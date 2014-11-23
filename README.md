@@ -4,7 +4,7 @@ I'm starting this repository to keep track of the ideas I'm having for a backend
 
 The basic idea is sort of a mix of spreadsheets and database tables.  One would define a schema for an application consisting of various writable tables (input) that may have any number of rows of data, each row having an entry in each of the table's columns.  Columns would have a name and a type.  All this is identical to database tables.
 
-In addition to these writable tables into which an application would pump data, there would be other, read-only, tables that are permutations of the data in these traditional tables.  This is similar to the database concept of a view.  Whenever data is added to, removed from, or changed in an input, the data in the views would change accordingly.
+In addition to these writable tables into which an application would pump data, there would be other, read-only, tables that are permutations of the data in these traditional tables or of other views.  This is similar to the database concept of a view.  Whenever data is added to, removed from, or changed in an input, the data in the views would change accordingly.
 
 Each of these tables would be represented to the application as an observable collection with each element in the collection representing a row.  This functionality is theoretically available via trigger mechanisms in some DBMS's, but not in the observable format, which is much easier to write applications against.
 
@@ -17,5 +17,9 @@ The application would have 2 sets of logic.  One is to display a layout of the d
 Adding features to this calendar would be easy.  For example, to add the ability to change the month view of the calendar, add an input with a single entry of the selected month.  The current-month-events view would be change to filter events whose time is within the value of the selected month.  The application needs the user widget to select the month.  Done.
 
 I believe defining the application logic in this format would make almost any application very simple to understand.  It also lends itself well to displaying application logic in a graphical format. It also lends itself very well to automated tools.  In the future, I will develop a MUIS sub-project containing widgets or models that interact directly with TDDL.  The end goal is to allow developers to build any application, no matter how massive the scope, just by defining tables and writing some MUIS files.
+
+Eventually, I want to also develop a server mode, allowing people to define inputs and views and share individual tables with others or with the public.  Others could create their own views on this data to perform their own logic on them and use the data in their own applications.  Data of any sort could be exported in this way.  Protocols could be developed to make this very efficient.  In particular, views would not necessarily need to be persisted in the same way as inputs.  Views could be calculated dynamically based on their inputs.  If a particular column of a view is computationally intensive but spatially small, this column could be persisted and the rest dynamically computed.
+
+One other thing to note is that a universal, bare-bones GUI on top of this framework could be very useful by itself.  It could expose and manipulate data in similar ways to spreadsheets but in a more structured and powerful way.
 
 My priority at the moment is MUIS.  I want to have a well-running minimal set of GUI functionality before I write any code for this project.  Ideally I'd like MUIS and TDDL to release 1.0.0 at the same time, maybe along with another repository containing a large, useful application that uses both libs and has a minimum of java code in it.  Maybe a calendar/task/lists app or a development environment.
