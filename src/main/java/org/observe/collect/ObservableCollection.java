@@ -3,6 +3,7 @@ package org.observe.collect;
 import java.util.AbstractCollection;
 import java.util.Collection;
 import java.util.Iterator;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 import org.observe.*;
@@ -24,6 +25,52 @@ public interface ObservableCollection<E> extends Collection<E>, Observable<Obser
 	 *         of a unit of work (controlled by implementation-specific means), batching events where possible.
 	 */
 	ObservableValue<CollectionSession> getSession();
+
+	/** @return An observable value for the size of this collection */
+	default ObservableValue<Integer> observeSize() {
+		return new ObservableValue<Integer>() {
+			private final Type intType = new Type(Integer.TYPE);
+
+			@Override
+			public Type getType() {
+				return intType;
+			}
+
+			@Override
+			public Integer get() {
+				return size();
+			}
+
+			@Override
+			public Runnable internalSubscribe(Observer<? super ObservableValueEvent<Integer>> observer) {
+				ObservableValue<Integer> sizeObs = this;
+				return ObservableCollection.this.internalSubscribe(new Observer<ObservableElement<E>>() {
+					private AtomicInteger size = new AtomicInteger();
+
+					@Override
+					public <V extends ObservableElement<E>> void onNext(V value) {
+						int newSize = size.incrementAndGet();
+						fire(newSize - 1, newSize, value);
+						value.internalSubscribe(new Observer<ObservableValueEvent<E>>() {
+							@Override
+							public <V2 extends ObservableValueEvent<E>> void onNext(V2 value2) {
+							}
+
+							@Override
+							public <V2 extends ObservableValueEvent<E>> void onCompleted(V2 value2) {
+								int newSize2 = size.decrementAndGet();
+								fire(newSize2 + 1, newSize2, value2);
+							}
+						});
+					}
+
+					private void fire(int oldSize, int newSize, Object cause) {
+						observer.onNext(new ObservableValueEvent<>(sizeObs, oldSize, newSize, cause));
+					}
+				});
+			}
+		};
+	}
 
 	/** @return An observable that fires a change event whenever any elements in it are added, removed or changed */
 	default Observable<? extends CollectionChangeEvent<E>> changes() {
