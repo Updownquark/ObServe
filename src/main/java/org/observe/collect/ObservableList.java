@@ -38,6 +38,11 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 		ObservableList<E> outerList = this;
 		class MappedObservableList extends AbstractList<T> implements ObservableList<T> {
 			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return outerList.getSession();
+			}
+
+			@Override
 			public Type getType() {
 				return type;
 			}
@@ -100,6 +105,11 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 		ObservableList<E> outer = this;
 		class FilteredList extends AbstractList<T> implements ObservableList<T> {
 			private List<FilteredListElement<T, E>> theFilteredElements = new java.util.ArrayList<>();
+
+			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return outer.getSession();
+			}
 
 			@Override
 			public Type getType() {
@@ -195,6 +205,11 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 		ObservableList<E> outerList = this;
 		class CombinedObservableList extends AbstractList<V> implements ObservableList<V> {
 			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return outerList.getSession();
+			}
+
+			@Override
 			public Type getType() {
 				return type;
 			}
@@ -263,7 +278,7 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 	@Override
 	default ObservableList<E> refireWhen(Observable<?> observable) {
 		ObservableList<E> outer = this;
-		return new org.muis.util.ObservableListWrapper<E>(this) {
+		return new org.observe.util.ObservableListWrapper<E>(this) {
 			@Override
 			public Runnable internalSubscribe(Observer<? super ObservableElement<E>> observer) {
 				return outer.internalSubscribe(new Observer<ObservableElement<E>>() {
@@ -336,6 +351,11 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 		for(int i = 0; i < constList.size(); i++)
 			obsEls.add(new ConstantObservableElement(constList.get(i), i));
 		class ConstantObservableList extends AbstractList<T> implements ObservableList<T> {
+			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return ObservableValue.constant(new Type(CollectionSession.class), null);
+			}
+
 			@Override
 			public Type getType() {
 				return type;
@@ -410,7 +430,7 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 					private Map<ObservableList<T>, Subscription<ObservableElement<T>>> subListSubscriptions;
 
 					{
-						subListSubscriptions = new org.muis.util.ConcurrentIdentityHashMap<>();
+						subListSubscriptions = new org.observe.util.ConcurrentIdentityHashMap<>();
 					}
 
 					@Override
@@ -534,6 +554,11 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 		/** @param wrap The collection to wrap */
 		public Immutable(ObservableList<E> wrap) {
 			theWrapped = wrap;
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			return theWrapped.getSession();
 		}
 
 		@Override

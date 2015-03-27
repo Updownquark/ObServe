@@ -5,7 +5,9 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
 
+import org.observe.ObservableValue;
 import org.observe.Observer;
+import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableList;
 
@@ -22,6 +24,11 @@ public class ObservableListWrapper<T> implements ObservableList<T> {
 	/** @param wrap The list to wrap */
 	public ObservableListWrapper(ObservableList<T> wrap) {
 		theWrapped = wrap;
+	}
+
+	@Override
+	public ObservableValue<CollectionSession> getSession() {
+		return theWrapped.getSession();
 	}
 
 	@Override

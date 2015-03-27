@@ -31,6 +31,11 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 		ObservableSet<E> outerSet = this;
 		class MappedObservableSet extends java.util.AbstractSet<T> implements ObservableSet<T> {
 			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return outerSet.getSession();
+			}
+
+			@Override
 			public Type getType() {
 				return type;
 			}
@@ -107,6 +112,11 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 	default <T> ObservableSet<T> filterMapC(Type type, Function<? super E, T> map) {
 		ObservableSet<E> outer = this;
 		class FilteredSet extends AbstractSet<T> implements ObservableSet<T> {
+			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return outer.getSession();
+			}
+
 			@Override
 			public Type getType() {
 				return type;
@@ -201,6 +211,11 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 	default <T, V> ObservableSet<V> combineC(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
 		ObservableSet<E> outerSet = this;
 		class CombinedObservableSet extends AbstractSet<V> implements ObservableSet<V> {
+			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return outerSet.getSession();
+			}
+
 			@Override
 			public Type getType() {
 				return type;
@@ -358,6 +373,11 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 			});
 		class ConstantObservableSet extends AbstractSet<T> implements ObservableSet<T> {
 			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return ObservableValue.constant(new Type(CollectionSession.class), null);
+			}
+
+			@Override
 			public Type getType() {
 				return type;
 			}
@@ -486,6 +506,11 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 			private java.util.concurrent.ConcurrentHashMap<UniqueFilteredElement, Object> theElements = new java.util.concurrent.ConcurrentHashMap<>();
 
 			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return coll.getSession();
+			}
+
+			@Override
 			public Type getType() {
 				return coll.getType().getParamTypes().length == 0 ? new Type(Object.class) : coll.getType().getParamTypes()[0];
 			}
@@ -605,6 +630,11 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 		/** @param wrap The set to wrap */
 		public Immutable(ObservableSet<E> wrap) {
 			theWrapped = wrap;
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			return theWrapped.getSession();
 		}
 
 		@Override

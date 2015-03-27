@@ -3,7 +3,9 @@ package org.observe.util;
 import java.util.Collection;
 import java.util.Iterator;
 
+import org.observe.ObservableValue;
 import org.observe.Observer;
+import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableSet;
 
@@ -20,6 +22,11 @@ public class ObservableSetWrapper<T> implements ObservableSet<T> {
 	/** @param wrap The set to wrap */
 	public ObservableSetWrapper(ObservableSet<T> wrap) {
 		theWrapped = wrap;
+	}
+
+	@Override
+	public ObservableValue<CollectionSession> getSession() {
+		return theWrapped.getSession();
 	}
 
 	@Override
