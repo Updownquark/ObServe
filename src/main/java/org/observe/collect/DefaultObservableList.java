@@ -7,9 +7,9 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.observe.DefaultObservable.OnSubscribe;
-import org.observe.ObservableValue;
-import org.observe.ObservableValueEvent;
+import org.observe.*;
 import org.observe.Observer;
+import org.observe.util.Transaction;
 
 import prisms.lang.Type;
 
@@ -33,6 +33,10 @@ public class DefaultObservableList<E> extends AbstractList<E> implements Observa
 	private volatile ObservableElementImpl<E> theRemovedElement;
 	private volatile int theRemovedElementIndex;
 
+	private CollectionSession theSession;
+	private DefaultObservableValue<CollectionSession> theSessionObservable;
+	private org.observe.Observer<ObservableValueEvent<CollectionSession>> theSessionController;
+
 	/**
 	 * Creates the list
 	 *
@@ -45,6 +49,26 @@ public class DefaultObservableList<E> extends AbstractList<E> implements Observa
 
 		theObservers = new java.util.concurrent.ConcurrentHashMap<>();
 		theLock = new ReentrantReadWriteLock();
+
+		theSessionObservable = new DefaultObservableValue<CollectionSession>() {
+			private final Type theSessionType = new Type(CollectionSession.class);
+
+			@Override
+			public Type getType() {
+				return theSessionType;
+			}
+
+			@Override
+			public CollectionSession get() {
+				return theSession;
+			}
+		};
+		theSessionController = theSessionObservable.control(null);
+	}
+
+	@Override
+	public ObservableValue<CollectionSession> getSession() {
+		return theSessionObservable;
 	}
 
 	@Override
@@ -81,7 +105,7 @@ public class DefaultObservableList<E> extends AbstractList<E> implements Observa
 	 * @param onSubscribe The listener to be notified when new subscriptions to this collection are made
 	 * @return The list to control this list's data.
 	 */
-	public List<E> control(OnSubscribe<ObservableElement<E>> onSubscribe) {
+	public TransactableList<E> control(OnSubscribe<ObservableElement<E>> onSubscribe) {
 		if(hasIssuedController.getAndSet(true))
 			throw new IllegalStateException("This observable list is already controlled");
 		theOnSubscribe = onSubscribe;
@@ -457,7 +481,28 @@ public class DefaultObservableList<E> extends AbstractList<E> implements Observa
 		return ret;
 	}
 
-	private class ObservableListController extends AbstractList<E> {
+	private class ObservableListController extends AbstractList<E> implements TransactableList<E> {
+		@Override
+		public Transaction startTransaction(Object cause) {
+			Lock lock = theLock.writeLock();
+			lock.lock();
+			theSession = new DefaultCollectionSession(cause);
+			theSessionController.onNext(new ObservableValueEvent<>(theSessionObservable, null, theSession, cause));
+			return new org.observe.util.Transaction() {
+				@Override
+				public void close() {
+					if(theLock.getWriteHoldCount() != 1) {
+						lock.unlock();
+						return;
+					}
+					CollectionSession session = theSession;
+					theSession = null;
+					theSessionController.onNext(new ObservableValueEvent<>(theSessionObservable, session, null, cause));
+					lock.unlock();
+				}
+			};
+		}
+
 		@Override
 		public int size() {
 			return DefaultObservableList.this.size();

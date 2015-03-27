@@ -7,9 +7,10 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.observe.DefaultObservable.OnSubscribe;
+import org.observe.DefaultObservableValue;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
-import org.observe.Observer;
+import org.observe.util.Transaction;
 
 import prisms.lang.Type;
 
@@ -27,7 +28,11 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 	private ReentrantReadWriteLock theLock;
 	private AtomicBoolean hasIssuedController = new AtomicBoolean(false);
 	private OnSubscribe<ObservableElement<E>> theOnSubscribe;
-	private java.util.concurrent.ConcurrentHashMap<Observer<? super ObservableElement<E>>, ConcurrentLinkedQueue<Runnable>> theObservers;
+	private java.util.concurrent.ConcurrentHashMap<org.observe.Observer<? super ObservableElement<E>>, ConcurrentLinkedQueue<Runnable>> theObservers;
+
+	private CollectionSession theSession;
+	private DefaultObservableValue<CollectionSession> theSessionObservable;
+	private org.observe.Observer<ObservableValueEvent<CollectionSession>> theSessionController;
 
 	/**
 	 * Creates the set
@@ -40,6 +45,26 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 
 		theObservers = new java.util.concurrent.ConcurrentHashMap<>();
 		theLock = new ReentrantReadWriteLock();
+
+		theSessionObservable = new DefaultObservableValue<CollectionSession>() {
+			private final Type theSessionType = new Type(CollectionSession.class);
+
+			@Override
+			public Type getType() {
+				return theSessionType;
+			}
+
+			@Override
+			public CollectionSession get() {
+				return theSession;
+			}
+		};
+		theSessionController = theSessionObservable.control(null);
+	}
+
+	@Override
+	public ObservableValue<CollectionSession> getSession() {
+		return theSessionObservable;
 	}
 
 	@Override
@@ -72,7 +97,7 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 	 * @param onSubscribe The listener to be notified when new subscriptions to this collection are made
 	 * @return The list to control this list's data.
 	 */
-	public Set<E> control(OnSubscribe<ObservableElement<E>> onSubscribe) {
+	public TransactableSet<E> control(OnSubscribe<ObservableElement<E>> onSubscribe) {
 		if(hasIssuedController.getAndSet(true))
 			throw new IllegalStateException("This observable set is already controlled");
 		theOnSubscribe = onSubscribe;
@@ -80,7 +105,7 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 	}
 
 	@Override
-	public Runnable internalSubscribe(Observer<? super ObservableElement<E>> observer) {
+	public Runnable internalSubscribe(org.observe.Observer<? super ObservableElement<E>> observer) {
 		ConcurrentLinkedQueue<Runnable> subSubscriptions = new ConcurrentLinkedQueue<>();
 		theObservers.put(observer, subSubscriptions);
 		doLocked(() -> {
@@ -109,9 +134,9 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 			}
 
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableValueEvent<E>> observer) {
+			public Runnable internalSubscribe(org.observe.Observer<? super ObservableValueEvent<E>> observer) {
 				ObservableValue<E> element = this;
-				Runnable ret = el.internalSubscribe(new Observer<ObservableValueEvent<E>>() {
+				Runnable ret = el.internalSubscribe(new org.observe.Observer<ObservableValueEvent<E>>() {
 					@Override
 					public <V extends ObservableValueEvent<E>> void onNext(V event) {
 						observer.onNext(new ObservableValueEvent<>(element, event.getOldValue(), event.getValue(), event.getCause()));
@@ -144,7 +169,8 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 	}
 
 	private void fireNewElement(ObservableElementImpl<E> el) {
-		for(Map.Entry<Observer<? super ObservableElement<E>>, ConcurrentLinkedQueue<Runnable>> observer : theObservers.entrySet()) {
+		for(Map.Entry<org.observe.Observer<? super ObservableElement<E>>, ConcurrentLinkedQueue<Runnable>> observer : theObservers
+			.entrySet()) {
 			observer.getKey().onNext(newValue(el, observer.getValue()));
 		}
 	}
@@ -451,7 +477,28 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 		return ret;
 	}
 
-	private class ObservableSortedSetController extends AbstractSet<E> implements NavigableSet<E> {
+	private class ObservableSortedSetController extends AbstractSet<E> implements NavigableSet<E>, TransactableSet<E> {
+		@Override
+		public Transaction startTransaction(Object cause) {
+			Lock lock = theLock.writeLock();
+			lock.lock();
+			theSession = new DefaultCollectionSession(cause);
+			theSessionController.onNext(new ObservableValueEvent<>(theSessionObservable, null, theSession, cause));
+			return new org.observe.util.Transaction() {
+				@Override
+				public void close() {
+					if(theLock.getWriteHoldCount() != 1) {
+						lock.unlock();
+						return;
+					}
+					CollectionSession session = theSession;
+					theSession = null;
+					theSessionController.onNext(new ObservableValueEvent<>(theSessionObservable, session, null, cause));
+					lock.unlock();
+				}
+			};
+		}
+
 		@Override
 		public Iterator<E> iterator() {
 			return new Iterator<E>() {

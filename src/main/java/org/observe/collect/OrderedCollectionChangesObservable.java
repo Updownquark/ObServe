@@ -53,7 +53,7 @@ CollectionChangesObservable<E, OCCE> {
 		CollectionChangeType type = (CollectionChangeType) session.get(key, "type");
 		if(type == null)
 			return;
-		Collection<E> elements = (Collection<E>) session.get(key, "elements");
+		Collection<E> elements = (Collection<E>) session.put(key, "elements", null);
 		IntList indexes = (IntList) session.get(key, "indexes");
 		OrderedCollectionChangeEvent<E> evt = new OrderedCollectionChangeEvent<>(type, elements, indexes);
 		observer.onNext((OCCE) evt);

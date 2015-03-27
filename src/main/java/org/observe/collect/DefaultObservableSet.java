@@ -7,9 +7,9 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.observe.DefaultObservable.OnSubscribe;
-import org.observe.ObservableValue;
-import org.observe.ObservableValueEvent;
+import org.observe.*;
 import org.observe.Observer;
+import org.observe.util.Transaction;
 
 import prisms.lang.Type;
 
@@ -30,6 +30,10 @@ public class DefaultObservableSet<E> extends AbstractSet<E> implements Observabl
 	private OnSubscribe<ObservableElement<E>> theOnSubscribe;
 	private java.util.concurrent.ConcurrentHashMap<Observer<? super ObservableElement<E>>, ConcurrentLinkedQueue<Runnable>> theObservers;
 
+	private CollectionSession theSession;
+	private DefaultObservableValue<CollectionSession> theSessionObservable;
+	private org.observe.Observer<ObservableValueEvent<CollectionSession>> theSessionController;
+
 	/**
 	 * Creates the set
 	 *
@@ -41,6 +45,26 @@ public class DefaultObservableSet<E> extends AbstractSet<E> implements Observabl
 
 		theObservers = new java.util.concurrent.ConcurrentHashMap<>();
 		theLock = new ReentrantReadWriteLock();
+
+		theSessionObservable = new DefaultObservableValue<CollectionSession>() {
+			private final Type theSessionType = new Type(CollectionSession.class);
+
+			@Override
+			public Type getType() {
+				return theSessionType;
+			}
+
+			@Override
+			public CollectionSession get() {
+				return theSession;
+			}
+		};
+		theSessionController = theSessionObservable.control(null);
+	}
+
+	@Override
+	public ObservableValue<CollectionSession> getSession() {
+		return theSessionObservable;
 	}
 
 	@Override
@@ -73,7 +97,7 @@ public class DefaultObservableSet<E> extends AbstractSet<E> implements Observabl
 	 * @param onSubscribe The listener to be notified when new subscriptions to this collection are made
 	 * @return The list to control this list's data.
 	 */
-	public Set<E> control(OnSubscribe<ObservableElement<E>> onSubscribe) {
+	public TransactableSet<E> control(OnSubscribe<ObservableElement<E>> onSubscribe) {
 		if(hasIssuedController.getAndSet(true))
 			throw new IllegalStateException("This observable set is already controlled");
 		theOnSubscribe = onSubscribe;
@@ -356,7 +380,28 @@ public class DefaultObservableSet<E> extends AbstractSet<E> implements Observabl
 		return ret;
 	}
 
-	private class ObservableSetController extends AbstractSet<E> {
+	private class ObservableSetController extends AbstractSet<E> implements TransactableSet<E> {
+		@Override
+		public Transaction startTransaction(Object cause) {
+			Lock lock = theLock.writeLock();
+			lock.lock();
+			theSession = new DefaultCollectionSession(cause);
+			theSessionController.onNext(new ObservableValueEvent<>(theSessionObservable, null, theSession, cause));
+			return new org.observe.util.Transaction() {
+				@Override
+				public void close() {
+					if(theLock.getWriteHoldCount() != 1) {
+						lock.unlock();
+						return;
+					}
+					CollectionSession session = theSession;
+					theSession = null;
+					theSessionController.onNext(new ObservableValueEvent<>(theSessionObservable, session, null, cause));
+					lock.unlock();
+				}
+			};
+		}
+
 		@Override
 		public Iterator<E> iterator() {
 			return new Iterator<E>() {

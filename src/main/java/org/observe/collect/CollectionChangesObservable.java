@@ -77,7 +77,7 @@ class CollectionChangesObservable<E, CCE extends CollectionChangeEvent<E>> imple
 		CollectionChangeType type=(CollectionChangeType) session.get(key, "type");
 		if(type==null)
 			return;
-		Collection<E> elements=(Collection<E>) session.get(key, "elements");
+		Collection<E> elements = (Collection<E>) session.put(key, "elements", null);
 		CollectionChangeEvent<E> evt=new CollectionChangeEvent<>(type, elements);
 		observer.onNext((CCE) evt);
 	}
