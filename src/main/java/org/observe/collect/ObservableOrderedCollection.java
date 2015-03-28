@@ -1,6 +1,7 @@
 package org.observe.collect;
 
 import java.util.*;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.*;
@@ -13,9 +14,9 @@ import prisms.lang.Type;
 /**
  * An ordered collection whose content can be observed. All {@link ObservableElement}s returned by this observable will be instances of
  * {@link OrderedObservableElement}. In addition, it is guaranteed that the {@link OrderedObservableElement#getIndex() index} of an element
- * given to the observer passed to {@link #subscribe(Observer)} or {@link #internalSubscribe(Observer)} will be less than or equal to the
- * number of uncompleted elements previously passed to the observer. This means that, for example, the first element passed to an observer
- * will always be index 0. The second may be 0 or 1. If one of these is then completed, the next element may be 0 or 1 as well.
+ * given to the observer passed to {@link #onElement(Consumer)} will be less than or equal to the number of uncompleted elements previously
+ * passed to the observer. This means that, for example, the first element passed to an observer will always be index 0. The second may be 0
+ * or 1. If one of these is then completed, the next element may be 0 or 1 as well.
  *
  * @param <E> The type of element in the collection
  */
@@ -63,12 +64,12 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 				if(isEmpty())
 					observer.onNext(new ObservableValueEvent<>(this, null, null, null));
 				ObservableValue<V> observableVal = this;
-				return ObservableOrderedCollection.this.internalSubscribe(new Observer<ObservableElement<E>>() {
+				return ObservableOrderedCollection.this.onElement(new Consumer<ObservableElement<E>>() {
 					private V theValue;
 					private int theIndex = -1;
 
 					@Override
-					public <V2 extends ObservableElement<E>> void onNext(V2 element) {
+					public void accept(ObservableElement<E> element) {
 						element.subscribe(new Observer<ObservableValueEvent<E>>() {
 							@Override
 							public <V3 extends ObservableValueEvent<E>> void onNext(V3 value) {
@@ -149,16 +150,16 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 			public Runnable internalSubscribe(Observer<? super ObservableValueEvent<E>> observer) {
 				if(isEmpty())
 					observer.onNext(new ObservableValueEvent<>(this, null, null, null));
-				return ObservableOrderedCollection.this.internalSubscribe(new Observer<ObservableElement<E>>() {
+				return ObservableOrderedCollection.this.onElement(new Consumer<ObservableElement<E>>() {
 					E oldValue;
 
 					@Override
-					public <V extends ObservableElement<E>> void onNext(V el) {
-						OrderedObservableElement<E> element = (OrderedObservableElement<E>) el;
-						element.internalSubscribe(new Observer<ObservableValueEvent<E>>() {
+					public void accept(ObservableElement<E> element) {
+						OrderedObservableElement<E> orderedEl = (OrderedObservableElement<E>) element;
+						orderedEl.internalSubscribe(new Observer<ObservableValueEvent<E>>() {
 							@Override
 							public <V2 extends ObservableValueEvent<E>> void onNext(V2 event) {
-								if(element.getIndex() != 0)
+								if(orderedEl.getIndex() != 0)
 									return;
 								observer.onNext(createEvent(oldValue, event.getValue(), event));
 								oldValue = event.getValue();
@@ -166,7 +167,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 							@Override
 							public <V2 extends ObservableValueEvent<E>> void onCompleted(V2 event) {
-								if(element.getIndex() != 0)
+								if(orderedEl.getIndex() != 0)
 									return;
 								E newValue = get();
 								observer.onNext(createEvent(oldValue, newValue, event));
@@ -188,13 +189,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		ObservableOrderedCollection<E> outer = this;
 		return new ObservableOrderedCollectionWrapper<E>(this) {
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableElement<E>> observer) {
-				return outer.internalSubscribe(new Observer<ObservableElement<E>>() {
-					@Override
-					public <V extends ObservableElement<E>> void onNext(V value) {
-						observer.onNext(value.refireWhen(observable));
-					}
-				});
+			public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
+				return outer.onElement(element -> observer.accept(element.refireWhen(observable)));
 			}
 		};
 	}
@@ -246,26 +242,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 			}
 
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableElement<T>> observer) {
-				Runnable sub = outerColl.internalSubscribe(new Observer<ObservableElement<E>>() {
-					@Override
-					public <V extends ObservableElement<E>> void onNext(V value) {
-						observer.onNext(value.mapV(map));
-					}
-
-					@Override
-					public <V extends ObservableElement<E>> void onCompleted(V value) {
-						observer.onCompleted(value.mapV(map));
-					}
-
-					@Override
-					public void onError(Throwable e) {
-						observer.onError(e);
-					}
-				});
-				return () -> {
-					sub.run();
-				};
+			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
+				return outerColl.onElement(element -> observer.accept(element.mapV(map)));
 			}
 		}
 		return new MappedObservableCollection();
@@ -334,31 +312,20 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 			}
 
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableElement<T>> observer) {
-				Runnable listSub = outer.internalSubscribe(new Observer<ObservableElement<E>>() {
-					@Override
-					public <V extends ObservableElement<E>> void onNext(V el) {
-						OrderedObservableElement<E> outerElement = (OrderedObservableElement<E>) el;
-						FilteredOrderedElement<T, E> retElement = new FilteredOrderedElement<>(outerElement, map, type, theFilteredElements);
-						theFilteredElements.add(outerElement.getIndex(), retElement);
-						outerElement.completed().act(elValue -> theFilteredElements.remove(outerElement.getIndex()));
-						outerElement.act(elValue -> {
-							if(!retElement.isIncluded()) {
-								T mapped = map.apply(elValue.getValue());
-								if(mapped != null)
-									observer.onNext(retElement);
-							}
-						});
-					}
-
-					@Override
-					public void onError(Throwable e) {
-						observer.onError(e);
-					}
+			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
+				return outer.onElement(element -> {
+					OrderedObservableElement<E> outerElement = (OrderedObservableElement<E>) element;
+					FilteredOrderedElement<T, E> retElement = new FilteredOrderedElement<>(outerElement, map, type, theFilteredElements);
+					theFilteredElements.add(outerElement.getIndex(), retElement);
+					outerElement.completed().act(elValue -> theFilteredElements.remove(outerElement.getIndex()));
+					outerElement.act(elValue -> {
+						if(!retElement.isIncluded()) {
+							T mapped = map.apply(elValue.getValue());
+							if(mapped != null)
+								observer.accept(retElement);
+						}
+					});
 				});
-				return () -> {
-					listSub.run();
-				};
 			}
 		}
 		return new FilteredOrderedCollection();
@@ -568,7 +535,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 			}
 
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableElement<E>> observer) {
+			public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
 				/* This has to be handled a little differently.  If the initial elements were simply handed to the observer, they could be
 				 * out of order, since the first sub-collection might contain elements that compare greater to elements in a following
 				 * sub-collection.  Thus, for example, the first element fed to the observer might have non-zero index.  This violates the
@@ -577,67 +544,48 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 				 * delivered their initial elements.  Subsequent elements can be delivered in the normal way. */
 				final List<FlattenedOrderedElement> initialElements = new ArrayList<>();
 				final boolean [] initializing = new boolean[] {true};
-				Runnable ret = list.internalSubscribe(new Observer<ObservableElement<? extends ObservableOrderedCollection<E>>>() {
-					private Map<ObservableOrderedCollection<E>, Subscription<ObservableElement<E>>> subListSubscriptions;
+				Runnable ret = list.onElement(new Consumer<ObservableElement<? extends ObservableOrderedCollection<E>>>() {
+					private Map<ObservableOrderedCollection<E>, Runnable> subListSubscriptions;
 
 					{
 						subListSubscriptions = new org.observe.util.ConcurrentIdentityHashMap<>();
 					}
 
 					@Override
-					public <V extends ObservableElement<? extends ObservableOrderedCollection<E>>> void onNext(V subList) {
+					public void accept(ObservableElement<? extends ObservableOrderedCollection<E>> subList) {
 						subList.subscribe(new Observer<ObservableValueEvent<? extends ObservableOrderedCollection<E>>>() {
 							@Override
 							public <V2 extends ObservableValueEvent<? extends ObservableOrderedCollection<E>>> void onNext(V2 subListEvent) {
 								if(subListEvent.getOldValue() != null && subListEvent.getOldValue() != subListEvent.getValue()) {
-									Subscription<ObservableElement<E>> subListSub = subListSubscriptions.get(subListEvent.getOldValue());
+									Runnable subListSub = subListSubscriptions.get(subListEvent.getOldValue());
 									if(subListSub != null)
-										subListSub.unsubscribe();
+										subListSub.run();
 								}
-								Subscription<ObservableElement<E>> subListSub = subListEvent.getValue().subscribe(
-									new Observer<ObservableElement<E>>() {
-										@Override
-										public <V3 extends ObservableElement<E>> void onNext(V3 subElement) {
-											OrderedObservableElement<E> subListEl = (OrderedObservableElement<E>) subElement;
-											FlattenedOrderedElement flatEl = new FlattenedOrderedElement(subListEl, subList);
-											if(initializing[0]) {
-												int index = flatEl.getIndex();
-												while(initialElements.size() <= index)
-													initialElements.add(null);
-												initialElements.set(index, flatEl);
-											} else
-												observer.onNext(flatEl);
-										}
-
-										@Override
-										public void onError(Throwable e) {
-											observer.onError(e);
-										}
-									});
+								Runnable subListSub = subListEvent.getValue().onElement(subElement -> {
+									OrderedObservableElement<E> subListEl = (OrderedObservableElement<E>) subElement;
+									FlattenedOrderedElement flatEl = new FlattenedOrderedElement(subListEl, subList);
+									if(initializing[0]) {
+										int index = flatEl.getIndex();
+										while(initialElements.size() <= index)
+											initialElements.add(null);
+										initialElements.set(index, flatEl);
+									} else
+										observer.accept(flatEl);
+								});
 								subListSubscriptions.put(subListEvent.getValue(), subListSub);
 							}
 
 							@Override
 							public <V2 extends ObservableValueEvent<? extends ObservableOrderedCollection<E>>> void onCompleted(
 								V2 subListEvent) {
-								subListSubscriptions.remove(subListEvent.getValue()).unsubscribe();
-							}
-
-							@Override
-							public void onError(Throwable e) {
-								observer.onError(e);
+								subListSubscriptions.remove(subListEvent.getValue()).run();
 							}
 						});
-					}
-
-					@Override
-					public void onError(Throwable e) {
-						observer.onError(e);
 					}
 				});
 				initializing[0] = false;
 				for(FlattenedOrderedElement el : initialElements)
-					observer.onNext(el);
+					observer.accept(el);
 				initialElements.clear();
 				return ret;
 			}
@@ -724,7 +672,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 						if(theRight != null)
 							theRight.theLeft = theLeft;
 						findPlace(event.getValue(), theLeft);
-						theParentObserver.theOuterObserver.onNext(SortedElementWrapper.this);
+						theParentObserver.theOuterObserver.accept(SortedElementWrapper.this);
 					} else if(theRight != null && theList.getCompare().compare(event.getValue(), theRight.get()) > 0) {
 						observer.onCompleted(new ObservableValueEvent<>(SortedElementWrapper.this, event.getOldValue(), event.getValue(),
 							event));
@@ -732,7 +680,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 							theLeft.theRight = theRight;
 						theRight.theLeft = theLeft;
 						findPlace(event.getValue(), theRight);
-						theParentObserver.theOuterObserver.onNext(SortedElementWrapper.this);
+						theParentObserver.theOuterObserver.accept(SortedElementWrapper.this);
 					} else
 						observer.onNext(new ObservableValueEvent<>(SortedElementWrapper.this, event.getOldValue(), event.getValue(), event));
 				}
@@ -854,8 +802,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		}
 
 		@Override
-		public Runnable internalSubscribe(Observer<? super ObservableElement<E>> observer) {
-			return theWrapped.internalSubscribe(new SortedObservableWrapperObserver<>(this, observer));
+		public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
+			return theWrapped.onElement(new SortedObservableWrapperObserver<>(this, observer));
 		}
 	}
 
@@ -864,27 +812,23 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 *
 	 * @param <E> The type of the elements in the collection
 	 */
-	static class SortedObservableWrapperObserver<E> implements Observer<ObservableElement<E>> {
+	static class SortedObservableWrapperObserver<E> implements Consumer<ObservableElement<E>> {
 		private final SortedObservableCollectionWrapper<E> theList;
-		final Observer<? super ObservableElement<E>> theOuterObserver;
+
+		final Consumer<? super ObservableElement<E>> theOuterObserver;
 		private SortedElementWrapper<E> theAnchor;
 
-		SortedObservableWrapperObserver(SortedObservableCollectionWrapper<E> list, Observer<? super ObservableElement<E>> outerObs) {
+		SortedObservableWrapperObserver(SortedObservableCollectionWrapper<E> list, Consumer<? super ObservableElement<E>> outerObs) {
 			theList = list;
 			theOuterObserver = outerObs;
 		}
 
 		@Override
-		public <V extends ObservableElement<E>> void onNext(V outerEl) {
+		public void accept(ObservableElement<E> outerEl) {
 			SortedElementWrapper<E> newEl = new SortedElementWrapper<>(theList, outerEl, this, theAnchor);
 			if(theAnchor == null)
 				theAnchor = newEl;
-			theOuterObserver.onNext(newEl);
-		}
-
-		@Override
-		public void onError(Throwable e) {
-			theOuterObserver.onError(e);
+			theOuterObserver.accept(newEl);
 		}
 	}
 
@@ -902,8 +846,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		}
 
 		@Override
-		public Runnable internalSubscribe(Observer<? super ObservableElement<E>> observer) {
-			return theWrapped.internalSubscribe(observer);
+		public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
+			return theWrapped.onElement(observer);
 		}
 
 		@Override

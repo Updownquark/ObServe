@@ -5,9 +5,11 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Consumer;
 
-import org.observe.DefaultObservable.OnSubscribe;
-import org.observe.*;
+import org.observe.DefaultObservableValue;
+import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.util.Transaction;
 
@@ -16,8 +18,8 @@ import prisms.lang.Type;
 /**
  * A list whose content can be observed. This list is immutable in that none of its methods, including {@link List} methods, can modify its
  * content (List modification methods will throw {@link UnsupportedOperationException}). To modify the list content, use
- * {@link #control(org.observe.DefaultObservable.OnSubscribe)} to obtain a list controller. This controller can be modified and these
- * modifications will be reflected in this list and will be propagated to subscribers.
+ * {@link #control(Consumer)} to obtain a list controller. This controller can be modified and these modifications will be reflected in this
+ * list and will be propagated to subscribers.
  *
  * @param <E> The type of element in the list
  */
@@ -28,8 +30,10 @@ public class DefaultObservableList<E> extends AbstractList<E> implements Observa
 
 	private ReentrantReadWriteLock theLock;
 	private AtomicBoolean hasIssuedController = new AtomicBoolean(false);
-	private OnSubscribe<ObservableElement<E>> theOnSubscribe;
-	private java.util.concurrent.ConcurrentHashMap<Observer<? super ObservableElement<E>>, ConcurrentLinkedQueue<Runnable>> theObservers;
+
+	private Consumer<? super Consumer<? super ObservableElement<E>>> theOnSubscribe;
+
+	private java.util.concurrent.ConcurrentHashMap<Consumer<? super ObservableElement<E>>, ConcurrentLinkedQueue<Runnable>> theObservers;
 	private volatile ObservableElementImpl<E> theRemovedElement;
 	private volatile int theRemovedElementIndex;
 
@@ -105,7 +109,7 @@ public class DefaultObservableList<E> extends AbstractList<E> implements Observa
 	 * @param onSubscribe The listener to be notified when new subscriptions to this collection are made
 	 * @return The list to control this list's data.
 	 */
-	public TransactableList<E> control(OnSubscribe<ObservableElement<E>> onSubscribe) {
+	public TransactableList<E> control(Consumer<? super Consumer<? super ObservableElement<E>>> onSubscribe) {
 		if(hasIssuedController.getAndSet(true))
 			throw new IllegalStateException("This observable list is already controlled");
 		theOnSubscribe = onSubscribe;
@@ -113,15 +117,15 @@ public class DefaultObservableList<E> extends AbstractList<E> implements Observa
 	}
 
 	@Override
-	public Runnable internalSubscribe(Observer<? super ObservableElement<E>> observer) {
+	public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
 		ConcurrentLinkedQueue<Runnable> subSubscriptions = new ConcurrentLinkedQueue<>();
 		theObservers.put(observer, subSubscriptions);
 		doLocked(() -> {
 			for(ObservableElementImpl<E> el : theElements)
-				observer.onNext(newValue(el, subSubscriptions));
+				observer.accept(newValue(el, subSubscriptions));
 		}, false, false);
 		if(theOnSubscribe != null)
-			theOnSubscribe.onsubscribe(observer);
+			theOnSubscribe.accept(observer);
 		return () -> {
 			ConcurrentLinkedQueue<Runnable> subs = theObservers.remove(observer);
 			for(Runnable sub : subs)
@@ -189,8 +193,8 @@ public class DefaultObservableList<E> extends AbstractList<E> implements Observa
 	}
 
 	private void fireNewElement(ObservableElementImpl<E> el) {
-		for(Map.Entry<Observer<? super ObservableElement<E>>, ConcurrentLinkedQueue<Runnable>> observer : theObservers.entrySet()) {
-			observer.getKey().onNext(newValue(el, observer.getValue()));
+		for(Map.Entry<Consumer<? super ObservableElement<E>>, ConcurrentLinkedQueue<Runnable>> observer : theObservers.entrySet()) {
+			observer.getKey().accept(newValue(el, observer.getValue()));
 		}
 	}
 

@@ -2,10 +2,10 @@ package org.observe.collect;
 
 import java.util.*;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.*;
-import org.observe.ObservableDebug.D;
 import org.observe.Observable;
 import org.observe.Observer;
 
@@ -68,25 +68,8 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 			}
 
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableElement<T>> observer) {
-				Runnable sub = outerSet.internalSubscribe(new Observer<ObservableElement<E>>() {
-					@Override
-					public <V extends ObservableElement<E>> void onNext(V value) {
-						observer.onNext(value.mapV(map));
-					}
-
-					@Override
-					public <V extends ObservableElement<E>> void onCompleted(V value) {
-						observer.onCompleted(value.mapV(map));
-					}
-
-					@Override
-					public void onError(Throwable e) {
-						observer.onError(e);
-
-					}
-				});
-				return sub;
+			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
+				return outerSet.onElement(element -> observer.accept(element.mapV(map)));
 			}
 		}
 		return new MappedObservableSet();
@@ -157,28 +140,17 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 			}
 
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableElement<T>> observer) {
-				Runnable listSub = outer.internalSubscribe(new Observer<ObservableElement<E>>() {
-					@Override
-					public <V extends ObservableElement<E>> void onNext(V el) {
-						FilteredElement<T, E> retElement = new FilteredElement<>(el, map, type);
-						el.act(elValue -> {
-							if(!retElement.isIncluded()) {
-								T mapped = map.apply(elValue.getValue());
-								if(mapped != null)
-									observer.onNext(retElement);
-							}
-						});
-					}
-
-					@Override
-					public void onError(Throwable e) {
-						observer.onError(e);
-					}
+			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
+				return outer.onElement(element -> {
+					FilteredElement<T, E> retElement = new FilteredElement<>(element, map, type);
+					element.act(elValue -> {
+						if(!retElement.isIncluded()) {
+							T mapped = map.apply(elValue.getValue());
+							if(mapped != null)
+								observer.accept(retElement);
+						}
+					});
 				});
-				return () -> {
-					listSub.run();
-				};
 			}
 
 			@Override
@@ -244,23 +216,12 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 			}
 
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableElement<V>> observer) {
+			public Runnable onElement(Consumer<? super ObservableElement<V>> observer) {
 				boolean [] complete = new boolean[1];
-				Runnable setSub = outerSet.internalSubscribe(new Observer<ObservableElement<E>>() {
+				Runnable setSub = outerSet.onElement(new Consumer<ObservableElement<E>>() {
 					@Override
-					public <V2 extends ObservableElement<E>> void onNext(V2 value) {
-						observer.onNext(value.combineV(func, arg));
-					}
-
-					@Override
-					public <V2 extends ObservableElement<E>> void onCompleted(V2 value) {
-						complete[0] = true;
-						observer.onCompleted(value.combineV(func, arg));
-					}
-
-					@Override
-					public void onError(Throwable e) {
-						observer.onError(e);
+					public void accept(ObservableElement<E> value) {
+						observer.accept(value.combineV(func, arg));
 					}
 				});
 				if(complete[0])
@@ -274,7 +235,6 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 						@Override
 						public <V2 extends ObservableValueEvent<T>> void onCompleted(V2 value) {
 							complete[0] = true;
-							observer.onCompleted(null);
 							setSub.run();
 						}
 					});
@@ -299,15 +259,8 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 		ObservableSet<E> outer = this;
 		return new org.observe.util.ObservableSetWrapper<E>(this) {
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableElement<E>> observer) {
-				return outer.internalSubscribe(new Observer<ObservableElement<E>>() {
-					@Override
-					public <V extends ObservableElement<E>> void onNext(V value) {
-						D d = ObservableDebug.onNext(outer, "refireWhen", null);
-						observer.onNext(value.refireWhen(observable));
-						d.done(null);
-					}
-				});
+			public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
+				return outer.onElement(element -> observer.accept(element.refireWhen(observable)));
 			}
 		};
 	}
@@ -321,13 +274,8 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 		ObservableCollection<E> outer = this;
 		return new org.observe.util.ObservableSetWrapper<E>(this) {
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableElement<E>> observer) {
-				return outer.internalSubscribe(new Observer<ObservableElement<E>>() {
-					@Override
-					public <V extends ObservableElement<E>> void onNext(V element) {
-						observer.onNext(element.refireWhenForValue(refire));
-					}
-				});
+			public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
+				return outer.onElement(element -> observer.accept(element.refireWhenForValue(refire)));
 			}
 		};
 	}
@@ -383,9 +331,9 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 			}
 
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableElement<T>> observer) {
+			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
 				for(ObservableElement<T> el : els)
-					observer.onNext(el);
+					observer.accept(el);
 				return () -> {
 				};
 			}
@@ -557,45 +505,34 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 			}
 
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableElement<T>> observer) {
-				Runnable listSub = coll.internalSubscribe(new Observer<ObservableElement<T>>() {
-					@Override
-					public <V extends ObservableElement<T>> void onNext(V el) {
-						UniqueFilteredElement retElement = new UniqueFilteredElement(el, theElements.keySet());
-						theElements.put(retElement, 0);
-						el.subscribe(new Observer<ObservableValueEvent<T>>() {
-							@Override
-							public <V2 extends ObservableValueEvent<T>> void onNext(V2 elValue) {
-								if(!retElement.isIncluded() && retElement.shouldBeIncluded(elValue.getValue())) {
-									observer.onNext(retElement);
-								}
+			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
+				return coll.onElement(element -> {
+					UniqueFilteredElement retElement = new UniqueFilteredElement(element, theElements.keySet());
+					theElements.put(retElement, 0);
+					element.subscribe(new Observer<ObservableValueEvent<T>>() {
+						@Override
+						public <V2 extends ObservableValueEvent<T>> void onNext(V2 elValue) {
+							if(!retElement.isIncluded() && retElement.shouldBeIncluded(elValue.getValue())) {
+								observer.accept(retElement);
 							}
+						}
 
-							@Override
-							public <V2 extends ObservableValueEvent<T>> void onCompleted(V2 elValue) {
-								theElements.remove(retElement);
-								if(retElement.isIncluded()) {
-									for(UniqueFilteredElement el2 : theElements.keySet()) {
-										if(el2 == retElement)
-											continue;
-										if(!el2.isIncluded() && Objects.equals(el2.get(), elValue.getOldValue())) {
-											observer.onNext(el2);
-											break;
-										}
+						@Override
+						public <V2 extends ObservableValueEvent<T>> void onCompleted(V2 elValue) {
+							theElements.remove(retElement);
+							if(retElement.isIncluded()) {
+								for(UniqueFilteredElement el2 : theElements.keySet()) {
+									if(el2 == retElement)
+										continue;
+									if(!el2.isIncluded() && Objects.equals(el2.get(), elValue.getOldValue())) {
+										observer.accept(el2);
+										break;
 									}
 								}
 							}
-						});
-					}
-
-					@Override
-					public void onError(Throwable e) {
-						observer.onError(e);
-					}
+						}
+					});
 				});
-				return () -> {
-					listSub.run();
-				};
 			}
 		}
 		return new UniqueSet();
@@ -638,8 +575,8 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 		}
 
 		@Override
-		public Runnable internalSubscribe(Observer<? super ObservableElement<E>> observer) {
-			return theWrapped.internalSubscribe(observer);
+		public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
+			return theWrapped.onElement(observer);
 		}
 
 		@Override

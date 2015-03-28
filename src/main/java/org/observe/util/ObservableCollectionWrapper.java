@@ -4,7 +4,6 @@ import java.util.Collection;
 import java.util.Iterator;
 
 import org.observe.ObservableValue;
-import org.observe.Observer;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableElement;
@@ -35,8 +34,8 @@ public class ObservableCollectionWrapper<T> implements ObservableCollection<T> {
 	}
 
 	@Override
-	public Runnable internalSubscribe(Observer<? super ObservableElement<T>> observer) {
-		return theWrapped.internalSubscribe(observer);
+	public Runnable onElement(java.util.function.Consumer<? super ObservableElement<T>> observer) {
+		return theWrapped.onElement(observer);
 	}
 
 	@Override

@@ -4,6 +4,7 @@ import java.util.AbstractCollection;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.*;
@@ -16,9 +17,15 @@ import prisms.lang.Type;
  *
  * @param <E> The type of element in the collection
  */
-public interface ObservableCollection<E> extends Collection<E>, Observable<ObservableElement<E>> {
+public interface ObservableCollection<E> extends Collection<E> {
 	/** @return The type of elements in this collection */
 	Type getType();
+
+	/**
+	 * @param onElement The listener to be notified when new elements are added to the collection
+	 * @return The function to call when the calling code is no longer interested in this collection
+	 */
+	Runnable onElement(Consumer<? super ObservableElement<E>> onElement);
 
 	/**
 	 * @return The observable value for the current session of this collection. The session allows listeners to retain state for the duration
@@ -44,11 +51,11 @@ public interface ObservableCollection<E> extends Collection<E>, Observable<Obser
 			@Override
 			public Runnable internalSubscribe(Observer<? super ObservableValueEvent<Integer>> observer) {
 				ObservableValue<Integer> sizeObs = this;
-				return ObservableCollection.this.internalSubscribe(new Observer<ObservableElement<E>>() {
+				return onElement(new Consumer<ObservableElement<E>>() {
 					private AtomicInteger size = new AtomicInteger();
 
 					@Override
-					public <V extends ObservableElement<E>> void onNext(V value) {
+					public void accept(ObservableElement<E> value) {
 						int newSize = size.incrementAndGet();
 						fire(newSize - 1, newSize, value);
 						value.internalSubscribe(new Observer<ObservableValueEvent<E>>() {
@@ -83,12 +90,7 @@ public interface ObservableCollection<E> extends Collection<E>, Observable<Obser
 		return new Observable<ObservableValueEvent<E>>() {
 			@Override
 			public Runnable internalSubscribe(Observer<? super ObservableValueEvent<E>> observer) {
-				return coll.internalSubscribe(new Observer<ObservableElement<E>>() {
-					@Override
-					public <V extends ObservableElement<E>> void onNext(V element) {
-						element.completed().act(value -> observer.onNext(value));
-					}
-				});
+				return coll.onElement(element -> element.completed().act(value -> observer.onNext(value)));
 			}
 
 			@Override
@@ -154,27 +156,8 @@ public interface ObservableCollection<E> extends Collection<E>, Observable<Obser
 			}
 
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableElement<T>> observer) {
-				Runnable sub = outerColl.internalSubscribe(new Observer<ObservableElement<E>>() {
-					@Override
-					public <V extends ObservableElement<E>> void onNext(V value) {
-						observer.onNext(value.mapV(map));
-					}
-
-					@Override
-					public <V extends ObservableElement<E>> void onCompleted(V value) {
-						observer.onCompleted(value.mapV(map));
-					}
-
-					@Override
-					public void onError(Throwable e) {
-						observer.onError(e);
-
-					}
-				});
-				return () -> {
-					sub.run();
-				};
+			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
+				return outerColl.onElement(element -> observer.accept(element.mapV(map)));
 			}
 		}
 		return new MappedObservableCollection();
@@ -253,28 +236,17 @@ public interface ObservableCollection<E> extends Collection<E>, Observable<Obser
 			}
 
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableElement<T>> observer) {
-				Runnable listSub = outer.internalSubscribe(new Observer<ObservableElement<E>>() {
-					@Override
-					public <V extends ObservableElement<E>> void onNext(V el) {
-						FilteredElement<T, E> retElement = new FilteredElement<>(el, map, type);
-						el.act(elValue -> {
-							if(!retElement.isIncluded()) {
-								T mapped = map.apply(elValue.getValue());
-								if(mapped != null)
-									observer.onNext(retElement);
-							}
-						});
-					}
-
-					@Override
-					public void onError(Throwable e) {
-						observer.onError(e);
-					}
+			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
+				return outer.onElement(element -> {
+					FilteredElement<T, E> retElement = new FilteredElement<>(element, map, type);
+					element.act(elValue -> {
+						if(!retElement.isIncluded()) {
+							T mapped = map.apply(elValue.getValue());
+							if(mapped != null)
+								observer.accept(retElement);
+						}
+					});
 				});
-				return () -> {
-					listSub.run();
-				};
 			}
 		}
 		return new FilteredCollection();
@@ -288,13 +260,8 @@ public interface ObservableCollection<E> extends Collection<E>, Observable<Obser
 		ObservableCollection<E> outer = this;
 		return new org.observe.util.ObservableCollectionWrapper<E>(this) {
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableElement<E>> observer) {
-				return outer.internalSubscribe(new Observer<ObservableElement<E>>() {
-					@Override
-					public <V extends ObservableElement<E>> void onNext(V value) {
-						observer.onNext(value.refireWhen(observable));
-					}
-				});
+			public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
+				return outer.onElement(element -> observer.accept(element.refireWhen(observable)));
 			}
 		};
 	}
@@ -307,13 +274,8 @@ public interface ObservableCollection<E> extends Collection<E>, Observable<Obser
 		ObservableCollection<E> outer = this;
 		return new org.observe.util.ObservableCollectionWrapper<E>(this) {
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableElement<E>> observer) {
-				return outer.internalSubscribe(new Observer<ObservableElement<E>>() {
-					@Override
-					public <V extends ObservableElement<E>> void onNext(V element) {
-						observer.onNext(element.refireWhenForValue(refire));
-					}
-				});
+			public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
+				return outer.onElement(element -> observer.accept(element.refireWhenForValue(refire)));
 			}
 		};
 	}
@@ -373,54 +335,34 @@ public interface ObservableCollection<E> extends Collection<E>, Observable<Obser
 			}
 
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableElement<T>> observer) {
-				return coll.internalSubscribe(new Observer<ObservableElement<? extends ObservableCollection<T>>>() {
-					private java.util.Map<ObservableCollection<T>, Subscription<ObservableElement<T>>> subCollSubscriptions;
+			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
+				return coll.onElement(new Consumer<ObservableElement<? extends ObservableCollection<T>>>() {
+					private java.util.Map<ObservableCollection<T>, Runnable> subCollSubscriptions;
 
 					{
 						subCollSubscriptions = new org.observe.util.ConcurrentIdentityHashMap<>();
 					}
 
 					@Override
-					public <V extends ObservableElement<? extends ObservableCollection<T>>> void onNext(V subColl) {
+					public void accept(ObservableElement<? extends ObservableCollection<T>> subColl) {
 						subColl.subscribe(new Observer<ObservableValueEvent<? extends ObservableCollection<T>>>() {
 							@Override
 							public <V2 extends ObservableValueEvent<? extends ObservableCollection<T>>> void onNext(V2 subCollEvent) {
 								if(subCollEvent.getOldValue() != null && subCollEvent.getOldValue() != subCollEvent.getValue()) {
-									Subscription<ObservableElement<T>> subCollSub = subCollSubscriptions.get(subCollEvent.getOldValue());
+									Runnable subCollSub = subCollSubscriptions.get(subCollEvent.getOldValue());
 									if(subCollSub != null)
-										subCollSub.unsubscribe();
+										subCollSub.run();
 								}
-								Subscription<ObservableElement<T>> subCollSub = subCollEvent.getValue().subscribe(
-									new Observer<ObservableElement<T>>() {
-										@Override
-										public <V3 extends ObservableElement<T>> void onNext(V3 subElement) {
-											observer.onNext(new FlattenedElement<>(subElement, subColl));
-										}
-
-										@Override
-										public void onError(Throwable e) {
-											observer.onError(e);
-										}
-									});
+								Runnable subCollSub = subCollEvent.getValue().onElement(
+									subElement -> observer.accept(new FlattenedElement<>(subElement, subColl)));
 								subCollSubscriptions.put(subCollEvent.getValue(), subCollSub);
 							}
 
 							@Override
 							public <V2 extends ObservableValueEvent<? extends ObservableCollection<T>>> void onCompleted(V2 subCollEvent) {
-								subCollSubscriptions.remove(subCollEvent.getValue()).unsubscribe();
-							}
-
-							@Override
-							public void onError(Throwable e) {
-								observer.onError(e);
+								subCollSubscriptions.remove(subCollEvent.getValue()).run();
 							}
 						});
-					}
-
-					@Override
-					public void onError(Throwable e) {
-						observer.onError(e);
 					}
 				});
 			}
@@ -439,42 +381,34 @@ public interface ObservableCollection<E> extends Collection<E>, Observable<Obser
 			public Runnable internalSubscribe(Observer<? super T> observer) {
 				Observable<T> outer = this;
 				D d = ObservableDebug.onSubscribe(this, "fold", null);
-				Runnable ret = coll.internalSubscribe(new Observer<ObservableElement<? extends Observable<T>>>() {
-					@Override
-					public <V extends ObservableElement<? extends Observable<T>>> void onNext(V element) {
-						D d2 = ObservableDebug.onNext(outer, "fold", null);
-						element.subscribe(new Observer<ObservableValueEvent<? extends Observable<T>>>() {
-							@Override
-							public <V2 extends ObservableValueEvent<? extends Observable<T>>> void onNext(V2 value) {
-								D d3 = ObservableDebug.onNext(outer, "fold/element", null);
-								value.getValue().takeUntil(element.noInit()).subscribe(new Observer<T>() {
-									@Override
-									public <V3 extends T> void onNext(V3 value3) {
-										D d4 = ObservableDebug.onNext(outer, "fold/element/value", null);
-										observer.onNext(value3);
-										d4.done(null);
-									}
+				Runnable ret = coll.onElement(element -> {
+					D d2 = ObservableDebug.onNext(outer, "fold", null);
+					element.subscribe(new Observer<ObservableValueEvent<? extends Observable<T>>>() {
+						@Override
+						public <V2 extends ObservableValueEvent<? extends Observable<T>>> void onNext(V2 value) {
+							D d3 = ObservableDebug.onNext(outer, "fold/element", null);
+							value.getValue().takeUntil(element.noInit()).subscribe(new Observer<T>() {
+								@Override
+								public <V3 extends T> void onNext(V3 value3) {
+									D d4 = ObservableDebug.onNext(outer, "fold/element/value", null);
+									observer.onNext(value3);
+									d4.done(null);
+								}
 
-									@Override
-									public void onError(Throwable e) {
-										observer.onError(e);
-									}
-								});
-								d3.done(null);
-							}
+								@Override
+								public void onError(Throwable e) {
+									observer.onError(e);
+								}
+							});
+							d3.done(null);
+						}
 
-							@Override
-							public void onError(Throwable e) {
-								observer.onError(e);
-							}
-						});
-						d2.done(null);
-					}
-
-					@Override
-					public void onError(Throwable e) {
-						observer.onError(e);
-					}
+						@Override
+						public void onError(Throwable e) {
+							observer.onError(e);
+						}
+					});
+					d2.done(null);
 				});
 				d.done(null);
 				return ret;
@@ -670,8 +604,8 @@ public interface ObservableCollection<E> extends Collection<E>, Observable<Obser
 		}
 
 		@Override
-		public Runnable internalSubscribe(Observer<? super ObservableElement<E>> observer) {
-			return theWrapped.internalSubscribe(observer);
+		public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
+			return theWrapped.onElement(observer);
 		}
 
 		@Override

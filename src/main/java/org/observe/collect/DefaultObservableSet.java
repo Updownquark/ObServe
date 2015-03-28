@@ -5,9 +5,11 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Consumer;
 
-import org.observe.DefaultObservable.OnSubscribe;
-import org.observe.*;
+import org.observe.DefaultObservableValue;
+import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.util.Transaction;
 
@@ -16,8 +18,8 @@ import prisms.lang.Type;
 /**
  * A set whose content can be observed. This set is immutable in that none of its methods, including {@link Set} methods, can modify its
  * content (Set modification methods will throw {@link UnsupportedOperationException}). To modify the list content, use
- * {@link #control(org.observe.DefaultObservable.OnSubscribe)} to obtain a set controller. This controller can be modified and these
- * modifications will be reflected in this set and will be propagated to subscribers.
+ * {@link #control(Consumer)} to obtain a set controller. This controller can be modified and these modifications will be reflected in this
+ * set and will be propagated to subscribers.
  *
  * @param <E> The type of element in the set
  */
@@ -27,8 +29,10 @@ public class DefaultObservableSet<E> extends AbstractSet<E> implements Observabl
 
 	private ReentrantReadWriteLock theLock;
 	private AtomicBoolean hasIssuedController = new AtomicBoolean(false);
-	private OnSubscribe<ObservableElement<E>> theOnSubscribe;
-	private java.util.concurrent.ConcurrentHashMap<Observer<? super ObservableElement<E>>, ConcurrentLinkedQueue<Runnable>> theObservers;
+
+	private Consumer<? super Consumer<? super ObservableElement<E>>> theOnSubscribe;
+
+	private java.util.concurrent.ConcurrentHashMap<Consumer<? super ObservableElement<E>>, ConcurrentLinkedQueue<Runnable>> theObservers;
 
 	private CollectionSession theSession;
 	private DefaultObservableValue<CollectionSession> theSessionObservable;
@@ -97,7 +101,7 @@ public class DefaultObservableSet<E> extends AbstractSet<E> implements Observabl
 	 * @param onSubscribe The listener to be notified when new subscriptions to this collection are made
 	 * @return The list to control this list's data.
 	 */
-	public TransactableSet<E> control(OnSubscribe<ObservableElement<E>> onSubscribe) {
+	public TransactableSet<E> control(Consumer<? super Consumer<? super ObservableElement<E>>> onSubscribe) {
 		if(hasIssuedController.getAndSet(true))
 			throw new IllegalStateException("This observable set is already controlled");
 		theOnSubscribe = onSubscribe;
@@ -105,17 +109,17 @@ public class DefaultObservableSet<E> extends AbstractSet<E> implements Observabl
 	}
 
 	@Override
-	public Runnable internalSubscribe(Observer<? super ObservableElement<E>> observer) {
+	public Runnable onElement(Consumer<? super ObservableElement<E>> onElement) {
 		ConcurrentLinkedQueue<Runnable> subSubscriptions = new ConcurrentLinkedQueue<>();
-		theObservers.put(observer, subSubscriptions);
+		theObservers.put(onElement, subSubscriptions);
 		doLocked(() -> {
 			for(ObservableElementImpl<E> el : theValues.values())
-				observer.onNext(newValue(el, subSubscriptions));
+				onElement.accept(newValue(el, subSubscriptions));
 		}, false, false);
 		if(theOnSubscribe != null)
-			theOnSubscribe.onsubscribe(observer);
+			theOnSubscribe.accept(onElement);
 		return () -> {
-			ConcurrentLinkedQueue<Runnable> subs = theObservers.remove(observer);
+			ConcurrentLinkedQueue<Runnable> subs = theObservers.remove(onElement);
 			if(subs == null)
 				return;
 			for(Runnable sub : subs)
@@ -175,8 +179,8 @@ public class DefaultObservableSet<E> extends AbstractSet<E> implements Observabl
 	}
 
 	private void fireNewElement(ObservableElementImpl<E> el) {
-		for(Map.Entry<Observer<? super ObservableElement<E>>, ConcurrentLinkedQueue<Runnable>> observer : theObservers.entrySet()) {
-			observer.getKey().onNext(newValue(el, observer.getValue()));
+		for(Map.Entry<Consumer<? super ObservableElement<E>>, ConcurrentLinkedQueue<Runnable>> observer : theObservers.entrySet()) {
+			observer.getKey().accept(newValue(el, observer.getValue()));
 		}
 	}
 

@@ -276,7 +276,7 @@ public class ObservableTest {
 		Set<Integer> controller = set.control(null);
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
-		Subscription<?> sub = set.act(element -> {
+		Runnable sub = set.onElement(element -> {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
@@ -309,7 +309,7 @@ public class ObservableTest {
 			assertEquals(new TreeSet<>(set), compare1);
 			assertEquals(correct, compare1);
 		}
-		sub.unsubscribe();
+		sub.run();
 		for(int i = 30; i < 50; i++) {
 			controller.add(i);
 			assertEquals(correct, compare1);
@@ -327,7 +327,7 @@ public class ObservableTest {
 		List<Integer> controller = list.control(null);
 		List<Integer> compare1 = new ArrayList<>();
 		List<Integer> correct = new ArrayList<>();
-		Subscription<?> sub = list.act(element -> {
+		Runnable sub = list.onElement(element -> {
 			OrderedObservableElement<Integer> listEl = (OrderedObservableElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
@@ -361,7 +361,7 @@ public class ObservableTest {
 			assertEquals(new ArrayList<>(list), compare1);
 			assertEquals(correct, compare1);
 		}
-		sub.unsubscribe();
+		sub.run();
 		for(int i = 30; i < 50; i++) {
 			controller.add(i);
 			assertEquals(correct, compare1);
@@ -379,7 +379,7 @@ public class ObservableTest {
 		Set<Integer> controller = set.control(null);
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
-		set.mapC(value -> value * 10).act(element -> {
+		set.mapC(value -> value * 10).onElement(element -> {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
@@ -412,7 +412,7 @@ public class ObservableTest {
 		Set<Integer> controller = set.control(null);
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
-		set.filterC(value -> value != null && value % 2 == 0).act(element -> {
+		set.filterC(value -> value != null && value % 2 == 0).onElement(element -> {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
@@ -451,7 +451,7 @@ public class ObservableTest {
 			if(value == null || value % 2 != 0)
 				return null;
 			return value / 2;
-		}).act(element -> {
+		}).onElement(element -> {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
@@ -481,6 +481,7 @@ public class ObservableTest {
 
 	/** Tests {@link ObservableSet#combineC(ObservableValue, java.util.function.BiFunction)} */
 	@Test
+	// TODO This test hangs, not sure why, ever since I refactored the observable collections to not be observables
 	public void observableSetCombine() {
 		DefaultObservableSet<Integer> set = new DefaultObservableSet<>(new Type(Integer.TYPE));
 		SimpleSettableValue<Integer> value1 = new SimpleSettableValue<>(Integer.TYPE, false);
@@ -488,7 +489,7 @@ public class ObservableTest {
 		Set<Integer> controller = set.control(null);
 		List<Integer> compare1 = new ArrayList<>();
 		Set<Integer> correct = new TreeSet<>();
-		set.combineC(value1, (v1, v2) -> v1 * v2).filterC(value -> value != null && value % 3 == 0).act(element -> {
+		set.combineC(value1, (v1, v2) -> v1 * v2).filterC(value -> value != null && value % 3 == 0).onElement(element -> {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
@@ -552,7 +553,7 @@ public class ObservableTest {
 		List<Integer> compare1 = new ArrayList<>();
 		Set<Integer> correct = new TreeSet<>();
 
-		unique.act(element -> {
+		unique.onElement(element -> {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
@@ -627,7 +628,7 @@ public class ObservableTest {
 		ObservableCollection<Integer> flat = ObservableCollection.flatten(outer);
 		List<Integer> compare1 = new ArrayList<>();
 		List<Integer> filtered = new ArrayList<>();
-		flat.act(element -> {
+		flat.onElement(element -> {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
@@ -642,7 +643,7 @@ public class ObservableTest {
 				}
 			});
 		});
-		flat.filterC(value -> value!=null && value % 3 == 0).act(element -> {
+		flat.filterC(value -> value != null && value % 3 == 0).onElement(element -> {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
@@ -798,7 +799,7 @@ public class ObservableTest {
 		List<Integer> controller = list.control(null);
 		List<Integer> compare1 = new ArrayList<>();
 		List<Integer> correct = new ArrayList<>();
-		list.mapC(value -> value * 10).act(element -> {
+		list.mapC(value -> value * 10).onElement(element -> {
 			OrderedObservableElement<Integer> listEl = (OrderedObservableElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
@@ -840,7 +841,7 @@ public class ObservableTest {
 		List<Integer> controller = list.control(null);
 		List<Integer> compare1 = new ArrayList<>();
 		List<Integer> correct = new ArrayList<>();
-		list.filterC(value -> value != null && value % 2 == 0).act(element -> {
+		list.filterC(value -> value != null && value % 2 == 0).onElement(element -> {
 			OrderedObservableElement<Integer> listEl = (OrderedObservableElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
@@ -889,7 +890,7 @@ public class ObservableTest {
 			if(value == null || value % 2 != 0)
 				return null;
 			return value / 2;
-		}).act(element -> {
+		}).onElement(element -> {
 			OrderedObservableElement<Integer> listEl = (OrderedObservableElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
@@ -929,6 +930,7 @@ public class ObservableTest {
 
 	/** Tests {@link ObservableList#combineC(ObservableValue, java.util.function.BiFunction)} */
 	@Test
+	// TODO This test hangs, not sure why, ever since I refactored the observable collections to not be observables
 	public void observableListCombine() {
 		DefaultObservableList<Integer> set = new DefaultObservableList<>(new Type(Integer.TYPE));
 		SimpleSettableValue<Integer> value1 = new SimpleSettableValue<>(Integer.TYPE, false);
@@ -936,7 +938,7 @@ public class ObservableTest {
 		List<Integer> controller = set.control(null);
 		List<Integer> compare1 = new ArrayList<>();
 		List<Integer> correct = new ArrayList<>();
-		set.combineC(value1, (v1, v2) -> v1 * v2).filterC(value -> value != null && value % 3 == 0).act(element -> {
+		set.combineC(value1, (v1, v2) -> v1 * v2).filterC(value -> value != null && value % 3 == 0).onElement(element -> {
 			OrderedObservableElement<Integer> listEl = (OrderedObservableElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
@@ -1007,7 +1009,7 @@ public class ObservableTest {
 		ObservableList<Integer> flat = ObservableList.flatten(outer);
 		List<Integer> compare1 = new ArrayList<>();
 		List<Integer> filtered = new ArrayList<>();
-		flat.act(element -> {
+		flat.onElement(element -> {
 			OrderedObservableElement<Integer> listEl = (OrderedObservableElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
@@ -1024,7 +1026,7 @@ public class ObservableTest {
 				}
 			});
 		});
-		flat.filterC(value -> value != null && value % 3 == 0).act(element -> {
+		flat.filterC(value -> value != null && value % 3 == 0).onElement(element -> {
 			OrderedObservableElement<Integer> listEl = (OrderedObservableElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
@@ -1216,7 +1218,7 @@ public class ObservableTest {
 		List<Integer> controller = list.control(null);
 
 		List<Integer> compare = new ArrayList<>();
-		ObservableOrderedCollection.sort(list, null).act(element -> {
+		ObservableOrderedCollection.sort(list, null).onElement(element -> {
 			OrderedObservableElement<Integer> orderedEl = (OrderedObservableElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
@@ -1285,7 +1287,7 @@ public class ObservableTest {
 			}
 		}
 
-		ObservableOrderedCollection.flatten(outer, null).act(element -> {
+		ObservableOrderedCollection.flatten(outer, null).onElement(element -> {
 			OrderedObservableElement<Integer> orderedEl = (OrderedObservableElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override

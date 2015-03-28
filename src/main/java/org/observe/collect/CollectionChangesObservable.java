@@ -16,25 +16,20 @@ class CollectionChangesObservable<E, CCE extends CollectionChangeEvent<E>> imple
 
 	@Override
 	public Runnable internalSubscribe(Observer<? super CCE> observer) {
-		Runnable collectSub = collection.internalSubscribe(new Observer<ObservableElement<E>>() {
+		Runnable collectSub = collection.onElement(element -> element.internalSubscribe(new Observer<ObservableValueEvent<E>>() {
 			@Override
-			public <V extends ObservableElement<E>> void onNext(V element) {
-				element.internalSubscribe(new Observer<ObservableValueEvent<E>>() {
-					@Override
-					public <V2 extends ObservableValueEvent<E>> void onNext(V2 evt) {
-						if(evt.getOldValue() == null)
-							newEvent(CollectionChangeType.add, evt, observer);
-						else
-							newEvent(CollectionChangeType.set, evt, observer);
-					}
-
-					@Override
-					public <V2 extends ObservableValueEvent<E>> void onCompleted(V2 evt) {
-						newEvent(CollectionChangeType.remove, evt, observer);
-					}
-				});
+			public <V2 extends ObservableValueEvent<E>> void onNext(V2 evt) {
+				if(evt.getOldValue() == null)
+					newEvent(CollectionChangeType.add, evt, observer);
+				else
+					newEvent(CollectionChangeType.set, evt, observer);
 			}
-		});
+
+			@Override
+			public <V2 extends ObservableValueEvent<E>> void onCompleted(V2 evt) {
+				newEvent(CollectionChangeType.remove, evt, observer);
+			}
+		}));
 		Runnable transSub = collection.getSession().internalSubscribe(new Observer<ObservableValueEvent<CollectionSession>>() {
 			@Override
 			public <V extends ObservableValueEvent<CollectionSession>> void onNext(V value) {
