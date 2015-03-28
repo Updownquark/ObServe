@@ -2,6 +2,8 @@ package org.observe.util;
 
 import java.util.Collection;
 import java.util.LinkedList;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
@@ -14,8 +16,11 @@ import java.util.function.Consumer;
  */
 public class ListenerSet<E> {
 	private final Collection<E> theListeners;
-
 	private final ReentrantReadWriteLock theLock;
+
+	private final ConcurrentHashMap<IdentityKey<E>, Boolean> theListenersToRemove;
+
+	private final Collection<E> theListenersToAdd;
 
 	private Consumer<Boolean> theUsedListener;
 	private Consumer<E> theOnSubscribe;
@@ -24,6 +29,9 @@ public class ListenerSet<E> {
 	public ListenerSet() {
 		theListeners = new LinkedList<>();
 		theLock = new ReentrantReadWriteLock();
+		// This need not be thread safe since it will
+		theListenersToRemove = new ConcurrentHashMap<>();
+		theListenersToAdd = new ConcurrentLinkedQueue<>();
 		theOnSubscribe = listener -> {
 		};
 		theUsedListener = used -> {
@@ -49,6 +57,10 @@ public class ListenerSet<E> {
 	 * @return Whether the listener was added (only false if the listener is already in this set)
 	 */
 	public boolean add(E listener) {
+		if(theLock.getReadHoldCount() > 0 && !theListeners.contains(listener)) {
+			theListenersToAdd.add(listener);
+			return true;
+		}
 		Lock lock = theLock.writeLock();
 		lock.lock();
 		boolean ret;
@@ -69,6 +81,12 @@ public class ListenerSet<E> {
 	 * @return Whether the listener was removed (false if the listener was not in this set)
 	 */
 	public boolean remove(E listener) {
+		if(theListenersToAdd.remove(listener))
+			return true;
+		if(theLock.getReadHoldCount() > 0 && theListeners.contains(listener)) {
+			theListenersToRemove.put(new IdentityKey<>(listener), true);
+			return true;
+		}
 		Lock lock = theLock.writeLock();
 		lock.lock();
 		boolean ret;
@@ -84,14 +102,46 @@ public class ListenerSet<E> {
 
 	/**
 	 * Invokes this set's listeners
-	 * 
+	 *
 	 * @param call The function to use each listener in this set
 	 */
 	public void forEach(Consumer<? super E> call) {
 		Lock lock = theLock.readLock();
 		lock.lock();
 		try {
-			theListeners.forEach(call);
+			for(E listener : theListeners) {
+				if(!theListenersToRemove.containsKey(listener))
+					call.accept(listener);
+			}
+		} finally {
+			lock.unlock();
+		}
+		if(theLock.getReadHoldCount() == 0) {
+			addAndRemoveQueuedListeners();
+		}
+	}
+
+	private void addAndRemoveQueuedListeners() {
+		if(theListenersToRemove.isEmpty() && theListenersToAdd.isEmpty())
+			return;
+		Lock lock = theLock.writeLock();
+		lock.lock();
+		try {
+			boolean beforeEmpty = theListeners.isEmpty();
+			if(!theListenersToRemove.isEmpty()) {
+				for(IdentityKey<E> listener : theListenersToRemove.keySet())
+					theListeners.remove(listener.value);
+				theListenersToRemove.clear();
+			}
+			if(!theListenersToAdd.isEmpty()) {
+				for(E listener : theListenersToAdd) {
+					theListeners.add(listener);
+					theOnSubscribe.accept(listener);
+				}
+			}
+
+			if(beforeEmpty != theListeners.isEmpty())
+				theUsedListener.accept(!theListeners.isEmpty());
 		} finally {
 			lock.unlock();
 		}
