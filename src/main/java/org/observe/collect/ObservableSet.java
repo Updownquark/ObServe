@@ -1,12 +1,12 @@
 package org.observe.collect;
 
 import java.util.*;
-import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import org.observe.*;
 import org.observe.Observable;
+import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 
 import prisms.lang.Type;
@@ -18,83 +18,13 @@ import prisms.lang.Type;
  */
 public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 	/**
-	 * @param map The mapping function
-	 * @return An observable collection of a new type backed by this collection and the mapping function
-	 */
-	@Override
-	default <T> ObservableSet<T> map(Function<? super E, T> map) {
-		return map(ComposedObservableValue.getReturnType(map), map);
-	}
-
-	@Override
-	default <T> ObservableSet<T> map(Type type, Function<? super E, T> map) {
-		ObservableSet<E> outerSet = this;
-		class MappedObservableSet extends java.util.AbstractSet<T> implements ObservableSet<T> {
-			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return outerSet.getSession();
-			}
-
-			@Override
-			public Type getType() {
-				return type;
-			}
-
-			@Override
-			public int size() {
-				return outerSet.size();
-			}
-
-			@Override
-			public Iterator<T> iterator() {
-				return new Iterator<T>() {
-					private final Iterator<E> backing = outerSet.iterator();
-
-					@Override
-					public boolean hasNext() {
-						return backing.hasNext();
-					}
-
-					@Override
-					public T next() {
-						return map.apply(backing.next());
-					}
-
-					@Override
-					public void remove() {
-						backing.remove();
-					}
-				};
-			}
-
-			@Override
-			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
-				return outerSet.onElement(element -> observer.accept(element.mapV(map)));
-			}
-		}
-		return new MappedObservableSet();
-	}
-
-	/**
 	 * @param filter The filter function
 	 * @return A set containing all elements passing the given test
 	 */
 	@Override
 	default ObservableSet<E> filter(Function<? super E, Boolean> filter) {
-		return filterMap(value -> {
-			return (value != null && filter.apply(value)) ? value : null;
-		});
-	}
-
-	@Override
-	default <T> ObservableSet<T> filterMap(Function<? super E, T> filterMap) {
-		return filterMap(ComposedObservableValue.getReturnType(filterMap), filterMap);
-	}
-
-	@Override
-	default <T> ObservableSet<T> filterMap(Type type, Function<? super E, T> map) {
 		ObservableSet<E> outer = this;
-		class FilteredSet extends AbstractSet<T> implements ObservableSet<T> {
+		class FilteredSet extends AbstractSet<E> implements ObservableSet<E> {
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
 				return outer.getSession();
@@ -102,37 +32,40 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 
 			@Override
 			public Type getType() {
-				return type;
+				return outer.getType();
 			}
 
 			@Override
 			public int size() {
 				int ret = 0;
 				for(E el : outer)
-					if(map.apply(el) != null)
+					if(filter.apply(el) != null)
 						ret++;
 				return ret;
 			}
 
 			@Override
-			public Iterator<T> iterator() {
-				return new Iterator<T>() {
+			public Iterator<E> iterator() {
+				return new Iterator<E>() {
 					private final Iterator<E> backing = outer.iterator();
-					private T nextVal;
+
+					private E nextVal;
 
 					@Override
 					public boolean hasNext() {
 						while(nextVal == null && backing.hasNext()) {
-							nextVal = map.apply(backing.next());
+							nextVal = backing.next();
+							if(!filter.apply(nextVal))
+								nextVal = null;
 						}
 						return nextVal != null;
 					}
 
 					@Override
-					public T next() {
+					public E next() {
 						if(nextVal == null && !hasNext())
 							throw new java.util.NoSuchElementException();
-						T ret = nextVal;
+						E ret = nextVal;
 						nextVal = null;
 						return ret;
 					}
@@ -140,12 +73,13 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 			}
 
 			@Override
-			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
+			public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
+				Function<E, E> map = value -> (filter.apply(value) ? value : null);
 				return outer.onElement(element -> {
-					FilteredElement<T, E> retElement = new FilteredElement<>(element, map, type);
+					FilteredElement<E, E> retElement = new FilteredElement<>(element, map, getType());
 					element.act(elValue -> {
 						if(!retElement.isIncluded()) {
-							T mapped = map.apply(elValue.getValue());
+							E mapped = map.apply(elValue.getValue());
 							if(mapped != null)
 								observer.accept(retElement);
 						}
@@ -159,95 +93,6 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 			}
 		}
 		return new FilteredSet();
-	}
-
-	/**
-	 * @param <T> The type of the argument value
-	 * @param <V> The type of the new observable set
-	 * @param arg The value to combine with each of this set's elements
-	 * @param func The combination function to apply to this set's elements and the given value
-	 * @return An observable set containing this set's elements combined with the given argument
-	 */
-	default <T, V> ObservableSet<V> combine(ObservableValue<T> arg, BiFunction<? super E, ? super T, V> func) {
-		return combine(arg, ComposedObservableValue.getReturnType(func), func);
-	}
-
-	/**
-	 * @param <T> The type of the argument value
-	 * @param <V> The type of the new observable set
-	 * @param arg The value to combine with each of this set's elements
-	 * @param type The type for the new set
-	 * @param func The combination function to apply to this set's elements and the given value
-	 * @return An observable set containing this set's elements combined with the given argument
-	 */
-	default <T, V> ObservableSet<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
-		ObservableSet<E> outerSet = this;
-		class CombinedObservableSet extends AbstractSet<V> implements ObservableSet<V> {
-			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return outerSet.getSession();
-			}
-
-			@Override
-			public Type getType() {
-				return type;
-			}
-
-			@Override
-			public int size() {
-				return outerSet.size();
-			}
-
-			@Override
-			public Iterator<V> iterator() {
-				return new Iterator<V>() {
-					private final Iterator<E> backing = outerSet.iterator();
-
-					@Override
-					public boolean hasNext() {
-						return backing.hasNext();
-					}
-
-					@Override
-					public V next() {
-						return func.apply(backing.next(), arg.get());
-					}
-				};
-			}
-
-			@Override
-			public Runnable onElement(Consumer<? super ObservableElement<V>> observer) {
-				boolean [] complete = new boolean[1];
-				Runnable setSub = outerSet.onElement(new Consumer<ObservableElement<E>>() {
-					@Override
-					public void accept(ObservableElement<E> value) {
-						observer.accept(value.combineV(func, arg));
-					}
-				});
-				if(complete[0])
-					return () -> {
-					};
-					Runnable argSub = arg.internalSubscribe(new Observer<ObservableValueEvent<T>>() {
-						@Override
-						public <V2 extends ObservableValueEvent<T>> void onNext(V2 value) {
-						}
-
-						@Override
-						public <V2 extends ObservableValueEvent<T>> void onCompleted(V2 value) {
-							complete[0] = true;
-							setSub.run();
-						}
-					});
-					if(complete[0])
-						return () -> {
-						};
-						return () -> {
-							setSub.run();
-							argSub.run();
-						};
-			}
-		}
-		return new CombinedObservableSet();
 	}
 
 	/**
@@ -536,24 +381,6 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 			}
 		}
 		return new UniqueSet();
-	}
-
-	/**
-	 * @param <T> An observable set that contains all elements in all collections in the wrapping collection
-	 * @param coll The collection to flatten
-	 * @return A collection containing all elements of all collections in the outer collection
-	 */
-	public static <T> ObservableSet<T> flatten(ObservableCollection<? extends ObservableCollection<T>> coll) {
-		return unique(ObservableCollection.flatten(coll));
-	}
-
-	/**
-	 * @param <T> An observable set that contains all elements the given collections
-	 * @param colls The collections to flatten
-	 * @return A collection containing all elements of the given collections
-	 */
-	public static <T> ObservableSet<T> flattenCollections(ObservableCollection<T>... colls) {
-		return flatten(ObservableList.constant(new Type(ObservableCollection.class, new Type(Object.class, true)), colls));
 	}
 
 	/**

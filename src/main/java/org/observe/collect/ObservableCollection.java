@@ -4,6 +4,7 @@ import java.util.AbstractCollection;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -253,6 +254,95 @@ public interface ObservableCollection<E> extends Collection<E> {
 	}
 
 	/**
+	 * @param <T> The type of the argument value
+	 * @param <V> The type of the new observable collection
+	 * @param arg The value to combine with each of this collection's elements
+	 * @param func The combination function to apply to this collection's elements and the given value
+	 * @return An observable collection containing this collection's elements combined with the given argument
+	 */
+	default <T, V> ObservableCollection<V> combine(ObservableValue<T> arg, BiFunction<? super E, ? super T, V> func) {
+		return combine(arg, ComposedObservableValue.getReturnType(func), func);
+	}
+
+	/**
+	 * @param <T> The type of the argument value
+	 * @param <V> The type of the new observable collection
+	 * @param arg The value to combine with each of this collection's elements
+	 * @param type The type for the new collection
+	 * @param func The combination function to apply to this collection's elements and the given value
+	 * @return An observable collection containing this collection's elements combined with the given argument
+	 */
+	default <T, V> ObservableCollection<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
+		ObservableCollection<E> outerSet = this;
+		class CombinedObservableCollection extends AbstractCollection<V> implements ObservableCollection<V> {
+			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return outerSet.getSession();
+			}
+
+			@Override
+			public Type getType() {
+				return type;
+			}
+
+			@Override
+			public int size() {
+				return outerSet.size();
+			}
+
+			@Override
+			public Iterator<V> iterator() {
+				return new Iterator<V>() {
+					private final Iterator<E> backing = outerSet.iterator();
+
+					@Override
+					public boolean hasNext() {
+						return backing.hasNext();
+					}
+
+					@Override
+					public V next() {
+						return func.apply(backing.next(), arg.get());
+					}
+				};
+			}
+
+			@Override
+			public Runnable onElement(Consumer<? super ObservableElement<V>> observer) {
+				boolean [] complete = new boolean[1];
+				Runnable setSub = outerSet.onElement(new Consumer<ObservableElement<E>>() {
+					@Override
+					public void accept(ObservableElement<E> value) {
+						observer.accept(value.combineV(func, arg));
+					}
+				});
+				if(complete[0])
+					return () -> {
+					};
+				Runnable argSub = arg.internalSubscribe(new Observer<ObservableValueEvent<T>>() {
+					@Override
+					public <V2 extends ObservableValueEvent<T>> void onNext(V2 value) {
+					}
+
+					@Override
+					public <V2 extends ObservableValueEvent<T>> void onCompleted(V2 value) {
+						complete[0] = true;
+						setSub.run();
+					}
+				});
+				if(complete[0])
+					return () -> {
+					};
+				return () -> {
+					setSub.run();
+					argSub.run();
+				};
+			}
+		}
+		return new CombinedObservableCollection();
+	}
+
+	/**
 	 * @param observable The observable to re-fire events on
 	 * @return A collection whose elements fire additional value events when the given observable fires
 	 */
@@ -368,6 +458,15 @@ public interface ObservableCollection<E> extends Collection<E> {
 			}
 		}
 		return new ComposedObservableCollection();
+	}
+
+	/**
+	 * @param <T> An observable collection that contains all elements the given collections
+	 * @param colls The collections to flatten
+	 * @return A collection containing all elements of the given collections
+	 */
+	public static <T> ObservableCollection<T> flattenCollections(ObservableCollection<T>... colls) {
+		return flatten(ObservableList.constant(new Type(ObservableCollection.class, new Type(Object.class, true)), colls));
 	}
 
 	/**

@@ -160,6 +160,7 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 	 * @param func The combination function to apply to this list's elements and the given value
 	 * @return An observable list containing this list's elements combined with the given argument
 	 */
+	@Override
 	default <T, V> ObservableList<V> combine(ObservableValue<T> arg, BiFunction<? super E, ? super T, V> func) {
 		return combine(arg, ComposedObservableValue.getReturnType(func), func);
 	}
@@ -172,6 +173,7 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 	 * @param func The combination function to apply to this list's elements and the given value
 	 * @return An observable list containing this list's elements combined with the given argument
 	 */
+	@Override
 	default <T, V> ObservableList<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
 		ObservableList<E> outerList = this;
 		class CombinedObservableList extends AbstractList<V> implements ObservableList<V> {
