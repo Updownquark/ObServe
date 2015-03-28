@@ -29,8 +29,8 @@ public class CombinedCollectionSessionObservable implements ObservableValue<Coll
 	 * @param collection The collection of collections that this session observable is for
 	 */
 	public CombinedCollectionSessionObservable(ObservableCollection<? extends ObservableCollection<?>> collection) {
-		theWrappedSessionObservable = ObservableUtils.flattenValues(SESSION_TYPE, collection.mapC(collect -> collect.getSession()))
-			.filterC(session -> session != null).observeSize().mapV(size -> size > 0)
+		theWrappedSessionObservable = ObservableUtils.flattenValues(SESSION_TYPE, collection.map(collect -> collect.getSession()))
+			.filter(session -> session != null).observeSize().mapV(size -> size > 0)
 			.combineV((Boolean value1, Boolean value2) -> value1 || value2, collection.getSession().mapV(session -> session != null));
 		theObservers = new ListenerSet<>();
 		isInTransaction = new AtomicBoolean();

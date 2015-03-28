@@ -105,8 +105,8 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @param map The mapping function
 	 * @return An observable collection of a new type backed by this collection and the mapping function
 	 */
-	default <T> ObservableCollection<T> mapC(Function<? super E, T> map) {
-		return mapC(ComposedObservableValue.getReturnType(map), map);
+	default <T> ObservableCollection<T> map(Function<? super E, T> map) {
+		return map(ComposedObservableValue.getReturnType(map), map);
 	}
 
 	/**
@@ -115,7 +115,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @param map The mapping function to map the elements of this collection
 	 * @return The mapped collection
 	 */
-	default <T> ObservableCollection<T> mapC(Type type, Function<? super E, T> map) {
+	default <T> ObservableCollection<T> map(Type type, Function<? super E, T> map) {
 		ObservableCollection<E> outerColl = this;
 		class MappedObservableCollection extends java.util.AbstractCollection<T> implements ObservableCollection<T> {
 			@Override
@@ -167,8 +167,8 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @param filter The filter function
 	 * @return A collection containing all elements passing the given test
 	 */
-	default ObservableCollection<E> filterC(Function<? super E, Boolean> filter) {
-		return filterMapC(value -> {
+	default ObservableCollection<E> filter(Function<? super E, Boolean> filter) {
+		return filterMap(value -> {
 			return (value != null && filter.apply(value)) ? value : null;
 		});
 	}
@@ -178,8 +178,8 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @param filterMap The mapping function
 	 * @return An observable collection of a new type backed by this collection and the mapping function
 	 */
-	default <T> ObservableCollection<T> filterMapC(Function<? super E, T> filterMap) {
-		return filterMapC(ComposedObservableValue.getReturnType(filterMap), filterMap);
+	default <T> ObservableCollection<T> filterMap(Function<? super E, T> filterMap) {
+		return filterMap(ComposedObservableValue.getReturnType(filterMap), filterMap);
 	}
 
 	/**
@@ -188,7 +188,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @param map The mapping function
 	 * @return A collection containing every element in this collection for which the mapping function returns a non-null value
 	 */
-	default <T> ObservableCollection<T> filterMapC(Type type, Function<? super E, T> map) {
+	default <T> ObservableCollection<T> filterMap(Type type, Function<? super E, T> map) {
 		ObservableCollection<E> outer = this;
 		class FilteredCollection extends AbstractCollection<T> implements ObservableCollection<T> {
 			@Override
@@ -422,7 +422,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	}
 
 	/**
-	 * The type of elements returned from {@link ObservableCollection#filterMapC(Function)}
+	 * The type of elements returned from {@link ObservableCollection#filterMap(Function)}
 	 *
 	 * @param <T> The type of this element
 	 * @param <E> The type of element being wrapped

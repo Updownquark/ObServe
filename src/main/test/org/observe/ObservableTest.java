@@ -372,14 +372,14 @@ public class ObservableTest {
 		}
 	}
 
-	/** Tests {@link ObservableSet#mapC(java.util.function.Function)} */
+	/** Tests {@link ObservableSet#map(java.util.function.Function)} */
 	@Test
 	public void observableSetMap() {
 		DefaultObservableSet<Integer> set = new DefaultObservableSet<>(new Type(Integer.TYPE));
 		Set<Integer> controller = set.control(null);
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
-		set.mapC(value -> value * 10).onElement(element -> {
+		set.map(value -> value * 10).onElement(element -> {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
@@ -405,14 +405,14 @@ public class ObservableTest {
 		}
 	}
 
-	/** Tests {@link ObservableSet#filterC(java.util.function.Function)} */
+	/** Tests {@link ObservableSet#filter(java.util.function.Function)} */
 	@Test
 	public void observableSetFilter() {
 		DefaultObservableSet<Integer> set = new DefaultObservableSet<>(new Type(Integer.TYPE));
 		Set<Integer> controller = set.control(null);
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
-		set.filterC(value -> value != null && value % 2 == 0).onElement(element -> {
+		set.filter(value -> value != null && value % 2 == 0).onElement(element -> {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
@@ -440,14 +440,14 @@ public class ObservableTest {
 		}
 	}
 
-	/** Tests {@link ObservableSet#filterMapC(java.util.function.Function)} */
+	/** Tests {@link ObservableSet#filterMap(java.util.function.Function)} */
 	@Test
 	public void observableSetFilterMap() {
 		DefaultObservableSet<Integer> set = new DefaultObservableSet<>(new Type(Integer.TYPE));
 		Set<Integer> controller = set.control(null);
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
-		set.filterMapC(value -> {
+		set.filterMap(value -> {
 			if(value == null || value % 2 != 0)
 				return null;
 			return value / 2;
@@ -479,7 +479,7 @@ public class ObservableTest {
 		}
 	}
 
-	/** Tests {@link ObservableSet#combineC(ObservableValue, java.util.function.BiFunction)} */
+	/** Tests {@link ObservableSet#combine(ObservableValue, java.util.function.BiFunction)} */
 	@Test
 	// TODO This test hangs, not sure why, ever since I refactored the observable collections to not be observables
 	public void observableSetCombine() {
@@ -489,7 +489,7 @@ public class ObservableTest {
 		Set<Integer> controller = set.control(null);
 		List<Integer> compare1 = new ArrayList<>();
 		Set<Integer> correct = new TreeSet<>();
-		set.combineC(value1, (v1, v2) -> v1 * v2).filterC(value -> value != null && value % 3 == 0).onElement(element -> {
+		set.combine(value1, (v1, v2) -> v1 * v2).filter(value -> value != null && value % 3 == 0).onElement(element -> {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
@@ -643,7 +643,7 @@ public class ObservableTest {
 				}
 			});
 		});
-		flat.filterC(value -> value != null && value % 3 == 0).onElement(element -> {
+		flat.filter(value -> value != null && value % 3 == 0).onElement(element -> {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
@@ -773,7 +773,7 @@ public class ObservableTest {
 		Set<ObservableValue<Integer>> controller = set.control(null);
 		controller.add(obs1);
 		controller.add(obs2);
-		Observable<Integer> folded = ObservableCollection.fold(set.mapC(value -> value.value()));
+		Observable<Integer> folded = ObservableCollection.fold(set.map(value -> value.value()));
 		int [] received = new int[1];
 		folded.noInit().act(value -> received[0] = value);
 
@@ -792,14 +792,14 @@ public class ObservableTest {
 		assertEquals(4, received[0]);
 	}
 
-	/** Tests {@link ObservableList#mapC(java.util.function.Function)} */
+	/** Tests {@link ObservableList#map(java.util.function.Function)} */
 	@Test
 	public void observableListMap() {
 		DefaultObservableList<Integer> list = new DefaultObservableList<>(new Type(Integer.TYPE));
 		List<Integer> controller = list.control(null);
 		List<Integer> compare1 = new ArrayList<>();
 		List<Integer> correct = new ArrayList<>();
-		list.mapC(value -> value * 10).onElement(element -> {
+		list.map(value -> value * 10).onElement(element -> {
 			OrderedObservableElement<Integer> listEl = (OrderedObservableElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
@@ -834,14 +834,14 @@ public class ObservableTest {
 		}
 	}
 
-	/** Tests {@link ObservableList#filterC(java.util.function.Function)} */
+	/** Tests {@link ObservableList#filter(java.util.function.Function)} */
 	@Test
 	public void observableListFilter() {
 		DefaultObservableList<Integer> list = new DefaultObservableList<>(new Type(Integer.TYPE));
 		List<Integer> controller = list.control(null);
 		List<Integer> compare1 = new ArrayList<>();
 		List<Integer> correct = new ArrayList<>();
-		list.filterC(value -> value != null && value % 2 == 0).onElement(element -> {
+		list.filter(value -> value != null && value % 2 == 0).onElement(element -> {
 			OrderedObservableElement<Integer> listEl = (OrderedObservableElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
@@ -879,14 +879,14 @@ public class ObservableTest {
 		}
 	}
 
-	/** Tests {@link ObservableList#filterMapC(java.util.function.Function)} */
+	/** Tests {@link ObservableList#filterMap(java.util.function.Function)} */
 	@Test
 	public void observableListFilterMap() {
 		DefaultObservableList<Integer> list = new DefaultObservableList<>(new Type(Integer.TYPE));
 		List<Integer> controller = list.control(null);
 		List<Integer> compare1 = new ArrayList<>();
 		List<Integer> correct = new ArrayList<>();
-		list.filterMapC(value -> {
+		list.filterMap(value -> {
 			if(value == null || value % 2 != 0)
 				return null;
 			return value / 2;
@@ -928,7 +928,7 @@ public class ObservableTest {
 		}
 	}
 
-	/** Tests {@link ObservableList#combineC(ObservableValue, java.util.function.BiFunction)} */
+	/** Tests {@link ObservableList#combine(ObservableValue, java.util.function.BiFunction)} */
 	@Test
 	// TODO This test hangs, not sure why, ever since I refactored the observable collections to not be observables
 	public void observableListCombine() {
@@ -938,7 +938,7 @@ public class ObservableTest {
 		List<Integer> controller = set.control(null);
 		List<Integer> compare1 = new ArrayList<>();
 		List<Integer> correct = new ArrayList<>();
-		set.combineC(value1, (v1, v2) -> v1 * v2).filterC(value -> value != null && value % 3 == 0).onElement(element -> {
+		set.combine(value1, (v1, v2) -> v1 * v2).filter(value -> value != null && value % 3 == 0).onElement(element -> {
 			OrderedObservableElement<Integer> listEl = (OrderedObservableElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
@@ -1026,7 +1026,7 @@ public class ObservableTest {
 				}
 			});
 		});
-		flat.filterC(value -> value != null && value % 3 == 0).onElement(element -> {
+		flat.filter(value -> value != null && value % 3 == 0).onElement(element -> {
 			OrderedObservableElement<Integer> listEl = (OrderedObservableElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override

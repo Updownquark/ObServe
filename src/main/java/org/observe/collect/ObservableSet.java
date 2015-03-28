@@ -22,12 +22,12 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 	 * @return An observable collection of a new type backed by this collection and the mapping function
 	 */
 	@Override
-	default <T> ObservableSet<T> mapC(Function<? super E, T> map) {
-		return mapC(ComposedObservableValue.getReturnType(map), map);
+	default <T> ObservableSet<T> map(Function<? super E, T> map) {
+		return map(ComposedObservableValue.getReturnType(map), map);
 	}
 
 	@Override
-	default <T> ObservableSet<T> mapC(Type type, Function<? super E, T> map) {
+	default <T> ObservableSet<T> map(Type type, Function<? super E, T> map) {
 		ObservableSet<E> outerSet = this;
 		class MappedObservableSet extends java.util.AbstractSet<T> implements ObservableSet<T> {
 			@Override
@@ -80,19 +80,19 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 	 * @return A set containing all elements passing the given test
 	 */
 	@Override
-	default ObservableSet<E> filterC(Function<? super E, Boolean> filter) {
-		return filterMapC(value -> {
+	default ObservableSet<E> filter(Function<? super E, Boolean> filter) {
+		return filterMap(value -> {
 			return (value != null && filter.apply(value)) ? value : null;
 		});
 	}
 
 	@Override
-	default <T> ObservableSet<T> filterMapC(Function<? super E, T> filterMap) {
-		return filterMapC(ComposedObservableValue.getReturnType(filterMap), filterMap);
+	default <T> ObservableSet<T> filterMap(Function<? super E, T> filterMap) {
+		return filterMap(ComposedObservableValue.getReturnType(filterMap), filterMap);
 	}
 
 	@Override
-	default <T> ObservableSet<T> filterMapC(Type type, Function<? super E, T> map) {
+	default <T> ObservableSet<T> filterMap(Type type, Function<? super E, T> map) {
 		ObservableSet<E> outer = this;
 		class FilteredSet extends AbstractSet<T> implements ObservableSet<T> {
 			@Override
@@ -168,8 +168,8 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 	 * @param func The combination function to apply to this set's elements and the given value
 	 * @return An observable set containing this set's elements combined with the given argument
 	 */
-	default <T, V> ObservableSet<V> combineC(ObservableValue<T> arg, BiFunction<? super E, ? super T, V> func) {
-		return combineC(arg, ComposedObservableValue.getReturnType(func), func);
+	default <T, V> ObservableSet<V> combine(ObservableValue<T> arg, BiFunction<? super E, ? super T, V> func) {
+		return combine(arg, ComposedObservableValue.getReturnType(func), func);
 	}
 
 	/**
@@ -180,7 +180,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 	 * @param func The combination function to apply to this set's elements and the given value
 	 * @return An observable set containing this set's elements combined with the given argument
 	 */
-	default <T, V> ObservableSet<V> combineC(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
+	default <T, V> ObservableSet<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
 		ObservableSet<E> outerSet = this;
 		class CombinedObservableSet extends AbstractSet<V> implements ObservableSet<V> {
 			@Override

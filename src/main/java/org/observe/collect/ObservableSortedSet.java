@@ -16,7 +16,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, NavigableSet<E
 	 * @return A sorted set containing all elements of this collection that pass the given test
 	 */
 	@Override
-	default ObservableSortedSet<E> filterC(Function<? super E, Boolean> filter) {
+	default ObservableSortedSet<E> filter(Function<? super E, Boolean> filter) {
 		// TODO
 		return null;
 	}

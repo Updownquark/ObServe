@@ -25,8 +25,8 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 	 * @return An observable list of a new type backed by this list and the mapping function
 	 */
 	@Override
-	default <T> ObservableList<T> mapC(Function<? super E, T> map) {
-		return mapC(ComposedObservableValue.getReturnType(map), map);
+	default <T> ObservableList<T> map(Function<? super E, T> map) {
+		return map(ComposedObservableValue.getReturnType(map), map);
 	}
 
 	/**
@@ -35,7 +35,7 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 	 * @return An observable list of a new type backed by this list and the mapping function
 	 */
 	@Override
-	default <T> ObservableList<T> mapC(Type type, Function<? super E, T> map) {
+	default <T> ObservableList<T> map(Type type, Function<? super E, T> map) {
 		ObservableList<E> outerList = this;
 		class MappedObservableList extends AbstractList<T> implements ObservableList<T> {
 			@Override
@@ -71,19 +71,19 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 	 * @return A list containing all elements of this list that pass the given test
 	 */
 	@Override
-	default ObservableList<E> filterC(Function<? super E, Boolean> filter) {
-		return filterMapC(getType(), (E value) -> {
+	default ObservableList<E> filter(Function<? super E, Boolean> filter) {
+		return filterMap(getType(), (E value) -> {
 			return (value != null && filter.apply(value)) ? value : null;
 		});
 	}
 
 	@Override
-	default <T> ObservableList<T> filterMapC(Function<? super E, T> map) {
-		return filterMapC(ComposedObservableValue.getReturnType(map), map);
+	default <T> ObservableList<T> filterMap(Function<? super E, T> map) {
+		return filterMap(ComposedObservableValue.getReturnType(map), map);
 	}
 
 	@Override
-	default <T> ObservableList<T> filterMapC(Type type, Function<? super E, T> map) {
+	default <T> ObservableList<T> filterMap(Type type, Function<? super E, T> map) {
 		ObservableList<E> outer = this;
 		class FilteredList extends AbstractList<T> implements ObservableList<T> {
 			private List<FilteredListElement<T, E>> theFilteredElements = new java.util.ArrayList<>();
@@ -160,8 +160,8 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 	 * @param func The combination function to apply to this list's elements and the given value
 	 * @return An observable list containing this list's elements combined with the given argument
 	 */
-	default <T, V> ObservableList<V> combineC(ObservableValue<T> arg, BiFunction<? super E, ? super T, V> func) {
-		return combineC(arg, ComposedObservableValue.getReturnType(func), func);
+	default <T, V> ObservableList<V> combine(ObservableValue<T> arg, BiFunction<? super E, ? super T, V> func) {
+		return combine(arg, ComposedObservableValue.getReturnType(func), func);
 	}
 
 	/**
@@ -172,7 +172,7 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 	 * @param func The combination function to apply to this list's elements and the given value
 	 * @return An observable list containing this list's elements combined with the given argument
 	 */
-	default <T, V> ObservableList<V> combineC(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
+	default <T, V> ObservableList<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
 		ObservableList<E> outerList = this;
 		class CombinedObservableList extends AbstractList<V> implements ObservableList<V> {
 			@Override

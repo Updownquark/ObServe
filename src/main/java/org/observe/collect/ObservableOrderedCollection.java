@@ -196,12 +196,12 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	@Override
-	default <T> ObservableOrderedCollection<T> mapC(Function<? super E, T> map) {
-		return mapC(ComposedObservableValue.getReturnType(map), map);
+	default <T> ObservableOrderedCollection<T> map(Function<? super E, T> map) {
+		return map(ComposedObservableValue.getReturnType(map), map);
 	}
 
 	@Override
-	default <T> ObservableOrderedCollection<T> mapC(Type type, Function<? super E, T> map) {
+	default <T> ObservableOrderedCollection<T> map(Type type, Function<? super E, T> map) {
 		ObservableCollection<E> outerColl = this;
 		class MappedObservableCollection extends java.util.AbstractCollection<T> implements ObservableOrderedCollection<T> {
 			@Override
@@ -250,19 +250,19 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	@Override
-	default ObservableOrderedCollection<E> filterC(Function<? super E, Boolean> filter) {
-		return filterMapC(value -> {
+	default ObservableOrderedCollection<E> filter(Function<? super E, Boolean> filter) {
+		return filterMap(value -> {
 			return (value != null && filter.apply(value)) ? value : null;
 		});
 	}
 
 	@Override
-	default <T> ObservableOrderedCollection<T> filterMapC(Function<? super E, T> filterMap) {
-		return filterMapC(ComposedObservableValue.getReturnType(filterMap), filterMap);
+	default <T> ObservableOrderedCollection<T> filterMap(Function<? super E, T> filterMap) {
+		return filterMap(ComposedObservableValue.getReturnType(filterMap), filterMap);
 	}
 
 	@Override
-	default <T> ObservableOrderedCollection<T> filterMapC(Type type, Function<? super E, T> map) {
+	default <T> ObservableOrderedCollection<T> filterMap(Type type, Function<? super E, T> map) {
 		ObservableOrderedCollection<E> outer = this;
 		class FilteredOrderedCollection extends AbstractCollection<T> implements ObservableOrderedCollection<T> {
 			private List<FilteredOrderedElement<T, E>> theFilteredElements = new java.util.ArrayList<>();
