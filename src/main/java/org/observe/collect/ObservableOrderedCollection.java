@@ -443,6 +443,13 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 			}
 		}
 		class FlattenedObservableOrderedCollection extends AbstractCollection<E> implements ObservableOrderedCollection<E> {
+			private final CombinedCollectionSessionObservable theSession = new CombinedCollectionSessionObservable(list);
+
+			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return theSession;
+			}
+
 			@Override
 			public Type getType() {
 				return list.getType().getParamTypes().length == 0 ? new Type(Object.class) : list.getType().getParamTypes()[0];
@@ -574,7 +581,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 					private Map<ObservableOrderedCollection<E>, Subscription<ObservableElement<E>>> subListSubscriptions;
 
 					{
-						subListSubscriptions = new org.muis.util.ConcurrentIdentityHashMap<>();
+						subListSubscriptions = new org.observe.util.ConcurrentIdentityHashMap<>();
 					}
 
 					@Override

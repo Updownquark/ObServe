@@ -2,7 +2,10 @@ package org.observe;
 
 import java.util.List;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
+
+import org.observe.util.ListenerSet;
 
 import prisms.lang.Type;
 
@@ -14,6 +17,8 @@ import prisms.lang.Type;
 public class ComposedObservableValue<T> implements ObservableValue<T> {
 	private final List<ObservableValue<?>> theComposed;
 	private final Function<Object [], T> theFunction;
+
+	private final ListenerSet<Observer<? super ObservableValueEvent<T>>> theObservers;
 	private final Type theType;
 	private final boolean combineNulls;
 
@@ -39,6 +44,84 @@ public class ComposedObservableValue<T> implements ObservableValue<T> {
 		combineNulls = combineNull;
 		theType = type != null ? type : getReturnType(function);
 		theComposed = java.util.Collections.unmodifiableList(java.util.Arrays.asList(composed));
+		theObservers = new ListenerSet<>();
+		final Runnable [] composedSubs = new Runnable[theComposed.size()];
+		final Object [] values = new Object[theComposed.size()];
+		final Object [] oldValue = new Object[1];
+		boolean [] completed = new boolean[1];
+		theObservers.setUsedListener(new Consumer<Boolean>() {
+			@Override
+			public void accept(Boolean used) {
+				if(used) {
+					/*Don't need to initialize this explicitly, because these will be populated when the components are subscribed to
+					 * for(int i = 0; i < args.length; i++)
+					 * 	args[i] = theComposed.get(i).get(); */
+					boolean [] initialized = new boolean[1];
+					for(int i = 0; i < values.length; i++) {
+						int index = i;
+						composedSubs[i] = theComposed.get(i).internalSubscribe(new Observer<ObservableValueEvent<?>>() {
+							@Override
+							public <V extends ObservableValueEvent<?>> void onNext(V event) {
+								values[index] = event.getValue();
+								if(!initialized[0])
+									return;
+								T newValue = combine(values);
+								ObservableValueEvent<T> toFire = new ObservableValueEvent<>(ComposedObservableValue.this, (T) oldValue[0],
+									newValue, event);
+								oldValue[0] = newValue;
+								fireNext(toFire);
+							}
+
+							@Override
+							public <V extends ObservableValueEvent<?>> void onCompleted(V event) {
+								values[index] = event.getValue();
+								completed[0] = true;
+								if(!initialized[0])
+									return;
+								T newValue = combine(values);
+								ObservableValueEvent<T> toFire = new ObservableValueEvent<>(ComposedObservableValue.this, (T) oldValue[0],
+									newValue, event);
+								oldValue[0] = newValue;
+								fireCompleted(toFire);
+							}
+
+							@Override
+							public void onError(Throwable e) {
+								fireError(e);
+							}
+
+							private void fireNext(ObservableValueEvent<T> next) {
+								theObservers.forEach(listener -> listener.onNext(next));
+							}
+
+							private void fireCompleted(ObservableValueEvent<T> next) {
+								theObservers.forEach(listener -> listener.onCompleted(next));
+							}
+
+							private void fireError(Throwable error) {
+								theObservers.forEach(listener -> listener.onError(error));
+							}
+						});
+					}
+					oldValue[0] = combine(values);
+					initialized[0] = true;
+				} else {
+					for(int i = 0; i < theComposed.size(); i++) {
+						composedSubs[i].run();
+						composedSubs[i] = null;
+						values[i] = null;
+						oldValue[0] = null;
+						completed[0] = false;
+					}
+				}
+			}
+		});
+		theObservers.setOnSubscribe(observer -> {
+			if(completed[0])
+				observer.onCompleted(new ObservableValueEvent<>(this, null, (T) oldValue[0], null));
+			else
+				observer.onNext(new ObservableValueEvent<>(this, null, (T) oldValue[0], null));
+		});
 	}
 
 	@Override
@@ -83,58 +166,8 @@ public class ComposedObservableValue<T> implements ObservableValue<T> {
 
 	@Override
 	public Runnable internalSubscribe(Observer<? super ObservableValueEvent<T>> observer) {
-		Runnable [] subs = new Runnable[theComposed.size()];
-		Object [] args = new Object[theComposed.size()];
-		/*Don't need to initialize this explicitly, because these will be populated when the components are subscribed to
-		 * for(int i = 0; i < args.length; i++)
-		 * 	args[i] = theComposed.get(i).get(); */
-		Object [] oldValue = new Object[1];
-		boolean [] initialized = new boolean[1];
-		boolean [] completed = new boolean[1];
-		for(int i = 0; i < args.length; i++) {
-			int index = i;
-			subs[i] = theComposed.get(i).internalSubscribe(new Observer<ObservableValueEvent<?>>() {
-				@Override
-				public <V extends ObservableValueEvent<?>> void onNext(V event) {
-					args[index] = event.getValue();
-					if(!initialized[0])
-						return;
-					T newValue = combine(args);
-					ObservableValueEvent<T> toFire = new ObservableValueEvent<>(ComposedObservableValue.this, (T) oldValue[0], newValue,
-						event);
-					oldValue[0] = newValue;
-					observer.onNext(toFire);
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<?>> void onCompleted(V event) {
-					args[index] = event.getValue();
-					completed[0] = true;
-					if(!initialized[0])
-						return;
-					T newValue = combine(args);
-					ObservableValueEvent<T> toFire = new ObservableValueEvent<>(ComposedObservableValue.this, (T) oldValue[0], newValue,
-						event);
-					oldValue[0] = newValue;
-					observer.onCompleted(toFire);
-				}
-
-				@Override
-				public void onError(Throwable e) {
-					observer.onError(e);
-				}
-			});
-		}
-		oldValue[0] = combine(args);
-		if(completed[0])
-			observer.onCompleted(new ObservableValueEvent<>(this, null, (T) oldValue[0], null));
-		else
-			observer.onNext(new ObservableValueEvent<>(this, null, (T) oldValue[0], null));
-		initialized[0] = true;
-		return () -> {
-			for(Runnable sub : subs)
-				sub.run();
-		};
+		theObservers.add(observer);
+		return () -> theObservers.remove(observer);
 	}
 
 	@Override

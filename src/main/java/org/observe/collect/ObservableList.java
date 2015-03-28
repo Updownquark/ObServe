@@ -399,6 +399,13 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 	 */
 	public static <T> ObservableList<T> flatten(ObservableList<? extends ObservableList<T>> list) {
 		class FlattenedObservableList extends AbstractList<T> implements ObservableList<T> {
+			private final CombinedCollectionSessionObservable theSession = new CombinedCollectionSessionObservable(list);
+
+			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return theSession;
+			}
+
 			@Override
 			public Type getType() {
 				return list.getType().getParamTypes().length == 0 ? new Type(Object.class) : list.getType().getParamTypes()[0];

@@ -330,6 +330,13 @@ public interface ObservableCollection<E> extends Collection<E>, Observable<Obser
 	 */
 	public static <T> ObservableCollection<T> flatten(ObservableCollection<? extends ObservableCollection<T>> coll) {
 		class ComposedObservableCollection extends AbstractCollection<T> implements ObservableCollection<T> {
+			private final CombinedCollectionSessionObservable theSession = new CombinedCollectionSessionObservable(coll);
+
+			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return theSession;
+			}
+
 			@Override
 			public Type getType() {
 				return coll.getType().getParamTypes().length == 0 ? new Type(Object.class) : coll.getType().getParamTypes()[0];

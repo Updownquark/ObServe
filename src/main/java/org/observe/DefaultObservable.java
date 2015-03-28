@@ -1,6 +1,6 @@
 package org.observe;
 
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -22,11 +22,11 @@ public class DefaultObservable<T> implements Observable<T> {
 	private OnSubscribe<T> theOnSubscribe;
 	private AtomicBoolean isAlive = new AtomicBoolean(true);
 	private AtomicBoolean hasIssuedController = new AtomicBoolean(false);
-	private CopyOnWriteArrayList<Observer<? super T>> theListeners;
+	private ConcurrentLinkedQueue<Observer<? super T>> theListeners;
 
 	/** Creates the observable */
 	public DefaultObservable() {
-		theListeners = new CopyOnWriteArrayList<>();
+		theListeners = new ConcurrentLinkedQueue<>();
 	}
 
 	/**
@@ -114,7 +114,7 @@ public class DefaultObservable<T> implements Observable<T> {
 	@Override
 	protected DefaultObservable<T> clone() throws CloneNotSupportedException {
 		DefaultObservable<T> ret = (DefaultObservable<T>) super.clone();
-		ret.theListeners = new CopyOnWriteArrayList<>();
+		ret.theListeners = new ConcurrentLinkedQueue<>();
 		ret.isAlive = new AtomicBoolean(true);
 		ret.hasIssuedController = new AtomicBoolean(false);
 		return ret;
