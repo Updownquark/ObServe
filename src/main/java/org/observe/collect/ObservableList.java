@@ -72,9 +72,14 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 	 */
 	@Override
 	default ObservableList<E> filter(Function<? super E, Boolean> filter) {
+		return filter(filter, null);
+	}
+
+	@Override
+	default ObservableList<E> filter(Function<? super E, Boolean> filter, Observable<?> refresh) {
 		return filterMap(getType(), (E value) -> {
 			return (value != null && filter.apply(value)) ? value : null;
-		});
+		}, refresh);
 	}
 
 	@Override
@@ -83,7 +88,17 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 	}
 
 	@Override
+	default <T> ObservableList<T> filterMap(Function<? super E, T> map, Observable<?> refresh) {
+		return filterMap(ComposedObservableValue.getReturnType(map), map, refresh);
+	}
+
+	@Override
 	default <T> ObservableList<T> filterMap(Type type, Function<? super E, T> map) {
+		return filterMap(type, map, null);
+	}
+
+	@Override
+	default <T> ObservableList<T> filterMap(Type type, Function<? super E, T> map, Observable<?> refresh) {
 		ObservableList<E> outer = this;
 		class FilteredList extends AbstractList<T> implements ObservableList<T> {
 			private List<FilteredListElement<T, E>> theFilteredElements = new java.util.ArrayList<>();
@@ -128,26 +143,31 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 
 			@Override
 			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
-				return outer.onElement(element -> {
-					OrderedObservableElement<E> outerElement = (OrderedObservableElement<E>) element;
-					FilteredListElement<T, E> retElement = new FilteredListElement<>(outerElement, map, type, theFilteredElements);
-					theFilteredElements.add(outerElement.getIndex(), retElement);
-					outerElement.internalSubscribe(new Observer<ObservableValueEvent<E>>() {
-						@Override
-						public <V2 extends ObservableValueEvent<E>> void onNext(V2 elValue) {
-							if(!retElement.isIncluded()) {
-								T mapped = map.apply(elValue.getValue());
-								if(mapped != null)
-									observer.accept(retElement);
+				return outer
+					.onElement(element -> {
+						OrderedObservableElement<E> outerElement = (OrderedObservableElement<E>) element;
+						FilteredListElement<T, E> retElement = new FilteredListElement<>(outerElement, map, type, theFilteredElements,
+							refresh);
+						theFilteredElements.add(outerElement.getIndex(), retElement);
+						OrderedObservableElement<E> trigger = outerElement;
+						if(refresh != null)
+							trigger = trigger.refireWhen(refresh);
+						trigger.internalSubscribe(new Observer<ObservableValueEvent<E>>() {
+							@Override
+							public <V2 extends ObservableValueEvent<E>> void onNext(V2 elValue) {
+								if(!retElement.isIncluded()) {
+									T mapped = map.apply(elValue.getValue());
+									if(mapped != null)
+										observer.accept(retElement);
+								}
 							}
-						}
 
-						@Override
-						public <V2 extends ObservableValueEvent<E>> void onCompleted(V2 elValue) {
-							theFilteredElements.remove(outerElement.getIndex());
-						}
+							@Override
+							public <V2 extends ObservableValueEvent<E>> void onCompleted(V2 elValue) {
+								theFilteredElements.remove(outerElement.getIndex());
+							}
+						});
 					});
-				});
 			}
 		}
 		return new FilteredList();
@@ -439,8 +459,8 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 		private List<FilteredListElement<T, E>> theFilteredElements;
 
 		FilteredListElement(OrderedObservableElement<E> wrapped, Function<? super E, T> map, Type type,
-			List<FilteredListElement<T, E>> filteredEls) {
-			super(wrapped, map, type);
+			List<FilteredListElement<T, E>> filteredEls, Observable<?> refresh) {
+			super(wrapped, map, type, refresh);
 			theFilteredElements = filteredEls;
 		}
 

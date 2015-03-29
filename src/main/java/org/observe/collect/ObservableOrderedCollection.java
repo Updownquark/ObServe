@@ -263,6 +263,11 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 	@Override
 	default <T> ObservableOrderedCollection<T> filterMap(Type type, Function<? super E, T> map) {
+		return filterMap(type, map, null);
+	}
+
+	@Override
+	default <T> ObservableOrderedCollection<T> filterMap(Type type, Function<? super E, T> map, Observable<?> refresh) {
 		ObservableOrderedCollection<E> outer = this;
 		class FilteredOrderedCollection extends AbstractCollection<T> implements ObservableOrderedCollection<T> {
 			private List<FilteredOrderedElement<T, E>> theFilteredElements = new java.util.ArrayList<>();
@@ -315,10 +320,14 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
 				return outer.onElement(element -> {
 					OrderedObservableElement<E> outerElement = (OrderedObservableElement<E>) element;
-					FilteredOrderedElement<T, E> retElement = new FilteredOrderedElement<>(outerElement, map, type, theFilteredElements);
+					FilteredOrderedElement<T, E> retElement = new FilteredOrderedElement<>(outerElement, map, type, theFilteredElements,
+						refresh);
 					theFilteredElements.add(outerElement.getIndex(), retElement);
 					outerElement.completed().act(elValue -> theFilteredElements.remove(outerElement.getIndex()));
-					outerElement.act(elValue -> {
+					OrderedObservableElement<E> trigger = outerElement;
+					if(refresh != null)
+						trigger = trigger.refireWhen(refresh);
+					trigger.act(elValue -> {
 						if(!retElement.isIncluded()) {
 							T mapped = map.apply(elValue.getValue());
 							if(mapped != null)
@@ -603,8 +612,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		private List<FilteredOrderedElement<T, E>> theFilteredElements;
 
 		FilteredOrderedElement(OrderedObservableElement<E> wrapped, Function<? super E, T> map, Type type,
-			List<FilteredOrderedElement<T, E>> filteredEls) {
-			super(wrapped, map, type);
+			List<FilteredOrderedElement<T, E>> filteredEls, Observable<?> refresh) {
+			super(wrapped, map, type, refresh);
 			theFilteredElements = filteredEls;
 		}
 

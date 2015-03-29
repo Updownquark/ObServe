@@ -175,6 +175,17 @@ public interface ObservableCollection<E> extends Collection<E> {
 	}
 
 	/**
+	 * @param filter The filter function
+	 * @param refresh An observable that will be used re-evaluate the filter function on the collection's elements
+	 * @return A collection containing all elements passing the given test
+	 */
+	default ObservableCollection<E> filter(Function<? super E, Boolean> filter, Observable<?> refresh) {
+		return filterMap(value -> {
+			return (value != null && filter.apply(value)) ? value : null;
+		}, refresh);
+	}
+
+	/**
 	 * @param <T> The type of the mapped collection
 	 * @param filterMap The mapping function
 	 * @return An observable collection of a new type backed by this collection and the mapping function
@@ -185,11 +196,32 @@ public interface ObservableCollection<E> extends Collection<E> {
 
 	/**
 	 * @param <T> The type of the mapped collection
+	 * @param filterMap The mapping function
+	 * @param refresh An observable that will be used re-evaluate the filter function on the collection's elements
+	 * @return An observable collection of a new type backed by this collection and the mapping function
+	 */
+	default <T> ObservableCollection<T> filterMap(Function<? super E, T> filterMap, Observable<?> refresh) {
+		return filterMap(ComposedObservableValue.getReturnType(filterMap), filterMap, refresh);
+	}
+
+	/**
+	 * @param <T> The type of the mapped collection
 	 * @param type The run-time type of the mapped collection
 	 * @param map The mapping function
 	 * @return A collection containing every element in this collection for which the mapping function returns a non-null value
 	 */
 	default <T> ObservableCollection<T> filterMap(Type type, Function<? super E, T> map) {
+		return filterMap(type, map, null);
+	}
+
+	/**
+	 * @param <T> The type of the mapped collection
+	 * @param type The run-time type of the mapped collection
+	 * @param map The mapping function
+	 * @param refresh An observable that will be used re-evaluate the filter function on the collection's elements
+	 * @return A collection containing every element in this collection for which the mapping function returns a non-null value
+	 */
+	default <T> ObservableCollection<T> filterMap(Type type, Function<? super E, T> map, Observable<?> refresh) {
 		ObservableCollection<E> outer = this;
 		class FilteredCollection extends AbstractCollection<T> implements ObservableCollection<T> {
 			@Override
@@ -239,7 +271,9 @@ public interface ObservableCollection<E> extends Collection<E> {
 			@Override
 			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
 				return outer.onElement(element -> {
-					FilteredElement<T, E> retElement = new FilteredElement<>(element, map, type);
+					FilteredElement<T, E> retElement = new FilteredElement<>(element, map, type, refresh);
+					if(refresh != null)
+						element = element.refireWhen(refresh);
 					element.act(elValue -> {
 						if(!retElement.isIncluded()) {
 							T mapped = map.apply(elValue.getValue());
@@ -319,24 +353,24 @@ public interface ObservableCollection<E> extends Collection<E> {
 				if(complete[0])
 					return () -> {
 					};
-				Runnable argSub = arg.internalSubscribe(new Observer<ObservableValueEvent<T>>() {
-					@Override
-					public <V2 extends ObservableValueEvent<T>> void onNext(V2 value) {
-					}
+					Runnable argSub = arg.internalSubscribe(new Observer<ObservableValueEvent<T>>() {
+						@Override
+						public <V2 extends ObservableValueEvent<T>> void onNext(V2 value) {
+						}
 
-					@Override
-					public <V2 extends ObservableValueEvent<T>> void onCompleted(V2 value) {
-						complete[0] = true;
-						setSub.run();
-					}
-				});
-				if(complete[0])
-					return () -> {
-					};
-				return () -> {
-					setSub.run();
-					argSub.run();
-				};
+						@Override
+						public <V2 extends ObservableValueEvent<T>> void onCompleted(V2 value) {
+							complete[0] = true;
+							setSub.run();
+						}
+					});
+					if(complete[0])
+						return () -> {
+						};
+						return () -> {
+							setSub.run();
+							argSub.run();
+						};
 			}
 		}
 		return new CombinedObservableCollection();
@@ -530,17 +564,21 @@ public interface ObservableCollection<E> extends Collection<E> {
 		private final ObservableElement<E> theWrappedElement;
 		private final Function<? super E, T> theMap;
 		private final Type theType;
+
+		private final Observable<?> theRefresh;
 		private boolean isIncluded;
 
 		/**
 		 * @param wrapped The element to wrap
 		 * @param map The mapping function to filter on
 		 * @param type The type of the element
+		 * @param refresh An observable used to re-evaluate the mapping function
 		 */
-		protected FilteredElement(ObservableElement<E> wrapped, Function<? super E, T> map, Type type) {
+		protected FilteredElement(ObservableElement<E> wrapped, Function<? super E, T> map, Type type, Observable<?> refresh) {
 			theWrappedElement = wrapped;
 			theMap = map;
 			theType = type;
+			theRefresh = refresh;
 		}
 
 		@Override
@@ -576,7 +614,10 @@ public interface ObservableCollection<E> extends Collection<E> {
 		@Override
 		public Runnable internalSubscribe(Observer<? super ObservableValueEvent<T>> observer2) {
 			Runnable [] innerSub = new Runnable[1];
-			innerSub[0] = theWrappedElement.internalSubscribe(new Observer<ObservableValueEvent<E>>() {
+			ObservableElement<E> wrap = theWrappedElement;
+			if(theRefresh != null)
+				wrap = wrap.refireWhen(theRefresh);
+			innerSub[0] = wrap.internalSubscribe(new Observer<ObservableValueEvent<E>>() {
 				@Override
 				public <V2 extends ObservableValueEvent<E>> void onNext(V2 elValue) {
 					T mapped = theMap.apply(elValue.getValue());

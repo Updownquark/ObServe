@@ -23,6 +23,11 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 	 */
 	@Override
 	default ObservableSet<E> filter(Function<? super E, Boolean> filter) {
+		return filter(filter, null);
+	}
+
+	@Override
+	default ObservableSet<E> filter(Function<? super E, Boolean> filter, Observable<?> refresh) {
 		ObservableSet<E> outer = this;
 		class FilteredSet extends AbstractSet<E> implements ObservableSet<E> {
 			@Override
@@ -76,7 +81,9 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 			public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
 				Function<E, E> map = value -> (filter.apply(value) ? value : null);
 				return outer.onElement(element -> {
-					FilteredElement<E, E> retElement = new FilteredElement<>(element, map, getType());
+					FilteredElement<E, E> retElement = new FilteredElement<>(element, map, getType(), refresh);
+					if(refresh != null)
+						element = element.refireWhen(refresh);
 					element.act(elValue -> {
 						if(!retElement.isIncluded()) {
 							E mapped = map.apply(elValue.getValue());
