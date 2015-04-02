@@ -1,6 +1,7 @@
 package org.observe.collect;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -270,6 +271,26 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	default <T> ObservableOrderedCollection<T> filterMap(Type type, Function<? super E, T> map, Observable<?> refresh) {
 		ObservableOrderedCollection<E> outer = this;
 		class FilteredOrderedCollection extends AbstractCollection<T> implements ObservableOrderedCollection<T> {
+			private AtomicReference<CollectionSession> theInternalSessionValue = new AtomicReference<>();
+			private final DefaultObservableValue<CollectionSession> theInternalSession = new DefaultObservableValue<CollectionSession>() {
+				private final Type TYPE = new Type(CollectionSession.class);
+
+				@Override
+				public Type getType() {
+					return TYPE;
+				}
+
+				@Override
+				public CollectionSession get() {
+					return theInternalSessionValue.get();
+				}
+			};
+
+			private final ObservableValue<CollectionSession> theExposedSession = new org.observe.ComposedObservableValue<>(
+				sessions -> (CollectionSession) (sessions[0] != null ? sessions[0] : sessions[1]), true, theInternalSession,
+				outer.getSession());
+			private final Observer<ObservableValueEvent<CollectionSession>> theSessionController = theInternalSession.control(null);
+
 			private List<FilteredOrderedElement<T, E>> theFilteredElements = new java.util.ArrayList<>();
 
 			@Override
@@ -279,7 +300,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
-				return outer.getSession();
+				return theExposedSession;
 			}
 
 			@Override
@@ -318,16 +339,42 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 			@Override
 			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
-				return outer.onElement(element -> {
+				// Here we're relying on observers being fired in the order they were subscribed
+				Runnable refreshStartSub = refresh == null ? null : refresh.internalSubscribe(new Observer<Object>() {
+					@Override
+					public <V> void onNext(V value) {
+						startTransaction(value);
+					}
+
+					@Override
+					public <V> void onCompleted(V value) {
+						startTransaction(value);
+					}
+				});
+				Observer<Object> refreshEnd = new Observer<Object>() {
+					@Override
+					public <V> void onNext(V value) {
+						endTransaction(value);
+					}
+
+					@Override
+					public <V> void onCompleted(V value) {
+						endTransaction(value);
+					}
+				};
+				Runnable [] refreshEndSub = new Runnable[] {refresh == null ? null : refresh.internalSubscribe(refreshEnd)};
+				Runnable collSub = outer.onElement(element -> {
 					OrderedObservableElement<E> outerElement = (OrderedObservableElement<E>) element;
 					FilteredOrderedElement<T, E> retElement = new FilteredOrderedElement<>(outerElement, map, type, theFilteredElements,
 						refresh);
 					theFilteredElements.add(outerElement.getIndex(), retElement);
+					// The refresh end always needs to be after the elements
+					Runnable oldRefreshEnd = refreshEndSub[0];
+					refreshEndSub[0] = refresh == null ? null : refresh.internalSubscribe(refreshEnd);
+					if(oldRefreshEnd != null)
+						oldRefreshEnd.run();
 					outerElement.completed().act(elValue -> theFilteredElements.remove(outerElement.getIndex()));
-					OrderedObservableElement<E> trigger = outerElement;
-					if(refresh != null)
-						trigger = trigger.refireWhen(refresh);
-					trigger.act(elValue -> {
+					outerElement.act(elValue -> {
 						if(!retElement.isIncluded()) {
 							T mapped = map.apply(elValue.getValue());
 							if(mapped != null)
@@ -335,6 +382,25 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 						}
 					});
 				});
+				return () -> {
+					if(refreshStartSub != null)
+						refreshStartSub.run();
+					Runnable oldRefreshEnd = refreshEndSub[0];
+					if(oldRefreshEnd != null)
+						oldRefreshEnd.run();
+					collSub.run();
+				};
+			}
+
+			private void startTransaction(Object cause) {
+				CollectionSession newSession = new DefaultCollectionSession(cause);
+				CollectionSession oldSession = theInternalSessionValue.getAndSet(newSession);
+				theSessionController.onNext(new org.observe.ObservableValueEvent<>(theInternalSession, oldSession, newSession, cause));
+			}
+
+			private void endTransaction(Object cause) {
+				CollectionSession session = theInternalSessionValue.getAndSet(null);
+				theSessionController.onNext(new org.observe.ObservableValueEvent<>(theInternalSession, session, null, cause));
 			}
 		}
 		return new FilteredOrderedCollection();
