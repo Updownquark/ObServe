@@ -319,48 +319,106 @@ public interface ObservableCollection<E> extends Collection<E> {
 				if(complete[0])
 					return () -> {
 					};
-				Runnable argSub = arg.internalSubscribe(new Observer<ObservableValueEvent<T>>() {
-					@Override
-					public <V2 extends ObservableValueEvent<T>> void onNext(V2 value) {
-					}
+					Runnable argSub = arg.internalSubscribe(new Observer<ObservableValueEvent<T>>() {
+						@Override
+						public <V2 extends ObservableValueEvent<T>> void onNext(V2 value) {
+						}
 
-					@Override
-					public <V2 extends ObservableValueEvent<T>> void onCompleted(V2 value) {
-						complete[0] = true;
-						setSub.run();
-					}
-				});
-				if(complete[0])
-					return () -> {
-					};
-				return () -> {
-					setSub.run();
-					argSub.run();
-				};
+						@Override
+						public <V2 extends ObservableValueEvent<T>> void onCompleted(V2 value) {
+							complete[0] = true;
+							setSub.run();
+						}
+					});
+					if(complete[0])
+						return () -> {
+						};
+						return () -> {
+							setSub.run();
+							argSub.run();
+						};
 			}
 		}
 		return new CombinedObservableCollection();
 	}
 
 	/**
-	 * @param observable The observable to re-fire events on
+	 * @param refresh The observable to re-fire events on
 	 * @return A collection whose elements fire additional value events when the given observable fires
 	 */
-	default ObservableCollection<E> refireWhen(Observable<?> observable) {
+	default ObservableCollection<E> refresh(Observable<?> refresh) {
 		ObservableCollection<E> outer = this;
-		return new org.observe.util.ObservableCollectionWrapper<E>(this) {
+		class RefreshingCollection extends AbstractCollection<E> implements ObservableCollection<E>{
+			private final DefaultTransactionManager theTransactionManager = new DefaultTransactionManager(outer);
+
+			@Override
+			public Type getType() {
+				return outer.getType();
+			}
+
+			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return theTransactionManager.getSession();
+			}
+
+			@Override
+			public Iterator<E> iterator() {
+				return outer.iterator();
+			}
+
+			@Override
+			public int size() {
+				return outer.size();
+			}
+
 			@Override
 			public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
-				return outer.onElement(element -> observer.accept(element.refireWhen(observable)));
+				// Here we're relying on observers being fired in the order they were subscribed
+				Runnable refreshStartSub = refresh == null ? null : refresh.internalSubscribe(new Observer<Object>() {
+					@Override
+					public <V> void onNext(V value) {
+						theTransactionManager.startTransaction(value);
+					}
+
+					@Override
+					public <V> void onCompleted(V value) {
+						theTransactionManager.startTransaction(value);
+					}
+				});
+				Observer<Object> refreshEnd = new Observer<Object>() {
+					@Override
+					public <V> void onNext(V value) {
+						theTransactionManager.endTransaction();
+					}
+
+					@Override
+					public <V> void onCompleted(V value) {
+						theTransactionManager.endTransaction();
+					}
+				};
+				Runnable [] refreshEndSub = new Runnable[] {refresh.internalSubscribe(refreshEnd)};
+				Runnable collSub = outer.onElement(element -> {
+					// The refresh end always needs to be after the elements
+					Runnable oldRefreshEnd = refreshEndSub[0];
+					refreshEndSub[0] = refresh.internalSubscribe(refreshEnd);
+					oldRefreshEnd.run();
+					observer.accept(element.refireWhen(refresh));
+				});
+				return () -> {
+					refreshStartSub.run();
+					refreshEndSub[0].run();
+					collSub.run();
+				};
 			}
 		};
+		return new RefreshingCollection();
 	}
 
 	/**
-	 * @param refire A function that supplies a refire observable as a function of element value
-	 * @return A collection whose values individually refire when the observable returned by the given function fires
+	 * @param refire A function that supplies a refresh observable as a function of element value
+	 * @return A collection whose values individually refresh when the observable returned by the given function fires
 	 */
-	default ObservableCollection<E> refireWhenEach(Function<? super E, Observable<?>> refire) {
+	default ObservableCollection<E> refreshEach(Function<? super E, Observable<?>> refire) {
 		ObservableCollection<E> outer = this;
 		return new org.observe.util.ObservableCollectionWrapper<E>(this) {
 			@Override

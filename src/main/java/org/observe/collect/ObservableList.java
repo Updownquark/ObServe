@@ -206,18 +206,76 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 	}
 
 	/**
-	 * @param observable The observable to re-fire events on
+	 * @param refresh The observable to re-fire events on
 	 * @return A collection whose elements fire additional value events when the given observable fires
 	 */
 	@Override
-	default ObservableList<E> refireWhen(Observable<?> observable) {
+	default ObservableList<E> refresh(Observable<?> refresh) {
 		ObservableList<E> outer = this;
-		return new org.observe.util.ObservableListWrapper<E>(this) {
+		class RefreshingCollection extends AbstractList<E> implements ObservableList<E> {
+			private final DefaultTransactionManager theTransactionManager = new DefaultTransactionManager(outer);
+
+			@Override
+			public Type getType() {
+				return outer.getType();
+			}
+
+			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return theTransactionManager.getSession();
+			}
+
+			@Override
+			public int size() {
+				return outer.size();
+			}
+
+			@Override
+			public E get(int index) {
+				return outer.get(index);
+			}
+
 			@Override
 			public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
-				return outer.onElement(element -> observer.accept(element.refireWhen(observable)));
+				// Here we're relying on observers being fired in the order they were subscribed
+				Runnable refreshStartSub = refresh == null ? null : refresh.internalSubscribe(new Observer<Object>() {
+					@Override
+					public <V> void onNext(V value) {
+						theTransactionManager.startTransaction(value);
+					}
+
+					@Override
+					public <V> void onCompleted(V value) {
+						theTransactionManager.startTransaction(value);
+					}
+				});
+				Observer<Object> refreshEnd = new Observer<Object>() {
+					@Override
+					public <V> void onNext(V value) {
+						theTransactionManager.endTransaction();
+					}
+
+					@Override
+					public <V> void onCompleted(V value) {
+						theTransactionManager.endTransaction();
+					}
+				};
+				Runnable [] refreshEndSub = new Runnable[] {refresh.internalSubscribe(refreshEnd)};
+				Runnable collSub = outer.onElement(element -> {
+					// The refresh end always needs to be after the elements
+					Runnable oldRefreshEnd = refreshEndSub[0];
+					refreshEndSub[0] = refresh.internalSubscribe(refreshEnd);
+					oldRefreshEnd.run();
+					observer.accept(element.refireWhen(refresh));
+				});
+				return () -> {
+					refreshStartSub.run();
+					refreshEndSub[0].run();
+					collSub.run();
+				};
 			}
 		};
+		return new RefreshingCollection();
 	}
 
 	@Override
