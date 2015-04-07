@@ -4,7 +4,6 @@ import java.util.AbstractCollection;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -176,17 +175,6 @@ public interface ObservableCollection<E> extends Collection<E> {
 	}
 
 	/**
-	 * @param filter The filter function
-	 * @param refresh An observable that will be used re-evaluate the filter function on the collection's elements
-	 * @return A collection containing all elements passing the given test
-	 */
-	default ObservableCollection<E> filter(Function<? super E, Boolean> filter, Observable<?> refresh) {
-		return filterMap(value -> {
-			return (value != null && filter.apply(value)) ? value : null;
-		}, refresh);
-	}
-
-	/**
 	 * @param <T> The type of the mapped collection
 	 * @param filterMap The mapping function
 	 * @return An observable collection of a new type backed by this collection and the mapping function
@@ -197,53 +185,13 @@ public interface ObservableCollection<E> extends Collection<E> {
 
 	/**
 	 * @param <T> The type of the mapped collection
-	 * @param filterMap The mapping function
-	 * @param refresh An observable that will be used re-evaluate the filter function on the collection's elements
-	 * @return An observable collection of a new type backed by this collection and the mapping function
-	 */
-	default <T> ObservableCollection<T> filterMap(Function<? super E, T> filterMap, Observable<?> refresh) {
-		return filterMap(ComposedObservableValue.getReturnType(filterMap), filterMap, refresh);
-	}
-
-	/**
-	 * @param <T> The type of the mapped collection
 	 * @param type The run-time type of the mapped collection
 	 * @param map The mapping function
 	 * @return A collection containing every element in this collection for which the mapping function returns a non-null value
 	 */
 	default <T> ObservableCollection<T> filterMap(Type type, Function<? super E, T> map) {
-		return filterMap(type, map, null);
-	}
-
-	/**
-	 * @param <T> The type of the mapped collection
-	 * @param type The run-time type of the mapped collection
-	 * @param map The mapping function
-	 * @param refresh An observable that will be used re-evaluate the filter function on the collection's elements
-	 * @return A collection containing every element in this collection for which the mapping function returns a non-null value
-	 */
-	default <T> ObservableCollection<T> filterMap(Type type, Function<? super E, T> map, Observable<?> refresh) {
 		ObservableCollection<E> outer = this;
 		class FilteredCollection extends AbstractCollection<T> implements ObservableCollection<T> {
-			private AtomicReference<CollectionSession> theInternalSessionValue = new AtomicReference<>();
-			private final DefaultObservableValue<CollectionSession> theInternalSession = new DefaultObservableValue<CollectionSession>() {
-				private final Type TYPE = new Type(CollectionSession.class);
-
-				@Override
-				public Type getType() {
-					return TYPE;
-				}
-
-				@Override
-				public CollectionSession get() {
-					return theInternalSessionValue.get();
-				}
-			};
-			private final ObservableValue<CollectionSession> theExposedSession = new org.observe.ComposedObservableValue<>(
-				sessions -> (CollectionSession) (sessions[0] != null ? sessions[0] : sessions[1]), true, theInternalSession,
-				outer.getSession());
-			private final Observer<ObservableValueEvent<CollectionSession>> theSessionController = theInternalSession.control(null);
-
 			@Override
 			public Type getType() {
 				return type;
@@ -251,7 +199,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
-				return theExposedSession;
+				return outer.getSession();
 			}
 
 			@Override
@@ -290,37 +238,8 @@ public interface ObservableCollection<E> extends Collection<E> {
 
 			@Override
 			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
-				// Here we're relying on observers being fired in the order they were subscribed
-				Runnable refreshStartSub = refresh == null ? null : refresh.internalSubscribe(new Observer<Object>() {
-					@Override
-					public <V> void onNext(V value) {
-						startTransaction(value);
-					}
-
-					@Override
-					public <V> void onCompleted(V value) {
-						startTransaction(value);
-					}
-				});
-				Observer<Object> refreshEnd = new Observer<Object>() {
-					@Override
-					public <V> void onNext(V value) {
-						endTransaction(value);
-					}
-
-					@Override
-					public <V> void onCompleted(V value) {
-						endTransaction(value);
-					}
-				};
-				Runnable [] refreshEndSub = new Runnable[] {refresh == null ? null : refresh.internalSubscribe(refreshEnd)};
-				Runnable collSub = outer.onElement(element -> {
-					FilteredElement<T, E> retElement = new FilteredElement<>(element, map, type, refresh);
-					// The refresh end always needs to be after the elements
-					Runnable oldRefreshEnd = refreshEndSub[0];
-					refreshEndSub[0] = refresh == null ? null : refresh.internalSubscribe(refreshEnd);
-					if(oldRefreshEnd != null)
-						oldRefreshEnd.run();
+				return outer.onElement(element -> {
+					FilteredElement<T, E> retElement = new FilteredElement<>(element, map, type);
 					element.act(elValue -> {
 						if(!retElement.isIncluded()) {
 							T mapped = map.apply(elValue.getValue());
@@ -329,25 +248,6 @@ public interface ObservableCollection<E> extends Collection<E> {
 						}
 					});
 				});
-				return () -> {
-					if(refreshStartSub != null)
-						refreshStartSub.run();
-					Runnable oldRefreshEnd = refreshEndSub[0];
-					if(oldRefreshEnd != null)
-						oldRefreshEnd.run();
-					collSub.run();
-				};
-			}
-
-			private void startTransaction(Object cause) {
-				CollectionSession newSession = new DefaultCollectionSession(cause);
-				CollectionSession oldSession = theInternalSessionValue.getAndSet(newSession);
-				theSessionController.onNext(new org.observe.ObservableValueEvent<>(theInternalSession, oldSession, newSession, cause));
-			}
-
-			private void endTransaction(Object cause) {
-				CollectionSession session = theInternalSessionValue.getAndSet(null);
-				theSessionController.onNext(new org.observe.ObservableValueEvent<>(theInternalSession, session, null, cause));
 			}
 		}
 		return new FilteredCollection();
@@ -419,24 +319,24 @@ public interface ObservableCollection<E> extends Collection<E> {
 				if(complete[0])
 					return () -> {
 					};
-					Runnable argSub = arg.internalSubscribe(new Observer<ObservableValueEvent<T>>() {
-						@Override
-						public <V2 extends ObservableValueEvent<T>> void onNext(V2 value) {
-						}
+				Runnable argSub = arg.internalSubscribe(new Observer<ObservableValueEvent<T>>() {
+					@Override
+					public <V2 extends ObservableValueEvent<T>> void onNext(V2 value) {
+					}
 
-						@Override
-						public <V2 extends ObservableValueEvent<T>> void onCompleted(V2 value) {
-							complete[0] = true;
-							setSub.run();
-						}
-					});
-					if(complete[0])
-						return () -> {
-						};
-						return () -> {
-							setSub.run();
-							argSub.run();
-						};
+					@Override
+					public <V2 extends ObservableValueEvent<T>> void onCompleted(V2 value) {
+						complete[0] = true;
+						setSub.run();
+					}
+				});
+				if(complete[0])
+					return () -> {
+					};
+				return () -> {
+					setSub.run();
+					argSub.run();
+				};
 			}
 		}
 		return new CombinedObservableCollection();
@@ -630,21 +530,17 @@ public interface ObservableCollection<E> extends Collection<E> {
 		private final ObservableElement<E> theWrappedElement;
 		private final Function<? super E, T> theMap;
 		private final Type theType;
-
-		private Observable<?> theRefresh;
 		private boolean isIncluded;
 
 		/**
 		 * @param wrapped The element to wrap
 		 * @param map The mapping function to filter on
 		 * @param type The type of the element
-		 * @param refresh An observable used to determine when the condition needs to be re-checked
 		 */
-		protected FilteredElement(ObservableElement<E> wrapped, Function<? super E, T> map, Type type, Observable<?> refresh) {
+		protected FilteredElement(ObservableElement<E> wrapped, Function<? super E, T> map, Type type) {
 			theWrappedElement = wrapped;
 			theMap = map;
 			theType = type;
-			theRefresh = refresh;
 		}
 
 		@Override
@@ -680,10 +576,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 		@Override
 		public Runnable internalSubscribe(Observer<? super ObservableValueEvent<T>> observer2) {
 			Runnable [] innerSub = new Runnable[1];
-			ObservableElement<E> wrap = theWrappedElement;
-			if(theRefresh != null)
-				wrap = wrap.refireWhen(wrap);
-			innerSub[0] = wrap.internalSubscribe(new Observer<ObservableValueEvent<E>>() {
+			innerSub[0] = theWrappedElement.internalSubscribe(new Observer<ObservableValueEvent<E>>() {
 				@Override
 				public <V2 extends ObservableValueEvent<E>> void onNext(V2 elValue) {
 					T mapped = theMap.apply(elValue.getValue());

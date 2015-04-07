@@ -1,12 +1,12 @@
 package org.observe.collect;
 
 import java.util.*;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import org.observe.*;
 import org.observe.Observable;
+import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 
 import prisms.lang.Type;
@@ -23,35 +23,11 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 	 */
 	@Override
 	default ObservableSet<E> filter(Function<? super E, Boolean> filter) {
-		return filter(filter, null);
-	}
-
-	@Override
-	default ObservableSet<E> filter(Function<? super E, Boolean> filter, Observable<?> refresh) {
 		ObservableSet<E> outer = this;
 		class FilteredSet extends AbstractSet<E> implements ObservableSet<E> {
-			private AtomicReference<CollectionSession> theInternalSessionValue = new AtomicReference<>();
-			private final DefaultObservableValue<CollectionSession> theInternalSession = new DefaultObservableValue<CollectionSession>() {
-				private final Type TYPE = new Type(CollectionSession.class);
-
-				@Override
-				public Type getType() {
-					return TYPE;
-				}
-
-				@Override
-				public CollectionSession get() {
-					return theInternalSessionValue.get();
-				}
-			};
-			private final ObservableValue<CollectionSession> theExposedSession = new org.observe.ComposedObservableValue<>(
-				sessions -> (CollectionSession) (sessions[0] != null ? sessions[0] : sessions[1]), true, theInternalSession,
-				outer.getSession());
-			private final Observer<ObservableValueEvent<CollectionSession>> theSessionController = theInternalSession.control(null);
-
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
-				return theExposedSession;
+				return outer.getSession();
 			}
 
 			@Override
@@ -99,37 +75,8 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 			@Override
 			public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
 				Function<E, E> map = value -> (filter.apply(value) ? value : null);
-				// Here we're relying on observers being fired in the order they were subscribed
-				Runnable refreshStartSub = refresh == null ? null : refresh.internalSubscribe(new Observer<Object>() {
-					@Override
-					public <V> void onNext(V value) {
-						startTransaction(value);
-					}
-
-					@Override
-					public <V> void onCompleted(V value) {
-						startTransaction(value);
-					}
-				});
-				Observer<Object> refreshEnd = new Observer<Object>() {
-					@Override
-					public <V> void onNext(V value) {
-						endTransaction(value);
-					}
-
-					@Override
-					public <V> void onCompleted(V value) {
-						endTransaction(value);
-					}
-				};
-				Runnable [] refreshEndSub = new Runnable[] {refresh == null ? null : refresh.internalSubscribe(refreshEnd)};
-				Runnable collSub = outer.onElement(element -> {
-					FilteredElement<E, E> retElement = new FilteredElement<>(element, map, getType(), refresh);
-					// The refresh end always needs to be after the elements
-					Runnable oldRefreshEnd = refreshEndSub[0];
-					refreshEndSub[0] = refresh == null ? null : refresh.internalSubscribe(refreshEnd);
-					if(oldRefreshEnd != null)
-						oldRefreshEnd.run();
+				return outer.onElement(element -> {
+					FilteredElement<E, E> retElement = new FilteredElement<>(element, map, getType());
 					element.act(elValue -> {
 						if(!retElement.isIncluded()) {
 							E mapped = map.apply(elValue.getValue());
@@ -138,25 +85,6 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 						}
 					});
 				});
-				return () -> {
-					if(refreshStartSub != null)
-						refreshStartSub.run();
-					Runnable oldRefreshEnd = refreshEndSub[0];
-					if(oldRefreshEnd != null)
-						oldRefreshEnd.run();
-					collSub.run();
-				};
-			}
-
-			private void startTransaction(Object cause) {
-				CollectionSession newSession = new DefaultCollectionSession(cause);
-				CollectionSession oldSession = theInternalSessionValue.getAndSet(newSession);
-				theSessionController.onNext(new org.observe.ObservableValueEvent<>(theInternalSession, oldSession, newSession, cause));
-			}
-
-			private void endTransaction(Object cause) {
-				CollectionSession session = theInternalSessionValue.getAndSet(null);
-				theSessionController.onNext(new org.observe.ObservableValueEvent<>(theInternalSession, session, null, cause));
 			}
 
 			@Override
