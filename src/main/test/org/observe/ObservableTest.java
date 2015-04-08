@@ -1148,12 +1148,12 @@ public class ObservableTest {
 		}
 	}
 
-	/** Tests {@link ObservableList#find(Type, java.util.function.Function)} */
+	/** Tests {@link ObservableList#find(java.util.function.Predicate)} */
 	@Test
 	public void observableListFind() {
 		DefaultObservableList<Integer> list = new DefaultObservableList<>(new Type(Integer.TYPE));
 		List<Integer> controller = list.control(null);
-		ObservableValue<Integer> found = list.find(new Type(Integer.class), value -> value % 3 == 0 ? value : null);
+		ObservableValue<Integer> found = list.find(value -> value % 3 == 0);
 		Integer [] received = new Integer[] {0};
 		found.act(value -> received[0] = value.getValue());
 		Integer [] correct = new Integer[] {null};
@@ -1198,8 +1198,8 @@ public class ObservableTest {
 		listControl.addAll(java.util.Arrays.asList(value1, value2, value3, value4));
 
 		Integer [] received = new Integer[1];
-		ObservableUtils.flattenListValues(new Type(Integer.TYPE), list).find(new Type(Integer.class), value -> value % 3 == 0 ? value : null).value()
-		.act(value -> received[0] = value);
+		ObservableUtils.flattenListValues(new Type(Integer.TYPE), list).find(value -> value % 3 == 0).value()
+			.act(value -> received[0] = value);
 		assertEquals(Integer.valueOf(3), received[0]);
 		value3.set(4, null);
 		assertEquals(null, received[0]);
