@@ -1,11 +1,9 @@
 package org.observe.collect;
 
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
 
-import org.observe.DefaultObservableValue;
-import org.observe.ObservableValue;
-import org.observe.ObservableValueEvent;
-import org.observe.Observer;
+import org.observe.*;
 
 import prisms.lang.Type;
 
@@ -42,6 +40,55 @@ public class DefaultTransactionManager {
 	/** @return The session observable to use for the collection */
 	public ObservableValue<CollectionSession> getSession() {
 		return theExposedSession;
+	}
+
+	/**
+	 * Installs an observer for a collection, wrapping refresh events in a transaction
+	 * 
+	 * @param <E> The type of the elements in the collection
+	 * @param collection The parent of the collection to observe
+	 * @param refresh The observable to refresh the collection on
+	 * @param onElement The code to deliver the elements to the observer
+	 * @return The runnable to execute to uninstall the observer
+	 */
+	public <E> Runnable onElement(ObservableCollection<E> collection, Observable<?> refresh,
+		Consumer<? super ObservableElement<E>> onElement) {
+		// Here we're relying on observers being fired in the order they were subscribed
+		Runnable refreshStartSub = refresh == null ? null : refresh.internalSubscribe(new Observer<Object>() {
+			@Override
+			public <V> void onNext(V value) {
+				startTransaction(value);
+			}
+
+			@Override
+			public <V> void onCompleted(V value) {
+				startTransaction(value);
+			}
+		});
+		Observer<Object> refreshEnd = new Observer<Object>() {
+			@Override
+			public <V> void onNext(V value) {
+				endTransaction();
+			}
+
+			@Override
+			public <V> void onCompleted(V value) {
+				endTransaction();
+			}
+		};
+		Runnable [] refreshEndSub = new Runnable[] {refresh.internalSubscribe(refreshEnd)};
+		Runnable collSub = collection.onElement(element -> {
+			onElement.accept(element);
+			// The refresh end always needs to be after the elements
+			Runnable oldRefreshEnd = refreshEndSub[0];
+			refreshEndSub[0] = refresh.internalSubscribe(refreshEnd);
+			oldRefreshEnd.run();
+		});
+		return () -> {
+			refreshStartSub.run();
+			refreshEndSub[0].run();
+			collSub.run();
+		};
 	}
 
 	/**

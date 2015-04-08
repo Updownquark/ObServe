@@ -1,6 +1,7 @@
 package org.observe.collect;
 
 import java.util.*;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -179,6 +180,52 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		};
 	}
 
+	@Override
+	default <T, V> ObservableOrderedCollection<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
+		ObservableOrderedCollection<E> outer = this;
+		class CombinedObservableCollection extends AbstractCollection<V> implements ObservableOrderedCollection<V> {
+			private final DefaultTransactionManager theTransactionManager = new DefaultTransactionManager(outer);
+
+			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return theTransactionManager.getSession();
+			}
+
+			@Override
+			public Type getType() {
+				return type;
+			}
+
+			@Override
+			public int size() {
+				return outer.size();
+			}
+
+			@Override
+			public Iterator<V> iterator() {
+				return new Iterator<V>() {
+					private final Iterator<E> backing = outer.iterator();
+
+					@Override
+					public boolean hasNext() {
+						return backing.hasNext();
+					}
+
+					@Override
+					public V next() {
+						return func.apply(backing.next(), arg.get());
+					}
+				};
+			}
+
+			@Override
+			public Runnable onElement(Consumer<? super ObservableElement<V>> observer) {
+				return theTransactionManager.onElement(outer, arg, element -> observer.accept(element.combineV(func, arg)));
+			}
+		}
+		return new CombinedObservableCollection();
+	}
+
 	/**
 	 * @param refresh The observable to re-fire events on
 	 * @return A collection whose elements fire additional value events when the given observable fires
@@ -211,42 +258,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 			@Override
 			public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
-				// Here we're relying on observers being fired in the order they were subscribed
-				Runnable refreshStartSub = refresh == null ? null : refresh.internalSubscribe(new Observer<Object>() {
-					@Override
-					public <V> void onNext(V value) {
-						theTransactionManager.startTransaction(value);
-					}
-
-					@Override
-					public <V> void onCompleted(V value) {
-						theTransactionManager.startTransaction(value);
-					}
-				});
-				Observer<Object> refreshEnd = new Observer<Object>() {
-					@Override
-					public <V> void onNext(V value) {
-						theTransactionManager.endTransaction();
-					}
-
-					@Override
-					public <V> void onCompleted(V value) {
-						theTransactionManager.endTransaction();
-					}
-				};
-				Runnable [] refreshEndSub = new Runnable[] {refresh.internalSubscribe(refreshEnd)};
-				Runnable collSub = outer.onElement(element -> {
-					// The refresh end always needs to be after the elements
-					Runnable oldRefreshEnd = refreshEndSub[0];
-					refreshEndSub[0] = refresh.internalSubscribe(refreshEnd);
-					oldRefreshEnd.run();
-					observer.accept(element.refireWhen(refresh));
-				});
-				return () -> {
-					refreshStartSub.run();
-					refreshEndSub[0].run();
-					collSub.run();
-				};
+				return theTransactionManager.onElement(outer, refresh, element -> observer.accept(element.refireWhen(refresh)));
 			}
 		};
 		return new RefreshingCollection();
@@ -259,7 +271,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 	@Override
 	default <T> ObservableOrderedCollection<T> map(Type type, Function<? super E, T> map) {
-		ObservableCollection<E> outerColl = this;
+		ObservableCollection<E> outer = this;
 		class MappedObservableCollection extends java.util.AbstractCollection<T> implements ObservableOrderedCollection<T> {
 			@Override
 			public Type getType() {
@@ -268,18 +280,18 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
-				return outerColl.getSession();
+				return outer.getSession();
 			}
 
 			@Override
 			public int size() {
-				return outerColl.size();
+				return outer.size();
 			}
 
 			@Override
 			public Iterator<T> iterator() {
 				return new Iterator<T>() {
-					private final Iterator<E> backing = outerColl.iterator();
+					private final Iterator<E> backing = outer.iterator();
 
 					@Override
 					public boolean hasNext() {
@@ -300,7 +312,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 			@Override
 			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
-				return outerColl.onElement(element -> observer.accept(element.mapV(map)));
+				return outer.onElement(element -> observer.accept(element.mapV(map)));
 			}
 		}
 		return new MappedObservableCollection();

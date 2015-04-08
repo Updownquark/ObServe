@@ -127,42 +127,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 
 			@Override
 			public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
-				// Here we're relying on observers being fired in the order they were subscribed
-				Runnable refreshStartSub = refresh == null ? null : refresh.internalSubscribe(new Observer<Object>() {
-					@Override
-					public <V> void onNext(V value) {
-						theTransactionManager.startTransaction(value);
-					}
-
-					@Override
-					public <V> void onCompleted(V value) {
-						theTransactionManager.startTransaction(value);
-					}
-				});
-				Observer<Object> refreshEnd = new Observer<Object>() {
-					@Override
-					public <V> void onNext(V value) {
-						theTransactionManager.endTransaction();
-					}
-
-					@Override
-					public <V> void onCompleted(V value) {
-						theTransactionManager.endTransaction();
-					}
-				};
-				Runnable [] refreshEndSub = new Runnable[] {refresh.internalSubscribe(refreshEnd)};
-				Runnable collSub = outer.onElement(element -> {
-					// The refresh end always needs to be after the elements
-					Runnable oldRefreshEnd = refreshEndSub[0];
-					refreshEndSub[0] = refresh.internalSubscribe(refreshEnd);
-					oldRefreshEnd.run();
-					observer.accept(element.refireWhen(refresh));
-				});
-				return () -> {
-					refreshStartSub.run();
-					refreshEndSub[0].run();
-					collSub.run();
-				};
+				return theTransactionManager.onElement(outer, refresh, element -> observer.accept(element.refireWhen(refresh)));
 			}
 		};
 		return new RefreshingCollection();

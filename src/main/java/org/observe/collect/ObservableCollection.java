@@ -117,7 +117,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @return The mapped collection
 	 */
 	default <T> ObservableCollection<T> map(Type type, Function<? super E, T> map) {
-		ObservableCollection<E> outerColl = this;
+		ObservableCollection<E> outer = this;
 		class MappedObservableCollection extends java.util.AbstractCollection<T> implements ObservableCollection<T> {
 			@Override
 			public Type getType() {
@@ -126,18 +126,18 @@ public interface ObservableCollection<E> extends Collection<E> {
 
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
-				return outerColl.getSession();
+				return outer.getSession();
 			}
 
 			@Override
 			public int size() {
-				return outerColl.size();
+				return outer.size();
 			}
 
 			@Override
 			public Iterator<T> iterator() {
 				return new Iterator<T>() {
-					private final Iterator<E> backing = outerColl.iterator();
+					private final Iterator<E> backing = outer.iterator();
 
 					@Override
 					public boolean hasNext() {
@@ -158,7 +158,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 
 			@Override
 			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
-				return outerColl.onElement(element -> observer.accept(element.mapV(map)));
+				return outer.onElement(element -> observer.accept(element.mapV(map)));
 			}
 		}
 		return new MappedObservableCollection();
@@ -273,11 +273,13 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @return An observable collection containing this collection's elements combined with the given argument
 	 */
 	default <T, V> ObservableCollection<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
-		ObservableCollection<E> outerSet = this;
+		ObservableCollection<E> outer = this;
 		class CombinedObservableCollection extends AbstractCollection<V> implements ObservableCollection<V> {
+			private final DefaultTransactionManager theTransactionManager = new DefaultTransactionManager(outer);
+
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
-				return outerSet.getSession();
+				return theTransactionManager.getSession();
 			}
 
 			@Override
@@ -287,13 +289,13 @@ public interface ObservableCollection<E> extends Collection<E> {
 
 			@Override
 			public int size() {
-				return outerSet.size();
+				return outer.size();
 			}
 
 			@Override
 			public Iterator<V> iterator() {
 				return new Iterator<V>() {
-					private final Iterator<E> backing = outerSet.iterator();
+					private final Iterator<E> backing = outer.iterator();
 
 					@Override
 					public boolean hasNext() {
@@ -309,34 +311,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 
 			@Override
 			public Runnable onElement(Consumer<? super ObservableElement<V>> observer) {
-				boolean [] complete = new boolean[1];
-				Runnable setSub = outerSet.onElement(new Consumer<ObservableElement<E>>() {
-					@Override
-					public void accept(ObservableElement<E> value) {
-						observer.accept(value.combineV(func, arg));
-					}
-				});
-				if(complete[0])
-					return () -> {
-					};
-					Runnable argSub = arg.internalSubscribe(new Observer<ObservableValueEvent<T>>() {
-						@Override
-						public <V2 extends ObservableValueEvent<T>> void onNext(V2 value) {
-						}
-
-						@Override
-						public <V2 extends ObservableValueEvent<T>> void onCompleted(V2 value) {
-							complete[0] = true;
-							setSub.run();
-						}
-					});
-					if(complete[0])
-						return () -> {
-						};
-						return () -> {
-							setSub.run();
-							argSub.run();
-						};
+				return theTransactionManager.onElement(outer, arg, element -> observer.accept(element.combineV(func, arg)));
 			}
 		}
 		return new CombinedObservableCollection();
@@ -373,42 +348,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 
 			@Override
 			public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
-				// Here we're relying on observers being fired in the order they were subscribed
-				Runnable refreshStartSub = refresh == null ? null : refresh.internalSubscribe(new Observer<Object>() {
-					@Override
-					public <V> void onNext(V value) {
-						theTransactionManager.startTransaction(value);
-					}
-
-					@Override
-					public <V> void onCompleted(V value) {
-						theTransactionManager.startTransaction(value);
-					}
-				});
-				Observer<Object> refreshEnd = new Observer<Object>() {
-					@Override
-					public <V> void onNext(V value) {
-						theTransactionManager.endTransaction();
-					}
-
-					@Override
-					public <V> void onCompleted(V value) {
-						theTransactionManager.endTransaction();
-					}
-				};
-				Runnable [] refreshEndSub = new Runnable[] {refresh.internalSubscribe(refreshEnd)};
-				Runnable collSub = outer.onElement(element -> {
-					// The refresh end always needs to be after the elements
-					Runnable oldRefreshEnd = refreshEndSub[0];
-					refreshEndSub[0] = refresh.internalSubscribe(refreshEnd);
-					oldRefreshEnd.run();
-					observer.accept(element.refireWhen(refresh));
-				});
-				return () -> {
-					refreshStartSub.run();
-					refreshEndSub[0].run();
-					collSub.run();
-				};
+				return theTransactionManager.onElement(outer, refresh, element -> observer.accept(element.refireWhen(refresh)));
 			}
 		};
 		return new RefreshingCollection();

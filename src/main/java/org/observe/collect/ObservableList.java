@@ -36,11 +36,11 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 	 */
 	@Override
 	default <T> ObservableList<T> map(Type type, Function<? super E, T> map) {
-		ObservableList<E> outerList = this;
+		ObservableList<E> outer = this;
 		class MappedObservableList extends AbstractList<T> implements ObservableList<T> {
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
-				return outerList.getSession();
+				return outer.getSession();
 			}
 
 			@Override
@@ -50,17 +50,17 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 
 			@Override
 			public int size() {
-				return outerList.size();
+				return outer.size();
 			}
 
 			@Override
 			public T get(int index) {
-				return map.apply(outerList.get(index));
+				return map.apply(outer.get(index));
 			}
 
 			@Override
 			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
-				return outerList.onElement(element -> observer.accept(element.mapV(map)));
+				return outer.onElement(element -> observer.accept(element.mapV(map)));
 			}
 		}
 		return new MappedObservableList();
@@ -175,11 +175,13 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 	 */
 	@Override
 	default <T, V> ObservableList<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
-		ObservableList<E> outerList = this;
+		ObservableList<E> outer = this;
 		class CombinedObservableList extends AbstractList<V> implements ObservableList<V> {
+			private final DefaultTransactionManager theTransactionManager = new DefaultTransactionManager(outer);
+
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
-				return outerList.getSession();
+				return theTransactionManager.getSession();
 			}
 
 			@Override
@@ -189,17 +191,17 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 
 			@Override
 			public int size() {
-				return outerList.size();
+				return outer.size();
 			}
 
 			@Override
 			public V get(int index) {
-				return func.apply(outerList.get(index), arg.get());
+				return func.apply(outer.get(index), arg.get());
 			}
 
 			@Override
 			public Runnable onElement(Consumer<? super ObservableElement<V>> observer) {
-				return outerList.onElement(element -> observer.accept(element.combineV(func, arg)));
+				return theTransactionManager.onElement(outer, arg, element -> observer.accept(element.combineV(func, arg)));
 			}
 		}
 		return new CombinedObservableList();
@@ -237,42 +239,7 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 
 			@Override
 			public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
-				// Here we're relying on observers being fired in the order they were subscribed
-				Runnable refreshStartSub = refresh == null ? null : refresh.internalSubscribe(new Observer<Object>() {
-					@Override
-					public <V> void onNext(V value) {
-						theTransactionManager.startTransaction(value);
-					}
-
-					@Override
-					public <V> void onCompleted(V value) {
-						theTransactionManager.startTransaction(value);
-					}
-				});
-				Observer<Object> refreshEnd = new Observer<Object>() {
-					@Override
-					public <V> void onNext(V value) {
-						theTransactionManager.endTransaction();
-					}
-
-					@Override
-					public <V> void onCompleted(V value) {
-						theTransactionManager.endTransaction();
-					}
-				};
-				Runnable [] refreshEndSub = new Runnable[] {refresh.internalSubscribe(refreshEnd)};
-				Runnable collSub = outer.onElement(element -> {
-					// The refresh end always needs to be after the elements
-					Runnable oldRefreshEnd = refreshEndSub[0];
-					refreshEndSub[0] = refresh.internalSubscribe(refreshEnd);
-					oldRefreshEnd.run();
-					observer.accept(element.refireWhen(refresh));
-				});
-				return () -> {
-					refreshStartSub.run();
-					refreshEndSub[0].run();
-					collSub.run();
-				};
+				return theTransactionManager.onElement(outer, refresh, element -> observer.accept(element.refireWhen(refresh)));
 			}
 		};
 		return new RefreshingCollection();
