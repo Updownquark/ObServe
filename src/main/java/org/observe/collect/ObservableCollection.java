@@ -29,8 +29,12 @@ public interface ObservableCollection<E> extends Collection<E> {
 	Runnable onElement(Consumer<? super ObservableElement<E>> onElement);
 
 	/**
-	 * @return The observable value for the current session of this collection. The session allows listeners to retain state for the duration
-	 *         of a unit of work (controlled by implementation-specific means), batching events where possible.
+	 * @return The observable value for the current session of this collection. The session allows listeners to retain state for the
+	 *         duration of a unit of work (controlled by implementation-specific means), batching events where possible. Not all events on a
+	 *         collection will have a session (the value may be null). In addition, the presence or absence of a session need not imply
+	 *         anything about the threaded interactions with a session. A transaction may encompass events fired and received on multiple
+	 *         threads. In short, the only thing guaranteed about sessions is that they will end. Therefore, if a session is present,
+	 *         observers may assume that they can delay expensive results of collection events until the session completes.
 	 */
 	ObservableValue<CollectionSession> getSession();
 

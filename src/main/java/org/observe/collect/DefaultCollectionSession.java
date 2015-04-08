@@ -1,6 +1,5 @@
 package org.observe.collect;
 
-import java.util.HashMap;
 import java.util.Map;
 
 /** Simple, default implementation of CollectionSession */
@@ -31,12 +30,12 @@ public class DefaultCollectionSession implements CollectionSession {
 
 	/**
 	 * Creates the session
-	 * 
+	 *
 	 * @param cause The cause of the set of changes to come
 	 */
 	public DefaultCollectionSession(Object cause) {
 		theCause = cause;
-		theValues = new HashMap<>();
+		theValues = new java.util.concurrent.ConcurrentHashMap<>();
 	}
 
 	@Override
