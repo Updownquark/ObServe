@@ -1,7 +1,5 @@
 package org.observe.collect;
 
-import java.util.Map;
-
 /** Simple, default implementation of CollectionSession */
 public class DefaultCollectionSession implements CollectionSession {
 	private static class Key {
@@ -26,7 +24,7 @@ public class DefaultCollectionSession implements CollectionSession {
 
 	private final Object theCause;
 
-	private final Map<Key, Object> theValues;
+	private final java.util.concurrent.ConcurrentHashMap<Key, Object> theValues;
 
 	/**
 	 * Creates the session
@@ -51,5 +49,10 @@ public class DefaultCollectionSession implements CollectionSession {
 	@Override
 	public Object put(Object listener, String key, Object value) {
 		return theValues.put(new Key(listener, key), value);
+	}
+
+	@Override
+	public Object putIfAbsent(Object listener, String key, Object value) {
+		return theValues.putIfAbsent(new Key(listener, key), value);
 	}
 }
