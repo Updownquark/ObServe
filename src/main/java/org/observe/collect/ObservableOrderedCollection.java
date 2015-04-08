@@ -64,7 +64,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 				if(isEmpty())
 					observer.onNext(new ObservableValueEvent<>(this, null, null, null));
 				ObservableValue<V> observableVal = this;
-				return ObservableOrderedCollection.this.onElement(new Consumer<ObservableElement<E>>() {
+				final Object key = new Object();
+				Runnable collSub = ObservableOrderedCollection.this.onElement(new Consumer<ObservableElement<E>>() {
 					private V theValue;
 					private int theIndex = -1;
 
@@ -118,9 +119,32 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 						V oldValue = theValue;
 						theValue = value;
 						theIndex = index;
-						observer.onNext(new ObservableValueEvent<>(observableVal, oldValue, theValue, null));
+						CollectionSession session = getSession().get();
+						if(session == null)
+							observer.onNext(new ObservableValueEvent<>(observableVal, oldValue, theValue, null));
+						else {
+							session.putIfAbsent(key, "oldBest", oldValue);
+							session.put(key, "newBest", theValue);
+						}
 					}
 				});
+				Runnable transSub = getSession().internalSubscribe(new Observer<ObservableValueEvent<CollectionSession>>() {
+					@Override
+					public <V2 extends ObservableValueEvent<CollectionSession>> void onNext(V2 value) {
+						CollectionSession completed = value.getOldValue();
+						if(completed == null)
+							return;
+						V oldBest = (V) completed.get(key, "oldBest");
+						V newBest = (V) completed.get(key, "newBest");
+						if(oldBest == null && newBest == null)
+							return;
+						observer.onNext(new ObservableValueEvent<>(observableVal, oldBest, newBest, value));
+					}
+				});
+				return () -> {
+					collSub.run();
+					transSub.run();
+				};
 			}
 
 			@Override
