@@ -10,6 +10,7 @@ import java.util.function.Function;
 
 import org.observe.*;
 import org.observe.ObservableDebug.D;
+import org.observe.util.ListenerSet;
 
 import prisms.lang.Type;
 
@@ -378,6 +379,15 @@ public interface ObservableCollection<E> extends Collection<E> {
 	}
 
 	/**
+	 * Creates a collection with the same elements as this collection, but cached, such that the
+	 *
+	 * @param safe Whether the cached collection must be thread-safe
+	 * @return The cached collection
+	 */
+	default ObservableCollection<E> cached(boolean safe) {
+	}
+
+	/**
 	 * @param <T> An observable collection that contains all elements in all collections in the wrapping collection
 	 * @param coll The collection to flatten
 	 * @return A collection containing all elements of all collections in the outer collection
@@ -728,5 +738,44 @@ public interface ObservableCollection<E> extends Collection<E> {
 		public Immutable<E> immutable() {
 			return this;
 		}
+	}
+
+	public static class SafeCached<E> extends AbstractCollection<E> implements ObservableCollection<E> {
+		private ObservableCollection<E> theWrapped;
+
+		private final java.util.concurrent.ConcurrentLinkedQueue<E> theCache;
+
+		private final ListenerSet<Consumer<? super ObservableElement<E>>> theListeners;
+
+		public Cached(ObservableCollection<E> wrap) {
+			theWrapped = wrap;
+			theCache = new java.util.concurrent.ConcurrentLinkedQueue<>();
+			theListeners = new ListenerSet<>();
+		}
+
+		@Override
+		public Type getType() {
+			return theWrapped.getType();
+		}
+
+		@Override
+		public Runnable onElement(Consumer<? super ObservableElement<E>> onElement) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			return theWrapped.getSession();
+		}
+
+		@Override
+		public Iterator<E> iterator() {
+		}
+
+		@Override
+		public int size() {
+		}
+
 	}
 }
