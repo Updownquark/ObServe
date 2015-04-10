@@ -1,5 +1,6 @@
 package org.observe.datastruct;
 
+import java.util.Map;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -11,60 +12,118 @@ public interface ObservableGraph<N, E> {
 	interface Node<N, E> {
 		ObservableCollection<Edge<N, E>> getEdges();
 
-		ObservableValue<N> getValue();
+		N getValue();
 	}
 
 	interface Edge<N, E> {
 		Node<N, E> getStart();
+
 		Node<N, E> getEnd();
+
 		boolean isDirected();
 
-		ObservableValue<E> getValue();
+		E getValue();
 	}
 
 	ObservableCollection<Node<N, E>> getNodes();
+
 	ObservableCollection<Edge<N, E>> getEdges();
 
-	default ObservableGraph<N, E> filter(Predicate<N> nodeFilter, Predicate<E> edgeFilter) {
-		if(nodeFilter==null && edgeFilter==null)
+	default ObservableGraph<N, E> filter(Predicate<? super N> nodeFilter, Predicate<? super E> edgeFilter) {
+		if(nodeFilter == null && edgeFilter == null)
 			return this;
-		if(nodeFilter==null)
-			nodeFilter=node->true;
-		if(edgeFilter==null)
-			edgeFilter=edge->true;
-		ObservableGraph<N, E> outer=this;
-		class FilteredNode implements Node<N, E>{
+		if(nodeFilter == null) {
+			nodeFilter = node -> true;
+		}
+		if(edgeFilter == null) {
+			edgeFilter = edge -> true;
+		}
+		final Predicate<? super N> nf = nodeFilter;
+		final Predicate<? super E> ef = edgeFilter;
+		ObservableGraph<N, E> outer = this;
+		class FilteredNode implements Node<N, E> {
 			private final Node<N, E> wrapped;
-			
-			FilteredNode(Node<N, E> wrap){
-				wrapped=wrap;
-			}
-			
-			@Override
-			public ObservableCollection<Edge<N, E>> getEdges() {
-				return wrapped.getEdges().filter(edge->edgeFilter.test(edge.get
-				// TODO Auto-generated method stub
-				return null;
+
+			FilteredNode(Node<N, E> wrap) {
+				wrapped = wrap;
 			}
 
 			@Override
-			public ObservableValue<N> getValue() {
-				// TODO Auto-generated method stub
-				return null;
+			public ObservableCollection<Edge<N, E>> getEdges() {
+				return wrapped.getEdges().filter(edge -> {
+					if(!ef.test(edge.getValue()))
+						return false;
+					if(edge.getStart() != wrapped && !nf.test(edge.getStart().getValue()))
+						return false;
+					if(edge.getEnd() != wrapped && !nf.test(edge.getEnd().getValue()))
+						return false;
+					return true;
+				});
+			}
+
+			@Override
+			public N getValue() {
+				return wrapped.getValue();
 			}
 		}
-		class FilteredGraph implements ObservableGraph<N, E>{
+		class FilteredEdge implements Edge<N, E> {
+			private final Edge<N, E> wrapped;
+
+			private final Node<N, E> start;
+
+			private final Node<N, E> end;
+
+			FilteredEdge(Edge<N, E> wrap, Node<N, E> start, Node<N, E> end) {
+				wrapped = wrap;
+				this.start = start;
+				this.end = end;
+			}
+
+			@Override
+			public Node<N, E> getStart() {
+				return start;
+			}
+
+			@Override
+			public Node<N, E> getEnd() {
+				return end;
+			}
+
+			@Override
+			public boolean isDirected() {
+				return wrapped.isDirected();
+			}
+
+			@Override
+			public E getValue() {
+				return wrapped.getValue();
+			}
+		}
+		class FilteredGraph implements ObservableGraph<N, E> {
+			// TODO Not threadsafe
+			private final Map<Node<N, E>, FilteredNode> theNodeMap = new java.util.IdentityHashMap<>();
+
 			@Override
 			public ObservableCollection<Node<N, E>> getNodes() {
-				
-				// TODO Auto-generated method stub
-				return null;
+				return outer.getNodes().filter(node -> nf.test(node.getValue())).map(node -> filter(node));
 			}
 
 			@Override
 			public ObservableCollection<Edge<N, E>> getEdges() {
-				// TODO Auto-generated method stub
-				return null;
+				return outer.getEdges().filter(edge -> ef.test(edge.getValue())).map(edge -> filter(edge));
+			}
+
+			private FilteredNode filter(Node<N, E> node) {
+				FilteredNode ret = theNodeMap.get(node);
+				if(ret == null) {
+					ret = new FilteredNode(node);
+					theNodeMap.put(node, ret);
+
+				}
+			}
+
+			private FilteredEdge filter(Edge<N, E> edge) {
+
 			}
 		}
 		return new FilteredGraph();
