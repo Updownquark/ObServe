@@ -1,14 +1,16 @@
 package org.observe.collect;
 
-import java.util.AbstractList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.observe.*;
+import org.observe.Observable;
+import org.observe.Observer;
+import org.observe.util.ListenerSet;
 
 import prisms.lang.Type;
 
@@ -248,6 +250,11 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 	@Override
 	default ObservableList<E> immutable() {
 		return new Immutable<>(this);
+	}
+
+	@Override
+	default ObservableOrderedCollection<E> cached() {
+		return new SafeCached<>(this);
 	}
 
 	/**
@@ -531,6 +538,157 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 		@Override
 		public Immutable<E> immutable() {
 			return this;
+		}
+	}
+
+	/**
+	 * Backs {@link ObservableOrderedCollection#cached()}
+	 *
+	 * @param <E> The type of elements in the collection
+	 */
+	public static class SafeCached<E> extends AbstractList<E> implements ObservableList<E> {
+		private static class CachedElement<E> implements OrderedObservableElement<E> {
+			private final OrderedObservableElement<E> theWrapped;
+
+			private final ListenerSet<Observer<? super ObservableValueEvent<E>>> theElementListeners;
+
+			private E theCachedValue;
+
+			CachedElement(OrderedObservableElement<E> wrap) {
+				theWrapped = wrap;
+				theElementListeners = new ListenerSet<>();
+			}
+
+			@Override
+			public ObservableValue<E> persistent() {
+				return theWrapped.persistent();
+			}
+
+			@Override
+			public Type getType() {
+				return theWrapped.getType();
+			}
+
+			@Override
+			public E get() {
+				return theCachedValue;
+			}
+
+			@Override
+			public Runnable internalSubscribe(Observer<? super ObservableValueEvent<E>> observer) {
+				theElementListeners.add(observer);
+				observer.onNext(new ObservableValueEvent<>(this, theCachedValue, theCachedValue, null));
+				return () -> theElementListeners.remove(observer);
+			}
+
+			@Override
+			public int getIndex() {
+				return theWrapped.getIndex();
+			}
+
+			private void newValue(ObservableValueEvent<E> event) {
+				E oldValue = theCachedValue;
+				theCachedValue = event.getValue();
+				ObservableValueEvent<E> cachedEvent = new ObservableValueEvent<>(this, oldValue, theCachedValue, event);
+				theElementListeners.forEach(observer -> observer.onNext(cachedEvent));
+			}
+
+			private void completed(ObservableValueEvent<E> event) {
+				ObservableValueEvent<E> cachedEvent = new ObservableValueEvent<>(this, theCachedValue, theCachedValue, event);
+				theElementListeners.forEach(observer -> observer.onCompleted(cachedEvent));
+			}
+		}
+
+		private final ObservableList<E> theWrapped;
+
+		private final ListenerSet<Consumer<? super ObservableElement<E>>> theListeners;
+
+		private final java.util.concurrent.CopyOnWriteArrayList<CachedElement<E>> theCache;
+
+		private final ReentrantLock theLock;
+
+		private final Consumer<ObservableElement<E>> theWrappedOnElement;
+
+		private Runnable theUnsubscribe;
+
+		/** @param wrap The collection to cache */
+		public SafeCached(ObservableList<E> wrap) {
+			theWrapped = wrap;
+			theListeners = new ListenerSet<>();
+			theCache = new java.util.concurrent.CopyOnWriteArrayList<>();
+			theLock = new ReentrantLock();
+			theWrappedOnElement = element -> {
+				CachedElement<E> cached = new CachedElement<>((OrderedObservableElement<E>) element);
+				theCache.add(cached.getIndex(), cached);
+				element.internalSubscribe(new Observer<ObservableValueEvent<E>>() {
+					@Override
+					public <V extends ObservableValueEvent<E>> void onNext(V event) {
+						cached.newValue(event);
+					}
+
+					@Override
+					public <V extends ObservableValueEvent<E>> void onCompleted(V event) {
+						cached.completed(event);
+						theCache.remove(element);
+					}
+				});
+				theListeners.forEach(onElement -> onElement.accept(cached));
+			};
+
+			theListeners.setUsedListener(this::setUsed);
+		}
+
+		@Override
+		public Type getType() {
+			return theWrapped.getType();
+		}
+
+		@Override
+		public Runnable onElement(Consumer<? super ObservableElement<E>> onElement) {
+			theListeners.add(onElement);
+			for(CachedElement<E> cached : theCache)
+				onElement.accept(cached);
+			return () -> theListeners.remove(onElement);
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			return theWrapped.getSession();
+		}
+
+		@Override
+		public int size() {
+			Collection<E> ret = refresh();
+			return ret.size();
+		}
+
+		@Override
+		public E get(int index) {
+			List<E> ret = refresh();
+			return ret.get(index);
+		}
+
+		private void setUsed(boolean used) {
+			if(used && theUnsubscribe == null) {
+				theLock.lock();
+				try {
+					theCache.clear();
+					theUnsubscribe = theWrapped.onElement(theWrappedOnElement);
+				} finally {
+					theLock.unlock();
+				}
+			} else if(!used && theUnsubscribe != null) {
+				theUnsubscribe.run();
+				theUnsubscribe = null;
+			}
+		}
+
+		private List<E> refresh() {
+			// If we're currently caching, then returned the cached values. Otherwise return the dynamic values.
+			if(theUnsubscribe != null)
+				return theCache.stream().map(CachedElement::get).collect(Collectors.toList());
+			else
+				return theWrapped;
 		}
 	}
 }

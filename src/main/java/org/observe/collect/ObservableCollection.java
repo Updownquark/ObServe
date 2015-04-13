@@ -4,9 +4,12 @@ import java.util.AbstractCollection;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import org.observe.*;
 import org.observe.ObservableDebug.D;
@@ -259,6 +262,113 @@ public interface ObservableCollection<E> extends Collection<E> {
 	}
 
 	/**
+	 * Searches in this collection for an element. Since an ObservableCollection's order may or may not be significant, the element
+	 * reflected in the value may not be the first element in the collection (by {@link #iterator()}) to match the filter.
+	 *
+	 * @param filter The filter function
+	 * @return A value in this list passing the filter, or null if none of this collection's elements pass.
+	 */
+	default ObservableValue<E> find(Predicate<E> filter) {
+		ObservableCollection<E> outer = this;
+		return new ObservableValue<E>() {
+			private final Type type = outer.getType().isPrimitive() ? new Type(Type.getWrapperType(outer.getType().getBaseType())) : outer
+				.getType();
+
+			@Override
+			public Type getType() {
+				return type;
+			}
+
+			@Override
+			public E get() {
+				for(E element : ObservableCollection.this) {
+					if(filter.test(element))
+						return element;
+				}
+				return null;
+			}
+
+			@Override
+			public Runnable internalSubscribe(Observer<? super ObservableValueEvent<E>> observer) {
+				if(isEmpty())
+					observer.onNext(new ObservableValueEvent<>(this, null, null, null));
+				final Object key = new Object();
+				Runnable collSub = ObservableCollection.this.onElement(new Consumer<ObservableElement<E>>() {
+					private E theValue;
+
+					private boolean isFound;
+
+					@Override
+					public void accept(ObservableElement<E> element) {
+						element.subscribe(new Observer<ObservableValueEvent<E>>() {
+							@Override
+							public <V3 extends ObservableValueEvent<E>> void onNext(V3 value) {
+								if(!isFound && filter.test(value.getValue())) {
+									isFound = true;
+									newBest(value.getValue());
+								}
+							}
+
+							@Override
+							public <V3 extends ObservableValueEvent<E>> void onCompleted(V3 value) {
+								if(theValue == value.getOldValue())
+									findNextBest();
+							}
+
+							private void findNextBest() {
+								isFound = false;
+								for(E value : ObservableCollection.this) {
+									if(filter.test(value)) {
+										isFound = true;
+										newBest(value);
+										break;
+									}
+								}
+								if(!isFound)
+									newBest(null);
+							}
+						});
+					}
+
+					void newBest(E value) {
+						E oldValue = theValue;
+						theValue = value;
+						CollectionSession session = getSession().get();
+						if(session == null)
+							observer.onNext(createEvent(oldValue, theValue, null));
+						else {
+							session.putIfAbsent(key, "oldBest", oldValue);
+							session.put(key, "newBest", theValue);
+						}
+					}
+				});
+				Runnable transSub = getSession().internalSubscribe(new Observer<ObservableValueEvent<CollectionSession>>() {
+					@Override
+					public <V2 extends ObservableValueEvent<CollectionSession>> void onNext(V2 value) {
+						CollectionSession completed = value.getOldValue();
+						if(completed == null)
+							return;
+						E oldBest = (E) completed.get(key, "oldBest");
+						E newBest = (E) completed.get(key, "newBest");
+						if(oldBest == null && newBest == null)
+							return;
+						observer.onNext(createEvent(oldBest, newBest, value));
+					}
+				});
+				return () -> {
+					collSub.run();
+					transSub.run();
+				};
+			}
+
+			@Override
+			public String toString() {
+				return "find in " + ObservableCollection.this;
+			}
+		};
+	}
+
+	/**
 	 * @param <T> The type of the argument value
 	 * @param <V> The type of the new observable collection
 	 * @param arg The value to combine with each of this collection's elements
@@ -381,10 +491,10 @@ public interface ObservableCollection<E> extends Collection<E> {
 	/**
 	 * Creates a collection with the same elements as this collection, but cached, such that the
 	 *
-	 * @param safe Whether the cached collection must be thread-safe
 	 * @return The cached collection
 	 */
-	default ObservableCollection<E> cached(boolean safe) {
+	default ObservableCollection<E> cached() {
+		return new SafeCached<>(this);
 	}
 
 	/**
@@ -740,17 +850,94 @@ public interface ObservableCollection<E> extends Collection<E> {
 		}
 	}
 
+	/**
+	 * Caches the values in an observable collection. As long as this collection is being listened to, it will maintain a cache of the
+	 * values in the given collection. When all observers to the collection have been unsubscribed, the cache is cleared and not maintained.
+	 * If the cache is active, all access methods to this cache, including the native {@link Collection} methods, will use the cached
+	 * values. If the cache is not active, the {@link Collection} methods will delegate to the wrapped collection.
+	 *
+	 * @param <E> The type of elements in the collection
+	 */
 	public static class SafeCached<E> extends AbstractCollection<E> implements ObservableCollection<E> {
+		private static class CachedElement<E> implements ObservableElement<E> {
+			private final ObservableElement<E> theWrapped;
+			private final ListenerSet<Observer<? super ObservableValueEvent<E>>> theElementListeners;
+
+			private E theCachedValue;
+
+			CachedElement(ObservableElement<E> wrap) {
+				theWrapped = wrap;
+				theElementListeners = new ListenerSet<>();
+			}
+
+			@Override
+			public Type getType() {
+				return theWrapped.getType();
+			}
+
+			@Override
+			public E get() {
+				return theCachedValue;
+			}
+
+			@Override
+			public Runnable internalSubscribe(Observer<? super ObservableValueEvent<E>> observer) {
+				theElementListeners.add(observer);
+				observer.onNext(new ObservableValueEvent<>(this, theCachedValue, theCachedValue, null));
+				return () -> theElementListeners.remove(observer);
+			}
+
+			@Override
+			public ObservableValue<E> persistent() {
+				return theWrapped.persistent();
+			}
+
+			private void newValue(ObservableValueEvent<E> event) {
+				E oldValue = theCachedValue;
+				theCachedValue = event.getValue();
+				ObservableValueEvent<E> cachedEvent = new ObservableValueEvent<>(this, oldValue, theCachedValue, event);
+				theElementListeners.forEach(observer -> observer.onNext(cachedEvent));
+			}
+
+			private void completed(ObservableValueEvent<E> event) {
+				ObservableValueEvent<E> cachedEvent = new ObservableValueEvent<>(this, theCachedValue, theCachedValue, event);
+				theElementListeners.forEach(observer -> observer.onCompleted(cachedEvent));
+			}
+		}
+
 		private ObservableCollection<E> theWrapped;
-
-		private final java.util.concurrent.ConcurrentLinkedQueue<E> theCache;
-
 		private final ListenerSet<Consumer<? super ObservableElement<E>>> theListeners;
+		private final org.observe.util.ConcurrentIdentityHashMap<ObservableElement<E>, CachedElement<E>> theCache;
+		private final ReentrantLock theLock;
+		private final Consumer<ObservableElement<E>> theWrappedOnElement;
 
-		public Cached(ObservableCollection<E> wrap) {
+		private Runnable theUnsubscribe;
+
+		/** @param wrap The collection to cache */
+		public SafeCached(ObservableCollection<E> wrap) {
 			theWrapped = wrap;
-			theCache = new java.util.concurrent.ConcurrentLinkedQueue<>();
 			theListeners = new ListenerSet<>();
+			theCache = new org.observe.util.ConcurrentIdentityHashMap<>();
+			theLock = new ReentrantLock();
+			theWrappedOnElement = element -> {
+				CachedElement<E> cached=new CachedElement<>(element);
+				theCache.put(element, cached);
+				element.internalSubscribe(new Observer<ObservableValueEvent<E>>(){
+					@Override
+					public <V extends ObservableValueEvent<E>> void onNext(V event) {
+						cached.newValue(event);
+					}
+
+					@Override
+					public <V extends ObservableValueEvent<E>> void onCompleted(V event) {
+						cached.completed(event);
+						theCache.remove(element);
+					}
+				});
+				theListeners.forEach(onElement -> onElement.accept(cached));
+			};
+
+			theListeners.setUsedListener(this::setUsed);
 		}
 
 		@Override
@@ -760,8 +947,10 @@ public interface ObservableCollection<E> extends Collection<E> {
 
 		@Override
 		public Runnable onElement(Consumer<? super ObservableElement<E>> onElement) {
-			// TODO Auto-generated method stub
-			return null;
+			theListeners.add(onElement);
+			for(CachedElement<E> cached : theCache.values())
+				onElement.accept(cached);
+			return () -> theListeners.remove(onElement);
 		}
 
 		@Override
@@ -771,11 +960,37 @@ public interface ObservableCollection<E> extends Collection<E> {
 
 		@Override
 		public Iterator<E> iterator() {
+			Collection<E> ret = refresh();
+			return ret.iterator();
 		}
 
 		@Override
 		public int size() {
+			Collection<E> ret = refresh();
+			return ret.size();
 		}
 
+		private void setUsed(boolean used) {
+			if(used && theUnsubscribe == null) {
+				theLock.lock();
+				try {
+					theCache.clear();
+					theUnsubscribe = theWrapped.onElement(theWrappedOnElement);
+				} finally {
+					theLock.unlock();
+				}
+			} else if(!used && theUnsubscribe != null) {
+				theUnsubscribe.run();
+				theUnsubscribe=null;
+			}
+		}
+
+		private Collection<E> refresh() {
+			// If we're currently caching, then returned the cached values. Otherwise return the dynamic values.
+			if(theUnsubscribe != null)
+				return theCache.values().stream().map(CachedElement::get).collect(Collectors.toList());
+			else
+				return theWrapped;
+		}
 	}
 }

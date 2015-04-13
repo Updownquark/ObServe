@@ -17,11 +17,8 @@ import java.util.function.Consumer;
 public class ListenerSet<E> {
 	private final Collection<E> theListeners;
 	private final ReentrantReadWriteLock theLock;
-
 	private final ConcurrentHashMap<IdentityKey<E>, Boolean> theListenersToRemove;
-
 	private final Collection<E> theListenersToAdd;
-
 	private Consumer<Boolean> theUsedListener;
 	private Consumer<E> theOnSubscribe;
 
@@ -36,6 +33,11 @@ public class ListenerSet<E> {
 		};
 		theUsedListener = used -> {
 		};
+	}
+
+	/** @return Whether this listener set is currently being used (has listeners) */
+	public boolean isUsed(){
+		return (theListeners.size() - theListenersToRemove.size() - +theListenersToAdd.size()) > 0;
 	}
 
 	/** @param onSubscribe The function to call for each listener that is added to this set */

@@ -38,7 +38,8 @@ public class DefaultObservableList<E> extends AbstractList<E> implements Observa
 	private volatile int theRemovedElementIndex;
 
 	private CollectionSession theSession;
-	private DefaultObservableValue<CollectionSession> theSessionObservable;
+
+	private ObservableValue<CollectionSession> theSessionObservable;
 	private org.observe.Observer<ObservableValueEvent<CollectionSession>> theSessionController;
 
 	/**
@@ -47,12 +48,7 @@ public class DefaultObservableList<E> extends AbstractList<E> implements Observa
 	 * @param type The type of elements for this list
 	 */
 	public DefaultObservableList(Type type) {
-		theType = type;
-		theValues = new ArrayList<>();
-		theElements = new ArrayList<>();
-
-		theObservers = new java.util.concurrent.ConcurrentHashMap<>();
-		theLock = new ReentrantReadWriteLock();
+		this(type, new ReentrantReadWriteLock(), null);
 
 		theSessionObservable = new DefaultObservableValue<CollectionSession>() {
 			private final Type theSessionType = new Type(CollectionSession.class);
@@ -67,7 +63,24 @@ public class DefaultObservableList<E> extends AbstractList<E> implements Observa
 				return theSession;
 			}
 		};
-		theSessionController = theSessionObservable.control(null);
+		theSessionController = ((DefaultObservableValue<CollectionSession>) theSessionObservable).control(null);
+	}
+
+	/**
+	 * This constructor is for specifying some of the internals of the list.
+	 *
+	 * @param type The type of elements for this list
+	 * @param lock The lock for this list to use
+	 * @param session The session for this list to use (see {@link #getSession()})
+	 */
+	protected DefaultObservableList(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session) {
+		theType = type;
+		theLock = lock;
+		theSessionObservable = session;
+
+		theValues = new ArrayList<>();
+		theElements = new ArrayList<>();
+		theObservers = new java.util.concurrent.ConcurrentHashMap<>();
 	}
 
 	@Override
