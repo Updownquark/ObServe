@@ -5,6 +5,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import org.observe.collect.ObservableCollection;
+
 /** A utility class for debugging observables */
 public final class ObservableDebug {
 	public static class ObservableDerivation {
@@ -33,6 +35,12 @@ public final class ObservableDebug {
 			this.tag = tag;
 			this.value = value;
 		}
+	}
+
+	public static class ObservableHolder{
+		public final Object observable;
+		public final ObservableCollection<String> labels;
+		public final
 	}
 
 	/** Whether debugging is turned on. If this is false, this class will do nothing */
@@ -152,6 +160,7 @@ public final class ObservableDebug {
 	}
 
 	private static final ConcurrentHashMap<Thread, DebugState> theThreadDebug = new ConcurrentHashMap<>();
+	private static final org.observe.datastruct.DefaultObservableGraph<ObservableHolder, String> theObservables;
 	private static final Map<Object, List<ObservableDerivation>> theDerivations = new IdentityHashMap<>();
 
 	private static final Map<Object, ObservableDerivation> theDerived = new IdentityHashMap<>();
