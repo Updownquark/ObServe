@@ -57,7 +57,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 			}
 
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableValueEvent<E>> observer) {
+			public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
 				if(isEmpty())
 					observer.onNext(new ObservableValueEvent<>(this, null, null, null));
 				final Object key = new Object();
@@ -121,7 +121,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 						}
 					}
 				});
-				Runnable transSub = getSession().internalSubscribe(new Observer<ObservableValueEvent<CollectionSession>>() {
+				Runnable transSub = getSession().observe(new Observer<ObservableValueEvent<CollectionSession>>() {
 					@Override
 					public <V2 extends ObservableValueEvent<CollectionSession>> void onNext(V2 value) {
 						CollectionSession completed = value.getOldValue();
@@ -168,7 +168,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 			}
 
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableValueEvent<E>> observer) {
+			public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
 				if(isEmpty())
 					observer.onNext(createEvent(null, null, null));
 				Object key = new Object();
@@ -177,7 +177,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 					@Override
 					public void accept(ObservableElement<E> element) {
 						OrderedObservableElement<E> orderedEl = (OrderedObservableElement<E>) element;
-						orderedEl.internalSubscribe(new Observer<ObservableValueEvent<E>>() {
+						orderedEl.observe(new Observer<ObservableValueEvent<E>>() {
 							@Override
 							public <V2 extends ObservableValueEvent<E>> void onNext(V2 event) {
 								if(orderedEl.getIndex() != 0)
@@ -205,7 +205,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 						});
 					}
 				});
-				Runnable transSub = getSession().internalSubscribe(new Observer<ObservableValueEvent<CollectionSession>>() {
+				Runnable transSub = getSession().observe(new Observer<ObservableValueEvent<CollectionSession>>() {
 					@Override
 					public <V2 extends ObservableValueEvent<CollectionSession>> void onNext(V2 value) {
 						CollectionSession completed = value.getOldValue();
@@ -780,8 +780,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		}
 
 		@Override
-		public Runnable internalSubscribe(Observer<? super ObservableValueEvent<E>> observer) {
-			return theWrapped.internalSubscribe(new Observer<ObservableValueEvent<E>>() {
+		public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
+			return theWrapped.observe(new Observer<ObservableValueEvent<E>>() {
 				@Override
 				public <V extends ObservableValueEvent<E>> void onNext(V event) {
 					if(theLeft != null && theList.getCompare().compare(event.getValue(), theLeft.get()) < 0) {
@@ -1028,7 +1028,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 			}
 
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableValueEvent<E>> observer) {
+			public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
 				theElementListeners.add(observer);
 				observer.onNext(new ObservableValueEvent<>(this, theCachedValue, theCachedValue, null));
 				return () -> theElementListeners.remove(observer);
@@ -1069,7 +1069,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 			theWrappedOnElement = element -> {
 				CachedElement<E> cached = new CachedElement<>((OrderedObservableElement<E>) element);
 				theCache.add(cached.getIndex(), cached);
-				element.internalSubscribe(new Observer<ObservableValueEvent<E>>() {
+				element.observe(new Observer<ObservableValueEvent<E>>() {
 					@Override
 					public <V extends ObservableValueEvent<E>> void onNext(V event) {
 						cached.newValue(event);

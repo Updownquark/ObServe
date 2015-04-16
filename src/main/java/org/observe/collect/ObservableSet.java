@@ -176,7 +176,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 				}
 
 				@Override
-				public Runnable internalSubscribe(Observer<? super ObservableValueEvent<T>> observer) {
+				public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
 					observer.onNext(new ObservableValueEvent<>(this, null, value, null));
 					return () -> {
 					};
@@ -272,9 +272,9 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 			}
 
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableValueEvent<T>> observer2) {
+			public Runnable observe(Observer<? super ObservableValueEvent<T>> observer2) {
 				Runnable [] innerSub = new Runnable[1];
-				innerSub[0] = theWrappedElement.internalSubscribe(new Observer<ObservableValueEvent<T>>() {
+				innerSub[0] = theWrappedElement.observe(new Observer<ObservableValueEvent<T>>() {
 					@Override
 					public <V2 extends ObservableValueEvent<T>> void onNext(V2 elValue) {
 						boolean shouldBe = shouldBeIncluded(elValue.getValue());

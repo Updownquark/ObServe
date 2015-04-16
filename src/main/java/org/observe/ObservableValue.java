@@ -23,8 +23,8 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	default Observable<T> value() {
 		return new Observable<T>() {
 			@Override
-			public Runnable internalSubscribe(Observer<? super T> observer) {
-				return ObservableValue.this.internalSubscribe(new Observer<ObservableValueEvent<T>>() {
+			public Runnable observe(Observer<? super T> observer) {
+				return ObservableValue.this.observe(new Observer<ObservableValueEvent<T>>() {
 					@Override
 					public <V extends ObservableValueEvent<T>> void onNext(V value) {
 						observer.onNext(value.getValue());
@@ -74,8 +74,8 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 			}
 
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableValueEvent<T>> observer) {
-				return outer.map(eventMap).internalSubscribe(observer);
+			public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
+				return outer.map(eventMap).observe(observer);
 			}
 
 			@Override
@@ -217,11 +217,11 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		ObservableValue<T> outer = this;
 		return new ObservableValue<T>() {
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableValueEvent<T>> observer) {
-				Runnable outerSub = outer.internalSubscribe(observer);
+			public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
+				Runnable outerSub = outer.observe(observer);
 				boolean [] complete = new boolean[1];
 				Runnable [] untilSub = new Runnable[1];
-				untilSub[0] = until.internalSubscribe(new Observer<Object>() {
+				untilSub[0] = until.observe(new Observer<Object>() {
 					@Override
 					public void onNext(Object value) {
 						onCompleted(value);
@@ -280,9 +280,9 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 			}
 
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableValueEvent<T>> observer) {
-				Runnable outerSub = outer.internalSubscribe(observer);
-				Runnable refireSub = observable.internalSubscribe(new Observer<Object>() {
+			public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
+				Runnable outerSub = outer.observe(observer);
+				Runnable refireSub = observable.observe(new Observer<Object>() {
 					@Override
 					public <V> void onNext(V value) {
 						observer.onNext(createEvent(get(), get(), value));
@@ -346,10 +346,10 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 			}
 
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableValueEvent<T>> observer) {
+			public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
 				ObservableValue<T> retObs = this;
 				Runnable [] innerSub = new Runnable[1];
-				Runnable outerSub = ov.internalSubscribe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends T>>>() {
+				Runnable outerSub = ov.observe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends T>>>() {
 					@Override
 					public <V extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onNext(V value) {
 						if(innerSub[0] != null) {
@@ -359,7 +359,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 						T old = get(value.getOldValue());
 						if(value.getValue() != null) {
 							boolean [] init = new boolean[] {true};
-							innerSub[0] = value.getValue().internalSubscribe(new Observer<ObservableValueEvent<? extends T>>() {
+							innerSub[0] = value.getValue().observe(new Observer<ObservableValueEvent<? extends T>>() {
 								@Override
 								public <V2 extends ObservableValueEvent<? extends T>> void onNext(V2 value2) {
 									T innerOld;
@@ -430,12 +430,12 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 			}
 
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableValueEvent<T>> observer) {
+			public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
 				ObservableValue<T> outer = this;
 				Runnable [] subSubs = new Runnable[components.length];
 				Object [] oldValue = new Object[1];
 				for(int i = 0; i < subSubs.length; i++)
-					subSubs[i] = components[i].internalSubscribe(new Observer<ObservableValueEvent<?>>() {
+					subSubs[i] = components[i].observe(new Observer<ObservableValueEvent<?>>() {
 						@Override
 						public <V extends ObservableValueEvent<?>> void onNext(V value2) {
 							T newVal = value.get();
@@ -507,7 +507,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		}
 
 		@Override
-		public Runnable internalSubscribe(Observer<? super ObservableValueEvent<T>> observer) {
+		public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
 			observer.onNext(createEvent(theValue, theValue, null));
 			return () -> {
 			};

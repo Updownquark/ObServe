@@ -15,8 +15,8 @@ class CollectionChangesObservable<E, CCE extends CollectionChangeEvent<E>> imple
 	}
 
 	@Override
-	public Runnable internalSubscribe(Observer<? super CCE> observer) {
-		Runnable collectSub = collection.onElement(element -> element.internalSubscribe(new Observer<ObservableValueEvent<E>>() {
+	public Runnable observe(Observer<? super CCE> observer) {
+		Runnable collectSub = collection.onElement(element -> element.observe(new Observer<ObservableValueEvent<E>>() {
 			@Override
 			public <V2 extends ObservableValueEvent<E>> void onNext(V2 evt) {
 				if(evt.getOldValue() == null)
@@ -30,7 +30,7 @@ class CollectionChangesObservable<E, CCE extends CollectionChangeEvent<E>> imple
 				newEvent(CollectionChangeType.remove, evt, observer);
 			}
 		}));
-		Runnable transSub = collection.getSession().internalSubscribe(new Observer<ObservableValueEvent<CollectionSession>>() {
+		Runnable transSub = collection.getSession().observe(new Observer<ObservableValueEvent<CollectionSession>>() {
 			@Override
 			public <V extends ObservableValueEvent<CollectionSession>> void onNext(V value) {
 				if(value.getOldValue() != null)

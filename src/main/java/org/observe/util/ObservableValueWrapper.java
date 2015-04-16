@@ -20,8 +20,8 @@ public class ObservableValueWrapper<T> implements ObservableValue<T> {
 	}
 
 	@Override
-	public Runnable internalSubscribe(Observer<? super ObservableValueEvent<T>> observer) {
-		return theWrapped.internalSubscribe(observer);
+	public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
+		return theWrapped.observe(observer);
 	}
 
 	@Override

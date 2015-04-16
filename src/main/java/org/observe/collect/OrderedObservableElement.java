@@ -159,9 +159,9 @@ public interface OrderedObservableElement<E> extends ObservableElement<E> {
 			}
 
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableValueEvent<E>> observer) {
-				Runnable outerSub = outer.internalSubscribe(observer);
-				Runnable refireSub = observable.internalSubscribe(new Observer<Object>() {
+			public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
+				Runnable outerSub = outer.observe(observer);
+				Runnable refireSub = observable.observe(new Observer<Object>() {
 					@Override
 					public <V> void onNext(V value) {
 						observer.onNext(createEvent(get(), get(), value));

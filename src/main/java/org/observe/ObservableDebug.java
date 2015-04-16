@@ -40,7 +40,7 @@ public final class ObservableDebug {
 	public static class ObservableHolder{
 		public final Object observable;
 		public final ObservableCollection<String> labels;
-		public final
+		// public final
 	}
 
 	/** Whether debugging is turned on. If this is false, this class will do nothing */
@@ -425,7 +425,7 @@ public final class ObservableDebug {
 	}
 
 	/**
-	 * To be called from the {@link Observable#internalSubscribe(Observer)} method
+	 * To be called from the {@link Observable#observe(Observer)} method
 	 *
 	 * @param obs The observable being subscribed to
 	 * @param name The name of the observable to print
@@ -442,7 +442,7 @@ public final class ObservableDebug {
 	}
 
 	/**
-	 * To be called from the {@link Runnable#run()} method of the Runnable returned from the {@link Observable#internalSubscribe(Observer)}
+	 * To be called from the {@link Runnable#run()} method of the Runnable returned from the {@link Observable#observe(Observer)}
 	 *
 	 * @param obs The observable being unsubscribed from
 	 * @param name The name of the observable to print

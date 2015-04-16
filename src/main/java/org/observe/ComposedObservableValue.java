@@ -59,7 +59,7 @@ public class ComposedObservableValue<T> implements ObservableValue<T> {
 					boolean [] initialized = new boolean[1];
 					for(int i = 0; i < values.length; i++) {
 						int index = i;
-						composedSubs[i] = theComposed.get(i).internalSubscribe(new Observer<ObservableValueEvent<?>>() {
+						composedSubs[i] = theComposed.get(i).observe(new Observer<ObservableValueEvent<?>>() {
 							@Override
 							public <V extends ObservableValueEvent<?>> void onNext(V event) {
 								values[index] = event.getValue();
@@ -165,7 +165,7 @@ public class ComposedObservableValue<T> implements ObservableValue<T> {
 	}
 
 	@Override
-	public Runnable internalSubscribe(Observer<? super ObservableValueEvent<T>> observer) {
+	public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
 		theObservers.add(observer);
 		return () -> theObservers.remove(observer);
 	}

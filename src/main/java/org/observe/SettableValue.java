@@ -57,8 +57,8 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			}
 
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableValueEvent<T>> observer) {
-				return SettableValue.this.internalSubscribe(observer);
+			public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
+				return SettableValue.this.observe(observer);
 			}
 		};
 	}

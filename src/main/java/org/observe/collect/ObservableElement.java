@@ -87,9 +87,9 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 			}
 
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableValueEvent<T>> observer) {
-				Runnable outerSub = outer.internalSubscribe(observer);
-				Runnable refireSub = observable.internalSubscribe(new Observer<Object>() {
+			public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
+				Runnable outerSub = outer.observe(observer);
+				Runnable refireSub = observable.observe(new Observer<Object>() {
 					@Override
 					public <V> void onNext(V value) {
 						ObservableValueEvent<T> event2 = outer.createEvent(outer.get(), outer.get(), value);
@@ -132,7 +132,7 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 			}
 
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableValueEvent<T>> observer) {
+			public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
 				Runnable [] refireSub = new Runnable[1];
 				Observer<Object> refireObs = new Observer<Object>() {
 					@Override
@@ -150,10 +150,10 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 						refireSub[0] = null;
 					}
 				};
-				Runnable outerSub = outer.internalSubscribe(new Observer<ObservableValueEvent<T>>() {
+				Runnable outerSub = outer.observe(new Observer<ObservableValueEvent<T>>() {
 					@Override
 					public <V extends ObservableValueEvent<T>> void onNext(V value) {
-						refireSub[0] = observable.apply(value.getValue()).noInit().takeUntil(outer).internalSubscribe(refireObs);
+						refireSub[0] = observable.apply(value.getValue()).noInit().takeUntil(outer).observe(refireObs);
 						observer.onNext(value);
 					}
 
@@ -169,7 +169,7 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 						observer.onError(e);
 					}
 				});
-				refireSub[0] = observable.apply(outer.get()).noInit().takeUntil(outer).internalSubscribe(refireObs);
+				refireSub[0] = observable.apply(outer.get()).noInit().takeUntil(outer).observe(refireObs);
 				return () -> {
 					outerSub.run();
 					if(refireSub[0] != null)

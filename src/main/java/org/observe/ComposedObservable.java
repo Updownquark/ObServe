@@ -35,7 +35,7 @@ public class ComposedObservable<T> implements Observable<T> {
 				if(used) {
 					for(int i = 0; i < theComposed.size(); i++) {
 						int index = i;
-						composedSubs[i] = theComposed.get(i).internalSubscribe(new Observer<Object>() {
+						composedSubs[i] = theComposed.get(i).observe(new Observer<Object>() {
 							@Override
 							public <V> void onNext(V value) {
 								values[index] = value;
@@ -90,7 +90,7 @@ public class ComposedObservable<T> implements Observable<T> {
 	}
 
 	@Override
-	public Runnable internalSubscribe(Observer<? super T> observer) {
+	public Runnable observe(Observer<? super T> observer) {
 		theObservers.add(observer);
 		return () -> theObservers.remove(observer);
 	}

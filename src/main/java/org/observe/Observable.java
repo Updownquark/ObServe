@@ -50,26 +50,26 @@ public interface Observable<T> {
 		};
 		if(!holder.alive)
 			return new Subscription<T>() {
-				@Override
-				public Runnable internalSubscribe(Observer<? super T> observer2) {
-					observer2.onCompleted(null);
-					return () -> {
-					};
-				}
+			@Override
+			public Runnable observe(Observer<? super T> observer2) {
+				observer2.onCompleted(null);
+				return () -> {
+				};
+			}
 
-				@Override
-				public void unsubscribe() {
-				}
-			};
+			@Override
+			public void unsubscribe() {
+			}
+		};
 		holder.subscription = new Subscription<T>() {
 			@Override
-			public Runnable internalSubscribe(Observer<? super T> observer2) {
+			public Runnable observe(Observer<? super T> observer2) {
 				if(!holder.alive) {
 					observer2.onCompleted(null);
 					return () -> {
 					};
 				}
-				Runnable internalSubSub = outer.internalSubscribe(observer2);
+				Runnable internalSubSub = outer.observe(observer2);
 				if(holder.subSubscriptions == null)
 					holder.subSubscriptions = new java.util.concurrent.CopyOnWriteArrayList<>();
 				holder.subSubscriptions.add(internalSubSub);
@@ -92,20 +92,20 @@ public interface Observable<T> {
 				}
 			}
 		};
-		holder.internalSub = internalSubscribe(holder.wrapper);
+		holder.internalSub = observe(holder.wrapper);
 		if(holder.internalSub == null)
 			throw new NullPointerException();
 		return holder.subscription;
 	}
 
 	/**
-	 * Adds the observer to the list of listeners to be notified of values. Typical applications will use {@link #subscribe(Observer)}
-	 * instead.
+	 * Adds the observer to the list of listeners to be notified of values. The Runnable returned from this observable is lighter-weight
+	 * than the {@link Subscription} object returned by {@link #subscribe(Observer)}, but doesn't facilitate subscription chaining.
 	 *
 	 * @param observer The observer to be notified when new values are available from this observable
 	 * @return A runnable that, when invoked, will cease notifications to the observer
 	 */
-	Runnable internalSubscribe(Observer<? super T> observer);
+	Runnable observe(Observer<? super T> observer);
 
 	/**
 	 * @param action The action to perform for each new value
@@ -141,8 +141,8 @@ public interface Observable<T> {
 		}
 		return new Observable<Throwable>() {
 			@Override
-			public Runnable internalSubscribe(Observer<? super Throwable> observer) {
-				return outer.internalSubscribe(new ErrorObserver(observer));
+			public Runnable observe(Observer<? super Throwable> observer) {
+				return outer.observe(new ErrorObserver(observer));
 			}
 		};
 	}
@@ -169,8 +169,8 @@ public interface Observable<T> {
 		}
 		return new Observable<T>() {
 			@Override
-			public Runnable internalSubscribe(Observer<? super T> observer) {
-				return outer.internalSubscribe(new CompleteObserver(observer));
+			public Runnable observe(Observer<? super T> observer) {
+				return outer.observe(new CompleteObserver(observer));
 			}
 		};
 	}
@@ -183,9 +183,9 @@ public interface Observable<T> {
 		Observable<T> outer = this;
 		return new Observable<T>() {
 			@Override
-			public Runnable internalSubscribe(Observer<? super T> observer) {
+			public Runnable observe(Observer<? super T> observer) {
 				boolean [] initialized = new boolean[1];
-				Runnable ret = outer.internalSubscribe(new Observer<T>() {
+				Runnable ret = outer.observe(new Observer<T>() {
 					@Override
 					public <V extends T> void onNext(V value) {
 						if(initialized[0])
@@ -237,8 +237,8 @@ public interface Observable<T> {
 		Observable<T> outer = this;
 		return new Observable<R>() {
 			@Override
-			public Runnable internalSubscribe(Observer<? super R> observer) {
-				return outer.internalSubscribe(new Observer<T>() {
+			public Runnable observe(Observer<? super R> observer) {
+				return outer.observe(new Observer<T>() {
 					@Override
 					public <V extends T> void onNext(V value) {
 						R mapped = func.apply(value);
@@ -290,11 +290,11 @@ public interface Observable<T> {
 		Observable<T> outer = this;
 		return new Observable<T>() {
 			@Override
-			public Runnable internalSubscribe(Observer<? super T> observer) {
-				Runnable outerSub = outer.internalSubscribe(observer);
+			public Runnable observe(Observer<? super T> observer) {
+				Runnable outerSub = outer.observe(observer);
 				boolean [] complete = new boolean[1];
 				Runnable [] untilSub = new Runnable[1];
-				untilSub[0] = until.internalSubscribe(new Observer<Object>() {
+				untilSub[0] = until.observe(new Observer<Object>() {
 					@Override
 					public void onNext(Object value) {
 						onCompleted(value);
@@ -328,9 +328,9 @@ public interface Observable<T> {
 		Observable<T> outer = this;
 		return new Observable<T>() {
 			@Override
-			public Runnable internalSubscribe(Observer<? super T> observer) {
+			public Runnable observe(Observer<? super T> observer) {
 				AtomicInteger counter = new AtomicInteger(times);
-				return outer.internalSubscribe(new Observer<T>() {
+				return outer.observe(new Observer<T>() {
 					@Override
 					public <V extends T> void onNext(V value) {
 						int count = counter.decrementAndGet();
@@ -377,8 +377,8 @@ public interface Observable<T> {
 		Observable<T> outer = this;
 		return new Observable<T>() {
 			@Override
-			public Runnable internalSubscribe(Observer<? super T> observer) {
-				return outer.internalSubscribe(new Observer<T>() {
+			public Runnable observe(Observer<? super T> observer) {
+				return outer.observe(new Observer<T>() {
 					private final AtomicInteger counter = new AtomicInteger(times.get());
 
 					@Override
@@ -415,10 +415,10 @@ public interface Observable<T> {
 	public static <V> Observable<V> or(Observable<? extends V>... obs) {
 		return new Observable<V>() {
 			@Override
-			public Runnable internalSubscribe(Observer<? super V> observer) {
+			public Runnable observe(Observer<? super V> observer) {
 				Runnable [] subs = new Runnable[obs.length];
 				for(int i = 0; i < subs.length; i++)
-					subs[i] = obs[i].internalSubscribe(new Observer<V>() {
+					subs[i] = obs[i].observe(new Observer<V>() {
 						@Override
 						public <V2 extends V> void onNext(V2 value) {
 							observer.onNext(value);
@@ -456,7 +456,7 @@ public interface Observable<T> {
 	/** An empty observable that never does anything */
 	public static Observable<?> empty = new Observable<Object>() {
 		@Override
-		public Runnable internalSubscribe(Observer<? super Object> observer) {
+		public Runnable observe(Observer<? super Object> observer) {
 			return () -> {
 			};
 		}
@@ -470,7 +470,7 @@ public interface Observable<T> {
 	public static <T> Observable<T> constant(T value) {
 		return new Observable<T>() {
 			@Override
-			public Runnable internalSubscribe(Observer<? super T> observer) {
+			public Runnable observe(Observer<? super T> observer) {
 				observer.onNext(value);
 				return () -> {
 				};

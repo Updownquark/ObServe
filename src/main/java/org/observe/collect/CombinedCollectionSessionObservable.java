@@ -38,7 +38,7 @@ public class CombinedCollectionSessionObservable implements ObservableValue<Coll
 		final Runnable [] wrappedSessionListener = new Runnable[1];
 		theObservers.setUsedListener(used -> {
 			if(used) {
-				wrappedSessionListener[0] = theWrappedSessionObservable.internalSubscribe(new Observer<ObservableValueEvent<Boolean>>() {
+				wrappedSessionListener[0] = theWrappedSessionObservable.observe(new Observer<ObservableValueEvent<Boolean>>() {
 					@Override
 					public <V extends ObservableValueEvent<Boolean>> void onNext(V value) {
 						if(isInTransaction.getAndSet(value.getValue()) == value.getValue())
@@ -71,7 +71,7 @@ public class CombinedCollectionSessionObservable implements ObservableValue<Coll
 	}
 
 	@Override
-	public Runnable internalSubscribe(Observer<? super ObservableValueEvent<CollectionSession>> observer) {
+	public Runnable observe(Observer<? super ObservableValueEvent<CollectionSession>> observer) {
 		theObservers.add(observer);
 		return () -> theObservers.remove(observer);
 	}

@@ -60,9 +60,9 @@ public class ObservableUtils {
 					}
 
 					@Override
-					public Runnable internalSubscribe(Observer<? super ObservableValueEvent<T>> observer2) {
+					public Runnable observe(Observer<? super ObservableValueEvent<T>> observer2) {
 						OrderedObservableElement<T> retObs = this;
-						return element.internalSubscribe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends T>>>() {
+						return element.observe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends T>>>() {
 							@Override
 							public <V2 extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onNext(V2 value) {
 								if(value.getValue() != null) {
@@ -150,9 +150,9 @@ public class ObservableUtils {
 					}
 
 					@Override
-					public Runnable internalSubscribe(Observer<? super ObservableValueEvent<T>> observer2) {
+					public Runnable observe(Observer<? super ObservableValueEvent<T>> observer2) {
 						ObservableElement<T> retObs = this;
-						return element.internalSubscribe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends T>>>() {
+						return element.observe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends T>>>() {
 							@Override
 							public <V2 extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onNext(V2 value) {
 								if(value.getValue() != null) {

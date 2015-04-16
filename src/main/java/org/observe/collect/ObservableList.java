@@ -134,7 +134,7 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 					OrderedObservableElement<E> outerElement = (OrderedObservableElement<E>) element;
 					FilteredListElement<T, E> retElement = new FilteredListElement<>(outerElement, map, type, theFilteredElements);
 					theFilteredElements.add(outerElement.getIndex(), retElement);
-					outerElement.internalSubscribe(new Observer<ObservableValueEvent<E>>() {
+					outerElement.observe(new Observer<ObservableValueEvent<E>>() {
 						@Override
 						public <V2 extends ObservableValueEvent<E>> void onNext(V2 elValue) {
 							if(!retElement.isIncluded()) {
@@ -276,7 +276,7 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 			}
 
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableValueEvent<T>> observer) {
+			public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
 				observer.onNext(new ObservableValueEvent<>(this, theValue, theValue, null));
 				return () -> {
 				};
@@ -575,7 +575,7 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 			}
 
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableValueEvent<E>> observer) {
+			public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
 				theElementListeners.add(observer);
 				observer.onNext(new ObservableValueEvent<>(this, theCachedValue, theCachedValue, null));
 				return () -> theElementListeners.remove(observer);
@@ -620,7 +620,7 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 			theWrappedOnElement = element -> {
 				CachedElement<E> cached = new CachedElement<>((OrderedObservableElement<E>) element);
 				theCache.add(cached.getIndex(), cached);
-				element.internalSubscribe(new Observer<ObservableValueEvent<E>>() {
+				element.observe(new Observer<ObservableValueEvent<E>>() {
 					@Override
 					public <V extends ObservableValueEvent<E>> void onNext(V event) {
 						cached.newValue(event);

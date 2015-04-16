@@ -54,7 +54,7 @@ public class DefaultTransactionManager {
 	public <E> Runnable onElement(ObservableCollection<E> collection, Observable<?> refresh,
 		Consumer<? super ObservableElement<E>> onElement) {
 		// Here we're relying on observers being fired in the order they were subscribed
-		Runnable refreshStartSub = refresh == null ? null : refresh.internalSubscribe(new Observer<Object>() {
+		Runnable refreshStartSub = refresh == null ? null : refresh.observe(new Observer<Object>() {
 			@Override
 			public <V> void onNext(V value) {
 				startTransaction(value);
@@ -76,12 +76,12 @@ public class DefaultTransactionManager {
 				endTransaction();
 			}
 		};
-		Runnable [] refreshEndSub = new Runnable[] {refresh.internalSubscribe(refreshEnd)};
+		Runnable [] refreshEndSub = new Runnable[] {refresh.observe(refreshEnd)};
 		Runnable collSub = collection.onElement(element -> {
 			onElement.accept(element);
 			// The refresh end always needs to be after the elements
 			Runnable oldRefreshEnd = refreshEndSub[0];
-			refreshEndSub[0] = refresh.internalSubscribe(refreshEnd);
+			refreshEndSub[0] = refresh.observe(refreshEnd);
 			oldRefreshEnd.run();
 		});
 		return () -> {

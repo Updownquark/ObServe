@@ -161,9 +161,9 @@ public class DefaultObservableList<E> extends AbstractList<E> implements Observa
 			}
 
 			@Override
-			public Runnable internalSubscribe(Observer<? super ObservableValueEvent<E>> observer) {
+			public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
 				ObservableValue<E> element = this;
-				Runnable ret = el.internalSubscribe(new Observer<ObservableValueEvent<E>>() {
+				Runnable ret = el.observe(new Observer<ObservableValueEvent<E>>() {
 					@Override
 					public <V extends ObservableValueEvent<E>> void onNext(V event) {
 						observer.onNext(new ObservableValueEvent<>(element, event.getOldValue(), event.getValue(), event.getCause()));

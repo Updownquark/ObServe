@@ -17,8 +17,8 @@ public class ObservableWrapper<T> implements Observable<T> {
 	}
 
 	@Override
-	public Runnable internalSubscribe(Observer<? super T> observer) {
-		return theWrapped.internalSubscribe(observer);
+	public Runnable observe(Observer<? super T> observer) {
+		return theWrapped.observe(observer);
 	}
 
 	@Override
