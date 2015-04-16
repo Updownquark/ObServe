@@ -68,4 +68,7 @@ public interface ObservableMap<K, V> extends Map<K, V> {
 	default ObservableCollection<V> observeValues() {
 		return observeEntries().map(getValueType(), Map.Entry<K, V>::getValue);
 	}
+
+	default ObservableMap<K, V> immutable() {
+	}
 }
