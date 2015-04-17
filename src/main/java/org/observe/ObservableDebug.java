@@ -1,47 +1,116 @@
 package org.observe;
 
-import java.util.*;
+import java.util.Collections;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.observe.collect.ObservableCollection;
+import org.observe.collect.TransactableCollection;
+import org.observe.datastruct.DefaultObservableMultiMap;
+import org.observe.datastruct.ObservableGraph;
+import org.observe.datastruct.ObservableMultiMap;
+import org.observe.util.WeakReferenceObservable;
+
+import prisms.lang.Type;
 
 /** A utility class for debugging observables */
 public final class ObservableDebug {
-	public static class ObservableDerivation {
-		public final List<Object> bases;
-		public final Object derived;
-		public final String derivation;
-		public final Object function;
+	/** Holds an observable structure for debugging */
+	public static class ObservableDebugWrapper{
+		/** The reference to the observable structure */
+		public final WeakReferenceObservable<Object> observable;
 
-		public ObservableDerivation(List<Object> b, Object d, String derive, Object f) {
-			super();
-			bases = b;
-			derived = d;
-			derivation = derive;
-			function = f;
-		}
-	}
+		/** The functions used to derive the observable */
+		public final Map<String, Object> functions;
 
-	public static class ObservableTag {
-		public final Object tagged;
-		public final String tag;
-		public final Object value;
-
-		public ObservableTag(Object tagged, String tag, Object value) {
-			super();
-			this.tagged = tagged;
-			this.tag = tag;
-			this.value = value;
-		}
-	}
-
-	public static class ObservableHolder{
-		public final Object observable;
+		/** Labels that have been given to the observable */
 		public final ObservableCollection<String> labels;
-		// public final
+
+		/** Properties that have been tagged onto the observable */
+		public final ObservableMultiMap<String, Object> tags;
+
+		private final TransactableCollection<String> labelController;
+		private final DefaultObservableMultiMap<String, Object> tagController;
+
+		private ObservableDebugWrapper(Object ob, Map<String, Object> fns) {
+			observable = new WeakReferenceObservable<>(new Type(Object.class), ob);
+			labels = new org.observe.collect.DefaultObservableSet<>(new Type(String.class));
+			labelController = ((org.observe.collect.DefaultObservableSet<String>) labels).control(null);
+			tagController = new org.observe.datastruct.DefaultObservableMultiMap<>(new Type(String.class), new Type(Object.class));
+			tags = tagController.immutable();
+			functions = Collections.unmodifiableMap(fns);
+		}
 	}
+
+	/**
+	 * A builder that allows the specification of derivation properties and debugging properties on an observable
+	 *
+	 * @param <T> The type of the observable
+	 */
+	public static interface ObservableDerivationBuilder<T> {
+		/**
+		 * @param relationship The relationship of this builder's observable to the specified parent(s)
+		 * @param parents The observable(s) that this builder's observable is derived from in some way
+		 * @return This builder, for chaining
+		 */
+		ObservableDerivationBuilder<T> from(String relationship, Object... parents);
+
+		/**
+		 * @param function The function used in the derivation of the value(s) of this builder's observable
+		 * @param purpose How the function is used in deriving the value
+		 * @return This builder, for chaining
+		 */
+		ObservableDerivationBuilder<T> using(Object function, String purpose);
+
+		/**
+		 * @param label The label to apply to this observable
+		 * @return This builder, for chaining
+		 */
+		ObservableDerivationBuilder<T> label(String label);
+
+		/**
+		 * @param tagName The name of the property to tag this builder's observable with
+		 * @param value The value for the property
+		 * @return This builder, for chaining
+		 */
+		ObservableDerivationBuilder<T> tag(String tagName, Object value);
+
+		/** @return The observable whose debugging properties are modifiable by this builder */
+		T get();
+	}
+
+	private static final class NullDerivationBuilder<T> implements ObservableDerivationBuilder<T> {
+		private final T theValue;
+
+		NullDerivationBuilder(T value) {
+			theValue = value;
+		}
+
+		@Override
+		public ObservableDerivationBuilder<T> from(String relationship, Object... parents) {
+			return this;
+		}
+
+		@Override
+		public ObservableDerivationBuilder<T> using(Object function, String purpose) {
+			return this;
+		}
+
+		@Override
+		public ObservableDerivationBuilder<T> label(String label) {
+			return this;
+		}
+
+		@Override
+		public ObservableDerivationBuilder<T> tag(String tagName, Object value) {
+			return this;
+		}
+
+		@Override
+		public T get() {
+			return theValue;
+		}
+	};
 
 	/** Whether debugging is turned on. If this is false, this class will do nothing */
 	public static final boolean DEBUG_ON = "true".equalsIgnoreCase(System.getProperty("org.observe.debug"));
@@ -160,14 +229,14 @@ public final class ObservableDebug {
 	}
 
 	private static final ConcurrentHashMap<Thread, DebugState> theThreadDebug = new ConcurrentHashMap<>();
-	private static final org.observe.datastruct.DefaultObservableGraph<ObservableHolder, String> theObservables;
-	private static final Map<Object, List<ObservableDerivation>> theDerivations = new IdentityHashMap<>();
+	private static final org.observe.datastruct.DefaultObservableGraph<ObservableDebugWrapper, String> theObservables;
 
-	private static final Map<Object, ObservableDerivation> theDerived = new IdentityHashMap<>();
-	private static final Map<Object, Map<String, ObservableTag>> theTags = new IdentityHashMap<>();
-
-	private static final Map<String, Map<Object, List<ObservableTag>>> theTagged = new HashMap<>();
-	private static final ReentrantReadWriteLock theLock = new ReentrantReadWriteLock();
+	static {
+		if(DEBUG_ON)
+			theObservables = new org.observe.datastruct.DefaultObservableGraph<>(new Type(ObservableDebugWrapper.class), new Type(String.class));
+		else
+			theObservables = null;
+	}
 
 	/** Enables debugging on the current thread until {@link #endDebug()} is called */
 	public static void startDebug() {
@@ -208,186 +277,124 @@ public final class ObservableDebug {
 		return debug;
 	}
 
-	public static void derived(Object base, Object derived, String derivation, Object function) {
-		derived(new Object[] {base}, derived, derivation, function);
-	}
-
-	public static void derived(Object [] bases, Object derived, String derivation, Object function) {
+	/**
+	 * Registers an observable for debugging
+	 *
+	 * @param <T> The type of the observable
+	 * @param observable The observable to register
+	 * @return A derivation builder for the observable, allowing its ancestry to be specified
+	 */
+	public static <T> ObservableDerivationBuilder<T> debug(T observable) {
 		if(!DEBUG_ON)
-			return;
-		Lock lock = theLock.writeLock();
-		lock.lock();
-		try {
-			ObservableDerivation d = new ObservableDerivation(Arrays.asList(bases), derived, derivation, function);
-			if(theDerived.put(derived, d) != null)
-				System.err.println("WARNING! Observable " + derived + " is being reported as a derivation twice.");
-			for(Object base : bases) {
-				List<ObservableDerivation> derivations = theDerivations.get(base);
-				if(derivations == null) {
-					derivations = new ArrayList<>();
-					theDerivations.put(base, derivations);
+			return new NullDerivationBuilder<>(observable);
+		if(theObservables.getNodes().find(holder -> holder.getValue().observable.get() == observable).get() != null)
+			throw new IllegalStateException("Observable " + observable + " has already been added to debugging");
+		Map<String, Object> functions = new java.util.LinkedHashMap<>();
+		ObservableDebugWrapper newHolder = new ObservableDebugWrapper(observable, functions);
+		ObservableGraph.Node<ObservableDebugWrapper, String> newNode = theObservables.addNode(newHolder);
+		newHolder.observable.completed().act(value -> theObservables.removeNode(newNode));
+		return new ObservableDerivationBuilder<T>() {
+			@Override
+			public ObservableDerivationBuilder<T> from(String relationship, Object... parents) {
+				for(Object parent : parents) {
+					ObservableGraph.Node<ObservableDebugWrapper, String> node = theObservables.getNodes()
+						.find(holder -> holder.getValue().observable.get() == parent).get();
+					if(node == null)
+						System.err.println("Derivation " + observable + "=" + parent + "." + relationship
+							+ " cannot be asserted. Parent not found");
+					theObservables.addEdge(node, newNode, true, relationship);
 				}
-				derivations.add(d);
+				return this;
 			}
-		} finally {
-			lock.unlock();
-		}
-	}
 
-	public static Collection<ObservableDerivation> getDerivations(Object base) {
-		if(!DEBUG_ON)
-			throw new IllegalStateException("Observable debugging is not enabled");
-		Lock lock = theLock.readLock();
-		lock.lock();
-		try {
-			List<ObservableDerivation> derivations = theDerivations.get(base);
-			if(derivations == null)
-				return Collections.EMPTY_LIST;
-			return Collections.unmodifiableCollection(new ArrayList<>(derivations));
-		} finally {
-			lock.unlock();
-		}
-	}
-
-	public static ObservableDerivation getDerived(Object derived) {
-		if(!DEBUG_ON)
-			throw new IllegalStateException("Observable debugging is not enabled");
-		Lock lock = theLock.readLock();
-		lock.lock();
-		try {
-			return theDerived.get(derived);
-		} finally {
-			lock.unlock();
-		}
-	}
-
-	public static void label(Object observable, String label) {
-		if(!DEBUG_ON)
-			return;
-		Lock lock = theLock.writeLock();
-		lock.lock();
-		try {
-			ObservableTag tag = new ObservableTag(observable, label, null);
-			Map<String, ObservableTag> tags = theTags.get(observable);
-			if(tags == null) {
-				tags = new HashMap<>();
-				theTags.put(observable, tags);
+			@Override
+			public ObservableDerivationBuilder<T> using(Object function, String purpose) {
+				if(!isFunctional(function.getClass()))
+					throw new IllegalArgumentException(function + " is not a function");
+				functions.put(purpose, function);
+				return this;
 			}
-			tags.put(label, tag);
-		} finally {
-			lock.unlock();
-		}
-	}
 
-	public Collection<String> getLabels(Object observable) {
-		if(!DEBUG_ON)
-			throw new IllegalStateException("Observable debugging is not enabled");
-		Lock lock = theLock.readLock();
-		lock.lock();
-		try {
-			Map<String, ObservableTag> tags = theTags.get(observable);
-			if(tags == null)
-				return Collections.EMPTY_LIST;
-			HashSet<String> ret = new HashSet<>();
-			for(ObservableTag tag : tags.values())
-				if(tag.value == null)
-					ret.add(tag.tag);
-			return Collections.unmodifiableCollection(ret);
-		} finally {
-			lock.unlock();
-		}
-	}
-
-	public static void tag(Object observable, String tag, Object value) {
-		if(!DEBUG_ON)
-			return;
-		Lock lock = theLock.writeLock();
-		lock.lock();
-		try {
-			ObservableTag obTag = new ObservableTag(observable, tag, value);
-			Map<String, ObservableTag> tags = theTags.get(observable);
-			if(tags == null) {
-				tags = new HashMap<>();
-				theTags.put(observable, tags);
+			private boolean isFunctional(Class<?> functional) {
+				if(functional.getAnnotation(FunctionalInterface.class) != null)
+					return true;
+				for(Class<?> intf : functional.getInterfaces())
+					if(isFunctional(intf))
+						return true;
+				return false;
 			}
-			if(tags.put(tag, obTag) != null)
-				System.err.println("WARNING! Observable " + observable + " is being tagged with \"" + tag + "\" twice: " + value);
-			Map<Object, List<ObservableTag>> tagged = theTagged.get(tag);
-			if(tagged == null) {
-				tagged = new IdentityHashMap<>();
-				theTagged.put(tag, tagged);
+
+			@Override
+			public ObservableDerivationBuilder<T> label(String label) {
+				newHolder.labelController.add(label);
+				return this;
 			}
-			List<ObservableTag> taggedList = tagged.get(value);
-			if(taggedList == null) {
-				taggedList = new ArrayList<>();
-				tagged.put(value, taggedList);
+
+			@Override
+			public ObservableDerivationBuilder<T> tag(String tagName, Object value) {
+				newHolder.tagController.add(tagName, value);
+				return this;
 			}
-			taggedList.add(obTag);
-		} finally {
-			lock.unlock();
-		}
+
+			@Override
+			public T get() {
+				return observable;
+			}
+		};
 	}
 
-	public Map<String, Object> getTags(Object observable) {
+	/**
+	 * Allows observables to be tagged in a custom way
+	 *
+	 * @param <T> The type of observable
+	 * @param observable The observable to add debugging properties to
+	 * @return A derivation builder that allows labeling and tagging, but cannot alter the observable's derivation properties
+	 */
+	public static <T> ObservableDerivationBuilder<T> label(T observable) {
 		if(!DEBUG_ON)
-			throw new IllegalStateException("Observable debugging is not enabled");
-		Lock lock = theLock.readLock();
-		lock.lock();
-		try {
-			Map<String, ObservableTag> tags = theTags.get(observable);
-			if(tags == null)
-				return Collections.EMPTY_MAP;
-			Map<String, Object> ret = new HashMap<>();
-			for(ObservableTag tag : tags.values())
-				if(tag.value != null)
-					ret.put(tag.tag, tag.value);
-			return Collections.unmodifiableMap(ret);
-		} finally {
-			lock.unlock();
+			return new NullDerivationBuilder<>(observable);
+		ObservableGraph.Node<ObservableDebugWrapper, String> node = theObservables.getNodes()
+			.find(holder -> holder.getValue().observable.get() == observable).get();
+		if(node == null) {
+			System.err.println("Observable " + observable + " has not been added to debugging");
+			return new NullDerivationBuilder<>(observable);
 		}
-	}
-
-	public Map<Object, Collection<Object>> getTagged(String tag) {
-		if(!DEBUG_ON)
-			throw new IllegalStateException("Observable debugging is not enabled");
-		Lock lock = theLock.readLock();
-		lock.lock();
-		try {
-			Map<Object, List<ObservableTag>> tagged = theTagged.get(tag);
-			if(tagged == null)
-				return Collections.EMPTY_MAP;
-			Map<Object, Collection<Object>> ret = new IdentityHashMap<>();
-			for(Map.Entry<Object, List<ObservableTag>> entry : tagged.entrySet()) {
-				List<Object> retValue = new ArrayList<>();
-				ret.put(entry.getKey(), Collections.unmodifiableList(retValue));
-				for(ObservableTag obTag : entry.getValue())
-					retValue.add(obTag.tagged);
+		return new ObservableDerivationBuilder<T>() {
+			@Override
+			public ObservableDerivationBuilder<T> from(String relationship, Object... parents) {
+				throw new IllegalStateException("An observable's derivation cannot be changed after it is created");
 			}
-			return Collections.unmodifiableMap(ret);
-		} finally {
-			lock.unlock();
-		}
+
+			@Override
+			public ObservableDerivationBuilder<T> using(Object function, String purpose) {
+				throw new IllegalStateException("An observable's derivation cannot be changed after it is created");
+			}
+
+			@Override
+			public ObservableDerivationBuilder<T> label(String label) {
+				node.getValue().labelController.add(label);
+				return this;
+			}
+
+			@Override
+			public ObservableDerivationBuilder<T> tag(String tagName, Object value) {
+				node.getValue().tagController.add(tagName, value);
+				return this;
+			}
+
+			@Override
+			public T get() {
+				return observable;
+			}
+		};
 	}
 
-	public Collection<Object> getTagged(String tag, Object value) {
-		if(!DEBUG_ON)
-			throw new IllegalStateException("Observable debugging is not enabled");
-		Lock lock = theLock.readLock();
-		lock.lock();
-		try {
-			Map<Object, List<ObservableTag>> tagged = theTagged.get(tag);
-			if(tagged == null)
-				return Collections.EMPTY_LIST;
-			List<ObservableTag> tags = tagged.get(value);
-			if(tags == null)
-				return Collections.EMPTY_LIST;
-			List<Object> ret = new ArrayList<>();
-			for(ObservableTag obTag : tags)
-				ret.add(obTag.tagged);
-			return Collections.unmodifiableCollection(ret);
-		} finally {
-			lock.unlock();
-		}
+	/** @return The graph of observable dependencies that the debugging framework knows about */
+	public ObservableGraph<ObservableDebugWrapper, String> getObservableGraph() {
+		if(DEBUG_ON)
+			return theObservables;
+		else
+			return ObservableGraph.empty(new Type(ObservableDebugWrapper.class), new Type(String.class));
 	}
 
 	/**
