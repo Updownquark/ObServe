@@ -1,5 +1,7 @@
 package org.observe;
 
+import static org.observe.ObservableDebug.debug;
+
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -144,12 +146,12 @@ public interface Observable<T> {
 				wrapped.onNext(e);
 			}
 		}
-		return new Observable<Throwable>() {
+		return debug(new Observable<Throwable>() {
 			@Override
 			public Runnable observe(Observer<? super Throwable> observer) {
 				return outer.observe(new ErrorObserver(observer));
 			}
-		};
+		}).from("error", outer).get();
 	}
 
 	/** @return An observable that will fire once when this observable completes (the value will be null) */
@@ -172,12 +174,12 @@ public interface Observable<T> {
 				wrapped.onCompleted(value);
 			}
 		}
-		return new Observable<T>() {
+		return debug(new Observable<T>() {
 			@Override
 			public Runnable observe(Observer<? super T> observer) {
 				return outer.observe(new CompleteObserver(observer));
 			}
-		};
+		}).from("completed", outer).get();
 	}
 
 	/**
@@ -186,7 +188,7 @@ public interface Observable<T> {
 	 */
 	default Observable<T> noInit() {
 		Observable<T> outer = this;
-		return new Observable<T>() {
+		return debug(new Observable<T>() {
 			@Override
 			public Runnable observe(Observer<? super T> observer) {
 				boolean [] initialized = new boolean[1];
@@ -210,7 +212,7 @@ public interface Observable<T> {
 				initialized[0] = true;
 				return ret;
 			}
-		};
+		}).from("noInit", outer).get();
 	}
 
 	/**
@@ -227,9 +229,9 @@ public interface Observable<T> {
 	 * @return An observable that provides the values of this observable, mapped by the given function
 	 */
 	default <R> Observable<R> map(Function<? super T, R> func) {
-		return new ComposedObservable<>(args -> {
+		return debug(new ComposedObservable<R>(args -> {
 			return func.apply((T) args[0]);
-		}, this);
+		}, this)).from("mapped", this).using(func, "map").get();
 	}
 
 	/**
@@ -240,7 +242,7 @@ public interface Observable<T> {
 	 */
 	default <R> Observable<R> filterMap(Function<? super T, R> func) {
 		Observable<T> outer = this;
-		return new Observable<R>() {
+		return debug(new Observable<R>() {
 			@Override
 			public Runnable observe(Observer<? super R> observer) {
 				return outer.observe(new Observer<T>() {
@@ -271,7 +273,7 @@ public interface Observable<T> {
 			public String toString() {
 				return "filterMap(" + outer + ")";
 			}
-		};
+		}).from("filterMap", this).using(func, "map").get();
 	}
 
 	/**
@@ -282,9 +284,9 @@ public interface Observable<T> {
 	 * @return A new observable whose values are the specified combination of this observable and the others'
 	 */
 	default <V, R> Observable<R> combine(Observable<V> other, BiFunction<? super T, ? super V, R> func) {
-		return new ComposedObservable<>(args -> {
+		return debug(new ComposedObservable<R>(args -> {
 			return func.apply((T) args[0], (V) args[1]);
-		}, this, other);
+		}, this, other)).from("combine-arg0", this).from("combine-arg1", other).using(func, "combination").get();
 	}
 
 	/**
@@ -293,7 +295,7 @@ public interface Observable<T> {
 	 */
 	default Observable<T> takeUntil(Observable<?> until) {
 		Observable<T> outer = this;
-		return new Observable<T>() {
+		return debug(new Observable<T>() {
 			@Override
 			public Runnable observe(Observer<? super T> observer) {
 				Runnable outerSub = outer.observe(observer);
@@ -322,7 +324,7 @@ public interface Observable<T> {
 					untilSub[0].run();
 				};
 			}
-		};
+		}).from("take", this).from("until", until).get();
 	}
 
 	/**
@@ -331,7 +333,7 @@ public interface Observable<T> {
 	 */
 	default Observable<T> take(int times) {
 		Observable<T> outer = this;
-		return new Observable<T>() {
+		return debug(new Observable<T>() {
 			@Override
 			public Runnable observe(Observer<? super T> observer) {
 				AtomicInteger counter = new AtomicInteger(times);
@@ -358,7 +360,7 @@ public interface Observable<T> {
 					}
 				});
 			}
-		};
+		}).from("take", this).tag("times", times).get();
 	}
 
 	/**
@@ -366,9 +368,37 @@ public interface Observable<T> {
 	 * @return An observable that provides the same values as this observable but ignores the first {@code times} values
 	 */
 	default Observable<T> skip(int times) {
-		return skip(() -> {
-			return times;
-		});
+		Observable<T> outer = this;
+		return debug(new Observable<T>() {
+			@Override
+			public Runnable observe(Observer<? super T> observer) {
+				return outer.observe(new Observer<T>() {
+					private final AtomicInteger counter = new AtomicInteger(times);
+
+					@Override
+					public <V extends T> void onNext(V value) {
+						if(counter.get() <= 0 || counter.getAndDecrement() <= 0)
+							observer.onNext(value);
+					}
+
+					@Override
+					public <V extends T> void onCompleted(V value) {
+						observer.onCompleted(value);
+					}
+
+					@Override
+					public void onError(Throwable e) {
+						if(counter.get() <= 0)
+							observer.onError(e);
+					}
+				});
+			}
+
+			@Override
+			public String toString() {
+				return outer + ".skip(" + times + ")";
+			}
+		}).from("skip", this).tag("times", times).get();
 	}
 
 	/**
@@ -380,7 +410,7 @@ public interface Observable<T> {
 	 */
 	default Observable<T> skip(java.util.function.Supplier<Integer> times) {
 		Observable<T> outer = this;
-		return new Observable<T>() {
+		return debug(new Observable<T>() {
 			@Override
 			public Runnable observe(Observer<? super T> observer) {
 				return outer.observe(new Observer<T>() {
@@ -409,7 +439,7 @@ public interface Observable<T> {
 			public String toString() {
 				return outer + ".skip(" + times + ")";
 			}
-		};
+		}).from("skip", this).using(times, "times").get();
 	}
 
 	/**
@@ -418,7 +448,7 @@ public interface Observable<T> {
 	 * @return An observable that pushes a value each time any of the given observables pushes a value
 	 */
 	public static <V> Observable<V> or(Observable<? extends V>... obs) {
-		return new Observable<V>() {
+		return debug(new Observable<V>() {
 			@Override
 			public Runnable observe(Observer<? super V> observer) {
 				Runnable [] subs = new Runnable[obs.length];
@@ -455,7 +485,7 @@ public interface Observable<T> {
 				}
 				return ret.toString();
 			}
-		};
+		}).from("or", (Object []) obs).get(); // TODO
 	}
 
 	/** An empty observable that never does anything */
@@ -473,13 +503,13 @@ public interface Observable<T> {
 	 * @return An observable that pushes the given value as soon as it is subscribed to and never completes
 	 */
 	public static <T> Observable<T> constant(T value) {
-		return new Observable<T>() {
+		return debug(new Observable<T>() {
 			@Override
 			public Runnable observe(Observer<? super T> observer) {
 				observer.onNext(value);
 				return () -> {
 				};
 			}
-		};
+		}).tag("constant", value).get();
 	}
 }
