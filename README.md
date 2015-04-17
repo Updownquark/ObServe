@@ -22,4 +22,4 @@ Eventually, I want to also develop a server mode, allowing people to define inpu
 
 One other thing to note is that a universal, bare-bones GUI on top of this framework could be very useful by itself.  It could expose and manipulate data in similar ways to spreadsheets but in a more structured and powerful way.
 
-My priority at the moment is MUIS.  I want to have a well-running minimal set of GUI functionality before I write any code for this project.  Ideally I'd like MUIS and TDDL to release 1.0.0 at the same time, maybe along with another repository containing a large, useful application that uses both libs and has a minimum of java code in it.  Maybe a calendar/task/lists app or a development environment.
+My priority at the moment is MUIS.  I want to have a well-running minimal set of GUI functionality before I write any code for this project.  Ideally I'd like MUIS and ObServe to release 1.0.0 at the same time, maybe along with another repository containing a large, useful application that uses both libs and has a minimum of java code in it.  Maybe a calendar/task/lists app or a development environment.
