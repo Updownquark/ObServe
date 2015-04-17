@@ -8,6 +8,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.observe.DefaultObservableValue;
+import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.collect.*;
@@ -121,6 +122,11 @@ public class DefaultObservableMap<K, V> extends java.util.AbstractMap<K, V> impl
 	@Override
 	public Type getValueType() {
 		return theValueType;
+	}
+
+	@Override
+	public ObservableValue<CollectionSession> getSession() {
+		return theSessionObservable;
 	}
 
 	@Override
