@@ -191,4 +191,50 @@ public interface ObservableMultiMap<K, V> {
 		}
 		return new WrappingMultiEntry();
 	}
+
+	/** @return An immutable copy of this map */
+	default ObservableMultiMap<K, V> immutable() {
+		ObservableMultiMap<K, V> outer = this;
+		return new ObservableMultiMap<K, V>() {
+			@Override
+			public Type getKeyType() {
+				return outer.getKeyType();
+			}
+
+			@Override
+			public Type getValueType() {
+				return outer.getValueType();
+			}
+
+			@Override
+			public ObservableCollection<ObservableMultiEntry<K, V>> observeEntries() {
+				return outer.observeEntries().immutable();
+			}
+
+			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return outer.getSession();
+			}
+
+			@Override
+			public boolean add(K key, V value) {
+				throw new UnsupportedOperationException();
+			}
+
+			@Override
+			public boolean addAll(K key, Collection<? extends V> values) {
+				throw new UnsupportedOperationException();
+			}
+
+			@Override
+			public boolean remove(K key, Object value) {
+				throw new UnsupportedOperationException();
+			}
+
+			@Override
+			public boolean removeAll(K key) {
+				throw new UnsupportedOperationException();
+			}
+		};
+	}
 }

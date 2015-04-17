@@ -1,6 +1,7 @@
 package org.observe.datastruct;
 
 import java.util.Map;
+import java.util.Set;
 
 import org.observe.ObservableValue;
 import org.observe.collect.CollectionSession;
@@ -69,6 +70,40 @@ public interface ObservableMap<K, V> extends Map<K, V> {
 		return observeEntries().map(getValueType(), Map.Entry<K, V>::getValue);
 	}
 
+	@Override
+	default Set<Map.Entry<K, V>> entrySet() {
+		return (Set<Map.Entry<K, V>>) (Set<?>) observeEntries();
+	}
+
+	/** @return An immutable copy of this map */
 	default ObservableMap<K, V> immutable() {
+		ObservableMap<K, V> outer = this;
+		class Immutable extends java.util.AbstractMap<K, V> implements ObservableMap<K, V> {
+			@Override
+			public Type getKeyType() {
+				return outer.getKeyType();
+			}
+
+			@Override
+			public Type getValueType() {
+				return outer.getValueType();
+			}
+
+			@Override
+			public ObservableCollection<ObservableEntry<K, V>> observeEntries() {
+				return outer.observeEntries().immutable();
+			}
+
+			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return outer.getSession();
+			}
+
+			@Override
+			public Set<java.util.Map.Entry<K, V>> entrySet() {
+				return outer.entrySet();
+			}
+		}
+		return new Immutable();
 	}
 }
