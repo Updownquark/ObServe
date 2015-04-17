@@ -9,5 +9,5 @@ import org.observe.util.Transactable;
  *
  * @param <E> The type of elements in the list
  */
-public interface TransactableList<E> extends List<E>, Transactable {
+public interface TransactableList<E> extends TransactableCollection<E>, List<E> {
 }

@@ -9,5 +9,5 @@ import org.observe.util.Transactable;
  *
  * @param <E> The type of elements in the set
  */
-public interface TransactableSet<E> extends Set<E>, Transactable {
+public interface TransactableSet<E> extends TransactableCollection<E>, Set<E> {
 }

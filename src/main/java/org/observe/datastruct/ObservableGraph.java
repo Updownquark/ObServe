@@ -9,6 +9,8 @@ import org.observe.ObservableValue;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
 
+import prisms.lang.Type;
+
 public interface ObservableGraph<N, E> {
 	interface Node<N, E> {
 		ObservableCollection<Edge<N, E>> getEdges();
@@ -168,5 +170,25 @@ public interface ObservableGraph<N, E> {
 	}
 
 	default ObservableCollection<Edge<N, E>> traverse(Node<N, E> start, Node<N, E> end, Function<Edge<N, E>, Double> cost) {
+	}
+
+	@SuppressWarnings("rawtypes")
+	static ObservableGraph empty(Type nodeType, Type edgeType) {
+		return new ObservableGraph() {
+			@Override
+			public ObservableCollection getNodes() {
+				return org.observe.collect.ObservableSet.constant(nodeType);
+			}
+
+			@Override
+			public ObservableCollection getEdges() {
+				return org.observe.collect.ObservableSet.constant(edgeType);
+			}
+
+			@Override
+			public ObservableValue getSession() {
+				return ObservableValue.constant(new Type(CollectionSession.class), null);
+			}
+		};
 	}
 }
