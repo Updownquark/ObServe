@@ -11,6 +11,11 @@ import java.util.function.Function;
  */
 public interface Observable<T> {
 	/**
+	 * Heavier-weight than {@link #observe(Observer)}, but supports subscription chaining. The Subscription returned from this method can be
+	 * used in place of this observable; observers added to it will receive the same events as if they were added to this observable
+	 * directly. However, when the subscription is {@link Subscription#unsubscribe() unsubscribed}, observers added to the subscription will
+	 * have their {@link Observer#onCompleted(Object) onCompleted} method called and their notifications will cease.
+	 *
 	 * @param observer The observer to listen to this observable
 	 * @return A subscription to use to unsubscribe the listener from this observable
 	 */
