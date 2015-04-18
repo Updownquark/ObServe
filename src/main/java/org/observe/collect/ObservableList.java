@@ -22,6 +22,92 @@ import prisms.lang.Type;
  * @param <E> The type of element in the list
  */
 public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<E> {
+	/* Overridden for performance.  get() is linear in the super, constant time here (assuming random-access) */
+	@Override
+	default ObservableValue<E> last() {
+		return new ObservableValue<E>() {
+			private final Type type = ObservableList.this.getType().isPrimitive() ? new Type(Type.getWrapperType(ObservableList.this
+				.getType().getBaseType())) : ObservableList.this.getType();
+
+			@Override
+			public Type getType() {
+				return type;
+			}
+
+			@Override
+			public E get() {
+				int size = size();
+				return size == 0 ? null : ObservableList.this.get(size - 1);
+			}
+
+			@Override
+			public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
+				if(isEmpty())
+					observer.onNext(createEvent(null, null, null));
+				Object key = new Object();
+				Object [] oldValue = new Object[1];
+				Runnable collSub = ObservableList.this.onElement(new Consumer<ObservableElement<E>>() {
+					@Override
+					public void accept(ObservableElement<E> element) {
+						OrderedObservableElement<E> orderedEl = (OrderedObservableElement<E>) element;
+						orderedEl.observe(new Observer<ObservableValueEvent<E>>() {
+							private OrderedObservableElement<E> lastElement;
+
+							@Override
+							public <V2 extends ObservableValueEvent<E>> void onNext(V2 event) {
+								if(lastElement != null && orderedEl.getIndex() < lastElement.getIndex())
+									return;
+								CollectionSession session = getSession().get();
+								if(session == null) {
+									observer.onNext(createEvent((E) oldValue[0], event.getValue(), event));
+									oldValue[0] = event.getValue();
+								} else {
+									session.put(key, "hasNewLast", true);
+									session.put(key, "newLast", event.getValue());
+								}
+							}
+
+							@Override
+							public <V2 extends ObservableValueEvent<E>> void onCompleted(V2 event) {
+								if(orderedEl != lastElement)
+									return;
+								CollectionSession session = getSession().get();
+								if(session == null) {
+									E newValue = get();
+									observer.onNext(createEvent((E) oldValue[0], newValue, event));
+									oldValue[0] = newValue;
+								} else {
+									session.put(key, "hasNewLast", true);
+									session.put(key, "findNewLast", true);
+								}
+							}
+						});
+					}
+				});
+				Runnable transSub = getSession().observe(new Observer<ObservableValueEvent<CollectionSession>>() {
+					@Override
+					public <V2 extends ObservableValueEvent<CollectionSession>> void onNext(V2 value) {
+						CollectionSession completed = value.getOldValue();
+						if(completed == null || completed.get(key, "hasNewLast") == null)
+							return;
+						E newLast;
+						if(completed.get(key, "findNewLast") != null)
+							newLast = get();
+						else
+							newLast = (E) completed.get(key, "newLast");
+						if(newLast != oldValue[0])
+							return;
+						observer.onNext(createEvent((E) oldValue[0], newLast, value));
+					}
+				});
+				return () -> {
+					collSub.run();
+					transSub.run();
+				};
+			}
+		};
+	}
+
 	/**
 	 * @param map The mapping function
 	 * @return An observable list of a new type backed by this list and the mapping function

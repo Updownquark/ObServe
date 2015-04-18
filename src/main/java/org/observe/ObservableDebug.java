@@ -1,13 +1,18 @@
 package org.observe;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiFunction;
 
+import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableList;
 import org.observe.collect.TransactableCollection;
 import org.observe.datastruct.DefaultObservableMultiMap;
 import org.observe.datastruct.ObservableGraph;
+import org.observe.datastruct.ObservableMap;
 import org.observe.datastruct.ObservableMultiMap;
 import org.observe.util.WeakReferenceObservable;
 
@@ -24,7 +29,7 @@ public final class ObservableDebug {
 		public final Map<String, Object> functions;
 
 		/** Labels that have been given to the observable */
-		public final ObservableCollection<String> labels;
+		public final ObservableList<String> labels;
 
 		/** Properties that have been tagged onto the observable */
 		public final ObservableMultiMap<String, Object> tags;
@@ -34,12 +39,34 @@ public final class ObservableDebug {
 
 		private ObservableDebugWrapper(Object ob, Map<String, Object> fns) {
 			observable = new WeakReferenceObservable<>(new Type(Object.class), ob);
-			labels = new org.observe.collect.DefaultObservableSet<>(new Type(String.class));
-			labelController = ((org.observe.collect.DefaultObservableSet<String>) labels).control(null);
+			labels = new org.observe.collect.DefaultObservableList<>(new Type(String.class));
+			labelController = ((org.observe.collect.DefaultObservableList<String>) labels).control(null);
 			tagController = new org.observe.datastruct.DefaultObservableMultiMap<>(new Type(String.class), new Type(Object.class));
 			tags = tagController.immutable();
 			functions = Collections.unmodifiableMap(fns);
 		}
+	}
+
+	/** A quick interface to describe an observable's debug properties */
+	public static interface DebugDescription {
+		/** @return The observable being described */
+		Object get();
+
+		/**
+		 * @return This observable's parents, by relationship. This map may break {@link Map}'s contract by containing multiple entries with
+		 *         the same key. The map is observable to allow the use of extra utilities in that class, but this map should be constant
+		 *         after the observable has been registered.
+		 */
+		ObservableMap<String, DebugDescription> parents();
+
+		/** @return Any functions that may be used to generate this observable's values */
+		Map<String, Object> functions();
+
+		/** @return Any labels that have been attached to this observable */
+		ObservableCollection<String> labels();
+
+		/** @return Any properties that have been tagged onto this observable */
+		ObservableMultiMap<String, Object> tags();
 	}
 
 	/**
@@ -326,7 +353,8 @@ public final class ObservableDebug {
 
 			@Override
 			public ObservableDerivationBuilder<T> label(String label) {
-				newHolder.labelController.add(label);
+				if(!newHolder.labels.contains(label))
+					newHolder.labelController.add(label);
 				return this;
 			}
 
@@ -372,7 +400,8 @@ public final class ObservableDebug {
 
 			@Override
 			public ObservableDerivationBuilder<T> label(String label) {
-				node.getValue().labelController.add(label);
+				if(!node.getValue().labels.contains(label))
+					node.getValue().labelController.add(label);
 				return this;
 			}
 
@@ -387,6 +416,212 @@ public final class ObservableDebug {
 				return observable;
 			}
 		};
+	}
+
+	/**
+	 * @param observable The observable to get debug information for
+	 * @return A descriptor containing detailed debugging information for the given observable (if it has been registered)
+	 */
+	public DebugDescription desc(Object observable) {
+		if(!DEBUG_ON)
+			return null;
+		class NodeDebugDescription implements DebugDescription {
+			private final ObservableGraph.Node<ObservableDebugWrapper, String> theNode;
+
+			NodeDebugDescription(ObservableGraph.Node<ObservableDebugWrapper, String> node) {
+				theNode = node;
+			}
+
+			@Override
+			public Object get() {
+				return theNode.getValue();
+			}
+
+			@Override
+			public ObservableMap<String, DebugDescription> parents() {
+				return new ObservableMap<String, DebugDescription>() {
+					private final Type keyType = new Type(String.class);
+
+					private final Type valueType = new Type(Object.class);
+
+					@Override
+					public DebugDescription put(String key, DebugDescription value) {
+						throw new UnsupportedOperationException();
+					}
+
+					@Override
+					public DebugDescription remove(Object key) {
+						throw new UnsupportedOperationException();
+					}
+
+					@Override
+					public void putAll(Map<? extends String, ? extends DebugDescription> m) {
+						throw new UnsupportedOperationException();
+					}
+
+					@Override
+					public void clear() {
+						throw new UnsupportedOperationException();
+					}
+
+					@Override
+					public Type getKeyType() {
+						return keyType;
+					}
+
+					@Override
+					public Type getValueType() {
+						return valueType;
+					}
+
+					@Override
+					public ObservableCollection<ObservableEntry<String, DebugDescription>> observeEntries() {
+						class Entry implements ObservableMap.ObservableEntry<String, DebugDescription> {
+							private final ObservableGraph.Edge<ObservableDebugWrapper, String> theEdge;
+
+							Entry(ObservableGraph.Edge<ObservableDebugWrapper, String> edge) {
+								theEdge = edge;
+							}
+
+							@Override
+							public Type getType() {
+								return valueType;
+							}
+
+							@Override
+							public Runnable observe(Observer<? super ObservableValueEvent<DebugDescription>> observer) {
+								return () -> { // Should never change
+								};
+							}
+
+							@Override
+							public String getKey() {
+								return theEdge.getValue();
+							}
+
+							@Override
+							public DebugDescription getValue() {
+								return new NodeDebugDescription(theEdge.getStart());
+							}
+
+							@Override
+							public DebugDescription setValue(DebugDescription value) {
+								throw new UnsupportedOperationException();
+							}
+						}
+						return theNode.getEdges().filter(edge -> edge.getEnd() == theNode).map(Entry::new);
+					}
+
+					@Override
+					public ObservableValue<CollectionSession> getSession() {
+						return null;
+					}
+				};
+			}
+
+			@Override
+			public Map<String, Object> functions() {
+				return theNode.getValue().functions;
+			}
+
+			@Override
+			public ObservableCollection<String> labels() {
+				return theNode.getValue().labels;
+			}
+
+			@Override
+			public ObservableMultiMap<String, Object> tags() {
+				return theNode.getValue().tags;
+			}
+
+			private StringBuilder labelString() {
+				StringBuilder ret = new StringBuilder();
+				if(!theNode.getValue().labels.isEmpty())
+					formatCollection(ret, theNode.getValue().labels);
+				ret.append(": ");
+				return ret;
+			}
+
+			private String toShortString(){
+				StringBuilder ret = labelString();
+
+				ObservableMap<String, DebugDescription> parents=parents();
+				if(parents.isEmpty())
+					ret.append(theNode.getValue().observable.get().toString());
+				else if(parents.keySet().size() == 1) { // Either single-parent or some sort of flattened set of parents
+					ret.append(parents.observeKeys().find(key -> true).get()).append('(');
+					boolean first = true;
+					for(DebugDescription parent : parents.values()) {
+						if(!first)
+							ret.append(", ");
+						first = false;
+						ret.append(parent.toString());
+					}
+					ret.append(')');
+					return ret.toString();
+				} else {
+					boolean first = true;
+					boolean second = false;
+					for(Map.Entry<String, DebugDescription> parent : parents.entrySet()) {
+						String parentStr = ((NodeDebugDescription) parent.getValue()).toShortString();
+						if(first) {
+							ret.append(parentStr).append(" .").append(parent.getKey()).append('(');
+							first = false;
+							second = true;
+						} else {
+							if(!second)
+								ret.append(", ");
+							ret.append(parent.getKey()).append(' ').append(parentStr);
+							second = false;
+						}
+					}
+					ret.append(')');
+				}
+				return ret.toString();
+			}
+
+			@Override
+			public String toString() {
+				StringBuilder ret = labelString();
+				ret.append(theNode.getValue().observable.get().toString());
+				formatMap(ret, parents(), "parents", (parent, sb) -> sb.append(((NodeDebugDescription) parent).toShortString()));
+				formatMap(ret, functions(), "functions", (function, sb) -> sb.append(function.toString()));
+				formatMap(ret, tags().asCollectionMap(), "tags", (tags, sb) -> formatCollection(sb, tags));
+				return ret.toString();
+			}
+
+			private StringBuilder formatCollection(StringBuilder ret, Collection<?> coll) {
+				ret.append('(');
+				boolean first = true;
+				for(Object value : coll) {
+					if(!first)
+						ret.append(", ");
+					first = false;
+					ret.append(value);
+				}
+				ret.append(')');
+				return ret;
+			}
+
+			private <T> void formatMap(StringBuilder ret, Map<String, T> map, String name, BiFunction<T, StringBuilder, ?> toString) {
+				if(!map.isEmpty()) {
+					ret.append('\n').append(name);
+					int maxLen = map.keySet().stream().mapToInt(str -> str.length()).max().getAsInt();
+					for(Map.Entry<String, T> entry : map.entrySet()) {
+						ret.append('\t').append(entry.getKey());
+						for(int i = entry.getKey().length(); i < maxLen; i++)
+							ret.append(' ');
+						ret.append(" = ");
+						toString.apply(entry.getValue(), ret);
+					}
+				}
+			}
+		}
+		ObservableGraph.Node<ObservableDebugWrapper, String> node = theObservables.getNodes()
+			.find(holder -> holder.getValue().observable.get() == observable).get();
+		if(node == null)
+			return null;
+		return new NodeDebugDescription(node);
 	}
 
 	/** @return The graph of observable dependencies that the debugging framework knows about */
