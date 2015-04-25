@@ -102,7 +102,7 @@ public interface Observable<T> {
 		holder.internalSub = observe(holder.wrapper);
 		if(holder.internalSub == null)
 			throw new NullPointerException();
-		return holder.subscription;
+		return debug(holder.subscription).from("subscribe", this).tag("observer", observer).get();
 	}
 
 	/**
@@ -231,7 +231,7 @@ public interface Observable<T> {
 	default <R> Observable<R> map(Function<? super T, R> func) {
 		return debug(new ComposedObservable<R>(args -> {
 			return func.apply((T) args[0]);
-		}, this)).from("mapped", this).using(func, "map").get();
+		}, this)).from("mapped", this).using("map", func).get();
 	}
 
 	/**
@@ -273,7 +273,7 @@ public interface Observable<T> {
 			public String toString() {
 				return "filterMap(" + outer + ")";
 			}
-		}).from("filterMap", this).using(func, "map").get();
+		}).from("filterMap", this).using("map", func).get();
 	}
 
 	/**
@@ -286,7 +286,7 @@ public interface Observable<T> {
 	default <V, R> Observable<R> combine(Observable<V> other, BiFunction<? super T, ? super V, R> func) {
 		return debug(new ComposedObservable<R>(args -> {
 			return func.apply((T) args[0], (V) args[1]);
-		}, this, other)).from("combine-arg0", this).from("combine-arg1", other).using(func, "combination").get();
+		}, this, other)).from("combine-arg0", this).from("combine-arg1", other).using("combination", func).get();
 	}
 
 	/**
@@ -439,7 +439,7 @@ public interface Observable<T> {
 			public String toString() {
 				return outer + ".skip(" + times + ")";
 			}
-		}).from("skip", this).using(times, "times").get();
+		}).from("skip", this).using("times", times).get();
 	}
 
 	/**

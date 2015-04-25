@@ -83,11 +83,11 @@ public final class ObservableDebug {
 		ObservableDerivationBuilder<T> from(String relationship, Object... parents);
 
 		/**
-		 * @param function The function used in the derivation of the value(s) of this builder's observable
 		 * @param purpose How the function is used in deriving the value
+		 * @param function The function used in the derivation of the value(s) of this builder's observable
 		 * @return This builder, for chaining
 		 */
-		ObservableDerivationBuilder<T> using(Object function, String purpose);
+		ObservableDerivationBuilder<T> using(String purpose, Object function);
 
 		/**
 		 * @param label The label to apply to this observable
@@ -119,7 +119,7 @@ public final class ObservableDebug {
 		}
 
 		@Override
-		public ObservableDerivationBuilder<T> using(Object function, String purpose) {
+		public ObservableDerivationBuilder<T> using(String purpose, Object function) {
 			return this;
 		}
 
@@ -335,7 +335,7 @@ public final class ObservableDebug {
 			}
 
 			@Override
-			public ObservableDerivationBuilder<T> using(Object function, String purpose) {
+			public ObservableDerivationBuilder<T> using(String purpose, Object function) {
 				if(!isFunctional(function.getClass()))
 					throw new IllegalArgumentException(function + " is not a function");
 				functions.put(purpose, function);
@@ -394,7 +394,7 @@ public final class ObservableDebug {
 			}
 
 			@Override
-			public ObservableDerivationBuilder<T> using(Object function, String purpose) {
+			public ObservableDerivationBuilder<T> using(String purpose, Object function) {
 				throw new IllegalStateException("An observable's derivation cannot be changed after it is created");
 			}
 

@@ -1,5 +1,7 @@
 package org.observe;
 
+import static org.observe.ObservableDebug.debug;
+
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
@@ -45,7 +47,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 
 	/** @return This value, but not settable */
 	default ObservableValue<T> unsettable() {
-		return new ObservableValue<T>() {
+		return debug(new ObservableValue<T>() {
 			@Override
 			public Type getType() {
 				return SettableValue.this.getType();
@@ -60,7 +62,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
 				return SettableValue.this.observe(observer);
 			}
-		};
+		}).from("unsettable", this).get();
 	}
 
 	/**
@@ -85,7 +87,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	public default <R> SettableValue<R> mapV(Type type, Function<? super T, R> function, Function<? super R, ? extends T> reverse,
 		boolean combineNull) {
 		SettableValue<T> root = this;
-		return new ComposedSettableValue<R>(type, args -> {
+		return debug(new ComposedSettableValue<R>(type, args -> {
 			return function.apply((T) args[0]);
 		}, combineNull, this) {
 			@Override
@@ -103,7 +105,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			public ObservableValue<Boolean> isEnabled() {
 				return root.isEnabled();
 			}
-		};
+		}).from("map", this).using("map", function).using("reverse", reverse).tag("combineNull", combineNull).get();
 	}
 
 	/**
@@ -118,7 +120,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 */
 	public default <U, R> SettableValue<R> composeV(BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		BiFunction<? super R, ? super U, ? extends T> reverse) {
-		return composeV(null, function, arg, reverse, false);
+		return combineV(null, function, arg, reverse, false);
 	}
 
 	/**
@@ -134,10 +136,10 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 *            result will be null.
 	 * @return The composed settable value
 	 */
-	public default <U, R> SettableValue<R> composeV(Type type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
+	public default <U, R> SettableValue<R> combineV(Type type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		BiFunction<? super R, ? super U, ? extends T> reverse, boolean combineNull) {
 		SettableValue<T> root = this;
-		return new ComposedSettableValue<R>(type, args -> {
+		return debug(new ComposedSettableValue<R>(type, args -> {
 			return function.apply((T) args[0], (U) args[1]);
 		}, combineNull, this) {
 			@Override
@@ -155,7 +157,8 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			public ObservableValue<Boolean> isEnabled() {
 				return root.isEnabled();
 			}
-		};
+		}).from("combine", this).from("with", arg).using("combination", function).using("reverse", reverse).tag("combineNull", combineNull)
+		.get();
 	}
 
 	/**
@@ -171,10 +174,10 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @param combineNull Whether to apply the filter to null values or simply preserve the null
 	 * @return The composed settable value
 	 */
-	public default <U, R> SettableValue<R> composeV(Type type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
+	public default <U, R> SettableValue<R> combineV(Type type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		BiFunction<? super R, ? super U, String> accept, BiFunction<? super R, ? super U, ? extends T> reverse, boolean combineNull) {
 		SettableValue<T> root = this;
-		return new ComposedSettableValue<R>(type, args -> {
+		return debug(new ComposedSettableValue<R>(type, args -> {
 			return function.apply((T) args[0], (U) args[1]);
 		}, combineNull, this) {
 			@Override
@@ -196,7 +199,8 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			public ObservableValue<Boolean> isEnabled() {
 				return root.isEnabled();
 			}
-		};
+		}).from("combine", this).from("with", arg).using("combination", function).using("reverse", reverse).using("accept", accept)
+			.tag("combineNull", combineNull).get();
 	}
 
 	/**
@@ -211,9 +215,9 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @param reverse The function to reverse the transformation
 	 * @return The composed settable value
 	 */
-	public default <U, V, R> SettableValue<R> composeV(TriFunction<? super T, ? super U, ? super V, R> function, ObservableValue<U> arg2,
+	public default <U, V, R> SettableValue<R> combineV(TriFunction<? super T, ? super U, ? super V, R> function, ObservableValue<U> arg2,
 		ObservableValue<V> arg3, TriFunction<? super R, ? super U, ? super V, ? extends T> reverse) {
-		return composeV(null, function, arg2, arg3, reverse, false);
+		return combineV(null, function, arg2, arg3, reverse, false);
 	}
 
 	/**
@@ -231,11 +235,11 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 *            result will be null.
 	 * @return The composed settable value
 	 */
-	public default <U, V, R> SettableValue<R> composeV(Type type, TriFunction<? super T, ? super U, ? super V, R> function,
+	public default <U, V, R> SettableValue<R> combineV(Type type, TriFunction<? super T, ? super U, ? super V, R> function,
 		ObservableValue<U> arg2, ObservableValue<V> arg3, TriFunction<? super R, ? super U, ? super V, ? extends T> reverse,
 		boolean combineNull) {
 		SettableValue<T> root = this;
-		return new ComposedSettableValue<R>(type, args -> {
+		return debug(new ComposedSettableValue<R>(type, args -> {
 			return function.apply((T) args[0], (U) args[1], (V) args[2]);
 		}, combineNull, this) {
 			@Override
@@ -253,7 +257,8 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			public ObservableValue<Boolean> isEnabled() {
 				return root.isEnabled();
 			}
-		};
+		}).from("combine", this).from("with", arg2).from("with", arg3).using("combination", function).using("reverse", reverse)
+			.tag("combineNull", combineNull).get();
 	}
 }
 
