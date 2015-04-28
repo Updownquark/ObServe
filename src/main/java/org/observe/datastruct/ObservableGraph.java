@@ -1,11 +1,12 @@
 package org.observe.datastruct;
 
 import java.util.Map;
-import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
+import org.observe.Observable;
 import org.observe.ObservableValue;
+import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
 
@@ -42,6 +43,14 @@ public interface ObservableGraph<N, E> {
 	 *         sessions} of the {@link #getNodes() node} and {@link #getEdges() edge} collections should be the same as this one.
 	 */
 	ObservableValue<CollectionSession> getSession();
+
+	default Observable<CollectionChangeEvent<?>> changes() {
+		return Observable.or(getNodes().changes(), getEdges().changes());
+	}
+
+	default ObservableValue<Node<N, E>> getNode(N nodeValue) {
+		return getNodes().find(node -> node.getValue().equals(nodeValue));
+	}
 
 	default ObservableGraph<N, E> filter(Predicate<? super N> nodeFilter, Predicate<? super E> edgeFilter) {
 		if(nodeFilter == null && edgeFilter == null)
@@ -157,20 +166,37 @@ public interface ObservableGraph<N, E> {
 		return new FilteredGraph();
 	}
 
-	default <N2, E2> ObservableGraph<N2, E2> map(Function<N, N2> nodeMap, Function<E, E2> edgeMap) {
-	}
-
-	default <V, N2> ObservableGraph<N2, E> combineNodes(ObservableValue<V> other, BiFunction<N, V, N2> map) {
-	}
-
-	default <V, E2> ObservableGraph<N, E2> combineEdges(ObservableValue<V> other, BiFunction<N, E, E2> map) {
-	}
+	// default <N2, E2> ObservableGraph<N2, E2> map(Function<N, N2> nodeMap, Function<E, E2> edgeMap) {
+	// }
+	//
+	// default <V, N2> ObservableGraph<N2, E> combineNodes(ObservableValue<V> other, BiFunction<N, V, N2> map) {
+	// }
+	//
+	// default <V, E2> ObservableGraph<N, E2> combineEdges(ObservableValue<V> other, BiFunction<N, E, E2> map) {
+	// }
 
 	default ObservableGraph<N, E> immutable() {
+		ObservableGraph<N, E> outer = this;
+		return new ObservableGraph<N, E>() {
+			@Override
+			public ObservableCollection<Node<N, E>> getNodes() {
+				return outer.getNodes().immutable();
+			}
+
+			@Override
+			public ObservableCollection<Edge<N, E>> getEdges() {
+				return outer.getEdges().immutable();
+			}
+
+			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return outer.getSession();
+			}
+		};
 	}
 
-	default ObservableCollection<Edge<N, E>> traverse(Node<N, E> start, Node<N, E> end, Function<Edge<N, E>, Double> cost) {
-	}
+	// default ObservableCollection<Edge<N, E>> traverse(Node<N, E> start, Node<N, E> end, Function<Edge<N, E>, Double> cost) {
+	// }
 
 	@SuppressWarnings("rawtypes")
 	static ObservableGraph empty(Type nodeType, Type edgeType) {

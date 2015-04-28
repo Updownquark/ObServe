@@ -21,7 +21,7 @@ import prisms.lang.Type;
  *
  * @param <E> The type of element in the set
  */
-public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements ObservableSortedSet<E> {
+public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements ObservableSortedSet<E>, TransactableCollection<E> {
 	private final Type theType;
 	private TreeMap<E, ObservableElementImpl<E>> theValues;
 
@@ -67,6 +67,33 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 	@Override
 	public ObservableValue<CollectionSession> getSession() {
 		return theSessionObservable;
+	}
+
+	@Override
+	public Transaction startTransaction(Object cause) {
+		if(hasIssuedController.get())
+			throw new IllegalStateException("Controlled default observable collections cannot be modified directly");
+		return startTransactionImpl(cause);
+	}
+
+	private Transaction startTransactionImpl(Object cause) {
+		Lock lock = theLock.writeLock();
+		lock.lock();
+		theSession = new DefaultCollectionSession(cause);
+		theSessionController.onNext(new ObservableValueEvent<>(theSessionObservable, null, theSession, cause));
+		return new org.observe.util.Transaction() {
+			@Override
+			public void close() {
+				if(theLock.getWriteHoldCount() != 1) {
+					lock.unlock();
+					return;
+				}
+				CollectionSession session = theSession;
+				theSession = null;
+				theSessionController.onNext(new ObservableValueEvent<>(theSessionObservable, session, null, cause));
+				lock.unlock();
+			}
+		};
 	}
 
 	@Override
@@ -482,23 +509,7 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 	private class ObservableSortedSetController extends AbstractSet<E> implements NavigableSet<E>, TransactableSet<E> {
 		@Override
 		public Transaction startTransaction(Object cause) {
-			Lock lock = theLock.writeLock();
-			lock.lock();
-			theSession = new DefaultCollectionSession(cause);
-			theSessionController.onNext(new ObservableValueEvent<>(theSessionObservable, null, theSession, cause));
-			return new org.observe.util.Transaction() {
-				@Override
-				public void close() {
-					if(theLock.getWriteHoldCount() != 1) {
-						lock.unlock();
-						return;
-					}
-					CollectionSession session = theSession;
-					theSession = null;
-					theSessionController.onNext(new ObservableValueEvent<>(theSessionObservable, session, null, cause));
-					lock.unlock();
-				}
-			};
+			return startTransactionImpl(cause);
 		}
 
 		@Override

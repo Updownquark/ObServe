@@ -1,5 +1,6 @@
 package org.observe.datastruct;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -166,6 +167,16 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Tran
 	}
 
 	/**
+	 * Adds a collection of nodes to a graph
+	 * 
+	 * @param values The node values to add
+	 */
+	public void addNodes(Collection<? extends N> values) {
+		for(N value : values)
+			addNode(value);
+	}
+
+	/**
 	 * Adds an edge between two nodes which must already be in the graph. The nodes cannot be the same.
 	 *
 	 * @param start The node for the edge to start at
@@ -214,7 +225,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Tran
 	/**
 	 * Replaces a node in the graph with a new node having a different value. This method is useful because the value of a node cannot be
 	 * directly modified. All edges referring to the given node will be replaced with equivalent edges referring to the new node.
-	 * 
+	 *
 	 * @param node The node to replace
 	 * @param newValue The value for the new node to have
 	 * @return The node that was created and added
@@ -236,6 +247,21 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Tran
 			}
 			theNodeController.remove(node);
 			return newNode;
+		}
+	}
+
+	/** Removes all nodes and edges from this graph */
+	public void clear() {
+		try (Transaction trans = startTransaction(null)) {
+			theEdgeController.clear();
+			theNodeController.clear();
+		}
+	}
+
+	/** Removes all edges from this graph */
+	public void clearEdges() {
+		try (Transaction trans = startTransaction(null)) {
+			theEdgeController.clear();
 		}
 	}
 }
