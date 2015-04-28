@@ -135,7 +135,7 @@ public interface OrderedObservableElement<E> extends ObservableElement<E> {
 	}
 
 	@Override
-	default OrderedObservableElement<E> refireWhen(Observable<?> observable) {
+	default OrderedObservableElement<E> refresh(Observable<?> observable) {
 		OrderedObservableElement<E> outer = this;
 		return new OrderedObservableElement<E>() {
 			@Override
@@ -155,7 +155,7 @@ public interface OrderedObservableElement<E> extends ObservableElement<E> {
 
 			@Override
 			public ObservableValue<E> persistent() {
-				return outer.persistent().refireWhen(observable);
+				return outer.persistent().refresh(observable);
 			}
 
 			@Override

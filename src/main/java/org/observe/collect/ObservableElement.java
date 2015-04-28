@@ -1,5 +1,7 @@
 package org.observe.collect;
 
+import static org.observe.ObservableDebug.debug;
+
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
@@ -25,9 +27,9 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 
 	@Override
 	default <R> ObservableElement<R> mapV(Type type, Function<? super T, R> function, boolean combineNull) {
-		return new ComposedObservableElement<>(this, type, args -> {
+		return debug(new ComposedObservableElement<R>(this, type, args -> {
 			return function.apply((T) args[0]);
-		}, combineNull, this);
+		}, combineNull, this)).from("map", this).using("map", function).tag("combineNull", combineNull).get();
 	};
 
 	@Override
@@ -38,9 +40,10 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 	@Override
 	default <U, R> ObservableElement<R> combineV(Type type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		boolean combineNull) {
-		return new ComposedObservableElement<>(this, type, args -> {
+		return debug(new ComposedObservableElement<R>(this, type, args -> {
 			return function.apply((T) args[0], (U) args[1]);
-		}, combineNull, this, arg);
+		}, combineNull, this, arg)).from("combine", this).from("with", arg).using("combination", function).tag("combineNull", combineNull)
+		.get();
 	}
 
 	@Override
@@ -62,15 +65,16 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 	@Override
 	default <U, V, R> ObservableElement<R> combineV(Type type, TriFunction<? super T, ? super U, ? super V, R> function,
 		ObservableValue<U> arg2, ObservableValue<V> arg3, boolean combineNull) {
-		return new ComposedObservableElement<>(this, type, args -> {
+		return debug(new ComposedObservableElement<R>(this, type, args -> {
 			return function.apply((T) args[0], (U) args[1], (V) args[2]);
-		}, combineNull, this, arg2, arg3);
+		}, combineNull, this, arg2, arg3)).from("combine", this).from("with", arg2, arg3).using("combination", function)
+		.tag("combineNull", combineNull).get();
 	}
 
 	@Override
-	default ObservableElement<T> refireWhen(Observable<?> observable) {
+	default ObservableElement<T> refresh(Observable<?> observable) {
 		ObservableElement<T> outer = this;
-		return new ObservableElement<T>() {
+		return debug(new ObservableElement<T>() {
 			@Override
 			public Type getType() {
 				return outer.getType();
@@ -83,7 +87,7 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 
 			@Override
 			public ObservableValue<T> persistent() {
-				return outer.persistent().refireWhen(observable);
+				return outer.persistent().refresh(observable);
 			}
 
 			@Override
@@ -104,18 +108,18 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 
 			@Override
 			public String toString() {
-				return outer + ".refireWhen(" + observable + ")";
+				return outer + ".refresh(" + observable + ")";
 			}
-		};
+		}).from("refresh", this).from("on", observable).get();
 	}
 
 	/**
 	 * @param observable A function providing an observable to refire on as a function of a value
 	 * @return An observable element that refires its value when the observable returned by the given function fires
 	 */
-	default ObservableElement<T> refireWhenForValue(Function<? super T, Observable<?>> observable) {
+	default ObservableElement<T> refreshForValue(Function<? super T, Observable<?>> observable) {
 		ObservableElement<T> outer = this;
-		return new ObservableElement<T>() {
+		return debug(new ObservableElement<T>() {
 			@Override
 			public Type getType() {
 				return outer.getType();
@@ -128,7 +132,7 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 
 			@Override
 			public ObservableValue<T> persistent() {
-				return outer.persistent().refireWhen(observable.apply(get()));
+				return outer.persistent().refresh(observable.apply(get()));
 			}
 
 			@Override
@@ -181,7 +185,7 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 			public String toString() {
 				return outer + ".refireWhen(" + observable + ")";
 			}
-		};
+		}).from("refresh", this).using("on", observable).get();
 	}
 
 	/** @param <T> The type of the element */

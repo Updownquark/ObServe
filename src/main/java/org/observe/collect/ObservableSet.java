@@ -1,5 +1,7 @@
 package org.observe.collect;
 
+import static org.observe.ObservableDebug.debug;
+
 import java.util.*;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -76,7 +78,8 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 			public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
 				Function<E, E> map = value -> (filter.apply(value) ? value : null);
 				return outer.onElement(element -> {
-					FilteredElement<E, E> retElement = new FilteredElement<>(element, map, getType());
+					FilteredElement<E, E> retElement = debug(new FilteredElement<>(element, map, getType())).from("element", this)
+						.tag("wrapped", element).using("map", map).get();
 					element.act(elValue -> {
 						if(!retElement.isIncluded()) {
 							E mapped = map.apply(elValue.getValue());
@@ -92,7 +95,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 				return "filter(" + outer + ")";
 			}
 		}
-		return new FilteredSet();
+		return debug(new FilteredSet()).from("filter", this).using("filter", filter).get();
 	}
 
 	/**
@@ -127,10 +130,10 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 
 			@Override
 			public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
-				return theTransactionManager.onElement(outer, refresh, element -> observer.accept(element.refireWhen(refresh)));
+				return theTransactionManager.onElement(outer, refresh, element -> observer.accept(element.refresh(refresh)));
 			}
 		};
-		return new RefreshingCollection();
+		return debug(new RefreshingCollection()).from("refresh", this).from("on", refresh).get();
 	}
 
 	/**
@@ -140,17 +143,17 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 	@Override
 	default ObservableSet<E> refreshEach(Function<? super E, Observable<?>> refire) {
 		ObservableCollection<E> outer = this;
-		return new org.observe.util.ObservableSetWrapper<E>(this) {
+		return debug(new org.observe.util.ObservableSetWrapper<E>(this) {
 			@Override
 			public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
-				return outer.onElement(element -> observer.accept(element.refireWhenForValue(refire)));
+				return outer.onElement(element -> observer.accept(element.refreshForValue(refire)));
 			}
-		};
+		}).from("refreshEach", this).using("on", refire).get();
 	}
 
 	@Override
 	default ObservableSet<E> immutable() {
-		return new Immutable<>(this);
+		return debug(new Immutable<>(this)).from("immutable", this).get();
 	}
 
 	/**
@@ -163,30 +166,6 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 		Set<T> modSet = new java.util.LinkedHashSet<>(coll);
 		Set<T> constSet = java.util.Collections.unmodifiableSet(modSet);
 		java.util.List<ObservableElement<T>> els = new java.util.ArrayList<>();
-		for(T value : constSet)
-			els.add(new ObservableElement<T>() {
-				@Override
-				public Type getType() {
-					return type;
-				}
-
-				@Override
-				public T get() {
-					return value;
-				}
-
-				@Override
-				public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
-					observer.onNext(new ObservableValueEvent<>(this, null, value, null));
-					return () -> {
-					};
-				}
-
-				@Override
-				public ObservableValue<T> persistent() {
-					return this;
-				}
-			});
 		class ConstantObservableSet extends AbstractSet<T> implements ObservableSet<T> {
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
@@ -216,7 +195,32 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 				return constSet.iterator();
 			}
 		}
-		return new ConstantObservableSet();
+		ConstantObservableSet ret = debug(new ConstantObservableSet()).tag("constant", coll).tag("type", type).get();
+		for(T value : constSet)
+			els.add(debug(new ObservableElement<T>() {
+				@Override
+				public Type getType() {
+					return type;
+				}
+
+				@Override
+				public T get() {
+					return value;
+				}
+
+				@Override
+				public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
+					observer.onNext(new ObservableValueEvent<>(this, null, value, null));
+					return () -> {
+					};
+				}
+
+				@Override
+				public ObservableValue<T> persistent() {
+					return this;
+				}
+			}).from("element", ret).tag("value", value).get());
+		return ret;
 	}
 
 	/**
@@ -375,7 +379,8 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 			@Override
 			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
 				return coll.onElement(element -> {
-					UniqueFilteredElement retElement = new UniqueFilteredElement(element, theElements.keySet());
+					UniqueFilteredElement retElement = debug(new UniqueFilteredElement(element, theElements.keySet()))
+						.from("element", this).tag("wrapped", element).get();
 					theElements.put(retElement, 0);
 					element.subscribe(new Observer<ObservableValueEvent<T>>() {
 						@Override
@@ -403,7 +408,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 				});
 			}
 		}
-		return new UniqueSet();
+		return debug(new UniqueSet()).from("unique", coll).get();
 	}
 
 	/**

@@ -1,5 +1,8 @@
 package org.observe.collect;
 
+import static org.observe.ObservableDebug.debug;
+import static org.observe.ObservableDebug.label;
+
 import java.util.*;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiFunction;
@@ -22,6 +25,92 @@ import prisms.lang.Type;
  * @param <E> The type of element in the list
  */
 public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<E> {
+	/* Overridden for performance.  get() is linear in the super, constant time here (assuming random-access) */
+	@Override
+	default ObservableValue<E> last() {
+		return debug(new ObservableValue<E>() {
+			private final Type type = ObservableList.this.getType().isPrimitive() ? new Type(Type.getWrapperType(ObservableList.this
+				.getType().getBaseType())) : ObservableList.this.getType();
+
+			@Override
+			public Type getType() {
+				return type;
+			}
+
+			@Override
+			public E get() {
+				int size = size();
+				return size == 0 ? null : ObservableList.this.get(size - 1);
+			}
+
+			@Override
+			public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
+				if(isEmpty())
+					observer.onNext(createEvent(null, null, null));
+				Object key = new Object();
+				Object [] oldValue = new Object[1];
+				Runnable collSub = ObservableList.this.onElement(new Consumer<ObservableElement<E>>() {
+					@Override
+					public void accept(ObservableElement<E> element) {
+						OrderedObservableElement<E> orderedEl = (OrderedObservableElement<E>) element;
+						orderedEl.observe(new Observer<ObservableValueEvent<E>>() {
+							private OrderedObservableElement<E> lastElement;
+
+							@Override
+							public <V2 extends ObservableValueEvent<E>> void onNext(V2 event) {
+								if(lastElement != null && orderedEl.getIndex() < lastElement.getIndex())
+									return;
+								CollectionSession session = getSession().get();
+								if(session == null) {
+									observer.onNext(createEvent((E) oldValue[0], event.getValue(), event));
+									oldValue[0] = event.getValue();
+								} else {
+									session.put(key, "hasNewLast", true);
+									session.put(key, "newLast", event.getValue());
+								}
+							}
+
+							@Override
+							public <V2 extends ObservableValueEvent<E>> void onCompleted(V2 event) {
+								if(orderedEl != lastElement)
+									return;
+								CollectionSession session = getSession().get();
+								if(session == null) {
+									E newValue = get();
+									observer.onNext(createEvent((E) oldValue[0], newValue, event));
+									oldValue[0] = newValue;
+								} else {
+									session.put(key, "hasNewLast", true);
+									session.put(key, "findNewLast", true);
+								}
+							}
+						});
+					}
+				});
+				Runnable transSub = getSession().observe(new Observer<ObservableValueEvent<CollectionSession>>() {
+					@Override
+					public <V2 extends ObservableValueEvent<CollectionSession>> void onNext(V2 value) {
+						CollectionSession completed = value.getOldValue();
+						if(completed == null || completed.get(key, "hasNewLast") == null)
+							return;
+						E newLast;
+						if(completed.get(key, "findNewLast") != null)
+							newLast = get();
+						else
+							newLast = (E) completed.get(key, "newLast");
+						if(newLast != oldValue[0])
+							return;
+						observer.onNext(createEvent((E) oldValue[0], newLast, value));
+					}
+				});
+				return () -> {
+					collSub.run();
+					transSub.run();
+				};
+			}
+		}).from("last", this).get();
+	}
+
 	/**
 	 * @param map The mapping function
 	 * @return An observable list of a new type backed by this list and the mapping function
@@ -65,7 +154,7 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 				return outer.onElement(element -> observer.accept(element.mapV(map)));
 			}
 		}
-		return new MappedObservableList();
+		return debug(new MappedObservableList()).from("map", this).using("map", map).get();
 	}
 
 	/**
@@ -74,9 +163,9 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 	 */
 	@Override
 	default ObservableList<E> filter(Function<? super E, Boolean> filter) {
-		return filterMap(getType(), (E value) -> {
+		return label(filterMap(getType(), (E value) -> {
 			return (value != null && filter.apply(value)) ? value : null;
-		});
+		})).label("filter").tag("filter", filter).get();
 	}
 
 	@Override
@@ -132,7 +221,8 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
 				return outer.onElement(element -> {
 					OrderedObservableElement<E> outerElement = (OrderedObservableElement<E>) element;
-					FilteredListElement<T, E> retElement = new FilteredListElement<>(outerElement, map, type, theFilteredElements);
+					FilteredListElement<T, E> retElement = debug(new FilteredListElement<>(outerElement, map, type, theFilteredElements))
+						.from("element", outer).tag("wrapped", element).get();
 					theFilteredElements.add(outerElement.getIndex(), retElement);
 					outerElement.observe(new Observer<ObservableValueEvent<E>>() {
 						@Override
@@ -152,7 +242,7 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 				});
 			}
 		}
-		return new FilteredList();
+		return debug(new FilteredList()).from("filterMap", this).using("map", map).get();
 	}
 
 	/**
@@ -206,7 +296,7 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 				return theTransactionManager.onElement(outer, arg, element -> observer.accept(element.combineV(func, arg)));
 			}
 		}
-		return new CombinedObservableList();
+		return debug(new CombinedObservableList()).from("combine", this).from("with", arg).using("combination", func).get();
 	}
 
 	/**
@@ -241,20 +331,20 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 
 			@Override
 			public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
-				return theTransactionManager.onElement(outer, refresh, element -> observer.accept(element.refireWhen(refresh)));
+				return theTransactionManager.onElement(outer, refresh, element -> observer.accept(element.refresh(refresh)));
 			}
 		};
-		return new RefreshingCollection();
+		return debug(new RefreshingCollection()).from("refresh", this).from("on", refresh).get();
 	}
 
 	@Override
 	default ObservableList<E> immutable() {
-		return new Immutable<>(this);
+		return debug(new Immutable<>(this)).from("immutable", this).get();
 	}
 
 	@Override
 	default ObservableOrderedCollection<E> cached() {
-		return new SafeCached<>(this);
+		return debug(new SafeCached<>(this)).from("cached", this).get();
 	}
 
 	/**
@@ -309,8 +399,6 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 		}
 		List<T> constList = java.util.Collections.unmodifiableList(list);
 		List<ObservableElement<T>> obsEls = new java.util.ArrayList<>();
-		for(int i = 0; i < constList.size(); i++)
-			obsEls.add(new ConstantObservableElement(constList.get(i), i));
 		class ConstantObservableList extends AbstractList<T> implements ObservableList<T> {
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
@@ -340,7 +428,10 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 				return constList.size();
 			}
 		}
-		return new ConstantObservableList();
+		ConstantObservableList ret = debug(new ConstantObservableList()).tag("constant", list).get();
+		for(int i = 0; i < constList.size(); i++)
+			obsEls.add(debug(new ConstantObservableElement(constList.get(i), i)).from("element", ret).tag("value", constList.get(i)).get());
+		return ret;
 	}
 
 	/**
@@ -441,7 +532,9 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 								}
 								Runnable subListSub = subListEvent.getValue().onElement(subElement -> {
 									OrderedObservableElement<T> subListEl = (OrderedObservableElement<T>) subElement;
-									FlattenedListElement flatEl = new FlattenedListElement(subListEl, subListEls);
+									FlattenedListElement flatEl = debug(new FlattenedListElement(subListEl, subListEls))
+										.from("element", FlattenedObservableList.this).tag("wrappedCollectionElement", subList)
+										.tag("wrappedSubElement", subElement).get();
 									subListEls.add(subListEl.getIndex(), flatEl);
 									subListEl.completed().act(x -> subListEls.remove(subListEl.getIndex()));
 									observer.accept(flatEl);
@@ -458,7 +551,7 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 				});
 			}
 		}
-		return new FlattenedObservableList();
+		return debug(new FlattenedObservableList()).from("flatten", list).get();
 	}
 
 	/**
@@ -618,7 +711,8 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 			theCache = new java.util.concurrent.CopyOnWriteArrayList<>();
 			theLock = new ReentrantLock();
 			theWrappedOnElement = element -> {
-				CachedElement<E> cached = new CachedElement<>((OrderedObservableElement<E>) element);
+				CachedElement<E> cached = debug(new CachedElement<>((OrderedObservableElement<E>) element)).from("element", this)
+					.tag("wrapped", element).get();
 				theCache.add(cached.getIndex(), cached);
 				element.observe(new Observer<ObservableValueEvent<E>>() {
 					@Override

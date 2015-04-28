@@ -1,5 +1,6 @@
 package org.observe.datastruct;
 
+import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 
@@ -24,6 +25,10 @@ public interface ObservableMap<K, V> extends Map<K, V> {
 	 * @param <V> The type of value this entry stores
 	 */
 	public interface ObservableEntry<K, V> extends Map.Entry<K, V>, ObservableValue<V> {
+		@Override
+		default V get() {
+			return getValue();
+		}
 	}
 
 	/** @return The type of keys this map uses */
@@ -68,6 +73,41 @@ public interface ObservableMap<K, V> extends Map<K, V> {
 	/** @return An observable collection of all the values stored in this map */
 	default ObservableCollection<V> observeValues() {
 		return observeEntries().map(getValueType(), Map.Entry<K, V>::getValue);
+	}
+
+	@Override
+	default int size() {
+		return observeEntries().size();
+	}
+
+	@Override
+	default boolean isEmpty() {
+		return observeEntries().isEmpty();
+	}
+
+	@Override
+	default boolean containsKey(Object key) {
+		return observeEntries().find(entry -> java.util.Objects.equals(entry.getKey(), key)).get() != null;
+	}
+
+	@Override
+	default boolean containsValue(Object value) {
+		return observeEntries().find(entry -> java.util.Objects.equals(entry.getValue(), value)).get() != null;
+	}
+
+	@Override
+	default V get(Object key) {
+		return observeEntries().find(entry -> java.util.Objects.equals(entry.getKey(), key)).mapV(Map.Entry<K, V>::getValue).get();
+	}
+
+	@Override
+	default Set<K> keySet() {
+		return observeKeys();
+	}
+
+	@Override
+	default Collection<V> values() {
+		return observeValues();
 	}
 
 	@Override

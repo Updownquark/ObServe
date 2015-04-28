@@ -1,5 +1,8 @@
 package org.observe.collect;
 
+import static org.observe.ObservableDebug.debug;
+import static org.observe.ObservableDebug.label;
+
 import java.util.*;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiFunction;
@@ -25,20 +28,20 @@ import prisms.lang.Type;
  * @param <E> The type of element in the collection
  */
 public interface ObservableOrderedCollection<E> extends ObservableCollection<E> {
-	/** @return An observable that returns null whenever any elements in it are added, removed or changed */
+	/** @return An observable that returns null whenever any elements in this collection are added, removed or changed */
 	@Override
 	default Observable<? extends OrderedCollectionChangeEvent<E>> changes() {
-		return new OrderedCollectionChangesObservable<>(this);
+		return debug(new OrderedCollectionChangesObservable<>(this)).from("changes", this).get();
 	}
 
 	/**
 	 * @param filter The filter function
-	 * @return The first value in this list passing the filter, or null if none of this list's elements pass
+	 * @return The first value in this collection passing the filter, or null if none of this collection's elements pass
 	 */
 	@Override
 	default ObservableValue<E> find(Predicate<E> filter) {
 		ObservableOrderedCollection<E> outer = this;
-		return new ObservableValue<E>() {
+		return debug(new ObservableValue<E>() {
 			private final Type type = outer.getType().isPrimitive() ? new Type(Type.getWrapperType(outer.getType().getBaseType())) : outer
 				.getType();
 
@@ -144,13 +147,13 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 			public String toString() {
 				return "find in " + ObservableOrderedCollection.this;
 			}
-		};
+		}).from("find", this).using("filter", filter).get();
 	}
 
-	/** @return The first value in this list, or null if this list is empty */
+	/** @return The first value in this collection, or null if this collection is empty */
 	default ObservableValue<E> first() {
 		ObservableOrderedCollection<E> outer = this;
-		return new ObservableValue<E>() {
+		return debug(new ObservableValue<E>() {
 			private final Type type = outer.getType().isPrimitive() ? new Type(Type.getWrapperType(outer.getType().getBaseType())) : outer
 				.getType();
 
@@ -186,8 +189,10 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 								if(session == null) {
 									observer.onNext(createEvent((E) oldValue[0], event.getValue(), event));
 									oldValue[0] = event.getValue();
-								} else
+								} else {
+									session.put(key, "hasNewFirst", true);
 									session.put(key, "newFirst", event.getValue());
+								}
 							}
 
 							@Override
@@ -199,8 +204,10 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 								if(session == null) {
 									observer.onNext(createEvent((E) oldValue[0], newValue, event));
 									oldValue[0] = newValue;
-								} else
+								} else {
+									session.put(key, "hasNewFirst", true);
 									session.put(key, "newFirst", newValue);
+								}
 							}
 						});
 					}
@@ -209,7 +216,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 					@Override
 					public <V2 extends ObservableValueEvent<CollectionSession>> void onNext(V2 value) {
 						CollectionSession completed = value.getOldValue();
-						if(completed == null)
+						if(completed == null || completed.get(key, "hasNewFirst") == null)
 							return;
 						E newFirst = (E) completed.get(key, "newFirst");
 						if(newFirst != oldValue[0])
@@ -222,7 +229,99 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 					transSub.run();
 				};
 			}
-		};
+		}).from("first", this).get();
+	}
+
+	/** @return The last value in this collection, or null if this collection is empty */
+	default ObservableValue<E> last() {
+		ObservableOrderedCollection<E> outer = this;
+		return debug(new ObservableValue<E>() {
+			private final Type type = outer.getType().isPrimitive() ? new Type(Type.getWrapperType(outer.getType().getBaseType())) : outer
+				.getType();
+
+			@Override
+			public Type getType() {
+				return type;
+			}
+
+			@Override
+			public E get() {
+				Iterator<E> iter = iterator();
+				if(!iter.hasNext())
+					return null;
+				E ret = null;
+				do {
+					ret = iter.next();
+				} while(iter.hasNext());
+				return ret;
+			}
+
+			@Override
+			public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
+				if(isEmpty())
+					observer.onNext(createEvent(null, null, null));
+				Object key = new Object();
+				Object [] oldValue = new Object[1];
+				Runnable collSub = ObservableOrderedCollection.this.onElement(new Consumer<ObservableElement<E>>() {
+					@Override
+					public void accept(ObservableElement<E> element) {
+						OrderedObservableElement<E> orderedEl = (OrderedObservableElement<E>) element;
+						orderedEl.observe(new Observer<ObservableValueEvent<E>>() {
+							private OrderedObservableElement<E> lastElement;
+
+							@Override
+							public <V2 extends ObservableValueEvent<E>> void onNext(V2 event) {
+								if(lastElement != null && orderedEl.getIndex() < lastElement.getIndex())
+									return;
+								CollectionSession session = getSession().get();
+								if(session == null) {
+									observer.onNext(createEvent((E) oldValue[0], event.getValue(), event));
+									oldValue[0] = event.getValue();
+								} else {
+									session.put(key, "hasNewLast", true);
+									session.put(key, "newLast", event.getValue());
+								}
+							}
+
+							@Override
+							public <V2 extends ObservableValueEvent<E>> void onCompleted(V2 event) {
+								if(orderedEl != lastElement)
+									return;
+								CollectionSession session = getSession().get();
+								if(session == null) {
+									E newValue = get();
+									observer.onNext(createEvent((E) oldValue[0], newValue, event));
+									oldValue[0] = newValue;
+								} else {
+									session.put(key, "hasNewLast", true);
+									session.put(key, "findNewLast", true);
+								}
+							}
+						});
+					}
+				});
+				Runnable transSub = getSession().observe(new Observer<ObservableValueEvent<CollectionSession>>() {
+					@Override
+					public <V2 extends ObservableValueEvent<CollectionSession>> void onNext(V2 value) {
+						CollectionSession completed = value.getOldValue();
+						if(completed == null || completed.get(key, "hasNewLast") == null)
+							return;
+						E newLast;
+						if(completed.get(key, "findNewLast") != null)
+							newLast = get();
+						else
+							newLast = (E) completed.get(key, "newLast");
+						if(newLast != oldValue[0])
+							return;
+						observer.onNext(createEvent((E) oldValue[0], newLast, value));
+					}
+				});
+				return () -> {
+					collSub.run();
+					transSub.run();
+				};
+			}
+		}).from("last", this).get();
 	}
 
 	@Override
@@ -268,7 +367,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 				return theTransactionManager.onElement(outer, arg, element -> observer.accept(element.combineV(func, arg)));
 			}
 		}
-		return new CombinedObservableCollection();
+		return debug(new CombinedObservableCollection()).from("combine", this).from("with", arg).using("combination", func).get();
 	}
 
 	/**
@@ -303,10 +402,10 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 			@Override
 			public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
-				return theTransactionManager.onElement(outer, refresh, element -> observer.accept(element.refireWhen(refresh)));
+				return theTransactionManager.onElement(outer, refresh, element -> observer.accept(element.refresh(refresh)));
 			}
 		};
-		return new RefreshingCollection();
+		return debug(new RefreshingCollection()).from("refresh", this).from("on", refresh).get();
 	}
 
 	@Override
@@ -360,14 +459,14 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 				return outer.onElement(element -> observer.accept(element.mapV(map)));
 			}
 		}
-		return new MappedObservableCollection();
+		return debug(new MappedObservableCollection()).from("map", this).using("map", map).get();
 	}
 
 	@Override
 	default ObservableOrderedCollection<E> filter(Function<? super E, Boolean> filter) {
-		return filterMap(value -> {
+		return label(filterMap(value -> {
 			return (value != null && filter.apply(value)) ? value : null;
-		});
+		})).label("filter").tag("filter", filter).get();
 	}
 
 	@Override
@@ -429,7 +528,9 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
 				return outer.onElement(element -> {
 					OrderedObservableElement<E> outerElement = (OrderedObservableElement<E>) element;
-					FilteredOrderedElement<T, E> retElement = new FilteredOrderedElement<>(outerElement, map, type, theFilteredElements);
+					FilteredOrderedElement<T, E> retElement = debug(
+						new FilteredOrderedElement<>(outerElement, map, type, theFilteredElements)).from("element", this)
+						.tag("wrapped", element).get();
 					theFilteredElements.add(outerElement.getIndex(), retElement);
 					outerElement.completed().act(elValue -> theFilteredElements.remove(outerElement.getIndex()));
 					outerElement.act(elValue -> {
@@ -442,17 +543,17 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 				});
 			}
 		}
-		return new FilteredOrderedCollection();
+		return debug(new FilteredOrderedCollection()).from("filterMap", this).using("map", map).get();
 	}
 
 	@Override
 	default ObservableOrderedCollection<E> immutable() {
-		return new Immutable<>(this);
+		return debug(new Immutable<>(this)).from("immutable", this).get();
 	}
 
 	@Override
 	default ObservableOrderedCollection<E> cached(){
-		return new SafeCached<>(this);
+		return debug(new SafeCached<>(this)).from("cached", this).get();
 	}
 
 	/**
@@ -468,7 +569,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 				throw new IllegalArgumentException("No natural ordering for collection of type " + coll.getType());
 			compare = (Comparator<? super E>) (Comparable<Comparable<?>> o1, Comparable<Comparable<?>> o2) -> o1.compareTo(o2);
 		}
-		return new SortedObservableCollectionWrapper<>(coll, compare);
+		return debug(new SortedObservableCollectionWrapper<>(coll, compare)).from("sort", coll).using("compare", compare).get();
 	}
 
 	/**
@@ -682,7 +783,9 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 								}
 								Runnable subListSub = subListEvent.getValue().onElement(subElement -> {
 									OrderedObservableElement<E> subListEl = (OrderedObservableElement<E>) subElement;
-									FlattenedOrderedElement flatEl = new FlattenedOrderedElement(subListEl, subList);
+									FlattenedOrderedElement flatEl = debug(new FlattenedOrderedElement(subListEl, subList))
+										.from("element", this).tag("wrappedCollectionElement", subList)
+										.tag("wrappedSubElement", subListEl).get();
 									if(initializing[0]) {
 										int index = flatEl.getIndex();
 										while(initialElements.size() <= index)
@@ -709,7 +812,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 				return ret;
 			}
 		}
-		return new FlattenedObservableOrderedCollection();
+		return debug(new FlattenedObservableOrderedCollection()).from("flatten", list).using("compare", compare).get();
 	}
 
 	/**
@@ -944,7 +1047,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 		@Override
 		public void accept(ObservableElement<E> outerEl) {
-			SortedElementWrapper<E> newEl = new SortedElementWrapper<>(theList, outerEl, this, theAnchor);
+			SortedElementWrapper<E> newEl = debug(new SortedElementWrapper<>(theList, outerEl, this, theAnchor)).from("element", theList)
+				.tag("wrapped", outerEl).get();
 			if(theAnchor == null)
 				theAnchor = newEl;
 			theOuterObserver.accept(newEl);
@@ -1067,7 +1171,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 			theCache = new java.util.concurrent.CopyOnWriteArrayList<>();
 			theLock = new ReentrantLock();
 			theWrappedOnElement = element -> {
-				CachedElement<E> cached = new CachedElement<>((OrderedObservableElement<E>) element);
+				CachedElement<E> cached = debug(new CachedElement<>((OrderedObservableElement<E>) element)).from("element", this)
+					.tag("wrapped", element).get();
 				theCache.add(cached.getIndex(), cached);
 				element.observe(new Observer<ObservableValueEvent<E>>() {
 					@Override

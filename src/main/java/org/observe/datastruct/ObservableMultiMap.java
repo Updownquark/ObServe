@@ -123,7 +123,7 @@ public interface ObservableMultiMap<K, V> {
 	 * @param key The key to get the values for
 	 * @return The values (in the form of a {@link ObservableMultiEntry multi-entry}) stored for the given key
 	 */
-	default ObservableMultiEntry<K, V> get(K key) {
+	default ObservableMultiEntry<K, V> observe(K key) {
 		ObservableValue<ObservableMultiEntry<K, V>> existingEntry = observeEntries().find(
 			entry -> java.util.Objects.equals(entry.getKey(), key));
 		class WrappingMultiEntry extends java.util.AbstractCollection<V> implements ObservableMultiEntry<K, V> {
@@ -190,6 +190,10 @@ public interface ObservableMultiMap<K, V> {
 			}
 		}
 		return new WrappingMultiEntry();
+	}
+
+	/** @return An observable map of collections which mirrors the keys and values in this multi-map */
+	default ObservableMap<K, ObservableCollection<V>> asCollectionMap() {
 	}
 
 	/** @return An immutable copy of this map */
