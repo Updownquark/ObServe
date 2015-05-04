@@ -257,6 +257,7 @@ public final class ObservableDebug {
 
 	private static final ConcurrentHashMap<Thread, DebugState> theThreadDebug = new ConcurrentHashMap<>();
 	private static final org.observe.datastruct.DefaultObservableGraph<ObservableDebugWrapper, String> theObservables;
+	private static final ConcurrentHashMap<Class<?>, String> theModFunctions = new ConcurrentHashMap<>();
 
 	static {
 		if(DEBUG_ON)
@@ -314,21 +315,30 @@ public final class ObservableDebug {
 	public static <T> ObservableDerivationBuilder<T> debug(T observable) {
 		if(!DEBUG_ON)
 			return new NullDerivationBuilder<>(observable);
-		if(theObservables.getNodes().find(holder -> holder.getValue().observable.get() == observable).get() != null)
+		if(getGraphNode(observable) != null)
 			throw new IllegalStateException("Observable " + observable + " has already been added to debugging");
 		Map<String, Object> functions = new java.util.LinkedHashMap<>();
 		ObservableDebugWrapper newHolder = new ObservableDebugWrapper(observable, functions);
 		ObservableGraph.Node<ObservableDebugWrapper, String> newNode = theObservables.addNode(newHolder);
-		newHolder.observable.completed().act(value -> theObservables.removeNode(newNode));
+		newHolder.observable.observe(new Observer<Object>() {
+			@Override
+			public <V> void onNext(V value) {
+			}
+
+			@Override
+			public <V> void onCompleted(V value) {
+				theObservables.removeNode(newNode);
+			}
+		});
 		return new ObservableDerivationBuilder<T>() {
 			@Override
 			public ObservableDerivationBuilder<T> from(String relationship, Object... parents) {
 				for(Object parent : parents) {
-					ObservableGraph.Node<ObservableDebugWrapper, String> node = theObservables.getNodes()
-						.find(holder -> holder.getValue().observable.get() == parent).get();
-					if(node == null)
-						System.err.println("Derivation " + observable + "=" + parent + "." + relationship
-							+ " cannot be asserted. Parent not found");
+					ObservableGraph.Node<ObservableDebugWrapper, String> node = getGraphNode(parent);
+					if(node == null) {
+						debug(parent);
+						node = getGraphNode(parent);
+					}
 					theObservables.addEdge(node, newNode, true, relationship);
 				}
 				return this;
@@ -372,6 +382,17 @@ public final class ObservableDebug {
 	}
 
 	/**
+	 * @param observable The observable to get the graph node for
+	 * @return The graph node containing all debugging information stored for the given observable
+	 */
+	public static ObservableGraph.Node<ObservableDebugWrapper, String> getGraphNode(Object observable) {
+		for(ObservableGraph.Node<ObservableDebugWrapper, String> node : theObservables.getNodes())
+			if(node.getValue().observable == observable)
+				return node;
+		return null;
+	}
+
+	/**
 	 * Allows observables to be tagged in a custom way
 	 *
 	 * @param <T> The type of observable
@@ -381,8 +402,7 @@ public final class ObservableDebug {
 	public static <T> ObservableDerivationBuilder<T> label(T observable) {
 		if(!DEBUG_ON)
 			return new NullDerivationBuilder<>(observable);
-		ObservableGraph.Node<ObservableDebugWrapper, String> node = theObservables.getNodes()
-			.find(holder -> holder.getValue().observable.get() == observable).get();
+		ObservableGraph.Node<ObservableDebugWrapper, String> node = getGraphNode(observable);
 		if(node == null) {
 			System.err.println("Observable " + observable + " has not been added to debugging");
 			return new NullDerivationBuilder<>(observable);
@@ -422,7 +442,7 @@ public final class ObservableDebug {
 	 * @param observable The observable to get debug information for
 	 * @return A descriptor containing detailed debugging information for the given observable (if it has been registered)
 	 */
-	public DebugDescription desc(Object observable) {
+	public static DebugDescription desc(Object observable) {
 		if(!DEBUG_ON)
 			return null;
 		class NodeDebugDescription implements DebugDescription {
@@ -617,19 +637,36 @@ public final class ObservableDebug {
 				}
 			}
 		}
-		ObservableGraph.Node<ObservableDebugWrapper, String> node = theObservables.getNodes()
-			.find(holder -> holder.getValue().observable.get() == observable).get();
+		ObservableGraph.Node<ObservableDebugWrapper, String> node = getGraphNode(observable);
 		if(node == null)
 			return null;
 		return new NodeDebugDescription(node);
 	}
 
 	/** @return The graph of observable dependencies that the debugging framework knows about */
-	public ObservableGraph<ObservableDebugWrapper, String> getObservableGraph() {
+	public static ObservableGraph<ObservableDebugWrapper, String> getObservableGraph() {
 		if(DEBUG_ON)
 			return theObservables;
 		else
 			return ObservableGraph.empty(new Type(ObservableDebugWrapper.class), new Type(String.class));
+	}
+
+	/**
+	 * @param lambda The lambda to label by type
+	 * @param label The label for the given lambda type
+	 * @return The lambda
+	 */
+	public static <T> T lambda(T lambda, String label) {
+		theModFunctions.putIfAbsent(lambda.getClass(), label);
+		return lambda;
+	}
+
+	/**
+	 * @param lambda The lambda to get the label of
+	 * @return The label stored for the given lambda, if one exists
+	 */
+	public static String descLambda(Object lambda) {
+		return theModFunctions.get(lambda.getClass());
 	}
 
 	/**

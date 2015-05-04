@@ -1,8 +1,7 @@
 package org.observe.collect;
 
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 
 /**
  * Represents a set of changes to a collection with a common {@link CollectionChangeType type}.
@@ -17,23 +16,19 @@ public class CollectionChangeEvent<E> {
 	 * The values that were {@link CollectionChangeType#add added}, {@link CollectionChangeType#remove removed}, or
 	 * {@link CollectionChangeType#set changed} in the collection
 	 */
-	public final Collection<E> values;
+	public final List<E> values;
+
+	/** The old values from the {@link CollectionChangeType#set} events, or null if this is not a set event */
+	public final List<E> oldValues;
 
 	/**
 	 * @param aType The common type of the changes
 	 * @param val The values that were added, removed, or changed in the collection
+	 * @param oldVal The old values from the set events
 	 */
-	public CollectionChangeEvent(CollectionChangeType aType, Collection<E> val) {
+	public CollectionChangeEvent(CollectionChangeType aType, List<E> val, List<E> oldVal) {
 		type = aType;
-		values = Collections.unmodifiableCollection(val);
-	}
-
-	/**
-	 * @param aType The common type of the changes
-	 * @param val The values that were added, removed, or changed in the collection
-	 */
-	public CollectionChangeEvent(CollectionChangeType aType, E... val) {
-		type = aType;
-		values = Collections.unmodifiableCollection(Arrays.asList(val));
+		values = Collections.unmodifiableList(val);
+		oldValues = oldVal == null ? null : Collections.unmodifiableList(oldVal);
 	}
 }

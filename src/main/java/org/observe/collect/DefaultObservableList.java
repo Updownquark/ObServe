@@ -1,16 +1,23 @@
 package org.observe.collect;
 
-import java.util.*;
+import java.util.AbstractList;
+import java.util.ArrayList;
+import java.util.BitSet;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.RandomAccess;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 
-import org.observe.DefaultObservableValue;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
+import org.observe.util.DefaultTransactable;
+import org.observe.util.Transactable;
 import org.observe.util.Transaction;
 
 import prisms.lang.Type;
@@ -37,10 +44,8 @@ public class DefaultObservableList<E> extends AbstractList<E> implements Observa
 	private volatile ObservableElementImpl<E> theRemovedElement;
 	private volatile int theRemovedElementIndex;
 
-	private CollectionSession theSession;
-
 	private ObservableValue<CollectionSession> theSessionObservable;
-	private org.observe.Observer<ObservableValueEvent<CollectionSession>> theSessionController;
+	private Transactable theSessionController;
 
 	/**
 	 * Creates the list
@@ -48,22 +53,10 @@ public class DefaultObservableList<E> extends AbstractList<E> implements Observa
 	 * @param type The type of elements for this list
 	 */
 	public DefaultObservableList(Type type) {
-		this(type, new ReentrantReadWriteLock(), null);
+		this(type, new ReentrantReadWriteLock(), null, null);
 
-		theSessionObservable = new DefaultObservableValue<CollectionSession>() {
-			private final Type theSessionType = new Type(CollectionSession.class);
-
-			@Override
-			public Type getType() {
-				return theSessionType;
-			}
-
-			@Override
-			public CollectionSession get() {
-				return theSession;
-			}
-		};
-		theSessionController = ((DefaultObservableValue<CollectionSession>) theSessionObservable).control(null);
+		theSessionController = new DefaultTransactable(theLock.writeLock());
+		theSessionObservable = ((DefaultTransactable) theSessionController).getSession();
 	}
 
 	/**
@@ -72,11 +65,15 @@ public class DefaultObservableList<E> extends AbstractList<E> implements Observa
 	 * @param type The type of elements for this list
 	 * @param lock The lock for this list to use
 	 * @param session The session for this list to use (see {@link #getSession()})
+	 * @param sessionController The controller for the session. May be null, in which case the transactional methods in this collection will
+	 *            not actually create transactions.
 	 */
-	protected DefaultObservableList(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session) {
+	public DefaultObservableList(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
+		Transactable sessionController) {
 		theType = type;
 		theLock = lock;
 		theSessionObservable = session;
+		theSessionController = sessionController;
 
 		theValues = new ArrayList<>();
 		theElements = new ArrayList<>();
@@ -96,23 +93,11 @@ public class DefaultObservableList<E> extends AbstractList<E> implements Observa
 	}
 
 	private Transaction startTransactionImpl(Object cause) {
-		Lock lock = theLock.writeLock();
-		lock.lock();
-		theSession = new DefaultCollectionSession(cause);
-		theSessionController.onNext(new ObservableValueEvent<>(theSessionObservable, null, theSession, cause));
-		return new org.observe.util.Transaction() {
-			@Override
-			public void close() {
-				if(theLock.getWriteHoldCount() != 1) {
-					lock.unlock();
-					return;
-				}
-				CollectionSession session = theSession;
-				theSession = null;
-				theSessionController.onNext(new ObservableValueEvent<>(theSessionObservable, session, null, cause));
-				lock.unlock();
-			}
-		};
+		if(theSessionController == null) {
+			return () -> {
+			};
+		}
+		return theSessionController.startTransaction(cause);
 	}
 
 	@Override
@@ -421,72 +406,82 @@ public class DefaultObservableList<E> extends AbstractList<E> implements Observa
 	}
 
 	private void addAllImpl(Collection<? extends E> c) {
-		for(E e : c) {
-			E val = (E) theType.cast(e);
-			theValues.add(val);
-			ObservableElementImpl<E> newWrapper = new ObservableElementImpl<>(theType, val);
-			theElements.add(newWrapper);
-			fireNewElement(newWrapper);
+		try (Transaction trans = startTransactionImpl(null)) {
+			for(E e : c) {
+				E val = (E) theType.cast(e);
+				theValues.add(val);
+				ObservableElementImpl<E> newWrapper = new ObservableElementImpl<>(theType, val);
+				theElements.add(newWrapper);
+				fireNewElement(newWrapper);
+			}
 		}
 	}
 
 	private void addAllImpl(int index, Collection<? extends E> c) {
-		int idx = index;
-		for(E e : c) {
-			E val = (E) theType.cast(e);
-			theValues.add(idx, val);
-			ObservableElementImpl<E> newWrapper = new ObservableElementImpl<>(theType, val);
-			theElements.add(idx, newWrapper);
-			fireNewElement(newWrapper);
-			idx++;
+		try (Transaction trans = startTransactionImpl(null)) {
+			int idx = index;
+			for(E e : c) {
+				E val = (E) theType.cast(e);
+				theValues.add(idx, val);
+				ObservableElementImpl<E> newWrapper = new ObservableElementImpl<>(theType, val);
+				theElements.add(idx, newWrapper);
+				fireNewElement(newWrapper);
+				idx++;
+			}
 		}
 	}
 
 	private boolean removeAllImpl(Collection<?> c) {
-		boolean ret = false;
-		for(Object o : c) {
-			int idx = theValues.indexOf(o);
-			if(idx >= 0) {
-				ret = true;
-				theValues.remove(idx);
-				theRemovedElement = theElements.remove(idx);
-				theRemovedElementIndex = idx;
-				theRemovedElement.remove();
+		try (Transaction trans = startTransactionImpl(null)) {
+			boolean ret = false;
+			for(Object o : c) {
+				int idx = theValues.indexOf(o);
+				if(idx >= 0) {
+					ret = true;
+					theValues.remove(idx);
+					theRemovedElement = theElements.remove(idx);
+					theRemovedElementIndex = idx;
+					theRemovedElement.remove();
+				}
 			}
+			return ret;
 		}
-		return ret;
 	}
 
 	private boolean retainAllImpl(Collection<?> c) {
-		boolean ret = false;
-		BitSet keep = new BitSet();
-		for(Object o : c) {
-			int idx = theValues.indexOf(o);
-			if(idx >= 0)
-				keep.set(idx);
+		try (Transaction trans = startTransactionImpl(null)) {
+			boolean ret = false;
+			BitSet keep = new BitSet();
+			for(Object o : c) {
+				int idx = theValues.indexOf(o);
+				if(idx >= 0)
+					keep.set(idx);
+			}
+			ret = keep.nextClearBit(0) < theValues.size();
+			if(ret) {
+				for(int i = theValues.size() - 1; i >= 0; i--)
+					if(!keep.get(i)) {
+						theValues.remove(i);
+						theRemovedElement = theElements.remove(i);
+						theRemovedElementIndex = i;
+						theRemovedElement.remove();
+					}
+			}
+			return ret;
 		}
-		ret = keep.nextClearBit(0) < theValues.size();
-		if(ret) {
-			for(int i = theValues.size() - 1; i >= 0; i--)
-				if(!keep.get(i)) {
-					theValues.remove(i);
-					theRemovedElement = theElements.remove(i);
-					theRemovedElementIndex = i;
-					theRemovedElement.remove();
-				}
-		}
-		return ret;
 	}
 
 	private void clearImpl() {
-		theValues.clear();
-		ArrayList<ObservableElementImpl<E>> remove = new ArrayList<>();
-		remove.addAll(theElements);
-		theElements.clear();
-		for(int i = remove.size() - 1; i >= 0; i--) {
-			theRemovedElement = remove.get(i);
-			theRemovedElementIndex = i;
-			theRemovedElement.remove();
+		try (Transaction trans = startTransactionImpl(null)) {
+			theValues.clear();
+			ArrayList<ObservableElementImpl<E>> remove = new ArrayList<>();
+			remove.addAll(theElements);
+			theElements.clear();
+			for(int i = remove.size() - 1; i >= 0; i--) {
+				theRemovedElement = remove.get(i);
+				theRemovedElementIndex = i;
+				theRemovedElement.remove();
+			}
 		}
 	}
 

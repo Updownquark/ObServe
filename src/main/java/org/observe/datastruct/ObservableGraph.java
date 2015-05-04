@@ -17,6 +17,16 @@ public interface ObservableGraph<N, E> {
 		ObservableCollection<Edge<N, E>> getEdges();
 
 		N getValue();
+
+		/** @return The collection of edges going outward from this node */
+		default ObservableCollection<Edge<N, E>> getOutward() {
+			return getEdges().filter(edge -> edge.getStart() == Node.this);
+		}
+
+		/** @return The collection of edges going inward toward this node */
+		default ObservableCollection<Edge<N, E>> getInward() {
+			return getEdges().filter(edge -> edge.getEnd() == Node.this);
+		}
 	}
 
 	interface Edge<N, E> {

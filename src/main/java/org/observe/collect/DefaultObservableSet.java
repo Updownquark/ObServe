@@ -1,16 +1,22 @@
 package org.observe.collect;
 
-import java.util.*;
+import java.util.AbstractSet;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 
-import org.observe.DefaultObservableValue;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
+import org.observe.util.DefaultTransactable;
+import org.observe.util.Transactable;
 import org.observe.util.Transaction;
 
 import prisms.lang.Type;
@@ -34,9 +40,8 @@ public class DefaultObservableSet<E> extends AbstractSet<E> implements Observabl
 
 	private java.util.concurrent.ConcurrentHashMap<Consumer<? super ObservableElement<E>>, ConcurrentLinkedQueue<Runnable>> theObservers;
 
-	private CollectionSession theSession;
 	private ObservableValue<CollectionSession> theSessionObservable;
-	private org.observe.Observer<ObservableValueEvent<CollectionSession>> theSessionController;
+	private Transactable theSessionController;
 
 	/**
 	 * Creates the set
@@ -44,35 +49,27 @@ public class DefaultObservableSet<E> extends AbstractSet<E> implements Observabl
 	 * @param type The type of elements for this set
 	 */
 	public DefaultObservableSet(Type type) {
-		this(type, new ReentrantReadWriteLock(), null);
+		this(type, new ReentrantReadWriteLock(), null, null);
 
-		theSessionObservable = new DefaultObservableValue<CollectionSession>() {
-			private final Type theSessionType = new Type(CollectionSession.class);
-
-			@Override
-			public Type getType() {
-				return theSessionType;
-			}
-
-			@Override
-			public CollectionSession get() {
-				return theSession;
-			}
-		};
-		theSessionController = ((DefaultObservableValue<CollectionSession>) theSessionObservable).control(null);
+		theSessionController = new DefaultTransactable(theLock.writeLock());
+		theSessionObservable = ((DefaultTransactable) theSessionController).getSession();
 	}
 
 	/**
-	 * This constructor is for specifying some of the internals of the list.
+	 * This constructor is for specifying some of the internals of the collection.
 	 *
-	 * @param type The type of elements for this list
-	 * @param lock The lock for this list to use
-	 * @param session The session for this list to use (see {@link #getSession()})
+	 * @param type The type of elements for this collection
+	 * @param lock The lock for this collection to use
+	 * @param session The session for this collection to use (see {@link #getSession()})
+	 * @param sessionController The controller for the session. May be null, in which case the transactional methods in this collection will
+	 *            not actually create transactions.
 	 */
-	protected DefaultObservableSet(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session) {
+	public DefaultObservableSet(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
+		Transactable sessionController) {
 		theType = type;
 		theLock = lock;
 		theSessionObservable = session;
+		theSessionController = sessionController;
 
 		theValues = new LinkedHashMap<>();
 		theObservers = new java.util.concurrent.ConcurrentHashMap<>();
@@ -91,23 +88,11 @@ public class DefaultObservableSet<E> extends AbstractSet<E> implements Observabl
 	}
 
 	private Transaction startTransactionImpl(Object cause) {
-		Lock lock = theLock.writeLock();
-		lock.lock();
-		theSession = new DefaultCollectionSession(cause);
-		theSessionController.onNext(new ObservableValueEvent<>(theSessionObservable, null, theSession, cause));
-		return new org.observe.util.Transaction() {
-			@Override
-			public void close() {
-				if(theLock.getWriteHoldCount() != 1) {
-					lock.unlock();
-					return;
-				}
-				CollectionSession session = theSession;
-				theSession = null;
-				theSessionController.onNext(new ObservableValueEvent<>(theSessionObservable, session, null, cause));
-				lock.unlock();
-			}
-		};
+		if(theSessionController == null) {
+			return () -> {
+			};
+		}
+		return theSessionController.startTransaction(cause);
 	}
 
 	@Override

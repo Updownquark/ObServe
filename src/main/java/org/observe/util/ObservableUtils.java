@@ -6,7 +6,11 @@ import java.util.function.Consumer;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
-import org.observe.collect.*;
+import org.observe.collect.CollectionSession;
+import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableElement;
+import org.observe.collect.ObservableList;
+import org.observe.collect.OrderedObservableElement;
 
 import prisms.lang.Type;
 
@@ -207,5 +211,14 @@ public class ObservableUtils {
 			}
 		}
 		return new FlattenedCollection();
+	}
+
+	/**
+	 * @param event The event to wrap
+	 * @param wrapper The wrapper observable to wrap the event for
+	 * @return An event with the same values as the given event, but created by the given observable
+	 */
+	public static <T> ObservableValueEvent<T> wrap(ObservableValueEvent<? extends T> event, ObservableValue<T> wrapper) {
+		return wrapper.createEvent(event.getOldValue(), event.getValue(), event.getCause());
 	}
 }

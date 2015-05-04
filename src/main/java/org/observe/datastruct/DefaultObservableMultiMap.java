@@ -1,13 +1,21 @@
 package org.observe.datastruct;
 
-import java.util.*;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import org.observe.DefaultObservableValue;
 import org.observe.ObservableValue;
-import org.observe.ObservableValueEvent;
-import org.observe.collect.*;
+import org.observe.collect.CollectionSession;
+import org.observe.collect.DefaultObservableList;
+import org.observe.collect.DefaultObservableSet;
+import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableSet;
+import org.observe.collect.TransactableList;
+import org.observe.util.DefaultTransactable;
 import org.observe.util.Transaction;
 
 import prisms.lang.Type;
@@ -25,7 +33,7 @@ public class DefaultObservableMultiMap<K, V> implements ObservableMultiMap<K, V>
 		private final K theKey;
 
 		DefaultMultiMapEntry(K key) {
-			super(theValueType, theLock, theSessionObservable);
+			super(theValueType, theLock, theSessionController.getSession(), theSessionController);
 			theKey = key;
 		}
 
@@ -60,9 +68,7 @@ public class DefaultObservableMultiMap<K, V> implements ObservableMultiMap<K, V>
 	private final Type theKeyType;
 	private final Type theValueType;
 
-	private CollectionSession theSession;
-	private DefaultObservableValue<CollectionSession> theSessionObservable;
-	private org.observe.Observer<ObservableValueEvent<CollectionSession>> theSessionController;
+	private DefaultTransactable theSessionController;
 
 	private final ReentrantReadWriteLock theLock;
 
@@ -78,25 +84,10 @@ public class DefaultObservableMultiMap<K, V> implements ObservableMultiMap<K, V>
 		theKeyType = keyType;
 		theValueType = valueType;
 		theLock=new ReentrantReadWriteLock();
-		theSessionObservable = new DefaultObservableValue<CollectionSession>() {
-			private final Type theSessionType = new Type(CollectionSession.class);
-
-			@Override
-			public Type getType() {
-				return theSessionType;
-			}
-
-			@Override
-			public CollectionSession get() {
-				return theSession;
-			}
-		};
-		theSessionController = theSessionObservable.control(null);
+		theSessionController = new DefaultTransactable(theLock.writeLock());
 
 		theEntries = new DefaultObservableSet<ObservableMultiEntry<K, V>>(new Type(ObservableMultiEntry.class, theKeyType, theKeyType),
-			theLock,
-			theSessionObservable) {
-		};
+			theLock, theSessionController.getSession(), theSessionController);
 		theEntryController = ((DefaultObservableSet<ObservableMultiEntry<K, V>>) theEntries).control(null);
 	}
 
@@ -112,7 +103,7 @@ public class DefaultObservableMultiMap<K, V> implements ObservableMultiMap<K, V>
 
 	@Override
 	public ObservableValue<CollectionSession> getSession() {
-		return theSessionObservable;
+		return theSessionController.getSession();
 	}
 
 	@Override
@@ -122,23 +113,7 @@ public class DefaultObservableMultiMap<K, V> implements ObservableMultiMap<K, V>
 
 	@Override
 	public Transaction startTransaction(Object cause) {
-		Lock lock = theLock.writeLock();
-		lock.lock();
-		theSession = new DefaultCollectionSession(cause);
-		theSessionController.onNext(new ObservableValueEvent<>(theSessionObservable, null, theSession, cause));
-		return new org.observe.util.Transaction() {
-			@Override
-			public void close() {
-				if(theLock.getWriteHoldCount() != 1) {
-					lock.unlock();
-					return;
-				}
-				CollectionSession session = theSession;
-				theSession = null;
-				theSessionController.onNext(new ObservableValueEvent<>(theSessionObservable, session, null, cause));
-				lock.unlock();
-			}
-		};
+		return theSessionController.startTransaction(cause);
 	}
 
 	@Override

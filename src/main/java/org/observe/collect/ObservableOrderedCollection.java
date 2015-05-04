@@ -3,7 +3,15 @@ package org.observe.collect;
 import static org.observe.ObservableDebug.debug;
 import static org.observe.ObservableDebug.label;
 
-import java.util.*;
+import java.util.AbstractCollection;
+import java.util.ArrayList;
+import java.util.BitSet;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -11,8 +19,10 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-import org.observe.*;
+import org.observe.ComposedObservableValue;
 import org.observe.Observable;
+import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.util.ListenerSet;
 
@@ -61,23 +71,21 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 			@Override
 			public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
-				if(isEmpty())
-					observer.onNext(new ObservableValueEvent<>(this, null, null, null));
 				final Object key = new Object();
+				int [] index = new int[] {-1};
 				Runnable collSub = ObservableOrderedCollection.this.onElement(new Consumer<ObservableElement<E>>() {
 					private E theValue;
-					private int theIndex = -1;
 
 					@Override
 					public void accept(ObservableElement<E> element) {
-						element.subscribe(new Observer<ObservableValueEvent<E>>() {
+						element.observe(new Observer<ObservableValueEvent<E>>() {
 							@Override
 							public <V3 extends ObservableValueEvent<E>> void onNext(V3 value) {
 								int listIndex = ((OrderedObservableElement<?>) value.getObservable()).getIndex();
-								if(theIndex < 0 || listIndex <= theIndex) {
+								if(index[0] < 0 || listIndex <= index[0]) {
 									if(filter.test(value.getValue()))
 										newBest(value.getValue(), listIndex);
-									else if(listIndex == theIndex)
+									else if(listIndex == index[0])
 										findNextBest(listIndex + 1);
 								}
 							}
@@ -85,17 +93,17 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 							@Override
 							public <V3 extends ObservableValueEvent<E>> void onCompleted(V3 value) {
 								int listIndex = ((OrderedObservableElement<?>) value.getObservable()).getIndex();
-								if(listIndex == theIndex) {
+								if(listIndex == index[0]) {
 									findNextBest(listIndex + 1);
-								} else if(listIndex < theIndex)
-									theIndex--;
+								} else if(listIndex < index[0])
+									index[0]--;
 							}
 
-							private void findNextBest(int index) {
+							private void findNextBest(int newIndex) {
 								boolean found = false;
 								java.util.Iterator<E> iter = ObservableOrderedCollection.this.iterator();
 								int idx = 0;
-								for(idx = 0; iter.hasNext() && idx < index; idx++)
+								for(idx = 0; iter.hasNext() && idx < newIndex; idx++)
 									iter.next();
 								for(; iter.hasNext(); idx++) {
 									E val = iter.next();
@@ -111,10 +119,10 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 						});
 					}
 
-					void newBest(E value, int index) {
+					void newBest(E value, int newIndex) {
 						E oldValue = theValue;
 						theValue = value;
-						theIndex = index;
+						index[0] = newIndex;
 						CollectionSession session = getSession().get();
 						if(session == null)
 							observer.onNext(createEvent(oldValue, theValue, null));
@@ -124,6 +132,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 						}
 					}
 				});
+				if(index[0] < 0)
+					observer.onNext(createEvent(null, null, null));
 				Runnable transSub = getSession().observe(new Observer<ObservableValueEvent<CollectionSession>>() {
 					@Override
 					public <V2 extends ObservableValueEvent<CollectionSession>> void onNext(V2 value) {
@@ -328,7 +338,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	default <T, V> ObservableOrderedCollection<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
 		ObservableOrderedCollection<E> outer = this;
 		class CombinedObservableCollection extends AbstractCollection<V> implements ObservableOrderedCollection<V> {
-			private final DefaultTransactionManager theTransactionManager = new DefaultTransactionManager(outer);
+			private final SubCollectionTransactionManager theTransactionManager = new SubCollectionTransactionManager(outer);
 
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
@@ -378,7 +388,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	default ObservableOrderedCollection<E> refresh(Observable<?> refresh) {
 		ObservableOrderedCollection<E> outer = this;
 		class RefreshingCollection extends AbstractCollection<E> implements ObservableOrderedCollection<E> {
-			private final DefaultTransactionManager theTransactionManager = new DefaultTransactionManager(outer);
+			private final SubCollectionTransactionManager theTransactionManager = new SubCollectionTransactionManager(outer);
 
 			@Override
 			public Type getType() {

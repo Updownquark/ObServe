@@ -2,6 +2,7 @@ package org.observe;
 
 import static org.observe.ObservableDebug.debug;
 import static org.observe.ObservableDebug.label;
+import static org.observe.ObservableDebug.lambda;
 
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -121,9 +122,9 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @return The new observable whose value is a function of this observable's value
 	 */
 	default <R> ObservableValue<R> mapV(Type type, Function<? super T, R> function, boolean filterNull) {
-		return debug(new ComposedObservableValue<R>(type, args -> {
+		return debug(new ComposedObservableValue<R>(type, lambda(args -> {
 			return function.apply((T) args[0]);
-		}, filterNull, this)).from("map", this).using("map", function).tag("filterNull", filterNull).get();
+		}, "mapV"), filterNull, this)).from("map", this).using("map", function).tag("filterNull", filterNull).get();
 	};
 
 	/**
@@ -153,9 +154,9 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 */
 	default <U, R> ObservableValue<R> combineV(Type type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		boolean combineNull) {
-		return debug(new ComposedObservableValue<R>(type, args -> {
+		return debug(new ComposedObservableValue<R>(type, lambda(args -> {
 			return function.apply((T) args[0], (U) args[1]);
-		}, combineNull, this, arg)).from("combine", this).from("with", arg).using("combination", function)
+		}, "combineV"), combineNull, this, arg)).from("combine", this).from("with", arg).using("combination", function)
 		.tag("combineNull", combineNull).get();
 	}
 
@@ -211,9 +212,9 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 */
 	default <U, V, R> ObservableValue<R> combineV(Type type, TriFunction<? super T, ? super U, ? super V, R> function,
 		ObservableValue<U> arg2, ObservableValue<V> arg3, boolean combineNull) {
-		return debug(new ComposedObservableValue<R>(type, args -> {
+		return debug(new ComposedObservableValue<R>(type, lambda(args -> {
 			return function.apply((T) args[0], (U) args[1], (V) args[2]);
-		}, combineNull, this, arg2, arg3)).from("combine", this).from("with", arg2).from("with", arg3)
+		}, "combineV"), combineNull, this, arg2, arg3)).from("combine", this).from("with", arg2).from("with", arg3)
 		.using("combination", function).tag("combineNull", combineNull).get();
 	}
 

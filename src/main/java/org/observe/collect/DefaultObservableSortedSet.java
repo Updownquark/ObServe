@@ -1,15 +1,23 @@
 package org.observe.collect;
 
-import java.util.*;
+import java.util.AbstractSet;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.NavigableSet;
+import java.util.SortedSet;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 
-import org.observe.DefaultObservableValue;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
+import org.observe.util.DefaultTransactable;
+import org.observe.util.Transactable;
 import org.observe.util.Transaction;
 
 import prisms.lang.Type;
@@ -32,9 +40,9 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 
 	private java.util.concurrent.ConcurrentHashMap<Consumer<? super ObservableElement<E>>, ConcurrentLinkedQueue<Runnable>> theObservers;
 
-	private CollectionSession theSession;
-	private DefaultObservableValue<CollectionSession> theSessionObservable;
-	private org.observe.Observer<ObservableValueEvent<CollectionSession>> theSessionController;
+	private ObservableValue<CollectionSession> theSessionObservable;
+
+	private Transactable theSessionController;
 
 	/**
 	 * Creates the set
@@ -42,26 +50,30 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 	 * @param type The type of elements for this set
 	 */
 	public DefaultObservableSortedSet(Type type) {
+		this(type, new ReentrantReadWriteLock(), null, null);
+
+		theSessionController = new DefaultTransactable(theLock.writeLock());
+		theSessionObservable = ((DefaultTransactable) theSessionController).getSession();
+	}
+
+	/**
+	 * This constructor is for specifying some of the internals of the collection.
+	 *
+	 * @param type The type of elements for this collection
+	 * @param lock The lock for this collection to use
+	 * @param session The session for this collection to use (see {@link #getSession()})
+	 * @param sessionController The controller for the session. May be null, in which case the transactional methods in this collection will
+	 *            not actually create transactions.
+	 */
+	public DefaultObservableSortedSet(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
+		Transactable sessionController) {
 		theType = type;
+		theLock = lock;
+		theSessionObservable = session;
+		theSessionController = sessionController;
+
 		theValues = new TreeMap<>();
-
 		theObservers = new java.util.concurrent.ConcurrentHashMap<>();
-		theLock = new ReentrantReadWriteLock();
-
-		theSessionObservable = new DefaultObservableValue<CollectionSession>() {
-			private final Type theSessionType = new Type(CollectionSession.class);
-
-			@Override
-			public Type getType() {
-				return theSessionType;
-			}
-
-			@Override
-			public CollectionSession get() {
-				return theSession;
-			}
-		};
-		theSessionController = theSessionObservable.control(null);
 	}
 
 	@Override
@@ -77,23 +89,11 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 	}
 
 	private Transaction startTransactionImpl(Object cause) {
-		Lock lock = theLock.writeLock();
-		lock.lock();
-		theSession = new DefaultCollectionSession(cause);
-		theSessionController.onNext(new ObservableValueEvent<>(theSessionObservable, null, theSession, cause));
-		return new org.observe.util.Transaction() {
-			@Override
-			public void close() {
-				if(theLock.getWriteHoldCount() != 1) {
-					lock.unlock();
-					return;
-				}
-				CollectionSession session = theSession;
-				theSession = null;
-				theSessionController.onNext(new ObservableValueEvent<>(theSessionObservable, session, null, cause));
-				lock.unlock();
-			}
-		};
+		if(theSessionController == null) {
+			return () -> {
+			};
+		}
+		return theSessionController.startTransaction(cause);
 	}
 
 	@Override

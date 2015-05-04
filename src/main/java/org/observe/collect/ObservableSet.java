@@ -106,7 +106,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 	default ObservableSet<E> refresh(Observable<?> refresh) {
 		ObservableSet<E> outer = this;
 		class RefreshingCollection extends AbstractSet<E> implements ObservableSet<E> {
-			private final DefaultTransactionManager theTransactionManager = new DefaultTransactionManager(outer);
+			private final SubCollectionTransactionManager theTransactionManager = new SubCollectionTransactionManager(outer);
 
 			@Override
 			public Type getType() {

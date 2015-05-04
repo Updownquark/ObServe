@@ -11,7 +11,11 @@ import org.observe.DefaultObservableValue;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
-import org.observe.collect.*;
+import org.observe.collect.CollectionSession;
+import org.observe.collect.DefaultObservableSet;
+import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableSet;
+import org.observe.util.DefaultTransactable;
 import org.observe.util.Transaction;
 
 import prisms.lang.Type;
@@ -77,9 +81,7 @@ public class DefaultObservableMap<K, V> extends java.util.AbstractMap<K, V> impl
 	private final Type theKeyType;
 	private final Type theValueType;
 
-	private CollectionSession theSession;
-	private DefaultObservableValue<CollectionSession> theSessionObservable;
-	private org.observe.Observer<ObservableValueEvent<CollectionSession>> theSessionController;
+	private DefaultTransactable theSessionController;
 
 	private final ReentrantReadWriteLock theLock;
 	private final ObservableSet<ObservableEntry<K, V>> theEntries;
@@ -93,24 +95,10 @@ public class DefaultObservableMap<K, V> extends java.util.AbstractMap<K, V> impl
 		theKeyType = keyType;
 		theValueType = valueType;
 		theLock=new ReentrantReadWriteLock();
-		theSessionObservable = new DefaultObservableValue<CollectionSession>() {
-			private final Type theSessionType = new Type(CollectionSession.class);
+		theSessionController = new DefaultTransactable(theLock.writeLock());
 
-			@Override
-			public Type getType() {
-				return theSessionType;
-			}
-
-			@Override
-			public CollectionSession get() {
-				return theSession;
-			}
-		};
-		theSessionController = theSessionObservable.control(null);
-
-		theEntries = new DefaultObservableSet<ObservableEntry<K, V>>(new Type(ObservableEntry.class, theKeyType, theKeyType), theLock,
-			theSessionObservable) {
-		};
+		theEntries = new DefaultObservableSet<>(new Type(ObservableEntry.class, theKeyType, theKeyType), theLock,
+			theSessionController.getSession(), theSessionController);
 		theEntryController = ((DefaultObservableSet<ObservableEntry<K, V>>) theEntries).control(null);
 	}
 
@@ -126,7 +114,7 @@ public class DefaultObservableMap<K, V> extends java.util.AbstractMap<K, V> impl
 
 	@Override
 	public ObservableValue<CollectionSession> getSession() {
-		return theSessionObservable;
+		return theSessionController.getSession();
 	}
 
 	@Override
@@ -136,23 +124,7 @@ public class DefaultObservableMap<K, V> extends java.util.AbstractMap<K, V> impl
 
 	@Override
 	public Transaction startTransaction(Object cause) {
-		Lock lock = theLock.writeLock();
-		lock.lock();
-		theSession = new DefaultCollectionSession(cause);
-		theSessionController.onNext(new ObservableValueEvent<>(theSessionObservable, null, theSession, cause));
-		return new org.observe.util.Transaction() {
-			@Override
-			public void close() {
-				if(theLock.getWriteHoldCount() != 1) {
-					lock.unlock();
-					return;
-				}
-				CollectionSession session = theSession;
-				theSession = null;
-				theSessionController.onNext(new ObservableValueEvent<>(theSessionObservable, session, null, cause));
-				lock.unlock();
-			}
-		};
+		return theSessionController.startTransaction(cause);
 	}
 
 	@Override

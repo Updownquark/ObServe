@@ -48,11 +48,16 @@ public class DefaultCollectionSession implements CollectionSession {
 
 	@Override
 	public Object put(Object listener, String key, Object value) {
-		return theValues.put(new Key(listener, key), value);
+		if(value == null)
+			return theValues.remove(new Key(listener, key));
+		else
+			return theValues.put(new Key(listener, key), value);
 	}
 
 	@Override
 	public Object putIfAbsent(Object listener, String key, Object value) {
+		if(value == null)
+			return null;
 		return theValues.putIfAbsent(new Key(listener, key), value);
 	}
 }

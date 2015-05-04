@@ -1,6 +1,9 @@
 package org.observe.collect;
 
-import java.util.Collection;
+import static java.util.Arrays.asList;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
@@ -19,13 +22,18 @@ CollectionChangesObservable<E, OCCE> {
 		int index = ((OrderedObservableElement<E>) evt.getObservable()).getIndex();
 		if(session != null) {
 			CollectionChangeType preType = (CollectionChangeType) session.get(key, "type");
-			Collection<E> elements;
+			List<E> elements;
+			List<E> oldElements = null;
 			IntList indexes;
 			if(preType == null) {
 				session.put(key, "type", type);
 				elements = new java.util.ArrayList<>();
 				indexes = new IntList();
 				session.put(key, "elements", elements);
+				if(type == CollectionChangeType.set) {
+					oldElements = new ArrayList<>();
+					session.put(key, "oldElements", oldElements);
+				}
 				session.put(key, "indexes", indexes);
 			} else {
 				if(preType != type) {
@@ -34,16 +42,24 @@ CollectionChangesObservable<E, OCCE> {
 					elements = new java.util.ArrayList<>();
 					indexes = new IntList();
 					session.put(key, "elements", elements);
+					if(type == CollectionChangeType.set) {
+						oldElements = new ArrayList<>();
+						session.put(key, "oldElements", oldElements);
+					}
 					session.put(key, "indexes", indexes);
 				} else {
-					elements = (Collection<E>) session.get(key, "elements");
+					elements = (List<E>) session.get(key, "elements");
+					oldElements = (List<E>) session.get(key, "oldElements");
 					indexes = (IntList) session.get(key, "indexes");
 				}
 			}
 			elements.add(evt.getValue());
+			if(oldElements != null)
+				oldElements.add(evt.getOldValue());
 			indexes.add(index);
 		} else {
-			OrderedCollectionChangeEvent<E> toFire = new OrderedCollectionChangeEvent<>(type, evt.getValue(), index);
+			OrderedCollectionChangeEvent<E> toFire = new OrderedCollectionChangeEvent<>(type, asList(evt.getValue()),
+				type == CollectionChangeType.set ? asList(evt.getOldValue()) : null, new IntList(new int[] {index}));
 			observer.onNext((OCCE) toFire);
 		}
 	}
@@ -53,9 +69,10 @@ CollectionChangesObservable<E, OCCE> {
 		CollectionChangeType type = (CollectionChangeType) session.get(key, "type");
 		if(type == null)
 			return;
-		Collection<E> elements = (Collection<E>) session.put(key, "elements", null);
+		List<E> elements = (List<E>) session.put(key, "elements", null);
+		List<E> oldElements = (List<E>) session.put(key, "oldElements", null);
 		IntList indexes = (IntList) session.get(key, "indexes");
-		OrderedCollectionChangeEvent<E> evt = new OrderedCollectionChangeEvent<>(type, elements, indexes);
+		OrderedCollectionChangeEvent<E> evt = new OrderedCollectionChangeEvent<>(type, elements, oldElements, indexes);
 		observer.onNext((OCCE) evt);
 	}
 }

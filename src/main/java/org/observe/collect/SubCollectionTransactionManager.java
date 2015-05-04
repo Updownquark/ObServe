@@ -3,12 +3,16 @@ package org.observe.collect;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
-import org.observe.*;
+import org.observe.DefaultObservableValue;
+import org.observe.Observable;
+import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
+import org.observe.Observer;
 
 import prisms.lang.Type;
 
-/** Manages transactions for a collection in a thread-safe way */
-public class DefaultTransactionManager {
+/** Manages transactions for a derived collection in a thread-safe way */
+public class SubCollectionTransactionManager {
 	private final ReentrantLock theLock;
 
 	private CollectionSession theInternalSessionValue;
@@ -17,7 +21,7 @@ public class DefaultTransactionManager {
 	private final Observer<ObservableValueEvent<CollectionSession>> theSessionController;
 
 	/** @param collection The parent of the collection to manage the transactions for */
-	public DefaultTransactionManager(ObservableCollection<?> collection) {
+	public SubCollectionTransactionManager(ObservableCollection<?> collection) {
 		theLock = new ReentrantLock();
 		theInternalSession = new DefaultObservableValue<CollectionSession>() {
 			private final Type TYPE = new Type(CollectionSession.class);
@@ -44,7 +48,7 @@ public class DefaultTransactionManager {
 
 	/**
 	 * Installs an observer for a collection, wrapping refresh events in a transaction
-	 * 
+	 *
 	 * @param <E> The type of the elements in the collection
 	 * @param collection The parent of the collection to observe
 	 * @param refresh The observable to refresh the collection on

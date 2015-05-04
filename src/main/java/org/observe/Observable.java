@@ -1,6 +1,7 @@
 package org.observe;
 
 import static org.observe.ObservableDebug.debug;
+import static org.observe.ObservableDebug.lambda;
 
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
@@ -220,7 +221,7 @@ public interface Observable<T> {
 	 * @return An observable that provides the same values as this observable minus those that the filter function returns false for
 	 */
 	default Observable<T> filter(Function<? super T, Boolean> func) {
-		return filterMap(value -> (value != null && func.apply(value)) ? value : null);
+		return filterMap(lambda(value -> (value != null && func.apply(value)) ? value : null, "filter"));
 	}
 
 	/**
@@ -229,9 +230,9 @@ public interface Observable<T> {
 	 * @return An observable that provides the values of this observable, mapped by the given function
 	 */
 	default <R> Observable<R> map(Function<? super T, R> func) {
-		return debug(new ComposedObservable<R>(args -> {
+		return debug(new ComposedObservable<R>(lambda(args -> {
 			return func.apply((T) args[0]);
-		}, this)).from("mapped", this).using("map", func).get();
+		}, "map"), this)).from("mapped", this).using("map", func).get();
 	}
 
 	/**
@@ -284,9 +285,9 @@ public interface Observable<T> {
 	 * @return A new observable whose values are the specified combination of this observable and the others'
 	 */
 	default <V, R> Observable<R> combine(Observable<V> other, BiFunction<? super T, ? super V, R> func) {
-		return debug(new ComposedObservable<R>(args -> {
+		return debug(new ComposedObservable<R>(lambda(args -> {
 			return func.apply((T) args[0], (V) args[1]);
-		}, this, other)).from("combine-arg0", this).from("combine-arg1", other).using("combination", func).get();
+		}, "combine"), this, other)).from("combine-arg0", this).from("combine-arg1", other).using("combination", func).get();
 	}
 
 	/**

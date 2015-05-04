@@ -14,9 +14,15 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-import org.observe.*;
+import org.observe.ComposedObservableValue;
+import org.observe.Observable;
+import org.observe.ObservableDebug;
 import org.observe.ObservableDebug.D;
+import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
+import org.observe.Observer;
 import org.observe.util.ListenerSet;
+import org.observe.util.ObservableUtils;
 
 import prisms.lang.Type;
 
@@ -63,7 +69,8 @@ public interface ObservableCollection<E> extends Collection<E> {
 			@Override
 			public Runnable observe(Observer<? super ObservableValueEvent<Integer>> observer) {
 				ObservableValue<Integer> sizeObs = this;
-				return onElement(new Consumer<ObservableElement<E>>() {
+				boolean [] initialized = new boolean[1];
+				Runnable sub = onElement(new Consumer<ObservableElement<E>>() {
 					private AtomicInteger size = new AtomicInteger();
 
 					@Override
@@ -84,9 +91,18 @@ public interface ObservableCollection<E> extends Collection<E> {
 					}
 
 					private void fire(int oldSize, int newSize, Object cause) {
-						observer.onNext(new ObservableValueEvent<>(sizeObs, oldSize, newSize, cause));
+						if(initialized[0])
+							observer.onNext(new ObservableValueEvent<>(sizeObs, oldSize, newSize, cause));
 					}
 				});
+				initialized[0] = true;
+				observer.onNext(new ObservableValueEvent<>(sizeObs, 0, size(), null));
+				return sub;
+			}
+
+			@Override
+			public String toString() {
+				return ObservableCollection.this + ".size()";
 			}
 		}).from("size", this).get();
 	}
@@ -177,7 +193,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 
 	/**
 	 * @param filter The filter function
-	 * @return A collection containing all elements passing the given test
+	 * @return A collection containing all non-null elements passing the given test
 	 */
 	default ObservableCollection<E> filter(Function<? super E, Boolean> filter) {
 		return label(filterMap(value -> {
@@ -202,10 +218,13 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 */
 	default <T> ObservableCollection<T> filterMap(Type type, Function<? super E, T> map) {
 		ObservableCollection<E> outer = this;
+		if(type == null)
+			type = ComposedObservableValue.getReturnType(map);
+		Type fType = type;
 		class FilteredCollection extends AbstractCollection<T> implements ObservableCollection<T> {
 			@Override
 			public Type getType() {
-				return type;
+				return fType;
 			}
 
 			@Override
@@ -250,7 +269,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 			@Override
 			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
 				return outer.onElement(element -> {
-					FilteredElement<T, E> retElement = debug(new FilteredElement<>(element, map, type)).from("element", this)
+					FilteredElement<T, E> retElement = debug(new FilteredElement<>(element, map, fType)).from("element", this)
 						.tag("wrapped", element).get();
 					element.act(elValue -> {
 						if(!retElement.isIncluded()) {
@@ -394,7 +413,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	default <T, V> ObservableCollection<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
 		ObservableCollection<E> outer = this;
 		class CombinedObservableCollection extends AbstractCollection<V> implements ObservableCollection<V> {
-			private final DefaultTransactionManager theTransactionManager = new DefaultTransactionManager(outer);
+			private final SubCollectionTransactionManager theTransactionManager = new SubCollectionTransactionManager(outer);
 
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
@@ -443,7 +462,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	default ObservableCollection<E> refresh(Observable<?> refresh) {
 		ObservableCollection<E> outer = this;
 		class RefreshingCollection extends AbstractCollection<E> implements ObservableCollection<E>{
-			private final DefaultTransactionManager theTransactionManager = new DefaultTransactionManager(outer);
+			private final SubCollectionTransactionManager theTransactionManager = new SubCollectionTransactionManager(outer);
 
 			@Override
 			public Type getType() {
@@ -506,7 +525,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @param coll The collection to flatten
 	 * @return A collection containing all elements of all collections in the outer collection
 	 */
-	public static <T> ObservableCollection<T> flatten(ObservableCollection<? extends ObservableCollection<T>> coll) {
+	public static <T> ObservableCollection<T> flatten(ObservableCollection<? extends ObservableCollection<? extends T>> coll) {
 		class ComposedObservableCollection extends AbstractCollection<T> implements ObservableCollection<T> {
 			private final CombinedCollectionSessionObservable theSession = new CombinedCollectionSessionObservable(coll);
 
@@ -523,7 +542,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 			@Override
 			public int size() {
 				int ret = 0;
-				for(ObservableCollection<T> subColl : coll)
+				for(ObservableCollection<? extends T> subColl : coll)
 					ret += subColl.size();
 				return ret;
 			}
@@ -531,7 +550,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 			@Override
 			public Iterator<T> iterator() {
 				return new Iterator<T>() {
-					private Iterator<? extends ObservableCollection<T>> outerBacking = coll.iterator();
+					private Iterator<? extends ObservableCollection<? extends T>> outerBacking = coll.iterator();
 					private Iterator<? extends T> innerBacking;
 
 					@Override
@@ -552,32 +571,34 @@ public interface ObservableCollection<E> extends Collection<E> {
 
 			@Override
 			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
-				return coll.onElement(new Consumer<ObservableElement<? extends ObservableCollection<T>>>() {
-					private java.util.Map<ObservableCollection<T>, Runnable> subCollSubscriptions;
+				return coll.onElement(new Consumer<ObservableElement<? extends ObservableCollection<? extends T>>>() {
+					private java.util.Map<ObservableCollection<?>, Runnable> subCollSubscriptions;
 
 					{
 						subCollSubscriptions = new org.observe.util.ConcurrentIdentityHashMap<>();
 					}
 
 					@Override
-					public void accept(ObservableElement<? extends ObservableCollection<T>> subColl) {
-						subColl.subscribe(new Observer<ObservableValueEvent<? extends ObservableCollection<T>>>() {
+					public void accept(ObservableElement<? extends ObservableCollection<? extends T>> subColl) {
+						subColl.subscribe(new Observer<ObservableValueEvent<? extends ObservableCollection<? extends T>>>() {
 							@Override
-							public <V2 extends ObservableValueEvent<? extends ObservableCollection<T>>> void onNext(V2 subCollEvent) {
+							public <V2 extends ObservableValueEvent<? extends ObservableCollection<? extends T>>> void onNext(
+								V2 subCollEvent) {
 								if(subCollEvent.getOldValue() != null && subCollEvent.getOldValue() != subCollEvent.getValue()) {
 									Runnable subCollSub = subCollSubscriptions.get(subCollEvent.getOldValue());
 									if(subCollSub != null)
 										subCollSub.run();
 								}
 								Runnable subCollSub = subCollEvent.getValue().onElement(
-									subElement -> observer.accept(debug(new FlattenedElement<>(subElement, subColl))
+									subElement -> observer.accept(debug(new FlattenedElement<>((ObservableElement<T>) subElement, subColl))
 										.from("element", ComposedObservableCollection.this).tag("wrappedCollectionElement", subColl)
 										.tag("wrappedSubElement", subElement).get()));
 								subCollSubscriptions.put(subCollEvent.getValue(), subCollSub);
 							}
 
 							@Override
-							public <V2 extends ObservableValueEvent<? extends ObservableCollection<T>>> void onCompleted(V2 subCollEvent) {
+							public <V2 extends ObservableValueEvent<? extends ObservableCollection<? extends T>>> void onCompleted(
+								V2 subCollEvent) {
 								subCollSubscriptions.remove(subCollEvent.getValue()).run();
 							}
 						});
@@ -593,7 +614,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @param colls The collections to flatten
 	 * @return A collection containing all elements of the given collections
 	 */
-	public static <T> ObservableCollection<T> flattenCollections(ObservableCollection<T>... colls) {
+	public static <T> ObservableCollection<T> flattenCollections(ObservableCollection<? extends T>... colls) {
 		return flatten(ObservableList.constant(new Type(ObservableCollection.class, new Type(Object.class, true)), colls));
 	}
 
@@ -756,14 +777,15 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 */
 	public class FlattenedElement<T> implements ObservableElement<T> {
 		private final ObservableElement<T> subElement;
-		private final ObservableElement<? extends ObservableCollection<T>> subCollectionEl;
+
+		private final ObservableElement<? extends ObservableCollection<? extends T>> subCollectionEl;
 		private boolean isRemoved;
 
 		/**
 		 * @param subEl The sub-collection element to wrap
 		 * @param subColl The element containing the sub-collection
 		 */
-		protected FlattenedElement(ObservableElement<T> subEl, ObservableElement<? extends ObservableCollection<T>> subColl) {
+		protected FlattenedElement(ObservableElement<T> subEl, ObservableElement<? extends ObservableCollection<? extends T>> subColl) {
 			if(subEl == null)
 				throw new NullPointerException();
 			subElement = subEl;
@@ -772,7 +794,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 		}
 
 		/** @return The element in the outer collection containing the inner collection that contains this element's wrapped element */
-		protected ObservableElement<? extends ObservableCollection<T>> getSubCollectionElement() {
+		protected ObservableElement<? extends ObservableCollection<? extends T>> getSubCollectionElement() {
 			return subCollectionEl;
 		}
 
@@ -803,7 +825,17 @@ public interface ObservableCollection<E> extends Collection<E> {
 
 		@Override
 		public Runnable observe(Observer<? super ObservableValueEvent<T>> observer2) {
-			return subElement.takeUntil(subCollectionEl.completed()).observe(observer2);
+			return subElement.takeUntil(subCollectionEl.completed()).observe(new Observer<ObservableValueEvent<T>>() {
+				@Override
+				public <V extends ObservableValueEvent<T>> void onNext(V event) {
+					observer2.onNext(ObservableUtils.wrap(event, FlattenedElement.this));
+				}
+
+				@Override
+				public <V extends ObservableValueEvent<T>> void onCompleted(V event) {
+					observer2.onCompleted(ObservableUtils.wrap(event, FlattenedElement.this));
+				}
+			});
 		}
 
 		@Override

@@ -8,8 +8,16 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import org.junit.Test;
-import org.observe.collect.*;
+import org.observe.collect.DefaultObservableList;
+import org.observe.collect.DefaultObservableSet;
+import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableList;
+import org.observe.collect.ObservableOrderedCollection;
+import org.observe.collect.ObservableSet;
+import org.observe.collect.OrderedObservableElement;
+import org.observe.collect.TransactableList;
 import org.observe.util.ObservableUtils;
+import org.observe.util.Transaction;
 
 import prisms.lang.Type;
 
@@ -1199,7 +1207,7 @@ public class ObservableTest {
 
 		Integer [] received = new Integer[1];
 		ObservableUtils.flattenListValues(new Type(Integer.TYPE), list).find(value -> value % 3 == 0).value()
-			.act(value -> received[0] = value);
+		.act(value -> received[0] = value);
 		assertEquals(Integer.valueOf(3), received[0]);
 		value3.set(4, null);
 		assertEquals(null, received[0]);
@@ -1325,5 +1333,120 @@ public class ObservableTest {
 		control1.add(control1.indexOf(19), 16);
 		correct.add(correct.indexOf(17), 16);
 		assertEquals(correct, compare);
+	}
+
+	/** Tests basic transaction functionality on observable collections */
+	@Test
+	public void testTransactionsBasic() {
+		// Use find() and changes() to test
+		DefaultObservableList<Integer> list = new DefaultObservableList<>(new Type(Integer.TYPE));
+		testTransactionsByFind(list, list);
+		testTransactionsByChanges(list, list);
+	}
+
+	/** Tests transactions in {@link ObservableList#flatten(ObservableList) flattened} collections */
+	@Test
+	public void testTransactionsFlattened() {
+		DefaultObservableList<Integer> list1 = new DefaultObservableList<>(new Type(Integer.TYPE));
+		DefaultObservableList<Integer> list2 = new DefaultObservableList<>(new Type(Integer.TYPE));
+		ObservableList<Integer> flat = ObservableList.flattenLists(list1, list2);
+		list1.add(50);
+
+		testTransactionsByFind(flat, list2);
+		testTransactionsByChanges(flat, list2);
+	}
+
+	/**
+	 * Tests transactions caused by {@link ObservableCollection#combine(ObservableValue, java.util.function.BiFunction) combining} a list
+	 * with an observable value
+	 */
+	@Test
+	public void testTransactionsCombined() {
+		// TODO
+	}
+
+	/** Tests transactions caused by {@link ObservableCollection#refresh(Observable) refreshing} on an observable */
+	@Test
+	public void testTransactionsRefresh() {
+		// TODO
+	}
+
+	private void testTransactionsByFind(ObservableList<Integer> observable, TransactableList<Integer> controller) {
+		Integer [] found = new Integer[1];
+		int [] findCount = new int[1];
+		Runnable sub = observable.find(value -> value % 5 == 4).act(event -> {
+			findCount[0]++;
+			found[0] = event.getValue();
+		});
+
+		assertEquals(1, findCount[0]);
+		controller.add(0);
+		assertEquals(1, findCount[0]);
+		controller.add(3);
+		assertEquals(1, findCount[0]);
+		controller.add(9);
+		assertEquals(2, findCount[0]);
+		assertEquals(9, (int) found[0]);
+		Transaction trans = controller.startTransaction(null);
+		assertEquals(2, findCount[0]);
+		controller.add(0, 4);
+		assertEquals(2, findCount[0]);
+		trans.close();
+		assertEquals(3, findCount[0]);
+		assertEquals(4, (int) found[0]);
+
+		sub.run();
+		controller.clear();
+	}
+
+	private void testTransactionsByChanges(ObservableList<Integer> observable, TransactableList<Integer> controller) {
+		ArrayList<Integer> compare = new ArrayList<>(observable);
+		ArrayList<Integer> correct = new ArrayList<>(observable);
+		int [] changeCount = new int[1];
+		Runnable sub = observable.changes().act(event -> {
+			changeCount[0]++;
+			for(int i = 0; i < event.indexes.size(); i++) {
+				switch (event.type) {
+				case add:
+					compare.add(event.indexes.get(i), event.values.get(i));
+					break;
+				case remove:
+					compare.remove(event.indexes.get(i));
+					break;
+				case set:
+					compare.set(event.indexes.get(i), event.values.get(i));
+					break;
+				}
+			}
+		});
+		assertEquals(0, changeCount[0]);
+
+		for(int i = 0; i < 30; i++) {
+			assertEquals(i, changeCount[0]);
+			int toAdd = (int) (Math.random() * 2000000) - 1000000;
+			controller.add(toAdd);
+			correct.add(toAdd);
+			assertEquals(correct, new ArrayList<>(observable));
+			assertEquals(correct, compare);
+		}
+		assertEquals(30, changeCount[0]);
+
+		Transaction trans = controller.startTransaction(null);
+		controller.clear();
+		correct.clear();
+		correct.addAll(observable);
+		for(int i = 0; i < 30; i++) {
+			int toAdd = (int) (Math.random() * 2000000) - 1000000;
+			controller.add(toAdd);
+			correct.add(toAdd);
+			assertEquals(correct, new ArrayList<>(observable));
+		}
+		assertEquals(31, changeCount[0]);
+		trans.close();
+		assertEquals(32, changeCount[0]);
+		assertEquals(correct, compare);
+
+		sub.run();
+		controller.clear();
 	}
 }

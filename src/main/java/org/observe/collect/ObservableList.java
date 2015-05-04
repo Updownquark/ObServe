@@ -3,15 +3,21 @@ package org.observe.collect;
 import static org.observe.ObservableDebug.debug;
 import static org.observe.ObservableDebug.label;
 
-import java.util.*;
+import java.util.AbstractList;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import org.observe.*;
+import org.observe.ComposedObservableValue;
 import org.observe.Observable;
+import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.util.ListenerSet;
 
@@ -269,7 +275,7 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 	default <T, V> ObservableList<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
 		ObservableList<E> outer = this;
 		class CombinedObservableList extends AbstractList<V> implements ObservableList<V> {
-			private final DefaultTransactionManager theTransactionManager = new DefaultTransactionManager(outer);
+			private final SubCollectionTransactionManager theTransactionManager = new SubCollectionTransactionManager(outer);
 
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
@@ -307,7 +313,7 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 	default ObservableList<E> refresh(Observable<?> refresh) {
 		ObservableList<E> outer = this;
 		class RefreshingCollection extends AbstractList<E> implements ObservableList<E> {
-			private final DefaultTransactionManager theTransactionManager = new DefaultTransactionManager(outer);
+			private final SubCollectionTransactionManager theTransactionManager = new SubCollectionTransactionManager(outer);
 
 			@Override
 			public Type getType() {
@@ -449,7 +455,7 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 	 * @param list The list to flatten
 	 * @return A list containing all elements of all lists in the outer list
 	 */
-	public static <T> ObservableList<T> flatten(ObservableList<? extends ObservableList<T>> list) {
+	public static <T> ObservableList<T> flatten(ObservableList<? extends ObservableList<? extends T>> list) {
 		class FlattenedObservableList extends AbstractList<T> implements ObservableList<T> {
 			private final CombinedCollectionSessionObservable theSession = new CombinedCollectionSessionObservable(list);
 
@@ -466,7 +472,7 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 			@Override
 			public T get(int index) {
 				int idx = index;
-				for(ObservableList<T> subList : list) {
+				for(ObservableList<? extends T> subList : list) {
 					if(idx < subList.size())
 						return subList.get(idx);
 					else
@@ -478,22 +484,22 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 			@Override
 			public int size() {
 				int ret = 0;
-				for(ObservableList<T> subList : list)
+				for(ObservableList<? extends T> subList : list)
 					ret += subList.size();
 				return ret;
 			}
 
 			@Override
 			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
-				return list.onElement(new Consumer<ObservableElement<? extends ObservableList<T>>>() {
-					private Map<ObservableList<T>, Runnable> subListSubscriptions;
+				return list.onElement(new Consumer<ObservableElement<? extends ObservableList<? extends T>>>() {
+					private Map<ObservableList<?>, Runnable> subListSubscriptions;
 
 					{
 						subListSubscriptions = new org.observe.util.ConcurrentIdentityHashMap<>();
 					}
 
 					@Override
-					public void accept(ObservableElement<? extends ObservableList<T>> subList) {
+					public void accept(ObservableElement<? extends ObservableList<? extends T>> subList) {
 						class FlattenedListElement extends FlattenedElement<T> implements OrderedObservableElement<T> {
 							private final List<FlattenedListElement> subListElements;
 
@@ -520,11 +526,11 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 								return ret;
 							}
 						}
-						subList.subscribe(new Observer<ObservableValueEvent<? extends ObservableList<T>>>() {
+						subList.observe(new Observer<ObservableValueEvent<? extends ObservableList<? extends T>>>() {
 							private List<FlattenedListElement> subListEls = new java.util.ArrayList<>();
 
 							@Override
-							public <V2 extends ObservableValueEvent<? extends ObservableList<T>>> void onNext(V2 subListEvent) {
+							public <V2 extends ObservableValueEvent<? extends ObservableList<? extends T>>> void onNext(V2 subListEvent) {
 								if(subListEvent.getOldValue() != null && subListEvent.getOldValue() != subListEvent.getValue()) {
 									Runnable subListSub = subListSubscriptions.get(subListEvent.getOldValue());
 									if(subListSub != null)
@@ -543,7 +549,7 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 							}
 
 							@Override
-							public <V2 extends ObservableValueEvent<? extends ObservableList<T>>> void onCompleted(V2 subListEvent) {
+							public <V2 extends ObservableValueEvent<? extends ObservableList<? extends T>>> void onCompleted(V2 subListEvent) {
 								subListSubscriptions.remove(subListEvent.getValue()).run();
 							}
 						});
@@ -552,6 +558,18 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 			}
 		}
 		return debug(new FlattenedObservableList()).from("flatten", list).get();
+	}
+
+	/**
+	 * @param <T> The supertype of elements in the lists
+	 * @param lists The lists to flatten
+	 * @return An observable list that contains all the values of the given lists
+	 */
+	public static <T> ObservableList<T> flattenLists(ObservableList<? extends T>... lists) {
+		if(lists.length == 0)
+			return constant(new Type(Object.class));
+		ObservableList<ObservableList<? extends T>> wrapper = constant(new Type(ObservableList.class, lists[0].getType()), lists);
+		return flatten(wrapper);
 	}
 
 	/**

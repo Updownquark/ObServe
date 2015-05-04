@@ -5,13 +5,11 @@ import java.util.List;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import org.observe.DefaultObservableValue;
 import org.observe.ObservableValue;
-import org.observe.ObservableValueEvent;
 import org.observe.collect.CollectionSession;
-import org.observe.collect.DefaultCollectionSession;
 import org.observe.collect.DefaultObservableList;
 import org.observe.collect.ObservableCollection;
+import org.observe.util.DefaultTransactable;
 import org.observe.util.Transactable;
 import org.observe.util.Transaction;
 
@@ -78,9 +76,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Tran
 
 	private ReentrantReadWriteLock theLock;
 
-	private CollectionSession theSession;
-	private DefaultObservableValue<CollectionSession> theSessionObservable;
-	private org.observe.Observer<ObservableValueEvent<CollectionSession>> theSessionController;
+	private DefaultTransactable theSessionController;
 
 	private DefaultObservableList<Node<N, E>> theNodes;
 	private DefaultObservableList<Edge<N, E>> theEdges;
@@ -95,26 +91,13 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Tran
 	public DefaultObservableGraph(Type nodeType, Type edgeType) {
 		theLock = new ReentrantReadWriteLock();
 
-		theSessionObservable = new DefaultObservableValue<CollectionSession>() {
-			private final Type theSessionType = new Type(CollectionSession.class);
+		theSessionController = new DefaultTransactable(theLock.writeLock());
 
-			@Override
-			public Type getType() {
-				return theSessionType;
-			}
-
-			@Override
-			public CollectionSession get() {
-				return theSession;
-			}
-		};
-		theSessionController = theSessionObservable.control(null);
-
-		theNodes = new DefaultObservableList<Node<N, E>>(new Type(Node.class, nodeType, edgeType), theLock, theSessionObservable) {
-		};
+		theNodes = new DefaultObservableList<>(new Type(Node.class, nodeType, edgeType), theLock, theSessionController.getSession(),
+			theSessionController);
 		theNodeController = theNodes.control(null);
-		theEdges = new DefaultObservableList<Edge<N, E>>(new Type(Edge.class, nodeType, edgeType), theLock, theSessionObservable) {
-		};
+		theEdges = new DefaultObservableList<>(new Type(Edge.class, nodeType, edgeType), theLock, theSessionController.getSession(),
+			theSessionController);
 		theEdgeController = theEdges.control(null);
 	}
 
@@ -130,28 +113,12 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Tran
 
 	@Override
 	public ObservableValue<CollectionSession> getSession() {
-		return theSessionObservable;
+		return theSessionController.getSession();
 	}
 
 	@Override
 	public Transaction startTransaction(Object cause) {
-		Lock lock = theLock.writeLock();
-		lock.lock();
-		theSession = new DefaultCollectionSession(cause);
-		theSessionController.onNext(new ObservableValueEvent<>(theSessionObservable, null, theSession, cause));
-		return new org.observe.util.Transaction() {
-			@Override
-			public void close() {
-				if(theLock.getWriteHoldCount() != 1) {
-					lock.unlock();
-					return;
-				}
-				CollectionSession session = theSession;
-				theSession = null;
-				theSessionController.onNext(new ObservableValueEvent<>(theSessionObservable, session, null, cause));
-				lock.unlock();
-			}
-		};
+		return theSessionController.startTransaction(cause);
 	}
 
 	/**
@@ -168,7 +135,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Tran
 
 	/**
 	 * Adds a collection of nodes to a graph
-	 * 
+	 *
 	 * @param values The node values to add
 	 */
 	public void addNodes(Collection<? extends N> values) {
@@ -202,7 +169,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Tran
 	public boolean removeNode(Node<N, E> node) {
 		if(!theNodes.contains(node))
 			return false;
-		try (Transaction trans = startTransaction(null);) {
+		try (Transaction trans = startTransaction(null)) {
 			java.util.Iterator<Edge<N, E>> edgeIter = theEdgeController.iterator();
 			while(edgeIter.hasNext()) {
 				Edge<N, E> edge = edgeIter.next();
@@ -235,7 +202,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Tran
 		int index = theNodeController.indexOf(node);
 		if(index < 0)
 			return null;
-		try (Transaction trans = startTransaction(null);) {
+		try (Transaction trans = startTransaction(null)) {
 			theNodeController.add(index + 1, newNode);
 			java.util.ListIterator<Edge<N, E>> edgeIter = theEdgeController.listIterator();
 			while(edgeIter.hasNext()) {
@@ -247,6 +214,42 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Tran
 			}
 			theNodeController.remove(node);
 			return newNode;
+		}
+	}
+
+	/**
+	 * Fires a set event on the given node, perhaps signifying that its internal value has changed
+	 *
+	 * @param node The node to fire the event on
+	 */
+	public void reset(Node<N, E> node) {
+		Lock lock = theLock.writeLock();
+		lock.lock();
+		try {
+			int index = theNodeController.indexOf(node);
+			if(index < 0)
+				return;
+			theNodeController.set(index, node);
+		} finally {
+			lock.unlock();
+		}
+	}
+
+	/**
+	 * Fires a set event on the given edge, perhaps signifying that its internal value has changed
+	 *
+	 * @param edge The edge to fire the event on
+	 */
+	public void reset(Edge<N, E> edge) {
+		Lock lock = theLock.writeLock();
+		lock.lock();
+		try {
+			int index = theEdgeController.indexOf(edge);
+			if(index < 0)
+				return;
+			theEdgeController.set(index, edge);
+		} finally {
+			lock.unlock();
 		}
 	}
 
