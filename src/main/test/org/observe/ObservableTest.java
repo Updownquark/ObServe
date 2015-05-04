@@ -285,7 +285,7 @@ public class ObservableTest {
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
 		Runnable sub = set.onElement(element -> {
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
+			element.observe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
 					compare1.add(value.getValue());
@@ -337,7 +337,7 @@ public class ObservableTest {
 		List<Integer> correct = new ArrayList<>();
 		Runnable sub = list.onElement(element -> {
 			OrderedObservableElement<Integer> listEl = (OrderedObservableElement<Integer>) element;
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
+			element.observe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
 					compare1.add(listEl.getIndex(), value.getValue());
@@ -388,7 +388,7 @@ public class ObservableTest {
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
 		set.map(value -> value * 10).onElement(element -> {
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
+			element.observe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
 					compare1.add(value.getValue());
@@ -421,7 +421,7 @@ public class ObservableTest {
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
 		set.filter(value -> value != null && value % 2 == 0).onElement(element -> {
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
+			element.observe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
 					compare1.add(value.getValue());
@@ -460,7 +460,7 @@ public class ObservableTest {
 				return null;
 			return value / 2;
 		}).onElement(element -> {
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
+			element.observe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
 					compare1.add(value.getValue());
@@ -498,7 +498,7 @@ public class ObservableTest {
 		List<Integer> compare1 = new ArrayList<>();
 		Set<Integer> correct = new TreeSet<>();
 		set.combine(value1, (v1, v2) -> v1 * v2).filter(value -> value != null && value % 3 == 0).onElement(element -> {
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
+			element.observe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
 					if(event.getOldValue() != null)
@@ -562,7 +562,7 @@ public class ObservableTest {
 		Set<Integer> correct = new TreeSet<>();
 
 		unique.onElement(element -> {
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
+			element.observe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
 					if(event.getOldValue() != null)
@@ -637,7 +637,7 @@ public class ObservableTest {
 		List<Integer> compare1 = new ArrayList<>();
 		List<Integer> filtered = new ArrayList<>();
 		flat.onElement(element -> {
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
+			element.observe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
 					if(event.getOldValue() != null)
@@ -652,7 +652,7 @@ public class ObservableTest {
 			});
 		});
 		flat.filter(value -> value != null && value % 3 == 0).onElement(element -> {
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
+			element.observe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
 					if(event.getOldValue() != null)
@@ -809,7 +809,7 @@ public class ObservableTest {
 		List<Integer> correct = new ArrayList<>();
 		list.map(value -> value * 10).onElement(element -> {
 			OrderedObservableElement<Integer> listEl = (OrderedObservableElement<Integer>) element;
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
+			element.observe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
 					if(value.getOldValue() != null)
@@ -851,7 +851,7 @@ public class ObservableTest {
 		List<Integer> correct = new ArrayList<>();
 		list.filter(value -> value != null && value % 2 == 0).onElement(element -> {
 			OrderedObservableElement<Integer> listEl = (OrderedObservableElement<Integer>) element;
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
+			element.observe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
 					if(value.getOldValue() != null)
@@ -887,6 +887,136 @@ public class ObservableTest {
 		}
 	}
 
+	/** Slight variation on {@link #observableListFilter()} */
+	@Test
+	public void observableListFilter2() {
+		DefaultObservableList<Integer> list = new DefaultObservableList<>(new Type(Integer.TYPE));
+		List<Integer> controller = list.control(null);
+		List<Integer> compare0 = new ArrayList<>();
+		List<Integer> correct0 = new ArrayList<>();
+		List<Integer> compare1 = new ArrayList<>();
+		List<Integer> correct1 = new ArrayList<>();
+		List<Integer> compare2 = new ArrayList<>();
+		List<Integer> correct2 = new ArrayList<>();
+
+		list.filter(value -> value % 3 == 0).onElement(element -> {
+			OrderedObservableElement<Integer> oel = (OrderedObservableElement<Integer>) element;
+			element.observe(new Observer<ObservableValueEvent<Integer>>() {
+				@Override
+				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
+					if(value.getOldValue() != null)
+						compare0.set(oel.getIndex(), value.getValue());
+					else
+						compare0.add(oel.getIndex(), value.getValue());
+				}
+
+				@Override
+				public <V extends ObservableValueEvent<Integer>> void onCompleted(V value) {
+					compare0.remove(oel.getIndex());
+				}
+			});
+		});
+		list.filter(value -> value % 3 == 1).onElement(element -> {
+			OrderedObservableElement<Integer> oel = (OrderedObservableElement<Integer>) element;
+			element.observe(new Observer<ObservableValueEvent<Integer>>() {
+				@Override
+				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
+					if(value.getOldValue() != null)
+						compare1.set(oel.getIndex(), value.getValue());
+					else
+						compare1.add(oel.getIndex(), value.getValue());
+				}
+
+				@Override
+				public <V extends ObservableValueEvent<Integer>> void onCompleted(V value) {
+					compare1.remove(oel.getIndex());
+				}
+			});
+		});
+		list.filter(value -> value % 3 == 2).onElement(element -> {
+			OrderedObservableElement<Integer> oel = (OrderedObservableElement<Integer>) element;
+			element.observe(new Observer<ObservableValueEvent<Integer>>() {
+				@Override
+				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
+					if(value.getOldValue() != null)
+						compare2.set(oel.getIndex(), value.getValue());
+					else
+						compare2.add(oel.getIndex(), value.getValue());
+				}
+
+				@Override
+				public <V extends ObservableValueEvent<Integer>> void onCompleted(V value) {
+					compare2.remove(oel.getIndex());
+				}
+			});
+		});
+
+		for(int i = 0; i < 30; i++) {
+			controller.add(i);
+			switch (i % 3) {
+			case 0:
+				correct0.add(i);
+				break;
+			case 1:
+				correct1.add(i);
+				break;
+			case 2:
+				correct2.add(i);
+				break;
+			}
+			assertEquals(correct0, compare0);
+			assertEquals(correct1, compare1);
+			assertEquals(correct2, compare2);
+		}
+		for(int i = 0; i < 30; i++) {
+			int value = i + 1;
+			controller.set(i, value);
+			switch (i % 3) {
+			case 0:
+				correct0.remove(i);
+				break;
+			case 1:
+				correct1.remove(i);
+				break;
+			case 2:
+				correct2.remove(i);
+				break;
+			}
+			switch (value % 3) {
+			case 0:
+				correct0.add(i, value);
+				break;
+			case 1:
+				correct1.add(i, value);
+				break;
+			case 2:
+				correct2.add(i, value);
+				break;
+			}
+			assertEquals(correct0, compare0);
+			assertEquals(correct1, compare1);
+			assertEquals(correct2, compare2);
+		}
+		for(int i = 0; i < 30; i++) {
+			int value = controller.get(i);
+			controller.remove(Integer.valueOf(value));
+			switch (i % 3) {
+			case 0:
+				correct0.remove(Integer.valueOf(value));
+				break;
+			case 1:
+				correct1.remove(Integer.valueOf(value));
+				break;
+			case 2:
+				correct2.remove(Integer.valueOf(value));
+				break;
+			}
+			assertEquals(correct0, compare0);
+			assertEquals(correct1, compare1);
+			assertEquals(correct2, compare2);
+		}
+	}
+
 	/** Tests {@link ObservableList#filterMap(java.util.function.Function)} */
 	@Test
 	public void observableListFilterMap() {
@@ -900,7 +1030,7 @@ public class ObservableTest {
 			return value / 2;
 		}).onElement(element -> {
 			OrderedObservableElement<Integer> listEl = (OrderedObservableElement<Integer>) element;
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
+			element.observe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
 					if(value.getOldValue() != null)
@@ -948,7 +1078,7 @@ public class ObservableTest {
 		List<Integer> correct = new ArrayList<>();
 		set.combine(value1, (v1, v2) -> v1 * v2).filter(value -> value != null && value % 3 == 0).onElement(element -> {
 			OrderedObservableElement<Integer> listEl = (OrderedObservableElement<Integer>) element;
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
+			element.observe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
 					if(event.getOldValue() != null)
@@ -1019,7 +1149,7 @@ public class ObservableTest {
 		List<Integer> filtered = new ArrayList<>();
 		flat.onElement(element -> {
 			OrderedObservableElement<Integer> listEl = (OrderedObservableElement<Integer>) element;
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
+			element.observe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
 					if(event.getOldValue() != null)
@@ -1036,7 +1166,7 @@ public class ObservableTest {
 		});
 		flat.filter(value -> value != null && value % 3 == 0).onElement(element -> {
 			OrderedObservableElement<Integer> listEl = (OrderedObservableElement<Integer>) element;
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
+			element.observe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
 					if(event.getOldValue() != null) {
@@ -1228,7 +1358,7 @@ public class ObservableTest {
 		List<Integer> compare = new ArrayList<>();
 		ObservableOrderedCollection.sort(list, null).onElement(element -> {
 			OrderedObservableElement<Integer> orderedEl = (OrderedObservableElement<Integer>) element;
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
+			element.observe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
 					if(event.getOldValue() == null)
@@ -1297,7 +1427,7 @@ public class ObservableTest {
 
 		ObservableOrderedCollection.flatten(outer, null).onElement(element -> {
 			OrderedObservableElement<Integer> orderedEl = (OrderedObservableElement<Integer>) element;
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
+			element.observe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
 					if(event.getOldValue() == null)
