@@ -482,7 +482,6 @@ public class ObservableTest {
 
 	/** Tests {@link ObservableSet#combine(ObservableValue, java.util.function.BiFunction)} */
 	@Test
-	// TODO This test hangs, not sure why, ever since I refactored the observable collections to not be observables
 	public void observableSetCombine() {
 		DefaultObservableSet<Integer> set = new DefaultObservableSet<>(new Type(Integer.TYPE));
 		SimpleSettableValue<Integer> value1 = new SimpleSettableValue<>(Integer.TYPE, false);
@@ -1062,7 +1061,6 @@ public class ObservableTest {
 
 	/** Tests {@link ObservableList#combine(ObservableValue, java.util.function.BiFunction)} */
 	@Test
-	// TODO This test hangs, not sure why, ever since I refactored the observable collections to not be observables
 	public void observableListCombine() {
 		DefaultObservableList<Integer> set = new DefaultObservableList<>(new Type(Integer.TYPE));
 		SimpleSettableValue<Integer> value1 = new SimpleSettableValue<>(Integer.TYPE, false);
