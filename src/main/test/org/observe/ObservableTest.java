@@ -973,24 +973,24 @@ public class ObservableTest {
 			controller.set(i, value);
 			switch (i % 3) {
 			case 0:
-				correct0.remove(i);
+				correct0.remove(Integer.valueOf(i));
 				break;
 			case 1:
-				correct1.remove(i);
+				correct1.remove(Integer.valueOf(i));
 				break;
 			case 2:
-				correct2.remove(i);
+				correct2.remove(Integer.valueOf(i));
 				break;
 			}
 			switch (value % 3) {
 			case 0:
-				correct0.add(i, value);
+				correct0.add(i / 3, value);
 				break;
 			case 1:
-				correct1.add(i, value);
+				correct1.add(i / 3, value);
 				break;
 			case 2:
-				correct2.add(i, value);
+				correct2.add(i / 3, value);
 				break;
 			}
 			assertEquals(correct0, compare0);
