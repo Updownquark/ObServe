@@ -6,7 +6,6 @@ import java.util.function.Predicate;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
-import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
 
@@ -54,8 +53,40 @@ public interface ObservableGraph<N, E> {
 	 */
 	ObservableValue<CollectionSession> getSession();
 
-	default Observable<CollectionChangeEvent<?>> changes() {
-		return Observable.or(getNodes().changes(), getEdges().changes());
+	/**
+	 * @return An observable that fires a (null) value whenever anything in this collection changes. This observable will only fire 1 event
+	 *         per transaction.
+	 */
+	default Observable<Void> changes() {
+		return observer -> {
+			Object key = new Object();
+			Runnable nodeSub = getNodes().simpleChanges().act(v -> {
+				CollectionSession session = getSession().get();
+				if(session == null)
+					observer.onNext(null);
+				else
+					session.put(key, "changed", true);
+
+			});
+			Runnable edgeSub = getEdges().simpleChanges().act(v -> {
+				CollectionSession session = getSession().get();
+				if(session == null)
+					observer.onNext(null);
+				else
+					session.put(key, "changed", true);
+
+			});
+			Runnable transSub = getSession().act(event -> {
+				if(event.getOldValue() != null && event.getOldValue().put(key, "changed", null) != null) {
+					observer.onNext(null);
+				}
+			});
+			return () -> {
+				nodeSub.run();
+				edgeSub.run();
+				transSub.run();
+			};
+		};
 	}
 
 	default ObservableValue<Node<N, E>> getNode(N nodeValue) {

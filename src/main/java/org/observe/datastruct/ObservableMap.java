@@ -4,6 +4,7 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 
+import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
@@ -113,6 +114,14 @@ public interface ObservableMap<K, V> extends Map<K, V> {
 	@Override
 	default Set<Map.Entry<K, V>> entrySet() {
 		return (Set<Map.Entry<K, V>>) (Set<?>) observeEntries();
+	}
+
+	/**
+	 * @return An observable that fires a (null) value whenever anything in this structure changes. This observable will only fire 1 event
+	 *         per transaction.
+	 */
+	default Observable<Void> changes() {
+		return observeEntries().simpleChanges();
 	}
 
 	/** @return An immutable copy of this map */

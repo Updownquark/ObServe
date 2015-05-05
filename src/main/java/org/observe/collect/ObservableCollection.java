@@ -14,13 +14,8 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-import org.observe.ComposedObservableValue;
-import org.observe.Observable;
-import org.observe.ObservableDebug;
+import org.observe.*;
 import org.observe.ObservableDebug.D;
-import org.observe.ObservableValue;
-import org.observe.ObservableValueEvent;
-import org.observe.Observer;
 import org.observe.util.ListenerSet;
 import org.observe.util.ObservableUtils;
 
@@ -110,6 +105,46 @@ public interface ObservableCollection<E> extends Collection<E> {
 	/** @return An observable that fires a change event whenever any elements in it are added, removed or changed */
 	default Observable<? extends CollectionChangeEvent<E>> changes() {
 		return debug(new CollectionChangesObservable<>(this)).from("changes", this).get();
+	}
+
+	/**
+	 * @return An observable that fires a (null) value whenever anything in this collection changes. Unlike {@link #changes()}, this
+	 *         observable will only fire 1 event per transaction.
+	 */
+	default Observable<Void> simpleChanges() {
+		return observer -> {
+			Object key = new Object();
+			Runnable collSub = onElement(element -> {
+				element.observe(new Observer<Object>() {
+					@Override
+					public void onNext(Object value) {
+						CollectionSession session = getSession().get();
+						if(session == null)
+							observer.onNext(null);
+						else
+							session.put(key, "changed", true);
+					}
+
+					@Override
+					public void onCompleted(Object value) {
+						CollectionSession session = getSession().get();
+						if(session == null)
+							observer.onNext(null);
+						else
+							session.put(key, "changed", true);
+					}
+				});
+			});
+			Runnable transSub = getSession().act(event -> {
+				if(event.getOldValue() != null && event.getOldValue().put(key, "changed", null) != null) {
+					observer.onNext(null);
+				}
+			});
+			return () -> {
+				collSub.run();
+				transSub.run();
+			};
+		};
 	}
 
 	/** @return An observable that passes along only events for removal of elements from the collection */

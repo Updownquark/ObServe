@@ -5,6 +5,7 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.function.Consumer;
 
+import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
@@ -194,6 +195,14 @@ public interface ObservableMultiMap<K, V> {
 
 	/** @return An observable map of collections which mirrors the keys and values in this multi-map */
 	default ObservableMap<K, ObservableCollection<V>> asCollectionMap() {
+	}
+
+	/**
+	 * @return An observable that fires a (null) value whenever anything in this structure changes. This observable will only fire 1 event
+	 *         per transaction.
+	 */
+	default Observable<Void> changes() {
+		return observeEntries().simpleChanges();
 	}
 
 	/** @return An immutable copy of this map */
