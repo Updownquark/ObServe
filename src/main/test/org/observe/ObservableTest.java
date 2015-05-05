@@ -899,11 +899,14 @@ public class ObservableTest {
 		List<Integer> compare2 = new ArrayList<>();
 		List<Integer> correct2 = new ArrayList<>();
 
+		boolean [] print = new boolean[1];
 		list.filter(value -> value % 3 == 0).onElement(element -> {
 			OrderedObservableElement<Integer> oel = (OrderedObservableElement<Integer>) element;
 			element.observe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
+					if(print[0])
+						System.out.println("0: " + value + " (" + System.identityHashCode(value) + ")");
 					if(value.getOldValue() != null)
 						compare0.set(oel.getIndex(), value.getValue());
 					else
@@ -912,6 +915,8 @@ public class ObservableTest {
 
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onCompleted(V value) {
+					if(print[0])
+						System.out.println("0: -" + value);
 					compare0.remove(oel.getIndex());
 				}
 			});
@@ -921,6 +926,8 @@ public class ObservableTest {
 			element.observe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
+					if(print[0])
+						System.out.println("1: " + value + " (" + System.identityHashCode(value) + ")");
 					if(value.getOldValue() != null)
 						compare1.set(oel.getIndex(), value.getValue());
 					else
@@ -929,6 +936,8 @@ public class ObservableTest {
 
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onCompleted(V value) {
+					if(print[0])
+						System.out.println("1: -" + value);
 					compare1.remove(oel.getIndex());
 				}
 			});
@@ -938,6 +947,8 @@ public class ObservableTest {
 			element.observe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
+					if(print[0])
+						System.out.println("2: " + value + " (" + System.identityHashCode(value) + ")");
 					if(value.getOldValue() != null)
 						compare2.set(oel.getIndex(), value.getValue());
 					else
@@ -946,12 +957,15 @@ public class ObservableTest {
 
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onCompleted(V value) {
+					if(print[0])
+						System.out.println("2: -" + value);
 					compare2.remove(oel.getIndex());
 				}
 			});
 		});
 
-		for(int i = 0; i < 30; i++) {
+		int count = 1;
+		for(int i = 0; i < count; i++) {
 			controller.add(i);
 			switch (i % 3) {
 			case 0:
@@ -968,8 +982,10 @@ public class ObservableTest {
 			assertEquals(correct1, compare1);
 			assertEquals(correct2, compare2);
 		}
-		for(int i = 0; i < 30; i++) {
+		print[0] = true;
+		for(int i = 0; i < count; i++) {
 			int value = i + 1;
+			System.out.println(i + "->" + value);
 			controller.set(i, value);
 			switch (i % 3) {
 			case 0:
@@ -997,7 +1013,7 @@ public class ObservableTest {
 			assertEquals(correct1, compare1);
 			assertEquals(correct2, compare2);
 		}
-		for(int i = 0; i < 30; i++) {
+		for(int i = 0; i < count; i++) {
 			int value = controller.get(i);
 			controller.remove(Integer.valueOf(value));
 			switch (i % 3) {
