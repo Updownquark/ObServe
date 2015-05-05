@@ -732,15 +732,14 @@ public interface ObservableCollection<E> extends Collection<E> {
 					if(mapped == null) {
 						isIncluded = false;
 						T oldValue = theMap.apply(elValue.getOldValue());
-						observer2.onCompleted(new ObservableValueEvent<>(FilteredElement.this, oldValue, oldValue, elValue));
+						observer2.onCompleted(createEvent(oldValue, oldValue, elValue));
 						if(innerSub[0] != null) {
 							innerSub[0].run();
 							innerSub[0] = null;
 						}
 					} else {
 						isIncluded = true;
-						observer2.onNext(new ObservableValueEvent<>(FilteredElement.this, theMap.apply(elValue.getOldValue()), mapped,
-							elValue));
+						observer2.onNext(createEvent(theMap.apply(elValue.getOldValue()), mapped, elValue));
 					}
 				}
 
@@ -754,7 +753,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 						oldVal = get();
 						newVal = oldVal;
 					}
-					observer2.onCompleted(new ObservableValueEvent<>(FilteredElement.this, oldVal, newVal, elValue));
+					observer2.onCompleted(createEvent(oldVal, newVal, elValue));
 				}
 			});
 			if(!isIncluded) {

@@ -174,16 +174,18 @@ public class DefaultObservableList<E> extends AbstractList<E> implements Observa
 
 			@Override
 			public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
-				ObservableValue<E> element = this;
+				OrderedObservableElement<E> element = this;
 				Runnable ret = el.observe(new Observer<ObservableValueEvent<E>>() {
 					@Override
 					public <V extends ObservableValueEvent<E>> void onNext(V event) {
-						observer.onNext(new ObservableValueEvent<>(element, event.getOldValue(), event.getValue(), event.getCause()));
+						ObservableValueEvent<E> wrapped = element.createEvent(event.getOldValue(), event.getValue(), event.getCause());
+						observer.onNext(wrapped);
 					}
 
 					@Override
 					public <V extends ObservableValueEvent<E>> void onCompleted(V event) {
-						observer.onCompleted(new ObservableValueEvent<>(element, event.getOldValue(), event.getValue(), event.getCause()));
+						ObservableValueEvent<E> wrapped = element.createEvent(event.getOldValue(), event.getValue(), event.getCause());
+						observer.onCompleted(wrapped);
 					}
 
 					@Override

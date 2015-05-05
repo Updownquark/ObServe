@@ -20,11 +20,11 @@ class ObservableElementImpl<T> extends DefaultObservableValue<T> {
 	void set(T newValue) {
 		T oldValue = theValue;
 		theValue = newValue;
-		theController.onNext(new ObservableValueEvent<>(this, oldValue, newValue, null));
+		theController.onNext(createEvent(oldValue, newValue, null));
 	}
 
 	void remove() {
-		theController.onCompleted(new ObservableValueEvent<>(this, theValue, theValue, null));
+		theController.onCompleted(createEvent(theValue, theValue, null));
 	}
 
 	@Override
