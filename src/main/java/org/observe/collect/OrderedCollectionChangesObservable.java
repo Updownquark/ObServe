@@ -6,18 +6,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.observe.ObservableValueEvent;
-import org.observe.Observer;
 
 import prisms.util.IntList;
 
-class OrderedCollectionChangesObservable<E, OCCE extends OrderedCollectionChangeEvent<E>> extends
-CollectionChangesObservable<E, OCCE> {
+class OrderedCollectionChangesObservable<E, OCCE extends OrderedCollectionChangeEvent<E>> extends CollectionChangesObservable<E, OCCE> {
 	OrderedCollectionChangesObservable(ObservableOrderedCollection<E> coll) {
 		super(coll);
 	}
 
 	@Override
-	protected void newEvent(CollectionChangeType type, ObservableValueEvent<E> evt, Observer<? super OCCE> observer) {
+	protected void newEvent(CollectionChangeType type, ObservableValueEvent<E> evt) {
 		CollectionSession session = collection.getSession().get();
 		int index = ((OrderedObservableElement<E>) evt.getObservable()).getIndex();
 		if(session != null) {
@@ -35,23 +33,21 @@ CollectionChangesObservable<E, OCCE> {
 					session.put(key, "oldElements", oldElements);
 				}
 				session.put(key, "indexes", indexes);
-			} else {
-				if(preType != type) {
-					fireEventsFromSessionData(session, observer);
-					session.put(key, "type", type);
-					elements = new java.util.ArrayList<>();
-					indexes = new IntList();
-					session.put(key, "elements", elements);
-					if(type == CollectionChangeType.set) {
-						oldElements = new ArrayList<>();
-						session.put(key, "oldElements", oldElements);
-					}
-					session.put(key, "indexes", indexes);
-				} else {
-					elements = (List<E>) session.get(key, "elements");
-					oldElements = (List<E>) session.get(key, "oldElements");
-					indexes = (IntList) session.get(key, "indexes");
+			} else if(preType != type) {
+				fireEventsFromSessionData(session);
+				session.put(key, "type", type);
+				elements = new java.util.ArrayList<>();
+				indexes = new IntList();
+				session.put(key, "elements", elements);
+				if(type == CollectionChangeType.set) {
+					oldElements = new ArrayList<>();
+					session.put(key, "oldElements", oldElements);
 				}
+				session.put(key, "indexes", indexes);
+			} else {
+				elements = (List<E>) session.get(key, "elements");
+				oldElements = (List<E>) session.get(key, "oldElements");
+				indexes = (IntList) session.get(key, "indexes");
 			}
 			elements.add(evt.getValue());
 			if(oldElements != null)
@@ -60,19 +56,19 @@ CollectionChangesObservable<E, OCCE> {
 		} else {
 			OrderedCollectionChangeEvent<E> toFire = new OrderedCollectionChangeEvent<>(type, asList(evt.getValue()),
 				type == CollectionChangeType.set ? asList(evt.getOldValue()) : null, new IntList(new int[] {index}));
-			observer.onNext((OCCE) toFire);
+			fireEvent((OCCE) toFire);
 		}
 	}
 
 	@Override
-	protected void fireEventsFromSessionData(CollectionSession session, Observer<? super OCCE> observer) {
-		CollectionChangeType type = (CollectionChangeType) session.get(key, "type");
+	protected void fireEventsFromSessionData(CollectionSession session) {
+		CollectionChangeType type = (CollectionChangeType) session.put(key, "type", null);
 		if(type == null)
 			return;
 		List<E> elements = (List<E>) session.put(key, "elements", null);
 		List<E> oldElements = (List<E>) session.put(key, "oldElements", null);
-		IntList indexes = (IntList) session.get(key, "indexes");
+		IntList indexes = (IntList) session.put(key, "indexes", null);
 		OrderedCollectionChangeEvent<E> evt = new OrderedCollectionChangeEvent<>(type, elements, oldElements, indexes);
-		observer.onNext((OCCE) evt);
+		fireEvent((OCCE) evt);
 	}
 }

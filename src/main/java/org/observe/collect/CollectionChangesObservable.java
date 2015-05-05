@@ -4,53 +4,75 @@ import static java.util.Arrays.asList;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 import org.observe.Observable;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
+import org.observe.util.ListenerSet;
 
 class CollectionChangesObservable<E, CCE extends CollectionChangeEvent<E>> implements Observable<CCE> {
 	protected final ObservableCollection<E> collection;
 	protected final Object key = this;
 
+	private final ListenerSet<Observer<? super CCE>> theObservers;
+
 	CollectionChangesObservable(ObservableCollection<E> coll) {
 		collection = coll;
+		theObservers = new ListenerSet<>();
+
+		theObservers.setUsedListener(new Consumer<Boolean>() {
+			private Runnable collectSub;
+
+			private Runnable transSub;
+
+			@Override
+			public void accept(Boolean used) {
+				if(used) {
+					boolean [] initialized = new boolean[1];
+					collectSub = collection.onElement(element -> element.observe(new Observer<ObservableValueEvent<E>>() {
+						@Override
+						public <V2 extends ObservableValueEvent<E>> void onNext(V2 evt) {
+							if(!initialized[0])
+								return;
+							if(evt.getOldValue() == null)
+								newEvent(CollectionChangeType.add, evt);
+							else
+								newEvent(CollectionChangeType.set, evt);
+						}
+
+						@Override
+						public <V2 extends ObservableValueEvent<E>> void onCompleted(V2 evt) {
+							newEvent(CollectionChangeType.remove, evt);
+						}
+					}));
+					initialized[0] = true;
+					transSub = collection.getSession().observe(new Observer<ObservableValueEvent<CollectionSession>>() {
+						@Override
+						public <V extends ObservableValueEvent<CollectionSession>> void onNext(V value) {
+							if(value.getOldValue() != null)
+								fireEventsFromSessionData(value.getOldValue());
+						}
+					});
+				} else {
+					collectSub.run();
+					transSub.run();
+					collectSub = null;
+					transSub = null;
+				}
+			}
+		});
 	}
 
 	@Override
 	public Runnable observe(Observer<? super CCE> observer) {
-		boolean [] initialized = new boolean[1];
-		Runnable collectSub = collection.onElement(element -> element.observe(new Observer<ObservableValueEvent<E>>() {
-			@Override
-			public <V2 extends ObservableValueEvent<E>> void onNext(V2 evt) {
-				if(!initialized[0])
-					return;
-				if(evt.getOldValue() == null)
-					newEvent(CollectionChangeType.add, evt, observer);
-				else
-					newEvent(CollectionChangeType.set, evt, observer);
-			}
-
-			@Override
-			public <V2 extends ObservableValueEvent<E>> void onCompleted(V2 evt) {
-				newEvent(CollectionChangeType.remove, evt, observer);
-			}
-		}));
-		initialized[0] = true;
-		Runnable transSub = collection.getSession().observe(new Observer<ObservableValueEvent<CollectionSession>>() {
-			@Override
-			public <V extends ObservableValueEvent<CollectionSession>> void onNext(V value) {
-				if(value.getOldValue() != null)
-					fireEventsFromSessionData(value.getOldValue(), observer);
-			}
-		});
+		theObservers.add(observer);
 		return () -> {
-			collectSub.run();
-			transSub.run();
+			theObservers.remove(observer);
 		};
 	}
 
-	protected void newEvent(CollectionChangeType type, ObservableValueEvent<E> evt, Observer<? super CCE> observer) {
+	protected void newEvent(CollectionChangeType type, ObservableValueEvent<E> evt) {
 		CollectionSession session = collection.getSession().get();
 		if(session != null) {
 			CollectionChangeType preType = (CollectionChangeType) session.get(key, "type");
@@ -66,7 +88,7 @@ class CollectionChangesObservable<E, CCE extends CollectionChangeEvent<E>> imple
 				}
 			} else{
 				if(preType!=type){
-					fireEventsFromSessionData(session, observer);
+					fireEventsFromSessionData(session);
 					session.put(key, "type", type);
 					elements = new ArrayList<>();
 					session.put(key, "elements", elements);
@@ -85,18 +107,22 @@ class CollectionChangesObservable<E, CCE extends CollectionChangeEvent<E>> imple
 		} else {
 			CollectionChangeEvent<E> toFire = new CollectionChangeEvent<>(type, asList(evt.getValue()),
 				type == CollectionChangeType.set ? asList(evt.getOldValue()) : null);
-			observer.onNext((CCE) toFire);
+			fireEvent((CCE) toFire);
 		}
 	}
 
-	protected void fireEventsFromSessionData(CollectionSession session, Observer<? super CCE> observer) {
-		CollectionChangeType type=(CollectionChangeType) session.get(key, "type");
+	protected void fireEventsFromSessionData(CollectionSession session) {
+		CollectionChangeType type = (CollectionChangeType) session.put(key, "type", null);
 		if(type==null)
 			return;
 		List<E> elements = (List<E>) session.put(key, "elements", null);
 		List<E> oldElements = (List<E>) session.put(key, "oldElements", null);
 		CollectionChangeEvent<E> evt = new CollectionChangeEvent<>(type, elements, oldElements);
-		observer.onNext((CCE) evt);
+		fireEvent((CCE) evt);
+	}
+
+	protected final void fireEvent(CCE evt) {
+		theObservers.forEach(observer -> observer.onNext(evt));
 	}
 
 	@Override

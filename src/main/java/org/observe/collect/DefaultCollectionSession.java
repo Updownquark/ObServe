@@ -20,6 +20,11 @@ public class DefaultCollectionSession implements CollectionSession {
 		public boolean equals(Object o) {
 			return o instanceof Key && ((Key) o).listener == listener && ((Key) o).key.equals(key);
 		}
+
+		@Override
+		public String toString() {
+			return key + " (" + listener + ")";
+		}
 	}
 
 	private final Object theCause;
