@@ -21,6 +21,11 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 	ObservableValue<T> persistent();
 
 	@Override
+	default ObservableElement<T> cached() {
+		return debug(new CachedObservableElement<>(this)).from("cached", this).get();
+	}
+
+	@Override
 	default <R> ObservableElement<R> mapV(Function<? super T, R> function) {
 		return mapV(null, function, false);
 	};
@@ -186,6 +191,32 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 				return outer + ".refireWhen(" + observable + ")";
 			}
 		}).from("refresh", this).using("on", observable).get();
+	}
+
+	/**
+	 * Implements {@link #cached()}
+	 * 
+	 * @param <T> The type of the value
+	 */
+	class CachedObservableElement<T> extends CachedObservableValue<T> implements ObservableElement<T> {
+		public CachedObservableElement(ObservableElement<T> wrapped) {
+			super(wrapped);
+		}
+
+		@Override
+		public ObservableValue<T> persistent() {
+			return getWrapped().persistent();
+		}
+
+		@Override
+		protected ObservableElement<T> getWrapped() {
+			return (ObservableElement<T>) super.getWrapped();
+		}
+
+		@Override
+		public ObservableElement<T> cached() {
+			return this;
+		}
 	}
 
 	/** @param <T> The type of the element */

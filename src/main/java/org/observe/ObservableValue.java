@@ -48,6 +48,11 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		}).from("value", this).get();
 	}
 
+	/** @return A cached version of this value, which */
+	default ObservableValue<T> cached() {
+		return debug(new CachedObservableValue<>(this)).from("cached", this).get();
+	}
+
 	/**
 	 * Creates an {@link ObservableValueEvent} to propagate a change to this observable's value
 	 *
@@ -493,6 +498,89 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		return (V v1, U v2) -> {
 			return v2;
 		};
+	}
+
+	/**
+	 * Observable value implementing the {@link #cached()} method
+	 *
+	 * @param <T> The type of the value
+	 */
+	class CachedObservableValue<T> implements ObservableValue<T> {
+		private final ObservableValue<T> theWrapped;
+
+		private T theValue;
+
+		private org.observe.util.ListenerSet<Observer<? super ObservableValueEvent<T>>> theObservers;
+
+		public CachedObservableValue(ObservableValue<T> wrapped) {
+			theWrapped = wrapped;
+			theObservers = new org.observe.util.ListenerSet<>();
+			theObservers.setUsedListener(new java.util.function.Consumer<Boolean>() {
+				private Runnable sub;
+
+				@Override
+				public void accept(Boolean used) {
+					if(used) {
+						boolean [] initialized = new boolean[1];
+						sub = theWrapped.observe(new Observer<ObservableValueEvent<T>>() {
+							@Override
+							public <V extends ObservableValueEvent<T>> void onNext(V value) {
+								T oldValue = theValue;
+								theValue = value.getValue();
+								if(initialized[0]) {
+									ObservableValueEvent<T> cachedEvent = createEvent(oldValue, theValue, value.getCause());
+									theObservers.forEach(observer -> observer.onNext(cachedEvent));
+								}
+							}
+
+							@Override
+							public <V extends ObservableValueEvent<T>> void onCompleted(V value) {
+								T oldValue = theValue;
+								T newValue = value.getValue();
+								if(initialized[0]) {
+									ObservableValueEvent<T> cachedEvent = createEvent(oldValue, newValue, value.getCause());
+									theObservers.forEach(observer -> observer.onNext(cachedEvent));
+								}
+							}
+						});
+					} else {
+						sub.run();
+						sub = null;
+						theValue = null;
+					}
+				}
+			});
+		}
+
+		protected ObservableValue<T> getWrapped() {
+			return theWrapped;
+		}
+
+		@Override
+		public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
+			theObservers.add(observer);
+			return () -> {
+				theObservers.remove(observer);
+			};
+		}
+
+		@Override
+		public Type getType() {
+			return theWrapped.getType();
+		}
+
+		@Override
+		public T get() {
+			if(theObservers.isUsed())
+				return theValue;
+			else
+				return theWrapped.get();
+		}
+
+		@Override
+		public ObservableValue<T> cached() {
+			return this;
+		}
 	}
 
 	/**

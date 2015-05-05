@@ -714,6 +714,8 @@ public interface ObservableCollection<E> extends Collection<E> {
 		private final ObservableElement<E> theWrappedElement;
 		private final Function<? super E, T> theMap;
 		private final Type theType;
+
+		private T theValue;
 		private boolean isIncluded;
 
 		/**
@@ -739,7 +741,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 
 		@Override
 		public T get() {
-			return theMap.apply(theWrappedElement.get());
+			return theValue;
 		}
 
 		/** @return The element that this filtered element wraps */
@@ -763,10 +765,11 @@ public interface ObservableCollection<E> extends Collection<E> {
 			innerSub[0] = theWrappedElement.observe(new Observer<ObservableValueEvent<E>>() {
 				@Override
 				public <V2 extends ObservableValueEvent<E>> void onNext(V2 elValue) {
-					T mapped = theMap.apply(elValue.getValue());
-					if(mapped == null) {
+					T oldValue = theValue;
+					theValue = theMap.apply(elValue.getValue());
+					if(theValue == null) {
 						isIncluded = false;
-						T oldValue = theMap.apply(elValue.getOldValue());
+						theValue = null;
 						observer2.onCompleted(createEvent(oldValue, oldValue, elValue));
 						if(innerSub[0] != null) {
 							innerSub[0].run();
@@ -774,21 +777,15 @@ public interface ObservableCollection<E> extends Collection<E> {
 						}
 					} else {
 						isIncluded = true;
-						observer2.onNext(createEvent(theMap.apply(elValue.getOldValue()), mapped, elValue));
+						observer2.onNext(createEvent(oldValue, theValue, elValue));
 					}
 				}
 
 				@Override
 				public <V2 extends ObservableValueEvent<E>> void onCompleted(V2 elValue) {
-					T oldVal, newVal;
-					if(elValue != null) {
-						oldVal = theMap.apply(elValue.getOldValue());
-						newVal = theMap.apply(elValue.getValue());
-					} else {
-						oldVal = get();
-						newVal = oldVal;
-					}
-					observer2.onCompleted(createEvent(oldVal, newVal, elValue));
+					T oldValue = theValue;
+					T newValue = elValue == null ? null : theMap.apply(elValue.getValue());
+					observer2.onCompleted(createEvent(oldValue, newValue, elValue));
 				}
 			});
 			if(!isIncluded) {

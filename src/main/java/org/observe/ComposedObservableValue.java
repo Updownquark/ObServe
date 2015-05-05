@@ -22,6 +22,10 @@ public class ComposedObservableValue<T> implements ObservableValue<T> {
 	private final Type theType;
 	private final boolean combineNulls;
 
+	private Object [] theComposedValues;
+
+	private T theValue;
+
 	/**
 	 * @param function The function that operates on the argument observables to produce this observable's value
 	 * @param combineNull Whether to apply the combination function if the arguments are null. If false and any arguments are null, the
@@ -45,9 +49,8 @@ public class ComposedObservableValue<T> implements ObservableValue<T> {
 		theType = type != null ? type : getReturnType(function);
 		theComposed = java.util.Collections.unmodifiableList(java.util.Arrays.asList(composed));
 		theObservers = new ListenerSet<>();
+		theComposedValues = new Object[composed.length];
 		final Runnable [] composedSubs = new Runnable[theComposed.size()];
-		final Object [] values = new Object[theComposed.size()];
-		final Object [] oldValue = new Object[1];
 		boolean [] completed = new boolean[1];
 		theObservers.setUsedListener(new Consumer<Boolean>() {
 			@Override
@@ -57,31 +60,31 @@ public class ComposedObservableValue<T> implements ObservableValue<T> {
 					 * for(int i = 0; i < args.length; i++)
 					 * 	args[i] = theComposed.get(i).get(); */
 					boolean [] initialized = new boolean[1];
-					for(int i = 0; i < values.length; i++) {
+					for(int i = 0; i < theComposedValues.length; i++) {
 						int index = i;
 						composedSubs[i] = theComposed.get(i).observe(new Observer<ObservableValueEvent<?>>() {
 							@Override
 							public <V extends ObservableValueEvent<?>> void onNext(V event) {
-								values[index] = event.getValue();
+								theComposedValues[index] = event.getValue();
 								if(!initialized[0])
 									return;
-								T newValue = combine(values);
-								ObservableValueEvent<T> toFire = new ObservableValueEvent<>(ComposedObservableValue.this, (T) oldValue[0],
-									newValue, event);
-								oldValue[0] = newValue;
+								T oldValue = theValue;
+								theValue = combine(theComposedValues);
+								ObservableValueEvent<T> toFire = new ObservableValueEvent<>(ComposedObservableValue.this, oldValue,
+									theValue, event);
 								fireNext(toFire);
 							}
 
 							@Override
 							public <V extends ObservableValueEvent<?>> void onCompleted(V event) {
-								values[index] = event.getValue();
+								theComposedValues[index] = event.getValue();
 								completed[0] = true;
 								if(!initialized[0])
 									return;
-								T newValue = combine(values);
-								ObservableValueEvent<T> toFire = new ObservableValueEvent<>(ComposedObservableValue.this, (T) oldValue[0],
-									newValue, event);
-								oldValue[0] = newValue;
+								T oldValue = theValue;
+								theValue = combine(theComposedValues);
+								ObservableValueEvent<T> toFire = new ObservableValueEvent<>(ComposedObservableValue.this, oldValue,
+									theValue, event);
 								fireCompleted(toFire);
 							}
 
@@ -103,14 +106,14 @@ public class ComposedObservableValue<T> implements ObservableValue<T> {
 							}
 						});
 					}
-					oldValue[0] = combine(values);
+					theValue = combine(theComposedValues);
 					initialized[0] = true;
 				} else {
 					for(int i = 0; i < theComposed.size(); i++) {
 						composedSubs[i].run();
 						composedSubs[i] = null;
-						values[i] = null;
-						oldValue[0] = null;
+						theComposedValues[i] = null;
+						theValue = null;
 						completed[0] = false;
 					}
 				}
@@ -118,9 +121,9 @@ public class ComposedObservableValue<T> implements ObservableValue<T> {
 		});
 		theObservers.setOnSubscribe(observer -> {
 			if(completed[0])
-				observer.onCompleted(new ObservableValueEvent<>(this, null, (T) oldValue[0], null));
+				observer.onCompleted(new ObservableValueEvent<>(this, null, theValue, null));
 			else
-				observer.onNext(new ObservableValueEvent<>(this, null, (T) oldValue[0], null));
+				observer.onNext(new ObservableValueEvent<>(this, null, theValue, null));
 		});
 	}
 
@@ -149,10 +152,7 @@ public class ComposedObservableValue<T> implements ObservableValue<T> {
 
 	@Override
 	public T get() {
-		Object [] args = new Object[theComposed.size()];
-		for(int i = 0; i < args.length; i++)
-			args[i] = theComposed.get(i).get();
-		return combine(args);
+		return theValue;
 	}
 
 	private T combine(Object [] args) {
