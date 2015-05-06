@@ -82,9 +82,9 @@ public class ComposedObservableValue<T> implements ObservableValue<T> {
 								if(!initialized[0])
 									return;
 								T oldValue = theValue;
-								theValue = combine(theComposedValues);
-								ObservableValueEvent<T> toFire = new ObservableValueEvent<>(ComposedObservableValue.this, oldValue,
-									theValue, event);
+								T newValue = combine(theComposedValues);
+								theValue = null;
+								ObservableValueEvent<T> toFire = createEvent(oldValue, newValue, event);
 								fireCompleted(toFire);
 							}
 
