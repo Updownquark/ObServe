@@ -3,10 +3,13 @@ package org.observe.datastruct;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
+import org.observe.Observer;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableElement;
@@ -195,6 +198,67 @@ public interface ObservableMultiMap<K, V> {
 
 	/** @return An observable map of collections which mirrors the keys and values in this multi-map */
 	default ObservableMap<K, ObservableCollection<V>> asCollectionMap() {
+		ObservableMultiMap<K, V> outer = this;
+		class CollectionMap extends java.util.AbstractMap<K, ObservableCollection<V>> implements ObservableMap<K, ObservableCollection<V>> {
+			@Override
+			public Type getKeyType() {
+				return outer.getKeyType();
+			}
+
+			@Override
+			public Type getValueType() {
+				return new Type(ObservableCollection.class, outer.getValueType());
+			}
+
+			@Override
+			public ObservableCollection<ObservableMap.ObservableEntry<K, ObservableCollection<V>>> observeEntries() {
+				class Entry implements ObservableMap.ObservableEntry<K, ObservableCollection<V>> {
+					private final ObservableMultiEntry<K, V> theWrapped;
+
+					Entry(ObservableMultiEntry<K, V> wrapped) {
+						theWrapped = wrapped;
+					}
+
+					@Override
+					public K getKey() {
+						return theWrapped.getKey();
+					}
+
+					@Override
+					public ObservableCollection<V> getValue() {
+						return theWrapped;
+					}
+
+					@Override
+					public ObservableCollection<V> setValue(ObservableCollection<V> value) {
+						throw new UnsupportedOperationException();
+					}
+
+					@Override
+					public Type getType() {
+						return CollectionMap.this.getValueType();
+					}
+
+					@Override
+					public Runnable observe(Observer<? super ObservableValueEvent<ObservableCollection<V>>> observer) {
+						// TODO Auto-generated method stub
+						return null;
+					}
+				}
+				return outer.observeEntries().map(Entry::new);
+			}
+
+			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return outer.getSession();
+			}
+
+			@Override
+			public Set<java.util.Map.Entry<K, ObservableCollection<V>>> entrySet() {
+				return (Set<Map.Entry<K, ObservableCollection<V>>>) (Set<?>) observeEntries();
+			}
+		}
+		return new CollectionMap();
 	}
 
 	/**
