@@ -783,6 +783,8 @@ public interface ObservableCollection<E> extends Collection<E> {
 
 				@Override
 				public <V2 extends ObservableValueEvent<E>> void onCompleted(V2 elValue) {
+					if(!isIncluded)
+						return;
 					T oldValue = theValue;
 					T newValue = elValue == null ? null : theMap.apply(elValue.getValue());
 					observer2.onCompleted(createEvent(oldValue, newValue, elValue));
