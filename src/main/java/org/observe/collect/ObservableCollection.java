@@ -102,7 +102,10 @@ public interface ObservableCollection<E> extends Collection<E> {
 		}).from("size", this).get();
 	}
 
-	/** @return An observable that fires a change event whenever any elements in it are added, removed or changed */
+	/**
+	 * @return An observable that fires a change event whenever any elements in it are added, removed or changed. These changes are batched
+	 *         by transaction when possible.
+	 */
 	default Observable<? extends CollectionChangeEvent<E>> changes() {
 		return debug(new CollectionChangesObservable<>(this)).from("changes", this).get();
 	}
@@ -113,11 +116,14 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 */
 	default Observable<Void> simpleChanges() {
 		return observer -> {
+			boolean [] initialized = new boolean[1];
 			Object key = new Object();
 			Runnable collSub = onElement(element -> {
 				element.observe(new Observer<Object>() {
 					@Override
 					public void onNext(Object value) {
+						if(!initialized[0])
+							return;
 						CollectionSession session = getSession().get();
 						if(session == null)
 							observer.onNext(null);
@@ -127,6 +133,8 @@ public interface ObservableCollection<E> extends Collection<E> {
 
 					@Override
 					public void onCompleted(Object value) {
+						if(!initialized[0])
+							return;
 						CollectionSession session = getSession().get();
 						if(session == null)
 							observer.onNext(null);
@@ -136,10 +144,13 @@ public interface ObservableCollection<E> extends Collection<E> {
 				});
 			});
 			Runnable transSub = getSession().act(event -> {
+				if(!initialized[0])
+					return;
 				if(event.getOldValue() != null && event.getOldValue().put(key, "changed", null) != null) {
 					observer.onNext(null);
 				}
 			});
+			initialized[0] = true;
 			return () -> {
 				collSub.run();
 				transSub.run();
@@ -768,6 +779,8 @@ public interface ObservableCollection<E> extends Collection<E> {
 					T oldValue = theValue;
 					theValue = theMap.apply(elValue.getValue());
 					if(theValue == null) {
+						if(!isIncluded)
+							return;
 						isIncluded = false;
 						theValue = null;
 						observer2.onCompleted(createEvent(oldValue, oldValue, elValue));
