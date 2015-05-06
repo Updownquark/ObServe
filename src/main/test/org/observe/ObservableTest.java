@@ -1402,7 +1402,6 @@ public class ObservableTest {
 		outerControl.add(list2);
 
 		ArrayList<Integer> compare = new ArrayList<>();
-
 		ArrayList<Integer> correct = new ArrayList<>();
 
 		for(int i = 0; i <= 30; i++) {
@@ -1455,6 +1454,48 @@ public class ObservableTest {
 		control1.add(control1.indexOf(19), 16);
 		correct.add(correct.indexOf(17), 16);
 		assertEquals(correct, compare);
+	}
+
+	/** Tests {@link ObservableList#asList(ObservableCollection)} */
+	@Test
+	public void obervableListFromCollection() {
+		DefaultObservableSet<Integer> set = new DefaultObservableSet<>(new Type(Integer.TYPE));
+		ObservableList<Integer> list = ObservableList.asList(set);
+		ArrayList<Integer> compare = new ArrayList<>();
+		ArrayList<Integer> correct = new ArrayList<>();
+		list.onElement(element -> {
+			OrderedObservableElement<Integer> orderedEl = (OrderedObservableElement<Integer>) element;
+			element.observe(new Observer<ObservableValueEvent<Integer>>() {
+				@Override
+				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
+					if(event.getOldValue() == null)
+						compare.add(orderedEl.getIndex(), event.getValue());
+					else
+						compare.set(orderedEl.getIndex(), event.getValue());
+				}
+
+				@Override
+				public <V extends ObservableValueEvent<Integer>> void onCompleted(V event) {
+					compare.remove(orderedEl.getIndex());
+				}
+			});
+		});
+
+		int count = 30;
+		for(int i = 0; i < count; i++) {
+			set.add(i);
+			correct.add(i);
+
+			assertEquals(correct, compare);
+		}
+		for(int i = count - 1; i >= 0; i--) {
+			if(i % 2 == 0) {
+				set.remove(i);
+				correct.remove(i); // By index
+			}
+
+			assertEquals(correct, compare);
+		}
 	}
 
 	/** Tests basic transaction functionality on observable collections */

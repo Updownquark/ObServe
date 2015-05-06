@@ -3,23 +3,20 @@ package org.observe.collect;
 import static org.observe.ObservableDebug.debug;
 import static org.observe.ObservableDebug.label;
 
-import java.util.AbstractList;
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import org.observe.ComposedObservableValue;
+import org.observe.*;
 import org.observe.Observable;
-import org.observe.ObservableValue;
-import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.util.ListenerSet;
+import org.observe.util.ObservableUtils;
 
 import prisms.lang.Type;
 
@@ -349,7 +346,7 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 	}
 
 	@Override
-	default ObservableOrderedCollection<E> cached() {
+	default ObservableList<E> cached() {
 		return debug(new SafeCached<>(this)).from("cached", this).get();
 	}
 
@@ -570,6 +567,16 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 			return constant(new Type(Object.class));
 		ObservableList<ObservableList<? extends T>> wrapper = constant(new Type(ObservableList.class, lists[0].getType()), lists);
 		return flatten(wrapper);
+	}
+
+	/**
+	 * @param collection The collection to wrap as a list
+	 * @return A list containing all elements in the collection, ordered and accessible by index
+	 */
+	public static <T> ObservableList<T> asList(ObservableCollection<T> collection){
+		if(collection instanceof ObservableList)
+			return (ObservableList<T>) collection;
+		return new CollectionWrappingList<>(collection);
 	}
 
 	/**
@@ -801,6 +808,333 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 				return theCache.stream().map(CachedElement::get).collect(Collectors.toList());
 			else
 				return theWrapped;
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableList#asList(ObservableCollection)}
+	 * 
+	 * @param <T> The type of the elements in the collection
+	 */
+	public static class CollectionWrappingList<T> extends AbstractList<T> implements ObservableList<T> {
+		private final ObservableCollection<T> theWrapped;
+
+		private final ListenerSet<Consumer<? super ObservableElement<T>>> theListeners;
+
+		private final ReentrantReadWriteLock theLock;
+
+		private final List<WrappingListElement<T>> theElements;
+
+		CollectionWrappingList(ObservableCollection<T> wrap) {
+			theWrapped = wrap;
+			theListeners = new ListenerSet<>();
+			theLock = new ReentrantReadWriteLock();
+			theElements = new ArrayList<>();
+			theListeners.setUsedListener(new Consumer<Boolean>() {
+				Runnable wrapSub;
+
+				@Override
+				public void accept(Boolean used) {
+					Lock lock = theLock.writeLock();
+					lock.lock();
+					try {
+						if(used) {
+							wrapSub = theWrapped.onElement(element -> {
+								int index = theElements.size();
+								if(element instanceof OrderedObservableElement)
+									index = ((OrderedObservableElement<T>) element).getIndex();
+								WrappingListElement<T> listEl = new WrappingListElement<>(CollectionWrappingList.this, element);
+								theElements.add(index, listEl);
+								theListeners.forEach(listener -> listener.accept(listEl));
+								element.completed().act(event -> {
+									Lock lock2 = theLock.writeLock();
+									lock2.lock();
+									try {
+										theElements.remove(listEl);
+									} finally {
+										lock2.unlock();
+									}
+								});
+							});
+						} else {
+							wrapSub.run();
+							wrapSub = null;
+							theElements.clear();
+						}
+					} finally {
+						lock.unlock();
+					}
+				}
+			});
+			theListeners.setOnSubscribe(listener -> {
+				Lock lock = theLock.readLock();
+				lock.lock();
+				try {
+					for(WrappingListElement<T> el : theElements)
+						listener.accept(el);
+				} finally {
+					lock.unlock();
+				}
+			});
+		}
+
+		@Override
+		public Type getType() {
+			return theWrapped.getType();
+		}
+
+		@Override
+		public Runnable onElement(Consumer<? super ObservableElement<T>> onElement) {
+			theListeners.add(onElement);
+			return () -> {
+				theListeners.remove(onElement);
+			};
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			return theWrapped.getSession();
+		}
+
+		@Override
+		public boolean addAll(int index, Collection<? extends T> c) {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public T get(int index) {
+			Lock lock = theLock.readLock();
+			lock.lock();
+			try {
+				if(theListeners.isUsed())
+					return theElements.get(index).get();
+				else { // This is risky here. No guarantee that the collection preserves order between iterations
+					int i = 0;
+					for(T value : theWrapped) {
+						if(i == index)
+							return value;
+						i++;
+					}
+					throw new IndexOutOfBoundsException(index + " of " + size());
+				}
+			} finally {
+				lock.unlock();
+			}
+		}
+
+		@Override
+		public T set(int index, T element) {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public void add(int index, T element) {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public T remove(int index) {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public int indexOf(Object o) {
+			Lock lock = theLock.readLock();
+			lock.lock();
+			try {
+				if(theListeners.isUsed()) {
+					int i = 0;
+					for(WrappingListElement<T> el : theElements) {
+						if(Objects.equals(el.get(), o))
+							return i;
+						i++;
+					}
+					return -1;
+				} else { // This is risky here. No guarantee that the collection preserves order between iterations
+					int i = 0;
+					for(T value : theWrapped) {
+						if(Objects.equals(value, o))
+							return i;
+						i++;
+					}
+					return -1;
+				}
+			} finally {
+				lock.unlock();
+			}
+		}
+
+		@Override
+		public int lastIndexOf(Object o) {
+			Lock lock = theLock.readLock();
+			lock.lock();
+			try {
+				if(theListeners.isUsed()) {
+					for(int i = theElements.size() - 1; i >= 0; i--) {
+						if(Objects.equals(theElements.get(i).get(), o))
+							return i;
+					}
+					return -1;
+				} else { // This is risky here. No guarantee that the collection preserves order between iterations
+					int ret = -1;
+					int i = 0;
+					for(T value : theWrapped) {
+						if(Objects.equals(value, o))
+							ret = i;
+						i++;
+					}
+					return ret;
+				}
+			} finally {
+				lock.unlock();
+			}
+		}
+
+		@Override
+		public int size() {
+			return theWrapped.size();
+		}
+
+		@Override
+		public boolean isEmpty() {
+			return theWrapped.isEmpty();
+		}
+
+		@Override
+		public boolean contains(Object o) {
+			return theWrapped.contains(o);
+		}
+
+		@Override
+		public Iterator<T> iterator() {
+			Lock lock = theLock.readLock();
+			lock.lock();
+			try {
+				if(theListeners.isUsed())
+					return new ArrayList<>(theElements.stream().map(el -> el.get()).collect(Collectors.toList())).iterator();
+				else
+					return theWrapped.iterator();
+			} finally {
+				lock.unlock();
+			}
+		}
+
+		@Override
+		public Object [] toArray() {
+			Lock lock = theLock.readLock();
+			lock.lock();
+			try {
+				if(theListeners.isUsed())
+					return theElements.stream().map(el -> el.get()).collect(Collectors.toList()).toArray();
+				else
+					return theWrapped.toArray();
+			} finally {
+				lock.unlock();
+			}
+		}
+
+		@Override
+		public <T2> T2 [] toArray(T2 [] a) {
+			Lock lock = theLock.readLock();
+			lock.lock();
+			try {
+				if(theListeners.isUsed())
+					return theElements.stream().map(el -> el.get()).collect(Collectors.toList()).toArray(a);
+				else
+					return theWrapped.toArray(a);
+			} finally {
+				lock.unlock();
+			}
+		}
+
+		@Override
+		public boolean add(T e) {
+			// Not supported because the contract of List says add must always return true, but the contract of the wrapped collection
+			// is unknown
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public boolean remove(Object o) {
+			return theWrapped.remove(o);
+		}
+
+		@Override
+		public boolean containsAll(Collection<?> c) {
+			return theWrapped.containsAll(c);
+		}
+
+		@Override
+		public boolean addAll(Collection<? extends T> c) {
+			// Not supported because the contract of List says add must always return true, but the contract of the wrapped collection
+			// is unknown
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public boolean removeAll(Collection<?> c) {
+			return theWrapped.removeAll(c);
+		}
+
+		@Override
+		public boolean retainAll(Collection<?> c) {
+			return theWrapped.retainAll(c);
+		}
+
+		@Override
+		public void clear() {
+			theWrapped.clear();
+		}
+	}
+
+	/**
+	 * An element for a {@link CollectionWrappingList}
+	 * 
+	 * @param <T> The type of the value in the element
+	 */
+	public static class WrappingListElement<T> implements OrderedObservableElement<T> {
+		private final CollectionWrappingList<T> theList;
+
+		private final ObservableElement<T> theWrapped;
+
+		WrappingListElement(CollectionWrappingList<T> list, ObservableElement<T> wrap) {
+			theList = list;
+			theWrapped = wrap;
+		}
+
+		@Override
+		public ObservableValue<T> persistent() {
+			return theWrapped.persistent();
+		}
+
+		@Override
+		public Type getType() {
+			return theWrapped.getType();
+		}
+
+		@Override
+		public T get() {
+			return theWrapped.get();
+		}
+
+		@Override
+		public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
+			return theWrapped.observe(new Observer<ObservableValueEvent<T>>() {
+				@Override
+				public <V extends ObservableValueEvent<T>> void onNext(V value) {
+					observer.onNext(ObservableUtils.wrap(value, WrappingListElement.this));
+				}
+
+				@Override
+				public <V extends ObservableValueEvent<T>> void onCompleted(V value) {
+					observer.onCompleted(ObservableUtils.wrap(value, WrappingListElement.this));
+				}
+			});
+		}
+
+		@Override
+		public int getIndex() {
+			return theList.theElements.indexOf(this);
 		}
 	}
 }
