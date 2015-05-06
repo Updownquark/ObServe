@@ -241,7 +241,7 @@ public interface ObservableMultiMap<K, V> {
 
 					@Override
 					public Runnable observe(Observer<? super ObservableValueEvent<ObservableCollection<V>>> observer) {
-						// TODO Auto-generated method stub
+						int todo; // TODO Auto-generated method stub
 						return null;
 					}
 				}

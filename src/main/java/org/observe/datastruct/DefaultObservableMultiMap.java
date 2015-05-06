@@ -1,20 +1,11 @@
 package org.observe.datastruct;
 
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.observe.ObservableValue;
-import org.observe.collect.CollectionSession;
-import org.observe.collect.DefaultObservableList;
-import org.observe.collect.DefaultObservableSet;
-import org.observe.collect.ObservableCollection;
-import org.observe.collect.ObservableSet;
-import org.observe.collect.TransactableList;
+import org.observe.collect.*;
 import org.observe.util.DefaultTransactable;
 import org.observe.util.Transaction;
 
@@ -86,8 +77,8 @@ public class DefaultObservableMultiMap<K, V> implements ObservableMultiMap<K, V>
 		theLock=new ReentrantReadWriteLock();
 		theSessionController = new DefaultTransactable(theLock.writeLock());
 
-		theEntries = new DefaultObservableSet<ObservableMultiEntry<K, V>>(new Type(ObservableMultiEntry.class, theKeyType, theKeyType),
-			theLock, theSessionController.getSession(), theSessionController);
+		theEntries = new DefaultObservableSet<>(new Type(ObservableMultiEntry.class, theKeyType, theKeyType), theLock,
+			theSessionController.getSession(), theSessionController);
 		theEntryController = ((DefaultObservableSet<ObservableMultiEntry<K, V>>) theEntries).control(null);
 	}
 

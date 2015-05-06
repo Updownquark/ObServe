@@ -14,10 +14,24 @@ import org.observe.collect.ObservableElement;
 
 import prisms.lang.Type;
 
+/**
+ * A graph implementation based on observable collections
+ *
+ * @param <N> The type of values stored in the nodes of the graph
+ * @param <E> The type of values stored in the edges of the graph
+ */
 public interface ObservableGraph<N, E> {
+	/**
+	 * A node in a graph
+	 *
+	 * @param <N> The type of values stored in the nodes of the graph
+	 * @param <E> The type of values stored in the edges of the graph
+	 */
 	interface Node<N, E> {
+		/** @return All edges that go to or from this node */
 		ObservableCollection<Edge<N, E>> getEdges();
 
+		/** @return The value associated with this node */
 		N getValue();
 
 		/** @return The collection of edges going outward from this node */
@@ -31,18 +45,33 @@ public interface ObservableGraph<N, E> {
 		}
 	}
 
+	/**
+	 * An edge between two nodes in a graph
+	 *
+	 * @param <N> The type of values stored in the nodes of the graph
+	 * @param <E> The type of values stored in the edges of the graph
+	 */
 	interface Edge<N, E> {
+		/** @return The node that this edge starts from */
 		Node<N, E> getStart();
 
+		/** @return The node that this edge goes to */
 		Node<N, E> getEnd();
 
+		/**
+		 * @return Whether this graph edge is to be interpreted as directional, i.e. if true, this edge does not represent a connection from
+		 *         {@link #getEnd() end} to {@link #getStart() start}.
+		 */
 		boolean isDirected();
 
+		/** @return The value associated with this edge */
 		E getValue();
 	}
 
+	/** @return An observable collection containing all nodes stored in this graph */
 	ObservableCollection<Node<N, E>> getNodes();
 
+	/** @return An observable collection containing all edges stored in this graph */
 	ObservableCollection<Edge<N, E>> getEdges();
 
 	/**
@@ -107,10 +136,19 @@ public interface ObservableGraph<N, E> {
 		};
 	}
 
+	/**
+	 * @param nodeValue The value to get the node for
+	 * @return An observable value containing the node in this graph whose value is equal to the argument. The value may be null.
+	 */
 	default ObservableValue<Node<N, E>> getNode(N nodeValue) {
 		return getNodes().find(node -> node.getValue().equals(nodeValue));
 	}
 
+	/**
+	 * @param nodeFilter The function to filter node values (may be null to not filter node values)
+	 * @param edgeFilter The function to filter edge values (may be null to not filter edge values)
+	 * @return A new graph based on a subset of this graph
+	 */
 	default ObservableGraph<N, E> filter(Predicate<? super N> nodeFilter, Predicate<? super E> edgeFilter) {
 		if(nodeFilter == null && edgeFilter == null)
 			return this;
@@ -234,6 +272,7 @@ public interface ObservableGraph<N, E> {
 	// default <V, E2> ObservableGraph<N, E2> combineEdges(ObservableValue<V> other, BiFunction<N, E, E2> map) {
 	// }
 
+	/** @return An immutable copy of this graph */
 	default ObservableGraph<N, E> immutable() {
 		ObservableGraph<N, E> outer = this;
 		return new ObservableGraph<N, E>() {
@@ -257,6 +296,11 @@ public interface ObservableGraph<N, E> {
 	// default ObservableCollection<Edge<N, E>> traverse(Node<N, E> start, Node<N, E> end, Function<Edge<N, E>, Double> cost) {
 	// }
 
+	/**
+	 * @param nodeType The type for the {@link #getNodes() nodes} collection
+	 * @param edgeType the type for the {@link #getEdges() edges} collection
+	 * @return An empty graph
+	 */
 	@SuppressWarnings("rawtypes")
 	static ObservableGraph empty(Type nodeType, Type edgeType) {
 		return new ObservableGraph() {
