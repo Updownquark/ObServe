@@ -31,4 +31,25 @@ public class CollectionChangeEvent<E> {
 		values = Collections.unmodifiableList(val);
 		oldValues = oldVal == null ? null : Collections.unmodifiableList(oldVal);
 	}
+
+	@Override
+	public String toString() {
+		StringBuilder ret = new StringBuilder();
+		switch (type) {
+		case add:
+			ret.append("added ").append(values);
+			break;
+		case remove:
+			ret.append("removed ").append(values);
+			break;
+		case set:
+			ret.append("set (\n");
+			for(int i = 0; i < values.size(); i++) {
+				ret.append("\t").append(oldValues.get(i)).append("->").append(values.get(i)).append('\n');
+			}
+			ret.append(')');
+			break;
+		}
+		return ret.toString();
+	}
 }

@@ -24,4 +24,38 @@ public class OrderedCollectionChangeEvent<E> extends CollectionChangeEvent<E> {
 		indexes = idxs;
 		indexes.seal();
 	}
+
+	@Override
+	public String toString() {
+		StringBuilder ret = new StringBuilder();
+		switch (type) {
+		case add:
+			ret.append("added ");
+			break;
+		case remove:
+			ret.append("removed ");
+			break;
+		case set:
+			ret.append("set ");
+			break;
+		}
+		ret.append(" (\n");
+		for(int i = 0; i < values.size(); i++) {
+			ret.append("\t[").append(indexes.get(i)).append("]: ");
+			switch (type) {
+			case add:
+				ret.append(values.get(i));
+				break;
+			case remove:
+				ret.append(values.get(i));
+				break;
+			case set:
+				ret.append(oldValues.get(i)).append("->").append(values.get(i));
+				break;
+			}
+			ret.append('\n');
+		}
+		ret.append(')');
+		return ret.toString();
+	}
 }
