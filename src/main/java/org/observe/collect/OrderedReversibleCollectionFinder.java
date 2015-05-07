@@ -8,14 +8,14 @@ import java.util.function.Predicate;
  * @param <E> The type of value to find
  */
 public class OrderedReversibleCollectionFinder<E> extends OrderedCollectionFinder<E> {
-	OrderedReversibleCollectionFinder(ObservableOrderedReversibleCollection<E> collection, Predicate<? super E> filter, boolean forward) {
+	OrderedReversibleCollectionFinder(ObservableReversibleCollection<E> collection, Predicate<? super E> filter, boolean forward) {
 		super(collection, filter, forward);
 	}
 
 	/** @return The collection that this finder searches */
 	@Override
-	public ObservableOrderedReversibleCollection<E> getCollection() {
-		return (ObservableOrderedReversibleCollection<E>) super.getCollection();
+	public ObservableReversibleCollection<E> getCollection() {
+		return (ObservableReversibleCollection<E>) super.getCollection();
 	}
 
 	@Override

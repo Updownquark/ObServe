@@ -3,7 +3,6 @@ package org.observe.collect;
 import static org.observe.ObservableDebug.debug;
 import static org.observe.ObservableDebug.label;
 
-import java.util.AbstractCollection;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
@@ -292,6 +291,15 @@ public interface ObservableCollection<E> extends Collection<E> {
 	}
 
 	/**
+	 * @param type The type to filter this collection by
+	 * @return A collection backed by this collection, consisting only of elements in this collection whose values are instances of the
+	 *         given class
+	 */
+	default <T> ObservableCollection<T> filter(Class<T> type) {
+		return label(filterMap(value -> type.isInstance(value) ? type.cast(value) : null)).tag("filterType", type).get();
+	}
+
+	/**
 	 * @param <T> The type of the mapped collection
 	 * @param filterMap The mapping function
 	 * @return An observable collection of a new type backed by this collection and the mapping function
@@ -539,7 +547,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 
 			@Override
 			public Runnable onElement(Consumer<? super ObservableElement<V>> observer) {
-				return theTransactionManager.onElement(outer, arg, element -> observer.accept(element.combineV(func, arg)));
+				return theTransactionManager.onElement(outer, arg, element -> observer.accept(element.combineV(func, arg)), true);
 			}
 		}
 		return debug(new CombinedObservableCollection()).from("combine", this).from("with", arg).using("combination", func).get();
@@ -576,7 +584,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 
 			@Override
 			public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
-				return theTransactionManager.onElement(outer, refresh, element -> observer.accept(element.refresh(refresh)));
+				return theTransactionManager.onElement(outer, refresh, element -> observer.accept(element.refresh(refresh)), true);
 			}
 		};
 		return debug(new RefreshingCollection()).from("refresh", this).from("on", refresh).get();
@@ -598,7 +606,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 
 	/** @return An observable collection that cannot be modified directly but reflects the value of this collection as it changes */
 	default ObservableCollection<E> immutable() {
-		return debug(new Immutable<>(this)).from("immutable", this).get();
+		return debug(new ImmutableObservableCollection<>(this)).from("immutable", this).get();
 	}
 
 	/**
@@ -607,7 +615,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @return The cached collection
 	 */
 	default ObservableCollection<E> cached() {
-		return debug(new SafeCached<>(this)).from("cached", this).get();
+		return debug(new SafeCachedObservableCollection<>(this)).from("cached", this).get();
 	}
 
 	/**
@@ -939,11 +947,11 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	public static class Immutable<E> extends AbstractCollection<E> implements ObservableCollection<E> {
+	public static class ImmutableObservableCollection<E> implements PartialCollectionImpl<E> {
 		private final ObservableCollection<E> theWrapped;
 
 		/** @param wrap The collection to wrap */
-		public Immutable(ObservableCollection<E> wrap) {
+		public ImmutableObservableCollection(ObservableCollection<E> wrap) {
 			theWrapped = wrap;
 		}
 
@@ -973,7 +981,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 		}
 
 		@Override
-		public Immutable<E> immutable() {
+		public ImmutableObservableCollection<E> immutable() {
 			return this;
 		}
 	}
@@ -986,7 +994,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	public static class SafeCached<E> implements PartialCollectionImpl<E> {
+	public static class SafeCachedObservableCollection<E> implements PartialCollectionImpl<E> {
 		private static class CachedElement<E> implements ObservableElement<E> {
 			private final ObservableElement<E> theWrapped;
 			private final ListenerSet<Observer<? super ObservableValueEvent<E>>> theElementListeners;
@@ -1042,7 +1050,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 		private Runnable theUnsubscribe;
 
 		/** @param wrap The collection to cache */
-		public SafeCached(ObservableCollection<E> wrap) {
+		public SafeCachedObservableCollection(ObservableCollection<E> wrap) {
 			theWrapped = wrap;
 			theListeners = new ListenerSet<>();
 			theCache = new org.observe.util.ConcurrentIdentityHashMap<>();

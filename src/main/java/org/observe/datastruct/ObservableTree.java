@@ -1,6 +1,7 @@
-package org.observe.collect;
+package org.observe.datastruct;
 
 import org.observe.ObservableValue;
+import org.observe.collect.ObservableList;
 
 /**
  * A observable tree structure, with a value and a list of trees underneath it. Also functions as a tree node.

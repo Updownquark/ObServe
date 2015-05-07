@@ -1,6 +1,11 @@
 package org.observe.collect;
 
-import java.util.*;
+import java.util.AbstractSet;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
@@ -105,7 +110,7 @@ public class DefaultObservableSet<E> extends AbstractSet<E> implements Observabl
 
 	@Override
 	public Runnable onElement(Consumer<? super ObservableElement<E>> onElement) {
-		return theInternals.onElement(onElement);
+		return theInternals.onElement(onElement, true);
 	}
 
 	@Override
@@ -428,7 +433,7 @@ public class DefaultObservableSet<E> extends AbstractSet<E> implements Observabl
 		}
 
 		@Override
-		Iterable<? extends InternalObservableElementImpl<E>> getElements() {
+		Iterable<? extends InternalObservableElementImpl<E>> getElements(boolean forward) {
 			return theValues.values();
 		}
 

@@ -1,6 +1,5 @@
 package org.observe.collect;
 
-import java.util.AbstractCollection;
 import java.util.Iterator;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -9,7 +8,7 @@ import org.observe.ObservableValue;
 
 import prisms.lang.Type;
 
-class CombinedObservableOrderedCollection<E, T, V> extends AbstractCollection<V> implements ObservableOrderedCollection<V> {
+class CombinedObservableOrderedCollection<E, T, V> implements ObservableOrderedCollection<V>, PartialCollectionImpl<V> {
 	private final ObservableOrderedCollection<E> theCollection;
 	private final ObservableValue<T> theValue;
 	private final Type theType;
@@ -24,6 +23,22 @@ class CombinedObservableOrderedCollection<E, T, V> extends AbstractCollection<V>
 		theType = type;
 		theMap = map;
 		theTransactionManager = new SubCollectionTransactionManager(theCollection);
+	}
+
+	SubCollectionTransactionManager getManager() {
+		return theTransactionManager;
+	}
+
+	ObservableOrderedCollection<E> getCollection() {
+		return theCollection;
+	}
+
+	ObservableValue<T> getValue() {
+		return theValue;
+	}
+
+	BiFunction<? super E, ? super T, V> getMap() {
+		return theMap;
 	}
 
 	@Override
@@ -55,12 +70,17 @@ class CombinedObservableOrderedCollection<E, T, V> extends AbstractCollection<V>
 			public V next() {
 				return theMap.apply(backing.next(), theValue.get());
 			}
+
+			@Override
+			public void remove() {
+				backing.remove();
+			}
 		};
 	}
 
 	@Override
-	public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<V>> observer) {
+	public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<V>> onElement) {
 		return theTransactionManager.onElement(theCollection, theValue,
-			element -> observer.accept((OrderedObservableElement<V>) element.combineV(theMap, theValue)));
+			element -> onElement.accept((OrderedObservableElement<V>) element.combineV(theMap, theValue)), true);
 	}
 }

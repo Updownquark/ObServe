@@ -11,7 +11,7 @@ import java.util.Objects;
  *
  * @param <E> The type of element in the collection
  */
-interface PartialCollectionImpl<E> extends ObservableCollection<E> {
+public interface PartialCollectionImpl<E> extends ObservableCollection<E> {
 	@Override
 	default boolean add(E e) {
 		throw new UnsupportedOperationException();

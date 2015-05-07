@@ -3,7 +3,15 @@ package org.observe.collect;
 import static org.observe.ObservableDebug.debug;
 import static org.observe.ObservableDebug.label;
 
-import java.util.*;
+import java.util.AbstractCollection;
+import java.util.ArrayList;
+import java.util.BitSet;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -11,8 +19,10 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-import org.observe.*;
+import org.observe.ComposedObservableValue;
 import org.observe.Observable;
+import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.util.ListenerSet;
 
@@ -90,7 +100,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	@Override
 	default ObservableOrderedCollection<E> refresh(Observable<?> refresh) {
 		ObservableOrderedCollection<E> outer = this;
-		class RefreshingCollection extends AbstractCollection<E> implements ObservableOrderedCollection<E> {
+		class RefreshingCollection implements PartialCollectionImpl<E>, ObservableOrderedCollection<E> {
 			private final SubCollectionTransactionManager theTransactionManager = new SubCollectionTransactionManager(outer);
 
 			@Override
@@ -116,7 +126,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 			@Override
 			public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<E>> observer) {
 				return theTransactionManager.onElement(outer, refresh,
-					element -> observer.accept((OrderedObservableElement<E>) element.refresh(refresh)));
+					element -> observer.accept((OrderedObservableElement<E>) element.refresh(refresh)), true);
 			}
 		};
 		return debug(new RefreshingCollection()).from("refresh", this).from("on", refresh).get();
@@ -130,7 +140,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	@Override
 	default <T> ObservableOrderedCollection<T> map(Type type, Function<? super E, T> map) {
 		ObservableOrderedCollection<E> outer = this;
-		class MappedObservableCollection extends java.util.AbstractCollection<T> implements ObservableOrderedCollection<T> {
+		class MappedObservableOrderedCollection implements PartialCollectionImpl<T>, ObservableOrderedCollection<T> {
 			@Override
 			public Type getType() {
 				return type;
@@ -173,7 +183,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 				return outer.onOrderedElement(element -> observer.accept(element.mapV(map)));
 			}
 		}
-		return debug(new MappedObservableCollection()).from("map", this).using("map", map).get();
+		return debug(new MappedObservableOrderedCollection()).from("map", this).using("map", map).get();
 	}
 
 	@Override
@@ -184,6 +194,11 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	@Override
+	default <T> ObservableOrderedCollection<T> filter(Class<T> type) {
+		return label(filterMap(value -> type.isInstance(value) ? type.cast(value) : null)).tag("filterType", type).get();
+	}
+
+	@Override
 	default <T> ObservableOrderedCollection<T> filterMap(Function<? super E, T> filterMap) {
 		return filterMap(ComposedObservableValue.getReturnType(filterMap), filterMap);
 	}
@@ -191,7 +206,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	@Override
 	default <T> ObservableOrderedCollection<T> filterMap(Type type, Function<? super E, T> map) {
 		ObservableOrderedCollection<E> outer = this;
-		class FilteredOrderedCollection extends AbstractCollection<T> implements ObservableOrderedCollection<T> {
+		class FilteredOrderedCollection implements PartialCollectionImpl<T>, ObservableOrderedCollection<T> {
 			private List<FilteredOrderedElement<T, E>> theFilteredElements = new java.util.ArrayList<>();
 
 			@Override
@@ -262,12 +277,12 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 	@Override
 	default ObservableOrderedCollection<E> immutable() {
-		return debug(new Immutable<>(this)).from("immutable", this).get();
+		return debug(new ImmutableOrderedObservableCollection<>(this)).from("immutable", this).get();
 	}
 
 	@Override
 	default ObservableOrderedCollection<E> cached(){
-		return debug(new SafeCached<>(this)).from("cached", this).get();
+		return debug(new SafeCachedOrderedObservableCollection<>(this)).from("cached", this).get();
 	}
 
 	/**
@@ -687,7 +702,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 *
 	 * @param <E> The type of the elements in the collection
 	 */
-	static class SortedObservableCollectionWrapper<E> extends AbstractCollection<E> implements ObservableOrderedCollection<E> {
+	static class SortedObservableCollectionWrapper<E> implements PartialCollectionImpl<E>, ObservableOrderedCollection<E> {
 		private final ObservableCollection<E> theWrapped;
 		private final Comparator<? super E> theCompare;
 
@@ -774,11 +789,11 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	public static class Immutable<E> extends AbstractCollection<E> implements ObservableOrderedCollection<E> {
+	public static class ImmutableOrderedObservableCollection<E> implements PartialCollectionImpl<E>, ObservableOrderedCollection<E> {
 		private final ObservableOrderedCollection<E> theWrapped;
 
 		/** @param wrap The collection to wrap */
-		public Immutable(ObservableOrderedCollection<E> wrap) {
+		public ImmutableOrderedObservableCollection(ObservableOrderedCollection<E> wrap) {
 			theWrapped = wrap;
 		}
 
@@ -808,7 +823,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		}
 
 		@Override
-		public Immutable<E> immutable() {
+		public ImmutableOrderedObservableCollection<E> immutable() {
 			return this;
 		}
 	}
@@ -818,7 +833,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	public static class SafeCached<E> extends AbstractCollection<E> implements ObservableOrderedCollection<E> {
+	public static class SafeCachedOrderedObservableCollection<E> implements PartialCollectionImpl<E>, ObservableOrderedCollection<E> {
 		private static class CachedElement<E> implements OrderedObservableElement<E> {
 			private final OrderedObservableElement<E> theWrapped;
 			private final ListenerSet<Observer<? super ObservableValueEvent<E>>> theElementListeners;
@@ -880,7 +895,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		private Runnable theUnsubscribe;
 
 		/** @param wrap The collection to cache */
-		public SafeCached(ObservableOrderedCollection<E> wrap) {
+		public SafeCachedOrderedObservableCollection(ObservableOrderedCollection<E> wrap) {
 			theWrapped = wrap;
 			theListeners = new ListenerSet<>();
 			theCache = new java.util.concurrent.CopyOnWriteArrayList<>();

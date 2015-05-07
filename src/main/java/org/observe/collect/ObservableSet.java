@@ -159,7 +159,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 
 			@Override
 			public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
-				return theTransactionManager.onElement(outer, refresh, element -> observer.accept(element.refresh(refresh)));
+				return theTransactionManager.onElement(outer, refresh, element -> observer.accept(element.refresh(refresh)), true);
 			}
 		};
 		return debug(new RefreshingCollection()).from("refresh", this).from("on", refresh).get();

@@ -5,10 +5,12 @@ import static org.observe.ObservableDebug.label;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.ConcurrentModificationException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -35,30 +37,30 @@ import prisms.lang.Type;
  *
  * @param <E> The type of element in the list
  */
-public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<E> {
+public interface ObservableList<E> extends ObservableReversibleCollection<E>, List<E> {
 	@Override
 	default boolean isEmpty() {
-		return ObservableOrderedCollection.super.isEmpty();
+		return ObservableReversibleCollection.super.isEmpty();
 	}
 
 	@Override
 	default boolean contains(Object o) {
-		return ObservableOrderedCollection.super.contains(o);
+		return ObservableReversibleCollection.super.contains(o);
 	}
 
 	@Override
 	default boolean containsAll(Collection<?> o) {
-		return ObservableOrderedCollection.super.containsAll(o);
+		return ObservableReversibleCollection.super.containsAll(o);
 	}
 
 	@Override
 	default Object [] toArray() {
-		return ObservableOrderedCollection.super.toArray();
+		return ObservableReversibleCollection.super.toArray();
 	}
 
 	@Override
 	default <T> T [] toArray(T [] a) {
-		return ObservableOrderedCollection.super.toArray(a);
+		return ObservableReversibleCollection.super.toArray(a);
 	}
 
 	@Override
@@ -76,6 +78,36 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 		return new ObservableSubList<>(this, fromIndex, toIndex);
 	}
 
+	@Override
+	default Iterable<E> descending() {
+		return new Iterable<E>() {
+			@Override
+			public Iterator<E> iterator() {
+				return new Iterator<E>() {
+					private final ListIterator<E> backing;
+
+					{
+						backing = listIterator(size());
+					}
+
+					@Override
+					public boolean hasNext() {
+						return backing.hasPrevious();
+					}
+
+					@Override
+					public E next() {
+						return backing.previous();
+					}
+
+					@Override
+					public void remove() {
+						backing.remove();
+					}
+				};
+			}
+		};
+	}
 	/**
 	 * @param map The mapping function
 	 * @return An observable list of a new type backed by this list and the mapping function
@@ -115,11 +147,21 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 			}
 
 			@Override
-			public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<T>> observer) {
-				return outer.onOrderedElement(element -> observer.accept(element.mapV(map)));
+			public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<T>> onElement) {
+				return outer.onOrderedElement(element -> onElement.accept(element.mapV(map)));
+			}
+
+			@Override
+			public Runnable onElementReverse(Consumer<? super OrderedObservableElement<T>> onElement) {
+				return outer.onElementReverse(element -> onElement.accept(element.mapV(map)));
 			}
 		}
 		return debug(new MappedObservableList()).from("map", this).using("map", map).get();
+	}
+
+	@Override
+	default <T> ObservableList<T> filter(Class<T> type) {
+		return label(filterMap(value -> type.isInstance(value) ? type.cast(value) : null)).tag("filterType", type).get();
 	}
 
 	/**
@@ -183,7 +225,7 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 			}
 
 			@Override
-			public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<T>> observer) {
+			public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<T>> onElement) {
 				return outer.onElement(element -> {
 					OrderedObservableElement<E> outerElement = (OrderedObservableElement<E>) element;
 					FilteredListElement<T, E> retElement = debug(new FilteredListElement<>(outerElement, map, type, theFilteredElements))
@@ -195,7 +237,32 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 							if(!retElement.isIncluded()) {
 								T mapped = map.apply(elValue.getValue());
 								if(mapped != null)
-									observer.accept(retElement);
+									onElement.accept(retElement);
+							}
+						}
+
+						@Override
+						public <V2 extends ObservableValueEvent<E>> void onCompleted(V2 elValue) {
+							theFilteredElements.remove(outerElement.getIndex());
+						}
+					});
+				});
+			}
+
+			@Override
+			public Runnable onElementReverse(Consumer<? super OrderedObservableElement<T>> onElement) {
+				return outer.onElement(element -> {
+					OrderedObservableElement<E> outerElement = (OrderedObservableElement<E>) element;
+					FilteredListElement<T, E> retElement = debug(new FilteredListElement<>(outerElement, map, type, theFilteredElements))
+						.from("element", outer).tag("wrapped", element).get();
+					theFilteredElements.add(outerElement.getIndex(), retElement);
+					outerElement.observe(new Observer<ObservableValueEvent<E>>() {
+						@Override
+						public <V2 extends ObservableValueEvent<E>> void onNext(V2 elValue) {
+							if(!retElement.isIncluded()) {
+								T mapped = map.apply(elValue.getValue());
+								if(mapped != null)
+									onElement.accept(retElement);
 							}
 						}
 
@@ -259,7 +326,13 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 			@Override
 			public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<V>> observer) {
 				return theTransactionManager.onElement(outer, arg,
-					element -> observer.accept((OrderedObservableElement<V>) element.combineV(func, arg)));
+					element -> observer.accept((OrderedObservableElement<V>) element.combineV(func, arg)), true);
+			}
+
+			@Override
+			public Runnable onElementReverse(Consumer<? super OrderedObservableElement<V>> onElement) {
+				return theTransactionManager.onElement(outer, arg,
+					element -> onElement.accept((OrderedObservableElement<V>) element.combineV(func, arg)), false);
 			}
 		}
 		return debug(new CombinedObservableList()).from("combine", this).from("with", arg).using("combination", func).get();
@@ -272,7 +345,7 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 	@Override
 	default ObservableList<E> refresh(Observable<?> refresh) {
 		ObservableList<E> outer = this;
-		class RefreshingCollection implements PartialListImpl<E> {
+		class RefreshingList implements PartialListImpl<E> {
 			private final SubCollectionTransactionManager theTransactionManager = new SubCollectionTransactionManager(outer);
 
 			@Override
@@ -298,10 +371,16 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 			@Override
 			public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<E>> observer) {
 				return theTransactionManager.onElement(outer, refresh,
-					element -> observer.accept((OrderedObservableElement<E>) element.refresh(refresh)));
+					element -> observer.accept((OrderedObservableElement<E>) element.refresh(refresh)), true);
+			}
+
+			@Override
+			public Runnable onElementReverse(Consumer<? super OrderedObservableElement<E>> observer) {
+				return theTransactionManager.onElement(outer, refresh,
+					element -> observer.accept((OrderedObservableElement<E>) element.refresh(refresh)), false);
 			}
 		};
-		return debug(new RefreshingCollection()).from("refresh", this).from("on", refresh).get();
+		return debug(new RefreshingList()).from("refresh", this).from("on", refresh).get();
 	}
 
 	@Override
@@ -386,6 +465,14 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 			}
 
 			@Override
+			public Runnable onElementReverse(Consumer<? super OrderedObservableElement<T>> observer) {
+				for(int i = obsEls.size() - 1; i >= 0; i--)
+					observer.accept(obsEls.get(i));
+				return () -> {
+				};
+			}
+
+			@Override
 			public T get(int index) {
 				return constList.get(index);
 			}
@@ -418,6 +505,37 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 	 */
 	public static <T> ObservableList<T> flatten(ObservableList<? extends ObservableList<? extends T>> list) {
 		class FlattenedObservableList implements PartialListImpl<T> {
+			class FlattenedListElement extends FlattenedElement<T> implements OrderedObservableElement<T> {
+				private final List<FlattenedListElement> subListElements;
+
+				private final OrderedObservableElement<? extends ObservableList<? extends T>> theSubList;
+
+				FlattenedListElement(OrderedObservableElement<? extends T> subEl, List<FlattenedListElement> subListEls,
+					OrderedObservableElement<? extends ObservableList<? extends T>> subList) {
+					super((ObservableElement<T>) subEl, subList);
+					subListElements = subListEls;
+					theSubList = subList;
+				}
+
+				@Override
+				protected OrderedObservableElement<T> getSubElement() {
+					return (OrderedObservableElement<T>) super.getSubElement();
+				}
+
+				@Override
+				public int getIndex() {
+					int subListIndex = theSubList.getIndex();
+					int ret = 0;
+					for(int i = 0; i < subListIndex; i++)
+						ret += list.get(i).size();
+					int innerIndex = getSubElement().getIndex();
+					for(int i = 0; i < innerIndex; i++)
+						if(!subListElements.get(i).isRemoved())
+							ret++;
+					return ret;
+				}
+			}
+
 			private final CombinedCollectionSessionObservable theSession = new CombinedCollectionSessionObservable(list);
 
 			@Override
@@ -451,8 +569,18 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 			}
 
 			@Override
-			public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<T>> observer) {
-				return list.onElement(new Consumer<ObservableElement<? extends ObservableList<? extends T>>>() {
+			public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<T>> onElement) {
+				return onElement(onElement, true);
+			}
+
+			@Override
+			public Runnable onElementReverse(Consumer<? super OrderedObservableElement<T>> onElement) {
+				return onElement(onElement, false);
+			}
+
+			private Runnable onElement(Consumer<? super OrderedObservableElement<T>> onElement, boolean forward) {
+				Consumer<OrderedObservableElement<? extends ObservableList<? extends T>>> outerConsumer;
+				outerConsumer = new Consumer<OrderedObservableElement<? extends ObservableList<? extends T>>>() {
 					private Map<ObservableList<?>, Runnable> subListSubscriptions;
 
 					{
@@ -460,33 +588,7 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 					}
 
 					@Override
-					public void accept(ObservableElement<? extends ObservableList<? extends T>> subList) {
-						class FlattenedListElement extends FlattenedElement<T> implements OrderedObservableElement<T> {
-							private final List<FlattenedListElement> subListElements;
-
-							FlattenedListElement(OrderedObservableElement<T> subEl, List<FlattenedListElement> subListEls) {
-								super(subEl, subList);
-								subListElements = subListEls;
-							}
-
-							@Override
-							protected OrderedObservableElement<T> getSubElement() {
-								return (OrderedObservableElement<T>) super.getSubElement();
-							}
-
-							@Override
-							public int getIndex() {
-								int subListIndex = ((OrderedObservableElement<?>) subList).getIndex();
-								int ret = 0;
-								for(int i = 0; i < subListIndex; i++)
-									ret += list.get(i).size();
-								int innerIndex = getSubElement().getIndex();
-								for(int i = 0; i < innerIndex; i++)
-									if(!subListElements.get(i).isRemoved())
-										ret++;
-								return ret;
-							}
-						}
+					public void accept(OrderedObservableElement<? extends ObservableList<? extends T>> subList) {
 						subList.observe(new Observer<ObservableValueEvent<? extends ObservableList<? extends T>>>() {
 							private List<FlattenedListElement> subListEls = new java.util.ArrayList<>();
 
@@ -497,15 +599,19 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 									if(subListSub != null)
 										subListSub.run();
 								}
-								Runnable subListSub = subListEvent.getValue().onElement(subElement -> {
-									OrderedObservableElement<T> subListEl = (OrderedObservableElement<T>) subElement;
-									FlattenedListElement flatEl = debug(new FlattenedListElement(subListEl, subListEls))
+								Consumer<OrderedObservableElement<? extends T>> innerConsumer = subElement -> {
+									FlattenedListElement flatEl = debug(new FlattenedListElement(subElement, subListEls, subList))
 										.from("element", FlattenedObservableList.this).tag("wrappedCollectionElement", subList)
 										.tag("wrappedSubElement", subElement).get();
-									subListEls.add(subListEl.getIndex(), flatEl);
-									subListEl.completed().act(x -> subListEls.remove(subListEl.getIndex()));
-									observer.accept(flatEl);
-								});
+									subListEls.add(subElement.getIndex(), flatEl);
+									subElement.completed().act(x -> subListEls.remove(subElement.getIndex()));
+									onElement.accept(flatEl);
+								};
+								Runnable subListSub;
+								if(forward)
+									subListSub = subListEvent.getValue().onOrderedElement(innerConsumer);
+								else
+									subListSub = subListEvent.getValue().onElementReverse(innerConsumer);
 								subListSubscriptions.put(subListEvent.getValue(), subListSub);
 							}
 
@@ -515,7 +621,8 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 							}
 						});
 					}
-				});
+				};
+				return forward ? list.onOrderedElement(outerConsumer) : list.onElementReverse(outerConsumer);
 			}
 		}
 		return debug(new FlattenedObservableList()).from("flatten", list).get();
@@ -595,6 +702,11 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 		@Override
 		public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<E>> observer) {
 			return theWrapped.onOrderedElement(observer);
+		}
+
+		@Override
+		public Runnable onElementReverse(Consumer<? super OrderedObservableElement<E>> observer) {
+			return theWrapped.onElementReverse(observer);
 		}
 
 		@Override
@@ -856,6 +968,22 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 		}
 
 		@Override
+		public Runnable onElementReverse(Consumer<? super OrderedObservableElement<T>> onElement) {
+			boolean [] initialized = new boolean[1];
+			Consumer<OrderedObservableElement<T>> listener = element -> {
+				if(initialized[0])
+					onElement.accept(element);
+			};
+			initialized[0] = true;
+			theListeners.add(listener);
+			for(int i = theElements.size() - 1; i >= 0; i--)
+				onElement.accept(theElements.get(i));
+			return () -> {
+				theListeners.remove(listener);
+			};
+		}
+
+		@Override
 		public ObservableValue<CollectionSession> getSession() {
 			return theWrapped.getSession();
 		}
@@ -1099,6 +1227,110 @@ public interface ObservableList<E> extends ObservableOrderedCollection<E>, List<
 		@Override
 		public int getIndex() {
 			return theList.theElements.indexOf(this);
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableList#listIterator()}
+	 *
+	 * @param <E> The type of values to iterate
+	 */
+	class SimpleListIterator<E> implements java.util.ListIterator<E> {
+		private final List<E> theList;
+
+		/** Index of element to be returned by subsequent call to next. */
+		int cursor = 0;
+
+		/** Index of element returned by most recent call to next or previous. Reset to -1 if this element is deleted by a call to remove. */
+		int lastRet = -1;
+
+		SimpleListIterator(List<E> list, int index) {
+			theList = list;
+			cursor = index;
+		}
+
+		@Override
+		public boolean hasNext() {
+			return cursor != theList.size();
+		}
+
+		@Override
+		public E next() {
+			try {
+				int i = cursor;
+				E next = theList.get(i);
+				lastRet = i;
+				cursor = i + 1;
+				return next;
+			} catch(IndexOutOfBoundsException e) {
+				throw new NoSuchElementException();
+			}
+		}
+
+		@Override
+		public void remove() {
+			if(lastRet < 0)
+				throw new IllegalStateException();
+
+			try {
+				theList.remove(lastRet);
+				if(lastRet < cursor)
+					cursor--;
+				lastRet = -1;
+			} catch(IndexOutOfBoundsException e) {
+				throw new ConcurrentModificationException();
+			}
+		}
+
+		@Override
+		public boolean hasPrevious() {
+			return cursor != 0;
+		}
+
+		@Override
+		public E previous() {
+			try {
+				int i = cursor - 1;
+				E previous = theList.get(i);
+				lastRet = cursor = i;
+				return previous;
+			} catch(IndexOutOfBoundsException e) {
+				throw new NoSuchElementException();
+			}
+		}
+
+		@Override
+		public int nextIndex() {
+			return cursor;
+		}
+
+		@Override
+		public int previousIndex() {
+			return cursor - 1;
+		}
+
+		@Override
+		public void set(E e) {
+			if(lastRet < 0)
+				throw new IllegalStateException();
+
+			try {
+				theList.set(lastRet, e);
+			} catch(IndexOutOfBoundsException ex) {
+				throw new ConcurrentModificationException();
+			}
+		}
+
+		@Override
+		public void add(E e) {
+			try {
+				int i = cursor;
+				theList.add(i, e);
+				lastRet = -1;
+				cursor = i + 1;
+			} catch(IndexOutOfBoundsException ex) {
+				throw new ConcurrentModificationException();
+			}
 		}
 	}
 }

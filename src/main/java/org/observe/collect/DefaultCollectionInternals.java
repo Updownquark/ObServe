@@ -58,11 +58,11 @@ abstract class DefaultCollectionInternals<E> {
 		}
 	}
 
-	Runnable onElement(Consumer<? super ObservableElement<E>> onElement) {
+	Runnable onElement(Consumer<? super ObservableElement<E>> onElement, boolean forward) {
 		ConcurrentLinkedQueue<Runnable> subSubscriptions = new ConcurrentLinkedQueue<>();
 		theObservers.put(onElement, subSubscriptions);
 		doLocked(() -> {
-			for(InternalObservableElementImpl<E> el : getElements())
+			for(InternalObservableElementImpl<E> el : getElements(forward))
 				onElement.accept(createExposedElement(el, subSubscriptions));
 		}, false, false);
 		if(theOnSubscribe != null)
@@ -82,7 +82,7 @@ abstract class DefaultCollectionInternals<E> {
 		}
 	}
 
-	abstract Iterable<? extends InternalObservableElementImpl<E>> getElements();
+	abstract Iterable<? extends InternalObservableElementImpl<E>> getElements(boolean forward);
 
 	abstract ObservableElement<E> createExposedElement(InternalObservableElementImpl<E> internal, Collection<Runnable> subscriptions);
 }

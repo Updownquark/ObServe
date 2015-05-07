@@ -12,7 +12,7 @@ import org.observe.Observer;
 import prisms.lang.Type;
 
 /** Manages transactions for a derived collection in a thread-safe way */
-public class SubCollectionTransactionManager {
+class SubCollectionTransactionManager {
 	private final ReentrantLock theLock;
 
 	private CollectionSession theInternalSessionValue;
@@ -53,10 +53,12 @@ public class SubCollectionTransactionManager {
 	 * @param collection The parent of the collection to observe
 	 * @param refresh The observable to refresh the collection on
 	 * @param onElement The code to deliver the elements to the observer
+	 * @param forward Whether to iterate forward through initial elements, or backward (only for {@link ObservableReversibleCollection
+	 *            reversible} collections)
 	 * @return The runnable to execute to uninstall the observer
 	 */
 	public <E> Runnable onElement(ObservableCollection<E> collection, Observable<?> refresh,
-		Consumer<? super ObservableElement<E>> onElement) {
+		Consumer<? super ObservableElement<E>> onElement, boolean forward) {
 		// Here we're relying on observers being fired in the order they were subscribed
 		Runnable refreshStartSub = refresh == null ? null : refresh.observe(new Observer<Object>() {
 			@Override
@@ -81,13 +83,18 @@ public class SubCollectionTransactionManager {
 			}
 		};
 		Runnable [] refreshEndSub = new Runnable[] {refresh.observe(refreshEnd)};
-		Runnable collSub = collection.onElement(element -> {
+		Consumer<ObservableElement<E>> elFn = element -> {
 			onElement.accept(element);
 			// The refresh end always needs to be after the elements
 			Runnable oldRefreshEnd = refreshEndSub[0];
 			refreshEndSub[0] = refresh.observe(refreshEnd);
 			oldRefreshEnd.run();
-		});
+		};
+		Runnable collSub;
+		if(forward)
+			collSub = collection.onElement(elFn);
+		else
+			collSub = ((ObservableReversibleCollection<E>) collection).onElementReverse(onElement);
 		return () -> {
 			refreshStartSub.run();
 			refreshEndSub[0].run();

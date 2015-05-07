@@ -1,6 +1,13 @@
 package org.observe.collect;
 
-import java.util.*;
+import java.util.AbstractSet;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.NavigableSet;
+import java.util.SortedSet;
+import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
@@ -103,7 +110,7 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 
 	@Override
 	public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
-		return theInternals.onElement(observer);
+		return theInternals.onElement(observer, true);
 	}
 
 	@Override
@@ -621,8 +628,16 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 		}
 
 		@Override
-		Iterable<? extends InternalObservableElementImpl<E>> getElements() {
-			return theValues.values();
+		Iterable<? extends InternalObservableElementImpl<E>> getElements(boolean forward) {
+			if(forward)
+				return theValues.values();
+			else
+				return new Iterable<InternalObservableElementImpl<E>>() {
+					@Override
+					public Iterator<InternalObservableElementImpl<E>> iterator() {
+						return theValues.descendingMap().values().iterator();
+					}
+				};
 		}
 
 		@Override

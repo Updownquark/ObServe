@@ -29,58 +29,6 @@ class ObservableSubList<E> implements PartialListImpl<E> {
 
 	@Override
 	public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<E>> onElement) {
-		class Element implements OrderedObservableElement<E> {
-			private final OrderedObservableElement<E> theWrapped;
-
-			private final DefaultObservable<Void> theRemovedObservable;
-
-			private final Observer<Void> theRemovedController;
-
-			Element(OrderedObservableElement<E> wrap) {
-				theWrapped = wrap;
-				theRemovedObservable = new DefaultObservable<>();
-				theRemovedController = theRemovedObservable.control(null);
-			}
-
-			@Override
-			public ObservableValue<E> persistent() {
-				return theWrapped.persistent();
-			}
-
-			@Override
-			public Type getType() {
-				return theWrapped.getType();
-			}
-
-			@Override
-			public E get() {
-				return theWrapped.get();
-			}
-
-			@Override
-			public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
-				return theWrapped.takeUntil(theRemovedObservable).observe(new Observer<ObservableValueEvent<E>>() {
-					@Override
-					public <V extends ObservableValueEvent<E>> void onNext(V value) {
-						observer.onNext(ObservableUtils.wrap(value, Element.this));
-					}
-
-					@Override
-					public <V extends ObservableValueEvent<E>> void onCompleted(V value) {
-						observer.onCompleted(ObservableUtils.wrap(value, Element.this));
-					}
-				});
-			}
-
-			@Override
-			public int getIndex() {
-				return theWrapped.getIndex() - theOffset;
-			}
-
-			void remove() {
-				theRemovedController.onNext(null);
-			}
-		}
 		List<OrderedObservableElement<E>> elements = new ArrayList<>();
 		List<Element> wrappers = new ArrayList<>();
 		return theList.onOrderedElement(element -> {
@@ -146,5 +94,57 @@ class ObservableSubList<E> implements PartialListImpl<E> {
 	private String outOfBoundsMsg(int index) {
 		return "Index: "+index+", Size: "+theSize;
 	}
-}
 
+	class Element implements OrderedObservableElement<E> {
+		private final OrderedObservableElement<E> theWrapped;
+
+		private final DefaultObservable<Void> theRemovedObservable;
+
+		private final Observer<Void> theRemovedController;
+
+		Element(OrderedObservableElement<E> wrap) {
+			theWrapped = wrap;
+			theRemovedObservable = new DefaultObservable<>();
+			theRemovedController = theRemovedObservable.control(null);
+		}
+
+		@Override
+		public ObservableValue<E> persistent() {
+			return theWrapped.persistent();
+		}
+
+		@Override
+		public Type getType() {
+			return theWrapped.getType();
+		}
+
+		@Override
+		public E get() {
+			return theWrapped.get();
+		}
+
+		@Override
+		public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
+			return theWrapped.takeUntil(theRemovedObservable).observe(new Observer<ObservableValueEvent<E>>() {
+				@Override
+				public <V extends ObservableValueEvent<E>> void onNext(V value) {
+					observer.onNext(ObservableUtils.wrap(value, Element.this));
+				}
+
+				@Override
+				public <V extends ObservableValueEvent<E>> void onCompleted(V value) {
+					observer.onCompleted(ObservableUtils.wrap(value, Element.this));
+				}
+			});
+		}
+
+		@Override
+		public int getIndex() {
+			return theWrapped.getIndex() - theOffset;
+		}
+
+		void remove() {
+			theRemovedController.onNext(null);
+		}
+	}
+}

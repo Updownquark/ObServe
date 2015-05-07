@@ -1,6 +1,13 @@
 package org.observe.collect;
 
-import java.util.*;
+import java.util.AbstractList;
+import java.util.ArrayList;
+import java.util.BitSet;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.List;
+import java.util.ListIterator;
+import java.util.RandomAccess;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
@@ -118,7 +125,13 @@ public class DefaultObservableList<E> extends AbstractList<E> implements Observa
 	@Override
 	public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<E>> onElement) {
 		// Cast is safe because the internals of this set will only create ordered elements
-		return theInternals.onElement((Consumer<ObservableElement<E>>) onElement);
+		return theInternals.onElement((Consumer<ObservableElement<E>>) onElement, true);
+	}
+
+	@Override
+	public Runnable onElementReverse(Consumer<? super OrderedObservableElement<E>> onElement) {
+		// Cast is safe because the internals of this set will only create ordered elements
+		return theInternals.onElement((Consumer<ObservableElement<E>>) onElement, false);
 	}
 
 	@Override
@@ -570,8 +583,32 @@ public class DefaultObservableList<E> extends AbstractList<E> implements Observa
 		}
 
 		@Override
-		Iterable<? extends InternalObservableElementImpl<E>> getElements() {
-			return theElements;
+		Iterable<? extends InternalObservableElementImpl<E>> getElements(boolean forward) {
+			if(forward)
+				return theElements;
+			else
+				return new Iterable<InternalObservableElementImpl<E>>() {
+				@Override
+				public Iterator<InternalObservableElementImpl<E>> iterator() {
+					return new Iterator<InternalObservableElementImpl<E>>() {
+						private final ListIterator<InternalObservableElementImpl<E>> backing;
+
+						{
+							backing = theElements.listIterator(theElements.size());
+						}
+
+						@Override
+						public boolean hasNext() {
+							return backing.hasPrevious();
+						}
+
+						@Override
+						public InternalObservableElementImpl<E> next() {
+							return backing.previous();
+						}
+					};
+				}
+			};
 		}
 
 		@Override
