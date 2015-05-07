@@ -7,8 +7,8 @@ import java.util.ListIterator;
 
 import org.observe.ObservableValue;
 import org.observe.collect.CollectionSession;
-import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableList;
+import org.observe.collect.OrderedObservableElement;
 
 import prisms.lang.Type;
 
@@ -101,8 +101,8 @@ public class ObservableListWrapper<T> implements ObservableList<T> {
 	}
 
 	@Override
-	public Runnable onElement(java.util.function.Consumer<? super ObservableElement<T>> observer) {
-		return theWrapped.onElement(observer);
+	public Runnable onOrderedElement(java.util.function.Consumer<? super OrderedObservableElement<T>> observer) {
+		return theWrapped.onOrderedElement(observer);
 	}
 
 	@Override

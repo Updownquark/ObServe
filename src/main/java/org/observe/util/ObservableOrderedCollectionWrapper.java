@@ -5,8 +5,8 @@ import java.util.Iterator;
 
 import org.observe.ObservableValue;
 import org.observe.collect.CollectionSession;
-import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableOrderedCollection;
+import org.observe.collect.OrderedObservableElement;
 
 import prisms.lang.Type;
 
@@ -99,8 +99,8 @@ public class ObservableOrderedCollectionWrapper<E> implements ObservableOrderedC
 	}
 
 	@Override
-	public Runnable onElement(java.util.function.Consumer<? super ObservableElement<E>> observer) {
-		return theWrapped.onElement(observer);
+	public Runnable onOrderedElement(java.util.function.Consumer<? super OrderedObservableElement<E>> observer) {
+		return theWrapped.onOrderedElement(observer);
 	}
 
 	@Override

@@ -2,7 +2,11 @@ package org.observe.collect;
 
 import static org.observe.ObservableDebug.debug;
 
-import java.util.*;
+import java.util.AbstractSet;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Objects;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -19,6 +23,31 @@ import prisms.lang.Type;
  * @param <E> The type of element in the set
  */
 public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
+	@Override
+	default boolean isEmpty() {
+		return ObservableCollection.super.isEmpty();
+	}
+
+	@Override
+	default boolean contains(Object o) {
+		return ObservableCollection.super.contains(o);
+	}
+
+	@Override
+	default boolean containsAll(java.util.Collection<?> coll) {
+		return ObservableCollection.super.containsAll(coll);
+	}
+
+	@Override
+	default Object [] toArray() {
+		return ObservableCollection.super.toArray();
+	}
+
+	@Override
+	default <T> T [] toArray(T [] a) {
+		return ObservableCollection.super.toArray(a);
+	}
+
 	/**
 	 * @param filter The filter function
 	 * @return A set containing all elements passing the given test

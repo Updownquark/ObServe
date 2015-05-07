@@ -8,7 +8,14 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import org.junit.Test;
-import org.observe.collect.*;
+import org.observe.collect.DefaultObservableList;
+import org.observe.collect.DefaultObservableSet;
+import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableList;
+import org.observe.collect.ObservableOrderedCollection;
+import org.observe.collect.ObservableSet;
+import org.observe.collect.OrderedObservableElement;
+import org.observe.collect.TransactableList;
 import org.observe.util.ObservableUtils;
 import org.observe.util.Transaction;
 
@@ -1201,7 +1208,7 @@ public class ObservableTest {
 			for(int j : correct2)
 				if(j % 3 == 0)
 					filteredCorrect.add(j);
-			assertEquals(flat, compare1);
+			assertEquals(new ArrayList<>(flat), compare1);
 			assertEquals(flat.size(), compare1.size());
 			assertEquals(correct, compare1);
 			assertEquals(correct.size(), compare1.size());
@@ -1225,7 +1232,7 @@ public class ObservableTest {
 			if(j % 3 == 0)
 				filteredCorrect.add(j);
 
-		assertEquals(flat, compare1);
+		assertEquals(new ArrayList<>(flat), compare1);
 		assertEquals(flat.size(), compare1.size());
 		assertEquals(correct, compare1);
 		assertEquals(correct.size(), compare1.size());
@@ -1245,7 +1252,7 @@ public class ObservableTest {
 			if(j % 3 == 0)
 				filteredCorrect.add(j);
 
-		assertEquals(flat, compare1);
+		assertEquals(new ArrayList<>(flat), compare1);
 		assertEquals(flat.size(), compare1.size());
 		assertEquals(correct, compare1);
 		assertEquals(correct.size(), compare1.size());
@@ -1269,7 +1276,8 @@ public class ObservableTest {
 			for(int j : correct3)
 				if(j % 3 == 0)
 					filteredCorrect.add(j);
-			assertEquals(flat, compare1);
+
+			assertEquals(new ArrayList<>(flat), compare1);
 			assertEquals(flat.size(), compare1.size());
 			assertEquals(correct, compare1);
 			assertEquals(correct.size(), compare1.size());

@@ -11,6 +11,7 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableList;
 import org.observe.collect.OrderedObservableElement;
+import org.observe.collect.PartialListImpl;
 
 import prisms.lang.Type;
 
@@ -25,7 +26,7 @@ public class ObservableUtils {
 	 * @return The flattened list
 	 */
 	public static <T> ObservableList<T> flattenListValues(Type type, ObservableList<? extends ObservableValue<T>> list) {
-		class FlattenedList extends java.util.AbstractList<T> implements ObservableList<T> {
+		class FlattenedList implements PartialListImpl<T> {
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
 				return list.getSession();
@@ -37,7 +38,7 @@ public class ObservableUtils {
 			}
 
 			@Override
-			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
+			public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<T>> observer) {
 				return list.onElement(element ->observer.accept(new OrderedObservableElement<T>() {
 					@Override
 					public Type getType() {

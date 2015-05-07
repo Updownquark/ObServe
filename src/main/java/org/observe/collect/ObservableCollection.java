@@ -4,8 +4,10 @@ import static org.observe.ObservableDebug.debug;
 import static org.observe.ObservableDebug.label;
 
 import java.util.AbstractCollection;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiFunction;
@@ -14,8 +16,13 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-import org.observe.*;
+import org.observe.ComposedObservableValue;
+import org.observe.Observable;
+import org.observe.ObservableDebug;
 import org.observe.ObservableDebug.D;
+import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
+import org.observe.Observer;
 import org.observe.util.ListenerSet;
 import org.observe.util.ObservableUtils;
 
@@ -45,6 +52,43 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 *         observers may assume that they can delay expensive results of collection events until the session completes.
 	 */
 	ObservableValue<CollectionSession> getSession();
+
+	@Override
+	default boolean isEmpty() {
+		return size() == 0;
+	}
+
+	@Override
+	default boolean contains(Object o) {
+		for(Object value : this)
+			if(Objects.equals(value, o))
+				return true;
+		return false;
+	}
+
+	@Override
+	default boolean containsAll(Collection<?> c) {
+		for(Object e : c)
+			if(!contains(e))
+				return false;
+		return true;
+	}
+
+	@Override
+	default Object [] toArray() {
+		ArrayList<E> ret = new ArrayList<>();
+		for(E value : this)
+			ret.add(value);
+		return ret.toArray();
+	}
+
+	@Override
+	default <T> T [] toArray(T [] a) {
+		ArrayList<E> ret = new ArrayList<>();
+		for(E value : this)
+			ret.add(value);
+		return ret.toArray(a);
+	}
 
 	/** @return An observable value for the size of this collection */
 	default ObservableValue<Integer> observeSize() {
@@ -191,7 +235,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 */
 	default <T> ObservableCollection<T> map(Type type, Function<? super E, T> map) {
 		ObservableCollection<E> outer = this;
-		class MappedObservableCollection extends java.util.AbstractCollection<T> implements ObservableCollection<T> {
+		class MappedObservableCollection implements PartialCollectionImpl<T> {
 			@Override
 			public Type getType() {
 				return type;
@@ -267,7 +311,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 		if(type == null)
 			type = ComposedObservableValue.getReturnType(map);
 		Type fType = type;
-		class FilteredCollection extends AbstractCollection<T> implements ObservableCollection<T> {
+		class FilteredCollection implements PartialCollectionImpl<T> {
 			@Override
 			public Type getType() {
 				return fType;
@@ -458,7 +502,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 */
 	default <T, V> ObservableCollection<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
 		ObservableCollection<E> outer = this;
-		class CombinedObservableCollection extends AbstractCollection<V> implements ObservableCollection<V> {
+		class CombinedObservableCollection implements PartialCollectionImpl<V> {
 			private final SubCollectionTransactionManager theTransactionManager = new SubCollectionTransactionManager(outer);
 
 			@Override
@@ -507,7 +551,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 */
 	default ObservableCollection<E> refresh(Observable<?> refresh) {
 		ObservableCollection<E> outer = this;
-		class RefreshingCollection extends AbstractCollection<E> implements ObservableCollection<E>{
+		class RefreshingCollection implements PartialCollectionImpl<E> {
 			private final SubCollectionTransactionManager theTransactionManager = new SubCollectionTransactionManager(outer);
 
 			@Override
@@ -572,7 +616,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @return A collection containing all elements of all collections in the outer collection
 	 */
 	public static <T> ObservableCollection<T> flatten(ObservableCollection<? extends ObservableCollection<? extends T>> coll) {
-		class ComposedObservableCollection extends AbstractCollection<T> implements ObservableCollection<T> {
+		class ComposedObservableCollection implements PartialCollectionImpl<T> {
 			private final CombinedCollectionSessionObservable theSession = new CombinedCollectionSessionObservable(coll);
 
 			@Override
@@ -942,7 +986,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	public static class SafeCached<E> extends AbstractCollection<E> implements ObservableCollection<E> {
+	public static class SafeCached<E> implements PartialCollectionImpl<E> {
 		private static class CachedElement<E> implements ObservableElement<E> {
 			private final ObservableElement<E> theWrapped;
 			private final ListenerSet<Observer<? super ObservableValueEvent<E>>> theElementListeners;

@@ -6,12 +6,12 @@ import org.observe.Observer;
 
 import prisms.lang.Type;
 
-class ObservableElementImpl<T> extends DefaultObservableValue<T> {
+class InternalObservableElementImpl<T> extends DefaultObservableValue<T> {
 	private Observer<ObservableValueEvent<T>> theController;
 	private final Type theType;
 	private T theValue;
 
-	ObservableElementImpl(Type type, T value) {
+	InternalObservableElementImpl(Type type, T value) {
 		theType = type;
 		theValue = value;
 		theController = control(null);

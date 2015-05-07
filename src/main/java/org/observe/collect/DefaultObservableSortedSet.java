@@ -1,21 +1,11 @@
 package org.observe.collect;
 
-import java.util.AbstractSet;
-import java.util.Collection;
-import java.util.Comparator;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.NavigableSet;
-import java.util.SortedSet;
-import java.util.TreeMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 
 import org.observe.ObservableValue;
-import org.observe.ObservableValueEvent;
 import org.observe.util.DefaultTransactable;
 import org.observe.util.Transactable;
 import org.observe.util.Transaction;
@@ -31,18 +21,13 @@ import prisms.lang.Type;
  */
 public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements ObservableSortedSet<E>, TransactableCollection<E> {
 	private final Type theType;
-	private TreeMap<E, ObservableElementImpl<E>> theValues;
-
-	private ReentrantReadWriteLock theLock;
-	private AtomicBoolean hasIssuedController = new AtomicBoolean(false);
-
-	private Consumer<? super Consumer<? super ObservableElement<E>>> theOnSubscribe;
-
-	private java.util.concurrent.ConcurrentHashMap<Consumer<? super ObservableElement<E>>, ConcurrentLinkedQueue<Runnable>> theObservers;
+	private AtomicBoolean hasIssuedController;
+	private DefaultSortedSetInternals theInternals;
 
 	private ObservableValue<CollectionSession> theSessionObservable;
-
 	private Transactable theSessionController;
+
+	private TreeMap<E, InternalObservableElementImpl<E>> theValues;
 
 	/**
 	 * Creates the set
@@ -52,7 +37,7 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 	public DefaultObservableSortedSet(Type type) {
 		this(type, new ReentrantReadWriteLock(), null, null);
 
-		theSessionController = new DefaultTransactable(theLock.writeLock());
+		theSessionController = new DefaultTransactable(theInternals.getLock().writeLock());
 		theSessionObservable = ((DefaultTransactable) theSessionController).getSession();
 	}
 
@@ -68,12 +53,12 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 	public DefaultObservableSortedSet(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController) {
 		theType = type;
-		theLock = lock;
+		hasIssuedController = new AtomicBoolean(false);
+		theInternals = new DefaultSortedSetInternals(lock, hasIssuedController);
 		theSessionObservable = session;
 		theSessionController = sessionController;
 
 		theValues = new TreeMap<>();
-		theObservers = new java.util.concurrent.ConcurrentHashMap<>();
 	}
 
 	@Override
@@ -102,23 +87,6 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 	}
 
 	/**
-	 * @param action The action to perform under a lock
-	 * @param write Whether to perform the action under a write lock or a read lock
-	 * @param errIfControlled Whether to throw an exception if this list is controlled
-	 */
-	protected void doLocked(Runnable action, boolean write, boolean errIfControlled) {
-		if(errIfControlled && hasIssuedController.get())
-			throw new IllegalStateException("Controlled default observable collections cannot be modified directly");
-		Lock lock = write ? theLock.writeLock() : theLock.readLock();
-		lock.lock();
-		try {
-			action.run();
-		} finally {
-			lock.unlock();
-		}
-	}
-
-	/**
 	 * Obtains the controller for this set. Once this is called, the observable set cannot be modified directly, but only through the
 	 * controller. Modification methods to this set after this call will throw an {@link IllegalStateException}. Only one call can be made
 	 * to this method. All calls after the first will throw an {@link IllegalStateException}.
@@ -129,79 +97,13 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 	public TransactableSet<E> control(Consumer<? super Consumer<? super ObservableElement<E>>> onSubscribe) {
 		if(hasIssuedController.getAndSet(true))
 			throw new IllegalStateException("This observable set is already controlled");
-		theOnSubscribe = onSubscribe;
+		theInternals.setOnSubscribe(onSubscribe);
 		return new ObservableSortedSetController();
 	}
 
 	@Override
 	public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
-		ConcurrentLinkedQueue<Runnable> subSubscriptions = new ConcurrentLinkedQueue<>();
-		theObservers.put(observer, subSubscriptions);
-		doLocked(() -> {
-			for(ObservableElementImpl<E> el : theValues.values())
-				observer.accept(newValue(el, subSubscriptions));
-		}, false, false);
-		if(theOnSubscribe != null)
-			theOnSubscribe.accept(observer);
-		return () -> {
-			ConcurrentLinkedQueue<Runnable> subs = theObservers.remove(observer);
-			for(Runnable sub : subs)
-				sub.run();
-		};
-	}
-
-	private ObservableElement<E> newValue(ObservableElementImpl<E> el, ConcurrentLinkedQueue<Runnable> observers) {
-		return new ObservableElement<E>() {
-			@Override
-			public Type getType() {
-				return el.getType();
-			}
-
-			@Override
-			public E get() {
-				return el.get();
-			}
-
-			@Override
-			public Runnable observe(org.observe.Observer<? super ObservableValueEvent<E>> observer) {
-				ObservableValue<E> element = this;
-				Runnable ret = el.observe(new org.observe.Observer<ObservableValueEvent<E>>() {
-					@Override
-					public <V extends ObservableValueEvent<E>> void onNext(V event) {
-						observer.onNext(new ObservableValueEvent<>(element, event.getOldValue(), event.getValue(), event.getCause()));
-					}
-
-					@Override
-					public <V extends ObservableValueEvent<E>> void onCompleted(V event) {
-						observer.onCompleted(new ObservableValueEvent<>(element, event.getOldValue(), event.getValue(), event.getCause()));
-					}
-
-					@Override
-					public void onError(Throwable e) {
-						observer.onError(e);
-					}
-				});
-				observers.add(ret);
-				return ret;
-			}
-
-			@Override
-			public ObservableValue<E> persistent() {
-				return el;
-			}
-
-			@Override
-			public String toString() {
-				return getType() + " set element (" + get() + ")";
-			}
-		};
-	}
-
-	private void fireNewElement(ObservableElementImpl<E> el) {
-		for(Map.Entry<Consumer<? super ObservableElement<E>>, ConcurrentLinkedQueue<Runnable>> observer : theObservers
-			.entrySet()) {
-			observer.getKey().accept(newValue(el, observer.getValue()));
-		}
+		return theInternals.onElement(observer);
 	}
 
 	@Override
@@ -212,7 +114,7 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 	@Override
 	public boolean contains(Object o) {
 		boolean [] ret = new boolean[1];
-		doLocked(() -> {
+		theInternals.doLocked(() -> {
 			ret[0] = theValues.containsKey(o);
 		}, false, false);
 		return ret[0];
@@ -221,7 +123,7 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 	@Override
 	public boolean containsAll(Collection<?> c) {
 		boolean [] ret = new boolean[1];
-		doLocked(() -> {
+		theInternals.doLocked(() -> {
 			ret[0] = theValues.keySet().containsAll(c);
 		}, false, false);
 		return ret[0];
@@ -230,7 +132,7 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 	@Override
 	public Object [] toArray() {
 		Object [][] ret = new Object[1][];
-		doLocked(() -> {
+		theInternals.doLocked(() -> {
 			ret[0] = theValues.keySet().toArray();
 		}, false, false);
 		return ret[0];
@@ -239,7 +141,7 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 	@Override
 	public <T> T [] toArray(T [] a) {
 		Object [][] ret = new Object[1][];
-		doLocked(() -> {
+		theInternals.doLocked(() -> {
 			ret[0] = theValues.keySet().toArray(a);
 		}, false, false);
 		return (T []) ret[0];
@@ -253,7 +155,7 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 			@Override
 			public boolean hasNext() {
 				boolean [] ret = new boolean[1];
-				doLocked(() -> {
+				theInternals.doLocked(() -> {
 					ret[0] = backing.hasNext();
 				}, false, false);
 				return ret[0];
@@ -262,7 +164,7 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 			@Override
 			public E next() {
 				Object [] ret = new Object[1];
-				doLocked(() -> {
+				theInternals.doLocked(() -> {
 					ret[0] = backing.next();
 				}, false, false);
 				return (E) ret[0];
@@ -278,7 +180,7 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 	@Override
 	public boolean add(E e) {
 		boolean [] ret = new boolean[1];
-		doLocked(() -> {
+		theInternals.doLocked(() -> {
 			ret[0] = addImpl(e);
 		}, true, true);
 		return ret[0];
@@ -287,7 +189,7 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 	@Override
 	public boolean remove(Object o) {
 		boolean [] ret = new boolean[1];
-		doLocked(() -> {
+		theInternals.doLocked(() -> {
 			ret[0] = removeImpl(o);
 		}, true, true);
 		return ret[0];
@@ -296,7 +198,7 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 	@Override
 	public boolean removeAll(Collection<?> c) {
 		boolean [] ret = new boolean[1];
-		doLocked(() -> {
+		theInternals.doLocked(() -> {
 			ret[0] = removeAllImpl(c);
 		}, true, true);
 		return ret[0];
@@ -305,7 +207,7 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 	@Override
 	public boolean addAll(Collection<? extends E> c) {
 		boolean [] ret = new boolean[1];
-		doLocked(() -> {
+		theInternals.doLocked(() -> {
 			ret[0] = addAllImpl(c);
 		}, true, true);
 		return ret[0];
@@ -314,7 +216,7 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 	@Override
 	public boolean retainAll(Collection<?> c) {
 		boolean [] ret = new boolean[1];
-		doLocked(() -> {
+		theInternals.doLocked(() -> {
 			ret[0] = retainAllImpl(c);
 		}, true, true);
 		return ret[0];
@@ -322,7 +224,7 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 
 	@Override
 	public void clear() {
-		doLocked(() -> {
+		theInternals.doLocked(() -> {
 			clearImpl();
 		}, true, true);
 	}
@@ -330,14 +232,14 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 	private boolean addImpl(E e) {
 		if(theValues.containsKey(e))
 			return false;
-		ObservableElementImpl<E> el = new ObservableElementImpl<>(theType, e);
+		InternalObservableElementImpl<E> el = new InternalObservableElementImpl<>(theType, e);
 		theValues.put(e, el);
-		fireNewElement(el);
+		theInternals.fireNewElement(el);
 		return true;
 	}
 
 	private boolean removeImpl(Object o) {
-		ObservableElementImpl<E> el = theValues.remove(o);
+		InternalObservableElementImpl<E> el = theValues.remove(o);
 		if(el == null)
 			return false;
 		el.remove();
@@ -350,9 +252,9 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 			if(!theValues.containsKey(add))
 				continue;
 			ret = true;
-			ObservableElementImpl<E> el = new ObservableElementImpl<>(theType, add);
+			InternalObservableElementImpl<E> el = new InternalObservableElementImpl<>(theType, add);
 			theValues.put(add, el);
-			fireNewElement(el);
+			theInternals.fireNewElement(el);
 		}
 		return ret;
 	}
@@ -360,7 +262,7 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 	private boolean removeAllImpl(Collection<?> c) {
 		boolean ret = false;
 		for(Object o : c) {
-			ObservableElementImpl<E> el = theValues.remove(o);
+			InternalObservableElementImpl<E> el = theValues.remove(o);
 			if(el == null)
 				continue;
 			ret = true;
@@ -371,13 +273,13 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 
 	private boolean retainAllImpl(Collection<?> c) {
 		boolean ret = false;
-		Iterator<Map.Entry<E, ObservableElementImpl<E>>> iter = theValues.entrySet().iterator();
+		Iterator<Map.Entry<E, InternalObservableElementImpl<E>>> iter = theValues.entrySet().iterator();
 		while(iter.hasNext()) {
-			Map.Entry<E, ObservableElementImpl<E>> entry = iter.next();
+			Map.Entry<E, InternalObservableElementImpl<E>> entry = iter.next();
 			if(c.contains(entry.getKey()))
 				continue;
 			ret = true;
-			ObservableElementImpl<E> el = entry.getValue();
+			InternalObservableElementImpl<E> el = entry.getValue();
 			iter.remove();
 			el.remove();
 		}
@@ -385,9 +287,9 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 	}
 
 	private void clearImpl() {
-		Iterator<ObservableElementImpl<E>> iter = theValues.values().iterator();
+		Iterator<InternalObservableElementImpl<E>> iter = theValues.values().iterator();
 		while(iter.hasNext()) {
-			ObservableElementImpl<E> el = iter.next();
+			InternalObservableElementImpl<E> el = iter.next();
 			iter.remove();
 			el.remove();
 		}
@@ -498,11 +400,11 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 	@Override
 	protected DefaultObservableSortedSet<E> clone() throws CloneNotSupportedException {
 		DefaultObservableSortedSet<E> ret = (DefaultObservableSortedSet<E>) super.clone();
-		ret.theValues = (TreeMap<E, ObservableElementImpl<E>>) theValues.clone();
-		for(Map.Entry<E, ObservableElementImpl<E>> entry : theValues.entrySet())
-			entry.setValue(new ObservableElementImpl<>(theType, entry.getKey()));
-		ret.theLock = new ReentrantReadWriteLock();
+		ret.theValues = (TreeMap<E, InternalObservableElementImpl<E>>) theValues.clone();
+		for(Map.Entry<E, InternalObservableElementImpl<E>> entry : theValues.entrySet())
+			entry.setValue(new InternalObservableElementImpl<>(theType, entry.getKey()));
 		ret.hasIssuedController = new AtomicBoolean(false);
+		ret.theInternals = ret.new DefaultSortedSetInternals(new ReentrantReadWriteLock(), hasIssuedController);
 		return ret;
 	}
 
@@ -515,12 +417,12 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 		@Override
 		public Iterator<E> iterator() {
 			return new Iterator<E>() {
-				private Iterator<Map.Entry<E, ObservableElementImpl<E>>> backing = theValues.entrySet().iterator();
+				private Iterator<Map.Entry<E, InternalObservableElementImpl<E>>> backing = theValues.entrySet().iterator();
 
 				@Override
 				public boolean hasNext() {
 					boolean [] ret = new boolean[1];
-					doLocked(() -> {
+					theInternals.doLocked(() -> {
 						ret[0] = backing.hasNext();
 					}, false, false);
 					return ret[0];
@@ -529,7 +431,7 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 				@Override
 				public E next() {
 					Object [] ret = new Object[1];
-					doLocked(() -> {
+					theInternals.doLocked(() -> {
 						ret[0] = backing.next();
 					}, false, false);
 					return (E) ret[0];
@@ -615,7 +517,7 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 		@Override
 		public boolean add(E e) {
 			boolean [] ret = new boolean[1];
-			doLocked(() -> {
+			theInternals.doLocked(() -> {
 				ret[0] = addImpl(e);
 			}, true, false);
 			return ret[0];
@@ -624,7 +526,7 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 		@Override
 		public boolean remove(Object o) {
 			boolean [] ret = new boolean[1];
-			doLocked(() -> {
+			theInternals.doLocked(() -> {
 				ret[0] = removeImpl(o);
 			}, true, false);
 			return ret[0];
@@ -633,7 +535,7 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 		@Override
 		public boolean removeAll(Collection<?> c) {
 			boolean [] ret = new boolean[1];
-			doLocked(() -> {
+			theInternals.doLocked(() -> {
 				ret[0] = removeAllImpl(c);
 			}, true, false);
 			return ret[0];
@@ -642,7 +544,7 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 		@Override
 		public boolean addAll(Collection<? extends E> c) {
 			boolean [] ret = new boolean[1];
-			doLocked(() -> {
+			theInternals.doLocked(() -> {
 				ret[0] = addAllImpl(c);
 			}, true, false);
 			return ret[0];
@@ -651,7 +553,7 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 		@Override
 		public boolean retainAll(Collection<?> c) {
 			boolean [] ret = new boolean[1];
-			doLocked(() -> {
+			theInternals.doLocked(() -> {
 				ret[0] = retainAllImpl(c);
 			}, true, false);
 			return ret[0];
@@ -659,7 +561,7 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 
 		@Override
 		public void clear() {
-			doLocked(() -> {
+			theInternals.doLocked(() -> {
 				clearImpl();
 			}, true, false);
 		}
@@ -710,6 +612,23 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 		public SortedSet<E> tailSet(E fromElement) {
 			// TODO Auto-generated method stub
 			return null;
+		}
+	}
+
+	private class DefaultSortedSetInternals extends DefaultCollectionInternals<E> {
+		DefaultSortedSetInternals(ReentrantReadWriteLock lock, AtomicBoolean issuedController) {
+			super(lock, issuedController, null, null);
+		}
+
+		@Override
+		Iterable<? extends InternalObservableElementImpl<E>> getElements() {
+			return theValues.values();
+		}
+
+		@Override
+		ObservableElement<E> createExposedElement(InternalObservableElementImpl<E> internal, Collection<Runnable> subscriptions) {
+			int todo; // TODO This should be an ordered element
+			return new ExposedObservableElement<>(internal, subscriptions);
 		}
 	}
 }
