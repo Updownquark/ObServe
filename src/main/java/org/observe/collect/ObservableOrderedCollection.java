@@ -88,51 +88,6 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	@Override
-	default <T, V> ObservableOrderedCollection<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
-		return debug(new CombinedObservableOrderedCollection<>(this, arg, type, func)).from("combine", this).from("with", arg)
-			.using("combination", func).get();
-	}
-
-	/**
-	 * @param refresh The observable to re-fire events on
-	 * @return A collection whose elements fire additional value events when the given observable fires
-	 */
-	@Override
-	default ObservableOrderedCollection<E> refresh(Observable<?> refresh) {
-		ObservableOrderedCollection<E> outer = this;
-		class RefreshingCollection implements PartialCollectionImpl<E>, ObservableOrderedCollection<E> {
-			private final SubCollectionTransactionManager theTransactionManager = new SubCollectionTransactionManager(outer);
-
-			@Override
-			public Type getType() {
-				return outer.getType();
-			}
-
-			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return theTransactionManager.getSession();
-			}
-
-			@Override
-			public Iterator<E> iterator() {
-				return outer.iterator();
-			}
-
-			@Override
-			public int size() {
-				return outer.size();
-			}
-
-			@Override
-			public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<E>> observer) {
-				return theTransactionManager.onElement(outer, refresh,
-					element -> observer.accept((OrderedObservableElement<E>) element.refresh(refresh)), true);
-			}
-		};
-		return debug(new RefreshingCollection()).from("refresh", this).from("on", refresh).get();
-	}
-
-	@Override
 	default <T> ObservableOrderedCollection<T> map(Function<? super E, T> map) {
 		return map(ComposedObservableValue.getReturnType(map), map);
 	}
@@ -162,6 +117,31 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	@Override
 	default <T> ObservableOrderedCollection<T> filterMap(Type type, Function<? super E, T> map) {
 		return debug(new FilteredOrderedCollection<>(this, type, map)).from("filterMap", this).using("map", map).get();
+	}
+
+	@Override
+	default <T, V> ObservableOrderedCollection<V> combine(ObservableValue<T> arg, BiFunction<? super E, ? super T, V> func) {
+		return combine(arg, ComposedObservableValue.getReturnType(func), func);
+	}
+
+	@Override
+	default <T, V> ObservableOrderedCollection<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
+		return debug(new CombinedObservableOrderedCollection<>(this, arg, type, func)).from("combine", this).from("with", arg)
+			.using("combination", func).get();
+	}
+
+	/**
+	 * @param refresh The observable to re-fire events on
+	 * @return A collection whose elements fire additional value events when the given observable fires
+	 */
+	@Override
+	default ObservableOrderedCollection<E> refresh(Observable<?> refresh) {
+		return debug(new RefreshingOrderedCollection<>(this, refresh)).from("refresh", this).from("on", refresh).get();
+	}
+
+	@Override
+	default ObservableOrderedCollection<E> refreshEach(Function<? super E, Observable<?>> refire) {
+		return debug(new ElementRefreshingOrderedCollection<>(this, refire)).from("refreshEach", this).using("on", refire).get();
 	}
 
 	@Override
@@ -512,6 +492,74 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 				if(theFilteredElements.get(i).isIncluded())
 					ret++;
 			return ret;
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableOrderedCollection#combine(ObservableValue, BiFunction)}
+	 *
+	 * @param <E> The type of the collection to be combined
+	 * @param <T> The type of the value to combine the collection elements with
+	 * @param <V> The type of the combined collection
+	 */
+	class CombinedObservableOrderedCollection<E, T, V> extends ObservableCollection.CombinedObservableCollection<E, T, V> implements
+	ObservableOrderedCollection<V> {
+		CombinedObservableOrderedCollection(ObservableOrderedCollection<E> collection, ObservableValue<T> value, Type type,
+			BiFunction<? super E, ? super T, V> map) {
+			super(collection, type, value, map);
+		}
+
+		@Override
+		protected ObservableOrderedCollection<E> getWrapped() {
+			return (ObservableOrderedCollection<E>) super.getWrapped();
+		}
+
+		@Override
+		public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<V>> onElement) {
+			return onElement(element -> onElement.accept((OrderedObservableElement<V>) element));
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableOrderedCollection#refresh(Observable)}
+	 *
+	 * @param <E> The type of the collection to refresh
+	 */
+	class RefreshingOrderedCollection<E> extends ObservableCollection.RefreshingCollection<E> implements ObservableOrderedCollection<E> {
+		protected RefreshingOrderedCollection(ObservableOrderedCollection<E> wrap, Observable<?> refresh) {
+			super(wrap, refresh);
+		}
+
+		@Override
+		protected ObservableOrderedCollection<E> getWrapped() {
+			return (ObservableOrderedCollection<E>) super.getWrapped();
+		}
+
+		@Override
+		public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<E>> onElement) {
+			return onElement(element -> onElement.accept((OrderedObservableElement<E>) element));
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableOrderedCollection#refreshEach(Function)}
+	 *
+	 * @param <E> The type of the collection to refresh
+	 */
+	class ElementRefreshingOrderedCollection<E> extends ObservableCollection.ElementRefreshingCollection<E> implements
+	ObservableOrderedCollection<E> {
+		protected ElementRefreshingOrderedCollection(ObservableOrderedCollection<E> wrap, Function<? super E, Observable<?>> refresh) {
+			super(wrap, refresh);
+		}
+
+		@Override
+		protected ObservableOrderedCollection<E> getWrapped() {
+			return (ObservableOrderedCollection<E>) super.getWrapped();
+		}
+
+		@Override
+		public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<E>> onElement) {
+			return onElement(element -> onElement.accept((OrderedObservableElement<E>) element));
 		}
 	}
 

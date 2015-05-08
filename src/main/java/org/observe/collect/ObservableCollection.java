@@ -404,48 +404,8 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @return An observable collection containing this collection's elements combined with the given argument
 	 */
 	default <T, V> ObservableCollection<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
-		ObservableCollection<E> outer = this;
-		class CombinedObservableCollection implements PartialCollectionImpl<V> {
-			private final SubCollectionTransactionManager theTransactionManager = new SubCollectionTransactionManager(outer);
-
-			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return theTransactionManager.getSession();
-			}
-
-			@Override
-			public Type getType() {
-				return type;
-			}
-
-			@Override
-			public int size() {
-				return outer.size();
-			}
-
-			@Override
-			public Iterator<V> iterator() {
-				return new Iterator<V>() {
-					private final Iterator<E> backing = outer.iterator();
-
-					@Override
-					public boolean hasNext() {
-						return backing.hasNext();
-					}
-
-					@Override
-					public V next() {
-						return func.apply(backing.next(), arg.get());
-					}
-				};
-			}
-
-			@Override
-			public Runnable onElement(Consumer<? super ObservableElement<V>> observer) {
-				return theTransactionManager.onElement(outer, arg, element -> observer.accept(element.combineV(func, arg)), true);
-			}
-		}
-		return debug(new CombinedObservableCollection()).from("combine", this).from("with", arg).using("combination", func).get();
+		return debug(new CombinedObservableCollection<>(this, type, arg, func)).from("combine", this).from("with", arg)
+			.using("combination", func).get();
 	}
 
 	/**
@@ -453,36 +413,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @return A collection whose elements fire additional value events when the given observable fires
 	 */
 	default ObservableCollection<E> refresh(Observable<?> refresh) {
-		ObservableCollection<E> outer = this;
-		class RefreshingCollection implements PartialCollectionImpl<E> {
-			private final SubCollectionTransactionManager theTransactionManager = new SubCollectionTransactionManager(outer);
-
-			@Override
-			public Type getType() {
-				return outer.getType();
-			}
-
-			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return theTransactionManager.getSession();
-			}
-
-			@Override
-			public Iterator<E> iterator() {
-				return outer.iterator();
-			}
-
-			@Override
-			public int size() {
-				return outer.size();
-			}
-
-			@Override
-			public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
-				return theTransactionManager.onElement(outer, refresh, element -> observer.accept(element.refresh(refresh)), true);
-			}
-		};
-		return debug(new RefreshingCollection()).from("refresh", this).from("on", refresh).get();
+		return debug(new RefreshingCollection<>(this, refresh)).from("refresh", this).from("on", refresh).get();
 	}
 
 	/**
@@ -490,13 +421,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @return A collection whose values individually refresh when the observable returned by the given function fires
 	 */
 	default ObservableCollection<E> refreshEach(Function<? super E, Observable<?>> refire) {
-		ObservableCollection<E> outer = this;
-		return debug(new org.observe.util.ObservableCollectionWrapper<E>(this) {
-			@Override
-			public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
-				return outer.onElement(element -> observer.accept(element.refreshForValue(refire)));
-			}
-		}).from("refreshEach", this).using("on", refire).get();
+		return debug(new ElementRefreshingCollection<>(this, refire)).from("refreshEach", this).using("on", refire).get();
 	}
 
 	/** @return An observable collection that cannot be modified directly but reflects the value of this collection as it changes */
@@ -909,6 +834,191 @@ public interface ObservableCollection<E> extends Collection<E> {
 		@Override
 		public String toString() {
 			return "filter(" + theWrappedElement + ")";
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableCollection#combine(ObservableValue, BiFunction)}
+	 *
+	 * @param <E> The type of the collection to be combined
+	 * @param <T> The type of the value to combine the collection elements with
+	 * @param <V> The type of the combined collection
+	 */
+	class CombinedObservableCollection<E, T, V> implements PartialCollectionImpl<V> {
+		private final ObservableCollection<E> theWrapped;
+		private final Type theType;
+		private final ObservableValue<T> theValue;
+		private final BiFunction<? super E, ? super T, V> theMap;
+
+		private final SubCollectionTransactionManager theTransactionManager;
+
+		protected CombinedObservableCollection(ObservableCollection<E> wrap, Type type, ObservableValue<T> value,
+			BiFunction<? super E, ? super T, V> map) {
+			theWrapped = wrap;
+			theType = type;
+			theValue = value;
+			theMap = map;
+
+			theTransactionManager = new SubCollectionTransactionManager(theWrapped);
+		}
+
+		protected ObservableCollection<E> getWrapped() {
+			return theWrapped;
+		}
+
+		protected ObservableValue<T> getValue() {
+			return theValue;
+		}
+
+		protected BiFunction<? super E, ? super T, V> getMap() {
+			return theMap;
+		}
+
+		protected SubCollectionTransactionManager getManager() {
+			return theTransactionManager;
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			return theTransactionManager.getSession();
+		}
+
+		@Override
+		public Type getType() {
+			return theType;
+		}
+
+		@Override
+		public int size() {
+			return theWrapped.size();
+		}
+
+		@Override
+		public Iterator<V> iterator() {
+			return new Iterator<V>() {
+				private final Iterator<E> backing = theWrapped.iterator();
+
+				@Override
+				public boolean hasNext() {
+					return backing.hasNext();
+				}
+
+				@Override
+				public V next() {
+					return theMap.apply(backing.next(), theValue.get());
+				}
+			};
+		}
+
+		@Override
+		public Runnable onElement(Consumer<? super ObservableElement<V>> onElement) {
+			return theTransactionManager.onElement(theWrapped, theValue, element -> onElement.accept(element.combineV(theMap, theValue)),
+				true);
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableCollection#refresh(Observable)}
+	 *
+	 * @param <E> The type of the collection to refresh
+	 */
+	class RefreshingCollection<E> implements PartialCollectionImpl<E> {
+		private final ObservableCollection<E> theWrapped;
+		private final Observable<?> theRefresh;
+
+		private final SubCollectionTransactionManager theTransactionManager;
+
+		protected RefreshingCollection(ObservableCollection<E> wrap, Observable<?> refresh) {
+			theWrapped = wrap;
+			theRefresh = refresh;
+
+			theTransactionManager = new SubCollectionTransactionManager(theWrapped);
+		}
+
+		protected ObservableCollection<E> getWrapped() {
+			return theWrapped;
+		}
+
+		protected Observable<?> getRefresh() {
+			return theRefresh;
+		}
+
+		protected SubCollectionTransactionManager getManager() {
+			return theTransactionManager;
+		}
+
+		@Override
+		public Type getType() {
+			return theWrapped.getType();
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			return theTransactionManager.getSession();
+		}
+
+		@Override
+		public Iterator<E> iterator() {
+			return theWrapped.iterator();
+		}
+
+		@Override
+		public int size() {
+			return theWrapped.size();
+		}
+
+		@Override
+		public Runnable onElement(Consumer<? super ObservableElement<E>> onElement) {
+			return theTransactionManager.onElement(theWrapped, theRefresh, element -> onElement.accept(element.refresh(theRefresh)), true);
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableCollection#refreshEach(Function)}
+	 * 
+	 * @param <E> The type of the collection to refresh
+	 */
+	static class ElementRefreshingCollection<E> implements PartialCollectionImpl<E> {
+		private final ObservableCollection<E> theWrapped;
+
+		private final Function<? super E, Observable<?>> theRefresh;
+
+		protected ElementRefreshingCollection(ObservableCollection<E> wrap, Function<? super E, Observable<?>> refresh) {
+			theWrapped = wrap;
+			theRefresh = refresh;
+		}
+
+		protected ObservableCollection<E> getWrapped() {
+			return theWrapped;
+		}
+
+		protected Function<? super E, Observable<?>> getRefresh() {
+			return theRefresh;
+		}
+
+		@Override
+		public Type getType() {
+			return theWrapped.getType();
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			return theWrapped.getSession();
+		}
+
+		@Override
+		public int size() {
+			return theWrapped.size();
+		}
+
+		@Override
+		public Iterator<E> iterator() {
+			return theWrapped.iterator();
+		}
+
+		@Override
+		public Runnable onElement(Consumer<? super ObservableElement<E>> onElement) {
+			return theWrapped.onElement(element -> onElement.accept(element.refreshForValue(theRefresh)));
 		}
 	}
 

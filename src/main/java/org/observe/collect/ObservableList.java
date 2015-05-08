@@ -207,43 +207,8 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 	 */
 	@Override
 	default <T, V> ObservableList<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
-		ObservableList<E> outer = this;
-		class CombinedObservableList implements PartialListImpl<V> {
-			private final SubCollectionTransactionManager theTransactionManager = new SubCollectionTransactionManager(outer);
-
-			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return theTransactionManager.getSession();
-			}
-
-			@Override
-			public Type getType() {
-				return type;
-			}
-
-			@Override
-			public int size() {
-				return outer.size();
-			}
-
-			@Override
-			public V get(int index) {
-				return func.apply(outer.get(index), arg.get());
-			}
-
-			@Override
-			public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<V>> observer) {
-				return theTransactionManager.onElement(outer, arg,
-					element -> observer.accept((OrderedObservableElement<V>) element.combineV(func, arg)), true);
-			}
-
-			@Override
-			public Runnable onElementReverse(Consumer<? super OrderedObservableElement<V>> onElement) {
-				return theTransactionManager.onElement(outer, arg,
-					element -> onElement.accept((OrderedObservableElement<V>) element.combineV(func, arg)), false);
-			}
-		}
-		return debug(new CombinedObservableList()).from("combine", this).from("with", arg).using("combination", func).get();
+		return debug(new CombinedObservableList<>(this, arg, type, func)).from("combine", this).from("with", arg)
+			.using("combination", func).get();
 	}
 
 	/**
@@ -252,43 +217,12 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 	 */
 	@Override
 	default ObservableList<E> refresh(Observable<?> refresh) {
-		ObservableList<E> outer = this;
-		class RefreshingList implements PartialListImpl<E> {
-			private final SubCollectionTransactionManager theTransactionManager = new SubCollectionTransactionManager(outer);
+		return debug(new RefreshingList<>(this, refresh)).from("refresh", this).from("on", refresh).get();
+	}
 
-			@Override
-			public Type getType() {
-				return outer.getType();
-			}
-
-			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return theTransactionManager.getSession();
-			}
-
-			@Override
-			public int size() {
-				return outer.size();
-			}
-
-			@Override
-			public E get(int index) {
-				return outer.get(index);
-			}
-
-			@Override
-			public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<E>> observer) {
-				return theTransactionManager.onElement(outer, refresh,
-					element -> observer.accept((OrderedObservableElement<E>) element.refresh(refresh)), true);
-			}
-
-			@Override
-			public Runnable onElementReverse(Consumer<? super OrderedObservableElement<E>> observer) {
-				return theTransactionManager.onElement(outer, refresh,
-					element -> observer.accept((OrderedObservableElement<E>) element.refresh(refresh)), false);
-			}
-		};
-		return debug(new RefreshingList()).from("refresh", this).from("on", refresh).get();
+	@Override
+	default ObservableList<E> refreshEach(Function<? super E, Observable<?>> refire) {
+		return debug(new ElementRefreshingList<>(this, refire)).from("refreshEach", this).using("on", refire).get();
 	}
 
 	@Override
@@ -606,6 +540,100 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 					}
 				});
 			});
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableList#combine(ObservableValue, BiFunction)}
+	 *
+	 * @param <E> The type of the collection to be combined
+	 * @param <T> The type of the value to combine the collection elements with
+	 * @param <V> The type of the combined collection
+	 */
+	class CombinedObservableList<E, T, V> extends ObservableOrderedCollection.CombinedObservableOrderedCollection<E, T, V> implements
+	PartialListImpl<V> {
+		protected CombinedObservableList(ObservableOrderedCollection<E> wrap, ObservableValue<T> value, Type type,
+			BiFunction<? super E, ? super T, V> map) {
+			super(wrap, value, type, map);
+		}
+
+		@Override
+		protected ObservableList<E> getWrapped() {
+			return (ObservableList<E>) super.getWrapped();
+		}
+
+		@Override
+		public V get(int index) {
+			return getMap().apply(getWrapped().get(index), getValue().get());
+		}
+
+		@Override
+		public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<V>> onElement) {
+			return onElement(element -> onElement.accept((OrderedObservableElement<V>) element));
+		}
+
+		@Override
+		public Runnable onElementReverse(Consumer<? super OrderedObservableElement<V>> onElement) {
+			return getManager().onElement(getWrapped(), getValue(),
+				element -> onElement.accept((OrderedObservableElement<V>) element.combineV(getMap(), getValue())), false);
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableList#refresh(Observable)}
+	 *
+	 * @param <E> The type of the collection to refresh
+	 */
+	class RefreshingList<E> extends ObservableOrderedCollection.RefreshingOrderedCollection<E> implements PartialListImpl<E> {
+		protected RefreshingList(ObservableList<E> wrap, Observable<?> refresh) {
+			super(wrap, refresh);
+		}
+
+		@Override
+		protected ObservableList<E> getWrapped() {
+			return (ObservableList<E>) super.getWrapped();
+		}
+
+		@Override
+		public E get(int index) {
+			return getWrapped().get(index);
+		}
+
+		@Override
+		public Runnable onElementReverse(Consumer<? super OrderedObservableElement<E>> onElement) {
+			return getManager().onElement(getWrapped(), getRefresh(),
+				element -> onElement.accept((OrderedObservableElement<E>) element.refresh(getRefresh())), false);
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableList#refreshEach(Function)}
+	 *
+	 * @param <E> The type of the collection to refresh
+	 */
+	class ElementRefreshingList<E> extends ObservableOrderedCollection.ElementRefreshingOrderedCollection<E> implements PartialListImpl<E> {
+		protected ElementRefreshingList(ObservableList<E> wrap, Function<? super E, Observable<?>> refresh) {
+			super(wrap, refresh);
+		}
+
+		@Override
+		protected ObservableList<E> getWrapped() {
+			return (ObservableList<E>) super.getWrapped();
+		}
+
+		@Override
+		public E get(int index) {
+			return getWrapped().get(index);
+		}
+
+		@Override
+		public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<E>> onElement) {
+			return onElement(element -> onElement.accept((OrderedObservableElement<E>) element));
+		}
+
+		@Override
+		public Runnable onElementReverse(Consumer<? super OrderedObservableElement<E>> onElement) {
+			return getWrapped().onElementReverse(element -> onElement.accept(element.refreshForValue(getRefresh())));
 		}
 	}
 

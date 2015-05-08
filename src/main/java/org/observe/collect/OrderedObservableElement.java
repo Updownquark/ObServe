@@ -1,9 +1,18 @@
 package org.observe.collect;
 
+import static org.observe.ObservableDebug.debug;
+
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
-import org.observe.*;
+import org.observe.BiTuple;
+import org.observe.ComposedObservableValue;
+import org.observe.Observable;
+import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
+import org.observe.Observer;
+import org.observe.TriFunction;
+import org.observe.TriTuple;
 
 import prisms.lang.Type;
 
@@ -173,6 +182,83 @@ public interface OrderedObservableElement<E> extends ObservableElement<E> {
 				};
 			}
 		};
+	}
+
+	@Override
+	default OrderedObservableElement<E> refreshForValue(Function<? super E, Observable<?>> observable) {
+		OrderedObservableElement<E> outer = this;
+		return debug(new OrderedObservableElement<E>() {
+			@Override
+			public Type getType() {
+				return outer.getType();
+			}
+
+			@Override
+			public E get() {
+				return outer.get();
+			}
+
+			@Override
+			public ObservableValue<E> persistent() {
+				return outer.persistent().refresh(observable.apply(get()));
+			}
+
+			@Override
+			public int getIndex() {
+				return outer.getIndex();
+			}
+
+			@Override
+			public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
+				Runnable [] refireSub = new Runnable[1];
+				Observer<Object> refireObs = new Observer<Object>() {
+					@Override
+					public <V> void onNext(V value) {
+						E outerVal = get();
+						ObservableValueEvent<E> event2 = outer.createEvent(outerVal, outerVal, value);
+						observer.onNext(event2);
+					}
+
+					@Override
+					public <V> void onCompleted(V value) {
+						E outerVal = get();
+						ObservableValueEvent<E> event2 = outer.createEvent(outerVal, outerVal, value);
+						observer.onNext(event2);
+						refireSub[0] = null;
+					}
+				};
+				Runnable outerSub = outer.observe(new Observer<ObservableValueEvent<E>>() {
+					@Override
+					public <V extends ObservableValueEvent<E>> void onNext(V value) {
+						refireSub[0] = observable.apply(value.getValue()).noInit().takeUntil(outer).observe(refireObs);
+						observer.onNext(value);
+					}
+
+					@Override
+					public <V extends ObservableValueEvent<E>> void onCompleted(V value) {
+						if(refireSub[0] != null)
+							refireSub[0].run();
+						observer.onCompleted(value);
+					}
+
+					@Override
+					public void onError(Throwable e) {
+						observer.onError(e);
+					}
+				});
+				refireSub[0] = observable.apply(outer.get()).noInit().takeUntil(outer).observe(refireObs);
+				return () -> {
+					outerSub.run();
+					if(refireSub[0] != null)
+						refireSub[0].run();
+				};
+			}
+
+			@Override
+			public String toString() {
+				return outer + ".refireWhen(" + observable + ")";
+			}
+		}).from("refresh", this).using("on", observable).get();
 	}
 
 	/** @param <T> The type of the element */
