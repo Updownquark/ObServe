@@ -14,7 +14,6 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -495,6 +494,110 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 	}
 
 	/**
+	 * Implements {@link ObservableList#listIterator()}
+	 *
+	 * @param <E> The type of values to iterate
+	 */
+	class SimpleListIterator<E> implements java.util.ListIterator<E> {
+		private final List<E> theList;
+
+		/** Index of element to be returned by subsequent call to next. */
+		int cursor = 0;
+
+		/** Index of element returned by most recent call to next or previous. Reset to -1 if this element is deleted by a call to remove. */
+		int lastRet = -1;
+
+		SimpleListIterator(List<E> list, int index) {
+			theList = list;
+			cursor = index;
+		}
+
+		@Override
+		public boolean hasNext() {
+			return cursor != theList.size();
+		}
+
+		@Override
+		public E next() {
+			try {
+				int i = cursor;
+				E next = theList.get(i);
+				lastRet = i;
+				cursor = i + 1;
+				return next;
+			} catch(IndexOutOfBoundsException e) {
+				throw new NoSuchElementException();
+			}
+		}
+
+		@Override
+		public void remove() {
+			if(lastRet < 0)
+				throw new IllegalStateException();
+
+			try {
+				theList.remove(lastRet);
+				if(lastRet < cursor)
+					cursor--;
+				lastRet = -1;
+			} catch(IndexOutOfBoundsException e) {
+				throw new ConcurrentModificationException();
+			}
+		}
+
+		@Override
+		public boolean hasPrevious() {
+			return cursor != 0;
+		}
+
+		@Override
+		public E previous() {
+			try {
+				int i = cursor - 1;
+				E previous = theList.get(i);
+				lastRet = cursor = i;
+				return previous;
+			} catch(IndexOutOfBoundsException e) {
+				throw new NoSuchElementException();
+			}
+		}
+
+		@Override
+		public int nextIndex() {
+			return cursor;
+		}
+
+		@Override
+		public int previousIndex() {
+			return cursor - 1;
+		}
+
+		@Override
+		public void set(E e) {
+			if(lastRet < 0)
+				throw new IllegalStateException();
+
+			try {
+				theList.set(lastRet, e);
+			} catch(IndexOutOfBoundsException ex) {
+				throw new ConcurrentModificationException();
+			}
+		}
+
+		@Override
+		public void add(E e) {
+			try {
+				int i = cursor;
+				theList.add(i, e);
+				lastRet = -1;
+				cursor = i + 1;
+			} catch(IndexOutOfBoundsException ex) {
+				throw new ConcurrentModificationException();
+			}
+		}
+	}
+
+	/**
 	 * An extension of ObservableList that implements some of the redundant methods and throws UnsupportedOperationExceptions for
 	 * modifications. Mostly copied from {@link AbstractList}.
 	 *
@@ -780,47 +883,24 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 	 *
 	 * @param <E> The type of elements in the list
 	 */
-	public static class ImmutableObservableList<E> implements PartialListImpl<E> {
-		private final ObservableList<E> theWrapped;
-
-		/** @param wrap The collection to wrap */
+	class ImmutableObservableList<E> extends ImmutableOrderedObservableCollection<E> implements PartialListImpl<E> {
 		public ImmutableObservableList(ObservableList<E> wrap) {
-			theWrapped = wrap;
+			super(wrap);
 		}
 
 		@Override
-		public ObservableValue<CollectionSession> getSession() {
-			return theWrapped.getSession();
-		}
-
-		@Override
-		public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<E>> observer) {
-			return theWrapped.onOrderedElement(observer);
+		protected ObservableList<E> getWrapped() {
+			return (ObservableList<E>) super.getWrapped();
 		}
 
 		@Override
 		public Runnable onElementReverse(Consumer<? super OrderedObservableElement<E>> observer) {
-			return theWrapped.onElementReverse(observer);
-		}
-
-		@Override
-		public Type getType() {
-			return theWrapped.getType();
+			return getWrapped().onElementReverse(observer);
 		}
 
 		@Override
 		public E get(int index) {
-			return theWrapped.get(index);
-		}
-
-		@Override
-		public Iterator<E> iterator() {
-			return prisms.util.ArrayUtils.immutableIterator(theWrapped.iterator());
-		}
-
-		@Override
-		public int size() {
-			return theWrapped.size();
+			return getWrapped().get(index);
 		}
 
 		@Override
@@ -834,121 +914,14 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	public static class SafeCachedObservableList<E> implements PartialListImpl<E> {
-		private static class CachedElement<E> implements OrderedObservableElement<E> {
-			private final OrderedObservableElement<E> theWrapped;
-
-			private final ListenerSet<Observer<? super ObservableValueEvent<E>>> theElementListeners;
-
-			private E theCachedValue;
-
-			CachedElement(OrderedObservableElement<E> wrap) {
-				theWrapped = wrap;
-				theElementListeners = new ListenerSet<>();
-			}
-
-			@Override
-			public ObservableValue<E> persistent() {
-				return theWrapped.persistent();
-			}
-
-			@Override
-			public Type getType() {
-				return theWrapped.getType();
-			}
-
-			@Override
-			public E get() {
-				return theCachedValue;
-			}
-
-			@Override
-			public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
-				theElementListeners.add(observer);
-				observer.onNext(new ObservableValueEvent<>(this, theCachedValue, theCachedValue, null));
-				return () -> theElementListeners.remove(observer);
-			}
-
-			@Override
-			public int getIndex() {
-				return theWrapped.getIndex();
-			}
-
-			private void newValue(ObservableValueEvent<E> event) {
-				E oldValue = theCachedValue;
-				theCachedValue = event.getValue();
-				ObservableValueEvent<E> cachedEvent = new ObservableValueEvent<>(this, oldValue, theCachedValue, event);
-				theElementListeners.forEach(observer -> observer.onNext(cachedEvent));
-			}
-
-			private void completed(ObservableValueEvent<E> event) {
-				ObservableValueEvent<E> cachedEvent = new ObservableValueEvent<>(this, theCachedValue, theCachedValue, event);
-				theElementListeners.forEach(observer -> observer.onCompleted(cachedEvent));
-			}
-		}
-
-		private final ObservableList<E> theWrapped;
-
-		private final ListenerSet<Consumer<? super OrderedObservableElement<E>>> theListeners;
-
-		private final java.util.concurrent.CopyOnWriteArrayList<CachedElement<E>> theCache;
-
-		private final ReentrantLock theLock;
-
-		private final Consumer<ObservableElement<E>> theWrappedOnElement;
-
-		private Runnable theUnsubscribe;
-
-		/** @param wrap The collection to cache */
-		public SafeCachedObservableList(ObservableList<E> wrap) {
-			theWrapped = wrap;
-			theListeners = new ListenerSet<>();
-			theCache = new java.util.concurrent.CopyOnWriteArrayList<>();
-			theLock = new ReentrantLock();
-			theWrappedOnElement = element -> {
-				CachedElement<E> cached = debug(new CachedElement<>((OrderedObservableElement<E>) element)).from("element", this)
-					.tag("wrapped", element).get();
-				theCache.add(cached.getIndex(), cached);
-				element.observe(new Observer<ObservableValueEvent<E>>() {
-					@Override
-					public <V extends ObservableValueEvent<E>> void onNext(V event) {
-						cached.newValue(event);
-					}
-
-					@Override
-					public <V extends ObservableValueEvent<E>> void onCompleted(V event) {
-						cached.completed(event);
-						theCache.remove(element);
-					}
-				});
-				theListeners.forEach(onElement -> onElement.accept(cached));
-			};
-
-			theListeners.setUsedListener(this::setUsed);
+	class SafeCachedObservableList<E> extends SafeCachedOrderedObservableCollection<E> implements PartialListImpl<E> {
+		protected SafeCachedObservableList(ObservableList<E> wrap) {
+			super(wrap);
 		}
 
 		@Override
-		public Type getType() {
-			return theWrapped.getType();
-		}
-
-		@Override
-		public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<E>> onElement) {
-			theListeners.add(onElement);
-			for(CachedElement<E> cached : theCache)
-				onElement.accept(cached);
-			return () -> theListeners.remove(onElement);
-		}
-
-		@Override
-		public ObservableValue<CollectionSession> getSession() {
-			return theWrapped.getSession();
-		}
-
-		@Override
-		public int size() {
-			Collection<E> ret = refresh();
-			return ret.size();
+		protected ObservableList<E> getWrapped() {
+			return (ObservableList<E>) super.getWrapped();
 		}
 
 		@Override
@@ -957,27 +930,9 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 			return ret.get(index);
 		}
 
-		private void setUsed(boolean used) {
-			if(used && theUnsubscribe == null) {
-				theLock.lock();
-				try {
-					theCache.clear();
-					theUnsubscribe = theWrapped.onElement(theWrappedOnElement);
-				} finally {
-					theLock.unlock();
-				}
-			} else if(!used && theUnsubscribe != null) {
-				theUnsubscribe.run();
-				theUnsubscribe = null;
-			}
-		}
-
-		private List<E> refresh() {
-			// If we're currently caching, then returned the cached values. Otherwise return the dynamic values.
-			if(theUnsubscribe != null)
-				return theCache.stream().map(CachedElement::get).collect(Collectors.toList());
-			else
-				return theWrapped;
+		@Override
+		public ObservableList<E> cached() {
+			return this;
 		}
 	}
 
@@ -986,7 +941,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 	 *
 	 * @param <T> The type of the elements in the collection
 	 */
-	public static class CollectionWrappingList<T> implements PartialListImpl<T> {
+	class CollectionWrappingList<T> implements PartialListImpl<T> {
 		private final ObservableCollection<T> theWrapped;
 
 		private final ListenerSet<Consumer<? super OrderedObservableElement<T>>> theListeners;
@@ -1278,7 +1233,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 	 *
 	 * @param <T> The type of the value in the element
 	 */
-	public static class WrappingListElement<T> implements OrderedObservableElement<T> {
+	class WrappingListElement<T> implements OrderedObservableElement<T> {
 		private final CollectionWrappingList<T> theList;
 
 		private final ObservableElement<T> theWrapped;
@@ -1321,110 +1276,6 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 		@Override
 		public int getIndex() {
 			return theList.theElements.indexOf(this);
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableList#listIterator()}
-	 *
-	 * @param <E> The type of values to iterate
-	 */
-	class SimpleListIterator<E> implements java.util.ListIterator<E> {
-		private final List<E> theList;
-
-		/** Index of element to be returned by subsequent call to next. */
-		int cursor = 0;
-
-		/** Index of element returned by most recent call to next or previous. Reset to -1 if this element is deleted by a call to remove. */
-		int lastRet = -1;
-
-		SimpleListIterator(List<E> list, int index) {
-			theList = list;
-			cursor = index;
-		}
-
-		@Override
-		public boolean hasNext() {
-			return cursor != theList.size();
-		}
-
-		@Override
-		public E next() {
-			try {
-				int i = cursor;
-				E next = theList.get(i);
-				lastRet = i;
-				cursor = i + 1;
-				return next;
-			} catch(IndexOutOfBoundsException e) {
-				throw new NoSuchElementException();
-			}
-		}
-
-		@Override
-		public void remove() {
-			if(lastRet < 0)
-				throw new IllegalStateException();
-
-			try {
-				theList.remove(lastRet);
-				if(lastRet < cursor)
-					cursor--;
-				lastRet = -1;
-			} catch(IndexOutOfBoundsException e) {
-				throw new ConcurrentModificationException();
-			}
-		}
-
-		@Override
-		public boolean hasPrevious() {
-			return cursor != 0;
-		}
-
-		@Override
-		public E previous() {
-			try {
-				int i = cursor - 1;
-				E previous = theList.get(i);
-				lastRet = cursor = i;
-				return previous;
-			} catch(IndexOutOfBoundsException e) {
-				throw new NoSuchElementException();
-			}
-		}
-
-		@Override
-		public int nextIndex() {
-			return cursor;
-		}
-
-		@Override
-		public int previousIndex() {
-			return cursor - 1;
-		}
-
-		@Override
-		public void set(E e) {
-			if(lastRet < 0)
-				throw new IllegalStateException();
-
-			try {
-				theList.set(lastRet, e);
-			} catch(IndexOutOfBoundsException ex) {
-				throw new ConcurrentModificationException();
-			}
-		}
-
-		@Override
-		public void add(E e) {
-			try {
-				int i = cursor;
-				theList.add(i, e);
-				lastRet = -1;
-				cursor = i + 1;
-			} catch(IndexOutOfBoundsException ex) {
-				throw new ConcurrentModificationException();
-			}
 		}
 	}
 }

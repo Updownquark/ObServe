@@ -91,6 +91,16 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 	}
 
 	/**
+	 * Creates a collection with the same elements as this collection, but cached, such that the
+	 *
+	 * @return The cached collection
+	 */
+	@Override
+	default ObservableSet<E> cached() {
+		return debug(new SafeCachedObservableSet<>(this)).from("cached", this).get();
+	}
+
+	/**
 	 * @param <T> The type of the collection
 	 * @param type The run-time type of the collection
 	 * @param coll The collection with elements to wrap
@@ -392,7 +402,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 
 	/**
 	 * Implements {@link ObservableSet#refresh(Observable)}
-	 * 
+	 *
 	 * @param <E> The type of the set
 	 */
 	class RefreshingSet<E> extends RefreshingCollection<E> implements PartialSetImpl<E> {
@@ -408,7 +418,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 
 	/**
 	 * Implements {@link ObservableSet#refreshEach(Function)}
-	 * 
+	 *
 	 * @param <E> The type of the set
 	 */
 	class ElementRefreshingSet<E> extends ElementRefreshingCollection<E> implements PartialSetImpl<E> {
@@ -427,41 +437,39 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 	 *
 	 * @param <E> The type of elements in the set
 	 */
-	public static class ImmutableObservableSet<E> extends AbstractSet<E> implements ObservableSet<E> {
-		private final ObservableSet<E> theWrapped;
-
-		/** @param wrap The set to wrap */
-		public ImmutableObservableSet(ObservableSet<E> wrap) {
-			theWrapped = wrap;
+	class ImmutableObservableSet<E> extends ImmutableObservableCollection<E> implements PartialSetImpl<E> {
+		protected ImmutableObservableSet(ObservableSet<E> wrap) {
+			super(wrap);
 		}
 
 		@Override
-		public ObservableValue<CollectionSession> getSession() {
-			return theWrapped.getSession();
-		}
-
-		@Override
-		public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
-			return theWrapped.onElement(observer);
-		}
-
-		@Override
-		public Type getType() {
-			return theWrapped.getType();
-		}
-
-		@Override
-		public Iterator<E> iterator() {
-			return prisms.util.ArrayUtils.immutableIterator(theWrapped.iterator());
-		}
-
-		@Override
-		public int size() {
-			return theWrapped.size();
+		protected ObservableSet<E> getWrapped() {
+			return (ObservableSet<E>) super.getWrapped();
 		}
 
 		@Override
 		public ImmutableObservableSet<E> immutable() {
+			return this;
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableSet#cached()}
+	 *
+	 * @param <E> The type of elements in the set
+	 */
+	class SafeCachedObservableSet<E> extends SafeCachedObservableCollection<E> implements PartialSetImpl<E> {
+		protected SafeCachedObservableSet(ObservableSet<E> wrap) {
+			super(wrap);
+		}
+
+		@Override
+		protected ObservableSet<E> getWrapped() {
+			return (ObservableSet<E>) super.getWrapped();
+		}
+
+		@Override
+		public ObservableSet<E> cached() {
 			return this;
 		}
 	}

@@ -12,18 +12,15 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.stream.Collectors;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
-import org.observe.util.ListenerSet;
 import org.observe.util.ObservableUtils;
 
 import prisms.lang.Type;
@@ -150,7 +147,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	@Override
-	default ObservableOrderedCollection<E> cached(){
+	default ObservableOrderedCollection<E> cached() {
 		return debug(new SafeCachedOrderedObservableCollection<>(this)).from("cached", this).get();
 	}
 
@@ -255,8 +252,10 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 					iters.add(subList.iterator());
 				return new Iterator<E>() {
 					private Object [] subValues = new Object[iters.size()];
+
 					/** This list represents the indexes of the sub values, as they would be in a list sorted according to the comparator. */
 					private prisms.util.IntList indexes = new prisms.util.IntList(subValues.length);
+
 					private boolean initialized;
 
 					@Override
@@ -379,19 +378,20 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 									if(subListSub != null)
 										subListSub.run();
 								}
-								Runnable subListSub = subListEvent.getValue().onElement(subElement -> {
-									OrderedObservableElement<E> subListEl = (OrderedObservableElement<E>) subElement;
-									FlattenedOrderedElement flatEl = debug(new FlattenedOrderedElement(subListEl, subList))
-										.from("element", this).tag("wrappedCollectionElement", subList)
-										.tag("wrappedSubElement", subListEl).get();
-									if(initializing[0]) {
-										int index = flatEl.getIndex();
-										while(initialElements.size() <= index)
-											initialElements.add(null);
-										initialElements.set(index, flatEl);
-									} else
-										observer.accept(flatEl);
-								});
+								Runnable subListSub = subListEvent.getValue().onElement(
+									subElement -> {
+										OrderedObservableElement<E> subListEl = (OrderedObservableElement<E>) subElement;
+										FlattenedOrderedElement flatEl = debug(new FlattenedOrderedElement(subListEl, subList))
+											.from("element", this).tag("wrappedCollectionElement", subList)
+											.tag("wrappedSubElement", subListEl).get();
+										if(initializing[0]) {
+											int index = flatEl.getIndex();
+											while(initialElements.size() <= index)
+												initialElements.add(null);
+											initialElements.set(index, flatEl);
+										} else
+											observer.accept(flatEl);
+									});
 								subListSubscriptions.put(subListEvent.getValue(), subListSub);
 							}
 
@@ -464,6 +464,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 			return onElement(element -> onElement.accept((OrderedObservableElement<T>) element));
 		}
 	}
+
 	/**
 	 * The type of element in filtered ordered collections
 	 *
@@ -570,9 +571,13 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 */
 	static class SortedElementWrapper<E> implements OrderedObservableElement<E> {
 		private final SortedObservableCollectionWrapper<E> theList;
+
 		private final ObservableElement<E> theWrapped;
+
 		private final SortedObservableWrapperObserver<E> theParentObserver;
+
 		SortedElementWrapper<E> theLeft;
+
 		SortedElementWrapper<E> theRight;
 
 		SortedElementWrapper(SortedObservableCollectionWrapper<E> list, ObservableElement<E> wrap,
@@ -692,6 +697,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 */
 	static class SortedObservableCollectionWrapper<E> implements PartialCollectionImpl<E>, ObservableOrderedCollection<E> {
 		private final ObservableCollection<E> theWrapped;
+
 		private final Comparator<? super E> theCompare;
 
 		SortedObservableCollectionWrapper(ObservableCollection<E> wrap, Comparator<? super E> compare) {
@@ -755,6 +761,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		private final SortedObservableCollectionWrapper<E> theList;
 
 		final Consumer<? super OrderedObservableElement<E>> theOuterObserver;
+
 		private SortedElementWrapper<E> theAnchor;
 
 		SortedObservableWrapperObserver(SortedObservableCollectionWrapper<E> list, Consumer<? super OrderedObservableElement<E>> outerObs) {
@@ -777,37 +784,20 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	public static class ImmutableOrderedObservableCollection<E> implements PartialCollectionImpl<E>, ObservableOrderedCollection<E> {
-		private final ObservableOrderedCollection<E> theWrapped;
+	class ImmutableOrderedObservableCollection<E> extends ImmutableObservableCollection<E> implements
+	ObservableOrderedCollection<E> {
+		protected ImmutableOrderedObservableCollection(ObservableOrderedCollection<E> wrap) {
+			super(wrap);
+		}
 
-		/** @param wrap The collection to wrap */
-		public ImmutableOrderedObservableCollection(ObservableOrderedCollection<E> wrap) {
-			theWrapped = wrap;
+		@Override
+		protected ObservableOrderedCollection<E> getWrapped() {
+			return (ObservableOrderedCollection<E>) super.getWrapped();
 		}
 
 		@Override
 		public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<E>> observer) {
-			return theWrapped.onOrderedElement(observer);
-		}
-
-		@Override
-		public Type getType() {
-			return theWrapped.getType();
-		}
-
-		@Override
-		public ObservableValue<CollectionSession> getSession() {
-			return theWrapped.getSession();
-		}
-
-		@Override
-		public Iterator<E> iterator() {
-			return prisms.util.ArrayUtils.immutableIterator(theWrapped.iterator());
-		}
-
-		@Override
-		public int size() {
-			return theWrapped.size();
+			return getWrapped().onOrderedElement(observer);
 		}
 
 		@Override
@@ -821,146 +811,60 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	public static class SafeCachedOrderedObservableCollection<E> implements PartialCollectionImpl<E>, ObservableOrderedCollection<E> {
-		private static class CachedElement<E> implements OrderedObservableElement<E> {
-			private final OrderedObservableElement<E> theWrapped;
-			private final ListenerSet<Observer<? super ObservableValueEvent<E>>> theElementListeners;
-
-			private E theCachedValue;
-
-			CachedElement(OrderedObservableElement<E> wrap) {
-				theWrapped = wrap;
-				theElementListeners = new ListenerSet<>();
+	class SafeCachedOrderedObservableCollection<E> extends SafeCachedObservableCollection<E> implements ObservableOrderedCollection<E> {
+		protected static class OrderedCachedElement<E> extends CachedElement<E> implements OrderedObservableElement<E> {
+			protected OrderedCachedElement(OrderedObservableElement<E> wrap) {
+				super(wrap);
 			}
 
 			@Override
-			public ObservableValue<E> persistent() {
-				return theWrapped.persistent();
-			}
-
-			@Override
-			public Type getType() {
-				return theWrapped.getType();
-			}
-
-			@Override
-			public E get() {
-				return theCachedValue;
-			}
-
-			@Override
-			public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
-				theElementListeners.add(observer);
-				observer.onNext(new ObservableValueEvent<>(this, theCachedValue, theCachedValue, null));
-				return () -> theElementListeners.remove(observer);
+			protected OrderedObservableElement<E> getWrapped() {
+				return (OrderedObservableElement<E>) super.getWrapped();
 			}
 
 			@Override
 			public int getIndex() {
-				return theWrapped.getIndex();
-			}
-
-			private void newValue(ObservableValueEvent<E> event) {
-				E oldValue = theCachedValue;
-				theCachedValue = event.getValue();
-				ObservableValueEvent<E> cachedEvent = new ObservableValueEvent<>(this, oldValue, theCachedValue, event);
-				theElementListeners.forEach(observer -> observer.onNext(cachedEvent));
-			}
-
-			private void completed(ObservableValueEvent<E> event) {
-				ObservableValueEvent<E> cachedEvent = new ObservableValueEvent<>(this, theCachedValue, theCachedValue, event);
-				theElementListeners.forEach(observer -> observer.onCompleted(cachedEvent));
+				return getWrapped().getIndex();
 			}
 		}
 
-		private final ObservableOrderedCollection<E> theWrapped;
-
-		private final ListenerSet<Consumer<? super OrderedObservableElement<E>>> theListeners;
-		private final java.util.concurrent.CopyOnWriteArrayList<CachedElement<E>> theCache;
-		private final ReentrantLock theLock;
-		private final Consumer<ObservableElement<E>> theWrappedOnElement;
-
-		private Runnable theUnsubscribe;
-
-		/** @param wrap The collection to cache */
-		public SafeCachedOrderedObservableCollection(ObservableOrderedCollection<E> wrap) {
-			theWrapped = wrap;
-			theListeners = new ListenerSet<>();
-			theCache = new java.util.concurrent.CopyOnWriteArrayList<>();
-			theLock = new ReentrantLock();
-			theWrappedOnElement = element -> {
-				CachedElement<E> cached = debug(new CachedElement<>((OrderedObservableElement<E>) element)).from("element", this)
-					.tag("wrapped", element).get();
-				theCache.add(cached.getIndex(), cached);
-				element.observe(new Observer<ObservableValueEvent<E>>() {
-					@Override
-					public <V extends ObservableValueEvent<E>> void onNext(V event) {
-						cached.newValue(event);
-					}
-
-					@Override
-					public <V extends ObservableValueEvent<E>> void onCompleted(V event) {
-						cached.completed(event);
-						theCache.remove(element);
-					}
-				});
-				theListeners.forEach(onElement -> onElement.accept(cached));
-			};
-
-			theListeners.setUsedListener(this::setUsed);
+		protected SafeCachedOrderedObservableCollection(ObservableOrderedCollection<E> wrap) {
+			super(wrap);
 		}
 
 		@Override
-		public Type getType() {
-			return theWrapped.getType();
+		protected ObservableOrderedCollection<E> getWrapped() {
+			return (ObservableOrderedCollection<E>) super.getWrapped();
+		}
+
+		@Override
+		protected List<E> refresh() {
+			return new ArrayList<>(super.refresh());
+		}
+
+		@Override
+		protected List<OrderedCachedElement<E>> cachedElements() {
+			ArrayList<OrderedCachedElement<E>> ret = new ArrayList<>(
+				(Collection<OrderedCachedElement<E>>) (Collection<?>) super.cachedElements());
+			Comparator<OrderedCachedElement<E>> compare = (OrderedCachedElement<E> el1, OrderedCachedElement<E> el2) -> el1.getIndex()
+				- el2.getIndex();
+			Collections.sort(ret, compare);
+			return ret;
+		}
+
+		@Override
+		protected CachedElement<E> createElement(ObservableElement<E> element) {
+			return new OrderedCachedElement<>((OrderedObservableElement<E>) element);
 		}
 
 		@Override
 		public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<E>> onElement) {
-			theListeners.add(onElement);
-			for(CachedElement<E> cached : theCache)
-				onElement.accept(cached);
-			return () -> theListeners.remove(onElement);
+			return onElement(element -> onElement.accept((OrderedObservableElement<E>) element));
 		}
 
 		@Override
-		public ObservableValue<CollectionSession> getSession() {
-			return theWrapped.getSession();
-		}
-
-		@Override
-		public Iterator<E> iterator() {
-			Collection<E> ret = refresh();
-			return ret.iterator();
-		}
-
-		@Override
-		public int size() {
-			Collection<E> ret = refresh();
-			return ret.size();
-		}
-
-		private void setUsed(boolean used) {
-			if(used && theUnsubscribe == null) {
-				theLock.lock();
-				try {
-					theCache.clear();
-					theUnsubscribe = theWrapped.onElement(theWrappedOnElement);
-				} finally {
-					theLock.unlock();
-				}
-			} else if(!used && theUnsubscribe != null) {
-				theUnsubscribe.run();
-				theUnsubscribe = null;
-			}
-		}
-
-		private Collection<E> refresh() {
-			// If we're currently caching, then returned the cached values. Otherwise return the dynamic values.
-			if(theUnsubscribe != null)
-				return theCache.stream().map(CachedElement::get).collect(Collectors.toList());
-			else
-				return theWrapped;
+		public ObservableOrderedCollection<E> cached() {
+			return this;
 		}
 	}
 }

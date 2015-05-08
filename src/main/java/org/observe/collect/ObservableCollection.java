@@ -600,6 +600,15 @@ public interface ObservableCollection<E> extends Collection<E> {
 		}
 
 		@Override
+		default boolean addAll(Collection<? extends E> c) {
+			boolean modified = false;
+			for(E e : c)
+				if(add(e))
+					modified = true;
+			return modified;
+		}
+
+		@Override
 		default boolean remove(Object o) {
 			Iterator<E> it = iterator();
 			if(o == null) {
@@ -618,15 +627,6 @@ public interface ObservableCollection<E> extends Collection<E> {
 				}
 			}
 			return false;
-		}
-
-		@Override
-		default boolean addAll(Collection<? extends E> c) {
-			boolean modified = false;
-			for(E e : c)
-				if(add(e))
-					modified = true;
-			return modified;
 		}
 
 		@Override
@@ -794,6 +794,11 @@ public interface ObservableCollection<E> extends Collection<E> {
 					nextVal = null;
 					return ret;
 				}
+
+				@Override
+				public void remove() {
+					backing.remove();
+				}
 			};
 		}
 
@@ -822,7 +827,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @param <T> The type of this element
 	 * @param <E> The type of element being wrapped
 	 */
-	public static class FilteredElement<E, T> implements ObservableElement<T> {
+	class FilteredElement<E, T> implements ObservableElement<T> {
 		private final ObservableElement<E> theWrappedElement;
 		private final Function<? super E, T> theMap;
 		private final Type theType;
@@ -987,6 +992,11 @@ public interface ObservableCollection<E> extends Collection<E> {
 				public V next() {
 					return theMap.apply(backing.next(), theValue.get());
 				}
+
+				@Override
+				public void remove() {
+					backing.remove();
+				}
 			};
 		}
 
@@ -1058,7 +1068,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 *
 	 * @param <E> The type of the collection to refresh
 	 */
-	static class ElementRefreshingCollection<E> implements PartialCollectionImpl<E> {
+	class ElementRefreshingCollection<E> implements PartialCollectionImpl<E> {
 		private final ObservableCollection<E> theWrapped;
 
 		private final Function<? super E, Observable<?>> theRefresh;
@@ -1107,7 +1117,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 *
 	 * @param <T> The type of the element
 	 */
-	public class FlattenedElement<T> implements ObservableElement<T> {
+	class FlattenedElement<T> implements ObservableElement<T> {
 		private final ObservableElement<T> subElement;
 
 		private final ObservableElement<? extends ObservableCollection<? extends T>> subCollectionEl;
@@ -1181,12 +1191,16 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	public static class ImmutableObservableCollection<E> implements PartialCollectionImpl<E> {
+	class ImmutableObservableCollection<E> implements PartialCollectionImpl<E> {
 		private final ObservableCollection<E> theWrapped;
 
 		/** @param wrap The collection to wrap */
-		public ImmutableObservableCollection(ObservableCollection<E> wrap) {
+		protected ImmutableObservableCollection(ObservableCollection<E> wrap) {
 			theWrapped = wrap;
+		}
+
+		protected ObservableCollection<E> getWrapped() {
+			return theWrapped;
 		}
 
 		@Override
@@ -1221,23 +1235,28 @@ public interface ObservableCollection<E> extends Collection<E> {
 	}
 
 	/**
-	 * Caches the values in an observable collection. As long as this collection is being listened to, it will maintain a cache of the
-	 * values in the given collection. When all observers to the collection have been unsubscribed, the cache is cleared and not maintained.
-	 * If the cache is active, all access methods to this cache, including the native {@link Collection} methods, will use the cached
-	 * values. If the cache is not active, the {@link Collection} methods will delegate to the wrapped collection.
+	 * Implements {@link ObservableCollection#cached()} Caches the values in an observable collection. As long as this collection is being
+	 * listened to, it will maintain a cache of the values in the given collection. When all observers to the collection have been
+	 * unsubscribed, the cache is cleared and not maintained. If the cache is active, all access methods to this cache, including the native
+	 * {@link Collection} methods, will use the cached values. If the cache is not active, the {@link Collection} methods will delegate to
+	 * the wrapped collection.
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	public static class SafeCachedObservableCollection<E> implements PartialCollectionImpl<E> {
-		private static class CachedElement<E> implements ObservableElement<E> {
+	class SafeCachedObservableCollection<E> implements PartialCollectionImpl<E> {
+		protected static class CachedElement<E> implements ObservableElement<E> {
 			private final ObservableElement<E> theWrapped;
 			private final ListenerSet<Observer<? super ObservableValueEvent<E>>> theElementListeners;
 
 			private E theCachedValue;
 
-			CachedElement(ObservableElement<E> wrap) {
+			protected CachedElement(ObservableElement<E> wrap) {
 				theWrapped = wrap;
 				theElementListeners = new ListenerSet<>();
+			}
+
+			protected ObservableElement<E> getWrapped() {
+				return theWrapped;
 			}
 
 			@Override
@@ -1284,13 +1303,13 @@ public interface ObservableCollection<E> extends Collection<E> {
 		private Runnable theUnsubscribe;
 
 		/** @param wrap The collection to cache */
-		public SafeCachedObservableCollection(ObservableCollection<E> wrap) {
+		protected SafeCachedObservableCollection(ObservableCollection<E> wrap) {
 			theWrapped = wrap;
 			theListeners = new ListenerSet<>();
 			theCache = new org.observe.util.ConcurrentIdentityHashMap<>();
 			theLock = new ReentrantLock();
 			theWrappedOnElement = element -> {
-				CachedElement<E> cached = debug(new CachedElement<>(element)).from("element", this).tag("wrapped", element).get();
+				CachedElement<E> cached = debug(createElement(element)).from("element", this).tag("wrapped", element).get();
 				debug(cached).from("cached", element).from("element", this);
 				theCache.put(element, cached);
 				element.observe(new Observer<ObservableValueEvent<E>>(){
@@ -1309,6 +1328,14 @@ public interface ObservableCollection<E> extends Collection<E> {
 			};
 
 			theListeners.setUsedListener(this::setUsed);
+		}
+
+		protected ObservableCollection<E> getWrapped(){
+			return theWrapped;
+		}
+
+		protected CachedElement<E> createElement(ObservableElement<E> element) {
+			return new CachedElement<>(element);
 		}
 
 		@Override
@@ -1332,7 +1359,27 @@ public interface ObservableCollection<E> extends Collection<E> {
 		@Override
 		public Iterator<E> iterator() {
 			Collection<E> ret = refresh();
-			return ret.iterator();
+			return new Iterator<E>() {
+				private final Iterator<E> backing = ret.iterator();
+
+				private E theLastRet;
+
+				@Override
+				public boolean hasNext() {
+					return backing.hasNext();
+				}
+
+				@Override
+				public E next() {
+					return theLastRet = backing.next();
+				}
+
+				@Override
+				public void remove() {
+					backing.remove();
+					theWrapped.remove(theLastRet);
+				}
+			};
 		}
 
 		@Override
@@ -1356,12 +1403,21 @@ public interface ObservableCollection<E> extends Collection<E> {
 			}
 		}
 
-		private Collection<E> refresh() {
+		protected Collection<E> refresh() {
 			// If we're currently caching, then returned the cached values. Otherwise return the dynamic values.
 			if(theUnsubscribe != null)
-				return theCache.values().stream().map(CachedElement::get).collect(Collectors.toList());
+				return cachedElements().stream().map(CachedElement::get).collect(Collectors.toList());
 			else
 				return theWrapped;
+		}
+
+		protected Collection<? extends CachedElement<E>> cachedElements() {
+			return theCache.values();
+		}
+
+		@Override
+		public ObservableCollection<E> cached() {
+			return this;
 		}
 	}
 }
