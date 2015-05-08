@@ -139,51 +139,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 	@Override
 	default <T> ObservableOrderedCollection<T> map(Type type, Function<? super E, T> map) {
-		ObservableOrderedCollection<E> outer = this;
-		class MappedObservableOrderedCollection implements PartialCollectionImpl<T>, ObservableOrderedCollection<T> {
-			@Override
-			public Type getType() {
-				return type;
-			}
-
-			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return outer.getSession();
-			}
-
-			@Override
-			public int size() {
-				return outer.size();
-			}
-
-			@Override
-			public Iterator<T> iterator() {
-				return new Iterator<T>() {
-					private final Iterator<E> backing = outer.iterator();
-
-					@Override
-					public boolean hasNext() {
-						return backing.hasNext();
-					}
-
-					@Override
-					public T next() {
-						return map.apply(backing.next());
-					}
-
-					@Override
-					public void remove() {
-						backing.remove();
-					}
-				};
-			}
-
-			@Override
-			public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<T>> observer) {
-				return outer.onOrderedElement(element -> observer.accept(element.mapV(map)));
-			}
-		}
-		return debug(new MappedObservableOrderedCollection()).from("map", this).using("map", map).get();
+		return debug(new MappedObservableOrderedCollection<>(this, type, map)).from("map", this).using("map", map).get();
 	}
 
 	@Override
@@ -205,74 +161,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 	@Override
 	default <T> ObservableOrderedCollection<T> filterMap(Type type, Function<? super E, T> map) {
-		ObservableOrderedCollection<E> outer = this;
-		class FilteredOrderedCollection implements PartialCollectionImpl<T>, ObservableOrderedCollection<T> {
-			private List<FilteredOrderedElement<T, E>> theFilteredElements = new java.util.ArrayList<>();
-
-			@Override
-			public Type getType() {
-				return type;
-			}
-
-			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return outer.getSession();
-			}
-
-			@Override
-			public int size() {
-				int ret = 0;
-				for(E el : outer)
-					if(map.apply(el) != null)
-						ret++;
-				return ret;
-			}
-
-			@Override
-			public Iterator<T> iterator() {
-				return new Iterator<T>() {
-					private final Iterator<E> backing = outer.iterator();
-					private T nextVal;
-
-					@Override
-					public boolean hasNext() {
-						while(nextVal == null && backing.hasNext()) {
-							nextVal = map.apply(backing.next());
-						}
-						return nextVal != null;
-					}
-
-					@Override
-					public T next() {
-						if(nextVal == null && !hasNext())
-							throw new java.util.NoSuchElementException();
-						T ret = nextVal;
-						nextVal = null;
-						return ret;
-					}
-				};
-			}
-
-			@Override
-			public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<T>> observer) {
-				return outer.onElement(element -> {
-					OrderedObservableElement<E> outerElement = (OrderedObservableElement<E>) element;
-					FilteredOrderedElement<T, E> retElement = debug(
-						new FilteredOrderedElement<>(outerElement, map, type, theFilteredElements)).from("element", this)
-						.tag("wrapped", element).get();
-					theFilteredElements.add(outerElement.getIndex(), retElement);
-					outerElement.completed().act(elValue -> theFilteredElements.remove(outerElement.getIndex()));
-					outerElement.act(elValue -> {
-						if(!retElement.isIncluded()) {
-							T mapped = map.apply(elValue.getValue());
-							if(mapped != null)
-								observer.accept(retElement);
-						}
-					});
-				});
-			}
-		}
-		return debug(new FilteredOrderedCollection()).from("filterMap", this).using("map", map).get();
+		return debug(new FilteredOrderedCollection<>(this, type, map)).from("filterMap", this).using("map", map).get();
 	}
 
 	@Override
@@ -545,16 +434,67 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	/**
+	 * Implements {@link ObservableOrderedCollection#map(Function)}
+	 *
+	 * @param <E> The type of the collection to map
+	 * @param <T> The type of the mapped collection
+	 */
+	class MappedObservableOrderedCollection<E, T> extends ObservableCollection.MappedObservableCollection<E, T> implements
+	ObservableOrderedCollection<T> {
+		protected MappedObservableOrderedCollection(ObservableOrderedCollection<E> wrap, Type type, Function<? super E, T> map) {
+			super(wrap, type, map);
+		}
+
+		@Override
+		public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<T>> onElement) {
+			return onElement(element -> onElement.accept((OrderedObservableElement<T>) element));
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableOrderedCollection#filterMap(Function)}
+	 *
+	 * @param <E> The type of the collection to be filter-mapped
+	 * @param <T> The type of the mapped collection
+	 */
+	class FilteredOrderedCollection<E, T> extends ObservableCollection.FilteredCollection<E, T> implements ObservableOrderedCollection<T> {
+		private List<FilteredOrderedElement<E, T>> theFilteredElements = new java.util.ArrayList<>();
+
+		FilteredOrderedCollection(ObservableOrderedCollection<E> wrap, Type type, Function<? super E, T> map) {
+			super(wrap, type, map);
+		}
+
+		@Override
+		protected ObservableOrderedCollection<E> getWrapped() {
+			return (ObservableOrderedCollection<E>) super.getWrapped();
+		}
+
+		@Override
+		protected FilteredOrderedElement<E, T> filter(ObservableElement<E> element) {
+			OrderedObservableElement<E> outerEl = (OrderedObservableElement<E>) element;
+			FilteredOrderedElement<E, T> retElement = debug(new FilteredOrderedElement<>(outerEl, getMap(), getType(), theFilteredElements))
+				.from("element", this).tag("wrapped", element).get();
+			theFilteredElements.add(outerEl.getIndex(), retElement);
+			outerEl.completed().act(elValue -> theFilteredElements.remove(outerEl.getIndex()));
+			return retElement;
+		}
+
+		@Override
+		public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<T>> onElement) {
+			return onElement(element -> onElement.accept((OrderedObservableElement<T>) element));
+		}
+	}
+	/**
 	 * The type of element in filtered ordered collections
 	 *
 	 * @param <T> The type of this element
 	 * @param <E> The type of element wrapped by this element
 	 */
-	class FilteredOrderedElement<T, E> extends FilteredElement<T, E> implements OrderedObservableElement<T> {
-		private List<FilteredOrderedElement<T, E>> theFilteredElements;
+	class FilteredOrderedElement<E, T> extends FilteredElement<E, T> implements OrderedObservableElement<T> {
+		private List<FilteredOrderedElement<E, T>> theFilteredElements;
 
 		FilteredOrderedElement(OrderedObservableElement<E> wrapped, Function<? super E, T> map, Type type,
-			List<FilteredOrderedElement<T, E>> filteredEls) {
+			List<FilteredOrderedElement<E, T>> filteredEls) {
 			super(wrapped, map, type);
 			theFilteredElements = filteredEls;
 		}

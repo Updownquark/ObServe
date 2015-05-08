@@ -182,99 +182,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 
 	@Override
 	default <T> ObservableList<T> filterMap(Type type, Function<? super E, T> map) {
-		ObservableList<E> outer = this;
-		class FilteredList implements PartialListImpl<T> {
-			private List<FilteredListElement<T, E>> theFilteredElements = new java.util.ArrayList<>();
-
-			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return outer.getSession();
-			}
-
-			@Override
-			public Type getType() {
-				return type;
-			}
-
-			@Override
-			public int size() {
-				int ret = 0;
-				for(E el : outer)
-					if(map.apply(el) != null)
-						ret++;
-				return ret;
-			}
-
-			@Override
-			public T get(int index) {
-				if(index < 0)
-					throw new IndexOutOfBoundsException("" + index);
-				int size = 0;
-				int idx = index;
-				for(E el : outer) {
-					T mapped = map.apply(el);
-					if(mapped != null) {
-						size++;
-						if(idx == 0)
-							return mapped;
-						else
-							idx--;
-					}
-				}
-				throw new IndexOutOfBoundsException(index + " of " + size);
-			}
-
-			@Override
-			public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<T>> onElement) {
-				return outer.onElement(element -> {
-					OrderedObservableElement<E> outerElement = (OrderedObservableElement<E>) element;
-					FilteredListElement<T, E> retElement = debug(new FilteredListElement<>(outerElement, map, type, theFilteredElements))
-						.from("element", outer).tag("wrapped", element).get();
-					theFilteredElements.add(outerElement.getIndex(), retElement);
-					outerElement.observe(new Observer<ObservableValueEvent<E>>() {
-						@Override
-						public <V2 extends ObservableValueEvent<E>> void onNext(V2 elValue) {
-							if(!retElement.isIncluded()) {
-								T mapped = map.apply(elValue.getValue());
-								if(mapped != null)
-									onElement.accept(retElement);
-							}
-						}
-
-						@Override
-						public <V2 extends ObservableValueEvent<E>> void onCompleted(V2 elValue) {
-							theFilteredElements.remove(outerElement.getIndex());
-						}
-					});
-				});
-			}
-
-			@Override
-			public Runnable onElementReverse(Consumer<? super OrderedObservableElement<T>> onElement) {
-				return outer.onElement(element -> {
-					OrderedObservableElement<E> outerElement = (OrderedObservableElement<E>) element;
-					FilteredListElement<T, E> retElement = debug(new FilteredListElement<>(outerElement, map, type, theFilteredElements))
-						.from("element", outer).tag("wrapped", element).get();
-					theFilteredElements.add(outerElement.getIndex(), retElement);
-					outerElement.observe(new Observer<ObservableValueEvent<E>>() {
-						@Override
-						public <V2 extends ObservableValueEvent<E>> void onNext(V2 elValue) {
-							if(!retElement.isIncluded()) {
-								T mapped = map.apply(elValue.getValue());
-								if(mapped != null)
-									onElement.accept(retElement);
-							}
-						}
-
-						@Override
-						public <V2 extends ObservableValueEvent<E>> void onCompleted(V2 elValue) {
-							theFilteredElements.remove(outerElement.getIndex());
-						}
-					});
-				});
-			}
-		}
-		return debug(new FilteredList()).from("filterMap", this).using("map", map).get();
+		return debug(new FilteredList<>(this, type, map)).from("filterMap", this).using("map", map).get();
 	}
 
 	/**
@@ -641,6 +549,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 	}
 
 	/**
+	 * @param <T> The type of the collection
 	 * @param collection The collection to wrap as a list
 	 * @return A list containing all elements in the collection, ordered and accessible by index
 	 */
@@ -651,33 +560,52 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 	}
 
 	/**
-	 * The type of element in filtered lists
+	 * Implements {@link ObservableList#filterMap(Function)}
 	 *
-	 * @param <T> The type of this element
-	 * @param <E> The type of element wrapped by this element
+	 * @param <E> The type of the collection to be filter-mapped
+	 * @param <T> The type of the mapped collection
 	 */
-	class FilteredListElement<T, E> extends FilteredElement<T, E> implements OrderedObservableElement<T> {
-		private List<FilteredListElement<T, E>> theFilteredElements;
-
-		FilteredListElement(OrderedObservableElement<E> wrapped, Function<? super E, T> map, Type type,
-			List<FilteredListElement<T, E>> filteredEls) {
-			super(wrapped, map, type);
-			theFilteredElements = filteredEls;
+	class FilteredList<E, T> extends ObservableOrderedCollection.FilteredOrderedCollection<E, T> implements PartialListImpl<T> {
+		protected FilteredList(ObservableOrderedCollection<E> wrap, Type type, Function<? super E, T> map) {
+			super(wrap, type, map);
 		}
 
 		@Override
-		protected OrderedObservableElement<E> getWrapped() {
-			return (OrderedObservableElement<E>) super.getWrapped();
+		protected ObservableList<E> getWrapped() {
+			return (ObservableList<E>) super.getWrapped();
 		}
 
 		@Override
-		public int getIndex() {
-			int ret = 0;
-			int outerIdx = getWrapped().getIndex();
-			for(int i = 0; i < outerIdx; i++)
-				if(theFilteredElements.get(i).isIncluded())
-					ret++;
-			return ret;
+		public T get(int index) {
+			if(index < 0)
+				throw new IndexOutOfBoundsException("" + index);
+			int size = 0;
+			int idx = index;
+			for(E el : getWrapped()) {
+				T mapped = getMap().apply(el);
+				if(mapped != null) {
+					size++;
+					if(idx == 0)
+						return mapped;
+					else
+						idx--;
+				}
+			}
+			throw new IndexOutOfBoundsException(index + " of " + size);
+		}
+
+		@Override
+		public Runnable onElementReverse(Consumer<? super OrderedObservableElement<T>> onElement) {
+			return getWrapped().onElementReverse(element -> {
+				FilteredOrderedElement<E, T> retElement = filter(element);
+				element.act(elValue -> {
+					if(!retElement.isIncluded()) {
+						T mapped = getMap().apply(elValue.getValue());
+						if(mapped != null)
+							onElement.accept(retElement);
+					}
+				});
+			});
 		}
 	}
 
@@ -1180,7 +1108,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 	}
 
 	/**
-	 * An element for a {@link CollectionWrappingList}
+	 * An element for a {@link org.observe.collect.ObservableList.CollectionWrappingList}
 	 *
 	 * @param <T> The type of the value in the element
 	 */

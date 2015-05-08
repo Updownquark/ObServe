@@ -233,51 +233,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @return The mapped collection
 	 */
 	default <T> ObservableCollection<T> map(Type type, Function<? super E, T> map) {
-		ObservableCollection<E> outer = this;
-		class MappedObservableCollection implements PartialCollectionImpl<T> {
-			@Override
-			public Type getType() {
-				return type;
-			}
-
-			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return outer.getSession();
-			}
-
-			@Override
-			public int size() {
-				return outer.size();
-			}
-
-			@Override
-			public Iterator<T> iterator() {
-				return new Iterator<T>() {
-					private final Iterator<E> backing = outer.iterator();
-
-					@Override
-					public boolean hasNext() {
-						return backing.hasNext();
-					}
-
-					@Override
-					public T next() {
-						return map.apply(backing.next());
-					}
-
-					@Override
-					public void remove() {
-						backing.remove();
-					}
-				};
-			}
-
-			@Override
-			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
-				return outer.onElement(element -> observer.accept(element.mapV(map)));
-			}
-		}
-		return debug(new MappedObservableCollection()).from("map", this).using("map", map).get();
+		return debug(new MappedObservableCollection<>(this, type, map)).from("map", this).using("map", map).get();
 	}
 
 	/**
@@ -291,6 +247,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	}
 
 	/**
+	 * @param <T> The type for the new collection
 	 * @param type The type to filter this collection by
 	 * @return A collection backed by this collection, consisting only of elements in this collection whose values are instances of the
 	 *         given class
@@ -315,71 +272,9 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @return A collection containing every element in this collection for which the mapping function returns a non-null value
 	 */
 	default <T> ObservableCollection<T> filterMap(Type type, Function<? super E, T> map) {
-		ObservableCollection<E> outer = this;
 		if(type == null)
 			type = ComposedObservableValue.getReturnType(map);
-		Type fType = type;
-		class FilteredCollection implements PartialCollectionImpl<T> {
-			@Override
-			public Type getType() {
-				return fType;
-			}
-
-			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return outer.getSession();
-			}
-
-			@Override
-			public int size() {
-				int ret = 0;
-				for(E el : outer)
-					if(map.apply(el) != null)
-						ret++;
-				return ret;
-			}
-
-			@Override
-			public Iterator<T> iterator() {
-				return new Iterator<T>() {
-					private final Iterator<E> backing = outer.iterator();
-					private T nextVal;
-
-					@Override
-					public boolean hasNext() {
-						while(nextVal == null && backing.hasNext()) {
-							nextVal = map.apply(backing.next());
-						}
-						return nextVal != null;
-					}
-
-					@Override
-					public T next() {
-						if(nextVal == null && !hasNext())
-							throw new java.util.NoSuchElementException();
-						T ret = nextVal;
-						nextVal = null;
-						return ret;
-					}
-				};
-			}
-
-			@Override
-			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
-				return outer.onElement(element -> {
-					FilteredElement<T, E> retElement = debug(new FilteredElement<>(element, map, fType)).from("element", this)
-						.tag("wrapped", element).get();
-					element.act(elValue -> {
-						if(!retElement.isIncluded()) {
-							T mapped = map.apply(elValue.getValue());
-							if(mapped != null)
-								observer.accept(retElement);
-						}
-					});
-				});
-			}
-		}
-		return debug(new FilteredCollection()).from("filterMap", this).using("map", map).get();
+		return debug(new FilteredCollection<>(this, type, map)).from("filterMap", this).using("map", map).get();
 	}
 
 	/**
@@ -768,12 +663,161 @@ public interface ObservableCollection<E> extends Collection<E> {
 	}
 
 	/**
+	 * Implements {@link ObservableCollection#map(Function)}
+	 *
+	 * @param <E> The type of the collection to map
+	 * @param <T> The type of the mapped collection
+	 */
+	class MappedObservableCollection<E, T> implements PartialCollectionImpl<T> {
+		private final ObservableCollection<E> theWrapped;
+		private final Type theType;
+		private final Function<? super E, T> theMap;
+
+		protected MappedObservableCollection(ObservableCollection<E> wrap, Type type, Function<? super E, T> map) {
+			theWrapped = wrap;
+			theType = type;
+			theMap = map;
+		}
+
+		@Override
+		public Type getType() {
+			return theType;
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			return theWrapped.getSession();
+		}
+
+		@Override
+		public int size() {
+			return theWrapped.size();
+		}
+
+		@Override
+		public Iterator<T> iterator() {
+			return new Iterator<T>() {
+				private final Iterator<E> backing = theWrapped.iterator();
+
+				@Override
+				public boolean hasNext() {
+					return backing.hasNext();
+				}
+
+				@Override
+				public T next() {
+					return theMap.apply(backing.next());
+				}
+
+				@Override
+				public void remove() {
+					backing.remove();
+				}
+			};
+		}
+
+		@Override
+		public Runnable onElement(Consumer<? super ObservableElement<T>> onElement) {
+			return theWrapped.onElement(element -> onElement.accept(element.mapV(theMap)));
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableCollection#filterMap(Function)}
+	 *
+	 * @param <E> The type of the collection to be filter-mapped
+	 * @param <T> The type of the mapped collection
+	 */
+	class FilteredCollection<E, T> implements PartialCollectionImpl<T> {
+		private final ObservableCollection<E> theWrapped;
+		private final Type theType;
+		private final Function<? super E, T> theMap;
+
+		FilteredCollection(ObservableCollection<E> wrap, Type type, Function<? super E, T> map) {
+			theWrapped = wrap;
+			theType = type;
+			theMap = map;
+		}
+
+		protected ObservableCollection<E> getWrapped() {
+			return theWrapped;
+		}
+
+		protected Function<? super E, T> getMap() {
+			return theMap;
+		}
+
+		@Override
+		public Type getType() {
+			return theType;
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			return theWrapped.getSession();
+		}
+
+		@Override
+		public int size() {
+			int ret = 0;
+			for(E el : theWrapped)
+				if(theMap.apply(el) != null)
+					ret++;
+			return ret;
+		}
+
+		@Override
+		public Iterator<T> iterator() {
+			return new Iterator<T>() {
+				private final Iterator<E> backing = theWrapped.iterator();
+
+				private T nextVal;
+
+				@Override
+				public boolean hasNext() {
+					while(nextVal == null && backing.hasNext()) {
+						nextVal = theMap.apply(backing.next());
+					}
+					return nextVal != null;
+				}
+
+				@Override
+				public T next() {
+					if(nextVal == null && !hasNext())
+						throw new java.util.NoSuchElementException();
+					T ret = nextVal;
+					nextVal = null;
+					return ret;
+				}
+			};
+		}
+
+		protected FilteredElement<E, T> filter(ObservableElement<E> element) {
+			return debug(new FilteredElement<>(element, theMap, theType)).from("element", this).tag("wrapped", element).get();
+		}
+
+		@Override
+		public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
+			return theWrapped.onElement(element -> {
+				FilteredElement<E, T> retElement = filter(element);
+				element.act(elValue -> {
+					if(!retElement.isIncluded()) {
+						T mapped = theMap.apply(elValue.getValue());
+						if(mapped != null)
+							observer.accept(retElement);
+					}
+				});
+			});
+		}
+	}
+
+	/**
 	 * The type of elements returned from {@link ObservableCollection#filterMap(Function)}
 	 *
 	 * @param <T> The type of this element
 	 * @param <E> The type of element being wrapped
 	 */
-	public static class FilteredElement<T, E> implements ObservableElement<T> {
+	public static class FilteredElement<E, T> implements ObservableElement<T> {
 		private final ObservableElement<E> theWrappedElement;
 		private final Function<? super E, T> theMap;
 		private final Type theType;
