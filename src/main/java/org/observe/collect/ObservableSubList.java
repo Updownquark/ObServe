@@ -12,7 +12,7 @@ import org.observe.util.ObservableUtils;
 
 import prisms.lang.Type;
 
-class ObservableSubList<E> implements PartialListImpl<E> {
+class ObservableSubList<E> implements ObservableList.PartialListImpl<E> {
 	private final ObservableList<E> theList;
 	private final int theOffset;
 	private int theSize;

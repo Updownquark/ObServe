@@ -261,14 +261,19 @@ public interface SettableValue<T> extends ObservableValue<T> {
 		}).from("combine", this).from("with", arg2).from("with", arg3).using("combination", function).using("reverse", reverse)
 		.tag("combineNull", combineNull).get();
 	}
-}
 
-abstract class ComposedSettableValue<T> extends ComposedObservableValue<T> implements SettableValue<T> {
-	public ComposedSettableValue(Function<Object [], T> function, boolean combineNull, ObservableValue<?> [] composed) {
-		super(function, combineNull, composed);
-	}
+	/**
+	 * Implements the SettableValue.combine methods
+	 * 
+	 * @param <T> The type of the value
+	 */
+	abstract class ComposedSettableValue<T> extends ComposedObservableValue<T> implements SettableValue<T> {
+		public ComposedSettableValue(Function<Object [], T> function, boolean combineNull, ObservableValue<?> [] composed) {
+			super(function, combineNull, composed);
+		}
 
-	public ComposedSettableValue(Type type, Function<Object [], T> function, boolean combineNull, ObservableValue<?>... composed) {
-		super(type, function, combineNull, composed);
+		public ComposedSettableValue(Type type, Function<Object [], T> function, boolean combineNull, ObservableValue<?>... composed) {
+			super(type, function, combineNull, composed);
+		}
 	}
 }

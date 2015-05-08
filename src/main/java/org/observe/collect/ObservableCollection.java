@@ -3,6 +3,7 @@ package org.observe.collect;
 import static org.observe.ObservableDebug.debug;
 import static org.observe.ObservableDebug.label;
 
+import java.util.AbstractCollection;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
@@ -15,7 +16,6 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-import org.observe.ComposedObservableValue;
 import org.observe.Observable;
 import org.observe.ObservableDebug;
 import org.observe.ObservableDebug.D;
@@ -223,7 +223,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @return An observable collection of a new type backed by this collection and the mapping function
 	 */
 	default <T> ObservableCollection<T> map(Function<? super E, T> map) {
-		return map(ComposedObservableValue.getReturnType(map), map);
+		return map(ObservableUtils.getReturnType(map), map);
 	}
 
 	/**
@@ -240,9 +240,9 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @param filter The filter function
 	 * @return A collection containing all non-null elements passing the given test
 	 */
-	default ObservableCollection<E> filter(Function<? super E, Boolean> filter) {
+	default ObservableCollection<E> filter(Predicate<? super E> filter) {
 		return label(filterMap(value -> {
-			return (value != null && filter.apply(value)) ? value : null;
+			return (value != null && filter.test(value)) ? value : null;
 		})).tag("filter", filter).get();
 	}
 
@@ -262,7 +262,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @return An observable collection of a new type backed by this collection and the mapping function
 	 */
 	default <T> ObservableCollection<T> filterMap(Function<? super E, T> filterMap) {
-		return filterMap(ComposedObservableValue.getReturnType(filterMap), filterMap);
+		return filterMap(ObservableUtils.getReturnType(filterMap), filterMap);
 	}
 
 	/**
@@ -273,7 +273,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 */
 	default <T> ObservableCollection<T> filterMap(Type type, Function<? super E, T> map) {
 		if(type == null)
-			type = ComposedObservableValue.getReturnType(map);
+			type = ObservableUtils.getReturnType(map);
 		return debug(new FilteredCollection<>(this, type, map)).from("filterMap", this).using("map", map).get();
 	}
 
@@ -392,7 +392,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @return An observable collection containing this collection's elements combined with the given argument
 	 */
 	default <T, V> ObservableCollection<V> combine(ObservableValue<T> arg, BiFunction<? super E, ? super T, V> func) {
-		return combine(arg, ComposedObservableValue.getReturnType(func), func);
+		return combine(arg, ObservableUtils.getReturnType(func), func);
 	}
 
 	/**
@@ -585,6 +585,86 @@ public interface ObservableCollection<E> extends Collection<E> {
 				return "fold(" + coll + ")";
 			}
 		}).from("fold", coll).get();
+	}
+
+	/**
+	 * An extension of ObservableCollection that implements some of the redundant methods and throws UnsupportedOperationExceptions for
+	 * modifications. Mostly copied from {@link AbstractCollection}.
+	 *
+	 * @param <E> The type of element in the collection
+	 */
+	interface PartialCollectionImpl<E> extends ObservableCollection<E> {
+		@Override
+		default boolean add(E e) {
+			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		default boolean remove(Object o) {
+			Iterator<E> it = iterator();
+			if(o == null) {
+				while(it.hasNext()) {
+					if(it.next() == null) {
+						it.remove();
+						return true;
+					}
+				}
+			} else {
+				while(it.hasNext()) {
+					if(o.equals(it.next())) {
+						it.remove();
+						return true;
+					}
+				}
+			}
+			return false;
+		}
+
+		@Override
+		default boolean addAll(Collection<? extends E> c) {
+			boolean modified = false;
+			for(E e : c)
+				if(add(e))
+					modified = true;
+			return modified;
+		}
+
+		@Override
+		default boolean removeAll(Collection<?> c) {
+			Objects.requireNonNull(c);
+			boolean modified = false;
+			Iterator<?> it = iterator();
+			while(it.hasNext()) {
+				if(c.contains(it.next())) {
+					it.remove();
+					modified = true;
+				}
+			}
+			return modified;
+		}
+
+		@Override
+		default boolean retainAll(Collection<?> c) {
+			Objects.requireNonNull(c);
+			boolean modified = false;
+			Iterator<E> it = iterator();
+			while(it.hasNext()) {
+				if(!c.contains(it.next())) {
+					it.remove();
+					modified = true;
+				}
+			}
+			return modified;
+		}
+
+		@Override
+		default void clear() {
+			Iterator<E> it = iterator();
+			while(it.hasNext()) {
+				it.next();
+				it.remove();
+			}
+		}
 	}
 
 	/**
@@ -975,7 +1055,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 
 	/**
 	 * Implements {@link ObservableCollection#refreshEach(Function)}
-	 * 
+	 *
 	 * @param <E> The type of the collection to refresh
 	 */
 	static class ElementRefreshingCollection<E> implements PartialCollectionImpl<E> {

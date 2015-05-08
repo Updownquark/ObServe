@@ -2,13 +2,16 @@ package org.observe.collect;
 
 import static org.observe.ObservableDebug.debug;
 
+import java.util.AbstractCollection;
 import java.util.AbstractSet;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -53,136 +56,38 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 	 * @return A set containing all elements passing the given test
 	 */
 	@Override
-	default ObservableSet<E> filter(Function<? super E, Boolean> filter) {
-		ObservableSet<E> outer = this;
-		class FilteredSet extends AbstractSet<E> implements ObservableSet<E> {
-			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return outer.getSession();
-			}
+	default ObservableSet<E> filter(Predicate<? super E> filter) {
+		Function<E, E> map = value -> (value != null && filter.test(value)) ? value : null;
+		return debug(new FilteredSet<>(this, getType(), map)).from("filter", this).using("filter", filter).get();
+	}
 
-			@Override
-			public Type getType() {
-				return outer.getType();
-			}
-
-			@Override
-			public int size() {
-				int ret = 0;
-				for(E el : outer)
-					if(filter.apply(el) != null)
-						ret++;
-				return ret;
-			}
-
-			@Override
-			public Iterator<E> iterator() {
-				return new Iterator<E>() {
-					private final Iterator<E> backing = outer.iterator();
-
-					private E nextVal;
-
-					@Override
-					public boolean hasNext() {
-						while(nextVal == null && backing.hasNext()) {
-							nextVal = backing.next();
-							if(!filter.apply(nextVal))
-								nextVal = null;
-						}
-						return nextVal != null;
-					}
-
-					@Override
-					public E next() {
-						if(nextVal == null && !hasNext())
-							throw new java.util.NoSuchElementException();
-						E ret = nextVal;
-						nextVal = null;
-						return ret;
-					}
-				};
-			}
-
-			@Override
-			public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
-				Function<E, E> map = value -> (filter.apply(value) ? value : null);
-				return outer.onElement(element -> {
-					FilteredElement<E, E> retElement = debug(new FilteredElement<>(element, map, getType())).from("element", this)
-						.tag("wrapped", element).using("map", map).get();
-					element.act(elValue -> {
-						if(!retElement.isIncluded()) {
-							E mapped = map.apply(elValue.getValue());
-							if(mapped != null)
-								observer.accept(retElement);
-						}
-					});
-				});
-			}
-
-			@Override
-			public String toString() {
-				return "filter(" + outer + ")";
-			}
-		}
-		return debug(new FilteredSet()).from("filter", this).using("filter", filter).get();
+	@Override
+	default <T> ObservableSet<T> filter(Class<T> type) {
+		Function<E, T> map = value -> type.isInstance(value) ? type.cast(value) : null;
+		return debug(new FilteredSet<>(this, new Type(type), map)).from("filterMap", this).using("map", map).tag("filterType", type).get();
 	}
 
 	/**
 	 * @param refresh The observable to re-fire events on
-	 * @return A collection whose elements fire additional value events when the given observable fires
+	 * @return A set whose elements fire additional value events when the given observable fires
 	 */
 	@Override
 	default ObservableSet<E> refresh(Observable<?> refresh) {
-		ObservableSet<E> outer = this;
-		class RefreshingCollection extends AbstractSet<E> implements ObservableSet<E> {
-			private final SubCollectionTransactionManager theTransactionManager = new SubCollectionTransactionManager(outer);
-
-			@Override
-			public Type getType() {
-				return outer.getType();
-			}
-
-			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return theTransactionManager.getSession();
-			}
-
-			@Override
-			public Iterator<E> iterator() {
-				return outer.iterator();
-			}
-
-			@Override
-			public int size() {
-				return outer.size();
-			}
-
-			@Override
-			public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
-				return theTransactionManager.onElement(outer, refresh, element -> observer.accept(element.refresh(refresh)), true);
-			}
-		};
-		return debug(new RefreshingCollection()).from("refresh", this).from("on", refresh).get();
+		return debug(new RefreshingSet<>(this, refresh)).from("refresh", this).from("on", refresh).get();
 	}
 
 	/**
-	 * @param refire A function that supplies a refresh observable as a function of element value
+	 * @param refresh A function that supplies a refresh observable as a function of element value
 	 * @return A collection whose values individually refresh when the observable returned by the given function fires
 	 */
 	@Override
-	default ObservableSet<E> refreshEach(Function<? super E, Observable<?>> refire) {
-		ObservableCollection<E> outer = this;
-		return debug(new org.observe.util.ObservableSetWrapper<E>(this) {
-			@Override
-			public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
-				return outer.onElement(element -> observer.accept(element.refreshForValue(refire)));
-			}
-		}).from("refreshEach", this).using("on", refire).get();
+	default ObservableSet<E> refreshEach(Function<? super E, Observable<?>> refresh) {
+		return debug(new ElementRefreshingSet<>(this, refresh)).from("refreshEach", this).using("on", refresh).get();
 	}
 
 	@Override
 	default ObservableSet<E> immutable() {
-		return debug(new Immutable<>(this)).from("immutable", this).get();
+		return debug(new ImmutableObservableSet<>(this)).from("immutable", this).get();
 	}
 
 	/**
@@ -441,15 +346,92 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 	}
 
 	/**
+	 * An extension of ObservableCollection that implements some of the redundant methods and throws UnsupportedOperationExceptions for
+	 * modifications. Mostly copied from {@link AbstractCollection}.
+	 *
+	 * @param <E> The type of element in the set
+	 */
+	interface PartialSetImpl<E> extends PartialCollectionImpl<E>, ObservableSet<E> {
+		@Override
+		default boolean remove(Object o) {
+			return PartialCollectionImpl.super.remove(o);
+		}
+
+		@Override
+		default boolean removeAll(Collection<?> c) {
+			return PartialCollectionImpl.super.removeAll(c);
+		}
+
+		@Override
+		default boolean retainAll(Collection<?> c) {
+			return PartialCollectionImpl.super.retainAll(c);
+		}
+
+		@Override
+		default void clear() {
+			PartialCollectionImpl.super.clear();
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableSet#filter(Predicate)} and {@link ObservableSet#filter(Class)}
+	 *
+	 * @param <E> The type of the set to filter
+	 * @param <T> the type of the mapped set
+	 */
+	class FilteredSet<E, T> extends FilteredCollection<E, T> implements PartialSetImpl<T> {
+		protected FilteredSet(ObservableSet<E> wrap, Type type, Function<? super E, T> map) {
+			super(wrap, type, map);
+		}
+
+		@Override
+		protected ObservableSet<E> getWrapped() {
+			return (ObservableSet<E>) super.getWrapped();
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableSet#refresh(Observable)}
+	 * 
+	 * @param <E> The type of the set
+	 */
+	class RefreshingSet<E> extends RefreshingCollection<E> implements PartialSetImpl<E> {
+		protected RefreshingSet(ObservableSet<E> wrap, Observable<?> refresh) {
+			super(wrap, refresh);
+		}
+
+		@Override
+		protected ObservableSet<E> getWrapped() {
+			return (ObservableSet<E>) super.getWrapped();
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableSet#refreshEach(Function)}
+	 * 
+	 * @param <E> The type of the set
+	 */
+	class ElementRefreshingSet<E> extends ElementRefreshingCollection<E> implements PartialSetImpl<E> {
+		protected ElementRefreshingSet(ObservableSet<E> wrap, Function<? super E, Observable<?>> refresh) {
+			super(wrap, refresh);
+		}
+
+		@Override
+		protected ObservableSet<E> getWrapped() {
+			return (ObservableSet<E>) super.getWrapped();
+		}
+	}
+
+	/**
 	 * An observable set that cannot be modified directly, but reflects the value of a wrapped set as it changes
 	 *
 	 * @param <E> The type of elements in the set
 	 */
-	public static class Immutable<E> extends AbstractSet<E> implements ObservableSet<E> {
+	public static class ImmutableObservableSet<E> extends AbstractSet<E> implements ObservableSet<E> {
 		private final ObservableSet<E> theWrapped;
 
 		/** @param wrap The set to wrap */
-		public Immutable(ObservableSet<E> wrap) {
+		public ImmutableObservableSet(ObservableSet<E> wrap) {
 			theWrapped = wrap;
 		}
 
@@ -479,7 +461,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 		}
 
 		@Override
-		public Immutable<E> immutable() {
+		public ImmutableObservableSet<E> immutable() {
 			return this;
 		}
 	}

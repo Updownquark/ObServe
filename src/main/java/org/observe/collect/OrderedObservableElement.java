@@ -6,11 +6,8 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import org.observe.BiTuple;
-import org.observe.ComposedObservableValue;
 import org.observe.Observable;
 import org.observe.ObservableValue;
-import org.observe.ObservableValueEvent;
-import org.observe.Observer;
 import org.observe.TriFunction;
 import org.observe.TriTuple;
 
@@ -24,6 +21,11 @@ import prisms.lang.Type;
 public interface OrderedObservableElement<E> extends ObservableElement<E> {
 	/** @return The index of this element within its list */
 	int getIndex();
+
+	@Override
+	default OrderedObservableElement<E> cached() {
+		return debug(new CachedOrderedObservableElement<>(this)).from("cached", this).get();
+	}
 
 	/**
 	 * Composes this observable into another observable that depends on this one
@@ -144,121 +146,39 @@ public interface OrderedObservableElement<E> extends ObservableElement<E> {
 	}
 
 	@Override
-	default OrderedObservableElement<E> refresh(Observable<?> observable) {
-		OrderedObservableElement<E> outer = this;
-		return new OrderedObservableElement<E>() {
-			@Override
-			public Type getType() {
-				return outer.getType();
-			}
-
-			@Override
-			public E get() {
-				return outer.get();
-			}
-
-			@Override
-			public int getIndex() {
-				return outer.getIndex();
-			}
-
-			@Override
-			public ObservableValue<E> persistent() {
-				return outer.persistent().refresh(observable);
-			}
-
-			@Override
-			public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
-				Runnable outerSub = outer.observe(observer);
-				Runnable refireSub = observable.observe(new Observer<Object>() {
-					@Override
-					public <V> void onNext(V value) {
-						observer.onNext(createEvent(get(), get(), value));
-					}
-				});
-				return () -> {
-					outerSub.run();
-					refireSub.run();
-				};
-			}
-		};
+	default OrderedObservableElement<E> refresh(Observable<?> refresh) {
+		return new RefreshingOrderedObservableElement<>(this, refresh);
 	}
 
 	@Override
-	default OrderedObservableElement<E> refreshForValue(Function<? super E, Observable<?>> observable) {
-		OrderedObservableElement<E> outer = this;
-		return debug(new OrderedObservableElement<E>() {
-			@Override
-			public Type getType() {
-				return outer.getType();
-			}
+	default OrderedObservableElement<E> refreshForValue(Function<? super E, Observable<?>> refresh) {
+		return debug(new ValueRefreshingOrderedObservableElement<>(this, refresh)).from("refresh", this).using("on", refresh).get();
+	}
 
-			@Override
-			public E get() {
-				return outer.get();
-			}
+	/**
+	 * Implements {@link #cached()}
+	 *
+	 * @param <E> The type of the value
+	 */
+	class CachedOrderedObservableElement<E> extends CachedObservableElement<E> implements OrderedObservableElement<E> {
+		protected CachedOrderedObservableElement(OrderedObservableElement<E> wrapped) {
+			super(wrapped);
+		}
 
-			@Override
-			public ObservableValue<E> persistent() {
-				return outer.persistent().refresh(observable.apply(get()));
-			}
+		@Override
+		protected OrderedObservableElement<E> getWrapped() {
+			return (OrderedObservableElement<E>) super.getWrapped();
+		}
 
-			@Override
-			public int getIndex() {
-				return outer.getIndex();
-			}
+		@Override
+		public OrderedObservableElement<E> cached() {
+			return this;
+		}
 
-			@Override
-			public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
-				Runnable [] refireSub = new Runnable[1];
-				Observer<Object> refireObs = new Observer<Object>() {
-					@Override
-					public <V> void onNext(V value) {
-						E outerVal = get();
-						ObservableValueEvent<E> event2 = outer.createEvent(outerVal, outerVal, value);
-						observer.onNext(event2);
-					}
-
-					@Override
-					public <V> void onCompleted(V value) {
-						E outerVal = get();
-						ObservableValueEvent<E> event2 = outer.createEvent(outerVal, outerVal, value);
-						observer.onNext(event2);
-						refireSub[0] = null;
-					}
-				};
-				Runnable outerSub = outer.observe(new Observer<ObservableValueEvent<E>>() {
-					@Override
-					public <V extends ObservableValueEvent<E>> void onNext(V value) {
-						refireSub[0] = observable.apply(value.getValue()).noInit().takeUntil(outer).observe(refireObs);
-						observer.onNext(value);
-					}
-
-					@Override
-					public <V extends ObservableValueEvent<E>> void onCompleted(V value) {
-						if(refireSub[0] != null)
-							refireSub[0].run();
-						observer.onCompleted(value);
-					}
-
-					@Override
-					public void onError(Throwable e) {
-						observer.onError(e);
-					}
-				});
-				refireSub[0] = observable.apply(outer.get()).noInit().takeUntil(outer).observe(refireObs);
-				return () -> {
-					outerSub.run();
-					if(refireSub[0] != null)
-						refireSub[0].run();
-				};
-			}
-
-			@Override
-			public String toString() {
-				return outer + ".refireWhen(" + observable + ")";
-			}
-		}).from("refresh", this).using("on", observable).get();
+		@Override
+		public int getIndex() {
+			return getWrapped().getIndex();
+		}
 	}
 
 	/** @param <T> The type of the element */
@@ -281,6 +201,48 @@ public interface OrderedObservableElement<E> extends ObservableElement<E> {
 		@Override
 		public int getIndex() {
 			return theRoot.getIndex();
+		}
+	}
+
+	/**
+	 * Implements {@link OrderedObservableElement#refresh(Observable)}
+	 *
+	 * @param <E> The type of the element
+	 */
+	class RefreshingOrderedObservableElement<E> extends RefreshingObservableElement<E> implements OrderedObservableElement<E> {
+		protected RefreshingOrderedObservableElement(OrderedObservableElement<E> wrap, Observable<?> refresh) {
+			super(wrap, refresh);
+		}
+
+		@Override
+		protected OrderedObservableElement<E> getWrapped() {
+			return (OrderedObservableElement<E>) super.getWrapped();
+		}
+
+		@Override
+		public int getIndex() {
+			return getWrapped().getIndex();
+		}
+	}
+
+	/**
+	 * Implements {@link OrderedObservableElement#refreshForValue(Function)}
+	 *
+	 * @param <E> The type of the element
+	 */
+	class ValueRefreshingOrderedObservableElement<E> extends ValueRefreshingObservableElement<E> implements OrderedObservableElement<E> {
+		protected ValueRefreshingOrderedObservableElement(OrderedObservableElement<E> wrap, Function<? super E, Observable<?>> refresh) {
+			super(wrap, refresh);
+		}
+
+		@Override
+		protected OrderedObservableElement<E> getWrapped() {
+			return (OrderedObservableElement<E>) super.getWrapped();
+		}
+
+		@Override
+		public int getIndex() {
+			return getWrapped().getIndex();
 		}
 	}
 }

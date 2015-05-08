@@ -1,11 +1,17 @@
 package org.observe;
 
 import static org.observe.ObservableDebug.debug;
+import static org.observe.ObservableDebug.label;
 import static org.observe.ObservableDebug.lambda;
 
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
+
+import org.observe.util.ListenerSet;
 
 /**
  * A stream of values that can be filtered, mapped, composed, etc. and evaluated on
@@ -189,31 +195,7 @@ public interface Observable<T> {
 	 */
 	default Observable<T> noInit() {
 		Observable<T> outer = this;
-		return debug(new Observable<T>() {
-			@Override
-			public Runnable observe(Observer<? super T> observer) {
-				boolean [] initialized = new boolean[1];
-				Runnable ret = outer.observe(new Observer<T>() {
-					@Override
-					public <V extends T> void onNext(V value) {
-						if(initialized[0])
-							observer.onNext(value);
-					}
-
-					@Override
-					public <V extends T> void onCompleted(V value) {
-						observer.onCompleted(value);
-					}
-
-					@Override
-					public void onError(Throwable e) {
-						observer.onError(e);
-					}
-				});
-				initialized[0] = true;
-				return ret;
-			}
-		}).from("noInit", outer).get();
+		return debug(new NoInitObservable<>(this)).from("noInit", outer).get();
 	}
 
 	/**
@@ -242,39 +224,7 @@ public interface Observable<T> {
 	 *         null
 	 */
 	default <R> Observable<R> filterMap(Function<? super T, R> func) {
-		Observable<T> outer = this;
-		return debug(new Observable<R>() {
-			@Override
-			public Runnable observe(Observer<? super R> observer) {
-				return outer.observe(new Observer<T>() {
-					@Override
-					public <V extends T> void onNext(V value) {
-						R mapped = func.apply(value);
-						if(mapped != null)
-							observer.onNext(mapped);
-					}
-
-					@Override
-					public <V extends T> void onCompleted(V value) {
-						R mapped = func.apply(value);
-						if(mapped != null)
-							observer.onNext(mapped);
-						else
-							observer.onCompleted(null); // Gotta pass along the completion even if it doesn't include a value
-					}
-
-					@Override
-					public void onError(Throwable e) {
-						observer.onError(e);
-					}
-				});
-			}
-
-			@Override
-			public String toString() {
-				return "filterMap(" + outer + ")";
-			}
-		}).from("filterMap", this).using("map", func).get();
+		return debug(new FilteredObservable<>(this, func)).from("filterMap", this).using("map", func).get();
 	}
 
 	/**
@@ -295,37 +245,7 @@ public interface Observable<T> {
 	 * @return An observable that provides the same values as this observable until the first value is observed from the given observable
 	 */
 	default Observable<T> takeUntil(Observable<?> until) {
-		Observable<T> outer = this;
-		return debug(new Observable<T>() {
-			@Override
-			public Runnable observe(Observer<? super T> observer) {
-				Runnable outerSub = outer.observe(observer);
-				boolean [] complete = new boolean[1];
-				Runnable [] untilSub = new Runnable[1];
-				untilSub[0] = until.observe(new Observer<Object>() {
-					@Override
-					public void onNext(Object value) {
-						onCompleted(value);
-					}
-
-					@Override
-					public void onCompleted(Object value) {
-						if(complete[0])
-							return;
-						complete[0] = true;
-						outerSub.run();
-						observer.onCompleted(null);
-					}
-				});
-				return () -> {
-					if(complete[0])
-						return;
-					complete[0] = true;
-					outerSub.run();
-					untilSub[0].run();
-				};
-			}
-		}).from("take", this).from("until", until).get();
+		return debug(new ObservableTakenUntil<>(this, until)).from("take", this).from("until", until).get();
 	}
 
 	/**
@@ -333,35 +253,7 @@ public interface Observable<T> {
 	 * @return An observable that provides the same values as this observable but completes after the given number of values
 	 */
 	default Observable<T> take(int times) {
-		Observable<T> outer = this;
-		return debug(new Observable<T>() {
-			@Override
-			public Runnable observe(Observer<? super T> observer) {
-				AtomicInteger counter = new AtomicInteger(times);
-				return outer.observe(new Observer<T>() {
-					@Override
-					public <V extends T> void onNext(V value) {
-						int count = counter.decrementAndGet();
-						if(count >= 0)
-							observer.onNext(value);
-						if(count == 0)
-							observer.onCompleted(value);
-					}
-
-					@Override
-					public <V extends T> void onCompleted(V value) {
-						if(counter.get() > 0)
-							observer.onCompleted(value);
-					}
-
-					@Override
-					public void onError(Throwable e) {
-						if(counter.get() > 0)
-							observer.onError(e);
-					}
-				});
-			}
-		}).from("take", this).tag("times", times).get();
+		return debug(new ObservableTakenTimes<>(this, times)).from("take", this).tag("times", times).get();
 	}
 
 	/**
@@ -369,37 +261,7 @@ public interface Observable<T> {
 	 * @return An observable that provides the same values as this observable but ignores the first {@code times} values
 	 */
 	default Observable<T> skip(int times) {
-		Observable<T> outer = this;
-		return debug(new Observable<T>() {
-			@Override
-			public Runnable observe(Observer<? super T> observer) {
-				return outer.observe(new Observer<T>() {
-					private final AtomicInteger counter = new AtomicInteger(times);
-
-					@Override
-					public <V extends T> void onNext(V value) {
-						if(counter.get() <= 0 || counter.getAndDecrement() <= 0)
-							observer.onNext(value);
-					}
-
-					@Override
-					public <V extends T> void onCompleted(V value) {
-						observer.onCompleted(value);
-					}
-
-					@Override
-					public void onError(Throwable e) {
-						if(counter.get() <= 0)
-							observer.onError(e);
-					}
-				});
-			}
-
-			@Override
-			public String toString() {
-				return outer + ".skip(" + times + ")";
-			}
-		}).from("skip", this).tag("times", times).get();
+		return label(skip(() -> times)).tag("times", times).get();
 	}
 
 	/**
@@ -410,37 +272,7 @@ public interface Observable<T> {
 	 * @return An observable that provides the same values as this observable but ignores the first {@code times} values
 	 */
 	default Observable<T> skip(java.util.function.Supplier<Integer> times) {
-		Observable<T> outer = this;
-		return debug(new Observable<T>() {
-			@Override
-			public Runnable observe(Observer<? super T> observer) {
-				return outer.observe(new Observer<T>() {
-					private final AtomicInteger counter = new AtomicInteger(times.get());
-
-					@Override
-					public <V extends T> void onNext(V value) {
-						if(counter.get() <= 0 || counter.getAndDecrement() <= 0)
-							observer.onNext(value);
-					}
-
-					@Override
-					public <V extends T> void onCompleted(V value) {
-						observer.onCompleted(value);
-					}
-
-					@Override
-					public void onError(Throwable e) {
-						if(counter.get() <= 0)
-							observer.onError(e);
-					}
-				});
-			}
-
-			@Override
-			public String toString() {
-				return outer + ".skip(" + times + ")";
-			}
-		}).from("skip", this).using("times", times).get();
+		return debug(new SkippingObservable<>(this, times)).from("skip", this).using("times", times).get();
 	}
 
 	/**
@@ -512,5 +344,366 @@ public interface Observable<T> {
 				};
 			}
 		}).tag("constant", value).get();
+	}
+
+	/**
+	 * Implements {@link Observable#noInit()}
+	 *
+	 * @param <T> The type of the observable
+	 */
+	class NoInitObservable<T> implements Observable<T> {
+		private final Observable<T> theWrapped;
+
+		protected NoInitObservable(Observable<T> wrap) {
+			theWrapped = wrap;
+		}
+
+		protected Observable<T> getWrapped() {
+			return theWrapped;
+		}
+
+		@Override
+		public Runnable observe(Observer<? super T> observer) {
+			boolean [] initialized = new boolean[1];
+			Runnable ret = theWrapped.observe(new Observer<T>() {
+				@Override
+				public <V extends T> void onNext(V value) {
+					if(initialized[0])
+						observer.onNext(value);
+				}
+
+				@Override
+				public <V extends T> void onCompleted(V value) {
+					observer.onCompleted(value);
+				}
+
+				@Override
+				public void onError(Throwable e) {
+					observer.onError(e);
+				}
+			});
+			initialized[0] = true;
+			return ret;
+		}
+	}
+
+	/**
+	 * Implements {@link Observable#filterMap(Function)}
+	 *
+	 * @param <T> The type of the observable to filter-map
+	 * @param <R> The type of the mapped observable
+	 */
+	class FilteredObservable<T, R> implements Observable<R> {
+		private final Observable<T> theWrapped;
+
+		private final Function<? super T, R> theMap;
+
+		protected FilteredObservable(Observable<T> wrap, Function<? super T, R> map) {
+			theWrapped = wrap;
+			theMap = map;
+		}
+
+		protected Observable<T> getWrapped() {
+			return theWrapped;
+		}
+
+		protected Function<? super T, R> getMap() {
+			return theMap;
+		}
+
+		@Override
+		public Runnable observe(Observer<? super R> observer) {
+			return theWrapped.observe(new Observer<T>() {
+				@Override
+				public <V extends T> void onNext(V value) {
+					R mapped = theMap.apply(value);
+					if(mapped != null)
+						observer.onNext(mapped);
+				}
+
+				@Override
+				public <V extends T> void onCompleted(V value) {
+					R mapped = theMap.apply(value);
+					if(mapped != null)
+						observer.onNext(mapped);
+					else
+						observer.onCompleted(null); // Gotta pass along the completion even if it doesn't include a value
+				}
+
+				@Override
+				public void onError(Throwable e) {
+					observer.onError(e);
+				}
+			});
+		}
+
+		@Override
+		public String toString() {
+			return "filterMap(" + theWrapped + ")";
+		}
+	}
+
+	/**
+	 * An observable that depends on the values of other observables
+	 *
+	 * @param <T> The type of the composed observable
+	 */
+	public class ComposedObservable<T> implements Observable<T> {
+		private static final Object NONE = new Object();
+
+		private final List<Observable<?>> theComposed;
+
+		private final Function<Object [], T> theFunction;
+
+		private final ListenerSet<Observer<? super T>> theObservers;
+
+		/**
+		 * @param function The function that operates on the argument observables to produce this observable's value
+		 * @param composed The argument observables whose values are passed to the function
+		 */
+		public ComposedObservable(Function<Object [], T> function, Observable<?>... composed) {
+			theFunction = function;
+			theComposed = java.util.Collections.unmodifiableList(java.util.Arrays.asList(composed));
+			theObservers = new ListenerSet<>();
+			theObservers.setUsedListener(new Consumer<Boolean>() {
+				private final Runnable [] composedSubs = new Runnable[theComposed.size()];
+
+				private final Object [] values = new Object[theComposed.size()];
+
+				@Override
+				public void accept(Boolean used) {
+					if(used) {
+						for(int i = 0; i < theComposed.size(); i++) {
+							int index = i;
+							composedSubs[i] = theComposed.get(i).observe(new Observer<Object>() {
+								@Override
+								public <V> void onNext(V value) {
+									values[index] = value;
+									Object next = getNext();
+									if(next != NONE)
+										fireNext((T) next);
+								}
+
+								@Override
+								public <V> void onCompleted(V value) {
+									values[index] = value;
+									Object next = getNext();
+									if(next != NONE)
+										fireCompleted((T) next);
+								}
+
+								@Override
+								public void onError(Throwable error) {
+									fireError(error);
+								}
+
+								private Object getNext() {
+									Object [] args = values.clone();
+									for(Object value : args)
+										if(value == NONE)
+											return NONE;
+									return theFunction.apply(args);
+								}
+
+								private void fireNext(T next) {
+									theObservers.forEach(listener -> listener.onNext(next));
+								}
+
+								private void fireCompleted(T next) {
+									theObservers.forEach(listener -> listener.onCompleted(next));
+								}
+
+								private void fireError(Throwable error) {
+									theObservers.forEach(listener -> listener.onError(error));
+								}
+							});
+						}
+					} else {
+						for(int i = 0; i < theComposed.size(); i++) {
+							composedSubs[i].run();
+							composedSubs[i] = null;
+							values[i] = null;
+						}
+					}
+				}
+			});
+		}
+
+		@Override
+		public Runnable observe(Observer<? super T> observer) {
+			theObservers.add(observer);
+			return () -> theObservers.remove(observer);
+		}
+
+		/** @return The observables that this observable uses as sources */
+		public Observable<?> [] getComposed() {
+			return theComposed.toArray(new Observable[theComposed.size()]);
+		}
+
+		@Override
+		public String toString() {
+			return theComposed.toString();
+		}
+	}
+
+	/**
+	 * Implements {@link Observable#takeUntil(Observable)}
+	 *
+	 * @param <T> The type of the observable
+	 */
+	class ObservableTakenUntil<T> implements Observable<T> {
+		private final Observable<T> theWrapped;
+		private final Observable<?> theUntil;
+
+		protected ObservableTakenUntil(Observable<T> wrap, Observable<?> until) {
+			theWrapped = wrap;
+			theUntil = until;
+		}
+
+		protected Observable<T> getWrapped() {
+			return theWrapped;
+		}
+
+		protected Observable<?> getUntil() {
+			return theUntil;
+		}
+
+		protected T getDefaultValue() {
+			return null;
+		}
+
+		@Override
+		public Runnable observe(Observer<? super T> observer) {
+			Runnable outerSub = theWrapped.observe(observer);
+			boolean [] complete = new boolean[1];
+			Runnable [] untilSub = new Runnable[1];
+			untilSub[0] = theUntil.observe(new Observer<Object>() {
+				@Override
+				public void onNext(Object value) {
+					onCompleted(value);
+				}
+
+				@Override
+				public void onCompleted(Object value) {
+					if(complete[0])
+						return;
+					complete[0] = true;
+					outerSub.run();
+					observer.onCompleted(getDefaultValue());
+				}
+			});
+			return () -> {
+				if(complete[0])
+					return;
+				complete[0] = true;
+				outerSub.run();
+				untilSub[0].run();
+			};
+		}
+	}
+
+	/**
+	 * Implements {@link Observable#take(int)}
+	 *
+	 * @param <T> The type of the observable
+	 */
+	class ObservableTakenTimes<T> implements Observable<T> {
+		private final Observable<T> theWrapped;
+
+		private final int theTimes;
+
+		protected ObservableTakenTimes(Observable<T> wrap, int times) {
+			theWrapped = wrap;
+			theTimes = times;
+		}
+
+		protected Observable<T> getWrapped() {
+			return theWrapped;
+		}
+
+		protected int getTimes() {
+			return theTimes;
+		}
+
+		@Override
+		public Runnable observe(Observer<? super T> observer) {
+			return theWrapped.observe(new Observer<T>() {
+				private AtomicInteger theCounter = new AtomicInteger();
+
+				@Override
+				public <V extends T> void onNext(V value) {
+					int count = theCounter.getAndIncrement();
+					if(count < theTimes)
+						observer.onNext(value);
+					if(count == theTimes - 1)
+						observer.onCompleted(value);
+				}
+
+				@Override
+				public <V extends T> void onCompleted(V value) {
+					if(theCounter.get() < theTimes)
+						observer.onCompleted(value);
+				}
+
+				@Override
+				public void onError(Throwable e) {
+					if(theCounter.get() < theTimes)
+						observer.onError(e);
+				}
+			});
+		}
+	}
+
+	/**
+	 * Implements {@link Observable#skip(Supplier)}
+	 *
+	 * @param <T> The type of the observable
+	 */
+	class SkippingObservable<T> implements Observable<T> {
+		private final Observable<T> theWrapped;
+
+		private final Supplier<Integer> theTimes;
+
+		protected SkippingObservable(Observable<T> wrap, Supplier<Integer> times) {
+			theWrapped = wrap;
+			theTimes = times;
+		}
+
+		protected Observable<T> getWrapped() {
+			return theWrapped;
+		}
+
+		protected Supplier<Integer> getTimes() {
+			return theTimes;
+		}
+
+		@Override
+		public Runnable observe(Observer<? super T> observer) {
+			return theWrapped.observe(new Observer<T>() {
+				private final AtomicInteger counter = new AtomicInteger(theTimes.get());
+
+				@Override
+				public <V extends T> void onNext(V value) {
+					if(counter.get() <= 0 || counter.getAndDecrement() <= 0)
+						observer.onNext(value);
+				}
+
+				@Override
+				public <V extends T> void onCompleted(V value) {
+					observer.onCompleted(value);
+				}
+
+				@Override
+				public void onError(Throwable e) {
+					if(counter.get() <= 0)
+						observer.onError(e);
+				}
+			});
+		}
+
+		@Override
+		public String toString() {
+			return theWrapped + ".skip(" + theTimes + ")";
+		}
 	}
 }

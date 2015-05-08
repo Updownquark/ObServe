@@ -420,7 +420,7 @@ public class ObservableTest {
 		Set<Integer> controller = set.control(null);
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
-		set.filter(value -> value != null && value % 2 == 0).onElement(element -> {
+		set.filter(value -> (value != null && value % 2 == 0)).onElement(element -> {
 			element.observe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {

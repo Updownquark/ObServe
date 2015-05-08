@@ -4,8 +4,13 @@ import static org.observe.ObservableDebug.debug;
 import static org.observe.ObservableDebug.label;
 import static org.observe.ObservableDebug.lambda;
 
+import java.util.List;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
+
+import org.observe.util.ListenerSet;
+import org.observe.util.ObservableUtils;
 
 import prisms.lang.Type;
 
@@ -225,86 +230,15 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 
 	@Override
 	default ObservableValue<T> takeUntil(Observable<?> until) {
-		ObservableValue<T> outer = this;
-		return debug(new ObservableValue<T>() {
-			@Override
-			public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
-				Runnable outerSub = outer.observe(observer);
-				boolean [] complete = new boolean[1];
-				Runnable [] untilSub = new Runnable[1];
-				untilSub[0] = until.observe(new Observer<Object>() {
-					@Override
-					public void onNext(Object value) {
-						onCompleted(value);
-					}
-
-					@Override
-					public void onCompleted(Object value) {
-						if(complete[0])
-							return;
-						complete[0] = true;
-						outerSub.run();
-						observer.onCompleted(outer.createEvent(outer.get(), outer.get(), value));
-					}
-				});
-				return () -> {
-					if(complete[0])
-						return;
-					complete[0] = true;
-					outerSub.run();
-					untilSub[0].run();
-				};
-			}
-
-			@Override
-			public Type getType() {
-				return outer.getType();
-			}
-
-			@Override
-			public T get() {
-				return outer.get();
-			}
-
-			@Override
-			public String toString() {
-				return "Take " + outer + " until " + until;
-			}
-		}).from("take", this).from("until", until).get();
+		return debug(new ObservableValueTakenUntil<>(this, until)).from("take", this).from("until", until).get();
 	}
 
 	/**
-	 * @param observable The observer to duplicate event firing for
+	 * @param refresh The observer to duplicate event firing for
 	 * @return An observable value that fires additional value events when the given observable fires
 	 */
-	default ObservableValue<T> refresh(Observable<?> observable) {
-		ObservableValue<T> outer = this;
-		return debug(new ObservableValue<T>() {
-			@Override
-			public Type getType() {
-				return outer.getType();
-			}
-
-			@Override
-			public T get() {
-				return outer.get();
-			}
-
-			@Override
-			public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
-				Runnable outerSub = outer.observe(observer);
-				Runnable refireSub = observable.observe(new Observer<Object>() {
-					@Override
-					public <V> void onNext(V value) {
-						observer.onNext(createEvent(get(), get(), value));
-					}
-				});
-				return () -> {
-					outerSub.run();
-					refireSub.run();
-				};
-			}
-		}).from("refresh", this).from("on", observable).get();
+	default ObservableValue<T> refresh(Observable<?> refresh) {
+		return debug(new RefreshingObservableValue<>(this, refresh)).from("refresh", this).from("on", refresh).get();
 	}
 
 	/**
@@ -429,7 +363,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @return The new observable value
 	 */
 	public static <T> ObservableValue<T> assemble(Type type, java.util.function.Supplier<T> value, ObservableValue<?>... components) {
-		Type t = type == null ? ComposedObservableValue.getReturnType(value) : type;
+		Type t = type == null ? ObservableUtils.getReturnType(value) : type;
 		return debug(new ObservableValue<T>() {
 			@Override
 			public Type getType() {
@@ -498,6 +432,256 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		return (V v1, U v2) -> {
 			return v2;
 		};
+	}
+
+	/**
+	 * An observable that depends on the values of other observables
+	 *
+	 * @param <T> The type of the composed observable
+	 */
+	public class ComposedObservableValue<T> implements ObservableValue<T> {
+		private final List<ObservableValue<?>> theComposed;
+
+		private final Function<Object [], T> theFunction;
+
+		private final ListenerSet<Observer<? super ObservableValueEvent<T>>> theObservers;
+
+		private final Type theType;
+
+		private final boolean combineNulls;
+
+		private Object [] theComposedValues;
+
+		private T theValue;
+
+		/**
+		 * @param function The function that operates on the argument observables to produce this observable's value
+		 * @param combineNull Whether to apply the combination function if the arguments are null. If false and any arguments are null, the
+		 *            result will be null.
+		 * @param composed The argument observables whose values are passed to the function
+		 */
+		public ComposedObservableValue(Function<Object [], T> function, boolean combineNull, ObservableValue<?>... composed) {
+			this(null, function, combineNull, composed);
+		}
+
+		/**
+		 * @param type The type for this value
+		 * @param function The function that operates on the argument observables to produce this observable's value
+		 * @param combineNull Whether to apply the combination function if the arguments are null. If false and any arguments are null, the
+		 *            result will be null.
+		 * @param composed The argument observables whose values are passed to the function
+		 */
+		public ComposedObservableValue(Type type, Function<Object [], T> function, boolean combineNull, ObservableValue<?>... composed) {
+			theFunction = function;
+			combineNulls = combineNull;
+			theType = type != null ? type : ObservableUtils.getReturnType(function);
+			theComposed = java.util.Collections.unmodifiableList(java.util.Arrays.asList(composed));
+			theObservers = new ListenerSet<>();
+			theComposedValues = new Object[composed.length];
+			final Runnable [] composedSubs = new Runnable[theComposed.size()];
+			boolean [] completed = new boolean[1];
+			theObservers.setUsedListener(new Consumer<Boolean>() {
+				@Override
+				public void accept(Boolean used) {
+					if(used) {
+						/*Don't need to initialize this explicitly, because these will be populated when the components are subscribed to
+						 * for(int i = 0; i < args.length; i++)
+						 * 	args[i] = theComposed.get(i).get(); */
+						boolean [] initialized = new boolean[1];
+						for(int i = 0; i < theComposedValues.length; i++) {
+							int index = i;
+							composedSubs[i] = theComposed.get(i).observe(new Observer<ObservableValueEvent<?>>() {
+								@Override
+								public <V extends ObservableValueEvent<?>> void onNext(V event) {
+									theComposedValues[index] = event.getValue();
+									if(!initialized[0])
+										return;
+									T oldValue = theValue;
+									theValue = combine(theComposedValues);
+									ObservableValueEvent<T> toFire = new ObservableValueEvent<>(ComposedObservableValue.this, oldValue,
+										theValue, event);
+									fireNext(toFire);
+								}
+
+								@Override
+								public <V extends ObservableValueEvent<?>> void onCompleted(V event) {
+									theComposedValues[index] = event.getValue();
+									completed[0] = true;
+									if(!initialized[0])
+										return;
+									T oldValue = theValue;
+									T newValue = combine(theComposedValues);
+									theValue = null;
+									ObservableValueEvent<T> toFire = createEvent(oldValue, newValue, event);
+									fireCompleted(toFire);
+								}
+
+								@Override
+								public void onError(Throwable e) {
+									fireError(e);
+								}
+
+								private void fireNext(ObservableValueEvent<T> next) {
+									theObservers.forEach(listener -> listener.onNext(next));
+								}
+
+								private void fireCompleted(ObservableValueEvent<T> next) {
+									theObservers.forEach(listener -> listener.onCompleted(next));
+								}
+
+								private void fireError(Throwable error) {
+									theObservers.forEach(listener -> listener.onError(error));
+								}
+							});
+						}
+						theValue = combine(theComposedValues);
+						initialized[0] = true;
+					} else {
+						for(int i = 0; i < theComposed.size(); i++) {
+							composedSubs[i].run();
+							composedSubs[i] = null;
+							theComposedValues[i] = null;
+							theValue = null;
+							completed[0] = false;
+						}
+					}
+				}
+			});
+			theObservers.setOnSubscribe(observer -> {
+				if(completed[0])
+					observer.onCompleted(new ObservableValueEvent<>(this, null, theValue, null));
+				else
+					observer.onNext(new ObservableValueEvent<>(this, null, theValue, null));
+			});
+		}
+
+		@Override
+		public Type getType() {
+			return theType;
+		}
+
+		/** @return The observable values that compose this value */
+		public ObservableValue<?> [] getComposed() {
+			return theComposed.toArray(new ObservableValue[theComposed.size()]);
+		}
+
+		/** @return The function used to map this observable's composed values into its return value */
+		public Function<Object [], T> getFunction() {
+			return theFunction;
+		}
+
+		/**
+		 * @return Whether the combination function will be applied if the arguments are null. If false and any arguments are null, the
+		 *         result will be null.
+		 */
+		public boolean isNullCombined() {
+			return combineNulls;
+		}
+
+		@Override
+		public T get() {
+			return theValue;
+		}
+
+		private T combine(Object [] args) {
+			if(!combineNulls) {
+				for(Object arg : args)
+					if(arg == null)
+						return null;
+			}
+			return theFunction.apply(args.clone());
+		}
+
+		@Override
+		public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
+			theObservers.add(observer);
+			return () -> theObservers.remove(observer);
+		}
+
+		@Override
+		public String toString() {
+			return theComposed.toString();
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableValue#takeUntil(Observable)}
+	 *
+	 * @param <T> The type of the value
+	 */
+	class ObservableValueTakenUntil<T> extends Observable.ObservableTakenUntil<ObservableValueEvent<T>> implements ObservableValue<T> {
+		protected ObservableValueTakenUntil(ObservableValue<T> wrap, Observable<?> until) {
+			super(wrap, until);
+		}
+
+		@Override
+		protected ObservableValue<T> getWrapped() {
+			return (ObservableValue<T>) super.getWrapped();
+		}
+
+		@Override
+		public Type getType() {
+			return getWrapped().getType();
+		}
+
+		@Override
+		public T get() {
+			return getWrapped().get();
+		}
+
+		@Override
+		protected ObservableValueEvent<T> getDefaultValue() {
+			T value = get();
+			return getWrapped().createEvent(value, value, null);
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableValue#refresh(Observable)}
+	 *
+	 * @param <T> The type of the value
+	 */
+	class RefreshingObservableValue<T> implements ObservableValue<T> {
+		private final ObservableValue<T> theWrapped;
+		private final Observable<?> theRefresh;
+
+		protected RefreshingObservableValue(ObservableValue<T> wrap, Observable<?> refresh) {
+			theWrapped = wrap;
+			theRefresh = refresh;
+		}
+
+		protected ObservableValue<T> getWrapped() {
+			return theWrapped;
+		}
+
+		protected Observable<?> getRefresh() {
+			return theRefresh;
+		}
+
+		@Override
+		public Type getType() {
+			return theWrapped.getType();
+		}
+
+		@Override
+		public T get() {
+			return theWrapped.get();
+		}
+
+		@Override
+		public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
+			Runnable outerSub = theWrapped.observe(observer);
+			Runnable refireSub = theRefresh.observe(new Observer<Object>() {
+				@Override
+				public <V> void onNext(V value) {
+					observer.onNext(createEvent(get(), get(), value));
+				}
+			});
+			return () -> {
+				outerSub.run();
+				refireSub.run();
+			};
+		}
 	}
 
 	/**

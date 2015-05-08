@@ -19,12 +19,12 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-import org.observe.ComposedObservableValue;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.util.ListenerSet;
+import org.observe.util.ObservableUtils;
 
 import prisms.lang.Type;
 
@@ -89,7 +89,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 	@Override
 	default <T> ObservableOrderedCollection<T> map(Function<? super E, T> map) {
-		return map(ComposedObservableValue.getReturnType(map), map);
+		return map(ObservableUtils.getReturnType(map), map);
 	}
 
 	@Override
@@ -98,9 +98,9 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	@Override
-	default ObservableOrderedCollection<E> filter(Function<? super E, Boolean> filter) {
+	default ObservableOrderedCollection<E> filter(Predicate<? super E> filter) {
 		return label(filterMap(value -> {
-			return (value != null && filter.apply(value)) ? value : null;
+			return (value != null && filter.test(value)) ? value : null;
 		})).label("filter").tag("filter", filter).get();
 	}
 
@@ -111,7 +111,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 	@Override
 	default <T> ObservableOrderedCollection<T> filterMap(Function<? super E, T> filterMap) {
-		return filterMap(ComposedObservableValue.getReturnType(filterMap), filterMap);
+		return filterMap(ObservableUtils.getReturnType(filterMap), filterMap);
 	}
 
 	@Override
@@ -121,7 +121,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 	@Override
 	default <T, V> ObservableOrderedCollection<V> combine(ObservableValue<T> arg, BiFunction<? super E, ? super T, V> func) {
-		return combine(arg, ComposedObservableValue.getReturnType(func), func);
+		return combine(arg, ObservableUtils.getReturnType(func), func);
 	}
 
 	@Override

@@ -5,7 +5,14 @@ import static org.observe.ObservableDebug.debug;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
-import org.observe.*;
+import org.observe.BiTuple;
+import org.observe.Observable;
+import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
+import org.observe.Observer;
+import org.observe.Subscription;
+import org.observe.TriFunction;
+import org.observe.TriTuple;
 
 import prisms.lang.Type;
 
@@ -77,125 +84,21 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 	}
 
 	@Override
-	default ObservableElement<E> refresh(Observable<?> observable) {
-		ObservableElement<E> outer = this;
-		return debug(new ObservableElement<E>() {
-			@Override
-			public Type getType() {
-				return outer.getType();
-			}
-
-			@Override
-			public E get() {
-				return outer.get();
-			}
-
-			@Override
-			public ObservableValue<E> persistent() {
-				return outer.persistent().refresh(observable);
-			}
-
-			@Override
-			public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
-				Runnable outerSub = outer.observe(observer);
-				Runnable refireSub = observable.observe(new Observer<Object>() {
-					@Override
-					public <V> void onNext(V value) {
-						ObservableValueEvent<E> event2 = outer.createEvent(outer.get(), outer.get(), value);
-						observer.onNext(event2);
-					}
-				});
-				return () -> {
-					outerSub.run();
-					refireSub.run();
-				};
-			}
-
-			@Override
-			public String toString() {
-				return outer + ".refresh(" + observable + ")";
-			}
-		}).from("refresh", this).from("on", observable).get();
+	default ObservableElement<E> refresh(Observable<?> refresh) {
+		return debug(new RefreshingObservableElement<>(this, refresh)).from("refresh", this).from("on", refresh).get();
 	}
 
 	/**
-	 * @param observable A function providing an observable to refire on as a function of a value
+	 * @param refresh A function providing an observable to refresh on as a function of a value
 	 * @return An observable element that refires its value when the observable returned by the given function fires
 	 */
-	default ObservableElement<E> refreshForValue(Function<? super E, Observable<?>> observable) {
-		ObservableElement<E> outer = this;
-		return debug(new ObservableElement<E>() {
-			@Override
-			public Type getType() {
-				return outer.getType();
-			}
-
-			@Override
-			public E get() {
-				return outer.get();
-			}
-
-			@Override
-			public ObservableValue<E> persistent() {
-				return outer.persistent().refresh(observable.apply(get()));
-			}
-
-			@Override
-			public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
-				Runnable [] refireSub = new Runnable[1];
-				Observer<Object> refireObs = new Observer<Object>() {
-					@Override
-					public <V> void onNext(V value) {
-						E outerVal = get();
-						ObservableValueEvent<E> event2 = outer.createEvent(outerVal, outerVal, value);
-						observer.onNext(event2);
-					}
-
-					@Override
-					public <V> void onCompleted(V value) {
-						E outerVal = get();
-						ObservableValueEvent<E> event2 = outer.createEvent(outerVal, outerVal, value);
-						observer.onNext(event2);
-						refireSub[0] = null;
-					}
-				};
-				Runnable outerSub = outer.observe(new Observer<ObservableValueEvent<E>>() {
-					@Override
-					public <V extends ObservableValueEvent<E>> void onNext(V value) {
-						refireSub[0] = observable.apply(value.getValue()).noInit().takeUntil(outer).observe(refireObs);
-						observer.onNext(value);
-					}
-
-					@Override
-					public <V extends ObservableValueEvent<E>> void onCompleted(V value) {
-						if(refireSub[0] != null)
-							refireSub[0].run();
-						observer.onCompleted(value);
-					}
-
-					@Override
-					public void onError(Throwable e) {
-						observer.onError(e);
-					}
-				});
-				refireSub[0] = observable.apply(outer.get()).noInit().takeUntil(outer).observe(refireObs);
-				return () -> {
-					outerSub.run();
-					if(refireSub[0] != null)
-						refireSub[0].run();
-				};
-			}
-
-			@Override
-			public String toString() {
-				return outer + ".refireWhen(" + observable + ")";
-			}
-		}).from("refresh", this).using("on", observable).get();
+	default ObservableElement<E> refreshForValue(Function<? super E, Observable<?>> refresh) {
+		return debug(new ValueRefreshingObservableElement<>(this, refresh)).from("refresh", this).using("on", refresh).get();
 	}
 
 	/**
 	 * Implements {@link #cached()}
-	 * 
+	 *
 	 * @param <T> The type of the value
 	 */
 	class CachedObservableElement<T> extends CachedObservableValue<T> implements ObservableElement<T> {
@@ -234,6 +137,117 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 			ObservableValue<?> [] composed = getComposed();
 			composed[0] = theRoot.persistent();
 			return new ComposedObservableValue<>(getType(), getFunction(), isNullCombined(), composed);
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableElement#refresh(Observable)}
+	 * 
+	 * @param <E> The type of the element
+	 */
+	class RefreshingObservableElement<E> extends ObservableValue.RefreshingObservableValue<E> implements ObservableElement<E> {
+		protected RefreshingObservableElement(ObservableElement<E> wrap, Observable<?> refresh) {
+			super(wrap, refresh);
+		}
+
+		@Override
+		protected ObservableElement<E> getWrapped() {
+			return (ObservableElement<E>) super.getWrapped();
+		}
+
+		@Override
+		public ObservableValue<E> persistent() {
+			return getWrapped().persistent().refresh(getRefresh());
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableElement#refreshForValue(Function)}
+	 * 
+	 * @param <E> The type of the element
+	 */
+	class ValueRefreshingObservableElement<E> implements ObservableElement<E> {
+		private final ObservableElement<E> theWrapped;
+
+		private final Function<? super E, Observable<?>> theRefresh;
+
+		protected ValueRefreshingObservableElement(ObservableElement<E> wrap, Function<? super E, Observable<?>> refresh) {
+			theWrapped = wrap;
+			theRefresh = refresh;
+		}
+
+		protected ObservableElement<E> getWrapped() {
+			return theWrapped;
+		}
+
+		protected Function<? super E, Observable<?>> getRefresh() {
+			return theRefresh;
+		}
+
+		@Override
+		public Type getType() {
+			return theWrapped.getType();
+		}
+
+		@Override
+		public E get() {
+			return theWrapped.get();
+		}
+
+		@Override
+		public ObservableValue<E> persistent() {
+			return theWrapped.persistent().refresh(theRefresh.apply(get()));
+		}
+
+		@Override
+		public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
+			Runnable [] refireSub = new Runnable[1];
+			Observer<Object> refireObs = new Observer<Object>() {
+				@Override
+				public <V> void onNext(V value) {
+					E outerVal = get();
+					ObservableValueEvent<E> event2 = theWrapped.createEvent(outerVal, outerVal, value);
+					observer.onNext(event2);
+				}
+
+				@Override
+				public <V> void onCompleted(V value) {
+					E outerVal = get();
+					ObservableValueEvent<E> event2 = theWrapped.createEvent(outerVal, outerVal, value);
+					observer.onNext(event2);
+					refireSub[0] = null;
+				}
+			};
+			Runnable outerSub = theWrapped.observe(new Observer<ObservableValueEvent<E>>() {
+				@Override
+				public <V extends ObservableValueEvent<E>> void onNext(V value) {
+					refireSub[0] = theRefresh.apply(value.getValue()).noInit().takeUntil(theWrapped).observe(refireObs);
+					observer.onNext(value);
+				}
+
+				@Override
+				public <V extends ObservableValueEvent<E>> void onCompleted(V value) {
+					if(refireSub[0] != null)
+						refireSub[0].run();
+					observer.onCompleted(value);
+				}
+
+				@Override
+				public void onError(Throwable e) {
+					observer.onError(e);
+				}
+			});
+			refireSub[0] = theRefresh.apply(theWrapped.get()).noInit().takeUntil(theWrapped).observe(refireObs);
+			return () -> {
+				outerSub.run();
+				if(refireSub[0] != null)
+					refireSub[0].run();
+			};
+		}
+
+		@Override
+		public String toString() {
+			return theWrapped + ".refireWhen(" + theRefresh + ")";
 		}
 	}
 }

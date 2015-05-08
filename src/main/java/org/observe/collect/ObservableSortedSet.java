@@ -1,7 +1,7 @@
 package org.observe.collect;
 
 import java.util.NavigableSet;
-import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * A sorted set whose content can be observed. This set is immutable in that none of its methods, including {@link java.util.Set} methods,
@@ -16,7 +16,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, NavigableSet<E
 	 * @return A sorted set containing all elements of this collection that pass the given test
 	 */
 	@Override
-	default ObservableSortedSet<E> filter(Function<? super E, Boolean> filter) {
+	default ObservableSortedSet<E> filter(Predicate<? super E> filter) {
 		// TODO
 		return null;
 	}

@@ -36,7 +36,8 @@ class SubCollectionTransactionManager {
 				return theInternalSessionValue;
 			}
 		};
-		theExposedSession = new org.observe.ComposedObservableValue<>(sessions -> (CollectionSession) (sessions[0] != null ? sessions[0]
+		theExposedSession = new org.observe.ObservableValue.ComposedObservableValue<>(
+			sessions -> (CollectionSession) (sessions[0] != null ? sessions[0]
 			: sessions[1]), true, theInternalSession, collection.getSession());
 		theSessionController = theInternalSession.control(null);
 	}
