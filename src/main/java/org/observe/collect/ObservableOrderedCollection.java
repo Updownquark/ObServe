@@ -418,8 +418,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @param <E> The type of the collection to map
 	 * @param <T> The type of the mapped collection
 	 */
-	class MappedObservableOrderedCollection<E, T> extends ObservableCollection.MappedObservableCollection<E, T> implements
-	ObservableOrderedCollection<T> {
+	class MappedObservableOrderedCollection<E, T> extends MappedObservableCollection<E, T> implements ObservableOrderedCollection<T> {
 		protected MappedObservableOrderedCollection(ObservableOrderedCollection<E> wrap, Type type, Function<? super E, T> map) {
 			super(wrap, type, map);
 		}
@@ -436,7 +435,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @param <E> The type of the collection to be filter-mapped
 	 * @param <T> The type of the mapped collection
 	 */
-	class FilteredOrderedCollection<E, T> extends ObservableCollection.FilteredCollection<E, T> implements ObservableOrderedCollection<T> {
+	class FilteredOrderedCollection<E, T> extends FilteredCollection<E, T> implements ObservableOrderedCollection<T> {
 		private List<FilteredOrderedElement<E, T>> theFilteredElements = new java.util.ArrayList<>();
 
 		FilteredOrderedCollection(ObservableOrderedCollection<E> wrap, Type type, Function<? super E, T> map) {
@@ -502,8 +501,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @param <T> The type of the value to combine the collection elements with
 	 * @param <V> The type of the combined collection
 	 */
-	class CombinedObservableOrderedCollection<E, T, V> extends ObservableCollection.CombinedObservableCollection<E, T, V> implements
-	ObservableOrderedCollection<V> {
+	class CombinedObservableOrderedCollection<E, T, V> extends CombinedObservableCollection<E, T, V> implements
+		ObservableOrderedCollection<V> {
 		CombinedObservableOrderedCollection(ObservableOrderedCollection<E> collection, ObservableValue<T> value, Type type,
 			BiFunction<? super E, ? super T, V> map) {
 			super(collection, type, value, map);
@@ -525,7 +524,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 *
 	 * @param <E> The type of the collection to refresh
 	 */
-	class RefreshingOrderedCollection<E> extends ObservableCollection.RefreshingCollection<E> implements ObservableOrderedCollection<E> {
+	class RefreshingOrderedCollection<E> extends RefreshingCollection<E> implements ObservableOrderedCollection<E> {
 		protected RefreshingOrderedCollection(ObservableOrderedCollection<E> wrap, Observable<?> refresh) {
 			super(wrap, refresh);
 		}
@@ -546,8 +545,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 *
 	 * @param <E> The type of the collection to refresh
 	 */
-	class ElementRefreshingOrderedCollection<E> extends ObservableCollection.ElementRefreshingCollection<E> implements
-	ObservableOrderedCollection<E> {
+	class ElementRefreshingOrderedCollection<E> extends ElementRefreshingCollection<E> implements ObservableOrderedCollection<E> {
 		protected ElementRefreshingOrderedCollection(ObservableOrderedCollection<E> wrap, Function<? super E, Observable<?>> refresh) {
 			super(wrap, refresh);
 		}
@@ -748,6 +746,36 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		@Override
 		public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<E>> observer) {
 			return theWrapped.onElement(new SortedObservableWrapperObserver<>(this, observer));
+		}
+
+		@Override
+		public boolean add(E e) {
+			return theWrapped.add(e);
+		}
+
+		@Override
+		public boolean addAll(Collection<? extends E> c) {
+			return theWrapped.addAll(c);
+		}
+
+		@Override
+		public boolean remove(Object o) {
+			return theWrapped.remove(o);
+		}
+
+		@Override
+		public boolean removeAll(Collection<?> c) {
+			return theWrapped.removeAll(c);
+		}
+
+		@Override
+		public boolean retainAll(Collection<?> c) {
+			return theWrapped.retainAll(c);
+		}
+
+		@Override
+		public void clear() {
+			theWrapped.clear();
 		}
 	}
 

@@ -1074,7 +1074,9 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 
 		@Override
 		public T remove(int index) {
-			throw new UnsupportedOperationException();
+			T ret = get(index);
+			theWrapped.remove(ret);
+			return ret;
 		}
 
 		@Override
