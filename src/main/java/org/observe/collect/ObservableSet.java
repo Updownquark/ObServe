@@ -2,8 +2,6 @@ package org.observe.collect;
 
 import static org.observe.ObservableDebug.debug;
 
-import java.util.AbstractCollection;
-import java.util.AbstractSet;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -110,7 +108,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 		Set<T> modSet = new java.util.LinkedHashSet<>(coll);
 		Set<T> constSet = java.util.Collections.unmodifiableSet(modSet);
 		java.util.List<ObservableElement<T>> els = new java.util.ArrayList<>();
-		class ConstantObservableSet extends AbstractSet<T> implements ObservableSet<T> {
+		class ConstantObservableSet implements PartialSetImpl<T> {
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
 				return ObservableValue.constant(new Type(CollectionSession.class), null);
@@ -266,7 +264,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 				return "filter(" + theWrappedElement + ")";
 			}
 		}
-		class UniqueSet extends AbstractSet<T> implements ObservableSet<T> {
+		class UniqueSet implements PartialSetImpl<T> {
 			private java.util.concurrent.ConcurrentHashMap<UniqueFilteredElement, Object> theElements = new java.util.concurrent.ConcurrentHashMap<>();
 
 			@Override
@@ -356,8 +354,8 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 	}
 
 	/**
-	 * An extension of ObservableCollection that implements some of the redundant methods and throws UnsupportedOperationExceptions for
-	 * modifications. Mostly copied from {@link AbstractCollection}.
+	 * An extension of ObservableSet that implements some of the redundant methods and throws UnsupportedOperationExceptions for
+	 * modifications.
 	 *
 	 * @param <E> The type of element in the set
 	 */

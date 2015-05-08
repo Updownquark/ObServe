@@ -3,7 +3,6 @@ package org.observe.collect;
 import static org.observe.ObservableDebug.debug;
 import static org.observe.ObservableDebug.label;
 
-import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.ConcurrentModificationException;
@@ -285,7 +284,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 				return "" + theValue;
 			}
 		}
-		List<T> constList = java.util.Collections.unmodifiableList(list);
+		List<T> constList = java.util.Collections.unmodifiableList(new ArrayList<>(list));
 		List<OrderedObservableElement<T>> obsEls = new java.util.ArrayList<>();
 		class ConstantObservableList implements PartialListImpl<T> {
 			@Override
@@ -599,7 +598,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 
 	/**
 	 * An extension of ObservableList that implements some of the redundant methods and throws UnsupportedOperationExceptions for
-	 * modifications. Mostly copied from {@link AbstractList}.
+	 * modifications. Mostly copied from {@link java.util.AbstractList}.
 	 *
 	 * @param <E> The type of element in the list
 	 */

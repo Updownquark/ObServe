@@ -3,7 +3,6 @@ package org.observe.collect;
 import static org.observe.ObservableDebug.debug;
 import static org.observe.ObservableDebug.label;
 
-import java.util.AbstractCollection;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collection;
@@ -224,7 +223,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 				return ret;
 			}
 		}
-		class FlattenedObservableOrderedCollection extends AbstractCollection<E> implements ObservableOrderedCollection<E> {
+		class FlattenedObservableOrderedCollection implements PartialCollectionImpl<E>, ObservableOrderedCollection<E> {
 			private final CombinedCollectionSessionObservable theSession = new CombinedCollectionSessionObservable(list);
 
 			@Override

@@ -3,7 +3,6 @@ package org.observe.collect;
 import static org.observe.ObservableDebug.debug;
 import static org.observe.ObservableDebug.label;
 
-import java.util.AbstractCollection;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
@@ -589,7 +588,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 
 	/**
 	 * An extension of ObservableCollection that implements some of the redundant methods and throws UnsupportedOperationExceptions for
-	 * modifications. Mostly copied from {@link AbstractCollection}.
+	 * modifications. Mostly copied from {@link java.util.AbstractCollection}.
 	 *
 	 * @param <E> The type of element in the collection
 	 */
