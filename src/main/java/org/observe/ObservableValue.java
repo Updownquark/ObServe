@@ -580,7 +580,14 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 
 		@Override
 		public T get() {
-			return theValue;
+			if(theObservers.isUsed())
+				return theValue;
+			else {
+				Object [] composed = new Object[theComposed.size()];
+				for(int i = 0; i < composed.length; i++)
+					composed[i] = theComposed.get(i).get();
+				return combine(composed);
+			}
 		}
 
 		private T combine(Object [] args) {
