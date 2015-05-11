@@ -158,12 +158,15 @@ public class DefaultObservableSet<E> extends AbstractSet<E> implements Observabl
 	}
 
 	@Override
-	public Object [] toArray() {
+	public E [] toArray() {
 		Object [][] ret = new Object[1][];
 		theInternals.doLocked(() -> {
-			ret[0] = theValues.keySet().toArray();
+			Class<?> base = getType().toClass();
+			if(base.isPrimitive())
+				base = Type.getWrapperType(base);
+			ret[0] = theValues.keySet().toArray((E []) java.lang.reflect.Array.newInstance(base, theValues.size()));
 		}, false, false);
-		return ret[0];
+		return (E []) ret[0];
 	}
 
 	@Override

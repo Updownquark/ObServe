@@ -73,11 +73,14 @@ public interface ObservableCollection<E> extends Collection<E> {
 	}
 
 	@Override
-	default Object [] toArray() {
+	default E [] toArray() {
 		ArrayList<E> ret = new ArrayList<>();
 		for(E value : this)
 			ret.add(value);
-		return ret.toArray();
+		Class<?> base = getType().toClass();
+		if(base.isPrimitive())
+			base = Type.getWrapperType(base);
+		return ret.toArray((E []) java.lang.reflect.Array.newInstance(base, ret.size()));
 	}
 
 	@Override

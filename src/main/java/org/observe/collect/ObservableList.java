@@ -20,6 +20,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import org.observe.DefaultObservable;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
@@ -53,7 +54,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 	}
 
 	@Override
-	default Object [] toArray() {
+	default E [] toArray() {
 		return ObservableReversibleCollection.super.toArray();
 	}
 
@@ -72,8 +73,15 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 		return new SimpleListIterator<>(this, index);
 	}
 
+	/**
+	 * A sub-list of this list. The returned list is backed by this list and updated along with it. The index arguments may be any
+	 * non-negative value. If this list's size is {@code <=fromIndex}, the list will be empty. If {@code toIndex>} this list's size, the
+	 * returned list's size may be less than {@code toIndex-fromIndex}.
+	 *
+	 * @see java.util.List#subList(int, int)
+	 */
 	@Override
-	default List<E> subList(int fromIndex, int toIndex) {
+	default ObservableList<E> subList(int fromIndex, int toIndex) {
 		return new ObservableSubList<>(this, fromIndex, toIndex);
 	}
 
@@ -734,6 +742,150 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 	}
 
 	/**
+	 * Implements {@link ObservableList#subList(int, int)}
+	 *
+	 * @param <E>
+	 */
+	class ObservableSubList<E> implements ObservableList.PartialListImpl<E> {
+		private final ObservableList<E> theList;
+
+		private final int theOffset;
+
+		private int theSize;
+
+		protected ObservableSubList(ObservableList<E> list, int fromIndex, int toIndex) {
+			if(fromIndex < 0)
+				throw new IndexOutOfBoundsException("fromIndex = " + fromIndex);
+			if(fromIndex > toIndex)
+				throw new IllegalArgumentException("fromIndex(" + fromIndex + ") > toIndex(" + toIndex + ")");
+			theList = list;
+			theOffset = fromIndex;
+			theSize = toIndex - fromIndex;
+		}
+
+		@Override
+		public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<E>> onElement) {
+			List<OrderedObservableElement<E>> elements = new ArrayList<>();
+			List<Element> wrappers = new ArrayList<>();
+			return theList.onOrderedElement(element -> {
+				int index = element.getIndex();
+				Element wrapper = new Element(element);
+				elements.add(index, element);
+				wrappers.add(index, wrapper);
+				int removeIdx = theOffset + theSize;
+				if(index < removeIdx && removeIdx < wrappers.size())
+					wrappers.get(removeIdx).remove();
+				if(index < theOffset && theOffset < wrappers.size())
+					onElement.accept(wrappers.get(theOffset));
+			});
+		}
+
+		@Override
+		public Type getType() {
+			return theList.getType();
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			return theList.getSession();
+		}
+
+		@Override
+		public E set(int index, E element) {
+			rangeCheck(index);
+			return theList.set(index + theOffset, element);
+		}
+
+		@Override
+		public E get(int index) {
+			rangeCheck(index);
+			return theList.get(index + theOffset);
+		}
+
+		@Override
+		public int size() {
+			int size = theList.size() - theOffset;
+			if(theSize < size)
+				size = theSize;
+			return size;
+		}
+
+		@Override
+		public void removeRange(int fromIndex, int toIndex) {
+			for(int i = fromIndex; i < toIndex; i++)
+				theList.remove(theOffset + i);
+			theSize -= (toIndex - fromIndex);
+		}
+
+		@Override
+		public ObservableList<E> subList(int fromIndex, int toIndex) {
+			return new ObservableSubList<>(this, fromIndex, toIndex);
+		}
+
+		private void rangeCheck(int index) {
+			if(index < 0 || index >= theSize)
+				throw new IndexOutOfBoundsException(outOfBoundsMsg(index));
+		}
+
+		private String outOfBoundsMsg(int index) {
+			return "Index: " + index + ", Size: " + theSize;
+		}
+
+		class Element implements OrderedObservableElement<E> {
+			private final OrderedObservableElement<E> theWrapped;
+
+			private final DefaultObservable<Void> theRemovedObservable;
+
+			private final Observer<Void> theRemovedController;
+
+			Element(OrderedObservableElement<E> wrap) {
+				theWrapped = wrap;
+				theRemovedObservable = new DefaultObservable<>();
+				theRemovedController = theRemovedObservable.control(null);
+			}
+
+			@Override
+			public ObservableValue<E> persistent() {
+				return theWrapped.persistent();
+			}
+
+			@Override
+			public Type getType() {
+				return theWrapped.getType();
+			}
+
+			@Override
+			public E get() {
+				return theWrapped.get();
+			}
+
+			@Override
+			public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
+				return theWrapped.takeUntil(theRemovedObservable).observe(new Observer<ObservableValueEvent<E>>() {
+					@Override
+					public <V extends ObservableValueEvent<E>> void onNext(V value) {
+						observer.onNext(ObservableUtils.wrap(value, Element.this));
+					}
+
+					@Override
+					public <V extends ObservableValueEvent<E>> void onCompleted(V value) {
+						observer.onCompleted(ObservableUtils.wrap(value, Element.this));
+					}
+				});
+			}
+
+			@Override
+			public int getIndex() {
+				return theWrapped.getIndex() - theOffset;
+			}
+
+			void remove() {
+				theRemovedController.onNext(null);
+			}
+		}
+	}
+
+	/**
 	 * Implements {@link ObservableList#filterMap(Function)}
 	 *
 	 * @param <E> The type of the collection to be filter-mapped
@@ -1162,14 +1314,11 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 		}
 
 		@Override
-		public Object [] toArray() {
+		public T [] toArray() {
 			Lock lock = theLock.readLock();
 			lock.lock();
 			try {
-				if(theListeners.isUsed())
-					return theElements.stream().map(el -> el.get()).collect(Collectors.toList()).toArray();
-				else
-					return theWrapped.toArray();
+				return PartialListImpl.super.toArray();
 			} finally {
 				lock.unlock();
 			}

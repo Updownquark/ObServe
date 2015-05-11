@@ -40,7 +40,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 	}
 
 	@Override
-	default Object [] toArray() {
+	default E [] toArray() {
 		return ObservableCollection.super.toArray();
 	}
 

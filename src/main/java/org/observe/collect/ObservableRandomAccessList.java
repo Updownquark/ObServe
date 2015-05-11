@@ -2,6 +2,7 @@ package org.observe.collect;
 
 import static org.observe.ObservableDebug.debug;
 
+import java.util.RandomAccess;
 import java.util.function.Predicate;
 
 import org.observe.ObservableValue;
@@ -11,7 +12,7 @@ import org.observe.ObservableValue;
  *
  * @param <E> The type of values stored in the list
  */
-public interface ObservableRandomAccessList<E> extends ObservableList<E> {
+public interface ObservableRandomAccessList<E> extends ObservableList<E>, RandomAccess {
 	/* Overridden for performance.  get() is linear in the super, constant time here */
 	@Override
 	default ObservableValue<E> findLast(Predicate<E> filter) {

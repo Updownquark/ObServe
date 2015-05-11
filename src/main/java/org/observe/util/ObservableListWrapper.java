@@ -2,7 +2,6 @@ package org.observe.util;
 
 import java.util.Collection;
 import java.util.Iterator;
-import java.util.List;
 import java.util.ListIterator;
 import java.util.function.Consumer;
 
@@ -57,7 +56,7 @@ public class ObservableListWrapper<T> implements ObservableList<T> {
 	}
 
 	@Override
-	public Object [] toArray() {
+	public T [] toArray() {
 		return theWrapped.toArray();
 	}
 
@@ -157,7 +156,7 @@ public class ObservableListWrapper<T> implements ObservableList<T> {
 	}
 
 	@Override
-	public List<T> subList(int fromIndex, int toIndex) {
+	public ObservableList<T> subList(int fromIndex, int toIndex) {
 		return theWrapped.subList(fromIndex, toIndex);
 	}
 

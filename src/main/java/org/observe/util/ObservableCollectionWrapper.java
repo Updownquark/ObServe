@@ -59,7 +59,7 @@ public class ObservableCollectionWrapper<T> implements ObservableCollection<T> {
 	}
 
 	@Override
-	public Object [] toArray() {
+	public T [] toArray() {
 		return theWrapped.toArray();
 	}
 

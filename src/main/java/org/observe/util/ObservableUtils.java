@@ -154,7 +154,7 @@ public class ObservableUtils {
 	 * @return The flattened collection
 	 */
 	public static <T> ObservableCollection<T> flattenValues(Type type, ObservableCollection<? extends ObservableValue<T>> collection) {
-		class FlattenedCollection extends java.util.AbstractCollection<T> implements org.observe.collect.ObservableCollection<T> {
+		class FlattenedCollection implements ObservableCollection.PartialCollectionImpl<T> {
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
 				return collection.getSession();
@@ -248,6 +248,7 @@ public class ObservableUtils {
 	}
 
 	/**
+	 * @param <T> The type of the value to wrap an event for
 	 * @param event The event to wrap
 	 * @param wrapper The wrapper observable to wrap the event for
 	 * @return An event with the same values as the given event, but created by the given observable

@@ -59,7 +59,7 @@ public class ObservableSetWrapper<T> implements ObservableSet<T> {
 	}
 
 	@Override
-	public Object [] toArray() {
+	public T [] toArray() {
 		return theWrapped.toArray();
 	}
 

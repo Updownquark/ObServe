@@ -130,7 +130,7 @@ public interface ObservableMultiMap<K, V> {
 	default ObservableMultiEntry<K, V> observe(K key) {
 		ObservableValue<ObservableMultiEntry<K, V>> existingEntry = observeEntries().find(
 			entry -> java.util.Objects.equals(entry.getKey(), key));
-		class WrappingMultiEntry extends java.util.AbstractCollection<V> implements ObservableMultiEntry<K, V> {
+		class WrappingMultiEntry implements ObservableCollection.PartialCollectionImpl<V>, ObservableMultiEntry<K, V> {
 			@Override
 			public Type getType() {
 				return getValueType();

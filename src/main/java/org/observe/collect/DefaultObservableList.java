@@ -7,7 +7,6 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
-import java.util.RandomAccess;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
@@ -27,7 +26,7 @@ import prisms.lang.Type;
  *
  * @param <E> The type of element in the list
  */
-public class DefaultObservableList<E> extends AbstractList<E> implements ObservableRandomAccessList<E>, TransactableList<E>, RandomAccess {
+public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, ObservableList.PartialListImpl<E>, TransactableList<E> {
 	private final Type theType;
 
 	private DefaultListInternals theInternals;
@@ -158,12 +157,15 @@ public class DefaultObservableList<E> extends AbstractList<E> implements Observa
 	}
 
 	@Override
-	public Object [] toArray() {
+	public E [] toArray() {
 		Object [][] ret = new Object[1][];
 		theInternals.doLocked(() -> {
-			ret[0] = theValues.toArray();
+			Class<?> base = getType().toClass();
+			if(base.isPrimitive())
+				base = Type.getWrapperType(base);
+			ret[0] = theValues.toArray((E []) java.lang.reflect.Array.newInstance(base, theValues.size()));
 		}, false, false);
-		return ret[0];
+		return (E []) ret[0];
 	}
 
 	@Override

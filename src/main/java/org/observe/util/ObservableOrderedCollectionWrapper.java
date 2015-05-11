@@ -54,7 +54,7 @@ public class ObservableOrderedCollectionWrapper<E> implements ObservableOrderedC
 	}
 
 	@Override
-	public Object [] toArray() {
+	public E [] toArray() {
 		return theWrapped.toArray();
 	}
 

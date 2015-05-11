@@ -26,7 +26,7 @@ import prisms.lang.Type;
  *
  * @param <E> The type of element in the set
  */
-public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements ObservableSortedSet<E>, TransactableCollection<E> {
+public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, TransactableCollection<E> {
 	private final Type theType;
 	private AtomicBoolean hasIssuedController;
 	private DefaultSortedSetInternals theInternals;
@@ -137,12 +137,15 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 	}
 
 	@Override
-	public Object [] toArray() {
+	public E [] toArray() {
 		Object [][] ret = new Object[1][];
 		theInternals.doLocked(() -> {
-			ret[0] = theValues.keySet().toArray();
+			Class<?> base = getType().toClass();
+			if(base.isPrimitive())
+				base = Type.getWrapperType(base);
+			ret[0] = theValues.keySet().toArray((E []) java.lang.reflect.Array.newInstance(base, theValues.size()));
 		}, false, false);
-		return ret[0];
+		return (E []) ret[0];
 	}
 
 	@Override
@@ -633,11 +636,11 @@ public class DefaultObservableSortedSet<E> extends AbstractSet<E> implements Obs
 				return theValues.values();
 			else
 				return new Iterable<InternalObservableElementImpl<E>>() {
-					@Override
-					public Iterator<InternalObservableElementImpl<E>> iterator() {
-						return theValues.descendingMap().values().iterator();
-					}
-				};
+				@Override
+				public Iterator<InternalObservableElementImpl<E>> iterator() {
+					return theValues.descendingMap().values().iterator();
+				}
+			};
 		}
 
 		@Override
