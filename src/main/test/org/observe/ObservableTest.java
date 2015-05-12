@@ -413,7 +413,7 @@ public class ObservableTest {
 		}
 	}
 
-	/** Tests {@link ObservableSet#filter(java.util.function.Function)} */
+	/** Tests {@link ObservableSet#filter(java.util.function.Predicate)} */
 	@Test
 	public void observableSetFilter() {
 		DefaultObservableSet<Integer> set = new DefaultObservableSet<>(new Type(Integer.TYPE));
@@ -841,7 +841,7 @@ public class ObservableTest {
 		}
 	}
 
-	/** Tests {@link ObservableList#filter(java.util.function.Function)} */
+	/** Tests {@link ObservableList#filter(java.util.function.Predicate)} */
 	@Test
 	public void observableListFilter() {
 		DefaultObservableList<Integer> list = new DefaultObservableList<>(new Type(Integer.TYPE));
