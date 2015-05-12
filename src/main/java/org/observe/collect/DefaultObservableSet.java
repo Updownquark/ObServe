@@ -11,6 +11,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 
 import org.observe.ObservableValue;
+import org.observe.Subscription;
 import org.observe.util.DefaultTransactable;
 import org.observe.util.Transactable;
 import org.observe.util.Transaction;
@@ -109,7 +110,7 @@ public class DefaultObservableSet<E> extends AbstractSet<E> implements Observabl
 	}
 
 	@Override
-	public Runnable onElement(Consumer<? super ObservableElement<E>> onElement) {
+	public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
 		return theInternals.onElement(onElement, true);
 	}
 
@@ -441,7 +442,7 @@ public class DefaultObservableSet<E> extends AbstractSet<E> implements Observabl
 		}
 
 		@Override
-		ObservableElement<E> createExposedElement(InternalObservableElementImpl<E> internal, Collection<Runnable> subscriptions) {
+		ObservableElement<E> createExposedElement(InternalObservableElementImpl<E> internal, Collection<Subscription> subscriptions) {
 			return new ExposedObservableElement<>(internal, subscriptions);
 		}
 	}

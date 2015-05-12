@@ -57,7 +57,7 @@ public interface ObservableMap<K, V> extends Map<K, V> {
 	 * @param key The key to observe the value of
 	 * @return An observable value whose value is the same as {@link #get(Object)} for the given key, but updates as the map is changed
 	 */
-	default ObservableValue<V> observe(K key) {
+	default ObservableValue<V> subscribe(K key) {
 		return observeEntries().find(entry -> java.util.Objects.equals(entry.getKey(), key)).mapV(Map.Entry<K, V>::getValue);
 	}
 

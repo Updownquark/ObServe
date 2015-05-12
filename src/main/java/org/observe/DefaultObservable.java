@@ -59,7 +59,7 @@ public class DefaultObservable<T> implements Observable<T> {
 	}
 
 	@Override
-	public Runnable observe(Observer<? super T> observer) {
+	public Subscription subscribe(Observer<? super T> observer) {
 		if(!isAlive.get()) {
 			observer.onCompleted(null);
 			return () -> {

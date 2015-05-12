@@ -6,6 +6,7 @@ import java.util.ListIterator;
 import java.util.function.Consumer;
 
 import org.observe.ObservableValue;
+import org.observe.Subscription;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableList;
 import org.observe.collect.OrderedObservableElement;
@@ -101,12 +102,12 @@ public class ObservableListWrapper<T> implements ObservableList<T> {
 	}
 
 	@Override
-	public Runnable onOrderedElement(java.util.function.Consumer<? super OrderedObservableElement<T>> observer) {
+	public Subscription onOrderedElement(java.util.function.Consumer<? super OrderedObservableElement<T>> observer) {
 		return theWrapped.onOrderedElement(observer);
 	}
 
 	@Override
-	public Runnable onElementReverse(Consumer<? super OrderedObservableElement<T>> onElement) {
+	public Subscription onElementReverse(Consumer<? super OrderedObservableElement<T>> onElement) {
 		return theWrapped.onElementReverse(onElement);
 	}
 

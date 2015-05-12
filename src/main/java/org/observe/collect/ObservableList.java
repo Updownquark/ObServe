@@ -25,6 +25,7 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
+import org.observe.Subscription;
 import org.observe.util.ListenerSet;
 import org.observe.util.ObservableUtils;
 
@@ -154,12 +155,12 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 			}
 
 			@Override
-			public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<T>> onElement) {
+			public Subscription onOrderedElement(Consumer<? super OrderedObservableElement<T>> onElement) {
 				return outer.onOrderedElement(element -> onElement.accept(element.mapV(map)));
 			}
 
 			@Override
-			public Runnable onElementReverse(Consumer<? super OrderedObservableElement<T>> onElement) {
+			public Subscription onElementReverse(Consumer<? super OrderedObservableElement<T>> onElement) {
 				return outer.onElementReverse(element -> onElement.accept(element.mapV(map)));
 			}
 		}
@@ -261,7 +262,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 			}
 
 			@Override
-			public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
+			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 				observer.onNext(new ObservableValueEvent<>(this, theValue, theValue, null));
 				return () -> {
 				};
@@ -306,7 +307,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 			}
 
 			@Override
-			public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<T>> observer) {
+			public Subscription onOrderedElement(Consumer<? super OrderedObservableElement<T>> observer) {
 				for(OrderedObservableElement<T> ob : obsEls)
 					observer.accept(ob);
 				return () -> {
@@ -314,7 +315,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 			}
 
 			@Override
-			public Runnable onElementReverse(Consumer<? super OrderedObservableElement<T>> observer) {
+			public Subscription onElementReverse(Consumer<? super OrderedObservableElement<T>> observer) {
 				for(int i = obsEls.size() - 1; i >= 0; i--)
 					observer.accept(obsEls.get(i));
 				return () -> {
@@ -418,19 +419,19 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 			}
 
 			@Override
-			public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<T>> onElement) {
+			public Subscription onOrderedElement(Consumer<? super OrderedObservableElement<T>> onElement) {
 				return onElement(onElement, true);
 			}
 
 			@Override
-			public Runnable onElementReverse(Consumer<? super OrderedObservableElement<T>> onElement) {
+			public Subscription onElementReverse(Consumer<? super OrderedObservableElement<T>> onElement) {
 				return onElement(onElement, false);
 			}
 
-			private Runnable onElement(Consumer<? super OrderedObservableElement<T>> onElement, boolean forward) {
+			private Subscription onElement(Consumer<? super OrderedObservableElement<T>> onElement, boolean forward) {
 				Consumer<OrderedObservableElement<? extends ObservableList<? extends T>>> outerConsumer;
 				outerConsumer = new Consumer<OrderedObservableElement<? extends ObservableList<? extends T>>>() {
-					private Map<ObservableList<?>, Runnable> subListSubscriptions;
+					private Map<ObservableList<?>, Subscription> subListSubscriptions;
 
 					{
 						subListSubscriptions = new org.observe.util.ConcurrentIdentityHashMap<>();
@@ -438,15 +439,15 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 
 					@Override
 					public void accept(OrderedObservableElement<? extends ObservableList<? extends T>> subList) {
-						subList.observe(new Observer<ObservableValueEvent<? extends ObservableList<? extends T>>>() {
+						subList.subscribe(new Observer<ObservableValueEvent<? extends ObservableList<? extends T>>>() {
 							private List<FlattenedListElement> subListEls = new java.util.ArrayList<>();
 
 							@Override
 							public <V2 extends ObservableValueEvent<? extends ObservableList<? extends T>>> void onNext(V2 subListEvent) {
 								if(subListEvent.getOldValue() != null && subListEvent.getOldValue() != subListEvent.getValue()) {
-									Runnable subListSub = subListSubscriptions.get(subListEvent.getOldValue());
+									Subscription subListSub = subListSubscriptions.get(subListEvent.getOldValue());
 									if(subListSub != null)
-										subListSub.run();
+										subListSub.unsubscribe();
 								}
 								Consumer<OrderedObservableElement<? extends T>> innerConsumer = subElement -> {
 									FlattenedListElement flatEl = debug(new FlattenedListElement(subElement, subListEls, subList))
@@ -456,7 +457,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 									subElement.completed().act(x -> subListEls.remove(subElement.getIndex()));
 									onElement.accept(flatEl);
 								};
-								Runnable subListSub;
+								Subscription subListSub;
 								if(forward)
 									subListSub = subListEvent.getValue().onOrderedElement(innerConsumer);
 								else
@@ -466,7 +467,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 
 							@Override
 							public <V2 extends ObservableValueEvent<? extends ObservableList<? extends T>>> void onCompleted(V2 subListEvent) {
-								subListSubscriptions.remove(subListEvent.getValue()).run();
+								subListSubscriptions.remove(subListEvent.getValue()).unsubscribe();
 							}
 						});
 					}
@@ -764,7 +765,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 		}
 
 		@Override
-		public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<E>> onElement) {
+		public Subscription onOrderedElement(Consumer<? super OrderedObservableElement<E>> onElement) {
 			List<OrderedObservableElement<E>> elements = new ArrayList<>();
 			List<Element> wrappers = new ArrayList<>();
 			return theList.onOrderedElement(element -> {
@@ -860,8 +861,8 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 			}
 
 			@Override
-			public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
-				return theWrapped.takeUntil(theRemovedObservable).observe(new Observer<ObservableValueEvent<E>>() {
+			public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
+				return theWrapped.takeUntil(theRemovedObservable).subscribe(new Observer<ObservableValueEvent<E>>() {
 					@Override
 					public <V extends ObservableValueEvent<E>> void onNext(V value) {
 						observer.onNext(ObservableUtils.wrap(value, Element.this));
@@ -921,7 +922,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 		}
 
 		@Override
-		public Runnable onElementReverse(Consumer<? super OrderedObservableElement<T>> onElement) {
+		public Subscription onElementReverse(Consumer<? super OrderedObservableElement<T>> onElement) {
 			return getWrapped().onElementReverse(element -> {
 				FilteredOrderedElement<E, T> retElement = filter(element);
 				element.act(elValue -> {
@@ -960,12 +961,12 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 		}
 
 		@Override
-		public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<V>> onElement) {
+		public Subscription onOrderedElement(Consumer<? super OrderedObservableElement<V>> onElement) {
 			return onElement(element -> onElement.accept((OrderedObservableElement<V>) element));
 		}
 
 		@Override
-		public Runnable onElementReverse(Consumer<? super OrderedObservableElement<V>> onElement) {
+		public Subscription onElementReverse(Consumer<? super OrderedObservableElement<V>> onElement) {
 			return getManager().onElement(getWrapped(), getValue(),
 				element -> onElement.accept((OrderedObservableElement<V>) element.combineV(getMap(), getValue())), false);
 		}
@@ -992,7 +993,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 		}
 
 		@Override
-		public Runnable onElementReverse(Consumer<? super OrderedObservableElement<E>> onElement) {
+		public Subscription onElementReverse(Consumer<? super OrderedObservableElement<E>> onElement) {
 			return getManager().onElement(getWrapped(), getRefresh(),
 				element -> onElement.accept((OrderedObservableElement<E>) element.refresh(getRefresh())), false);
 		}
@@ -1019,12 +1020,12 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 		}
 
 		@Override
-		public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<E>> onElement) {
+		public Subscription onOrderedElement(Consumer<? super OrderedObservableElement<E>> onElement) {
 			return onElement(element -> onElement.accept((OrderedObservableElement<E>) element));
 		}
 
 		@Override
-		public Runnable onElementReverse(Consumer<? super OrderedObservableElement<E>> onElement) {
+		public Subscription onElementReverse(Consumer<? super OrderedObservableElement<E>> onElement) {
 			return getWrapped().onElementReverse(element -> onElement.accept(element.refreshForValue(getRefresh())));
 		}
 	}
@@ -1045,7 +1046,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 		}
 
 		@Override
-		public Runnable onElementReverse(Consumer<? super OrderedObservableElement<E>> observer) {
+		public Subscription onElementReverse(Consumer<? super OrderedObservableElement<E>> observer) {
 			return getWrapped().onElementReverse(observer);
 		}
 
@@ -1107,7 +1108,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 			theLock = new ReentrantReadWriteLock();
 			theElements = new ArrayList<>();
 			theListeners.setUsedListener(new Consumer<Boolean>() {
-				Runnable wrapSub;
+				Subscription wrapSub;
 
 				@Override
 				public void accept(Boolean used) {
@@ -1133,7 +1134,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 								});
 							});
 						} else {
-							wrapSub.run();
+							wrapSub.unsubscribe();
 							wrapSub = null;
 							theElements.clear();
 						}
@@ -1160,7 +1161,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 		}
 
 		@Override
-		public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<T>> onElement) {
+		public Subscription onOrderedElement(Consumer<? super OrderedObservableElement<T>> onElement) {
 			theListeners.add(onElement);
 			return () -> {
 				theListeners.remove(onElement);
@@ -1168,7 +1169,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 		}
 
 		@Override
-		public Runnable onElementReverse(Consumer<? super OrderedObservableElement<T>> onElement) {
+		public Subscription onElementReverse(Consumer<? super OrderedObservableElement<T>> onElement) {
 			boolean [] initialized = new boolean[1];
 			Consumer<OrderedObservableElement<T>> listener = element -> {
 				if(initialized[0])
@@ -1409,8 +1410,8 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 		}
 
 		@Override
-		public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
-			return theWrapped.observe(new Observer<ObservableValueEvent<T>>() {
+		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+			return theWrapped.subscribe(new Observer<ObservableValueEvent<T>>() {
 				@Override
 				public <V extends ObservableValueEvent<T>> void onNext(V value) {
 					observer.onNext(ObservableUtils.wrap(value, WrappingListElement.this));

@@ -11,6 +11,7 @@ import java.util.function.Predicate;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
+import org.observe.Subscription;
 
 import prisms.lang.Type;
 
@@ -28,10 +29,10 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 * @param onElement The element accepter
 	 * @return The unsubscribe runnable
 	 */
-	default Runnable onElementReverse(Consumer<? super OrderedObservableElement<E>> onElement) {
+	default Subscription onElementReverse(Consumer<? super OrderedObservableElement<E>> onElement) {
 		List<OrderedObservableElement<E>> initElements = new ArrayList<>();
 		boolean [] initialized = new boolean[1];
-		Runnable ret = onOrderedElement(element -> {
+		Subscription ret = onOrderedElement(element -> {
 			if(initialized[0])
 				onElement.accept(element);
 			else
@@ -281,7 +282,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 		}
 
 		@Override
-		public Runnable onElement(Consumer<? super ObservableElement<E>> onElement) {
+		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
 			return theWrapped.onElementReverse(onElement);
 		}
 
@@ -306,14 +307,14 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 		}
 
 		@Override
-		public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<E>> onElement) {
+		public Subscription onOrderedElement(Consumer<? super OrderedObservableElement<E>> onElement) {
 			return theWrapped.onElementReverse(element -> {
 				onElement.accept(new ReversedElement(element));
 			});
 		}
 
 		@Override
-		public Runnable onElementReverse(Consumer<? super OrderedObservableElement<E>> onElement) {
+		public Subscription onElementReverse(Consumer<? super OrderedObservableElement<E>> onElement) {
 			return theWrapped.onOrderedElement(element -> {
 				onElement.accept(new ReversedElement(element));
 			});
@@ -342,13 +343,43 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 			}
 
 			@Override
-			public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
-				return theWrappedElement.observe(observer);
+			public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
+				return theWrappedElement.subscribe(observer);
 			}
 
 			@Override
 			public int getIndex() {
 				return theWrapped.size() - theWrappedElement.getIndex() - 1;
+			}
+		}
+	}
+
+	/**
+	 * Finds something in an {@link ObservableOrderedCollection}. More performant for backward searching.
+	 *
+	 * @param <E> The type of value to find
+	 */
+	public class OrderedReversibleCollectionFinder<E> extends OrderedCollectionFinder<E> {
+		OrderedReversibleCollectionFinder(ObservableReversibleCollection<E> collection, Predicate<? super E> filter, boolean forward) {
+			super(collection, filter, forward);
+		}
+
+		/** @return The collection that this finder searches */
+		@Override
+		public ObservableReversibleCollection<E> getCollection() {
+			return (ObservableReversibleCollection<E>) super.getCollection();
+		}
+
+		@Override
+		public E get() {
+			if(isForward()) {
+				return super.get();
+			} else {
+				for(E element : getCollection().descending()) {
+					if(getFilter().test(element))
+						return element;
+				}
+				return null;
 			}
 		}
 	}

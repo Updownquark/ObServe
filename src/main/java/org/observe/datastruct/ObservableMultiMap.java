@@ -10,6 +10,7 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
+import org.observe.Subscription;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableElement;
@@ -127,7 +128,7 @@ public interface ObservableMultiMap<K, V> {
 	 * @param key The key to get the values for
 	 * @return The values (in the form of a {@link ObservableMultiEntry multi-entry}) stored for the given key
 	 */
-	default ObservableMultiEntry<K, V> observe(K key) {
+	default ObservableMultiEntry<K, V> subscribe(K key) {
 		ObservableValue<ObservableMultiEntry<K, V>> existingEntry = observeEntries().find(
 			entry -> java.util.Objects.equals(entry.getKey(), key));
 		class WrappingMultiEntry implements ObservableCollection.PartialCollectionImpl<V>, ObservableMultiEntry<K, V> {
@@ -137,22 +138,22 @@ public interface ObservableMultiMap<K, V> {
 			}
 
 			@Override
-			public Runnable onElement(Consumer<? super ObservableElement<V>> onElement) {
-				Runnable [] innerSub = new Runnable[1];
-				Runnable outerSub = existingEntry.value().act(entry -> {
-					Runnable is = innerSub[0];
+			public Subscription onElement(Consumer<? super ObservableElement<V>> onElement) {
+				Subscription [] innerSub = new Subscription[1];
+				Subscription outerSub = existingEntry.value().act(entry -> {
+					Subscription is = innerSub[0];
 					innerSub[0] = null;
 					if(is != null)
-						is.run();
+						is.unsubscribe();
 					if(entry != null)
 						innerSub[0] = entry.onElement(onElement);
 				});
 				return () -> {
-					outerSub.run();
-					Runnable is = innerSub[0];
+					outerSub.unsubscribe();
+					Subscription is = innerSub[0];
 					innerSub[0] = null;
 					if(is != null)
-						is.run();
+						is.unsubscribe();
 				};
 			}
 
@@ -240,7 +241,7 @@ public interface ObservableMultiMap<K, V> {
 					}
 
 					@Override
-					public Runnable observe(Observer<? super ObservableValueEvent<ObservableCollection<V>>> observer) {
+					public Subscription subscribe(Observer<? super ObservableValueEvent<ObservableCollection<V>>> observer) {
 						int todo; // TODO Auto-generated method stub
 						return null;
 					}

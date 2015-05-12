@@ -5,6 +5,7 @@ import java.lang.ref.WeakReference;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
+import org.observe.Subscription;
 
 import prisms.lang.Type;
 
@@ -32,7 +33,7 @@ public class WeakReferenceObservable<T> implements ObservableValue<T> {
 	}
 
 	@Override
-	public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
+	public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 		T ref = theRef.get();
 		if(ref == null) {
 			observer.onCompleted(new ObservableValueEvent<>(this, null, null, null));

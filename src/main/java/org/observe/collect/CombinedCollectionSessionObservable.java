@@ -5,6 +5,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
+import org.observe.Subscription;
 import org.observe.util.ListenerSet;
 import org.observe.util.ObservableUtils;
 
@@ -37,10 +38,10 @@ public class CombinedCollectionSessionObservable implements ObservableValue<Coll
 		theObservers = new ListenerSet<>();
 		isInTransaction = new AtomicBoolean();
 
-		final Runnable [] wrappedSessionListener = new Runnable[1];
+		final Subscription [] wrappedSessionListener = new Subscription[1];
 		theObservers.setUsedListener(used -> {
 			if(used) {
-				wrappedSessionListener[0] = theWrappedSessionObservable.observe(new Observer<ObservableValueEvent<Boolean>>() {
+				wrappedSessionListener[0] = theWrappedSessionObservable.subscribe(new Observer<ObservableValueEvent<Boolean>>() {
 					@Override
 					public <V extends ObservableValueEvent<Boolean>> void onNext(V value) {
 						if(isInTransaction.getAndSet(value.getValue()) == value.getValue())
@@ -56,7 +57,7 @@ public class CombinedCollectionSessionObservable implements ObservableValue<Coll
 					}
 				});
 			} else {
-				wrappedSessionListener[0].run();
+				wrappedSessionListener[0].unsubscribe();
 				wrappedSessionListener[0] = null;
 			}
 		});
@@ -73,7 +74,7 @@ public class CombinedCollectionSessionObservable implements ObservableValue<Coll
 	}
 
 	@Override
-	public Runnable observe(Observer<? super ObservableValueEvent<CollectionSession>> observer) {
+	public Subscription subscribe(Observer<? super ObservableValueEvent<CollectionSession>> observer) {
 		theObservers.add(observer);
 		return () -> theObservers.remove(observer);
 	}

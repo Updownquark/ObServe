@@ -12,6 +12,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 
 import org.observe.ObservableValue;
+import org.observe.Subscription;
 import org.observe.util.DefaultTransactable;
 import org.observe.util.Transactable;
 import org.observe.util.Transaction;
@@ -122,13 +123,13 @@ public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, 
 	}
 
 	@Override
-	public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<E>> onElement) {
+	public Subscription onOrderedElement(Consumer<? super OrderedObservableElement<E>> onElement) {
 		// Cast is safe because the internals of this set will only create ordered elements
 		return theInternals.onElement((Consumer<ObservableElement<E>>) onElement, true);
 	}
 
 	@Override
-	public Runnable onElementReverse(Consumer<? super OrderedObservableElement<E>> onElement) {
+	public Subscription onElementReverse(Consumer<? super OrderedObservableElement<E>> onElement) {
 		// Cast is safe because the internals of this set will only create ordered elements
 		return theInternals.onElement((Consumer<ObservableElement<E>>) onElement, false);
 	}
@@ -614,7 +615,7 @@ public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, 
 		}
 
 		@Override
-		ObservableElement<E> createExposedElement(InternalObservableElementImpl<E> internal, Collection<Runnable> subscriptions) {
+		ObservableElement<E> createExposedElement(InternalObservableElementImpl<E> internal, Collection<Subscription> subscriptions) {
 			class ExposedOrderedObservableElement extends ExposedObservableElement<E> implements OrderedObservableElement<E> {
 				private int theRemovedIndex = -1;
 

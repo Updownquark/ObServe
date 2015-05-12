@@ -21,6 +21,7 @@ import org.observe.ObservableDebug.D;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
+import org.observe.Subscription;
 import org.observe.util.ListenerSet;
 import org.observe.util.ObservableUtils;
 
@@ -39,7 +40,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @param onElement The listener to be notified when new elements are added to the collection
 	 * @return The function to call when the calling code is no longer interested in this collection
 	 */
-	Runnable onElement(Consumer<? super ObservableElement<E>> onElement);
+	Subscription onElement(Consumer<? super ObservableElement<E>> onElement);
 
 	/**
 	 * @return The observable value for the current session of this collection. The session allows listeners to retain state for the
@@ -107,17 +108,17 @@ public interface ObservableCollection<E> extends Collection<E> {
 			}
 
 			@Override
-			public Runnable observe(Observer<? super ObservableValueEvent<Integer>> observer) {
+			public Subscription subscribe(Observer<? super ObservableValueEvent<Integer>> observer) {
 				ObservableValue<Integer> sizeObs = this;
 				boolean [] initialized = new boolean[1];
-				Runnable sub = onElement(new Consumer<ObservableElement<E>>() {
+				Subscription sub = onElement(new Consumer<ObservableElement<E>>() {
 					private AtomicInteger size = new AtomicInteger();
 
 					@Override
 					public void accept(ObservableElement<E> value) {
 						int newSize = size.incrementAndGet();
 						fire(newSize - 1, newSize, value);
-						value.observe(new Observer<ObservableValueEvent<E>>() {
+						value.subscribe(new Observer<ObservableValueEvent<E>>() {
 							@Override
 							public <V2 extends ObservableValueEvent<E>> void onNext(V2 value2) {
 							}
@@ -163,8 +164,8 @@ public interface ObservableCollection<E> extends Collection<E> {
 		return observer -> {
 			boolean [] initialized = new boolean[1];
 			Object key = new Object();
-			Runnable collSub = onElement(element -> {
-				element.observe(new Observer<Object>() {
+			Subscription collSub = onElement(element -> {
+				element.subscribe(new Observer<Object>() {
 					@Override
 					public void onNext(Object value) {
 						if(!initialized[0])
@@ -188,7 +189,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 					}
 				});
 			});
-			Runnable transSub = getSession().act(event -> {
+			Subscription transSub = getSession().act(event -> {
 				if(!initialized[0])
 					return;
 				if(event.getOldValue() != null && event.getOldValue().put(key, "changed", null) != null) {
@@ -197,8 +198,8 @@ public interface ObservableCollection<E> extends Collection<E> {
 			});
 			initialized[0] = true;
 			return () -> {
-				collSub.run();
-				transSub.run();
+				collSub.unsubscribe();
+				transSub.unsubscribe();
 			};
 		};
 	}
@@ -208,7 +209,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 		ObservableCollection<E> coll = this;
 		return debug(new Observable<ObservableValueEvent<E>>() {
 			@Override
-			public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
+			public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
 				return coll.onElement(element -> element.completed().act(value -> observer.onNext(value)));
 			}
 
@@ -307,11 +308,11 @@ public interface ObservableCollection<E> extends Collection<E> {
 			}
 
 			@Override
-			public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
+			public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
 				if(isEmpty())
 					observer.onNext(new ObservableValueEvent<>(this, null, null, null));
 				final Object key = new Object();
-				Runnable collSub = ObservableCollection.this.onElement(new Consumer<ObservableElement<E>>() {
+				Subscription collSub = ObservableCollection.this.onElement(new Consumer<ObservableElement<E>>() {
 					private E theValue;
 
 					private boolean isFound;
@@ -360,7 +361,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 						}
 					}
 				});
-				Runnable transSub = getSession().observe(new Observer<ObservableValueEvent<CollectionSession>>() {
+				Subscription transSub = getSession().subscribe(new Observer<ObservableValueEvent<CollectionSession>>() {
 					@Override
 					public <V2 extends ObservableValueEvent<CollectionSession>> void onNext(V2 value) {
 						CollectionSession completed = value.getOldValue();
@@ -374,8 +375,8 @@ public interface ObservableCollection<E> extends Collection<E> {
 					}
 				});
 				return () -> {
-					collSub.run();
-					transSub.run();
+					collSub.unsubscribe();
+					transSub.unsubscribe();
 				};
 			}
 
@@ -490,9 +491,9 @@ public interface ObservableCollection<E> extends Collection<E> {
 			}
 
 			@Override
-			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
+			public Subscription onElement(Consumer<? super ObservableElement<T>> observer) {
 				return coll.onElement(new Consumer<ObservableElement<? extends ObservableCollection<? extends T>>>() {
-					private java.util.Map<ObservableCollection<?>, Runnable> subCollSubscriptions;
+					private java.util.Map<ObservableCollection<?>, Subscription> subCollSubscriptions;
 
 					{
 						subCollSubscriptions = new org.observe.util.ConcurrentIdentityHashMap<>();
@@ -505,11 +506,11 @@ public interface ObservableCollection<E> extends Collection<E> {
 							public <V2 extends ObservableValueEvent<? extends ObservableCollection<? extends T>>> void onNext(
 								V2 subCollEvent) {
 								if(subCollEvent.getOldValue() != null && subCollEvent.getOldValue() != subCollEvent.getValue()) {
-									Runnable subCollSub = subCollSubscriptions.get(subCollEvent.getOldValue());
+									Subscription subCollSub = subCollSubscriptions.get(subCollEvent.getOldValue());
 									if(subCollSub != null)
-										subCollSub.run();
+										subCollSub.unsubscribe();
 								}
-								Runnable subCollSub = subCollEvent.getValue().onElement(
+								Subscription subCollSub = subCollEvent.getValue().onElement(
 									subElement -> observer.accept(debug(new FlattenedElement<>((ObservableElement<T>) subElement, subColl))
 										.from("element", ComposedObservableCollection.this).tag("wrappedCollectionElement", subColl)
 										.tag("wrappedSubElement", subElement).get()));
@@ -519,7 +520,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 							@Override
 							public <V2 extends ObservableValueEvent<? extends ObservableCollection<? extends T>>> void onCompleted(
 								V2 subCollEvent) {
-								subCollSubscriptions.remove(subCollEvent.getValue()).run();
+								subCollSubscriptions.remove(subCollEvent.getValue()).unsubscribe();
 							}
 						});
 					}
@@ -546,10 +547,10 @@ public interface ObservableCollection<E> extends Collection<E> {
 	public static <T> Observable<T> fold(ObservableCollection<? extends Observable<T>> coll) {
 		return debug(new Observable<T>() {
 			@Override
-			public Runnable observe(Observer<? super T> observer) {
+			public Subscription subscribe(Observer<? super T> observer) {
 				Observable<T> outer = this;
 				D d = ObservableDebug.onSubscribe(this, "fold", null);
-				Runnable ret = coll.onElement(element -> {
+				Subscription ret = coll.onElement(element -> {
 					D d2 = ObservableDebug.onNext(outer, "fold", null);
 					element.subscribe(new Observer<ObservableValueEvent<? extends Observable<T>>>() {
 						@Override
@@ -724,7 +725,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 		}
 
 		@Override
-		public Runnable onElement(Consumer<? super ObservableElement<T>> onElement) {
+		public Subscription onElement(Consumer<? super ObservableElement<T>> onElement) {
 			return theWrapped.onElement(element -> onElement.accept(element.mapV(theMap)));
 		}
 	}
@@ -809,7 +810,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 		}
 
 		@Override
-		public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
+		public Subscription onElement(Consumer<? super ObservableElement<T>> observer) {
 			return theWrapped.onElement(element -> {
 				FilteredElement<E, T> retElement = filter(element);
 				element.act(elValue -> {
@@ -879,9 +880,9 @@ public interface ObservableCollection<E> extends Collection<E> {
 		}
 
 		@Override
-		public Runnable observe(Observer<? super ObservableValueEvent<T>> observer2) {
-			Runnable [] innerSub = new Runnable[1];
-			innerSub[0] = theWrappedElement.observe(new Observer<ObservableValueEvent<E>>() {
+		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer2) {
+			Subscription [] innerSub = new Subscription[1];
+			innerSub[0] = theWrappedElement.subscribe(new Observer<ObservableValueEvent<E>>() {
 				@Override
 				public <V2 extends ObservableValueEvent<E>> void onNext(V2 elValue) {
 					T oldValue = theValue;
@@ -893,7 +894,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 						theValue = null;
 						observer2.onCompleted(createEvent(oldValue, oldValue, elValue));
 						if(innerSub[0] != null) {
-							innerSub[0].run();
+							innerSub[0].unsubscribe();
 							innerSub[0] = null;
 						}
 					} else {
@@ -1003,7 +1004,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 		}
 
 		@Override
-		public Runnable onElement(Consumer<? super ObservableElement<V>> onElement) {
+		public Subscription onElement(Consumer<? super ObservableElement<V>> onElement) {
 			return theTransactionManager.onElement(theWrapped, theValue, element -> onElement.accept(element.combineV(theMap, theValue)),
 				true);
 		}
@@ -1060,7 +1061,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 		}
 
 		@Override
-		public Runnable onElement(Consumer<? super ObservableElement<E>> onElement) {
+		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
 			return theTransactionManager.onElement(theWrapped, theRefresh, element -> onElement.accept(element.refresh(theRefresh)), true);
 		}
 	}
@@ -1109,7 +1110,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 		}
 
 		@Override
-		public Runnable onElement(Consumer<? super ObservableElement<E>> onElement) {
+		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
 			return theWrapped.onElement(element -> onElement.accept(element.refreshForValue(theRefresh)));
 		}
 	}
@@ -1168,8 +1169,8 @@ public interface ObservableCollection<E> extends Collection<E> {
 		}
 
 		@Override
-		public Runnable observe(Observer<? super ObservableValueEvent<T>> observer2) {
-			return subElement.takeUntil(subCollectionEl.completed()).observe(new Observer<ObservableValueEvent<T>>() {
+		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer2) {
+			return subElement.takeUntil(subCollectionEl.completed()).subscribe(new Observer<ObservableValueEvent<T>>() {
 				@Override
 				public <V extends ObservableValueEvent<T>> void onNext(V event) {
 					observer2.onNext(ObservableUtils.wrap(event, FlattenedElement.this));
@@ -1211,7 +1212,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 		}
 
 		@Override
-		public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
+		public Subscription onElement(Consumer<? super ObservableElement<E>> observer) {
 			return theWrapped.onElement(observer);
 		}
 
@@ -1272,7 +1273,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 			}
 
 			@Override
-			public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
+			public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
 				theElementListeners.add(observer);
 				observer.onNext(new ObservableValueEvent<>(this, theCachedValue, theCachedValue, null));
 				return () -> theElementListeners.remove(observer);
@@ -1302,7 +1303,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 		private final ReentrantLock theLock;
 		private final Consumer<ObservableElement<E>> theWrappedOnElement;
 
-		private Runnable theUnsubscribe;
+		private Subscription theUnsubscribe;
 
 		/** @param wrap The collection to cache */
 		protected SafeCachedObservableCollection(ObservableCollection<E> wrap) {
@@ -1314,7 +1315,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 				CachedElement<E> cached = debug(createElement(element)).from("element", this).tag("wrapped", element).get();
 				debug(cached).from("cached", element).from("element", this);
 				theCache.put(element, cached);
-				element.observe(new Observer<ObservableValueEvent<E>>(){
+				element.subscribe(new Observer<ObservableValueEvent<E>>(){
 					@Override
 					public <V extends ObservableValueEvent<E>> void onNext(V event) {
 						cached.newValue(event);
@@ -1346,7 +1347,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 		}
 
 		@Override
-		public Runnable onElement(Consumer<? super ObservableElement<E>> onElement) {
+		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
 			theListeners.add(onElement);
 			for(CachedElement<E> cached : theCache.values())
 				onElement.accept(cached);
@@ -1400,7 +1401,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 					theLock.unlock();
 				}
 			} else if(!used && theUnsubscribe != null) {
-				theUnsubscribe.run();
+				theUnsubscribe.unsubscribe();
 				theUnsubscribe=null;
 			}
 		}

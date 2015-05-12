@@ -8,6 +8,7 @@ import java.util.function.Function;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
+import org.observe.Subscription;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableElement;
@@ -71,7 +72,7 @@ public class ObservableUtils {
 			}
 
 			@Override
-			public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<T>> observer) {
+			public Subscription onOrderedElement(Consumer<? super OrderedObservableElement<T>> observer) {
 				return list.onElement(element ->observer.accept(new OrderedObservableElement<T>() {
 					@Override
 					public Type getType() {
@@ -98,9 +99,9 @@ public class ObservableUtils {
 					}
 
 					@Override
-					public Runnable observe(Observer<? super ObservableValueEvent<T>> observer2) {
+					public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer2) {
 						OrderedObservableElement<T> retObs = this;
-						return element.observe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends T>>>() {
+						return element.subscribe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends T>>>() {
 							@Override
 							public <V2 extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onNext(V2 value) {
 								if(value.getValue() != null) {
@@ -166,7 +167,7 @@ public class ObservableUtils {
 			}
 
 			@Override
-			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
+			public Subscription onElement(Consumer<? super ObservableElement<T>> observer) {
 				return collection.onElement(element -> observer.accept(new ObservableElement<T>() {
 					@Override
 					public Type getType() {
@@ -188,9 +189,9 @@ public class ObservableUtils {
 					}
 
 					@Override
-					public Runnable observe(Observer<? super ObservableValueEvent<T>> observer2) {
+					public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer2) {
 						ObservableElement<T> retObs = this;
-						return element.observe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends T>>>() {
+						return element.subscribe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends T>>>() {
 							@Override
 							public <V2 extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onNext(V2 value) {
 								if(value.getValue() != null) {

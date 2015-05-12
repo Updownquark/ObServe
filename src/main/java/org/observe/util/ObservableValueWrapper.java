@@ -3,6 +3,7 @@ package org.observe.util;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
+import org.observe.Subscription;
 
 import prisms.lang.Type;
 
@@ -20,8 +21,8 @@ public class ObservableValueWrapper<T> implements ObservableValue<T> {
 	}
 
 	@Override
-	public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
-		return theWrapped.observe(observer);
+	public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+		return theWrapped.subscribe(observer);
 	}
 
 	@Override

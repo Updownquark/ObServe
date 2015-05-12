@@ -9,6 +9,7 @@ import java.util.function.Consumer;
 import org.observe.Observable;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
+import org.observe.Subscription;
 import org.observe.util.ListenerSet;
 
 class CollectionChangesObservable<E, CCE extends CollectionChangeEvent<E>> implements Observable<CCE> {
@@ -22,15 +23,15 @@ class CollectionChangesObservable<E, CCE extends CollectionChangeEvent<E>> imple
 		theObservers = new ListenerSet<>();
 
 		theObservers.setUsedListener(new Consumer<Boolean>() {
-			private Runnable collectSub;
+			private Subscription collectSub;
 
-			private Runnable transSub;
+			private Subscription transSub;
 
 			@Override
 			public void accept(Boolean used) {
 				if(used) {
 					boolean [] initialized = new boolean[1];
-					collectSub = collection.onElement(element -> element.observe(new Observer<ObservableValueEvent<E>>() {
+					collectSub = collection.onElement(element -> element.subscribe(new Observer<ObservableValueEvent<E>>() {
 						@Override
 						public <V2 extends ObservableValueEvent<E>> void onNext(V2 evt) {
 							if(!initialized[0])
@@ -47,7 +48,7 @@ class CollectionChangesObservable<E, CCE extends CollectionChangeEvent<E>> imple
 						}
 					}));
 					initialized[0] = true;
-					transSub = collection.getSession().observe(new Observer<ObservableValueEvent<CollectionSession>>() {
+					transSub = collection.getSession().subscribe(new Observer<ObservableValueEvent<CollectionSession>>() {
 						@Override
 						public <V extends ObservableValueEvent<CollectionSession>> void onNext(V value) {
 							if(value.getOldValue() != null)
@@ -55,8 +56,8 @@ class CollectionChangesObservable<E, CCE extends CollectionChangeEvent<E>> imple
 						}
 					});
 				} else {
-					collectSub.run();
-					transSub.run();
+					collectSub.unsubscribe();
+					transSub.unsubscribe();
 					collectSub = null;
 					transSub = null;
 				}
@@ -65,7 +66,7 @@ class CollectionChangesObservable<E, CCE extends CollectionChangeEvent<E>> imple
 	}
 
 	@Override
-	public Runnable observe(Observer<? super CCE> observer) {
+	public Subscription subscribe(Observer<? super CCE> observer) {
 		theObservers.add(observer);
 		return () -> {
 			theObservers.remove(observer);

@@ -40,7 +40,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @param value The observable value to link this value to
 	 * @return A subscription by which the link may be canceled
 	 */
-	default <V extends T> Subscription<ObservableValueEvent<V>> link(ObservableValue<V> value) {
+	default <V extends T> Subscription link(ObservableValue<V> value) {
 		return value.act(lambda(event -> {
 			set(event.getValue(), event);
 		}, "link"));
@@ -60,8 +60,8 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			}
 
 			@Override
-			public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
-				return SettableValue.this.observe(observer);
+			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+				return SettableValue.this.subscribe(observer);
 			}
 		}).from("unsettable", this).get();
 	}
@@ -264,7 +264,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 
 	/**
 	 * Implements the SettableValue.combine methods
-	 * 
+	 *
 	 * @param <T> The type of the value
 	 */
 	abstract class ComposedSettableValue<T> extends ComposedObservableValue<T> implements SettableValue<T> {

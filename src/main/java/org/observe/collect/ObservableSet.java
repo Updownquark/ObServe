@@ -15,6 +15,7 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
+import org.observe.Subscription;
 
 import prisms.lang.Type;
 
@@ -120,7 +121,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 			}
 
 			@Override
-			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
+			public Subscription onElement(Consumer<? super ObservableElement<T>> observer) {
 				for(ObservableElement<T> el : els)
 					observer.accept(el);
 				return () -> {
@@ -151,7 +152,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 				}
 
 				@Override
-				public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
+				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 					observer.onNext(new ObservableValueEvent<>(this, null, value, null));
 					return () -> {
 					};
@@ -218,9 +219,9 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 			}
 
 			@Override
-			public Runnable observe(Observer<? super ObservableValueEvent<T>> observer2) {
-				Runnable [] innerSub = new Runnable[1];
-				innerSub[0] = theWrappedElement.observe(new Observer<ObservableValueEvent<T>>() {
+			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer2) {
+				Subscription [] innerSub = new Subscription[1];
+				innerSub[0] = theWrappedElement.subscribe(new Observer<ObservableValueEvent<T>>() {
 					@Override
 					public <V2 extends ObservableValueEvent<T>> void onNext(V2 elValue) {
 						boolean shouldBe = shouldBeIncluded(elValue.getValue());
@@ -229,7 +230,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 							observer2.onCompleted(new ObservableValueEvent<>(UniqueFilteredElement.this, elValue.getOldValue(), elValue
 								.getValue(), elValue));
 							if(innerSub[0] != null) {
-								innerSub[0].run();
+								innerSub[0].unsubscribe();
 								innerSub[0] = null;
 							}
 						} else if(!isIncluded && shouldBe) {
@@ -319,7 +320,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 			}
 
 			@Override
-			public Runnable onElement(Consumer<? super ObservableElement<T>> observer) {
+			public Subscription onElement(Consumer<? super ObservableElement<T>> observer) {
 				return coll.onElement(element -> {
 					UniqueFilteredElement retElement = debug(new UniqueFilteredElement(element, theElements.keySet()))
 						.from("element", this).tag("wrapped", element).get();

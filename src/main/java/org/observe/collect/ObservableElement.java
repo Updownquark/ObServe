@@ -142,7 +142,7 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 
 	/**
 	 * Implements {@link ObservableElement#refresh(Observable)}
-	 * 
+	 *
 	 * @param <E> The type of the element
 	 */
 	class RefreshingObservableElement<E> extends ObservableValue.RefreshingObservableValue<E> implements ObservableElement<E> {
@@ -163,7 +163,7 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 
 	/**
 	 * Implements {@link ObservableElement#refreshForValue(Function)}
-	 * 
+	 *
 	 * @param <E> The type of the element
 	 */
 	class ValueRefreshingObservableElement<E> implements ObservableElement<E> {
@@ -200,8 +200,8 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 		}
 
 		@Override
-		public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
-			Runnable [] refireSub = new Runnable[1];
+		public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
+			Subscription [] refireSub = new Subscription[1];
 			Observer<Object> refireObs = new Observer<Object>() {
 				@Override
 				public <V> void onNext(V value) {
@@ -218,17 +218,17 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 					refireSub[0] = null;
 				}
 			};
-			Runnable outerSub = theWrapped.observe(new Observer<ObservableValueEvent<E>>() {
+			Subscription outerSub = theWrapped.subscribe(new Observer<ObservableValueEvent<E>>() {
 				@Override
 				public <V extends ObservableValueEvent<E>> void onNext(V value) {
-					refireSub[0] = theRefresh.apply(value.getValue()).noInit().takeUntil(theWrapped).observe(refireObs);
+					refireSub[0] = theRefresh.apply(value.getValue()).noInit().takeUntil(theWrapped).subscribe(refireObs);
 					observer.onNext(value);
 				}
 
 				@Override
 				public <V extends ObservableValueEvent<E>> void onCompleted(V value) {
 					if(refireSub[0] != null)
-						refireSub[0].run();
+						refireSub[0].unsubscribe();
 					observer.onCompleted(value);
 				}
 
@@ -237,11 +237,11 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 					observer.onError(e);
 				}
 			});
-			refireSub[0] = theRefresh.apply(theWrapped.get()).noInit().takeUntil(theWrapped).observe(refireObs);
+			refireSub[0] = theRefresh.apply(theWrapped.get()).noInit().takeUntil(theWrapped).subscribe(refireObs);
 			return () -> {
-				outerSub.run();
+				outerSub.unsubscribe();
 				if(refireSub[0] != null)
-					refireSub[0].run();
+					refireSub[0].unsubscribe();
 			};
 		}
 

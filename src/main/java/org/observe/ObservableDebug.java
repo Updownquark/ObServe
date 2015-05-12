@@ -320,7 +320,7 @@ public final class ObservableDebug {
 		Map<String, Object> functions = new java.util.LinkedHashMap<>();
 		ObservableDebugWrapper newHolder = new ObservableDebugWrapper(observable, functions);
 		ObservableGraph.Node<ObservableDebugWrapper, String> newNode = theObservables.addNode(newHolder);
-		newHolder.observable.observe(new Observer<Object>() {
+		newHolder.observable.subscribe(new Observer<Object>() {
 			@Override
 			public <V> void onNext(V value) {
 			}
@@ -509,7 +509,7 @@ public final class ObservableDebug {
 							}
 
 							@Override
-							public Runnable observe(Observer<? super ObservableValueEvent<DebugDescription>> observer) {
+							public Subscription subscribe(Observer<? super ObservableValueEvent<DebugDescription>> observer) {
 								return () -> { // Should never change
 								};
 							}
@@ -704,7 +704,7 @@ public final class ObservableDebug {
 	}
 
 	/**
-	 * To be called from the {@link Observable#observe(Observer)} method
+	 * To be called from the {@link Observable#subscribe(Observer)} method
 	 *
 	 * @param obs The observable being subscribed to
 	 * @param name The name of the observable to print
@@ -721,7 +721,7 @@ public final class ObservableDebug {
 	}
 
 	/**
-	 * To be called from the {@link Runnable#run()} method of the Runnable returned from the {@link Observable#observe(Observer)}
+	 * To be called from the {@link Runnable#run()} method of the Runnable returned from the {@link Observable#subscribe(Observer)}
 	 *
 	 * @param obs The observable being unsubscribed from
 	 * @param name The name of the observable to print

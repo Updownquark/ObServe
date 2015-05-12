@@ -20,112 +20,24 @@ import org.observe.util.ListenerSet;
  */
 public interface Observable<T> {
 	/**
-	 * Heavier-weight than {@link #observe(Observer)}, but supports subscription chaining. The Subscription returned from this method can be
-	 * used in place of this observable; observers added to it will receive the same events as if they were added to this observable
-	 * directly. However, when the subscription is {@link Subscription#unsubscribe() unsubscribed}, observers added to the subscription will
-	 * have their {@link Observer#onCompleted(Object) onCompleted} method called and their notifications will cease.
-	 *
-	 * @param observer The observer to listen to this observable
-	 * @return A subscription to use to unsubscribe the listener from this observable
-	 */
-	default Subscription<T> subscribe(Observer<? super T> observer) {
-		Observable<T> outer = this;
-		class SubscriptionHolder {
-			boolean alive = true;
-			Subscription<T> subscription;
-			Runnable internalSub;
-			Observer<T> wrapper;
-			private java.util.concurrent.CopyOnWriteArrayList<Runnable> subSubscriptions;
-		}
-		SubscriptionHolder holder = new SubscriptionHolder();
-		holder.wrapper = new Observer<T>() {
-			@Override
-			public <V extends T> void onNext(V value) {
-				observer.onNext(value);
-			}
-
-			@Override
-			public <V extends T> void onCompleted(V value) {
-				if(!holder.alive)
-					return;
-				try {
-					// if(holder.subscription != null) //Looks like this can only cause double-unsubscribe errors in correct code
-					// holder.subscription.unsubscribe();
-					observer.onCompleted(value);
-				} finally {
-					holder.alive = false;
-				}
-			}
-
-			@Override
-			public void onError(Throwable e) {
-				observer.onError(e);
-			}
-		};
-		if(!holder.alive)
-			return new Subscription<T>() {
-			@Override
-			public Runnable observe(Observer<? super T> observer2) {
-				observer2.onCompleted(null);
-				return () -> {
-				};
-			}
-
-			@Override
-			public void unsubscribe() {
-			}
-		};
-		holder.subscription = new Subscription<T>() {
-			@Override
-			public Runnable observe(Observer<? super T> observer2) {
-				if(!holder.alive) {
-					observer2.onCompleted(null);
-					return () -> {
-					};
-				}
-				Runnable internalSubSub = outer.observe(observer2);
-				if(holder.subSubscriptions == null)
-					holder.subSubscriptions = new java.util.concurrent.CopyOnWriteArrayList<>();
-				holder.subSubscriptions.add(internalSubSub);
-				return internalSubSub;
-			}
-
-			@Override
-			public void unsubscribe() {
-				try {
-					if(holder.internalSub != null)
-						holder.internalSub.run();
-					if(!holder.alive)
-						return;
-					if(holder.subSubscriptions != null)
-						for(Runnable subSub : holder.subSubscriptions)
-							subSub.run();
-					holder.subSubscriptions = null;
-				} finally {
-					holder.alive = false;
-				}
-			}
-		};
-		holder.internalSub = observe(holder.wrapper);
-		if(holder.internalSub == null)
-			throw new NullPointerException();
-		return debug(holder.subscription).from("subscribe", this).tag("observer", observer).get();
-	}
-
-	/**
 	 * Adds the observer to the list of listeners to be notified of values. The Runnable returned from this observable is lighter-weight
 	 * than the {@link Subscription} object returned by {@link #subscribe(Observer)}, but doesn't facilitate subscription chaining.
 	 *
 	 * @param observer The observer to be notified when new values are available from this observable
 	 * @return A runnable that, when invoked, will cease notifications to the observer
 	 */
-	Runnable observe(Observer<? super T> observer);
+	Subscription subscribe(Observer<? super T> observer);
+
+	/** @return A chaining observable, allowing chained calls with one subscription to rule them all */
+	default ChainingObservable<T> chain() {
+		return new DefaultChainingObservable<>(this, null, null);
+	}
 
 	/**
 	 * @param action The action to perform for each new value
 	 * @return The subscription for the action
 	 */
-	default Subscription<T> act(Action<? super T> action) {
+	default Subscription act(Action<? super T> action) {
 		return subscribe(new Observer<T>() {
 			@Override
 			public <V extends T> void onNext(V value) {
@@ -155,8 +67,8 @@ public interface Observable<T> {
 		}
 		return debug(new Observable<Throwable>() {
 			@Override
-			public Runnable observe(Observer<? super Throwable> observer) {
-				return outer.observe(new ErrorObserver(observer));
+			public Subscription subscribe(Observer<? super Throwable> observer) {
+				return outer.subscribe(new ErrorObserver(observer));
 			}
 		}).from("error", outer).get();
 	}
@@ -183,8 +95,8 @@ public interface Observable<T> {
 		}
 		return debug(new Observable<T>() {
 			@Override
-			public Runnable observe(Observer<? super T> observer) {
-				return outer.observe(new CompleteObserver(observer));
+			public Subscription subscribe(Observer<? super T> observer) {
+				return outer.subscribe(new CompleteObserver(observer));
 			}
 		}).from("completed", outer).get();
 	}
@@ -283,10 +195,10 @@ public interface Observable<T> {
 	public static <V> Observable<V> or(Observable<? extends V>... obs) {
 		return debug(new Observable<V>() {
 			@Override
-			public Runnable observe(Observer<? super V> observer) {
-				Runnable [] subs = new Runnable[obs.length];
+			public Subscription subscribe(Observer<? super V> observer) {
+				Subscription [] subs = new Subscription[obs.length];
 				for(int i = 0; i < subs.length; i++)
-					subs[i] = obs[i].observe(new Observer<V>() {
+					subs[i] = obs[i].subscribe(new Observer<V>() {
 						@Override
 						public <V2 extends V> void onNext(V2 value) {
 							observer.onNext(value);
@@ -303,8 +215,8 @@ public interface Observable<T> {
 						}
 					});
 				return () -> {
-					for(Runnable sub : subs)
-						sub.run();
+					for(Subscription sub : subs)
+						sub.unsubscribe();
 				};
 			}
 
@@ -324,7 +236,7 @@ public interface Observable<T> {
 	/** An empty observable that never does anything */
 	public static Observable<?> empty = new Observable<Object>() {
 		@Override
-		public Runnable observe(Observer<? super Object> observer) {
+		public Subscription subscribe(Observer<? super Object> observer) {
 			return () -> {
 			};
 		}
@@ -338,12 +250,115 @@ public interface Observable<T> {
 	public static <T> Observable<T> constant(T value) {
 		return debug(new Observable<T>() {
 			@Override
-			public Runnable observe(Observer<? super T> observer) {
+			public Subscription subscribe(Observer<? super T> observer) {
 				observer.onNext(value);
 				return () -> {
 				};
 			}
 		}).tag("constant", value).get();
+	}
+
+	/**
+	 * Implements {@link #chain()}
+	 *
+	 * @param <T> The type of the observable
+	 */
+	public class DefaultChainingObservable<T> implements ChainingObservable<T> {
+		private final Observable<T> theWrapped;
+
+		private final Observable<Void> theCompletion;
+
+		private final Observer<Void> theCompletionController;
+
+		/**
+		 * @param wrap The observable that this chaining observable reflects the values of
+		 * @param completion The completion observable that will emit a value when the {@link #unsubscribe()} method of any link in the
+		 *            chain is called. May be null if this is the first link in the chain, in which case the observable and its controller
+		 *            will be created.
+		 * @param controller The controller for the completion observable. May be null if <code>completion</code> is null.
+		 */
+		public DefaultChainingObservable(Observable<T> wrap, Observable<Void> completion, Observer<Void> controller) {
+			theWrapped = wrap;
+			theCompletion = completion == null ? new DefaultObservable<>() : completion;
+			theCompletionController = completion == null ? ((DefaultObservable<Void>) theCompletion).control(null) : controller;
+		}
+
+		@Override
+		public void unsubscribe() {
+			theCompletionController.onNext(null);
+		}
+
+		@Override
+		public Observable<T> unchain() {
+			return theWrapped;
+		}
+
+		@Override
+		public ChainingObservable<T> subscribe(Observer<? super T> observer) {
+			theWrapped.takeUntil(theCompletion).subscribe(observer);
+			return this;
+		}
+
+		@Override
+		public ChainingObservable<T> act(Action<? super T> action) {
+			theWrapped.takeUntil(theCompletion).act(action);
+			return this;
+		}
+
+		@Override
+		public ChainingObservable<Throwable> error() {
+			return new DefaultChainingObservable<>(theWrapped.error(), theCompletion, theCompletionController);
+		}
+
+		@Override
+		public ChainingObservable<T> completed() {
+			return new DefaultChainingObservable<>(theWrapped.completed(), theCompletion, theCompletionController);
+		}
+
+		@Override
+		public ChainingObservable<T> noInit() {
+			return new DefaultChainingObservable<>(theWrapped.noInit(), theCompletion, theCompletionController);
+		}
+
+		@Override
+		public ChainingObservable<T> filter(Function<? super T, Boolean> func) {
+			return new DefaultChainingObservable<>(theWrapped.filter(func), theCompletion, theCompletionController);
+		}
+
+		@Override
+		public <R> ChainingObservable<R> map(Function<? super T, R> func) {
+			return new DefaultChainingObservable<>(theWrapped.map(func), theCompletion, theCompletionController);
+		}
+
+		@Override
+		public <R> ChainingObservable<R> filterMap(Function<? super T, R> func) {
+			return new DefaultChainingObservable<>(theWrapped.filterMap(func), theCompletion, theCompletionController);
+		}
+
+		@Override
+		public <V, R> ChainingObservable<R> combine(Observable<V> other, BiFunction<? super T, ? super V, R> func) {
+			return new DefaultChainingObservable<>(theWrapped.combine(other, func), theCompletion, theCompletionController);
+		}
+
+		@Override
+		public ChainingObservable<T> takeUntil(Observable<?> until) {
+			return new DefaultChainingObservable<>(theWrapped.takeUntil(until), theCompletion, theCompletionController);
+		}
+
+		@Override
+		public ChainingObservable<T> take(int times) {
+			return new DefaultChainingObservable<>(theWrapped.take(times), theCompletion, theCompletionController);
+		}
+
+		@Override
+		public ChainingObservable<T> skip(int times) {
+			return new DefaultChainingObservable<>(theWrapped.skip(times), theCompletion, theCompletionController);
+		}
+
+		@Override
+		public ChainingObservable<T> skip(Supplier<Integer> times) {
+			return new DefaultChainingObservable<>(theWrapped.skip(times), theCompletion, theCompletionController);
+		}
 	}
 
 	/**
@@ -363,9 +378,9 @@ public interface Observable<T> {
 		}
 
 		@Override
-		public Runnable observe(Observer<? super T> observer) {
+		public Subscription subscribe(Observer<? super T> observer) {
 			boolean [] initialized = new boolean[1];
-			Runnable ret = theWrapped.observe(new Observer<T>() {
+			Subscription ret = theWrapped.subscribe(new Observer<T>() {
 				@Override
 				public <V extends T> void onNext(V value) {
 					if(initialized[0])
@@ -412,8 +427,8 @@ public interface Observable<T> {
 		}
 
 		@Override
-		public Runnable observe(Observer<? super R> observer) {
-			return theWrapped.observe(new Observer<T>() {
+		public Subscription subscribe(Observer<? super R> observer) {
+			return theWrapped.subscribe(new Observer<T>() {
 				@Override
 				public <V extends T> void onNext(V value) {
 					R mapped = theMap.apply(value);
@@ -466,7 +481,7 @@ public interface Observable<T> {
 			theComposed = java.util.Collections.unmodifiableList(java.util.Arrays.asList(composed));
 			theObservers = new ListenerSet<>();
 			theObservers.setUsedListener(new Consumer<Boolean>() {
-				private final Runnable [] composedSubs = new Runnable[theComposed.size()];
+				private final Subscription [] composedSubs = new Subscription[theComposed.size()];
 
 				private final Object [] values = new Object[theComposed.size()];
 
@@ -475,7 +490,7 @@ public interface Observable<T> {
 					if(used) {
 						for(int i = 0; i < theComposed.size(); i++) {
 							int index = i;
-							composedSubs[i] = theComposed.get(i).observe(new Observer<Object>() {
+							composedSubs[i] = theComposed.get(i).subscribe(new Observer<Object>() {
 								@Override
 								public <V> void onNext(V value) {
 									values[index] = value;
@@ -520,7 +535,7 @@ public interface Observable<T> {
 						}
 					} else {
 						for(int i = 0; i < theComposed.size(); i++) {
-							composedSubs[i].run();
+							composedSubs[i].unsubscribe();
 							composedSubs[i] = null;
 							values[i] = null;
 						}
@@ -530,7 +545,7 @@ public interface Observable<T> {
 		}
 
 		@Override
-		public Runnable observe(Observer<? super T> observer) {
+		public Subscription subscribe(Observer<? super T> observer) {
 			theObservers.add(observer);
 			return () -> theObservers.remove(observer);
 		}
@@ -573,11 +588,11 @@ public interface Observable<T> {
 		}
 
 		@Override
-		public Runnable observe(Observer<? super T> observer) {
-			Runnable outerSub = theWrapped.observe(observer);
+		public Subscription subscribe(Observer<? super T> observer) {
+			Subscription outerSub = theWrapped.subscribe(observer);
 			boolean [] complete = new boolean[1];
-			Runnable [] untilSub = new Runnable[1];
-			untilSub[0] = theUntil.observe(new Observer<Object>() {
+			Subscription [] untilSub = new Subscription[1];
+			untilSub[0] = theUntil.subscribe(new Observer<Object>() {
 				@Override
 				public void onNext(Object value) {
 					onCompleted(value);
@@ -588,7 +603,7 @@ public interface Observable<T> {
 					if(complete[0])
 						return;
 					complete[0] = true;
-					outerSub.run();
+					outerSub.unsubscribe();
 					observer.onCompleted(getDefaultValue());
 				}
 			});
@@ -596,8 +611,8 @@ public interface Observable<T> {
 				if(complete[0])
 					return;
 				complete[0] = true;
-				outerSub.run();
-				untilSub[0].run();
+				outerSub.unsubscribe();
+				untilSub[0].unsubscribe();
 			};
 		}
 	}
@@ -626,8 +641,8 @@ public interface Observable<T> {
 		}
 
 		@Override
-		public Runnable observe(Observer<? super T> observer) {
-			return theWrapped.observe(new Observer<T>() {
+		public Subscription subscribe(Observer<? super T> observer) {
+			return theWrapped.subscribe(new Observer<T>() {
 				private AtomicInteger theCounter = new AtomicInteger();
 
 				@Override
@@ -678,8 +693,8 @@ public interface Observable<T> {
 		}
 
 		@Override
-		public Runnable observe(Observer<? super T> observer) {
-			return theWrapped.observe(new Observer<T>() {
+		public Subscription subscribe(Observer<? super T> observer) {
+			return theWrapped.subscribe(new Observer<T>() {
 				private final AtomicInteger counter = new AtomicInteger(theTimes.get());
 
 				@Override

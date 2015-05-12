@@ -32,8 +32,8 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	default Observable<T> value() {
 		return debug(new Observable<T>() {
 			@Override
-			public Runnable observe(Observer<? super T> observer) {
-				return ObservableValue.this.observe(new Observer<ObservableValueEvent<T>>() {
+			public Subscription subscribe(Observer<? super T> observer) {
+				return ObservableValue.this.subscribe(new Observer<ObservableValueEvent<T>>() {
 					@Override
 					public <V extends ObservableValueEvent<T>> void onNext(V value) {
 						observer.onNext(value.getValue());
@@ -88,8 +88,8 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 			}
 
 			@Override
-			public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
-				return outer.map(eventMap).observe(observer);
+			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+				return outer.map(eventMap).subscribe(observer);
 			}
 
 			@Override
@@ -292,20 +292,20 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 			}
 
 			@Override
-			public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
+			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 				ObservableValue<T> retObs = this;
-				Runnable [] innerSub = new Runnable[1];
-				Runnable outerSub = ov.observe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends T>>>() {
+				Subscription [] innerSub = new Subscription[1];
+				Subscription outerSub = ov.subscribe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends T>>>() {
 					@Override
 					public <V extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onNext(V value) {
 						if(innerSub[0] != null) {
-							innerSub[0].run();
+							innerSub[0].unsubscribe();
 							innerSub[0] = null;
 						}
 						T old = get(value.getOldValue());
 						if(value.getValue() != null) {
 							boolean [] init = new boolean[] {true};
-							innerSub[0] = value.getValue().observe(new Observer<ObservableValueEvent<? extends T>>() {
+							innerSub[0] = value.getValue().subscribe(new Observer<ObservableValueEvent<? extends T>>() {
 								@Override
 								public <V2 extends ObservableValueEvent<? extends T>> void onNext(V2 value2) {
 									T innerOld;
@@ -338,9 +338,9 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 					}
 				});
 				return () -> {
-					outerSub.run();
+					outerSub.unsubscribe();
 					if(innerSub[0] != null) {
-						innerSub[0].run();
+						innerSub[0].unsubscribe();
 						innerSub[0] = null;
 					}
 				};
@@ -376,12 +376,12 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 			}
 
 			@Override
-			public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
+			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 				ObservableValue<T> outer = this;
-				Runnable [] subSubs = new Runnable[components.length];
+				Subscription [] subSubs = new Subscription[components.length];
 				Object [] oldValue = new Object[1];
 				for(int i = 0; i < subSubs.length; i++)
-					subSubs[i] = components[i].observe(new Observer<ObservableValueEvent<?>>() {
+					subSubs[i] = components[i].subscribe(new Observer<ObservableValueEvent<?>>() {
 						@Override
 						public <V extends ObservableValueEvent<?>> void onNext(V value2) {
 							T newVal = value.get();
@@ -400,8 +400,8 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 						}
 					});
 				return () -> {
-					for(Runnable sub : subSubs)
-						sub.run();
+					for(Subscription sub : subSubs)
+						sub.unsubscribe();
 				};
 			}
 
@@ -478,7 +478,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 			theComposed = java.util.Collections.unmodifiableList(java.util.Arrays.asList(composed));
 			theObservers = new ListenerSet<>();
 			theComposedValues = new Object[composed.length];
-			final Runnable [] composedSubs = new Runnable[theComposed.size()];
+			final Subscription [] composedSubs = new Subscription[theComposed.size()];
 			boolean [] completed = new boolean[1];
 			theObservers.setUsedListener(new Consumer<Boolean>() {
 				@Override
@@ -490,7 +490,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 						boolean [] initialized = new boolean[1];
 						for(int i = 0; i < theComposedValues.length; i++) {
 							int index = i;
-							composedSubs[i] = theComposed.get(i).observe(new Observer<ObservableValueEvent<?>>() {
+							composedSubs[i] = theComposed.get(i).subscribe(new Observer<ObservableValueEvent<?>>() {
 								@Override
 								public <V extends ObservableValueEvent<?>> void onNext(V event) {
 									theComposedValues[index] = event.getValue();
@@ -538,7 +538,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 						initialized[0] = true;
 					} else {
 						for(int i = 0; i < theComposed.size(); i++) {
-							composedSubs[i].run();
+							composedSubs[i].unsubscribe();
 							composedSubs[i] = null;
 							theComposedValues[i] = null;
 							theValue = null;
@@ -600,7 +600,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		}
 
 		@Override
-		public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
+		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 			theObservers.add(observer);
 			return () -> theObservers.remove(observer);
 		}
@@ -676,17 +676,17 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		}
 
 		@Override
-		public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
-			Runnable outerSub = theWrapped.observe(observer);
-			Runnable refireSub = theRefresh.observe(new Observer<Object>() {
+		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+			Subscription outerSub = theWrapped.subscribe(observer);
+			Subscription refireSub = theRefresh.subscribe(new Observer<Object>() {
 				@Override
 				public <V> void onNext(V value) {
 					observer.onNext(createEvent(get(), get(), value));
 				}
 			});
 			return () -> {
-				outerSub.run();
-				refireSub.run();
+				outerSub.unsubscribe();
+				refireSub.unsubscribe();
 			};
 		}
 	}
@@ -707,13 +707,13 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 			theWrapped = wrapped;
 			theObservers = new org.observe.util.ListenerSet<>();
 			theObservers.setUsedListener(new java.util.function.Consumer<Boolean>() {
-				private Runnable sub;
+				private Subscription sub;
 
 				@Override
 				public void accept(Boolean used) {
 					if(used) {
 						boolean [] initialized = new boolean[1];
-						sub = theWrapped.observe(new Observer<ObservableValueEvent<T>>() {
+						sub = theWrapped.subscribe(new Observer<ObservableValueEvent<T>>() {
 							@Override
 							public <V extends ObservableValueEvent<T>> void onNext(V value) {
 								T oldValue = theValue;
@@ -735,7 +735,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 							}
 						});
 					} else {
-						sub.run();
+						sub.unsubscribe();
 						sub = null;
 						theValue = null;
 					}
@@ -748,7 +748,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		}
 
 		@Override
-		public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
+		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 			theObservers.add(observer);
 			return () -> {
 				theObservers.remove(observer);
@@ -793,7 +793,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		}
 
 		@Override
-		public Runnable observe(Observer<? super ObservableValueEvent<T>> observer) {
+		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 			observer.onNext(createEvent(theValue, theValue, null));
 			return () -> {
 			};

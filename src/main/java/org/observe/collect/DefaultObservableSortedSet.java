@@ -13,6 +13,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 
 import org.observe.ObservableValue;
+import org.observe.Subscription;
 import org.observe.util.DefaultTransactable;
 import org.observe.util.Transactable;
 import org.observe.util.Transaction;
@@ -109,7 +110,7 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 	}
 
 	@Override
-	public Runnable onElement(Consumer<? super ObservableElement<E>> observer) {
+	public Subscription onElement(Consumer<? super ObservableElement<E>> observer) {
 		return theInternals.onElement(observer, true);
 	}
 
@@ -644,7 +645,7 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 		}
 
 		@Override
-		ObservableElement<E> createExposedElement(InternalObservableElementImpl<E> internal, Collection<Runnable> subscriptions) {
+		ObservableElement<E> createExposedElement(InternalObservableElementImpl<E> internal, Collection<Subscription> subscriptions) {
 			int todo; // TODO This should be an ordered element
 			return new ExposedObservableElement<>(internal, subscriptions);
 		}

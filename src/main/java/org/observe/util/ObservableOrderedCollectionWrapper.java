@@ -4,6 +4,7 @@ import java.util.Collection;
 import java.util.Iterator;
 
 import org.observe.ObservableValue;
+import org.observe.Subscription;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableOrderedCollection;
 import org.observe.collect.OrderedObservableElement;
@@ -99,7 +100,7 @@ public class ObservableOrderedCollectionWrapper<E> implements ObservableOrderedC
 	}
 
 	@Override
-	public Runnable onOrderedElement(java.util.function.Consumer<? super OrderedObservableElement<E>> observer) {
+	public Subscription onOrderedElement(java.util.function.Consumer<? super OrderedObservableElement<E>> observer) {
 		return theWrapped.onOrderedElement(observer);
 	}
 

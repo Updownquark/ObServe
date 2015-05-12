@@ -5,15 +5,16 @@ import java.util.Collection;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
+import org.observe.Subscription;
 
 import prisms.lang.Type;
 
 class ExposedObservableElement<E> implements ObservableElement<E> {
 	private final InternalObservableElementImpl<E> theInternalElement;
 
-	private final Collection<Runnable> theSubscriptions;
+	private final Collection<Subscription> theSubscriptions;
 
-	ExposedObservableElement(InternalObservableElementImpl<E> internal, Collection<Runnable> subscriptions) {
+	ExposedObservableElement(InternalObservableElementImpl<E> internal, Collection<Subscription> subscriptions) {
 		theInternalElement = internal;
 		theSubscriptions = subscriptions;
 	}
@@ -29,8 +30,8 @@ class ExposedObservableElement<E> implements ObservableElement<E> {
 	}
 
 	@Override
-	public Runnable observe(Observer<? super ObservableValueEvent<E>> observer) {
-		Runnable ret = theInternalElement.observe(new Observer<ObservableValueEvent<E>>() {
+	public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
+		Subscription ret = theInternalElement.subscribe(new Observer<ObservableValueEvent<E>>() {
 			@Override
 			public <V extends ObservableValueEvent<E>> void onNext(V event) {
 				ObservableValueEvent<E> event2 = createEvent(event.getOldValue(), event.getValue(), event.getCause());

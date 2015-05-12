@@ -8,6 +8,7 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
+import org.observe.Subscription;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableElement;
@@ -94,7 +95,7 @@ public interface ObservableGraph<N, E> {
 			boolean [] initialized = new boolean[1];
 			Object key = new Object();
 			java.util.function.Consumer<ObservableElement<?>> listener = element -> {
-				element.observe(new Observer<ObservableValueEvent<?>>() {
+				element.subscribe(new Observer<ObservableValueEvent<?>>() {
 					@Override
 					public <V extends ObservableValueEvent<?>> void onNext(V value) {
 						if(!initialized[0])
@@ -118,9 +119,9 @@ public interface ObservableGraph<N, E> {
 					}
 				});
 			};
-			Runnable nodeSub = getNodes().onElement(listener);
-			Runnable edgeSub = getEdges().onElement(listener);
-			Runnable transSub = getSession().act(event -> {
+			Subscription nodeSub = getNodes().onElement(listener);
+			Subscription edgeSub = getEdges().onElement(listener);
+			Subscription transSub = getSession().act(event -> {
 				if(!initialized[0])
 					return;
 				if(event.getOldValue() != null && event.getOldValue().put(key, "changed", null) != null) {
@@ -129,9 +130,9 @@ public interface ObservableGraph<N, E> {
 			});
 			initialized[0] = true;
 			return () -> {
-				nodeSub.run();
-				edgeSub.run();
-				transSub.run();
+				nodeSub.unsubscribe();
+				edgeSub.unsubscribe();
+				transSub.unsubscribe();
 			};
 		};
 	}

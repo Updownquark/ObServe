@@ -2,10 +2,11 @@ package org.observe.util;
 
 import org.observe.Observable;
 import org.observe.Observer;
+import org.observe.Subscription;
 
 /**
  * Wraps an observable
- * 
+ *
  * @param <T> The type of the observable
  */
 public class ObservableWrapper<T> implements Observable<T> {
@@ -17,8 +18,8 @@ public class ObservableWrapper<T> implements Observable<T> {
 	}
 
 	@Override
-	public Runnable observe(Observer<? super T> observer) {
-		return theWrapped.observe(observer);
+	public Subscription subscribe(Observer<? super T> observer) {
+		return theWrapped.subscribe(observer);
 	}
 
 	@Override

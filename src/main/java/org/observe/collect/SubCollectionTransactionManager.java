@@ -8,6 +8,7 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
+import org.observe.Subscription;
 
 import prisms.lang.Type;
 
@@ -38,7 +39,7 @@ class SubCollectionTransactionManager {
 		};
 		theExposedSession = new org.observe.ObservableValue.ComposedObservableValue<>(
 			sessions -> (CollectionSession) (sessions[0] != null ? sessions[0]
-			: sessions[1]), true, theInternalSession, collection.getSession());
+				: sessions[1]), true, theInternalSession, collection.getSession());
 		theSessionController = theInternalSession.control(null);
 	}
 
@@ -58,10 +59,10 @@ class SubCollectionTransactionManager {
 	 *            reversible} collections)
 	 * @return The runnable to execute to uninstall the observer
 	 */
-	public <E> Runnable onElement(ObservableCollection<E> collection, Observable<?> refresh,
+	public <E> Subscription onElement(ObservableCollection<E> collection, Observable<?> refresh,
 		Consumer<? super ObservableElement<E>> onElement, boolean forward) {
 		// Here we're relying on observers being fired in the order they were subscribed
-		Runnable refreshStartSub = refresh == null ? null : refresh.observe(new Observer<Object>() {
+		Subscription refreshStartSub = refresh == null ? null : refresh.subscribe(new Observer<Object>() {
 			@Override
 			public <V> void onNext(V value) {
 				startTransaction(value);
@@ -83,23 +84,23 @@ class SubCollectionTransactionManager {
 				endTransaction();
 			}
 		};
-		Runnable [] refreshEndSub = new Runnable[] {refresh.observe(refreshEnd)};
+		Subscription [] refreshEndSub = new Subscription[] {refresh.subscribe(refreshEnd)};
 		Consumer<ObservableElement<E>> elFn = element -> {
 			onElement.accept(element);
 			// The refresh end always needs to be after the elements
-			Runnable oldRefreshEnd = refreshEndSub[0];
-			refreshEndSub[0] = refresh.observe(refreshEnd);
-			oldRefreshEnd.run();
+			Subscription oldRefreshEnd = refreshEndSub[0];
+			refreshEndSub[0] = refresh.subscribe(refreshEnd);
+			oldRefreshEnd.unsubscribe();
 		};
-		Runnable collSub;
+		Subscription collSub;
 		if(forward)
 			collSub = collection.onElement(elFn);
 		else
 			collSub = ((ObservableReversibleCollection<E>) collection).onElementReverse(onElement);
 		return () -> {
-			refreshStartSub.run();
-			refreshEndSub[0].run();
-			collSub.run();
+			refreshStartSub.unsubscribe();
+			refreshEndSub[0].unsubscribe();
+			collSub.unsubscribe();
 		};
 	}
 
