@@ -652,6 +652,7 @@ public final class ObservableDebug {
 	}
 
 	/**
+	 * @param <T> The type of the function
 	 * @param lambda The lambda to label by type
 	 * @param label The label for the given lambda type
 	 * @return The lambda

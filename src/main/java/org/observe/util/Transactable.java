@@ -1,6 +1,7 @@
 package org.observe.util;
 
 /** Represents a mutable object whose modifications can be batched for increased efficiency */
+@FunctionalInterface
 public interface Transactable {
 	/**
 	 * Begins a transaction in which modifications to this object may be batched and combined for increased efficiency.
