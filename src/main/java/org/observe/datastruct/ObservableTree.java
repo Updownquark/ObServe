@@ -10,5 +10,5 @@ import org.observe.collect.ObservableList;
  */
 public interface ObservableTree<E> extends ObservableValue<E> {
 	/** @return The list of tree structures that are the direct children of this tree node */
-	ObservableList<ObservableTree<E>> getChildren();
+	ObservableList<? extends ObservableTree<?>> getChildren();
 }
