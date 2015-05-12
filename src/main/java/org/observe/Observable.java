@@ -20,11 +20,10 @@ import org.observe.util.ListenerSet;
  */
 public interface Observable<T> {
 	/**
-	 * Adds the observer to the list of listeners to be notified of values. The Runnable returned from this observable is lighter-weight
-	 * than the {@link Subscription} object returned by {@link #subscribe(Observer)}, but doesn't facilitate subscription chaining.
+	 * Subscribes to this observable such that the given observer will be notified of any new values on this observable.
 	 *
 	 * @param observer The observer to be notified when new values are available from this observable
-	 * @return A runnable that, when invoked, will cease notifications to the observer
+	 * @return A subscription that, when invoked, will cease notifications to the observer
 	 */
 	Subscription subscribe(Observer<? super T> observer);
 
@@ -233,15 +232,6 @@ public interface Observable<T> {
 		}).from("or", (Object []) obs).get(); // TODO
 	}
 
-	/** An empty observable that never does anything */
-	public static Observable<?> empty = new Observable<Object>() {
-		@Override
-		public Subscription subscribe(Observer<? super Object> observer) {
-			return () -> {
-			};
-		}
-	};
-
 	/**
 	 * @param <T> The type of the observable to create
 	 * @param value The value for the observable
@@ -258,12 +248,21 @@ public interface Observable<T> {
 		}).tag("constant", value).get();
 	}
 
+	/** An empty observable that never does anything */
+	public static Observable<?> empty = new Observable<Object>() {
+		@Override
+		public Subscription subscribe(Observer<? super Object> observer) {
+			return () -> {
+			};
+		}
+	};
+
 	/**
 	 * Implements {@link #chain()}
 	 *
 	 * @param <T> The type of the observable
 	 */
-	public class DefaultChainingObservable<T> implements ChainingObservable<T> {
+	class DefaultChainingObservable<T> implements ChainingObservable<T> {
 		private final Observable<T> theWrapped;
 
 		private final Observable<Void> theCompletion;
