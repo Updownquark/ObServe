@@ -43,12 +43,24 @@ public interface ObservableCollection<E> extends Collection<E> {
 	Subscription onElement(Consumer<? super ObservableElement<E>> onElement);
 
 	/**
-	 * @return The observable value for the current session of this collection. The session allows listeners to retain state for the
-	 *         duration of a unit of work (controlled by implementation-specific means), batching events where possible. Not all events on a
-	 *         collection will have a session (the value may be null). In addition, the presence or absence of a session need not imply
-	 *         anything about the threaded interactions with a session. A transaction may encompass events fired and received on multiple
-	 *         threads. In short, the only thing guaranteed about sessions is that they will end. Therefore, if a session is present,
-	 *         observers may assume that they can delay expensive results of collection events until the session completes.
+	 * <p>
+	 * The session allows listeners to retain state for the duration of a unit of work (controlled by implementation-specific means),
+	 * batching events where possible. Not all events on a collection will have a session (the value may be null). In addition, the presence
+	 * or absence of a session need not imply anything about the threaded interactions with a session. A transaction may encompass events
+	 * fired and received on multiple threads. In short, the only thing guaranteed about sessions is that they will end. Therefore, if a
+	 * session is present, observers may assume that they can delay expensive results of collection events until the session completes.
+	 * </p>
+	 * <p>
+	 * In order to use the session for a listening operation, 2 observers must be installed: one for the collection, and one for the
+	 * session. If an event that the observer is interested in occurs in the collection, the session value must be checked. If there is
+	 * currently a session, then the session must be tagged with information that will allow later reconstruction of the interesting
+	 * particulars of the event. When a session event occurs, the observer should check to see if the
+	 * {@link ObservableValueEvent#getOldValue() old value} of the event is non null and whether that old session (the one that is now
+	 * ending) has any information installed by the collection observer. If it does, the interesting information should be reconstructed and
+	 * dealt with at that time.
+	 * </p>
+	 *
+	 * @return The observable value for the current session of this collection
 	 */
 	ObservableValue<CollectionSession> getSession();
 
