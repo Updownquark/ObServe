@@ -1,6 +1,6 @@
 package org.observe.collect;
 
-import static org.observe.ObservableDebug.debug;
+import static org.observe.ObservableDebug.d;
 
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -24,7 +24,7 @@ public interface OrderedObservableElement<E> extends ObservableElement<E> {
 
 	@Override
 	default OrderedObservableElement<E> cached() {
-		return debug(new CachedOrderedObservableElement<>(this)).from("cached", this).get();
+		return d().debug(new CachedOrderedObservableElement<>(this)).from("cached", this).get();
 	}
 
 	/**
@@ -152,7 +152,7 @@ public interface OrderedObservableElement<E> extends ObservableElement<E> {
 
 	@Override
 	default OrderedObservableElement<E> refreshForValue(Function<? super E, Observable<?>> refresh) {
-		return debug(new ValueRefreshingOrderedObservableElement<>(this, refresh)).from("refresh", this).using("on", refresh).get();
+		return d().debug(new ValueRefreshingOrderedObservableElement<>(this, refresh)).from("refresh", this).using("on", refresh).get();
 	}
 
 	/**

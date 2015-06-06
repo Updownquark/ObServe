@@ -1,6 +1,6 @@
 package org.observe.collect;
 
-import static org.observe.ObservableDebug.debug;
+import static org.observe.ObservableDebug.d;
 
 import java.util.Collection;
 import java.util.HashSet;
@@ -57,13 +57,14 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 	@Override
 	default ObservableSet<E> filter(Predicate<? super E> filter) {
 		Function<E, E> map = value -> (value != null && filter.test(value)) ? value : null;
-		return debug(new FilteredSet<>(this, getType(), map)).from("filter", this).using("filter", filter).get();
+		return d().debug(new FilteredSet<>(this, getType(), map)).from("filter", this).using("filter", filter).get();
 	}
 
 	@Override
 	default <T> ObservableSet<T> filter(Class<T> type) {
 		Function<E, T> map = value -> type.isInstance(value) ? type.cast(value) : null;
-		return debug(new FilteredSet<>(this, new Type(type), map)).from("filterMap", this).using("map", map).tag("filterType", type).get();
+		return d().debug(new FilteredSet<>(this, new Type(type), map)).from("filterMap", this).using("map", map).tag("filterType", type)
+			.get();
 	}
 
 	/**
@@ -72,7 +73,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 	 */
 	@Override
 	default ObservableSet<E> refresh(Observable<?> refresh) {
-		return debug(new RefreshingSet<>(this, refresh)).from("refresh", this).from("on", refresh).get();
+		return d().debug(new RefreshingSet<>(this, refresh)).from("refresh", this).from("on", refresh).get();
 	}
 
 	/**
@@ -81,12 +82,12 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 	 */
 	@Override
 	default ObservableSet<E> refreshEach(Function<? super E, Observable<?>> refresh) {
-		return debug(new ElementRefreshingSet<>(this, refresh)).from("refreshEach", this).using("on", refresh).get();
+		return d().debug(new ElementRefreshingSet<>(this, refresh)).from("refreshEach", this).using("on", refresh).get();
 	}
 
 	@Override
 	default ObservableSet<E> immutable() {
-		return debug(new ImmutableObservableSet<>(this)).from("immutable", this).get();
+		return d().debug(new ImmutableObservableSet<>(this)).from("immutable", this).get();
 	}
 
 	/**
@@ -96,7 +97,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 	 */
 	@Override
 	default ObservableSet<E> cached() {
-		return debug(new SafeCachedObservableSet<>(this)).from("cached", this).get();
+		return d().debug(new SafeCachedObservableSet<>(this)).from("cached", this).get();
 	}
 
 	/**
@@ -138,9 +139,9 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 				return constSet.iterator();
 			}
 		}
-		ConstantObservableSet ret = debug(new ConstantObservableSet()).tag("constant", coll).tag("type", type).get();
+		ConstantObservableSet ret = d().debug(new ConstantObservableSet()).tag("constant", coll).tag("type", type).get();
 		for(T value : constSet)
-			els.add(debug(new ObservableElement<T>() {
+			els.add(d().debug(new ObservableElement<T>() {
 				@Override
 				public Type getType() {
 					return type;
@@ -322,7 +323,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 			@Override
 			public Subscription onElement(Consumer<? super ObservableElement<T>> observer) {
 				return coll.onElement(element -> {
-					UniqueFilteredElement retElement = debug(new UniqueFilteredElement(element, theElements.keySet()))
+					UniqueFilteredElement retElement = d().debug(new UniqueFilteredElement(element, theElements.keySet()))
 						.from("element", this).tag("wrapped", element).get();
 					theElements.put(retElement, 0);
 					element.subscribe(new Observer<ObservableValueEvent<T>>() {
@@ -351,7 +352,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 				});
 			}
 		}
-		return debug(new UniqueSet()).from("unique", coll).get();
+		return d().debug(new UniqueSet()).from("unique", coll).get();
 	}
 
 	/**

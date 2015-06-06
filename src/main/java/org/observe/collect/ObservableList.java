@@ -1,7 +1,6 @@
 package org.observe.collect;
 
-import static org.observe.ObservableDebug.debug;
-import static org.observe.ObservableDebug.label;
+import static org.observe.ObservableDebug.d;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -164,12 +163,12 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 				return outer.onElementReverse(element -> onElement.accept(element.mapV(map)));
 			}
 		}
-		return debug(new MappedObservableList()).from("map", this).using("map", map).get();
+		return d().debug(new MappedObservableList()).from("map", this).using("map", map).get();
 	}
 
 	@Override
 	default <T> ObservableList<T> filter(Class<T> type) {
-		return label(filterMap(value -> type.isInstance(value) ? type.cast(value) : null)).tag("filterType", type).get();
+		return d().label(filterMap(value -> type.isInstance(value) ? type.cast(value) : null)).tag("filterType", type).get();
 	}
 
 	/**
@@ -178,7 +177,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 	 */
 	@Override
 	default ObservableList<E> filter(Predicate<? super E> filter) {
-		return label(filterMap(getType(), (E value) -> {
+		return d().label(filterMap(getType(), (E value) -> {
 			return (value != null && filter.test(value)) ? value : null;
 		})).label("filter").tag("filter", filter).get();
 	}
@@ -190,7 +189,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 
 	@Override
 	default <T> ObservableList<T> filterMap(Type type, Function<? super E, T> map) {
-		return debug(new FilteredList<>(this, type, map)).from("filterMap", this).using("map", map).get();
+		return d().debug(new FilteredList<>(this, type, map)).from("filterMap", this).using("map", map).get();
 	}
 
 	/**
@@ -215,7 +214,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 	 */
 	@Override
 	default <T, V> ObservableList<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
-		return debug(new CombinedObservableList<>(this, arg, type, func)).from("combine", this).from("with", arg)
+		return d().debug(new CombinedObservableList<>(this, arg, type, func)).from("combine", this).from("with", arg)
 			.using("combination", func).get();
 	}
 
@@ -225,22 +224,22 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 	 */
 	@Override
 	default ObservableList<E> refresh(Observable<?> refresh) {
-		return debug(new RefreshingList<>(this, refresh)).from("refresh", this).from("on", refresh).get();
+		return d().debug(new RefreshingList<>(this, refresh)).from("refresh", this).from("on", refresh).get();
 	}
 
 	@Override
 	default ObservableList<E> refreshEach(Function<? super E, Observable<?>> refire) {
-		return debug(new ElementRefreshingList<>(this, refire)).from("refreshEach", this).using("on", refire).get();
+		return d().debug(new ElementRefreshingList<>(this, refire)).from("refreshEach", this).using("on", refire).get();
 	}
 
 	@Override
 	default ObservableList<E> immutable() {
-		return debug(new ImmutableObservableList<>(this)).from("immutable", this).get();
+		return d().debug(new ImmutableObservableList<>(this)).from("immutable", this).get();
 	}
 
 	@Override
 	default ObservableList<E> cached() {
-		return debug(new SafeCachedObservableList<>(this)).from("cached", this).get();
+		return d().debug(new SafeCachedObservableList<>(this)).from("cached", this).get();
 	}
 
 	/**
@@ -332,9 +331,10 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 				return constList.size();
 			}
 		}
-		ConstantObservableList ret = debug(new ConstantObservableList()).tag("constant", list).get();
+		ConstantObservableList ret = d().debug(new ConstantObservableList()).tag("constant", list).get();
 		for(int i = 0; i < constList.size(); i++)
-			obsEls.add(debug(new ConstantObservableElement(constList.get(i), i)).from("element", ret).tag("value", constList.get(i)).get());
+			obsEls.add(d().debug(new ConstantObservableElement(constList.get(i), i)).from("element", ret).tag("value", constList.get(i))
+				.get());
 		return ret;
 	}
 
@@ -450,7 +450,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 										subListSub.unsubscribe();
 								}
 								Consumer<OrderedObservableElement<? extends T>> innerConsumer = subElement -> {
-									FlattenedListElement flatEl = debug(new FlattenedListElement(subElement, subListEls, subList))
+									FlattenedListElement flatEl = d().debug(new FlattenedListElement(subElement, subListEls, subList))
 										.from("element", FlattenedObservableList.this).tag("wrappedCollectionElement", subList)
 										.tag("wrappedSubElement", subElement).get();
 									subListEls.add(subElement.getIndex(), flatEl);
@@ -475,7 +475,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 				return forward ? list.onOrderedElement(outerConsumer) : list.onElementReverse(outerConsumer);
 			}
 		}
-		return debug(new FlattenedObservableList()).from("flatten", list).get();
+		return d().debug(new FlattenedObservableList()).from("flatten", list).get();
 	}
 
 	/**

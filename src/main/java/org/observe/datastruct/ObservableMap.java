@@ -155,4 +155,9 @@ public interface ObservableMap<K, V> extends Map<K, V> {
 		}
 		return new Immutable();
 	}
+
+	static <K, V> ObservableMap<K, V> empty(Type keyType, Type valueType) {
+		return new ObservableMap<K, V>() {
+		};
+	}
 }

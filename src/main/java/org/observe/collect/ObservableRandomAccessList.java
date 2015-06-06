@@ -1,6 +1,6 @@
 package org.observe.collect;
 
-import static org.observe.ObservableDebug.debug;
+import static org.observe.ObservableDebug.d;
 
 import java.util.RandomAccess;
 import java.util.function.Predicate;
@@ -16,13 +16,13 @@ public interface ObservableRandomAccessList<E> extends ObservableList<E>, Random
 	/* Overridden for performance.  get() is linear in the super, constant time here */
 	@Override
 	default ObservableValue<E> findLast(Predicate<E> filter) {
-		return debug(new RandomAccessFinder<>(this, filter, false)).from("findLast", this).using("filter", filter).get();
+		return d().debug(new RandomAccessFinder<>(this, filter, false)).from("findLast", this).using("filter", filter).get();
 	}
 
 	/* Overridden for performance.  get() is linear in the super, constant time here */
 	@Override
 	default ObservableValue<E> last() {
-		return debug(new RandomAccessFinder<>(this, value -> true, false)).from("last", this).get();
+		return d().debug(new RandomAccessFinder<>(this, value -> true, false)).from("last", this).get();
 	}
 
 	/**

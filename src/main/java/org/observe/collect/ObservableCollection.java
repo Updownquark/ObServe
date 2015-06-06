@@ -1,7 +1,6 @@
 package org.observe.collect;
 
-import static org.observe.ObservableDebug.debug;
-import static org.observe.ObservableDebug.label;
+import static org.observe.ObservableDebug.d;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -16,8 +15,6 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import org.observe.Observable;
-import org.observe.ObservableDebug;
-import org.observe.ObservableDebug.D;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
@@ -106,7 +103,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 
 	/** @return An observable value for the size of this collection */
 	default ObservableValue<Integer> observeSize() {
-		return debug(new ObservableValue<Integer>() {
+		return d().debug(new ObservableValue<Integer>() {
 			private final Type intType = new Type(Integer.TYPE);
 
 			@Override
@@ -165,7 +162,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 *         by transaction when possible.
 	 */
 	default Observable<? extends CollectionChangeEvent<E>> changes() {
-		return debug(new CollectionChangesObservable<>(this)).from("changes", this).get();
+		return d().debug(new CollectionChangesObservable<>(this)).from("changes", this).get();
 	}
 
 	/**
@@ -219,7 +216,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	/** @return An observable that passes along only events for removal of elements from the collection */
 	default Observable<ObservableValueEvent<E>> removes() {
 		ObservableCollection<E> coll = this;
-		return debug(new Observable<ObservableValueEvent<E>>() {
+		return d().debug(new Observable<ObservableValueEvent<E>>() {
 			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
 				return coll.onElement(element -> element.completed().act(value -> observer.onNext(value)));
@@ -248,7 +245,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @return The mapped collection
 	 */
 	default <T> ObservableCollection<T> map(Type type, Function<? super E, T> map) {
-		return debug(new MappedObservableCollection<>(this, type, map)).from("map", this).using("map", map).get();
+		return d().debug(new MappedObservableCollection<>(this, type, map)).from("map", this).using("map", map).get();
 	}
 
 	/**
@@ -256,7 +253,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @return A collection containing all non-null elements passing the given test
 	 */
 	default ObservableCollection<E> filter(Predicate<? super E> filter) {
-		return label(filterMap(value -> {
+		return d().label(filterMap(value -> {
 			return (value != null && filter.test(value)) ? value : null;
 		})).tag("filter", filter).get();
 	}
@@ -268,7 +265,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 *         given class
 	 */
 	default <T> ObservableCollection<T> filter(Class<T> type) {
-		return label(filterMap(value -> type.isInstance(value) ? type.cast(value) : null)).tag("filterType", type).get();
+		return d().label(filterMap(value -> type.isInstance(value) ? type.cast(value) : null)).tag("filterType", type).get();
 	}
 
 	/**
@@ -289,7 +286,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	default <T> ObservableCollection<T> filterMap(Type type, Function<? super E, T> map) {
 		if(type == null)
 			type = ObservableUtils.getReturnType(map);
-		return debug(new FilteredCollection<>(this, type, map)).from("filterMap", this).using("map", map).get();
+		return d().debug(new FilteredCollection<>(this, type, map)).from("filterMap", this).using("map", map).get();
 	}
 
 	/**
@@ -301,7 +298,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 */
 	default ObservableValue<E> find(Predicate<E> filter) {
 		ObservableCollection<E> outer = this;
-		return debug(new ObservableValue<E>() {
+		return d().debug(new ObservableValue<E>() {
 			private final Type type = outer.getType().isPrimitive() ? new Type(Type.getWrapperType(outer.getType().getBaseType())) : outer
 				.getType();
 
@@ -419,7 +416,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @return An observable collection containing this collection's elements combined with the given argument
 	 */
 	default <T, V> ObservableCollection<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
-		return debug(new CombinedObservableCollection<>(this, type, arg, func)).from("combine", this).from("with", arg)
+		return d().debug(new CombinedObservableCollection<>(this, type, arg, func)).from("combine", this).from("with", arg)
 			.using("combination", func).get();
 	}
 
@@ -428,7 +425,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @return A collection whose elements fire additional value events when the given observable fires
 	 */
 	default ObservableCollection<E> refresh(Observable<?> refresh) {
-		return debug(new RefreshingCollection<>(this, refresh)).from("refresh", this).from("on", refresh).get();
+		return d().debug(new RefreshingCollection<>(this, refresh)).from("refresh", this).from("on", refresh).get();
 	}
 
 	/**
@@ -436,12 +433,12 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @return A collection whose values individually refresh when the observable returned by the given function fires
 	 */
 	default ObservableCollection<E> refreshEach(Function<? super E, Observable<?>> refire) {
-		return debug(new ElementRefreshingCollection<>(this, refire)).from("refreshEach", this).using("on", refire).get();
+		return d().debug(new ElementRefreshingCollection<>(this, refire)).from("refreshEach", this).using("on", refire).get();
 	}
 
 	/** @return An observable collection that cannot be modified directly but reflects the value of this collection as it changes */
 	default ObservableCollection<E> immutable() {
-		return debug(new ImmutableObservableCollection<>(this)).from("immutable", this).get();
+		return d().debug(new ImmutableObservableCollection<>(this)).from("immutable", this).get();
 	}
 
 	/**
@@ -450,7 +447,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @return The cached collection
 	 */
 	default ObservableCollection<E> cached() {
-		return debug(new SafeCachedObservableCollection<>(this)).from("cached", this).get();
+		return d().debug(new SafeCachedObservableCollection<>(this)).from("cached", this).get();
 	}
 
 	/**
@@ -523,7 +520,8 @@ public interface ObservableCollection<E> extends Collection<E> {
 										subCollSub.unsubscribe();
 								}
 								Subscription subCollSub = subCollEvent.getValue().onElement(
-									subElement -> observer.accept(debug(new FlattenedElement<>((ObservableElement<T>) subElement, subColl))
+									subElement -> observer.accept(d()
+										.debug(new FlattenedElement<>((ObservableElement<T>) subElement, subColl))
 										.from("element", ComposedObservableCollection.this).tag("wrappedCollectionElement", subColl)
 										.tag("wrappedSubElement", subElement).get()));
 								subCollSubscriptions.put(subCollEvent.getValue(), subCollSub);
@@ -539,7 +537,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 				});
 			}
 		}
-		return debug(new ComposedObservableCollection()).from("flatten", coll).get();
+		return d().debug(new ComposedObservableCollection()).from("flatten", coll).get();
 	}
 
 	/**
@@ -557,23 +555,17 @@ public interface ObservableCollection<E> extends Collection<E> {
 	 * @return An observable that is notified for every event on any observable in the collection
 	 */
 	public static <T> Observable<T> fold(ObservableCollection<? extends Observable<T>> coll) {
-		return debug(new Observable<T>() {
+		return d().debug(new Observable<T>() {
 			@Override
 			public Subscription subscribe(Observer<? super T> observer) {
-				Observable<T> outer = this;
-				D d = ObservableDebug.onSubscribe(this, "fold", null);
 				Subscription ret = coll.onElement(element -> {
-					D d2 = ObservableDebug.onNext(outer, "fold", null);
 					element.subscribe(new Observer<ObservableValueEvent<? extends Observable<T>>>() {
 						@Override
 						public <V2 extends ObservableValueEvent<? extends Observable<T>>> void onNext(V2 value) {
-							D d3 = ObservableDebug.onNext(outer, "fold/element", null);
 							value.getValue().takeUntil(element.noInit()).subscribe(new Observer<T>() {
 								@Override
 								public <V3 extends T> void onNext(V3 value3) {
-									D d4 = ObservableDebug.onNext(outer, "fold/element/value", null);
 									observer.onNext(value3);
-									d4.done(null);
 								}
 
 								@Override
@@ -581,7 +573,6 @@ public interface ObservableCollection<E> extends Collection<E> {
 									observer.onError(e);
 								}
 							});
-							d3.done(null);
 						}
 
 						@Override
@@ -589,9 +580,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 							observer.onError(e);
 						}
 					});
-					d2.done(null);
 				});
-				d.done(null);
 				return ret;
 			}
 
@@ -818,7 +807,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 		}
 
 		protected FilteredElement<E, T> filter(ObservableElement<E> element) {
-			return debug(new FilteredElement<>(element, theMap, theType)).from("element", this).tag("wrapped", element).get();
+			return d().debug(new FilteredElement<>(element, theMap, theType)).from("element", this).tag("wrapped", element).get();
 		}
 
 		@Override
@@ -1324,8 +1313,8 @@ public interface ObservableCollection<E> extends Collection<E> {
 			theCache = new org.observe.util.ConcurrentIdentityHashMap<>();
 			theLock = new ReentrantLock();
 			theWrappedOnElement = element -> {
-				CachedElement<E> cached = debug(createElement(element)).from("element", this).tag("wrapped", element).get();
-				debug(cached).from("cached", element).from("element", this);
+				CachedElement<E> cached = d().debug(createElement(element)).from("element", this).tag("wrapped", element).get();
+				d().debug(cached).from("cached", element).from("element", this);
 				theCache.put(element, cached);
 				element.subscribe(new Observer<ObservableValueEvent<E>>(){
 					@Override

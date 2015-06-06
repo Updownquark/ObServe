@@ -1,8 +1,6 @@
 package org.observe;
 
-import static org.observe.ObservableDebug.debug;
-import static org.observe.ObservableDebug.label;
-import static org.observe.ObservableDebug.lambda;
+import static org.observe.ObservableDebug.d;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -64,7 +62,7 @@ public interface Observable<T> {
 				wrapped.onNext(e);
 			}
 		}
-		return debug(new Observable<Throwable>() {
+		return d().debug(new Observable<Throwable>() {
 			@Override
 			public Subscription subscribe(Observer<? super Throwable> observer) {
 				return outer.subscribe(new ErrorObserver(observer));
@@ -92,7 +90,7 @@ public interface Observable<T> {
 				wrapped.onCompleted(value);
 			}
 		}
-		return debug(new Observable<T>() {
+		return d().debug(new Observable<T>() {
 			@Override
 			public Subscription subscribe(Observer<? super T> observer) {
 				return outer.subscribe(new CompleteObserver(observer));
@@ -106,7 +104,7 @@ public interface Observable<T> {
 	 */
 	default Observable<T> noInit() {
 		Observable<T> outer = this;
-		return debug(new NoInitObservable<>(this)).from("noInit", outer).get();
+		return d().debug(new NoInitObservable<>(this)).from("noInit", outer).get();
 	}
 
 	/**
@@ -114,7 +112,7 @@ public interface Observable<T> {
 	 * @return An observable that provides the same values as this observable minus those that the filter function returns false for
 	 */
 	default Observable<T> filter(Function<? super T, Boolean> func) {
-		return filterMap(lambda(value -> (value != null && func.apply(value)) ? value : null, "filter"));
+		return filterMap(d().lambda(value -> (value != null && func.apply(value)) ? value : null, "filter"));
 	}
 
 	/**
@@ -123,7 +121,7 @@ public interface Observable<T> {
 	 * @return An observable that provides the values of this observable, mapped by the given function
 	 */
 	default <R> Observable<R> map(Function<? super T, R> func) {
-		return debug(new ComposedObservable<R>(lambda(args -> {
+		return d().debug(new ComposedObservable<R>(d().lambda(args -> {
 			return func.apply((T) args[0]);
 		}, "map"), this)).from("mapped", this).using("map", func).get();
 	}
@@ -135,7 +133,7 @@ public interface Observable<T> {
 	 *         null
 	 */
 	default <R> Observable<R> filterMap(Function<? super T, R> func) {
-		return debug(new FilteredObservable<>(this, func)).from("filterMap", this).using("map", func).get();
+		return d().debug(new FilteredObservable<>(this, func)).from("filterMap", this).using("map", func).get();
 	}
 
 	/**
@@ -146,7 +144,7 @@ public interface Observable<T> {
 	 * @return A new observable whose values are the specified combination of this observable and the others'
 	 */
 	default <V, R> Observable<R> combine(Observable<V> other, BiFunction<? super T, ? super V, R> func) {
-		return debug(new ComposedObservable<R>(lambda(args -> {
+		return d().debug(new ComposedObservable<R>(d().lambda(args -> {
 			return func.apply((T) args[0], (V) args[1]);
 		}, "combine"), this, other)).from("combine-arg0", this).from("combine-arg1", other).using("combination", func).get();
 	}
@@ -156,7 +154,7 @@ public interface Observable<T> {
 	 * @return An observable that provides the same values as this observable until the first value is observed from the given observable
 	 */
 	default Observable<T> takeUntil(Observable<?> until) {
-		return debug(new ObservableTakenUntil<>(this, until)).from("take", this).from("until", until).get();
+		return d().debug(new ObservableTakenUntil<>(this, until)).from("take", this).from("until", until).get();
 	}
 
 	/**
@@ -164,7 +162,7 @@ public interface Observable<T> {
 	 * @return An observable that provides the same values as this observable but completes after the given number of values
 	 */
 	default Observable<T> take(int times) {
-		return debug(new ObservableTakenTimes<>(this, times)).from("take", this).tag("times", times).get();
+		return d().debug(new ObservableTakenTimes<>(this, times)).from("take", this).tag("times", times).get();
 	}
 
 	/**
@@ -172,7 +170,7 @@ public interface Observable<T> {
 	 * @return An observable that provides the same values as this observable but ignores the first {@code times} values
 	 */
 	default Observable<T> skip(int times) {
-		return label(skip(() -> times)).tag("times", times).get();
+		return d().label(skip(() -> times)).tag("times", times).get();
 	}
 
 	/**
@@ -183,7 +181,7 @@ public interface Observable<T> {
 	 * @return An observable that provides the same values as this observable but ignores the first {@code times} values
 	 */
 	default Observable<T> skip(java.util.function.Supplier<Integer> times) {
-		return debug(new SkippingObservable<>(this, times)).from("skip", this).using("times", times).get();
+		return d().debug(new SkippingObservable<>(this, times)).from("skip", this).using("times", times).get();
 	}
 
 	/**
@@ -192,7 +190,7 @@ public interface Observable<T> {
 	 * @return An observable that pushes a value each time any of the given observables pushes a value
 	 */
 	public static <V> Observable<V> or(Observable<? extends V>... obs) {
-		return debug(new Observable<V>() {
+		return d().debug(new Observable<V>() {
 			@Override
 			public Subscription subscribe(Observer<? super V> observer) {
 				Subscription [] subs = new Subscription[obs.length];
@@ -238,7 +236,7 @@ public interface Observable<T> {
 	 * @return An observable that pushes the given value as soon as it is subscribed to and never completes
 	 */
 	public static <T> Observable<T> constant(T value) {
-		return debug(new Observable<T>() {
+		return d().debug(new Observable<T>() {
 			@Override
 			public Subscription subscribe(Observer<? super T> observer) {
 				observer.onNext(value);

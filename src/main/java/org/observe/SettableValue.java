@@ -1,7 +1,6 @@
 package org.observe;
 
-import static org.observe.ObservableDebug.debug;
-import static org.observe.ObservableDebug.lambda;
+import static org.observe.ObservableDebug.d;
 
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -41,14 +40,14 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @return A subscription by which the link may be canceled
 	 */
 	default <V extends T> Subscription link(ObservableValue<V> value) {
-		return value.act(lambda(event -> {
+		return value.act(d().lambda(event -> {
 			set(event.getValue(), event);
 		}, "link"));
 	}
 
 	/** @return This value, but not settable */
 	default ObservableValue<T> unsettable() {
-		return debug(new ObservableValue<T>() {
+		return d().debug(new ObservableValue<T>() {
 			@Override
 			public Type getType() {
 				return SettableValue.this.getType();
@@ -88,7 +87,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	public default <R> SettableValue<R> mapV(Type type, Function<? super T, R> function, Function<? super R, ? extends T> reverse,
 		boolean combineNull) {
 		SettableValue<T> root = this;
-		return debug(new ComposedSettableValue<R>(type, lambda(args -> {
+		return d().debug(new ComposedSettableValue<R>(type, d().lambda(args -> {
 			return function.apply((T) args[0]);
 		}, "mapV"), combineNull, this) {
 			@Override
@@ -140,7 +139,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	public default <U, R> SettableValue<R> combineV(Type type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		BiFunction<? super R, ? super U, ? extends T> reverse, boolean combineNull) {
 		SettableValue<T> root = this;
-		return debug(new ComposedSettableValue<R>(type, lambda(args -> {
+		return d().debug(new ComposedSettableValue<R>(type, d().lambda(args -> {
 			return function.apply((T) args[0], (U) args[1]);
 		}, "combineV"), combineNull, this) {
 			@Override
@@ -178,7 +177,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	public default <U, R> SettableValue<R> combineV(Type type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		BiFunction<? super R, ? super U, String> accept, BiFunction<? super R, ? super U, ? extends T> reverse, boolean combineNull) {
 		SettableValue<T> root = this;
-		return debug(new ComposedSettableValue<R>(type, args -> {
+		return d().debug(new ComposedSettableValue<R>(type, args -> {
 			return function.apply((T) args[0], (U) args[1]);
 		}, combineNull, this) {
 			@Override
@@ -240,7 +239,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 		ObservableValue<U> arg2, ObservableValue<V> arg3, TriFunction<? super R, ? super U, ? super V, ? extends T> reverse,
 		boolean combineNull) {
 		SettableValue<T> root = this;
-		return debug(new ComposedSettableValue<R>(type, args -> {
+		return d().debug(new ComposedSettableValue<R>(type, args -> {
 			return function.apply((T) args[0], (U) args[1], (V) args[2]);
 		}, combineNull, this) {
 			@Override

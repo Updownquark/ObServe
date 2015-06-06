@@ -1,6 +1,6 @@
 package org.observe.collect;
 
-import static org.observe.ObservableDebug.debug;
+import static org.observe.ObservableDebug.d;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -57,18 +57,18 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	/* Overridden for performance.  get() is linear in the super, constant time here */
 	@Override
 	default ObservableValue<E> findLast(Predicate<E> filter) {
-		return debug(new OrderedReversibleCollectionFinder<>(this, filter, false)).from("findLast", this).using("filter", filter).get();
+		return d().debug(new OrderedReversibleCollectionFinder<>(this, filter, false)).from("findLast", this).using("filter", filter).get();
 	}
 
 	/* Overridden for performance.  get() is linear in the super, constant time here */
 	@Override
 	default ObservableValue<E> last() {
-		return debug(new OrderedReversibleCollectionFinder<>(this, value -> true, false)).from("last", this).get();
+		return d().debug(new OrderedReversibleCollectionFinder<>(this, value -> true, false)).from("last", this).get();
 	}
 
 	// @Override
 	// default <T, V> ObservableOrderedCollection<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
-	// return debug(new CombinedObservableOrderedCollection<>(this, arg, type, func)).from("combine", this).from("with", arg)
+	// return d().debug(new CombinedObservableOrderedCollection<>(this, arg, type, func)).from("combine", this).from("with", arg)
 	// .using("combination", func).get();
 	// }
 	//
@@ -108,7 +108,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	// element -> observer.accept((OrderedObservableElement<E>) element.refresh(refresh)));
 	// }
 	// };
-	// return debug(new RefreshingCollection()).from("refresh", this).from("on", refresh).get();
+	// return d().debug(new RefreshingCollection()).from("refresh", this).from("on", refresh).get();
 	// }
 	//
 	// @Override
@@ -162,7 +162,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	// return outer.onOrderedElement(element -> observer.accept(element.mapV(map)));
 	// }
 	// }
-	// return debug(new MappedObservableOrderedCollection()).from("map", this).using("map", map).get();
+	// return d().debug(new MappedObservableOrderedCollection()).from("map", this).using("map", map).get();
 	// }
 	//
 	// @Override
@@ -236,7 +236,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	// public Runnable onOrderedElement(Consumer<? super OrderedObservableElement<T>> observer) {
 	// return outer.onElement(element -> {
 	// OrderedObservableElement<E> outerElement = (OrderedObservableElement<E>) element;
-	// FilteredOrderedElement<T, E> retElement = debug(
+	// FilteredOrderedElement<T, E> retElement = d().debug(
 	// new FilteredOrderedElement<>(outerElement, map, type, theFilteredElements)).from("element", this)
 	// .tag("wrapped", element).get();
 	// theFilteredElements.add(outerElement.getIndex(), retElement);
@@ -251,17 +251,17 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	// });
 	// }
 	// }
-	// return debug(new FilteredOrderedCollection()).from("filterMap", this).using("map", map).get();
+	// return d().debug(new FilteredOrderedCollection()).from("filterMap", this).using("map", map).get();
 	// }
 	//
 	// @Override
 	// default ObservableOrderedCollection<E> immutable() {
-	// return debug(new ImmutableOrderedObservableCollection<>(this)).from("immutable", this).get();
+	// return d().debug(new ImmutableOrderedObservableCollection<>(this)).from("immutable", this).get();
 	// }
 	//
 	// @Override
 	// default ObservableOrderedCollection<E> cached(){
-	// return debug(new SafeCachedOrderedObservableCollection<>(this)).from("cached", this).get();
+	// return d().debug(new SafeCachedOrderedObservableCollection<>(this)).from("cached", this).get();
 	// }
 	//
 	/**

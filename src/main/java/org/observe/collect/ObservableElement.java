@@ -1,6 +1,6 @@
 package org.observe.collect;
 
-import static org.observe.ObservableDebug.debug;
+import static org.observe.ObservableDebug.d;
 
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -29,7 +29,7 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 
 	@Override
 	default ObservableElement<E> cached() {
-		return debug(new CachedObservableElement<>(this)).from("cached", this).get();
+		return d().debug(new CachedObservableElement<>(this)).from("cached", this).get();
 	}
 
 	@Override
@@ -39,7 +39,7 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 
 	@Override
 	default <R> ObservableElement<R> mapV(Type type, Function<? super E, R> function, boolean combineNull) {
-		return debug(new ComposedObservableElement<R>(this, type, args -> {
+		return d().debug(new ComposedObservableElement<R>(this, type, args -> {
 			return function.apply((E) args[0]);
 		}, combineNull, this)).from("map", this).using("map", function).tag("combineNull", combineNull).get();
 	};
@@ -52,7 +52,7 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 	@Override
 	default <U, R> ObservableElement<R> combineV(Type type, BiFunction<? super E, ? super U, R> function, ObservableValue<U> arg,
 		boolean combineNull) {
-		return debug(new ComposedObservableElement<R>(this, type, args -> {
+		return d().debug(new ComposedObservableElement<R>(this, type, args -> {
 			return function.apply((E) args[0], (U) args[1]);
 		}, combineNull, this, arg)).from("combine", this).from("with", arg).using("combination", function).tag("combineNull", combineNull)
 		.get();
@@ -77,7 +77,7 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 	@Override
 	default <U, V, R> ObservableElement<R> combineV(Type type, TriFunction<? super E, ? super U, ? super V, R> function,
 		ObservableValue<U> arg2, ObservableValue<V> arg3, boolean combineNull) {
-		return debug(new ComposedObservableElement<R>(this, type, args -> {
+		return d().debug(new ComposedObservableElement<R>(this, type, args -> {
 			return function.apply((E) args[0], (U) args[1], (V) args[2]);
 		}, combineNull, this, arg2, arg3)).from("combine", this).from("with", arg2, arg3).using("combination", function)
 		.tag("combineNull", combineNull).get();
@@ -85,7 +85,7 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 
 	@Override
 	default ObservableElement<E> refresh(Observable<?> refresh) {
-		return debug(new RefreshingObservableElement<>(this, refresh)).from("refresh", this).from("on", refresh).get();
+		return d().debug(new RefreshingObservableElement<>(this, refresh)).from("refresh", this).from("on", refresh).get();
 	}
 
 	/**
@@ -93,7 +93,7 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 	 * @return An observable element that refires its value when the observable returned by the given function fires
 	 */
 	default ObservableElement<E> refreshForValue(Function<? super E, Observable<?>> refresh) {
-		return debug(new ValueRefreshingObservableElement<>(this, refresh)).from("refresh", this).using("on", refresh).get();
+		return d().debug(new ValueRefreshingObservableElement<>(this, refresh)).from("refresh", this).using("on", refresh).get();
 	}
 
 	/**

@@ -12,6 +12,7 @@ import org.observe.collect.ObservableList;
 import org.observe.collect.TransactableCollection;
 import org.observe.datastruct.DefaultObservableMultiMap;
 import org.observe.datastruct.ObservableGraph;
+import org.observe.datastruct.ObservableGraph.Node;
 import org.observe.datastruct.ObservableMap;
 import org.observe.datastruct.ObservableMultiMap;
 import org.observe.util.WeakReferenceObservable;
@@ -19,62 +20,13 @@ import org.observe.util.WeakReferenceObservable;
 import prisms.lang.Type;
 
 /** A utility class for debugging observables */
-public final class ObservableDebug {
-	/** Holds an observable structure for debugging */
-	public static class ObservableDebugWrapper{
-		/** The reference to the observable structure */
-		public final WeakReferenceObservable<Object> observable;
-
-		/** The functions used to derive the observable */
-		public final Map<String, Object> functions;
-
-		/** Labels that have been given to the observable */
-		public final ObservableList<String> labels;
-
-		/** Properties that have been tagged onto the observable */
-		public final ObservableMultiMap<String, Object> tags;
-
-		private final TransactableCollection<String> labelController;
-		private final DefaultObservableMultiMap<String, Object> tagController;
-
-		private ObservableDebugWrapper(Object ob, Map<String, Object> fns) {
-			observable = new WeakReferenceObservable<>(new Type(Object.class), ob);
-			labels = new org.observe.collect.DefaultObservableList<>(new Type(String.class));
-			labelController = ((org.observe.collect.DefaultObservableList<String>) labels).control(null);
-			tagController = new org.observe.datastruct.DefaultObservableMultiMap<>(new Type(String.class), new Type(Object.class));
-			tags = tagController.immutable();
-			functions = Collections.unmodifiableMap(fns);
-		}
-	}
-
-	/** A quick interface to describe an observable's debug properties */
-	public static interface DebugDescription {
-		/** @return The observable being described */
-		Object get();
-
-		/**
-		 * @return This observable's parents, by relationship. This map may break {@link Map}'s contract by containing multiple entries with
-		 *         the same key. The map is observable to allow the use of extra utilities in that class, but this map should be constant
-		 *         after the observable has been registered.
-		 */
-		ObservableMap<String, DebugDescription> parents();
-
-		/** @return Any functions that may be used to generate this observable's values */
-		Map<String, Object> functions();
-
-		/** @return Any labels that have been attached to this observable */
-		ObservableCollection<String> labels();
-
-		/** @return Any properties that have been tagged onto this observable */
-		ObservableMultiMap<String, Object> tags();
-	}
-
+public abstract class ObservableDebug {
 	/**
 	 * A builder that allows the specification of derivation properties and debugging properties on an observable
 	 *
 	 * @param <T> The type of the observable
 	 */
-	public static interface ObservableDerivationBuilder<T> {
+	public interface ObservableDerivationBuilder<T> {
 		/**
 		 * @param relationship The relationship of this builder's observable to the specified parent(s)
 		 * @param parents The observable(s) that this builder's observable is derived from in some way
@@ -106,58 +58,80 @@ public final class ObservableDebug {
 		T get();
 	}
 
-	private static final class NullDerivationBuilder<T> implements ObservableDerivationBuilder<T> {
-		private final T theValue;
+	/** A quick interface to describe an observable's debug properties */
+	public interface DebugDescription {
+		/** @return The observable being described */
+		Object get();
 
-		NullDerivationBuilder(T value) {
-			theValue = value;
+		/**
+		 * @return This observable's parents, by relationship. This map may break {@link Map}'s contract by containing multiple entries with
+		 *         the same key. The map is observable to allow the use of extra utilities in that class, but this map should be constant
+		 *         after the observable has been registered.
+		 */
+		ObservableMap<String, DebugDescription> parents();
+
+		/** @return Any functions that may be used to generate this observable's values */
+		Map<String, Object> functions();
+
+		/** @return Any labels that have been attached to this observable */
+		ObservableCollection<String> labels();
+
+		/** @return Any properties that have been tagged onto this observable */
+		ObservableMultiMap<String, Object> tags();
+	}
+
+	/** Holds an observable structure for debugging */
+	public static class ObservableDebugWrapper {
+		/** The reference to the observable structure */
+		public final WeakReferenceObservable<Object> observable;
+
+		/** The functions used to derive the observable */
+		public final Map<String, Object> functions;
+
+		/** Labels that have been given to the observable */
+		public final ObservableList<String> labels;
+
+		/** Properties that have been tagged onto the observable */
+		public final ObservableMultiMap<String, Object> tags;
+
+		private final TransactableCollection<String> labelController;
+
+		private final DefaultObservableMultiMap<String, Object> tagController;
+
+		private ObservableDebugWrapper(Object ob, Map<String, Object> fns) {
+			observable = new WeakReferenceObservable<>(new Type(Object.class), ob);
+			labels = new org.observe.collect.DefaultObservableList<>(new Type(String.class));
+			labelController = ((org.observe.collect.DefaultObservableList<String>) labels).control(null);
+			tagController = new org.observe.datastruct.DefaultObservableMultiMap<>(new Type(String.class), new Type(Object.class));
+			tags = tagController.immutable();
+			functions = Collections.unmodifiableMap(fns);
 		}
+	}
 
-		@Override
-		public ObservableDerivationBuilder<T> from(String relationship, Object... parents) {
-			return this;
-		}
+	@FunctionalInterface
+	public interface D {
+		void done();
+	}
 
-		@Override
-		public ObservableDerivationBuilder<T> using(String purpose, Object function) {
-			return this;
-		}
+	public static enum DebugType {
+		next, complete, subscribe;
+	}
 
-		@Override
-		public ObservableDerivationBuilder<T> label(String label) {
-			return this;
-		}
+	public interface DebugFrame extends Subscription{
+		Object getObservable();
+		DebugType getType();
+		DebugFrame getParent();
+		ObservableList<DebugFrame> getChildren();
+		ObservableValue<Boolean> isDone();
+	}
 
-		@Override
-		public ObservableDerivationBuilder<T> tag(String tagName, Object value) {
-			return this;
-		}
-
-		@Override
-		public T get() {
-			return theValue;
-		}
-	};
-
-	/** Whether debugging is turned on. If this is false, this class will do nothing */
-	public static final boolean DEBUG_ON = "true".equalsIgnoreCase(System.getProperty("org.observe.debug"));
-
-	/**
-	 * Whether debugging is always on. If false and {@link #DEBUG_ON} is true, then debugging must be {@link #startDebug() activated} and
-	 * {@link #endDebug() deactivated} per thread
-	 */
-	public static final boolean DEBUG_ALL_THREADS = false;
-
-	/** The indent used per depth level of nested debug print statements */
-	public static final String INDENT = "  ";
-
-	/** Returned from debugging methods. The {@link #done(String)} method on this must be called before the method exits. */
-	public static final class D {
+	/** Returned from execution debugging methods. The {@link #done(String)} method on this must be called before the method exits. */
+	public static final class DImpl implements DebugFrame {
 		private final DebugState theState;
 		private final DebugPlacemark thePlace;
 		private boolean isDone;
 
-		private D(DebugState state, DebugPlacemark place) {
+		private DImpl(DebugState state, DebugPlacemark place) {
 			theState = state;
 			thePlace = place;
 		}
@@ -200,29 +174,639 @@ public final class ObservableDebug {
 		}
 	}
 
-	/** The default debug object returned when debugging is not enabled */
-	public static final D DEFAULT_DEBUG = new D(null, null);
+	//Structural debugging methods
 
-	private static enum DebugType {
-		next, complete, subscribe, unsubscribe;
+	/**
+	 * Registers an observable for debugging
+	 *
+	 * @param <T> The type of the observable
+	 * @param observable The observable to register
+	 * @return A derivation builder for the observable, allowing its ancestry to be specified
+	 */
+	public abstract <T> ObservableDerivationBuilder<T> debug(T observable);
+
+	/**
+	 * Allows observables to be tagged in a custom way
+	 *
+	 * @param <T> The type of observable
+	 * @param observable The observable to add debugging properties to
+	 * @return A derivation builder that allows labeling and tagging, but cannot alter the observable's derivation properties
+	 */
+	public abstract <T> ObservableDerivationBuilder<T> label(T observable);
+
+	/**
+	 * @param observable The observable to get debug information for
+	 * @return A descriptor containing detailed debugging information for the given observable (if it has been registered)
+	 */
+	public abstract DebugDescription desc(Object observable);
+
+	/**
+	 * @param <T> The type of the function
+	 * @param lambda The lambda to label by type
+	 * @param label The label for the given lambda type
+	 * @return The lambda
+	 */
+	public abstract <T> T lambda(T lambda, String label);
+
+	/**
+	 * @param lambda The lambda to get the label of
+	 * @return The label stored for the given lambda, if one exists
+	 */
+	public abstract String descLambda(Object lambda);
+
+	/** @return The graph of observable dependencies that the debugging framework knows about */
+	public abstract ObservableGraph<ObservableDebugWrapper, String> getObservableGraph();
+
+	/**
+	 * @param observable The observable to get the graph node for
+	 * @return The graph node containing all debugging information stored for the given observable
+	 */
+	public abstract ObservableGraph.Node<ObservableDebugWrapper, String> getGraphNode(Object observable);
+
+	//Execution debugging methods
+
+	/** Enables debugging on the current thread until {@link #endDebug()} is called */
+	public abstract void startDebug();
+
+	/** Disables debugging on the current thread. @see {@link #startDebug()} */
+	public abstract void endDebug();
+
+	public abstract D subscribed(Object observable);
+
+	public abstract D onNext(Object observable);
+
+	public abstract D onCompleted(Object observable);
+
+	public abstract DebugFrame getCurrentFrame();
+
+	public abstract ObservableMap<Thread, DebugFrame> getFrames();
+
+	public abstract ObservableMap<Thread, DebugFrame> getRoots();
+
+	private static ObservableDebug instance;
+
+	static {
+		instance = createInstance(System.getProperty("org.observe.debug"));
 	}
+
+	/**
+	 * @param type The type of debugger to create, either one of the default string values (null, structure, full) or the
+	 *            fully-qualified type name of a custom ObservableDebug implementation
+	 * @return The ObservableDebug of the given type
+	 */
+	public static ObservableDebug createInstance(String type) {
+		if(type == null)
+			return new DisabledDebugger();
+		switch (type) {
+		case "structural":
+			return new StructuralDebugger();
+		case "full":
+			return new FullDebugger();
+		default:
+			try {
+				return (ObservableDebug) Class.forName(type).newInstance();
+			} catch(Throwable e) {
+				System.err.println("Could not instantiate custom debugger type: " + type
+					+ ".\nThe default available debugger types are null (for disabled debugging), structural, and full.");
+				e.printStackTrace();
+				return null;
+			}
+		}
+	}
+
+	/** @return The debugging instance to use */
+	public static ObservableDebug d() {
+		return instance;
+	}
+
+	/** Simply returns without performing any debugging operations */
+	public static class DisabledDebugger extends ObservableDebug {
+		/**
+		 * No-op builder. Discards all metadata.
+		 *
+		 * @param <T> The type of the observable
+		 */
+		protected static final class NullDerivationBuilder<T> implements ObservableDerivationBuilder<T> {
+			private final T theValue;
+
+			NullDerivationBuilder(T value) {
+				theValue = value;
+			}
+
+			@Override
+			public ObservableDerivationBuilder<T> from(String relationship, Object... parents) {
+				return this;
+			}
+
+			@Override
+			public ObservableDerivationBuilder<T> using(String purpose, Object function) {
+				return this;
+			}
+
+			@Override
+			public ObservableDerivationBuilder<T> label(String label) {
+				return this;
+			}
+
+			@Override
+			public ObservableDerivationBuilder<T> tag(String tagName, Object value) {
+				return this;
+			}
+
+			@Override
+			public T get() {
+				return theValue;
+			}
+		};
+
+		private final ObservableGraph<ObservableDebugWrapper, String> theGraph = ObservableGraph.empty(new Type(
+			ObservableDebugWrapper.class), new Type(String.class));
+
+		private final ObservableMap<Thread, DebugFrame> theFrameMap = ObservableMap.empty(new Type(Thread.class),
+			new Type(DebugFrame.class));
+
+		@Override
+		public <T> ObservableDerivationBuilder<T> debug(T observable) {
+			return new NullDerivationBuilder<>(observable);
+		}
+
+		@Override
+		public <T> ObservableDerivationBuilder<T> label(T observable) {
+			return new NullDerivationBuilder<>(observable);
+		}
+
+		@Override
+		public DebugDescription desc(Object observable) {
+			return null;
+		}
+
+		@Override
+		public <T> T lambda(T lambda, String label) {
+			return lambda;
+		}
+
+		@Override
+		public String descLambda(Object lambda) {
+			return lambda.toString();
+		}
+
+		@Override
+		public ObservableGraph<ObservableDebugWrapper, String> getObservableGraph() {
+			return theGraph;
+		}
+
+		@Override
+		public Node<ObservableDebugWrapper, String> getGraphNode(Object observable) {
+			return null;
+		}
+
+		@Override
+		public void startDebug() {
+		}
+
+		@Override
+		public void endDebug() {
+		}
+
+		@Override
+		public D subscribed(Object observable) {
+			return () -> {
+			};
+		}
+
+		@Override
+		public D onNext(Object observable) {
+			return () -> {
+			};
+		}
+
+		@Override
+		public D onCompleted(Object observable) {
+			return () -> {
+			};
+		}
+
+		@Override
+		public DebugFrame getCurrentFrame() {
+			return null;
+		}
+
+		@Override
+		public ObservableMap<Thread, DebugFrame> getFrames() {
+			return theFrameMap;
+		}
+
+		@Override
+		public ObservableMap<Thread, DebugFrame> getRoots() {
+			return theFrameMap;
+		}
+	}
+
+	/** Supports the structural debugging methods, but not execution */
+	public static class StructuralDebugger extends ObservableDebug {
+		private final org.observe.datastruct.DefaultObservableGraph<ObservableDebugWrapper, String> theObservables;
+
+		private final ConcurrentHashMap<Class<?>, String> theModFunctions = new ConcurrentHashMap<>();
+
+		/** Creates the debugger */
+		public StructuralDebugger() {
+			theObservables = new org.observe.datastruct.DefaultObservableGraph<>(new Type(ObservableDebugWrapper.class), new Type(
+				String.class));
+		}
+
+		@Override
+		public <T> ObservableDerivationBuilder<T> debug(T observable) {
+			if(getGraphNode(observable) != null)
+				throw new IllegalStateException("Observable " + observable + " has already been added to debugging");
+			Map<String, Object> functions = new java.util.LinkedHashMap<>();
+			ObservableDebugWrapper newHolder = new ObservableDebugWrapper(observable, functions);
+			ObservableGraph.Node<ObservableDebugWrapper, String> newNode = theObservables.addNode(newHolder);
+			newHolder.observable.subscribe(new Observer<Object>() {
+				@Override
+				public <V> void onNext(V value) {
+				}
+
+				@Override
+				public <V> void onCompleted(V value) {
+					theObservables.removeNode(newNode);
+				}
+			});
+			return new ObservableDerivationBuilder<T>() {
+				@Override
+				public ObservableDerivationBuilder<T> from(String relationship, Object... parents) {
+					for(Object parent : parents) {
+						ObservableGraph.Node<ObservableDebugWrapper, String> node = getGraphNode(parent);
+						if(node == null) {
+							debug(parent);
+							node = getGraphNode(parent);
+						}
+						theObservables.addEdge(node, newNode, true, relationship);
+					}
+					return this;
+				}
+
+				@Override
+				public ObservableDerivationBuilder<T> using(String purpose, Object function) {
+					if(!isFunctional(function.getClass()))
+						throw new IllegalArgumentException(function + " is not a function");
+					functions.put(purpose, function);
+					return this;
+				}
+
+				private boolean isFunctional(Class<?> functional) {
+					if(functional.getAnnotation(FunctionalInterface.class) != null)
+						return true;
+					for(Class<?> intf : functional.getInterfaces())
+						if(isFunctional(intf))
+							return true;
+					return false;
+				}
+
+				@Override
+				public ObservableDerivationBuilder<T> label(String label) {
+					if(!newHolder.labels.contains(label))
+						newHolder.labelController.add(label);
+					return this;
+				}
+
+				@Override
+				public ObservableDerivationBuilder<T> tag(String tagName, Object value) {
+					newHolder.tagController.add(tagName, value);
+					return this;
+				}
+
+				@Override
+				public T get() {
+					return observable;
+				}
+			};
+		}
+
+		@Override
+		public <T> ObservableDerivationBuilder<T> label(T observable) {
+			ObservableGraph.Node<ObservableDebugWrapper, String> node = getGraphNode(observable);
+			if(node == null) {
+				System.err.println("Observable " + observable + " has not been added to debugging");
+				return new DisabledDebugger.NullDerivationBuilder<>(observable);
+			}
+			return new ObservableDerivationBuilder<T>() {
+				@Override
+				public ObservableDerivationBuilder<T> from(String relationship, Object... parents) {
+					throw new IllegalStateException("An observable's derivation cannot be changed after it is created");
+				}
+
+				@Override
+				public ObservableDerivationBuilder<T> using(String purpose, Object function) {
+					throw new IllegalStateException("An observable's derivation cannot be changed after it is created");
+				}
+
+				@Override
+				public ObservableDerivationBuilder<T> label(String label) {
+					if(!node.getValue().labels.contains(label))
+						node.getValue().labelController.add(label);
+					return this;
+				}
+
+				@Override
+				public ObservableDerivationBuilder<T> tag(String tagName, Object value) {
+					node.getValue().tagController.add(tagName, value);
+					return this;
+				}
+
+				@Override
+				public T get() {
+					return observable;
+				}
+			};
+		}
+
+		@Override
+		public DebugDescription desc(Object observable) {
+			class NodeDebugDescription implements DebugDescription {
+				private final ObservableGraph.Node<ObservableDebugWrapper, String> theNode;
+
+				NodeDebugDescription(ObservableGraph.Node<ObservableDebugWrapper, String> node) {
+					theNode = node;
+				}
+
+				@Override
+				public Object get() {
+					return theNode.getValue();
+				}
+
+				@Override
+				public ObservableMap<String, DebugDescription> parents() {
+					return new ObservableMap<String, DebugDescription>() {
+						private final Type keyType = new Type(String.class);
+
+						private final Type valueType = new Type(Object.class);
+
+						@Override
+						public DebugDescription put(String key, DebugDescription value) {
+							throw new UnsupportedOperationException();
+						}
+
+						@Override
+						public DebugDescription remove(Object key) {
+							throw new UnsupportedOperationException();
+						}
+
+						@Override
+						public void putAll(Map<? extends String, ? extends DebugDescription> m) {
+							throw new UnsupportedOperationException();
+						}
+
+						@Override
+						public void clear() {
+							throw new UnsupportedOperationException();
+						}
+
+						@Override
+						public Type getKeyType() {
+							return keyType;
+						}
+
+						@Override
+						public Type getValueType() {
+							return valueType;
+						}
+
+						@Override
+						public ObservableCollection<ObservableEntry<String, DebugDescription>> observeEntries() {
+							class Entry implements ObservableMap.ObservableEntry<String, DebugDescription> {
+								private final ObservableGraph.Edge<ObservableDebugWrapper, String> theEdge;
+
+								Entry(ObservableGraph.Edge<ObservableDebugWrapper, String> edge) {
+									theEdge = edge;
+								}
+
+								@Override
+								public Type getType() {
+									return valueType;
+								}
+
+								@Override
+								public Subscription subscribe(Observer<? super ObservableValueEvent<DebugDescription>> observer) {
+									return () -> { // Should never change
+									};
+								}
+
+								@Override
+								public String getKey() {
+									return theEdge.getValue();
+								}
+
+								@Override
+								public DebugDescription getValue() {
+									return new NodeDebugDescription(theEdge.getStart());
+								}
+
+								@Override
+								public DebugDescription setValue(DebugDescription value) {
+									throw new UnsupportedOperationException();
+								}
+							}
+							return theNode.getEdges().filter(edge -> edge.getEnd() == theNode).map(Entry::new);
+						}
+
+						@Override
+						public ObservableValue<CollectionSession> getSession() {
+							return null;
+						}
+					};
+				}
+
+				@Override
+				public Map<String, Object> functions() {
+					return theNode.getValue().functions;
+				}
+
+				@Override
+				public ObservableCollection<String> labels() {
+					return theNode.getValue().labels;
+				}
+
+				@Override
+				public ObservableMultiMap<String, Object> tags() {
+					return theNode.getValue().tags;
+				}
+
+				private StringBuilder labelString() {
+					StringBuilder ret = new StringBuilder();
+					if(!theNode.getValue().labels.isEmpty())
+						formatCollection(ret, theNode.getValue().labels);
+					ret.append(": ");
+					return ret;
+				}
+
+				private String toShortString() {
+					StringBuilder ret = labelString();
+
+					ObservableMap<String, DebugDescription> parents = parents();
+					if(parents.isEmpty())
+						ret.append(theNode.getValue().observable.get().toString());
+					else if(parents.keySet().size() == 1) { // Either single-parent or some sort of flattened set of parents
+						ret.append(parents.observeKeys().find(key -> true).get()).append('(');
+						boolean first = true;
+						for(DebugDescription parent : parents.values()) {
+							if(!first)
+								ret.append(", ");
+							first = false;
+							ret.append(parent.toString());
+						}
+						ret.append(')');
+						return ret.toString();
+					} else {
+						boolean first = true;
+						boolean second = false;
+						for(Map.Entry<String, DebugDescription> parent : parents.entrySet()) {
+							String parentStr = ((NodeDebugDescription) parent.getValue()).toShortString();
+							if(first) {
+								ret.append(parentStr).append(" .").append(parent.getKey()).append('(');
+								first = false;
+								second = true;
+							} else {
+								if(!second)
+									ret.append(", ");
+								ret.append(parent.getKey()).append(' ').append(parentStr);
+								second = false;
+							}
+						}
+						ret.append(')');
+					}
+					return ret.toString();
+				}
+
+				@Override
+				public String toString() {
+					StringBuilder ret = labelString();
+					ret.append(theNode.getValue().observable.get().toString());
+					formatMap(ret, parents(), "parents", (parent, sb) -> sb.append(((NodeDebugDescription) parent).toShortString()));
+					formatMap(ret, functions(), "functions", (function, sb) -> sb.append(function.toString()));
+					formatMap(ret, tags().asCollectionMap(), "tags", (tags, sb) -> formatCollection(sb, tags));
+					return ret.toString();
+				}
+
+				private StringBuilder formatCollection(StringBuilder ret, Collection<?> coll) {
+					ret.append('(');
+					boolean first = true;
+					for(Object value : coll) {
+						if(!first)
+							ret.append(", ");
+						first = false;
+						ret.append(value);
+					}
+					ret.append(')');
+					return ret;
+				}
+
+				private <T> void formatMap(StringBuilder ret, Map<String, T> map, String name, BiFunction<T, StringBuilder, ?> toString) {
+					if(!map.isEmpty()) {
+						ret.append('\n').append(name);
+						int maxLen = map.keySet().stream().mapToInt(str -> str.length()).max().getAsInt();
+						for(Map.Entry<String, T> entry : map.entrySet()) {
+							ret.append('\t').append(entry.getKey());
+							for(int i = entry.getKey().length(); i < maxLen; i++)
+								ret.append(' ');
+							ret.append(" = ");
+							toString.apply(entry.getValue(), ret);
+						}
+					}
+				}
+			}
+			ObservableGraph.Node<ObservableDebugWrapper, String> node = getGraphNode(observable);
+			if(node == null)
+				return null;
+			return new NodeDebugDescription(node);
+		}
+
+		@Override
+		public <T> T lambda(T lambda, String label) {
+			theModFunctions.putIfAbsent(lambda.getClass(), label);
+			return lambda;
+		}
+
+		@Override
+		public String descLambda(Object lambda) {
+			return theModFunctions.get(lambda.getClass());
+		}
+
+		@Override
+		public ObservableGraph.Node<ObservableDebugWrapper, String> getGraphNode(Object observable) {
+			for(ObservableGraph.Node<ObservableDebugWrapper, String> node : theObservables.getNodes())
+				if(node.getValue().observable == observable)
+					return node;
+			return null;
+		}
+
+		@Override
+		public ObservableGraph<ObservableDebugWrapper, String> getObservableGraph() {
+			return theObservables;
+		}
+
+		@Override
+		public void startDebug() {
+		}
+
+		@Override
+		public void endDebug() {
+		}
+	}
+
+	/** Full support for structural and execution debugging on any number of simultaneous threads */
+	public static class FullDebugger extends StructuralDebugger {
+		private final ConcurrentHashMap<Thread, DebugState> theThreadDebug = new ConcurrentHashMap<>();
+
+		@Override
+		public void startDebug() {
+			Thread current = Thread.currentThread();
+			DebugState state = theThreadDebug.get(current);
+			if(state == null)
+				theThreadDebug.put(current, new DebugState());
+		}
+
+		@Override
+		public void endDebug() {
+			Thread current = Thread.currentThread();
+			theThreadDebug.remove(current);
+		}
+
+		private DebugState debug() {
+			Thread current = Thread.currentThread();
+			return theThreadDebug.get(current);
+		}
+
+		@Override
+		public Subscription subscribed(Object observable) {
+			DebugState debug = debug();
+			if(debug == null)
+				return DEFAULT_DEBUG;
+			DebugPlacemark place = debug.push(obs, DebugType.subscribe, name);
+			started(debug, msg);
+			return new DebugFrame(debug, place);
+		}
+	}
+
+	/** The indent used per depth level of nested debug print statements */
+	public static final String INDENT = "  ";
+
+	/** The default debug object returned when debugging is not enabled */
+	public static final DebugFrame DEFAULT_DEBUG = new DebugFrame(null, null);
 
 	private static final class DebugPlacemark {
 		final DebugPlacemark parent;
 		final DebugType type;
 		final Observable<?> observable;
-		final String name;
 
-		DebugPlacemark(DebugPlacemark p, DebugType typ, Observable<?> obs, String n) {
+		DebugPlacemark(DebugPlacemark p, DebugType typ, Observable<?> obs) {
 			parent = p;
 			type = typ;
 			observable = obs;
-			name = n;
 		}
 
 		@Override
 		public String toString() {
-			return new StringBuilder(name).append('(').append(observable).append(')').append('.').append(type).toString();
+			return new StringBuilder('(').append(observable).append(')').append('.').append(type).toString();
 		}
 	}
 
@@ -255,436 +839,21 @@ public final class ObservableDebug {
 		}
 	}
 
-	private static final ConcurrentHashMap<Thread, DebugState> theThreadDebug = new ConcurrentHashMap<>();
-	private static final org.observe.datastruct.DefaultObservableGraph<ObservableDebugWrapper, String> theObservables;
-	private static final ConcurrentHashMap<Class<?>, String> theModFunctions = new ConcurrentHashMap<>();
-
-	static {
-		if(DEBUG_ON)
-			theObservables = new org.observe.datastruct.DefaultObservableGraph<>(new Type(ObservableDebugWrapper.class), new Type(String.class));
-		else
-			theObservables = null;
-	}
-
-	/** Enables debugging on the current thread until {@link #endDebug()} is called */
-	public static void startDebug() {
-		if(!DEBUG_ON) {
-			System.err.println("Observable debugging is turned off");
-			return;
-		}
-		if(DEBUG_ALL_THREADS) // Debugging is turned on for all threads
-			return;
-		Thread current = Thread.currentThread();
-		DebugState state = theThreadDebug.get(current);
-		if(state == null)
-			theThreadDebug.put(current, new DebugState());
-	}
-
-	/** Disables debugging on the current thread. @see {@link #startDebug()} */
-	public static void endDebug() {
-		if(!DEBUG_ON)
-			return;
-		if(DEBUG_ALL_THREADS)
-			return;
-		Thread current = Thread.currentThread();
-		theThreadDebug.remove(current);
-	}
-
-	private static DebugState debug() {
-		if(!DEBUG_ON)
-			return null;
-		Thread current = Thread.currentThread();
-		DebugState debug = theThreadDebug.get(current);
-		if(debug == null) {
-			if(DEBUG_ALL_THREADS) {
-				debug = new DebugState();
-				theThreadDebug.put(current, debug);
-			} else
-				return null;
-		}
-		return debug;
-	}
-
-	/**
-	 * Registers an observable for debugging
-	 *
-	 * @param <T> The type of the observable
-	 * @param observable The observable to register
-	 * @return A derivation builder for the observable, allowing its ancestry to be specified
-	 */
-	public static <T> ObservableDerivationBuilder<T> debug(T observable) {
-		if(!DEBUG_ON)
-			return new NullDerivationBuilder<>(observable);
-		if(getGraphNode(observable) != null)
-			throw new IllegalStateException("Observable " + observable + " has already been added to debugging");
-		Map<String, Object> functions = new java.util.LinkedHashMap<>();
-		ObservableDebugWrapper newHolder = new ObservableDebugWrapper(observable, functions);
-		ObservableGraph.Node<ObservableDebugWrapper, String> newNode = theObservables.addNode(newHolder);
-		newHolder.observable.subscribe(new Observer<Object>() {
-			@Override
-			public <V> void onNext(V value) {
-			}
-
-			@Override
-			public <V> void onCompleted(V value) {
-				theObservables.removeNode(newNode);
-			}
-		});
-		return new ObservableDerivationBuilder<T>() {
-			@Override
-			public ObservableDerivationBuilder<T> from(String relationship, Object... parents) {
-				for(Object parent : parents) {
-					ObservableGraph.Node<ObservableDebugWrapper, String> node = getGraphNode(parent);
-					if(node == null) {
-						debug(parent);
-						node = getGraphNode(parent);
-					}
-					theObservables.addEdge(node, newNode, true, relationship);
-				}
-				return this;
-			}
-
-			@Override
-			public ObservableDerivationBuilder<T> using(String purpose, Object function) {
-				if(!isFunctional(function.getClass()))
-					throw new IllegalArgumentException(function + " is not a function");
-				functions.put(purpose, function);
-				return this;
-			}
-
-			private boolean isFunctional(Class<?> functional) {
-				if(functional.getAnnotation(FunctionalInterface.class) != null)
-					return true;
-				for(Class<?> intf : functional.getInterfaces())
-					if(isFunctional(intf))
-						return true;
-				return false;
-			}
-
-			@Override
-			public ObservableDerivationBuilder<T> label(String label) {
-				if(!newHolder.labels.contains(label))
-					newHolder.labelController.add(label);
-				return this;
-			}
-
-			@Override
-			public ObservableDerivationBuilder<T> tag(String tagName, Object value) {
-				newHolder.tagController.add(tagName, value);
-				return this;
-			}
-
-			@Override
-			public T get() {
-				return observable;
-			}
-		};
-	}
-
-	/**
-	 * @param observable The observable to get the graph node for
-	 * @return The graph node containing all debugging information stored for the given observable
-	 */
-	public static ObservableGraph.Node<ObservableDebugWrapper, String> getGraphNode(Object observable) {
-		for(ObservableGraph.Node<ObservableDebugWrapper, String> node : theObservables.getNodes())
-			if(node.getValue().observable == observable)
-				return node;
-		return null;
-	}
-
-	/**
-	 * Allows observables to be tagged in a custom way
-	 *
-	 * @param <T> The type of observable
-	 * @param observable The observable to add debugging properties to
-	 * @return A derivation builder that allows labeling and tagging, but cannot alter the observable's derivation properties
-	 */
-	public static <T> ObservableDerivationBuilder<T> label(T observable) {
-		if(!DEBUG_ON)
-			return new NullDerivationBuilder<>(observable);
-		ObservableGraph.Node<ObservableDebugWrapper, String> node = getGraphNode(observable);
-		if(node == null) {
-			System.err.println("Observable " + observable + " has not been added to debugging");
-			return new NullDerivationBuilder<>(observable);
-		}
-		return new ObservableDerivationBuilder<T>() {
-			@Override
-			public ObservableDerivationBuilder<T> from(String relationship, Object... parents) {
-				throw new IllegalStateException("An observable's derivation cannot be changed after it is created");
-			}
-
-			@Override
-			public ObservableDerivationBuilder<T> using(String purpose, Object function) {
-				throw new IllegalStateException("An observable's derivation cannot be changed after it is created");
-			}
-
-			@Override
-			public ObservableDerivationBuilder<T> label(String label) {
-				if(!node.getValue().labels.contains(label))
-					node.getValue().labelController.add(label);
-				return this;
-			}
-
-			@Override
-			public ObservableDerivationBuilder<T> tag(String tagName, Object value) {
-				node.getValue().tagController.add(tagName, value);
-				return this;
-			}
-
-			@Override
-			public T get() {
-				return observable;
-			}
-		};
-	}
-
-	/**
-	 * @param observable The observable to get debug information for
-	 * @return A descriptor containing detailed debugging information for the given observable (if it has been registered)
-	 */
-	public static DebugDescription desc(Object observable) {
-		if(!DEBUG_ON)
-			return null;
-		class NodeDebugDescription implements DebugDescription {
-			private final ObservableGraph.Node<ObservableDebugWrapper, String> theNode;
-
-			NodeDebugDescription(ObservableGraph.Node<ObservableDebugWrapper, String> node) {
-				theNode = node;
-			}
-
-			@Override
-			public Object get() {
-				return theNode.getValue();
-			}
-
-			@Override
-			public ObservableMap<String, DebugDescription> parents() {
-				return new ObservableMap<String, DebugDescription>() {
-					private final Type keyType = new Type(String.class);
-
-					private final Type valueType = new Type(Object.class);
-
-					@Override
-					public DebugDescription put(String key, DebugDescription value) {
-						throw new UnsupportedOperationException();
-					}
-
-					@Override
-					public DebugDescription remove(Object key) {
-						throw new UnsupportedOperationException();
-					}
-
-					@Override
-					public void putAll(Map<? extends String, ? extends DebugDescription> m) {
-						throw new UnsupportedOperationException();
-					}
-
-					@Override
-					public void clear() {
-						throw new UnsupportedOperationException();
-					}
-
-					@Override
-					public Type getKeyType() {
-						return keyType;
-					}
-
-					@Override
-					public Type getValueType() {
-						return valueType;
-					}
-
-					@Override
-					public ObservableCollection<ObservableEntry<String, DebugDescription>> observeEntries() {
-						class Entry implements ObservableMap.ObservableEntry<String, DebugDescription> {
-							private final ObservableGraph.Edge<ObservableDebugWrapper, String> theEdge;
-
-							Entry(ObservableGraph.Edge<ObservableDebugWrapper, String> edge) {
-								theEdge = edge;
-							}
-
-							@Override
-							public Type getType() {
-								return valueType;
-							}
-
-							@Override
-							public Subscription subscribe(Observer<? super ObservableValueEvent<DebugDescription>> observer) {
-								return () -> { // Should never change
-								};
-							}
-
-							@Override
-							public String getKey() {
-								return theEdge.getValue();
-							}
-
-							@Override
-							public DebugDescription getValue() {
-								return new NodeDebugDescription(theEdge.getStart());
-							}
-
-							@Override
-							public DebugDescription setValue(DebugDescription value) {
-								throw new UnsupportedOperationException();
-							}
-						}
-						return theNode.getEdges().filter(edge -> edge.getEnd() == theNode).map(Entry::new);
-					}
-
-					@Override
-					public ObservableValue<CollectionSession> getSession() {
-						return null;
-					}
-				};
-			}
-
-			@Override
-			public Map<String, Object> functions() {
-				return theNode.getValue().functions;
-			}
-
-			@Override
-			public ObservableCollection<String> labels() {
-				return theNode.getValue().labels;
-			}
-
-			@Override
-			public ObservableMultiMap<String, Object> tags() {
-				return theNode.getValue().tags;
-			}
-
-			private StringBuilder labelString() {
-				StringBuilder ret = new StringBuilder();
-				if(!theNode.getValue().labels.isEmpty())
-					formatCollection(ret, theNode.getValue().labels);
-				ret.append(": ");
-				return ret;
-			}
-
-			private String toShortString(){
-				StringBuilder ret = labelString();
-
-				ObservableMap<String, DebugDescription> parents=parents();
-				if(parents.isEmpty())
-					ret.append(theNode.getValue().observable.get().toString());
-				else if(parents.keySet().size() == 1) { // Either single-parent or some sort of flattened set of parents
-					ret.append(parents.observeKeys().find(key -> true).get()).append('(');
-					boolean first = true;
-					for(DebugDescription parent : parents.values()) {
-						if(!first)
-							ret.append(", ");
-						first = false;
-						ret.append(parent.toString());
-					}
-					ret.append(')');
-					return ret.toString();
-				} else {
-					boolean first = true;
-					boolean second = false;
-					for(Map.Entry<String, DebugDescription> parent : parents.entrySet()) {
-						String parentStr = ((NodeDebugDescription) parent.getValue()).toShortString();
-						if(first) {
-							ret.append(parentStr).append(" .").append(parent.getKey()).append('(');
-							first = false;
-							second = true;
-						} else {
-							if(!second)
-								ret.append(", ");
-							ret.append(parent.getKey()).append(' ').append(parentStr);
-							second = false;
-						}
-					}
-					ret.append(')');
-				}
-				return ret.toString();
-			}
-
-			@Override
-			public String toString() {
-				StringBuilder ret = labelString();
-				ret.append(theNode.getValue().observable.get().toString());
-				formatMap(ret, parents(), "parents", (parent, sb) -> sb.append(((NodeDebugDescription) parent).toShortString()));
-				formatMap(ret, functions(), "functions", (function, sb) -> sb.append(function.toString()));
-				formatMap(ret, tags().asCollectionMap(), "tags", (tags, sb) -> formatCollection(sb, tags));
-				return ret.toString();
-			}
-
-			private StringBuilder formatCollection(StringBuilder ret, Collection<?> coll) {
-				ret.append('(');
-				boolean first = true;
-				for(Object value : coll) {
-					if(!first)
-						ret.append(", ");
-					first = false;
-					ret.append(value);
-				}
-				ret.append(')');
-				return ret;
-			}
-
-			private <T> void formatMap(StringBuilder ret, Map<String, T> map, String name, BiFunction<T, StringBuilder, ?> toString) {
-				if(!map.isEmpty()) {
-					ret.append('\n').append(name);
-					int maxLen = map.keySet().stream().mapToInt(str -> str.length()).max().getAsInt();
-					for(Map.Entry<String, T> entry : map.entrySet()) {
-						ret.append('\t').append(entry.getKey());
-						for(int i = entry.getKey().length(); i < maxLen; i++)
-							ret.append(' ');
-						ret.append(" = ");
-						toString.apply(entry.getValue(), ret);
-					}
-				}
-			}
-		}
-		ObservableGraph.Node<ObservableDebugWrapper, String> node = getGraphNode(observable);
-		if(node == null)
-			return null;
-		return new NodeDebugDescription(node);
-	}
-
-	/** @return The graph of observable dependencies that the debugging framework knows about */
-	public static ObservableGraph<ObservableDebugWrapper, String> getObservableGraph() {
-		if(DEBUG_ON)
-			return theObservables;
-		else
-			return ObservableGraph.empty(new Type(ObservableDebugWrapper.class), new Type(String.class));
-	}
-
-	/**
-	 * @param <T> The type of the function
-	 * @param lambda The lambda to label by type
-	 * @param label The label for the given lambda type
-	 * @return The lambda
-	 */
-	public static <T> T lambda(T lambda, String label) {
-		theModFunctions.putIfAbsent(lambda.getClass(), label);
-		return lambda;
-	}
-
-	/**
-	 * @param lambda The lambda to get the label of
-	 * @return The label stored for the given lambda, if one exists
-	 */
-	public static String descLambda(Object lambda) {
-		return theModFunctions.get(lambda.getClass());
-	}
-
 	/**
 	 * To be called from the {@link Observer#onNext(Object)} method
 	 *
 	 * @param obs The observable firing the value
 	 * @param name The name of the observable to print
 	 * @param msg The message to print
-	 * @return The debug object to call {@link D#done(String)} on when the current method exits
+	 * @return The debug object to call {@link DebugFrame#done(String)} on when the current method exits
 	 */
-	public static D onNext(Observable<?> obs, String name, String msg) {
+	public static DebugFrame onNext(Observable<?> obs, String name, String msg) {
 		DebugState debug = debug();
 		if(debug == null)
 			return DEFAULT_DEBUG;
 		DebugPlacemark place = debug.push(obs, DebugType.next, name);
 		started(debug, msg);
-		return new D(debug, place);
+		return new DebugFrame(debug, place);
 	}
 
 	/**
@@ -693,15 +862,15 @@ public final class ObservableDebug {
 	 * @param obs The observable firing the value
 	 * @param name The name of the observable to print
 	 * @param msg The message to print
-	 * @return The debug object to call {@link D#done(String)} on when the current method exits
+	 * @return The debug object to call {@link DebugFrame#done(String)} on when the current method exits
 	 */
-	public static D onCompleted(Observable<?> obs, String name, String msg) {
+	public static DebugFrame onCompleted(Observable<?> obs, String name, String msg) {
 		DebugState debug = debug();
 		if(debug == null)
 			return DEFAULT_DEBUG;
 		DebugPlacemark place = debug.push(obs, DebugType.complete, name);
 		started(debug, msg);
-		return new D(debug, place);
+		return new DebugFrame(debug, place);
 	}
 
 	/**
@@ -710,32 +879,15 @@ public final class ObservableDebug {
 	 * @param obs The observable being subscribed to
 	 * @param name The name of the observable to print
 	 * @param msg The message to print
-	 * @return The debug object to call {@link D#done(String)} on when the current method exits
+	 * @return The debug object to call {@link DebugFrame#done(String)} on when the current method exits
 	 */
-	public static D onSubscribe(Observable<?> obs, String name, String msg) {
+	public static DebugFrame onSubscribe(Observable<?> obs, String name, String msg) {
 		DebugState debug = debug();
 		if(debug == null)
 			return DEFAULT_DEBUG;
 		DebugPlacemark place = debug.push(obs, DebugType.subscribe, name);
 		started(debug, msg);
-		return new D(debug, place);
-	}
-
-	/**
-	 * To be called from the {@link Runnable#run()} method of the Runnable returned from the {@link Observable#subscribe(Observer)}
-	 *
-	 * @param obs The observable being unsubscribed from
-	 * @param name The name of the observable to print
-	 * @param msg The message to print
-	 * @return The debug object to call {@link D#done(String)} on when the current method exits
-	 */
-	public static D onUnsubscribe(Observable<?> obs, String name, String msg) {
-		DebugState debug = debug();
-		if(debug == null)
-			return DEFAULT_DEBUG;
-		DebugPlacemark place = debug.push(obs, DebugType.unsubscribe, name);
-		started(debug, msg);
-		return new D(debug, place);
+		return new DebugFrame(debug, place);
 	}
 
 	private static StringBuilder indent(DebugState state) {

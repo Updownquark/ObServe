@@ -1,8 +1,6 @@
 package org.observe;
 
-import static org.observe.ObservableDebug.debug;
-import static org.observe.ObservableDebug.label;
-import static org.observe.ObservableDebug.lambda;
+import static org.observe.ObservableDebug.d;
 
 import java.util.List;
 import java.util.function.BiFunction;
@@ -30,7 +28,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 
 	/** @return An observable that just reports this observable value's value in an observable without the event */
 	default Observable<T> value() {
-		return debug(new Observable<T>() {
+		return d().debug(new Observable<T>() {
 			@Override
 			public Subscription subscribe(Observer<? super T> observer) {
 				return ObservableValue.this.subscribe(new Observer<ObservableValueEvent<T>>() {
@@ -55,7 +53,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 
 	/** @return A cached version of this value, which */
 	default ObservableValue<T> cached() {
-		return debug(new CachedObservableValue<>(this)).from("cached", this).get();
+		return d().debug(new CachedObservableValue<>(this)).from("cached", this).get();
 	}
 
 	/**
@@ -76,7 +74,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 */
 	default ObservableValue<T> mapEvent(Function<? super ObservableValueEvent<T>, ? extends ObservableValueEvent<T>> eventMap) {
 		ObservableValue<T> outer = this;
-		return debug(new ObservableValue<T>() {
+		return d().debug(new ObservableValue<T>() {
 			@Override
 			public Type getType() {
 				return outer.getType();
@@ -132,7 +130,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @return The new observable whose value is a function of this observable's value
 	 */
 	default <R> ObservableValue<R> mapV(Type type, Function<? super T, R> function, boolean filterNull) {
-		return debug(new ComposedObservableValue<R>(type, lambda(args -> {
+		return d().debug(new ComposedObservableValue<R>(type, d().lambda(args -> {
 			return function.apply((T) args[0]);
 		}, "mapV"), filterNull, this)).from("map", this).using("map", function).tag("filterNull", filterNull).get();
 	};
@@ -164,7 +162,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 */
 	default <U, R> ObservableValue<R> combineV(Type type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		boolean combineNull) {
-		return debug(new ComposedObservableValue<R>(type, lambda(args -> {
+		return d().debug(new ComposedObservableValue<R>(type, d().lambda(args -> {
 			return function.apply((T) args[0], (U) args[1]);
 		}, "combineV"), combineNull, this, arg)).from("combine", this).from("with", arg).using("combination", function)
 		.tag("combineNull", combineNull).get();
@@ -176,7 +174,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @return An observable which broadcasts tuples of the latest values of this observable value and another
 	 */
 	default <U> ObservableValue<BiTuple<T, U>> tupleV(ObservableValue<U> arg) {
-		return label(combineV(null, BiTuple<T, U>::new, arg, true)).label("tuple").get();
+		return d().label(combineV(null, BiTuple<T, U>::new, arg, true)).label("tuple").get();
 	}
 
 	/**
@@ -187,7 +185,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @return An observable which broadcasts tuples of the latest values of this observable value and 2 others
 	 */
 	default <U, V> ObservableValue<TriTuple<T, U, V>> tupleV(ObservableValue<U> arg1, ObservableValue<V> arg2) {
-		return label(combineV(null, TriTuple<T, U, V>::new, arg1, arg2, true)).label("tuple").get();
+		return d().label(combineV(null, TriTuple<T, U, V>::new, arg1, arg2, true)).label("tuple").get();
 	}
 
 	/**
@@ -222,7 +220,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 */
 	default <U, V, R> ObservableValue<R> combineV(Type type, TriFunction<? super T, ? super U, ? super V, R> function,
 		ObservableValue<U> arg2, ObservableValue<V> arg3, boolean combineNull) {
-		return debug(new ComposedObservableValue<R>(type, lambda(args -> {
+		return d().debug(new ComposedObservableValue<R>(type, d().lambda(args -> {
 			return function.apply((T) args[0], (U) args[1], (V) args[2]);
 		}, "combineV"), combineNull, this, arg2, arg3)).from("combine", this).from("with", arg2).from("with", arg3)
 		.using("combination", function).tag("combineNull", combineNull).get();
@@ -230,7 +228,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 
 	@Override
 	default ObservableValue<T> takeUntil(Observable<?> until) {
-		return debug(new ObservableValueTakenUntil<>(this, until)).from("take", this).from("until", until).get();
+		return d().debug(new ObservableValueTakenUntil<>(this, until)).from("take", this).from("until", until).get();
 	}
 
 	/**
@@ -238,7 +236,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @return An observable value that fires additional value events when the given observable fires
 	 */
 	default ObservableValue<T> refresh(Observable<?> refresh) {
-		return debug(new RefreshingObservableValue<>(this, refresh)).from("refresh", this).from("on", refresh).get();
+		return d().debug(new RefreshingObservableValue<>(this, refresh)).from("refresh", this).from("on", refresh).get();
 	}
 
 	/**
@@ -247,7 +245,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @return An observable that always returns the given value
 	 */
 	public static <X> ObservableValue<X> constant(final X value) {
-		return debug(new ConstantObservableValue<>(value == null ? Type.NULL : new Type(value.getClass()), value)).label("constant")
+		return d().debug(new ConstantObservableValue<>(value == null ? Type.NULL : new Type(value.getClass()), value)).label("constant")
 			.tag("value", value).get();
 	}
 
@@ -258,7 +256,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @return An observable that always returns the given value
 	 */
 	public static <X> ObservableValue<X> constant(final Type type, final X value) {
-		return debug(new ConstantObservableValue<>(type, value)).label("constant").tag("value", value).get();
+		return d().debug(new ConstantObservableValue<>(type, value)).label("constant").tag("value", value).get();
 	}
 
 	/**
@@ -271,7 +269,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	public static <T> ObservableValue<T> flatten(final Type type, final ObservableValue<? extends ObservableValue<? extends T>> ov) {
 		if(ov == null)
 			throw new NullPointerException("Null observable");
-		return debug(new ObservableValue<T>() {
+		return d().debug(new ObservableValue<T>() {
 			@Override
 			public Type getType() {
 				if(type != null)
@@ -364,7 +362,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 */
 	public static <T> ObservableValue<T> assemble(Type type, java.util.function.Supplier<T> value, ObservableValue<?>... components) {
 		Type t = type == null ? ObservableUtils.getReturnType(value) : type;
-		return debug(new ObservableValue<T>() {
+		return d().debug(new ObservableValue<T>() {
 			@Override
 			public Type getType() {
 				return t;

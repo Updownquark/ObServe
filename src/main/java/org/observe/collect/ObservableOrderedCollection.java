@@ -1,7 +1,6 @@
 package org.observe.collect;
 
-import static org.observe.ObservableDebug.debug;
-import static org.observe.ObservableDebug.label;
+import static org.observe.ObservableDebug.d;
 
 import java.util.ArrayList;
 import java.util.BitSet;
@@ -49,7 +48,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	/** @return An observable that returns null whenever any elements in this collection are added, removed or changed */
 	@Override
 	default Observable<? extends OrderedCollectionChangeEvent<E>> changes() {
-		return debug(new OrderedCollectionChangesObservable<>(this)).from("changes", this).get();
+		return d().debug(new OrderedCollectionChangesObservable<>(this)).from("changes", this).get();
 	}
 
 	/**
@@ -58,7 +57,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 */
 	@Override
 	default ObservableValue<E> find(Predicate<E> filter) {
-		return debug(new OrderedCollectionFinder<>(this, filter, true)).from("find", this).using("filter", filter).get();
+		return d().debug(new OrderedCollectionFinder<>(this, filter, true)).from("find", this).using("filter", filter).get();
 	}
 
 	/**
@@ -66,12 +65,12 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @return The first value in this collection passing the filter, or null if none of this collection's elements pass
 	 */
 	default ObservableValue<E> findLast(Predicate<E> filter) {
-		return debug(new OrderedCollectionFinder<>(this, filter, false)).from("findLast", this).using("filter", filter).get();
+		return d().debug(new OrderedCollectionFinder<>(this, filter, false)).from("findLast", this).using("filter", filter).get();
 	}
 
 	/** @return The first value in this collection, or null if this collection is empty */
 	default ObservableValue<E> first() {
-		return debug(new OrderedCollectionFinder<>(this, value -> true, true)).from("first", this).get();
+		return d().debug(new OrderedCollectionFinder<>(this, value -> true, true)).from("first", this).get();
 	}
 
 	/**
@@ -81,7 +80,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @return The last value in this collection, or null if this collection is empty
 	 */
 	default ObservableValue<E> last() {
-		return debug(new OrderedCollectionFinder<>(this, value -> true, false)).from("last", this).get();
+		return d().debug(new OrderedCollectionFinder<>(this, value -> true, false)).from("last", this).get();
 	}
 
 	@Override
@@ -91,19 +90,19 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 	@Override
 	default <T> ObservableOrderedCollection<T> map(Type type, Function<? super E, T> map) {
-		return debug(new MappedObservableOrderedCollection<>(this, type, map)).from("map", this).using("map", map).get();
+		return d().debug(new MappedObservableOrderedCollection<>(this, type, map)).from("map", this).using("map", map).get();
 	}
 
 	@Override
 	default ObservableOrderedCollection<E> filter(Predicate<? super E> filter) {
-		return label(filterMap(value -> {
+		return d().label(filterMap(value -> {
 			return (value != null && filter.test(value)) ? value : null;
 		})).label("filter").tag("filter", filter).get();
 	}
 
 	@Override
 	default <T> ObservableOrderedCollection<T> filter(Class<T> type) {
-		return label(filterMap(value -> type.isInstance(value) ? type.cast(value) : null)).tag("filterType", type).get();
+		return d().label(filterMap(value -> type.isInstance(value) ? type.cast(value) : null)).tag("filterType", type).get();
 	}
 
 	@Override
@@ -113,7 +112,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 	@Override
 	default <T> ObservableOrderedCollection<T> filterMap(Type type, Function<? super E, T> map) {
-		return debug(new FilteredOrderedCollection<>(this, type, map)).from("filterMap", this).using("map", map).get();
+		return d().debug(new FilteredOrderedCollection<>(this, type, map)).from("filterMap", this).using("map", map).get();
 	}
 
 	@Override
@@ -123,7 +122,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 	@Override
 	default <T, V> ObservableOrderedCollection<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
-		return debug(new CombinedObservableOrderedCollection<>(this, arg, type, func)).from("combine", this).from("with", arg)
+		return d().debug(new CombinedObservableOrderedCollection<>(this, arg, type, func)).from("combine", this).from("with", arg)
 			.using("combination", func).get();
 	}
 
@@ -133,22 +132,22 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 */
 	@Override
 	default ObservableOrderedCollection<E> refresh(Observable<?> refresh) {
-		return debug(new RefreshingOrderedCollection<>(this, refresh)).from("refresh", this).from("on", refresh).get();
+		return d().debug(new RefreshingOrderedCollection<>(this, refresh)).from("refresh", this).from("on", refresh).get();
 	}
 
 	@Override
 	default ObservableOrderedCollection<E> refreshEach(Function<? super E, Observable<?>> refire) {
-		return debug(new ElementRefreshingOrderedCollection<>(this, refire)).from("refreshEach", this).using("on", refire).get();
+		return d().debug(new ElementRefreshingOrderedCollection<>(this, refire)).from("refreshEach", this).using("on", refire).get();
 	}
 
 	@Override
 	default ObservableOrderedCollection<E> immutable() {
-		return debug(new ImmutableOrderedObservableCollection<>(this)).from("immutable", this).get();
+		return d().debug(new ImmutableOrderedObservableCollection<>(this)).from("immutable", this).get();
 	}
 
 	@Override
 	default ObservableOrderedCollection<E> cached() {
-		return debug(new SafeCachedOrderedObservableCollection<>(this)).from("cached", this).get();
+		return d().debug(new SafeCachedOrderedObservableCollection<>(this)).from("cached", this).get();
 	}
 
 	/**
@@ -164,7 +163,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 				throw new IllegalArgumentException("No natural ordering for collection of type " + coll.getType());
 			compare = (Comparator<? super E>) (Comparable<Comparable<?>> o1, Comparable<Comparable<?>> o2) -> o1.compareTo(o2);
 		}
-		return debug(new SortedObservableCollectionWrapper<>(coll, compare)).from("sort", coll).using("compare", compare).get();
+		return d().debug(new SortedObservableCollectionWrapper<>(coll, compare)).from("sort", coll).using("compare", compare).get();
 	}
 
 	/**
@@ -381,7 +380,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 								Subscription subListSub = subListEvent.getValue().onElement(
 									subElement -> {
 										OrderedObservableElement<E> subListEl = (OrderedObservableElement<E>) subElement;
-										FlattenedOrderedElement flatEl = debug(new FlattenedOrderedElement(subListEl, subList))
+										FlattenedOrderedElement flatEl = d().debug(new FlattenedOrderedElement(subListEl, subList))
 											.from("element", this).tag("wrappedCollectionElement", subList)
 											.tag("wrappedSubElement", subListEl).get();
 										if(initializing[0]) {
@@ -410,7 +409,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 				return ret;
 			}
 		}
-		return debug(new FlattenedObservableOrderedCollection()).from("flatten", list).using("compare", compare).get();
+		return d().debug(new FlattenedObservableOrderedCollection()).from("flatten", list).using("compare", compare).get();
 	}
 
 	/**
@@ -608,7 +607,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		@Override
 		protected FilteredOrderedElement<E, T> filter(ObservableElement<E> element) {
 			OrderedObservableElement<E> outerEl = (OrderedObservableElement<E>) element;
-			FilteredOrderedElement<E, T> retElement = debug(new FilteredOrderedElement<>(outerEl, getMap(), getType(), theFilteredElements))
+			FilteredOrderedElement<E, T> retElement = d()
+				.debug(new FilteredOrderedElement<>(outerEl, getMap(), getType(), theFilteredElements))
 				.from("element", this).tag("wrapped", element).get();
 			theFilteredElements.add(outerEl.getIndex(), retElement);
 			outerEl.completed().act(elValue -> theFilteredElements.remove(outerEl.getIndex()));
@@ -956,7 +956,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 		@Override
 		public void accept(ObservableElement<E> outerEl) {
-			SortedElementWrapper<E> newEl = debug(new SortedElementWrapper<>(theList, outerEl, this, theAnchor)).from("element", theList)
+			SortedElementWrapper<E> newEl = d().debug(new SortedElementWrapper<>(theList, outerEl, this, theAnchor))
+				.from("element", theList)
 				.tag("wrapped", outerEl).get();
 			if(theAnchor == null)
 				theAnchor = newEl;
