@@ -109,15 +109,20 @@ public abstract class ObservableDebug {
 	}
 
 	@FunctionalInterface
-	public interface D {
+	public interface D extends AutoCloseable {
 		void done();
+
+		@Override
+		default void close() {
+			done();
+		}
 	}
 
 	public static enum DebugType {
 		next, complete, subscribe;
 	}
 
-	public interface DebugFrame extends Subscription{
+	public interface DebugFrame {
 		Object getObservable();
 		DebugType getType();
 		DebugFrame getParent();
@@ -231,7 +236,7 @@ public abstract class ObservableDebug {
 	/** Disables debugging on the current thread. @see {@link #startDebug()} */
 	public abstract void endDebug();
 
-	public abstract D subscribed(Object observable);
+	public abstract D subscribed(Object observable, Object observer);
 
 	public abstract D onNext(Object observable);
 
