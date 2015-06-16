@@ -131,7 +131,7 @@ public abstract class ObservableDebug {
 	}
 
 	/** Returned from execution debugging methods. The {@link #done(String)} method on this must be called before the method exits. */
-	public static final class DImpl implements DebugFrame {
+	/*public static final class DImpl implements DebugFrame {
 		private final DebugState theState;
 		private final DebugPlacemark thePlace;
 		private boolean isDone;
@@ -142,10 +142,10 @@ public abstract class ObservableDebug {
 		}
 
 		/**
-		 * Called when the method that called a debugging method exits.
-		 *
-		 * @param msg The message to print
-		 */
+	 * Called when the method that called a debugging method exits.
+	 *
+	 * @param msg The message to print
+	 * /
 		public void done(String msg) {
 			if(theState == null)
 				return;
@@ -177,7 +177,7 @@ public abstract class ObservableDebug {
 		public String toString() {
 			return thePlace.toString();
 		}
-	}
+	}*/
 
 	//Structural debugging methods
 
@@ -230,10 +230,10 @@ public abstract class ObservableDebug {
 
 	//Execution debugging methods
 
-	/** Enables debugging on the current thread until {@link #endDebug()} is called */
+	/*/** Enables debugging on the current thread until {@link #endDebug()} is called * /
 	public abstract void startDebug();
 
-	/** Disables debugging on the current thread. @see {@link #startDebug()} */
+	/** Disables debugging on the current thread. @see {@link #startDebug()} * /
 	public abstract void endDebug();
 
 	public abstract D subscribed(Object observable, Object observer);
@@ -246,7 +246,7 @@ public abstract class ObservableDebug {
 
 	public abstract ObservableMap<Thread, DebugFrame> getFrames();
 
-	public abstract ObservableMap<Thread, DebugFrame> getRoots();
+	public abstract ObservableMap<Thread, DebugFrame> getRoots();*/
 
 	private static ObservableDebug instance;
 
@@ -327,8 +327,9 @@ public abstract class ObservableDebug {
 		private final ObservableGraph<ObservableDebugWrapper, String> theGraph = ObservableGraph.empty(new Type(
 			ObservableDebugWrapper.class), new Type(String.class));
 
-		private final ObservableMap<Thread, DebugFrame> theFrameMap = ObservableMap.empty(new Type(Thread.class),
-			new Type(DebugFrame.class));
+		//
+		// private final ObservableMap<Thread, DebugFrame> theFrameMap = ObservableMap.empty(new Type(Thread.class),
+		// new Type(DebugFrame.class));
 
 		@Override
 		public <T> ObservableDerivationBuilder<T> debug(T observable) {
@@ -364,47 +365,47 @@ public abstract class ObservableDebug {
 		public Node<ObservableDebugWrapper, String> getGraphNode(Object observable) {
 			return null;
 		}
-
-		@Override
-		public void startDebug() {
-		}
-
-		@Override
-		public void endDebug() {
-		}
-
-		@Override
-		public D subscribed(Object observable) {
-			return () -> {
-			};
-		}
-
-		@Override
-		public D onNext(Object observable) {
-			return () -> {
-			};
-		}
-
-		@Override
-		public D onCompleted(Object observable) {
-			return () -> {
-			};
-		}
-
-		@Override
-		public DebugFrame getCurrentFrame() {
-			return null;
-		}
-
-		@Override
-		public ObservableMap<Thread, DebugFrame> getFrames() {
-			return theFrameMap;
-		}
-
-		@Override
-		public ObservableMap<Thread, DebugFrame> getRoots() {
-			return theFrameMap;
-		}
+		//
+		// @Override
+		// public void startDebug() {
+		// }
+		//
+		// @Override
+		// public void endDebug() {
+		// }
+		//
+		// @Override
+		// public D subscribed(Object observable) {
+		// return () -> {
+		// };
+		// }
+		//
+		// @Override
+		// public D onNext(Object observable) {
+		// return () -> {
+		// };
+		// }
+		//
+		// @Override
+		// public D onCompleted(Object observable) {
+		// return () -> {
+		// };
+		// }
+		//
+		// @Override
+		// public DebugFrame getCurrentFrame() {
+		// return null;
+		// }
+		//
+		// @Override
+		// public ObservableMap<Thread, DebugFrame> getFrames() {
+		// return theFrameMap;
+		// }
+		//
+		// @Override
+		// public ObservableMap<Thread, DebugFrame> getRoots() {
+		// return theFrameMap;
+		// }
 	}
 
 	/** Supports the structural debugging methods, but not execution */
@@ -748,179 +749,179 @@ public abstract class ObservableDebug {
 		public ObservableGraph<ObservableDebugWrapper, String> getObservableGraph() {
 			return theObservables;
 		}
-
-		@Override
-		public void startDebug() {
-		}
-
-		@Override
-		public void endDebug() {
-		}
+		//
+		// @Override
+		// public void startDebug() {
+		// }
+		//
+		// @Override
+		// public void endDebug() {
+		// }
 	}
 
 	/** Full support for structural and execution debugging on any number of simultaneous threads */
 	public static class FullDebugger extends StructuralDebugger {
-		private final ConcurrentHashMap<Thread, DebugState> theThreadDebug = new ConcurrentHashMap<>();
-
-		@Override
-		public void startDebug() {
-			Thread current = Thread.currentThread();
-			DebugState state = theThreadDebug.get(current);
-			if(state == null)
-				theThreadDebug.put(current, new DebugState());
-		}
-
-		@Override
-		public void endDebug() {
-			Thread current = Thread.currentThread();
-			theThreadDebug.remove(current);
-		}
-
-		private DebugState debug() {
-			Thread current = Thread.currentThread();
-			return theThreadDebug.get(current);
-		}
-
-		@Override
-		public Subscription subscribed(Object observable) {
-			DebugState debug = debug();
-			if(debug == null)
-				return DEFAULT_DEBUG;
-			DebugPlacemark place = debug.push(obs, DebugType.subscribe, name);
-			started(debug, msg);
-			return new DebugFrame(debug, place);
-		}
+		// private final ConcurrentHashMap<Thread, DebugState> theThreadDebug = new ConcurrentHashMap<>();
+		//
+		// @Override
+		// public void startDebug() {
+		// Thread current = Thread.currentThread();
+		// DebugState state = theThreadDebug.get(current);
+		// if(state == null)
+		// theThreadDebug.put(current, new DebugState());
+		// }
+		//
+		// @Override
+		// public void endDebug() {
+		// Thread current = Thread.currentThread();
+		// theThreadDebug.remove(current);
+		// }
+		//
+		// private DebugState debug() {
+		// Thread current = Thread.currentThread();
+		// return theThreadDebug.get(current);
+		// }
+		//
+		// @Override
+		// public Subscription subscribed(Object observable) {
+		// DebugState debug = debug();
+		// if(debug == null)
+		// return DEFAULT_DEBUG;
+		// DebugPlacemark place = debug.push(obs, DebugType.subscribe, name);
+		// started(debug, msg);
+		// return new DebugFrame(debug, place);
+		// }
 	}
 
 	/** The indent used per depth level of nested debug print statements */
 	public static final String INDENT = "  ";
 
-	/** The default debug object returned when debugging is not enabled */
-	public static final DebugFrame DEFAULT_DEBUG = new DebugFrame(null, null);
+	// /** The default debug object returned when debugging is not enabled */
+	// public static final DebugFrame DEFAULT_DEBUG = new DebugFrame(null, null);
 
-	private static final class DebugPlacemark {
-		final DebugPlacemark parent;
-		final DebugType type;
-		final Observable<?> observable;
+	// private static final class DebugPlacemark {
+	// final DebugPlacemark parent;
+	// final DebugType type;
+	// final Observable<?> observable;
+	//
+	// DebugPlacemark(DebugPlacemark p, DebugType typ, Observable<?> obs) {
+	// parent = p;
+	// type = typ;
+	// observable = obs;
+	// }
+	//
+	// @Override
+	// public String toString() {
+	// return new StringBuilder('(').append(observable).append(')').append('.').append(type).toString();
+	// }
+	// }
 
-		DebugPlacemark(DebugPlacemark p, DebugType typ, Observable<?> obs) {
-			parent = p;
-			type = typ;
-			observable = obs;
-		}
+	// private static final class DebugState {
+	// private DebugPlacemark thePlace;
+	// private int theDepth;
+	//
+	// DebugPlacemark getPlace() {
+	// return thePlace;
+	// }
+	//
+	// int getDepth() {
+	// return theDepth;
+	// }
+	//
+	// DebugPlacemark push(Observable<?> obs, DebugType type, String name) {
+	// DebugPlacemark place = new DebugPlacemark(thePlace, type, obs, name);
+	// thePlace = place;
+	// theDepth++;
+	// return place;
+	// }
+	//
+	// DebugPlacemark pop() {
+	// DebugPlacemark ret = thePlace;
+	// if(ret != null) {
+	// thePlace = ret.parent;
+	// theDepth--;
+	// }
+	// return ret;
+	// }
+	// }
 
-		@Override
-		public String toString() {
-			return new StringBuilder('(').append(observable).append(')').append('.').append(type).toString();
-		}
-	}
-
-	private static final class DebugState {
-		private DebugPlacemark thePlace;
-		private int theDepth;
-
-		DebugPlacemark getPlace() {
-			return thePlace;
-		}
-
-		int getDepth() {
-			return theDepth;
-		}
-
-		DebugPlacemark push(Observable<?> obs, DebugType type, String name) {
-			DebugPlacemark place = new DebugPlacemark(thePlace, type, obs, name);
-			thePlace = place;
-			theDepth++;
-			return place;
-		}
-
-		DebugPlacemark pop() {
-			DebugPlacemark ret = thePlace;
-			if(ret != null) {
-				thePlace = ret.parent;
-				theDepth--;
-			}
-			return ret;
-		}
-	}
-
-	/**
-	 * To be called from the {@link Observer#onNext(Object)} method
-	 *
-	 * @param obs The observable firing the value
-	 * @param name The name of the observable to print
-	 * @param msg The message to print
-	 * @return The debug object to call {@link DebugFrame#done(String)} on when the current method exits
-	 */
-	public static DebugFrame onNext(Observable<?> obs, String name, String msg) {
-		DebugState debug = debug();
-		if(debug == null)
-			return DEFAULT_DEBUG;
-		DebugPlacemark place = debug.push(obs, DebugType.next, name);
-		started(debug, msg);
-		return new DebugFrame(debug, place);
-	}
-
-	/**
-	 * To be called from the {@link Observer#onCompleted(Object)} method
-	 *
-	 * @param obs The observable firing the value
-	 * @param name The name of the observable to print
-	 * @param msg The message to print
-	 * @return The debug object to call {@link DebugFrame#done(String)} on when the current method exits
-	 */
-	public static DebugFrame onCompleted(Observable<?> obs, String name, String msg) {
-		DebugState debug = debug();
-		if(debug == null)
-			return DEFAULT_DEBUG;
-		DebugPlacemark place = debug.push(obs, DebugType.complete, name);
-		started(debug, msg);
-		return new DebugFrame(debug, place);
-	}
-
-	/**
-	 * To be called from the {@link Observable#subscribe(Observer)} method
-	 *
-	 * @param obs The observable being subscribed to
-	 * @param name The name of the observable to print
-	 * @param msg The message to print
-	 * @return The debug object to call {@link DebugFrame#done(String)} on when the current method exits
-	 */
-	public static DebugFrame onSubscribe(Observable<?> obs, String name, String msg) {
-		DebugState debug = debug();
-		if(debug == null)
-			return DEFAULT_DEBUG;
-		DebugPlacemark place = debug.push(obs, DebugType.subscribe, name);
-		started(debug, msg);
-		return new DebugFrame(debug, place);
-	}
-
-	private static StringBuilder indent(DebugState state) {
-		StringBuilder print = new StringBuilder();
-		for(int i = 0; i < state.getDepth() - 1; i++)
-			print.append(INDENT);
-		return print;
-	}
-
-	private static void started(DebugState state, String msg) {
-		StringBuilder print = indent(state);
-		print.append(state.getPlace());
-		if(msg != null)
-			print.append(": ").append(msg);
-		System.out.println(print.toString());
-	}
-
-	private static void finished(DebugState state, String msg) {
-		StringBuilder print = indent(state);
-		print.append('/').append(state.getPlace());
-		if(msg != null)
-			print.append(": ").append(msg);
-		System.out.println(print.toString());
-	}
-
-	private static void notFinished(DebugState state) {
-		StringBuilder print = indent(state);
-		print.append('!').append(state.getPlace()).append(": ");
-		System.out.println(print.toString());
-	}
+	// /**
+	// * To be called from the {@link Observer#onNext(Object)} method
+	// *
+	// * @param obs The observable firing the value
+	// * @param name The name of the observable to print
+	// * @param msg The message to print
+	// * @return The debug object to call {@link DebugFrame#done(String)} on when the current method exits
+	// */
+	// public static DebugFrame onNext(Observable<?> obs, String name, String msg) {
+	// DebugState debug = debug();
+	// if(debug == null)
+	// return DEFAULT_DEBUG;
+	// DebugPlacemark place = debug.push(obs, DebugType.next, name);
+	// started(debug, msg);
+	// return new DebugFrame(debug, place);
+	// }
+	//
+	// /**
+	// * To be called from the {@link Observer#onCompleted(Object)} method
+	// *
+	// * @param obs The observable firing the value
+	// * @param name The name of the observable to print
+	// * @param msg The message to print
+	// * @return The debug object to call {@link DebugFrame#done(String)} on when the current method exits
+	// */
+	// public static DebugFrame onCompleted(Observable<?> obs, String name, String msg) {
+	// DebugState debug = debug();
+	// if(debug == null)
+	// return DEFAULT_DEBUG;
+	// DebugPlacemark place = debug.push(obs, DebugType.complete, name);
+	// started(debug, msg);
+	// return new DebugFrame(debug, place);
+	// }
+	//
+	// /**
+	// * To be called from the {@link Observable#subscribe(Observer)} method
+	// *
+	// * @param obs The observable being subscribed to
+	// * @param name The name of the observable to print
+	// * @param msg The message to print
+	// * @return The debug object to call {@link DebugFrame#done(String)} on when the current method exits
+	// */
+	// public static DebugFrame onSubscribe(Observable<?> obs, String name, String msg) {
+	// DebugState debug = debug();
+	// if(debug == null)
+	// return DEFAULT_DEBUG;
+	// DebugPlacemark place = debug.push(obs, DebugType.subscribe, name);
+	// started(debug, msg);
+	// return new DebugFrame(debug, place);
+	// }
+	//
+	// private static StringBuilder indent(DebugState state) {
+	// StringBuilder print = new StringBuilder();
+	// for(int i = 0; i < state.getDepth() - 1; i++)
+	// print.append(INDENT);
+	// return print;
+	// }
+	//
+	// private static void started(DebugState state, String msg) {
+	// StringBuilder print = indent(state);
+	// print.append(state.getPlace());
+	// if(msg != null)
+	// print.append(": ").append(msg);
+	// System.out.println(print.toString());
+	// }
+	//
+	// private static void finished(DebugState state, String msg) {
+	// StringBuilder print = indent(state);
+	// print.append('/').append(state.getPlace());
+	// if(msg != null)
+	// print.append(": ").append(msg);
+	// System.out.println(print.toString());
+	// }
+	//
+	// private static void notFinished(DebugState state) {
+	// StringBuilder print = indent(state);
+	// print.append('!').append(state.getPlace()).append(": ");
+	// System.out.println(print.toString());
+	// }
 }

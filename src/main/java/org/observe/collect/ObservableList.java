@@ -934,6 +934,40 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 				});
 			});
 		}
+
+		@Override
+		public T remove(int index) {
+			if(index < 0)
+				throw new IndexOutOfBoundsException("" + index);
+			int size = 0;
+			int idx = index;
+			Iterator<E> iter = getWrapped().iterator();
+			while(iter.hasNext()) {
+				E el = iter.next();
+				T mapped = getMap().apply(el);
+				if(mapped != null) {
+					size++;
+					if(idx == 0) {
+						iter.remove();
+						return mapped;
+					} else
+						idx--;
+				}
+			}
+			throw new IndexOutOfBoundsException(index + " of " + size);
+		}
+
+		@Override
+		public void clear() {
+			Iterator<E> iter = getWrapped().iterator();
+			while(iter.hasNext()) {
+				E el = iter.next();
+				T mapped = getMap().apply(el);
+				if(mapped != null) {
+					iter.remove();
+				}
+			}
+		}
 	}
 
 	/**

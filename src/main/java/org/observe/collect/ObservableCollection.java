@@ -4,6 +4,7 @@ import static org.observe.ObservableDebug.d;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -19,6 +20,7 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
+import org.observe.datastruct.ObservableMultiMap;
 import org.observe.util.ListenerSet;
 import org.observe.util.ObservableUtils;
 
@@ -229,6 +231,35 @@ public interface ObservableCollection<E> extends Collection<E> {
 		}).from("removes", this).get();
 	}
 
+	/** @return This collection, as an observable value containing an immutable collection */
+	default ObservableValue<Collection<E>> asValue() {
+		ObservableCollection<E> outer = this;
+		return new ObservableValue<Collection<E>>() {
+			final Type theType = new Type(ObservableCollection.class, outer.getType());
+
+			@Override
+			public Type getType() {
+				return theType;
+			}
+
+			@Override
+			public Collection<E> get() {
+				return Collections.unmodifiableCollection(new ArrayList<>(outer));
+			}
+
+			@Override
+			public Subscription subscribe(Observer<? super ObservableValueEvent<Collection<E>>> observer) {
+				Collection<E> [] value = new Collection[] {get()};
+				observer.onNext(new ObservableValueEvent<>(this, null, value[0], null));
+				return outer.simpleChanges().act(v -> {
+					Collection<E> old = value[0];
+					value[0] = get();
+					observer.onNext(new ObservableValueEvent<>(this, old, value[0], null));
+				});
+			}
+		};
+	}
+
 	/**
 	 * @param <T> The type of the new collection
 	 * @param map The mapping function
@@ -418,6 +449,25 @@ public interface ObservableCollection<E> extends Collection<E> {
 	default <T, V> ObservableCollection<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
 		return d().debug(new CombinedObservableCollection<>(this, type, arg, func)).from("combine", this).from("with", arg)
 			.using("combination", func).get();
+	}
+
+	/**
+	 * @param keyMap The mapping function to group this collection's values by
+	 * @return A multi-map containing each of this collection's elements, each in the collection of the value mapped by the given function
+	 *         applied to the element
+	 */
+	default <K> ObservableMultiMap<K, E> groupBy(Function<E, K> keyMap) {
+		return groupBy(null, keyMap);
+	}
+
+	/**
+	 * @param keyType The type of the key
+	 * @param keyMap The mapping function to group this collection's values by
+	 * @return A multi-map containing each of this collection's elements, each in the collection of the value mapped by the given function
+	 *         applied to the element
+	 */
+	default <K> ObservableMultiMap<K, E> groupBy(Type keyType, Function<E, K> keyMap) {
+		return new GroupedMultiMap<>(this, keyMap, keyType);
 	}
 
 	/**
@@ -1008,6 +1058,143 @@ public interface ObservableCollection<E> extends Collection<E> {
 		public Subscription onElement(Consumer<? super ObservableElement<V>> onElement) {
 			return theTransactionManager.onElement(theWrapped, theValue, element -> onElement.accept(element.combineV(theMap, theValue)),
 				true);
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableCollection#groupBy(Function)}
+	 *
+	 * @param <K> The key type of the map
+	 * @param <E> The value type of the map
+	 */
+	class GroupedMultiMap<K, E> implements ObservableMultiMap<K, E> {
+		private final ObservableCollection<E> theWrapped;
+
+		private final Function<E, K> theKeyMap;
+
+		private final Type theKeyType;
+
+		GroupedMultiMap(ObservableCollection<E> wrap, Function<E, K> keyMap, Type keyType) {
+			theWrapped = wrap;
+			theKeyMap = keyMap;
+			theKeyType = keyType != null ? keyType : ObservableUtils.getReturnType(keyMap);
+		}
+
+		@Override
+		public Type getKeyType() {
+			return theKeyType;
+		}
+
+		@Override
+		public Type getValueType() {
+			return theWrapped.getType();
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			return theWrapped.getSession();
+		}
+
+		@Override
+		public ObservableSet<K> keySet() {
+			return ObservableSet.unique(theWrapped.map(theKeyMap));
+		}
+
+		@Override
+		public ObservableCollection<E> get(Object key) {
+			return theWrapped.filter(el -> Objects.equals(theKeyMap.apply(el), key));
+		}
+	}
+
+	/**
+	 * An entry in a {@link GroupedMultiMap}
+	 *
+	 * @param <K> The key type of the entry
+	 * @param <E> The value type of the entry
+	 */
+	class GroupedMultiEntry<K, E> implements ObservableMultiMap.ObservableMultiEntry<K, E> {
+		private final K theKey;
+
+		private final Function<E, K> theKeyMap;
+
+		private final ObservableCollection<E> theElements;
+
+		GroupedMultiEntry(K key, ObservableCollection<E> wrap, Function<E, K> keyMap) {
+			theKey = key;
+			theKeyMap = keyMap;
+			theElements = wrap.filter(el -> Objects.equals(theKey, theKeyMap.apply(el)));
+		}
+
+		@Override
+		public K getKey() {
+			return theKey;
+		}
+
+		@Override
+		public Type getType() {
+			return theElements.getType();
+		}
+
+		@Override
+		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
+			return theElements.onElement(onElement);
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			return theElements.getSession();
+		}
+
+		@Override
+		public int size() {
+			return theElements.size();
+		}
+
+		@Override
+		public Iterator<E> iterator() {
+			return theElements.iterator();
+		}
+
+		@Override
+		public boolean add(E e) {
+			return theElements.add(e);
+		}
+
+		@Override
+		public boolean remove(Object o) {
+			return theElements.remove(o);
+		}
+
+		@Override
+		public boolean addAll(Collection<? extends E> c) {
+			return theElements.addAll(c);
+		}
+
+		@Override
+		public boolean removeAll(Collection<?> c) {
+			return theElements.removeAll(c);
+		}
+
+		@Override
+		public boolean retainAll(Collection<?> c) {
+			return theElements.retainAll(c);
+		}
+
+		@Override
+		public void clear() {
+			theElements.clear();
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if(this == o)
+				return true;
+			return o instanceof GroupedMultiEntry && Objects.equals(theKey, ((GroupedMultiEntry<?, ?>) o).theKey);
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hashCode(theKey);
 		}
 	}
 
