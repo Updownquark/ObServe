@@ -452,6 +452,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	}
 
 	/**
+	 * @param <K> The type of the key
 	 * @param keyMap The mapping function to group this collection's values by
 	 * @return A multi-map containing each of this collection's elements, each in the collection of the value mapped by the given function
 	 *         applied to the element
@@ -461,6 +462,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	}
 
 	/**
+	 * @param <K> The type of the key
 	 * @param keyType The type of the key
 	 * @param keyMap The mapping function to group this collection's values by
 	 * @return A multi-map containing each of this collection's elements, each in the collection of the value mapped by the given function
@@ -738,6 +740,14 @@ public interface ObservableCollection<E> extends Collection<E> {
 			theMap = map;
 		}
 
+		protected ObservableCollection<E> getWrapped() {
+			return theWrapped;
+		}
+
+		protected Function<? super E, T> getMap() {
+			return theMap;
+		}
+
 		@Override
 		public Type getType() {
 			return theType;
@@ -755,22 +765,24 @@ public interface ObservableCollection<E> extends Collection<E> {
 
 		@Override
 		public Iterator<T> iterator() {
-			return new Iterator<T>() {
-				private final Iterator<E> backing = theWrapped.iterator();
+			return map(theWrapped.iterator());
+		}
 
+		protected Iterator<T> map(Iterator<E> iter) {
+			return new Iterator<T>() {
 				@Override
 				public boolean hasNext() {
-					return backing.hasNext();
+					return iter.hasNext();
 				}
 
 				@Override
 				public T next() {
-					return theMap.apply(backing.next());
+					return theMap.apply(iter.next());
 				}
 
 				@Override
 				public void remove() {
-					backing.remove();
+					iter.remove();
 				}
 			};
 		}
@@ -827,15 +839,17 @@ public interface ObservableCollection<E> extends Collection<E> {
 
 		@Override
 		public Iterator<T> iterator() {
-			return new Iterator<T>() {
-				private final Iterator<E> backing = theWrapped.iterator();
+			return filter(theWrapped.iterator());
+		}
 
+		protected Iterator<T> filter(Iterator<E> iter) {
+			return new Iterator<T>() {
 				private T nextVal;
 
 				@Override
 				public boolean hasNext() {
-					while(nextVal == null && backing.hasNext()) {
-						nextVal = theMap.apply(backing.next());
+					while(nextVal == null && iter.hasNext()) {
+						nextVal = theMap.apply(iter.next());
 					}
 					return nextVal != null;
 				}
@@ -851,7 +865,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 
 				@Override
 				public void remove() {
-					backing.remove();
+					iter.remove();
 				}
 			};
 		}
@@ -1034,22 +1048,24 @@ public interface ObservableCollection<E> extends Collection<E> {
 
 		@Override
 		public Iterator<V> iterator() {
-			return new Iterator<V>() {
-				private final Iterator<E> backing = theWrapped.iterator();
+			return combine(theWrapped.iterator());
+		}
 
+		protected Iterator<V> combine(Iterator<E> iter) {
+			return new Iterator<V>() {
 				@Override
 				public boolean hasNext() {
-					return backing.hasNext();
+					return iter.hasNext();
 				}
 
 				@Override
 				public V next() {
-					return theMap.apply(backing.next(), theValue.get());
+					return theMap.apply(iter.next(), theValue.get());
 				}
 
 				@Override
 				public void remove() {
-					backing.remove();
+					iter.remove();
 				}
 			};
 		}
@@ -1107,7 +1123,7 @@ public interface ObservableCollection<E> extends Collection<E> {
 	}
 
 	/**
-	 * An entry in a {@link GroupedMultiMap}
+	 * An entry in a {@link ObservableCollection.GroupedMultiMap}
 	 *
 	 * @param <K> The key type of the entry
 	 * @param <E> The value type of the entry
@@ -1534,12 +1550,17 @@ public interface ObservableCollection<E> extends Collection<E> {
 			return theWrapped.getType();
 		}
 
+		protected Subscription addListener(Consumer<? super ObservableElement<E>> onElement) {
+			theListeners.add(onElement);
+			return () -> theListeners.remove(onElement);
+		}
+
 		@Override
 		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
-			theListeners.add(onElement);
+			Subscription ret = addListener(onElement);
 			for(CachedElement<E> cached : theCache.values())
 				onElement.accept(cached);
-			return () -> theListeners.remove(onElement);
+			return ret;
 		}
 
 		@Override

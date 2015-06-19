@@ -59,8 +59,8 @@ public interface ObservableMap<K, V> extends Map<K, V> {
 	 *         threaded interactions with a session. A transaction may encompass events fired and received on multiple threads. In short,
 	 *         the only thing guaranteed about sessions is that they will end. Therefore, if a session is present, observers may assume that
 	 *         they can delay expensive results of map events until the session completes. The {@link ObservableCollection#getSession()
-	 *         sessions} of the {@link #observeEntries() entries}, {@link #observeKeys() keys}, and {@link #observeValues() values}
-	 *         collections should be the same as this one.
+	 *         sessions} of the {@link #observeEntries() entries}, {@link #keySet() keys}, and {@link #values() values} collections should
+	 *         be the same as this one.
 	 */
 	ObservableValue<CollectionSession> getSession();
 
@@ -128,7 +128,7 @@ public interface ObservableMap<K, V> extends Map<K, V> {
 	 *         per transaction.
 	 */
 	default Observable<Void> changes() {
-		return observeEntries().simpleChanges();
+		return keySet().refreshEach(this::observe).simpleChanges();
 	}
 
 	/** @return An immutable copy of this map */
@@ -178,6 +178,8 @@ public interface ObservableMap<K, V> extends Map<K, V> {
 	}
 
 	/**
+	 * @param <K> The key type for the map
+	 * @param <V> The value type for the map
 	 * @param keyType The key type for the map
 	 * @param valueType The value type for the map
 	 * @return An immutable, empty map with the given types

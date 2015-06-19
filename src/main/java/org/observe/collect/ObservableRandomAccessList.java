@@ -21,7 +21,7 @@ public interface ObservableRandomAccessList<E> extends ObservableList<E>, Random
 
 	/* Overridden for performance.  get() is linear in the super, constant time here */
 	@Override
-	default ObservableValue<E> last() {
+	default ObservableValue<E> getLast() {
 		return d().debug(new RandomAccessFinder<>(this, value -> true, false)).from("last", this).get();
 	}
 

@@ -747,7 +747,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 	 *
 	 * @param <E>
 	 */
-	class ObservableSubList<E> implements ObservableList.PartialListImpl<E> {
+	class ObservableSubList<E> implements PartialListImpl<E> {
 		private final ObservableList<E> theList;
 
 		private final int theOffset;
@@ -892,8 +892,8 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 	 * @param <E> The type of the collection to be filter-mapped
 	 * @param <T> The type of the mapped collection
 	 */
-	class FilteredList<E, T> extends ObservableOrderedCollection.FilteredOrderedCollection<E, T> implements PartialListImpl<T> {
-		protected FilteredList(ObservableOrderedCollection<E> wrap, Type type, Function<? super E, T> map) {
+	class FilteredList<E, T> extends FilteredReversibleCollection<E, T> implements PartialListImpl<T> {
+		protected FilteredList(ObservableList<E> wrap, Type type, Function<? super E, T> map) {
 			super(wrap, type, map);
 		}
 
@@ -919,20 +919,6 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 				}
 			}
 			throw new IndexOutOfBoundsException(index + " of " + size);
-		}
-
-		@Override
-		public Subscription onElementReverse(Consumer<? super OrderedObservableElement<T>> onElement) {
-			return getWrapped().onElementReverse(element -> {
-				FilteredOrderedElement<E, T> retElement = filter(element);
-				element.act(elValue -> {
-					if(!retElement.isIncluded()) {
-						T mapped = getMap().apply(elValue.getValue());
-						if(mapped != null)
-							onElement.accept(retElement);
-					}
-				});
-			});
 		}
 
 		@Override
@@ -977,9 +963,8 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 	 * @param <T> The type of the value to combine the collection elements with
 	 * @param <V> The type of the combined collection
 	 */
-	class CombinedObservableList<E, T, V> extends ObservableOrderedCollection.CombinedObservableOrderedCollection<E, T, V> implements
-	PartialListImpl<V> {
-		protected CombinedObservableList(ObservableOrderedCollection<E> wrap, ObservableValue<T> value, Type type,
+	class CombinedObservableList<E, T, V> extends CombinedReversibleCollection<E, T, V> implements PartialListImpl<V> {
+		protected CombinedObservableList(ObservableList<E> wrap, ObservableValue<T> value, Type type,
 			BiFunction<? super E, ? super T, V> map) {
 			super(wrap, value, type, map);
 		}
@@ -993,17 +978,6 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 		public V get(int index) {
 			return getMap().apply(getWrapped().get(index), getValue().get());
 		}
-
-		@Override
-		public Subscription onOrderedElement(Consumer<? super OrderedObservableElement<V>> onElement) {
-			return onElement(element -> onElement.accept((OrderedObservableElement<V>) element));
-		}
-
-		@Override
-		public Subscription onElementReverse(Consumer<? super OrderedObservableElement<V>> onElement) {
-			return getManager().onElement(getWrapped(), getValue(),
-				element -> onElement.accept((OrderedObservableElement<V>) element.combineV(getMap(), getValue())), false);
-		}
 	}
 
 	/**
@@ -1011,7 +985,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 	 *
 	 * @param <E> The type of the collection to refresh
 	 */
-	class RefreshingList<E> extends ObservableOrderedCollection.RefreshingOrderedCollection<E> implements PartialListImpl<E> {
+	class RefreshingList<E> extends RefreshingReversibleCollection<E> implements PartialListImpl<E> {
 		protected RefreshingList(ObservableList<E> wrap, Observable<?> refresh) {
 			super(wrap, refresh);
 		}
@@ -1038,7 +1012,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 	 *
 	 * @param <E> The type of the collection to refresh
 	 */
-	class ElementRefreshingList<E> extends ObservableOrderedCollection.ElementRefreshingOrderedCollection<E> implements PartialListImpl<E> {
+	class ElementRefreshingList<E> extends ElementRefreshingReversibleCollection<E> implements PartialListImpl<E> {
 		protected ElementRefreshingList(ObservableList<E> wrap, Function<? super E, Observable<?>> refresh) {
 			super(wrap, refresh);
 		}
@@ -1052,16 +1026,6 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 		public E get(int index) {
 			return getWrapped().get(index);
 		}
-
-		@Override
-		public Subscription onOrderedElement(Consumer<? super OrderedObservableElement<E>> onElement) {
-			return onElement(element -> onElement.accept((OrderedObservableElement<E>) element));
-		}
-
-		@Override
-		public Subscription onElementReverse(Consumer<? super OrderedObservableElement<E>> onElement) {
-			return getWrapped().onElementReverse(element -> onElement.accept(element.refreshForValue(getRefresh())));
-		}
 	}
 
 	/**
@@ -1069,7 +1033,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 	 *
 	 * @param <E> The type of elements in the list
 	 */
-	class ImmutableObservableList<E> extends ImmutableOrderedObservableCollection<E> implements PartialListImpl<E> {
+	class ImmutableObservableList<E> extends ImmutableReversibleCollection<E> implements PartialListImpl<E> {
 		public ImmutableObservableList(ObservableList<E> wrap) {
 			super(wrap);
 		}
@@ -1077,11 +1041,6 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 		@Override
 		protected ObservableList<E> getWrapped() {
 			return (ObservableList<E>) super.getWrapped();
-		}
-
-		@Override
-		public Subscription onElementReverse(Consumer<? super OrderedObservableElement<E>> observer) {
-			return getWrapped().onElementReverse(observer);
 		}
 
 		@Override
@@ -1100,7 +1059,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	class SafeCachedObservableList<E> extends SafeCachedOrderedObservableCollection<E> implements PartialListImpl<E> {
+	class SafeCachedObservableList<E> extends SafeCachedReversibleCollection<E> implements PartialListImpl<E> {
 		protected SafeCachedObservableList(ObservableList<E> wrap) {
 			super(wrap);
 		}

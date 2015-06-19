@@ -1,6 +1,7 @@
 package org.observe.datastruct;
 
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Objects;
@@ -68,7 +69,7 @@ public interface ObservableMultiMap<K, V> {
 
 	/**
 	 * @param key The key to get the entry for
-	 * @return A multi entry that represents the given key's presence in this map. Never null.
+	 * @return A multi-entry that represents the given key's presence in this map. Never null.
 	 */
 	default ObservableMultiEntry<K, V> entryFor(K key) {
 		ObservableCollection<V> values = get(key);
@@ -272,6 +273,7 @@ public interface ObservableMultiMap<K, V> {
 		return new CollectionMap();
 	}
 
+	/** @return An observable map with the same key set as this map and whose values are one of the elements in this multi-map for each key */
 	default ObservableMap<K, V> unique() {
 		ObservableMultiMap<K, V> outer = this;
 		class UniqueMap implements ObservableMap<K, V> {
@@ -308,7 +310,7 @@ public interface ObservableMultiMap<K, V> {
 	 *         per transaction.
 	 */
 	default Observable<Void> changes() {
-		return observeEntries().simpleChanges();
+		return keySet().refreshEach(key -> get(key).simpleChanges()).simpleChanges();
 	}
 
 	/** @return An immutable copy of this map */
@@ -343,7 +345,7 @@ public interface ObservableMultiMap<K, V> {
 	}
 
 	/**
-	 * Simple multi entry implementation
+	 * Simple multi-entry implementation
 	 *
 	 * @param <K> The key type for this entry
 	 * @param <V> The value type for this entry
@@ -435,6 +437,12 @@ public interface ObservableMultiMap<K, V> {
 		}
 	}
 
+	/**
+	 * Simple ordered multi-entry implementation
+	 *
+	 * @param <K> The key type for this entry
+	 * @param <V> The value type for this entry
+	 */
 	class ObsMultiEntryOrdered<K, V> extends ObsMultiEntryImpl<K, V> implements ObservableOrderedCollection<V> {
 		public ObsMultiEntryOrdered(K key, ObservableOrderedCollection<V> values) {
 			super(key, values);
@@ -451,12 +459,84 @@ public interface ObservableMultiMap<K, V> {
 		}
 	}
 
+	/**
+	 * Simple multi-entry sorted set implementation
+	 *
+	 * @param <K> The key type for this entry
+	 * @param <V> The value type for this entry
+	 */
 	class ObsMultiEntrySortedSet<K, V> extends ObsMultiEntryOrdered<K, V> implements ObservableSortedSet<V> {
 		public ObsMultiEntrySortedSet(K key, ObservableSortedSet<V> values) {
 			super(key, values);
 		}
+
+		@Override
+		protected ObservableSortedSet<V> getWrapped() {
+			return (ObservableSortedSet<V>) super.getWrapped();
+		}
+
+		@Override
+		public Iterable<V> descending() {
+			return getWrapped().descending();
+		}
+
+		@Override
+		public V pollFirst() {
+			return getWrapped().pollFirst();
+		}
+
+		@Override
+		public V pollLast() {
+			return getWrapped().pollLast();
+		}
+
+		@Override
+		public ObservableSortedSet<V> descendingSet() {
+			return getWrapped().descendingSet();
+		}
+
+		@Override
+		public Iterator<V> descendingIterator() {
+			return getWrapped().descendingIterator();
+		}
+
+		@Override
+		public ObservableSortedSet<V> subSet(V fromElement, boolean fromInclusive, V toElement, boolean toInclusive) {
+			return getWrapped().subSet(fromElement, fromInclusive, toElement, toInclusive);
+		}
+
+		@Override
+		public ObservableSortedSet<V> headSet(V toElement, boolean inclusive) {
+			return getWrapped().headSet(toElement, inclusive);
+		}
+
+		@Override
+		public ObservableSortedSet<V> tailSet(V fromElement, boolean inclusive) {
+			return getWrapped().tailSet(fromElement, inclusive);
+		}
+
+		@Override
+		public Comparator<? super V> comparator() {
+			return getWrapped().comparator();
+		}
+
+		@Override
+		public V first() {
+			return getWrapped().first();
+		}
+
+		@Override
+		public V last() {
+			return getWrapped().last();
+		}
 	}
 
+	/**
+	 * Simple multi-entry list implementation
+	 *
+	 * @param <K> The key type for this entry
+	 * @param <V> The value type for this entry
+	 */
 	class ObsMultiEntryList<K, V> extends ObsMultiEntryOrdered<K, V> implements ObservableList<V> {
 		public ObsMultiEntryList(K key, ObservableList<V> values) {
 			super(key, values);
@@ -503,6 +583,12 @@ public interface ObservableMultiMap<K, V> {
 		}
 	}
 
+	/**
+	 * Simple multi-entry set implementation
+	 *
+	 * @param <K> The key type for this entry
+	 * @param <V> The value type for this entry
+	 */
 	class ObsMultiEntrySet<K, V> extends ObsMultiEntryImpl<K, V> implements ObservableSet<V> {
 		public ObsMultiEntrySet(K key, ObservableSet<V> values) {
 			super(key, values);

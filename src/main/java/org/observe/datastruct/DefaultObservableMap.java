@@ -13,7 +13,6 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.DefaultObservableSet;
-import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.util.DefaultTransactable;
 import org.observe.util.Transaction;
@@ -118,7 +117,7 @@ public class DefaultObservableMap<K, V> extends java.util.AbstractMap<K, V> impl
 	}
 
 	@Override
-	public ObservableCollection<ObservableEntry<K, V>> observeEntries() {
+	public ObservableSet<ObservableEntry<K, V>> observeEntries() {
 		return theEntries;
 	}
 

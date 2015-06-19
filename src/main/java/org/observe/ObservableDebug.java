@@ -9,6 +9,7 @@ import java.util.function.BiFunction;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableList;
+import org.observe.collect.ObservableSet;
 import org.observe.collect.TransactableCollection;
 import org.observe.datastruct.DefaultObservableMultiMap;
 import org.observe.datastruct.ObservableGraph;
@@ -548,26 +549,6 @@ public abstract class ObservableDebug {
 						private final Type valueType = new Type(Object.class);
 
 						@Override
-						public DebugDescription put(String key, DebugDescription value) {
-							throw new UnsupportedOperationException();
-						}
-
-						@Override
-						public DebugDescription remove(Object key) {
-							throw new UnsupportedOperationException();
-						}
-
-						@Override
-						public void putAll(Map<? extends String, ? extends DebugDescription> m) {
-							throw new UnsupportedOperationException();
-						}
-
-						@Override
-						public void clear() {
-							throw new UnsupportedOperationException();
-						}
-
-						@Override
 						public Type getKeyType() {
 							return keyType;
 						}
@@ -578,46 +559,20 @@ public abstract class ObservableDebug {
 						}
 
 						@Override
-						public ObservableCollection<ObservableEntry<String, DebugDescription>> observeEntries() {
-							class Entry implements ObservableMap.ObservableEntry<String, DebugDescription> {
-								private final ObservableGraph.Edge<ObservableDebugWrapper, String> theEdge;
-
-								Entry(ObservableGraph.Edge<ObservableDebugWrapper, String> edge) {
-									theEdge = edge;
-								}
-
-								@Override
-								public Type getType() {
-									return valueType;
-								}
-
-								@Override
-								public Subscription subscribe(Observer<? super ObservableValueEvent<DebugDescription>> observer) {
-									return () -> { // Should never change
-									};
-								}
-
-								@Override
-								public String getKey() {
-									return theEdge.getValue();
-								}
-
-								@Override
-								public DebugDescription getValue() {
-									return new NodeDebugDescription(theEdge.getStart());
-								}
-
-								@Override
-								public DebugDescription setValue(DebugDescription value) {
-									throw new UnsupportedOperationException();
-								}
-							}
-							return theNode.getEdges().filter(edge -> edge.getEnd() == theNode).map(Entry::new);
+						public ObservableValue<CollectionSession> getSession() {
+							return null;
 						}
 
 						@Override
-						public ObservableValue<CollectionSession> getSession() {
-							return null;
+						public ObservableSet<String> keySet() {
+							return ObservableSet.unique(theNode.getEdges().filter(edge -> edge.getEnd() == theNode)
+								.map(edge -> edge.getValue()));
+						}
+
+						@Override
+						public ObservableValue<DebugDescription> observe(Object key) {
+							return theNode.getEdges().find(edge -> edge.getEnd() == theNode && edge.getValue().equals(key))
+								.mapV(edge -> new NodeDebugDescription(edge.getStart()));
 						}
 					};
 				}
@@ -652,7 +607,7 @@ public abstract class ObservableDebug {
 					if(parents.isEmpty())
 						ret.append(theNode.getValue().observable.get().toString());
 					else if(parents.keySet().size() == 1) { // Either single-parent or some sort of flattened set of parents
-						ret.append(parents.observeKeys().find(key -> true).get()).append('(');
+						ret.append(parents.keySet().find(key -> true).get()).append('(');
 						boolean first = true;
 						for(DebugDescription parent : parents.values()) {
 							if(!first)

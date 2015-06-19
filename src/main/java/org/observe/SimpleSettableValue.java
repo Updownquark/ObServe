@@ -47,14 +47,14 @@ public class SimpleSettableValue<T> extends DefaultSettableValue<T> {
 	}
 
 	@Override
-	public <V extends T> SimpleSettableValue<T> set(V value, Object cause) throws IllegalArgumentException {
+	public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
 		String accept = isAcceptable(value);
 		if(accept != null)
 			throw new IllegalArgumentException(accept);
 		T old = theValue;
 		theValue = value;
 		theController.onNext(new ObservableValueEvent<>(this, old, value, cause));
-		return this;
+		return old;
 	}
 
 	@Override
