@@ -47,7 +47,13 @@ public interface RedBlackTreeMap<K, V, N extends ValuedRedBlackNode<Map.Entry<K,
 
 	N getRoot();
 
-	N createRoot(K key, V value);
+	N createRoot(K key);
+
+	default N createRoot(K key, V value) {
+		N ret = createRoot(key);
+		ret.getValue().setValue(value);
+		return ret;
+	}
 
 	void setRoot(N root);
 
@@ -293,18 +299,27 @@ public interface RedBlackTreeMap<K, V, N extends ValuedRedBlackNode<Map.Entry<K,
 		return node.getValue().getValue();
 	}
 
+	default N getOrInsertNode(K key){
+		N root=getRoot();
+		if(root==null){
+			root = createRoot(key);
+			setRoot(root);
+			return root;
+		}
+		TreeOpResult result = root.add(new RedBlackTreeMap.DefaultEntry<>(key), false);
+		return (N) result.getNewNode();
+	}
+
 	@Override
 	default V put(K key, V value) {
-		N root = getRoot();
-		if(root == null) {
-			setRoot(createRoot(key, value));
-			return null;
-		}
-		TreeOpResult result = root.add(new RedBlackTreeMap.DefaultEntry<>(key, value), false);
-		if(result.getFoundNode() != null)
-			return ((N) result.getFoundNode()).getValue().setValue(value);
-		else
-			return null;
+		N node = getOrInsertNode(key);
+		return node.getValue().setValue(value);
+	}
+
+	default N putGetNode(K key, V value) {
+		N node = getOrInsertNode(key);
+		node.getValue().setValue(value);
+		return node;
 	}
 
 	@Override
@@ -412,7 +427,9 @@ public interface RedBlackTreeMap<K, V, N extends ValuedRedBlackNode<Map.Entry<K,
 
 		@Override
 		public N createRoot(java.util.Map.Entry<K, V> value) {
-			return theMap.createRoot(value.getKey(), value.getValue());
+			N node = theMap.createRoot(value.getKey());
+			node.getValue().setValue(value.getValue());
+			return node;
 		}
 
 		@Override

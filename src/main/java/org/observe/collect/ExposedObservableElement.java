@@ -19,6 +19,10 @@ class ExposedObservableElement<E> implements ObservableElement<E> {
 		theSubscriptions = subscriptions;
 	}
 
+	protected InternalObservableElementImpl<E> getInternalElement() {
+		return theInternalElement;
+	}
+
 	@Override
 	public Type getType() {
 		return theInternalElement.getType();

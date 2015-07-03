@@ -114,6 +114,10 @@ public class DefaultObservableSet<E> extends AbstractSet<E> implements Observabl
 		return theInternals.onElement(onElement, true);
 	}
 
+	private InternalObservableElementImpl<E> createElement(E value) {
+		return new InternalObservableElementImpl<>(theType, value);
+	}
+
 	@Override
 	public int size() {
 		return theValues.size();
@@ -236,7 +240,7 @@ public class DefaultObservableSet<E> extends AbstractSet<E> implements Observabl
 	private boolean addImpl(E e) {
 		if(theValues.containsKey(e))
 			return false;
-		InternalObservableElementImpl<E> el = new InternalObservableElementImpl<>(theType, e);
+		InternalObservableElementImpl<E> el = createElement(e);
 		theValues.put(e, el);
 		theInternals.fireNewElement(el);
 		return true;
@@ -275,7 +279,7 @@ public class DefaultObservableSet<E> extends AbstractSet<E> implements Observabl
 			if(theValues.containsKey(add))
 				continue;
 			ret = true;
-			InternalObservableElementImpl<E> el = new InternalObservableElementImpl<>(theType, add);
+			InternalObservableElementImpl<E> el = createElement(add);
 			theValues.put(add, el);
 			theInternals.fireNewElement(el);
 		}
@@ -311,7 +315,7 @@ public class DefaultObservableSet<E> extends AbstractSet<E> implements Observabl
 		DefaultObservableSet<E> ret = (DefaultObservableSet<E>) super.clone();
 		ret.theValues = (LinkedHashMap<E, InternalObservableElementImpl<E>>) theValues.clone();
 		for(Map.Entry<E, InternalObservableElementImpl<E>> entry : theValues.entrySet())
-			entry.setValue(new InternalObservableElementImpl<>(theType, entry.getKey()));
+			entry.setValue(ret.createElement(entry.getKey()));
 		ret.hasIssuedController = new AtomicBoolean(false);
 		ret.theInternals = ret.new DefaultSetInternals(new ReentrantReadWriteLock(), hasIssuedController);
 		return ret;

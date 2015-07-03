@@ -454,9 +454,8 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 		}
 
 		@Override
-		public DefaultNode<Entry<K, V>> createRoot(K key, V value) {
-			return new DefaultNode<>(new RedBlackTreeMap.DefaultEntry<>(key, value), (o1, o2) -> theCompare.compare(o1.getKey(),
-				o2.getKey()));
+		public DefaultNode<Entry<K, V>> createRoot(K key) {
+			return new DefaultNode<>(new RedBlackTreeMap.DefaultEntry<>(key), (o1, o2) -> theCompare.compare(o1.getKey(), o2.getKey()));
 		}
 	}
 

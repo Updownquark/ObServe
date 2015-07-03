@@ -7,14 +7,22 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 	public static class TreeOpResult {
 		private RedBlackNode theFoundNode;
 
+		private RedBlackNode theNewNode;
+
 		RedBlackNode theNewRoot;
 
-		TreeOpResult(RedBlackNode foundNode, RedBlackNode root) {
+		TreeOpResult(RedBlackNode foundNode, RedBlackNode newNode, RedBlackNode root) {
+			theFoundNode = foundNode;
+			theNewNode = newNode;
 			theNewRoot = root;
 		}
 
 		public RedBlackNode getFoundNode() {
 			return theFoundNode;
+		}
+
+		public RedBlackNode getNewNode() {
+			return theNewNode;
 		}
 
 		public RedBlackNode getNewRoot() {
@@ -282,9 +290,9 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 		if(compare == 0) {
 			if(replaceIfFound) {
 				replace(node);
-				return new TreeOpResult(this, node);
+				return new TreeOpResult(this, node, node);
 			} else
-				return new TreeOpResult(this, this);
+				return new TreeOpResult(this, this, this);
 		}
 		return addOnSide(node, compare < 0, replaceIfFound);
 	}
@@ -297,7 +305,7 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 		if(child == null) {
 			setChild(node, left);
 			child = node;
-			r = new TreeOpResult(null, this);
+			r = new TreeOpResult(null, node, this);
 		} else {
 			r = child.add(node, replaceIfFound);
 			if(r.theNewRoot == theParent) {

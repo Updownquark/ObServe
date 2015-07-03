@@ -44,6 +44,8 @@ public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, 
 	private volatile InternalObservableElementImpl<E> theRemovedElement;
 	private volatile int theRemovedElementIndex;
 
+	private volatile int theModCount;
+
 	/**
 	 * Creates the list
 	 *
@@ -73,6 +75,7 @@ public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, 
 			if(write) {
 				theRemovedElement = null;
 				theRemovedElementIndex = -1;
+				theModCount++;
 			}
 		});
 		theSessionObservable = session;
@@ -132,6 +135,10 @@ public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, 
 	public Subscription onElementReverse(Consumer<? super OrderedObservableElement<E>> onElement) {
 		// Cast is safe because the internals of this set will only create ordered elements
 		return theInternals.onElement((Consumer<ObservableElement<E>>) onElement, false);
+	}
+
+	private InternalOrderedObservableElementImpl<E> createElement(E value) {
+		return new InternalOrderedObservableElementImpl<>(theType, value);
 	}
 
 	@Override
@@ -302,7 +309,7 @@ public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, 
 	private void addImpl(Object e) {
 		E val = (E) theType.cast(e);
 		theValues.add(val);
-		InternalObservableElementImpl<E> add = new InternalObservableElementImpl<>(theType, val);
+		InternalObservableElementImpl<E> add = createElement(val);
 		theElements.add(add);
 		theInternals.fireNewElement(add);
 	}
@@ -324,7 +331,7 @@ public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, 
 			for(E e : c) {
 				E val = (E) theType.cast(e);
 				theValues.add(val);
-				InternalObservableElementImpl<E> newWrapper = new InternalObservableElementImpl<>(theType, val);
+				InternalObservableElementImpl<E> newWrapper = createElement(val);
 				theElements.add(newWrapper);
 				theInternals.fireNewElement(newWrapper);
 			}
@@ -337,7 +344,7 @@ public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, 
 			for(E e : c) {
 				E val = (E) theType.cast(e);
 				theValues.add(idx, val);
-				InternalObservableElementImpl<E> newWrapper = new InternalObservableElementImpl<>(theType, val);
+				InternalObservableElementImpl<E> newWrapper = createElement(val);
 				theElements.add(idx, newWrapper);
 				theInternals.fireNewElement(newWrapper);
 				idx++;
@@ -409,7 +416,7 @@ public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, 
 	private void addImpl(int index, E element) {
 		E val = (E) theType.cast(element);
 		theValues.add(index, val);
-		InternalObservableElementImpl<E> newWrapper = new InternalObservableElementImpl<>(theType, val);
+		InternalObservableElementImpl<E> newWrapper = createElement(val);
 		theElements.add(index, newWrapper);
 		theInternals.fireNewElement(newWrapper);
 	}
@@ -428,7 +435,7 @@ public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, 
 		ret.theValues = (ArrayList<E>) theValues.clone();
 		ret.theElements = new ArrayList<>();
 		for(E el : ret.theValues)
-			ret.theElements.add(new InternalObservableElementImpl<>(theType, el));
+			ret.theElements.add(createElement(el));
 		ret.hasIssuedController = new AtomicBoolean(false);
 		ret.theInternals = ret.new DefaultListInternals(new ReentrantReadWriteLock(), ret.hasIssuedController, write -> {
 			if(write) {
@@ -614,10 +621,15 @@ public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, 
 			};
 		}
 
+		private void cacheIndexes() {
+			for(int i = 0; i < theElements.size(); i++)
+				((InternalOrderedObservableElementImpl<E>) theElements.get(i)).cacheIndex(i, theModCount);
+		}
+
 		@Override
 		ObservableElement<E> createExposedElement(InternalObservableElementImpl<E> internal, Collection<Subscription> subscriptions) {
+			InternalOrderedObservableElementImpl<E> orderedInternal = (InternalOrderedObservableElementImpl<E>) internal;
 			class ExposedOrderedObservableElement extends ExposedObservableElement<E> implements OrderedObservableElement<E> {
-				private int theRemovedIndex = -1;
 
 				ExposedOrderedObservableElement() {
 					super(internal, subscriptions);
@@ -625,12 +637,17 @@ public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, 
 
 				@Override
 				public int getIndex() {
-					int ret = theElements.indexOf(internal);
-					if(ret < 0)
-						ret = theRemovedIndex;
-					if(ret < 0 && theRemovedElement == internal)
-						ret = theRemovedIndex = theRemovedElementIndex;
-					return ret;
+					int index = orderedInternal.getCachedIndex(theModCount);
+					if(index < 0) {
+						if(theRemovedElement == orderedInternal) {
+							index = theRemovedElementIndex;
+							orderedInternal.setRemovedIndex(index);
+						} else {
+							cacheIndexes();
+							index = orderedInternal.getCachedIndex(theModCount);
+						}
+					}
+					return index;
 				}
 
 				@Override

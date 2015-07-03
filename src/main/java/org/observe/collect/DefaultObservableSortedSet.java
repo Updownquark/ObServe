@@ -34,17 +34,22 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 	private final Type theType;
 
 	private final Comparator<? super E> theCompare;
+
 	private AtomicBoolean hasIssuedController;
+
 	private DefaultSortedSetInternals theInternals;
 
 	private ObservableValue<CollectionSession> theSessionObservable;
+
 	private Transactable theSessionController;
 
-	private DefaultTreeMap<E, InternalObservableElementImpl<E>> theValues;
+	private DefaultTreeMap<E, InternalElement> theValues;
 
-	private volatile InternalObservableElementImpl<E> theRemovedElement;
+	private volatile InternalElement theRemovedElement;
 
 	private volatile int theRemovedElementIndex;
+
+	private volatile int theModCount;
 
 	/**
 	 * Creates the set
@@ -79,6 +84,7 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 			if(write) {
 				theRemovedElement = null;
 				theRemovedElementIndex = -1;
+				theModCount++;
 			}
 		});
 		theSessionObservable = session;
@@ -143,6 +149,10 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 	public Subscription onElementReverse(Consumer<? super OrderedObservableElement<E>> onElement) {
 		// Cast is safe because the internals of this set will only create ordered elements
 		return theInternals.onElement((Consumer<ObservableElement<E>>) onElement, false);
+	}
+
+	private InternalElement createElement(E value) {
+		return new InternalElement(theType, value);
 	}
 
 	@Override
@@ -272,8 +282,8 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 	private boolean addImpl(E e) {
 		if(theValues.containsKey(e))
 			return false;
-		InternalObservableElementImpl<E> el = new InternalObservableElementImpl<>(theType, e);
-		theValues.put(e, el);
+		InternalElement el = createElement(e);
+		el.setNode(theValues.putGetNode(e, el));
 		theInternals.fireNewElement(el);
 		return true;
 	}
@@ -283,7 +293,7 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 	}
 
 	private boolean removeNodeImpl(Object o) {
-		DefaultNode<Map.Entry<E, InternalObservableElementImpl<E>>> node = theValues.getNode(o);
+		DefaultNode<Map.Entry<E, InternalElement>> node = theValues.getNode(o);
 		if(node != null) {
 			theValues.removeNode(node);
 			removedNodeImpl(node);
@@ -292,7 +302,7 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 			return false;
 	}
 
-	private void removedNodeImpl(DefaultNode<Map.Entry<E, InternalObservableElementImpl<E>>> node) {
+	private void removedNodeImpl(DefaultNode<Map.Entry<E, InternalElement>> node) {
 		theRemovedElementIndex = node.getIndex();
 		theRemovedElement = node.getValue().getValue();
 		theRemovedElement.remove();
@@ -304,8 +314,8 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 			if(!theValues.containsKey(add))
 				continue;
 			ret = true;
-			InternalObservableElementImpl<E> el = new InternalObservableElementImpl<>(theType, add);
-			theValues.put(add, el);
+			InternalElement el = createElement(add);
+			el.setNode(theValues.putGetNode(add, el));
 			theInternals.fireNewElement(el);
 		}
 		return ret;
@@ -323,9 +333,9 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 
 	private boolean retainAllImpl(Collection<?> c) {
 		boolean ret = false;
-		Iterator<DefaultNode<Map.Entry<E, InternalObservableElementImpl<E>>>> iter = theValues.nodeIterator();
+		Iterator<DefaultNode<Map.Entry<E, InternalElement>>> iter = theValues.nodeIterator();
 		while(iter.hasNext()) {
-			DefaultNode<Map.Entry<E, InternalObservableElementImpl<E>>> node = iter.next();
+			DefaultNode<Map.Entry<E, InternalElement>> node = iter.next();
 			if(c.contains(node.getValue().getKey()))
 				continue;
 			ret = true;
@@ -340,7 +350,7 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 	private void clearImpl() {
 		try (Transaction trans = startTransactionImpl(null)) {
 			theValues.clear();
-			ArrayList<InternalObservableElementImpl<E>> remove = new ArrayList<>();
+			ArrayList<InternalElement> remove = new ArrayList<>();
 			remove.addAll(theValues.values());
 			theValues.clear();
 			for(int i = remove.size() - 1; i >= 0; i--) {
@@ -352,7 +362,7 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 	}
 
 	private E pollFirstImpl() {
-		Map.Entry<E, InternalObservableElementImpl<E>> entry = theValues.pollFirstEntry();
+		Map.Entry<E, InternalElement> entry = theValues.pollFirstEntry();
 		if(entry == null)
 			return null;
 		entry.getValue().remove();
@@ -360,7 +370,7 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 	}
 
 	private E pollLastImpl() {
-		Map.Entry<E, InternalObservableElementImpl<E>> entry = theValues.pollLastEntry();
+		Map.Entry<E, InternalElement> entry = theValues.pollLastEntry();
 		if(entry == null)
 			return null;
 		entry.getValue().remove();
@@ -375,9 +385,9 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 	@Override
 	protected DefaultObservableSortedSet<E> clone() throws CloneNotSupportedException {
 		DefaultObservableSortedSet<E> ret = (DefaultObservableSortedSet<E>) super.clone();
-		ret.theValues = (DefaultTreeMap<E, InternalObservableElementImpl<E>>) theValues.clone();
-		for(Map.Entry<E, InternalObservableElementImpl<E>> entry : theValues.entrySet())
-			entry.setValue(new InternalObservableElementImpl<>(theType, entry.getKey()));
+		ret.theValues = (DefaultTreeMap<E, InternalElement>) theValues.clone();
+		for(Map.Entry<E, InternalElement> entry : theValues.entrySet())
+			entry.setValue(ret.createElement(entry.getKey()));
 		ret.hasIssuedController = new AtomicBoolean(false);
 		ret.theInternals = ret.new DefaultSortedSetInternals(new ReentrantReadWriteLock(), ret.hasIssuedController, write -> {
 			if(write) {
@@ -389,13 +399,13 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 	}
 
 	private class SetIterator implements Iterator<E> {
-		private final Iterator<Map.Entry<E, InternalObservableElementImpl<E>>> backing;
+		private final Iterator<Map.Entry<E, InternalElement>> backing;
 
 		private final boolean isController;
 
-		private InternalObservableElementImpl<E> theLastElement;
+		private InternalElement theLastElement;
 
-		SetIterator(Iterator<Map.Entry<E, InternalObservableElementImpl<E>>> back, boolean controller) {
+		SetIterator(Iterator<Map.Entry<E, InternalElement>> back, boolean controller) {
 			backing = back;
 			isController = controller;
 		}
@@ -413,7 +423,7 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 		public E next() {
 			Object [] ret = new Object[1];
 			theInternals.doLocked(() -> {
-				Map.Entry<E, InternalObservableElementImpl<E>> entry = backing.next();
+				Map.Entry<E, InternalElement> entry = backing.next();
 				ret[0] = entry.getKey();
 				theLastElement = entry.getValue();
 			}, false, false);
@@ -431,10 +441,9 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 	}
 
 	private class ControllerSubSet implements NavigableSet<E> {
-		private final NodeSet<Map.Entry<E, InternalObservableElementImpl<E>>, DefaultNode<Map.Entry<E, InternalObservableElementImpl<E>>>> backing;
+		private final NodeSet<Map.Entry<E, InternalElement>, DefaultNode<Map.Entry<E, InternalElement>>> backing;
 
-		ControllerSubSet(
-			NodeSet<Map.Entry<E, InternalObservableElementImpl<E>>, DefaultNode<Map.Entry<E, InternalObservableElementImpl<E>>>> back) {
+		ControllerSubSet(NodeSet<Map.Entry<E, InternalElement>, DefaultNode<Map.Entry<E, InternalElement>>> back) {
 			backing = back;
 		}
 
@@ -447,7 +456,7 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 		public E first() {
 			Object [] ret = new Object[1];
 			theInternals.doLocked(() -> {
-				DefaultNode<Entry<E, InternalObservableElementImpl<E>>> entry = backing.first();
+				DefaultNode<Entry<E, InternalElement>> entry = backing.first();
 				if(entry == null)
 					throw new java.util.NoSuchElementException();
 				ret[0] = entry.getValue().getKey();
@@ -459,7 +468,7 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 		public E last() {
 			Object [] ret = new Object[1];
 			theInternals.doLocked(() -> {
-				DefaultNode<Entry<E, InternalObservableElementImpl<E>>> entry = backing.last();
+				DefaultNode<Entry<E, InternalElement>> entry = backing.last();
 				if(entry == null)
 					throw new java.util.NoSuchElementException();
 				ret[0] = entry.getValue().getKey();
@@ -471,7 +480,7 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 		public E lower(E e) {
 			Object [] ret = new Object[1];
 			theInternals.doLocked(() -> {
-				DefaultNode<Entry<E, InternalObservableElementImpl<E>>> entry = backing.lower(theValues.keyEntry(e));
+				DefaultNode<Entry<E, InternalElement>> entry = backing.lower(theValues.keyEntry(e));
 				if(entry == null)
 					throw new java.util.NoSuchElementException();
 				ret[0] = entry.getValue().getKey();
@@ -483,7 +492,7 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 		public E floor(E e) {
 			Object [] ret = new Object[1];
 			theInternals.doLocked(() -> {
-				DefaultNode<Entry<E, InternalObservableElementImpl<E>>> entry = backing.floor(theValues.keyEntry(e));
+				DefaultNode<Entry<E, InternalElement>> entry = backing.floor(theValues.keyEntry(e));
 				if(entry == null)
 					throw new java.util.NoSuchElementException();
 				ret[0] = entry.getValue().getKey();
@@ -495,7 +504,7 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 		public E ceiling(E e) {
 			Object [] ret = new Object[1];
 			theInternals.doLocked(() -> {
-				DefaultNode<Entry<E, InternalObservableElementImpl<E>>> entry = backing.ceiling(theValues.keyEntry(e));
+				DefaultNode<Entry<E, InternalElement>> entry = backing.ceiling(theValues.keyEntry(e));
 				if(entry == null)
 					throw new java.util.NoSuchElementException();
 				ret[0] = entry.getValue().getKey();
@@ -507,7 +516,7 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 		public E higher(E e) {
 			Object [] ret = new Object[1];
 			theInternals.doLocked(() -> {
-				DefaultNode<Entry<E, InternalObservableElementImpl<E>>> entry = backing.higher(theValues.keyEntry(e));
+				DefaultNode<Entry<E, InternalElement>> entry = backing.higher(theValues.keyEntry(e));
 				if(entry == null)
 					throw new java.util.NoSuchElementException();
 				ret[0] = entry.getValue().getKey();
@@ -556,7 +565,7 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 			theInternals.doLocked(() -> {
 				ret[0] = backing.toArray();
 				for(int i = 0; i < ret[0].length; i++)
-					ret[0][i] = ((DefaultNode<Entry<E, InternalObservableElementImpl<E>>>) ret[0][i]).getValue().getKey();
+					ret[0][i] = ((DefaultNode<Entry<E, InternalElement>>) ret[0][i]).getValue().getKey();
 			}, false, false);
 			return ret[0];
 		}
@@ -571,7 +580,7 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 				else
 					ret[0] = (T []) java.lang.reflect.Array.newInstance(a.getClass().getComponentType(), backed.length);
 				for(int i = 0; i < backed.length; i++)
-					ret[0][i] = ((DefaultNode<Entry<E, InternalObservableElementImpl<E>>>) ret[0][i]).getValue().getKey();
+					ret[0][i] = ((DefaultNode<Entry<E, InternalElement>>) ret[0][i]).getValue().getKey();
 			}, false, false);
 			return (T []) ret[0];
 		}
@@ -586,9 +595,9 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 			return wrap(backing.descendingIterator());
 		}
 
-		private Iterator<E> wrap(Iterator<DefaultNode<Entry<E, InternalObservableElementImpl<E>>>> entryIter) {
+		private Iterator<E> wrap(Iterator<DefaultNode<Entry<E, InternalElement>>> entryIter) {
 			return new Iterator<E>() {
-				private DefaultNode<Entry<E, InternalObservableElementImpl<E>>> theLast;
+				private DefaultNode<Entry<E, InternalElement>> theLast;
 
 				@Override
 				public boolean hasNext() {
@@ -616,7 +625,7 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 		public E pollFirst() {
 			Object [] ret = new Object[1];
 			theInternals.doLocked(() -> {
-				DefaultNode<Entry<E, InternalObservableElementImpl<E>>> node = backing.pollFirst();
+				DefaultNode<Entry<E, InternalElement>> node = backing.pollFirst();
 				ret[0] = node.getValue().getKey();
 				removedNodeImpl(node);
 			}, true, false);
@@ -627,7 +636,7 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 		public E pollLast() {
 			Object [] ret = new Object[1];
 			theInternals.doLocked(() -> {
-				DefaultNode<Entry<E, InternalObservableElementImpl<E>>> node = backing.pollLast();
+				DefaultNode<Entry<E, InternalElement>> node = backing.pollLast();
 				ret[0] = node.getValue().getKey();
 				removedNodeImpl(node);
 			}, true, false);
@@ -684,9 +693,9 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 		public boolean retainAll(Collection<?> c) {
 			boolean [] ret = new boolean[1];
 			theInternals.doLocked(() -> {
-				Iterator<DefaultNode<Entry<E, InternalObservableElementImpl<E>>>> entryIter = backing.iterator();
+				Iterator<DefaultNode<Entry<E, InternalElement>>> entryIter = backing.iterator();
 				while(entryIter.hasNext()) {
-					DefaultNode<Entry<E, InternalObservableElementImpl<E>>> node = entryIter.next();
+					DefaultNode<Entry<E, InternalElement>> node = entryIter.next();
 					if(!c.contains(node.getValue().getKey())) {
 						ret[0] = true;
 						entryIter.remove();
@@ -700,7 +709,7 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 		@Override
 		public void clear() {
 			theInternals.doLocked(() -> {
-				Iterator<DefaultNode<Entry<E, InternalObservableElementImpl<E>>>> entryIter = backing.iterator();
+				Iterator<DefaultNode<Entry<E, InternalElement>>> entryIter = backing.iterator();
 				while(entryIter.hasNext()) {
 					removedNodeImpl(entryIter.next());
 					entryIter.remove();
@@ -933,19 +942,60 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 		}
 	}
 
+	private class InternalElement extends InternalOrderedObservableElementImpl<E> {
+		private DefaultNode<Map.Entry<E, InternalElement>> theNode;
+
+		InternalElement(Type type, E value) {
+			super(type, value);
+		}
+
+		void setNode(DefaultNode<Map.Entry<E, InternalElement>> node) {
+			theNode = node;
+		}
+
+		int getIndex() {
+			int ret = getCachedIndex(theModCount);
+			if(ret < 0)
+				ret = cacheIndex(theNode);
+			return ret;
+		}
+
+		private int cacheIndex(DefaultNode<Map.Entry<E, InternalElement>> node) {
+			int ret = node.getValue().getValue().getCachedIndex(theModCount);
+			if(ret < 0) {
+				if(theRemovedElement == node.getValue().getValue()) {
+					ret = theRemovedElementIndex;
+					node.getValue().getValue().setRemovedIndex(ret);
+				} else {
+					DefaultNode<Map.Entry<E, InternalElement>> parent = (DefaultNode<Entry<E, InternalElement>>) node.getParent();
+					if(parent != null && !node.getSide())
+						ret = cacheIndex(parent) + 1;
+					else
+						ret = 0;
+					DefaultNode<Map.Entry<E, InternalElement>> left = (DefaultNode<Entry<E, InternalElement>>) node.getLeft();
+					if(left != null) {
+						ret += node.getSize();
+					}
+					node.getValue().getValue().cacheIndex(ret, theModCount);
+				}
+			}
+			return ret;
+		}
+	}
+
 	private class DefaultSortedSetInternals extends DefaultCollectionInternals<E> {
 		DefaultSortedSetInternals(ReentrantReadWriteLock lock, AtomicBoolean issuedController, Consumer<? super Boolean> postAction) {
 			super(lock, issuedController, null, postAction);
 		}
 
 		@Override
-		Iterable<? extends InternalObservableElementImpl<E>> getElements(boolean forward) {
+		Iterable<? extends InternalElement> getElements(boolean forward) {
 			if(forward)
 				return theValues.values();
 			else
-				return new Iterable<InternalObservableElementImpl<E>>() {
+				return new Iterable<InternalElement>() {
 				@Override
-				public Iterator<InternalObservableElementImpl<E>> iterator() {
+				public Iterator<InternalElement> iterator() {
 					return theValues.descendingMap().values().iterator();
 				}
 			};
@@ -954,25 +1004,23 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 		@Override
 		ObservableElement<E> createExposedElement(InternalObservableElementImpl<E> internal, Collection<Subscription> subscriptions) {
 			class ExposedOrderedObservableElement extends ExposedObservableElement<E> implements OrderedObservableElement<E> {
-				private int theRemovedIndex = -1;
-
 				ExposedOrderedObservableElement() {
 					super(internal, subscriptions);
 				}
 
 				@Override
+				protected InternalElement getInternalElement() {
+					return (InternalElement) super.getInternalElement();
+				}
+
+				@Override
 				public int getIndex() {
-					int ret = theValues.indexOfKey(internal.get());
-					if(ret < 0)
-						ret = theRemovedIndex;
-					if(ret < 0 && theRemovedElement == internal)
-						ret = theRemovedIndex = theRemovedElementIndex;
-					return ret;
+					return ((InternalElement) internal).getIndex();
 				}
 
 				@Override
 				public String toString() {
-					return getType() + " list[" + getIndex() + "]=" + get();
+					return getType() + " SortedSet[" + getIndex() + "]=" + get();
 				}
 			}
 			return new ExposedOrderedObservableElement();
