@@ -1074,12 +1074,11 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 		@Override
 		public int getIndex() {
-			E value = get();
 			int subListIndex = getSubCollectionElement().getIndex();
 			int subElIdx = getSubElement().getIndex();
-			int ret;
+			int ret = 0;
 			if(theCompare != null) {
-				ret = 0;
+				E value = get();
 				int index = 0;
 				for(ObservableOrderedCollection<E> sub : theOuter) {
 					if(index == subListIndex) {
@@ -1098,12 +1097,14 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 					index++;
 				}
 			} else {
-				ret = subElIdx;
 				int i = 0;
 				for(ObservableOrderedCollection<E> sub : theOuter) {
-					if(i >= subListIndex)
+					if(i < subListIndex)
+						ret += sub.size();
+					else if(i == subListIndex && sub == getSubCollectionElement().get())
+						ret += subElIdx;
+					else
 						break;
-					ret += sub.size();
 					i++;
 				}
 			}

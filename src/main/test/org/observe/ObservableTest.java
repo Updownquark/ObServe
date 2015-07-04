@@ -3,6 +3,7 @@ package org.observe;
 import static org.junit.Assert.assertEquals;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
@@ -1415,17 +1416,21 @@ public class ObservableTest {
 		outerControl.add(list2);
 
 		ArrayList<Integer> compare = new ArrayList<>();
-		ArrayList<Integer> correct = new ArrayList<>();
+		ArrayList<Integer> correct1 = new ArrayList<>();
+		ArrayList<Integer> correct2 = new ArrayList<>();
+		ArrayList<Integer> correct3 = new ArrayList<>();
 
+		// Add data before the subscription because subscribing to non-empty, indexed, flattened collections is complicated
 		for(int i = 0; i <= 30; i++) {
 			if(i % 3 == 1) {
 				control1.add(i);
-				correct.add(i);
+				correct1.add(i);
 			} else if(i % 3 == 0) {
 				control2.add(i);
-				correct.add(i);
+				correct2.add(i);
 			} else {
 				control3.add(i);
+				correct3.add(i);
 			}
 		}
 
@@ -1446,29 +1451,31 @@ public class ObservableTest {
 				}
 			});
 		});
-		assertEquals(correct, compare);
+		assertEquals(join(comparator, correct1, correct2), compare);
 
 		outerControl.add(list3);
-		correct.clear();
-		for(int i = 0; i <= 30; i++)
-			correct.add(i);
-		assertEquals(correct, compare);
+		assertEquals(join(comparator, correct1, correct2, correct3), compare);
 
 		outerControl.remove(list2);
-		correct.clear();
-		for(int i = 0; i <= 30; i++)
-			if(i % 3 != 0)
-				correct.add(i);
-		assertEquals(correct, compare);
+		assertEquals(join(comparator, correct1, correct3), compare);
 
 		control1.remove((Integer) 16);
-		correct.remove((Integer) 16);
-		assertEquals(correct, compare);
+		correct1.remove((Integer) 16);
+		assertEquals(join(comparator, correct1, correct3), compare);
 		control1.add(control1.indexOf(19), 16);
-		correct.add(correct.indexOf(17), 16);
-		assertEquals(correct, compare);
+		correct1.add(correct1.indexOf(19), 16);
+		assertEquals(join(comparator, correct1, correct3), compare);
 
 		sub.unsubscribe();
+	}
+
+	private static <T> List<T> join(Comparator<? super T> comparator, List<T>... correct) {
+		ArrayList<T> ret = new ArrayList<>();
+		for(List<T> c : correct)
+			ret.addAll(c);
+		if(comparator != null)
+			java.util.Collections.sort(ret, comparator);
+		return ret;
 	}
 
 	/** Tests {@link ObservableList#asList(ObservableCollection)} */
