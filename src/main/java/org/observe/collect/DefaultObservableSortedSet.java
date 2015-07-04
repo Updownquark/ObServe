@@ -45,10 +45,6 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 
 	private DefaultTreeMap<E, InternalElement> theValues;
 
-	private volatile InternalElement theRemovedElement;
-
-	private volatile int theRemovedElementIndex;
-
 	private volatile int theModCount;
 
 	/**
@@ -81,11 +77,8 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 		theType = type;
 		hasIssuedController = new AtomicBoolean(false);
 		theInternals = new DefaultSortedSetInternals(lock, hasIssuedController, write -> {
-			if(write) {
-				theRemovedElement = null;
-				theRemovedElementIndex = -1;
+			if(write)
 				theModCount++;
-			}
 		});
 		theSessionObservable = session;
 		theSessionController = sessionController;
@@ -303,20 +296,21 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 	}
 
 	private void removedNodeImpl(DefaultNode<Map.Entry<E, InternalElement>> node) {
-		theRemovedElementIndex = node.getIndex();
-		theRemovedElement = node.getValue().getValue();
-		theRemovedElement.remove();
+		node.getValue().getValue().setRemovedIndex(node.getValue().getValue().getIndex());
+		node.getValue().getValue().remove();
 	}
 
 	private boolean addAllImpl(Collection<? extends E> c) {
 		boolean ret = false;
-		for(E add : c) {
-			if(!theValues.containsKey(add))
-				continue;
-			ret = true;
-			InternalElement el = createElement(add);
-			el.setNode(theValues.putGetNode(add, el));
-			theInternals.fireNewElement(el);
+		try (Transaction trans = startTransactionImpl(null)) {
+			for(E add : c) {
+				if(!theValues.containsKey(add))
+					continue;
+				ret = true;
+				InternalElement el = createElement(add);
+				el.setNode(theValues.putGetNode(add, el));
+				theInternals.fireNewElement(el);
+			}
 		}
 		return ret;
 	}
@@ -324,40 +318,36 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 	private boolean removeAllImpl(Collection<?> c) {
 		try (Transaction trans = startTransactionImpl(null)) {
 			boolean ret = false;
-			for(Object o : c) {
+			for(Object o : c)
 				ret |= removeNodeImpl(o);
-			}
 			return ret;
 		}
 	}
 
 	private boolean retainAllImpl(Collection<?> c) {
 		boolean ret = false;
-		Iterator<DefaultNode<Map.Entry<E, InternalElement>>> iter = theValues.nodeIterator();
-		while(iter.hasNext()) {
-			DefaultNode<Map.Entry<E, InternalElement>> node = iter.next();
-			if(c.contains(node.getValue().getKey()))
-				continue;
-			ret = true;
-			theRemovedElementIndex = node.getIndex();
-			theRemovedElement = node.getValue().getValue();
-			theRemovedElement.remove();
-			iter.remove();
+		try (Transaction trans = startTransactionImpl(null)) {
+			Iterator<DefaultNode<Map.Entry<E, InternalElement>>> iter = theValues.nodeIterator();
+			while(iter.hasNext()) {
+				DefaultNode<Map.Entry<E, InternalElement>> node = iter.next();
+				if(c.contains(node.getValue().getKey()))
+					continue;
+				ret = true;
+				removedNodeImpl(node);
+				iter.remove();
+			}
 		}
 		return ret;
 	}
 
 	private void clearImpl() {
 		try (Transaction trans = startTransactionImpl(null)) {
-			theValues.clear();
-			ArrayList<InternalElement> remove = new ArrayList<>();
-			remove.addAll(theValues.values());
-			theValues.clear();
-			for(int i = remove.size() - 1; i >= 0; i--) {
-				theRemovedElement = remove.get(i);
-				theRemovedElementIndex = i;
-				theRemovedElement.remove();
+			Iterator<DefaultNode<Map.Entry<E, InternalElement>>> iter = theValues.nodeIterator();
+			while(iter.hasNext()) {
+				DefaultNode<Map.Entry<E, InternalElement>> node = iter.next();
+				removedNodeImpl(node);
 			}
+			theValues.clear();
 		}
 	}
 
@@ -390,10 +380,8 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 			entry.setValue(ret.createElement(entry.getKey()));
 		ret.hasIssuedController = new AtomicBoolean(false);
 		ret.theInternals = ret.new DefaultSortedSetInternals(new ReentrantReadWriteLock(), ret.hasIssuedController, write -> {
-			if(write) {
-				theRemovedElement = null;
-				theRemovedElementIndex = -1;
-			}
+			if(write)
+				theModCount++;
 		});
 		return ret;
 	}
@@ -963,26 +951,21 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 		private int cacheIndex(DefaultNode<Map.Entry<E, InternalElement>> node) {
 			int ret = node.getValue().getValue().getCachedIndex(theModCount);
 			if(ret < 0) {
-				if(theRemovedElement == node.getValue().getValue()) {
-					ret = theRemovedElementIndex;
-					node.getValue().getValue().setRemovedIndex(ret);
-				} else {
-					ret = 0;
-					DefaultNode<Map.Entry<E, InternalElement>> left = (DefaultNode<Entry<E, InternalElement>>) node.getLeft();
-					if(left != null)
-						ret += left.getSize();
-					DefaultNode<Map.Entry<E, InternalElement>> parent = (DefaultNode<Entry<E, InternalElement>>) node.getParent();
-					DefaultNode<Map.Entry<E, InternalElement>> child = node;
-					while(parent != null) {
-						if(parent.getRight() == child) {
-							ret += cacheIndex(parent) + 1;
-							break;
-						}
-						child = parent;
-						parent = (DefaultNode<Entry<E, InternalElement>>) parent.getParent();
+				ret = 0;
+				DefaultNode<Map.Entry<E, InternalElement>> left = (DefaultNode<Entry<E, InternalElement>>) node.getLeft();
+				if(left != null)
+					ret += left.getSize();
+				DefaultNode<Map.Entry<E, InternalElement>> parent = (DefaultNode<Entry<E, InternalElement>>) node.getParent();
+				DefaultNode<Map.Entry<E, InternalElement>> child = node;
+				while(parent != null) {
+					if(parent.getRight() == child) {
+						ret += cacheIndex(parent) + 1;
+						break;
 					}
-					node.getValue().getValue().cacheIndex(ret, theModCount);
+					child = parent;
+					parent = (DefaultNode<Entry<E, InternalElement>>) parent.getParent();
 				}
+				node.getValue().getValue().cacheIndex(ret, theModCount);
 			}
 			return ret;
 		}
