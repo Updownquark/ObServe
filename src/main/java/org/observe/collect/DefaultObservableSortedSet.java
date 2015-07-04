@@ -967,14 +967,19 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 					ret = theRemovedElementIndex;
 					node.getValue().getValue().setRemovedIndex(ret);
 				} else {
-					DefaultNode<Map.Entry<E, InternalElement>> parent = (DefaultNode<Entry<E, InternalElement>>) node.getParent();
-					if(parent != null && !node.getSide())
-						ret = cacheIndex(parent) + 1;
-					else
-						ret = 0;
+					ret = 0;
 					DefaultNode<Map.Entry<E, InternalElement>> left = (DefaultNode<Entry<E, InternalElement>>) node.getLeft();
-					if(left != null) {
-						ret += node.getSize();
+					if(left != null)
+						ret += left.getSize();
+					DefaultNode<Map.Entry<E, InternalElement>> parent = (DefaultNode<Entry<E, InternalElement>>) node.getParent();
+					DefaultNode<Map.Entry<E, InternalElement>> child = node;
+					while(parent != null) {
+						if(parent.getRight() == child) {
+							ret += cacheIndex(parent) + 1;
+							break;
+						}
+						child = parent;
+						parent = (DefaultNode<Entry<E, InternalElement>>) parent.getParent();
 					}
 					node.getValue().getValue().cacheIndex(ret, theModCount);
 				}
