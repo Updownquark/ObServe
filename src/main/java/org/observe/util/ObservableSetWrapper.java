@@ -30,6 +30,11 @@ public class ObservableSetWrapper<T> implements ObservableSet<T> {
 	}
 
 	@Override
+	public Transaction lock(boolean write, Object cause) {
+		return theWrapped.lock(write, cause);
+	}
+
+	@Override
 	public Type getType() {
 		return theWrapped.getType();
 	}

@@ -30,7 +30,7 @@ import prisms.lang.Type;
  *
  * @param <E> The type of element in the set
  */
-public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, TransactableCollection<E> {
+public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E> {
 	private final Type theType;
 
 	private final Comparator<? super E> theCompare;
@@ -57,7 +57,7 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 	public DefaultObservableSortedSet(Type type, Comparator<? super E> compare) {
 		this(type, new ReentrantReadWriteLock(), null, null, compare);
 
-		theSessionController = new DefaultTransactable(theInternals.getLock().writeLock());
+		theSessionController = new DefaultTransactable(theInternals.getLock());
 		theSessionObservable = ((DefaultTransactable) theSessionController).getSession();
 	}
 
@@ -93,18 +93,18 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 	}
 
 	@Override
-	public Transaction startTransaction(Object cause) {
+	public Transaction lock(boolean write, Object cause) {
 		if(hasIssuedController.get())
 			throw new IllegalStateException("Controlled default observable collections cannot be modified directly");
-		return startTransactionImpl(cause);
+		return startTransactionImpl(write, cause);
 	}
 
-	private Transaction startTransactionImpl(Object cause) {
+	private Transaction startTransactionImpl(boolean write, Object cause) {
 		if(theSessionController == null) {
 			return () -> {
 			};
 		}
-		return theSessionController.startTransaction(cause);
+		return theSessionController.lock(write, cause);
 	}
 
 	@Override
@@ -302,7 +302,7 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 
 	private boolean addAllImpl(Collection<? extends E> c) {
 		boolean ret = false;
-		try (Transaction trans = startTransactionImpl(null)) {
+		try (Transaction trans = startTransactionImpl(true, null)) {
 			for(E add : c) {
 				if(!theValues.containsKey(add))
 					continue;
@@ -316,7 +316,7 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 	}
 
 	private boolean removeAllImpl(Collection<?> c) {
-		try (Transaction trans = startTransactionImpl(null)) {
+		try (Transaction trans = startTransactionImpl(true, null)) {
 			boolean ret = false;
 			for(Object o : c)
 				ret |= removeNodeImpl(o);
@@ -326,7 +326,7 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 
 	private boolean retainAllImpl(Collection<?> c) {
 		boolean ret = false;
-		try (Transaction trans = startTransactionImpl(null)) {
+		try (Transaction trans = startTransactionImpl(true, null)) {
 			Iterator<DefaultNode<Map.Entry<E, InternalElement>>> iter = theValues.nodeIterator();
 			while(iter.hasNext()) {
 				DefaultNode<Map.Entry<E, InternalElement>> node = iter.next();
@@ -341,7 +341,7 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 	}
 
 	private void clearImpl() {
-		try (Transaction trans = startTransactionImpl(null)) {
+		try (Transaction trans = startTransactionImpl(true, null)) {
 			Iterator<DefaultNode<Map.Entry<E, InternalElement>>> iter = theValues.nodeIterator();
 			while(iter.hasNext()) {
 				DefaultNode<Map.Entry<E, InternalElement>> node = iter.next();
@@ -748,8 +748,8 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E>, Tr
 
 	private class ObservableSortedSetController implements TransactableSortedSet<E> {
 		@Override
-		public Transaction startTransaction(Object cause) {
-			return startTransactionImpl(cause);
+		public Transaction lock(boolean write, Object cause) {
+			return startTransactionImpl(write, cause);
 		}
 
 		@Override

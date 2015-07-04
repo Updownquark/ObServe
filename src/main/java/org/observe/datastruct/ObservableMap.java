@@ -13,6 +13,7 @@ import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.util.ObservableUtils;
+import org.observe.util.Transaction;
 
 import prisms.lang.Type;
 
@@ -22,7 +23,7 @@ import prisms.lang.Type;
  * @param <K> The type of keys this map uses
  * @param <V> The type of values this map stores
  */
-public interface ObservableMap<K, V> extends Map<K, V> {
+public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 	/**
 	 * A {@link java.util.Map.Entry} with observable capabilities. The {@link #equals(Object) equals} and {@link #hashCode() hashCode}
 	 * methods of this class must use only the entry's key.
@@ -77,7 +78,7 @@ public interface ObservableMap<K, V> extends Map<K, V> {
 	}
 
 	/** @return An observable collection of {@link ObservableEntry observable entries} of all the key-value pairs stored in this map */
-	default ObservableSet<ObservableEntry<K, V>> observeEntries() {
+	default ObservableSet<? extends ObservableEntry<K, V>> observeEntries() {
 		return ObservableSet.unique(keySet().map(this::entryFor));
 	}
 
@@ -156,7 +157,7 @@ public interface ObservableMap<K, V> extends Map<K, V> {
 			}
 
 			@Override
-			public ObservableSet<ObservableEntry<K, V>> observeEntries() {
+			public ObservableSet<? extends ObservableEntry<K, V>> observeEntries() {
 				return outer.observeEntries().immutable();
 			}
 
@@ -172,6 +173,11 @@ public interface ObservableMap<K, V> extends Map<K, V> {
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
 				return outer.getSession();
+			}
+
+			@Override
+			public Transaction lock(boolean write, Object cause) {
+				return outer.lock(write, cause);
 			}
 		}
 		return new Immutable();
@@ -209,6 +215,12 @@ public interface ObservableMap<K, V> extends Map<K, V> {
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
 				return ObservableValue.constant(new Type(CollectionSession.class), null);
+			}
+
+			@Override
+			public Transaction lock(boolean write, Object cause) {
+				return () -> {
+				};
 			}
 		};
 	}

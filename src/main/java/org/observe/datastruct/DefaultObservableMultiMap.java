@@ -1,11 +1,19 @@
 package org.observe.datastruct;
 
-import java.util.*;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.observe.ObservableValue;
-import org.observe.collect.*;
+import org.observe.collect.CollectionSession;
+import org.observe.collect.DefaultObservableList;
+import org.observe.collect.DefaultObservableSet;
+import org.observe.collect.ObservableSet;
+import org.observe.collect.TransactableList;
 import org.observe.util.DefaultTransactable;
 import org.observe.util.Transaction;
 
@@ -17,7 +25,7 @@ import prisms.lang.Type;
  * @param <K> The type of keys used in this map
  * @param <V> The type of values stored in this map
  */
-public class DefaultObservableMultiMap<K, V> implements ObservableMultiMap<K, V>, org.observe.util.Transactable {
+public class DefaultObservableMultiMap<K, V> implements ObservableMultiMap<K, V> {
 	private class DefaultMultiMapEntry extends DefaultObservableList<V> implements ObservableMultiEntry<K, V> {
 		private final TransactableList<V> theController = control(null);
 
@@ -75,7 +83,7 @@ public class DefaultObservableMultiMap<K, V> implements ObservableMultiMap<K, V>
 		theKeyType = keyType;
 		theValueType = valueType;
 		theLock=new ReentrantReadWriteLock();
-		theSessionController = new DefaultTransactable(theLock.writeLock());
+		theSessionController = new DefaultTransactable(theLock);
 
 		theEntries = new DefaultObservableSet<>(new Type(ObservableMultiEntry.class, theKeyType, theKeyType), theLock,
 			theSessionController.getSession(), theSessionController);
@@ -98,13 +106,13 @@ public class DefaultObservableMultiMap<K, V> implements ObservableMultiMap<K, V>
 	}
 
 	@Override
-	public ObservableCollection<ObservableMultiEntry<K, V>> observeEntries() {
+	public ObservableSet<ObservableMultiEntry<K, V>> observeEntries() {
 		return theEntries;
 	}
 
 	@Override
-	public Transaction startTransaction(Object cause) {
-		return theSessionController.startTransaction(cause);
+	public Transaction lock(boolean write, Object cause) {
+		return theSessionController.lock(write, cause);
 	}
 
 	@Override
@@ -130,7 +138,7 @@ public class DefaultObservableMultiMap<K, V> implements ObservableMultiMap<K, V>
 
 	@Override
 	public boolean addAll(K key, Collection<? extends V> values) {
-		try (Transaction trans = startTransaction(null)) {
+		try (Transaction trans = lock(true, null)) {
 			DefaultMultiMapEntry keyedEntry = null;
 			for(ObservableMultiEntry<K, V> entry : theEntries)
 				if(Objects.equals(entry.getKey(), key)) {
@@ -172,7 +180,7 @@ public class DefaultObservableMultiMap<K, V> implements ObservableMultiMap<K, V>
 
 	@Override
 	public boolean removeAll(K key) {
-		try (Transaction trans = startTransaction(null)) {
+		try (Transaction trans = lock(true, null)) {
 			Iterator<ObservableMultiEntry<K, V>> entryIter = theEntryController.iterator();
 			while(entryIter.hasNext()) {
 				DefaultMultiMapEntry entry = (DefaultMultiMapEntry) entryIter.next();

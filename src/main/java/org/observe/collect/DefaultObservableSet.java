@@ -26,7 +26,7 @@ import prisms.lang.Type;
  *
  * @param <E> The type of element in the set
  */
-public class DefaultObservableSet<E> extends AbstractSet<E> implements ObservableSet<E>, TransactableSet<E> {
+public class DefaultObservableSet<E> extends AbstractSet<E> implements ObservableSet<E> {
 	private final Type theType;
 	private LinkedHashMap<E, InternalObservableElementImpl<E>> theValues;
 
@@ -45,7 +45,7 @@ public class DefaultObservableSet<E> extends AbstractSet<E> implements Observabl
 	public DefaultObservableSet(Type type) {
 		this(type, new ReentrantReadWriteLock(), null, null);
 
-		theSessionController = new DefaultTransactable(theInternals.getLock().writeLock());
+		theSessionController = new DefaultTransactable(theInternals.getLock());
 		theSessionObservable = ((DefaultTransactable) theSessionController).getSession();
 	}
 
@@ -75,18 +75,18 @@ public class DefaultObservableSet<E> extends AbstractSet<E> implements Observabl
 	}
 
 	@Override
-	public Transaction startTransaction(Object cause) {
+	public Transaction lock(boolean write, Object cause) {
 		if(hasIssuedController.get())
 			throw new IllegalStateException("Controlled default observable collections cannot be modified directly");
-		return startTransactionImpl(cause);
+		return startTransactionImpl(write, cause);
 	}
 
-	private Transaction startTransactionImpl(Object cause) {
+	private Transaction startTransactionImpl(boolean write, Object cause) {
 		if(theSessionController == null) {
 			return () -> {
 			};
 		}
-		return theSessionController.startTransaction(cause);
+		return theSessionController.lock(write, cause);
 	}
 
 	@Override
@@ -323,8 +323,8 @@ public class DefaultObservableSet<E> extends AbstractSet<E> implements Observabl
 
 	private class ObservableSetController extends AbstractSet<E> implements TransactableSet<E> {
 		@Override
-		public Transaction startTransaction(Object cause) {
-			return startTransactionImpl(cause);
+		public Transaction lock(boolean write, Object cause) {
+			return startTransactionImpl(write, cause);
 		}
 
 		@Override

@@ -35,6 +35,11 @@ public class ObservableCollectionWrapper<T> implements ObservableCollection<T> {
 	}
 
 	@Override
+	public Transaction lock(boolean write, Object cause) {
+		return theWrapped.lock(write, cause);
+	}
+
+	@Override
 	public Subscription onElement(java.util.function.Consumer<? super ObservableElement<T>> observer) {
 		return theWrapped.onElement(observer);
 	}

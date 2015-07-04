@@ -2,6 +2,7 @@ package org.observe.util;
 
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
 
 import org.observe.DefaultObservableValue;
 import org.observe.ObservableValue;
@@ -14,7 +15,7 @@ import prisms.lang.Type;
 
 /** A simple transactable that manages a reentrant session for an observable collection or data structure */
 public class DefaultTransactable implements Transactable {
-	private final Lock theLock;
+	private final ReadWriteLock theLock;
 
 	private final AtomicInteger theDepth;
 
@@ -25,7 +26,7 @@ public class DefaultTransactable implements Transactable {
 	private CollectionSession theInternalSessionValue;
 
 	/** @param lock The lock to use. Must support reentrancy. */
-	public DefaultTransactable(Lock lock) {
+	public DefaultTransactable(ReadWriteLock lock) {
 		theLock = lock;
 		theDepth = new AtomicInteger();
 		theObservableSession = new DefaultObservableValue<CollectionSession>() {
@@ -50,23 +51,26 @@ public class DefaultTransactable implements Transactable {
 	}
 
 	@Override
-	public Transaction startTransaction(Object cause) {
-		theLock.lock();
+	public Transaction lock(boolean write, Object cause) {
+		Lock lock = write ? theLock.writeLock() : theLock.readLock();
+		lock.lock();
 		boolean success = false;
 		try {
-			int depth = theDepth.getAndIncrement();
-			if(depth != 0) {
-				success = true;
-				return new EndTransaction();
-			}
+			if(write) {
+				int depth = theDepth.getAndIncrement();
+				if(depth != 0) {
+					success = true;
+					return new EndTransaction(lock, true);
+				}
 
-			theInternalSessionValue = createSession(cause);
-			theSessionController.onNext(theObservableSession.createEvent(null, theInternalSessionValue, cause));
+				theInternalSessionValue = createSession(cause);
+				theSessionController.onNext(theObservableSession.createEvent(null, theInternalSessionValue, cause));
+			}
 			success = true;
-			return new EndTransaction();
+			return new EndTransaction(lock, write);
 		} finally {
 			if(!success) // If we don't successfully return the transaction that allows the unlock, we need to do it here
-				theLock.unlock();
+				lock.unlock();
 		}
 	}
 
@@ -78,29 +82,44 @@ public class DefaultTransactable implements Transactable {
 		return new DefaultCollectionSession(cause);
 	}
 
-	private void endTransaction() {
+	private void endTransaction(Lock lock, boolean write) {
 		try {
-			int depth = theDepth.decrementAndGet();
-			if(depth != 0)
-				return;
+			if(write) {
+				int depth = theDepth.decrementAndGet();
+				if(depth != 0)
+					return;
 
-			CollectionSession old = theInternalSessionValue;
-			theInternalSessionValue = null;
-			theSessionController.onNext(theObservableSession.createEvent(old, null, old.getCause()));
+				CollectionSession old = theInternalSessionValue;
+				theInternalSessionValue = null;
+				theSessionController.onNext(theObservableSession.createEvent(old, null, old.getCause()));
+			}
 		} finally {
-			theLock.unlock();
+			lock.unlock();
 		}
 	}
 
 	private class EndTransaction implements Transaction {
+		private final Lock theTransactionLock;
+		private final boolean isWrite;
 		private volatile boolean hasRun;
+
+		EndTransaction(Lock lock, boolean write) {
+			theTransactionLock = lock;
+			isWrite = write;
+		}
 
 		@Override
 		public void close() {
 			if(hasRun)
 				return;
 			hasRun = true;
-			endTransaction();
+			endTransaction(theTransactionLock, isWrite);
+		}
+
+		@Override
+		protected void finalize() {
+			if(!hasRun)
+				close();
 		}
 	}
 }

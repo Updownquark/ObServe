@@ -4,7 +4,6 @@ import static org.observe.ObservableDebug.d;
 
 import java.util.Comparator;
 import java.util.Iterator;
-import java.util.NavigableSet;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -22,7 +21,7 @@ import prisms.lang.Type;
  *
  * @param <E> The type of element in the set
  */
-public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReversibleCollection<E>, NavigableSet<E> {
+public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReversibleCollection<E>, TransactableSortedSet<E> {
 	/**
 	 * Returns a value at or adjacent to another value
 	 *

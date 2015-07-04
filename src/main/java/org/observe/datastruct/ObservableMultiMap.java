@@ -19,6 +19,7 @@ import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.collect.OrderedObservableElement;
 import org.observe.datastruct.ObservableMap.ObsEntryImpl;
+import org.observe.util.Transaction;
 
 import prisms.lang.Type;
 
@@ -28,7 +29,7 @@ import prisms.lang.Type;
  * @param <K> The type of key used by this map
  * @param <V> The type of values stored in this map
  */
-public interface ObservableMultiMap<K, V> {
+public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	/**
 	 * A {@link java.util.Map.Entry} with observable capabilities
 	 *
@@ -47,12 +48,14 @@ public interface ObservableMultiMap<K, V> {
 	Type getValueType();
 
 	/** @return The keys that have least one value in this map */
+	@Override
 	ObservableSet<K> keySet();
 
 	/**
 	 * @param key The key to get values for
 	 * @return The collection of values stored for the given key in this map. Never null.
 	 */
+	@Override
 	ObservableCollection<V> get(Object key);
 
 	/**
@@ -86,7 +89,7 @@ public interface ObservableMultiMap<K, V> {
 	}
 
 	/** @return An observable collection of {@link ObservableMultiEntry observable entries} of all the key-value set pairs stored in this map */
-	default ObservableSet<ObservableMultiEntry<K, V>> observeEntries() {
+	default ObservableSet<? extends ObservableMultiEntry<K, V>> observeEntries() {
 		return ObservableSet.unique(keySet().map(this::entryFor));
 	}
 
@@ -95,6 +98,7 @@ public interface ObservableMultiMap<K, V> {
 	 * @param value The value to store
 	 * @return Whether the map was changed as a result
 	 */
+	@Override
 	default boolean add(K key, V value) {
 		return get(key).add(value);
 	}
@@ -104,6 +108,7 @@ public interface ObservableMultiMap<K, V> {
 	 * @param values The values to store
 	 * @return Whether the map was changed as a result
 	 */
+	@Override
 	default boolean addAll(K key, Collection<? extends V> values) {
 		return get(key).addAll(values);
 	}
@@ -113,6 +118,7 @@ public interface ObservableMultiMap<K, V> {
 	 * @param value The value to remove
 	 * @return Whether the map was changed as a result
 	 */
+	@Override
 	default boolean remove(K key, Object value) {
 		return get(key).remove(value);
 	}
@@ -121,6 +127,7 @@ public interface ObservableMultiMap<K, V> {
 	 * @param key The key to remove all values from
 	 * @return Whether the map was changed as a result
 	 */
+	@Override
 	default boolean removeAll(K key) {
 		ObservableCollection<V> values = get(key);
 		boolean ret = !values.isEmpty();
@@ -173,7 +180,7 @@ public interface ObservableMultiMap<K, V> {
 	 * @return The values (in the form of a {@link ObservableMultiEntry multi-entry}) stored for the given key
 	 */
 	default ObservableMultiEntry<K, V> subscribe(K key) {
-		ObservableValue<ObservableMultiEntry<K, V>> existingEntry = observeEntries().find(
+		ObservableValue<? extends ObservableMultiEntry<K, V>> existingEntry = observeEntries().find(
 			entry -> java.util.Objects.equals(entry.getKey(), key));
 		class WrappingMultiEntry implements ObservableCollection.PartialCollectionImpl<V>, ObservableMultiEntry<K, V> {
 			@Override
@@ -204,6 +211,11 @@ public interface ObservableMultiMap<K, V> {
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
 				return ObservableValue.flatten(new Type(CollectionSession.class), existingEntry.mapV(ObservableCollection::getSession));
+			}
+
+			@Override
+			public Transaction lock(boolean write, Object cause) {
+				return ObservableMultiMap.this.lock(write, cause);
 			}
 
 			@Override
@@ -261,6 +273,11 @@ public interface ObservableMultiMap<K, V> {
 			}
 
 			@Override
+			public Transaction lock(boolean write, Object cause) {
+				return outer.lock(write, cause);
+			}
+
+			@Override
 			public ObservableSet<K> keySet() {
 				return outer.keySet();
 			}
@@ -290,6 +307,11 @@ public interface ObservableMultiMap<K, V> {
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
 				return outer.getSession();
+			}
+
+			@Override
+			public Transaction lock(boolean write, Object cause) {
+				return outer.lock(write, cause);
 			}
 
 			@Override
@@ -330,6 +352,11 @@ public interface ObservableMultiMap<K, V> {
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
 				return outer.getSession();
+			}
+
+			@Override
+			public Transaction lock(boolean write, Object cause) {
+				return outer.lock(write, cause);
 			}
 
 			@Override
@@ -382,6 +409,11 @@ public interface ObservableMultiMap<K, V> {
 		@Override
 		public ObservableValue<CollectionSession> getSession() {
 			return theValues.getSession();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theValues.lock(write, cause);
 		}
 
 		@Override

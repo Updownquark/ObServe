@@ -21,6 +21,7 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.util.ObservableUtils;
+import org.observe.util.Transaction;
 
 import prisms.lang.Type;
 
@@ -633,6 +634,11 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 			return theWrapped.getSession();
 		}
 
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theWrapped.lock(write, cause);
+		}
+
 		Comparator<? super E> getCompare() {
 			return theCompare;
 		}
@@ -855,6 +861,35 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		@Override
 		public ObservableValue<CollectionSession> getSession() {
 			return theSession;
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			Transaction outerLock = theOuter.lock(write, cause);
+			Transaction [] innerLocks = new Transaction[theOuter.size()];
+			int i = 0;
+			for(ObservableCollection<? extends E> c : theOuter) {
+				innerLocks[i++] = c.lock(write, cause);
+			}
+			return new Transaction() {
+				private volatile boolean hasRun;
+
+				@Override
+				public void close() {
+					if(hasRun)
+						return;
+					hasRun = true;
+					for(int j = innerLocks.length - 1; j >= 0; j--)
+						innerLocks[j].close();
+					outerLock.close();
+				}
+
+				@Override
+				protected void finalize() {
+					if(!hasRun)
+						close();
+				}
+			};
 		}
 
 		@Override

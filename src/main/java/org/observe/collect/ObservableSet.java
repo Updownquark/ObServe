@@ -16,6 +16,7 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
+import org.observe.util.Transaction;
 
 import prisms.lang.Type;
 
@@ -24,7 +25,7 @@ import prisms.lang.Type;
  *
  * @param <E> The type of element in the set
  */
-public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
+public interface ObservableSet<E> extends ObservableCollection<E>, TransactableSet<E> {
 	@Override
 	default boolean isEmpty() {
 		return ObservableCollection.super.isEmpty();
@@ -114,6 +115,12 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
 				return ObservableValue.constant(new Type(CollectionSession.class), null);
+			}
+
+			@Override
+			public Transaction lock(boolean write, Object cause) {
+				return () -> {
+				};
 			}
 
 			@Override
@@ -272,6 +279,11 @@ public interface ObservableSet<E> extends ObservableCollection<E>, Set<E> {
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
 				return coll.getSession();
+			}
+
+			@Override
+			public Transaction lock(boolean write, Object cause) {
+				return coll.lock(write, cause);
 			}
 
 			@Override

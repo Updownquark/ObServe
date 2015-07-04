@@ -23,6 +23,7 @@ import org.observe.Subscription;
 import org.observe.datastruct.ObservableMultiMap;
 import org.observe.util.ListenerSet;
 import org.observe.util.ObservableUtils;
+import org.observe.util.Transaction;
 
 import prisms.lang.Type;
 
@@ -31,7 +32,7 @@ import prisms.lang.Type;
  *
  * @param <E> The type of element in the collection
  */
-public interface ObservableCollection<E> extends Collection<E> {
+public interface ObservableCollection<E> extends TransactableCollection<E> {
 	/** @return The type of elements in this collection */
 	Type getType();
 
@@ -517,6 +518,35 @@ public interface ObservableCollection<E> extends Collection<E> {
 			}
 
 			@Override
+			public Transaction lock(boolean write, Object cause) {
+				Transaction outerLock = coll.lock(write, cause);
+				Transaction [] innerLocks = new Transaction[coll.size()];
+				int i = 0;
+				for(ObservableCollection<? extends T> c : coll) {
+					innerLocks[i++] = c.lock(write, cause);
+				}
+				return new Transaction() {
+					private volatile boolean hasRun;
+
+					@Override
+					public void close() {
+						if(hasRun)
+							return;
+						hasRun = true;
+						for(int j = innerLocks.length - 1; j >= 0; j--)
+							innerLocks[j].close();
+						outerLock.close();
+					}
+
+					@Override
+					protected void finalize() {
+						if(!hasRun)
+							close();
+					}
+				};
+			}
+
+			@Override
 			public Type getType() {
 				return coll.getType().getParamTypes().length == 0 ? new Type(Object.class) : coll.getType().getParamTypes()[0];
 			}
@@ -759,6 +789,11 @@ public interface ObservableCollection<E> extends Collection<E> {
 		}
 
 		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theWrapped.lock(write, cause);
+		}
+
+		@Override
 		public int size() {
 			return theWrapped.size();
 		}
@@ -826,6 +861,11 @@ public interface ObservableCollection<E> extends Collection<E> {
 		@Override
 		public ObservableValue<CollectionSession> getSession() {
 			return theWrapped.getSession();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theWrapped.lock(write, cause);
 		}
 
 		@Override
@@ -1037,6 +1077,11 @@ public interface ObservableCollection<E> extends Collection<E> {
 		}
 
 		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theWrapped.lock(write, cause);
+		}
+
+		@Override
 		public Type getType() {
 			return theType;
 		}
@@ -1112,6 +1157,11 @@ public interface ObservableCollection<E> extends Collection<E> {
 		}
 
 		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theWrapped.lock(write, cause);
+		}
+
+		@Override
 		public ObservableSet<K> keySet() {
 			return ObservableSet.unique(theWrapped.map(theKeyMap));
 		}
@@ -1159,6 +1209,11 @@ public interface ObservableCollection<E> extends Collection<E> {
 		@Override
 		public ObservableValue<CollectionSession> getSession() {
 			return theElements.getSession();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theElements.lock(write, cause);
 		}
 
 		@Override
@@ -1255,6 +1310,11 @@ public interface ObservableCollection<E> extends Collection<E> {
 		}
 
 		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theWrapped.lock(write, cause);
+		}
+
+		@Override
 		public Iterator<E> iterator() {
 			return theWrapped.iterator();
 		}
@@ -1301,6 +1361,11 @@ public interface ObservableCollection<E> extends Collection<E> {
 		@Override
 		public ObservableValue<CollectionSession> getSession() {
 			return theWrapped.getSession();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theWrapped.lock(write, cause);
 		}
 
 		@Override
@@ -1413,6 +1478,13 @@ public interface ObservableCollection<E> extends Collection<E> {
 		@Override
 		public ObservableValue<CollectionSession> getSession() {
 			return theWrapped.getSession();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			if(write)
+				throw new IllegalArgumentException("Immutable collections cannot be locked for writing");
+			return theWrapped.lock(false, cause);
 		}
 
 		@Override
@@ -1566,6 +1638,11 @@ public interface ObservableCollection<E> extends Collection<E> {
 		@Override
 		public ObservableValue<CollectionSession> getSession() {
 			return theWrapped.getSession();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theWrapped.lock(write, cause);
 		}
 
 		@Override

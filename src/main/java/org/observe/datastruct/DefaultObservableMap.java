@@ -25,7 +25,7 @@ import prisms.lang.Type;
  * @param <K> The type of keys used in this map
  * @param <V> The type of values stored in this map
  */
-public class DefaultObservableMap<K, V> extends java.util.AbstractMap<K, V> implements ObservableMap<K, V>, org.observe.util.Transactable {
+public class DefaultObservableMap<K, V> extends java.util.AbstractMap<K, V> implements ObservableMap<K, V> {
 	private class DefaultMapEntry extends DefaultObservableValue<V> implements ObservableEntry<K, V> {
 		private final Observer<ObservableValueEvent<V>> theController = control(null);
 
@@ -94,7 +94,7 @@ public class DefaultObservableMap<K, V> extends java.util.AbstractMap<K, V> impl
 		theKeyType = keyType;
 		theValueType = valueType;
 		theLock=new ReentrantReadWriteLock();
-		theSessionController = new DefaultTransactable(theLock.writeLock());
+		theSessionController = new DefaultTransactable(theLock);
 
 		theEntries = new DefaultObservableSet<>(new Type(ObservableEntry.class, theKeyType, theKeyType), theLock,
 			theSessionController.getSession(), theSessionController);
@@ -122,13 +122,13 @@ public class DefaultObservableMap<K, V> extends java.util.AbstractMap<K, V> impl
 	}
 
 	@Override
-	public Transaction startTransaction(Object cause) {
-		return theSessionController.startTransaction(cause);
+	public Transaction lock(boolean write, Object cause) {
+		return theSessionController.lock(write, cause);
 	}
 
 	@Override
-	public Set<Map.Entry<K, V>> entrySet() {
-		return (Set<Map.Entry<K, V>>) (Set<? extends Map.Entry<K, V>>) theEntries;
+	public ObservableSet<Map.Entry<K, V>> entrySet() {
+		return (ObservableSet<Map.Entry<K, V>>) (ObservableSet<? extends Map.Entry<K, V>>) theEntries;
 	}
 
 	@Override
@@ -180,7 +180,7 @@ public class DefaultObservableMap<K, V> extends java.util.AbstractMap<K, V> impl
 
 	@Override
 	public void putAll(Map<? extends K, ? extends V> m) {
-		try (Transaction trans = startTransaction(null);) {
+		try (Transaction trans = lock(true, null)) {
 			for(Map.Entry<? extends K, ? extends V> mEntry : m.entrySet()) {
 				boolean found = false;
 				for(ObservableEntry<K, V> entry : theEntries)

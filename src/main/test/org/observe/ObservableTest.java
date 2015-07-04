@@ -1572,7 +1572,7 @@ public class ObservableTest {
 		controller.add(9);
 		assertEquals(2, findCount[0]);
 		assertEquals(9, (int) found[0]);
-		Transaction trans = controller.startTransaction(null);
+		Transaction trans = controller.lock(true, null);
 		assertEquals(2, findCount[0]);
 		controller.add(0, 4);
 		assertEquals(2, findCount[0]);
@@ -1616,7 +1616,7 @@ public class ObservableTest {
 		}
 		assertEquals(30, changeCount[0]);
 
-		Transaction trans = controller.startTransaction(null);
+		Transaction trans = controller.lock(true, null);
 		controller.clear();
 		correct.clear();
 		correct.addAll(observable);

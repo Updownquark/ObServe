@@ -27,7 +27,7 @@ import prisms.lang.Type;
  *
  * @param <E> The type of element in the list
  */
-public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, ObservableList.PartialListImpl<E>, TransactableList<E> {
+public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, ObservableList.PartialListImpl<E> {
 	private final Type theType;
 
 	private DefaultListInternals theInternals;
@@ -51,7 +51,7 @@ public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, 
 	public DefaultObservableList(Type type) {
 		this(type, new ReentrantReadWriteLock(), null, null);
 
-		theSessionController = new DefaultTransactable(theInternals.getLock().writeLock());
+		theSessionController = new DefaultTransactable(theInternals.getLock());
 		theSessionObservable = ((DefaultTransactable) theSessionController).getSession();
 	}
 
@@ -85,18 +85,18 @@ public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, 
 	}
 
 	@Override
-	public Transaction startTransaction(Object cause) {
+	public Transaction lock(boolean write, Object cause) {
 		if(hasIssuedController.get())
 			throw new IllegalStateException("Controlled default observable collections cannot be modified directly");
-		return startTransactionImpl(cause);
+		return startTransactionImpl(write, cause);
 	}
 
-	private Transaction startTransactionImpl(Object cause) {
+	private Transaction startTransactionImpl(boolean write, Object cause) {
 		if(theSessionController == null) {
 			return () -> {
 			};
 		}
-		return theSessionController.startTransaction(cause);
+		return theSessionController.lock(write, cause);
 	}
 
 	@Override
@@ -321,7 +321,7 @@ public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, 
 	}
 
 	private void addAllImpl(Collection<? extends E> c) {
-		try (Transaction trans = startTransactionImpl(null)) {
+		try (Transaction trans = startTransactionImpl(true, null)) {
 			for(E e : c) {
 				E val = (E) theType.cast(e);
 				theValues.add(val);
@@ -333,7 +333,7 @@ public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, 
 	}
 
 	private void addAllImpl(int index, Collection<? extends E> c) {
-		try (Transaction trans = startTransactionImpl(null)) {
+		try (Transaction trans = startTransactionImpl(true, null)) {
 			int idx = index;
 			for(E e : c) {
 				E val = (E) theType.cast(e);
@@ -347,7 +347,7 @@ public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, 
 	}
 
 	private boolean removeAllImpl(Collection<?> c) {
-		try (Transaction trans = startTransactionImpl(null)) {
+		try (Transaction trans = startTransactionImpl(true, null)) {
 			boolean ret = false;
 			for(Object o : c) {
 				int idx = theValues.indexOf(o);
@@ -364,7 +364,7 @@ public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, 
 	}
 
 	private boolean retainAllImpl(Collection<?> c) {
-		try (Transaction trans = startTransactionImpl(null)) {
+		try (Transaction trans = startTransactionImpl(true, null)) {
 			boolean ret = false;
 			BitSet keep = new BitSet();
 			for(Object o : c) {
@@ -387,7 +387,7 @@ public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, 
 	}
 
 	private void clearImpl() {
-		try (Transaction trans = startTransactionImpl(null)) {
+		try (Transaction trans = startTransactionImpl(true, null)) {
 			theValues.clear();
 			ArrayList<InternalOrderedObservableElementImpl<E>> remove = new ArrayList<>();
 			remove.addAll(theElements);
@@ -440,8 +440,8 @@ public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, 
 
 	private class ObservableListController extends AbstractList<E> implements TransactableList<E> {
 		@Override
-		public Transaction startTransaction(Object cause) {
-			return startTransactionImpl(cause);
+		public Transaction lock(boolean write, Object cause) {
+			return startTransactionImpl(write, cause);
 		}
 
 		@Override
@@ -593,7 +593,7 @@ public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, 
 				@Override
 				public Iterator<InternalObservableElementImpl<E>> iterator() {
 					return new Iterator<InternalObservableElementImpl<E>>() {
-							private final ListIterator<InternalOrderedObservableElementImpl<E>> backing;
+						private final ListIterator<InternalOrderedObservableElementImpl<E>> backing;
 
 						{
 							backing = theElements.listIterator(theElements.size());

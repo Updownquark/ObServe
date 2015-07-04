@@ -10,7 +10,6 @@ import org.observe.collect.CollectionSession;
 import org.observe.collect.DefaultObservableList;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.DefaultTransactable;
-import org.observe.util.Transactable;
 import org.observe.util.Transaction;
 
 import prisms.lang.Type;
@@ -21,7 +20,7 @@ import prisms.lang.Type;
  * @param <N> The type of values associated with nodes
  * @param <E> The type of values associated with edges
  */
-public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Transactable {
+public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E> {
 	private class DefaultNode implements Node<N, E> {
 		private final N theValue;
 
@@ -91,7 +90,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Tran
 	public DefaultObservableGraph(Type nodeType, Type edgeType) {
 		theLock = new ReentrantReadWriteLock();
 
-		theSessionController = new DefaultTransactable(theLock.writeLock());
+		theSessionController = new DefaultTransactable(theLock);
 
 		theNodes = new DefaultObservableList<>(new Type(Node.class, nodeType, edgeType), theLock, theSessionController.getSession(),
 			theSessionController);
@@ -117,8 +116,8 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Tran
 	}
 
 	@Override
-	public Transaction startTransaction(Object cause) {
-		return theSessionController.startTransaction(cause);
+	public Transaction lock(boolean write, Object cause) {
+		return theSessionController.lock(write, cause);
 	}
 
 	/**
@@ -169,7 +168,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Tran
 	public boolean removeNode(Node<N, E> node) {
 		if(!theNodes.contains(node))
 			return false;
-		try (Transaction trans = startTransaction(null)) {
+		try (Transaction trans = lock(true, null)) {
 			java.util.Iterator<Edge<N, E>> edgeIter = theEdgeController.iterator();
 			while(edgeIter.hasNext()) {
 				Edge<N, E> edge = edgeIter.next();
@@ -202,7 +201,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Tran
 		int index = theNodeController.indexOf(node);
 		if(index < 0)
 			return null;
-		try (Transaction trans = startTransaction(null)) {
+		try (Transaction trans = lock(true, null)) {
 			theNodeController.add(index + 1, newNode);
 			java.util.ListIterator<Edge<N, E>> edgeIter = theEdgeController.listIterator();
 			while(edgeIter.hasNext()) {
@@ -255,7 +254,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Tran
 
 	/** Removes all nodes and edges from this graph */
 	public void clear() {
-		try (Transaction trans = startTransaction(null)) {
+		try (Transaction trans = lock(true, null)) {
 			theEdgeController.clear();
 			theNodeController.clear();
 		}
@@ -263,7 +262,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Tran
 
 	/** Removes all edges from this graph */
 	public void clearEdges() {
-		try (Transaction trans = startTransaction(null)) {
+		try (Transaction trans = lock(true, null)) {
 			theEdgeController.clear();
 		}
 	}

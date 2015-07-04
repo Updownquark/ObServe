@@ -27,6 +27,7 @@ import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.util.ListenerSet;
 import org.observe.util.ObservableUtils;
+import org.observe.util.Transaction;
 
 import prisms.lang.Type;
 
@@ -37,7 +38,7 @@ import prisms.lang.Type;
  *
  * @param <E> The type of element in the list
  */
-public interface ObservableList<E> extends ObservableReversibleCollection<E>, List<E> {
+public interface ObservableList<E> extends ObservableReversibleCollection<E>, TransactableList<E> {
 	@Override
 	default boolean isEmpty() {
 		return ObservableReversibleCollection.super.isEmpty();
@@ -136,6 +137,11 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
 				return outer.getSession();
+			}
+
+			@Override
+			public Transaction lock(boolean write, Object cause) {
+				return outer.lock(write, cause);
 			}
 
 			@Override
@@ -301,6 +307,12 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 			}
 
 			@Override
+			public Transaction lock(boolean write, Object cause) {
+				return () -> {
+				};
+			}
+
+			@Override
 			public Type getType() {
 				return type;
 			}
@@ -391,6 +403,35 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
 				return theSession;
+			}
+
+			@Override
+			public Transaction lock(boolean write, Object cause) {
+				Transaction outerLock = list.lock(write, cause);
+				Transaction [] innerLocks = new Transaction[list.size()];
+				int i = 0;
+				for(ObservableCollection<? extends T> c : list) {
+					innerLocks[i++] = c.lock(write, cause);
+				}
+				return new Transaction() {
+					private volatile boolean hasRun;
+
+					@Override
+					public void close() {
+						if(hasRun)
+							return;
+						hasRun = true;
+						for(int j = innerLocks.length - 1; j >= 0; j--)
+							innerLocks[j].close();
+						outerLock.close();
+					}
+
+					@Override
+					protected void finalize() {
+						if(!hasRun)
+							close();
+					}
+				};
 			}
 
 			@Override
@@ -792,6 +833,11 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 		}
 
 		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theList.lock(write, cause);
+		}
+
+		@Override
 		public E set(int index, E element) {
 			rangeCheck(index);
 			return theList.set(index + theOffset, element);
@@ -1180,6 +1226,11 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Li
 		@Override
 		public ObservableValue<CollectionSession> getSession() {
 			return theWrapped.getSession();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theWrapped.lock(write, cause);
 		}
 
 		@Override

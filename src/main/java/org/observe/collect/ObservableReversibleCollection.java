@@ -16,6 +16,7 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.util.ObservableUtils;
+import org.observe.util.Transaction;
 
 import prisms.lang.Type;
 import prisms.util.ArrayUtils;
@@ -170,6 +171,11 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 		}
 
 		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theWrapped.lock(write, cause);
+		}
+
+		@Override
 		public int size() {
 			return theWrapped.size();
 		}
@@ -264,7 +270,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 
 	/**
 	 * Implements {@link ObservableReversibleCollection#map(Function)}
-	 * 
+	 *
 	 * @param <E> The type of the collection to map
 	 * @param <T> The type of the mapped collection
 	 */
@@ -296,7 +302,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 
 	/**
 	 * Implements {@link ObservableOrderedCollection#filterMap(Function)}
-	 * 
+	 *
 	 * @param <E> The type of the collection to filter/map
 	 * @param <T> The type of the filter/mapped collection
 	 */
@@ -337,7 +343,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 
 	/**
 	 * Implements {@link ObservableOrderedCollection#combine(ObservableValue, BiFunction)}
-	 * 
+	 *
 	 * @param <E> The type of the collection to combine
 	 * @param <T> The type of the argument value
 	 * @param <V> The type of the combined collection
@@ -372,7 +378,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 
 	/**
 	 * Implements {@link ObservableOrderedCollection#refresh(Observable)}
-	 * 
+	 *
 	 * @param <E> The type of the collection
 	 */
 	class RefreshingReversibleCollection<E> extends RefreshingOrderedCollection<E> implements ObservableReversibleCollection<E> {
@@ -399,7 +405,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 
 	/**
 	 * Implements {@link ObservableOrderedCollection#refreshEach(Function)}
-	 * 
+	 *
 	 * @param <E> The type of the collection
 	 */
 	class ElementRefreshingReversibleCollection<E> extends ElementRefreshingOrderedCollection<E> implements
@@ -426,7 +432,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 
 	/**
 	 * Implements {@link ObservableOrderedCollection#immutable()}
-	 * 
+	 *
 	 * @param <E> The type of the collection
 	 */
 	class ImmutableReversibleCollection<E> extends ImmutableOrderedCollection<E> implements ObservableReversibleCollection<E> {
@@ -457,7 +463,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 
 	/**
 	 * Implements {@link ObservableOrderedCollection#cached()}
-	 * 
+	 *
 	 * @param <E> The type of the collection
 	 */
 	class SafeCachedReversibleCollection<E> extends SafeCachedOrderedCollection<E> implements ObservableReversibleCollection<E> {

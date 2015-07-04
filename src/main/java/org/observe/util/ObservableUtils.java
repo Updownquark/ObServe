@@ -67,6 +67,11 @@ public class ObservableUtils {
 			}
 
 			@Override
+			public Transaction lock(boolean write, Object cause) {
+				return list.lock(write, cause);
+			}
+
+			@Override
 			public Type getType() {
 				return type;
 			}
@@ -159,6 +164,11 @@ public class ObservableUtils {
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
 				return collection.getSession();
+			}
+
+			@Override
+			public Transaction lock(boolean write, Object cause) {
+				return collection.lock(write, cause);
 			}
 
 			@Override

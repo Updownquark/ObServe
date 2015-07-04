@@ -12,6 +12,8 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableElement;
+import org.observe.util.Transactable;
+import org.observe.util.Transaction;
 
 import prisms.lang.Type;
 
@@ -21,7 +23,7 @@ import prisms.lang.Type;
  * @param <N> The type of values stored in the nodes of the graph
  * @param <E> The type of values stored in the edges of the graph
  */
-public interface ObservableGraph<N, E> {
+public interface ObservableGraph<N, E> extends Transactable {
 	/**
 	 * A node in a graph
 	 *
@@ -233,6 +235,11 @@ public interface ObservableGraph<N, E> {
 				return outer.getSession();
 			}
 
+			@Override
+			public Transaction lock(boolean write, Object cause) {
+				return outer.lock(write, cause);
+			}
+
 			private FilteredNode filter(Node<N, E> node) {
 				// TODO Not completely thread-safe
 				FilteredNode ret = theNodeMap.get(node);
@@ -291,6 +298,11 @@ public interface ObservableGraph<N, E> {
 			public ObservableValue<CollectionSession> getSession() {
 				return outer.getSession();
 			}
+
+			@Override
+			public Transaction lock(boolean write, Object cause) {
+				return outer.lock(write, cause);
+			}
 		};
 	}
 
@@ -318,6 +330,12 @@ public interface ObservableGraph<N, E> {
 			@Override
 			public ObservableValue getSession() {
 				return ObservableValue.constant(new Type(CollectionSession.class), null);
+			}
+
+			@Override
+			public Transaction lock(boolean write, Object cause) {
+				return () -> {
+				};
 			}
 		};
 	}
