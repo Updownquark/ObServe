@@ -172,15 +172,12 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 *
 	 * @param <E> The super-type of all collections in the wrapping collection
 	 * @param list The collection to flatten
-	 * @param compare The comparator to compare elements between collections
+	 * @param compare The comparator to compare elements between collections. May be null.
 	 * @return A collection containing all elements of all collections in the outer collection, sorted according to the given comparator,
 	 *         then by order in the outer collection.
 	 */
 	public static <E> ObservableOrderedCollection<E> flatten(ObservableOrderedCollection<? extends ObservableOrderedCollection<E>> list,
 		Comparator<? super E> compare) {
-		if(compare == null) {
-			compare = (o1, o2) -> -1;
-		}
 		return d().debug(new FlattenedOrderedCollection<>(list, compare)).from("flatten", list).using("compare", compare).get();
 	}
 
@@ -1041,7 +1038,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 	/**
 	 * Implements an element in {@link ObservableOrderedCollection#flatten(ObservableOrderedCollection, Comparator)}
-	 * 
+	 *
 	 * @param <E> The type of the element
 	 */
 	class FlattenedOrderedElement<E> extends FlattenedElement<E> implements OrderedObservableElement<E> {
@@ -1080,23 +1077,35 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 			E value = get();
 			int subListIndex = getSubCollectionElement().getIndex();
 			int subElIdx = getSubElement().getIndex();
-			int ret = 0;
-			int index = 0;
-			for(ObservableOrderedCollection<E> sub : theOuter) {
-				if(index == subListIndex) {
-					ret += subElIdx;
+			int ret;
+			if(theCompare != null) {
+				ret = 0;
+				int index = 0;
+				for(ObservableOrderedCollection<E> sub : theOuter) {
+					if(index == subListIndex) {
+						ret += subElIdx;
+						index++;
+						continue;
+					}
+					for(E el : sub) {
+						int comp = theCompare.compare(value, el);
+						if(comp < 0)
+							break;
+						if(index > subListIndex && comp == 0)
+							break;
+						ret++;
+					}
 					index++;
-					continue;
 				}
-				for(E el : sub) {
-					int comp = theCompare.compare(value, el);
-					if(comp < 0)
+			} else {
+				ret = subElIdx;
+				int i = 0;
+				for(ObservableOrderedCollection<E> sub : theOuter) {
+					if(i >= subListIndex)
 						break;
-					if(index > subListIndex && comp == 0)
-						break;
-					ret++;
+					ret += sub.size();
+					i++;
 				}
-				index++;
 			}
 			return ret;
 		}

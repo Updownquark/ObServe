@@ -1395,6 +1395,11 @@ public class ObservableTest {
 	/** Tests {@link ObservableOrderedCollection#flatten(ObservableOrderedCollection, java.util.Comparator)} */
 	@Test
 	public void observableOrderedFlatten() {
+		observableOrderedFlatten(Comparable::compareTo);
+		observableOrderedFlatten(null);
+	}
+
+	private void observableOrderedFlatten(java.util.Comparator<Integer> comparator) {
 		DefaultObservableList<ObservableList<Integer>> outer = new DefaultObservableList<>(new Type(ObservableList.class, new Type(
 			Integer.TYPE)));
 		DefaultObservableList<Integer> list1 = new DefaultObservableList<>(new Type(Integer.TYPE));
@@ -1424,7 +1429,7 @@ public class ObservableTest {
 			}
 		}
 
-		ObservableOrderedCollection.flatten(outer, null).onElement(element -> {
+		Subscription sub = ObservableOrderedCollection.flatten(outer, comparator).onElement(element -> {
 			OrderedObservableElement<Integer> orderedEl = (OrderedObservableElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
@@ -1462,6 +1467,8 @@ public class ObservableTest {
 		control1.add(control1.indexOf(19), 16);
 		correct.add(correct.indexOf(17), 16);
 		assertEquals(correct, compare);
+
+		sub.unsubscribe();
 	}
 
 	/** Tests {@link ObservableList#asList(ObservableCollection)} */
