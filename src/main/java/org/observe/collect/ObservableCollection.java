@@ -494,6 +494,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		return d().debug(new ImmutableObservableCollection<>(this)).from("immutable", this).get();
 	}
 
+	default ObservableCollection<E> filterModification(Predicate<Object> removeFilter, Predicate<? super E> addFilter) {
+		return new ModFilteredCollection<>(this, removeFilter, addFilter);
+	}
+
 	/**
 	 * Creates a collection with the same elements as this collection, but cached, such that the
 	 *
@@ -1510,6 +1514,125 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		@Override
 		public ImmutableObservableCollection<E> immutable() {
 			return this;
+		}
+	}
+
+	class ModFilteredCollection<E> implements PartialCollectionImpl<E> {
+		private final ObservableCollection<E> theWrapped;
+
+		private final Predicate<Object> theRemoveFilter;
+
+		private final Predicate<? super E> theAddFilter;
+
+		public ModFilteredCollection(ObservableCollection<E> wrapped, Predicate<Object> removeFilter, Predicate<? super E> addFilter) {
+			theWrapped = wrapped;
+			theRemoveFilter = removeFilter;
+			theAddFilter = addFilter;
+		}
+
+		protected ObservableCollection<E> getWrapped() {
+			return theWrapped;
+		}
+
+		protected Predicate<? super E> getRemoveFilter() {
+			return theRemoveFilter;
+		}
+
+		protected Predicate<? super E> getAddFilter() {
+			return theAddFilter;
+		}
+
+		@Override
+		public Type getType() {
+			return theWrapped.getType();
+		}
+
+		@Override
+		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
+			return theWrapped.onElement(onElement);
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			return theWrapped.getSession();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theWrapped.lock(write, cause);
+		}
+
+		@Override
+		public int size() {
+			return theWrapped.size();
+		}
+
+		@Override
+		public Iterator<E> iterator() {
+			return new Iterator<E>() {
+				private final Iterator<E> backing = theWrapped.iterator();
+
+				private E theLast;
+
+				@Override
+				public boolean hasNext() {
+					return backing.hasNext();
+				}
+
+				@Override
+				public E next() {
+					theLast = backing.next();
+					return theLast;
+				}
+
+				@Override
+				public void remove() {
+					if(theRemoveFilter == null || theRemoveFilter.test(theLast))
+						backing.remove();
+				}
+			};
+		}
+
+		@Override
+		public boolean add(E value) {
+			if(theAddFilter == null || theAddFilter.test(value))
+				return theWrapped.add(value);
+			else
+				return false;
+		}
+
+		@Override
+		public boolean addAll(Collection<? extends E> values) {
+			if(theAddFilter != null)
+				return theWrapped.addAll(values.stream().filter(theAddFilter).collect(Collectors.toList()));
+			else
+				return theWrapped.addAll(values);
+		}
+
+		@Override
+		public boolean remove(Object value) {
+			// TODO Check for containment before applying the filter?
+			if(theRemoveFilter == null || theRemoveFilter.test(value))
+				return theWrapped.remove(value);
+			else
+				return false;
+		}
+
+		@Override
+		public boolean removeAll(Collection<?> values) {
+			// TODO Check for containment before applying the filter?
+			if(theRemoveFilter != null)
+				return theWrapped.removeAll(values.stream().filter(theRemoveFilter).collect(Collectors.toList()));
+			else
+				return theWrapped.removeAll(values);
+		}
+
+		@Override
+		public boolean retainAll(Collection<?> values) {
+		}
+
+		@Override
+		public void clear() {
 		}
 	}
 
