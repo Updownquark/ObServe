@@ -91,7 +91,13 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 	@Override
 	default <T> ObservableOrderedCollection<T> map(Type type, Function<? super E, T> map) {
-		return d().debug(new MappedOrderedCollection<>(this, type, map)).from("map", this).using("map", map).get();
+		return map(type, map, null);
+	}
+
+	@Override
+	default <T> ObservableOrderedCollection<T> map(Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
+		return d().debug(new MappedOrderedCollection<>(this, type, map, reverse)).from("map", this).using("map", map)
+			.using("reverse", reverse).get();
 	}
 
 	@Override
@@ -113,7 +119,13 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 	@Override
 	default <T> ObservableOrderedCollection<T> filterMap(Type type, Function<? super E, T> map) {
-		return d().debug(new FilteredOrderedCollection<>(this, type, map)).from("filterMap", this).using("map", map).get();
+		return filterMap(type, map, null);
+	}
+
+	@Override
+	default <T> ObservableOrderedCollection<T> filterMap(Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
+		return d().debug(new FilteredOrderedCollection<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
+			.using("reverse", reverse).get();
 	}
 
 	@Override
@@ -123,8 +135,14 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 	@Override
 	default <T, V> ObservableOrderedCollection<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
-		return d().debug(new CombinedOrderedCollection<>(this, arg, type, func)).from("combine", this).from("with", arg)
-			.using("combination", func).get();
+		return combine(arg, type, func, null);
+	}
+
+	@Override
+	default <T, V> ObservableOrderedCollection<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func,
+		BiFunction<? super V, ? super T, E> reverse) {
+		return d().debug(new CombinedOrderedCollection<>(this, arg, type, func, reverse)).from("combine", this).from("with", arg)
+			.using("combination", func).using("reverse", reverse).get();
 	}
 
 	/**
@@ -371,8 +389,9 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @param <T> The type of the mapped collection
 	 */
 	class MappedOrderedCollection<E, T> extends MappedObservableCollection<E, T> implements ObservableOrderedCollection<T> {
-		protected MappedOrderedCollection(ObservableOrderedCollection<E> wrap, Type type, Function<? super E, T> map) {
-			super(wrap, type, map);
+		protected MappedOrderedCollection(ObservableOrderedCollection<E> wrap, Type type, Function<? super E, T> map,
+			Function<? super T, E> reverse) {
+			super(wrap, type, map, reverse);
 		}
 
 		@Override
@@ -390,8 +409,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	class FilteredOrderedCollection<E, T> extends FilteredCollection<E, T> implements ObservableOrderedCollection<T> {
 		private List<FilteredOrderedElement<E, T>> theFilteredElements = new java.util.ArrayList<>();
 
-		FilteredOrderedCollection(ObservableOrderedCollection<E> wrap, Type type, Function<? super E, T> map) {
-			super(wrap, type, map);
+		FilteredOrderedCollection(ObservableOrderedCollection<E> wrap, Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
+			super(wrap, type, map, reverse);
 		}
 
 		@Override
@@ -456,8 +475,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 */
 	class CombinedOrderedCollection<E, T, V> extends CombinedObservableCollection<E, T, V> implements ObservableOrderedCollection<V> {
 		CombinedOrderedCollection(ObservableOrderedCollection<E> collection, ObservableValue<T> value, Type type,
-			BiFunction<? super E, ? super T, V> map) {
-			super(collection, type, value, map);
+			BiFunction<? super E, ? super T, V> map, BiFunction<? super V, ? super T, E> reverse) {
+			super(collection, type, value, map, reverse);
 		}
 
 		@Override

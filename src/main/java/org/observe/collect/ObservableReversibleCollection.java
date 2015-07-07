@@ -79,7 +79,13 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 
 	@Override
 	default <T> ObservableReversibleCollection<T> map(Type type, Function<? super E, T> map) {
-		return d().debug(new MappedReversibleCollection<>(this, type, map)).from("map", this).using("map", map).get();
+		return map(type, map, null);
+	}
+
+	@Override
+	default <T> ObservableReversibleCollection<T> map(Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
+		return d().debug(new MappedReversibleCollection<>(this, type, map, reverse)).from("map", this).using("map", map)
+			.using("reverse", reverse).get();
 	}
 
 	@Override
@@ -101,7 +107,13 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 
 	@Override
 	default <T> ObservableReversibleCollection<T> filterMap(Type type, Function<? super E, T> map) {
-		return d().debug(new FilteredReversibleCollection<>(this, type, map)).from("filterMap", this).using("map", map).get();
+		return filterMap(type, map, null);
+	}
+
+	@Override
+	default <T> ObservableReversibleCollection<T> filterMap(Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
+		return d().debug(new FilteredReversibleCollection<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
+			.using("reverse", reverse).get();
 	}
 
 	@Override
@@ -111,8 +123,14 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 
 	@Override
 	default <T, V> ObservableReversibleCollection<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
-		return d().debug(new CombinedReversibleCollection<>(this, arg, type, func)).from("combine", this).from("with", arg)
-			.using("combination", func).get();
+		return combine(arg, type, func, null);
+	}
+
+	@Override
+	default <T, V> ObservableReversibleCollection<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func,
+		BiFunction<? super V, ? super T, E> reverse) {
+		return d().debug(new CombinedReversibleCollection<>(this, arg, type, func, reverse)).from("combine", this).from("with", arg)
+			.using("combination", func).using("reverse", reverse).get();
 	}
 
 	/**
@@ -300,8 +318,9 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 * @param <T> The type of the mapped collection
 	 */
 	class MappedReversibleCollection<E, T> extends MappedOrderedCollection<E, T> implements ObservableReversibleCollection<T> {
-		protected MappedReversibleCollection(ObservableReversibleCollection<E> wrap, Type type, Function<? super E, T> map) {
-			super(wrap, type, map);
+		protected MappedReversibleCollection(ObservableReversibleCollection<E> wrap, Type type, Function<? super E, T> map,
+			Function<? super T, E> reverse) {
+			super(wrap, type, map, reverse);
 		}
 
 		@Override
@@ -332,8 +351,9 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 * @param <T> The type of the filter/mapped collection
 	 */
 	class FilteredReversibleCollection<E, T> extends FilteredOrderedCollection<E, T> implements ObservableReversibleCollection<T> {
-		public FilteredReversibleCollection(ObservableReversibleCollection<E> wrap, Type type, Function<? super E, T> map) {
-			super(wrap, type, map);
+		public FilteredReversibleCollection(ObservableReversibleCollection<E> wrap, Type type, Function<? super E, T> map,
+			Function<? super T, E> reverse) {
+			super(wrap, type, map, reverse);
 		}
 
 		@Override
@@ -375,8 +395,8 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 */
 	class CombinedReversibleCollection<E, T, V> extends CombinedOrderedCollection<E, T, V> implements ObservableReversibleCollection<V> {
 		public CombinedReversibleCollection(ObservableReversibleCollection<E> collection, ObservableValue<T> value, Type type,
-			BiFunction<? super E, ? super T, V> map) {
-			super(collection, value, type, map);
+			BiFunction<? super E, ? super T, V> map, BiFunction<? super V, ? super T, E> reverse) {
+			super(collection, value, type, map, reverse);
 		}
 
 		@Override

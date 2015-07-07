@@ -278,7 +278,19 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @return The mapped collection
 	 */
 	default <T> ObservableCollection<T> map(Type type, Function<? super E, T> map) {
-		return d().debug(new MappedObservableCollection<>(this, type, map)).from("map", this).using("map", map).get();
+		return map(type, map, null);
+	}
+
+	/**
+	 * @param <T> The type of the mapped collection
+	 * @param type The run-time type for the mapped collection (may be null)
+	 * @param map The mapping function to map the elements of this collection
+	 * @param reverse The reverse function if addition support is desired for the mapped collection
+	 * @return The mapped collection
+	 */
+	default <T> ObservableCollection<T> map(Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
+		return d().debug(new MappedObservableCollection<>(this, type, map, reverse)).from("map", this).using("map", map)
+			.using("reverse", reverse).get();
 	}
 
 	/**
@@ -286,9 +298,9 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @return A collection containing all non-null elements passing the given test
 	 */
 	default ObservableCollection<E> filter(Predicate<? super E> filter) {
-		return d().label(filterMap(value -> {
+		return d().label(filterMap(getType(), value -> {
 			return (value != null && filter.test(value)) ? value : null;
-		})).tag("filter", filter).get();
+		}, value -> value)).tag("filter", filter).get();
 	}
 
 	/**
@@ -298,7 +310,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 *         given class
 	 */
 	default <T> ObservableCollection<T> filter(Class<T> type) {
-		return d().label(filterMap(value -> type.isInstance(value) ? type.cast(value) : null)).tag("filterType", type).get();
+		return d().label(filterMap(new Type(type), value -> type.isInstance(value) ? type.cast(value) : null, value -> (E) value))
+			.tag("filterType", type).get();
 	}
 
 	/**
@@ -307,7 +320,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @return An observable collection of a new type backed by this collection and the mapping function
 	 */
 	default <T> ObservableCollection<T> filterMap(Function<? super E, T> filterMap) {
-		return filterMap(ObservableUtils.getReturnType(filterMap), filterMap);
+		return filterMap(ObservableUtils.getReturnType(filterMap), filterMap, null);
 	}
 
 	/**
@@ -317,9 +330,21 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @return A collection containing every element in this collection for which the mapping function returns a non-null value
 	 */
 	default <T> ObservableCollection<T> filterMap(Type type, Function<? super E, T> map) {
+		return filterMap(type, map, null);
+	}
+
+	/**
+	 * @param <T> The type of the mapped collection
+	 * @param type The run-time type of the mapped collection
+	 * @param map The mapping function
+	 * @param reverse The reverse function if addition support is desired for the filtered collection
+	 * @return A collection containing every element in this collection for which the mapping function returns a non-null value
+	 */
+	default <T> ObservableCollection<T> filterMap(Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
 		if(type == null)
 			type = ObservableUtils.getReturnType(map);
-		return d().debug(new FilteredCollection<>(this, type, map)).from("filterMap", this).using("map", map).get();
+		return d().debug(new FilteredCollection<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
+			.using("reverse", reverse).get();
 	}
 
 	/**
@@ -449,8 +474,22 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @return An observable collection containing this collection's elements combined with the given argument
 	 */
 	default <T, V> ObservableCollection<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
-		return d().debug(new CombinedObservableCollection<>(this, type, arg, func)).from("combine", this).from("with", arg)
-			.using("combination", func).get();
+		return combine(arg, type, func, null);
+	}
+
+	/**
+	 * @param <T> The type of the argument value
+	 * @param <V> The type of the new observable collection
+	 * @param arg The value to combine with each of this collection's elements
+	 * @param type The type for the new collection
+	 * @param func The combination function to apply to this collection's elements and the given value
+	 * @param reverse The reverse function if addition support is desired for the combined collection
+	 * @return An observable collection containing this collection's elements combined with the given argument
+	 */
+	default <T, V> ObservableCollection<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func,
+		BiFunction<? super V, ? super T, E> reverse) {
+		return d().debug(new CombinedObservableCollection<>(this, type, arg, func, reverse)).from("combine", this).from("with", arg)
+			.using("combination", func).using("reverse", reverse).get();
 	}
 
 	/**
@@ -823,11 +862,14 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		private final ObservableCollection<E> theWrapped;
 		private final Type theType;
 		private final Function<? super E, T> theMap;
+		private final Function<? super T, E> theReverse;
 
-		protected MappedObservableCollection(ObservableCollection<E> wrap, Type type, Function<? super E, T> map) {
+		protected MappedObservableCollection(ObservableCollection<E> wrap, Type type, Function<? super E, T> map,
+			Function<? super T, E> reverse) {
 			theWrapped = wrap;
 			theType = type;
 			theMap = map;
+			theReverse = reverse;
 		}
 
 		protected ObservableCollection<E> getWrapped() {
@@ -836,6 +878,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		protected Function<? super E, T> getMap() {
 			return theMap;
+		}
+
+		protected Function<? super T, E> getReverse() {
+			return theReverse;
 		}
 
 		@Override
@@ -883,6 +929,74 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
+		public boolean add(T e) {
+			if(theReverse == null)
+				return PartialCollectionImpl.super.add(e);
+			else
+				return theWrapped.add(theReverse.apply(e));
+		}
+
+		@Override
+		public boolean addAll(Collection<? extends T> c) {
+			if(theReverse == null)
+				return PartialCollectionImpl.super.addAll(c);
+			else
+				return theWrapped.addAll(c.stream().map(theReverse).collect(Collectors.toList()));
+		}
+
+		@Override
+		public boolean remove(Object o) {
+			try (Transaction t = lock(true, null)) {
+				Iterator<E> iter = theWrapped.iterator();
+				while(iter.hasNext()) {
+					E el = iter.next();
+					if(Objects.equals(getMap().apply(el), o)) {
+						iter.remove();
+						return true;
+					}
+				}
+			}
+			return false;
+		}
+
+		@Override
+		public boolean removeAll(Collection<?> c) {
+			boolean ret = false;
+			try (Transaction t = lock(true, null)) {
+				Iterator<E> iter = theWrapped.iterator();
+				while(iter.hasNext()) {
+					E el = iter.next();
+					if(c.contains(getMap().apply(el))) {
+						iter.remove();
+						ret = true;
+					}
+				}
+			}
+			return ret;
+		}
+
+		@Override
+		public boolean retainAll(Collection<?> c) {
+			boolean ret = false;
+			try (Transaction t = lock(true, null)) {
+				Iterator<E> iter = theWrapped.iterator();
+				while(iter.hasNext()) {
+					E el = iter.next();
+					if(!c.contains(getMap().apply(el))) {
+						iter.remove();
+						ret = true;
+					}
+				}
+			}
+			return ret;
+		}
+
+		@Override
+		public void clear() {
+			getWrapped().clear();
+		}
+
+		@Override
 		public Subscription onElement(Consumer<? super ObservableElement<T>> onElement) {
 			return theWrapped.onElement(element -> onElement.accept(element.mapV(theMap)));
 		}
@@ -898,11 +1012,13 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		private final ObservableCollection<E> theWrapped;
 		private final Type theType;
 		private final Function<? super E, T> theMap;
+		private final Function<? super T, E> theReverse;
 
-		FilteredCollection(ObservableCollection<E> wrap, Type type, Function<? super E, T> map) {
+		FilteredCollection(ObservableCollection<E> wrap, Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
 			theWrapped = wrap;
 			theType = type;
 			theMap = map;
+			theReverse = reverse;
 		}
 
 		protected ObservableCollection<E> getWrapped() {
@@ -911,6 +1027,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		protected Function<? super E, T> getMap() {
 			return theMap;
+		}
+
+		protected Function<? super T, E> getReverse() {
+			return theReverse;
 		}
 
 		@Override
@@ -940,6 +1060,86 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		@Override
 		public Iterator<T> iterator() {
 			return filter(theWrapped.iterator());
+		}
+
+		@Override
+		public boolean add(T e) {
+			if(theReverse == null)
+				return PartialCollectionImpl.super.add(e);
+			else
+				return theWrapped.add(theReverse.apply(e));
+		}
+
+		@Override
+		public boolean addAll(Collection<? extends T> c) {
+			if(theReverse == null)
+				return PartialCollectionImpl.super.addAll(c);
+			else
+				return theWrapped.addAll(c.stream().map(theReverse).collect(Collectors.toList()));
+		}
+
+		@Override
+		public boolean remove(Object o) {
+			try (Transaction t = lock(true, null)) {
+				Iterator<E> iter = theWrapped.iterator();
+				while(iter.hasNext()) {
+					E el = iter.next();
+					T mapped = getMap().apply(el);
+					if(mapped != null && Objects.equals(mapped, o)) {
+						iter.remove();
+						return true;
+					}
+				}
+			}
+			return false;
+		}
+
+		@Override
+		public boolean removeAll(Collection<?> c) {
+			boolean ret = false;
+			try (Transaction t = lock(true, null)) {
+				Iterator<E> iter = theWrapped.iterator();
+				while(iter.hasNext()) {
+					E el = iter.next();
+					T mapped = getMap().apply(el);
+					if(mapped != null && c.contains(mapped)) {
+						iter.remove();
+						ret = true;
+					}
+				}
+			}
+			return ret;
+		}
+
+		@Override
+		public boolean retainAll(Collection<?> c) {
+			boolean ret = false;
+			try (Transaction t = lock(true, null)) {
+				Iterator<E> iter = theWrapped.iterator();
+				while(iter.hasNext()) {
+					E el = iter.next();
+					T mapped = getMap().apply(el);
+					if(mapped != null && !c.contains(mapped)) {
+						iter.remove();
+						ret = true;
+					}
+				}
+			}
+			return ret;
+		}
+
+		@Override
+		public void clear() {
+			try (Transaction t = lock(true, null)) {
+				Iterator<E> iter = getWrapped().iterator();
+				while(iter.hasNext()) {
+					E el = iter.next();
+					T mapped = getMap().apply(el);
+					if(mapped != null) {
+						iter.remove();
+					}
+				}
+			}
 		}
 
 		protected Iterator<T> filter(Iterator<E> iter) {
@@ -1102,15 +1302,17 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		private final Type theType;
 		private final ObservableValue<T> theValue;
 		private final BiFunction<? super E, ? super T, V> theMap;
+		private final BiFunction<? super V, ? super T, E> theReverse;
 
 		private final SubCollectionTransactionManager theTransactionManager;
 
 		protected CombinedObservableCollection(ObservableCollection<E> wrap, Type type, ObservableValue<T> value,
-			BiFunction<? super E, ? super T, V> map) {
+			BiFunction<? super E, ? super T, V> map, BiFunction<? super V, ? super T, E> reverse) {
 			theWrapped = wrap;
 			theType = type;
 			theValue = value;
 			theMap = map;
+			theReverse = reverse;
 
 			theTransactionManager = new SubCollectionTransactionManager(theWrapped);
 		}
@@ -1125,6 +1327,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		protected BiFunction<? super E, ? super T, V> getMap() {
 			return theMap;
+		}
+
+		protected BiFunction<? super V, ? super T, E> getReverse() {
+			return theReverse;
 		}
 
 		protected SubCollectionTransactionManager getManager() {
@@ -1154,6 +1360,79 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		@Override
 		public Iterator<V> iterator() {
 			return combine(theWrapped.iterator());
+		}
+
+		@Override
+		public boolean add(V e) {
+			if(theReverse == null)
+				return PartialCollectionImpl.super.add(e);
+			else
+				return theWrapped.add(theReverse.apply(e, theValue.get()));
+		}
+
+		@Override
+		public boolean addAll(Collection<? extends V> c) {
+			if(theReverse == null)
+				return PartialCollectionImpl.super.addAll(c);
+			else {
+				T combineValue = theValue.get();
+				return theWrapped.addAll(c.stream().map(o -> theReverse.apply(o, combineValue)).collect(Collectors.toList()));
+			}
+		}
+
+		@Override
+		public boolean remove(Object o) {
+			try (Transaction t = lock(true, null)) {
+				T combineValue = theValue.get();
+				Iterator<E> iter = theWrapped.iterator();
+				while(iter.hasNext()) {
+					E el = iter.next();
+					if(Objects.equals(getMap().apply(el, combineValue), o)) {
+						iter.remove();
+						return true;
+					}
+				}
+			}
+			return false;
+		}
+
+		@Override
+		public boolean removeAll(Collection<?> c) {
+			boolean ret = false;
+			try (Transaction t = lock(true, null)) {
+				T combineValue = theValue.get();
+				Iterator<E> iter = theWrapped.iterator();
+				while(iter.hasNext()) {
+					E el = iter.next();
+					if(c.contains(getMap().apply(el, combineValue))) {
+						iter.remove();
+						ret = true;
+					}
+				}
+			}
+			return ret;
+		}
+
+		@Override
+		public boolean retainAll(Collection<?> c) {
+			boolean ret = false;
+			try (Transaction t = lock(true, null)) {
+				T combineValue = theValue.get();
+				Iterator<E> iter = theWrapped.iterator();
+				while(iter.hasNext()) {
+					E el = iter.next();
+					if(!c.contains(getMap().apply(el, combineValue))) {
+						iter.remove();
+						ret = true;
+					}
+				}
+			}
+			return ret;
+		}
+
+		@Override
+		public void clear() {
+			getWrapped().clear();
 		}
 
 		protected Iterator<V> combine(Iterator<E> iter) {

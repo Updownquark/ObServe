@@ -304,7 +304,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 		/* Note that everywhere we cast a T-typed value to E is safe because this sorted set is only called from filter, not map */
 
 		protected FilteredSortedSet(ObservableSortedSet<E> wrap, Type type, Function<? super E, T> map) {
-			super(wrap, type, map);
+			super(wrap, type, map, value -> (E) value);
 		}
 
 		@Override

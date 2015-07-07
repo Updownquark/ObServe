@@ -428,7 +428,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	 */
 	class FilteredSet<E, T> extends FilteredCollection<E, T> implements PartialSetImpl<T> {
 		protected FilteredSet(ObservableSet<E> wrap, Type type, Function<? super E, T> map) {
-			super(wrap, type, map);
+			super(wrap, type, map, value -> (E) value);
 		}
 
 		@Override
