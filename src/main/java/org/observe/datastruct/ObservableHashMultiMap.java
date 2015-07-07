@@ -10,8 +10,8 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.observe.ObservableValue;
 import org.observe.collect.CollectionSession;
-import org.observe.collect.DefaultObservableList;
-import org.observe.collect.DefaultObservableSet;
+import org.observe.collect.ObservableArrayList;
+import org.observe.collect.ObservableHashSet;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.TransactableList;
 import org.observe.util.DefaultTransactable;
@@ -25,8 +25,8 @@ import prisms.lang.Type;
  * @param <K> The type of keys used in this map
  * @param <V> The type of values stored in this map
  */
-public class DefaultObservableMultiMap<K, V> implements ObservableMultiMap<K, V> {
-	private class DefaultMultiMapEntry extends DefaultObservableList<V> implements ObservableMultiEntry<K, V> {
+public class ObservableHashMultiMap<K, V> implements ObservableMultiMap<K, V> {
+	private class DefaultMultiMapEntry extends ObservableArrayList<V> implements ObservableMultiEntry<K, V> {
 		private final TransactableList<V> theController = control(null);
 
 		private final K theKey;
@@ -79,15 +79,15 @@ public class DefaultObservableMultiMap<K, V> implements ObservableMultiMap<K, V>
 	 * @param keyType The type of key used by this map
 	 * @param valueType The type of value stored in this map
 	 */
-	public DefaultObservableMultiMap(Type keyType, Type valueType) {
+	public ObservableHashMultiMap(Type keyType, Type valueType) {
 		theKeyType = keyType;
 		theValueType = valueType;
 		theLock=new ReentrantReadWriteLock();
 		theSessionController = new DefaultTransactable(theLock);
 
-		theEntries = new DefaultObservableSet<>(new Type(ObservableMultiEntry.class, theKeyType, theKeyType), theLock,
+		theEntries = new ObservableHashSet<>(new Type(ObservableMultiEntry.class, theKeyType, theKeyType), theLock,
 			theSessionController.getSession(), theSessionController);
-		theEntryController = ((DefaultObservableSet<ObservableMultiEntry<K, V>>) theEntries).control(null);
+		theEntryController = ((ObservableHashSet<ObservableMultiEntry<K, V>>) theEntries).control(null);
 	}
 
 	@Override

@@ -9,8 +9,8 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import org.junit.Test;
-import org.observe.collect.DefaultObservableList;
-import org.observe.collect.DefaultObservableSet;
+import org.observe.collect.ObservableArrayList;
+import org.observe.collect.ObservableHashSet;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableList;
 import org.observe.collect.ObservableOrderedCollection;
@@ -281,7 +281,7 @@ public class ObservableTest {
 	/** Tests basic {@link ObservableSet} functionality */
 	@Test
 	public void observableSet() {
-		DefaultObservableSet<Integer> set = new DefaultObservableSet<>(new Type(Integer.TYPE));
+		ObservableHashSet<Integer> set = new ObservableHashSet<>(new Type(Integer.TYPE));
 		Set<Integer> controller = set.control(null);
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
@@ -332,7 +332,7 @@ public class ObservableTest {
 	/** Tests basic {@link ObservableList} functionality */
 	@Test
 	public void observableList() {
-		DefaultObservableList<Integer> list = new DefaultObservableList<>(new Type(Integer.TYPE));
+		ObservableArrayList<Integer> list = new ObservableArrayList<>(new Type(Integer.TYPE));
 		List<Integer> controller = list.control(null);
 		List<Integer> compare1 = new ArrayList<>();
 		List<Integer> correct = new ArrayList<>();
@@ -384,7 +384,7 @@ public class ObservableTest {
 	/** Tests {@link ObservableSet#map(java.util.function.Function)} */
 	@Test
 	public void observableSetMap() {
-		DefaultObservableSet<Integer> set = new DefaultObservableSet<>(new Type(Integer.TYPE));
+		ObservableHashSet<Integer> set = new ObservableHashSet<>(new Type(Integer.TYPE));
 		Set<Integer> controller = set.control(null);
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
@@ -417,7 +417,7 @@ public class ObservableTest {
 	/** Tests {@link ObservableSet#filter(java.util.function.Predicate)} */
 	@Test
 	public void observableSetFilter() {
-		DefaultObservableSet<Integer> set = new DefaultObservableSet<>(new Type(Integer.TYPE));
+		ObservableHashSet<Integer> set = new ObservableHashSet<>(new Type(Integer.TYPE));
 		Set<Integer> controller = set.control(null);
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
@@ -452,7 +452,7 @@ public class ObservableTest {
 	/** Tests {@link ObservableSet#filterMap(java.util.function.Function)} */
 	@Test
 	public void observableSetFilterMap() {
-		DefaultObservableSet<Integer> set = new DefaultObservableSet<>(new Type(Integer.TYPE));
+		ObservableHashSet<Integer> set = new ObservableHashSet<>(new Type(Integer.TYPE));
 		Set<Integer> controller = set.control(null);
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
@@ -491,7 +491,7 @@ public class ObservableTest {
 	/** Tests {@link ObservableSet#combine(ObservableValue, java.util.function.BiFunction)} */
 	@Test
 	public void observableSetCombine() {
-		DefaultObservableSet<Integer> set = new DefaultObservableSet<>(new Type(Integer.TYPE));
+		ObservableHashSet<Integer> set = new ObservableHashSet<>(new Type(Integer.TYPE));
 		SimpleSettableValue<Integer> value1 = new SimpleSettableValue<>(Integer.TYPE, false);
 		value1.set(1, null);
 		Set<Integer> controller = set.control(null);
@@ -555,7 +555,7 @@ public class ObservableTest {
 	/** Tests {@link ObservableSet#unique(ObservableCollection)} */
 	@Test
 	public void observableSetUnique() {
-		DefaultObservableList<Integer> list = new DefaultObservableList<>(new Type(Integer.TYPE));
+		ObservableArrayList<Integer> list = new ObservableArrayList<>(new Type(Integer.TYPE));
 		List<Integer> controller = list.control(null);
 		ObservableSet<Integer> unique = ObservableSet.unique(list);
 		List<Integer> compare1 = new ArrayList<>();
@@ -625,10 +625,10 @@ public class ObservableTest {
 	/** Tests {@link ObservableCollection#flatten(ObservableCollection)} */
 	@Test
 	public void observableCollectionFlatten() {
-		DefaultObservableSet<Integer> set1 = new DefaultObservableSet<>(new Type(Integer.TYPE));
-		DefaultObservableSet<Integer> set2 = new DefaultObservableSet<>(new Type(Integer.TYPE));
-		DefaultObservableSet<Integer> set3 = new DefaultObservableSet<>(new Type(Integer.TYPE));
-		DefaultObservableList<ObservableSet<Integer>> outer = new DefaultObservableList<>(new Type(ObservableSet.class,
+		ObservableHashSet<Integer> set1 = new ObservableHashSet<>(new Type(Integer.TYPE));
+		ObservableHashSet<Integer> set2 = new ObservableHashSet<>(new Type(Integer.TYPE));
+		ObservableHashSet<Integer> set3 = new ObservableHashSet<>(new Type(Integer.TYPE));
+		ObservableArrayList<ObservableSet<Integer>> outer = new ObservableArrayList<>(new Type(ObservableSet.class,
 			new Type(Integer.TYPE)));
 		List<ObservableSet<Integer>> outerControl = outer.control(null);
 		outerControl.add(set1);
@@ -776,7 +776,7 @@ public class ObservableTest {
 		SimpleSettableValue<Integer> obs1 = new SimpleSettableValue<>(Integer.class, true);
 		SimpleSettableValue<Integer> obs2 = new SimpleSettableValue<>(Integer.class, true);
 		SimpleSettableValue<Integer> obs3 = new SimpleSettableValue<>(Integer.class, true);
-		DefaultObservableSet<ObservableValue<Integer>> set = new DefaultObservableSet<>(new Type(Observable.class, new Type(
+		ObservableHashSet<ObservableValue<Integer>> set = new ObservableHashSet<>(new Type(Observable.class, new Type(
 			Integer.TYPE)));
 		Set<ObservableValue<Integer>> controller = set.control(null);
 		controller.add(obs1);
@@ -803,7 +803,7 @@ public class ObservableTest {
 	/** Tests {@link ObservableList#map(java.util.function.Function)} */
 	@Test
 	public void observableListMap() {
-		DefaultObservableList<Integer> list = new DefaultObservableList<>(new Type(Integer.TYPE));
+		ObservableArrayList<Integer> list = new ObservableArrayList<>(new Type(Integer.TYPE));
 		List<Integer> controller = list.control(null);
 		List<Integer> compare1 = new ArrayList<>();
 		List<Integer> correct = new ArrayList<>();
@@ -845,7 +845,7 @@ public class ObservableTest {
 	/** Tests {@link ObservableList#filter(java.util.function.Predicate)} */
 	@Test
 	public void observableListFilter() {
-		DefaultObservableList<Integer> list = new DefaultObservableList<>(new Type(Integer.TYPE));
+		ObservableArrayList<Integer> list = new ObservableArrayList<>(new Type(Integer.TYPE));
 		List<Integer> controller = list.control(null);
 		List<Integer> compare1 = new ArrayList<>();
 		List<Integer> correct = new ArrayList<>();
@@ -890,7 +890,7 @@ public class ObservableTest {
 	/** Slight variation on {@link #observableListFilter()} */
 	@Test
 	public void observableListFilter2() {
-		DefaultObservableList<Integer> list = new DefaultObservableList<>(new Type(Integer.TYPE));
+		ObservableArrayList<Integer> list = new ObservableArrayList<>(new Type(Integer.TYPE));
 		List<Integer> controller = list.control(null);
 		List<Integer> compare0 = new ArrayList<>();
 		List<Integer> correct0 = new ArrayList<>();
@@ -1021,7 +1021,7 @@ public class ObservableTest {
 	/** Tests {@link ObservableList#filterMap(java.util.function.Function)} */
 	@Test
 	public void observableListFilterMap() {
-		DefaultObservableList<Integer> list = new DefaultObservableList<>(new Type(Integer.TYPE));
+		ObservableArrayList<Integer> list = new ObservableArrayList<>(new Type(Integer.TYPE));
 		List<Integer> controller = list.control(null);
 		List<Integer> compare1 = new ArrayList<>();
 		List<Integer> correct = new ArrayList<>();
@@ -1070,7 +1070,7 @@ public class ObservableTest {
 	/** Tests {@link ObservableList#combine(ObservableValue, java.util.function.BiFunction)} */
 	@Test
 	public void observableListCombine() {
-		DefaultObservableList<Integer> set = new DefaultObservableList<>(new Type(Integer.TYPE));
+		ObservableArrayList<Integer> set = new ObservableArrayList<>(new Type(Integer.TYPE));
 		SimpleSettableValue<Integer> value1 = new SimpleSettableValue<>(Integer.TYPE, false);
 		value1.set(1, null);
 		List<Integer> controller = set.control(null);
@@ -1136,10 +1136,10 @@ public class ObservableTest {
 	/** Tests {@link ObservableList#flatten(ObservableList)} */
 	@Test
 	public void observableListFlatten() {
-		DefaultObservableList<Integer> set1 = new DefaultObservableList<>(new Type(Integer.TYPE));
-		DefaultObservableList<Integer> set2 = new DefaultObservableList<>(new Type(Integer.TYPE));
-		DefaultObservableList<Integer> set3 = new DefaultObservableList<>(new Type(Integer.TYPE));
-		DefaultObservableList<ObservableList<Integer>> outer = new DefaultObservableList<>(new Type(ObservableList.class, new Type(
+		ObservableArrayList<Integer> set1 = new ObservableArrayList<>(new Type(Integer.TYPE));
+		ObservableArrayList<Integer> set2 = new ObservableArrayList<>(new Type(Integer.TYPE));
+		ObservableArrayList<Integer> set3 = new ObservableArrayList<>(new Type(Integer.TYPE));
+		ObservableArrayList<ObservableList<Integer>> outer = new ObservableArrayList<>(new Type(ObservableList.class, new Type(
 			Integer.TYPE)));
 		List<ObservableList<Integer>> outerControl = outer.control(null);
 		outerControl.add(set1);
@@ -1290,7 +1290,7 @@ public class ObservableTest {
 	/** Tests {@link ObservableList#find(java.util.function.Predicate)} */
 	@Test
 	public void observableListFind() {
-		DefaultObservableList<Integer> list = new DefaultObservableList<>(new Type(Integer.TYPE));
+		ObservableArrayList<Integer> list = new ObservableArrayList<>(new Type(Integer.TYPE));
 		List<Integer> controller = list.control(null);
 		ObservableValue<Integer> found = list.find(value -> value % 3 == 0);
 		Integer [] received = new Integer[] {0};
@@ -1321,7 +1321,7 @@ public class ObservableTest {
 	/** Tests {@link ObservableUtils#flattenListValues(Type, ObservableList)} */
 	@Test
 	public void flattenListValues() {
-		DefaultObservableList<ObservableValue<Integer>> list = new DefaultObservableList<>(new Type(ObservableValue.class, new Type(
+		ObservableArrayList<ObservableValue<Integer>> list = new ObservableArrayList<>(new Type(ObservableValue.class, new Type(
 			Integer.TYPE)));
 		List<ObservableValue<Integer>> listControl = list.control(null);
 		SimpleSettableValue<Integer> value1 = new SimpleSettableValue<>(Integer.TYPE, false);
@@ -1353,7 +1353,7 @@ public class ObservableTest {
 	/** Tests {@link ObservableOrderedCollection#sort(ObservableCollection, java.util.Comparator)} */
 	@Test
 	public void sortedObservableList() {
-		DefaultObservableList<Integer> list = new DefaultObservableList<>(new Type(Integer.TYPE));
+		ObservableArrayList<Integer> list = new ObservableArrayList<>(new Type(Integer.TYPE));
 		List<Integer> controller = list.control(null);
 
 		List<Integer> compare = new ArrayList<>();
@@ -1401,11 +1401,11 @@ public class ObservableTest {
 	}
 
 	private void observableOrderedFlatten(java.util.Comparator<Integer> comparator) {
-		DefaultObservableList<ObservableList<Integer>> outer = new DefaultObservableList<>(new Type(ObservableList.class, new Type(
+		ObservableArrayList<ObservableList<Integer>> outer = new ObservableArrayList<>(new Type(ObservableList.class, new Type(
 			Integer.TYPE)));
-		DefaultObservableList<Integer> list1 = new DefaultObservableList<>(new Type(Integer.TYPE));
-		DefaultObservableList<Integer> list2 = new DefaultObservableList<>(new Type(Integer.TYPE));
-		DefaultObservableList<Integer> list3 = new DefaultObservableList<>(new Type(Integer.TYPE));
+		ObservableArrayList<Integer> list1 = new ObservableArrayList<>(new Type(Integer.TYPE));
+		ObservableArrayList<Integer> list2 = new ObservableArrayList<>(new Type(Integer.TYPE));
+		ObservableArrayList<Integer> list3 = new ObservableArrayList<>(new Type(Integer.TYPE));
 
 		List<ObservableList<Integer>> outerControl = outer.control(null);
 		List<Integer> control1 = list1.control(null);
@@ -1481,7 +1481,7 @@ public class ObservableTest {
 	/** Tests {@link ObservableList#asList(ObservableCollection)} */
 	@Test
 	public void obervableListFromCollection() {
-		DefaultObservableSet<Integer> set = new DefaultObservableSet<>(new Type(Integer.TYPE));
+		ObservableHashSet<Integer> set = new ObservableHashSet<>(new Type(Integer.TYPE));
 		ObservableList<Integer> list = ObservableList.asList(set);
 		ArrayList<Integer> compare = new ArrayList<>();
 		ArrayList<Integer> correct = new ArrayList<>();
@@ -1524,7 +1524,7 @@ public class ObservableTest {
 	@Test
 	public void testTransactionsBasic() {
 		// Use find() and changes() to test
-		DefaultObservableList<Integer> list = new DefaultObservableList<>(new Type(Integer.TYPE));
+		ObservableArrayList<Integer> list = new ObservableArrayList<>(new Type(Integer.TYPE));
 		testTransactionsByFind(list, list);
 		testTransactionsByChanges(list, list);
 	}
@@ -1532,8 +1532,8 @@ public class ObservableTest {
 	/** Tests transactions in {@link ObservableList#flatten(ObservableList) flattened} collections */
 	@Test
 	public void testTransactionsFlattened() {
-		DefaultObservableList<Integer> list1 = new DefaultObservableList<>(new Type(Integer.TYPE));
-		DefaultObservableList<Integer> list2 = new DefaultObservableList<>(new Type(Integer.TYPE));
+		ObservableArrayList<Integer> list1 = new ObservableArrayList<>(new Type(Integer.TYPE));
+		ObservableArrayList<Integer> list2 = new ObservableArrayList<>(new Type(Integer.TYPE));
 		ObservableList<Integer> flat = ObservableList.flattenLists(list1, list2);
 		list1.add(50);
 

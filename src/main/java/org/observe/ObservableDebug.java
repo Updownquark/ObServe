@@ -11,7 +11,7 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableList;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.TransactableCollection;
-import org.observe.datastruct.DefaultObservableMultiMap;
+import org.observe.datastruct.ObservableHashMultiMap;
 import org.observe.datastruct.ObservableGraph;
 import org.observe.datastruct.ObservableGraph.Node;
 import org.observe.datastruct.ObservableMap;
@@ -98,13 +98,13 @@ public abstract class ObservableDebug {
 
 		private final TransactableCollection<String> labelController;
 
-		private final DefaultObservableMultiMap<String, Object> tagController;
+		private final ObservableHashMultiMap<String, Object> tagController;
 
 		private ObservableDebugWrapper(Object ob, Map<String, Object> fns) {
 			observable = new WeakReferenceObservable<>(new Type(Object.class), ob);
-			labels = new org.observe.collect.DefaultObservableList<>(new Type(String.class));
-			labelController = ((org.observe.collect.DefaultObservableList<String>) labels).control(null);
-			tagController = new org.observe.datastruct.DefaultObservableMultiMap<>(new Type(String.class), new Type(Object.class));
+			labels = new org.observe.collect.ObservableArrayList<>(new Type(String.class));
+			labelController = ((org.observe.collect.ObservableArrayList<String>) labels).control(null);
+			tagController = new org.observe.datastruct.ObservableHashMultiMap<>(new Type(String.class), new Type(Object.class));
 			tags = tagController.immutable();
 			functions = Collections.unmodifiableMap(fns);
 		}

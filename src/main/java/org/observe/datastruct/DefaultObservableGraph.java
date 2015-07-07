@@ -7,7 +7,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.observe.ObservableValue;
 import org.observe.collect.CollectionSession;
-import org.observe.collect.DefaultObservableList;
+import org.observe.collect.ObservableArrayList;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.DefaultTransactable;
 import org.observe.util.Transaction;
@@ -77,8 +77,8 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E> {
 
 	private DefaultTransactable theSessionController;
 
-	private DefaultObservableList<Node<N, E>> theNodes;
-	private DefaultObservableList<Edge<N, E>> theEdges;
+	private ObservableArrayList<Node<N, E>> theNodes;
+	private ObservableArrayList<Edge<N, E>> theEdges;
 
 	private List<Node<N, E>> theNodeController;
 	private List<Edge<N, E>> theEdgeController;
@@ -92,10 +92,10 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E> {
 
 		theSessionController = new DefaultTransactable(theLock);
 
-		theNodes = new DefaultObservableList<>(new Type(Node.class, nodeType, edgeType), theLock, theSessionController.getSession(),
+		theNodes = new ObservableArrayList<>(new Type(Node.class, nodeType, edgeType), theLock, theSessionController.getSession(),
 			theSessionController);
 		theNodeController = theNodes.control(null);
-		theEdges = new DefaultObservableList<>(new Type(Edge.class, nodeType, edgeType), theLock, theSessionController.getSession(),
+		theEdges = new ObservableArrayList<>(new Type(Edge.class, nodeType, edgeType), theLock, theSessionController.getSession(),
 			theSessionController);
 		theEdgeController = theEdges.control(null);
 	}

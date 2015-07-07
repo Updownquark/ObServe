@@ -26,7 +26,7 @@ import prisms.lang.Type;
  *
  * @param <E> The type of element in the set
  */
-public class DefaultObservableSet<E> extends AbstractSet<E> implements ObservableSet<E> {
+public class ObservableHashSet<E> extends AbstractSet<E> implements ObservableSet<E> {
 	private final Type theType;
 	private LinkedHashMap<E, InternalObservableElementImpl<E>> theValues;
 
@@ -42,7 +42,7 @@ public class DefaultObservableSet<E> extends AbstractSet<E> implements Observabl
 	 *
 	 * @param type The type of elements for this set
 	 */
-	public DefaultObservableSet(Type type) {
+	public ObservableHashSet(Type type) {
 		this(type, new ReentrantReadWriteLock(), null, null);
 
 		theSessionController = new DefaultTransactable(theInternals.getLock());
@@ -58,7 +58,7 @@ public class DefaultObservableSet<E> extends AbstractSet<E> implements Observabl
 	 * @param sessionController The controller for the session. May be null, in which case the transactional methods in this collection will
 	 *            not actually create transactions.
 	 */
-	public DefaultObservableSet(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
+	public ObservableHashSet(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController) {
 		theType = type;
 		hasIssuedController = new AtomicBoolean(false);
@@ -311,8 +311,8 @@ public class DefaultObservableSet<E> extends AbstractSet<E> implements Observabl
 	}
 
 	@Override
-	protected DefaultObservableSet<E> clone() throws CloneNotSupportedException {
-		DefaultObservableSet<E> ret = (DefaultObservableSet<E>) super.clone();
+	protected ObservableHashSet<E> clone() throws CloneNotSupportedException {
+		ObservableHashSet<E> ret = (ObservableHashSet<E>) super.clone();
 		ret.theValues = (LinkedHashMap<E, InternalObservableElementImpl<E>>) theValues.clone();
 		for(Map.Entry<E, InternalObservableElementImpl<E>> entry : theValues.entrySet())
 			entry.setValue(ret.createElement(entry.getKey()));
@@ -359,27 +359,27 @@ public class DefaultObservableSet<E> extends AbstractSet<E> implements Observabl
 
 		@Override
 		public int size() {
-			return DefaultObservableSet.this.size();
+			return ObservableHashSet.this.size();
 		}
 
 		@Override
 		public boolean contains(Object o) {
-			return DefaultObservableSet.this.contains(o);
+			return ObservableHashSet.this.contains(o);
 		}
 
 		@Override
 		public boolean containsAll(Collection<?> c) {
-			return DefaultObservableSet.this.containsAll(c);
+			return ObservableHashSet.this.containsAll(c);
 		}
 
 		@Override
 		public Object [] toArray() {
-			return DefaultObservableSet.this.toArray();
+			return ObservableHashSet.this.toArray();
 		}
 
 		@Override
 		public <T> T [] toArray(T [] a) {
-			return DefaultObservableSet.this.toArray(a);
+			return ObservableHashSet.this.toArray(a);
 		}
 
 		@Override

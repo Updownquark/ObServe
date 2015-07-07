@@ -30,7 +30,7 @@ import prisms.lang.Type;
  *
  * @param <E> The type of element in the set
  */
-public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E> {
+public class ObservableTreeSet<E> implements ObservableSortedSet<E> {
 	private final Type theType;
 
 	private final Comparator<? super E> theCompare;
@@ -54,7 +54,7 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E> {
 	 * @param compare The comparator to sort this set's elements. Use {@link Comparable}::{@link Comparable#compareTo(Object) compareTo} for
 	 *            natural ordering.
 	 */
-	public DefaultObservableSortedSet(Type type, Comparator<? super E> compare) {
+	public ObservableTreeSet(Type type, Comparator<? super E> compare) {
 		this(type, new ReentrantReadWriteLock(), null, null, compare);
 
 		theSessionController = new DefaultTransactable(theInternals.getLock());
@@ -72,7 +72,7 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E> {
 	 * @param compare The comparator to sort this set's elements. Use {@link Comparable}::{@link Comparable#compareTo(Object) compareTo} for
 	 *            natural ordering.
 	 */
-	public DefaultObservableSortedSet(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
+	public ObservableTreeSet(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController, Comparator<? super E> compare) {
 		theType = type;
 		hasIssuedController = new AtomicBoolean(false);
@@ -373,8 +373,8 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E> {
 	}
 
 	@Override
-	protected DefaultObservableSortedSet<E> clone() throws CloneNotSupportedException {
-		DefaultObservableSortedSet<E> ret = (DefaultObservableSortedSet<E>) super.clone();
+	protected ObservableTreeSet<E> clone() throws CloneNotSupportedException {
+		ObservableTreeSet<E> ret = (ObservableTreeSet<E>) super.clone();
 		ret.theValues = (DefaultTreeMap<E, InternalElement>) theValues.clone();
 		for(Map.Entry<E, InternalElement> entry : theValues.entrySet())
 			entry.setValue(ret.createElement(entry.getKey()));
@@ -759,77 +759,77 @@ public class DefaultObservableSortedSet<E> implements ObservableSortedSet<E> {
 
 		@Override
 		public boolean isEmpty() {
-			return DefaultObservableSortedSet.this.isEmpty();
+			return ObservableTreeSet.this.isEmpty();
 		}
 
 		@Override
 		public int size() {
-			return DefaultObservableSortedSet.this.size();
+			return ObservableTreeSet.this.size();
 		}
 
 		@Override
 		public Comparator<? super E> comparator() {
-			return DefaultObservableSortedSet.this.comparator();
+			return ObservableTreeSet.this.comparator();
 		}
 
 		@Override
 		public E first() {
-			return DefaultObservableSortedSet.this.first();
+			return ObservableTreeSet.this.first();
 		}
 
 		@Override
 		public E last() {
-			return DefaultObservableSortedSet.this.last();
+			return ObservableTreeSet.this.last();
 		}
 
 		@Override
 		public E lower(E e) {
-			return DefaultObservableSortedSet.this.lower(e);
+			return ObservableTreeSet.this.lower(e);
 		}
 
 		@Override
 		public E floor(E e) {
-			return DefaultObservableSortedSet.this.floor(e);
+			return ObservableTreeSet.this.floor(e);
 		}
 
 		@Override
 		public E ceiling(E e) {
-			return DefaultObservableSortedSet.this.ceiling(e);
+			return ObservableTreeSet.this.ceiling(e);
 		}
 
 		@Override
 		public E higher(E e) {
-			return DefaultObservableSortedSet.this.higher(e);
+			return ObservableTreeSet.this.higher(e);
 		}
 
 		@Override
 		public E pollFirst() {
-			return DefaultObservableSortedSet.this.pollFirst();
+			return ObservableTreeSet.this.pollFirst();
 		}
 
 		@Override
 		public E pollLast() {
-			return DefaultObservableSortedSet.this.pollLast();
+			return ObservableTreeSet.this.pollLast();
 		}
 
 		@Override
 		public boolean contains(Object o) {
-			return DefaultObservableSortedSet.this.contains(o);
+			return ObservableTreeSet.this.contains(o);
 		}
 
 		@Override
 		public boolean containsAll(Collection<?> c) {
-			return DefaultObservableSortedSet.this.containsAll(c);
+			return ObservableTreeSet.this.containsAll(c);
 		}
 
 		@Override
 		public E [] toArray() {
-			return DefaultObservableSortedSet.this.toArray();
+			return ObservableTreeSet.this.toArray();
 		}
 
 		@Override
 		public <T> T [] toArray(T [] a) {
-			return DefaultObservableSortedSet.this.toArray(a);
+			return ObservableTreeSet.this.toArray(a);
 		}
 
 		@Override

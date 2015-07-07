@@ -27,7 +27,7 @@ import prisms.lang.Type;
  *
  * @param <E> The type of element in the list
  */
-public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, ObservableList.PartialListImpl<E> {
+public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, ObservableList.PartialListImpl<E> {
 	private final Type theType;
 
 	private DefaultListInternals theInternals;
@@ -48,7 +48,7 @@ public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, 
 	 *
 	 * @param type The type of elements for this list
 	 */
-	public DefaultObservableList(Type type) {
+	public ObservableArrayList(Type type) {
 		this(type, new ReentrantReadWriteLock(), null, null);
 
 		theSessionController = new DefaultTransactable(theInternals.getLock());
@@ -64,7 +64,7 @@ public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, 
 	 * @param sessionController The controller for the session. May be null, in which case the transactional methods in this collection will
 	 *            not actually create transactions.
 	 */
-	public DefaultObservableList(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
+	public ObservableArrayList(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController) {
 		theType = type;
 		hasIssuedController = new AtomicBoolean(false);
@@ -424,8 +424,8 @@ public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, 
 	}
 
 	@Override
-	protected DefaultObservableList<E> clone() throws CloneNotSupportedException {
-		DefaultObservableList<E> ret = (DefaultObservableList<E>) super.clone();
+	protected ObservableArrayList<E> clone() throws CloneNotSupportedException {
+		ObservableArrayList<E> ret = (ObservableArrayList<E>) super.clone();
 		ret.theValues = (ArrayList<E>) theValues.clone();
 		ret.theElements = new ArrayList<>();
 		for(E el : ret.theValues)
@@ -446,42 +446,42 @@ public class DefaultObservableList<E> implements ObservableRandomAccessList<E>, 
 
 		@Override
 		public int size() {
-			return DefaultObservableList.this.size();
+			return ObservableArrayList.this.size();
 		}
 
 		@Override
 		public boolean contains(Object o) {
-			return DefaultObservableList.this.contains(o);
+			return ObservableArrayList.this.contains(o);
 		}
 
 		@Override
 		public Object [] toArray() {
-			return DefaultObservableList.this.toArray();
+			return ObservableArrayList.this.toArray();
 		}
 
 		@Override
 		public <T> T [] toArray(T [] a) {
-			return DefaultObservableList.this.toArray(a);
+			return ObservableArrayList.this.toArray(a);
 		}
 
 		@Override
 		public E get(int index) {
-			return DefaultObservableList.this.get(index);
+			return ObservableArrayList.this.get(index);
 		}
 
 		@Override
 		public int indexOf(Object o) {
-			return DefaultObservableList.this.indexOf(o);
+			return ObservableArrayList.this.indexOf(o);
 		}
 
 		@Override
 		public int lastIndexOf(Object o) {
-			return DefaultObservableList.this.lastIndexOf(o);
+			return ObservableArrayList.this.lastIndexOf(o);
 		}
 
 		@Override
 		public boolean containsAll(Collection<?> c) {
-			return DefaultObservableList.this.containsAll(c);
+			return ObservableArrayList.this.containsAll(c);
 		}
 
 		@Override
