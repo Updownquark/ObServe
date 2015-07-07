@@ -3,6 +3,7 @@ package org.observe.collect;
 import static org.observe.ObservableDebug.d;
 
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
@@ -494,7 +495,62 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		return d().debug(new ImmutableObservableCollection<>(this)).from("immutable", this).get();
 	}
 
-	default ObservableCollection<E> filterModification(Predicate<Object> removeFilter, Predicate<? super E> addFilter) {
+	/**
+	 * Creates a wrapper collection for which removals are filtered
+	 *
+	 * @param filter The filter to check removals with
+	 * @return The removal-filtered collection
+	 */
+	default ObservableCollection<E> filterRemove(Predicate<? super E> filter) {
+		return filterModification(filter, null);
+	}
+
+	/**
+	 * Creates a wrapper collection for which removals are rejected with an {@link IllegalStateException}
+	 *
+	 * @return The removal-disabled collection
+	 */
+	default ObservableCollection<E> noRemove() {
+		return filterModification(value -> {
+			throw new IllegalStateException("This collection does not allow removal");
+		}, null);
+	}
+
+	/**
+	 * Creates a wrapper collection for which additions are filtered
+	 *
+	 * @param filter The filter to check additions with
+	 * @return The addition-filtered collection
+	 */
+	default ObservableCollection<E> filterAdd(Predicate<? super E> filter) {
+		return filterModification(null, filter);
+	}
+
+	/**
+	 * Creates a wrapper collection for which additions are rejected with an {@link IllegalStateException}
+	 *
+	 * @return The addition-disabled collection
+	 */
+	default ObservableCollection<E> noAdd() {
+		return filterModification(null, value -> {
+			throw new IllegalStateException("This collection does not allow addition");
+		});
+	}
+
+	/**
+	 * Creates a wrapper around this collection that can filter items that are attempted to be added or removed from it. If the filter
+	 * returns true, the addition/removal is allowed. If it returns false, the addition/removal is silently rejected. The filter is also
+	 * allowed to throw an exception, in which case the operation as a whole will fail. In the case of batch operations like
+	 * {@link #addAll(Collection) addAll} or {@link #removeAll(Collection) removeAll}, if the filter throws an exception on any item, the
+	 * collection will not be changed. Note that for filters that can return false, silently failing to add or remove items may break the
+	 * contract for the collection type.
+	 *
+	 * @param removeFilter The filter to test items being removed from the collection. If null, removals will not be filtered and will all
+	 *            pass.
+	 * @param addFilter The filter to test items being added to the collection. If null, additions will not be filtered and will all pass
+	 * @return The controlled collection
+	 */
+	default ObservableCollection<E> filterModification(Predicate<? super E> removeFilter, Predicate<? super E> addFilter) {
 		return new ModFilteredCollection<>(this, removeFilter, addFilter);
 	}
 
@@ -1517,14 +1573,19 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 	}
 
+	/**
+	 * Implements {@link ObservableCollection#filterModification(Predicate, Predicate)}
+	 *
+	 * @param <E> The type of the collection to control
+	 */
 	class ModFilteredCollection<E> implements PartialCollectionImpl<E> {
 		private final ObservableCollection<E> theWrapped;
 
-		private final Predicate<Object> theRemoveFilter;
+		private final Predicate<? super E> theRemoveFilter;
 
 		private final Predicate<? super E> theAddFilter;
 
-		public ModFilteredCollection(ObservableCollection<E> wrapped, Predicate<Object> removeFilter, Predicate<? super E> addFilter) {
+		public ModFilteredCollection(ObservableCollection<E> wrapped, Predicate<? super E> removeFilter, Predicate<? super E> addFilter) {
 			theWrapped = wrapped;
 			theRemoveFilter = removeFilter;
 			theAddFilter = addFilter;
@@ -1611,28 +1672,114 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		@Override
 		public boolean remove(Object value) {
-			// TODO Check for containment before applying the filter?
-			if(theRemoveFilter == null || theRemoveFilter.test(value))
+			if(theRemoveFilter == null)
 				return theWrapped.remove(value);
-			else
-				return false;
+
+			try (Transaction t = lock(true, null)) {
+				Iterator<E> iter = theWrapped.iterator();
+				while(iter.hasNext()) {
+					E next = iter.next();
+					if(!Objects.equals(next, value))
+						continue;
+					if(theRemoveFilter.test(next)) {
+						iter.remove();
+						return true;
+					} else
+						return false;
+				}
+			}
+			return false;
 		}
 
 		@Override
 		public boolean removeAll(Collection<?> values) {
-			// TODO Check for containment before applying the filter?
-			if(theRemoveFilter != null)
-				return theWrapped.removeAll(values.stream().filter(theRemoveFilter).collect(Collectors.toList()));
-			else
+			if(theRemoveFilter == null)
 				return theWrapped.removeAll(values);
+
+			BitSet remove = new BitSet();
+			int i = 0;
+			try (Transaction t = lock(true, null)) {
+				Iterator<E> iter = theWrapped.iterator();
+				while(iter.hasNext()) {
+					E next = iter.next();
+					if(!values.contains(next))
+						continue;
+					if(theRemoveFilter.test(next))
+						remove.set(i);
+					i++;
+				}
+
+				if(!remove.isEmpty()) {
+					i = 0;
+					iter = theWrapped.iterator();
+					while(iter.hasNext()) {
+						iter.next();
+						if(remove.get(i))
+							iter.remove();
+						i++;
+					}
+				}
+			}
+			return !remove.isEmpty();
 		}
 
 		@Override
 		public boolean retainAll(Collection<?> values) {
+			if(theRemoveFilter == null)
+				return theWrapped.retainAll(values);
+
+			BitSet remove = new BitSet();
+			int i = 0;
+			try (Transaction t = lock(true, null)) {
+				Iterator<E> iter = theWrapped.iterator();
+				while(iter.hasNext()) {
+					E next = iter.next();
+					if(values.contains(next))
+						continue;
+					if(theRemoveFilter.test(next))
+						remove.set(i);
+					i++;
+				}
+
+				if(!remove.isEmpty()) {
+					i = 0;
+					iter = theWrapped.iterator();
+					while(iter.hasNext()) {
+						iter.next();
+						if(remove.get(i))
+							iter.remove();
+						i++;
+					}
+				}
+			}
+			return !remove.isEmpty();
 		}
 
 		@Override
 		public void clear() {
+			if(theRemoveFilter == null) {
+				theWrapped.clear();
+				return;
+			}
+
+			BitSet remove = new BitSet();
+			int i = 0;
+			Iterator<E> iter = theWrapped.iterator();
+			while(iter.hasNext()) {
+				E next = iter.next();
+				if(theRemoveFilter.test(next))
+					remove.set(i);
+				i++;
+			}
+
+			i = 0;
+			iter = theWrapped.iterator();
+			while(iter.hasNext()) {
+				iter.next();
+				if(remove.get(i))
+					iter.remove();
+				i++;
+			}
 		}
 	}
 

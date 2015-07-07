@@ -91,6 +91,31 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 		return d().debug(new ImmutableObservableSet<>(this)).from("immutable", this).get();
 	}
 
+	@Override
+	default ObservableSet<E> filterRemove(Predicate<? super E> filter) {
+		return (ObservableSet<E>) ObservableCollection.super.filterRemove(filter);
+	}
+
+	@Override
+	default ObservableSet<E> noRemove() {
+		return (ObservableSet<E>) ObservableCollection.super.noRemove();
+	}
+
+	@Override
+	default ObservableSet<E> filterAdd(Predicate<? super E> filter) {
+		return (ObservableSet<E>) ObservableCollection.super.filterAdd(filter);
+	}
+
+	@Override
+	default ObservableSet<E> noAdd() {
+		return (ObservableSet<E>) ObservableCollection.super.noAdd();
+	}
+
+	@Override
+	default ObservableSet<E> filterModification(Predicate<? super E> removeFilter, Predicate<? super E> addFilter) {
+		return new ModFilteredSet<>(this, removeFilter, addFilter);
+	}
+
 	/**
 	 * Creates a collection with the same elements as this collection, but cached, such that the
 	 *
@@ -462,6 +487,22 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 		@Override
 		public ImmutableObservableSet<E> immutable() {
 			return this;
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableSet#filterModification(Predicate, Predicate)}
+	 *
+	 * @param <E> The type of elements in the set
+	 */
+	class ModFilteredSet<E> extends ModFilteredCollection<E> implements PartialSetImpl<E> {
+		public ModFilteredSet(ObservableSet<E> wrapped, Predicate<? super E> removeFilter, Predicate<? super E> addFilter) {
+			super(wrapped, removeFilter, addFilter);
+		}
+
+		@Override
+		protected ObservableSet<E> getWrapped() {
+			return (ObservableSet<E>) super.getWrapped();
 		}
 	}
 

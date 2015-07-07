@@ -171,6 +171,31 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 	}
 
 	@Override
+	default ObservableSortedSet<E> filterRemove(Predicate<? super E> filter) {
+		return (ObservableSortedSet<E>) ObservableReversibleCollection.super.filterRemove(filter);
+	}
+
+	@Override
+	default ObservableSortedSet<E> noRemove() {
+		return (ObservableSortedSet<E>) ObservableReversibleCollection.super.noRemove();
+	}
+
+	@Override
+	default ObservableSortedSet<E> filterAdd(Predicate<? super E> filter) {
+		return (ObservableSortedSet<E>) ObservableReversibleCollection.super.filterAdd(filter);
+	}
+
+	@Override
+	default ObservableSortedSet<E> noAdd() {
+		return (ObservableSortedSet<E>) ObservableReversibleCollection.super.noAdd();
+	}
+
+	@Override
+	default ObservableSortedSet<E> filterModification(Predicate<? super E> removeFilter, Predicate<? super E> addFilter) {
+		return new ModFilteredSortedSet<>(this, removeFilter, addFilter);
+	}
+
+	@Override
 	default ObservableSortedSet<E> cached() {
 		return d().debug(new SafeCachedObservableSortedSet<>(this)).from("cached", this).get();
 	}
@@ -421,6 +446,27 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 		@Override
 		public ImmutableObservableSortedSet<E> immutable() {
 			return this;
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableSortedSet#filterModification(Predicate, Predicate)}
+	 *
+	 * @param <E> The type of elements in the set
+	 */
+	class ModFilteredSortedSet<E> extends ModFilteredReversibleCollection<E> implements PartialSortedSetImpl<E> {
+		public ModFilteredSortedSet(ObservableSortedSet<E> wrapped, Predicate<? super E> removeFilter, Predicate<? super E> addFilter) {
+			super(wrapped, removeFilter, addFilter);
+		}
+
+		@Override
+		protected ObservableSortedSet<E> getWrapped() {
+			return (ObservableSortedSet<E>) super.getWrapped();
+		}
+
+		@Override
+		public Comparator<? super E> comparator() {
+			return getWrapped().comparator();
 		}
 	}
 

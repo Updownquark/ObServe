@@ -147,6 +147,31 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	@Override
+	default ObservableOrderedCollection<E> filterRemove(Predicate<? super E> filter) {
+		return (ObservableOrderedCollection<E>) ObservableCollection.super.filterRemove(filter);
+	}
+
+	@Override
+	default ObservableOrderedCollection<E> noRemove() {
+		return (ObservableOrderedCollection<E>) ObservableCollection.super.noRemove();
+	}
+
+	@Override
+	default ObservableOrderedCollection<E> filterAdd(Predicate<? super E> filter) {
+		return (ObservableOrderedCollection<E>) ObservableCollection.super.filterAdd(filter);
+	}
+
+	@Override
+	default ObservableOrderedCollection<E> noAdd() {
+		return (ObservableOrderedCollection<E>) ObservableCollection.super.noAdd();
+	}
+
+	@Override
+	default ObservableOrderedCollection<E> filterModification(Predicate<? super E> removeFilter, Predicate<? super E> addFilter) {
+		return new ModFilteredOrderedCollection<>(this, removeFilter, addFilter);
+	}
+
+	@Override
 	default ObservableOrderedCollection<E> cached() {
 		return d().debug(new SafeCachedOrderedCollection<>(this)).from("cached", this).get();
 	}
@@ -763,6 +788,28 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		@Override
 		public ImmutableOrderedCollection<E> immutable() {
 			return this;
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableOrderedCollection#filterModification(Predicate, Predicate)}
+	 *
+	 * @param <E> The type of elements in the collection
+	 */
+	class ModFilteredOrderedCollection<E> extends ModFilteredCollection<E> implements ObservableOrderedCollection<E> {
+		public ModFilteredOrderedCollection(ObservableOrderedCollection<E> wrapped, Predicate<? super E> removeFilter,
+			Predicate<? super E> addFilter) {
+			super(wrapped, removeFilter, addFilter);
+		}
+
+		@Override
+		protected ObservableOrderedCollection<E> getWrapped() {
+			return (ObservableOrderedCollection<E>) super.getWrapped();
+		}
+
+		@Override
+		public Subscription onOrderedElement(Consumer<? super OrderedObservableElement<E>> onElement) {
+			return getWrapped().onOrderedElement(onElement);
 		}
 	}
 

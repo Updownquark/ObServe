@@ -135,6 +135,31 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	}
 
 	@Override
+	default ObservableReversibleCollection<E> filterRemove(Predicate<? super E> filter) {
+		return (ObservableReversibleCollection<E>) ObservableOrderedCollection.super.filterRemove(filter);
+	}
+
+	@Override
+	default ObservableReversibleCollection<E> noRemove() {
+		return (ObservableReversibleCollection<E>) ObservableOrderedCollection.super.noRemove();
+	}
+
+	@Override
+	default ObservableReversibleCollection<E> filterAdd(Predicate<? super E> filter) {
+		return (ObservableReversibleCollection<E>) ObservableOrderedCollection.super.filterAdd(filter);
+	}
+
+	@Override
+	default ObservableReversibleCollection<E> noAdd() {
+		return (ObservableReversibleCollection<E>) ObservableOrderedCollection.super.noAdd();
+	}
+
+	@Override
+	default ObservableReversibleCollection<E> filterModification(Predicate<? super E> removeFilter, Predicate<? super E> addFilter) {
+		return new ModFilteredReversibleCollection<>(this, removeFilter, addFilter);
+	}
+
+	@Override
 	default ObservableReversibleCollection<E> cached() {
 		return d().debug(new SafeCachedReversibleCollection<>(this)).from("cached", this).get();
 	}
@@ -458,6 +483,52 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 		@Override
 		public ImmutableReversibleCollection<E> immutable() {
 			return this;
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableReversibleCollection#filterModification(Predicate, Predicate)}
+	 *
+	 * @param <E> The type of elements in the collection
+	 */
+	class ModFilteredReversibleCollection<E> extends ModFilteredOrderedCollection<E> implements ObservableReversibleCollection<E> {
+		public ModFilteredReversibleCollection(ObservableReversibleCollection<E> wrapped, Predicate<? super E> removeFilter,
+			Predicate<? super E> addFilter) {
+			super(wrapped, removeFilter, addFilter);
+		}
+
+		@Override
+		protected ObservableReversibleCollection<E> getWrapped() {
+			return (ObservableReversibleCollection<E>) super.getWrapped();
+		}
+
+		@Override
+		public Iterable<E> descending() {
+			if(getRemoveFilter() == null)
+				return getWrapped().descending();
+
+			return () -> new Iterator<E>() {
+				private final Iterator<E> backing = getWrapped().descending().iterator();
+
+				private E theLast;
+
+				@Override
+				public boolean hasNext() {
+					return backing.hasNext();
+				}
+
+				@Override
+				public E next() {
+					theLast = backing.next();
+					return theLast;
+				}
+
+				@Override
+				public void remove() {
+					if(getRemoveFilter().test(theLast))
+						backing.remove();
+				}
+			};
 		}
 	}
 

@@ -244,6 +244,31 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	}
 
 	@Override
+	default ObservableList<E> filterRemove(Predicate<? super E> filter) {
+		return (ObservableList<E>) ObservableReversibleCollection.super.filterRemove(filter);
+	}
+
+	@Override
+	default ObservableList<E> noRemove() {
+		return (ObservableList<E>) ObservableReversibleCollection.super.noRemove();
+	}
+
+	@Override
+	default ObservableList<E> filterAdd(Predicate<? super E> filter) {
+		return (ObservableList<E>) ObservableReversibleCollection.super.filterAdd(filter);
+	}
+
+	@Override
+	default ObservableList<E> noAdd() {
+		return (ObservableList<E>) ObservableReversibleCollection.super.noAdd();
+	}
+
+	@Override
+	default ObservableList<E> filterModification(Predicate<? super E> removeFilter, Predicate<? super E> addFilter) {
+		return new ModFilteredList<>(this, removeFilter, addFilter);
+	}
+
+	@Override
 	default ObservableList<E> cached() {
 		return d().debug(new SafeCachedObservableList<>(this)).from("cached", this).get();
 	}
@@ -1097,6 +1122,75 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		@Override
 		public ImmutableObservableList<E> immutable() {
 			return this;
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableReversibleCollection#filterModification(Predicate, Predicate)}
+	 *
+	 * @param <E> The type of elements in the collection
+	 */
+	class ModFilteredList<E> extends ModFilteredReversibleCollection<E> implements ObservableList<E> {
+		public ModFilteredList(ObservableList<E> wrapped, Predicate<? super E> removeFilter, Predicate<? super E> addFilter) {
+			super(wrapped, removeFilter, addFilter);
+		}
+
+		@Override
+		protected ObservableList<E> getWrapped() {
+			return (ObservableList<E>) super.getWrapped();
+		}
+
+		@Override
+		public E get(int index) {
+			return getWrapped().get(index);
+		}
+
+		@Override
+		public int indexOf(Object o) {
+			return getWrapped().indexOf(o);
+		}
+
+		@Override
+		public int lastIndexOf(Object o) {
+			return getWrapped().lastIndexOf(o);
+		}
+
+		@Override
+		public void add(int index, E element) {
+			if(getAddFilter() == null || getAddFilter().test(element))
+				getWrapped().add(index, element);
+		}
+
+		@Override
+		public boolean addAll(int index, Collection<? extends E> c) {
+			if(getAddFilter() == null)
+				return getWrapped().addAll(c);
+			else
+				return getWrapped().addAll(c.stream().filter(getAddFilter()).collect(Collectors.toList()));
+		}
+
+		@Override
+		public E set(int index, E element) {
+			if(getAddFilter() != null && !getAddFilter().test(element))
+				return get(index);
+			if(getRemoveFilter() == null)
+				return set(index, element);
+			ListIterator<E> iter = getWrapped().listIterator(index);
+			E value = iter.next();
+			if(getRemoveFilter().test(value))
+				iter.set(element);
+			return value;
+		}
+
+		@Override
+		public E remove(int index) {
+			if(getRemoveFilter() == null)
+				return getWrapped().remove(index);
+			ListIterator<E> iter = getWrapped().listIterator(index);
+			E value = iter.next();
+			if(getRemoveFilter().test(value))
+				iter.remove();
+			return value;
 		}
 	}
 
