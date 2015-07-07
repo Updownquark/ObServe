@@ -1,4 +1,4 @@
-package org.observe.datastruct;
+package org.observe.datastruct.impl;
 
 import java.util.Collection;
 import java.util.Iterator;
@@ -10,10 +10,12 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.observe.ObservableValue;
 import org.observe.collect.CollectionSession;
-import org.observe.collect.ObservableArrayList;
-import org.observe.collect.ObservableHashSet;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.TransactableList;
+import org.observe.collect.impl.ObservableArrayList;
+import org.observe.collect.impl.ObservableHashSet;
+import org.observe.datastruct.ObservableMultiMap;
+import org.observe.datastruct.ObservableMultiMap.ObservableMultiEntry;
 import org.observe.util.DefaultTransactable;
 import org.observe.util.Transaction;
 

@@ -1,4 +1,4 @@
-package org.observe.collect;
+package org.observe.collect.impl;
 
 import java.util.Collection;
 
@@ -6,6 +6,7 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
+import org.observe.collect.ObservableElement;
 
 import prisms.lang.Type;
 

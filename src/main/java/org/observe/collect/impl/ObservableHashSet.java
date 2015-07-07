@@ -1,4 +1,4 @@
-package org.observe.collect;
+package org.observe.collect.impl;
 
 import java.util.AbstractSet;
 import java.util.Collection;
@@ -12,6 +12,11 @@ import java.util.function.Consumer;
 
 import org.observe.ObservableValue;
 import org.observe.Subscription;
+import org.observe.collect.CollectionSession;
+import org.observe.collect.ObservableElement;
+import org.observe.collect.ObservableFastFindCollection;
+import org.observe.collect.ObservableSet;
+import org.observe.collect.TransactableSet;
 import org.observe.util.DefaultTransactable;
 import org.observe.util.Transactable;
 import org.observe.util.Transaction;
@@ -26,7 +31,7 @@ import prisms.lang.Type;
  *
  * @param <E> The type of element in the set
  */
-public class ObservableHashSet<E> extends AbstractSet<E> implements ObservableSet<E> {
+public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, ObservableFastFindCollection<E> {
 	private final Type theType;
 	private LinkedHashMap<E, InternalObservableElementImpl<E>> theValues;
 

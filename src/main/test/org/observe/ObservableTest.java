@@ -9,14 +9,14 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import org.junit.Test;
-import org.observe.collect.ObservableArrayList;
-import org.observe.collect.ObservableHashSet;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableList;
 import org.observe.collect.ObservableOrderedCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.OrderedObservableElement;
 import org.observe.collect.TransactableList;
+import org.observe.collect.impl.ObservableArrayList;
+import org.observe.collect.impl.ObservableHashSet;
 import org.observe.util.ObservableUtils;
 import org.observe.util.Transaction;
 

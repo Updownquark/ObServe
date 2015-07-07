@@ -11,9 +11,9 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableList;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.TransactableCollection;
-import org.observe.datastruct.ObservableHashMultiMap;
 import org.observe.datastruct.ObservableGraph;
 import org.observe.datastruct.ObservableGraph.Node;
+import org.observe.datastruct.impl.ObservableHashMultiMap;
 import org.observe.datastruct.ObservableMap;
 import org.observe.datastruct.ObservableMultiMap;
 import org.observe.util.Transaction;
@@ -102,9 +102,9 @@ public abstract class ObservableDebug {
 
 		private ObservableDebugWrapper(Object ob, Map<String, Object> fns) {
 			observable = new WeakReferenceObservable<>(new Type(Object.class), ob);
-			labels = new org.observe.collect.ObservableArrayList<>(new Type(String.class));
-			labelController = ((org.observe.collect.ObservableArrayList<String>) labels).control(null);
-			tagController = new org.observe.datastruct.ObservableHashMultiMap<>(new Type(String.class), new Type(Object.class));
+			labels = new org.observe.collect.impl.ObservableArrayList<>(new Type(String.class));
+			labelController = ((org.observe.collect.impl.ObservableArrayList<String>) labels).control(null);
+			tagController = new org.observe.datastruct.impl.ObservableHashMultiMap<>(new Type(String.class), new Type(Object.class));
 			tags = tagController.immutable();
 			functions = Collections.unmodifiableMap(fns);
 		}
@@ -412,13 +412,13 @@ public abstract class ObservableDebug {
 
 	/** Supports the structural debugging methods, but not execution */
 	public static class StructuralDebugger extends ObservableDebug {
-		private final org.observe.datastruct.DefaultObservableGraph<ObservableDebugWrapper, String> theObservables;
+		private final org.observe.datastruct.impl.DefaultObservableGraph<ObservableDebugWrapper, String> theObservables;
 
 		private final ConcurrentHashMap<Class<?>, String> theModFunctions = new ConcurrentHashMap<>();
 
 		/** Creates the debugger */
 		public StructuralDebugger() {
-			theObservables = new org.observe.datastruct.DefaultObservableGraph<>(new Type(ObservableDebugWrapper.class), new Type(
+			theObservables = new org.observe.datastruct.impl.DefaultObservableGraph<>(new Type(ObservableDebugWrapper.class), new Type(
 				String.class));
 		}
 

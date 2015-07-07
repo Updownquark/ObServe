@@ -1,4 +1,4 @@
-package org.observe.collect;
+package org.observe.collect.impl;
 
 import java.util.AbstractList;
 import java.util.ArrayList;
@@ -13,6 +13,12 @@ import java.util.function.Consumer;
 
 import org.observe.ObservableValue;
 import org.observe.Subscription;
+import org.observe.collect.CollectionSession;
+import org.observe.collect.ObservableElement;
+import org.observe.collect.ObservableList;
+import org.observe.collect.ObservableRandomAccessList;
+import org.observe.collect.OrderedObservableElement;
+import org.observe.collect.TransactableList;
 import org.observe.util.DefaultTransactable;
 import org.observe.util.Transactable;
 import org.observe.util.Transaction;

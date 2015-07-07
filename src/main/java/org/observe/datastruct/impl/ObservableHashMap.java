@@ -1,4 +1,4 @@
-package org.observe.datastruct;
+package org.observe.datastruct.impl;
 
 import java.util.Iterator;
 import java.util.Map;
@@ -12,8 +12,10 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.collect.CollectionSession;
-import org.observe.collect.ObservableHashSet;
 import org.observe.collect.ObservableSet;
+import org.observe.collect.impl.ObservableHashSet;
+import org.observe.datastruct.ObservableMap;
+import org.observe.datastruct.ObservableMap.ObservableEntry;
 import org.observe.util.DefaultTransactable;
 import org.observe.util.Transaction;
 

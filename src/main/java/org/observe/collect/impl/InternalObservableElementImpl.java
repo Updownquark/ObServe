@@ -1,4 +1,4 @@
-package org.observe.collect;
+package org.observe.collect.impl;
 
 import org.observe.DefaultObservableValue;
 import org.observe.ObservableValueEvent;

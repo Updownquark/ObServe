@@ -1,4 +1,4 @@
-package org.observe.collect;
+package org.observe.collect.impl;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -14,6 +14,12 @@ import java.util.function.Consumer;
 
 import org.observe.ObservableValue;
 import org.observe.Subscription;
+import org.observe.collect.CollectionSession;
+import org.observe.collect.ObservableElement;
+import org.observe.collect.ObservableFastFindCollection;
+import org.observe.collect.ObservableSortedSet;
+import org.observe.collect.OrderedObservableElement;
+import org.observe.collect.TransactableSortedSet;
 import org.observe.util.DefaultTransactable;
 import org.observe.util.Transactable;
 import org.observe.util.Transaction;
@@ -30,7 +36,7 @@ import prisms.lang.Type;
  *
  * @param <E> The type of element in the set
  */
-public class ObservableTreeSet<E> implements ObservableSortedSet<E> {
+public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableFastFindCollection<E> {
 	private final Type theType;
 
 	private final Comparator<? super E> theCompare;

@@ -1,4 +1,4 @@
-package org.observe.datastruct;
+package org.observe.datastruct.impl;
 
 import java.util.Collection;
 import java.util.List;
@@ -7,8 +7,11 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.observe.ObservableValue;
 import org.observe.collect.CollectionSession;
-import org.observe.collect.ObservableArrayList;
 import org.observe.collect.ObservableCollection;
+import org.observe.collect.impl.ObservableArrayList;
+import org.observe.datastruct.ObservableGraph;
+import org.observe.datastruct.ObservableGraph.Edge;
+import org.observe.datastruct.ObservableGraph.Node;
 import org.observe.util.DefaultTransactable;
 import org.observe.util.Transaction;
 
