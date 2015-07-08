@@ -28,6 +28,11 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 	ObservableValue<E> persistent();
 
 	@Override
+	default ObservableElement<E> takeUntil(Observable<?> until) {
+		return new ObservableElementTakenUntil<>(this, until);
+	}
+
+	@Override
 	default ObservableElement<E> cached() {
 		return d().debug(new CachedObservableElement<>(this)).from("cached", this).get();
 	}
@@ -94,6 +99,27 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 	 */
 	default ObservableElement<E> refreshForValue(Function<? super E, Observable<?>> refresh) {
 		return d().debug(new ValueRefreshingObservableElement<>(this, refresh)).from("refresh", this).using("on", refresh).get();
+	}
+
+	/**
+	 * Implements {@link ObservableElement#takeUntil(Observable)}
+	 *
+	 * @param <T> The type of the element value
+	 */
+	class ObservableElementTakenUntil<T> extends ObservableValueTakenUntil<T> implements ObservableElement<T> {
+		public ObservableElementTakenUntil(ObservableElement<T> wrap, Observable<?> until) {
+			super(wrap, until);
+		}
+
+		@Override
+		protected ObservableElement<T> getWrapped() {
+			return (ObservableElement<T>) super.getWrapped();
+		}
+
+		@Override
+		public ObservableValue<T> persistent() {
+			return getWrapped().persistent();
+		}
 	}
 
 	/**

@@ -44,15 +44,6 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 	/** @return The type of values this map stores */
 	Type getValueType();
 
-	@Override
-	ObservableSet<K> keySet();
-
-	/**
-	 * @param key The key to get the value for
-	 * @return An observable value that changes whenever the value for the given key changes in this map
-	 */
-	ObservableValue<V> observe(Object key);
-
 	/**
 	 * @return The observable value for the current session of this map. The session allows listeners to retain state for the duration of a
 	 *         unit of work (controlled by implementation-specific means), batching events where possible. Not all events on a map will have
@@ -64,6 +55,80 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 	 *         be the same as this one.
 	 */
 	ObservableValue<CollectionSession> getSession();
+
+	@Override
+	ObservableSet<K> keySet();
+
+	/**
+	 * <p>
+	 * A default implementation of {@link #keySet()}.
+	 * </p>
+	 * <p>
+	 * No {@link ObservableMultiMap} implementation may use the default implementations for its {@link #keySet()}, {@link #get(Object)}, and
+	 * {@link #observeEntries()} methods. {@link #defaultObserveEntries(ObservableMap)} may not be used in the same implementation as
+	 * {@link #defaultKeySet(ObservableMap)} or {@link #defaultObserve(ObservableMap, Object)}. Either {@link #observeEntries()} or both
+	 * {@link #keySet()} and {@link #get(Object)} must be custom. If an implementation supplies custom {@link #keySet()} and
+	 * {@link #get(Object)} implementations, it may use {@link #defaultObserveEntries(ObservableMap)} for its {@link #observeEntries()} . If
+	 * an implementation supplies a custom {@link #observeEntries()} implementation, it may use {@link #defaultKeySet(ObservableMap)} and
+	 * {@link #defaultObserve(ObservableMap, Object)} for its {@link #keySet()} and {@link #get(Object)} implementations, respectively.
+	 * Using default implementations for both will result in infinite loops.
+	 * </p>
+	 *
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 * @param map The map to create a key set for
+	 * @return A key set for the map
+	 */
+	public static <K, V> ObservableSet<K> defaultKeySet(ObservableMap<K, V> map) {
+		return ObservableSet.unique(map.observeEntries().map(Entry::getKey));
+	}
+
+	/**
+	 * @param key The key to get the value for
+	 * @return An observable value that changes whenever the value for the given key changes in this map
+	 */
+	ObservableValue<V> observe(Object key);
+
+	/**
+	 * <p>
+	 * A default implementation of {@link #observe(Object)}.
+	 * </p>
+	 * <p>
+	 * No {@link ObservableMultiMap} implementation may use the default implementations for its {@link #keySet()}, {@link #get(Object)}, and
+	 * {@link #observeEntries()} methods. {@link #defaultObserveEntries(ObservableMap)} may not be used in the same implementation as
+	 * {@link #defaultKeySet(ObservableMap)} or {@link #defaultObserve(ObservableMap, Object)}. Either {@link #observeEntries()} or both
+	 * {@link #keySet()} and {@link #get(Object)} must be custom. If an implementation supplies custom {@link #keySet()} and
+	 * {@link #get(Object)} implementations, it may use {@link #defaultObserveEntries(ObservableMap)} for its {@link #observeEntries()} . If
+	 * an implementation supplies a custom {@link #observeEntries()} implementation, it may use {@link #defaultKeySet(ObservableMap)} and
+	 * {@link #defaultObserve(ObservableMap, Object)} for its {@link #keySet()} and {@link #get(Object)} implementations, respectively.
+	 * Using default implementations for both will result in infinite loops.
+	 * </p>
+	 *
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 * @param map The map to observe the value in
+	 * @param key The key to observe the value of
+	 * @return An observable value representing the value of the given key in this map
+	 */
+	public static <K, V> ObservableValue<V> defaultObserve(ObservableMap<K, V> map, Object key) {
+		Map.Entry<Object, Object> keyEntry = new Map.Entry<Object, Object>() {
+			@Override
+			public Object getKey() {
+				return key;
+			}
+
+			@Override
+			public Object getValue() {
+				return null;
+			}
+
+			@Override
+			public Object setValue(Object value) {
+				return null;
+			}
+		};
+		return ObservableValue.flatten(map.getValueType(), map.observeEntries().equivalent(keyEntry));
+	}
 
 	/**
 	 * @param key The key to get the entry for
@@ -78,8 +143,30 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 	}
 
 	/** @return An observable collection of {@link ObservableEntry observable entries} of all the key-value pairs stored in this map */
-	default ObservableSet<? extends ObservableEntry<K, V>> observeEntries() {
-		return ObservableSet.unique(keySet().map(this::entryFor));
+	ObservableSet<? extends ObservableEntry<K, V>> observeEntries();
+
+	/**
+	 * <p>
+	 * A default implementation of {@link #observeEntries()}.
+	 * </p>
+	 * <p>
+	 * No {@link ObservableMultiMap} implementation may use the default implementations for its {@link #keySet()}, {@link #get(Object)}, and
+	 * {@link #observeEntries()} methods. {@link #defaultObserveEntries(ObservableMap)} may not be used in the same implementation as
+	 * {@link #defaultKeySet(ObservableMap)} or {@link #defaultObserve(ObservableMap, Object)}. Either {@link #observeEntries()} or both
+	 * {@link #keySet()} and {@link #get(Object)} must be custom. If an implementation supplies custom {@link #keySet()} and
+	 * {@link #get(Object)} implementations, it may use {@link #defaultObserveEntries(ObservableMap)} for its {@link #observeEntries()} . If
+	 * an implementation supplies a custom {@link #observeEntries()} implementation, it may use {@link #defaultKeySet(ObservableMap)} and
+	 * {@link #defaultObserve(ObservableMap, Object)} for its {@link #keySet()} and {@link #get(Object)} implementations, respectively.
+	 * Using default implementations for both will result in infinite loops.
+	 * </p>
+	 *
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 * @param map The map to create an entry set for
+	 * @return An entry set for the map
+	 */
+	public static <K, V> ObservableSet<? extends ObservableEntry<K, V>> defaultObserveEntries(ObservableMap<K, V> map) {
+		return ObservableSet.unique(map.keySet().map(map::entryFor));
 	}
 
 	/** @return An observable value reflecting the number of key-value pairs stored in this map */
@@ -203,6 +290,17 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 			}
 
 			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return ObservableValue.constant(new Type(CollectionSession.class), null);
+			}
+
+			@Override
+			public Transaction lock(boolean write, Object cause) {
+				return () -> {
+				};
+			}
+
+			@Override
 			public ObservableSet<K> keySet() {
 				return ObservableSet.constant(keyType);
 			}
@@ -213,14 +311,8 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 			}
 
 			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return ObservableValue.constant(new Type(CollectionSession.class), null);
-			}
-
-			@Override
-			public Transaction lock(boolean write, Object cause) {
-				return () -> {
-				};
+			public ObservableSet<? extends ObservableEntry<K, V>> observeEntries() {
+				return ObservableMap.defaultObserveEntries(this);
 			}
 		};
 	}

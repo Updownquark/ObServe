@@ -41,6 +41,14 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 		return ObservableCollection.super.containsAll(coll);
 	}
 
+	/**
+	 * @param o The object to get the equivalent of
+	 * @return The object in this set whose value is equivalent to the given value
+	 */
+	default ObservableValue<E> equivalent(Object o) {
+		return new ObservableSetEquivalentFinder<>(this, o);
+	}
+
 	@Override
 	default E [] toArray() {
 		return ObservableCollection.super.toArray();
@@ -417,6 +425,67 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 		@Override
 		default void clear() {
 			PartialCollectionImpl.super.clear();
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableSet#equivalent(Object)}
+	 *
+	 * @param <E> The type of the set to find the value in
+	 */
+	class ObservableSetEquivalentFinder<E> implements ObservableValue<E> {
+		private final ObservableSet<E> theSet;
+		private final Object theKey;
+
+		protected ObservableSetEquivalentFinder(ObservableSet<E> set, Object key) {
+			theSet = set;
+			theKey = key;
+		}
+
+		@Override
+		public Type getType() {
+			return theSet.getType();
+		}
+
+		@Override
+		public E get() {
+			for(E value : theSet){
+				if(Objects.equals(value, theKey))
+					return value;
+			}
+			return null;
+		}
+
+		@Override
+		public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
+			return theSet.onElement(new Consumer<ObservableElement<E>>() {
+				private E theCurrentMatch;
+
+				@Override
+				public void accept(ObservableElement<E> element) {
+					element.subscribe(new Observer<ObservableValueEvent<E>>() {
+						private boolean isMatch;
+
+						@Override
+						public <V extends ObservableValueEvent<E>> void onNext(V event) {
+							isMatch = Objects.equals(event.getValue(), theKey);
+							if(isMatch) {
+								E old = theCurrentMatch;
+								theCurrentMatch = event.getValue();
+								observer.onNext(createEvent(old, event.getValue(), event));
+							}
+						}
+
+						@Override
+						public <V extends ObservableValueEvent<E>> void onCompleted(V event) {
+							if(isMatch && theCurrentMatch == event.getValue()) {
+								theCurrentMatch = null;
+								observer.onNext(createEvent(event.getValue(), null, event));
+							}
+						}
+					});
+				}
+			});
 		}
 	}
 

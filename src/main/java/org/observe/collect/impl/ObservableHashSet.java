@@ -100,187 +100,144 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 	@Override
 	public Iterator<E> iterator() {
 		return new Iterator<E>() {
-			private final Iterator<E> backing = theValues.keySet().iterator();
+			private final Iterator<Map.Entry<E, InternalObservableElementImpl<E>>> backing = theValues.entrySet().iterator();
+			private InternalObservableElementImpl<E> theLastElement;
 
 			@Override
 			public boolean hasNext() {
-				boolean [] ret = new boolean[1];
-				theInternals.doLocked(() -> {
-					ret[0] = backing.hasNext();
-				}, false);
-				return ret[0];
+				try (Transaction t = theInternals.lock(false)) {
+					return backing.hasNext();
+				}
 			}
 
 			@Override
 			public E next() {
-				Object [] ret = new Object[1];
-				theInternals.doLocked(() -> {
-					ret[0] = backing.next();
-				}, false);
-				return (E) ret[0];
+				try (Transaction t = theInternals.lock(false)) {
+					Map.Entry<E, InternalObservableElementImpl<E>> entry = backing.next();
+					theLastElement = entry.getValue();
+					return entry.getKey();
+				}
 			}
 
 			@Override
 			public void remove() {
-				theInternals.doLocked(() -> backing.remove(), true);
+				try (Transaction t = theInternals.lock(true)) {
+					backing.remove();
+					theLastElement.remove();
+					theLastElement = null;
+				}
 			}
 		};
 	}
 
 	@Override
 	public boolean contains(Object o) {
-		boolean [] ret = new boolean[1];
-		theInternals.doLocked(() -> {
-			ret[0] = theValues.containsKey(o);
-		}, false);
-		return ret[0];
-	}
-
-	@Override
-	public E [] toArray() {
-		Object [][] ret = new Object[1][];
-		theInternals.doLocked(() -> {
-			Class<?> base = getType().toClass();
-			if(base.isPrimitive())
-				base = Type.getWrapperType(base);
-			ret[0] = theValues.keySet().toArray((E []) java.lang.reflect.Array.newInstance(base, theValues.size()));
-		}, false);
-		return (E []) ret[0];
-	}
-
-	@Override
-	public <T> T [] toArray(T [] a) {
-		Object [][] ret = new Object[1][];
-		theInternals.doLocked(() -> {
-			ret[0] = theValues.keySet().toArray(a);
-		}, false);
-		return (T []) ret[0];
+		try (Transaction t = theInternals.lock(false)) {
+			return theValues.containsKey(o);
+		}
 	}
 
 	@Override
 	public boolean containsAll(Collection<?> c) {
-		boolean [] ret = new boolean[1];
-		theInternals.doLocked(() -> {
-			ret[0] = theValues.keySet().containsAll(c);
-		}, false);
-		return ret[0];
+		try (Transaction t = theInternals.lock(false)) {
+			return theValues.keySet().containsAll(c);
+		}
+	}
+
+	@Override
+	public ObservableValue<E> equivalent(Object o) {
+		return new ObservableSet.ObservableSetEquivalentFinder<E>(this, o){
+			@Override
+			public E get() {
+				try (Transaction t = theInternals.lock(false)) {
+					InternalObservableElementImpl<E> element = theValues.get(o);
+					return element == null ? null : element.get();
+				}
+			}
+		};
 	}
 
 	@Override
 	public boolean add(E e) {
-		boolean [] ret = new boolean[1];
-		theInternals.doLocked(() -> {
-			ret[0] = addImpl(e);
-		}, true);
-		return ret[0];
+		try (Transaction t = theInternals.lock(true)) {
+			if(theValues.containsKey(e))
+				return false;
+			InternalObservableElementImpl<E> el = createElement(e);
+			theValues.put(e, el);
+			theInternals.fireNewElement(el);
+			return true;
+		}
 	}
 
 	@Override
 	public boolean addAll(Collection<? extends E> c) {
-		boolean [] ret = new boolean[1];
-		theInternals.doLocked(() -> {
-			ret[0] = addAllImpl(c);
-		}, true);
-		return ret[0];
-	}
-
-	@Override
-	public boolean retainAll(Collection<?> c) {
-		boolean [] ret = new boolean[1];
-		theInternals.doLocked(() -> {
-			ret[0] = retainAllImpl(c);
-		}, true);
-		return ret[0];
+		boolean ret = false;
+		try (Transaction t = lock(true, null)) {
+			for(E add : c) {
+				if(theValues.containsKey(add))
+					continue;
+				ret = true;
+				InternalObservableElementImpl<E> el = createElement(add);
+				theValues.put(add, el);
+				theInternals.fireNewElement(el);
+			}
+		}
+		return ret;
 	}
 
 	@Override
 	public boolean remove(Object o) {
-		boolean [] ret = new boolean[1];
-		theInternals.doLocked(() -> {
-			ret[0] = removeImpl(o);
-		}, true);
-		return ret[0];
+		try (Transaction t = theInternals.lock(true)) {
+			InternalObservableElementImpl<E> el = theValues.remove(o);
+			if(el == null)
+				return false;
+			el.remove();
+			return true;
+		}
 	}
 
 	@Override
 	public boolean removeAll(Collection<?> c) {
-		boolean [] ret = new boolean[1];
-		theInternals.doLocked(() -> {
-			ret[0] = removeAllImpl(c);
-		}, true);
-		return ret[0];
+		boolean ret = false;
+		try (Transaction t = lock(true, null)) {
+			for(Object o : c) {
+				InternalObservableElementImpl<E> el = theValues.remove(o);
+				if(el == null)
+					continue;
+				ret = true;
+				el.remove();
+			}
+		}
+		return ret;
 	}
 
-	private boolean addImpl(E e) {
-		if(theValues.containsKey(e))
-			return false;
-		InternalObservableElementImpl<E> el = createElement(e);
-		theValues.put(e, el);
-		theInternals.fireNewElement(el);
-		return true;
+	@Override
+	public boolean retainAll(Collection<?> c) {
+		boolean ret = false;
+		try (Transaction t = lock(true, null)) {
+			Iterator<Map.Entry<E, InternalObservableElementImpl<E>>> iter = theValues.entrySet().iterator();
+			while(iter.hasNext()) {
+				Map.Entry<E, InternalObservableElementImpl<E>> entry = iter.next();
+				if(c.contains(entry.getKey()))
+					continue;
+				ret = true;
+				InternalObservableElementImpl<E> el = entry.getValue();
+				iter.remove();
+				el.remove();
+			}
+		}
+		return ret;
 	}
 
 	@Override
 	public void clear() {
-		theInternals.doLocked(() -> {
-			clearImpl();
-		}, true);
-	}
-
-	private boolean removeImpl(Object o) {
-		InternalObservableElementImpl<E> el = theValues.remove(o);
-		if(el == null)
-			return false;
-		el.remove();
-		return true;
-	}
-
-	private boolean removeAllImpl(Collection<?> c) {
-		boolean ret = false;
-		for(Object o : c) {
-			InternalObservableElementImpl<E> el = theValues.remove(o);
-			if(el == null)
-				continue;
-			ret = true;
-			el.remove();
-		}
-		return ret;
-	}
-
-	private boolean addAllImpl(Collection<? extends E> c) {
-		boolean ret = false;
-		for(E add : c) {
-			if(theValues.containsKey(add))
-				continue;
-			ret = true;
-			InternalObservableElementImpl<E> el = createElement(add);
-			theValues.put(add, el);
-			theInternals.fireNewElement(el);
-		}
-		return ret;
-	}
-
-	private boolean retainAllImpl(Collection<?> c) {
-		boolean ret = false;
-		Iterator<Map.Entry<E, InternalObservableElementImpl<E>>> iter = theValues.entrySet().iterator();
-		while(iter.hasNext()) {
-			Map.Entry<E, InternalObservableElementImpl<E>> entry = iter.next();
-			if(c.contains(entry.getKey()))
-				continue;
-			ret = true;
-			InternalObservableElementImpl<E> el = entry.getValue();
-			iter.remove();
-			el.remove();
-		}
-		return ret;
-	}
-
-	private void clearImpl() {
-		Iterator<InternalObservableElementImpl<E>> iter = theValues.values().iterator();
-		while(iter.hasNext()) {
-			InternalObservableElementImpl<E> el = iter.next();
-			iter.remove();
-			el.remove();
+		try (Transaction t = lock(true, null)) {
+			Iterator<InternalObservableElementImpl<E>> iter = theValues.values().iterator();
+			while(iter.hasNext()) {
+				InternalObservableElementImpl<E> el = iter.next();
+				iter.remove();
+				el.remove();
+			}
 		}
 	}
 

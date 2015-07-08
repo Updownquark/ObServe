@@ -23,6 +23,11 @@ public interface OrderedObservableElement<E> extends ObservableElement<E> {
 	int getIndex();
 
 	@Override
+	default OrderedObservableElement<E> takeUntil(Observable<?> until) {
+		return new OrderedElementTakenUntil<>(this, until);
+	}
+
+	@Override
 	default OrderedObservableElement<E> cached() {
 		return d().debug(new CachedOrderedObservableElement<>(this)).from("cached", this).get();
 	}
@@ -153,6 +158,27 @@ public interface OrderedObservableElement<E> extends ObservableElement<E> {
 	@Override
 	default OrderedObservableElement<E> refreshForValue(Function<? super E, Observable<?>> refresh) {
 		return d().debug(new ValueRefreshingOrderedObservableElement<>(this, refresh)).from("refresh", this).using("on", refresh).get();
+	}
+
+	/**
+	 * Implements {@link ObservableElement#takeUntil(Observable)}
+	 *
+	 * @param <T> The type of the element value
+	 */
+	class OrderedElementTakenUntil<T> extends ObservableElementTakenUntil<T> implements OrderedObservableElement<T> {
+		public OrderedElementTakenUntil(OrderedObservableElement<T> wrap, Observable<?> until) {
+			super(wrap, until);
+		}
+
+		@Override
+		protected OrderedObservableElement<T> getWrapped() {
+			return (OrderedObservableElement<T>) super.getWrapped();
+		}
+
+		@Override
+		public int getIndex() {
+			return getWrapped().getIndex();
+		}
 	}
 
 	/**

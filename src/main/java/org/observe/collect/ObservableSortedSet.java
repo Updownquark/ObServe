@@ -39,12 +39,18 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 
 	@Override
 	default E first() {
-		return getFirst().get();
+		E ret = getFirst().get();
+		if(ret == null)
+			throw new java.util.NoSuchElementException();
+		return ret;
 	}
 
 	@Override
 	default E last() {
-		return getLast().get();
+		E ret = getLast().get();
+		if(ret == null)
+			throw new java.util.NoSuchElementException();
+		return ret;
 	}
 
 	@Override

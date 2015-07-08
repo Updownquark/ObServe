@@ -1,7 +1,6 @@
 package org.observe.collect.impl;
 
 import java.util.ArrayList;
-import java.util.BitSet;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.ListIterator;
@@ -30,13 +29,10 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	private final Type theType;
 
 	private DefaultListInternals theInternals;
-
 	private ObservableValue<CollectionSession> theSessionObservable;
-
 	private Transactable theSessionController;
 
 	private ArrayList<InternalOrderedObservableElementImpl<E>> theElements;
-
 	private ArrayList<E> theValues;
 
 	private volatile int theModCount;
@@ -114,9 +110,9 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	@Override
 	public E get(int index) {
 		Object [] ret = new Object[1];
-		theInternals.doLocked(() -> {
+		try (Transaction t = theInternals.lock(false)) {
 			ret[0] = theValues.get(index);
-		}, false);
+		}
 		return (E) ret[0];
 	}
 
@@ -127,177 +123,86 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 
 	@Override
 	public boolean contains(Object o) {
-		boolean [] ret = new boolean[1];
-		theInternals.doLocked(() -> {
-			ret[0] = theValues.contains(o);
-		}, false);
-		return ret[0];
-	}
-
-	@Override
-	public E [] toArray() {
-		Object [][] ret = new Object[1][];
-		theInternals.doLocked(() -> {
-			Class<?> base = getType().toClass();
-			if(base.isPrimitive())
-				base = Type.getWrapperType(base);
-			ret[0] = theValues.toArray((E []) java.lang.reflect.Array.newInstance(base, theValues.size()));
-		}, false);
-		return (E []) ret[0];
-	}
-
-	@Override
-	public <T> T [] toArray(T [] a) {
-		Object [][] ret = new Object[1][];
-		theInternals.doLocked(() -> {
-			ret[0] = theValues.toArray(a);
-		}, false);
-		return (T []) ret[0];
+		try (Transaction t = theInternals.lock(false)) {
+			return theValues.contains(o);
+		}
 	}
 
 	@Override
 	public int indexOf(Object o) {
-		int [] ret = new int[1];
-		theInternals.doLocked(() -> {
-			ret[0] = theValues.indexOf(o);
-		}, false);
-		return ret[0];
+		try (Transaction t = theInternals.lock(false)) {
+			return theValues.indexOf(o);
+		}
 	}
 
 	@Override
 	public int lastIndexOf(Object o) {
-		int [] ret = new int[1];
-		theInternals.doLocked(() -> {
-			ret[0] = theValues.lastIndexOf(o);
-		}, false);
-		return ret[0];
+		try (Transaction t = theInternals.lock(false)) {
+			return theValues.lastIndexOf(o);
+		}
 	}
 
 	@Override
 	public boolean containsAll(Collection<?> c) {
-		boolean [] ret = new boolean[1];
-		theInternals.doLocked(() -> {
-			ret[0] = theValues.containsAll(c);
-		}, false);
-		return ret[0];
+		try (Transaction t = theInternals.lock(false)) {
+			return theValues.containsAll(c);
+		}
 	}
 
 	@Override
 	public boolean add(E e) {
-		theInternals.doLocked(() -> {
-			addImpl(e);
-		}, true);
+		try (Transaction t = theInternals.lock(true)) {
+			E val = (E) theType.cast(e);
+			theValues.add(val);
+			InternalOrderedObservableElementImpl<E> add = createElement(val);
+			theElements.add(add);
+			theInternals.fireNewElement(add);
+		}
 		return true;
 	}
 
 	@Override
+	public void add(int index, E element) {
+		try (Transaction t = theInternals.lock(true)) {
+			E val = (E) theType.cast(element);
+			theValues.add(index, val);
+			InternalOrderedObservableElementImpl<E> newWrapper = createElement(val);
+			theElements.add(index, newWrapper);
+			theInternals.fireNewElement(newWrapper);
+		}
+	}
+
+	@Override
 	public boolean remove(Object o) {
-		boolean [] ret = new boolean[1];
-		theInternals.doLocked(() -> {
-			ret[0] = removeImpl(o);
-		}, true);
-		return ret[0];
+		try (Transaction t = theInternals.lock(true)) {
+			int idx = theValues.indexOf(o);
+			if(idx < 0) {
+				return false;
+			}
+			theValues.remove(idx);
+			InternalOrderedObservableElementImpl<E> removed = theElements.remove(idx);
+			removed.setRemovedIndex(idx);
+			removed.remove();
+			return true;
+		}
+	}
+
+	@Override
+	public E remove(int index) {
+		try (Transaction t = theInternals.lock(true)) {
+			E ret = theValues.remove(index);
+			InternalOrderedObservableElementImpl<E> removed = theElements.remove(index);
+			removed.setRemovedIndex(index);
+			removed.remove();
+			return ret;
+		}
 	}
 
 	@Override
 	public boolean addAll(Collection<? extends E> c) {
 		if(c.isEmpty())
 			return false;
-		theInternals.doLocked(() -> {
-			addAllImpl(c);
-		}, true);
-		return true;
-	}
-
-	@Override
-	public boolean addAll(int index, Collection<? extends E> c) {
-		if(c.isEmpty())
-			return false;
-		theInternals.doLocked(() -> {
-			addAllImpl(index, c);
-		}, true);
-		return true;
-	}
-
-	@Override
-	public boolean removeAll(Collection<?> c) {
-		if(c.isEmpty())
-			return false;
-		boolean [] ret = new boolean[] {false};
-		theInternals.doLocked(() -> {
-			ret[0] = removeAllImpl(c);
-		}, true);
-		return ret[0];
-	}
-
-	@Override
-	public boolean retainAll(Collection<?> c) {
-		if(c.isEmpty()) {
-			boolean ret = !isEmpty();
-			clear();
-			return ret;
-		}
-		boolean [] ret = new boolean[1];
-		theInternals.doLocked(() -> {
-			ret[0] = retainAllImpl(c);
-		}, true);
-		return ret[0];
-	}
-
-	@Override
-	public void clear() {
-		theInternals.doLocked(() -> {
-			clearImpl();
-		}, true);
-	}
-
-	@Override
-	public E set(int index, E element) {
-		Object [] ret = new Object[1];
-		theInternals.doLocked(() -> {
-			ret[0] = setImpl(index, element);
-		}, true);
-		return (E) ret[0];
-	}
-
-	@Override
-	public void add(int index, E element) {
-		theInternals.doLocked(() -> {
-			addImpl(index, element);
-		}, true);
-	}
-
-	@Override
-	public E remove(int index) {
-		Object [] ret = new Object[1];
-		theInternals.doLocked(() -> {
-			ret[0] = removeImpl(index);
-		}, true);
-		return (E) ret[0];
-	}
-
-	private void addImpl(Object e) {
-		E val = (E) theType.cast(e);
-		theValues.add(val);
-		InternalOrderedObservableElementImpl<E> add = createElement(val);
-		theElements.add(add);
-		theInternals.fireNewElement(add);
-	}
-
-	private boolean removeImpl(Object o) {
-		int idx = theValues.indexOf(o);
-		if(idx < 0) {
-			return false;
-		}
-		theValues.remove(idx);
-		InternalOrderedObservableElementImpl<E> removed = theElements.remove(idx);
-		removed.setRemovedIndex(idx);
-		removed.remove();
-		return true;
-	}
-
-	private void addAllImpl(Collection<? extends E> c) {
-		try (Transaction trans = lock(true, null)) {
+		try (Transaction t = lock(true, null)) {
 			for(E e : c) {
 				E val = (E) theType.cast(e);
 				theValues.add(val);
@@ -306,10 +211,14 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 				theInternals.fireNewElement(newWrapper);
 			}
 		}
+		return true;
 	}
 
-	private void addAllImpl(int index, Collection<? extends E> c) {
-		try (Transaction trans = lock(true, null)) {
+	@Override
+	public boolean addAll(int index, Collection<? extends E> c) {
+		if(c.isEmpty())
+			return false;
+		try (Transaction t = lock(true, null)) {
 			int idx = index;
 			for(E e : c) {
 				E val = (E) theType.cast(e);
@@ -320,53 +229,58 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 				idx++;
 			}
 		}
+		return true;
 	}
 
-	private boolean removeAllImpl(Collection<?> c) {
-		try (Transaction trans = lock(true, null)) {
-			boolean ret = false;
-			for(Object o : c) {
-				int idx = theValues.indexOf(o);
-				if(idx >= 0) {
+	@Override
+	public boolean removeAll(Collection<?> c) {
+		if(c.isEmpty() || isEmpty())
+			return false;
+		boolean ret = false;
+		try (Transaction t = lock(true, null)) {
+			for(int i = theValues.size() - 1; i >= 0; i--) {
+				if(c.contains(theValues.get(i))) {
 					ret = true;
-					theValues.remove(idx);
-					InternalOrderedObservableElementImpl<E> removed = theElements.remove(idx);
-					removed.setRemovedIndex(idx);
-					removed.remove();
+					theValues.remove(i);
+					InternalOrderedObservableElementImpl<E> element = theElements.remove(i);
+					element.setRemovedIndex(i);
+					element.remove();
 				}
 			}
-			return ret;
 		}
+		return ret;
 	}
 
-	private boolean retainAllImpl(Collection<?> c) {
-		try (Transaction trans = lock(true, null)) {
-			boolean ret = false;
-			BitSet keep = new BitSet();
-			for(Object o : c) {
-				int idx = theValues.indexOf(o);
-				if(idx >= 0)
-					keep.set(idx);
-			}
-			ret = keep.nextClearBit(0) < theValues.size();
-			if(ret) {
-				for(int i = theValues.size() - 1; i >= 0; i--)
-					if(!keep.get(i)) {
-						theValues.remove(i);
-						InternalOrderedObservableElementImpl<E> removed = theElements.remove(i);
-						removed.setRemovedIndex(i);
-						removed.remove();
-					}
-			}
-			return ret;
+	@Override
+	public boolean retainAll(Collection<?> c) {
+		if(c.isEmpty()) {
+			if(isEmpty())
+				return false;
+			clear();
+			return true;
 		}
+		boolean ret = false;
+		try (Transaction t = lock(true, null)) {
+			for(int i = theValues.size() - 1; i >= 0; i--) {
+				if(!c.contains(theValues.get(i))) {
+					ret = true;
+					theValues.remove(i);
+					InternalOrderedObservableElementImpl<E> element = theElements.remove(i);
+					element.setRemovedIndex(i);
+					element.remove();
+				}
+			}
+		}
+		return ret;
 	}
 
-	private void clearImpl() {
-		try (Transaction trans = lock(true, null)) {
+	@Override
+	public void clear() {
+		if(isEmpty())
+			return;
+		try (Transaction t = lock(true, null)) {
 			theValues.clear();
-			ArrayList<InternalOrderedObservableElementImpl<E>> remove = new ArrayList<>();
-			remove.addAll(theElements);
+			ArrayList<InternalOrderedObservableElementImpl<E>> remove = new ArrayList<>(theElements);
 			theElements.clear();
 			for(int i = remove.size() - 1; i >= 0; i--) {
 				InternalOrderedObservableElementImpl<E> removed = remove.get(i);
@@ -376,27 +290,14 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 		}
 	}
 
-	private E setImpl(int index, E element) {
-		E val = (E) theType.cast(element);
-		E ret = theValues.set(index, val);
-		theElements.get(index).set(val);
-		return ret;
-	}
-
-	private void addImpl(int index, E element) {
-		E val = (E) theType.cast(element);
-		theValues.add(index, val);
-		InternalOrderedObservableElementImpl<E> newWrapper = createElement(val);
-		theElements.add(index, newWrapper);
-		theInternals.fireNewElement(newWrapper);
-	}
-
-	private E removeImpl(int index) {
-		E ret = theValues.remove(index);
-		InternalOrderedObservableElementImpl<E> removed = theElements.remove(index);
-		removed.setRemovedIndex(index);
-		removed.remove();
-		return ret;
+	@Override
+	public E set(int index, E element) {
+		try (Transaction t = theInternals.lock(true)) {
+			E val = (E) theType.cast(element);
+			E ret = theValues.set(index, val);
+			theElements.get(index).set(val);
+			return ret;
+		}
 	}
 
 	@Override
@@ -408,7 +309,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 			ret.theElements.add(createElement(el));
 		ret.theInternals = ret.new DefaultListInternals(new ReentrantReadWriteLock(), write -> {
 			if(write)
-				theModCount++;
+				ret.theModCount++;
 		});
 		return ret;
 	}

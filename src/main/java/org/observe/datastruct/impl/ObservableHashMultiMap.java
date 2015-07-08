@@ -9,6 +9,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.observe.ObservableValue;
 import org.observe.collect.CollectionSession;
+import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableList;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.impl.ObservableArrayList;
@@ -71,9 +72,7 @@ public class ObservableHashMultiMap<K, V> implements ObservableMultiMap<K, V> {
 	private DefaultTransactable theSessionController;
 	private final ReentrantReadWriteLock theLock;
 
-	private final ObservableSet<ObservableMultiEntry<K, V>> theEntries;
-
-	private final ObservableSet<ObservableMultiEntry<K, V>> theExposedEntries;
+	private final ObservableSet<DefaultMultiMapEntry> theEntries;
 
 	/**
 	 * @param keyType The type of key used by this map
@@ -85,9 +84,8 @@ public class ObservableHashMultiMap<K, V> implements ObservableMultiMap<K, V> {
 		theLock=new ReentrantReadWriteLock();
 		theSessionController = new DefaultTransactable(theLock);
 
-		theEntries = new ObservableHashSet<>(new Type(ObservableMultiEntry.class, theKeyType, theKeyType), theLock,
-			theSessionController.getSession(), theSessionController);
-		theExposedEntries = theEntries.immutable();
+		theEntries = new ObservableHashSet<>(new Type(DefaultMultiMapEntry.class), theLock, theSessionController.getSession(),
+			theSessionController);
 	}
 
 	@Override
@@ -106,13 +104,23 @@ public class ObservableHashMultiMap<K, V> implements ObservableMultiMap<K, V> {
 	}
 
 	@Override
-	public ObservableSet<ObservableMultiEntry<K, V>> observeEntries() {
-		return theExposedEntries;
+	public Transaction lock(boolean write, Object cause) {
+		return theSessionController.lock(write, cause);
 	}
 
 	@Override
-	public Transaction lock(boolean write, Object cause) {
-		return theSessionController.lock(write, cause);
+	public ObservableSet<K> keySet() {
+		return ObservableMultiMap.defaultKeySet(this);
+	}
+
+	@Override
+	public ObservableCollection<V> get(Object key) {
+		return ObservableMultiMap.defaultGet(this, key);
+	}
+
+	@Override
+	public ObservableSet<? extends ObservableMultiEntry<K, V>> observeEntries() {
+		return theEntries;
 	}
 
 	@Override
@@ -158,7 +166,7 @@ public class ObservableHashMultiMap<K, V> implements ObservableMultiMap<K, V> {
 		Lock lock = theLock.writeLock();
 		lock.lock();
 		try {
-			Iterator<ObservableMultiEntry<K, V>> entryIter = theEntries.iterator();
+			Iterator<? extends ObservableMultiEntry<K, V>> entryIter = theEntries.iterator();
 			while(entryIter.hasNext()) {
 				DefaultMultiMapEntry entry = (DefaultMultiMapEntry) entryIter.next();
 				if(Objects.equals(entry.getKey(), key)) {
@@ -181,7 +189,7 @@ public class ObservableHashMultiMap<K, V> implements ObservableMultiMap<K, V> {
 	@Override
 	public boolean removeAll(K key) {
 		try (Transaction trans = lock(true, null)) {
-			Iterator<ObservableMultiEntry<K, V>> entryIter = theEntries.iterator();
+			Iterator<? extends ObservableMultiEntry<K, V>> entryIter = theEntries.iterator();
 			while(entryIter.hasNext()) {
 				DefaultMultiMapEntry entry = (DefaultMultiMapEntry) entryIter.next();
 				if(Objects.equals(entry.getKey(), key)) {

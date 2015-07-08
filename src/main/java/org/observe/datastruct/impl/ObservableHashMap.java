@@ -25,7 +25,7 @@ import prisms.lang.Type;
  * @param <K> The type of keys used in this map
  * @param <V> The type of values stored in this map
  */
-public class ObservableHashMap<K, V> extends java.util.AbstractMap<K, V> implements ObservableMap<K, V> {
+public class ObservableHashMap<K, V> implements ObservableMap<K, V> {
 	private class DefaultMapEntry extends DefaultObservableValue<V> implements ObservableEntry<K, V> {
 		private final Observer<ObservableValueEvent<V>> theController = control(null);
 
@@ -72,6 +72,11 @@ public class ObservableHashMap<K, V> extends java.util.AbstractMap<K, V> impleme
 		}
 
 		@Override
+		public int hashCode() {
+			return Objects.hashCode(theKey);
+		}
+
+		@Override
 		public boolean equals(Object o) {
 			return o instanceof Map.Entry && Objects.equals(((Map.Entry<?, ?>) o).getKey(), theKey);
 		}
@@ -81,11 +86,9 @@ public class ObservableHashMap<K, V> extends java.util.AbstractMap<K, V> impleme
 	private final Type theValueType;
 
 	private DefaultTransactable theSessionController;
-
 	private final ReentrantReadWriteLock theLock;
-	private final ObservableSet<ObservableEntry<K, V>> theEntries;
 
-	private final ObservableSet<ObservableEntry<K, V>> theExposedEntries;
+	private final ObservableSet<ObservableEntry<K, V>> theEntries;
 
 	/**
 	 * @param keyType The type of key used by this map
@@ -99,7 +102,6 @@ public class ObservableHashMap<K, V> extends java.util.AbstractMap<K, V> impleme
 
 		theEntries = new ObservableHashSet<>(new Type(ObservableEntry.class, theKeyType, theKeyType), theLock,
 			theSessionController.getSession(), theSessionController);
-		theExposedEntries = theEntries.immutable();
 	}
 
 	@Override
@@ -118,18 +120,23 @@ public class ObservableHashMap<K, V> extends java.util.AbstractMap<K, V> impleme
 	}
 
 	@Override
-	public ObservableSet<ObservableEntry<K, V>> observeEntries() {
-		return theExposedEntries;
-	}
-
-	@Override
 	public Transaction lock(boolean write, Object cause) {
 		return theSessionController.lock(write, cause);
 	}
 
 	@Override
-	public ObservableSet<Map.Entry<K, V>> entrySet() {
-		return (ObservableSet<Map.Entry<K, V>>) (ObservableSet<? extends Map.Entry<K, V>>) theExposedEntries;
+	public ObservableSet<K> keySet() {
+		return ObservableMap.defaultKeySet(this);
+	}
+
+	@Override
+	public ObservableValue<V> observe(Object key) {
+		return ObservableMap.defaultObserve(this, key);
+	}
+
+	@Override
+	public ObservableSet<ObservableEntry<K, V>> observeEntries() {
+		return theEntries;
 	}
 
 	@Override

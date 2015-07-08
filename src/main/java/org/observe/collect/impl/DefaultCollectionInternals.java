@@ -9,6 +9,7 @@ import java.util.function.Consumer;
 
 import org.observe.Subscription;
 import org.observe.collect.ObservableElement;
+import org.observe.util.Transaction;
 
 abstract class DefaultCollectionInternals<E> {
 	private final java.util.concurrent.ConcurrentHashMap<Consumer<? super ObservableElement<E>>, ConcurrentLinkedQueue<Subscription>> theObservers;
@@ -33,34 +34,46 @@ abstract class DefaultCollectionInternals<E> {
 		theOnSubscribe = onSubscribe;
 	}
 
-	/**
-	 * @param action The action to perform under a lock
-	 * @param write Whether to perform the action under a write lock or a read lock
-	 */
-	void doLocked(Runnable action, boolean write) {
+	Transaction lock(boolean write) {
 		Lock lock = write ? theLock.writeLock() : theLock.readLock();
 		lock.lock();
+		boolean success = false;
 		try {
 			if(thePreAction != null)
 				thePreAction.accept(write);
-			action.run();
+			success = true;
+			return new Transaction() {
+				private volatile boolean hasRun;
+
+				@Override
+				public void close() {
+					if(hasRun)
+						return;
+					hasRun = true;
+					lock.unlock();
+					if(thePostAction != null)
+						thePostAction.accept(write);
+				}
+
+				@Override
+				protected void finalize() throws Throwable {
+					if(!hasRun)
+						close();
+				}
+			};
 		} finally {
-			try {
-				if(thePostAction != null)
-					thePostAction.accept(write);
-			} finally {
+			if(!success)
 				lock.unlock();
-			}
 		}
 	}
 
 	Subscription onElement(Consumer<? super ObservableElement<E>> onElement, boolean forward) {
 		ConcurrentLinkedQueue<Subscription> subSubscriptions = new ConcurrentLinkedQueue<>();
 		theObservers.put(onElement, subSubscriptions);
-		doLocked(() -> {
+		try (Transaction t = lock(false)) {
 			for(InternalObservableElementImpl<E> el : getElements(forward))
 				onElement.accept(createExposedElement(el, subSubscriptions));
-		}, false);
+		}
 		if(theOnSubscribe != null)
 			theOnSubscribe.accept(onElement);
 		return () -> {

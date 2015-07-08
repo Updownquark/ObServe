@@ -1,14 +1,10 @@
 package org.observe.collect.impl;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.NavigableSet;
-import java.util.SortedSet;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 
@@ -19,13 +15,11 @@ import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableFastFindCollection;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.collect.OrderedObservableElement;
-import org.observe.collect.TransactableSortedSet;
 import org.observe.util.DefaultTransactable;
 import org.observe.util.Transactable;
 import org.observe.util.Transaction;
 import org.observe.util.tree.CountedRedBlackNode.DefaultNode;
 import org.observe.util.tree.CountedRedBlackNode.DefaultTreeMap;
-import org.observe.util.tree.RedBlackTreeSet.NodeSet;
 
 import prisms.lang.Type;
 
@@ -40,8 +34,6 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	private final Type theType;
 
 	private final Comparator<? super E> theCompare;
-
-	private AtomicBoolean hasIssuedController;
 
 	private DefaultSortedSetInternals theInternals;
 
@@ -81,8 +73,7 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	public ObservableTreeSet(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController, Comparator<? super E> compare) {
 		theType = type;
-		hasIssuedController = new AtomicBoolean(false);
-		theInternals = new DefaultSortedSetInternals(lock, hasIssuedController, write -> {
+		theInternals = new DefaultSortedSetInternals(lock, write -> {
 			if(write)
 				theModCount++;
 		});
@@ -100,12 +91,6 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 
 	@Override
 	public Transaction lock(boolean write, Object cause) {
-		if(hasIssuedController.get())
-			throw new IllegalStateException("Controlled default observable collections cannot be modified directly");
-		return startTransactionImpl(write, cause);
-	}
-
-	private Transaction startTransactionImpl(boolean write, Object cause) {
 		if(theSessionController == null) {
 			return () -> {
 			};
@@ -116,21 +101,6 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	@Override
 	public Type getType() {
 		return theType;
-	}
-
-	/**
-	 * Obtains the controller for this set. Once this is called, the observable set cannot be modified directly, but only through the
-	 * controller. Modification methods to this set after this call will throw an {@link IllegalStateException}. Only one call can be made
-	 * to this method. All calls after the first will throw an {@link IllegalStateException}.
-	 *
-	 * @param onSubscribe The listener to be notified when new subscriptions to this collection are made
-	 * @return The list to control this list's data.
-	 */
-	public TransactableSortedSet<E> control(Consumer<? super Consumer<? super ObservableElement<E>>> onSubscribe) {
-		if(hasIssuedController.getAndSet(true))
-			throw new IllegalStateException("This observable set is already controlled");
-		theInternals.setOnSubscribe(onSubscribe);
-		return new ObservableSortedSetController();
 	}
 
 	@Override
@@ -161,134 +131,126 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 
 	@Override
 	public boolean contains(Object o) {
-		boolean [] ret = new boolean[1];
-		theInternals.doLocked(() -> {
-			ret[0] = theValues.containsKey(o);
-		}, false, false);
-		return ret[0];
+		try (Transaction t = theInternals.lock(false)) {
+			return theValues.containsKey(o);
+		}
 	}
 
 	@Override
 	public boolean containsAll(Collection<?> c) {
-		boolean [] ret = new boolean[1];
-		theInternals.doLocked(() -> {
-			ret[0] = theValues.keySet().containsAll(c);
-		}, false, false);
-		return ret[0];
-	}
-
-	@Override
-	public E [] toArray() {
-		Object [][] ret = new Object[1][];
-		theInternals.doLocked(() -> {
-			Class<?> base = getType().toClass();
-			if(base.isPrimitive())
-				base = Type.getWrapperType(base);
-			ret[0] = theValues.keySet().toArray((E []) java.lang.reflect.Array.newInstance(base, theValues.size()));
-		}, false, false);
-		return (E []) ret[0];
-	}
-
-	@Override
-	public <T> T [] toArray(T [] a) {
-		Object [][] ret = new Object[1][];
-		theInternals.doLocked(() -> {
-			ret[0] = theValues.keySet().toArray(a);
-		}, false, false);
-		return (T []) ret[0];
+		try (Transaction t = theInternals.lock(false)) {
+			return theValues.keySet().containsAll(c);
+		}
 	}
 
 	@Override
 	public Iterator<E> iterator() {
-		return new SetIterator(theValues.entrySet().iterator(), false);
+		return new SetIterator(theValues.entrySet().iterator());
 	}
 
 	@Override
 	public Iterable<E> descending() {
-		return () -> new SetIterator(theValues.descendingMap().entrySet().iterator(), false);
+		return () -> new SetIterator(theValues.descendingMap().entrySet().iterator());
 	}
 
 	@Override
 	public boolean add(E e) {
-		boolean [] ret = new boolean[1];
-		theInternals.doLocked(() -> {
-			ret[0] = addImpl(e);
-		}, true, true);
-		return ret[0];
+		try (Transaction t = theInternals.lock(true)) {
+			if(theValues.containsKey(e))
+				return false;
+			InternalElement el = createElement(e);
+			el.setNode(theValues.putGetNode(e, el));
+			theInternals.fireNewElement(el);
+			return true;
+		}
 	}
 
 	@Override
 	public boolean remove(Object o) {
-		boolean [] ret = new boolean[1];
-		theInternals.doLocked(() -> {
-			ret[0] = removeImpl(o);
-		}, true, true);
-		return ret[0];
+		try (Transaction t = theInternals.lock(true)) {
+			return removeNodeImpl(o);
+		}
 	}
 
 	@Override
 	public boolean removeAll(Collection<?> c) {
-		boolean [] ret = new boolean[1];
-		theInternals.doLocked(() -> {
-			ret[0] = removeAllImpl(c);
-		}, true, true);
-		return ret[0];
+		try (Transaction t = lock(true, null)) {
+			try (Transaction trans = lock(true, null)) {
+				boolean ret = false;
+				for(Object o : c)
+					ret |= removeNodeImpl(o);
+				return ret;
+			}
+		}
 	}
 
 	@Override
 	public boolean addAll(Collection<? extends E> c) {
-		boolean [] ret = new boolean[1];
-		theInternals.doLocked(() -> {
-			ret[0] = addAllImpl(c);
-		}, true, true);
-		return ret[0];
+		boolean ret = false;
+		try (Transaction t = lock(true, null)) {
+			for(E add : c) {
+				if(!theValues.containsKey(add))
+					continue;
+				ret = true;
+				InternalElement el = createElement(add);
+				el.setNode(theValues.putGetNode(add, el));
+				theInternals.fireNewElement(el);
+			}
+		}
+		return ret;
 	}
 
 	@Override
 	public boolean retainAll(Collection<?> c) {
-		boolean [] ret = new boolean[1];
-		theInternals.doLocked(() -> {
-			ret[0] = retainAllImpl(c);
-		}, true, true);
-		return ret[0];
+		boolean ret = false;
+		try (Transaction t = lock(true, null)) {
+			try (Transaction trans = lock(true, null)) {
+				Iterator<DefaultNode<Map.Entry<E, InternalElement>>> iter = theValues.nodeIterator();
+				while(iter.hasNext()) {
+					DefaultNode<Map.Entry<E, InternalElement>> node = iter.next();
+					if(c.contains(node.getValue().getKey()))
+						continue;
+					ret = true;
+					removedNodeImpl(node);
+					iter.remove();
+				}
+			}
+		}
+		return ret;
 	}
 
 	@Override
 	public void clear() {
-		theInternals.doLocked(() -> {
-			clearImpl();
-		}, true, true);
+		try (Transaction t = lock(true, null)) {
+			Iterator<DefaultNode<Map.Entry<E, InternalElement>>> iter = theValues.nodeIterator();
+			while(iter.hasNext()) {
+				DefaultNode<Map.Entry<E, InternalElement>> node = iter.next();
+				removedNodeImpl(node);
+			}
+			theValues.clear();
+		}
 	}
 
 	@Override
 	public E pollFirst() {
-		Object [] ret = new Object[1];
-		theInternals.doLocked(() -> {
-			ret[0] = pollFirstImpl();
-		}, true, true);
-		return (E) ret[0];
+		try (Transaction t = lock(true, null)) {
+			Map.Entry<E, InternalElement> entry = theValues.pollFirstEntry();
+			if(entry == null)
+				return null;
+			entry.getValue().remove();
+			return entry.getKey();
+		}
 	}
 
 	@Override
 	public E pollLast() {
-		Object [] ret = new Object[1];
-		theInternals.doLocked(() -> {
-			ret[0] = pollLastImpl();
-		}, true, true);
-		return (E) ret[0];
-	}
-
-	private boolean addImpl(E e) {
-		if(theValues.containsKey(e))
-			return false;
-		InternalElement el = createElement(e);
-		el.setNode(theValues.putGetNode(e, el));
-		theInternals.fireNewElement(el);
-		return true;
-	}
-
-	private boolean removeImpl(Object o) {
-		return removeNodeImpl(o);
+		try (Transaction t = lock(true, null)) {
+			Map.Entry<E, InternalElement> entry = theValues.pollLastEntry();
+			if(entry == null)
+				return null;
+			entry.getValue().remove();
+			return entry.getKey();
+		}
 	}
 
 	private boolean removeNodeImpl(Object o) {
@@ -306,73 +268,6 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 		node.getValue().getValue().remove();
 	}
 
-	private boolean addAllImpl(Collection<? extends E> c) {
-		boolean ret = false;
-		try (Transaction trans = startTransactionImpl(true, null)) {
-			for(E add : c) {
-				if(!theValues.containsKey(add))
-					continue;
-				ret = true;
-				InternalElement el = createElement(add);
-				el.setNode(theValues.putGetNode(add, el));
-				theInternals.fireNewElement(el);
-			}
-		}
-		return ret;
-	}
-
-	private boolean removeAllImpl(Collection<?> c) {
-		try (Transaction trans = startTransactionImpl(true, null)) {
-			boolean ret = false;
-			for(Object o : c)
-				ret |= removeNodeImpl(o);
-			return ret;
-		}
-	}
-
-	private boolean retainAllImpl(Collection<?> c) {
-		boolean ret = false;
-		try (Transaction trans = startTransactionImpl(true, null)) {
-			Iterator<DefaultNode<Map.Entry<E, InternalElement>>> iter = theValues.nodeIterator();
-			while(iter.hasNext()) {
-				DefaultNode<Map.Entry<E, InternalElement>> node = iter.next();
-				if(c.contains(node.getValue().getKey()))
-					continue;
-				ret = true;
-				removedNodeImpl(node);
-				iter.remove();
-			}
-		}
-		return ret;
-	}
-
-	private void clearImpl() {
-		try (Transaction trans = startTransactionImpl(true, null)) {
-			Iterator<DefaultNode<Map.Entry<E, InternalElement>>> iter = theValues.nodeIterator();
-			while(iter.hasNext()) {
-				DefaultNode<Map.Entry<E, InternalElement>> node = iter.next();
-				removedNodeImpl(node);
-			}
-			theValues.clear();
-		}
-	}
-
-	private E pollFirstImpl() {
-		Map.Entry<E, InternalElement> entry = theValues.pollFirstEntry();
-		if(entry == null)
-			return null;
-		entry.getValue().remove();
-		return entry.getKey();
-	}
-
-	private E pollLastImpl() {
-		Map.Entry<E, InternalElement> entry = theValues.pollLastEntry();
-		if(entry == null)
-			return null;
-		entry.getValue().remove();
-		return entry.getKey();
-	}
-
 	@Override
 	public Comparator<? super E> comparator() {
 		return theValues.comparator();
@@ -384,10 +279,9 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 		ret.theValues = (DefaultTreeMap<E, InternalElement>) theValues.clone();
 		for(Map.Entry<E, InternalElement> entry : theValues.entrySet())
 			entry.setValue(ret.createElement(entry.getKey()));
-		ret.hasIssuedController = new AtomicBoolean(false);
-		ret.theInternals = ret.new DefaultSortedSetInternals(new ReentrantReadWriteLock(), ret.hasIssuedController, write -> {
+		ret.theInternals = ret.new DefaultSortedSetInternals(new ReentrantReadWriteLock(), write -> {
 			if(write)
-				theModCount++;
+				ret.theModCount++;
 		});
 		return ret;
 	}
@@ -395,544 +289,35 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	private class SetIterator implements Iterator<E> {
 		private final Iterator<Map.Entry<E, InternalElement>> backing;
 
-		private final boolean isController;
-
 		private InternalElement theLastElement;
 
-		SetIterator(Iterator<Map.Entry<E, InternalElement>> back, boolean controller) {
+		SetIterator(Iterator<Map.Entry<E, InternalElement>> back) {
 			backing = back;
-			isController = controller;
 		}
 
 		@Override
 		public boolean hasNext() {
-			boolean [] ret = new boolean[1];
-			theInternals.doLocked(() -> {
-				ret[0] = backing.hasNext();
-			}, false, false);
-			return ret[0];
+			try (Transaction t = theInternals.lock(false)) {
+				return backing.hasNext();
+			}
 		}
 
 		@Override
 		public E next() {
-			Object [] ret = new Object[1];
-			theInternals.doLocked(() -> {
+			try (Transaction t = theInternals.lock(false)) {
 				Map.Entry<E, InternalElement> entry = backing.next();
-				ret[0] = entry.getKey();
 				theLastElement = entry.getValue();
-			}, false, false);
-			return (E) ret[0];
+				return entry.getKey();
+			}
 		}
 
 		@Override
 		public void remove() {
-			theInternals.doLocked(() -> {
+			try (Transaction t = theInternals.lock(true)) {
 				backing.remove();
 				theLastElement.remove();
 				theLastElement = null;
-			}, true, !isController);
-		}
-	}
-
-	private class ControllerSubSet implements NavigableSet<E> {
-		private final NodeSet<Map.Entry<E, InternalElement>, DefaultNode<Map.Entry<E, InternalElement>>> backing;
-
-		ControllerSubSet(NodeSet<Map.Entry<E, InternalElement>, DefaultNode<Map.Entry<E, InternalElement>>> back) {
-			backing = back;
-		}
-
-		@Override
-		public Comparator<? super E> comparator() {
-			return theCompare;
-		}
-
-		@Override
-		public E first() {
-			Object [] ret = new Object[1];
-			theInternals.doLocked(() -> {
-				DefaultNode<Entry<E, InternalElement>> entry = backing.first();
-				if(entry == null)
-					throw new java.util.NoSuchElementException();
-				ret[0] = entry.getValue().getKey();
-			}, false, false);
-			return (E) ret[0];
-		}
-
-		@Override
-		public E last() {
-			Object [] ret = new Object[1];
-			theInternals.doLocked(() -> {
-				DefaultNode<Entry<E, InternalElement>> entry = backing.last();
-				if(entry == null)
-					throw new java.util.NoSuchElementException();
-				ret[0] = entry.getValue().getKey();
-			}, false, false);
-			return (E) ret[0];
-		}
-
-		@Override
-		public E lower(E e) {
-			Object [] ret = new Object[1];
-			theInternals.doLocked(() -> {
-				DefaultNode<Entry<E, InternalElement>> entry = backing.lower(theValues.keyEntry(e));
-				if(entry == null)
-					throw new java.util.NoSuchElementException();
-				ret[0] = entry.getValue().getKey();
-			}, false, false);
-			return (E) ret[0];
-		}
-
-		@Override
-		public E floor(E e) {
-			Object [] ret = new Object[1];
-			theInternals.doLocked(() -> {
-				DefaultNode<Entry<E, InternalElement>> entry = backing.floor(theValues.keyEntry(e));
-				if(entry == null)
-					throw new java.util.NoSuchElementException();
-				ret[0] = entry.getValue().getKey();
-			}, false, false);
-			return (E) ret[0];
-		}
-
-		@Override
-		public E ceiling(E e) {
-			Object [] ret = new Object[1];
-			theInternals.doLocked(() -> {
-				DefaultNode<Entry<E, InternalElement>> entry = backing.ceiling(theValues.keyEntry(e));
-				if(entry == null)
-					throw new java.util.NoSuchElementException();
-				ret[0] = entry.getValue().getKey();
-			}, false, false);
-			return (E) ret[0];
-		}
-
-		@Override
-		public E higher(E e) {
-			Object [] ret = new Object[1];
-			theInternals.doLocked(() -> {
-				DefaultNode<Entry<E, InternalElement>> entry = backing.higher(theValues.keyEntry(e));
-				if(entry == null)
-					throw new java.util.NoSuchElementException();
-				ret[0] = entry.getValue().getKey();
-			}, false, false);
-			return (E) ret[0];
-		}
-
-		@Override
-		public int size() {
-			int [] ret = new int[1];
-			theInternals.doLocked(() -> {
-				ret[0] = backing.size();
-			}, false, false);
-			return ret[0];
-		}
-
-		@Override
-		public boolean isEmpty() {
-			return size() == 0;
-		}
-
-		@Override
-		public boolean contains(Object o) {
-			boolean [] ret = new boolean[1];
-			theInternals.doLocked(() -> {
-				ret[0] = backing.contains(theValues.keyEntry((E) o));
-			}, false, false);
-			return ret[0];
-		}
-
-		@Override
-		public boolean containsAll(Collection<?> c) {
-			boolean [] ret = new boolean[] {true};
-			theInternals.doLocked(() -> {
-				for(Object o : c) {
-					if(!backing.contains(theValues.keyEntry((E) o)))
-						ret[0] = false;
-				}
-			}, false, false);
-			return ret[0];
-		}
-
-		@Override
-		public Object [] toArray() {
-			Object [][] ret = new Object[1][];
-			theInternals.doLocked(() -> {
-				ret[0] = backing.toArray();
-				for(int i = 0; i < ret[0].length; i++)
-					ret[0][i] = ((DefaultNode<Entry<E, InternalElement>>) ret[0][i]).getValue().getKey();
-			}, false, false);
-			return ret[0];
-		}
-
-		@Override
-		public <T> T [] toArray(T [] a) {
-			Object [][] ret = new Object[][] {a};
-			theInternals.doLocked(() -> {
-				Object [] backed = backing.toArray();
-				if(backed.length <= a.length)
-					ret[0] = a;
-				else
-					ret[0] = (T []) java.lang.reflect.Array.newInstance(a.getClass().getComponentType(), backed.length);
-				for(int i = 0; i < backed.length; i++)
-					ret[0][i] = ((DefaultNode<Entry<E, InternalElement>>) ret[0][i]).getValue().getKey();
-			}, false, false);
-			return (T []) ret[0];
-		}
-
-		@Override
-		public Iterator<E> iterator() {
-			return wrap(backing.iterator());
-		}
-
-		@Override
-		public Iterator<E> descendingIterator() {
-			return wrap(backing.descendingIterator());
-		}
-
-		private Iterator<E> wrap(Iterator<DefaultNode<Entry<E, InternalElement>>> entryIter) {
-			return new Iterator<E>() {
-				private DefaultNode<Entry<E, InternalElement>> theLast;
-
-				@Override
-				public boolean hasNext() {
-					return entryIter.hasNext();
-				}
-
-				@Override
-				public E next() {
-					theLast = entryIter.next();
-					return theLast.getValue().getKey();
-				}
-
-				@Override
-				public void remove() {
-					theInternals.doLocked(() -> {
-						entryIter.remove();
-						removedNodeImpl(theLast);
-						theLast = null;
-					}, true, false);
-				}
-			};
-		}
-
-		@Override
-		public E pollFirst() {
-			Object [] ret = new Object[1];
-			theInternals.doLocked(() -> {
-				DefaultNode<Entry<E, InternalElement>> node = backing.pollFirst();
-				ret[0] = node.getValue().getKey();
-				removedNodeImpl(node);
-			}, true, false);
-			return (E) ret[0];
-		}
-
-		@Override
-		public E pollLast() {
-			Object [] ret = new Object[1];
-			theInternals.doLocked(() -> {
-				DefaultNode<Entry<E, InternalElement>> node = backing.pollLast();
-				ret[0] = node.getValue().getKey();
-				removedNodeImpl(node);
-			}, true, false);
-			return (E) ret[0];
-		}
-
-		@Override
-		public boolean add(E e) {
-			backing.checkRange(theValues.keyEntry(e), true, true);
-			boolean [] ret = new boolean[1];
-			theInternals.doLocked(() -> {
-				ret[0] = addImpl(e);
-			}, true, false);
-			return ret[0];
-		}
-
-		@Override
-		public boolean addAll(Collection<? extends E> c) {
-			for(E e : c)
-				backing.checkRange(theValues.keyEntry(e), true, true);
-			boolean [] ret = new boolean[1];
-			theInternals.doLocked(() -> {
-				ret[0] = addAllImpl(c);
-			}, true, false);
-			return ret[0];
-		}
-
-		@Override
-		public boolean remove(Object o) {
-			if(!backing.checkRange(theValues.keyEntry((E) o)))
-				return false;
-			boolean [] ret = new boolean[1];
-			theInternals.doLocked(() -> {
-				ret[0] = removeImpl(o);
-			}, true, false);
-			return ret[0];
-		}
-
-		@Override
-		public boolean removeAll(Collection<?> c) {
-			ArrayList<Object> copy = new ArrayList<>(c);
-			Iterator<Object> iter = copy.iterator();
-			while(iter.hasNext())
-				if(!backing.checkRange(theValues.keyEntry((E) iter.next())))
-					iter.remove();
-			boolean [] ret = new boolean[1];
-			theInternals.doLocked(() -> {
-				ret[0] = removeAllImpl(copy);
-			}, true, false);
-			return ret[0];
-		}
-
-		@Override
-		public boolean retainAll(Collection<?> c) {
-			boolean [] ret = new boolean[1];
-			theInternals.doLocked(() -> {
-				Iterator<DefaultNode<Entry<E, InternalElement>>> entryIter = backing.iterator();
-				while(entryIter.hasNext()) {
-					DefaultNode<Entry<E, InternalElement>> node = entryIter.next();
-					if(!c.contains(node.getValue().getKey())) {
-						ret[0] = true;
-						entryIter.remove();
-						removedNodeImpl(node);
-					}
-				}
-			}, true, false);
-			return ret[0];
-		}
-
-		@Override
-		public void clear() {
-			theInternals.doLocked(() -> {
-				Iterator<DefaultNode<Entry<E, InternalElement>>> entryIter = backing.iterator();
-				while(entryIter.hasNext()) {
-					removedNodeImpl(entryIter.next());
-					entryIter.remove();
-				}
-			}, true, false);
-		}
-
-		public NavigableSet<E> getSubSet(boolean reversed, E fromElement, boolean fromInclusive, E toElement, boolean toInclusive) {
-			return new ControllerSubSet(backing.getSubSet(reversed, theValues.keyEntry(fromElement), fromInclusive,
-				theValues.keyEntry(toElement), toInclusive));
-		}
-
-		@Override
-		public NavigableSet<E> descendingSet() {
-			return getSubSet(true, null, true, null, true);
-		}
-
-		@Override
-		public NavigableSet<E> subSet(E fromElement, boolean fromInclusive, E toElement, boolean toInclusive) {
-			return getSubSet(false, fromElement, fromInclusive, toElement, toInclusive);
-		}
-
-		@Override
-		public NavigableSet<E> headSet(E toElement, boolean inclusive) {
-			return getSubSet(false, null, true, toElement, inclusive);
-		}
-
-		@Override
-		public NavigableSet<E> tailSet(E fromElement, boolean inclusive) {
-			return getSubSet(false, fromElement, inclusive, null, true);
-		}
-
-		@Override
-		public SortedSet<E> subSet(E fromElement, E toElement) {
-			return getSubSet(false, fromElement, true, toElement, false);
-		}
-
-		@Override
-		public SortedSet<E> headSet(E toElement) {
-			return getSubSet(false, null, true, toElement, false);
-		}
-
-		@Override
-		public SortedSet<E> tailSet(E fromElement) {
-			return getSubSet(false, fromElement, true, null, true);
-		}
-	}
-
-	private class ObservableSortedSetController implements TransactableSortedSet<E> {
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return startTransactionImpl(write, cause);
-		}
-
-		@Override
-		public Iterator<E> iterator() {
-			return new SetIterator(theValues.entrySet().iterator(), true);
-		}
-
-		@Override
-		public boolean isEmpty() {
-			return ObservableTreeSet.this.isEmpty();
-		}
-
-		@Override
-		public int size() {
-			return ObservableTreeSet.this.size();
-		}
-
-		@Override
-		public Comparator<? super E> comparator() {
-			return ObservableTreeSet.this.comparator();
-		}
-
-		@Override
-		public E first() {
-			return ObservableTreeSet.this.first();
-		}
-
-		@Override
-		public E last() {
-			return ObservableTreeSet.this.last();
-		}
-
-		@Override
-		public E lower(E e) {
-			return ObservableTreeSet.this.lower(e);
-		}
-
-		@Override
-		public E floor(E e) {
-			return ObservableTreeSet.this.floor(e);
-		}
-
-		@Override
-		public E ceiling(E e) {
-			return ObservableTreeSet.this.ceiling(e);
-		}
-
-		@Override
-		public E higher(E e) {
-			return ObservableTreeSet.this.higher(e);
-		}
-
-		@Override
-		public E pollFirst() {
-			return ObservableTreeSet.this.pollFirst();
-		}
-
-		@Override
-		public E pollLast() {
-			return ObservableTreeSet.this.pollLast();
-		}
-
-		@Override
-		public boolean contains(Object o) {
-			return ObservableTreeSet.this.contains(o);
-		}
-
-		@Override
-		public boolean containsAll(Collection<?> c) {
-			return ObservableTreeSet.this.containsAll(c);
-		}
-
-		@Override
-		public E [] toArray() {
-			return ObservableTreeSet.this.toArray();
-		}
-
-		@Override
-		public <T> T [] toArray(T [] a) {
-			return ObservableTreeSet.this.toArray(a);
-		}
-
-		@Override
-		public Iterator<E> descendingIterator() {
-			return new SetIterator(theValues.entrySet().descendingIterator(), true);
-		}
-
-		public NavigableSet<E> getSubSet(boolean reversed, E fromElement, boolean fromInclusive, E toElement, boolean toInclusive) {
-			return new ControllerSubSet(theValues.entrySet().nodes(reversed, theValues.keyEntry(fromElement), fromInclusive,
-				theValues.keyEntry(toElement), toInclusive));
-		}
-
-		@Override
-		public NavigableSet<E> descendingSet() {
-			return getSubSet(true, null, true, null, true);
-		}
-
-		@Override
-		public NavigableSet<E> subSet(E fromElement, boolean fromInclusive, E toElement, boolean toInclusive) {
-			return getSubSet(false, fromElement, fromInclusive, toElement, toInclusive);
-		}
-
-		@Override
-		public NavigableSet<E> headSet(E toElement, boolean inclusive) {
-			return getSubSet(false, null, true, toElement, inclusive);
-		}
-
-		@Override
-		public NavigableSet<E> tailSet(E fromElement, boolean inclusive) {
-			return getSubSet(false, fromElement, inclusive, null, true);
-		}
-
-		@Override
-		public SortedSet<E> subSet(E fromElement, E toElement) {
-			return getSubSet(false, fromElement, true, toElement, false);
-		}
-
-		@Override
-		public SortedSet<E> headSet(E toElement) {
-			return getSubSet(false, null, true, toElement, false);
-		}
-
-		@Override
-		public SortedSet<E> tailSet(E fromElement) {
-			return getSubSet(false, fromElement, true, null, true);
-		}
-
-		@Override
-		public boolean add(E e) {
-			boolean [] ret = new boolean[1];
-			theInternals.doLocked(() -> {
-				ret[0] = addImpl(e);
-			}, true, false);
-			return ret[0];
-		}
-
-		@Override
-		public boolean remove(Object o) {
-			boolean [] ret = new boolean[1];
-			theInternals.doLocked(() -> {
-				ret[0] = removeImpl(o);
-			}, true, false);
-			return ret[0];
-		}
-
-		@Override
-		public boolean removeAll(Collection<?> c) {
-			boolean [] ret = new boolean[1];
-			theInternals.doLocked(() -> {
-				ret[0] = removeAllImpl(c);
-			}, true, false);
-			return ret[0];
-		}
-
-		@Override
-		public boolean addAll(Collection<? extends E> c) {
-			boolean [] ret = new boolean[1];
-			theInternals.doLocked(() -> {
-				ret[0] = addAllImpl(c);
-			}, true, false);
-			return ret[0];
-		}
-
-		@Override
-		public boolean retainAll(Collection<?> c) {
-			boolean [] ret = new boolean[1];
-			theInternals.doLocked(() -> {
-				ret[0] = retainAllImpl(c);
-			}, true, false);
-			return ret[0];
-		}
-
-		@Override
-		public void clear() {
-			theInternals.doLocked(() -> {
-				clearImpl();
-			}, true, false);
+			}
 		}
 	}
 
@@ -978,8 +363,8 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	}
 
 	private class DefaultSortedSetInternals extends DefaultCollectionInternals<E> {
-		DefaultSortedSetInternals(ReentrantReadWriteLock lock, AtomicBoolean issuedController, Consumer<? super Boolean> postAction) {
-			super(lock, issuedController, null, postAction);
+		DefaultSortedSetInternals(ReentrantReadWriteLock lock, Consumer<? super Boolean> postAction) {
+			super(lock, null, postAction);
 		}
 
 		@Override

@@ -577,6 +577,11 @@ public abstract class ObservableDebug {
 							return theNode.getEdges().find(edge -> edge.getEnd() == theNode && edge.getValue().equals(key))
 								.mapV(edge -> new NodeDebugDescription(edge.getStart()));
 						}
+
+						@Override
+						public ObservableSet<? extends ObservableEntry<String, DebugDescription>> observeEntries() {
+							return ObservableMap.defaultObserveEntries(this);
+						}
 					};
 				}
 

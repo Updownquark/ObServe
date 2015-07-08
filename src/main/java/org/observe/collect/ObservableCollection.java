@@ -89,8 +89,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	@Override
 	default E [] toArray() {
 		ArrayList<E> ret = new ArrayList<>();
-		for(E value : this)
-			ret.add(value);
+		try (Transaction t = lock(false, null)) {
+			for(E value : this)
+				ret.add(value);
+		}
 		Class<?> base = getType().toClass();
 		if(base.isPrimitive())
 			base = Type.getWrapperType(base);
@@ -100,8 +102,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	@Override
 	default <T> T [] toArray(T [] a) {
 		ArrayList<E> ret = new ArrayList<>();
-		for(E value : this)
-			ret.add(value);
+		try (Transaction t = lock(false, null)) {
+			for(E value : this)
+				ret.add(value);
+		}
 		return ret.toArray(a);
 	}
 
@@ -1508,6 +1512,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		@Override
 		public ObservableCollection<E> get(Object key) {
 			return theWrapped.filter(el -> Objects.equals(theKeyMap.apply(el), key));
+		}
+
+		@Override
+		public ObservableSet<? extends ObservableMultiEntry<K, E>> observeEntries() {
+			return ObservableMultiMap.defaultObserveEntries(this);
 		}
 	}
 
