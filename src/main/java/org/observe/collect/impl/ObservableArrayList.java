@@ -28,7 +28,7 @@ import prisms.lang.Type;
 public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, ObservableList.PartialListImpl<E> {
 	private final Type theType;
 
-	private DefaultListInternals theInternals;
+	private ArrayListInternals theInternals;
 	private ObservableValue<CollectionSession> theSessionObservable;
 	private Transactable theSessionController;
 
@@ -61,7 +61,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	public ObservableArrayList(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController) {
 		theType = type;
-		theInternals = new DefaultListInternals(lock, write -> {
+		theInternals = new ArrayListInternals(lock, write -> {
 			if(write)
 				theModCount++;
 		});
@@ -199,6 +199,18 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	}
 
 	@Override
+	public void removeRange(int fromIndex, int toIndex) {
+		try (Transaction t = theInternals.lock(true)) {
+			for(int i = toIndex - 1; i >= fromIndex; i--) {
+				theValues.remove(i);
+				InternalOrderedObservableElementImpl<E> removed = theElements.remove(i);
+				removed.setRemovedIndex(i);
+				removed.remove();
+			}
+		}
+	}
+
+	@Override
 	public boolean addAll(Collection<? extends E> c) {
 		if(c.isEmpty())
 			return false;
@@ -307,15 +319,15 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 		ret.theElements = new ArrayList<>();
 		for(E el : ret.theValues)
 			ret.theElements.add(createElement(el));
-		ret.theInternals = ret.new DefaultListInternals(new ReentrantReadWriteLock(), write -> {
+		ret.theInternals = ret.new ArrayListInternals(new ReentrantReadWriteLock(), write -> {
 			if(write)
 				ret.theModCount++;
 		});
 		return ret;
 	}
 
-	private class DefaultListInternals extends DefaultCollectionInternals<E> {
-		DefaultListInternals(ReentrantReadWriteLock lock, Consumer<? super Boolean> postAction) {
+	private class ArrayListInternals extends DefaultCollectionInternals<E> {
+		ArrayListInternals(ReentrantReadWriteLock lock, Consumer<? super Boolean> postAction) {
 			super(lock, null, postAction);
 		}
 

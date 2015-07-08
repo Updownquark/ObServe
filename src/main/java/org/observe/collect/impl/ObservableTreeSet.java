@@ -35,7 +35,7 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 
 	private final Comparator<? super E> theCompare;
 
-	private DefaultSortedSetInternals theInternals;
+	private TreeSetInternals theInternals;
 
 	private ObservableValue<CollectionSession> theSessionObservable;
 
@@ -73,7 +73,7 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	public ObservableTreeSet(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController, Comparator<? super E> compare) {
 		theType = type;
-		theInternals = new DefaultSortedSetInternals(lock, write -> {
+		theInternals = new TreeSetInternals(lock, write -> {
 			if(write)
 				theModCount++;
 		});
@@ -279,7 +279,7 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 		ret.theValues = (DefaultTreeMap<E, InternalElement>) theValues.clone();
 		for(Map.Entry<E, InternalElement> entry : theValues.entrySet())
 			entry.setValue(ret.createElement(entry.getKey()));
-		ret.theInternals = ret.new DefaultSortedSetInternals(new ReentrantReadWriteLock(), write -> {
+		ret.theInternals = ret.new TreeSetInternals(new ReentrantReadWriteLock(), write -> {
 			if(write)
 				ret.theModCount++;
 		});
@@ -362,8 +362,8 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 		}
 	}
 
-	private class DefaultSortedSetInternals extends DefaultCollectionInternals<E> {
-		DefaultSortedSetInternals(ReentrantReadWriteLock lock, Consumer<? super Boolean> postAction) {
+	private class TreeSetInternals extends DefaultCollectionInternals<E> {
+		TreeSetInternals(ReentrantReadWriteLock lock, Consumer<? super Boolean> postAction) {
 			super(lock, null, postAction);
 		}
 

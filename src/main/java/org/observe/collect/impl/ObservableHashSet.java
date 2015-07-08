@@ -28,7 +28,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 	private final Type theType;
 	private LinkedHashMap<E, InternalObservableElementImpl<E>> theValues;
 
-	private DefaultSetInternals theInternals;
+	private HashSetInternals theInternals;
 
 	private ObservableValue<CollectionSession> theSessionObservable;
 	private Transactable theSessionController;
@@ -57,7 +57,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 	public ObservableHashSet(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController) {
 		theType = type;
-		theInternals = new DefaultSetInternals(lock);
+		theInternals = new HashSetInternals(lock);
 		theSessionObservable = session;
 		theSessionController = sessionController;
 
@@ -247,12 +247,12 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 		ret.theValues = (LinkedHashMap<E, InternalObservableElementImpl<E>>) theValues.clone();
 		for(Map.Entry<E, InternalObservableElementImpl<E>> entry : theValues.entrySet())
 			entry.setValue(ret.createElement(entry.getKey()));
-		ret.theInternals = ret.new DefaultSetInternals(new ReentrantReadWriteLock());
+		ret.theInternals = ret.new HashSetInternals(new ReentrantReadWriteLock());
 		return ret;
 	}
 
-	private class DefaultSetInternals extends DefaultCollectionInternals<E> {
-		DefaultSetInternals(ReentrantReadWriteLock lock) {
+	private class HashSetInternals extends DefaultCollectionInternals<E> {
+		HashSetInternals(ReentrantReadWriteLock lock) {
 			super(lock, null, null);
 		}
 
