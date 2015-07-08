@@ -10,12 +10,11 @@ import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableList;
 import org.observe.collect.ObservableSet;
-import org.observe.collect.TransactableCollection;
 import org.observe.datastruct.ObservableGraph;
 import org.observe.datastruct.ObservableGraph.Node;
-import org.observe.datastruct.impl.ObservableHashMultiMap;
 import org.observe.datastruct.ObservableMap;
 import org.observe.datastruct.ObservableMultiMap;
+import org.observe.datastruct.impl.ObservableHashMultiMap;
 import org.observe.util.Transaction;
 import org.observe.util.WeakReferenceObservable;
 
@@ -96,14 +95,11 @@ public abstract class ObservableDebug {
 		/** Properties that have been tagged onto the observable */
 		public final ObservableMultiMap<String, Object> tags;
 
-		private final TransactableCollection<String> labelController;
-
 		private final ObservableHashMultiMap<String, Object> tagController;
 
 		private ObservableDebugWrapper(Object ob, Map<String, Object> fns) {
 			observable = new WeakReferenceObservable<>(new Type(Object.class), ob);
 			labels = new org.observe.collect.impl.ObservableArrayList<>(new Type(String.class));
-			labelController = ((org.observe.collect.impl.ObservableArrayList<String>) labels).control(null);
 			tagController = new org.observe.datastruct.impl.ObservableHashMultiMap<>(new Type(String.class), new Type(Object.class));
 			tags = tagController.immutable();
 			functions = Collections.unmodifiableMap(fns);
@@ -473,7 +469,7 @@ public abstract class ObservableDebug {
 				@Override
 				public ObservableDerivationBuilder<T> label(String label) {
 					if(!newHolder.labels.contains(label))
-						newHolder.labelController.add(label);
+						newHolder.labels.add(label);
 					return this;
 				}
 
@@ -511,7 +507,7 @@ public abstract class ObservableDebug {
 				@Override
 				public ObservableDerivationBuilder<T> label(String label) {
 					if(!node.getValue().labels.contains(label))
-						node.getValue().labelController.add(label);
+						node.getValue().labels.add(label);
 					return this;
 				}
 

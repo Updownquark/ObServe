@@ -282,7 +282,6 @@ public class ObservableTest {
 	@Test
 	public void observableSet() {
 		ObservableHashSet<Integer> set = new ObservableHashSet<>(new Type(Integer.TYPE));
-		Set<Integer> controller = set.control(null);
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
 		Subscription sub = set.onElement(element -> {
@@ -300,31 +299,31 @@ public class ObservableTest {
 		});
 
 		for(int i = 0; i < 30; i++) {
-			controller.add(i);
+			set.add(i);
 			correct.add(i);
 			assertEquals(new TreeSet<>(set), compare1);
 			assertEquals(correct, compare1);
 		}
 		for(int i = 0; i < 30; i++) {
-			controller.remove(i);
+			set.remove(i);
 			correct.remove(i);
 			assertEquals(new TreeSet<>(set), compare1);
 			assertEquals(correct, compare1);
 		}
 
 		for(int i = 0; i < 30; i++) {
-			controller.add(i);
+			set.add(i);
 			correct.add(i);
 			assertEquals(new TreeSet<>(set), compare1);
 			assertEquals(correct, compare1);
 		}
 		sub.unsubscribe();
 		for(int i = 30; i < 50; i++) {
-			controller.add(i);
+			set.add(i);
 			assertEquals(correct, compare1);
 		}
 		for(int i = 0; i < 30; i++) {
-			controller.remove(i);
+			set.remove(i);
 			assertEquals(correct, compare1);
 		}
 	}
@@ -333,7 +332,6 @@ public class ObservableTest {
 	@Test
 	public void observableList() {
 		ObservableArrayList<Integer> list = new ObservableArrayList<>(new Type(Integer.TYPE));
-		List<Integer> controller = list.control(null);
 		List<Integer> compare1 = new ArrayList<>();
 		List<Integer> correct = new ArrayList<>();
 		Subscription sub = list.onElement(element -> {
@@ -352,31 +350,31 @@ public class ObservableTest {
 		});
 
 		for(int i = 0; i < 30; i++) {
-			controller.add(i);
+			list.add(i);
 			correct.add(i);
 			assertEquals(new ArrayList<>(list), compare1);
 			assertEquals(correct, compare1);
 		}
 		for(int i = 0; i < 30; i++) {
-			controller.remove((Integer) i);
+			list.remove((Integer) i);
 			correct.remove((Integer) i);
 			assertEquals(new ArrayList<>(list), compare1);
 			assertEquals(correct, compare1);
 		}
 
 		for(int i = 0; i < 30; i++) {
-			controller.add(i);
+			list.add(i);
 			correct.add(i);
 			assertEquals(new ArrayList<>(list), compare1);
 			assertEquals(correct, compare1);
 		}
 		sub.unsubscribe();
 		for(int i = 30; i < 50; i++) {
-			controller.add(i);
+			list.add(i);
 			assertEquals(correct, compare1);
 		}
 		for(int i = 0; i < 30; i++) {
-			controller.remove((Integer) i);
+			list.remove((Integer) i);
 			assertEquals(correct, compare1);
 		}
 	}
@@ -385,7 +383,6 @@ public class ObservableTest {
 	@Test
 	public void observableSetMap() {
 		ObservableHashSet<Integer> set = new ObservableHashSet<>(new Type(Integer.TYPE));
-		Set<Integer> controller = set.control(null);
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
 		set.map(value -> value * 10).onElement(element -> {
@@ -403,12 +400,12 @@ public class ObservableTest {
 		});
 
 		for(int i = 0; i < 30; i++) {
-			controller.add(i);
+			set.add(i);
 			correct.add(i * 10);
 			assertEquals(correct, compare1);
 		}
 		for(int i = 0; i < 30; i++) {
-			controller.remove(i);
+			set.remove(i);
 			correct.remove(i * 10);
 			assertEquals(correct, compare1);
 		}
@@ -418,7 +415,6 @@ public class ObservableTest {
 	@Test
 	public void observableSetFilter() {
 		ObservableHashSet<Integer> set = new ObservableHashSet<>(new Type(Integer.TYPE));
-		Set<Integer> controller = set.control(null);
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
 		set.filter(value -> (value != null && value % 2 == 0)).onElement(element -> {
@@ -436,13 +432,13 @@ public class ObservableTest {
 		});
 
 		for(int i = 0; i < 30; i++) {
-			controller.add(i);
+			set.add(i);
 			if(i % 2 == 0)
 				correct.add(i);
 			assertEquals(correct, compare1);
 		}
 		for(int i = 0; i < 30; i++) {
-			controller.remove(i);
+			set.remove(i);
 			if(i % 2 == 0)
 				correct.remove(i);
 			assertEquals(correct, compare1);
@@ -453,7 +449,6 @@ public class ObservableTest {
 	@Test
 	public void observableSetFilterMap() {
 		ObservableHashSet<Integer> set = new ObservableHashSet<>(new Type(Integer.TYPE));
-		Set<Integer> controller = set.control(null);
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
 		set.filterMap(value -> {
@@ -475,13 +470,13 @@ public class ObservableTest {
 		});
 
 		for(int i = 0; i < 30; i++) {
-			controller.add(i);
+			set.add(i);
 			if(i % 2 == 0)
 				correct.add(i / 2);
 			assertEquals(correct, compare1);
 		}
 		for(int i = 0; i < 30; i++) {
-			controller.remove(i);
+			set.remove(i);
 			if(i % 2 == 0)
 				correct.remove(i / 2);
 			assertEquals(correct, compare1);
@@ -494,7 +489,6 @@ public class ObservableTest {
 		ObservableHashSet<Integer> set = new ObservableHashSet<>(new Type(Integer.TYPE));
 		SimpleSettableValue<Integer> value1 = new SimpleSettableValue<>(Integer.TYPE, false);
 		value1.set(1, null);
-		Set<Integer> controller = set.control(null);
 		List<Integer> compare1 = new ArrayList<>();
 		Set<Integer> correct = new TreeSet<>();
 		set.combine(value1, (v1, v2) -> v1 * v2).filter(value -> value != null && value % 3 == 0).onElement(element -> {
@@ -514,7 +508,7 @@ public class ObservableTest {
 		});
 
 		for(int i = 0; i < 30; i++) {
-			controller.add(i);
+			set.add(i);
 			int value = i * value1.get();
 			if(value % 3 == 0)
 				correct.add(value);
@@ -543,7 +537,7 @@ public class ObservableTest {
 		assertEquals(correct.size(), compare1.size());
 
 		for(int i = 0; i < 30; i++) {
-			controller.remove(i);
+			set.remove(i);
 			int value = i * value1.get();
 			if(value % 3 == 0)
 				correct.remove(value);
@@ -556,7 +550,6 @@ public class ObservableTest {
 	@Test
 	public void observableSetUnique() {
 		ObservableArrayList<Integer> list = new ObservableArrayList<>(new Type(Integer.TYPE));
-		List<Integer> controller = list.control(null);
 		ObservableSet<Integer> unique = ObservableSet.unique(list);
 		List<Integer> compare1 = new ArrayList<>();
 		Set<Integer> correct = new TreeSet<>();
@@ -578,7 +571,7 @@ public class ObservableTest {
 		});
 
 		for(int i = 0; i < 30; i++) {
-			controller.add(i);
+			list.add(i);
 			correct.add(i);
 		}
 		assertEquals(correct, new TreeSet<>(unique));
@@ -586,35 +579,35 @@ public class ObservableTest {
 		assertEquals(correct.size(), compare1.size());
 
 		for(int i = 0; i < 30; i++) {
-			controller.add(i);
+			list.add(i);
 		}
 		assertEquals(correct, new TreeSet<>(unique));
 		assertEquals(correct, new TreeSet<>(compare1));
 		assertEquals(correct.size(), compare1.size());
 
 		for(int i = 29; i >= 0; i--) {
-			controller.remove(30 + i);
+			list.remove(30 + i);
 		}
 		assertEquals(correct, new TreeSet<>(unique));
 		assertEquals(correct, new TreeSet<>(compare1));
 		assertEquals(correct.size(), compare1.size());
 
 		for(int i = 0; i < 30; i++) {
-			controller.add(i);
+			list.add(i);
 		}
 		assertEquals(correct, new TreeSet<>(unique));
 		assertEquals(correct, new TreeSet<>(compare1));
 		assertEquals(correct.size(), compare1.size());
 
 		for(int i = 29; i >= 0; i--) {
-			controller.remove(i);
+			list.remove(i);
 		}
 		assertEquals(correct, new TreeSet<>(unique));
 		assertEquals(correct, new TreeSet<>(compare1));
 		assertEquals(correct.size(), compare1.size());
 
 		for(int i = 29; i >= 0; i--) {
-			controller.remove(i);
+			list.remove(i);
 			correct.remove(i);
 		}
 		assertEquals(correct, new TreeSet<>(unique));
@@ -630,9 +623,8 @@ public class ObservableTest {
 		ObservableHashSet<Integer> set3 = new ObservableHashSet<>(new Type(Integer.TYPE));
 		ObservableArrayList<ObservableSet<Integer>> outer = new ObservableArrayList<>(new Type(ObservableSet.class,
 			new Type(Integer.TYPE)));
-		List<ObservableSet<Integer>> outerControl = outer.control(null);
-		outerControl.add(set1);
-		outerControl.add(set2);
+		outer.add(set1);
+		outer.add(set2);
 		ObservableCollection<Integer> flat = ObservableCollection.flatten(outer);
 		List<Integer> compare1 = new ArrayList<>();
 		List<Integer> filtered = new ArrayList<>();
@@ -666,9 +658,6 @@ public class ObservableTest {
 				}
 			});
 		});
-		Set<Integer> controller1 = set1.control(null);
-		Set<Integer> controller2 = set2.control(null);
-		Set<Integer> controller3 = set3.control(null);
 
 		List<Integer> correct1 = new ArrayList<>();
 		List<Integer> correct2 = new ArrayList<>();
@@ -677,9 +666,9 @@ public class ObservableTest {
 		List<Integer> filteredCorrect = new ArrayList<>();
 
 		for(int i = 0; i < 30; i++) {
-			controller1.add(i);
-			controller2.add(i * 10);
-			controller3.add(i * 100);
+			set1.add(i);
+			set2.add(i * 10);
+			set3.add(i * 100);
 			correct1.add(i);
 			correct2.add(i * 10);
 			correct3.add(i * 100);
@@ -701,7 +690,7 @@ public class ObservableTest {
 			assertEquals(filteredCorrect.size(), filtered.size());
 		}
 
-		outerControl.add(set3);
+		outer.add(set3);
 		correct.clear();
 		correct.addAll(correct1);
 		correct.addAll(correct2);
@@ -724,7 +713,7 @@ public class ObservableTest {
 		assertEquals(new TreeSet<>(filteredCorrect), new TreeSet<>(filtered));
 		assertEquals(filteredCorrect.size(), filtered.size());
 
-		outerControl.remove(set2);
+		outer.remove(set2);
 		correct.clear();
 		correct.addAll(correct1);
 		correct.addAll(correct3);
@@ -744,9 +733,9 @@ public class ObservableTest {
 		assertEquals(filteredCorrect.size(), filtered.size());
 
 		for(int i = 0; i < 30; i++) {
-			controller1.remove(i);
-			controller2.remove(i * 10);
-			controller3.remove(i * 100);
+			set1.remove(i);
+			set2.remove(i * 10);
+			set3.remove(i * 100);
 			correct1.remove((Integer) i);
 			correct2.remove((Integer) (i * 10));
 			correct3.remove((Integer) (i * 100));
@@ -778,9 +767,8 @@ public class ObservableTest {
 		SimpleSettableValue<Integer> obs3 = new SimpleSettableValue<>(Integer.class, true);
 		ObservableHashSet<ObservableValue<Integer>> set = new ObservableHashSet<>(new Type(Observable.class, new Type(
 			Integer.TYPE)));
-		Set<ObservableValue<Integer>> controller = set.control(null);
-		controller.add(obs1);
-		controller.add(obs2);
+		set.add(obs1);
+		set.add(obs2);
 		Observable<Integer> folded = ObservableCollection.fold(set.map(value -> value.value()));
 		int [] received = new int[1];
 		folded.noInit().act(value -> received[0] = value);
@@ -791,11 +779,11 @@ public class ObservableTest {
 		assertEquals(2, received[0]);
 		obs3.set(3, null);
 		assertEquals(2, received[0]);
-		controller.add(obs3);
+		set.add(obs3);
 		assertEquals(3, received[0]); // Initial value fired
 		obs3.set(4, null);
 		assertEquals(4, received[0]);
-		controller.remove(obs2);
+		set.remove(obs2);
 		obs2.set(5, null);
 		assertEquals(4, received[0]);
 	}
@@ -804,7 +792,6 @@ public class ObservableTest {
 	@Test
 	public void observableListMap() {
 		ObservableArrayList<Integer> list = new ObservableArrayList<>(new Type(Integer.TYPE));
-		List<Integer> controller = list.control(null);
 		List<Integer> compare1 = new ArrayList<>();
 		List<Integer> correct = new ArrayList<>();
 		list.map(value -> value * 10).onElement(element -> {
@@ -826,17 +813,17 @@ public class ObservableTest {
 		});
 
 		for(int i = 0; i < 30; i++) {
-			controller.add(i);
+			list.add(i);
 			correct.add(i * 10);
 			assertEquals(correct, compare1);
 		}
 		for(int i = 0; i < 30; i++) {
-			controller.add(i);
+			list.add(i);
 			correct.add(i * 10);
 			assertEquals(correct, compare1);
 		}
 		for(int i = 0; i < 30; i++) {
-			controller.remove(Integer.valueOf(i));
+			list.remove(Integer.valueOf(i));
 			correct.remove(Integer.valueOf(i * 10));
 			assertEquals(correct, compare1);
 		}
@@ -846,7 +833,6 @@ public class ObservableTest {
 	@Test
 	public void observableListFilter() {
 		ObservableArrayList<Integer> list = new ObservableArrayList<>(new Type(Integer.TYPE));
-		List<Integer> controller = list.control(null);
 		List<Integer> compare1 = new ArrayList<>();
 		List<Integer> correct = new ArrayList<>();
 		list.filter(value -> value != null && value % 2 == 0).onElement(element -> {
@@ -868,19 +854,19 @@ public class ObservableTest {
 		});
 
 		for(int i = 0; i < 30; i++) {
-			controller.add(i);
+			list.add(i);
 			if(i % 2 == 0)
 				correct.add(i);
 			assertEquals(correct, compare1);
 		}
 		for(int i = 0; i < 30; i++) {
-			controller.add(i);
+			list.add(i);
 			if(i % 2 == 0)
 				correct.add(i);
 			assertEquals(correct, compare1);
 		}
 		for(int i = 0; i < 30; i++) {
-			controller.remove(Integer.valueOf(i));
+			list.remove(Integer.valueOf(i));
 			if(i % 2 == 0)
 				correct.remove(Integer.valueOf(i));
 			assertEquals(correct, compare1);
@@ -891,7 +877,6 @@ public class ObservableTest {
 	@Test
 	public void observableListFilter2() {
 		ObservableArrayList<Integer> list = new ObservableArrayList<>(new Type(Integer.TYPE));
-		List<Integer> controller = list.control(null);
 		List<Integer> compare0 = new ArrayList<>();
 		List<Integer> correct0 = new ArrayList<>();
 		List<Integer> compare1 = new ArrayList<>();
@@ -953,7 +938,7 @@ public class ObservableTest {
 
 		int count = 30;
 		for(int i = 0; i < count; i++) {
-			controller.add(i);
+			list.add(i);
 			switch (i % 3) {
 			case 0:
 				correct0.add(i);
@@ -971,7 +956,7 @@ public class ObservableTest {
 		}
 		for(int i = 0; i < count; i++) {
 			int value = i + 1;
-			controller.set(i, value);
+			list.set(i, value);
 			switch (i % 3) {
 			case 0:
 				correct0.remove(Integer.valueOf(i));
@@ -999,8 +984,8 @@ public class ObservableTest {
 			assertEquals(correct2, compare2);
 		}
 		for(int i = count - 1; i >= 0; i--) {
-			int value = controller.get(i);
-			controller.remove(Integer.valueOf(value));
+			int value = list.get(i);
+			list.remove(Integer.valueOf(value));
 			switch (value % 3) {
 			case 0:
 				correct0.remove(Integer.valueOf(value));
@@ -1022,7 +1007,6 @@ public class ObservableTest {
 	@Test
 	public void observableListFilterMap() {
 		ObservableArrayList<Integer> list = new ObservableArrayList<>(new Type(Integer.TYPE));
-		List<Integer> controller = list.control(null);
 		List<Integer> compare1 = new ArrayList<>();
 		List<Integer> correct = new ArrayList<>();
 		list.filterMap(value -> {
@@ -1048,19 +1032,19 @@ public class ObservableTest {
 		});
 
 		for(int i = 0; i < 30; i++) {
-			controller.add(i);
+			list.add(i);
 			if(i % 2 == 0)
 				correct.add(i / 2);
 			assertEquals(correct, compare1);
 		}
 		for(int i = 0; i < 30; i++) {
-			controller.add(i);
+			list.add(i);
 			if(i % 2 == 0)
 				correct.add(i / 2);
 			assertEquals(correct, compare1);
 		}
 		for(int i = 0; i < 30; i++) {
-			controller.remove(Integer.valueOf(i));
+			list.remove(Integer.valueOf(i));
 			if(i % 2 == 0)
 				correct.remove(Integer.valueOf(i / 2));
 			assertEquals(correct, compare1);
@@ -1070,13 +1054,12 @@ public class ObservableTest {
 	/** Tests {@link ObservableList#combine(ObservableValue, java.util.function.BiFunction)} */
 	@Test
 	public void observableListCombine() {
-		ObservableArrayList<Integer> set = new ObservableArrayList<>(new Type(Integer.TYPE));
+		ObservableArrayList<Integer> list = new ObservableArrayList<>(new Type(Integer.TYPE));
 		SimpleSettableValue<Integer> value1 = new SimpleSettableValue<>(Integer.TYPE, false);
 		value1.set(1, null);
-		List<Integer> controller = set.control(null);
 		List<Integer> compare1 = new ArrayList<>();
 		List<Integer> correct = new ArrayList<>();
-		set.combine(value1, (v1, v2) -> v1 * v2).filter(value -> value != null && value % 3 == 0).onElement(element -> {
+		list.combine(value1, (v1, v2) -> v1 * v2).filter(value -> value != null && value % 3 == 0).onElement(element -> {
 			OrderedObservableElement<Integer> listEl = (OrderedObservableElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
@@ -1095,7 +1078,7 @@ public class ObservableTest {
 		});
 
 		for(int i = 0; i < 30; i++) {
-			controller.add(i);
+			list.add(i);
 			int value = i * value1.get();
 			if(value % 3 == 0)
 				correct.add(value);
@@ -1124,7 +1107,7 @@ public class ObservableTest {
 		assertEquals(correct.size(), compare1.size());
 
 		for(int i = 0; i < 30; i++) {
-			controller.remove(Integer.valueOf(i));
+			list.remove(Integer.valueOf(i));
 			int value = i * value1.get();
 			if(value % 3 == 0)
 				correct.remove(Integer.valueOf(value));
@@ -1141,9 +1124,8 @@ public class ObservableTest {
 		ObservableArrayList<Integer> set3 = new ObservableArrayList<>(new Type(Integer.TYPE));
 		ObservableArrayList<ObservableList<Integer>> outer = new ObservableArrayList<>(new Type(ObservableList.class, new Type(
 			Integer.TYPE)));
-		List<ObservableList<Integer>> outerControl = outer.control(null);
-		outerControl.add(set1);
-		outerControl.add(set2);
+		outer.add(set1);
+		outer.add(set2);
 		ObservableList<Integer> flat = ObservableList.flatten(outer);
 		List<Integer> compare1 = new ArrayList<>();
 		List<Integer> filtered = new ArrayList<>();
@@ -1182,9 +1164,6 @@ public class ObservableTest {
 				}
 			});
 		});
-		List<Integer> controller1 = set1.control(null);
-		List<Integer> controller2 = set2.control(null);
-		List<Integer> controller3 = set3.control(null);
 
 		List<Integer> correct1 = new ArrayList<>();
 		List<Integer> correct2 = new ArrayList<>();
@@ -1193,9 +1172,9 @@ public class ObservableTest {
 		List<Integer> filteredCorrect = new ArrayList<>();
 
 		for(int i = 0; i < 30; i++) {
-			controller1.add(i);
-			controller2.add(i * 10);
-			controller3.add(i * 100);
+			set1.add(i);
+			set2.add(i * 10);
+			set3.add(i * 100);
 			correct1.add(i);
 			correct2.add(i * 10);
 			correct3.add(i * 100);
@@ -1217,7 +1196,7 @@ public class ObservableTest {
 			assertEquals(filteredCorrect.size(), filtered.size());
 		}
 
-		outerControl.add(set3);
+		outer.add(set3);
 		correct.clear();
 		correct.addAll(correct1);
 		correct.addAll(correct2);
@@ -1241,7 +1220,7 @@ public class ObservableTest {
 		assertEquals(filteredCorrect.size(), filtered.size());
 
 
-		outerControl.remove(set2);
+		outer.remove(set2);
 		correct.clear();
 		correct.addAll(correct1);
 		correct.addAll(correct3);
@@ -1261,9 +1240,9 @@ public class ObservableTest {
 		assertEquals(filteredCorrect.size(), filtered.size());
 
 		for(int i = 0; i < 30; i++) {
-			controller1.remove((Integer) i);
-			controller2.remove((Integer) (i * 10));
-			controller3.remove((Integer) (i * 100));
+			set1.remove((Integer) i);
+			set2.remove((Integer) (i * 10));
+			set3.remove((Integer) (i * 100));
 			correct1.remove((Integer) i);
 			correct2.remove((Integer) (i * 10));
 			correct3.remove((Integer) (i * 100));
@@ -1291,7 +1270,6 @@ public class ObservableTest {
 	@Test
 	public void observableListFind() {
 		ObservableArrayList<Integer> list = new ObservableArrayList<>(new Type(Integer.TYPE));
-		List<Integer> controller = list.control(null);
 		ObservableValue<Integer> found = list.find(value -> value % 3 == 0);
 		Integer [] received = new Integer[] {0};
 		found.act(value -> received[0] = value.getValue());
@@ -1300,14 +1278,14 @@ public class ObservableTest {
 		assertEquals(correct[0], received[0]);
 		assertEquals(correct[0], found.get());
 		for(int i = 1; i < 30; i++) {
-			controller.add(i);
+			list.add(i);
 			if(i % 3 == 0 && correct[0] == null)
 				correct[0] = i;
 			assertEquals(correct[0], received[0]);
 			assertEquals(correct[0], found.get());
 		}
 		for(int i = 1; i < 30; i++) {
-			controller.remove(Integer.valueOf(i));
+			list.remove(Integer.valueOf(i));
 			if(i % 3 == 0) {
 				correct[0] += 3;
 				if(correct[0] >= 30)
@@ -1323,7 +1301,6 @@ public class ObservableTest {
 	public void flattenListValues() {
 		ObservableArrayList<ObservableValue<Integer>> list = new ObservableArrayList<>(new Type(ObservableValue.class, new Type(
 			Integer.TYPE)));
-		List<ObservableValue<Integer>> listControl = list.control(null);
 		SimpleSettableValue<Integer> value1 = new SimpleSettableValue<>(Integer.TYPE, false);
 		value1.set(1, null);
 		SimpleSettableValue<Integer> value2 = new SimpleSettableValue<>(Integer.TYPE, false);
@@ -1334,7 +1311,7 @@ public class ObservableTest {
 		value4.set(4, null);
 		SimpleSettableValue<Integer> value5 = new SimpleSettableValue<>(Integer.TYPE, false);
 		value5.set(9, null);
-		listControl.addAll(java.util.Arrays.asList(value1, value2, value3, value4));
+		list.addAll(java.util.Arrays.asList(value1, value2, value3, value4));
 
 		Integer [] received = new Integer[1];
 		ObservableUtils.flattenListValues(new Type(Integer.TYPE), list).find(value -> value % 3 == 0).value()
@@ -1344,9 +1321,9 @@ public class ObservableTest {
 		assertEquals(null, received[0]);
 		value4.set(6, null);
 		assertEquals(Integer.valueOf(6), received[0]);
-		listControl.remove(value4);
+		list.remove(value4);
 		assertEquals(null, received[0]);
-		listControl.add(value5);
+		list.add(value5);
 		assertEquals(Integer.valueOf(9), received[0]);
 	}
 
@@ -1354,7 +1331,6 @@ public class ObservableTest {
 	@Test
 	public void sortedObservableList() {
 		ObservableArrayList<Integer> list = new ObservableArrayList<>(new Type(Integer.TYPE));
-		List<Integer> controller = list.control(null);
 
 		List<Integer> compare = new ArrayList<>();
 		ObservableOrderedCollection.sort(list, null).onElement(element -> {
@@ -1378,7 +1354,7 @@ public class ObservableTest {
 		List<Integer> correct = new ArrayList<>();
 
 		for(int i = 30; i >= 0; i--) {
-			controller.add(i);
+			list.add(i);
 			correct.add(i);
 		}
 
@@ -1386,7 +1362,7 @@ public class ObservableTest {
 		assertEquals(correct, compare);
 
 		for(int i = 30; i >= 0; i--) {
-			controller.remove((Integer) i);
+			list.remove((Integer) i);
 			correct.remove((Integer) i);
 
 			assertEquals(correct, compare);
@@ -1407,13 +1383,8 @@ public class ObservableTest {
 		ObservableArrayList<Integer> list2 = new ObservableArrayList<>(new Type(Integer.TYPE));
 		ObservableArrayList<Integer> list3 = new ObservableArrayList<>(new Type(Integer.TYPE));
 
-		List<ObservableList<Integer>> outerControl = outer.control(null);
-		List<Integer> control1 = list1.control(null);
-		List<Integer> control2 = list2.control(null);
-		List<Integer> control3 = list3.control(null);
-
-		outerControl.add(list1);
-		outerControl.add(list2);
+		outer.add(list1);
+		outer.add(list2);
 
 		ArrayList<Integer> compare = new ArrayList<>();
 		ArrayList<Integer> correct1 = new ArrayList<>();
@@ -1423,13 +1394,13 @@ public class ObservableTest {
 		// Add data before the subscription because subscribing to non-empty, indexed, flattened collections is complicated
 		for(int i = 0; i <= 30; i++) {
 			if(i % 3 == 1) {
-				control1.add(i);
+				list1.add(i);
 				correct1.add(i);
 			} else if(i % 3 == 0) {
-				control2.add(i);
+				list2.add(i);
 				correct2.add(i);
 			} else {
-				control3.add(i);
+				list3.add(i);
 				correct3.add(i);
 			}
 		}
@@ -1453,16 +1424,16 @@ public class ObservableTest {
 		});
 		assertEquals(join(comparator, correct1, correct2), compare);
 
-		outerControl.add(list3);
+		outer.add(list3);
 		assertEquals(join(comparator, correct1, correct2, correct3), compare);
 
-		outerControl.remove(list2);
+		outer.remove(list2);
 		assertEquals(join(comparator, correct1, correct3), compare);
 
-		control1.remove((Integer) 16);
+		list1.remove((Integer) 16);
 		correct1.remove((Integer) 16);
 		assertEquals(join(comparator, correct1, correct3), compare);
-		control1.add(control1.indexOf(19), 16);
+		list1.add(list1.indexOf(19), 16);
 		correct1.add(correct1.indexOf(19), 16);
 		assertEquals(join(comparator, correct1, correct3), compare);
 

@@ -3,7 +3,6 @@ package org.observe.datastruct.impl;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -15,7 +14,6 @@ import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.impl.ObservableHashSet;
 import org.observe.datastruct.ObservableMap;
-import org.observe.datastruct.ObservableMap.ObservableEntry;
 import org.observe.util.DefaultTransactable;
 import org.observe.util.Transaction;
 
@@ -86,7 +84,8 @@ public class ObservableHashMap<K, V> extends java.util.AbstractMap<K, V> impleme
 
 	private final ReentrantReadWriteLock theLock;
 	private final ObservableSet<ObservableEntry<K, V>> theEntries;
-	private final Set<ObservableEntry<K, V>> theEntryController;
+
+	private final ObservableSet<ObservableEntry<K, V>> theExposedEntries;
 
 	/**
 	 * @param keyType The type of key used by this map
@@ -100,7 +99,7 @@ public class ObservableHashMap<K, V> extends java.util.AbstractMap<K, V> impleme
 
 		theEntries = new ObservableHashSet<>(new Type(ObservableEntry.class, theKeyType, theKeyType), theLock,
 			theSessionController.getSession(), theSessionController);
-		theEntryController = ((ObservableHashSet<ObservableEntry<K, V>>) theEntries).control(null);
+		theExposedEntries = theEntries.immutable();
 	}
 
 	@Override
@@ -120,7 +119,7 @@ public class ObservableHashMap<K, V> extends java.util.AbstractMap<K, V> impleme
 
 	@Override
 	public ObservableSet<ObservableEntry<K, V>> observeEntries() {
-		return theEntries;
+		return theExposedEntries;
 	}
 
 	@Override
@@ -130,7 +129,7 @@ public class ObservableHashMap<K, V> extends java.util.AbstractMap<K, V> impleme
 
 	@Override
 	public ObservableSet<Map.Entry<K, V>> entrySet() {
-		return (ObservableSet<Map.Entry<K, V>>) (ObservableSet<? extends Map.Entry<K, V>>) theEntries;
+		return (ObservableSet<Map.Entry<K, V>>) (ObservableSet<? extends Map.Entry<K, V>>) theExposedEntries;
 	}
 
 	@Override
@@ -149,7 +148,7 @@ public class ObservableHashMap<K, V> extends java.util.AbstractMap<K, V> impleme
 			if(!found) {
 				DefaultMapEntry newEntry = new DefaultMapEntry(key);
 				newEntry.setValue(value);
-				theEntryController.add(newEntry);
+				theEntries.add(newEntry);
 			}
 			return found ? oldValue : null;
 		} finally {
@@ -164,7 +163,7 @@ public class ObservableHashMap<K, V> extends java.util.AbstractMap<K, V> impleme
 		try {
 			boolean found = false;
 			V oldValue = null;
-			Iterator<ObservableEntry<K, V>> entryIter = theEntryController.iterator();
+			Iterator<ObservableEntry<K, V>> entryIter = theEntries.iterator();
 			while(entryIter.hasNext()) {
 				DefaultMapEntry entry = (DefaultMapEntry) entryIter.next();
 				if(Objects.equals(entry.getKey(), key)) {
@@ -194,7 +193,7 @@ public class ObservableHashMap<K, V> extends java.util.AbstractMap<K, V> impleme
 				if(!found) {
 					DefaultMapEntry newEntry = new DefaultMapEntry(mEntry.getKey());
 					newEntry.setValue(mEntry.getValue());
-					theEntryController.add(newEntry);
+					theEntries.add(newEntry);
 				}
 			}
 		}

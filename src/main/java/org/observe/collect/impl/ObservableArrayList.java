@@ -1,13 +1,10 @@
 package org.observe.collect.impl;
 
-import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.Iterator;
-import java.util.List;
 import java.util.ListIterator;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 
@@ -18,7 +15,6 @@ import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableList;
 import org.observe.collect.ObservableRandomAccessList;
 import org.observe.collect.OrderedObservableElement;
-import org.observe.collect.TransactableList;
 import org.observe.util.DefaultTransactable;
 import org.observe.util.Transactable;
 import org.observe.util.Transaction;
@@ -26,10 +22,7 @@ import org.observe.util.Transaction;
 import prisms.lang.Type;
 
 /**
- * A list whose content can be observed. This list is immutable in that none of its methods, including {@link List} methods, can modify its
- * content (List modification methods will throw {@link UnsupportedOperationException}). To modify the list content, use
- * {@link #control(Consumer)} to obtain a list controller. This controller can be modified and these modifications will be reflected in this
- * list and will be propagated to subscribers.
+ * A list whose content can be observed.
  *
  * @param <E> The type of element in the list
  */
@@ -37,7 +30,6 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	private final Type theType;
 
 	private DefaultListInternals theInternals;
-	private AtomicBoolean hasIssuedController;
 
 	private ObservableValue<CollectionSession> theSessionObservable;
 
@@ -73,8 +65,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	public ObservableArrayList(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController) {
 		theType = type;
-		hasIssuedController = new AtomicBoolean(false);
-		theInternals = new DefaultListInternals(lock, hasIssuedController, write -> {
+		theInternals = new DefaultListInternals(lock, write -> {
 			if(write)
 				theModCount++;
 		});
@@ -92,12 +83,6 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 
 	@Override
 	public Transaction lock(boolean write, Object cause) {
-		if(hasIssuedController.get())
-			throw new IllegalStateException("Controlled default observable collections cannot be modified directly");
-		return startTransactionImpl(write, cause);
-	}
-
-	private Transaction startTransactionImpl(boolean write, Object cause) {
 		if(theSessionController == null) {
 			return () -> {
 			};
@@ -108,21 +93,6 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	@Override
 	public Type getType() {
 		return theType;
-	}
-
-	/**
-	 * Obtains the controller for this list. Once this is called, the observable list cannot be modified directly, but only through the
-	 * controller. Modification methods to this list after this call will throw an {@link IllegalStateException}. Only one call can be made
-	 * to this method. All calls after the first will throw an {@link IllegalStateException}.
-	 *
-	 * @param onSubscribe The listener to be notified when new subscriptions to this collection are made
-	 * @return The list to control this list's data.
-	 */
-	public TransactableList<E> control(Consumer<? super Consumer<? super ObservableElement<E>>> onSubscribe) {
-		if(hasIssuedController.getAndSet(true))
-			throw new IllegalStateException("This observable list is already controlled");
-		theInternals.setOnSubscribe(onSubscribe);
-		return new ObservableListController();
 	}
 
 	@Override
@@ -146,7 +116,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 		Object [] ret = new Object[1];
 		theInternals.doLocked(() -> {
 			ret[0] = theValues.get(index);
-		}, false, false);
+		}, false);
 		return (E) ret[0];
 	}
 
@@ -160,7 +130,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 		boolean [] ret = new boolean[1];
 		theInternals.doLocked(() -> {
 			ret[0] = theValues.contains(o);
-		}, false, false);
+		}, false);
 		return ret[0];
 	}
 
@@ -172,7 +142,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 			if(base.isPrimitive())
 				base = Type.getWrapperType(base);
 			ret[0] = theValues.toArray((E []) java.lang.reflect.Array.newInstance(base, theValues.size()));
-		}, false, false);
+		}, false);
 		return (E []) ret[0];
 	}
 
@@ -181,7 +151,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 		Object [][] ret = new Object[1][];
 		theInternals.doLocked(() -> {
 			ret[0] = theValues.toArray(a);
-		}, false, false);
+		}, false);
 		return (T []) ret[0];
 	}
 
@@ -190,7 +160,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 		int [] ret = new int[1];
 		theInternals.doLocked(() -> {
 			ret[0] = theValues.indexOf(o);
-		}, false, false);
+		}, false);
 		return ret[0];
 	}
 
@@ -199,7 +169,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 		int [] ret = new int[1];
 		theInternals.doLocked(() -> {
 			ret[0] = theValues.lastIndexOf(o);
-		}, false, false);
+		}, false);
 		return ret[0];
 	}
 
@@ -208,7 +178,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 		boolean [] ret = new boolean[1];
 		theInternals.doLocked(() -> {
 			ret[0] = theValues.containsAll(c);
-		}, false, false);
+		}, false);
 		return ret[0];
 	}
 
@@ -216,7 +186,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	public boolean add(E e) {
 		theInternals.doLocked(() -> {
 			addImpl(e);
-		}, true, true);
+		}, true);
 		return true;
 	}
 
@@ -225,7 +195,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 		boolean [] ret = new boolean[1];
 		theInternals.doLocked(() -> {
 			ret[0] = removeImpl(o);
-		}, true, false);
+		}, true);
 		return ret[0];
 	}
 
@@ -235,7 +205,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 			return false;
 		theInternals.doLocked(() -> {
 			addAllImpl(c);
-		}, true, false);
+		}, true);
 		return true;
 	}
 
@@ -245,7 +215,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 			return false;
 		theInternals.doLocked(() -> {
 			addAllImpl(index, c);
-		}, true, true);
+		}, true);
 		return true;
 	}
 
@@ -256,7 +226,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 		boolean [] ret = new boolean[] {false};
 		theInternals.doLocked(() -> {
 			ret[0] = removeAllImpl(c);
-		}, true, true);
+		}, true);
 		return ret[0];
 	}
 
@@ -270,7 +240,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 		boolean [] ret = new boolean[1];
 		theInternals.doLocked(() -> {
 			ret[0] = retainAllImpl(c);
-		}, true, true);
+		}, true);
 		return ret[0];
 	}
 
@@ -278,7 +248,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	public void clear() {
 		theInternals.doLocked(() -> {
 			clearImpl();
-		}, true, true);
+		}, true);
 	}
 
 	@Override
@@ -286,7 +256,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 		Object [] ret = new Object[1];
 		theInternals.doLocked(() -> {
 			ret[0] = setImpl(index, element);
-		}, true, true);
+		}, true);
 		return (E) ret[0];
 	}
 
@@ -294,7 +264,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	public void add(int index, E element) {
 		theInternals.doLocked(() -> {
 			addImpl(index, element);
-		}, true, true);
+		}, true);
 	}
 
 	@Override
@@ -302,7 +272,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 		Object [] ret = new Object[1];
 		theInternals.doLocked(() -> {
 			ret[0] = removeImpl(index);
-		}, true, true);
+		}, true);
 		return (E) ret[0];
 	}
 
@@ -327,7 +297,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	}
 
 	private void addAllImpl(Collection<? extends E> c) {
-		try (Transaction trans = startTransactionImpl(true, null)) {
+		try (Transaction trans = lock(true, null)) {
 			for(E e : c) {
 				E val = (E) theType.cast(e);
 				theValues.add(val);
@@ -339,7 +309,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	}
 
 	private void addAllImpl(int index, Collection<? extends E> c) {
-		try (Transaction trans = startTransactionImpl(true, null)) {
+		try (Transaction trans = lock(true, null)) {
 			int idx = index;
 			for(E e : c) {
 				E val = (E) theType.cast(e);
@@ -353,7 +323,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	}
 
 	private boolean removeAllImpl(Collection<?> c) {
-		try (Transaction trans = startTransactionImpl(true, null)) {
+		try (Transaction trans = lock(true, null)) {
 			boolean ret = false;
 			for(Object o : c) {
 				int idx = theValues.indexOf(o);
@@ -370,7 +340,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	}
 
 	private boolean retainAllImpl(Collection<?> c) {
-		try (Transaction trans = startTransactionImpl(true, null)) {
+		try (Transaction trans = lock(true, null)) {
 			boolean ret = false;
 			BitSet keep = new BitSet();
 			for(Object o : c) {
@@ -393,7 +363,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	}
 
 	private void clearImpl() {
-		try (Transaction trans = startTransactionImpl(true, null)) {
+		try (Transaction trans = lock(true, null)) {
 			theValues.clear();
 			ArrayList<InternalOrderedObservableElementImpl<E>> remove = new ArrayList<>();
 			remove.addAll(theElements);
@@ -436,158 +406,16 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 		ret.theElements = new ArrayList<>();
 		for(E el : ret.theValues)
 			ret.theElements.add(createElement(el));
-		ret.hasIssuedController = new AtomicBoolean(false);
-		ret.theInternals = ret.new DefaultListInternals(new ReentrantReadWriteLock(), ret.hasIssuedController, write -> {
+		ret.theInternals = ret.new DefaultListInternals(new ReentrantReadWriteLock(), write -> {
 			if(write)
 				theModCount++;
 		});
 		return ret;
 	}
 
-	private class ObservableListController extends AbstractList<E> implements TransactableList<E> {
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return startTransactionImpl(write, cause);
-		}
-
-		@Override
-		public int size() {
-			return ObservableArrayList.this.size();
-		}
-
-		@Override
-		public boolean contains(Object o) {
-			return ObservableArrayList.this.contains(o);
-		}
-
-		@Override
-		public Object [] toArray() {
-			return ObservableArrayList.this.toArray();
-		}
-
-		@Override
-		public <T> T [] toArray(T [] a) {
-			return ObservableArrayList.this.toArray(a);
-		}
-
-		@Override
-		public E get(int index) {
-			return ObservableArrayList.this.get(index);
-		}
-
-		@Override
-		public int indexOf(Object o) {
-			return ObservableArrayList.this.indexOf(o);
-		}
-
-		@Override
-		public int lastIndexOf(Object o) {
-			return ObservableArrayList.this.lastIndexOf(o);
-		}
-
-		@Override
-		public boolean containsAll(Collection<?> c) {
-			return ObservableArrayList.this.containsAll(c);
-		}
-
-		@Override
-		public boolean add(E e) {
-			theInternals.doLocked(() -> {
-				addImpl(e);
-			}, true, false);
-			return true;
-		}
-
-		@Override
-		public boolean remove(Object o) {
-			boolean [] ret = new boolean[1];
-			theInternals.doLocked(() -> {
-				ret[0] = removeImpl(o);
-			}, true, false);
-			return ret[0];
-		}
-
-		@Override
-		public boolean addAll(Collection<? extends E> c) {
-			if(c.isEmpty())
-				return false;
-			theInternals.doLocked(() -> {
-				addAllImpl(c);
-			}, true, false);
-			return true;
-		}
-
-		@Override
-		public boolean addAll(int index, Collection<? extends E> c) {
-			if(c.isEmpty())
-				return false;
-			theInternals.doLocked(() -> {
-				addAllImpl(index, c);
-			}, true, false);
-			return true;
-		}
-
-		@Override
-		public boolean removeAll(Collection<?> c) {
-			if(c.isEmpty())
-				return false;
-			boolean [] ret = new boolean[] {false};
-			theInternals.doLocked(() -> {
-				ret[0] = removeAllImpl(c);
-			}, true, false);
-			return ret[0];
-		}
-
-		@Override
-		public boolean retainAll(Collection<?> c) {
-			if(c.isEmpty()) {
-				boolean ret = !isEmpty();
-				clear();
-				return ret;
-			}
-			boolean [] ret = new boolean[1];
-			theInternals.doLocked(() -> {
-				ret[0] = retainAllImpl(c);
-			}, true, false);
-			return ret[0];
-		}
-
-		@Override
-		public void clear() {
-			theInternals.doLocked(() -> {
-				clearImpl();
-			}, true, false);
-		}
-
-		@Override
-		public E set(int index, E element) {
-			Object [] ret = new Object[1];
-			theInternals.doLocked(() -> {
-				ret[0] = setImpl(index, element);
-			}, true, false);
-			return (E) ret[0];
-		}
-
-		@Override
-		public void add(int index, E element) {
-			theInternals.doLocked(() -> {
-				addImpl(index, element);
-			}, true, false);
-		}
-
-		@Override
-		public E remove(int index) {
-			Object [] ret = new Object[1];
-			theInternals.doLocked(() -> {
-				ret[0] = removeImpl(index);
-			}, true, false);
-			return (E) ret[0];
-		}
-	}
-
 	private class DefaultListInternals extends DefaultCollectionInternals<E> {
-		DefaultListInternals(ReentrantReadWriteLock lock, AtomicBoolean issuedController, Consumer<? super Boolean> postAction) {
-			super(lock, issuedController, null, postAction);
+		DefaultListInternals(ReentrantReadWriteLock lock, Consumer<? super Boolean> postAction) {
+			super(lock, null, postAction);
 		}
 
 		@Override

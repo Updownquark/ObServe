@@ -3,7 +3,6 @@ package org.observe.collect.impl;
 import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
@@ -14,17 +13,14 @@ import org.observe.collect.ObservableElement;
 abstract class DefaultCollectionInternals<E> {
 	private final java.util.concurrent.ConcurrentHashMap<Consumer<? super ObservableElement<E>>, ConcurrentLinkedQueue<Subscription>> theObservers;
 	private final ReentrantReadWriteLock theLock;
-	private final AtomicBoolean hasIssuedController;
 	private Consumer<? super Consumer<? super ObservableElement<E>>> theOnSubscribe;
 
 	private final Consumer<? super Boolean> thePreAction;
 	private final Consumer<? super Boolean> thePostAction;
 
-	DefaultCollectionInternals(ReentrantReadWriteLock lock, AtomicBoolean issuedController, Consumer<? super Boolean> preAction,
-		Consumer<? super Boolean> postAction) {
+	DefaultCollectionInternals(ReentrantReadWriteLock lock, Consumer<? super Boolean> preAction, Consumer<? super Boolean> postAction) {
 		theObservers = new java.util.concurrent.ConcurrentHashMap<>();
 		theLock = lock;
-		hasIssuedController = issuedController;
 		thePreAction = preAction;
 		thePostAction = postAction;
 	}
@@ -40,11 +36,8 @@ abstract class DefaultCollectionInternals<E> {
 	/**
 	 * @param action The action to perform under a lock
 	 * @param write Whether to perform the action under a write lock or a read lock
-	 * @param errIfControlled Whether to throw an exception if this list is controlled
 	 */
-	void doLocked(Runnable action, boolean write, boolean errIfControlled) {
-		if(errIfControlled && hasIssuedController.get())
-			throw new IllegalStateException("Controlled default observable collections cannot be modified directly");
+	void doLocked(Runnable action, boolean write) {
 		Lock lock = write ? theLock.writeLock() : theLock.readLock();
 		lock.lock();
 		try {
@@ -67,7 +60,7 @@ abstract class DefaultCollectionInternals<E> {
 		doLocked(() -> {
 			for(InternalObservableElementImpl<E> el : getElements(forward))
 				onElement.accept(createExposedElement(el, subSubscriptions));
-		}, false, false);
+		}, false);
 		if(theOnSubscribe != null)
 			theOnSubscribe.accept(onElement);
 		return () -> {

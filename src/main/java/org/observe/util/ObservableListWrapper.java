@@ -26,6 +26,11 @@ public class ObservableListWrapper<T> implements ObservableList<T> {
 		theWrapped = wrap;
 	}
 
+	/** @return The list that this wrapper wraps */
+	protected ObservableList<T> getWrapped() {
+		return theWrapped;
+	}
+
 	@Override
 	public ObservableValue<CollectionSession> getSession() {
 		return theWrapped.getSession();

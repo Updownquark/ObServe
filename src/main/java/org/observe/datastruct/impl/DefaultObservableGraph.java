@@ -1,17 +1,15 @@
 package org.observe.datastruct.impl;
 
 import java.util.Collection;
-import java.util.List;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.observe.ObservableValue;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableList;
 import org.observe.collect.impl.ObservableArrayList;
 import org.observe.datastruct.ObservableGraph;
-import org.observe.datastruct.ObservableGraph.Edge;
-import org.observe.datastruct.ObservableGraph.Node;
 import org.observe.util.DefaultTransactable;
 import org.observe.util.Transaction;
 
@@ -80,11 +78,11 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E> {
 
 	private DefaultTransactable theSessionController;
 
-	private ObservableArrayList<Node<N, E>> theNodes;
-	private ObservableArrayList<Edge<N, E>> theEdges;
+	private ObservableList<Node<N, E>> theNodes;
+	private ObservableList<Edge<N, E>> theEdges;
 
-	private List<Node<N, E>> theNodeController;
-	private List<Edge<N, E>> theEdgeController;
+	private ObservableList<Node<N, E>> theNodeController;
+	private ObservableList<Edge<N, E>> theEdgeController;
 
 	/**
 	 * @param nodeType The type of values associated with nodes
@@ -95,12 +93,12 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E> {
 
 		theSessionController = new DefaultTransactable(theLock);
 
-		theNodes = new ObservableArrayList<>(new Type(Node.class, nodeType, edgeType), theLock, theSessionController.getSession(),
+		theNodeController = new ObservableArrayList<>(new Type(Node.class, nodeType, edgeType), theLock, theSessionController.getSession(),
 			theSessionController);
-		theNodeController = theNodes.control(null);
-		theEdges = new ObservableArrayList<>(new Type(Edge.class, nodeType, edgeType), theLock, theSessionController.getSession(),
+		theNodes = theNodeController.immutable();
+		theEdgeController = new ObservableArrayList<>(new Type(Edge.class, nodeType, edgeType), theLock, theSessionController.getSession(),
 			theSessionController);
-		theEdgeController = theEdges.control(null);
+		theEdges = theEdgeController.immutable();
 	}
 
 	@Override

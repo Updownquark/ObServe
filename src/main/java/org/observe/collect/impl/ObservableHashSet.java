@@ -1,12 +1,9 @@
 package org.observe.collect.impl;
 
-import java.util.AbstractSet;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 
@@ -16,7 +13,6 @@ import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableFastFindCollection;
 import org.observe.collect.ObservableSet;
-import org.observe.collect.TransactableSet;
 import org.observe.util.DefaultTransactable;
 import org.observe.util.Transactable;
 import org.observe.util.Transaction;
@@ -24,18 +20,13 @@ import org.observe.util.Transaction;
 import prisms.lang.Type;
 
 /**
- * A set whose content can be observed. This set is immutable in that none of its methods, including {@link Set} methods, can modify its
- * content (Set modification methods will throw {@link UnsupportedOperationException}). To modify the list content, use
- * {@link #control(Consumer)} to obtain a set controller. This controller can be modified and these modifications will be reflected in this
- * set and will be propagated to subscribers.
+ * A set whose content can be observed.
  *
  * @param <E> The type of element in the set
  */
 public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, ObservableFastFindCollection<E> {
 	private final Type theType;
 	private LinkedHashMap<E, InternalObservableElementImpl<E>> theValues;
-
-	private AtomicBoolean hasIssuedController;
 
 	private DefaultSetInternals theInternals;
 
@@ -66,8 +57,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 	public ObservableHashSet(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController) {
 		theType = type;
-		hasIssuedController = new AtomicBoolean(false);
-		theInternals = new DefaultSetInternals(lock, hasIssuedController);
+		theInternals = new DefaultSetInternals(lock);
 		theSessionObservable = session;
 		theSessionController = sessionController;
 
@@ -81,12 +71,6 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 
 	@Override
 	public Transaction lock(boolean write, Object cause) {
-		if(hasIssuedController.get())
-			throw new IllegalStateException("Controlled default observable collections cannot be modified directly");
-		return startTransactionImpl(write, cause);
-	}
-
-	private Transaction startTransactionImpl(boolean write, Object cause) {
 		if(theSessionController == null) {
 			return () -> {
 			};
@@ -97,21 +81,6 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 	@Override
 	public Type getType() {
 		return theType;
-	}
-
-	/**
-	 * Obtains the controller for this list. Once this is called, the observable set cannot be modified directly, but only through the
-	 * controller. Modification methods to this set after this call will throw an {@link IllegalStateException}. Only one call can be made
-	 * to this method. All calls after the first will throw an {@link IllegalStateException}.
-	 *
-	 * @param onSubscribe The listener to be notified when new subscriptions to this collection are made
-	 * @return The list to control this list's data.
-	 */
-	public TransactableSet<E> control(Consumer<? super Consumer<? super ObservableElement<E>>> onSubscribe) {
-		if(hasIssuedController.getAndSet(true))
-			throw new IllegalStateException("This observable set is already controlled");
-		theInternals.setOnSubscribe(onSubscribe);
-		return new ObservableSetController();
 	}
 
 	@Override
@@ -138,7 +107,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 				boolean [] ret = new boolean[1];
 				theInternals.doLocked(() -> {
 					ret[0] = backing.hasNext();
-				}, false, false);
+				}, false);
 				return ret[0];
 			}
 
@@ -147,13 +116,13 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 				Object [] ret = new Object[1];
 				theInternals.doLocked(() -> {
 					ret[0] = backing.next();
-				}, false, false);
+				}, false);
 				return (E) ret[0];
 			}
 
 			@Override
 			public void remove() {
-				throw new UnsupportedOperationException("Not Implemented");
+				theInternals.doLocked(() -> backing.remove(), true);
 			}
 		};
 	}
@@ -163,7 +132,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 		boolean [] ret = new boolean[1];
 		theInternals.doLocked(() -> {
 			ret[0] = theValues.containsKey(o);
-		}, false, false);
+		}, false);
 		return ret[0];
 	}
 
@@ -175,7 +144,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 			if(base.isPrimitive())
 				base = Type.getWrapperType(base);
 			ret[0] = theValues.keySet().toArray((E []) java.lang.reflect.Array.newInstance(base, theValues.size()));
-		}, false, false);
+		}, false);
 		return (E []) ret[0];
 	}
 
@@ -184,7 +153,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 		Object [][] ret = new Object[1][];
 		theInternals.doLocked(() -> {
 			ret[0] = theValues.keySet().toArray(a);
-		}, false, false);
+		}, false);
 		return (T []) ret[0];
 	}
 
@@ -193,7 +162,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 		boolean [] ret = new boolean[1];
 		theInternals.doLocked(() -> {
 			ret[0] = theValues.keySet().containsAll(c);
-		}, false, false);
+		}, false);
 		return ret[0];
 	}
 
@@ -202,7 +171,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 		boolean [] ret = new boolean[1];
 		theInternals.doLocked(() -> {
 			ret[0] = addImpl(e);
-		}, true, true);
+		}, true);
 		return ret[0];
 	}
 
@@ -211,7 +180,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 		boolean [] ret = new boolean[1];
 		theInternals.doLocked(() -> {
 			ret[0] = addAllImpl(c);
-		}, true, true);
+		}, true);
 		return ret[0];
 	}
 
@@ -220,7 +189,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 		boolean [] ret = new boolean[1];
 		theInternals.doLocked(() -> {
 			ret[0] = retainAllImpl(c);
-		}, true, true);
+		}, true);
 		return ret[0];
 	}
 
@@ -229,7 +198,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 		boolean [] ret = new boolean[1];
 		theInternals.doLocked(() -> {
 			ret[0] = removeImpl(o);
-		}, true, true);
+		}, true);
 		return ret[0];
 	}
 
@@ -238,7 +207,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 		boolean [] ret = new boolean[1];
 		theInternals.doLocked(() -> {
 			ret[0] = removeAllImpl(c);
-		}, true, true);
+		}, true);
 		return ret[0];
 	}
 
@@ -255,7 +224,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 	public void clear() {
 		theInternals.doLocked(() -> {
 			clearImpl();
-		}, true, true);
+		}, true);
 	}
 
 	private boolean removeImpl(Object o) {
@@ -321,128 +290,13 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 		ret.theValues = (LinkedHashMap<E, InternalObservableElementImpl<E>>) theValues.clone();
 		for(Map.Entry<E, InternalObservableElementImpl<E>> entry : theValues.entrySet())
 			entry.setValue(ret.createElement(entry.getKey()));
-		ret.hasIssuedController = new AtomicBoolean(false);
-		ret.theInternals = ret.new DefaultSetInternals(new ReentrantReadWriteLock(), hasIssuedController);
+		ret.theInternals = ret.new DefaultSetInternals(new ReentrantReadWriteLock());
 		return ret;
 	}
 
-	private class ObservableSetController extends AbstractSet<E> implements TransactableSet<E> {
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return startTransactionImpl(write, cause);
-		}
-
-		@Override
-		public Iterator<E> iterator() {
-			return new Iterator<E>() {
-				private Iterator<Map.Entry<E, InternalObservableElementImpl<E>>> backing = theValues.entrySet().iterator();
-
-				@Override
-				public boolean hasNext() {
-					boolean [] ret = new boolean[1];
-					theInternals.doLocked(() -> {
-						ret[0] = backing.hasNext();
-					}, false, false);
-					return ret[0];
-				}
-
-				@Override
-				public E next() {
-					Object [] ret = new Object[1];
-					theInternals.doLocked(() -> {
-						ret[0] = backing.next();
-					}, false, false);
-					return (E) ret[0];
-				}
-
-				@Override
-				public void remove() {
-					throw new UnsupportedOperationException("Not Implemented");
-				}
-			};
-		}
-
-		@Override
-		public int size() {
-			return ObservableHashSet.this.size();
-		}
-
-		@Override
-		public boolean contains(Object o) {
-			return ObservableHashSet.this.contains(o);
-		}
-
-		@Override
-		public boolean containsAll(Collection<?> c) {
-			return ObservableHashSet.this.containsAll(c);
-		}
-
-		@Override
-		public Object [] toArray() {
-			return ObservableHashSet.this.toArray();
-		}
-
-		@Override
-		public <T> T [] toArray(T [] a) {
-			return ObservableHashSet.this.toArray(a);
-		}
-
-		@Override
-		public boolean add(E e) {
-			boolean [] ret = new boolean[1];
-			theInternals.doLocked(() -> {
-				ret[0] = addImpl(e);
-			}, true, false);
-			return ret[0];
-		}
-
-		@Override
-		public boolean remove(Object o) {
-			boolean [] ret = new boolean[1];
-			theInternals.doLocked(() -> {
-				ret[0] = removeImpl(o);
-			}, true, false);
-			return ret[0];
-		}
-
-		@Override
-		public boolean removeAll(Collection<?> c) {
-			boolean [] ret = new boolean[1];
-			theInternals.doLocked(() -> {
-				ret[0] = removeAllImpl(c);
-			}, true, false);
-			return ret[0];
-		}
-
-		@Override
-		public boolean addAll(Collection<? extends E> c) {
-			boolean [] ret = new boolean[1];
-			theInternals.doLocked(() -> {
-				ret[0] = addAllImpl(c);
-			}, true, false);
-			return ret[0];
-		}
-
-		@Override
-		public boolean retainAll(Collection<?> c) {
-			boolean [] ret = new boolean[1];
-			theInternals.doLocked(() -> {
-				ret[0] = retainAllImpl(c);
-			}, true, false);
-			return ret[0];
-		}
-
-		@Override
-		public void clear() {
-			theInternals.doLocked(() -> {
-				clearImpl();
-			}, true, false);
-		}
-	}
-
 	private class DefaultSetInternals extends DefaultCollectionInternals<E> {
-		DefaultSetInternals(ReentrantReadWriteLock lock, AtomicBoolean issuedController) {
-			super(lock, issuedController, null, null);
+		DefaultSetInternals(ReentrantReadWriteLock lock) {
+			super(lock, null, null);
 		}
 
 		@Override
