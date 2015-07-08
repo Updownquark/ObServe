@@ -10,7 +10,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.observe.ObservableValue;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
-import org.observe.collect.ObservableList;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.impl.ObservableArrayList;
 import org.observe.collect.impl.ObservableHashSet;
@@ -27,14 +26,12 @@ import prisms.lang.Type;
  * @param <V> The type of values stored in this map
  */
 public class ObservableHashMultiMap<K, V> implements ObservableMultiMap<K, V> {
-	private class DefaultMultiMapEntry extends org.observe.util.ObservableListWrapper<V> implements ObservableMultiEntry<K, V> {
-		private final ObservableList<V> theController;
+	private class DefaultMultiMapEntry extends ObservableArrayList<V> implements ObservableMultiEntry<K, V> {
 
 		private final K theKey;
 
 		DefaultMultiMapEntry(K key) {
-			super(new ObservableArrayList<>(theValueType, theLock, theSessionController.getSession(), theSessionController));
-			theController = getWrapped();
+			super(theValueType, theLock, theSessionController.getSession(), theSessionController);
 			theKey = key;
 		}
 
@@ -54,15 +51,15 @@ public class ObservableHashMultiMap<K, V> implements ObservableMultiMap<K, V> {
 		}
 
 		private boolean addValue(V value) {
-			return theController.add(value);
+			return add(value);
 		}
 
 		private boolean addAllValues(Collection<? extends V> values) {
-			return theController.addAll(values);
+			return addAll(values);
 		}
 
 		private boolean removeValue(Object value) {
-			return theController.remove(value);
+			return remove(value);
 		}
 	}
 

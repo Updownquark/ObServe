@@ -267,4 +267,46 @@ public class ObservableUtils {
 	public static <T> ObservableValueEvent<T> wrap(ObservableValueEvent<? extends T> event, ObservableValue<T> wrapper) {
 		return wrapper.createEvent(event.getOldValue(), event.getValue(), event.getCause());
 	}
+
+	private static class ControllableObservableList<T> extends ObservableListWrapper<T> {
+		private volatile boolean isControlled;
+
+		public ControllableObservableList(ObservableList<T> wrap) {
+			super(wrap, false);
+		}
+
+		protected ObservableList<T> getController() {
+			if(isControlled)
+				throw new IllegalStateException("This list is already controlled");
+			isControlled=true;
+			return super.getWrapped();
+		}
+	}
+
+	/**
+	 * A mechanism for passing controllable lists to super constructors
+	 *
+	 * @param <T> The type of the list
+	 * @param list The list to control
+	 * @return A list that cannot be modified directly and for which a single call to {@link #getController(ObservableList)} will return a
+	 *         modifiable list, changes to which will be reflected in the return value
+	 */
+	public static <T> ObservableList<T> control(ObservableList<T> list) {
+		return new ControllableObservableList<>(list);
+	}
+
+	/**
+	 * Gets the controller for a list created by {@link #control(ObservableList)}
+	 * 
+	 * @param <T> The type of the list
+	 * @param controllableList The controllable list
+	 * @return The controller for the list
+	 * @throws IllegalArgumentException If the given list was not created by {@link #control(ObservableList)}
+	 * @throws IllegalStateException If the given list is already controlled
+	 */
+	public static <T> ObservableList<T> getController(ObservableList<T> controllableList) {
+		if(!(controllableList instanceof ControllableObservableList))
+			throw new IllegalArgumentException("This list is not controllable.  Use control(ObservableList) to create a controllable list");
+		return ((ControllableObservableList<T>) controllableList).getController();
+	}
 }

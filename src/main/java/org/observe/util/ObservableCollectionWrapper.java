@@ -14,14 +14,36 @@ import prisms.lang.Type;
 /**
  * Wraps an observable set
  *
- * @param <T> The type of the set
+ * @param <E> The type of the set
  */
-public class ObservableCollectionWrapper<T> implements ObservableCollection<T> {
-	private final ObservableCollection<T> theWrapped;
+public class ObservableCollectionWrapper<E> implements ObservableCollection<E> {
+	private final ObservableCollection<E> theWrapped;
 
-	/** @param wrap The set to wrap */
-	public ObservableCollectionWrapper(ObservableCollection<T> wrap) {
+	private final boolean isModifiable;
+
+	/** @param wrap The collection to wrap */
+	public ObservableCollectionWrapper(ObservableCollection<E> wrap) {
+		this(wrap, true);
+	}
+
+	/**
+	 * @param wrap The collection to wrap
+	 * @param modifiable Whether this collection can propagate modifications to the wrapped collection. If false, this collection will be
+	 *            immutable.
+	 */
+	public ObservableCollectionWrapper(ObservableCollection<E> wrap, boolean modifiable) {
 		theWrapped = wrap;
+		isModifiable = modifiable;
+	}
+
+	/** @return The collection that this wrapper wraps */
+	protected ObservableCollection<E> getWrapped() {
+		return theWrapped;
+	}
+
+	/** @return Whether this collection can be modified directly */
+	protected boolean isModifiable() {
+		return isModifiable;
 	}
 
 	@Override
@@ -40,7 +62,7 @@ public class ObservableCollectionWrapper<T> implements ObservableCollection<T> {
 	}
 
 	@Override
-	public Subscription onElement(java.util.function.Consumer<? super ObservableElement<T>> observer) {
+	public Subscription onElement(java.util.function.Consumer<? super ObservableElement<E>> observer) {
 		return theWrapped.onElement(observer);
 	}
 
@@ -60,12 +82,12 @@ public class ObservableCollectionWrapper<T> implements ObservableCollection<T> {
 	}
 
 	@Override
-	public Iterator<T> iterator() {
-		return theWrapped.iterator();
+	public boolean containsAll(Collection<?> c) {
+		return theWrapped.containsAll(c);
 	}
 
 	@Override
-	public T [] toArray() {
+	public E [] toArray() {
 		return theWrapped.toArray();
 	}
 
@@ -75,37 +97,67 @@ public class ObservableCollectionWrapper<T> implements ObservableCollection<T> {
 	}
 
 	@Override
-	public boolean add(T e) {
+	public Iterator<E> iterator() {
+		return new Iterator<E>() {
+			private final Iterator<E> backing = getWrapped().iterator();
+
+			@Override
+			public boolean hasNext() {
+				return backing.hasNext();
+			}
+
+			@Override
+			public E next() {
+				return backing.next();
+			}
+
+			@Override
+			public void remove() {
+				assertModifiable();
+				backing.remove();
+			}
+		};
+	}
+
+	/** Throws an {@link UnsupportedOperationException} if this collection is not {@link #isModifiable() modifiable} */
+	protected void assertModifiable() {
+		if(!isModifiable)
+			throw new UnsupportedOperationException("This collection is not modifiable");
+	}
+
+	@Override
+	public boolean add(E e) {
+		assertModifiable();
 		return theWrapped.add(e);
 	}
 
 	@Override
-	public boolean remove(Object o) {
-		return theWrapped.remove(o);
-	}
-
-	@Override
-	public boolean containsAll(Collection<?> c) {
-		return theWrapped.containsAll(c);
-	}
-
-	@Override
-	public boolean addAll(Collection<? extends T> c) {
+	public boolean addAll(Collection<? extends E> c) {
+		assertModifiable();
 		return theWrapped.addAll(c);
 	}
 
 	@Override
+	public boolean remove(Object o) {
+		assertModifiable();
+		return theWrapped.remove(o);
+	}
+
+	@Override
 	public boolean removeAll(Collection<?> c) {
+		assertModifiable();
 		return theWrapped.removeAll(c);
 	}
 
 	@Override
 	public boolean retainAll(Collection<?> c) {
+		assertModifiable();
 		return theWrapped.retainAll(c);
 	}
 
 	@Override
 	public void clear() {
+		assertModifiable();
 		theWrapped.clear();
 	}
 

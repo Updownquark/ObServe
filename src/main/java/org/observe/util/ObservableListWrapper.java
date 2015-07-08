@@ -1,178 +1,149 @@
 package org.observe.util;
 
 import java.util.Collection;
-import java.util.Iterator;
 import java.util.ListIterator;
 import java.util.function.Consumer;
 
-import org.observe.ObservableValue;
 import org.observe.Subscription;
-import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableList;
 import org.observe.collect.OrderedObservableElement;
-
-import prisms.lang.Type;
 
 /**
  * Wraps an observable list
  *
- * @param <T> The type of the list
+ * @param <E> The type of the list
  */
-public class ObservableListWrapper<T> implements ObservableList<T> {
-	private final ObservableList<T> theWrapped;
-
+public class ObservableListWrapper<E> extends ObservableOrderedCollectionWrapper<E> implements ObservableList<E> {
 	/** @param wrap The list to wrap */
-	public ObservableListWrapper(ObservableList<T> wrap) {
-		theWrapped = wrap;
+	public ObservableListWrapper(ObservableList<E> wrap) {
+		super(wrap, true);
+	}
+
+	/**
+	 * @param wrap The list to wrap
+	 * @param modifiable Whether this list can propagate modifications to the wrapped list. If false, this list will be immutable.
+	 */
+	public ObservableListWrapper(ObservableList<E> wrap, boolean modifiable) {
+		super(wrap, modifiable);
 	}
 
 	/** @return The list that this wrapper wraps */
-	protected ObservableList<T> getWrapped() {
-		return theWrapped;
+	@Override
+	protected ObservableList<E> getWrapped() {
+		return (ObservableList<E>) super.getWrapped();
 	}
 
 	@Override
-	public ObservableValue<CollectionSession> getSession() {
-		return theWrapped.getSession();
+	public Subscription onElementReverse(Consumer<? super OrderedObservableElement<E>> onElement) {
+		return getWrapped().onElementReverse(onElement);
 	}
 
 	@Override
-	public Transaction lock(boolean write, Object cause) {
-		return theWrapped.lock(write, cause);
-	}
-
-	@Override
-	public Type getType() {
-		return theWrapped.getType();
-	}
-
-	@Override
-	public int size() {
-		return theWrapped.size();
-	}
-
-	@Override
-	public boolean isEmpty() {
-		return theWrapped.isEmpty();
-	}
-
-	@Override
-	public boolean contains(Object o) {
-		return theWrapped.contains(o);
-	}
-
-	@Override
-	public Iterator<T> iterator() {
-		return theWrapped.iterator();
-	}
-
-	@Override
-	public T [] toArray() {
-		return theWrapped.toArray();
-	}
-
-	@Override
-	public <T2> T2 [] toArray(T2 [] a) {
-		return theWrapped.toArray(a);
-	}
-
-	@Override
-	public boolean add(T e) {
-		return theWrapped.add(e);
-	}
-
-	@Override
-	public boolean remove(Object o) {
-		return theWrapped.remove(o);
-	}
-
-	@Override
-	public boolean containsAll(Collection<?> c) {
-		return theWrapped.containsAll(c);
-	}
-
-	@Override
-	public boolean addAll(Collection<? extends T> c) {
-		return theWrapped.addAll(c);
-	}
-
-	@Override
-	public boolean removeAll(Collection<?> c) {
-		return theWrapped.removeAll(c);
-	}
-
-	@Override
-	public boolean retainAll(Collection<?> c) {
-		return theWrapped.retainAll(c);
-	}
-
-	@Override
-	public void clear() {
-		theWrapped.clear();
-	}
-
-	@Override
-	public Subscription onOrderedElement(java.util.function.Consumer<? super OrderedObservableElement<T>> observer) {
-		return theWrapped.onOrderedElement(observer);
-	}
-
-	@Override
-	public Subscription onElementReverse(Consumer<? super OrderedObservableElement<T>> onElement) {
-		return theWrapped.onElementReverse(onElement);
-	}
-
-	@Override
-	public boolean addAll(int index, Collection<? extends T> c) {
-		return theWrapped.addAll(c);
-	}
-
-	@Override
-	public T get(int index) {
-		return theWrapped.get(index);
-	}
-
-	@Override
-	public T set(int index, T element) {
-		return theWrapped.set(index, element);
-	}
-
-	@Override
-	public void add(int index, T element) {
-		theWrapped.add(index, element);
-	}
-
-	@Override
-	public T remove(int index) {
-		return theWrapped.remove(index);
+	public E get(int index) {
+		return getWrapped().get(index);
 	}
 
 	@Override
 	public int indexOf(Object o) {
-		return theWrapped.indexOf(o);
+		return getWrapped().indexOf(o);
 	}
 
 	@Override
 	public int lastIndexOf(Object o) {
-		return theWrapped.lastIndexOf(o);
+		return getWrapped().lastIndexOf(o);
 	}
 
 	@Override
-	public ListIterator<T> listIterator() {
-		return theWrapped.listIterator();
+	public void add(int index, E element) {
+		assertModifiable();
+		getWrapped().add(index, element);
 	}
 
 	@Override
-	public ListIterator<T> listIterator(int index) {
-		return theWrapped.listIterator(index);
+	public boolean addAll(int index, Collection<? extends E> c) {
+		assertModifiable();
+		return getWrapped().addAll(c);
 	}
 
 	@Override
-	public ObservableList<T> subList(int fromIndex, int toIndex) {
-		return theWrapped.subList(fromIndex, toIndex);
+	public E remove(int index) {
+		assertModifiable();
+		return getWrapped().remove(index);
+	}
+
+	@Override
+	public E set(int index, E element) {
+		assertModifiable();
+		return getWrapped().set(index, element);
+	}
+
+	@Override
+	public ListIterator<E> listIterator() {
+		return listIterator(0);
+	}
+
+	@Override
+	public ListIterator<E> listIterator(int index) {
+		return new ListIterator<E>() {
+			private final ListIterator<E> backing = getWrapped().listIterator(index);
+
+			@Override
+			public boolean hasNext() {
+				return backing.hasNext();
+			}
+
+			@Override
+			public E next() {
+				return backing.next();
+			}
+
+			@Override
+			public boolean hasPrevious() {
+				return backing.hasPrevious();
+			}
+
+			@Override
+			public E previous() {
+				return backing.previous();
+			}
+
+			@Override
+			public int nextIndex() {
+				return backing.nextIndex();
+			}
+
+			@Override
+			public int previousIndex() {
+				return backing.previousIndex();
+			}
+
+			@Override
+			public void remove() {
+				assertModifiable();
+				backing.remove();
+			}
+
+			@Override
+			public void set(E e) {
+				assertModifiable();
+				backing.set(e);
+			}
+
+			@Override
+			public void add(E e) {
+				assertModifiable();
+				backing.add(e);
+			}
+		};
+	}
+
+	@Override
+	public ObservableList<E> subList(int fromIndex, int toIndex) {
+		return new ObservableListWrapper<>(getWrapped().subList(fromIndex, toIndex), isModifiable());
 	}
 
 	@Override
 	public String toString() {
-		return theWrapped.toString();
+		return getWrapped().toString();
 	}
 }
