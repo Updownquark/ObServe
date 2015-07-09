@@ -24,14 +24,15 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 	private final Type theType;
 
 	private LinkedListInternals theInternals;
-
 	private ObservableValue<CollectionSession> theSessionObservable;
-
 	private Transactable theSessionController;
 
 	private LinkedNode theFirst;
-
 	private LinkedNode theLast;
+
+	private int theSize;
+	private LinkedNode theHighestIndexedFromFirst;
+	private LinkedNode theLowestIndextFromLast;
 
 	/**
 	 * Creates the list
@@ -201,52 +202,100 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 	@Override
 	public boolean add(E e) {
 		try (Transaction t = theInternals.lock(true)) {
-			LinkedNode newNode = createElement(e);
-			newNode.setPrevious(theLast);
+			addImpl(e, theLast);
+		}
+		return true;
+	}
+
+	private LinkedNode addImpl(E value, LinkedNode after) {
+		LinkedNode newNode = createElement(value);
+		newNode.setPrevious(after);
+		if(theLast == after)
 			theLast = newNode;
-			theInternals.fireNewElement(newNode);
+		if(after == null) {
+			newNode.setNext(theFirst);
+			theFirst = newNode;
+		} else {
+			newNode.setNext(after.getNext());
+			after.setNext(newNode);
+		}
+		theInternals.fireNewElement(newNode);
+
+		// TODO Indexing
+
+		return newNode;
+	}
+
+	@Override
+	public void add(int index, E element) {
+		try (Transaction t = theInternals.lock(true)) {
+			LinkedNode after = index == 0 ? null : getNodeAt(index - 1);
+			addImpl(element, after);
+		}
+	}
+
+	private LinkedNode getNodeAt(int index) {
+		if(index < 0 || index >= theSize)
+			throw new IndexOutOfBoundsException(index + " of " + theSize);
+		int i;
+		LinkedNode node;
+		Function<LinkedNode, LinkedNode> next;
+		int delta;
+		if(index <= theSize / 2) {
+			i = 0;
+			node = theFirst;
+			next = LinkedNode::getNext;
+			delta = 1;
+		} else {
+			i = theSize - 1;
+			node = theLast;
+			next = LinkedNode::getPrevious;
+			delta = -1;
+		}
+		while(i != index) {
+			node = next.apply(node);
+			i += delta;
+		}
+		return node;
+	}
+
+	@Override
+	public boolean addAll(Collection<? extends E> c) {
+		if(c.isEmpty())
+			return false;
+		try (Transaction t = lock(true, null)) {
+			for(E value : c)
+				addImpl(value, theLast);
 		}
 		return true;
 	}
 
 	@Override
-	public void add(int index, E element) {
-	}
-
-	@Override
-	public boolean addAll(Collection<? extends E> c) {
-		// TODO Auto-generated method stub
-		return PartialListImpl.super.addAll(c);
-	}
-
-	@Override
 	public boolean addAll(int index, Collection<? extends E> c) {
-		// TODO Auto-generated method stub
-		return PartialListImpl.super.addAll(index, c);
+		if(c.isEmpty())
+			return false;
+		try (Transaction t = lock(true, null)) {
+			LinkedNode after = theLast;
+			for(E value : c)
+				after = addImpl(value, after);
+		}
+		return true;
 	}
 
 	@Override
 	public boolean remove(Object o) {
-		// TODO Auto-generated method stub
-		return PartialListImpl.super.remove(o);
 	}
 
 	@Override
 	public E remove(int index) {
-		// TODO Auto-generated method stub
-		return PartialListImpl.super.remove(index);
 	}
 
 	@Override
 	public void removeRange(int fromIndex, int toIndex) {
-		// TODO Auto-generated method stub
-		PartialListImpl.super.removeRange(fromIndex, toIndex);
 	}
 
 	@Override
 	public boolean removeAll(Collection<?> coll) {
-		// TODO Auto-generated method stub
-		return PartialListImpl.super.removeAll(coll);
 	}
 
 	@Override
@@ -267,8 +316,13 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 
 	@Override
 	public void clear() {
-		// TODO Auto-generated method stub
-		PartialListImpl.super.clear();
+		try (Transaction t = lock(true, null)) {
+			LinkedNode node = theLast;
+			while(node != null) {
+				node.remove();
+				node = node.getPrevious();
+			}
+		}
 	}
 
 	@Override
@@ -277,9 +331,12 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 		return PartialListImpl.super.set(index, element);
 	}
 
-	private class LinkedNode extends InternalOrderedObservableElementImpl<E> {
+	private class LinkedNode extends InternalObservableElementImpl<E> {
 		private LinkedNode thePrevious;
 		private LinkedNode theNext;
+
+		private int theIndexFromFirst;
+		private int theIndexFromLast;
 
 		public LinkedNode(E value) {
 			super(ObservableLinkedList.this.getType(), value);
@@ -291,7 +348,6 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 
 		void setPrevious(LinkedNode previous) {
 			thePrevious = previous;
-			cacheIndex(thePrevious == null ? 0 : thePrevious.getCachedIndex(0), 0);
 		}
 
 		LinkedNode getNext() {
@@ -316,7 +372,8 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 				theFirst = theNext;
 			if(this == theLast)
 				theLast = thePrevious;
-			// TODO Set the removed index
+			theSize--;
+			// TODO Set the removed index, adjust indexes of theNext and thePrevious
 
 			super.remove();
 		}
