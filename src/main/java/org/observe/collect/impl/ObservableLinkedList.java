@@ -22,6 +22,15 @@ import org.observe.util.Transaction;
 
 import prisms.lang.Type;
 
+/**
+ * A list whose content can be observed. This list is a classic linked-type list with the following performance characteristics:
+ * <ul>
+ * <li><b>Access by index</b> Linear</li>
+ * <li><b>Addition and removal</b> Constant at the beginning or the end, linear for the middle</li>
+ * </ul>
+ *
+ * @param <E> The type of element in the list
+ */
 public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E> {
 	private final Type theType;
 
@@ -33,8 +42,10 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 	private LinkedNode theLast;
 
 	private int theSize;
-	private LinkedNode theHighestIndexedFromFirst;
-	private LinkedNode theLowestIndextFromLast;
+
+	LinkedNode theHighestIndexedFromFirst;
+
+	LinkedNode theLowestIndexedFromLast;
 
 	/**
 	 * Creates the list
@@ -432,6 +443,8 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 		private int theIndexFromFirst;
 		private int theIndexFromLast;
 
+		private boolean isRemoved;
+
 		public LinkedNode(E value) {
 			super(ObservableLinkedList.this.getType(), value);
 		}
@@ -440,51 +453,109 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 			return thePrevious;
 		}
 
-		void setPrevious(LinkedNode previous) {
-			thePrevious = previous;
-		}
-
 		LinkedNode getNext() {
 			return theNext;
 		}
 
-		void setNext(LinkedNode next) {
-			theNext = next;
+		int getIndex() {
+			if(isRemoved)
+				return theIndexFromFirst;
+			if(theIndexFromFirst < theHighestIndexedFromFirst.theIndexFromFirst || this == theHighestIndexedFromFirst)
+				return theIndexFromFirst;
+			else if(theIndexFromLast < theLowestIndexedFromLast.theIndexFromLast || this == theLowestIndexedFromLast)
+				return theSize - theIndexFromLast - 1;
+			// Don't know our index. Find it.
+			return cacheIndex();
 		}
 
-		int getIndex() {
-			// TODO
+		private int cacheIndex() {
+			int lowDiff = theIndexFromFirst - theHighestIndexedFromFirst.theIndexFromFirst;
+			int highDiff = theIndexFromLast - theLowestIndexedFromLast.theIndexFromLast;
+			while(true) {
+				// This loop *should* be safe, since we know we're an element in the collection and we're between the highest and lowest
+				// indexed elements. If this assumption does not hold (due to implementation errors in this list), this loop will just
+				// generate an NPE
+				if(lowDiff < highDiff) {
+					theHighestIndexedFromFirst.theNext.theIndexFromFirst = theHighestIndexedFromFirst.theIndexFromFirst + 1;
+					theHighestIndexedFromFirst = theHighestIndexedFromFirst.theNext;
+					if(this == theHighestIndexedFromFirst)
+						return theIndexFromFirst;
+					lowDiff++;
+				} else {
+					theLowestIndexedFromLast.thePrevious.theIndexFromLast = theLowestIndexedFromLast.theIndexFromLast + 1;
+					theLowestIndexedFromLast = theLowestIndexedFromLast.thePrevious;
+					if(this == theLowestIndexedFromLast)
+						return theIndexFromLast;
+					highDiff++;
+				}
+			}
 		}
 
 		void added(LinkedNode after) {
-			setPrevious(after);
+			thePrevious = after;
 			if(theLast == after)
 				theLast = this;
 			if(after == null) {
-				setNext(theFirst);
+				theNext = theFirst;
 				theFirst = this;
 			} else {
-				setNext(after.getNext());
-				after.setNext(this);
+				theNext = after.getNext();
+				after.theNext = this;
 			}
+			theSize++;
 			theInternals.fireNewElement(this);
 
-			// TODO Indexing
+			// Maintain cached indexes where possible
+			if(after != null) {
+				// For starters, assume we know where after is in relation to first and last. Adjust indexes accordingly.
+				theIndexFromFirst = after.theIndexFromFirst + 1;
+				theIndexFromLast = after.theIndexFromLast;
+				after.theIndexFromLast++;
 
+				if(theHighestIndexedFromFirst == after)
+					theHighestIndexedFromFirst = this;
+				else if(theIndexFromFirst < theHighestIndexedFromFirst.theIndexFromFirst)
+					theHighestIndexedFromFirst = this;
+
+				if(after.theIndexFromLast < theLowestIndexedFromLast.theIndexFromLast)
+					theLowestIndexedFromLast = after;
+			} else {
+				// Inserting at beginning
+				theIndexFromFirst = 0;
+				theIndexFromLast = theSize - 1;
+				theHighestIndexedFromFirst = this;
+				if(theLowestIndexedFromLast == theNext)
+					theLowestIndexedFromLast = this;
+			}
 		}
 
 		@Override
 		void remove() {
 			if(thePrevious != null)
-				thePrevious.setNext(theNext);
+				thePrevious.theNext = theNext;
 			if(theNext != null)
-				theNext.setPrevious(thePrevious);
+				theNext.thePrevious = thePrevious;
 			if(this == theFirst)
 				theFirst = theNext;
 			if(this == theLast)
 				theLast = thePrevious;
 			theSize--;
-			// TODO Set the removed index, adjust indexes of theNext and thePrevious
+			theIndexFromFirst = theIndexFromLast = getIndex();
+			isRemoved = true;
+
+			// Maintain cached indexes where possible
+			if(theIndexFromFirst <= theHighestIndexedFromFirst.theIndexFromFirst) {
+				if(thePrevious != null)
+					theHighestIndexedFromFirst = thePrevious;
+				else
+					theHighestIndexedFromFirst = theNext;
+			}
+			if(theIndexFromLast <= theLowestIndexedFromLast.theIndexFromLast) {
+				if(theNext != null)
+					theLowestIndexedFromLast = theNext;
+				else
+					theLowestIndexedFromLast = thePrevious;
+			}
 
 			super.remove();
 		}

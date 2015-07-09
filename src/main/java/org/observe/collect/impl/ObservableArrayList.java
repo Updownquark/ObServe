@@ -21,7 +21,11 @@ import org.observe.util.Transaction;
 import prisms.lang.Type;
 
 /**
- * A list whose content can be observed.
+ * A list whose content can be observed. This list is a classic array-type list with the following performance characteristics:
+ * <ul>
+ * <li><b>Access by index</b> Constant</li>
+ * <li><b>Addition and removal</b> Linear</li>
+ * </ul>
  *
  * @param <E> The type of element in the list
  */
