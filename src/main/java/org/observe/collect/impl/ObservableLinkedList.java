@@ -3,6 +3,8 @@ package org.observe.collect.impl;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
+import java.util.ListIterator;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
@@ -100,8 +102,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 
 	@Override
 	public int size() {
-		LinkedNode last = theLast;
-		return last == null ? 0 : last.getIndex();
+		return theSize;
 	}
 
 	@Override
@@ -142,27 +143,6 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 			}
 		}
 		return copy.isEmpty();
-	}
-
-	@Override
-	public int indexOf(Object o) {
-		try (Transaction t = theInternals.lock(false)) {
-			int i = 0;
-			LinkedNode node = theFirst;
-			while(node != null) {
-				if(Objects.equals(node.get(), o))
-					return i;
-				node = node.getNext();
-				i++;
-			}
-		}
-		return -1;
-	}
-
-	@Override
-	public int lastIndexOf(Object o) {
-		// TODO Auto-generated method stub
-		return PartialListImpl.super.lastIndexOf(o);
 	}
 
 	@Override
@@ -209,20 +189,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 
 	private LinkedNode addImpl(E value, LinkedNode after) {
 		LinkedNode newNode = createElement(value);
-		newNode.setPrevious(after);
-		if(theLast == after)
-			theLast = newNode;
-		if(after == null) {
-			newNode.setNext(theFirst);
-			theFirst = newNode;
-		} else {
-			newNode.setNext(after.getNext());
-			after.setNext(newNode);
-		}
-		theInternals.fireNewElement(newNode);
-
-		// TODO Indexing
-
+		newNode.added(after);
 		return newNode;
 	}
 
@@ -284,18 +251,40 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 
 	@Override
 	public boolean remove(Object o) {
+		try (Transaction t = theInternals.lock(true)) {
+			LinkedNode node = theFirst;
+			while(node != null && !Objects.equals(node.get(), o))
+				node = node.getNext();
+			if(node != null)
+				node.remove();
+			return node != null;
+		}
 	}
 
 	@Override
 	public E remove(int index) {
-	}
-
-	@Override
-	public void removeRange(int fromIndex, int toIndex) {
+		try (Transaction t = theInternals.lock(true)) {
+			LinkedNode node = getNodeAt(index);
+			E ret = node.get();
+			node.remove();
+			return ret;
+		}
 	}
 
 	@Override
 	public boolean removeAll(Collection<?> coll) {
+		boolean ret = false;
+		try (Transaction t = lock(true, null)) {
+			LinkedNode node = theFirst;
+			while(node != null) {
+				if(coll.contains(node.get())) {
+					ret = true;
+					node.remove();
+				}
+				node = node.getNext();
+			}
+		}
+		return ret;
 	}
 
 	@Override
@@ -327,8 +316,113 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 
 	@Override
 	public E set(int index, E element) {
-		// TODO Auto-generated method stub
-		return PartialListImpl.super.set(index, element);
+		try (Transaction t = theInternals.lock(true)) {
+			LinkedNode node = getNodeAt(index);
+			E ret = node.get();
+			node.set(element);
+			return ret;
+		}
+	}
+
+	@Override
+	public ListIterator<E> listIterator(int index) {
+		LinkedNode indexed;
+		try (Transaction t = theInternals.lock(false)) {
+			indexed = getNodeAt(index);
+		}
+		return new ListIterator<E>() {
+			private LinkedNode theNext = indexed;
+
+			private boolean isCursorBefore;
+
+			private boolean hasRemoved = true;
+
+			@Override
+			public boolean hasNext() {
+				if(theNext == null)
+					return false;
+				if(isCursorBefore && !hasRemoved)
+					return true;
+				else
+					return theNext.getNext() != null;
+			}
+
+			@Override
+			public E next() {
+				if(!hasNext())
+					throw new NoSuchElementException();
+				if(!isCursorBefore || hasRemoved)
+					theNext = theNext.getNext();
+				E ret = theNext.get();
+				isCursorBefore = false;
+				hasRemoved = false;
+				return ret;
+			}
+
+			@Override
+			public boolean hasPrevious() {
+				if(theNext == null)
+					return false;
+				if(!isCursorBefore && !hasRemoved)
+					return true;
+				else
+					return theNext.getPrevious() != null;
+			}
+
+			@Override
+			public E previous() {
+				if(!hasPrevious())
+					throw new NoSuchElementException();
+				if(isCursorBefore || hasRemoved)
+					theNext = theNext.getPrevious();
+				E ret = theNext.get();
+				isCursorBefore = true;
+				hasRemoved = false;
+				return ret;
+			}
+
+			@Override
+			public int nextIndex() {
+				int nextIndex = theNext.getIndex();
+				if(!isCursorBefore)
+					nextIndex++;
+				return nextIndex;
+			}
+
+			@Override
+			public int previousIndex() {
+				int prevIndex = theNext.getIndex();
+				if(isCursorBefore)
+					prevIndex--;
+				return prevIndex;
+			}
+
+			@Override
+			public void remove() {
+				if(hasRemoved)
+					throw new IllegalStateException("remove() may only be called (once) after next() or previous()");
+				hasRemoved = true;
+				try (Transaction t = theInternals.lock(true)) {
+					theNext.remove();
+				}
+			}
+
+			@Override
+			public void set(E e) {
+				if(hasRemoved)
+					throw new IllegalStateException("set() may only be called after next() or previous() and not after remove()");
+				theNext.set(e);
+			}
+
+			@Override
+			public void add(E e) {
+				if(hasRemoved)
+					throw new IllegalStateException("add() may only be called after next() or previous() and not after remove()");
+				try (Transaction t = theInternals.lock(true)) {
+					addImpl(e, theNext);
+				}
+			}
+		};
 	}
 
 	private class LinkedNode extends InternalObservableElementImpl<E> {
@@ -360,6 +454,23 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 
 		int getIndex() {
 			// TODO
+		}
+
+		void added(LinkedNode after) {
+			setPrevious(after);
+			if(theLast == after)
+				theLast = this;
+			if(after == null) {
+				setNext(theFirst);
+				theFirst = this;
+			} else {
+				setNext(after.getNext());
+				after.setNext(this);
+			}
+			theInternals.fireNewElement(this);
+
+			// TODO Indexing
+
 		}
 
 		@Override
@@ -420,12 +531,6 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 				@Override
 				public int getIndex() {
 					return orderedInternal.getIndex();
-					int index = orderedInternal.getCachedIndex(theModCount);
-					if(index < 0) {
-						cacheIndexes();
-						index = orderedInternal.getCachedIndex(theModCount);
-					}
-					return index;
 				}
 
 				@Override

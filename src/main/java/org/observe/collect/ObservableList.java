@@ -675,32 +675,26 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 		@Override
 		default int indexOf(Object o) {
-			ListIterator<E> it = listIterator();
-			if(o == null) {
-				while(it.hasNext())
-					if(it.next() == null)
-						return it.previousIndex();
-			} else {
-				while(it.hasNext())
-					if(o.equals(it.next()))
-						return it.previousIndex();
+			try (Transaction t = lock(false, null)) {
+				ListIterator<E> it = listIterator();
+				int i;
+				for(i = 0; it.hasNext(); i++)
+					if(Objects.equals(it.next(), o))
+						return i;
+				return -1;
 			}
-			return -1;
 		}
 
 		@Override
 		default int lastIndexOf(Object o) {
-			ListIterator<E> it = listIterator(size());
-			if(o == null) {
-				while(it.hasPrevious())
-					if(it.previous() == null)
-						return it.nextIndex();
-			} else {
-				while(it.hasPrevious())
-					if(o.equals(it.previous()))
-						return it.nextIndex();
+			try (Transaction t = lock(false, null)) {
+				ListIterator<E> it = listIterator(size());
+				int i;
+				for(i = size() - 1; it.hasPrevious(); i--)
+					if(Objects.equals(it.previous(), o))
+						return i;
+				return -1;
 			}
-			return -1;
 		}
 
 		@Override
@@ -715,14 +709,16 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 		@Override
 		default boolean addAll(int index, Collection<? extends E> c) {
-			if(index < 0 || index > size())
-				throw new IndexOutOfBoundsException("Index: " + index + ", Size: " + size());
-			boolean modified = false;
-			for(E e : c) {
-				add(index++, e);
-				modified = true;
+			try (Transaction t = lock(true, null)) {
+				if(index < 0 || index > size())
+					throw new IndexOutOfBoundsException("Index: " + index + ", Size: " + size());
+				boolean modified = false;
+				for(E e : c) {
+					add(index++, e);
+					modified = true;
+				}
+				return modified;
 			}
-			return modified;
 		}
 
 		@Override
@@ -749,10 +745,12 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		 * @param toIndex index after last element to be removed
 		 */
 		default void removeRange(int fromIndex, int toIndex) {
-			ListIterator<E> it = listIterator(fromIndex);
-			for(int i = 0, n = toIndex - fromIndex; i < n; i++) {
-				it.next();
-				it.remove();
+			try (Transaction t = lock(true, null)) {
+				ListIterator<E> it = listIterator(fromIndex);
+				for(int i = 0, n = toIndex - fromIndex; i < n; i++) {
+					it.next();
+					it.remove();
+				}
 			}
 		}
 	}
@@ -841,6 +839,73 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		@Override
 		public ObservableList<E> subList(int fromIndex, int toIndex) {
 			return new ObservableSubList<>(this, fromIndex, toIndex);
+		}
+
+		@Override
+		public ListIterator<E> listIterator(int index) {
+			int size = size();
+			if(index < 0 || index > size)
+				throw new IndexOutOfBoundsException(index + " of " + size);
+			return new ListIterator<E>() {
+				private final ListIterator<E> backing = theList.listIterator(theOffset + index);
+
+				private int theIndex = index;
+
+				@Override
+				public boolean hasNext() {
+					if(theIndex >= theSize)
+						return false;
+					return backing.hasNext();
+				}
+
+				@Override
+				public E next() {
+					if(theIndex >= theSize)
+						throw new NoSuchElementException();
+					theIndex++;
+					return backing.next();
+				}
+
+				@Override
+				public boolean hasPrevious() {
+					if(theIndex <= 0)
+						return false;
+					return backing.hasPrevious();
+				}
+
+				@Override
+				public E previous() {
+					if(theIndex <= 0)
+						throw new NoSuchElementException();
+					theIndex--;
+					return backing.previous();
+				}
+
+				@Override
+				public int nextIndex() {
+					return theIndex;
+				}
+
+				@Override
+				public int previousIndex() {
+					return theIndex - 1;
+				}
+
+				@Override
+				public void remove() {
+					backing.remove();
+				}
+
+				@Override
+				public void set(E e) {
+					backing.set(e);
+				}
+
+				@Override
+				public void add(E e) {
+					backing.add(e);
+				}
+			};
 		}
 
 		private void rangeCheck(int index) {

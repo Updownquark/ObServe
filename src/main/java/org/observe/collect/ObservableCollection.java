@@ -72,18 +72,26 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 	@Override
 	default boolean contains(Object o) {
-		for(Object value : this)
-			if(Objects.equals(value, o))
-				return true;
-		return false;
+		try (Transaction t = lock(false, null)) {
+			for(Object value : this)
+				if(Objects.equals(value, o))
+					return true;
+			return false;
+		}
 	}
 
 	@Override
 	default boolean containsAll(Collection<?> c) {
-		for(Object e : c)
-			if(!contains(e))
-				return false;
-		return true;
+		try (Transaction t = lock(false, null)) {
+			boolean modified = false;
+			Iterator<E> iter = iterator();
+			while(iter.hasNext())
+				if(c.contains(iter.next())) {
+					modified = true;
+					iter.remove();
+				}
+			return modified;
+		}
 	}
 
 	@Override
@@ -790,51 +798,54 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		@Override
 		default boolean addAll(Collection<? extends E> c) {
-			boolean modified = false;
-			for(E e : c)
-				if(add(e))
-					modified = true;
-			return modified;
+			try (Transaction t = lock(true, null)) {
+				boolean modified = false;
+				for(E e : c)
+					if(add(e))
+						modified = true;
+				return modified;
+			}
 		}
 
 		@Override
 		default boolean remove(Object o) {
-			Iterator<E> it = iterator();
-			if(o == null) {
+			try (Transaction t = lock(true, null)) {
+				Iterator<E> it = iterator();
 				while(it.hasNext()) {
-					if(it.next() == null) {
+					if(Objects.equals(it.next(), o)) {
 						it.remove();
 						return true;
 					}
 				}
-			} else {
-				while(it.hasNext()) {
-					if(o.equals(it.next())) {
-						it.remove();
-						return true;
-					}
-				}
+				return false;
 			}
-			return false;
 		}
 
 		@Override
 		default boolean removeAll(Collection<?> c) {
 			Objects.requireNonNull(c);
-			boolean modified = false;
-			Iterator<?> it = iterator();
-			while(it.hasNext()) {
-				if(c.contains(it.next())) {
-					it.remove();
-					modified = true;
+			if(c.isEmpty())
+				return false;
+			try (Transaction t = lock(false, null)) {
+				boolean modified = false;
+				Iterator<?> it = iterator();
+				while(it.hasNext()) {
+					if(c.contains(it.next())) {
+						it.remove();
+						modified = true;
+					}
 				}
+				return modified;
 			}
-			return modified;
 		}
 
 		@Override
 		default boolean retainAll(Collection<?> c) {
 			Objects.requireNonNull(c);
+			if(c.isEmpty()) {
+				clear();
+				return false;
+			}
 			boolean modified = false;
 			Iterator<E> it = iterator();
 			while(it.hasNext()) {
@@ -848,10 +859,12 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		@Override
 		default void clear() {
-			Iterator<E> it = iterator();
-			while(it.hasNext()) {
-				it.next();
-				it.remove();
+			try (Transaction t = lock(true, null)) {
+				Iterator<E> it = iterator();
+				while(it.hasNext()) {
+					it.next();
+					it.remove();
+				}
 			}
 		}
 	}
