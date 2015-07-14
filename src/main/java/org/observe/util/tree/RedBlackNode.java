@@ -230,8 +230,7 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 	}
 
 	/**
-	 * Replaces this node in the tree with the given node, orphaning this node. This method should <b>NEVER</b> be called from outside of
-	 * the {@link RedBlackNode} class.
+	 * Replaces this node in the tree with the given node, orphaning this node.
 	 *
 	 * @param node The node to replace this node in the tree
 	 */

@@ -110,6 +110,12 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 	@Override
 	protected abstract CountedRedBlackNode<E> createNode(E value);
 
+	/**
+	 * This should NEVER be called outside of the {@link CountedRedBlackNode} class, but may be overridden by subclasses if the super is
+	 * called.
+	 *
+	 * @param size The new size
+	 */
 	protected void setSize(int size) {
 		theSize = size;
 	}
@@ -209,7 +215,7 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 		return ret;
 	}
 
-	private static final int size(RedBlackNode node) {
+	public static final int size(RedBlackNode node) {
 		CountedRedBlackNode<?> counted = (CountedRedBlackNode<?>) node;
 		return node == null ? 0 : counted.theSize;
 	}
