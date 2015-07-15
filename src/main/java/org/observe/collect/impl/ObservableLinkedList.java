@@ -44,7 +44,6 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 	private int theSize;
 
 	LinkedNode theHighestIndexedFromFirst;
-
 	LinkedNode theLowestIndexedFromLast;
 
 	/**

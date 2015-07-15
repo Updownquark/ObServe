@@ -33,14 +33,11 @@ import prisms.lang.Type;
 public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableFastFindCollection<E> {
 	private final Type theType;
 
-	private final Comparator<? super E> theCompare;
-
 	private TreeSetInternals theInternals;
-
 	private ObservableValue<CollectionSession> theSessionObservable;
-
 	private Transactable theSessionController;
 
+	private final Comparator<? super E> theCompare;
 	private DefaultTreeMap<E, InternalElement> theValues;
 
 	private volatile int theModCount;

@@ -296,7 +296,7 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 		return addOnSide(node, compare < 0, replaceIfFound);
 	}
 
-	private static final boolean DEBUG = false;
+	private static final boolean SPECIAL_BALANCING = false;
 
 	protected TreeOpResult addOnSide(RedBlackNode node, boolean left, boolean replaceIfFound) {
 		RedBlackNode child = getChild(left);
@@ -313,7 +313,7 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 			r.theNewRoot = this;
 		}
 
-		if(!DEBUG) {
+		if(SPECIAL_BALANCING) {
 			// Rebalance after add
 			if(theParent == null) {
 				isRed = false; // Root is black
@@ -342,7 +342,7 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 				}
 			}
 		} else {
-			r.theNewRoot = node;
+			r.theNewRoot = fixAfterInsertion(this);
 			return r;
 		}
 	}
@@ -406,8 +406,8 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 	}
 
 	/** This is not used, but here for reference. It is the rebalancing code from {@link java.util.TreeMap}, refactored for RedBlackTree. */
-	private static RedBlackNode fixAfterInsertion(RedBlackNode root, RedBlackNode x) {
-		while(x != null && x != root && x.getParent().getParent() != null && x.getParent().isRed()) {
+	private static RedBlackNode fixAfterInsertion(RedBlackNode x) {
+		while(x != null && x.theParent != null && x.getParent().getParent() != null && x.getParent().isRed()) {
 			boolean parentLeft = x.getParent().getSide();
 			RedBlackNode y = x.getParent().getSibling();
 			if(y != null && y.isRed()) {
@@ -427,10 +427,9 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 				x.getParent().getParent().setRed(true);
 				x.getParent().getParent().rotate(!parentLeft);
 			}
-			root = root.getRoot();
 		}
-		root.setRed(false);
-		return root;
+		x.getRoot().setRed(false);
+		return x.getRoot();
 	}
 
 	private static RedBlackNode fixAfterDeletion(RedBlackNode node) {
@@ -583,7 +582,6 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 	}
 
 	public static <T> void test(ValuedRedBlackNode<T> tree, Iterable<T> nodes) {
-		ValuedRedBlackNode<T> node;
 		Iterator<T> iter = nodes.iterator();
 		iter.next(); // Skip the first value, assuming that's what's in the tree
 		System.out.println(print(tree));
@@ -591,11 +589,7 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 		while(iter.hasNext()) {
 			T value = iter.next();
 			System.out.println("Adding " + value);
-			node = (ValuedRedBlackNode<T>) tree.add(value, false).getNewRoot();
-			if(DEBUG)
-				tree = (ValuedRedBlackNode<T>) fixAfterInsertion(tree, node);
-			else
-				tree = node;
+			tree = (ValuedRedBlackNode<T>) tree.add(value, false).getNewRoot();
 			System.out.println(print(tree));
 			tree.checkValid();
 			System.out.println(" ---- ");

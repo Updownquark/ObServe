@@ -60,10 +60,14 @@ public class RedBlackTreeList<N extends CountedRedBlackNode<E>, E> extends Abstr
 
 	@Override
 	public Iterator<E> iterator() {
+		return iterator(true);
+	}
+
+	public Iterator<E> iterator(boolean forward) {
 		N root = theRoot;
 		if(root == null)
 			return java.util.Collections.EMPTY_LIST.iterator();
-		return iterator(getNodeAt(0), true);
+		return iterator(forward ? getNodeAt(0) : getLastNode(), forward);
 	}
 
 	public Iterator<E> iterator(N start, boolean forward) {
@@ -160,9 +164,33 @@ public class RedBlackTreeList<N extends CountedRedBlackNode<E>, E> extends Abstr
 	}
 
 	protected N addBefore(E element, N before) {
+		N newNode = createNode(element);
+		N left = (N) before.getLeft();
+		RedBlackNode.TreeOpResult result;
+		if(left == null)
+			result = before.addOnSide(newNode, true, true);
+		else {
+			while(left.getRight() != null)
+				left = (N) left.getRight();
+			result = left.addOnSide(newNode, false, true);
+		}
+		theRoot = (N) result.getNewRoot();
+		return newNode;
 	}
 
 	protected N addAfter(E element, N after) {
+		N newNode = createNode(element);
+		N right = (N) after.getRight();
+		RedBlackNode.TreeOpResult result;
+		if(right == null)
+			result = after.addOnSide(newNode, false, true);
+		else {
+			while(right.getLeft() != null)
+				right = (N) right.getLeft();
+			result = right.addOnSide(newNode, true, true);
+		}
+		theRoot = (N) result.getNewRoot();
+		return newNode;
 	}
 
 	@Override
