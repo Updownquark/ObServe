@@ -823,10 +823,9 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		@Override
 		default boolean removeAll(Collection<?> c) {
-			Objects.requireNonNull(c);
 			if(c.isEmpty())
 				return false;
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = lock(true, null)) {
 				boolean modified = false;
 				Iterator<?> it = iterator();
 				while(it.hasNext()) {
@@ -841,20 +840,21 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		@Override
 		default boolean retainAll(Collection<?> c) {
-			Objects.requireNonNull(c);
 			if(c.isEmpty()) {
 				clear();
 				return false;
 			}
-			boolean modified = false;
-			Iterator<E> it = iterator();
-			while(it.hasNext()) {
-				if(!c.contains(it.next())) {
-					it.remove();
-					modified = true;
+			try (Transaction t = lock(true, null)) {
+				boolean modified = false;
+				Iterator<E> it = iterator();
+				while(it.hasNext()) {
+					if(!c.contains(it.next())) {
+						it.remove();
+						modified = true;
+					}
 				}
+				return modified;
 			}
-			return modified;
 		}
 
 		@Override

@@ -240,70 +240,12 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 	}
 
 	@Override
-	public boolean remove(Object o) {
-		try (Transaction t = theInternals.lock(true)) {
-			Iterator<InternalElement> iter = theElements.iterator();
-			while(iter.hasNext()) {
-				if(Objects.equals(iter.next().get(), o)) {
-					iter.remove();
-					return true;
-				}
-			}
-			return false;
-		}
-	}
-
-	@Override
 	public E remove(int index) {
 		try (Transaction t = theInternals.lock(true)) {
 			InternalElement node = theElements.get(index);
 			E ret = node.get();
 			node.remove();
 			return ret;
-		}
-	}
-
-	@Override
-	public boolean removeAll(Collection<?> coll) {
-		boolean ret = false;
-		try (Transaction t = lock(true, null)) {
-			InternalElement node = theFirst;
-			while(node != null) {
-				if(coll.contains(node.get())) {
-					ret = true;
-					node.remove();
-				}
-				node = node.getNext();
-			}
-		}
-		return ret;
-	}
-
-	@Override
-	public boolean retainAll(Collection<?> coll) {
-		boolean ret = false;
-		try (Transaction t = lock(true, null)) {
-			InternalElement node = theFirst;
-			while(node != null) {
-				if(!coll.contains(node.get())) {
-					ret = true;
-					node.remove();
-				}
-				node = node.getNext();
-			}
-		}
-		return ret;
-	}
-
-	@Override
-	public void clear() {
-		try (Transaction t = lock(true, null)) {
-			Iterator<InternalElement> iter = theElements.iterator(false);
-			while(iter.hasNext()) {
-				InternalElement el = iter.next();
-				iter.remove();
-				el.remove();
-			}
 		}
 	}
 
