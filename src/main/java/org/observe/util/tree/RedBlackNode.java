@@ -3,7 +3,12 @@ package org.observe.util.tree;
 import java.util.Iterator;
 import java.util.Map;
 
+/**
+ * A node in a red/black binary tree structure. This class does all the work of keeping itself balanced and has hooks that allow specialized
+ * tree structures to achieve optimal performance without worrying about balancing.
+ */
 public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneable {
+	/** Returned from {@link RedBlackNode#add(RedBlackNode, boolean)} to provide information about the result of the add operation */
 	public static class TreeOpResult {
 		private RedBlackNode theFoundNode;
 
@@ -17,14 +22,24 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 			theNewRoot = root;
 		}
 
+		/** @return The node that was found in the tree that was equivalent to the given node. May be null if no equivalent node was found. */
 		public RedBlackNode getFoundNode() {
 			return theFoundNode;
 		}
 
+		/**
+		 * @return The node that is now in the tree that is equivalent to the given node. May be identical to the given node or to the
+		 *         {@link #getFoundNode() found node}.
+		 */
 		public RedBlackNode getNewNode() {
 			return theNewNode;
 		}
 
+		/**
+		 * Due to balancing rotation operations or replacement, the root of the tree may have changed as a result of the tree addition.
+		 *
+		 * @return The new root for the tree structure
+		 */
 		public RedBlackNode getNewRoot() {
 			return theNewRoot;
 		}
@@ -38,18 +53,22 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 
 	private RedBlackNode theRight;
 
+	/** Creates a node */
 	public RedBlackNode() {
 		isRed = true;
 	}
 
+	/** @return Whether this node is red or black */
 	public boolean isRed() {
 		return isRed;
 	}
 
+	/** @return The parent of this node in the tree structure. Will be null if and only if this node is the root (or an orphan). */
 	public RedBlackNode getParent() {
 		return theParent;
 	}
 
+	/** @return The root of the tree structure that this node exists in */
 	public RedBlackNode getRoot() {
 		RedBlackNode ret = this;
 		while(ret.getParent() != null)
@@ -57,6 +76,7 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 		return ret;
 	}
 
+	/** Runs debugging checks on this tree structure to assure that all internal constraints are currently met. */
 	public final void checkValid() {
 		if(theParent != null)
 			throw new IllegalStateException("checkValid() may only be called on the root");
@@ -66,13 +86,27 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 		checkValid(initValidationProperties());
 	}
 
+	/**
+	 * Called by {@link #checkValid()}. May be overridden by subclasses to provide more validation initialization information
+	 *
+	 * @return A map containing mutable properties that may be used to ensure validation of the structure
+	 */
 	protected Map<String, Object> initValidationProperties() {
 		Map<String, Object> ret = new java.util.LinkedHashMap<>();
 		ret.put("black-depth", 0);
 		return ret;
 	}
 
+	/**
+	 * Called by {@link #checkValid()}. May be overridden by subclasses to check internal constraints specific to the subclassed node.
+	 *
+	 * @param properties The validation properties to use to check validity
+	 */
 	protected void checkValid(java.util.Map<String, Object> properties) {
+		if(theLeft != null && theLeft.theParent != this)
+			throw new IllegalStateException("(" + this + "): left (" + theLeft + ")'s parent is not this");
+		if(theRight != null && theRight.theParent != this)
+			throw new IllegalStateException("(" + this + "): right (" + theRight + ")'s parent is not this");
 		Integer blackDepth = (Integer) properties.get("black-depth");
 		if(isRed) {
 			if((theLeft != null && theLeft.isRed) || (theRight != null && theRight.isRed))
@@ -90,6 +124,12 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 		}
 	}
 
+	/**
+	 * A specialized and low-performance version of {@link #getRoot()} that avoids infinite loops which may occur if called on nodes in the
+	 * middle of an operation. Mostly for debugging.
+	 *
+	 * @return The root of this tree structure, as far as can be reached from this node without a cycle
+	 */
 	public RedBlackNode getRootNoCycles() {
 		return getRootNoCycles(new java.util.LinkedHashSet<>());
 	}
@@ -100,10 +140,12 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 		return theParent.getRootNoCycles(visited);
 	}
 
+	/** @return The child node that is on the left of this node */
 	public RedBlackNode getLeft() {
 		return theLeft;
 	}
 
+	/** @return The child node that is on the right of this node */
 	public RedBlackNode getRight() {
 		return theRight;
 	}
@@ -111,6 +153,7 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 	@Override
 	public abstract int compareTo(RedBlackNode node);
 
+	/** @return Whether this node is on the right or the left of its parent. False for the root. */
 	public boolean getSide() {
 		if(theParent == null)
 			return false;
@@ -119,17 +162,28 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 		return false;
 	}
 
+	/**
+	 * @param left Whether to get the left or right child
+	 * @return The left or right child of this node
+	 */
 	public RedBlackNode getChild(boolean left) {
 		return left ? theLeft : theRight;
 	}
 
+	/** @return The other child of this node's parent. Null if the parent is null. */
 	public RedBlackNode getSibling() {
-		if(theParent.getLeft() == this)
+		if(theParent == null)
+			return null;
+		else if(theParent.getLeft() == this)
 			return theParent.getRight();
 		else
 			return theParent.getLeft();
 	}
 
+	/**
+	 * @param finder The compare operation to use to find the node. Must obey the ordering used to construct this structure.
+	 * @return The node in this structure for which finder.compareTo(node)==0, or null if no such node exists.
+	 */
 	public RedBlackNode find(Comparable<RedBlackNode> finder) {
 		int compare = finder.compareTo(this);
 		if(compare == 0)
@@ -141,6 +195,14 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 			return null;
 	}
 
+	/**
+	 * Finds the node in this tree that is closest to {@code finder.compareTo(node)==0)}.
+	 *
+	 * @param finder The compare operation to use to find the node. Must obey the ordering used to construct this structure.
+	 * @param lesser Wh
+	 * @param withExact
+	 * @return
+	 */
 	public RedBlackNode findClosest(Comparable<RedBlackNode> finder, boolean lesser, boolean withExact) {
 		return findClosest(finder, lesser, withExact, null);
 	}
@@ -158,6 +220,7 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 			return found;
 	}
 
+	/** @return The number of nodes in this structure (this node plus all its descendants) */
 	public int getSize() {
 		int ret = 1;
 		if(theLeft != null)
@@ -221,7 +284,8 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 	}
 
 	/**
-	 * Sets this node's color. This method should <b>NEVER</b> be called from outside of the {@link RedBlackNode} class.
+	 * Sets this node's color. This method should <b>NEVER</b> be called from outside of the {@link RedBlackNode} class, but may be
+	 * overridden by subclasses if the super is called with the argument.
 	 *
 	 * @param red Whether this node will be red or black
 	 */
@@ -251,9 +315,9 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 
 	/**
 	 * Causes this node to switch places in the tree with the given node. This method should <b>NEVER</b> be called from outside of the
-	 * {@link RedBlackNode} class.
+	 * {@link RedBlackNode} class, but may be overridden by subclasses if the super is called with the argument.
 	 *
-	 * @param node
+	 * @param node The node to switch places with
 	 */
 	protected void switchWith(RedBlackNode node) {
 		boolean thisRed = isRed;
@@ -270,6 +334,13 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 		node.setParent(temp);
 	}
 
+	/**
+	 * Performs a rotation for balancing. This method should <b>NEVER</b> be called from outside of the {@link RedBlackNode} class, but may
+	 * be overridden by subclasses if the super is called with the argument.
+	 *
+	 * @param left Whether to rotate left or right
+	 * @return The new parent of this node
+	 */
 	protected RedBlackNode rotate(boolean left) {
 		RedBlackNode oldChild = getChild(!left);
 		RedBlackNode newChild = oldChild.getChild(left);
@@ -296,6 +367,7 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 		return addOnSide(node, compare < 0, replaceIfFound);
 	}
 
+	/** A new implementation of balancing, which causes errors if not called from {@link #add(RedBlackNode, boolean)} on the root. */
 	private static final boolean SPECIAL_BALANCING = false;
 
 	protected TreeOpResult addOnSide(RedBlackNode node, boolean left, boolean replaceIfFound) {
@@ -347,6 +419,11 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 		}
 	}
 
+	/**
+	 * Removes this node from it structure, rebalancing if necessary
+	 *
+	 * @return The new root of this node's structure
+	 */
 	protected RedBlackNode delete() {
 		if(theLeft != null && theRight != null) {
 			RedBlackNode successor = getClosest(false);
@@ -380,6 +457,10 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 		}
 	}
 
+	/**
+	 * @param left Whether to get the closest node on the left or right
+	 * @return The closest (in value) node to this node on one side or the other
+	 */
 	public RedBlackNode getClosest(boolean left) {
 		RedBlackNode child = getChild(left);
 		if(child != null) {
