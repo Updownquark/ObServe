@@ -4,11 +4,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.ListIterator;
-import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 import org.observe.ObservableValue;
 import org.observe.Subscription;
@@ -19,7 +17,6 @@ import org.observe.collect.OrderedObservableElement;
 import org.observe.util.DefaultTransactable;
 import org.observe.util.Transactable;
 import org.observe.util.Transaction;
-import org.observe.util.tree.CountedRedBlackNode;
 import org.observe.util.tree.CountedRedBlackNode.DefaultNode;
 import org.observe.util.tree.RedBlackTreeList;
 
@@ -41,7 +38,7 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 	private ObservableValue<CollectionSession> theSessionObservable;
 	private Transactable theSessionController;
 
-	private final RedBlackTreeList<CountedRedBlackNode<InternalElement>, InternalElement> theElements;
+	private final RedBlackTreeList<DefaultNode<InternalElement>, InternalElement> theElements;
 
 	private volatile int theModCount;
 
@@ -127,23 +124,16 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 	@Override
 	public E get(int index) {
 		try (Transaction t = theInternals.lock(false)) {
-			LinkedNode node = theFirst;
-			for(int i = 0; i < index && node != null; i++)
-				node = node.getNext();
-			if(node == null)
-				throw new IndexOutOfBoundsException();
-			return node.get();
+			return theElements.get(index).get();
 		}
 	}
 
 	@Override
 	public boolean contains(Object o) {
 		try (Transaction t = theInternals.lock(false)) {
-			LinkedNode node = theFirst;
-			while(node != null) {
-				if(Objects.equals(node.get(), o))
+			for(InternalElement el : theElements) {
+				if(Objects.equals(el.get(), o))
 					return true;
-				node = node.getNext();
 			}
 		}
 		return false;
@@ -155,45 +145,39 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 		if(copy.isEmpty())
 			return true;
 		try (Transaction t = theInternals.lock(false)) {
-			LinkedNode node = theFirst;
-			while(node != null && !copy.isEmpty()) {
-				copy.remove(node.get());
-				node = node.getNext();
-			}
+			for(InternalElement el : theElements)
+				copy.remove(el.get());
 		}
 		return copy.isEmpty();
 	}
 
 	@Override
 	public Iterator<E> iterator() {
-		return iterate(theFirst, LinkedNode::getNext);
+		return iterate(true);
 	}
 
 	@Override
 	public Iterable<E> descending() {
-		return () -> iterate(theLast, LinkedNode::getPrevious);
+		return () -> iterate(false);
 	}
 
-	private Iterator<E> iterate(LinkedNode node, Function<LinkedNode, LinkedNode> next) {
+	private Iterator<E> iterate(boolean forward) {
 		return new Iterator<E>() {
-			private LinkedNode theNext;
-			private LinkedNode thePassed;
+			private Iterator<InternalElement> backing = theElements.iterator(forward);
 
 			@Override
 			public boolean hasNext() {
-				return theNext != null;
+				return backing.hasNext();
 			}
 
 			@Override
 			public E next() {
-				thePassed = theNext;
-				theNext = next.apply(theNext);
-				return thePassed.get();
+				return backing.next().get();
 			}
 
 			@Override
 			public void remove() {
-				thePassed.remove();
+				backing.remove();
 			}
 		};
 	}
@@ -201,49 +185,31 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 	@Override
 	public boolean add(E e) {
 		try (Transaction t = theInternals.lock(true)) {
-			addImpl(e, theLast);
+			addAfter(e, theElements.getLastNode());
 		}
 		return true;
 	}
 
-	private LinkedNode addImpl(E value, LinkedNode after) {
-		LinkedNode newNode = createElement(value);
-		newNode.added(after);
+	private InternalElement addBefore(E value, DefaultNode<InternalElement> before) {
+		InternalElement newNode = createElement(value);
+		newNode.setNode(theElements.addBefore(newNode, before));
+		theInternals.fireNewElement(newNode);
 		return newNode;
+	}
+
+	private DefaultNode<InternalElement> addAfter(E value, DefaultNode<InternalElement> after) {
+		InternalElement newNode = createElement(value);
+		newNode.setNode(theElements.addAfter(newNode, after));
+		theInternals.fireNewElement(newNode);
+		return newNode.getNode();
 	}
 
 	@Override
 	public void add(int index, E element) {
 		try (Transaction t = theInternals.lock(true)) {
-			LinkedNode after = index == 0 ? null : getNodeAt(index - 1);
-			addImpl(element, after);
+			InternalElement after = index == 0 ? null : theElements.get(index - 1);
+			addAfter(element, after.getNode());
 		}
-	}
-
-	private InternalElement getNodeAt(int index) {
-		if(index < 0 || index >= theElements.size())
-			throw new IndexOutOfBoundsException(index + " of " + theElements.size());
-		int i;
-		InternalElement node;
-		Function<InternalElement, InternalElement> next;
-		int delta;
-		int size = theElements.size();
-		if(index <= size / 2) {
-			i = 0;
-			node = theFirst;
-			next = LinkedNode::getNext;
-			delta = 1;
-		} else {
-			i = theSize - 1;
-			node = theLast;
-			next = LinkedNode::getPrevious;
-			delta = -1;
-		}
-		while(i != index) {
-			node = next.apply(node);
-			i += delta;
-		}
-		return node;
 	}
 
 	@Override
@@ -252,7 +218,7 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 			return false;
 		try (Transaction t = lock(true, null)) {
 			for(E value : c)
-				addImpl(value, theLast);
+				addAfter(value, theElements.getLastNode());
 		}
 		return true;
 	}
@@ -262,9 +228,13 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 		if(c.isEmpty())
 			return false;
 		try (Transaction t = lock(true, null)) {
-			LinkedNode after = theLast;
+			DefaultNode<InternalElement> after;
+			if(index == 0)
+				after = null;
+			else
+				after = theElements.getNodeAt(0);
 			for(E value : c)
-				after = addImpl(value, after);
+				after = addAfter(value, after);
 		}
 		return true;
 	}
@@ -272,19 +242,21 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 	@Override
 	public boolean remove(Object o) {
 		try (Transaction t = theInternals.lock(true)) {
-			LinkedNode node = theFirst;
-			while(node != null && !Objects.equals(node.get(), o))
-				node = node.getNext();
-			if(node != null)
-				node.remove();
-			return node != null;
+			Iterator<InternalElement> iter = theElements.iterator();
+			while(iter.hasNext()) {
+				if(Objects.equals(iter.next().get(), o)) {
+					iter.remove();
+					return true;
+				}
+			}
+			return false;
 		}
 	}
 
 	@Override
 	public E remove(int index) {
 		try (Transaction t = theInternals.lock(true)) {
-			LinkedNode node = getNodeAt(index);
+			InternalElement node = theElements.get(index);
 			E ret = node.get();
 			node.remove();
 			return ret;
@@ -295,7 +267,7 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 	public boolean removeAll(Collection<?> coll) {
 		boolean ret = false;
 		try (Transaction t = lock(true, null)) {
-			LinkedNode node = theFirst;
+			InternalElement node = theFirst;
 			while(node != null) {
 				if(coll.contains(node.get())) {
 					ret = true;
@@ -311,7 +283,7 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 	public boolean retainAll(Collection<?> coll) {
 		boolean ret = false;
 		try (Transaction t = lock(true, null)) {
-			LinkedNode node = theFirst;
+			InternalElement node = theFirst;
 			while(node != null) {
 				if(!coll.contains(node.get())) {
 					ret = true;
@@ -338,7 +310,7 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 	@Override
 	public E set(int index, E element) {
 		try (Transaction t = theInternals.lock(true)) {
-			InternalElement el = getNodeAt(index);
+			InternalElement el = theElements.get(index);
 			E ret = el.get();
 			el.set(element);
 			return ret;
@@ -347,101 +319,65 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 
 	@Override
 	public ListIterator<E> listIterator(int index) {
-		LinkedNode indexed;
-		try (Transaction t = theInternals.lock(false)) {
-			indexed = getNodeAt(index);
-		}
 		return new ListIterator<E>() {
-			private LinkedNode theNext = indexed;
+			private ListIterator<InternalElement> backing = theElements.listIterator(index);
 
-			private boolean isCursorBefore;
+			private InternalElement theLast;
 
-			private boolean hasRemoved = true;
+			private boolean lastWasNext;
 
 			@Override
 			public boolean hasNext() {
-				if(theNext == null)
-					return false;
-				if(isCursorBefore && !hasRemoved)
-					return true;
-				else
-					return theNext.getNext() != null;
+				return backing.hasNext();
 			}
 
 			@Override
 			public E next() {
-				if(!hasNext())
-					throw new NoSuchElementException();
-				if(!isCursorBefore || hasRemoved)
-					theNext = theNext.getNext();
-				E ret = theNext.get();
-				isCursorBefore = false;
-				hasRemoved = false;
-				return ret;
+				theLast = backing.next();
+				lastWasNext = true;
+				return theLast.get();
 			}
 
 			@Override
 			public boolean hasPrevious() {
-				if(theNext == null)
-					return false;
-				if(!isCursorBefore && !hasRemoved)
-					return true;
-				else
-					return theNext.getPrevious() != null;
+				return backing.hasPrevious();
 			}
 
 			@Override
 			public E previous() {
-				if(!hasPrevious())
-					throw new NoSuchElementException();
-				if(isCursorBefore || hasRemoved)
-					theNext = theNext.getPrevious();
-				E ret = theNext.get();
-				isCursorBefore = true;
-				hasRemoved = false;
-				return ret;
+				theLast = backing.previous();
+				lastWasNext = false;
+				return theLast.get();
 			}
 
 			@Override
 			public int nextIndex() {
-				int nextIndex = theNext.getIndex();
-				if(!isCursorBefore)
-					nextIndex++;
-				return nextIndex;
+				return backing.nextIndex();
 			}
 
 			@Override
 			public int previousIndex() {
-				int prevIndex = theNext.getIndex();
-				if(isCursorBefore)
-					prevIndex--;
-				return prevIndex;
+				return backing.previousIndex();
 			}
 
 			@Override
 			public void remove() {
-				if(hasRemoved)
-					throw new IllegalStateException("remove() may only be called (once) after next() or previous()");
-				hasRemoved = true;
-				try (Transaction t = theInternals.lock(true)) {
-					theNext.remove();
-				}
+				backing.remove();
+				theLast.remove();
+				theLast = null;
 			}
 
 			@Override
 			public void set(E e) {
-				if(hasRemoved)
-					throw new IllegalStateException("set() may only be called after next() or previous() and not after remove()");
-				theNext.set(e);
+				theLast.set(e);
 			}
 
 			@Override
 			public void add(E e) {
-				if(hasRemoved)
-					throw new IllegalStateException("add() may only be called after next() or previous() and not after remove()");
-				try (Transaction t = theInternals.lock(true)) {
-					addImpl(e, theNext);
-				}
+				if(lastWasNext)
+					addBefore(e, theLast.getNode());
+				else
+					addAfter(e, theLast.getNode());
 			}
 		};
 	}
@@ -451,6 +387,10 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 
 		InternalElement(Type type, E value) {
 			super(type, value);
+		}
+
+		DefaultNode<InternalElement> getNode() {
+			return theNode;
 		}
 
 		void setNode(DefaultNode<InternalElement> node) {

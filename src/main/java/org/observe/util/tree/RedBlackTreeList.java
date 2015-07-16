@@ -70,7 +70,14 @@ public class RedBlackTreeList<N extends CountedRedBlackNode<E>, E> extends Abstr
 		return iterator(forward ? getNodeAt(0) : getLastNode(), forward);
 	}
 
-	public Iterator<E> iterator(N start, boolean forward) {
+	public Iterator<N> nodeIterator(boolean forward) {
+		N root = theRoot;
+		if(root == null)
+			return java.util.Collections.EMPTY_LIST.iterator();
+		return nodeIterator(getNodeAt(0), forward);
+	}
+
+	private Iterator<E> iterator(N start, boolean forward) {
 		return new Iterator<E>() {
 			private final Iterator<N> backing = nodeIterator(start, forward);
 
@@ -91,7 +98,7 @@ public class RedBlackTreeList<N extends CountedRedBlackNode<E>, E> extends Abstr
 		};
 	}
 
-	public Iterator<N> nodeIterator(N start, boolean forward) {
+	private Iterator<N> nodeIterator(N start, boolean forward) {
 		return new Iterator<N>() {
 			private N theLastNode = null;
 
@@ -163,7 +170,7 @@ public class RedBlackTreeList<N extends CountedRedBlackNode<E>, E> extends Abstr
 		return !c.isEmpty();
 	}
 
-	protected N addBefore(E element, N before) {
+	public N addBefore(E element, N before) {
 		N newNode = createNode(element);
 		N left = (N) before.getLeft();
 		RedBlackNode.TreeOpResult result;
@@ -178,7 +185,7 @@ public class RedBlackTreeList<N extends CountedRedBlackNode<E>, E> extends Abstr
 		return newNode;
 	}
 
-	protected N addAfter(E element, N after) {
+	public N addAfter(E element, N after) {
 		N newNode = createNode(element);
 		N right = (N) after.getRight();
 		RedBlackNode.TreeOpResult result;

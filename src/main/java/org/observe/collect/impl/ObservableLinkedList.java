@@ -252,7 +252,8 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 		if(c.isEmpty())
 			return false;
 		try (Transaction t = lock(true, null)) {
-			LinkedNode after = theLast;
+			LinkedNode after = getNodeAt(index);
+			after = after.getPrevious();
 			for(E value : c)
 				after = addImpl(value, after);
 		}
