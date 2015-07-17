@@ -8,6 +8,13 @@ import java.util.function.Function;
 
 import org.observe.util.tree.RedBlackNode.ValuedRedBlackNode;
 
+/**
+ * A red/black node containing a value which also keeps track of the size of the tree structure under each node. This makes insertions and
+ * deletions slightly more expensive (still O(log(n))), but makes size() operations O(1) and getIndex() operations O(log(n)) instead of O(n)
+ * for both.
+ *
+ * @param <E> The type of value in this node
+ */
 public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 	private int theSize;
 
@@ -15,6 +22,7 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 
 	private int theTransaction;
 
+	/** @param value The value for the node */
 	public CountedRedBlackNode(E value) {
 		super(value);
 		theSize = 1;
@@ -25,6 +33,7 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 		return theSize;
 	}
 
+	/** @return The number of nodes stored before this node in the tree */
 	public int getIndex() {
 		CountedRedBlackNode<E> node = this;
 		int ret = size(node.getLeft());
@@ -38,7 +47,11 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 		return ret;
 	}
 
-	public int getIndex(Comparable<RedBlackNode> finder) {
+	/**
+	 * @param finder The finder to find the node to get the index of
+	 * @return The number of nodes stored before the found node in the tree, or -1 if the given node is not found
+	 */
+	public int getIndex(Comparable<? super CountedRedBlackNode<E>> finder) {
 		CountedRedBlackNode<E> node = this;
 		int compare = finder.compareTo(node);
 		int ret = 0;
@@ -147,7 +160,7 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 	@Override
 	protected RedBlackNode setChild(RedBlackNode child, boolean left) {
 		RedBlackNode oldChild = super.setChild(child, left);
-		adjustSize(size(child) - size(oldChild));
+		adjustSize(size((CountedRedBlackNode<?>) child) - size((CountedRedBlackNode<?>) oldChild));
 		return oldChild;
 	}
 
@@ -215,14 +228,27 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 		return ret;
 	}
 
-	public static final int size(RedBlackNode node) {
-		CountedRedBlackNode<?> counted = (CountedRedBlackNode<?>) node;
+	/**
+	 * @param node The node to get the size of
+	 * @return The size of the given node, or 0 if the node is null
+	 */
+	public static final int size(CountedRedBlackNode<?> node) {
+		CountedRedBlackNode<?> counted = node;
 		return node == null ? 0 : counted.theSize;
 	}
 
+	/**
+	 * A simple counted node implementation
+	 *
+	 * @param <E> The type of value for the node
+	 */
 	public static class DefaultNode<E> extends CountedRedBlackNode<E> {
 		private Comparator<? super E> theCompare;
 
+		/**
+		 * @param value The value for the node
+		 * @param compare The comparator to compare node values with
+		 */
 		public DefaultNode(E value, Comparator<? super E> compare) {
 			super(value);
 			theCompare = compare;
@@ -239,6 +265,12 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 		}
 	}
 
+	/**
+	 * A tree set of counted nodes that improves performance for some operations and adds the ability to get the index of a value
+	 *
+	 * @param <E> The type of values to store in the set
+	 * @param <N> The sub-type of nodes used to store the data
+	 */
 	public static abstract class CountedRedBlackTreeSet<E, N extends CountedRedBlackNode<E>> implements RedBlackTreeSet<E, N> {
 		private N theRoot;
 
@@ -252,8 +284,12 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 			theRoot = root;
 		}
 
+		/**
+		 * @param value The value to get the index for
+		 * @return The number of values in this set less than the given value
+		 */
 		public int indexOf(E value){
-			return getRoot().getIndex(node->((CountedRedBlackNode<E>) node).compare(value, ((CountedRedBlackNode<E>) node).getValue()));
+			return getRoot().getIndex(node->node.compare(value, node.getValue()));
 		}
 
 		@Override
@@ -280,6 +316,7 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 		 * The sub set type used by {@link CountedRedBlackNode.CountedRedBlackTreeSet}
 		 *
 		 * @param <E> The type of elements in the set
+		 * @param <V> the type of values in the sub set
 		 */
 		public static class MappedSubSet<E, V> extends RedBlackTreeSet.MappedSubSet<E, V> {
 			MappedSubSet(CountedRedBlackTreeSet<E, ?> tree, Function<? super E, V> outMap, Function<? super V, E> inMap, boolean reverse,
@@ -303,7 +340,19 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 			}
 		}
 
+		/**
+		 * @param <E> The type of value in the set
+		 * @param <N> The sub-type of node in the set
+		 */
 		public static class NodeSet<E, N extends CountedRedBlackNode<E>> extends RedBlackTreeSet.NodeSet<E, N> {
+			/**
+			 * @param set The tree set to wrap
+			 * @param reversed Whether to return nodes in reverse of the ordering of the set's values
+			 * @param min The minimum value for the node set
+			 * @param minInclusive Whether the node for the minimum value is included in the node set
+			 * @param max The maximum value for the node set
+			 * @param maxInclusive Whether the node for the maximum value is included in the node set
+			 */
 			public NodeSet(CountedRedBlackTreeSet<E, N> set, boolean reversed, E min, boolean minInclusive, E max, boolean maxInclusive) {
 				super(set, reversed, min, minInclusive, max, maxInclusive);
 			}
@@ -320,6 +369,13 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 		}
 	}
 
+	/**
+	 * A tree map of counted nodes that improves performance for some operations and adds the ability to get the index of a key
+	 *
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 * @param <N> The type of nodes used to store the data
+	 */
 	public static abstract class CountedRedBlackTreeMap<K, V, N extends CountedRedBlackNode<Map.Entry<K, V>>> implements
 	RedBlackTreeMap<K, V, N>, Cloneable {
 		private N theRoot;
@@ -334,10 +390,14 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 			theRoot = root;
 		}
 
+		/**
+		 * @param key The key to get the index of
+		 * @return The number of keys in this map less than the given key
+		 */
 		public int indexOfKey(K key) {
 			return getRoot().getIndex(
-				node -> ((CountedRedBlackNode<Entry<K, V>>) node).compare(keyEntry(key),
-					((CountedRedBlackNode<Entry<K, V>>) node).getValue()));
+				node -> node.compare(keyEntry(key),
+					node.getValue()));
 		}
 
 		@Override
@@ -372,9 +432,17 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 			return ret;
 		}
 
+		/**
+		 * Implements {@link CountedRedBlackNode.CountedRedBlackTreeMap#entrySet()}
+		 *
+		 * @param <K> The key type of the map
+		 * @param <V> The value type of the map
+		 * @param <N> The sub-type of node storing the values
+		 */
 		public static class EntrySet<K, V, N extends CountedRedBlackNode<Entry<K, V>>> extends CountedRedBlackTreeSet<Entry<K, V>, N> {
 			private final CountedRedBlackTreeMap<K, V, N> theMap;
 
+			/** @param map The map to represent the entries of */
 			public EntrySet(CountedRedBlackTreeMap<K, V, N> map) {
 				theMap = map;
 			}
@@ -390,8 +458,8 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 			}
 
 			@Override
-			public N createRoot(java.util.Map.Entry<K, V> value) {
-				return theMap.createRoot(value.getKey(), value.getValue());
+			public N createNode(java.util.Map.Entry<K, V> value) {
+				return theMap.createNode(value.getKey(), value.getValue());
 			}
 
 			@Override
@@ -400,13 +468,41 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 			}
 		}
 
+		/**
+		 * Implements {@link CountedRedBlackNode.CountedRedBlackTreeMap#keySet()}
+		 *
+		 * @param <K> The key type of the map
+		 * @param <V> The value type of the map
+		 */
 		public static class KeySet<K, V> extends CountedRedBlackTreeSet.MappedSubSet<Entry<K, V>, K> {
+			/**
+			 * @param map The map to create the key set for
+			 * @param reverse Whether to reverse the map's keys
+			 * @param minKey The key to bound the map on the low side
+			 * @param includeMin Whether to include the fromKey in the key set
+			 * @param maxKey The key bound the map on the high side
+			 * @param includeMax Whether to include the endKey in the key set
+			 */
 			public KeySet(CountedRedBlackTreeMap<K, V, ?> map, boolean reverse, K minKey, boolean includeMin, K maxKey, boolean includeMax) {
 				super(map.entrySet(), Entry::getKey, map::createEntry, reverse, minKey, includeMin, maxKey, includeMax);
 			}
 		}
 
+		/**
+		 * Implements {@link CountedRedBlackNode.CountedRedBlackTreeMap#getSubMap(boolean, Object, boolean, Object, boolean)}
+		 *
+		 * @param <K> The key type of the map
+		 * @param <V> The value type of the map
+		 */
 		public static class SubMap<K, V> extends RedBlackTreeMap.SubMap<K, V> {
+			/**
+			 * @param map The map to sub-map
+			 * @param reversed Whether to reverse the map's keys
+			 * @param minKey The key to bound the map on the low side
+			 * @param minInclusive Whether to include the fromKey in the sub-map
+			 * @param maxKey The key bound the map on the high side
+			 * @param maxInclusive Whether to include the endKey in the sub-map
+			 */
 			public SubMap(CountedRedBlackTreeMap<K, V, ?> map, boolean reversed, K minKey, boolean minInclusive, K maxKey,
 				boolean maxInclusive) {
 				super(map, reversed, minKey, minInclusive, maxKey, maxInclusive);
@@ -429,9 +525,15 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 		}
 	}
 
+	/**
+	 * A default implementation of the counted tree set
+	 *
+	 * @param <E> The type of values in the set
+	 */
 	public static class DefaultTreeSet<E> extends CountedRedBlackTreeSet<E, DefaultNode<E>> {
 		private final Comparator<? super E> theCompare;
 
+		/** @param compare The value comparator for the set */
 		public DefaultTreeSet(Comparator<? super E> compare) {
 			theCompare = compare;
 		}
@@ -442,14 +544,21 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 		}
 
 		@Override
-		public DefaultNode<E> createRoot(E value) {
+		public DefaultNode<E> createNode(E value) {
 			return new DefaultNode<>(value, theCompare);
 		}
 	}
 
+	/**
+	 * A default implementation of counted tree map
+	 *
+	 * @param <K> The key type for the map
+	 * @param <V> The value type for the map
+	 */
 	public static class DefaultTreeMap<K, V> extends CountedRedBlackTreeMap<K, V, DefaultNode<Map.Entry<K, V>>> {
 		private final Comparator<? super K> theCompare;
 
+		/** @param compare The key comparator for the map */
 		public DefaultTreeMap(Comparator<? super K> compare) {
 			theCompare = compare;
 		}
@@ -460,7 +569,7 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 		}
 
 		@Override
-		public DefaultNode<Entry<K, V>> createRoot(K key) {
+		public DefaultNode<Entry<K, V>> createNode(K key) {
 			return new DefaultNode<>(new RedBlackTreeMap.DefaultEntry<>(key), (o1, o2) -> theCompare.compare(o1.getKey(), o2.getKey()));
 		}
 	}

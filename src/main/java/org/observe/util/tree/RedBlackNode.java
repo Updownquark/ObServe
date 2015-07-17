@@ -199,9 +199,9 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 	 * Finds the node in this tree that is closest to {@code finder.compareTo(node)==0)}.
 	 *
 	 * @param finder The compare operation to use to find the node. Must obey the ordering used to construct this structure.
-	 * @param lesser Wh
-	 * @param withExact
-	 * @return
+	 * @param lesser Whether to search for lesser or greater values (left or right, respectively)
+	 * @param withExact Whether to accept an equivalent node, if present (as opposed to strictly left or right of)
+	 * @return The found node
 	 */
 	public RedBlackNode findClosest(Comparable<RedBlackNode> finder, boolean lesser, boolean withExact) {
 		return findClosest(finder, lesser, withExact, null);
@@ -355,6 +355,13 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 		return oldChild;
 	}
 
+	/**
+	 * Adds a new node into the correct place in this structure, rebalancing if necessary
+	 *
+	 * @param node The node to add
+	 * @param replaceIfFound Whether to replace an equivalent node if found, or leave the tree as-is
+	 * @return The result of the addition
+	 */
 	protected TreeOpResult add(RedBlackNode node, boolean replaceIfFound) {
 		int compare = node.compareTo(this);
 		if(compare == 0) {
@@ -370,6 +377,14 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 	/** A new implementation of balancing, which causes errors if not called from {@link #add(RedBlackNode, boolean)} on the root. */
 	private static final boolean SPECIAL_BALANCING = false;
 
+	/**
+	 * Adds a new node into this structure, rebalancing if necessary
+	 *
+	 * @param node The node to add
+	 * @param left The side on which to place the node
+	 * @param replaceIfFound Whether to replace an equivalent node if found, or leave the tree as-is
+	 * @return The result of the addition
+	 */
 	protected TreeOpResult addOnSide(RedBlackNode node, boolean left, boolean replaceIfFound) {
 		RedBlackNode child = getChild(left);
 		TreeOpResult r;
@@ -546,12 +561,25 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 		return node.getRoot();
 	}
 
+	/**
+	 * Prints a tree in a way that indicates the position of each node in the tree
+	 *
+	 * @param tree The tree node to print
+	 * @return The printed representation of the node
+	 */
 	public static String print(RedBlackNode tree) {
 		StringBuilder ret = new StringBuilder();
 		print(tree, ret, 0);
 		return ret.toString();
 	}
 
+	/**
+	 * Prints a tree in a way that indicates the position of each node in the tree
+	 *
+	 * @param tree The tree node to print
+	 * @param str The string builder to append the printed tree representation to
+	 * @param indent The amount of indentation with which to indent the root of the tree
+	 */
 	public static void print(RedBlackNode tree, StringBuilder str, int indent) {
 		if(tree == null) {
 			for(int i = 0; i < indent; i++)
@@ -573,19 +601,35 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 			print(left, str, indent + 1);
 	}
 
+	/**
+	 * A subclass of {@link RedBlackNode} that contains a value, which is (typically) the key by which nodes are compared
+	 *
+	 * @param <E> The type of value contained in each node
+	 */
 	public static abstract class ValuedRedBlackNode<E> extends RedBlackNode {
 		private final E theValue;
 
+		/** @param value The value for the node */
 		public ValuedRedBlackNode(E value) {
 			theValue = value;
 		}
 
+		/** @return This node's value */
 		public E getValue() {
 			return theValue;
 		}
 
+		/**
+		 * @param o1 One of the values to compare
+		 * @param o2 The other value to compare
+		 * @return -1 if o1&lt;o2, 1 if o1&gt;o2, or 0 if the two are logically equal
+		 */
 		protected abstract int compare(E o1, E o2);
 
+		/**
+		 * @param value The value to create the node for
+		 * @return The new node for the given value
+		 */
 		protected abstract ValuedRedBlackNode<E> createNode(E value);
 
 		@Override
@@ -593,15 +637,35 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 			return compare(getValue(), ((ValuedRedBlackNode<E>) node).getValue());
 		}
 
+		/**
+		 * Adds a value to this tree
+		 *
+		 * @param value The value to add
+		 * @param replaceIfFound If another equivalent value is found in this tree, whether to replace it with the given value or leave it
+		 *            there
+		 * @return The tree result of the addition
+		 */
 		protected TreeOpResult add(E value, boolean replaceIfFound) {
 			ValuedRedBlackNode<E> node = createNode(value);
 			return add(node, replaceIfFound);
 		}
 
+		/**
+		 * @param value The value to get the node for
+		 * @return The node with the given value (or equivalent) in this tree
+		 */
 		public ValuedRedBlackNode<E> findValue(E value) {
 			return (ValuedRedBlackNode<E>) find(node -> compare(value, ((ValuedRedBlackNode<E>) node).getValue()));
 		}
 
+		/**
+		 * Finds the given value in the tree or the closest value to one side
+		 *
+		 * @param value The value to search for
+		 * @param lesser Whether to search lesser values or greater
+		 * @param withEqual Whether to accept the equivalent of the given value (as opposed to strictly less or greater than)
+		 * @return The node in the tree matching the given constraints
+		 */
 		public ValuedRedBlackNode<E> findClosestValue(E value, boolean lesser, boolean withEqual) {
 			return (ValuedRedBlackNode<E>) findClosest(node -> compare(value, ((ValuedRedBlackNode<E>) node).getValue()), lesser, withEqual);
 		}
@@ -612,7 +676,13 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 		}
 	}
 
+	/**
+	 * A value node for comparable values
+	 *
+	 * @param <E> The type of comparable value for the node
+	 */
 	public static class ComparableValuedRedBlackNode<E extends Comparable<E>> extends ValuedRedBlackNode<E> {
+		/** @param value The value for the node */
 		public ComparableValuedRedBlackNode(E value) {
 			super(value);
 		}
@@ -632,16 +702,31 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 			return o1.compareTo(o2);
 		}
 
+		/**
+		 * @param <E> The type of the value
+		 * @param value The value for the new node
+		 * @return The new node for the given value
+		 */
 		public static <E extends Comparable<E>> ComparableValuedRedBlackNode<E> valueOf(E value) {
 			return new ComparableValuedRedBlackNode<>(value);
 		}
 	}
 
-
+	/**
+	 * Tester main method
+	 *
+	 * @param args Command-line arguments, unused
+	 */
 	public static void main(String [] args) {
 		test(ComparableValuedRedBlackNode.valueOf("a"), alphaBet('q'));
 	}
 
+	/**
+	 * Iterates through the alphabet from 'a' up to the given character
+	 *
+	 * @param last The last letter to be returned from the iterator
+	 * @return An alphabet iterable
+	 */
 	protected static final Iterable<String> alphaBet(char last) {
 		return () -> {
 			return new Iterator<String>() {
@@ -662,6 +747,13 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 		};
 	}
 
+	/**
+	 * A testing method. Adds sequential nodes into a tree and removes them, checking validity of the tree at each step.
+	 *
+	 * @param <T> The type of values to put in the tree
+	 * @param tree The initial tree node
+	 * @param nodes The sequence of nodes to add to the tree. Must repeat.
+	 */
 	public static <T> void test(ValuedRedBlackNode<T> tree, Iterable<T> nodes) {
 		Iterator<T> iter = nodes.iterator();
 		iter.next(); // Skip the first value, assuming that's what's in the tree

@@ -9,13 +9,29 @@ import java.util.function.Function;
 
 import org.observe.util.tree.RedBlackNode.ValuedRedBlackNode;
 
+/**
+ * A tree set using {@link RedBlackNode}. This set is extensible and has lots of hooks into the internals for performance.
+ *
+ * @param <E> The type of values stored in the set
+ * @param <N> The type of nodes used by the set
+ */
 public interface RedBlackTreeSet<E, N extends ValuedRedBlackNode<E>> extends java.util.NavigableSet<E> {
+	/** @return The root node of this tree */
 	N getRoot();
 
-	N createRoot(E value);
+	/**
+	 * @param value The value for the new node
+	 * @return A new node for the given value
+	 */
+	N createNode(E value);
 
+	/** @param root The new root node for the tree */
 	void setRoot(N root);
 
+	/**
+	 * @param value The value to get the node for
+	 * @return The node in this tree with the given value (or equivalent) or null if this tree contains no such node
+	 */
 	default N getNode(Object value) {
 		N root = getRoot();
 		if(root == null)
@@ -23,6 +39,10 @@ public interface RedBlackTreeSet<E, N extends ValuedRedBlackNode<E>> extends jav
 		return (N) root.findValue((E) value);
 	}
 
+	/**
+	 * @param first Whether to get the first node or the last node
+	 * @return The first or last node of this tree structure
+	 */
 	default N getEndNode(boolean first) {
 		N ret = getRoot();
 		if(ret == null)
@@ -96,6 +116,16 @@ public interface RedBlackTreeSet<E, N extends ValuedRedBlackNode<E>> extends jav
 		return iterator(true, null, true, null, true);
 	}
 
+	/**
+	 * An iterator that iterates through values in this set given a starting and ending value
+	 *
+	 * @param forward Whether to iterate forward or backward through the tree
+	 * @param start The value to start iteration at
+	 * @param includeStart Whether to return the start value as the first value from the iterator (if present) or start on the next value
+	 * @param end The value to stop iteration at
+	 * @param includeEnd Whether to return the end value as the last value from the iterator (if present) or stop before that value
+	 * @return The iterator
+	 */
 	default Iterator<E> iterator(boolean forward, E start, boolean includeStart, E end, boolean includeEnd) {
 		return new Iterator<E>() {
 			private final Iterator<N> backing = nodeIterator(forward, start, includeStart, end, includeEnd);
@@ -117,6 +147,16 @@ public interface RedBlackTreeSet<E, N extends ValuedRedBlackNode<E>> extends jav
 		};
 	}
 
+	/**
+	 * An iterator that iterates through nodes in this set given a starting and ending value
+	 *
+	 * @param forward Whether to iterate forward or backward through the set
+	 * @param start The value to start iteration at
+	 * @param includeStart Whether to return the start value as the first value from the iterator (if present) or start on the next value
+	 * @param end The value to stop iteration at
+	 * @param includeEnd Whether to return the end value as the last value from the iterator (if present) or stop before that value
+	 * @return The iterator
+	 */
 	default Iterator<N> nodeIterator(boolean forward, E start, boolean includeStart, E end, boolean includeEnd) {
 		N startNode;
 		N root = getRoot();
@@ -182,7 +222,7 @@ public interface RedBlackTreeSet<E, N extends ValuedRedBlackNode<E>> extends jav
 	default void simpleAdd(E value) {
 		N root = getRoot();
 		if(root == null)
-			setRoot(createRoot(value));
+			setRoot(createNode(value));
 		else
 			setRoot((N) root.add(value, true).getNewRoot());
 	}
@@ -234,12 +274,25 @@ public interface RedBlackTreeSet<E, N extends ValuedRedBlackNode<E>> extends jav
 		return found.getValue();
 	}
 
+	/**
+	 * @param value The value to search for
+	 * @param lesser Whether to look for values less than the given value or greater than
+	 * @param withEqual Whether to return the equivalent value if it exists (as opposed to strictly less or greater than)
+	 * @return The node with the queried value
+	 */
 	default N getClosestNode(E value, boolean lesser, boolean withEqual) {
 		N root = getRoot();
 		if(root == null)
 			return null;
 		return (N) root.findClosestValue(value, lesser, withEqual);
 	}
+
+	/**
+	 * @param value The value to search for
+	 * @param lesser Whether to look for values less than the given value or greater than
+	 * @param withEqual Whether to return the equivalent value if it exists (as opposed to strictly less or greater than)
+	 * @return The queried value
+	 */
 
 	default E getClosest(E value, boolean lesser, boolean withEqual) {
 		N root = getRoot();
@@ -299,10 +352,31 @@ public interface RedBlackTreeSet<E, N extends ValuedRedBlackNode<E>> extends jav
 		return iterator(false, null, true, null, true);
 	}
 
+	/**
+	 * @param reverse Whether the sub set should be a reverse if this set
+	 * @param fromElement The smallest element of the sub set
+	 * @param fromInclusive Whether the smallest element is included in the sub set
+	 * @param toElement The largest element of the sub set
+	 * @param toInclusive Whether the largest element is included in the sub set
+	 * @return The sub set
+	 */
 	default NavigableSet<E> getSubSet(boolean reverse, E fromElement, boolean fromInclusive, E toElement, boolean toInclusive) {
 		return getMappedSubSet(null, null, reverse, fromElement, fromInclusive, toElement, toInclusive);
 	}
 
+	/**
+	 * Creates a mapped sub-set of this set
+	 *
+	 * @param <V> The type for the sub-set
+	 * @param outMap A mapping function to map the values in this set to the values in the sub-set
+	 * @param inMap A mapping function to map values given to the sub-set into this set
+	 * @param reverse Whether the sub set should be a reverse if this set
+	 * @param fromElement The smallest element of the sub set
+	 * @param fromInclusive Whether the smallest element is included in the sub set
+	 * @param toElement The largest element of the sub set
+	 * @param toInclusive Whether the largest element is included in the sub set
+	 * @return The sub set
+	 */
 	default <V> NavigableSet<V> getMappedSubSet(Function<? super E, V> outMap, Function<? super V, E> inMap, boolean reverse,
 		V fromElement, boolean fromInclusive, V toElement, boolean toInclusive) {
 		Comparator<? super E> treeComparator = comparator();
@@ -347,14 +421,31 @@ public interface RedBlackTreeSet<E, N extends ValuedRedBlackNode<E>> extends jav
 		return getSubSet(false, fromElement, true, null, true);
 	}
 
+	/** @return The nodes in this set */
 	default NodeSet<E, N> nodes() {
 		return nodes(false, null, true, null, true);
 	}
 
+	/**
+	 * The nodes in a sub-set of this set
+	 *
+	 * @param reverse Whether the sub set should be a reverse if this set
+	 * @param fromElement The smallest element of the sub set
+	 * @param fromInclusive Whether the smallest element is included in the sub set
+	 * @param toElement The largest element of the sub set
+	 * @param toInclusive Whether the largest element is included in the sub set
+	 * @return The node set
+	 */
 	default NodeSet<E, N> nodes(boolean reverse, E fromElement, boolean fromInclusive, E toElement, boolean toInclusive) {
 		return new NodeSet<>(this, reverse, fromElement, fromInclusive, toElement, toInclusive);
 	}
 
+	/**
+	 * A sub set of a {@link RedBlackTreeSet}
+	 *
+	 * @param <E> The type of the values in the outer set
+	 * @param <V> The type of values in this set
+	 */
 	static class MappedSubSet<E, V> implements java.util.NavigableSet<V> {
 		private final RedBlackTreeSet<E, ?> theTreeSet;
 		private final Function<? super E, V> theOutMap;
@@ -765,6 +856,12 @@ public interface RedBlackTreeSet<E, N extends ValuedRedBlackNode<E>> extends jav
 		}
 	}
 
+	/**
+	 * A set to give visibility into the nodes of a {@link RedBlackTreeSet}
+	 *
+	 * @param <E> The type of values in the set
+	 * @param <N> The type of nodes in the set
+	 */
 	static class NodeSet<E, N extends ValuedRedBlackNode<E>> implements NavigableSet<N> {
 		private final RedBlackTreeSet<E, N> theSet;
 

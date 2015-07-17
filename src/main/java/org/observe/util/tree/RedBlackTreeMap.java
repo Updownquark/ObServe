@@ -12,7 +12,20 @@ import java.util.SortedMap;
 import org.observe.util.tree.RedBlackNode.TreeOpResult;
 import org.observe.util.tree.RedBlackNode.ValuedRedBlackNode;
 
+/**
+ * A map made of {@link RedBlackNode}s
+ *
+ * @param <K> The type of keys in the map
+ * @param <V> The type of values in the map
+ * @param <N> The type of nodes used by the map
+ */
 public interface RedBlackTreeMap<K, V, N extends ValuedRedBlackNode<Map.Entry<K, V>>> extends java.util.NavigableMap<K, V> {
+	/**
+	 * Default entry type used by the map
+	 *
+	 * @param <K> The type of key in the entry
+	 * @param <V> The type of value in the entry
+	 */
 	static final class DefaultEntry<K, V> implements Map.Entry<K, V> {
 		private final K theKey;
 
@@ -45,22 +58,38 @@ public interface RedBlackTreeMap<K, V, N extends ValuedRedBlackNode<Map.Entry<K,
 		}
 	}
 
+	/** @return The root of the tree */
 	N getRoot();
 
-	N createRoot(K key);
+	/**
+	 * @param key The key to create the node for
+	 * @return A new node for the tree
+	 */
+	N createNode(K key);
 
-	default N createRoot(K key, V value) {
-		N ret = createRoot(key);
+	/**
+	 * @param key The key to create the node for
+	 * @param value The value to create the node for
+	 * @return A new node for the tree
+	 */
+	default N createNode(K key, V value) {
+		N ret = createNode(key);
 		ret.getValue().setValue(value);
 		return ret;
 	}
 
+	/** @param root The new root for the tree */
 	void setRoot(N root);
 
+	/** @return The value to insert in the tree for a key when the value is not supplied (e.g. adding a value into a key set) */
 	default V getDefaultValue() {
 		return null;
 	}
 
+	/**
+	 * @param key The key to create a dummy entry for
+	 * @return A dummy entry to use for comparison on the given key
+	 */
 	default Entry<K, V> keyEntry(K key) {
 		return key == null ? null : new Map.Entry<K, V>() {
 			@Override
@@ -80,10 +109,18 @@ public interface RedBlackTreeMap<K, V, N extends ValuedRedBlackNode<Map.Entry<K,
 		};
 	}
 
+	/**
+	 * @param key The key to create the entry for
+	 * @return A bona-fide map entry (as opposed to the dummy from {@link #keyEntry(Object)}) that can have its value set
+	 */
 	default Entry<K, V> createEntry(K key) {
 		return new DefaultEntry<>(key, getDefaultValue());
 	}
 
+	/**
+	 * @param key The key to get the node for
+	 * @return The node holding the entry with the given key, or null if this map does not contain the key
+	 */
 	default N getNode(Object key) {
 		N root = getRoot();
 		if(root == null)
@@ -91,6 +128,10 @@ public interface RedBlackTreeMap<K, V, N extends ValuedRedBlackNode<Map.Entry<K,
 		return (N) root.findValue(keyEntry((K) key));
 	}
 
+	/**
+	 * @param first Whether to get the first or last node in the tree
+	 * @return The first or last node in this tree
+	 */
 	default N getEndNode(boolean first) {
 		N ret = getRoot();
 		if(ret == null)
@@ -100,14 +141,24 @@ public interface RedBlackTreeMap<K, V, N extends ValuedRedBlackNode<Map.Entry<K,
 		return ret;
 	}
 
+	/** @param node The node to delete from this tree */
 	default void removeNode(N node) {
 		setRoot((N) node.delete());
 	}
 
+	/** @return An iterator over the nodes in this tree */
 	default Iterator<N> nodeIterator() {
 		return nodeIterator(true, null, true, null, true);
 	}
 
+	/**
+	 * @param forward Whether to iterate forward or backward through the tree
+	 * @param start The key to start iteration at
+	 * @param includeStart Whether to return the start key as the first value from the iterator (if present) or start on the next key
+	 * @param end The key to stop iteration at
+	 * @param includeEnd Whether to return the end key as the last value from the iterator (if present) or stop before that key
+	 * @return The node iterator
+	 */
 	default Iterator<N> nodeIterator(boolean forward, K start, boolean includeStart, K end, boolean includeEnd) {
 		N startNode;
 		N root = getRoot();
@@ -219,6 +270,12 @@ public interface RedBlackTreeMap<K, V, N extends ValuedRedBlackNode<Map.Entry<K,
 		return found.getValue();
 	}
 
+	/**
+	 * @param key The key to query
+	 * @param lesser Whether to search for smaller or larger keys
+	 * @param withEqual Whether to return the equivalent key if it exists (as opposed to strictly less or greater than)
+	 * @return The entry for the closest key, or null if no value matching the given constraints was found
+	 */
 	default Entry<K, V> getClosestEntry(K key, boolean lesser, boolean withEqual) {
 		N root = getRoot();
 		if(root == null)
@@ -299,10 +356,16 @@ public interface RedBlackTreeMap<K, V, N extends ValuedRedBlackNode<Map.Entry<K,
 		return node.getValue().getValue();
 	}
 
+	/**
+	 * Finds or adds a node in the tree for the given key
+	 *
+	 * @param key The key to get or insert the node for
+	 * @return The found or created node
+	 */
 	default N getOrInsertNode(K key){
 		N root=getRoot();
 		if(root==null){
-			root = createRoot(key);
+			root = createNode(key);
 			setRoot(root);
 			return root;
 		}
@@ -316,6 +379,13 @@ public interface RedBlackTreeMap<K, V, N extends ValuedRedBlackNode<Map.Entry<K,
 		return node.getValue().setValue(value);
 	}
 
+	/**
+	 * Like {@link #put(Object, Object)} but returns the node containing the entry
+	 *
+	 * @param key The key to put the value into
+	 * @param value The value to put into this map for the key
+	 * @return The node holding the found or created entry
+	 */
 	default N putGetNode(K key, V value) {
 		N node = getOrInsertNode(key);
 		node.getValue().setValue(value);
@@ -374,6 +444,14 @@ public interface RedBlackTreeMap<K, V, N extends ValuedRedBlackNode<Map.Entry<K,
 		return new EntrySet<>(this);
 	}
 
+	/**
+	 * @param reverse Whether to reverse this map
+	 * @param fromKey The key to bound the map on the low side
+	 * @param fromInclusive Whether to include the fromKey in the sub-map
+	 * @param toKey The key bound the map on the high side
+	 * @param toInclusive Whether to include the endKey in the sub-map
+	 * @return The sub-map
+	 */
 	default NavigableMap<K, V> getSubMap(boolean reverse, K fromKey, boolean fromInclusive, K toKey, boolean toInclusive) {
 		return new SubMap<>(this, reverse, fromKey, fromInclusive, toKey, toInclusive);
 	}
@@ -408,6 +486,13 @@ public interface RedBlackTreeMap<K, V, N extends ValuedRedBlackNode<Map.Entry<K,
 		return getSubMap(false, fromKey, true, null, true);
 	}
 
+	/**
+	 * Implements {@link RedBlackTreeMap#entrySet()}
+	 * 
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 * @param <N> The node type used to store the data
+	 */
 	static class EntrySet<K, V, N extends ValuedRedBlackNode<Entry<K, V>>> implements RedBlackTreeSet<Entry<K, V>, N> {
 		private final RedBlackTreeMap<K, V, N> theMap;
 
@@ -426,8 +511,8 @@ public interface RedBlackTreeMap<K, V, N extends ValuedRedBlackNode<Map.Entry<K,
 		}
 
 		@Override
-		public N createRoot(java.util.Map.Entry<K, V> value) {
-			N node = theMap.createRoot(value.getKey());
+		public N createNode(java.util.Map.Entry<K, V> value) {
+			N node = theMap.createNode(value.getKey());
 			node.getValue().setValue(value.getValue());
 			return node;
 		}
@@ -438,12 +523,24 @@ public interface RedBlackTreeMap<K, V, N extends ValuedRedBlackNode<Map.Entry<K,
 		}
 	}
 
+	/**
+	 * Implements {@link RedBlackTreeMap#keySet()}
+	 * 
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 */
 	static class KeySet<K, V> extends RedBlackTreeSet.MappedSubSet<Entry<K, V>, K> {
 		public KeySet(RedBlackTreeMap<K, V, ?> map, boolean reverse, K minKey, boolean includeMin, K maxKey, boolean includeMax) {
 			super(map.entrySet(), Entry::getKey, map::createEntry, reverse, minKey, includeMin, maxKey, includeMax);
 		}
 	}
 
+	/**
+	 * Implements {@link RedBlackTreeMap#values()}
+	 * 
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 */
 	static class ValueCollection<K, V> implements Collection<V> {
 		private final Collection<? extends Entry<K, V>> theEntries;
 
@@ -567,6 +664,12 @@ public interface RedBlackTreeMap<K, V, N extends ValuedRedBlackNode<Map.Entry<K,
 		}
 	}
 
+	/**
+	 * Implements {@link RedBlackTreeMap#getSubMap(boolean, Object, boolean, Object, boolean)}
+	 * 
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 */
 	static class SubMap<K, V> implements NavigableMap<K, V> {
 		private final RedBlackTreeMap<K, V, ?> theMap;
 

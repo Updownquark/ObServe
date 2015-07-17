@@ -6,24 +6,40 @@ import java.util.Iterator;
 import java.util.ListIterator;
 import java.util.function.Function;
 
+/**
+ * A list backed by a binary red/black tree structure. Tree lists are O(log(n)) for get(index) and all modifications; constant time-from a
+ * {@link #listIterator() list iterator}.
+ *
+ * @param <N> The sub-type of {@link CountedRedBlackNode} used to store the data
+ * @param <E> The type of values in the list
+ */
 public class RedBlackTreeList<N extends CountedRedBlackNode<E>, E> extends AbstractList<E> {
 	private final Function<E, N> theNodeCreator;
 
 	private N theRoot;
 
+	/** @param nodeCreator The function to create nodes for the list */
 	public RedBlackTreeList(Function<E, N> nodeCreator) {
 		theNodeCreator = nodeCreator;
 	}
 
+	/**
+	 * @param value The value to create the node for
+	 * @return The new node for the value
+	 */
 	protected N createNode(E value) {
 		return theNodeCreator.apply(value);
 	}
 
+	/**
+	 * @param index The index to get the node at
+	 * @return The node at the given index
+	 */
 	public N getNodeAt(int index) {
 		return getNodeAt(theRoot, index, 0);
 	}
 
-	protected N getNodeAt(N node, int index, int passed) {
+	private N getNodeAt(N node, int index, int passed) {
 		if(node == null)
 			throw new IndexOutOfBoundsException((passed + index) + " of " + CountedRedBlackNode.size(theRoot));
 		int leftCount = CountedRedBlackNode.size(node.getLeft());
@@ -35,6 +51,7 @@ public class RedBlackTreeList<N extends CountedRedBlackNode<E>, E> extends Abstr
 			return getNodeAt((N) node.getRight(), index - leftCount - 1, passed + leftCount + 1);
 	}
 
+	/** @return The last node in this tree */
 	public N getLastNode() {
 		N ret = theRoot;
 		while(ret != null && ret.getRight() != null)
@@ -63,6 +80,10 @@ public class RedBlackTreeList<N extends CountedRedBlackNode<E>, E> extends Abstr
 		return iterator(true);
 	}
 
+	/**
+	 * @param forward Whether to iterate forward through the list or backward
+	 * @return The iterator
+	 */
 	public Iterator<E> iterator(boolean forward) {
 		N root = theRoot;
 		if(root == null)
@@ -70,6 +91,10 @@ public class RedBlackTreeList<N extends CountedRedBlackNode<E>, E> extends Abstr
 		return iterator(forward ? getNodeAt(0) : getLastNode(), forward);
 	}
 
+	/**
+	 * @param forward Whether to iterate forward through the list or backward
+	 * @return The node iterator
+	 */
 	public Iterator<N> nodeIterator(boolean forward) {
 		N root = theRoot;
 		if(root == null)
@@ -170,6 +195,11 @@ public class RedBlackTreeList<N extends CountedRedBlackNode<E>, E> extends Abstr
 		return !c.isEmpty();
 	}
 
+	/**
+	 * @param element the element to add
+	 * @param before The node to add the element before
+	 * @return The new node
+	 */
 	public N addBefore(E element, N before) {
 		N newNode = createNode(element);
 		N left = (N) before.getLeft();
@@ -185,6 +215,11 @@ public class RedBlackTreeList<N extends CountedRedBlackNode<E>, E> extends Abstr
 		return newNode;
 	}
 
+	/**
+	 * @param element the element to add
+	 * @param after The node to add the element after
+	 * @return The new node
+	 */
 	public N addAfter(E element, N after) {
 		N newNode = createNode(element);
 		N right = (N) after.getRight();
