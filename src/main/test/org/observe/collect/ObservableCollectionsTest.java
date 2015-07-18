@@ -1,6 +1,11 @@
 package org.observe.collect;
 
+import static java.util.Arrays.asList;
+import static org.hamcrest.CoreMatchers.not;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -12,6 +17,8 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Predicate;
 
+import org.hamcrest.Description;
+import org.hamcrest.Matcher;
 import org.junit.Test;
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -28,52 +35,159 @@ import prisms.lang.Type;
 
 /** Tests observable collections and their default implementations */
 public class ObservableCollectionsTest {
-	public static void testCollection(Collection<Integer> coll, Predicate<Collection<Integer>> check) {
+	/**
+	 * Runs a collection through a set of tests designed to ensure all {@link Collection} methods are functioning correctly
+	 *
+	 * @param <T> The type of the collection
+	 * @param coll The collection to test
+	 * @param check An optional function to apply after each collection modification to ensure the structure of the collection is correct
+	 *            and potentially assert other side effects of collection modification
+	 */
+	public static <T extends Collection<Integer>> void testCollection(T coll, Predicate<? super T> check) {
 		// Most basic functionality, with iterator
-		assertEquals(0, coll.size());
-		coll.add(0);
-		assertEquals(1, coll.size());
+		assertEquals(0, coll.size()); // Start with empty list
+		coll.add(0); //Test add
+		assertEquals(1, coll.size()); // Test size
 		if(check != null)
 			assertEquals(true, check.test(coll));
-		Iterator<Integer> iter = coll.iterator();
+		Iterator<Integer> iter = coll.iterator(); //Test iterator
 		assertEquals(true, iter.hasNext());
 		assertEquals(0, (int) iter.next());
 		assertEquals(false, iter.hasNext());
 		iter = coll.iterator();
 		assertEquals(true, iter.hasNext());
 		assertEquals(0, (int) iter.next());
-		iter.remove();
+		iter.remove(); //Test iterator remove
 		assertEquals(0, coll.size());
 		if(check != null)
-			assertEquals(true, check.test(coll));
+			assertTrue(check.test(coll));
 		assertEquals(false, iter.hasNext());
 		iter = coll.iterator();
 		assertEquals(false, iter.hasNext());
 		coll.add(0);
 		assertEquals(1, coll.size());
+		assertFalse(coll.isEmpty());
 		if(check != null)
-			assertEquals(true, check.test(coll));
-		assertEquals(true, coll.contains(0));
-		coll.remove(0);
-		assertEquals(0, coll.size());
+			assertTrue(check.test(coll));
+		assertThat(coll, contains(0)); // Test contains
+		coll.remove(0); //Test remove
+		assertTrue(coll.isEmpty()); // Test isEmpty
 		if(check != null)
-			assertEquals(true, check.test(coll));
-		assertEquals(false, coll.contains(0));
+			assertTrue(check.test(coll));
+		assertThat(coll, not(contains(0)));
 
-		for(int i = 0; i < 10; i++)
-			coll.add(i);
+		ArrayList<Integer> toAdd=new ArrayList<>();
+		for(int i = 0; i < 100; i++)
+			toAdd.add(i);
+		coll.addAll(toAdd); // Test addAll
+		assertEquals(100, coll.size());
+		if(check != null)
+			assertTrue(check.test(coll));
+		assertThat(coll, containsAll(0, 100, 50, 11, 99, 50)); // 50 twice. Test containsAll
+		coll.removeAll(asList(0, 50, 100, 10, 90, 20, 80, 30, 70, 40, 60, 50)); // 100 not in coll.  50 in list twice. Test removeAll.
+		assertEquals(90, coll.size());
+		if(check != null)
+			assertTrue(check.test(coll));
+		assertThat(coll, containsAll(1, 2, 11, 99));
+		coll.retainAll(asList(1, 51, 101, 11, 91, 21, 81, 31, 71, 41, 61, 51)); // 101 not in coll. 51 in list twice. Test retainAll.
 		assertEquals(10, coll.size());
 		if(check != null)
-			assertEquals(true, check.test(coll));
+			assertTrue(check.test(coll));
+		assertThat(coll, not(containsAll(1, 2, 11, 99)));
+		coll.clear(); // Test clear
+		assertEquals(0, coll.size());
+		if(check != null)
+			assertTrue(check.test(coll));
+		assertThat(coll, not(contains(2)));
+		// Leave the collection empty
+
+		// Not testing toArray() methods. These are pretty simple, but should probably put those in some time.
 	}
 
-	public static void testSet(Set<Integer> set) {
+	private static <T> Matcher<Collection<T>> contains(T value) {
+		return new org.hamcrest.BaseMatcher<Collection<T>>() {
+			@Override
+			public boolean matches(Object arg0) {
+				return ((Collection<T>) arg0).contains(value);
+			}
+
+			@Override
+			public void describeTo(Description arg0) {
+				arg0.appendText("collection does not contain ").appendValue(value);
+			}
+		};
 	}
 
-	public static void testSortedSet(NavigableSet<Integer> set) {
+	private static <T> Matcher<Collection<T>> containsAll(T... values) {
+		List<T> valueList = asList(values);
+		return new org.hamcrest.BaseMatcher<Collection<T>>() {
+			@Override
+			public boolean matches(Object arg0) {
+				return ((Collection<T>) arg0).containsAll(valueList);
+			}
+
+			@Override
+			public void describeTo(Description arg0) {
+				arg0.appendText("collection does not contain all of ").appendValue(valueList);
+			}
+		};
 	}
 
-	public static void testList(List<Integer> list) {
+	/**
+	 * Runs a set through a set of tests designed to ensure all {@link Set} methods are functioning correctly
+	 *
+	 * @param <T> The type of the set
+	 * @param set The set to test
+	 * @param check An optional function to apply after each collection modification to ensure the structure of the collection is correct
+	 *            and potentially assert other side effects of collection modification
+	 */
+	public static <T extends Set<Integer>> void testSet(T set, Predicate<? super T> check) {
+		testCollection(set, check);
+
+		set.add(0);
+		assertEquals(1, set.size());
+		if(check != null)
+			check.test(set);
+		set.add(1);
+		assertEquals(2, set.size());
+		if(check != null)
+			check.test(set);
+		set.add(0); // Test uniqueness
+		assertEquals(2, set.size());
+		if(check != null)
+			check.test(set);
+		set.remove(0);
+		assertEquals(1, set.size());
+		if(check != null)
+			check.test(set);
+		set.clear();
+		assertEquals(0, set.size());
+		if(check != null)
+			check.test(set);
+	}
+
+	/**
+	 * Runs a sorted set through a set of tests designed to ensure all {@link NavigableSet} methods are functioning correctly
+	 *
+	 * @param <T> The type of the set
+	 * @param set The set to test
+	 * @param check An optional function to apply after each collection modification to ensure the structure of the collection is correct
+	 *            and potentially assert other side effects of collection modification
+	 */
+	public static <T extends NavigableSet<Integer>> void testSortedSet(T set, Predicate<? super T> check) {
+		testSet(set, check);
+	}
+
+	/**
+	 * Runs a list through a set of tests designed to ensure all {@link List} methods are functioning correctly
+	 *
+	 * @param <T> The type of the list
+	 * @param list The list to test
+	 * @param check An optional function to apply after each collection modification to ensure the structure of the collection is correct
+	 *            and potentially assert other side effects of collection modification
+	 */
+	public static <T extends List<Integer>> void testList(T list, Predicate<? super T> check) {
+		testCollection(list, check);
 	}
 
 	/** Tests basic {@link ObservableSet} functionality */
