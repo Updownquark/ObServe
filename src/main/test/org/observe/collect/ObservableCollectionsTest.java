@@ -46,7 +46,7 @@ public class ObservableCollectionsTest {
 	public static <T extends Collection<Integer>> void testCollection(T coll, Predicate<? super T> check) {
 		// Most basic functionality, with iterator
 		assertEquals(0, coll.size()); // Start with empty list
-		coll.add(0); //Test add
+		assertTrue(coll.add(0)); //Test add
 		assertEquals(1, coll.size()); // Test size
 		if(check != null)
 			assertEquals(true, check.test(coll));
@@ -64,30 +64,39 @@ public class ObservableCollectionsTest {
 		assertEquals(false, iter.hasNext());
 		iter = coll.iterator();
 		assertEquals(false, iter.hasNext());
-		coll.add(0);
+		assertTrue(coll.add(0));
 		assertEquals(1, coll.size());
 		assertFalse(coll.isEmpty());
 		if(check != null)
 			assertTrue(check.test(coll));
 		assertThat(coll, contains(0)); // Test contains
-		coll.remove(0); //Test remove
+		assertTrue(coll.remove(0)); //Test remove
+		assertFalse(coll.remove(0));
 		assertTrue(coll.isEmpty()); // Test isEmpty
 		if(check != null)
 			assertTrue(check.test(coll));
 		assertThat(coll, not(contains(0)));
 
 		ArrayList<Integer> toAdd=new ArrayList<>();
-		for(int i = 0; i < 100; i++)
+		for(int i = 0; i < 50; i++)
 			toAdd.add(i);
-		coll.addAll(toAdd); // Test addAll
+		for(int i = 99; i >= 50; i--)
+			toAdd.add(i);
+		assertTrue(coll.addAll(toAdd)); // Test addAll
 		assertEquals(100, coll.size());
 		if(check != null)
 			assertTrue(check.test(coll));
 		assertThat(coll, containsAll(0, 100, 50, 11, 99, 50)); // 50 twice. Test containsAll
-		coll.removeAll(asList(0, 50, 100, 10, 90, 20, 80, 30, 70, 40, 60, 50)); // 100 not in coll.  50 in list twice. Test removeAll.
+		// 100 not in coll. 50 in list twice. Test removeAll.
+		assertTrue(coll.removeAll(asList(0, 50, 100, 10, 90, 20, 80, 30, 70, 40, 60, 50)));
 		assertEquals(90, coll.size());
 		if(check != null)
 			assertTrue(check.test(coll));
+
+		ArrayList<Integer> copy = new ArrayList<>(coll); // More iterator testing
+		assertThat(coll, containsAll(copy));
+		assertThat(copy, containsAll(coll));
+
 		assertThat(coll, containsAll(1, 2, 11, 99));
 		coll.retainAll(asList(1, 51, 101, 11, 91, 21, 81, 31, 71, 41, 61, 51)); // 101 not in coll. 51 in list twice. Test retainAll.
 		assertEquals(10, coll.size());
@@ -119,16 +128,19 @@ public class ObservableCollectionsTest {
 	}
 
 	private static <T> Matcher<Collection<T>> containsAll(T... values) {
-		List<T> valueList = asList(values);
+		return containsAll(asList(values));
+	}
+
+	private static <T> Matcher<Collection<T>> containsAll(Collection<T> values) {
 		return new org.hamcrest.BaseMatcher<Collection<T>>() {
 			@Override
 			public boolean matches(Object arg0) {
-				return ((Collection<T>) arg0).containsAll(valueList);
+				return ((Collection<T>) arg0).containsAll(values);
 			}
 
 			@Override
 			public void describeTo(Description arg0) {
-				arg0.appendText("collection does not contain all of ").appendValue(valueList);
+				arg0.appendText("collection does not contain all of ").appendValue(values);
 			}
 		};
 	}
@@ -144,19 +156,19 @@ public class ObservableCollectionsTest {
 	public static <T extends Set<Integer>> void testSet(T set, Predicate<? super T> check) {
 		testCollection(set, check);
 
-		set.add(0);
+		assertTrue(set.add(0));
 		assertEquals(1, set.size());
 		if(check != null)
 			check.test(set);
-		set.add(1);
+		assertTrue(set.add(1));
 		assertEquals(2, set.size());
 		if(check != null)
 			check.test(set);
-		set.add(0); // Test uniqueness
+		assertFalse(set.add(0)); // Test uniqueness
 		assertEquals(2, set.size());
 		if(check != null)
 			check.test(set);
-		set.remove(0);
+		assertTrue(set.remove(0));
 		assertEquals(1, set.size());
 		if(check != null)
 			check.test(set);
@@ -175,7 +187,33 @@ public class ObservableCollectionsTest {
 	 *            and potentially assert other side effects of collection modification
 	 */
 	public static <T extends NavigableSet<Integer>> void testSortedSet(T set, Predicate<? super T> check) {
-		testSet(set, check);
+		testSet(set, coll -> {
+			Comparator<? super Integer> comp = set.comparator();
+			Integer last = null;
+			for(Integer el : coll) {
+				if(last != null)
+					assertThat(el, greaterThanOrEqual(last, comp));
+			}
+
+			if(check != null)
+				return check.test(coll);
+			else
+				return true;
+		});
+	}
+
+	private static <T> Matcher<T> greaterThanOrEqual(T value, Comparator<? super T> comp) {
+		return new org.hamcrest.BaseMatcher<T>() {
+			@Override
+			public boolean matches(Object arg0) {
+				return comp.compare((T) arg0, value) >= 1;
+			}
+
+			@Override
+			public void describeTo(Description arg0) {
+				arg0.appendText("value is not greater than " + value);
+			}
+		};
 	}
 
 	/**
@@ -188,6 +226,66 @@ public class ObservableCollectionsTest {
 	 */
 	public static <T extends List<Integer>> void testList(T list, Predicate<? super T> check) {
 		testCollection(list, check);
+
+		assertTrue(list.addAll(asList(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)));
+		assertEquals(10, list.size());
+		if(check != null)
+			check.test(list);
+		assertTrue(list.add(0)); // Test non-uniqueness
+		assertEquals(11, list.size());
+		if(check != null)
+			check.test(list);
+		assertEquals((Integer) 0, list.remove(10));
+		assertEquals(10, list.size());
+		if(check != null)
+			check.test(list);
+		assertTrue(list.addAll(asList(20, 21, 22, 23, 24, 25, 26, 27, 28, 29)));
+		assertEquals(20, list.size());
+		if(check != null)
+			check.test(list);
+		assertTrue(list.addAll(10, asList(10, 11, 12, 13, 14, 15, 16, 17, 18, 19))); // Test addAll at index
+		assertEquals(30, list.size());
+		if(check != null)
+			check.test(list);
+		for(int i = 0; i < 30; i++)
+			assertEquals((Integer) i, list.get(i)); // Test get
+
+		for(int i = 0; i < 30; i++)
+			assertEquals(i, list.indexOf(i)); // Test indexOf
+		for(int i = 0; i < 30; i++) {
+			assertEquals((Integer) i, list.set(i, list.get(30 - i - 1))); // Test set
+			if(check != null)
+				check.test(list);
+		}
+		assertEquals(30, list.size());
+		list.add(0);
+		list.add(1);
+		if(check != null)
+			check.test(list);
+		assertEquals(0, list.indexOf(0)); // Test indexOf with duplicate values
+		assertEquals(30, list.lastIndexOf(0)); // Test lastIndexOf
+		list.remove(31);
+		list.remove(30);
+		for(int i = 0; i < 30; i++)
+			assertEquals(30 - i - 1, list.indexOf(i));
+		if(check != null)
+			check.test(list);
+		for(int i = 0; i < 30; i++) {
+			assertEquals((Integer) (30 - i - 1), list.set(i, list.get(30 - i - 1)));
+			if(check != null)
+				check.test(list);
+		}
+		assertTrue(list.remove((Integer) 10));
+		assertEquals(29, list.size());
+		if(check != null)
+			check.test(list);
+		list.add(10, 10); // Test add at index
+		assertEquals(30, list.size());
+		if(check != null)
+			check.test(list);
+
+		// Test listIterator
+		// Test subList
 	}
 
 	/** Tests basic {@link ObservableSet} functionality */
