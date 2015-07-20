@@ -1,6 +1,7 @@
 package org.observe.collect;
 
 import static java.util.Arrays.asList;
+import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.not;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -12,6 +13,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.NavigableSet;
 import java.util.Set;
 import java.util.TreeSet;
@@ -200,6 +202,8 @@ public class ObservableCollectionsTest {
 			else
 				return true;
 		});
+
+		// TODO Test the rest of NavigableSet
 	}
 
 	private static <T> Matcher<T> greaterThanOrEqual(T value, Comparator<? super T> comp) {
@@ -285,7 +289,81 @@ public class ObservableCollectionsTest {
 			check.test(list);
 
 		// Test listIterator
-		// Test subList
+		ArrayList<Integer> test = new ArrayList<>(list.size());
+		for(int i = 0; i < list.size(); i++)
+			test.add(null);
+		ListIterator<Integer> listIter1 = list.listIterator(list.size() / 2); // Basic bi-directional read-only functionality
+		ListIterator<Integer> listIter2 = list.listIterator(list.size() / 2);
+		while(true) {
+			boolean stop = true;
+			if(listIter1.hasPrevious()) {
+				test.set(listIter1.previousIndex(), listIter1.previous());
+				stop = false;
+			}
+			if(listIter2.hasNext()) {
+				test.set(listIter1.nextIndex(), listIter1.next());
+				stop = false;
+			}
+			if(stop)
+				break;
+		}
+		assertThat(test, equalTo(list));
+
+		// Test listIterator modification
+		listIter1 = list.listIterator(list.size() / 2);
+		listIter2 = test.listIterator(list.size() / 2);
+		int i;
+		for(i = 0; listIter2.hasPrevious(); i++) {
+			assertTrue(listIter1.hasPrevious());
+			int prev = listIter1.previous();
+			assertThat(listIter2.previous(), equalTo(prev));
+			switch (i % 3) {
+			case 0:
+				int toAdd=i * 17 + 100;
+				listIter1.add(toAdd);
+				listIter2.add(toAdd);
+				assertTrue(listIter1.hasNext());
+				assertThat(toAdd, equalTo(listIter1.next()));
+				assertTrue(listIter1.hasPrevious());
+				assertThat(toAdd, equalTo(listIter1.previous()));
+				break;
+			case 2:
+				listIter1.set(prev + 50);
+				listIter2.set(prev + 50);
+				break;
+			}
+			assertThat(test, equalTo(list));
+			if(check != null)
+				check.test(list);
+		}
+		for(i = 0; listIter2.hasNext(); i++) {
+			assertTrue(listIter1.hasNext());
+			int next = listIter1.next();
+			assertThat(listIter2.next(), equalTo(next));
+			switch (i % 5) {
+			case 0:
+				int toAdd=i*53+1000;
+				listIter1.add(toAdd);
+				listIter2.add(toAdd);
+				assertTrue(listIter1.hasNext());
+				assertThat(toAdd, equalTo(listIter1.next()));
+				listIter2.next();
+				break;
+			case 1:
+				listIter1.remove();
+				listIter2.remove();
+				break;
+			case 2:
+				listIter1.set(next + 10000);
+				listIter2.set(next + 1000);
+				break;
+			}
+			assertThat(test, equalTo(list));
+			if(check != null)
+				check.test(list);
+		}
+
+		// TODO Test subList
 	}
 
 	/** Tests basic {@link ObservableSet} functionality */
