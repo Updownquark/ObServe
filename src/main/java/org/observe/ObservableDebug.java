@@ -258,7 +258,7 @@ public abstract class ObservableDebug {
 	 * @return The ObservableDebug of the given type
 	 */
 	public static ObservableDebug createInstance(String type) {
-		if(type == null)
+		if(type == null || type.equals("none"))
 			return new DisabledDebugger();
 		switch (type) {
 		case "structural":
@@ -270,7 +270,7 @@ public abstract class ObservableDebug {
 				return (ObservableDebug) Class.forName(type).newInstance();
 			} catch(Throwable e) {
 				System.err.println("Could not instantiate custom debugger type: " + type
-					+ ".\nThe default available debugger types are null (for disabled debugging), structural, and full.");
+					+ ".\nThe default available debugger types are null or none (for disabled debugging), structural, and full.");
 				e.printStackTrace();
 				return null;
 			}

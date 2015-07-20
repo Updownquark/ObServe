@@ -10,6 +10,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
@@ -17,7 +18,9 @@ import java.util.ListIterator;
 import java.util.NavigableSet;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.function.Predicate;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.hamcrest.Description;
 import org.hamcrest.Matcher;
@@ -45,13 +48,13 @@ public class ObservableCollectionsTest {
 	 * @param check An optional function to apply after each collection modification to ensure the structure of the collection is correct
 	 *            and potentially assert other side effects of collection modification
 	 */
-	public static <T extends Collection<Integer>> void testCollection(T coll, Predicate<? super T> check) {
+	public static <T extends Collection<Integer>> void testCollection(T coll, Consumer<? super T> check) {
 		// Most basic functionality, with iterator
 		assertEquals(0, coll.size()); // Start with empty list
 		assertTrue(coll.add(0)); //Test add
 		assertEquals(1, coll.size()); // Test size
 		if(check != null)
-			assertEquals(true, check.test(coll));
+			check.accept(coll);
 		Iterator<Integer> iter = coll.iterator(); //Test iterator
 		assertEquals(true, iter.hasNext());
 		assertEquals(0, (int) iter.next());
@@ -62,7 +65,7 @@ public class ObservableCollectionsTest {
 		iter.remove(); //Test iterator remove
 		assertEquals(0, coll.size());
 		if(check != null)
-			assertTrue(check.test(coll));
+			check.accept(coll);
 		assertEquals(false, iter.hasNext());
 		iter = coll.iterator();
 		assertEquals(false, iter.hasNext());
@@ -70,13 +73,13 @@ public class ObservableCollectionsTest {
 		assertEquals(1, coll.size());
 		assertFalse(coll.isEmpty());
 		if(check != null)
-			assertTrue(check.test(coll));
+			check.accept(coll);
 		assertThat(coll, contains(0)); // Test contains
 		assertTrue(coll.remove(0)); //Test remove
 		assertFalse(coll.remove(0));
 		assertTrue(coll.isEmpty()); // Test isEmpty
 		if(check != null)
-			assertTrue(check.test(coll));
+			check.accept(coll);
 		assertThat(coll, not(contains(0)));
 
 		ArrayList<Integer> toAdd=new ArrayList<>();
@@ -87,13 +90,13 @@ public class ObservableCollectionsTest {
 		assertTrue(coll.addAll(toAdd)); // Test addAll
 		assertEquals(100, coll.size());
 		if(check != null)
-			assertTrue(check.test(coll));
+			check.accept(coll);
 		assertThat(coll, containsAll(0, 100, 50, 11, 99, 50)); // 50 twice. Test containsAll
 		// 100 not in coll. 50 in list twice. Test removeAll.
 		assertTrue(coll.removeAll(asList(0, 50, 100, 10, 90, 20, 80, 30, 70, 40, 60, 50)));
 		assertEquals(90, coll.size());
 		if(check != null)
-			assertTrue(check.test(coll));
+			check.accept(coll);
 
 		ArrayList<Integer> copy = new ArrayList<>(coll); // More iterator testing
 		assertThat(coll, containsAll(copy));
@@ -103,12 +106,12 @@ public class ObservableCollectionsTest {
 		coll.retainAll(asList(1, 51, 101, 11, 91, 21, 81, 31, 71, 41, 61, 51)); // 101 not in coll. 51 in list twice. Test retainAll.
 		assertEquals(10, coll.size());
 		if(check != null)
-			assertTrue(check.test(coll));
+			check.accept(coll);
 		assertThat(coll, not(containsAll(1, 2, 11, 99)));
 		coll.clear(); // Test clear
 		assertEquals(0, coll.size());
 		if(check != null)
-			assertTrue(check.test(coll));
+			check.accept(coll);
 		assertThat(coll, not(contains(2)));
 		// Leave the collection empty
 
@@ -147,6 +150,36 @@ public class ObservableCollectionsTest {
 		};
 	}
 
+	private static <T> Collection<T> sequence(int num, Function<Integer, T> map, boolean scramble) {
+		ArrayList<T> ret = new ArrayList<>();
+		for(int i = 0; i < num; i++)
+			ret.add(null);
+		for(int i = 0; i < num; i++) {
+			T value;
+			if(map != null)
+				value = map.apply(num);
+			else
+				value = (T) (Integer) i;
+			int index = i;
+			if(scramble) {
+				switch (i % 3) {
+				case 0:
+					index = i;
+					break;
+				case 1:
+					index = (i + 3) % num;
+					break;
+				default:
+					index = num - index - 1;
+					break;
+				}
+			}
+			ret.set(index, value);
+		}
+
+		return Collections.unmodifiableCollection(ret);
+	}
+
 	/**
 	 * Runs a set through a set of tests designed to ensure all {@link Set} methods are functioning correctly
 	 *
@@ -155,29 +188,29 @@ public class ObservableCollectionsTest {
 	 * @param check An optional function to apply after each collection modification to ensure the structure of the collection is correct
 	 *            and potentially assert other side effects of collection modification
 	 */
-	public static <T extends Set<Integer>> void testSet(T set, Predicate<? super T> check) {
+	public static <T extends Set<Integer>> void testSet(T set, Consumer<? super T> check) {
 		testCollection(set, check);
 
 		assertTrue(set.add(0));
 		assertEquals(1, set.size());
 		if(check != null)
-			check.test(set);
+			check.accept(set);
 		assertTrue(set.add(1));
 		assertEquals(2, set.size());
 		if(check != null)
-			check.test(set);
+			check.accept(set);
 		assertFalse(set.add(0)); // Test uniqueness
 		assertEquals(2, set.size());
 		if(check != null)
-			check.test(set);
+			check.accept(set);
 		assertTrue(set.remove(0));
 		assertEquals(1, set.size());
 		if(check != null)
-			check.test(set);
+			check.accept(set);
 		set.clear();
 		assertEquals(0, set.size());
 		if(check != null)
-			check.test(set);
+			check.accept(set);
 	}
 
 	/**
@@ -188,22 +221,89 @@ public class ObservableCollectionsTest {
 	 * @param check An optional function to apply after each collection modification to ensure the structure of the collection is correct
 	 *            and potentially assert other side effects of collection modification
 	 */
-	public static <T extends NavigableSet<Integer>> void testSortedSet(T set, Predicate<? super T> check) {
+	public static <T extends NavigableSet<Integer>> void testSortedSet(T set, Consumer<? super T> check) {
 		testSet(set, coll -> {
 			Comparator<? super Integer> comp = set.comparator();
 			Integer last = null;
 			for(Integer el : coll) {
 				if(last != null)
 					assertThat(el, greaterThanOrEqual(last, comp));
+				last = el;
 			}
 
 			if(check != null)
-				return check.test(coll);
-			else
-				return true;
+				check.accept(coll);
 		});
 
-		// TODO Test the rest of NavigableSet
+		// Test the special find methods of NavigableSet
+		set.addAll(sequence(30, v -> v * 2, true));
+		assertEquals(30, set.size());
+		if(check != null)
+			check.accept(set);
+		assertEquals((Integer) 0, set.first());
+		assertEquals((Integer) 58, set.last());
+		assertEquals((Integer) 14, set.lower(16));
+		assertEquals((Integer) 18, set.higher(16));
+		assertEquals((Integer) 14, set.floor(15));
+		assertEquals((Integer) 16, set.ceiling(15));
+		assertEquals((Integer) 16, set.floor(16));
+		assertEquals((Integer) 16, set.ceiling(16));
+		assertEquals((Integer) 0, set.pollFirst());
+		assertEquals(29, set.size());
+		if(check != null)
+			check.accept(set);
+		assertEquals((Integer) 58, set.pollLast());
+		assertEquals(28, set.size());
+		if(check != null)
+			check.accept(set);
+		assertEquals((Integer) 2, set.pollFirst());
+		assertEquals(29, set.size());
+		if(check != null)
+			check.accept(set);
+		assertEquals((Integer) 56, set.pollLast());
+		assertEquals(28, set.size());
+		if(check != null)
+			check.accept(set);
+
+		Iterator<Integer> desc = set.descendingIterator(); // Test descendingIterator
+		Integer last = null;
+		while(desc.hasNext()) {
+			Integer el = desc.next();
+			if(last != null)
+				assertThat(el, not(greaterThanOrEqual(last, set.comparator()))); // Strictly less than
+			last = el;
+		}
+
+		// Test subsets
+		Consumer<NavigableSet<Integer>> ssListener = ss -> {
+			if(check != null)
+				check.accept(set);
+		};
+		TreeSet<Integer> copy = new TreeSet<>(set);
+		NavigableSet<Integer> subSet = (NavigableSet<Integer>) set.headSet(30);
+		NavigableSet<Integer> copySubSet = (NavigableSet<Integer>) copy.headSet(30);
+		assertThat(subSet, equalTo(copySubSet));
+		testSubSet(subSet, null, true, 30, false, ssListener);
+
+		subSet = set.headSet(30, true);
+		copySubSet = copy.headSet(30, true);
+		assertThat(subSet, equalTo(copySubSet));
+		testSubSet(subSet, null, true, 30, true, ssListener);
+
+		subSet = (NavigableSet<Integer>) set.tailSet(30);
+		copySubSet = (NavigableSet<Integer>) copy.tailSet(30);
+		assertThat(subSet, equalTo(copySubSet));
+		testSubSet(subSet, 30, true, null, true, ssListener);
+
+		subSet = set.tailSet(30, false);
+		copySubSet = copy.tailSet(30, false);
+		assertThat(subSet, equalTo(copySubSet));
+		testSubSet(set.tailSet(30, false), 30, false, null, true, ssListener);
+
+		subSet = (NavigableSet<Integer>) set.subSet(15, 45);
+		copySubSet = (NavigableSet<Integer>) copy.subSet(15, 45);
+		assertThat(subSet, equalTo(copySubSet));
+		testSubSet(subSet, 15, true, 45, false, ssListener);
 	}
 
 	private static <T> Matcher<T> greaterThanOrEqual(T value, Comparator<? super T> comp) {
@@ -220,6 +320,54 @@ public class ObservableCollectionsTest {
 		};
 	}
 
+	private static void testSubSet(NavigableSet<Integer> subSet, Integer min, boolean minInclude, Integer max, boolean maxInclude,
+		Consumer<? super NavigableSet<Integer>> check) {
+		int startSize = subSet.size();
+		if(min != null) {
+			if(minInclude) {
+				subSet.add(min);
+				assertEquals(startSize + 1, subSet.size());
+				check.accept(subSet);
+			}
+			try {
+				if(minInclude) {
+					subSet.add(min - 1);
+				} else
+					subSet.add(min);
+				assertTrue("SubSet should have thrown argument exception", false);
+			} catch(IllegalArgumentException e) {
+			}
+		} else {
+			subSet.add(Integer.MIN_VALUE);
+			assertEquals(startSize + 1, subSet.size());
+			check.accept(subSet);
+		}
+		if(max != null) {
+			if(maxInclude) {
+				subSet.add(max);
+				assertEquals(startSize + 1, subSet.size());
+				check.accept(subSet);
+			}
+			try {
+				if(maxInclude)
+					subSet.add(max + 1);
+				else
+					subSet.add(max);
+				assertTrue("SubSet should have thrown argument exception", false);
+			} catch(IllegalArgumentException e) {
+			}
+		} else {
+			subSet.add(Integer.MAX_VALUE);
+			assertEquals(startSize + 1, subSet.size());
+			check.accept(subSet);
+		}
+		subSet.removeAll(asList(min, max, Integer.MIN_VALUE, Integer.MAX_VALUE));
+		assertEquals(startSize, subSet.size());
+		check.accept(subSet);
+	}
+
+	private static final int SUBLIST_TEST_DEPTH = 3;
+
 	/**
 	 * Runs a list through a set of tests designed to ensure all {@link List} methods are functioning correctly
 	 *
@@ -227,45 +375,78 @@ public class ObservableCollectionsTest {
 	 * @param list The list to test
 	 * @param check An optional function to apply after each collection modification to ensure the structure of the collection is correct
 	 *            and potentially assert other side effects of collection modification
+	 * @param depth 0 unless called internally to the method (recursively)
 	 */
-	public static <T extends List<Integer>> void testList(T list, Predicate<? super T> check) {
+	public static <T extends List<Integer>> void testList(T list, Consumer<? super T> check, int depth) {
 		testCollection(list, check);
 
-		assertTrue(list.addAll(asList(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)));
+		assertTrue(list.addAll(sequence(10, null, false)));
 		assertEquals(10, list.size());
 		if(check != null)
-			check.test(list);
+			check.accept(list);
 		assertTrue(list.add(0)); // Test non-uniqueness
 		assertEquals(11, list.size());
 		if(check != null)
-			check.test(list);
+			check.accept(list);
 		assertEquals((Integer) 0, list.remove(10));
 		assertEquals(10, list.size());
 		if(check != null)
-			check.test(list);
-		assertTrue(list.addAll(asList(20, 21, 22, 23, 24, 25, 26, 27, 28, 29)));
+			check.accept(list);
+		assertTrue(list.addAll(sequence(10, v -> v + 20, false)));
 		assertEquals(20, list.size());
 		if(check != null)
-			check.test(list);
-		assertTrue(list.addAll(10, asList(10, 11, 12, 13, 14, 15, 16, 17, 18, 19))); // Test addAll at index
+			check.accept(list);
+		assertTrue(list.addAll(10, sequence(10, v -> v + 10, false))); // Test addAll at index
 		assertEquals(30, list.size());
 		if(check != null)
-			check.test(list);
+			check.accept(list);
 		for(int i = 0; i < 30; i++)
 			assertEquals((Integer) i, list.get(i)); // Test get
+
+		// Test range checks
+		try {
+			list.remove(-1);
+			assertTrue("List should have thrown out of bounds exception", false);
+		} catch(IndexOutOfBoundsException e) {
+		}
+		try {
+			list.remove(list.size());
+			assertTrue("List should have thrown out of bounds exception", false);
+		} catch(IndexOutOfBoundsException e) {
+		}
+		try {
+			list.add(-1, 0);
+			assertTrue("List should have thrown out of bounds exception", false);
+		} catch(IndexOutOfBoundsException e) {
+		}
+		try {
+			list.add(list.size(), 0);
+			assertTrue("List should have thrown out of bounds exception", false);
+		} catch(IndexOutOfBoundsException e) {
+		}
+		try {
+			list.set(-1, 0);
+			assertTrue("List should have thrown out of bounds exception", false);
+		} catch(IndexOutOfBoundsException e) {
+		}
+		try {
+			list.set(list.size(), 0);
+			assertTrue("List should have thrown out of bounds exception", false);
+		} catch(IndexOutOfBoundsException e) {
+		}
 
 		for(int i = 0; i < 30; i++)
 			assertEquals(i, list.indexOf(i)); // Test indexOf
 		for(int i = 0; i < 30; i++) {
 			assertEquals((Integer) i, list.set(i, list.get(30 - i - 1))); // Test set
 			if(check != null)
-				check.test(list);
+				check.accept(list);
 		}
 		assertEquals(30, list.size());
 		list.add(0);
 		list.add(1);
 		if(check != null)
-			check.test(list);
+			check.accept(list);
 		assertEquals(0, list.indexOf(0)); // Test indexOf with duplicate values
 		assertEquals(30, list.lastIndexOf(0)); // Test lastIndexOf
 		list.remove(31);
@@ -273,20 +454,20 @@ public class ObservableCollectionsTest {
 		for(int i = 0; i < 30; i++)
 			assertEquals(30 - i - 1, list.indexOf(i));
 		if(check != null)
-			check.test(list);
+			check.accept(list);
 		for(int i = 0; i < 30; i++) {
 			assertEquals((Integer) (30 - i - 1), list.set(i, list.get(30 - i - 1)));
 			if(check != null)
-				check.test(list);
+				check.accept(list);
 		}
 		assertTrue(list.remove((Integer) 10));
 		assertEquals(29, list.size());
 		if(check != null)
-			check.test(list);
+			check.accept(list);
 		list.add(10, 10); // Test add at index
 		assertEquals(30, list.size());
 		if(check != null)
-			check.test(list);
+			check.accept(list);
 
 		// Test listIterator
 		ArrayList<Integer> test = new ArrayList<>(list.size());
@@ -317,7 +498,7 @@ public class ObservableCollectionsTest {
 			assertTrue(listIter1.hasPrevious());
 			int prev = listIter1.previous();
 			assertThat(listIter2.previous(), equalTo(prev));
-			switch (i % 3) {
+			switch (i % 5) {
 			case 0:
 				int toAdd=i * 17 + 100;
 				listIter1.add(toAdd);
@@ -327,6 +508,10 @@ public class ObservableCollectionsTest {
 				assertTrue(listIter1.hasPrevious());
 				assertThat(toAdd, equalTo(listIter1.previous()));
 				break;
+			case 1:
+				listIter1.remove();
+				listIter2.remove();
+				break;
 			case 2:
 				listIter1.set(prev + 50);
 				listIter2.set(prev + 50);
@@ -334,7 +519,7 @@ public class ObservableCollectionsTest {
 			}
 			assertThat(test, equalTo(list));
 			if(check != null)
-				check.test(list);
+				check.accept(list);
 		}
 		for(i = 0; listIter2.hasNext(); i++) {
 			assertTrue(listIter1.hasNext());
@@ -360,10 +545,132 @@ public class ObservableCollectionsTest {
 			}
 			assertThat(test, equalTo(list));
 			if(check != null)
-				check.test(list);
+				check.accept(list);
 		}
 
-		// TODO Test subList
+		list.clear();
+		if(check != null)
+			check.accept(list);
+		if(depth + 1 < SUBLIST_TEST_DEPTH) {
+			// Test subList
+			list.addAll(sequence(30, null, false));
+			if(check != null)
+				check.accept(list);
+			int subIndex = list.size() / 2;
+			List<Integer> subList = list.subList(subIndex, subIndex + 5);
+			assertEquals(5, subList.size());
+			for(i = 0; i < subList.size(); i++)
+				assertEquals((Integer) (subIndex + i), subList.get(i));
+			i = 0;
+			for(Integer el : subList)
+				assertEquals((Integer) (subIndex + i++), el);
+			subList.remove(0);
+			assertThat(list, not(contains(subIndex)));
+			if(check != null)
+				check.accept(list);
+			subList.add(0, subIndex);
+			assertThat(list, contains(subIndex));
+			if(check != null)
+				check.accept(list);
+			try {
+				subList.remove(-1);
+				assertTrue("SubList should have thrown out of bounds exception", false);
+			} catch(IndexOutOfBoundsException e) {
+			}
+			try {
+				subList.remove(subList.size());
+				assertTrue("SubList should have thrown out of bounds exception", false);
+			} catch(IndexOutOfBoundsException e) {
+			}
+			assertEquals(30, list.size());
+			assertEquals(5, subList.size());
+			subList.clear();
+			assertEquals(25, list.size());
+			assertEquals(0, subList.size());
+			if(check != null)
+				check.accept(list);
+
+			testList(subList, sl -> {
+				assertEquals(list.size(), 25 + sl.size());
+				for(int j = 0; j < list.size(); j++) {
+					if(j < subIndex)
+						assertEquals((Integer) j, list.get(j));
+					else if(j < subIndex - sl.size())
+						assertEquals(sl.get(j - subIndex), list.get(j));
+					else
+						assertEquals((Integer) (j - sl.size() + 5), list.get(j));
+				}
+				if(check != null)
+					check.accept(list);
+			}, depth + 1);
+		}
+	}
+
+	public static <T extends ObservableSet<Integer>> void testObservableSet(T set, Consumer<? super T> check) {
+		testSet(set, check);
+	}
+
+	public static <T extends ObservableList<Integer>> void testObservableList(T list, Consumer<? super T> check) {
+		list.addAll(sequence(50, null, true));
+		if(check != null)
+			check.accept(list);
+		ArrayList<Integer> synced = new ArrayList<>();
+		Subscription listSub = sync(list, synced);
+		assertThat(synced, equalTo(list));
+		list.clear();
+		assertThat(synced, equalTo(list));
+		if(check != null)
+			check.accept(list);
+
+		Function<Integer, Integer> mapFn = v -> v + 1000;
+		Function<Integer, Integer> reverseMapFn = v -> v - 1000;
+		ObservableList<Integer> mappedOL = list.map(null, mapFn, reverseMapFn);
+		ArrayList<Integer> mappedSynced = new ArrayList<>();
+		Subscription mappedSub = sync(mappedOL, mappedSynced);
+
+		Consumer<ObservableList<Integer>> newCheck = l -> {
+			assertThat(synced, equalTo(list));
+			if(check != null)
+				check.accept(list);
+
+			List<Integer> mappedCorrect = list.stream().map(mapFn).collect(Collectors.toList());
+			assertThat(mappedCorrect, equalTo(mappedOL));
+			assertThat(mappedCorrect, equalTo(mappedSub));
+		};
+		try {
+			testList(list, newCheck, 0);
+
+			testList(mappedOL, newCheck, 0);
+		} finally {
+			mappedSub.unsubscribe();
+			listSub.unsubscribe();
+		}
+	}
+
+	private static <T> Subscription sync(ObservableList<T> list, List<T> synced) {
+		return list.onOrderedElement(el -> {
+			el.subscribe(new Observer<ObservableValueEvent<T>>() {
+				@Override
+				public <V extends ObservableValueEvent<T>> void onNext(V evt) {
+					if(evt.getOldValue() == null)
+						synced.add(el.getIndex(), evt.getValue());
+					else {
+						assertEquals(evt.getOldValue(), synced.get(el.getIndex()));
+						synced.set(el.getIndex(), evt.getValue());
+					}
+				}
+
+				@Override
+				public <V extends ObservableValueEvent<T>> void onCompleted(V evt) {
+					synced.remove(el.getIndex());
+				}
+			});
+		});
+	}
+
+	@Test
+	public void testObservableArrayList() {
+		testObservableList(new ObservableArrayList<>(new Type(Integer.class)), null);
 	}
 
 	/** Tests basic {@link ObservableSet} functionality */
