@@ -6,6 +6,7 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -450,6 +451,13 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	 */
 	default Observable<Void> changes() {
 		return keySet().refreshEach(key -> get(key).simpleChanges()).simpleChanges();
+	}
+
+	/**
+	 * @param map The function to map values
+	 * @return A map with the same key set, but with its values mapped according to the given mapping function
+	 */
+	default <T> ObservableMultiMap<K, T> map(Function<? super V, T> map) {
 	}
 
 	/** @return An immutable copy of this map */
