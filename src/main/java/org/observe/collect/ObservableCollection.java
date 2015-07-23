@@ -82,15 +82,14 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 	@Override
 	default boolean containsAll(Collection<?> c) {
+		if(c.isEmpty())
+			return true;
+		ArrayList<Object> copy = new ArrayList<>(c);
 		try (Transaction t = lock(false, null)) {
-			boolean modified = false;
 			Iterator<E> iter = iterator();
 			while(iter.hasNext())
-				if(c.contains(iter.next())) {
-					modified = true;
-					iter.remove();
-				}
-			return modified;
+				copy.remove(iter.next());
+			return copy.isEmpty();
 		}
 	}
 
@@ -793,7 +792,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	interface PartialCollectionImpl<E> extends ObservableCollection<E> {
 		@Override
 		default boolean add(E e) {
-			throw new UnsupportedOperationException();
+			throw new UnsupportedOperationException(getClass().getName() + " does not implement add(value)");
 		}
 
 		@Override

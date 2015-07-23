@@ -458,7 +458,7 @@ public class ObservableCollectionsTest {
 		if(check != null)
 			check.accept(list);
 		for(int i = 0; i < 30; i++) {
-			assertEquals((Integer) (30 - i - 1), list.set(i, list.get(30 - i - 1)));
+			assertEquals((Integer) (30 - i - 1), list.set(i, 30 - i - 1));
 			if(check != null)
 				check.accept(list);
 		}
@@ -506,9 +506,8 @@ public class ObservableCollectionsTest {
 				listIter1.add(toAdd);
 				listIter2.add(toAdd);
 				assertTrue(listIter1.hasNext());
-				assertThat(toAdd, equalTo(listIter1.next()));
-				assertTrue(listIter1.hasPrevious());
-				assertThat(toAdd, equalTo(listIter1.previous()));
+				assertThat(toAdd, equalTo(listIter1.previous())); // Back up over the added value
+				listIter2.previous();
 				break;
 			case 1:
 				listIter1.remove();
@@ -532,16 +531,16 @@ public class ObservableCollectionsTest {
 				int toAdd=i*53+1000;
 				listIter1.add(toAdd);
 				listIter2.add(toAdd);
-				assertTrue(listIter1.hasNext());
-				assertThat(toAdd, equalTo(listIter1.next()));
-				listIter2.next();
+				assertTrue(listIter1.hasPrevious());
+				assertThat(toAdd, equalTo(listIter1.previous()));
+				listIter1.next();
 				break;
 			case 1:
 				listIter1.remove();
 				listIter2.remove();
 				break;
 			case 2:
-				listIter1.set(next + 10000);
+				listIter1.set(next + 1000);
 				listIter2.set(next + 1000);
 				break;
 			}
@@ -567,6 +566,7 @@ public class ObservableCollectionsTest {
 			for(Integer el : subList)
 				assertEquals((Integer) (subIndex + i++), el);
 			subList.remove(0);
+			assertEquals(4, subList.size());
 			assertThat(list, not(contains(subIndex)));
 			if(check != null)
 				check.accept(list);
@@ -597,7 +597,7 @@ public class ObservableCollectionsTest {
 				for(int j = 0; j < list.size(); j++) {
 					if(j < subIndex)
 						assertEquals((Integer) j, list.get(j));
-					else if(j < subIndex - sl.size())
+					else if(j < subIndex + sl.size())
 						assertEquals(sl.get(j - subIndex), list.get(j));
 					else
 						assertEquals((Integer) (j - sl.size() + 5), list.get(j));

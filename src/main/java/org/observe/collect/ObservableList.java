@@ -554,21 +554,6 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		}
 
 		@Override
-		public void remove() {
-			if(lastRet < 0)
-				throw new IllegalStateException();
-
-			try {
-				theList.remove(lastRet);
-				if(lastRet < cursor)
-					cursor--;
-				lastRet = -1;
-			} catch(IndexOutOfBoundsException e) {
-				throw new ConcurrentModificationException();
-			}
-		}
-
-		@Override
 		public boolean hasPrevious() {
 			return cursor != 0;
 		}
@@ -579,7 +564,6 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 				int i = cursor - 1;
 				E previous = theList.get(i);
 				lastRet = cursor = i;
-				cursor = i;
 				return previous;
 			} catch(IndexOutOfBoundsException e) {
 				throw new NoSuchElementException();
@@ -597,13 +581,16 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		}
 
 		@Override
-		public void set(E e) {
+		public void remove() {
 			if(lastRet < 0)
 				throw new IllegalStateException();
 
 			try {
-				theList.set(lastRet, e);
-			} catch(IndexOutOfBoundsException ex) {
+				theList.remove(lastRet);
+				if(lastRet < cursor)
+					cursor--;
+				lastRet = -1;
+			} catch(IndexOutOfBoundsException e) {
 				throw new ConcurrentModificationException();
 			}
 		}
@@ -615,6 +602,18 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 				theList.add(i, e);
 				lastRet = -1;
 				cursor = i + 1;
+			} catch(IndexOutOfBoundsException ex) {
+				throw new ConcurrentModificationException();
+			}
+		}
+
+		@Override
+		public void set(E e) {
+			if(lastRet < 0)
+				throw new IllegalStateException();
+
+			try {
+				theList.set(lastRet, e);
 			} catch(IndexOutOfBoundsException ex) {
 				throw new ConcurrentModificationException();
 			}
@@ -661,17 +660,17 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 		@Override
 		default E set(int index, E element) {
-			throw new UnsupportedOperationException();
+			throw new UnsupportedOperationException(getClass().getName() + " does not implement set(index, value)");
 		}
 
 		@Override
 		default void add(int index, E element) {
-			throw new UnsupportedOperationException();
+			throw new UnsupportedOperationException(getClass().getName() + " does not implement add(index, value)");
 		}
 
 		@Override
 		default E remove(int index) {
-			throw new UnsupportedOperationException();
+			throw new UnsupportedOperationException(getClass().getName() + " does not implement remove(index)");
 		}
 
 		@Override
@@ -811,12 +810,6 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		}
 
 		@Override
-		public E set(int index, E element) {
-			rangeCheck(index);
-			return theList.set(index + theOffset, element);
-		}
-
-		@Override
 		public E get(int index) {
 			rangeCheck(index);
 			return theList.get(index + theOffset);
@@ -831,8 +824,54 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		}
 
 		@Override
+		public boolean add(E value) {
+			try (Transaction t = theList.lock(true, null)) {
+				int preSize = theList.size();
+				theList.add(theOffset + theSize, value);
+				if(preSize < theList.size()) {
+					theSize++;
+					return true;
+				}
+				return false;
+			}
+		}
+
+		@Override
+		public void add(int index, E value) {
+			try (Transaction t = theList.lock(true, null)) {
+				if(index < 0 || index > theSize)
+					throw new IndexOutOfBoundsException(index + " of " + size());
+				int preSize = theList.size();
+				theList.add(theOffset + index, value);
+				if(preSize < theList.size()) {
+					theSize++;
+				}
+			}
+		}
+
+		@Override
+		public E remove(int index) {
+			try (Transaction t = theList.lock(true, null)) {
+				rangeCheck(index);
+				int preSize = theList.size();
+				E ret = theList.remove(theOffset + index);
+				if(theList.size() < preSize)
+					theSize--;
+				return ret;
+			}
+		}
+
+		@Override
+		public E set(int index, E value) {
+			try (Transaction t = theList.lock(true, null)) {
+				rangeCheck(index);
+				return theList.set(theOffset + index, value);
+			}
+		}
+
+		@Override
 		public void removeRange(int fromIndex, int toIndex) {
-			for(int i = fromIndex; i < toIndex; i++)
+			for(int i = toIndex - 1; i >= fromIndex; i--)
 				theList.remove(theOffset + i);
 			theSize -= (toIndex - fromIndex);
 		}
@@ -894,7 +933,12 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 				@Override
 				public void remove() {
-					backing.remove();
+					try (Transaction t = theList.lock(true, null)) {
+						int preSize = theList.size();
+						backing.remove();
+						if(theList.size() < preSize)
+							theSize--;
+					}
 				}
 
 				@Override
@@ -904,7 +948,12 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 				@Override
 				public void add(E e) {
-					backing.add(e);
+					try (Transaction t = theList.lock(true, null)) {
+						int preSize = theList.size();
+						backing.add(e);
+						if(theList.size() > preSize)
+							theSize++;
+					}
 				}
 			};
 		}
@@ -916,6 +965,23 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 		private String outOfBoundsMsg(int index) {
 			return "Index: " + index + ", Size: " + theSize;
+		}
+
+		@Override
+		public String toString() {
+			StringBuilder ret = new StringBuilder("[");
+			boolean first = true;
+			try (Transaction t = lock(false, null)) {
+				for(E value : this) {
+					if(!first) {
+						ret.append(", ");
+					} else
+						first = false;
+					ret.append(value);
+				}
+			}
+			ret.append(']');
+			return ret.toString();
 		}
 
 		class Element implements OrderedObservableElement<E> {
