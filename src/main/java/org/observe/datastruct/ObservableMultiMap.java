@@ -22,6 +22,7 @@ import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.collect.OrderedObservableElement;
 import org.observe.datastruct.ObservableMap.ObsEntryImpl;
+import org.observe.util.ObservableUtils;
 import org.observe.util.Transaction;
 
 import prisms.lang.Type;
@@ -458,6 +459,45 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	 * @return A map with the same key set, but with its values mapped according to the given mapping function
 	 */
 	default <T> ObservableMultiMap<K, T> map(Function<? super V, T> map) {
+		ObservableMultiMap<K, V> outer = this;
+		return new ObservableMultiMap<K, T>() {
+			private Type theValueType = ObservableUtils.getReturnType(map);
+
+			@Override
+			public Transaction lock(boolean write, Object cause) {
+				return outer.lock(write, cause);
+			}
+
+			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return outer.getSession();
+			}
+
+			@Override
+			public Type getKeyType() {
+				return outer.getKeyType();
+			}
+
+			@Override
+			public Type getValueType() {
+				return theValueType;
+			}
+
+			@Override
+			public ObservableSet<K> keySet() {
+				return outer.keySet();
+			}
+
+			@Override
+			public ObservableCollection<T> get(Object key) {
+				return outer.get(key).map(map);
+			}
+
+			@Override
+			public ObservableSet<? extends ObservableMultiEntry<K, T>> observeEntries() {
+				return ObservableMultiMap.defaultObserveEntries(this);
+			}
+		};
 	}
 
 	/** @return An immutable copy of this map */

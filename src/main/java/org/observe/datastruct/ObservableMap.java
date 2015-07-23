@@ -225,6 +225,45 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 	 * @return A map with the same key set, but with its values mapped according to the given mapping function
 	 */
 	default <T> ObservableMap<K, T> map(Function<? super V, T> map) {
+		ObservableMap<K, V> outer = this;
+		return new ObservableMap<K, T>() {
+			private Type theValueType = ObservableUtils.getReturnType(map);
+
+			@Override
+			public Transaction lock(boolean write, Object cause) {
+				return outer.lock(write, cause);
+			}
+
+			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return outer.getSession();
+			}
+
+			@Override
+			public Type getKeyType() {
+				return outer.getKeyType();
+			}
+
+			@Override
+			public Type getValueType() {
+				return theValueType;
+			}
+
+			@Override
+			public ObservableSet<K> keySet() {
+				return outer.keySet();
+			}
+
+			@Override
+			public ObservableValue<T> observe(Object key) {
+				return outer.observe(key).mapV(map);
+			}
+
+			@Override
+			public ObservableSet<? extends ObservableEntry<K, T>> observeEntries() {
+				return ObservableMap.defaultObserveEntries(this);
+			}
+		};
 	}
 
 	/** @return An immutable copy of this map */
