@@ -14,7 +14,6 @@ import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableList.PartialListImpl;
 import org.observe.collect.OrderedObservableElement;
-import org.observe.util.DefaultTransactable;
 import org.observe.util.Transactable;
 import org.observe.util.Transaction;
 import org.observe.util.tree.CountedRedBlackNode.DefaultNode;
@@ -35,8 +34,6 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 	private final Type theType;
 
 	private TreeListInternals theInternals;
-	private ObservableValue<CollectionSession> theSessionObservable;
-	private Transactable theSessionController;
 
 	private final RedBlackTreeList<DefaultNode<InternalElement>, InternalElement> theElements;
 
@@ -49,9 +46,6 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 	 */
 	public ObservableTreeList(Type type) {
 		this(type, new ReentrantReadWriteLock(), null, null);
-
-		theSessionController = new DefaultTransactable(theInternals.getLock());
-		theSessionObservable = ((DefaultTransactable) theSessionController).getSession();
 	}
 
 	/**
@@ -66,28 +60,22 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 	public ObservableTreeList(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController) {
 		theType = type;
-		theInternals = new TreeListInternals(lock, write -> {
+		theInternals = new TreeListInternals(lock, session, sessionController, write -> {
 			if(write)
 				theModCount++;
 		});
-		theSessionObservable = session;
-		theSessionController = sessionController;
 
 		theElements = new RedBlackTreeList<>(element -> new DefaultNode<>(element, null));
 	}
 
 	@Override
 	public ObservableValue<CollectionSession> getSession() {
-		return theSessionObservable;
+		return theInternals.getSession();
 	}
 
 	@Override
 	public Transaction lock(boolean write, Object cause) {
-		if(theSessionController == null) {
-			return () -> {
-			};
-		}
-		return theSessionController.lock(write, cause);
+		return theInternals.lock(write, true, cause);
 	}
 
 	@Override
@@ -123,14 +111,14 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 
 	@Override
 	public E get(int index) {
-		try (Transaction t = theInternals.lock(false)) {
+		try (Transaction t = theInternals.lock(false, false, null)) {
 			return theElements.get(index).get();
 		}
 	}
 
 	@Override
 	public boolean contains(Object o) {
-		try (Transaction t = theInternals.lock(false)) {
+		try (Transaction t = theInternals.lock(false, false, null)) {
 			for(InternalElement el : theElements) {
 				if(Objects.equals(el.get(), o))
 					return true;
@@ -144,7 +132,7 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 		ArrayList<Object> copy = new ArrayList<>(coll);
 		if(copy.isEmpty())
 			return true;
-		try (Transaction t = theInternals.lock(false)) {
+		try (Transaction t = theInternals.lock(false, false, null)) {
 			for(InternalElement el : theElements)
 				copy.remove(el.get());
 		}
@@ -184,7 +172,7 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 
 	@Override
 	public boolean add(E e) {
-		try (Transaction t = theInternals.lock(true)) {
+		try (Transaction t = theInternals.lock(true, false, null)) {
 			addAfter(e, theElements.getLastNode());
 		}
 		return true;
@@ -206,7 +194,7 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 
 	@Override
 	public void add(int index, E element) {
-		try (Transaction t = theInternals.lock(true)) {
+		try (Transaction t = theInternals.lock(true, false, null)) {
 			InternalElement after = index == 0 ? null : theElements.get(index - 1);
 			addAfter(element, after.getNode());
 		}
@@ -241,7 +229,7 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 
 	@Override
 	public E remove(int index) {
-		try (Transaction t = theInternals.lock(true)) {
+		try (Transaction t = theInternals.lock(true, false, null)) {
 			InternalElement node = theElements.get(index);
 			E ret = node.get();
 			node.remove();
@@ -251,7 +239,7 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 
 	@Override
 	public E set(int index, E element) {
-		try (Transaction t = theInternals.lock(true)) {
+		try (Transaction t = theInternals.lock(true, false, null)) {
 			InternalElement el = theElements.get(index);
 			E ret = el.get();
 			el.set(element);
@@ -304,9 +292,11 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 
 			@Override
 			public void remove() {
-				backing.remove();
-				theLast.remove();
-				theLast = null;
+				try (Transaction t = theInternals.lock(true, false, null)) {
+					backing.remove();
+					theLast.remove();
+					theLast = null;
+				}
 			}
 
 			@Override
@@ -316,10 +306,12 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 
 			@Override
 			public void add(E e) {
-				if(lastWasNext)
-					addBefore(e, theLast.getNode());
-				else
-					addAfter(e, theLast.getNode());
+				try (Transaction t = theInternals.lock(true, false, null)) {
+					if(lastWasNext)
+						addBefore(e, theLast.getNode());
+					else
+						addAfter(e, theLast.getNode());
+				}
 			}
 		};
 	}
@@ -370,8 +362,9 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 	}
 
 	private class TreeListInternals extends DefaultCollectionInternals<E> {
-		TreeListInternals(ReentrantReadWriteLock lock, Consumer<? super Boolean> postAction) {
-			super(lock, null, postAction);
+		TreeListInternals(ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session, Transactable sessionController,
+			Consumer<? super Boolean> postAction) {
+			super(lock, session, sessionController, null, postAction);
 		}
 
 		@Override

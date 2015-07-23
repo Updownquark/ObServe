@@ -16,7 +16,6 @@ import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableList;
 import org.observe.collect.OrderedObservableElement;
-import org.observe.util.DefaultTransactable;
 import org.observe.util.Transactable;
 import org.observe.util.Transaction;
 
@@ -35,8 +34,6 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 	private final Type theType;
 
 	private LinkedListInternals theInternals;
-	private ObservableValue<CollectionSession> theSessionObservable;
-	private Transactable theSessionController;
 
 	private LinkedNode theFirst;
 	private LinkedNode theLast;
@@ -53,9 +50,6 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 	 */
 	public ObservableLinkedList(Type type) {
 		this(type, new ReentrantReadWriteLock(), null, null);
-
-		theSessionController = new DefaultTransactable(theInternals.getLock());
-		theSessionObservable = ((DefaultTransactable) theSessionController).getSession();
 	}
 
 	/**
@@ -70,23 +64,17 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 	public ObservableLinkedList(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController) {
 		theType = type;
-		theInternals = new LinkedListInternals(lock);
-		theSessionObservable = session;
-		theSessionController = sessionController;
+		theInternals = new LinkedListInternals(lock, session, sessionController);
 	}
 
 	@Override
 	public ObservableValue<CollectionSession> getSession() {
-		return theSessionObservable;
+		return theInternals.getSession();
 	}
 
 	@Override
 	public Transaction lock(boolean write, Object cause) {
-		if(theSessionController == null) {
-			return () -> {
-			};
-		}
-		return theSessionController.lock(write, cause);
+		return theInternals.lock(write, true, cause);
 	}
 
 	@Override
@@ -117,7 +105,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 
 	@Override
 	public E get(int index) {
-		try (Transaction t = theInternals.lock(false)) {
+		try (Transaction t = theInternals.lock(false, false, null)) {
 			LinkedNode node = theFirst;
 			for(int i = 0; i < index && node != null; i++)
 				node = node.getNext();
@@ -129,7 +117,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 
 	@Override
 	public boolean contains(Object o) {
-		try (Transaction t = theInternals.lock(false)) {
+		try (Transaction t = theInternals.lock(false, false, null)) {
 			LinkedNode node = theFirst;
 			while(node != null) {
 				if(Objects.equals(node.get(), o))
@@ -145,7 +133,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 		ArrayList<Object> copy = new ArrayList<>(coll);
 		if(copy.isEmpty())
 			return true;
-		try (Transaction t = theInternals.lock(false)) {
+		try (Transaction t = theInternals.lock(false, false, null)) {
 			LinkedNode node = theFirst;
 			while(node != null && !copy.isEmpty()) {
 				copy.remove(node.get());
@@ -191,7 +179,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 
 	@Override
 	public boolean add(E e) {
-		try (Transaction t = theInternals.lock(true)) {
+		try (Transaction t = theInternals.lock(true, false, null)) {
 			addImpl(e, theLast);
 		}
 		return true;
@@ -205,7 +193,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 
 	@Override
 	public void add(int index, E element) {
-		try (Transaction t = theInternals.lock(true)) {
+		try (Transaction t = theInternals.lock(true, false, null)) {
 			LinkedNode after = index == 0 ? null : getNodeAt(index - 1);
 			addImpl(element, after);
 		}
@@ -262,7 +250,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 
 	@Override
 	public boolean remove(Object o) {
-		try (Transaction t = theInternals.lock(true)) {
+		try (Transaction t = theInternals.lock(true, false, null)) {
 			LinkedNode node = theFirst;
 			while(node != null && !Objects.equals(node.get(), o))
 				node = node.getNext();
@@ -274,7 +262,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 
 	@Override
 	public E remove(int index) {
-		try (Transaction t = theInternals.lock(true)) {
+		try (Transaction t = theInternals.lock(true, false, null)) {
 			LinkedNode node = getNodeAt(index);
 			E ret = node.get();
 			node.remove();
@@ -327,7 +315,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 
 	@Override
 	public E set(int index, E element) {
-		try (Transaction t = theInternals.lock(true)) {
+		try (Transaction t = theInternals.lock(true, false, null)) {
 			LinkedNode node = getNodeAt(index);
 			E ret = node.get();
 			node.set(element);
@@ -338,7 +326,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 	@Override
 	public ListIterator<E> listIterator(int index) {
 		LinkedNode indexed;
-		try (Transaction t = theInternals.lock(false)) {
+		try (Transaction t = theInternals.lock(false, false, null)) {
 			indexed = getNodeAt(index);
 		}
 		return new ListIterator<E>() {
@@ -413,7 +401,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 				if(hasRemoved)
 					throw new IllegalStateException("remove() may only be called (once) after next() or previous()");
 				hasRemoved = true;
-				try (Transaction t = theInternals.lock(true)) {
+				try (Transaction t = theInternals.lock(true, false, null)) {
 					theNext.remove();
 				}
 			}
@@ -429,7 +417,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 			public void add(E e) {
 				if(hasRemoved)
 					throw new IllegalStateException("add() may only be called after next() or previous() and not after remove()");
-				try (Transaction t = theInternals.lock(true)) {
+				try (Transaction t = theInternals.lock(true, false, null)) {
 					addImpl(e, theNext);
 				}
 			}
@@ -562,8 +550,8 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 	}
 
 	private class LinkedListInternals extends DefaultCollectionInternals<E> {
-		public LinkedListInternals(ReentrantReadWriteLock lock) {
-			super(lock, null, null);
+		public LinkedListInternals(ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session, Transactable sessionController) {
+			super(lock, session, sessionController, null, null);
 		}
 
 		@Override

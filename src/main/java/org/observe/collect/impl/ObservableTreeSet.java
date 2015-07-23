@@ -15,7 +15,6 @@ import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableFastFindCollection;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.collect.OrderedObservableElement;
-import org.observe.util.DefaultTransactable;
 import org.observe.util.Transactable;
 import org.observe.util.Transaction;
 import org.observe.util.tree.CountedRedBlackNode.DefaultNode;
@@ -34,8 +33,6 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	private final Type theType;
 
 	private TreeSetInternals theInternals;
-	private ObservableValue<CollectionSession> theSessionObservable;
-	private Transactable theSessionController;
 
 	private final Comparator<? super E> theCompare;
 	private DefaultTreeMap<E, InternalElement> theValues;
@@ -51,9 +48,6 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	 */
 	public ObservableTreeSet(Type type, Comparator<? super E> compare) {
 		this(type, new ReentrantReadWriteLock(), null, null, compare);
-
-		theSessionController = new DefaultTransactable(theInternals.getLock());
-		theSessionObservable = ((DefaultTransactable) theSessionController).getSession();
 	}
 
 	/**
@@ -70,12 +64,10 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	public ObservableTreeSet(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController, Comparator<? super E> compare) {
 		theType = type;
-		theInternals = new TreeSetInternals(lock, write -> {
+		theInternals = new TreeSetInternals(lock, session, sessionController, write -> {
 			if(write)
 				theModCount++;
 		});
-		theSessionObservable = session;
-		theSessionController = sessionController;
 		theCompare = compare;
 
 		theValues = new DefaultTreeMap<>(theCompare);
@@ -83,16 +75,12 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 
 	@Override
 	public ObservableValue<CollectionSession> getSession() {
-		return theSessionObservable;
+		return theInternals.getSession();
 	}
 
 	@Override
 	public Transaction lock(boolean write, Object cause) {
-		if(theSessionController == null) {
-			return () -> {
-			};
-		}
-		return theSessionController.lock(write, cause);
+		return theInternals.lock(write, true, cause);
 	}
 
 	@Override
@@ -128,14 +116,14 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 
 	@Override
 	public boolean contains(Object o) {
-		try (Transaction t = theInternals.lock(false)) {
+		try (Transaction t = theInternals.lock(false, false, null)) {
 			return theValues.containsKey(o);
 		}
 	}
 
 	@Override
 	public boolean containsAll(Collection<?> c) {
-		try (Transaction t = theInternals.lock(false)) {
+		try (Transaction t = theInternals.lock(false, false, null)) {
 			return theValues.keySet().containsAll(c);
 		}
 	}
@@ -152,7 +140,7 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 
 	@Override
 	public boolean add(E e) {
-		try (Transaction t = theInternals.lock(true)) {
+		try (Transaction t = theInternals.lock(true, false, null)) {
 			if(theValues.containsKey(e))
 				return false;
 			InternalElement el = createElement(e);
@@ -164,7 +152,7 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 
 	@Override
 	public boolean remove(Object o) {
-		try (Transaction t = theInternals.lock(true)) {
+		try (Transaction t = theInternals.lock(true, false, null)) {
 			return removeNodeImpl(o);
 		}
 	}
@@ -270,19 +258,6 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 		return theValues.comparator();
 	}
 
-	@Override
-	protected ObservableTreeSet<E> clone() throws CloneNotSupportedException {
-		ObservableTreeSet<E> ret = (ObservableTreeSet<E>) super.clone();
-		ret.theValues = (DefaultTreeMap<E, InternalElement>) theValues.clone();
-		for(Map.Entry<E, InternalElement> entry : theValues.entrySet())
-			entry.setValue(ret.createElement(entry.getKey()));
-		ret.theInternals = ret.new TreeSetInternals(new ReentrantReadWriteLock(), write -> {
-			if(write)
-				ret.theModCount++;
-		});
-		return ret;
-	}
-
 	private class SetIterator implements Iterator<E> {
 		private final Iterator<Map.Entry<E, InternalElement>> backing;
 
@@ -294,14 +269,14 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 
 		@Override
 		public boolean hasNext() {
-			try (Transaction t = theInternals.lock(false)) {
+			try (Transaction t = theInternals.lock(false, false, null)) {
 				return backing.hasNext();
 			}
 		}
 
 		@Override
 		public E next() {
-			try (Transaction t = theInternals.lock(false)) {
+			try (Transaction t = theInternals.lock(false, false, null)) {
 				Map.Entry<E, InternalElement> entry = backing.next();
 				theLastElement = entry.getValue();
 				return entry.getKey();
@@ -310,7 +285,7 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 
 		@Override
 		public void remove() {
-			try (Transaction t = theInternals.lock(true)) {
+			try (Transaction t = theInternals.lock(true, false, null)) {
 				backing.remove();
 				theLastElement.remove();
 				theLastElement = null;
@@ -360,8 +335,9 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	}
 
 	private class TreeSetInternals extends DefaultCollectionInternals<E> {
-		TreeSetInternals(ReentrantReadWriteLock lock, Consumer<? super Boolean> postAction) {
-			super(lock, null, postAction);
+		TreeSetInternals(ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session, Transactable sessionController,
+			Consumer<? super Boolean> postAction) {
+			super(lock, session, sessionController, null, postAction);
 		}
 
 		@Override

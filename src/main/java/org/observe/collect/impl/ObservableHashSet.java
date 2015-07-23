@@ -13,7 +13,6 @@ import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableFastFindCollection;
 import org.observe.collect.ObservableSet;
-import org.observe.util.DefaultTransactable;
 import org.observe.util.Transactable;
 import org.observe.util.Transaction;
 
@@ -30,9 +29,6 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 
 	private HashSetInternals theInternals;
 
-	private ObservableValue<CollectionSession> theSessionObservable;
-	private Transactable theSessionController;
-
 	/**
 	 * Creates the set
 	 *
@@ -40,9 +36,6 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 	 */
 	public ObservableHashSet(Type type) {
 		this(type, new ReentrantReadWriteLock(), null, null);
-
-		theSessionController = new DefaultTransactable(theInternals.getLock());
-		theSessionObservable = ((DefaultTransactable) theSessionController).getSession();
 	}
 
 	/**
@@ -57,25 +50,19 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 	public ObservableHashSet(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController) {
 		theType = type;
-		theInternals = new HashSetInternals(lock);
-		theSessionObservable = session;
-		theSessionController = sessionController;
+		theInternals = new HashSetInternals(lock, session, sessionController);
 
 		theValues = new LinkedHashMap<>();
 	}
 
 	@Override
 	public ObservableValue<CollectionSession> getSession() {
-		return theSessionObservable;
+		return theInternals.getSession();
 	}
 
 	@Override
 	public Transaction lock(boolean write, Object cause) {
-		if(theSessionController == null) {
-			return () -> {
-			};
-		}
-		return theSessionController.lock(write, cause);
+		return theInternals.lock(write, true, cause);
 	}
 
 	@Override
@@ -105,14 +92,14 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 
 			@Override
 			public boolean hasNext() {
-				try (Transaction t = theInternals.lock(false)) {
+				try (Transaction t = theInternals.lock(false, false, null)) {
 					return backing.hasNext();
 				}
 			}
 
 			@Override
 			public E next() {
-				try (Transaction t = theInternals.lock(false)) {
+				try (Transaction t = theInternals.lock(false, false, null)) {
 					Map.Entry<E, InternalObservableElementImpl<E>> entry = backing.next();
 					theLastElement = entry.getValue();
 					return entry.getKey();
@@ -121,7 +108,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 
 			@Override
 			public void remove() {
-				try (Transaction t = theInternals.lock(true)) {
+				try (Transaction t = theInternals.lock(true, false, null)) {
 					backing.remove();
 					theLastElement.remove();
 					theLastElement = null;
@@ -132,14 +119,14 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 
 	@Override
 	public boolean contains(Object o) {
-		try (Transaction t = theInternals.lock(false)) {
+		try (Transaction t = theInternals.lock(false, false, null)) {
 			return theValues.containsKey(o);
 		}
 	}
 
 	@Override
 	public boolean containsAll(Collection<?> c) {
-		try (Transaction t = theInternals.lock(false)) {
+		try (Transaction t = theInternals.lock(false, false, null)) {
 			return theValues.keySet().containsAll(c);
 		}
 	}
@@ -149,7 +136,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 		return new ObservableSet.ObservableSetEquivalentFinder<E>(this, o){
 			@Override
 			public E get() {
-				try (Transaction t = theInternals.lock(false)) {
+				try (Transaction t = theInternals.lock(false, false, null)) {
 					InternalObservableElementImpl<E> element = theValues.get(o);
 					return element == null ? null : element.get();
 				}
@@ -159,7 +146,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 
 	@Override
 	public boolean add(E e) {
-		try (Transaction t = theInternals.lock(true)) {
+		try (Transaction t = theInternals.lock(true, false, null)) {
 			if(theValues.containsKey(e))
 				return false;
 			InternalObservableElementImpl<E> el = createElement(e);
@@ -187,7 +174,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 
 	@Override
 	public boolean remove(Object o) {
-		try (Transaction t = theInternals.lock(true)) {
+		try (Transaction t = theInternals.lock(true, false, null)) {
 			InternalObservableElementImpl<E> el = theValues.remove(o);
 			if(el == null)
 				return false;
@@ -241,19 +228,9 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 		}
 	}
 
-	@Override
-	protected ObservableHashSet<E> clone() throws CloneNotSupportedException {
-		ObservableHashSet<E> ret = (ObservableHashSet<E>) super.clone();
-		ret.theValues = (LinkedHashMap<E, InternalObservableElementImpl<E>>) theValues.clone();
-		for(Map.Entry<E, InternalObservableElementImpl<E>> entry : theValues.entrySet())
-			entry.setValue(ret.createElement(entry.getKey()));
-		ret.theInternals = ret.new HashSetInternals(new ReentrantReadWriteLock());
-		return ret;
-	}
-
 	private class HashSetInternals extends DefaultCollectionInternals<E> {
-		HashSetInternals(ReentrantReadWriteLock lock) {
-			super(lock, null, null);
+		HashSetInternals(ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session, Transactable sessionController) {
+			super(lock, session, sessionController, null, null);
 		}
 
 		@Override

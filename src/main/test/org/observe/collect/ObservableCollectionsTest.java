@@ -91,7 +91,7 @@ public class ObservableCollectionsTest {
 		assertEquals(100, coll.size());
 		if(check != null)
 			check.accept(coll);
-		assertThat(coll, containsAll(0, 100, 50, 11, 99, 50)); // 50 twice. Test containsAll
+		assertThat(coll, containsAll(0, 75, 50, 11, 99, 50)); // 50 twice. Test containsAll
 		// 100 not in coll. 50 in list twice. Test removeAll.
 		assertTrue(coll.removeAll(asList(0, 50, 100, 10, 90, 20, 80, 30, 70, 40, 60, 50)));
 		assertEquals(90, coll.size());
@@ -157,7 +157,7 @@ public class ObservableCollectionsTest {
 		for(int i = 0; i < num; i++) {
 			T value;
 			if(map != null)
-				value = map.apply(num);
+				value = map.apply(i);
 			else
 				value = (T) (Integer) i;
 			int index = i;
@@ -167,10 +167,12 @@ public class ObservableCollectionsTest {
 					index = i;
 					break;
 				case 1:
-					index = (i + 3) % num;
+					index = i + 3;
+					if(index >= num)
+						index = 1;
 					break;
 				default:
-					index = num - index - 1;
+					index = ((num / 3) - (i / 3) - 1) * 3 + 2;
 					break;
 				}
 			}
@@ -420,7 +422,7 @@ public class ObservableCollectionsTest {
 		} catch(IndexOutOfBoundsException e) {
 		}
 		try {
-			list.add(list.size(), 0);
+			list.add(list.size() + 1, 0);
 			assertTrue("List should have thrown out of bounds exception", false);
 		} catch(IndexOutOfBoundsException e) {
 		}
@@ -437,12 +439,6 @@ public class ObservableCollectionsTest {
 
 		for(int i = 0; i < 30; i++)
 			assertEquals(i, list.indexOf(i)); // Test indexOf
-		for(int i = 0; i < 30; i++) {
-			assertEquals((Integer) i, list.set(i, list.get(30 - i - 1))); // Test set
-			if(check != null)
-				check.accept(list);
-		}
-		assertEquals(30, list.size());
 		list.add(0);
 		list.add(1);
 		if(check != null)
@@ -451,6 +447,12 @@ public class ObservableCollectionsTest {
 		assertEquals(30, list.lastIndexOf(0)); // Test lastIndexOf
 		list.remove(31);
 		list.remove(30);
+		for(int i = 0; i < 30; i++) {
+			assertEquals((Integer) i, list.set(i, 30 - i - 1)); // Test set
+			if(check != null)
+				check.accept(list);
+		}
+		assertEquals(30, list.size());
 		for(int i = 0; i < 30; i++)
 			assertEquals(30 - i - 1, list.indexOf(i));
 		if(check != null)
@@ -482,7 +484,7 @@ public class ObservableCollectionsTest {
 				stop = false;
 			}
 			if(listIter2.hasNext()) {
-				test.set(listIter1.nextIndex(), listIter1.next());
+				test.set(listIter2.nextIndex(), listIter2.next());
 				stop = false;
 			}
 			if(stop)
@@ -635,7 +637,7 @@ public class ObservableCollectionsTest {
 
 			List<Integer> mappedCorrect = list.stream().map(mapFn).collect(Collectors.toList());
 			assertThat(mappedCorrect, equalTo(mappedOL));
-			assertThat(mappedCorrect, equalTo(mappedSub));
+			assertThat(mappedCorrect, equalTo(mappedSynced));
 		};
 		try {
 			testList(list, newCheck, 0);

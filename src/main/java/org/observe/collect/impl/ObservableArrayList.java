@@ -14,7 +14,6 @@ import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableList;
 import org.observe.collect.ObservableRandomAccessList;
 import org.observe.collect.OrderedObservableElement;
-import org.observe.util.DefaultTransactable;
 import org.observe.util.Transactable;
 import org.observe.util.Transaction;
 
@@ -33,8 +32,6 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	private final Type theType;
 
 	private ArrayListInternals theInternals;
-	private ObservableValue<CollectionSession> theSessionObservable;
-	private Transactable theSessionController;
 
 	private ArrayList<InternalOrderedObservableElementImpl<E>> theElements;
 	private ArrayList<E> theValues;
@@ -48,9 +45,6 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	 */
 	public ObservableArrayList(Type type) {
 		this(type, new ReentrantReadWriteLock(), null, null);
-
-		theSessionController = new DefaultTransactable(theInternals.getLock());
-		theSessionObservable = ((DefaultTransactable) theSessionController).getSession();
 	}
 
 	/**
@@ -65,12 +59,10 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	public ObservableArrayList(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController) {
 		theType = type;
-		theInternals = new ArrayListInternals(lock, write -> {
+		theInternals = new ArrayListInternals(lock, session, sessionController, write -> {
 			if(write)
 				theModCount++;
 		});
-		theSessionObservable = session;
-		theSessionController = sessionController;
 
 		theValues = new ArrayList<>();
 		theElements = new ArrayList<>();
@@ -78,16 +70,12 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 
 	@Override
 	public ObservableValue<CollectionSession> getSession() {
-		return theSessionObservable;
+		return theInternals.getSession();
 	}
 
 	@Override
 	public Transaction lock(boolean write, Object cause) {
-		if(theSessionController == null) {
-			return () -> {
-			};
-		}
-		return theSessionController.lock(write, cause);
+		return theInternals.lock(write, true, cause);
 	}
 
 	@Override
@@ -114,7 +102,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	@Override
 	public E get(int index) {
 		Object [] ret = new Object[1];
-		try (Transaction t = theInternals.lock(false)) {
+		try (Transaction t = theInternals.lock(false, false, null)) {
 			ret[0] = theValues.get(index);
 		}
 		return (E) ret[0];
@@ -127,38 +115,39 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 
 	@Override
 	public boolean contains(Object o) {
-		try (Transaction t = theInternals.lock(false)) {
+		try (Transaction t = theInternals.lock(false, false, null)) {
 			return theValues.contains(o);
 		}
 	}
 
 	@Override
 	public int indexOf(Object o) {
-		try (Transaction t = theInternals.lock(false)) {
+		try (Transaction t = theInternals.lock(false, false, null)) {
 			return theValues.indexOf(o);
 		}
 	}
 
 	@Override
 	public int lastIndexOf(Object o) {
-		try (Transaction t = theInternals.lock(false)) {
+		try (Transaction t = theInternals.lock(false, false, null)) {
 			return theValues.lastIndexOf(o);
 		}
 	}
 
 	@Override
 	public boolean containsAll(Collection<?> c) {
-		try (Transaction t = theInternals.lock(false)) {
+		try (Transaction t = theInternals.lock(false, false, null)) {
 			return theValues.containsAll(c);
 		}
 	}
 
 	@Override
 	public boolean add(E e) {
-		try (Transaction t = theInternals.lock(true)) {
+		try (Transaction t = theInternals.lock(true, false, null)) {
 			E val = (E) theType.cast(e);
 			theValues.add(val);
 			InternalOrderedObservableElementImpl<E> add = createElement(val);
+			add.cacheIndex(theElements.size(), theModCount + 1); // +1 because the mod count will be incremented when the transaction ends
 			theElements.add(add);
 			theInternals.fireNewElement(add);
 		}
@@ -167,10 +156,11 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 
 	@Override
 	public void add(int index, E element) {
-		try (Transaction t = theInternals.lock(true)) {
+		try (Transaction t = theInternals.lock(true, false, null)) {
 			E val = (E) theType.cast(element);
 			theValues.add(index, val);
 			InternalOrderedObservableElementImpl<E> newWrapper = createElement(val);
+			newWrapper.cacheIndex(index, theModCount + 1);
 			theElements.add(index, newWrapper);
 			theInternals.fireNewElement(newWrapper);
 		}
@@ -178,7 +168,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 
 	@Override
 	public boolean remove(Object o) {
-		try (Transaction t = theInternals.lock(true)) {
+		try (Transaction t = theInternals.lock(true, false, null)) {
 			int idx = theValues.indexOf(o);
 			if(idx < 0) {
 				return false;
@@ -193,7 +183,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 
 	@Override
 	public E remove(int index) {
-		try (Transaction t = theInternals.lock(true)) {
+		try (Transaction t = theInternals.lock(true, false, null)) {
 			E ret = theValues.remove(index);
 			InternalOrderedObservableElementImpl<E> removed = theElements.remove(index);
 			removed.setRemovedIndex(index);
@@ -204,7 +194,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 
 	@Override
 	public void removeRange(int fromIndex, int toIndex) {
-		try (Transaction t = theInternals.lock(true)) {
+		try (Transaction t = theInternals.lock(true, false, null)) {
 			for(int i = toIndex - 1; i >= fromIndex; i--) {
 				theValues.remove(i);
 				InternalOrderedObservableElementImpl<E> removed = theElements.remove(i);
@@ -223,6 +213,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 				E val = (E) theType.cast(e);
 				theValues.add(val);
 				InternalOrderedObservableElementImpl<E> newWrapper = createElement(val);
+				newWrapper.cacheIndex(theElements.size(), theModCount + 1);
 				theElements.add(newWrapper);
 				theInternals.fireNewElement(newWrapper);
 			}
@@ -240,6 +231,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 				E val = (E) theType.cast(e);
 				theValues.add(idx, val);
 				InternalOrderedObservableElementImpl<E> newWrapper = createElement(val);
+				newWrapper.cacheIndex(idx, theModCount + 1);
 				theElements.add(idx, newWrapper);
 				theInternals.fireNewElement(newWrapper);
 				idx++;
@@ -308,7 +300,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 
 	@Override
 	public E set(int index, E element) {
-		try (Transaction t = theInternals.lock(true)) {
+		try (Transaction t = theInternals.lock(true, false, null)) {
 			E val = (E) theType.cast(element);
 			E ret = theValues.set(index, val);
 			theElements.get(index).set(val);
@@ -317,22 +309,26 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	}
 
 	@Override
-	protected ObservableArrayList<E> clone() throws CloneNotSupportedException {
-		ObservableArrayList<E> ret = (ObservableArrayList<E>) super.clone();
-		ret.theValues = (ArrayList<E>) theValues.clone();
-		ret.theElements = new ArrayList<>();
-		for(E el : ret.theValues)
-			ret.theElements.add(createElement(el));
-		ret.theInternals = ret.new ArrayListInternals(new ReentrantReadWriteLock(), write -> {
-			if(write)
-				ret.theModCount++;
-		});
-		return ret;
+	public String toString() {
+		StringBuilder ret = new StringBuilder("[");
+		boolean first = true;
+		try (Transaction t = theInternals.lock(false, false, null)) {
+			for(E value : theValues) {
+				if(!first) {
+					ret.append(", ");
+				} else
+					first = false;
+				ret.append(value);
+			}
+		}
+		ret.append(']');
+		return ret.toString();
 	}
 
 	private class ArrayListInternals extends DefaultCollectionInternals<E> {
-		ArrayListInternals(ReentrantReadWriteLock lock, Consumer<? super Boolean> postAction) {
-			super(lock, null, postAction);
+		ArrayListInternals(ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session, Transactable sessionController,
+			Consumer<? super Boolean> postAction) {
+			super(lock, session, sessionController, null, postAction);
 		}
 
 		@Override

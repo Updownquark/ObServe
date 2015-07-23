@@ -4,7 +4,8 @@ import prisms.lang.Type;
 
 class InternalOrderedObservableElementImpl<T> extends InternalObservableElementImpl<T> {
 	private int theCachedIndex;
-	private int theModTracker;
+	// The mod count on the collections starts at 0, so we don't want to make it look like the cached index is correct from the start
+	private int theModTracker = -1;
 	private boolean isRemoved;
 
 	InternalOrderedObservableElementImpl(Type type, T value) {

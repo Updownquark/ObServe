@@ -579,6 +579,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 				int i = cursor - 1;
 				E previous = theList.get(i);
 				lastRet = cursor = i;
+				cursor = i;
 				return previous;
 			} catch(IndexOutOfBoundsException e) {
 				throw new NoSuchElementException();
