@@ -704,7 +704,14 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 		@Override
 		default boolean addAll(Collection<? extends E> c) {
-			return addAll(0, c);
+			try (Transaction t = lock(true, null)) {
+				boolean modified = false;
+				for(E e : c) {
+					add(e);
+					modified = true;
+				}
+				return modified;
+			}
 		}
 
 		@Override
@@ -891,6 +898,8 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 				private int theIndex = index;
 
+				private boolean lastPrevious;
+
 				@Override
 				public boolean hasNext() {
 					if(theIndex >= theSize)
@@ -903,6 +912,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 					if(theIndex >= theSize)
 						throw new NoSuchElementException();
 					theIndex++;
+					lastPrevious = false;
 					return backing.next();
 				}
 
@@ -918,6 +928,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 					if(theIndex <= 0)
 						throw new NoSuchElementException();
 					theIndex--;
+					lastPrevious = true;
 					return backing.previous();
 				}
 
@@ -936,8 +947,11 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 					try (Transaction t = theList.lock(true, null)) {
 						int preSize = theList.size();
 						backing.remove();
-						if(theList.size() < preSize)
+						if(theList.size() < preSize) {
 							theSize--;
+							if(!lastPrevious)
+								theIndex--;
+						}
 					}
 				}
 
@@ -951,8 +965,10 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 					try (Transaction t = theList.lock(true, null)) {
 						int preSize = theList.size();
 						backing.add(e);
-						if(theList.size() > preSize)
+						if(theList.size() > preSize) {
 							theSize++;
+							theIndex++;
+						}
 					}
 				}
 			};

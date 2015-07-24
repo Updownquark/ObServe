@@ -85,11 +85,17 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		if(c.isEmpty())
 			return true;
 		ArrayList<Object> copy = new ArrayList<>(c);
+		BitSet found = new BitSet(copy.size());
 		try (Transaction t = lock(false, null)) {
 			Iterator<E> iter = iterator();
-			while(iter.hasNext())
-				copy.remove(iter.next());
-			return copy.isEmpty();
+			while(iter.hasNext()) {
+				E next = iter.next();
+				int stop = found.previousClearBit(copy.size());
+				for(int i = found.nextClearBit(0); i < stop; i = found.nextClearBit(i + 1))
+					if(Objects.equals(next, copy.get(i)))
+						found.set(i);
+			}
+			return found.cardinality() == copy.size();
 		}
 	}
 

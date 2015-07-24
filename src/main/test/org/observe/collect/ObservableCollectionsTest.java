@@ -127,7 +127,7 @@ public class ObservableCollectionsTest {
 
 			@Override
 			public void describeTo(Description arg0) {
-				arg0.appendText("collection does not contain ").appendValue(value);
+				arg0.appendText("collection contains ").appendValue(value);
 			}
 		};
 	}
@@ -145,7 +145,7 @@ public class ObservableCollectionsTest {
 
 			@Override
 			public void describeTo(Description arg0) {
-				arg0.appendText("collection does not contain all of ").appendValue(values);
+				arg0.appendText("collection contains all of ").appendValue(values);
 			}
 		};
 	}
@@ -505,7 +505,7 @@ public class ObservableCollectionsTest {
 				int toAdd=i * 17 + 100;
 				listIter1.add(toAdd);
 				listIter2.add(toAdd);
-				assertTrue(listIter1.hasNext());
+				assertTrue(listIter1.hasPrevious());
 				assertThat(toAdd, equalTo(listIter1.previous())); // Back up over the added value
 				listIter2.previous();
 				break;
@@ -606,6 +606,10 @@ public class ObservableCollectionsTest {
 					check.accept(list);
 			}, depth + 1);
 		}
+		list.clear();
+		assertEquals(0, list.size());
+		if(check != null)
+			check.accept(list);
 	}
 
 	public static <T extends ObservableSet<Integer>> void testObservableSet(T set, Consumer<? super T> check) {
