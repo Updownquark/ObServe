@@ -115,18 +115,21 @@ public class ObservableUtils {
 									.takeUntil(element.noInit())
 									.act(
 										innerEvent -> {
-											observer2.onNext(new ObservableValueEvent<>(retObs, innerEvent.getOldValue(), innerEvent
-												.getValue(), innerEvent));
+											observer2.onNext(ObservableUtils.wrap(innerEvent, retObs));
 										});
-								} else {
-									observer2.onNext(new ObservableValueEvent<>(retObs, get(value.getOldValue()), null, value.getCause()));
-								}
+								} else if(value.isInitial())
+									observer2.onNext(retObs.createInitialEvent(null));
+								else
+									observer2.onNext(retObs.createChangeEvent(get(value.getOldValue()), null, value.getCause()));
 							}
 
 							@Override
 							public <V2 extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onCompleted(V2 value) {
-								observer2.onCompleted(new ObservableValueEvent<>(retObs, get(value.getOldValue()), get(value.getValue()),
-									value.getCause()));
+								if(value.isInitial())
+									observer2.onCompleted(retObs.createInitialEvent(get(value.getValue())));
+								else
+									observer2.onCompleted(retObs.createChangeEvent(get(value.getOldValue()), get(value.getValue()),
+										value.getCause()));
 							}
 						});
 					}
@@ -210,18 +213,21 @@ public class ObservableUtils {
 									.takeUntil(element.noInit())
 									.act(
 										innerEvent -> {
-											observer2.onNext(new ObservableValueEvent<>(retObs, innerEvent.getOldValue(), innerEvent
-												.getValue(), innerEvent));
+											observer2.onNext(ObservableUtils.wrap(innerEvent, retObs));
 										});
-								} else {
-									observer2.onNext(new ObservableValueEvent<>(retObs, get(value.getOldValue()), null, value.getCause()));
-								}
+								} else if(value.isInitial())
+									observer2.onNext(retObs.createInitialEvent(null));
+								else
+									observer2.onNext(retObs.createChangeEvent(get(value.getOldValue()), null, value.getCause()));
 							}
 
 							@Override
 							public <V2 extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onCompleted(V2 value) {
-								observer2.onCompleted(new ObservableValueEvent<>(retObs, get(value.getOldValue()), get(value.getValue()),
-									value.getCause()));
+								if(value.isInitial())
+									observer2.onCompleted(retObs.createInitialEvent(get(value.getValue())));
+								else
+									observer2.onCompleted(retObs.createChangeEvent(get(value.getOldValue()), get(value.getValue()),
+										value.getCause()));
 							}
 						});
 					}
@@ -265,7 +271,10 @@ public class ObservableUtils {
 	 * @return An event with the same values as the given event, but created by the given observable
 	 */
 	public static <T> ObservableValueEvent<T> wrap(ObservableValueEvent<? extends T> event, ObservableValue<T> wrapper) {
-		return wrapper.createEvent(event.getOldValue(), event.getValue(), event.getCause());
+		if(event.isInitial())
+			return wrapper.createInitialEvent(event.getValue());
+		else
+			return wrapper.createChangeEvent(event.getOldValue(), event.getValue(), event.getCause());
 	}
 
 	private static class ControllableObservableList<T> extends ObservableListWrapper<T> {
@@ -297,7 +306,7 @@ public class ObservableUtils {
 
 	/**
 	 * Gets the controller for a list created by {@link #control(ObservableList)}
-	 * 
+	 *
 	 * @param <T> The type of the list
 	 * @param controllableList The controllable list
 	 * @return The controller for the list

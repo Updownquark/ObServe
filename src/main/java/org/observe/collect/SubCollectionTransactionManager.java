@@ -115,7 +115,7 @@ class SubCollectionTransactionManager {
 		try {
 			oldSession = theInternalSessionValue;
 			newSession = theInternalSessionValue = new DefaultCollectionSession(cause);
-			theSessionController.onNext(new org.observe.ObservableValueEvent<>(theInternalSession, oldSession, newSession, cause));
+			theSessionController.onNext(theInternalSession.createChangeEvent(oldSession, newSession, cause));
 		} finally {
 			theLock.unlock();
 		}
@@ -129,7 +129,7 @@ class SubCollectionTransactionManager {
 			session = theInternalSessionValue;
 			theInternalSessionValue = null;
 			if(session != null)
-				theSessionController.onNext(new org.observe.ObservableValueEvent<>(theInternalSession, session, null, session.getCause()));
+				theSessionController.onNext(theInternalSession.createChangeEvent(session, null, session.getCause()));
 		} finally {
 			theLock.unlock();
 		}

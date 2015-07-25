@@ -36,12 +36,12 @@ public class WeakReferenceObservable<T> implements ObservableValue<T> {
 	public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 		T ref = theRef.get();
 		if(ref == null) {
-			observer.onCompleted(new ObservableValueEvent<>(this, null, null, null));
+			observer.onCompleted(createInitialEvent(null));
 			return () -> {
 			};
 		}
 		theObservers.add(observer);
-		observer.onNext(new ObservableValueEvent<>(this, ref, ref, null));
+		observer.onNext(createInitialEvent(ref));
 		return () -> {
 			theObservers.remove(observer);
 		};
@@ -66,7 +66,7 @@ public class WeakReferenceObservable<T> implements ObservableValue<T> {
 			Observer<? super ObservableValueEvent<T>> [] observers = theObservers.toArray(new Observer[0]);
 			theObservers.clear();
 			for(Observer<? super ObservableValueEvent<T>> observer : observers)
-				observer.onCompleted(new ObservableValueEvent<>(this, null, null, null));
+				observer.onCompleted(createChangeEvent(null, null, null));
 		}
 	}
 }

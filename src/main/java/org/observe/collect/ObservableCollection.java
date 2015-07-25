@@ -163,11 +163,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 					private void fire(int oldSize, int newSize, Object cause) {
 						if(initialized[0])
-							observer.onNext(new ObservableValueEvent<>(sizeObs, oldSize, newSize, cause));
+							observer.onNext(sizeObs.createChangeEvent(oldSize, newSize, cause));
 					}
 				});
 				initialized[0] = true;
-				observer.onNext(new ObservableValueEvent<>(sizeObs, 0, size(), null));
+				observer.onNext(sizeObs.createInitialEvent(size()));
 				return sub;
 			}
 
@@ -269,11 +269,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<Collection<E>>> observer) {
 				Collection<E> [] value = new Collection[] {get()};
-				observer.onNext(new ObservableValueEvent<>(this, null, value[0], null));
+				observer.onNext(createInitialEvent(value[0]));
 				return outer.simpleChanges().act(v -> {
 					Collection<E> old = value[0];
 					value[0] = get();
-					observer.onNext(new ObservableValueEvent<>(this, old, value[0], null));
+					observer.onNext(createChangeEvent(old, value[0], null));
 				});
 			}
 		};
@@ -394,7 +394,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
 				if(isEmpty())
-					observer.onNext(new ObservableValueEvent<>(this, null, null, null));
+					observer.onNext(createInitialEvent(null));
 				final Object key = new Object();
 				Subscription collSub = ObservableCollection.this.onElement(new Consumer<ObservableElement<E>>() {
 					private E theValue;
@@ -438,7 +438,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						theValue = value;
 						CollectionSession session = getSession().get();
 						if(session == null)
-							observer.onNext(createEvent(oldValue, theValue, null));
+							observer.onNext(createChangeEvent(oldValue, theValue, null));
 						else {
 							session.putIfAbsent(key, "oldBest", oldValue);
 							session.put(key, "newBest", theValue);
@@ -455,7 +455,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						E newBest = (E) completed.get(key, "newBest");
 						if(oldBest == null && newBest == null)
 							return;
-						observer.onNext(createEvent(oldBest, newBest, value));
+						observer.onNext(createChangeEvent(oldBest, newBest, value));
 					}
 				});
 				return () -> {
@@ -1279,14 +1279,14 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 							return;
 						isIncluded = false;
 						theValue = null;
-						observer2.onCompleted(createEvent(oldValue, oldValue, elValue));
+						observer2.onCompleted(createChangeEvent(oldValue, oldValue, elValue));
 						if(innerSub[0] != null) {
 							innerSub[0].unsubscribe();
 							innerSub[0] = null;
 						}
 					} else {
 						isIncluded = true;
-						observer2.onNext(createEvent(oldValue, theValue, elValue));
+						observer2.onNext(createChangeEvent(oldValue, theValue, elValue));
 					}
 				}
 
@@ -1296,7 +1296,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						return;
 					T oldValue = theValue;
 					T newValue = elValue == null ? null : theMap.apply(elValue.getValue());
-					observer2.onCompleted(createEvent(oldValue, newValue, elValue));
+					observer2.onCompleted(createChangeEvent(oldValue, newValue, elValue));
 				}
 			});
 			if(!isIncluded) {
@@ -2127,7 +2127,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
 				theElementListeners.add(observer);
-				observer.onNext(new ObservableValueEvent<>(this, theCachedValue, theCachedValue, null));
+				observer.onNext(createInitialEvent(theCachedValue));
 				return () -> theElementListeners.remove(observer);
 			}
 
@@ -2139,12 +2139,12 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			private void newValue(ObservableValueEvent<E> event) {
 				E oldValue = theCachedValue;
 				theCachedValue = event.getValue();
-				ObservableValueEvent<E> cachedEvent = new ObservableValueEvent<>(this, oldValue, theCachedValue, event);
+				ObservableValueEvent<E> cachedEvent = createChangeEvent(oldValue, theCachedValue, event);
 				theElementListeners.forEach(observer -> observer.onNext(cachedEvent));
 			}
 
 			private void completed(ObservableValueEvent<E> event) {
-				ObservableValueEvent<E> cachedEvent = new ObservableValueEvent<>(this, theCachedValue, theCachedValue, event);
+				ObservableValueEvent<E> cachedEvent = createChangeEvent(theCachedValue, theCachedValue, event);
 				theElementListeners.forEach(observer -> observer.onCompleted(cachedEvent));
 			}
 		}

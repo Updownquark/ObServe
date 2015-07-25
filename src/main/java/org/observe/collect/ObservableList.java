@@ -242,7 +242,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-				observer.onNext(new ObservableValueEvent<>(this, theValue, theValue, null));
+				observer.onNext(createInitialEvent(theValue));
 				return () -> {
 				};
 			}

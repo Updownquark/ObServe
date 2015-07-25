@@ -16,6 +16,7 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
+import org.observe.util.ObservableUtils;
 import org.observe.util.Transaction;
 
 import prisms.lang.Type;
@@ -194,7 +195,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 
 				@Override
 				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-					observer.onNext(new ObservableValueEvent<>(this, null, value, null));
+					observer.onNext(createInitialEvent(value));
 					return () -> {
 					};
 				}
@@ -268,16 +269,14 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 						boolean shouldBe = shouldBeIncluded(elValue.getValue());
 						if(isIncluded && !shouldBe) {
 							isIncluded = false;
-							observer2.onCompleted(new ObservableValueEvent<>(UniqueFilteredElement.this, elValue.getOldValue(), elValue
-								.getValue(), elValue));
+							observer2.onCompleted(ObservableUtils.wrap(elValue, UniqueFilteredElement.this));
 							if(innerSub[0] != null) {
 								innerSub[0].unsubscribe();
 								innerSub[0] = null;
 							}
 						} else if(!isIncluded && shouldBe) {
 							isIncluded = true;
-							observer2.onNext(new ObservableValueEvent<>(UniqueFilteredElement.this, elValue.getOldValue(), elValue
-								.getValue(), elValue));
+							observer2.onNext(ObservableUtils.wrap(elValue, UniqueFilteredElement.this));
 						}
 					}
 
@@ -291,7 +290,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 							oldVal = get();
 							newVal = oldVal;
 						}
-						observer2.onCompleted(new ObservableValueEvent<>(UniqueFilteredElement.this, oldVal, newVal, elValue));
+						observer2.onCompleted(UniqueFilteredElement.this.createChangeEvent(oldVal, newVal, elValue));
 					}
 				});
 				if(!isIncluded) {
@@ -472,7 +471,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 							if(isMatch) {
 								E old = theCurrentMatch;
 								theCurrentMatch = event.getValue();
-								observer.onNext(createEvent(old, event.getValue(), event));
+								observer.onNext(createChangeEvent(old, event.getValue(), event));
 							}
 						}
 
@@ -480,7 +479,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 						public <V extends ObservableValueEvent<E>> void onCompleted(V event) {
 							if(isMatch && theCurrentMatch == event.getValue()) {
 								theCurrentMatch = null;
-								observer.onNext(createEvent(event.getValue(), null, event));
+								observer.onNext(createChangeEvent(event.getValue(), null, event));
 							}
 						}
 					});

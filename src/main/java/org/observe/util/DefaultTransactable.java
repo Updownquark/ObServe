@@ -64,7 +64,7 @@ public class DefaultTransactable implements Transactable {
 				}
 
 				theInternalSessionValue = createSession(cause);
-				theSessionController.onNext(theObservableSession.createEvent(null, theInternalSessionValue, cause));
+				theSessionController.onNext(theObservableSession.createChangeEvent(null, theInternalSessionValue, cause));
 			}
 			success = true;
 			return new EndTransaction(lock, write);
@@ -91,7 +91,7 @@ public class DefaultTransactable implements Transactable {
 
 				CollectionSession old = theInternalSessionValue;
 				theInternalSessionValue = null;
-				theSessionController.onNext(theObservableSession.createEvent(old, null, old.getCause()));
+				theSessionController.onNext(theObservableSession.createChangeEvent(old, null, old.getCause()));
 			}
 		} finally {
 			lock.unlock();

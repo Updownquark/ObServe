@@ -348,7 +348,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 					index[0] = newIndex;
 					CollectionSession session = theCollection.getSession().get();
 					if(session == null)
-						observer.onNext(createEvent(oldValue, theValue, null));
+						observer.onNext(createChangeEvent(oldValue, theValue, null));
 					else {
 						session.putIfAbsent(key, "oldBest", oldValue);
 						session.put(key, "newBest", theValue);
@@ -356,7 +356,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 				}
 			});
 			if(index[0] < 0)
-				observer.onNext(createEvent(null, null, null));
+				observer.onNext(createChangeEvent(null, null, null));
 			Subscription transSub = theCollection.getSession().subscribe(new Observer<ObservableValueEvent<CollectionSession>>() {
 				@Override
 				public <V2 extends ObservableValueEvent<CollectionSession>> void onNext(V2 value) {
@@ -367,7 +367,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 					E newBest = (E) completed.get(key, "newBest");
 					if(oldBest == null && newBest == null)
 						return;
-					observer.onNext(createEvent(oldBest, newBest, value));
+					observer.onNext(createChangeEvent(oldBest, newBest, value));
 				}
 			});
 			return () -> {
@@ -578,23 +578,21 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 				@Override
 				public <V extends ObservableValueEvent<E>> void onNext(V event) {
 					if(theLeft != null && theList.getCompare().compare(event.getValue(), theLeft.get()) < 0) {
-						observer.onCompleted(new ObservableValueEvent<>(SortedElementWrapper.this, event.getOldValue(), event.getValue(),
-							event));
+						observer.onCompleted(ObservableUtils.wrap(event, SortedElementWrapper.this));
 						theLeft.theRight = theRight;
 						if(theRight != null)
 							theRight.theLeft = theLeft;
 						findPlace(event.getValue(), theLeft);
 						theParentObserver.theOuterObserver.accept(SortedElementWrapper.this);
 					} else if(theRight != null && theList.getCompare().compare(event.getValue(), theRight.get()) > 0) {
-						observer.onCompleted(new ObservableValueEvent<>(SortedElementWrapper.this, event.getOldValue(), event.getValue(),
-							event));
+						observer.onCompleted(ObservableUtils.wrap(event, SortedElementWrapper.this));
 						if(theLeft != null)
 							theLeft.theRight = theRight;
 						theRight.theLeft = theLeft;
 						findPlace(event.getValue(), theRight);
 						theParentObserver.theOuterObserver.accept(SortedElementWrapper.this);
 					} else
-						observer.onNext(new ObservableValueEvent<>(SortedElementWrapper.this, event.getOldValue(), event.getValue(), event));
+						observer.onNext(ObservableUtils.wrap(event, SortedElementWrapper.this));
 				}
 
 				@Override
@@ -607,7 +605,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 						else
 							theParentObserver.theAnchor = null;
 					}
-					observer.onCompleted(new ObservableValueEvent<>(SortedElementWrapper.this, event.getOldValue(), event.getValue(), event));
+					observer.onCompleted(ObservableUtils.wrap(event, SortedElementWrapper.this));
 				}
 			});
 		}

@@ -39,13 +39,13 @@ class ExposedObservableElement<E> implements ObservableElement<E> {
 		Subscription ret = theInternalElement.subscribe(new Observer<ObservableValueEvent<E>>() {
 			@Override
 			public <V extends ObservableValueEvent<E>> void onNext(V event) {
-				ObservableValueEvent<E> event2 = createEvent(event.getOldValue(), event.getValue(), event.getCause());
+				ObservableValueEvent<E> event2 = createChangeEvent(event.getOldValue(), event.getValue(), event.getCause());
 				observer.onNext(event2);
 			}
 
 			@Override
 			public <V extends ObservableValueEvent<E>> void onCompleted(V event) {
-				ObservableValueEvent<E> event2 = createEvent(event.getOldValue(), event.getValue(), event.getCause());
+				ObservableValueEvent<E> event2 = createChangeEvent(event.getOldValue(), event.getValue(), event.getCause());
 				observer.onCompleted(event2);
 			}
 

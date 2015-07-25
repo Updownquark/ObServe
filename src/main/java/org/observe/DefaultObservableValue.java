@@ -10,14 +10,14 @@ public abstract class DefaultObservableValue<T> extends DefaultObservable<Observ
 	public Observer<ObservableValueEvent<T>> control(DefaultObservable.OnSubscribe<ObservableValueEvent<T>> onSubscribe)
 		throws IllegalStateException {
 		return super.control(observer -> {
-			fire(observer);
+			fireInitial(observer);
 			if(onSubscribe != null)
 				onSubscribe.onsubscribe(observer);
 		});
 	}
 
-	private void fire(Observer<? super ObservableValueEvent<T>> observer) {
-		ObservableValueEvent<T> event = new ObservableValueEvent<>(this, null, get(), null);
+	private void fireInitial(Observer<? super ObservableValueEvent<T>> observer) {
+		ObservableValueEvent<T> event = createInitialEvent(get());
 		try {
 			observer.onNext(event);
 		} catch(Throwable e) {
