@@ -658,7 +658,7 @@ public class ObservableCollectionsTest {
 			el.subscribe(new Observer<ObservableValueEvent<T>>() {
 				@Override
 				public <V extends ObservableValueEvent<T>> void onNext(V evt) {
-					if(evt.getOldValue() == null)
+					if(evt.isInitial())
 						synced.add(el.getIndex(), evt.getValue());
 					else {
 						assertEquals(evt.getOldValue(), synced.get(el.getIndex()));
@@ -896,7 +896,7 @@ public class ObservableCollectionsTest {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
-					if(event.getOldValue() != null)
+					if(!event.isInitial())
 						compare1.remove(event.getOldValue());
 					compare1.add(event.getValue());
 				}
@@ -959,7 +959,7 @@ public class ObservableCollectionsTest {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
-					if(event.getOldValue() != null)
+					if(!event.isInitial())
 						compare1.remove(event.getOldValue());
 					compare1.add(event.getValue());
 				}
@@ -1032,7 +1032,7 @@ public class ObservableCollectionsTest {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
-					if(event.getOldValue() != null)
+					if(!event.isInitial())
 						compare1.remove(event.getOldValue());
 					compare1.add(event.getValue());
 				}
@@ -1047,7 +1047,7 @@ public class ObservableCollectionsTest {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
-					if(event.getOldValue() != null)
+					if(!event.isInitial())
 						filtered.remove(event.getOldValue());
 					filtered.add(event.getValue());
 				}
@@ -1198,7 +1198,7 @@ public class ObservableCollectionsTest {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
-					if(value.getOldValue() != null)
+					if(!value.isInitial())
 						compare1.set(listEl.getIndex(), value.getValue());
 					else
 						compare1.add(listEl.getIndex(), value.getValue());
@@ -1239,7 +1239,7 @@ public class ObservableCollectionsTest {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
-					if(value.getOldValue() != null)
+					if(!value.isInitial())
 						compare1.set(listEl.getIndex(), value.getValue());
 					else
 						compare1.add(listEl.getIndex(), value.getValue());
@@ -1288,7 +1288,7 @@ public class ObservableCollectionsTest {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
-					if(value.getOldValue() != null)
+					if(!value.isInitial())
 						compare0.set(oel.getIndex(), value.getValue());
 					else
 						compare0.add(oel.getIndex(), value.getValue());
@@ -1305,7 +1305,7 @@ public class ObservableCollectionsTest {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
-					if(value.getOldValue() != null)
+					if(!value.isInitial())
 						compare1.set(oel.getIndex(), value.getValue());
 					else
 						compare1.add(oel.getIndex(), value.getValue());
@@ -1322,7 +1322,7 @@ public class ObservableCollectionsTest {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
-					if(value.getOldValue() != null)
+					if(!value.isInitial())
 						compare2.set(oel.getIndex(), value.getValue());
 					else
 						compare2.add(oel.getIndex(), value.getValue());
@@ -1417,7 +1417,7 @@ public class ObservableCollectionsTest {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
-					if(value.getOldValue() != null)
+					if(!value.isInitial())
 						compare1.set(listEl.getIndex(), value.getValue());
 					else
 						compare1.add(listEl.getIndex(), value.getValue());
@@ -1463,7 +1463,7 @@ public class ObservableCollectionsTest {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
-					if(event.getOldValue() != null)
+					if(!event.isInitial())
 						compare1.set(listEl.getIndex(), event.getValue());
 					else
 						compare1.add(listEl.getIndex(), event.getValue());
@@ -1533,7 +1533,7 @@ public class ObservableCollectionsTest {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
-					if(event.getOldValue() != null)
+					if(!event.isInitial())
 						compare1.set(listEl.getIndex(), event.getOldValue());
 					else
 						compare1.add(listEl.getIndex(), event.getValue());
@@ -1550,7 +1550,7 @@ public class ObservableCollectionsTest {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
-					if(event.getOldValue() != null) {
+					if(!event.isInitial()) {
 						filtered.set(listEl.getIndex(), event.getValue());
 					} else {
 						filtered.add(listEl.getIndex(), event.getValue());
@@ -1736,7 +1736,7 @@ public class ObservableCollectionsTest {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
-					if(event.getOldValue() == null)
+					if(event.isInitial())
 						compare.add(orderedEl.getIndex(), event.getValue());
 					else
 						compare.set(orderedEl.getIndex(), event.getValue());
@@ -1808,7 +1808,7 @@ public class ObservableCollectionsTest {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
-					if(event.getOldValue() == null)
+					if(event.isInitial())
 						compare.add(orderedEl.getIndex(), event.getValue());
 					else
 						compare.set(orderedEl.getIndex(), event.getValue());
@@ -1859,7 +1859,7 @@ public class ObservableCollectionsTest {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
-					if(event.getOldValue() == null)
+					if(event.isInitial())
 						compare.add(orderedEl.getIndex(), event.getValue());
 					else
 						compare.set(orderedEl.getIndex(), event.getValue());

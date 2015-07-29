@@ -36,7 +36,7 @@ class CollectionChangesObservable<E, CCE extends CollectionChangeEvent<E>> imple
 						public <V2 extends ObservableValueEvent<E>> void onNext(V2 evt) {
 							if(!initialized[0])
 								return;
-							if(evt.getOldValue() == null)
+							if(evt.isInitial())
 								newEvent(CollectionChangeType.add, evt);
 							else
 								newEvent(CollectionChangeType.set, evt);

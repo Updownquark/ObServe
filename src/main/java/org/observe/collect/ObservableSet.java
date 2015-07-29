@@ -457,27 +457,30 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 
 		@Override
 		public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
-			return theSet.onElement(new Consumer<ObservableElement<E>>() {
+			boolean [] isMatch = new boolean[1];
+			boolean [] initialized = new boolean[1];
+			Subscription ret = theSet.onElement(new Consumer<ObservableElement<E>>() {
 				private E theCurrentMatch;
 
 				@Override
 				public void accept(ObservableElement<E> element) {
 					element.subscribe(new Observer<ObservableValueEvent<E>>() {
-						private boolean isMatch;
-
 						@Override
 						public <V extends ObservableValueEvent<E>> void onNext(V event) {
-							isMatch = Objects.equals(event.getValue(), theKey);
-							if(isMatch) {
+							isMatch[0] = Objects.equals(event.getValue(), theKey);
+							if(isMatch[0]) {
 								E old = theCurrentMatch;
 								theCurrentMatch = event.getValue();
-								observer.onNext(createChangeEvent(old, event.getValue(), event));
+								if(initialized[0])
+									observer.onNext(createInitialEvent(event.getValue()));
+								else
+									observer.onNext(createChangeEvent(old, event.getValue(), event));
 							}
 						}
 
 						@Override
 						public <V extends ObservableValueEvent<E>> void onCompleted(V event) {
-							if(isMatch && theCurrentMatch == event.getValue()) {
+							if(isMatch[0] && theCurrentMatch == event.getValue()) {
 								theCurrentMatch = null;
 								observer.onNext(createChangeEvent(event.getValue(), null, event));
 							}
@@ -485,6 +488,9 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 					});
 				}
 			});
+			if(!isMatch[0])
+				observer.onNext(createInitialEvent(null));
+			return ret;
 		}
 	}
 

@@ -356,7 +356,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 				}
 			});
 			if(index[0] < 0)
-				observer.onNext(createChangeEvent(null, null, null));
+				observer.onNext(createInitialEvent(null));
 			Subscription transSub = theCollection.getSession().subscribe(new Observer<ObservableValueEvent<CollectionSession>>() {
 				@Override
 				public <V2 extends ObservableValueEvent<CollectionSession>> void onNext(V2 value) {

@@ -7,6 +7,7 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.collect.ObservableElement;
+import org.observe.util.ObservableUtils;
 
 import prisms.lang.Type;
 
@@ -39,7 +40,7 @@ class ExposedObservableElement<E> implements ObservableElement<E> {
 		Subscription ret = theInternalElement.subscribe(new Observer<ObservableValueEvent<E>>() {
 			@Override
 			public <V extends ObservableValueEvent<E>> void onNext(V event) {
-				ObservableValueEvent<E> event2 = createChangeEvent(event.getOldValue(), event.getValue(), event.getCause());
+				ObservableValueEvent<E> event2 = ObservableUtils.wrap(event, ExposedObservableElement.this);
 				observer.onNext(event2);
 			}
 

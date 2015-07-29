@@ -401,7 +401,10 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 							T newVal = value.get();
 							T oldVal = (T) oldValue[0];
 							oldValue[0] = newVal;
-							observer.onNext(outer.createChangeEvent(oldVal, newVal, value2.getCause()));
+							if(value2.isInitial())
+								observer.onNext(outer.createInitialEvent(newVal));
+							else
+								observer.onNext(outer.createChangeEvent(oldVal, newVal, value2.getCause()));
 						}
 
 						@Override
@@ -808,7 +811,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 
 		@Override
 		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-			observer.onNext(createChangeEvent(theValue, theValue, null));
+			observer.onNext(createInitialEvent(theValue));
 			return () -> {
 			};
 		}

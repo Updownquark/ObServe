@@ -393,21 +393,18 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
-				if(isEmpty())
-					observer.onNext(createInitialEvent(null));
+				final boolean [] isFound=new boolean[1];
 				final Object key = new Object();
 				Subscription collSub = ObservableCollection.this.onElement(new Consumer<ObservableElement<E>>() {
 					private E theValue;
-
-					private boolean isFound;
 
 					@Override
 					public void accept(ObservableElement<E> element) {
 						element.subscribe(new Observer<ObservableValueEvent<E>>() {
 							@Override
 							public <V3 extends ObservableValueEvent<E>> void onNext(V3 value) {
-								if(!isFound && filter.test(value.getValue())) {
-									isFound = true;
+								if(!isFound[0] && filter.test(value.getValue())) {
+									isFound[0] = true;
 									newBest(value.getValue());
 								}
 							}
@@ -419,15 +416,15 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 							}
 
 							private void findNextBest() {
-								isFound = false;
+								isFound[0] = false;
 								for(E value : ObservableCollection.this) {
 									if(filter.test(value)) {
-										isFound = true;
+										isFound[0] = true;
 										newBest(value);
 										break;
 									}
 								}
-								if(!isFound)
+								if(!isFound[0])
 									newBest(null);
 							}
 						});
@@ -458,6 +455,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						observer.onNext(createChangeEvent(oldBest, newBest, value));
 					}
 				});
+				if(!isFound[0])
+					observer.onNext(createInitialEvent(null));
 				return () -> {
 					collSub.unsubscribe();
 					transSub.unsubscribe();
@@ -1286,7 +1285,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						}
 					} else {
 						isIncluded = true;
-						observer2.onNext(createChangeEvent(oldValue, theValue, elValue));
+						if(elValue.isInitial())
+							observer2.onNext(createInitialEvent(theValue));
+						else
+							observer2.onNext(createChangeEvent(oldValue, theValue, elValue));
 					}
 				}
 
