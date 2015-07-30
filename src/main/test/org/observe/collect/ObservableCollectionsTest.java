@@ -33,6 +33,7 @@ import org.observe.SimpleSettableValue;
 import org.observe.Subscription;
 import org.observe.collect.impl.ObservableArrayList;
 import org.observe.collect.impl.ObservableHashSet;
+import org.observe.collect.impl.ObservableTreeSet;
 import org.observe.util.ObservableUtils;
 import org.observe.util.Transaction;
 
@@ -614,6 +615,12 @@ public class ObservableCollectionsTest {
 
 	public static <T extends ObservableSet<Integer>> void testObservableSet(T set, Consumer<? super T> check) {
 		testSet(set, check);
+		// TODO
+	}
+
+	public static <T extends ObservableSortedSet<Integer>> void testObservableSortedSet(T set, Consumer<? super T> check) {
+		testSortedSet(set, check);
+		// TODO
 	}
 
 	public static <T extends ObservableList<Integer>> void testObservableList(T list, Consumer<? super T> check) {
@@ -677,6 +684,11 @@ public class ObservableCollectionsTest {
 	@Test
 	public void testObservableArrayList() {
 		testObservableList(new ObservableArrayList<>(new Type(Integer.class)), null);
+	}
+
+	@Test
+	public void testObservableTreeSet() {
+		testObservableSortedSet(new ObservableTreeSet<>(new Type(Integer.class), Integer::compareTo), null);
 	}
 
 	/** Tests basic {@link ObservableSet} functionality */
