@@ -20,11 +20,11 @@ class InternalObservableElementImpl<T> extends DefaultObservableValue<T> {
 	void set(T newValue) {
 		T oldValue = theValue;
 		theValue = newValue;
-		theController.onNext(createEvent(oldValue, newValue, null));
+		theController.onNext(createChangeEvent(oldValue, newValue, null));
 	}
 
 	void remove() {
-		theController.onCompleted(createEvent(theValue, theValue, null));
+		theController.onCompleted(createChangeEvent(theValue, theValue, null));
 	}
 
 	@Override

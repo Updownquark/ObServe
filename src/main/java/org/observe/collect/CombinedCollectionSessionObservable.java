@@ -84,7 +84,7 @@ public class CombinedCollectionSessionObservable implements ObservableValue<Coll
 	}
 
 	private void fire(CollectionSession old, CollectionSession newSession, Object cause) {
-		ObservableValueEvent<CollectionSession> evt = new ObservableValueEvent<>(this, old, newSession, cause);
+		ObservableValueEvent<CollectionSession> evt = createChangeEvent(old, newSession, cause);
 		theObservers.forEach(listener -> listener.onNext(evt));
 	}
 }

@@ -53,7 +53,7 @@ public class SimpleSettableValue<T> extends DefaultSettableValue<T> {
 			throw new IllegalArgumentException(accept);
 		T old = theValue;
 		theValue = value;
-		theController.onNext(new ObservableValueEvent<>(this, old, value, cause));
+		theController.onNext(createChangeEvent(old, value, cause));
 		return old;
 	}
 

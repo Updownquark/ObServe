@@ -57,15 +57,26 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	}
 
 	/**
+	 * Creates an {@link ObservableValueEvent} to propagate the current value of this observable to a new subscriber
+	 *
+	 * @param value The current value of this observable
+	 * @param cause The cause of the change
+	 * @return The event to propagate
+	 */
+	default ObservableValueEvent<T> createInitialEvent(T value) {
+		return ObservableValueEvent.createInitialEvent(this, value);
+	}
+
+	/**
 	 * Creates an {@link ObservableValueEvent} to propagate a change to this observable's value
 	 *
 	 * @param oldVal The previous value of this observable
 	 * @param newVal The new value of this observable
 	 * @param cause The cause of the change
-	 * @return New event to propagate
+	 * @return The event to propagate
 	 */
-	default ObservableValueEvent<T> createEvent(T oldVal, T newVal, Object cause) {
-		return new ObservableValueEvent<>(this, oldVal, newVal, cause);
+	default ObservableValueEvent<T> createChangeEvent(T oldVal, T newVal, Object cause) {
+		return ObservableValueEvent.createChangeEvent(this, oldVal, newVal, cause);
 	}
 
 	/**
@@ -312,7 +323,10 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 										innerOld = old;
 									} else
 										innerOld = value2.getValue();
-									observer.onNext(new ObservableValueEvent<>(retObs, innerOld, value2.getValue(), value2.getCause()));
+									if(value.isInitial() && value2.isInitial())
+										observer.onNext(retObs.createInitialEvent(value2.getValue()));
+									else
+										observer.onNext(retObs.createChangeEvent(innerOld, value2.getValue(), value2.getCause()));
 								}
 
 								@Override
@@ -320,13 +334,15 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 									observer.onError(e);
 								}
 							});
-						} else
-							observer.onNext(retObs.createEvent(old, null, value.getCause()));
+						} else if(value.isInitial())
+							observer.onNext(retObs.createInitialEvent(null));
+						else
+							observer.onNext(retObs.createChangeEvent(old, null, value.getCause()));
 					}
 
 					@Override
 					public <V extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onCompleted(V value) {
-						observer.onCompleted(retObs.createEvent(get(value.getOldValue()), get(value.getValue()), value
+						observer.onCompleted(retObs.createChangeEvent(get(value.getOldValue()), get(value.getValue()), value
 							.getCause()));
 					}
 
@@ -385,7 +401,10 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 							T newVal = value.get();
 							T oldVal = (T) oldValue[0];
 							oldValue[0] = newVal;
-							observer.onNext(outer.createEvent(oldVal, newVal, value2.getCause()));
+							if(value2.isInitial())
+								observer.onNext(outer.createInitialEvent(newVal));
+							else
+								observer.onNext(outer.createChangeEvent(oldVal, newVal, value2.getCause()));
 						}
 
 						@Override
@@ -496,8 +515,8 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 										return;
 									T oldValue = theValue;
 									theValue = combine(theComposedValues);
-									ObservableValueEvent<T> toFire = new ObservableValueEvent<>(ComposedObservableValue.this, oldValue,
-										theValue, event);
+									ObservableValueEvent<T> toFire = ComposedObservableValue.this.createChangeEvent(oldValue, theValue,
+										event);
 									fireNext(toFire);
 								}
 
@@ -510,7 +529,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 									T oldValue = theValue;
 									T newValue = combine(theComposedValues);
 									theValue = null;
-									ObservableValueEvent<T> toFire = createEvent(oldValue, newValue, event);
+									ObservableValueEvent<T> toFire = createChangeEvent(oldValue, newValue, event);
 									fireCompleted(toFire);
 								}
 
@@ -547,9 +566,9 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 			});
 			theObservers.setOnSubscribe(observer -> {
 				if(completed[0])
-					observer.onCompleted(new ObservableValueEvent<>(this, null, theValue, null));
+					observer.onCompleted(createInitialEvent(theValue));
 				else
-					observer.onNext(new ObservableValueEvent<>(this, null, theValue, null));
+					observer.onNext(createInitialEvent(theValue));
 			});
 		}
 
@@ -637,7 +656,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		@Override
 		protected ObservableValueEvent<T> getDefaultValue() {
 			T value = get();
-			return getWrapped().createEvent(value, value, null);
+			return getWrapped().createChangeEvent(value, value, null);
 		}
 	}
 
@@ -679,7 +698,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 			Subscription refireSub = theRefresh.subscribe(new Observer<Object>() {
 				@Override
 				public <V> void onNext(V value) {
-					observer.onNext(createEvent(get(), get(), value));
+					observer.onNext(createChangeEvent(get(), get(), value));
 				}
 			});
 			return () -> {
@@ -717,7 +736,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 								T oldValue = theValue;
 								theValue = value.getValue();
 								if(initialized[0]) {
-									ObservableValueEvent<T> cachedEvent = createEvent(oldValue, theValue, value.getCause());
+									ObservableValueEvent<T> cachedEvent = createChangeEvent(oldValue, theValue, value.getCause());
 									theObservers.forEach(observer -> observer.onNext(cachedEvent));
 								}
 							}
@@ -727,7 +746,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 								T oldValue = theValue;
 								T newValue = value.getValue();
 								if(initialized[0]) {
-									ObservableValueEvent<T> cachedEvent = createEvent(oldValue, newValue, value.getCause());
+									ObservableValueEvent<T> cachedEvent = createChangeEvent(oldValue, newValue, value.getCause());
 									theObservers.forEach(observer -> observer.onNext(cachedEvent));
 								}
 							}
@@ -792,7 +811,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 
 		@Override
 		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-			observer.onNext(createEvent(theValue, theValue, null));
+			observer.onNext(createInitialEvent(theValue));
 			return () -> {
 			};
 		}

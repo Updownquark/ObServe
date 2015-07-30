@@ -50,14 +50,14 @@ public class ObservableHashMap<K, V> implements ObservableMap<K, V> {
 		public V setValue(V value) {
 			V oldValue = theValue;
 			theValue = value;
-			theController.onNext(new ObservableValueEvent<>(this, oldValue, theValue, null));
+			theController.onNext(createChangeEvent(oldValue, theValue, null));
 			return oldValue;
 		}
 
 		private V remove() {
 			V oldValue = theValue;
 			theValue = null;
-			theController.onCompleted(new ObservableValueEvent<>(this, oldValue, oldValue, null));
+			theController.onCompleted(createChangeEvent(oldValue, oldValue, null));
 			return oldValue;
 		}
 

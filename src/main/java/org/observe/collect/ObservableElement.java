@@ -232,14 +232,14 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 				@Override
 				public <V> void onNext(V value) {
 					E outerVal = get();
-					ObservableValueEvent<E> event2 = theWrapped.createEvent(outerVal, outerVal, value);
+					ObservableValueEvent<E> event2 = theWrapped.createChangeEvent(outerVal, outerVal, value);
 					observer.onNext(event2);
 				}
 
 				@Override
 				public <V> void onCompleted(V value) {
 					E outerVal = get();
-					ObservableValueEvent<E> event2 = theWrapped.createEvent(outerVal, outerVal, value);
+					ObservableValueEvent<E> event2 = theWrapped.createChangeEvent(outerVal, outerVal, value);
 					observer.onNext(event2);
 					refireSub[0] = null;
 				}

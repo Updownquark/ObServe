@@ -7,6 +7,7 @@ import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
@@ -163,11 +164,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 					private void fire(int oldSize, int newSize, Object cause) {
 						if(initialized[0])
-							observer.onNext(new ObservableValueEvent<>(sizeObs, oldSize, newSize, cause));
+							observer.onNext(sizeObs.createChangeEvent(oldSize, newSize, cause));
 					}
 				});
 				initialized[0] = true;
-				observer.onNext(new ObservableValueEvent<>(sizeObs, 0, size(), null));
+				observer.onNext(sizeObs.createInitialEvent(size()));
 				return sub;
 			}
 
@@ -269,11 +270,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<Collection<E>>> observer) {
 				Collection<E> [] value = new Collection[] {get()};
-				observer.onNext(new ObservableValueEvent<>(this, null, value[0], null));
+				observer.onNext(createInitialEvent(value[0]));
 				return outer.simpleChanges().act(v -> {
 					Collection<E> old = value[0];
 					value[0] = get();
-					observer.onNext(new ObservableValueEvent<>(this, old, value[0], null));
+					observer.onNext(createChangeEvent(old, value[0], null));
 				});
 			}
 		};
@@ -393,21 +394,18 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
-				if(isEmpty())
-					observer.onNext(new ObservableValueEvent<>(this, null, null, null));
+				final boolean [] isFound=new boolean[1];
 				final Object key = new Object();
 				Subscription collSub = ObservableCollection.this.onElement(new Consumer<ObservableElement<E>>() {
 					private E theValue;
-
-					private boolean isFound;
 
 					@Override
 					public void accept(ObservableElement<E> element) {
 						element.subscribe(new Observer<ObservableValueEvent<E>>() {
 							@Override
 							public <V3 extends ObservableValueEvent<E>> void onNext(V3 value) {
-								if(!isFound && filter.test(value.getValue())) {
-									isFound = true;
+								if(!isFound[0] && filter.test(value.getValue())) {
+									isFound[0] = true;
 									newBest(value.getValue());
 								}
 							}
@@ -419,15 +417,15 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 							}
 
 							private void findNextBest() {
-								isFound = false;
+								isFound[0] = false;
 								for(E value : ObservableCollection.this) {
 									if(filter.test(value)) {
-										isFound = true;
+										isFound[0] = true;
 										newBest(value);
 										break;
 									}
 								}
-								if(!isFound)
+								if(!isFound[0])
 									newBest(null);
 							}
 						});
@@ -438,7 +436,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						theValue = value;
 						CollectionSession session = getSession().get();
 						if(session == null)
-							observer.onNext(createEvent(oldValue, theValue, null));
+							observer.onNext(createChangeEvent(oldValue, theValue, null));
 						else {
 							session.putIfAbsent(key, "oldBest", oldValue);
 							session.put(key, "newBest", theValue);
@@ -455,9 +453,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						E newBest = (E) completed.get(key, "newBest");
 						if(oldBest == null && newBest == null)
 							return;
-						observer.onNext(createEvent(oldBest, newBest, value));
+						observer.onNext(createChangeEvent(oldBest, newBest, value));
 					}
 				});
+				if(!isFound[0])
+					observer.onNext(createInitialEvent(null));
 				return () -> {
 					collSub.unsubscribe();
 					transSub.unsubscribe();
@@ -889,7 +889,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		protected MappedObservableCollection(ObservableCollection<E> wrap, Type type, Function<? super E, T> map,
 			Function<? super T, E> reverse) {
 			theWrapped = wrap;
-			theType = type;
+			theType = type != null ? type : ObservableUtils.getReturnType(map);
 			theMap = map;
 			theReverse = reverse;
 		}
@@ -1038,7 +1038,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		FilteredCollection(ObservableCollection<E> wrap, Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
 			theWrapped = wrap;
-			theType = type;
+			theType = type != null ? type : ObservableUtils.getReturnType(map);
 			theMap = map;
 			theReverse = reverse;
 		}
@@ -1088,16 +1088,25 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		public boolean add(T e) {
 			if(theReverse == null)
 				return PartialCollectionImpl.super.add(e);
-			else
-				return theWrapped.add(theReverse.apply(e));
+			else {
+				E reversed = theReverse.apply(e);
+				if(theMap.apply(reversed) == null)
+					throw new IllegalArgumentException("The value " + e + " is not acceptable in this mapped list");
+				return theWrapped.add(reversed);
+			}
 		}
 
 		@Override
 		public boolean addAll(Collection<? extends T> c) {
 			if(theReverse == null)
 				return PartialCollectionImpl.super.addAll(c);
-			else
-				return theWrapped.addAll(c.stream().map(theReverse).collect(Collectors.toList()));
+			else {
+				List<E> toAdd = c.stream().map(theReverse).collect(Collectors.toList());
+				for(E value : toAdd)
+					if(theMap.apply(value) == null)
+						throw new IllegalArgumentException("Value " + value + " is not acceptable in this mapped list");
+				return theWrapped.addAll(toAdd);
+			}
 		}
 
 		@Override
@@ -1279,14 +1288,17 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 							return;
 						isIncluded = false;
 						theValue = null;
-						observer2.onCompleted(createEvent(oldValue, oldValue, elValue));
+						observer2.onCompleted(createChangeEvent(oldValue, oldValue, elValue));
 						if(innerSub[0] != null) {
 							innerSub[0].unsubscribe();
 							innerSub[0] = null;
 						}
 					} else {
 						isIncluded = true;
-						observer2.onNext(createEvent(oldValue, theValue, elValue));
+						if(elValue.isInitial())
+							observer2.onNext(createInitialEvent(theValue));
+						else
+							observer2.onNext(createChangeEvent(oldValue, theValue, elValue));
 					}
 				}
 
@@ -1296,7 +1308,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						return;
 					T oldValue = theValue;
 					T newValue = elValue == null ? null : theMap.apply(elValue.getValue());
-					observer2.onCompleted(createEvent(oldValue, newValue, elValue));
+					observer2.onCompleted(createChangeEvent(oldValue, newValue, elValue));
 				}
 			});
 			if(!isIncluded) {
@@ -2127,7 +2139,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
 				theElementListeners.add(observer);
-				observer.onNext(new ObservableValueEvent<>(this, theCachedValue, theCachedValue, null));
+				observer.onNext(createInitialEvent(theCachedValue));
 				return () -> theElementListeners.remove(observer);
 			}
 
@@ -2139,12 +2151,12 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			private void newValue(ObservableValueEvent<E> event) {
 				E oldValue = theCachedValue;
 				theCachedValue = event.getValue();
-				ObservableValueEvent<E> cachedEvent = new ObservableValueEvent<>(this, oldValue, theCachedValue, event);
+				ObservableValueEvent<E> cachedEvent = createChangeEvent(oldValue, theCachedValue, event);
 				theElementListeners.forEach(observer -> observer.onNext(cachedEvent));
 			}
 
 			private void completed(ObservableValueEvent<E> event) {
-				ObservableValueEvent<E> cachedEvent = new ObservableValueEvent<>(this, theCachedValue, theCachedValue, event);
+				ObservableValueEvent<E> cachedEvent = createChangeEvent(theCachedValue, theCachedValue, event);
 				theElementListeners.forEach(observer -> observer.onCompleted(cachedEvent));
 			}
 		}

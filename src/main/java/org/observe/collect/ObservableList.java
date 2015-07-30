@@ -134,14 +134,15 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 	@Override
 	default <T> ObservableList<T> filter(Class<T> type) {
-		return d().label(filterMap(value -> type.isInstance(value) ? type.cast(value) : null)).tag("filterType", type).get();
+		return d().label(filterMap(new Type(type), value -> type.isInstance(value) ? type.cast(value) : null, value -> (E) value))
+			.tag("filterType", type).get();
 	}
 
 	@Override
 	default ObservableList<E> filter(Predicate<? super E> filter) {
 		return d().label(filterMap(getType(), (E value) -> {
 			return (value != null && filter.test(value)) ? value : null;
-		})).label("filter").tag("filter", filter).get();
+		}, value -> value)).label("filter").tag("filter", filter).get();
 	}
 
 	@Override
@@ -242,7 +243,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-				observer.onNext(new ObservableValueEvent<>(this, theValue, theValue, null));
+				observer.onNext(createInitialEvent(theValue));
 				return () -> {
 				};
 			}
@@ -514,6 +515,28 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		if(collection instanceof ObservableList)
 			return (ObservableList<T>) collection;
 		return new CollectionWrappingList<>(collection);
+	}
+
+	/**
+	 * A default toString() method for list implementations to use
+	 * 
+	 * @param list The list to print
+	 * @return The string representation of the list
+	 */
+	public static String toString(ObservableList<?> list) {
+		StringBuilder ret = new StringBuilder("[");
+		boolean first = true;
+		try (Transaction t = list.lock(false, null)) {
+			for(Object value : list) {
+				if(!first) {
+					ret.append(", ");
+				} else
+					first = false;
+				ret.append(value);
+			}
+		}
+		ret.append(']');
+		return ret.toString();
 	}
 
 	/**
@@ -1253,7 +1276,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 				private T thePreviousValue;
 				private T theNextValue;
 
-				private int theIndex;
+				private int theIndex = index;
 
 				private boolean hasRemoved;
 
@@ -1334,7 +1357,10 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 						throw new IllegalStateException("set() cannot be called after hasNext() or hasPrevious()");
 					if(theNextValue == null && thePreviousValue == null)
 						throw new IllegalStateException("set() cannot be called before next() or previous()");
-					backing.set(getReverse().apply(e));
+					E toSet = getReverse().apply(e);
+					if(getMap().apply(toSet) == null)
+						throw new IllegalArgumentException("Value " + e + " is not acceptable in this mapped list");
+					backing.set(toSet);
 					if(theNextValue == null) // next() called last
 						thePreviousValue = e;
 					else
@@ -1349,13 +1375,19 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 						throw new IllegalStateException("add() cannot be called twice");
 					if(theNextValue != null && thePreviousValue != null)
 						throw new IllegalStateException("add() cannot be called after hasNext() or hasPrevious()");
-					if(theNextValue == null && thePreviousValue == null)
-						throw new IllegalStateException("add() cannot be called before next() or previous()");
-					backing.add(getReverse().apply(e));
+					E toAdd = getReverse().apply(e);
+					if(getMap().apply(toAdd) == null)
+						throw new IllegalArgumentException("Value " + e + " is not acceptable in this mapped list");
+					backing.add(toAdd);
 					theIndex++;
-					thePreviousValue = e;
+					thePreviousValue = null;
 				}
 			};
+		}
+
+		@Override
+		public String toString() {
+			return ObservableList.toString(this);
 		}
 	}
 
