@@ -7,6 +7,7 @@ import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
@@ -888,7 +889,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		protected MappedObservableCollection(ObservableCollection<E> wrap, Type type, Function<? super E, T> map,
 			Function<? super T, E> reverse) {
 			theWrapped = wrap;
-			theType = type;
+			theType = type != null ? type : ObservableUtils.getReturnType(map);
 			theMap = map;
 			theReverse = reverse;
 		}
@@ -1037,7 +1038,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		FilteredCollection(ObservableCollection<E> wrap, Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
 			theWrapped = wrap;
-			theType = type;
+			theType = type != null ? type : ObservableUtils.getReturnType(map);
 			theMap = map;
 			theReverse = reverse;
 		}
@@ -1087,16 +1088,25 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		public boolean add(T e) {
 			if(theReverse == null)
 				return PartialCollectionImpl.super.add(e);
-			else
-				return theWrapped.add(theReverse.apply(e));
+			else {
+				E reversed = theReverse.apply(e);
+				if(theMap.apply(reversed) == null)
+					throw new IllegalArgumentException("The value " + e + " is not acceptable in this mapped list");
+				return theWrapped.add(reversed);
+			}
 		}
 
 		@Override
 		public boolean addAll(Collection<? extends T> c) {
 			if(theReverse == null)
 				return PartialCollectionImpl.super.addAll(c);
-			else
-				return theWrapped.addAll(c.stream().map(theReverse).collect(Collectors.toList()));
+			else {
+				List<E> toAdd = c.stream().map(theReverse).collect(Collectors.toList());
+				for(E value : toAdd)
+					if(theMap.apply(value) == null)
+						throw new IllegalArgumentException("Value " + value + " is not acceptable in this mapped list");
+				return theWrapped.addAll(toAdd);
+			}
 		}
 
 		@Override

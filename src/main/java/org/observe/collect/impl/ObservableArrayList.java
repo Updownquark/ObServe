@@ -310,19 +310,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 
 	@Override
 	public String toString() {
-		StringBuilder ret = new StringBuilder("[");
-		boolean first = true;
-		try (Transaction t = theInternals.lock(false, false, null)) {
-			for(E value : theValues) {
-				if(!first) {
-					ret.append(", ");
-				} else
-					first = false;
-				ret.append(value);
-			}
-		}
-		ret.append(']');
-		return ret.toString();
+		return ObservableList.toString(this);
 	}
 
 	private class ArrayListInternals extends DefaultCollectionInternals<E> {
