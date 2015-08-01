@@ -519,7 +519,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 	/**
 	 * A default toString() method for list implementations to use
-	 * 
+	 *
 	 * @param list The list to print
 	 * @return The string representation of the list
 	 */
@@ -1278,8 +1278,6 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 				private int theIndex = index;
 
-				private boolean hasRemoved;
-
 				@Override
 				public boolean hasNext() {
 					while(theNextValue == null && backing.hasNext()) {
@@ -1294,10 +1292,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 						throw new NoSuchElementException();
 					T ret = theNextValue;
 					theNextValue = null;
-					if(!hasRemoved) {
-						thePreviousValue = ret;
-					}
-					hasRemoved = false;
+					thePreviousValue = null;
 					theIndex++;
 					return ret;
 				}
@@ -1316,10 +1311,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 						throw new NoSuchElementException();
 					T ret = thePreviousValue;
 					thePreviousValue = null;
-					if(!hasRemoved) {
-						theNextValue = ret;
-					}
-					hasRemoved = false;
+					theNextValue = null;
 					theIndex--;
 					return ret;
 				}
@@ -1336,13 +1328,6 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 				@Override
 				public void remove() {
-					if(hasRemoved)
-						throw new IllegalStateException("remove() cannot be called twice");
-					if(theNextValue != null && thePreviousValue != null)
-						throw new IllegalStateException("remove() cannot be called after hasNext() or hasPrevious()");
-					if(theNextValue == null && thePreviousValue == null)
-						throw new IllegalStateException("remove() cannot be called before next() or previous()");
-					hasRemoved = true;
 					backing.remove();
 					theIndex--;
 				}
@@ -1351,30 +1336,22 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 				public void set(T e) {
 					if(getReverse() == null)
 						throw new UnsupportedOperationException();
-					if(hasRemoved)
-						throw new IllegalStateException("set() cannot be called twice");
-					if(theNextValue != null && thePreviousValue != null)
-						throw new IllegalStateException("set() cannot be called after hasNext() or hasPrevious()");
-					if(theNextValue == null && thePreviousValue == null)
-						throw new IllegalStateException("set() cannot be called before next() or previous()");
 					E toSet = getReverse().apply(e);
 					if(getMap().apply(toSet) == null)
 						throw new IllegalArgumentException("Value " + e + " is not acceptable in this mapped list");
 					backing.set(toSet);
+					theNextValue = null;
+					thePreviousValue = null;
 					if(theNextValue == null) // next() called last
-						thePreviousValue = e;
+						thePreviousValue = null;
 					else
-						theNextValue = e;
+						theNextValue = null;
 				}
 
 				@Override
 				public void add(T e) {
 					if(getReverse() == null)
 						throw new UnsupportedOperationException();
-					if(hasRemoved)
-						throw new IllegalStateException("add() cannot be called twice");
-					if(theNextValue != null && thePreviousValue != null)
-						throw new IllegalStateException("add() cannot be called after hasNext() or hasPrevious()");
 					E toAdd = getReverse().apply(e);
 					if(getMap().apply(toAdd) == null)
 						throw new IllegalArgumentException("Value " + e + " is not acceptable in this mapped list");

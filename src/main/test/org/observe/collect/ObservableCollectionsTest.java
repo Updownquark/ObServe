@@ -661,6 +661,8 @@ public class ObservableCollectionsTest {
 		ArrayList<Integer> filterMapSynced = new ArrayList<>();
 		Subscription filterMapSub = sync(filterMapOL, filterMapSynced);
 
+		// TODO Test combination list
+
 		Consumer<ObservableList<Integer>> newCheck = l -> {
 			assertThat(synced, equalTo(list));
 			if(check != null)
@@ -705,12 +707,12 @@ public class ObservableCollectionsTest {
 			listIter.add(0);
 			assertEquals(1, filteredOL1.size());
 			newCheck.accept(list);
-			listIter.next();
 			try {
 				listIter.add(1);
 				assertTrue("Should have thrown an IllegalArgumentException", false);
 			} catch(IllegalArgumentException e) {
 			}
+			listIter.previous();
 			listIter.remove();
 			assertEquals(0, filteredOL1.size());
 			newCheck.accept(list);
@@ -722,6 +724,8 @@ public class ObservableCollectionsTest {
 			filteredSub1.unsubscribe();
 			filterMapSub.unsubscribe();
 		}
+
+		// TODO Call testObservableList from the other applicable tests
 	}
 
 	private static <T> Subscription sync(ObservableList<T> list, List<T> synced) {
