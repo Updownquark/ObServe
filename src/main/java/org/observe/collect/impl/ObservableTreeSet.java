@@ -13,8 +13,8 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableFastFindCollection;
+import org.observe.collect.ObservableOrderedElement;
 import org.observe.collect.ObservableSortedSet;
-import org.observe.collect.OrderedObservableElement;
 import org.observe.util.Transactable;
 import org.observe.util.Transaction;
 import org.observe.util.tree.CountedRedBlackNode.DefaultNode;
@@ -94,13 +94,13 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	}
 
 	@Override
-	public Subscription onOrderedElement(Consumer<? super OrderedObservableElement<E>> onElement) {
+	public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
 		// Cast is safe because the internals of this set will only create ordered elements
 		return theInternals.onElement((Consumer<ObservableElement<E>>) onElement, true);
 	}
 
 	@Override
-	public Subscription onElementReverse(Consumer<? super OrderedObservableElement<E>> onElement) {
+	public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<E>> onElement) {
 		// Cast is safe because the internals of this set will only create ordered elements
 		return theInternals.onElement((Consumer<ObservableElement<E>>) onElement, false);
 	}
@@ -238,6 +238,20 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 		}
 	}
 
+	@Override
+	public E get(int index) {
+		return theValues.get(index).getKey();
+	}
+
+	@Override
+	public int indexOf(Object o){
+		return theValues.indexOfKey((E) o);
+	}
+
+	@Override
+	public ObservableSortedSet<E> subSet(E from, boolean fromInclusive, E to, boolean toInclusive, boolean reversed) {
+	}
+
 	private boolean removeNodeImpl(Object o) {
 		DefaultNode<Map.Entry<E, InternalElement>> node = theValues.getNode(o);
 		if(node != null) {
@@ -355,7 +369,7 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 
 		@Override
 		ObservableElement<E> createExposedElement(InternalObservableElementImpl<E> internal, Collection<Subscription> subscriptions) {
-			class ExposedOrderedObservableElement extends ExposedObservableElement<E> implements OrderedObservableElement<E> {
+			class ExposedOrderedObservableElement extends ExposedObservableElement<E> implements ObservableOrderedElement<E> {
 				ExposedOrderedObservableElement() {
 					super(internal, subscriptions);
 				}

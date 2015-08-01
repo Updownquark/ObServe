@@ -2,7 +2,6 @@ package org.observe.util.tree;
 
 import java.util.Comparator;
 import java.util.Map;
-import java.util.NavigableMap;
 import java.util.NavigableSet;
 import java.util.function.Function;
 
@@ -391,6 +390,43 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 		}
 
 		/**
+		 * @param index The index of the entry to get
+		 * @return The entry at the given index
+		 */
+		public Map.Entry<K, V> get(int index) {
+			return getNode(index).getValue();
+		}
+
+		/**
+		 * @param index The index of the node to get
+		 * @return The node at the given index
+		 */
+		public N getNode(int index) {
+			N node = theRoot;
+			if(node == null || index < 0)
+				throw new IndexOutOfBoundsException(index + " of " + size());
+			int past = 0;
+			while(true) {
+				N left = (N) node.getLeft();
+				int leftSize = CountedRedBlackNode.size(left);
+				if(leftSize < index)
+					node = left;
+				else {
+					N right = (N) node.getRight();
+					if(right == null) {
+						if(index == 0)
+							return node;
+						else
+							throw new IndexOutOfBoundsException(index + " of " + past);
+					} else {
+						past += leftSize;
+						node = (N) node.getRight();
+					}
+				}
+			}
+		}
+
+		/**
 		 * @param key The key to get the index of
 		 * @return The number of keys in this map less than the given key
 		 */
@@ -416,7 +452,7 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 		}
 
 		@Override
-		public NavigableMap<K, V> getSubMap(boolean reverse, K fromKey, boolean fromInclusive, K toKey, boolean toInclusive) {
+		public SubMap<K, V> getSubMap(boolean reverse, K fromKey, boolean fromInclusive, K toKey, boolean toInclusive) {
 			return new SubMap<>(this, reverse, fromKey, fromInclusive, toKey, toInclusive);
 		}
 

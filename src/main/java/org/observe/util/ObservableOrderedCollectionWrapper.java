@@ -2,7 +2,7 @@ package org.observe.util;
 
 import org.observe.Subscription;
 import org.observe.collect.ObservableOrderedCollection;
-import org.observe.collect.OrderedObservableElement;
+import org.observe.collect.ObservableOrderedElement;
 
 /**
  * Wraps an observable ordered collection
@@ -30,7 +30,7 @@ public class ObservableOrderedCollectionWrapper<E> extends ObservableCollectionW
 	}
 
 	@Override
-	public Subscription onOrderedElement(java.util.function.Consumer<? super OrderedObservableElement<E>> observer) {
+	public Subscription onOrderedElement(java.util.function.Consumer<? super ObservableOrderedElement<E>> observer) {
 		return getWrapped().onOrderedElement(observer);
 	}
 }

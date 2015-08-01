@@ -6,7 +6,7 @@ import java.util.function.Consumer;
 
 import org.observe.Subscription;
 import org.observe.collect.ObservableList;
-import org.observe.collect.OrderedObservableElement;
+import org.observe.collect.ObservableOrderedElement;
 
 /**
  * Wraps an observable list
@@ -34,7 +34,7 @@ public class ObservableListWrapper<E> extends ObservableOrderedCollectionWrapper
 	}
 
 	@Override
-	public Subscription onElementReverse(Consumer<? super OrderedObservableElement<E>> onElement) {
+	public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<E>> onElement) {
 		return getWrapped().onElementReverse(onElement);
 	}
 

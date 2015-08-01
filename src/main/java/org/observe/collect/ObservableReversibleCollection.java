@@ -5,6 +5,7 @@ import static org.observe.ObservableDebug.d;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -35,8 +36,8 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 * @param onElement The element accepter
 	 * @return The unsubscribe runnable
 	 */
-	default Subscription onElementReverse(Consumer<? super OrderedObservableElement<E>> onElement) {
-		List<OrderedObservableElement<E>> initElements = new ArrayList<>();
+	default Subscription onElementReverse(Consumer<? super ObservableOrderedElement<E>> onElement) {
+		List<ObservableOrderedElement<E>> initElements = new ArrayList<>();
 		boolean [] initialized = new boolean[1];
 		Subscription ret = onOrderedElement(element -> {
 			if(initialized[0])
@@ -44,7 +45,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 			else
 				initElements.add(element);
 		});
-		OrderedObservableElement<E> [] e = initElements.toArray(new OrderedObservableElement[initElements.size()]);
+		ObservableOrderedElement<E> [] e = initElements.toArray(new ObservableOrderedElement[initElements.size()]);
 		initElements.clear();
 		initialized[0] = true;
 		for(int i = e.length - 1; i >= 0; i--)
@@ -70,6 +71,19 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	@Override
 	default ObservableValue<E> getLast() {
 		return d().debug(new OrderedReversibleCollectionFinder<>(this, value -> true, false)).from("last", this).get();
+	}
+
+	@Override
+	default int lastIndexOf(Object value) {
+		try (Transaction t = lock(false, null)) {
+			int size = size();
+			Iterator<E> iter = descending().iterator();
+			for(int i = 0; iter.hasNext(); i++) {
+				if(Objects.equals(iter.next(), value))
+					return size - i - 1;
+			}
+			return -1;
+		}
 	}
 
 	@Override
@@ -190,7 +204,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	class ReversedCollection<E> implements PartialCollectionImpl<E>, ObservableReversibleCollection<E> {
 		private final ObservableReversibleCollection<E> theWrapped;
 
-		ReversedCollection(ObservableReversibleCollection<E> wrap) {
+		protected ReversedCollection(ObservableReversibleCollection<E> wrap) {
 			theWrapped = wrap;
 		}
 
@@ -234,23 +248,40 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 		}
 
 		@Override
-		public Subscription onOrderedElement(Consumer<? super OrderedObservableElement<E>> onElement) {
+		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
 			return theWrapped.onElementReverse(element -> {
 				onElement.accept(new ReversedElement(element));
 			});
 		}
 
 		@Override
-		public Subscription onElementReverse(Consumer<? super OrderedObservableElement<E>> onElement) {
+		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<E>> onElement) {
 			return theWrapped.onOrderedElement(element -> {
 				onElement.accept(new ReversedElement(element));
 			});
 		}
 
-		class ReversedElement implements OrderedObservableElement<E> {
-			private final OrderedObservableElement<E> theWrappedElement;
+		@Override
+		public E get(int index) {
+			try (Transaction t = theWrapped.lock(false, null)) {
+				return theWrapped.get(theWrapped.size() - index - 1);
+			}
+		}
 
-			ReversedElement(OrderedObservableElement<E> wrap) {
+		@Override
+		public int indexOf(Object o) {
+			return theWrapped.lastIndexOf(o);
+		}
+
+		@Override
+		public int lastIndexOf(Object o) {
+			return theWrapped.indexOf(o);
+		}
+
+		class ReversedElement implements ObservableOrderedElement<E> {
+			private final ObservableOrderedElement<E> theWrappedElement;
+
+			ReversedElement(ObservableOrderedElement<E> wrap) {
 				theWrappedElement = wrap;
 			}
 
@@ -329,7 +360,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 		}
 
 		@Override
-		public Subscription onElementReverse(Consumer<? super OrderedObservableElement<T>> onElement) {
+		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<T>> onElement) {
 			return getWrapped().onElementReverse(element -> onElement.accept(element.mapV(getMap())));
 		}
 
@@ -362,7 +393,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 		}
 
 		@Override
-		public Subscription onElementReverse(Consumer<? super OrderedObservableElement<T>> onElement) {
+		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<T>> onElement) {
 			return getWrapped().onElementReverse(element -> {
 				FilteredOrderedElement<E, T> retElement = filter(element);
 				element.act(elValue -> {
@@ -405,9 +436,9 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 		}
 
 		@Override
-		public Subscription onElementReverse(Consumer<? super OrderedObservableElement<V>> onElement) {
+		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<V>> onElement) {
 			return getManager().onElement(getWrapped(), getValue(),
-				element -> onElement.accept((OrderedObservableElement<V>) element.combineV(getMap(), getValue())), false);
+				element -> onElement.accept((ObservableOrderedElement<V>) element.combineV(getMap(), getValue())), false);
 		}
 
 		@Override
@@ -437,9 +468,9 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 		}
 
 		@Override
-		public Subscription onElementReverse(Consumer<? super OrderedObservableElement<E>> onElement) {
+		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<E>> onElement) {
 			return getManager().onElement(getWrapped(), getRefresh(),
-				element -> onElement.accept((OrderedObservableElement<E>) element.refresh(getRefresh())), false);
+				element -> onElement.accept((ObservableOrderedElement<E>) element.refresh(getRefresh())), false);
 		}
 
 		@Override
@@ -465,7 +496,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 		}
 
 		@Override
-		public Subscription onElementReverse(Consumer<? super OrderedObservableElement<E>> onElement) {
+		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<E>> onElement) {
 			return getWrapped().onElementReverse(element -> onElement.accept(element.refreshForValue(getRefresh())));
 		}
 
@@ -491,7 +522,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 		}
 
 		@Override
-		public Subscription onElementReverse(Consumer<? super OrderedObservableElement<E>> onElement) {
+		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<E>> onElement) {
 			return getWrapped().onElementReverse(onElement);
 		}
 
@@ -568,8 +599,8 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 		}
 
 		@Override
-		public Subscription onElementReverse(Consumer<? super OrderedObservableElement<E>> onElement) {
-			Subscription ret = addListener(element -> onElement.accept((OrderedObservableElement<E>) element));
+		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<E>> onElement) {
+			Subscription ret = addListener(element -> onElement.accept((ObservableOrderedElement<E>) element));
 			List<OrderedCachedElement<E>> cache = cachedElements();
 			for(int i = cache.size() - 1; i >= 0; i--)
 				onElement.accept(cache.get(i).cached());
