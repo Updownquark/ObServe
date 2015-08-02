@@ -318,7 +318,8 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 * @param <E> The type of value to find
 	 */
 	class OrderedReversibleCollectionFinder<E> extends OrderedCollectionFinder<E> {
-		OrderedReversibleCollectionFinder(ObservableReversibleCollection<E> collection, Predicate<? super E> filter, boolean forward) {
+		protected OrderedReversibleCollectionFinder(ObservableReversibleCollection<E> collection, Predicate<? super E> filter,
+			boolean forward) {
 			super(collection, filter, forward);
 		}
 
