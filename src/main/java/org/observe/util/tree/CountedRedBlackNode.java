@@ -280,6 +280,8 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 
 		@Override
 		public void setRoot(N root) {
+			if(root != null)
+				root.setRed(false); // Root is black
 			theRoot = root;
 		}
 
@@ -386,6 +388,8 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 
 		@Override
 		public void setRoot(N root) {
+			if(root != null)
+				root.setRed(false);
 			theRoot = root;
 		}
 
@@ -608,24 +612,5 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 		public DefaultNode<Entry<K, V>> createNode(K key) {
 			return new DefaultNode<>(new RedBlackTreeMap.DefaultEntry<>(key), (o1, o2) -> theCompare.compare(o1.getKey(), o2.getKey()));
 		}
-	}
-
-	public static void main(String [] args) {
-		class CountedStringNode extends CountedRedBlackNode<String> {
-			public CountedStringNode(String value) {
-				super(value);
-			}
-
-			@Override
-			protected CountedRedBlackNode<String> createNode(String value) {
-				return new CountedStringNode(value);
-			}
-
-			@Override
-			protected int compare(String o1, String o2) {
-				return o1.compareTo(o2);
-			}
-		}
-		test(new CountedStringNode("a"), alphaBet('q'));
 	}
 }
