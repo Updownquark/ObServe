@@ -137,12 +137,12 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 	@Override
 	default <T> ObservableOrderedCollection<T> map(Function<? super E, T> map) {
-		return map(ObservableUtils.getReturnType(map), map);
+		return (ObservableOrderedCollection<T>) ObservableCollection.super.map(map);
 	}
 
 	@Override
 	default <T> ObservableOrderedCollection<T> map(Type type, Function<? super E, T> map) {
-		return map(type, map, null);
+		return (ObservableOrderedCollection<T>) ObservableCollection.super.map(type, map);
 	}
 
 	@Override
@@ -153,40 +153,58 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 	@Override
 	default ObservableOrderedCollection<E> filter(Predicate<? super E> filter) {
-		return d().label(filterMap(value -> {
-			return (value != null && filter.test(value)) ? value : null;
-		})).label("filter").tag("filter", filter).get();
+		return (ObservableOrderedCollection<E>) ObservableCollection.super.filter(filter);
+	}
+
+	@Override
+	default ObservableOrderedCollection<E> filter(Predicate<? super E> filter, boolean staticFilter) {
+		return (ObservableOrderedCollection<E>) ObservableCollection.super.filter(filter, staticFilter);
+	}
+
+	@Override
+	default ObservableOrderedCollection<E> filterDynamic(Predicate<? super E> filter) {
+		return (ObservableOrderedCollection<E>) ObservableCollection.super.filterDynamic(filter);
+	}
+
+	@Override
+	default ObservableOrderedCollection<E> filterStatic(Predicate<? super E> filter) {
+		return (ObservableOrderedCollection<E>) ObservableCollection.super.filterStatic(filter);
 	}
 
 	@Override
 	default <T> ObservableOrderedCollection<T> filter(Class<T> type) {
-		return d().label(filterMap(value -> type.isInstance(value) ? type.cast(value) : null)).tag("filterType", type).get();
+		return (ObservableOrderedCollection<T>) ObservableCollection.super.filter(type);
 	}
 
 	@Override
 	default <T> ObservableOrderedCollection<T> filterMap(Function<? super E, T> filterMap) {
-		return filterMap(ObservableUtils.getReturnType(filterMap), filterMap);
+		return (ObservableOrderedCollection<T>) ObservableCollection.super.filterMap(filterMap);
 	}
 
 	@Override
-	default <T> ObservableOrderedCollection<T> filterMap(Type type, Function<? super E, T> map) {
-		return filterMap(type, map, null);
+	default <T> ObservableOrderedCollection<T> filterMap(Type type, Function<? super E, T> map, boolean staticFilter) {
+		return (ObservableOrderedCollection<T>) ObservableCollection.super.filterMap(type, map, staticFilter);
 	}
 
 	@Override
-	default <T> ObservableOrderedCollection<T> filterMap(Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
-		return d().debug(new FilteredOrderedCollection<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
-			.using("reverse", reverse).get();
+	default <T> ObservableOrderedCollection<T> filterMap(Type type, Function<? super E, T> map, Function<? super T, E> reverse,
+		boolean staticFilter) {
+		if(staticFilter)
+			return d().debug(new StaticFilteredOrderedCollection<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
+				.using("reverse", reverse).get();
+		else
+			return d().debug(new DynamicFilteredOrderedCollection<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
+				.using("reverse", reverse).get();
 	}
 
 	@Override
 	default <T, V> ObservableOrderedCollection<V> combine(ObservableValue<T> arg, BiFunction<? super E, ? super T, V> func) {
-		return combine(arg, ObservableUtils.getReturnType(func), func);
+		return (ObservableOrderedCollection<V>) ObservableCollection.super.combine(arg, func);
 	}
 
 	@Override
 	default <T, V> ObservableOrderedCollection<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
-		return combine(arg, type, func, null);
+		return (ObservableOrderedCollection<V>) ObservableCollection.super.combine(arg, type, func);
 	}
 
 	@Override
@@ -457,10 +475,33 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @param <E> The type of the collection to be filter-mapped
 	 * @param <T> The type of the mapped collection
 	 */
-	class FilteredOrderedCollection<E, T> extends FilteredCollection<E, T> implements ObservableOrderedCollection<T> {
+	class StaticFilteredOrderedCollection<E, T> extends StaticFilteredCollection<E, T> implements ObservableOrderedCollection<T> {
+		StaticFilteredOrderedCollection(ObservableOrderedCollection<E> wrap, Type type, Function<? super E, T> map,
+			Function<? super T, E> reverse) {
+			super(wrap, type, map, reverse);
+		}
+
+		@Override
+		protected ObservableOrderedCollection<E> getWrapped() {
+			return (ObservableOrderedCollection<E>) super.getWrapped();
+		}
+
+		@Override
+		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<T>> onElement) {
+			return onElement(element -> onElement.accept((ObservableOrderedElement<T>) element));
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableOrderedCollection#filterMap(Function)}
+	 *
+	 * @param <E> The type of the collection to be filter-mapped
+	 * @param <T> The type of the mapped collection
+	 */
+	class DynamicFilteredOrderedCollection<E, T> extends DynamicFilteredCollection<E, T> implements ObservableOrderedCollection<T> {
 		private List<FilteredOrderedElement<E, T>> theFilteredElements = new java.util.ArrayList<>();
 
-		FilteredOrderedCollection(ObservableOrderedCollection<E> wrap, Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
+		DynamicFilteredOrderedCollection(ObservableOrderedCollection<E> wrap, Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
 

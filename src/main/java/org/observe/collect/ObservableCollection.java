@@ -312,13 +312,73 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	}
 
 	/**
+	 * A shortcut for {@link #filterDynamic(Predicate)}
+	 *
 	 * @param filter The filter function
 	 * @return A collection containing all non-null elements passing the given test
 	 */
 	default ObservableCollection<E> filter(Predicate<? super E> filter) {
+		return filter(filter, false);
+	}
+
+	/**
+	 * <p>
+	 * Creates a collection containing the non-null elements of this collection that pass a given filter.
+	 * </p>
+	 *
+	 * <p>
+	 * The filtering is dynamic, such that if an element in the collection changes in a way that changes whether it passes the filter, the
+	 * element will be added or removed from the filtered collection accordingly.
+	 * </p>
+	 * <p>
+	 * This method is safe in that no matter what changes with the collection and their elements, the filtered collection will be updated
+	 * correctly each time a relevant event is fired. However, it may perform more poorly than static filtering when many elements are
+	 * filtered out.
+	 * </p>
+	 *
+	 * @param filter The filter function
+	 * @return A collection containing all non-null elements passing the given test
+	 */
+	default ObservableCollection<E> filterDynamic(Predicate<? super E> filter) {
+		return filter(filter, false);
+	}
+
+	/**
+	 * <p>
+	 * Creates a collection containing the non-null elements of this collection that pass a given filter.
+	 * </p>
+	 *
+	 * <p>
+	 * The filtering is static; it is assumed that whether an element passes the test will never change. If an element in the collection
+	 * changes in a way that changes whether it passes the filter, the element's presence in the filtered collection will not change.
+	 * </p>
+	 * <p>
+	 * Also, methods that affect the contents of a single element position (e.g. {@link ObservableList#set(int, Object)} may cause problems.
+	 * For example, if an element that does not match the given filter is replaced in the same position by an element that matches the
+	 * filter, the new element may not show up in the filtered collection.
+	 * </p>
+	 * <p>
+	 * This behavior allows significant performance improvements for filtered collections that exclude many elements, but it must only be
+	 * used in cases where the data being filtered on is known to be constant.
+	 * </p>
+	 *
+	 * @param filter The filter function
+	 * @return A collection containing all non-null elements passing the given test
+	 */
+	default ObservableCollection<E> filterStatic(Predicate<? super E> filter) {
+		return filter(filter, true);
+	}
+
+	/**
+	 * @param filter The filter function
+	 * @param staticFilter Whether the filtering on the filtered collection is to be {@link #filterStatic(Predicate) static} or
+	 *            {@link #filterDynamic(Predicate) dynamic}.
+	 * @return A collection containing all non-null elements passing the given test
+	 */
+	default ObservableCollection<E> filter(Predicate<? super E> filter, boolean staticFilter) {
 		return d().label(filterMap(getType(), value -> {
 			return (value != null && filter.test(value)) ? value : null;
-		}, value -> value)).tag("filter", filter).get();
+		}, value -> value, staticFilter)).tag("filter", filter).get();
 	}
 
 	/**
@@ -328,7 +388,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 *         given class
 	 */
 	default <T> ObservableCollection<T> filter(Class<T> type) {
-		return d().label(filterMap(new Type(type), value -> type.isInstance(value) ? type.cast(value) : null, value -> (E) value))
+		return d().label(filterMap(new Type(type), value -> type.isInstance(value) ? type.cast(value) : null, value -> (E) value, true))
 			.tag("filterType", type).get();
 	}
 
@@ -338,17 +398,19 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @return An observable collection of a new type backed by this collection and the mapping function
 	 */
 	default <T> ObservableCollection<T> filterMap(Function<? super E, T> filterMap) {
-		return filterMap(ObservableUtils.getReturnType(filterMap), filterMap, null);
+		return filterMap(ObservableUtils.getReturnType(filterMap), filterMap, null, false);
 	}
 
 	/**
 	 * @param <T> The type of the mapped collection
 	 * @param type The run-time type of the mapped collection
 	 * @param map The mapping function
+	 * @param staticFilter Whether the filtering on the filtered collection is to be {@link #filterStatic(Predicate) static} or
+	 *            {@link #filterDynamic(Predicate) dynamic}.
 	 * @return A collection containing every element in this collection for which the mapping function returns a non-null value
 	 */
-	default <T> ObservableCollection<T> filterMap(Type type, Function<? super E, T> map) {
-		return filterMap(type, map, null);
+	default <T> ObservableCollection<T> filterMap(Type type, Function<? super E, T> map, boolean staticFilter) {
+		return filterMap(type, map, null, staticFilter);
 	}
 
 	/**
@@ -356,13 +418,20 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @param type The run-time type of the mapped collection
 	 * @param map The mapping function
 	 * @param reverse The reverse function if addition support is desired for the filtered collection
+	 * @param staticFilter Whether the filtering on the filtered collection is to be {@link #filterStatic(Predicate) static} or
+	 *            {@link #filterDynamic(Predicate) dynamic}.
 	 * @return A collection containing every element in this collection for which the mapping function returns a non-null value
 	 */
-	default <T> ObservableCollection<T> filterMap(Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
+	default <T> ObservableCollection<T> filterMap(Type type, Function<? super E, T> map, Function<? super T, E> reverse,
+		boolean staticFilter) {
 		if(type == null)
 			type = ObservableUtils.getReturnType(map);
-		return d().debug(new FilteredCollection<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
-			.using("reverse", reverse).get();
+		if(staticFilter)
+			return d().debug(new StaticFilteredCollection<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
+				.using("reverse", reverse).get();
+		else
+			return d().debug(new DynamicFilteredCollection<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
+				.using("reverse", reverse).get();
 	}
 
 	/**
@@ -1025,15 +1094,18 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	}
 
 	/**
-	 * Implements {@link ObservableCollection#filterMap(Function)}
+	 * Implements {@link #filterMap(Type, Function, Function, boolean)}
 	 *
-	 * @param <E> The type of the collection to be filter-mapped
-	 * @param <T> The type of the mapped collection
+	 * @param <E> The type of the collection to filter/map
+	 * @param <T> The type of the filter/mapped collection
 	 */
-	class FilteredCollection<E, T> implements PartialCollectionImpl<T> {
+	abstract class FilteredCollection<E, T> implements PartialCollectionImpl<T> {
 		private final ObservableCollection<E> theWrapped;
+
 		private final Type theType;
+
 		private final Function<? super E, T> theMap;
+
 		private final Function<? super T, E> theReverse;
 
 		FilteredCollection(ObservableCollection<E> wrap, Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
@@ -1201,17 +1273,50 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			};
 		}
 
-		protected FilteredElement<E, T> filter(ObservableElement<E> element) {
-			return d().debug(new FilteredElement<>(element, theMap, theType)).from("element", this).tag("wrapped", element).get();
+	}
+
+	/**
+	 * Implements {@link ObservableCollection#filterMap(Function)} for static filtering
+	 *
+	 * @param <E> The type of the collection to be filter-mapped
+	 * @param <T> The type of the mapped collection
+	 */
+	class StaticFilteredCollection<E, T> extends FilteredCollection<E, T> {
+		public StaticFilteredCollection(ObservableCollection<E> wrap, Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
+			super(wrap, type, map, reverse);
 		}
 
 		@Override
 		public Subscription onElement(Consumer<? super ObservableElement<T>> observer) {
-			return theWrapped.onElement(element -> {
+			return getWrapped().onElement(element -> {
+				if(getMap().apply(element.get())!=null)
+					observer.accept(element.mapV(getMap()));
+			});
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableCollection#filterMap(Function)} for dynamic filtering
+	 *
+	 * @param <E> The type of the collection to be filter-mapped
+	 * @param <T> The type of the mapped collection
+	 */
+	class DynamicFilteredCollection<E, T> extends FilteredCollection<E, T> {
+		DynamicFilteredCollection(ObservableCollection<E> wrap, Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
+			super(wrap, type, map, reverse);
+		}
+
+		protected FilteredElement<E, T> filter(ObservableElement<E> element) {
+			return d().debug(new FilteredElement<>(element, getMap(), getType())).from("element", this).tag("wrapped", element).get();
+		}
+
+		@Override
+		public Subscription onElement(Consumer<? super ObservableElement<T>> observer) {
+			return getWrapped().onElement(element -> {
 				FilteredElement<E, T> retElement = filter(element);
 				element.act(elValue -> {
 					if(!retElement.isIncluded()) {
-						T mapped = theMap.apply(elValue.getValue());
+						T mapped = getMap().apply(elValue.getValue());
 						if(mapped != null)
 							observer.accept(retElement);
 					}

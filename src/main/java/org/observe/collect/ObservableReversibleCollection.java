@@ -88,12 +88,12 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 
 	@Override
 	default <T> ObservableReversibleCollection<T> map(Function<? super E, T> map) {
-		return map(ObservableUtils.getReturnType(map), map);
+		return (ObservableReversibleCollection<T>) ObservableOrderedCollection.super.map(map);
 	}
 
 	@Override
 	default <T> ObservableReversibleCollection<T> map(Type type, Function<? super E, T> map) {
-		return map(type, map, null);
+		return (ObservableReversibleCollection<T>) ObservableOrderedCollection.super.map(type, map);
 	}
 
 	@Override
@@ -104,30 +104,48 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 
 	@Override
 	default ObservableReversibleCollection<E> filter(Predicate<? super E> filter) {
-		return d().label(filterMap(value -> {
-			return (value != null && filter.test(value)) ? value : null;
-		})).label("filter").tag("filter", filter).get();
+		return (ObservableReversibleCollection<E>) ObservableOrderedCollection.super.filter(filter);
+	}
+
+	@Override
+	default ObservableReversibleCollection<E> filter(Predicate<? super E> filter, boolean staticFilter) {
+		return (ObservableReversibleCollection<E>) ObservableOrderedCollection.super.filter(filter, staticFilter);
+	}
+
+	@Override
+	default ObservableReversibleCollection<E> filterDynamic(Predicate<? super E> filter) {
+		return (ObservableReversibleCollection<E>) ObservableOrderedCollection.super.filterDynamic(filter);
+	}
+
+	@Override
+	default ObservableReversibleCollection<E> filterStatic(Predicate<? super E> filter) {
+		return (ObservableReversibleCollection<E>) ObservableOrderedCollection.super.filterStatic(filter);
 	}
 
 	@Override
 	default <T> ObservableReversibleCollection<T> filter(Class<T> type) {
-		return d().label(filterMap(value -> type.isInstance(value) ? type.cast(value) : null)).tag("filterType", type).get();
+		return (ObservableReversibleCollection<T>) ObservableOrderedCollection.super.filter(type);
 	}
 
 	@Override
 	default <T> ObservableReversibleCollection<T> filterMap(Function<? super E, T> filterMap) {
-		return filterMap(ObservableUtils.getReturnType(filterMap), filterMap);
+		return (ObservableReversibleCollection<T>) ObservableOrderedCollection.super.filterMap(filterMap);
 	}
 
 	@Override
-	default <T> ObservableReversibleCollection<T> filterMap(Type type, Function<? super E, T> map) {
-		return filterMap(type, map, null);
+	default <T> ObservableReversibleCollection<T> filterMap(Type type, Function<? super E, T> map, boolean staticFilter) {
+		return (ObservableReversibleCollection<T>) ObservableOrderedCollection.super.filterMap(type, map, staticFilter);
 	}
 
 	@Override
-	default <T> ObservableReversibleCollection<T> filterMap(Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
-		return d().debug(new FilteredReversibleCollection<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
-			.using("reverse", reverse).get();
+	default <T> ObservableReversibleCollection<T> filterMap(Type type, Function<? super E, T> map, Function<? super T, E> reverse,
+		boolean staticFilter) {
+		if(staticFilter)
+			return d().debug(new StaticFilteredReversibleCollection<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
+				.using("reverse", reverse).get();
+		else
+			return d().debug(new DynamicFilteredReversibleCollection<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
+				.using("reverse", reverse).get();
 	}
 
 	@Override
@@ -382,8 +400,37 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 * @param <E> The type of the collection to filter/map
 	 * @param <T> The type of the filter/mapped collection
 	 */
-	class FilteredReversibleCollection<E, T> extends FilteredOrderedCollection<E, T> implements ObservableReversibleCollection<T> {
-		public FilteredReversibleCollection(ObservableReversibleCollection<E> wrap, Type type, Function<? super E, T> map,
+	class StaticFilteredReversibleCollection<E, T> extends StaticFilteredOrderedCollection<E, T> implements
+	ObservableReversibleCollection<T> {
+		public StaticFilteredReversibleCollection(ObservableReversibleCollection<E> wrap, Type type, Function<? super E, T> map,
+			Function<? super T, E> reverse) {
+			super(wrap, type, map, reverse);
+		}
+
+		@Override
+		protected ObservableReversibleCollection<E> getWrapped() {
+			return (ObservableReversibleCollection<E>) super.getWrapped();
+		}
+
+		@Override
+		public Iterable<T> descending() {
+			return new Iterable<T>() {
+				@Override
+				public Iterator<T> iterator() {
+					return filter(getWrapped().descending().iterator());
+				}
+			};
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableOrderedCollection#filterMap(Function)}
+	 *
+	 * @param <E> The type of the collection to filter/map
+	 * @param <T> The type of the filter/mapped collection
+	 */
+	class DynamicFilteredReversibleCollection<E, T> extends DynamicFilteredOrderedCollection<E, T> implements ObservableReversibleCollection<T> {
+		public DynamicFilteredReversibleCollection(ObservableReversibleCollection<E> wrap, Type type, Function<? super E, T> map,
 			Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}

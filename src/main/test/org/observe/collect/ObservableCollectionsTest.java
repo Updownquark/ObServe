@@ -657,7 +657,7 @@ public class ObservableCollectionsTest {
 		Subscription filteredSub1 = sync(filteredOL1, filteredSynced1);
 
 		Function<Integer, Integer> filterMap = v -> v;
-		ObservableList<Integer> filterMapOL = list.filterMap(null, filterMap, filterMap);
+		ObservableList<Integer> filterMapOL = list.filterMap(null, filterMap, filterMap, false);
 		ArrayList<Integer> filterMapSynced = new ArrayList<>();
 		Subscription filterMapSub = sync(filterMapOL, filterMapSynced);
 

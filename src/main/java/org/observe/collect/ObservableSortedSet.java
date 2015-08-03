@@ -228,14 +228,30 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 	 */
 	@Override
 	default ObservableSortedSet<E> filter(Predicate<? super E> filter) {
+		return (ObservableSortedSet<E>) ObservableReversibleCollection.super.filter(filter);
+	}
+
+	@Override
+	default ObservableSortedSet<E> filter(Predicate<? super E> filter, boolean staticFilter) {
+		return (ObservableSortedSet<E>) ObservableSet.super.filter(filter, staticFilter);
+	}
+
+	@Override
+	default ObservableSortedSet<E> filterDynamic(Predicate<? super E> filter){
 		Function<E, E> map = value -> (value != null && filter.test(value)) ? value : null;
-		return d().debug(new FilteredSortedSet<>(this, getType(), map)).from("filter", this).using("filter", filter).get();
+		return d().debug(new DynamicFilteredSortedSet<>(this, getType(), map)).from("filter", this).using("filter", filter).get();
+	}
+
+	@Override
+	default ObservableSortedSet<E> filterStatic(Predicate<? super E> filter){
+		Function<E, E> map = value -> (value != null && filter.test(value)) ? value : null;
+		return d().debug(new StaticFilteredSortedSet<>(this, getType(), map)).from("filter", this).using("filter", filter).get();
 	}
 
 	@Override
 	default <T> ObservableSortedSet<T> filter(Class<T> type) {
 		Function<E, T> map = value -> type.isInstance(value) ? type.cast(value) : null;
-		return d().debug(new FilteredSortedSet<>(this, new Type(type), map)).from("filterMap", this).using("map", map)
+		return d().debug(new StaticFilteredSortedSet<>(this, new Type(type), map)).from("filterMap", this).using("map", map)
 			.tag("filterType", type).get();
 	}
 
@@ -741,10 +757,10 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 	 * @param <E> The type of the set to filter
 	 * @param <T> the type of the mapped set
 	 */
-	class FilteredSortedSet<E, T> extends FilteredReversibleCollection<E, T> implements PartialSortedSetImpl<T> {
+	class StaticFilteredSortedSet<E, T> extends StaticFilteredReversibleCollection<E, T> implements PartialSortedSetImpl<T> {
 		/* Note that everywhere we cast a T-typed value to E is safe because this sorted set is only called from filter, not map */
 
-		protected FilteredSortedSet(ObservableSortedSet<E> wrap, Type type, Function<? super E, T> map) {
+		protected StaticFilteredSortedSet(ObservableSortedSet<E> wrap, Type type, Function<? super E, T> map) {
 			super(wrap, type, map, value -> (E) value);
 		}
 
@@ -755,18 +771,60 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 
 		@Override
 		public ObservableSortedSet<T> subSet(T fromElement, boolean fromInclusive, T toElement, boolean toInclusive) {
-			return new FilteredSortedSet<>(getWrapped().subSet((E) fromElement, fromInclusive, (E) toElement, toInclusive), getType(),
+			return new StaticFilteredSortedSet<>(getWrapped().subSet((E) fromElement, fromInclusive, (E) toElement, toInclusive),
+				getType(), getMap());
+		}
+
+		@Override
+		public ObservableSortedSet<T> headSet(T toElement, boolean inclusive) {
+			return new StaticFilteredSortedSet<>(getWrapped().headSet((E) toElement, inclusive), getType(), getMap());
+		}
+
+		@Override
+		public ObservableSortedSet<T> tailSet(T fromElement, boolean inclusive) {
+			return new StaticFilteredSortedSet<>(getWrapped().tailSet((E) fromElement, inclusive), getType(), getMap());
+		}
+
+		@Override
+		public Comparator<? super T> comparator() {
+			return (o1, o2) -> {
+				return getWrapped().comparator().compare((E) o1, (E) o2);
+			};
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableSortedSet#filter(Predicate)} and {@link ObservableSortedSet#filter(Class)}
+	 *
+	 * @param <E> The type of the set to filter
+	 * @param <T> the type of the mapped set
+	 */
+	class DynamicFilteredSortedSet<E, T> extends DynamicFilteredReversibleCollection<E, T> implements PartialSortedSetImpl<T> {
+		/* Note that everywhere we cast a T-typed value to E is safe because this sorted set is only called from filter, not map */
+
+		protected DynamicFilteredSortedSet(ObservableSortedSet<E> wrap, Type type, Function<? super E, T> map) {
+			super(wrap, type, map, value -> (E) value);
+		}
+
+		@Override
+		protected ObservableSortedSet<E> getWrapped() {
+			return (ObservableSortedSet<E>) super.getWrapped();
+		}
+
+		@Override
+		public ObservableSortedSet<T> subSet(T fromElement, boolean fromInclusive, T toElement, boolean toInclusive) {
+			return new DynamicFilteredSortedSet<>(getWrapped().subSet((E) fromElement, fromInclusive, (E) toElement, toInclusive), getType(),
 				getMap());
 		}
 
 		@Override
 		public ObservableSortedSet<T> headSet(T toElement, boolean inclusive) {
-			return new FilteredSortedSet<>(getWrapped().headSet((E) toElement, inclusive), getType(), getMap());
+			return new DynamicFilteredSortedSet<>(getWrapped().headSet((E) toElement, inclusive), getType(), getMap());
 		}
 
 		@Override
 		public ObservableSortedSet<T> tailSet(T fromElement, boolean inclusive) {
-			return new FilteredSortedSet<>(getWrapped().tailSet((E) fromElement, inclusive), getType(), getMap());
+			return new DynamicFilteredSortedSet<>(getWrapped().tailSet((E) fromElement, inclusive), getType(), getMap());
 		}
 
 		@Override

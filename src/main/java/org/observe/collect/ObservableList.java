@@ -147,31 +147,47 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 	@Override
 	default <T> ObservableList<T> filter(Class<T> type) {
-		return d().label(filterMap(new Type(type), value -> type.isInstance(value) ? type.cast(value) : null, value -> (E) value))
-			.tag("filterType", type).get();
+		return (ObservableList<T>) ObservableReversibleCollection.super.filter(type);
 	}
 
 	@Override
 	default ObservableList<E> filter(Predicate<? super E> filter) {
-		return d().label(filterMap(getType(), (E value) -> {
-			return (value != null && filter.test(value)) ? value : null;
-		}, value -> value)).label("filter").tag("filter", filter).get();
+		return (ObservableList<E>) ObservableReversibleCollection.super.filter(filter);
+	}
+
+	@Override
+	default ObservableList<E> filter(Predicate<? super E> filter, boolean staticFilter) {
+		return (ObservableList<E>) ObservableReversibleCollection.super.filter(filter, staticFilter);
+	}
+
+	@Override
+	default ObservableList<E> filterDynamic(Predicate<? super E> filter) {
+		return (ObservableList<E>) ObservableReversibleCollection.super.filterDynamic(filter);
+	}
+
+	@Override
+	default ObservableList<E> filterStatic(Predicate<? super E> filter) {
+		return (ObservableList<E>) ObservableReversibleCollection.super.filterStatic(filter);
 	}
 
 	@Override
 	default <T> ObservableList<T> filterMap(Function<? super E, T> map) {
-		return filterMap(ObservableUtils.getReturnType(map), map);
+		return (ObservableList<T>) ObservableReversibleCollection.super.filterMap(map);
 	}
 
 	@Override
-	default <T> ObservableList<T> filterMap(Type type, Function<? super E, T> map) {
-		return filterMap(type, map, null);
+	default <T> ObservableList<T> filterMap(Type type, Function<? super E, T> map, boolean staticFilter) {
+		return (ObservableList<T>) ObservableReversibleCollection.super.filterMap(type, map, staticFilter);
 	}
 
 	@Override
-	default <T> ObservableList<T> filterMap(Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
-		return d().debug(new FilteredList<>(this, type, map, reverse)).from("filterMap", this).using("map", map).using("reverse", reverse)
-			.get();
+	default <T> ObservableList<T> filterMap(Type type, Function<? super E, T> map, Function<? super T, E> reverse, boolean staticFilter) {
+		if(staticFilter)
+			return d().debug(new StaticFilteredList<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
+				.using("reverse", reverse).get();
+		else
+			return d().debug(new DynamicFilteredList<>(this, type, map, reverse)).from("filterMap", this).using("map", map).using("reverse", reverse)
+				.get();
 	}
 
 	@Override
@@ -1147,23 +1163,21 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	}
 
 	/**
-	 * Implements {@link ObservableList#filterMap(Function)}
+	 * Implements several list functions for the two filtered list implementations ({@link ObservableList.StaticFilteredList} and
+	 * {@link ObservableList.DynamicFilteredList})
 	 *
-	 * @param <E> The type of the collection to be filter-mapped
-	 * @param <T> The type of the mapped collection
+	 * @param <E> The type of the list to filter
+	 * @param <T> The type of the filtered list
 	 */
-	class FilteredList<E, T> extends FilteredReversibleCollection<E, T> implements PartialListImpl<T> {
-		protected FilteredList(ObservableList<E> wrap, Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
-			super(wrap, type, map, reverse);
-		}
+	interface PartialFilteredListImpl<E, T> extends PartialListImpl<T> {
+		ObservableList<E> getWrapped();
+
+		Function<? super E, T> getMap();
+
+		Function<? super T, E> getReverse();
 
 		@Override
-		protected ObservableList<E> getWrapped() {
-			return (ObservableList<E>) super.getWrapped();
-		}
-
-		@Override
-		public T get(int index) {
+		default T get(int index) {
 			if(index < 0)
 				throw new IndexOutOfBoundsException("" + index);
 			int size = 0;
@@ -1184,7 +1198,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		}
 
 		@Override
-		public void add(int index, T element) {
+		default void add(int index, T element) {
 			if(getReverse() == null)
 				PartialListImpl.super.add(index, element);
 			if(index < 0)
@@ -1210,7 +1224,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		}
 
 		@Override
-		public boolean addAll(int index, Collection<? extends T> c) {
+		default boolean addAll(int index, Collection<? extends T> c) {
 			if(getReverse() == null)
 				return PartialListImpl.super.addAll(index, c);
 			if(index < 0)
@@ -1237,7 +1251,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		}
 
 		@Override
-		public T remove(int index) {
+		default T remove(int index) {
 			if(index < 0)
 				throw new IndexOutOfBoundsException("" + index);
 			int size = 0;
@@ -1261,7 +1275,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		}
 
 		@Override
-		public T set(int index, T element) {
+		default T set(int index, T element) {
 			if(getReverse() == null)
 				return PartialListImpl.super.set(index, element);
 			if(index < 0)
@@ -1287,11 +1301,12 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		}
 
 		@Override
-		public ListIterator<T> listIterator(int index) {
+		default ListIterator<T> listIterator(int index) {
 			return new ListIterator<T>() {
 				private final ListIterator<E> backing = getWrapped().listIterator(index);
 
 				private T thePreviousValue;
+
 				private T theNextValue;
 
 				private int theIndex = index;
@@ -1378,6 +1393,67 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 					thePreviousValue = null;
 				}
 			};
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableList#filterMap(Type, Function, Function, boolean)} for static filtering
+	 *
+	 * @param <E> The type of the collection to be filter-mapped
+	 * @param <T> The type of the mapped collection
+	 */
+	class StaticFilteredList<E, T> extends StaticFilteredReversibleCollection<E, T> implements PartialFilteredListImpl<E, T> {
+		protected StaticFilteredList(ObservableList<E> wrap, Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
+			super(wrap, type, map, reverse);
+		}
+
+		// Have to expose these as public to satsify the interface
+
+		@Override
+		public ObservableList<E> getWrapped() {
+			return (ObservableList<E>) super.getWrapped();
+		}
+
+		@Override
+		public Function<? super E, T> getMap() {
+			return super.getMap();
+		}
+
+		@Override
+		public Function<? super T, E> getReverse() {
+			return super.getReverse();
+		}
+
+		@Override
+		public String toString() {
+			return ObservableList.toString(this);
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableList#filterMap(Type, Function, Function, boolean)} for dynamic filtering
+	 *
+	 * @param <E> The type of the collection to be filter-mapped
+	 * @param <T> The type of the mapped collection
+	 */
+	class DynamicFilteredList<E, T> extends DynamicFilteredReversibleCollection<E, T> implements PartialFilteredListImpl<E, T> {
+		protected DynamicFilteredList(ObservableList<E> wrap, Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
+			super(wrap, type, map, reverse);
+		}
+
+		@Override
+		public ObservableList<E> getWrapped() {
+			return (ObservableList<E>) super.getWrapped();
+		}
+
+		@Override
+		public Function<? super E, T> getMap() {
+			return super.getMap();
+		}
+
+		@Override
+		public Function<? super T, E> getReverse() {
+			return super.getReverse();
 		}
 
 		@Override
@@ -1617,7 +1693,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 	/**
 	 * Implements {@link ObservableList#reverse()}
-	 * 
+	 *
 	 * @param <E> The type of elements in the collection
 	 */
 	class ReversedList<E> extends ReversedCollection<E> implements PartialListImpl<E> {
