@@ -447,7 +447,7 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 		}
 
 		@Override
-		public CountedRedBlackTreeSet<Entry<K, V>, N> entrySet() {
+		public EntrySet<K, V, N> entrySet() {
 			return new EntrySet<>(this);
 		}
 

@@ -139,6 +139,30 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	}
 
 	@Override
+	public Iterable<E> iterateFrom(E start, boolean up, boolean withStart) {
+		Iterable<Entry<E, InternalElement>> backingIterable = (Iterable<Entry<E, InternalElement>>) theValues.entrySet().iterator(up,
+			theValues.keyEntry(start), withStart, null, true);
+		return () -> new Iterator<E>() {
+			private final Iterator<Entry<E, InternalElement>> backing = backingIterable.iterator();
+
+			@Override
+			public boolean hasNext() {
+				return backing.hasNext();
+			}
+
+			@Override
+			public E next() {
+				return backing.next().getKey();
+			}
+
+			@Override
+			public void remove() {
+				backing.remove();
+			}
+		};
+	}
+
+	@Override
 	public boolean add(E e) {
 		try (Transaction t = theInternals.lock(true, false, null)) {
 			if(theValues.containsKey(e))
@@ -246,10 +270,6 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	@Override
 	public int indexOf(Object o){
 		return theValues.indexOfKey((E) o);
-	}
-
-	@Override
-	public ObservableSortedSet<E> subSet(E from, boolean fromInclusive, E to, boolean toInclusive, boolean reversed) {
 	}
 
 	private boolean removeNodeImpl(Object o) {

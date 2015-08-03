@@ -449,8 +449,6 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 
 		@Override
 		public Iterable<E> iterateFrom(E start, boolean included, boolean reversed) {
-			int todo = todo;// TODO Look this over again.
-			Iterator<E> backing;
 			E stop;
 			boolean includeStop;
 			Comparator<? super E> compare = comparator();
@@ -471,10 +469,11 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 				stop = theMax;
 				includeStop = isMaxIncluded;
 			}
-			backing = theWrapped.iterateFrom(start, included, reversed).iterator();
+			Iterable<E> backingIterable = theWrapped.iterateFrom(start, included, reversed);
 			return () -> new Iterator<E>() {
-				private boolean calledHasNext;
+				private final Iterator<E> backing = backingIterable.iterator();
 
+				private boolean calledHasNext;
 				private E theNext;
 
 				private boolean isEnded;
@@ -505,6 +504,8 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 
 				@Override
 				public void remove() {
+					if(calledHasNext)
+						throw new IllegalStateException("remove() must be called after next() and before hasNext()");
 					backing.remove();
 				}
 			};
