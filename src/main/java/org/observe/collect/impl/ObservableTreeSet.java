@@ -13,8 +13,8 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableFastFindCollection;
+import org.observe.collect.ObservableOrderedElement;
 import org.observe.collect.ObservableSortedSet;
-import org.observe.collect.OrderedObservableElement;
 import org.observe.util.Transactable;
 import org.observe.util.Transaction;
 import org.observe.util.tree.CountedRedBlackNode.DefaultNode;
@@ -94,13 +94,13 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	}
 
 	@Override
-	public Subscription onOrderedElement(Consumer<? super OrderedObservableElement<E>> onElement) {
+	public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
 		// Cast is safe because the internals of this set will only create ordered elements
 		return theInternals.onElement((Consumer<ObservableElement<E>>) onElement, true);
 	}
 
 	@Override
-	public Subscription onElementReverse(Consumer<? super OrderedObservableElement<E>> onElement) {
+	public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<E>> onElement) {
 		// Cast is safe because the internals of this set will only create ordered elements
 		return theInternals.onElement((Consumer<ObservableElement<E>>) onElement, false);
 	}
@@ -136,6 +136,30 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	@Override
 	public Iterable<E> descending() {
 		return () -> new SetIterator(theValues.descendingMap().entrySet().iterator());
+	}
+
+	@Override
+	public Iterable<E> iterateFrom(E start, boolean up, boolean withStart) {
+		Iterable<Entry<E, InternalElement>> backingIterable = (Iterable<Entry<E, InternalElement>>) theValues.entrySet().iterator(up,
+			theValues.keyEntry(start), withStart, null, true);
+		return () -> new Iterator<E>() {
+			private final Iterator<Entry<E, InternalElement>> backing = backingIterable.iterator();
+
+			@Override
+			public boolean hasNext() {
+				return backing.hasNext();
+			}
+
+			@Override
+			public E next() {
+				return backing.next().getKey();
+			}
+
+			@Override
+			public void remove() {
+				backing.remove();
+			}
+		};
 	}
 
 	@Override
@@ -236,6 +260,16 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 			entry.getValue().remove();
 			return entry.getKey();
 		}
+	}
+
+	@Override
+	public E get(int index) {
+		return theValues.get(index).getKey();
+	}
+
+	@Override
+	public int indexOf(Object o){
+		return theValues.indexOfKey((E) o);
 	}
 
 	private boolean removeNodeImpl(Object o) {
@@ -355,7 +389,7 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 
 		@Override
 		ObservableElement<E> createExposedElement(InternalObservableElementImpl<E> internal, Collection<Subscription> subscriptions) {
-			class ExposedOrderedObservableElement extends ExposedObservableElement<E> implements OrderedObservableElement<E> {
+			class ExposedOrderedObservableElement extends ExposedObservableElement<E> implements ObservableOrderedElement<E> {
 				ExposedOrderedObservableElement() {
 					super(internal, subscriptions);
 				}

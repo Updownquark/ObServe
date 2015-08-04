@@ -25,7 +25,7 @@ import prisms.lang.Type;
  * @param <K> The type of keys used in this map
  * @param <V> The type of values stored in this map
  */
-public class ObservableHashMap<K, V> implements ObservableMap<K, V> {
+public class ObservableMapImpl<K, V> implements ObservableMap<K, V> {
 	private class DefaultMapEntry extends DefaultObservableValue<V> implements ObservableEntry<K, V> {
 		private final Observer<ObservableValueEvent<V>> theController = control(null);
 
@@ -94,13 +94,23 @@ public class ObservableHashMap<K, V> implements ObservableMap<K, V> {
 	 * @param keyType The type of key used by this map
 	 * @param valueType The type of value stored in this map
 	 */
-	public ObservableHashMap(Type keyType, Type valueType) {
+	public ObservableMapImpl(Type keyType, Type valueType) {
+		this(keyType, valueType, ObservableHashSet::new);
+	}
+
+	/**
+	 * @param keyType The type of key used by this map
+	 * @param valueType The type of value stored in this map
+	 * @param entrySet Creates the set to hold this map's entries
+	 */
+	public ObservableMapImpl(Type keyType, Type valueType,
+		CollectionCreator<ObservableEntry<K, V>, ObservableSet<ObservableEntry<K, V>>> entrySet) {
 		theKeyType = keyType;
 		theValueType = valueType;
 		theLock=new ReentrantReadWriteLock();
 		theSessionController = new DefaultTransactable(theLock);
 
-		theEntries = new ObservableHashSet<>(new Type(ObservableEntry.class, theKeyType, theKeyType), theLock,
+		theEntries = entrySet.create(new Type(ObservableEntry.class, theKeyType, theKeyType), theLock,
 			theSessionController.getSession(), theSessionController);
 	}
 

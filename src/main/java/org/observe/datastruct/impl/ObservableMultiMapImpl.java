@@ -25,7 +25,7 @@ import prisms.lang.Type;
  * @param <K> The type of keys used in this map
  * @param <V> The type of values stored in this map
  */
-public class ObservableHashMultiMap<K, V> implements ObservableMultiMap<K, V> {
+public class ObservableMultiMapImpl<K, V> implements ObservableMultiMap<K, V> {
 	private class DefaultMultiMapEntry extends ObservableArrayList<V> implements ObservableMultiEntry<K, V> {
 
 		private final K theKey;
@@ -75,14 +75,24 @@ public class ObservableHashMultiMap<K, V> implements ObservableMultiMap<K, V> {
 	 * @param keyType The type of key used by this map
 	 * @param valueType The type of value stored in this map
 	 */
-	public ObservableHashMultiMap(Type keyType, Type valueType) {
+	public ObservableMultiMapImpl(Type keyType, Type valueType) {
+		this(keyType, valueType, ObservableHashSet::new);
+	}
+
+	/**
+	 * @param keyType The type of key used by this map
+	 * @param valueType The type of value stored in this map
+	 * @param entrySet Creates the set to store this collection's entries
+	 */
+	public ObservableMultiMapImpl(Type keyType, Type valueType,
+		CollectionCreator<ObservableMultiEntry<K, V>, ObservableSet<ObservableMultiEntry<K, V>>> entrySet) {
 		theKeyType = keyType;
 		theValueType = valueType;
 		theLock=new ReentrantReadWriteLock();
 		theSessionController = new DefaultTransactable(theLock);
 
-		theEntries = new ObservableHashSet<>(new Type(DefaultMultiMapEntry.class), theLock, theSessionController.getSession(),
-			theSessionController);
+		theEntries = (ObservableSet<DefaultMultiMapEntry>) (ObservableSet<?>) entrySet
+			.create(new Type(DefaultMultiMapEntry.class), theLock, theSessionController.getSession(), theSessionController);
 	}
 
 	@Override

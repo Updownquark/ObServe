@@ -13,7 +13,7 @@ import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableList;
-import org.observe.collect.OrderedObservableElement;
+import org.observe.collect.ObservableOrderedElement;
 
 import prisms.lang.Type;
 
@@ -77,8 +77,8 @@ public class ObservableUtils {
 			}
 
 			@Override
-			public Subscription onOrderedElement(Consumer<? super OrderedObservableElement<T>> observer) {
-				return list.onElement(element ->observer.accept(new OrderedObservableElement<T>() {
+			public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<T>> observer) {
+				return list.onElement(element ->observer.accept(new ObservableOrderedElement<T>() {
 					@Override
 					public Type getType() {
 						return type != null ? type : element.get().getType();
@@ -91,7 +91,7 @@ public class ObservableUtils {
 
 					@Override
 					public int getIndex() {
-						return ((OrderedObservableElement<?>) element).getIndex();
+						return ((ObservableOrderedElement<?>) element).getIndex();
 					}
 
 					@Override
@@ -105,7 +105,7 @@ public class ObservableUtils {
 
 					@Override
 					public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer2) {
-						OrderedObservableElement<T> retObs = this;
+						ObservableOrderedElement<T> retObs = this;
 						return element.subscribe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends T>>>() {
 							@Override
 							public <V2 extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onNext(V2 value) {

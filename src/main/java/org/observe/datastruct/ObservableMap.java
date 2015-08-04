@@ -221,6 +221,7 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 	}
 
 	/**
+	 * @param <T> The type of values to map to
 	 * @param map The function to map values
 	 * @return A map with the same key set, but with its values mapped according to the given mapping function
 	 */

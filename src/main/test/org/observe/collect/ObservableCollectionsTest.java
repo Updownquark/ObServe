@@ -664,9 +664,11 @@ public class ObservableCollectionsTest {
 		Subscription filteredSub1 = sync(filteredOL1, filteredSynced1);
 
 		Function<Integer, Integer> filterMap = v -> v;
-		ObservableList<Integer> filterMapOL = list.filterMap(null, filterMap, filterMap);
+		ObservableList<Integer> filterMapOL = list.filterMap(null, filterMap, filterMap, false);
 		ArrayList<Integer> filterMapSynced = new ArrayList<>();
 		Subscription filterMapSub = sync(filterMapOL, filterMapSynced);
+
+		// TODO Test combination list
 
 		Consumer<ObservableList<Integer>> newCheck = l -> {
 			assertThat(synced, equalTo(list));
@@ -712,12 +714,12 @@ public class ObservableCollectionsTest {
 			listIter.add(0);
 			assertEquals(1, filteredOL1.size());
 			newCheck.accept(list);
-			listIter.next();
 			try {
 				listIter.add(1);
 				assertTrue("Should have thrown an IllegalArgumentException", false);
 			} catch(IllegalArgumentException e) {
 			}
+			listIter.previous();
 			listIter.remove();
 			assertEquals(0, filteredOL1.size());
 			newCheck.accept(list);
@@ -729,6 +731,8 @@ public class ObservableCollectionsTest {
 			filteredSub1.unsubscribe();
 			filterMapSub.unsubscribe();
 		}
+
+		// TODO Call testObservableList from the other applicable tests
 	}
 
 	private static <T> Subscription sync(ObservableList<T> list, List<T> synced) {
@@ -821,7 +825,7 @@ public class ObservableCollectionsTest {
 		List<Integer> compare1 = new ArrayList<>();
 		List<Integer> correct = new ArrayList<>();
 		Subscription sub = list.onElement(element -> {
-			OrderedObservableElement<Integer> listEl = (OrderedObservableElement<Integer>) element;
+			ObservableOrderedElement<Integer> listEl = (ObservableOrderedElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
@@ -1279,7 +1283,7 @@ public class ObservableCollectionsTest {
 		List<Integer> compare1 = new ArrayList<>();
 		List<Integer> correct = new ArrayList<>();
 		list.map(value -> value * 10).onElement(element -> {
-			OrderedObservableElement<Integer> listEl = (OrderedObservableElement<Integer>) element;
+			ObservableOrderedElement<Integer> listEl = (ObservableOrderedElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
@@ -1320,7 +1324,7 @@ public class ObservableCollectionsTest {
 		List<Integer> compare1 = new ArrayList<>();
 		List<Integer> correct = new ArrayList<>();
 		list.filter(value -> value != null && value % 2 == 0).onElement(element -> {
-			OrderedObservableElement<Integer> listEl = (OrderedObservableElement<Integer>) element;
+			ObservableOrderedElement<Integer> listEl = (ObservableOrderedElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
@@ -1369,7 +1373,7 @@ public class ObservableCollectionsTest {
 		List<Integer> correct2 = new ArrayList<>();
 
 		list.filter(value -> value % 3 == 0).onElement(element -> {
-			OrderedObservableElement<Integer> oel = (OrderedObservableElement<Integer>) element;
+			ObservableOrderedElement<Integer> oel = (ObservableOrderedElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
@@ -1386,7 +1390,7 @@ public class ObservableCollectionsTest {
 			});
 		});
 		list.filter(value -> value % 3 == 1).onElement(element -> {
-			OrderedObservableElement<Integer> oel = (OrderedObservableElement<Integer>) element;
+			ObservableOrderedElement<Integer> oel = (ObservableOrderedElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
@@ -1403,7 +1407,7 @@ public class ObservableCollectionsTest {
 			});
 		});
 		list.filter(value -> value % 3 == 2).onElement(element -> {
-			OrderedObservableElement<Integer> oel = (OrderedObservableElement<Integer>) element;
+			ObservableOrderedElement<Integer> oel = (ObservableOrderedElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
@@ -1498,7 +1502,7 @@ public class ObservableCollectionsTest {
 				return null;
 			return value / 2;
 		}).onElement(element -> {
-			OrderedObservableElement<Integer> listEl = (OrderedObservableElement<Integer>) element;
+			ObservableOrderedElement<Integer> listEl = (ObservableOrderedElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
@@ -1544,7 +1548,7 @@ public class ObservableCollectionsTest {
 		List<Integer> compare1 = new ArrayList<>();
 		List<Integer> correct = new ArrayList<>();
 		list.combine(value1, (v1, v2) -> v1 * v2).filter(value -> value != null && value % 3 == 0).onElement(element -> {
-			OrderedObservableElement<Integer> listEl = (OrderedObservableElement<Integer>) element;
+			ObservableOrderedElement<Integer> listEl = (ObservableOrderedElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
@@ -1614,7 +1618,7 @@ public class ObservableCollectionsTest {
 		List<Integer> compare1 = new ArrayList<>();
 		List<Integer> filtered = new ArrayList<>();
 		flat.onElement(element -> {
-			OrderedObservableElement<Integer> listEl = (OrderedObservableElement<Integer>) element;
+			ObservableOrderedElement<Integer> listEl = (ObservableOrderedElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
@@ -1631,7 +1635,7 @@ public class ObservableCollectionsTest {
 			});
 		});
 		flat.filter(value -> value != null && value % 3 == 0).onElement(element -> {
-			OrderedObservableElement<Integer> listEl = (OrderedObservableElement<Integer>) element;
+			ObservableOrderedElement<Integer> listEl = (ObservableOrderedElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
@@ -1817,7 +1821,7 @@ public class ObservableCollectionsTest {
 
 		List<Integer> compare = new ArrayList<>();
 		ObservableOrderedCollection.sort(list, null).onElement(element -> {
-			OrderedObservableElement<Integer> orderedEl = (OrderedObservableElement<Integer>) element;
+			ObservableOrderedElement<Integer> orderedEl = (ObservableOrderedElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
@@ -1889,7 +1893,7 @@ public class ObservableCollectionsTest {
 		}
 
 		Subscription sub = ObservableOrderedCollection.flatten(outer, comparator).onElement(element -> {
-			OrderedObservableElement<Integer> orderedEl = (OrderedObservableElement<Integer>) element;
+			ObservableOrderedElement<Integer> orderedEl = (ObservableOrderedElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
@@ -1940,7 +1944,7 @@ public class ObservableCollectionsTest {
 		ArrayList<Integer> compare = new ArrayList<>();
 		ArrayList<Integer> correct = new ArrayList<>();
 		list.onElement(element -> {
-			OrderedObservableElement<Integer> orderedEl = (OrderedObservableElement<Integer>) element;
+			ObservableOrderedElement<Integer> orderedEl = (ObservableOrderedElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {

@@ -1,6 +1,5 @@
 package org.observe.util.tree;
 
-import java.util.Iterator;
 import java.util.Map;
 
 /**
@@ -284,8 +283,8 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 	}
 
 	/**
-	 * Sets this node's color. This method should <b>NEVER</b> be called from outside of the {@link RedBlackNode} class, but may be
-	 * overridden by subclasses if the super is called with the argument.
+	 * Sets this node's color. This method should <b>NEVER</b> be called from outside of the {@link RedBlackNode} class unless this node is
+	 * the root of the tree, but may be overridden by subclasses if the super is called with the argument.
 	 *
 	 * @param red Whether this node will be red or black
 	 */
@@ -709,75 +708,6 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 		 */
 		public static <E extends Comparable<E>> ComparableValuedRedBlackNode<E> valueOf(E value) {
 			return new ComparableValuedRedBlackNode<>(value);
-		}
-	}
-
-	/**
-	 * Tester main method
-	 *
-	 * @param args Command-line arguments, unused
-	 */
-	public static void main(String [] args) {
-		test(ComparableValuedRedBlackNode.valueOf("a"), alphaBet('q'));
-	}
-
-	/**
-	 * Iterates through the alphabet from 'a' up to the given character
-	 *
-	 * @param last The last letter to be returned from the iterator
-	 * @return An alphabet iterable
-	 */
-	protected static final Iterable<String> alphaBet(char last) {
-		return () -> {
-			return new Iterator<String>() {
-				private char theNext = 'a';
-
-				@Override
-				public boolean hasNext() {
-					return theNext <= last;
-				}
-
-				@Override
-				public String next() {
-					String ret = "" + theNext;
-					theNext++;
-					return ret;
-				}
-			};
-		};
-	}
-
-	/**
-	 * A testing method. Adds sequential nodes into a tree and removes them, checking validity of the tree at each step.
-	 *
-	 * @param <T> The type of values to put in the tree
-	 * @param tree The initial tree node
-	 * @param nodes The sequence of nodes to add to the tree. Must repeat.
-	 */
-	public static <T> void test(ValuedRedBlackNode<T> tree, Iterable<T> nodes) {
-		Iterator<T> iter = nodes.iterator();
-		iter.next(); // Skip the first value, assuming that's what's in the tree
-		System.out.println(print(tree));
-		System.out.println(" ---- ");
-		while(iter.hasNext()) {
-			T value = iter.next();
-			System.out.println("Adding " + value);
-			tree = (ValuedRedBlackNode<T>) tree.add(value, false).getNewRoot();
-			System.out.println(print(tree));
-			tree.checkValid();
-			System.out.println(" ---- ");
-		}
-		System.out.println(" ---- \n ---- \nDeleting:");
-
-		iter = nodes.iterator();
-		while(iter.hasNext()) {
-			T value = iter.next();
-			System.out.println("Deleting " + value);
-			tree = (ValuedRedBlackNode<T>) tree.findValue(value).delete();
-			System.out.println(print(tree));
-			if(tree != null)
-				tree.checkValid();
-			System.out.println(" ---- ");
 		}
 	}
 }

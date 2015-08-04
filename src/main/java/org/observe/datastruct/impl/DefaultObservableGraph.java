@@ -89,14 +89,25 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E> {
 	 * @param edgeType The type of value associated with edges
 	 */
 	public DefaultObservableGraph(Type nodeType, Type edgeType) {
+		this(nodeType, edgeType, ObservableArrayList::new, ObservableArrayList::new);
+	}
+
+	/**
+	 * @param nodeType The type of values associated with nodes
+	 * @param edgeType The type of value associated with edges
+	 * @param nodeList Creates the list of nodes
+	 * @param edgeList Creates the list of edges
+	 */
+	public DefaultObservableGraph(Type nodeType, Type edgeType, CollectionCreator<Node<N, E>, ObservableList<Node<N, E>>> nodeList,
+		CollectionCreator<Edge<N, E>, ObservableList<Edge<N, E>>> edgeList) {
 		theLock = new ReentrantReadWriteLock();
 
 		theSessionController = new DefaultTransactable(theLock);
 
-		theNodeController = new ObservableArrayList<>(new Type(Node.class, nodeType, edgeType), theLock, theSessionController.getSession(),
+		theNodeController = nodeList.create(new Type(Node.class, nodeType, edgeType), theLock, theSessionController.getSession(),
 			theSessionController);
 		theNodes = theNodeController.immutable();
-		theEdgeController = new ObservableArrayList<>(new Type(Edge.class, nodeType, edgeType), theLock, theSessionController.getSession(),
+		theEdgeController = edgeList.create(new Type(Edge.class, nodeType, edgeType), theLock, theSessionController.getSession(),
 			theSessionController);
 		theEdges = theEdgeController.immutable();
 	}

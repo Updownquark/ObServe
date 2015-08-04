@@ -20,7 +20,7 @@ import org.observe.collect.ObservableList;
 import org.observe.collect.ObservableOrderedCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedSet;
-import org.observe.collect.OrderedObservableElement;
+import org.observe.collect.ObservableOrderedElement;
 import org.observe.datastruct.ObservableMap.ObsEntryImpl;
 import org.observe.util.ObservableUtils;
 import org.observe.util.Transaction;
@@ -455,6 +455,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	}
 
 	/**
+	 * @param <T> The type of values to map to
 	 * @param map The function to map values
 	 * @return A map with the same key set, but with its values mapped according to the given mapping function
 	 */
@@ -718,7 +719,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		}
 
 		@Override
-		public Subscription onOrderedElement(Consumer<? super OrderedObservableElement<V>> onElement) {
+		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<V>> onElement) {
 			ObservableValue<? extends ObservableOrderedCollection<V>> values = getWrappedObservable();
 			return values.subscribe(new Observer<ObservableValueEvent<? extends ObservableOrderedCollection<V>>>() {
 				private Subscription theSubscription;

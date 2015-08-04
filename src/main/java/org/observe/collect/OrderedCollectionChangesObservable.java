@@ -17,7 +17,7 @@ class OrderedCollectionChangesObservable<E, OCCE extends OrderedCollectionChange
 	@Override
 	protected void newEvent(CollectionChangeType type, ObservableValueEvent<E> evt) {
 		CollectionSession session = collection.getSession().get();
-		int index = ((OrderedObservableElement<E>) evt.getObservable()).getIndex();
+		int index = ((ObservableOrderedElement<E>) evt.getObservable()).getIndex();
 		if(session != null) {
 			CollectionChangeType preType = (CollectionChangeType) session.get(key, "type");
 			List<E> elements;

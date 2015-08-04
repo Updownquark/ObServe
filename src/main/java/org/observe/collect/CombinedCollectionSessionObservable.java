@@ -30,7 +30,7 @@ public class CombinedCollectionSessionObservable implements ObservableValue<Coll
 	public CombinedCollectionSessionObservable(ObservableCollection<? extends ObservableCollection<?>> collection) {
 		theWrappedSessionObservable = ObservableUtils
 			.flattenValues(SESSION_TYPE, collection.map(collect -> collect.getSession()))
-			.filterMap(null, session -> session)
+			.filterMap(null, session -> session, false)
 			.observeSize()
 			.mapV(size -> size > 0)
 			.combineV((Boolean value1, Boolean value2) -> value1 || value2,

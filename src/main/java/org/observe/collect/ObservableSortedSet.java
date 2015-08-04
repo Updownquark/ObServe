@@ -2,22 +2,26 @@ package org.observe.collect;
 
 import static org.observe.ObservableDebug.d;
 
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.Iterator;
+import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.Subscription;
+import org.observe.util.Transaction;
 
 import prisms.lang.Type;
 
 /**
  * A sorted set whose content can be observed. This set is immutable in that none of its methods, including {@link java.util.Set} methods,
  * can modify its content (Set modification methods will throw {@link UnsupportedOperationException}). All {@link ObservableElement}s
- * returned by this observable will be instances of {@link OrderedObservableElement}.
+ * returned by this observable will be instances of {@link ObservableOrderedElement}.
  *
  * @param <E> The type of element in the set
  */
@@ -38,19 +42,27 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 	}
 
 	@Override
+	default ObservableValue<E> getFirst(){
+		return relative(null, true, true);
+	}
+
+	@Override
+	default ObservableValue<E> getLast(){
+		return relative(null, false, true);
+	}
+
+	@Override
 	default E first() {
-		E ret = getFirst().get();
-		if(ret == null)
+		if(isEmpty())
 			throw new java.util.NoSuchElementException();
-		return ret;
+		return getFirst().get();
 	}
 
 	@Override
 	default E last() {
-		E ret = getLast().get();
-		if(ret == null)
+		if(isEmpty())
 			throw new java.util.NoSuchElementException();
-		return ret;
+		return getLast().get();
 	}
 
 	@Override
@@ -75,12 +87,12 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 
 	@Override
 	default ObservableSortedSet<E> reverse() {
-		return new ReversedSortedSet<>(this);
+		return descendingSet();
 	}
 
 	@Override
 	default ObservableSortedSet<E> descendingSet() {
-		return reverse();
+		return subSet(null, true, null, true, true);
 	}
 
 	@Override
@@ -88,27 +100,75 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 		return descending().iterator();
 	}
 
+	/**
+	 * <p>
+	 * Starts iteration in either direction from a starting point.
+	 * </p>
+	 *
+	 * <p>
+	 * By default, this method just takes a default iterator and skips over elements until the given starting point is passed. This method
+	 * should be overridden by implementations and extensions where performance improvement is possible. This method is used by the default
+	 * implementation of {@link #subSet(Object, boolean, Object, boolean, boolean)}, so implementations and sub-interfaces should <b>NOT</b>
+	 * call any of the sub-set methods from this method unless the subSet method itself is overridden.
+	 * </p>
+	 *
+	 * @param element The element to start iteration at
+	 * @param included Whether to include the given element in the iteration
+	 * @param reversed Whether to iterate backward or forward from the given element
+	 * @return An iterable that starts iteration from the given element
+	 */
+	default Iterable<E> iterateFrom(E element, boolean included, boolean reversed) {
+		return () -> new Iterator<E>() {
+			private final Iterator<E> backing = reversed ? descendingIterator() : ObservableSortedSet.this.iterator();
+
+			private E theFirst;
+
+			{
+				if(element != null) {
+					Comparator<? super E> compare = comparator();
+					while(backing.hasNext()) {
+						theFirst = backing.next();
+						int comp = compare.compare(theFirst, element);
+						if(comp > 0 || (included && comp == 0))
+							break;
+					}
+				}
+			}
+
+			@Override
+			public boolean hasNext() {
+				return backing.hasNext();
+			}
+
+			@Override
+			public E next() {
+				return backing.next();
+			}
+
+			@Override
+			public void remove() {
+				backing.remove();
+			}
+		};
+	}
+
+	/**
+	 * A sub-set of this set. Like {@link #subSet(Object, boolean, Object, boolean)}, but may be reversed.
+	 *
+	 * @param fromElement The minimum bounding element for the sub set
+	 * @param fromInclusive Whether the minimum bound will be included in the sub set (if present in this set)
+	 * @param toElement The maximum bounding element for the sub set
+	 * @param toInclusive Whether the maximum bound will be included in the sub set (if present in this set)
+	 * @param reversed Whether the returned sub set will be in the opposite order as this set
+	 * @return The sub set
+	 */
+	default ObservableSortedSet<E> subSet(E fromElement, boolean fromInclusive, E toElement, boolean toInclusive, boolean reversed) {
+		return new ObservableSubSet<>(this, fromElement, fromInclusive, toElement, toInclusive, reversed);
+	}
+
 	@Override
 	default ObservableSortedSet<E> subSet(E fromElement, boolean fromInclusive, E toElement, boolean toInclusive) {
-		return filter(el -> {
-			if(fromElement != null) {
-				int fromCompare = comparator().compare(el, fromElement);
-				if(fromCompare < 0)
-					return false;
-				if(fromCompare == 0 && !fromInclusive)
-					return false;
-			}
-
-			if(toElement != null) {
-				int toCompare = comparator().compare(el, toElement);
-				if(toCompare > 0)
-					return false;
-				if(toCompare == 0 && !toInclusive)
-					return false;
-			}
-
-			return true;
-		});
+		return subSet(fromElement, fromInclusive, toElement, toInclusive, false);
 	}
 
 	@Override
@@ -137,19 +197,61 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 	}
 
 	/**
+	 * @param o The value to get the index of
+	 * @return The index of the given value in this collection, or, if the given value is not present in this set, <code>-dest-1</code>,
+	 *         where <code>dest</code> is the index of the position where the given element would appear if it were added to this set.
+	 * @throws ClassCastException If the given value is not null or an instance of this set's type.
+	 * @see org.observe.collect.ObservableOrderedCollection#indexOf(java.lang.Object)
+	 */
+	@Override
+	default int indexOf(Object o) {
+		return ObservableReversibleCollection.super.indexOf(o);
+	}
+
+	/**
+	 * Same as {@link #indexOf(Object)} for sorted sets
+	 *
+	 * @param o The value to get the index of
+	 * @return The index of the given value in this collection, or, if the given value is not present in this set, <code>-dest-1</code>,
+	 *         where <code>dest</code> is the index of the position where the given element would appear if it were added to this set.
+	 * @throws ClassCastException If the given value is not null or an instance of this set's type.
+	 * @see org.observe.collect.ObservableOrderedCollection#indexOf(java.lang.Object)
+	 */
+	@Override
+	default int lastIndexOf(Object o) {
+		return indexOf(o);
+	}
+
+	/**
 	 * @param filter The filter function
 	 * @return A set containing all elements passing the given test
 	 */
 	@Override
 	default ObservableSortedSet<E> filter(Predicate<? super E> filter) {
+		return (ObservableSortedSet<E>) ObservableReversibleCollection.super.filter(filter);
+	}
+
+	@Override
+	default ObservableSortedSet<E> filter(Predicate<? super E> filter, boolean staticFilter) {
+		return (ObservableSortedSet<E>) ObservableSet.super.filter(filter, staticFilter);
+	}
+
+	@Override
+	default ObservableSortedSet<E> filterDynamic(Predicate<? super E> filter){
 		Function<E, E> map = value -> (value != null && filter.test(value)) ? value : null;
-		return d().debug(new FilteredSortedSet<>(this, getType(), map)).from("filter", this).using("filter", filter).get();
+		return d().debug(new DynamicFilteredSortedSet<>(this, getType(), map)).from("filter", this).using("filter", filter).get();
+	}
+
+	@Override
+	default ObservableSortedSet<E> filterStatic(Predicate<? super E> filter){
+		Function<E, E> map = value -> (value != null && filter.test(value)) ? value : null;
+		return d().debug(new StaticFilteredSortedSet<>(this, getType(), map)).from("filter", this).using("filter", filter).get();
 	}
 
 	@Override
 	default <T> ObservableSortedSet<T> filter(Class<T> type) {
 		Function<E, T> map = value -> type.isInstance(value) ? type.cast(value) : null;
-		return d().debug(new FilteredSortedSet<>(this, new Type(type), map)).from("filterMap", this).using("map", map)
+		return d().debug(new StaticFilteredSortedSet<>(this, new Type(type), map)).from("filterMap", this).using("map", map)
 			.tag("filterType", type).get();
 	}
 
@@ -250,6 +352,355 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 	}
 
 	/**
+	 * Implements {@link ObservableSortedSet#subSet(Object, boolean, Object, boolean, boolean)}
+	 *
+	 * @param <E> The type of elements in the set
+	 */
+	class ObservableSubSet<E> implements PartialSortedSetImpl<E> {
+		private final ObservableSortedSet<E> theWrapped;
+
+		private final E theMin;
+		private final boolean isMinIncluded;
+		private final E theMax;
+		private final boolean isMaxIncluded;
+
+		private final boolean isReversed;
+
+		public ObservableSubSet(ObservableSortedSet<E> set, E min, boolean includeMin, E max, boolean includeMax, boolean reversed) {
+			super();
+			theWrapped = set;
+			theMin = min;
+			isMinIncluded = includeMin;
+			theMax = max;
+			isMaxIncluded = includeMax;
+			isReversed = reversed;
+		}
+
+		public ObservableSortedSet<E> getWrapped() {
+			return theWrapped;
+		}
+
+		public E getMin() {
+			return theMin;
+		}
+
+		public boolean isMinIncluded() {
+			return isMinIncluded;
+		}
+
+		public E getMax() {
+			return theMax;
+		}
+
+		public boolean isMaxIncluded() {
+			return isMaxIncluded;
+		}
+
+		public boolean isReversed() {
+			return isReversed;
+		}
+
+		public boolean isInRange(E value) {
+			Comparator<? super E> compare = theWrapped.comparator();
+			if(theMin != null) {
+				int comp = compare.compare(value, theMin);
+				if(comp < 0 || (!isMinIncluded && comp == 0))
+					return false;
+			}
+			if(theMax != null) {
+				int comp = compare.compare(value, theMax);
+				if(comp < 0 || (!isMaxIncluded && comp == 0))
+					return false;
+			}
+			return true;
+		}
+
+		@Override
+		public Type getType() {
+			return theWrapped.getType();
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			return theWrapped.getSession();
+		}
+
+		@Override
+		public int size() {
+			int minIndex;
+			if(theMin == null)
+				minIndex = 0;
+			else {
+				minIndex = theWrapped.indexOf(theMin);
+				if(minIndex < 0)
+					minIndex = -minIndex - 1;
+				else if(!isMinIncluded)
+					minIndex++;
+			}
+			int maxIndex;
+			if(theMax == null)
+				maxIndex = theWrapped.size();
+			else {
+				maxIndex = theWrapped.indexOf(theMax);
+				if(maxIndex < 0)
+					maxIndex = -maxIndex - 1;
+				else if(!isMaxIncluded)
+					maxIndex--;
+			}
+			int ret = maxIndex - minIndex;
+			if(ret < 0)
+				ret = 0;
+			return ret;
+		}
+
+		@Override
+		public Iterator<E> iterator() {
+			return iterateFrom(null, true, false).iterator();
+		}
+
+		@Override
+		public Iterable<E> descending() {
+			return iterateFrom(null, true, true);
+		}
+
+		@Override
+		public Iterable<E> iterateFrom(E start, boolean included, boolean reversed) {
+			E stop;
+			boolean includeStop;
+			Comparator<? super E> compare = comparator();
+			if(isReversed)
+				reversed = !reversed;
+			if(reversed) {
+				if(theMax != null && compare.compare(start, theMax) > 0) {
+					start = theMax;
+					included &= isMaxIncluded;
+				}
+				stop = theMin;
+				includeStop = isMinIncluded;
+			} else {
+				if(theMin != null && compare.compare(start, theMin) < 0) {
+					start = theMin;
+					included &= isMinIncluded;
+				}
+				stop = theMax;
+				includeStop = isMaxIncluded;
+			}
+			Iterable<E> backingIterable = theWrapped.iterateFrom(start, included, reversed);
+			return () -> new Iterator<E>() {
+				private final Iterator<E> backing = backingIterable.iterator();
+
+				private boolean calledHasNext;
+				private E theNext;
+
+				private boolean isEnded;
+
+				@Override
+				public boolean hasNext() {
+					if(calledHasNext)
+						return !isEnded;
+					calledHasNext = true;
+					if(!backing.hasNext())
+						return false;
+					theNext = backing.next();
+					if(stop != null) {
+						int comp = compare.compare(theNext, stop);
+						if(comp > 0 || (comp == 0 && !includeStop))
+							isEnded = true;
+					}
+					return !isEnded;
+				}
+
+				@Override
+				public E next() {
+					if(!hasNext())
+						throw new java.util.NoSuchElementException();
+					calledHasNext = false;
+					return theNext;
+				}
+
+				@Override
+				public void remove() {
+					if(calledHasNext)
+						throw new IllegalStateException("remove() must be called after next() and before hasNext()");
+					backing.remove();
+				}
+			};
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theWrapped.lock(write, cause);
+		}
+
+		@Override
+		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
+			return theWrapped.onOrderedElement(element -> {
+				if(isInRange(element.get()))
+					onElement.accept(element);
+			});
+		}
+
+		@Override
+		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<E>> onElement) {
+			return theWrapped.onElementReverse(element -> {
+				if(isInRange(element.get()))
+					onElement.accept(element);
+			});
+		}
+
+		@Override
+		public Comparator<? super E> comparator() {
+			Comparator<? super E> compare = theWrapped.comparator();
+			if(isReversed)
+				compare = compare.reversed();
+			return compare;
+		}
+
+		@Override
+		public ObservableValue<E> relative(E value, boolean up, boolean withValue) {
+			if(isReversed)
+				up = !up;
+			Comparator<? super E> compare = theWrapped.comparator();
+			if(!up && theMin != null) {
+				int comp = compare.compare(value, theMin);
+				if(comp < 0 || (!withValue && comp == 0))
+					return ObservableValue.constant(getType(), null);
+			}
+			if(up && theMax != null) {
+				int comp = compare.compare(value, theMax);
+				if(comp > 0 || (!withValue && comp == 0))
+					return ObservableValue.constant(getType(), null);
+			}
+			return theWrapped.relative(value, up, withValue).mapV(v -> isInRange(v) ? v : null);
+		}
+
+		@Override
+		public ObservableSortedSet<E> subSet(E min, boolean includeMin, E max, boolean includeMax, boolean reverse) {
+			if(isReversed) {
+				E temp = min;
+				min = max;
+				max = temp;
+				boolean tempB = includeMin;
+				includeMin = includeMax;
+				includeMax = tempB;
+			}
+			if(min == null)
+				min = theMin;
+			else if(theMin != null && theWrapped.comparator().compare(min, theMin) <= 0) {
+				min = theMin;
+				includeMin = isMinIncluded;
+			}
+			if(max == null)
+				max = theMax;
+			else if(theMax != null && theWrapped.comparator().compare(max, theMax) >= 0) {
+				max = theMax;
+				includeMax = isMaxIncluded;
+			}
+			return new ObservableSubSet<>(theWrapped, min, includeMin, max, includeMax, reverse ^ isReversed);
+		}
+
+		@Override
+		public E get(int index) {
+			int minIndex;
+			if(theMin == null)
+				minIndex = 0;
+			else {
+				minIndex = theWrapped.indexOf(theMin);
+				if(minIndex < 0)
+					minIndex = -minIndex - 1;
+				else if(!isMinIncluded)
+					minIndex++;
+			}
+			int maxIndex;
+			if(theMax == null)
+				maxIndex = theWrapped.size();
+			else {
+				maxIndex = theWrapped.indexOf(theMax);
+				if(maxIndex < 0)
+					maxIndex = -maxIndex - 1;
+				else if(!isMaxIncluded)
+					maxIndex--;
+			}
+			int size = maxIndex - minIndex;
+			if(size < 0)
+				size = 0;
+			if(index < 0 || index >= size)
+				throw new IndexOutOfBoundsException(index + " of " + size);
+			return theWrapped.get(index + minIndex);
+		}
+
+		@Override
+		public int indexOf(Object value) {
+			Comparator<? super E> compare = theWrapped.comparator();
+			// If it's not in range, we'll return the bound index, even though actually adding it would generate an error
+			if(theMin != null) {
+				int comp = compare.compare((E) value, theMin);
+				if(comp < 0 || (!isMinIncluded && comp == 0))
+					return isReversed ? -size() - 1 : -1;
+			}
+			if(theMax != null) {
+				int comp = compare.compare((E) value, theMax);
+				if(comp < 0 || (!isMaxIncluded && comp == 0))
+					return isReversed ? -1 : -size() - 1;
+			}
+			return PartialSortedSetImpl.super.indexOf(value);
+		}
+
+		@Override
+		public boolean contains(Object o) {
+			if(!isInRange((E) o))
+				return false;
+			return theWrapped.contains(o);
+		}
+
+		@Override
+		public boolean containsAll(Collection<?> values) {
+			for(Object o : values)
+				if(!isInRange((E) o))
+					return false;
+			return theWrapped.containsAll(values);
+		}
+
+		@Override
+		public boolean add(E value) {
+			if(!isInRange(value))
+				throw new IllegalArgumentException(value + " is not in the range of this sub-set");
+			return theWrapped.add(value);
+		}
+
+		@Override
+		public boolean addAll(Collection<? extends E> values) {
+			for(E value : values)
+				if(!isInRange(value))
+					throw new IllegalArgumentException(value + " is not in the range of this sub-set");
+			return theWrapped.addAll(values);
+		}
+
+		@Override
+		public boolean remove(Object value) {
+			if(!isInRange((E) value))
+				return false;
+			return theWrapped.remove(value);
+		}
+
+		@Override
+		public boolean removeAll(Collection<?> values) {
+			List<?> toRemove = values.stream().filter(v -> isInRange((E) v)).collect(Collectors.toList());
+			return theWrapped.removeAll(toRemove);
+		}
+
+		@Override
+		public boolean retainAll(Collection<?> values) {
+			return PartialSortedSetImpl.super.retainAll(values);
+		}
+
+		@Override
+		public void clear() {
+			PartialSortedSetImpl.super.clear();
+		}
+	}
+
+	/**
 	 * Implements {@link ObservableSortedSet#reverse()}
 	 *
 	 * @param <E> The type of elements in the collection
@@ -306,10 +757,10 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 	 * @param <E> The type of the set to filter
 	 * @param <T> the type of the mapped set
 	 */
-	class FilteredSortedSet<E, T> extends FilteredReversibleCollection<E, T> implements PartialSortedSetImpl<T> {
+	class StaticFilteredSortedSet<E, T> extends StaticFilteredReversibleCollection<E, T> implements PartialSortedSetImpl<T> {
 		/* Note that everywhere we cast a T-typed value to E is safe because this sorted set is only called from filter, not map */
 
-		protected FilteredSortedSet(ObservableSortedSet<E> wrap, Type type, Function<? super E, T> map) {
+		protected StaticFilteredSortedSet(ObservableSortedSet<E> wrap, Type type, Function<? super E, T> map) {
 			super(wrap, type, map, value -> (E) value);
 		}
 
@@ -320,18 +771,60 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 
 		@Override
 		public ObservableSortedSet<T> subSet(T fromElement, boolean fromInclusive, T toElement, boolean toInclusive) {
-			return new FilteredSortedSet<>(getWrapped().subSet((E) fromElement, fromInclusive, (E) toElement, toInclusive), getType(),
+			return new StaticFilteredSortedSet<>(getWrapped().subSet((E) fromElement, fromInclusive, (E) toElement, toInclusive),
+				getType(), getMap());
+		}
+
+		@Override
+		public ObservableSortedSet<T> headSet(T toElement, boolean inclusive) {
+			return new StaticFilteredSortedSet<>(getWrapped().headSet((E) toElement, inclusive), getType(), getMap());
+		}
+
+		@Override
+		public ObservableSortedSet<T> tailSet(T fromElement, boolean inclusive) {
+			return new StaticFilteredSortedSet<>(getWrapped().tailSet((E) fromElement, inclusive), getType(), getMap());
+		}
+
+		@Override
+		public Comparator<? super T> comparator() {
+			return (o1, o2) -> {
+				return getWrapped().comparator().compare((E) o1, (E) o2);
+			};
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableSortedSet#filter(Predicate)} and {@link ObservableSortedSet#filter(Class)}
+	 *
+	 * @param <E> The type of the set to filter
+	 * @param <T> the type of the mapped set
+	 */
+	class DynamicFilteredSortedSet<E, T> extends DynamicFilteredReversibleCollection<E, T> implements PartialSortedSetImpl<T> {
+		/* Note that everywhere we cast a T-typed value to E is safe because this sorted set is only called from filter, not map */
+
+		protected DynamicFilteredSortedSet(ObservableSortedSet<E> wrap, Type type, Function<? super E, T> map) {
+			super(wrap, type, map, value -> (E) value);
+		}
+
+		@Override
+		protected ObservableSortedSet<E> getWrapped() {
+			return (ObservableSortedSet<E>) super.getWrapped();
+		}
+
+		@Override
+		public ObservableSortedSet<T> subSet(T fromElement, boolean fromInclusive, T toElement, boolean toInclusive) {
+			return new DynamicFilteredSortedSet<>(getWrapped().subSet((E) fromElement, fromInclusive, (E) toElement, toInclusive), getType(),
 				getMap());
 		}
 
 		@Override
 		public ObservableSortedSet<T> headSet(T toElement, boolean inclusive) {
-			return new FilteredSortedSet<>(getWrapped().headSet((E) toElement, inclusive), getType(), getMap());
+			return new DynamicFilteredSortedSet<>(getWrapped().headSet((E) toElement, inclusive), getType(), getMap());
 		}
 
 		@Override
 		public ObservableSortedSet<T> tailSet(T fromElement, boolean inclusive) {
-			return new FilteredSortedSet<>(getWrapped().tailSet((E) fromElement, inclusive), getType(), getMap());
+			return new DynamicFilteredSortedSet<>(getWrapped().tailSet((E) fromElement, inclusive), getType(), getMap());
 		}
 
 		@Override

@@ -15,7 +15,7 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableList;
-import org.observe.collect.OrderedObservableElement;
+import org.observe.collect.ObservableOrderedElement;
 import org.observe.util.Transactable;
 import org.observe.util.Transaction;
 
@@ -83,13 +83,13 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 	}
 
 	@Override
-	public Subscription onOrderedElement(Consumer<? super OrderedObservableElement<E>> onElement) {
+	public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
 		// Cast is safe because the internals of this set will only create ordered elements
 		return theInternals.onElement((Consumer<ObservableElement<E>>) onElement, true);
 	}
 
 	@Override
-	public Subscription onElementReverse(Consumer<? super OrderedObservableElement<E>> onElement) {
+	public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<E>> onElement) {
 		// Cast is safe because the internals of this set will only create ordered elements
 		return theInternals.onElement((Consumer<ObservableElement<E>>) onElement, false);
 	}
@@ -581,7 +581,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 		@Override
 		ObservableElement<E> createExposedElement(InternalObservableElementImpl<E> internal, Collection<Subscription> subscriptions) {
 			LinkedNode orderedInternal = (LinkedNode) internal;
-			class ExposedOrderedObservableElement extends ExposedObservableElement<E> implements OrderedObservableElement<E> {
+			class ExposedOrderedObservableElement extends ExposedObservableElement<E> implements ObservableOrderedElement<E> {
 
 				ExposedOrderedObservableElement() {
 					super(internal, subscriptions);

@@ -66,15 +66,34 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	 */
 	@Override
 	default ObservableSet<E> filter(Predicate<? super E> filter) {
+		return (ObservableSet<E>) ObservableCollection.super.filter(filter);
+	}
+
+	@Override
+	default ObservableSet<E> filter(Predicate<? super E> filter, boolean staticFilter) {
+		if(staticFilter)
+			return filterStatic(filter);
+		else
+			return filterDynamic(filter);
+	}
+
+	@Override
+	default ObservableSet<E> filterDynamic(Predicate<? super E> filter) {
 		Function<E, E> map = value -> (value != null && filter.test(value)) ? value : null;
-		return d().debug(new FilteredSet<>(this, getType(), map)).from("filter", this).using("filter", filter).get();
+		return d().debug(new DynamicFilteredSet<>(this, getType(), map)).from("filter", this).using("filter", filter).get();
+	}
+
+	@Override
+	default ObservableSet<E> filterStatic(Predicate<? super E> filter) {
+		Function<E, E> map = value -> (value != null && filter.test(value)) ? value : null;
+		return d().debug(new StaticFilteredSet<>(this, getType(), map)).from("filter", this).using("filter", filter).get();
 	}
 
 	@Override
 	default <T> ObservableSet<T> filter(Class<T> type) {
 		Function<E, T> map = value -> type.isInstance(value) ? type.cast(value) : null;
-		return d().debug(new FilteredSet<>(this, new Type(type), map)).from("filterMap", this).using("map", map).tag("filterType", type)
-			.get();
+		return d().debug(new StaticFilteredSet<>(this, new Type(type), map)).from("filterMap", this).using("map", map)
+			.tag("filterType", type).get();
 	}
 
 	/**
@@ -226,7 +245,9 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	public static <T> ObservableSet<T> unique(ObservableCollection<T> coll) {
 		class UniqueFilteredElement implements ObservableElement<T> {
 			private ObservableElement<T> theWrappedElement;
+
 			private Set<UniqueFilteredElement> theElements;
+
 			private boolean isIncluded;
 
 			UniqueFilteredElement(ObservableElement<T> wrapped, Set<UniqueFilteredElement> elements) {
@@ -335,7 +356,9 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 			public Iterator<T> iterator() {
 				return new Iterator<T>() {
 					private final Iterator<T> backing = coll.iterator();
+
 					private final HashSet<T> set = new HashSet<>();
+
 					private T nextVal;
 
 					@Override
@@ -434,6 +457,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	 */
 	class ObservableSetEquivalentFinder<E> implements ObservableValue<E> {
 		private final ObservableSet<E> theSet;
+
 		private final Object theKey;
 
 		protected ObservableSetEquivalentFinder(ObservableSet<E> set, Object key) {
@@ -448,7 +472,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 
 		@Override
 		public E get() {
-			for(E value : theSet){
+			for(E value : theSet) {
 				if(Objects.equals(value, theKey))
 					return value;
 			}
@@ -500,8 +524,25 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	 * @param <E> The type of the set to filter
 	 * @param <T> the type of the mapped set
 	 */
-	class FilteredSet<E, T> extends FilteredCollection<E, T> implements PartialSetImpl<T> {
-		protected FilteredSet(ObservableSet<E> wrap, Type type, Function<? super E, T> map) {
+	class StaticFilteredSet<E, T> extends StaticFilteredCollection<E, T> implements PartialSetImpl<T> {
+		protected StaticFilteredSet(ObservableSet<E> wrap, Type type, Function<? super E, T> map) {
+			super(wrap, type, map, value -> (E) value);
+		}
+
+		@Override
+		protected ObservableSet<E> getWrapped() {
+			return (ObservableSet<E>) super.getWrapped();
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableSet#filter(Predicate)} and {@link ObservableSet#filter(Class)}
+	 *
+	 * @param <E> The type of the set to filter
+	 * @param <T> the type of the mapped set
+	 */
+	class DynamicFilteredSet<E, T> extends DynamicFilteredCollection<E, T> implements PartialSetImpl<T> {
+		protected DynamicFilteredSet(ObservableSet<E> wrap, Type type, Function<? super E, T> map) {
 			super(wrap, type, map, value -> (E) value);
 		}
 
