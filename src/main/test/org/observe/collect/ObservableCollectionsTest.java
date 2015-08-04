@@ -13,14 +13,18 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.Map;
 import java.util.NavigableSet;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import org.hamcrest.Description;
@@ -35,6 +39,7 @@ import org.observe.Subscription;
 import org.observe.collect.impl.ObservableArrayList;
 import org.observe.collect.impl.ObservableHashSet;
 import org.observe.collect.impl.ObservableTreeSet;
+import org.observe.datastruct.ObservableMultiMap;
 import org.observe.util.ObservableUtils;
 import org.observe.util.Transaction;
 
@@ -668,6 +673,11 @@ public class ObservableCollectionsTest {
 		ArrayList<Integer> filterMapSynced = new ArrayList<>();
 		Subscription filterMapSub = sync(filterMapOL, filterMapSynced);
 
+		Function<Integer, Integer> groupFn = v -> v % 3;
+		ObservableMultiMap<Integer, Integer> grouped = list.groupBy(groupFn);
+		Map<Integer, List<Integer>> groupedSynced = new LinkedHashMap<>();
+		ObservableCollectionsTest.sync(grouped, groupedSynced, () -> new ArrayList<>());
+
 		// TODO Test combination list
 
 		Consumer<ObservableList<Integer>> newCheck = l -> {
@@ -685,6 +695,15 @@ public class ObservableCollectionsTest {
 
 			assertThat(synced, equalTo(filterMapOL));
 			assertThat(synced, equalTo(filterMapSynced));
+
+			Set<Integer> groupKeySet = synced.stream().map(groupFn).collect(Collectors.toSet());
+			assertThat(groupKeySet, equalTo(grouped.keySet()));
+			assertThat(groupKeySet, equalTo(groupedSynced.keySet()));
+			for(Integer groupKey : groupKeySet) {
+				List<Integer> values = synced.stream().filter(v -> Objects.equals(groupFn.apply(v), groupKey)).collect(Collectors.toList());
+				assertThat(values, equalTo(grouped.get(groupKey)));
+				assertThat(values, equalTo(groupedSynced.get(groupKey)));
+			}
 		};
 
 		try {
@@ -756,17 +775,72 @@ public class ObservableCollectionsTest {
 		});
 	}
 
+	private static <K, V, C extends Collection<V>> Subscription sync(ObservableMultiMap<K, V> map, Map<K, C> synced,
+		Supplier<? extends C> collectCreator) {
+		return map.keySet().onElement(el -> el.subscribe(new Observer<ObservableValueEvent<K>>() {
+			@Override
+			public <E extends ObservableValueEvent<K>> void onNext(E event) {
+				if(!event.isInitial())
+					return;
+				C collect = collectCreator.get();
+				synced.put(event.getValue(), collect);
+				Subscription elSub = map.get(event.getValue()).onElement(el2 -> el2.subscribe(new Observer<ObservableValueEvent<V>>() {
+					@Override
+					public <E2 extends ObservableValueEvent<V>> void onNext(E2 event2) {
+						if(el2 instanceof ObservableOrderedElement && collect instanceof List) {
+							ObservableOrderedElement<V> orderedEl = (ObservableOrderedElement<V>) el2;
+							if(event2.isInitial())
+								((List<V>) collect).add(orderedEl.getIndex(), event2.getValue());
+							else
+								((List<V>) collect).set(orderedEl.getIndex(), event2.getValue());
+						} else {
+							if(event2.isInitial())
+								collect.add(event2.getValue());
+							else {
+								collect.remove(event2.getOldValue());
+								collect.add(event2.getValue());
+							}
+						}
+					}
+
+					@Override
+					public <E2 extends ObservableValueEvent<V>> void onCompleted(E2 event2) {
+						if(el2 instanceof ObservableOrderedElement && collect instanceof List) {
+							ObservableOrderedElement<V> orderedEl = (ObservableOrderedElement<V>) el2;
+							((List<V>) collect).remove(orderedEl.getIndex());
+						} else
+							collect.remove(event2.getValue());
+					}
+				}));
+				el.completed().act(evt -> elSub.unsubscribe());
+			}
+
+			@Override
+			public <E extends ObservableValueEvent<K>> void onCompleted(E event) {
+				synced.remove(event.getValue());
+			}
+		}));
+	}
+
 	/** Runs a barrage of tests ({@link #testObservableList(ObservableList, Consumer)}) on {@link ObservableArrayList} */
 	@Test
 	public void testObservableArrayList() {
 		testObservableList(new ObservableArrayList<>(new Type(Integer.class)), null);
 	}
 
-	/** Runs a barrage of tests ({@link #testObservableSet(ObservableSet, Consumer)}) on {@link ObservableTreeSet} */
+	/** Runs a barrage of tests ({@link #testObservableSortedSet(ObservableSet, Consumer)}) on {@link ObservableTreeSet} */
 	@Test
 	public void testObservableTreeSet() {
 		testObservableSortedSet(new ObservableTreeSet<>(new Type(Integer.class), Integer::compareTo), null);
 	}
+
+	/** Runs a barrage of tests ({@link #testObservableSet(ObservableSet, Consumer)}) on {@link ObservableHashSet} */
+	@Test
+	public void testObservableHashSet() {
+		testObservableSet(new ObservableHashSet<>(new Type(Integer.class)), null);
+	}
+
+	// Older, more specific tests
 
 	/** Tests basic {@link ObservableSet} functionality */
 	@Test
