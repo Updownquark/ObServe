@@ -758,6 +758,7 @@ public class ObservableCollectionsTest {
 		testObservableList(new ObservableArrayList<>(new Type(Integer.class)), null);
 	}
 
+	/** Runs a barrage of tests ({@link #testObservableSet(ObservableSet, Consumer)}) on {@link ObservableTreeSet} */
 	@Test
 	public void testObservableTreeSet() {
 		testObservableSortedSet(new ObservableTreeSet<>(new Type(Integer.class), Integer::compareTo), null);
