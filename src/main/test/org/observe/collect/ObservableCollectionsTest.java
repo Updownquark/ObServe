@@ -34,6 +34,7 @@ import org.observe.SimpleSettableValue;
 import org.observe.Subscription;
 import org.observe.collect.impl.ObservableArrayList;
 import org.observe.collect.impl.ObservableHashSet;
+import org.observe.collect.impl.ObservableTreeSet;
 import org.observe.util.ObservableUtils;
 import org.observe.util.Transaction;
 
@@ -626,6 +627,19 @@ public class ObservableCollectionsTest {
 	}
 
 	/**
+	 * Runs a set of tests on an observable set
+	 *
+	 * @param <T> The type of elements in the set
+	 * @param set The set to test
+	 * @param check An optional function to apply after each collection modification to ensure the structure of the collection is correct
+	 *            and potentially assert other side effects of collection modification
+	 */
+	public static <T extends ObservableSortedSet<Integer>> void testObservableSortedSet(T set, Consumer<? super T> check) {
+		testObservableSet(set, check);
+		testSortedSet(set, check);
+	}
+
+	/**
 	 * Runs a set of tests on an observable list
 	 *
 	 * @param <T> The type of elements in the list
@@ -728,7 +742,7 @@ public class ObservableCollectionsTest {
 		// TODO Call testObservableList from the other applicable tests
 	}
 
-	private static <T> Subscription sync(ObservableList<T> list, List<T> synced) {
+	private static <T> Subscription sync(ObservableOrderedCollection<T> list, List<T> synced) {
 		return list.onOrderedElement(el -> {
 			el.subscribe(new Observer<ObservableValueEvent<T>>() {
 				@Override
@@ -753,6 +767,18 @@ public class ObservableCollectionsTest {
 	@Test
 	public void testObservableArrayList() {
 		testObservableList(new ObservableArrayList<>(new Type(Integer.class)), null);
+	}
+
+	/** Runs a barrage of tests ({@link #testObservableList(ObservableList, Consumer)}) on {@link ObservableArrayList} */
+	@Test
+	public void testObservableHashSet() {
+		testObservableSet(new ObservableHashSet<>(new Type(Integer.class)), null);
+	}
+
+	/** Runs a barrage of tests ({@link #testObservableList(ObservableList, Consumer)}) on {@link ObservableArrayList} */
+	@Test
+	public void testObservableTreeSet() {
+		testObservableSortedSet(new ObservableTreeSet<>(new Type(Integer.class), Integer::compareTo), null);
 	}
 
 	/** Tests basic {@link ObservableSet} functionality */
