@@ -18,9 +18,9 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableList;
 import org.observe.collect.ObservableOrderedCollection;
+import org.observe.collect.ObservableOrderedElement;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedSet;
-import org.observe.collect.ObservableOrderedElement;
 import org.observe.datastruct.ObservableMap.ObsEntryImpl;
 import org.observe.util.ObservableUtils;
 import org.observe.util.Transaction;
@@ -40,9 +40,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	 * @param <K> The type of key this entry uses
 	 * @param <V> The type of value this entry stores
 	 */
-	public interface ObservableMultiEntry<K, V> extends ObservableCollection<V> {
-		/** @return The key associated with this entry's values */
-		K getKey();
+	public interface ObservableMultiEntry<K, V> extends MultiEntry<K, V>, ObservableCollection<V> {
 	}
 
 	/** @return The type of keys this map uses */
@@ -58,8 +56,8 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	 *         threaded interactions with a session. A transaction may encompass events fired and received on multiple threads. In short,
 	 *         the only thing guaranteed about sessions is that they will end. Therefore, if a session is present, observers may assume that
 	 *         they can delay expensive results of map events until the session completes. The {@link ObservableCollection#getSession()
-	 *         sessions} of the {@link #observeEntries() entries}, {@link #observeKeys() keys}, and {@link #observeValues() values}
-	 *         collections should be the same as this one.
+	 *         sessions} of the {@link #entrySet() entries}, {@link #observeKeys() keys}, and {@link #entrySet() values} collections should
+	 *         be the same as this one.
 	 */
 	ObservableValue<CollectionSession> getSession();
 
@@ -73,13 +71,13 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	 * </p>
 	 * <p>
 	 * No {@link ObservableMultiMap} implementation may use the default implementations for its {@link #keySet()}, {@link #get(Object)}, and
-	 * {@link #observeEntries()} methods. {@link #defaultObserveEntries(ObservableMultiMap)} may not be used in the same implementation as
-	 * {@link #defaultKeySet(ObservableMultiMap)} or {@link #defaultGet(ObservableMultiMap, Object)}. Either {@link #observeEntries()} or
-	 * both {@link #keySet()} and {@link #get(Object)} must be custom. If an implementation supplies custom {@link #keySet()} and
-	 * {@link #get(Object)} implementations, it may use {@link #defaultObserveEntries(ObservableMultiMap)} for its {@link #observeEntries()}
-	 * . If an implementation supplies a custom {@link #observeEntries()} implementation, it may use
-	 * {@link #defaultKeySet(ObservableMultiMap)} and {@link #defaultGet(ObservableMultiMap, Object)} for its {@link #keySet()} and
-	 * {@link #get(Object)} implementations, respectively. Using default implementations for both will result in infinite loops.
+	 * {@link #entrySet()} methods. {@link #defaultEntrySet(ObservableMultiMap)} may not be used in the same implementation as
+	 * {@link #defaultKeySet(ObservableMultiMap)} or {@link #defaultGet(ObservableMultiMap, Object)}. Either {@link #entrySet()} or both
+	 * {@link #keySet()} and {@link #get(Object)} must be custom. If an implementation supplies custom {@link #keySet()} and
+	 * {@link #get(Object)} implementations, it may use {@link #defaultEntrySet(ObservableMultiMap)} for its {@link #entrySet()} . If
+	 * an implementation supplies a custom {@link #entrySet()} implementation, it may use {@link #defaultKeySet(ObservableMultiMap)} and
+	 * {@link #defaultGet(ObservableMultiMap, Object)} for its {@link #keySet()} and {@link #get(Object)} implementations, respectively.
+	 * Using default implementations for both will result in infinite loops.
 	 * </p>
 	 *
 	 * @param <K> The key type of the map
@@ -88,7 +86,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	 * @return A key set for the map
 	 */
 	public static <K, V> ObservableSet<K> defaultKeySet(ObservableMultiMap<K, V> map) {
-		return ObservableSet.unique(map.observeEntries().map(ObservableMultiEntry::getKey));
+		return ObservableSet.unique(map.entrySet().map(ObservableMultiEntry::getKey));
 	}
 
 	/**
@@ -104,13 +102,13 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	 * </p>
 	 * <p>
 	 * No {@link ObservableMultiMap} implementation may use the default implementations for its {@link #keySet()}, {@link #get(Object)}, and
-	 * {@link #observeEntries()} methods. {@link #defaultObserveEntries(ObservableMultiMap)} may not be used in the same implementation as
-	 * {@link #defaultKeySet(ObservableMultiMap)} or {@link #defaultGet(ObservableMultiMap, Object)}. Either {@link #observeEntries()} or
-	 * both {@link #keySet()} and {@link #get(Object)} must be custom. If an implementation supplies custom {@link #keySet()} and
-	 * {@link #get(Object)} implementations, it may use {@link #defaultObserveEntries(ObservableMultiMap)} for its {@link #observeEntries()}
-	 * . If an implementation supplies a custom {@link #observeEntries()} implementation, it may use
-	 * {@link #defaultKeySet(ObservableMultiMap)} and {@link #defaultGet(ObservableMultiMap, Object)} for its {@link #keySet()} and
-	 * {@link #get(Object)} implementations, respectively. Using default implementations for both will result in infinite loops.
+	 * {@link #entrySet()} methods. {@link #defaultEntrySet(ObservableMultiMap)} may not be used in the same implementation as
+	 * {@link #defaultKeySet(ObservableMultiMap)} or {@link #defaultGet(ObservableMultiMap, Object)}. Either {@link #entrySet()} or both
+	 * {@link #keySet()} and {@link #get(Object)} must be custom. If an implementation supplies custom {@link #keySet()} and
+	 * {@link #get(Object)} implementations, it may use {@link #defaultEntrySet(ObservableMultiMap)} for its {@link #entrySet()} . If
+	 * an implementation supplies a custom {@link #entrySet()} implementation, it may use {@link #defaultKeySet(ObservableMultiMap)} and
+	 * {@link #defaultGet(ObservableMultiMap, Object)} for its {@link #keySet()} and {@link #get(Object)} implementations, respectively.
+	 * Using default implementations for both will result in infinite loops.
 	 * </p>
 	 *
 	 * @param <K> The key type of the map
@@ -123,7 +121,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		if(key != null && !map.getKeyType().isAssignableFrom(key.getClass()))
 			return ObservableList.constant(map.getValueType());
 
-		ObservableSet<? extends ObservableMultiEntry<K, V>> entries = map.observeEntries();
+		ObservableSet<? extends ObservableMultiEntry<K, V>> entries = map.entrySet();
 		Map.Entry<Object, ?> keyEntry = new Map.Entry<Object, Object>() {
 			@Override
 			public Object getKey() {
@@ -176,21 +174,22 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	}
 
 	/** @return An observable collection of {@link ObservableMultiEntry observable entries} of all the key-value set pairs stored in this map */
-	ObservableSet<? extends ObservableMultiEntry<K, V>> observeEntries();
+	@Override
+	ObservableSet<? extends ObservableMultiEntry<K, V>> entrySet();
 
 	/**
 	 * <p>
-	 * A default implementation of {@link #observeEntries()}.
+	 * A default implementation of {@link #entrySet()}.
 	 * </p>
 	 * <p>
 	 * No {@link ObservableMultiMap} implementation may use the default implementations for its {@link #keySet()}, {@link #get(Object)}, and
-	 * {@link #observeEntries()} methods. {@link #defaultObserveEntries(ObservableMultiMap)} may not be used in the same implementation as
-	 * {@link #defaultKeySet(ObservableMultiMap)} or {@link #defaultGet(ObservableMultiMap, Object)}. Either {@link #observeEntries()} or
-	 * both {@link #keySet()} and {@link #get(Object)} must be custom. If an implementation supplies custom {@link #keySet()} and
-	 * {@link #get(Object)} implementations, it may use {@link #defaultObserveEntries(ObservableMultiMap)} for its {@link #observeEntries()}
-	 * . If an implementation supplies a custom {@link #observeEntries()} implementation, it may use
-	 * {@link #defaultKeySet(ObservableMultiMap)} and {@link #defaultGet(ObservableMultiMap, Object)} for its {@link #keySet()} and
-	 * {@link #get(Object)} implementations, respectively. Using default implementations for both will result in infinite loops.
+	 * {@link #entrySet()} methods. {@link #defaultEntrySet(ObservableMultiMap)} may not be used in the same implementation as
+	 * {@link #defaultKeySet(ObservableMultiMap)} or {@link #defaultGet(ObservableMultiMap, Object)}. Either {@link #entrySet()} or both
+	 * {@link #keySet()} and {@link #get(Object)} must be custom. If an implementation supplies custom {@link #keySet()} and
+	 * {@link #get(Object)} implementations, it may use {@link #defaultEntrySet(ObservableMultiMap)} for its {@link #entrySet()} . If
+	 * an implementation supplies a custom {@link #entrySet()} implementation, it may use {@link #defaultKeySet(ObservableMultiMap)} and
+	 * {@link #defaultGet(ObservableMultiMap, Object)} for its {@link #keySet()} and {@link #get(Object)} implementations, respectively.
+	 * Using default implementations for both will result in infinite loops.
 	 * </p>
 	 *
 	 * @param <K> The key type of the map
@@ -198,7 +197,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	 * @param map The map to create an entry set for
 	 * @return An entry set for the map
 	 */
-	public static <K, V> ObservableSet<? extends ObservableMultiEntry<K, V>> defaultObserveEntries(ObservableMultiMap<K, V> map) {
+	public static <K, V> ObservableSet<? extends ObservableMultiEntry<K, V>> defaultEntrySet(ObservableMultiMap<K, V> map) {
 		return ObservableSet.unique(map.keySet().map(map::entryFor));
 	}
 
@@ -246,12 +245,13 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 
 	/** @return All keys stored in this map */
 	default ObservableSet<K> observeKeys() {
-		return ObservableSet.unique(observeEntries().map(getKeyType(), ObservableMultiEntry<K, V>::getKey));
+		return ObservableSet.unique(entrySet().map(getKeyType(), ObservableMultiEntry<K, V>::getKey));
 	}
 
 	/** @return All values stored in this map */
-	default ObservableCollection<V> observeValues() {
-		return ObservableCollection.flatten(observeEntries());
+	@Override
+	default ObservableCollection<V> values() {
+		return ObservableCollection.flatten(entrySet());
 	}
 
 	/** @return A collection of plain (non-observable) {@link java.util.Map.Entry entries}, one for each value in this map */
@@ -281,7 +281,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 				throw new UnsupportedOperationException();
 			}
 		}
-		return ObservableCollection.flatten(observeEntries().map(entry -> entry.map(value -> new DefaultMapEntry(entry.getKey(), value))));
+		return ObservableCollection.flatten(entrySet().map(entry -> entry.map(value -> new DefaultMapEntry(entry.getKey(), value))));
 	}
 
 	/**
@@ -289,8 +289,9 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	 * @return The values (in the form of a {@link ObservableMultiEntry multi-entry}) stored for the given key
 	 */
 	default ObservableMultiEntry<K, V> subscribe(K key) {
-		ObservableValue<? extends ObservableMultiEntry<K, V>> existingEntry = observeEntries().find(
-			entry -> java.util.Objects.equals(entry.getKey(), key));
+		ObservableValue<? extends ObservableMultiEntry<K, V>> existingEntry = entrySet()
+			.find(
+				entry -> java.util.Objects.equals(entry.getKey(), key));
 		class WrappingMultiEntry implements ObservableCollection.PartialCollectionImpl<V>, ObservableMultiEntry<K, V> {
 			@Override
 			public Type getType() {
@@ -495,8 +496,8 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			}
 
 			@Override
-			public ObservableSet<? extends ObservableMultiEntry<K, T>> observeEntries() {
-				return ObservableMultiMap.defaultObserveEntries(this);
+			public ObservableSet<? extends ObservableMultiEntry<K, T>> entrySet() {
+				return ObservableMultiMap.defaultEntrySet(this);
 			}
 		};
 	}
@@ -536,8 +537,8 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			}
 
 			@Override
-			public ObservableSet<? extends ObservableMultiEntry<K, V>> observeEntries() {
-				return outer.observeEntries().immutable();
+			public ObservableSet<? extends ObservableMultiEntry<K, V>> entrySet() {
+				return outer.entrySet().immutable();
 			}
 		};
 	}
@@ -690,6 +691,11 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			if(this == obj)
 				return true;
 			return obj instanceof ObsEntryImpl && Objects.equals(theKey, ((ObsMultiEntryImpl<?, ?>) obj).theKey);
+		}
+
+		@Override
+		public String toString() {
+			return theKey + "=" + theValues.get();
 		}
 	}
 

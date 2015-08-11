@@ -376,9 +376,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @return A collection containing all non-null elements passing the given test
 	 */
 	default ObservableCollection<E> filter(Predicate<? super E> filter, boolean staticFilter) {
-		return d().label(filterMap(getType(), value -> {
+		Function<E, E> map = value -> {
 			return (value != null && filter.test(value)) ? value : null;
-		}, value -> value, staticFilter)).tag("filter", filter).get();
+		};
+		return d().label(filterMap(getType(), map, value -> value, staticFilter)).tag("filter", filter).get();
 	}
 
 	/**
@@ -1399,8 +1400,9 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 							innerSub[0] = null;
 						}
 					} else {
+						boolean initial = !isIncluded;
 						isIncluded = true;
-						if(elValue.isInitial())
+						if(initial)
 							observer2.onNext(createInitialEvent(theValue));
 						else
 							observer2.onNext(createChangeEvent(oldValue, theValue, elValue));
@@ -1613,10 +1615,14 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		private final Type theKeyType;
 
+		private final ObservableSet<K> theKeySet;
+
 		GroupedMultiMap(ObservableCollection<E> wrap, Function<E, K> keyMap, Type keyType) {
 			theWrapped = wrap;
 			theKeyMap = keyMap;
 			theKeyType = keyType != null ? keyType : ObservableUtils.getReturnType(keyMap);
+
+			theKeySet = ObservableSet.unique(theWrapped.map(theKeyMap));
 		}
 
 		@Override
@@ -1641,7 +1647,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		@Override
 		public ObservableSet<K> keySet() {
-			return ObservableSet.unique(theWrapped.map(theKeyMap));
+			return theKeySet;
 		}
 
 		@Override
@@ -1650,8 +1656,13 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public ObservableSet<? extends ObservableMultiEntry<K, E>> observeEntries() {
-			return ObservableMultiMap.defaultObserveEntries(this);
+		public ObservableSet<? extends ObservableMultiEntry<K, E>> entrySet() {
+			return ObservableMultiMap.defaultEntrySet(this);
+		}
+
+		@Override
+		public String toString() {
+			return entrySet().toString();
 		}
 	}
 

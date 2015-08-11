@@ -274,7 +274,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		if(compare == null) {
 			if(!new Type(Comparable.class).isAssignable(coll.getType()))
 				throw new IllegalArgumentException("No natural ordering for collection of type " + coll.getType());
-			compare = (Comparator<? super E>) (Comparable<Comparable<?>> o1, Comparable<Comparable<?>> o2) -> o1.compareTo(o2);
+			compare = (Comparator<? super E>) (E o1, E o2) -> ((Comparable<? super E>) o1).compareTo(o2);
 		}
 		return d().debug(new SortedOrderedCollectionWrapper<>(coll, compare)).from("sort", coll).using("compare", compare).get();
 	}
@@ -311,7 +311,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		OrderedCollectionFinder(ObservableOrderedCollection<E> collection, Predicate<? super E> filter, boolean forward) {
 			theCollection = collection;
 			theType = theCollection.getType().isPrimitive() ? new Type(Type.getWrapperType(theCollection.getType().getBaseType()))
-			: theCollection.getType();
+				: theCollection.getType();
 			theFilter = filter;
 			isForward = forward;
 		}

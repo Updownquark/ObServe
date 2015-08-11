@@ -126,7 +126,7 @@ public class ObservableMultiMapImpl<K, V> implements ObservableMultiMap<K, V> {
 	}
 
 	@Override
-	public ObservableSet<? extends ObservableMultiEntry<K, V>> observeEntries() {
+	public ObservableSet<? extends ObservableMultiEntry<K, V>> entrySet() {
 		return theEntries;
 	}
 

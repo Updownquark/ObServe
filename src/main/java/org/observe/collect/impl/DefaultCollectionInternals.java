@@ -108,7 +108,9 @@ abstract class DefaultCollectionInternals<E> {
 	}
 
 	void fireNewElement(InternalObservableElementImpl<E> el) {
-		for(Map.Entry<Consumer<? super ObservableElement<E>>, ConcurrentLinkedQueue<Subscription>> observer : theObservers.entrySet()) {
+		Map.Entry<Consumer<? super ObservableElement<E>>, ConcurrentLinkedQueue<Subscription>> [] observers = theObservers.entrySet()
+			.toArray(new Map.Entry[theObservers.size()]);
+		for(Map.Entry<Consumer<? super ObservableElement<E>>, ConcurrentLinkedQueue<Subscription>> observer : observers) {
 			observer.getKey().accept(createExposedElement(el, observer.getValue()));
 		}
 	}

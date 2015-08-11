@@ -155,6 +155,28 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	}
 
 	/**
+	 * A default toString() method for set implementations to use
+	 *
+	 * @param set The set to print
+	 * @return The string representation of the set
+	 */
+	public static String toString(ObservableSet<?> set) {
+		StringBuilder ret = new StringBuilder("{");
+		boolean first = true;
+		try (Transaction t = set.lock(false, null)) {
+			for(Object value : set) {
+				if(!first) {
+					ret.append(", ");
+				} else
+					first = false;
+				ret.append(value);
+			}
+		}
+		ret.append('}');
+		return ret.toString();
+	}
+
+	/**
 	 * @param <T> The type of the collection
 	 * @param type The run-time type of the collection
 	 * @param coll The collection with elements to wrap
@@ -297,7 +319,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 							}
 						} else if(!isIncluded && shouldBe) {
 							isIncluded = true;
-							observer2.onNext(ObservableUtils.wrap(elValue, UniqueFilteredElement.this));
+							observer2.onNext(createInitialEvent(elValue.getValue()));
 						}
 					}
 
@@ -311,7 +333,8 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 							oldVal = get();
 							newVal = oldVal;
 						}
-						observer2.onCompleted(UniqueFilteredElement.this.createChangeEvent(oldVal, newVal, elValue));
+						if(isIncluded)
+							observer2.onCompleted(UniqueFilteredElement.this.createChangeEvent(oldVal, newVal, elValue));
 					}
 				});
 				if(!isIncluded) {
@@ -417,6 +440,11 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 						}
 					});
 				});
+			}
+
+			@Override
+			public String toString() {
+				return ObservableSet.toString(this);
 			}
 		}
 		return d().debug(new UniqueSet()).from("unique", coll).get();
