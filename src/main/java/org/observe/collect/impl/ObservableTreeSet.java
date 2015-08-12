@@ -198,7 +198,7 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 		boolean ret = false;
 		try (Transaction t = lock(true, null)) {
 			for(E add : c) {
-				if(!theValues.containsKey(add))
+				if(theValues.containsKey(add))
 					continue;
 				ret = true;
 				InternalElement el = createElement(add);
