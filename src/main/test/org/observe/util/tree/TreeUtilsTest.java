@@ -110,7 +110,7 @@ public class TreeUtilsTest {
 	@Test
 	public void testTreeSet() {
 		DefaultTreeSet<Integer> set = new DefaultTreeSet<>(Integer::compareTo);
-		ObservableCollectionsTest.testSortedSet(set, s -> {
+		ObservableCollectionsTest.testCollection(set, s -> {
 			DefaultNode<Integer> root = set.getRoot();
 			if(root != null)
 				root.checkValid();

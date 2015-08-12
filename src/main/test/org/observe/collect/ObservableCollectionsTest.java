@@ -38,6 +38,8 @@ import org.observe.SimpleSettableValue;
 import org.observe.Subscription;
 import org.observe.collect.impl.ObservableArrayList;
 import org.observe.collect.impl.ObservableHashSet;
+import org.observe.collect.impl.ObservableLinkedList;
+import org.observe.collect.impl.ObservableTreeList;
 import org.observe.collect.impl.ObservableTreeSet;
 import org.observe.datastruct.ObservableMultiMap;
 import org.observe.util.ObservableUtils;
@@ -47,6 +49,242 @@ import prisms.lang.Type;
 
 /** Tests observable collections and their default implementations */
 public class ObservableCollectionsTest {
+	private static final int COLLECTION_TEST_DEPTH = 5;
+
+	private interface Checker<T> extends Consumer<T>, Transaction {
+	}
+
+	/**
+	 * Runs a barrage of tests against a collection, unobservable or not
+	 *
+	 * @param <T> The type of the collection
+	 * @param coll The collection to test
+	 * @param check An optional check to run against the collection after every modification
+	 */
+	public static <T extends Collection<Integer>> void testCollection(T coll, Consumer<? super T> check) {
+		testCollection(coll, check, 0);
+	}
+
+	private static <T extends Collection<Integer>> void testCollection(T coll, Consumer<? super T> check, int depth) {
+		if(coll instanceof ObservableCollection)
+			check = (Consumer<? super T>) testingObservableBasicCollection((ObservableCollection<Integer>) coll,
+				(Consumer<? super ObservableCollection<Integer>>) check, depth);
+
+		if(coll instanceof List)
+			testList((List<Integer>) coll, (Consumer<? super List<Integer>>) check, depth);
+		else if(coll instanceof NavigableSet)
+			testSortedSet((NavigableSet<Integer>) coll, (Consumer<? super NavigableSet<Integer>>) check);
+		else if(coll instanceof Set)
+			testSet((Set<Integer>) coll, (Consumer<? super Set<Integer>>) check);
+		else
+			testBasicCollection(coll, check);
+	}
+
+	private static <T extends ObservableCollection<Integer>> Checker<ObservableCollection<Integer>> testingObservableBasicCollection(T coll,
+		Consumer<? super T> check, int depth) {
+
+		boolean ordered = coll instanceof ObservableOrderedCollection;
+		ArrayList<Integer> synced = new ArrayList<>();
+		Subscription syncSub = sync(coll, synced);
+
+		// Quick test first
+		coll.addAll(sequence(50, null, true));
+		assertThat(coll, collectionsEqual(synced, ordered));
+		if(check != null)
+			check.accept(coll);
+		coll.clear();
+		assertThat(coll, collectionsEqual(synced, ordered));
+		if(check != null)
+			check.accept(coll);
+
+		Function<Integer, Integer> mapFn = v -> v + 1000;
+		Function<Integer, Integer> reverseMapFn = v -> v - 1000;
+		ObservableCollection<Integer> mappedOL = coll.map(null, mapFn, reverseMapFn);
+		ArrayList<Integer> mappedSynced = new ArrayList<>();
+		Subscription mappedSub = sync(mappedOL, mappedSynced);
+
+		Predicate<Integer> filterFn1 = v -> v % 3 == 0;
+		ObservableCollection<Integer> filteredOL1 = coll.filter(filterFn1);
+		ArrayList<Integer> filteredSynced1 = new ArrayList<>();
+		Subscription filteredSub1 = sync(filteredOL1, filteredSynced1);
+
+		Function<Integer, Integer> filterMap = v -> v;
+		ObservableCollection<Integer> filterMapOL = coll.filterMap(null, filterMap, filterMap, false);
+		ArrayList<Integer> filterMapSynced = new ArrayList<>();
+		Subscription filterMapSub = sync(filterMapOL, filterMapSynced);
+
+		Function<Integer, Integer> groupFn = v -> v % 3;
+		ObservableMultiMap<Integer, Integer> grouped = coll.groupBy(groupFn);
+		Map<Integer, List<Integer>> groupedSynced = new LinkedHashMap<>();
+		ObservableCollectionsTest.sync(grouped, groupedSynced, () -> new ArrayList<>());
+
+		// TODO Combined collection
+
+		return new Checker<ObservableCollection<Integer>>() {
+			@Override
+			public void accept(ObservableCollection<Integer> value) {
+				assertThat(coll, collectionsEqual(synced, ordered));
+				if(check != null)
+					check.accept(coll);
+
+				List<Integer> mappedCorrect = coll.stream().map(mapFn).collect(Collectors.toList());
+				assertThat(mappedOL, collectionsEqual(mappedCorrect, ordered));
+				assertThat(mappedSynced, collectionsEqual(mappedCorrect, ordered));
+
+				List<Integer> filteredCorrect1 = coll.stream().filter(filterFn1).collect(Collectors.toList());
+				assertThat(filteredOL1, collectionsEqual(filteredCorrect1, ordered));
+				assertThat(filteredSynced1, collectionsEqual(filteredCorrect1, ordered));
+
+				assertThat(filterMapOL, collectionsEqual(synced, ordered));
+				assertThat(filterMapSynced, collectionsEqual(synced, ordered));
+
+				Set<Integer> groupKeySet = synced.stream().map(groupFn).collect(Collectors.toSet());
+				assertThat(grouped.keySet(), collectionsEqual(groupKeySet, false));
+				assertThat(groupedSynced.keySet(), collectionsEqual(groupKeySet, false));
+				for(Integer groupKey : groupKeySet) {
+					List<Integer> values = synced.stream().filter(v -> Objects.equals(groupFn.apply(v), groupKey))
+						.collect(Collectors.toList());
+					assertThat(grouped.get(groupKey), collectionsEqual(values, ordered));
+					assertThat(groupedSynced.get(groupKey), collectionsEqual(values, ordered));
+				}
+			}
+
+			@Override
+			public void close() {
+				if(depth < COLLECTION_TEST_DEPTH) {
+					testCollection(mappedOL, this, depth + 1);
+					testCollection(filterMapOL, this, depth + 1);
+				}
+
+				// Test filter adding
+				filteredOL1.add(0);
+				assertEquals(1, filteredOL1.size());
+				accept(coll);
+
+				try {
+					filteredOL1.add(1);
+					assertTrue("Should have thrown an IllegalArgumentException", false);
+				} catch(IllegalArgumentException e) {
+				}
+				assertEquals(1, filteredOL1.size());
+				accept(coll);
+
+				filteredOL1.remove(0);
+				assertEquals(0, filteredOL1.size());
+				accept(coll);
+
+				if(coll instanceof ObservableList) {
+					ListIterator<Integer> listIter = ((List<Integer>) filteredOL1).listIterator();
+					listIter.add(0);
+					assertEquals(1, filteredOL1.size());
+					accept(coll);
+					try {
+						listIter.add(1);
+						assertTrue("Should have thrown an IllegalArgumentException", false);
+					} catch(IllegalArgumentException e) {
+					}
+					listIter.previous();
+					listIter.remove();
+					assertEquals(0, filteredOL1.size());
+					accept(coll);
+				}
+
+				syncSub.unsubscribe();
+				mappedSub.unsubscribe();
+				filteredSub1.unsubscribe();
+				filterMapSub.unsubscribe();
+			}
+		};
+	}
+
+	private static <T> Subscription sync(ObservableCollection<T> coll, List<T> synced) {
+		if(coll instanceof ObservableOrderedCollection)
+			return ((ObservableOrderedCollection<T>) coll).onOrderedElement(el -> {
+				el.subscribe(new Observer<ObservableValueEvent<T>>() {
+					@Override
+					public <V extends ObservableValueEvent<T>> void onNext(V evt) {
+						if(evt.isInitial())
+							synced.add(el.getIndex(), evt.getValue());
+						else {
+							assertEquals(evt.getOldValue(), synced.get(el.getIndex()));
+							synced.set(el.getIndex(), evt.getValue());
+						}
+					}
+
+					@Override
+					public <V extends ObservableValueEvent<T>> void onCompleted(V evt) {
+						synced.remove(el.getIndex());
+					}
+				});
+			});
+		else
+			return coll.onElement(el -> {
+				el.subscribe(new Observer<ObservableValueEvent<T>>() {
+					@Override
+					public <V extends ObservableValueEvent<T>> void onNext(V evt) {
+						if(evt.isInitial())
+							synced.add(evt.getValue());
+						else {
+							synced.remove(evt.getOldValue());
+							synced.add(evt.getValue());
+						}
+					}
+
+					@Override
+					public <V extends ObservableValueEvent<T>> void onCompleted(V evt) {
+						synced.remove(evt.getValue());
+					}
+				});
+			});
+	}
+
+	private static <K, V, C extends Collection<V>> Subscription sync(ObservableMultiMap<K, V> map, Map<K, C> synced,
+		Supplier<? extends C> collectCreator) {
+		return map.keySet().onElement(el -> el.subscribe(new Observer<ObservableValueEvent<K>>() {
+			@Override
+			public <E extends ObservableValueEvent<K>> void onNext(E event) {
+				if(!event.isInitial())
+					return;
+				C collect = collectCreator.get();
+				synced.put(event.getValue(), collect);
+				Subscription elSub = map.get(event.getValue()).onElement(el2 -> el2.subscribe(new Observer<ObservableValueEvent<V>>() {
+					@Override
+					public <E2 extends ObservableValueEvent<V>> void onNext(E2 event2) {
+						if(el2 instanceof ObservableOrderedElement && collect instanceof List) {
+							ObservableOrderedElement<V> orderedEl = (ObservableOrderedElement<V>) el2;
+							if(event2.isInitial())
+								((List<V>) collect).add(orderedEl.getIndex(), event2.getValue());
+							else
+								((List<V>) collect).set(orderedEl.getIndex(), event2.getValue());
+						} else {
+							if(event2.isInitial())
+								collect.add(event2.getValue());
+							else {
+								collect.remove(event2.getOldValue());
+								collect.add(event2.getValue());
+							}
+						}
+					}
+
+					@Override
+					public <E2 extends ObservableValueEvent<V>> void onCompleted(E2 event2) {
+						if(el2 instanceof ObservableOrderedElement && collect instanceof List) {
+							ObservableOrderedElement<V> orderedEl = (ObservableOrderedElement<V>) el2;
+							((List<V>) collect).remove(orderedEl.getIndex());
+						} else
+							collect.remove(event2.getValue());
+					}
+				}));
+				el.completed().act(evt -> elSub.unsubscribe());
+			}
+
+			@Override
+			public <E extends ObservableValueEvent<K>> void onCompleted(E event) {
+				synced.remove(event.getValue());
+			}
+		}));
+	}
+
 	/**
 	 * Runs a collection through a set of tests designed to ensure all {@link Collection} methods are functioning correctly
 	 *
@@ -55,7 +293,7 @@ public class ObservableCollectionsTest {
 	 * @param check An optional function to apply after each collection modification to ensure the structure of the collection is correct
 	 *            and potentially assert other side effects of collection modification
 	 */
-	public static <T extends Collection<Integer>> void testCollection(T coll, Consumer<? super T> check) {
+	private static <T extends Collection<Integer>> void testBasicCollection(T coll, Consumer<? super T> check) {
 		// Most basic functionality, with iterator
 		assertEquals(0, coll.size()); // Start with empty list
 		assertTrue(coll.add(0)); //Test add
@@ -125,80 +363,8 @@ public class ObservableCollectionsTest {
 		// Not testing toArray() methods. These are pretty simple, but should probably put those in some time.
 	}
 
-	private static <T> Matcher<Collection<T>> contains(T value) {
-		return new org.hamcrest.BaseMatcher<Collection<T>>() {
-			@Override
-			public boolean matches(Object arg0) {
-				return ((Collection<T>) arg0).contains(value);
-			}
-
-			@Override
-			public void describeTo(Description arg0) {
-				arg0.appendText("collection contains ").appendValue(value);
-			}
-		};
-	}
-
-	private static <T> Matcher<Collection<T>> containsAll(T... values) {
-		return containsAll(asList(values));
-	}
-
-	private static <T> Matcher<Collection<T>> containsAll(Collection<T> values) {
-		return new org.hamcrest.BaseMatcher<Collection<T>>() {
-			@Override
-			public boolean matches(Object arg0) {
-				return ((Collection<T>) arg0).containsAll(values);
-			}
-
-			@Override
-			public void describeTo(Description arg0) {
-				arg0.appendText("collection contains all of ").appendValue(values);
-			}
-		};
-	}
-
-	private static <T> Collection<T> sequence(int num, Function<Integer, T> map, boolean scramble) {
-		ArrayList<T> ret = new ArrayList<>();
-		for(int i = 0; i < num; i++)
-			ret.add(null);
-		for(int i = 0; i < num; i++) {
-			T value;
-			if(map != null)
-				value = map.apply(i);
-			else
-				value = (T) (Integer) i;
-			int index = i;
-			if(scramble) {
-				switch (i % 3) {
-				case 0:
-					index = i;
-					break;
-				case 1:
-					index = i + 3;
-					if(index >= num)
-						index = 1;
-					break;
-				default:
-					index = ((num / 3) - (i / 3) - 1) * 3 + 2;
-					break;
-				}
-			}
-			ret.set(index, value);
-		}
-
-		return Collections.unmodifiableCollection(ret);
-	}
-
-	/**
-	 * Runs a set through a set of tests designed to ensure all {@link Set} methods are functioning correctly
-	 *
-	 * @param <T> The type of the set
-	 * @param set The set to test
-	 * @param check An optional function to apply after each collection modification to ensure the structure of the collection is correct
-	 *            and potentially assert other side effects of collection modification
-	 */
-	public static <T extends Set<Integer>> void testSet(T set, Consumer<? super T> check) {
-		testCollection(set, check);
+	private static <T extends Set<Integer>> void testSet(T set, Consumer<? super T> check) {
+		testBasicCollection(set, check);
 
 		assertTrue(set.add(0));
 		assertEquals(1, set.size());
@@ -222,15 +388,7 @@ public class ObservableCollectionsTest {
 			check.accept(set);
 	}
 
-	/**
-	 * Runs a sorted set through a set of tests designed to ensure all {@link NavigableSet} methods are functioning correctly
-	 *
-	 * @param <T> The type of the set
-	 * @param set The set to test
-	 * @param check An optional function to apply after each collection modification to ensure the structure of the collection is correct
-	 *            and potentially assert other side effects of collection modification
-	 */
-	public static <T extends NavigableSet<Integer>> void testSortedSet(T set, Consumer<? super T> check) {
+	private static <T extends NavigableSet<Integer>> void testSortedSet(T set, Consumer<? super T> check) {
 		testSet(set, coll -> {
 			Comparator<? super Integer> comp = set.comparator();
 			Integer last = null;
@@ -292,44 +450,31 @@ public class ObservableCollectionsTest {
 		NavigableSet<Integer> subSet = (NavigableSet<Integer>) set.headSet(30);
 		NavigableSet<Integer> copySubSet = (NavigableSet<Integer>) copy.headSet(30);
 		assertThat(subSet, equalTo(copySubSet));
-		testSubSet(subSet, null, true, 30, false, ssListener);
+		testUnobservableSubSet(subSet, null, true, 30, false, ssListener);
 
 		subSet = set.headSet(30, true);
 		copySubSet = copy.headSet(30, true);
 		assertThat(subSet, equalTo(copySubSet));
-		testSubSet(subSet, null, true, 30, true, ssListener);
+		testUnobservableSubSet(subSet, null, true, 30, true, ssListener);
 
 		subSet = (NavigableSet<Integer>) set.tailSet(30);
 		copySubSet = (NavigableSet<Integer>) copy.tailSet(30);
 		assertThat(subSet, equalTo(copySubSet));
-		testSubSet(subSet, 30, true, null, true, ssListener);
+		testUnobservableSubSet(subSet, 30, true, null, true, ssListener);
 
 		subSet = set.tailSet(30, false);
 		copySubSet = copy.tailSet(30, false);
 		assertThat(subSet, equalTo(copySubSet));
-		testSubSet(set.tailSet(30, false), 30, false, null, true, ssListener);
+		testUnobservableSubSet(set.tailSet(30, false), 30, false, null, true, ssListener);
 
 		subSet = (NavigableSet<Integer>) set.subSet(15, 45);
 		copySubSet = (NavigableSet<Integer>) copy.subSet(15, 45);
 		assertThat(subSet, equalTo(copySubSet));
-		testSubSet(subSet, 15, true, 45, false, ssListener);
+		testUnobservableSubSet(subSet, 15, true, 45, false, ssListener);
 	}
 
-	private static <T> Matcher<T> greaterThanOrEqual(T value, Comparator<? super T> comp) {
-		return new org.hamcrest.BaseMatcher<T>() {
-			@Override
-			public boolean matches(Object arg0) {
-				return comp.compare((T) arg0, value) >= 1;
-			}
-
-			@Override
-			public void describeTo(Description arg0) {
-				arg0.appendText("value is not greater than " + value);
-			}
-		};
-	}
-
-	private static void testSubSet(NavigableSet<Integer> subSet, Integer min, boolean minInclude, Integer max, boolean maxInclude,
+	private static void testUnobservableSubSet(NavigableSet<Integer> subSet, Integer min, boolean minInclude, Integer max,
+		boolean maxInclude,
 		Consumer<? super NavigableSet<Integer>> check) {
 		int startSize = subSet.size();
 		if(min != null) {
@@ -375,19 +520,8 @@ public class ObservableCollectionsTest {
 		check.accept(subSet);
 	}
 
-	private static final int SUBLIST_TEST_DEPTH = 3;
-
-	/**
-	 * Runs a list through a set of tests designed to ensure all {@link List} methods are functioning correctly
-	 *
-	 * @param <T> The type of the list
-	 * @param list The list to test
-	 * @param check An optional function to apply after each collection modification to ensure the structure of the collection is correct
-	 *            and potentially assert other side effects of collection modification
-	 * @param depth 0 unless called internally to the method (recursively)
-	 */
-	public static <T extends List<Integer>> void testList(T list, Consumer<? super T> check, int depth) {
-		testCollection(list, check);
+	private static <T extends List<Integer>> void testList(T list, Consumer<? super T> check, int depth) {
+		testBasicCollection(list, check);
 
 		assertTrue(list.addAll(sequence(10, null, false)));
 		assertEquals(10, list.size());
@@ -559,7 +693,7 @@ public class ObservableCollectionsTest {
 		list.clear();
 		if(check != null)
 			check.accept(list);
-		if(depth + 1 < SUBLIST_TEST_DEPTH) {
+		if(depth + 1 < COLLECTION_TEST_DEPTH) {
 			// Test subList
 			list.addAll(sequence(30, null, false));
 			if(check != null)
@@ -599,7 +733,7 @@ public class ObservableCollectionsTest {
 			if(check != null)
 				check.accept(list);
 
-			testList(subList, sl -> {
+			testCollection(subList, sl -> {
 				assertEquals(list.size(), 25 + sl.size());
 				for(int j = 0; j < list.size(); j++) {
 					if(j < subIndex)
@@ -619,235 +753,141 @@ public class ObservableCollectionsTest {
 			check.accept(list);
 	}
 
-	/**
-	 * Runs a set of tests on an observable set
-	 *
-	 * @param <T> The type of elements in the set
-	 * @param set The set to test
-	 * @param check An optional function to apply after each collection modification to ensure the structure of the collection is correct
-	 *            and potentially assert other side effects of collection modification
-	 */
-	public static <T extends ObservableSet<Integer>> void testObservableSet(T set, Consumer<? super T> check) {
-		testSet(set, check);
-		// TODO
-	}
+	private static <T> Matcher<Collection<T>> contains(T value) {
+		return new org.hamcrest.BaseMatcher<Collection<T>>() {
+			@Override
+			public boolean matches(Object arg0) {
+				return ((Collection<T>) arg0).contains(value);
+			}
 
-	/**
-	 * Runs a set of tests on an observable set
-	 *
-	 * @param <T> The type of elements in the set
-	 * @param set The set to test
-	 * @param check An optional function to apply after each collection modification to ensure the structure of the collection is correct
-	 *            and potentially assert other side effects of collection modification
-	 */
-	public static <T extends ObservableSortedSet<Integer>> void testObservableSortedSet(T set, Consumer<? super T> check) {
-		testObservableSet(set, check);
-		testSortedSet(set, check);
-
-		// TODO
-	}
-
-	/**
-	 * Runs a set of tests on an observable list
-	 *
-	 * @param <T> The type of elements in the list
-	 * @param list The list to test
-	 * @param check An optional function to apply after each collection modification to ensure the structure of the collection is correct
-	 *            and potentially assert other side effects of collection modification
-	 */
-	public static <T extends ObservableList<Integer>> void testObservableList(T list, Consumer<? super T> check) {
-		list.addAll(sequence(50, null, true));
-		if(check != null)
-			check.accept(list);
-		ArrayList<Integer> synced = new ArrayList<>();
-		Subscription listSub = sync(list, synced);
-		assertThat(synced, equalTo(list));
-		list.clear();
-		assertThat(synced, equalTo(list));
-		if(check != null)
-			check.accept(list);
-
-		Function<Integer, Integer> mapFn = v -> v + 1000;
-		Function<Integer, Integer> reverseMapFn = v -> v - 1000;
-		ObservableList<Integer> mappedOL = list.map(null, mapFn, reverseMapFn);
-		ArrayList<Integer> mappedSynced = new ArrayList<>();
-		Subscription mappedSub = sync(mappedOL, mappedSynced);
-
-		Predicate<Integer> filterFn1 = v -> v % 3 == 0;
-		ObservableList<Integer> filteredOL1 = list.filter(filterFn1);
-		ArrayList<Integer> filteredSynced1 = new ArrayList<>();
-		Subscription filteredSub1 = sync(filteredOL1, filteredSynced1);
-
-		Function<Integer, Integer> filterMap = v -> v;
-		ObservableList<Integer> filterMapOL = list.filterMap(null, filterMap, filterMap, false);
-		ArrayList<Integer> filterMapSynced = new ArrayList<>();
-		Subscription filterMapSub = sync(filterMapOL, filterMapSynced);
-
-		Function<Integer, Integer> groupFn = v -> v % 3;
-		ObservableMultiMap<Integer, Integer> grouped = list.groupBy(groupFn);
-		Map<Integer, List<Integer>> groupedSynced = new LinkedHashMap<>();
-		ObservableCollectionsTest.sync(grouped, groupedSynced, () -> new ArrayList<>());
-
-		// TODO Test combination list
-
-		Consumer<ObservableList<Integer>> newCheck = l -> {
-			assertThat(synced, equalTo(list));
-			if(check != null)
-				check.accept(list);
-
-			List<Integer> mappedCorrect = list.stream().map(mapFn).collect(Collectors.toList());
-			assertThat(mappedCorrect, equalTo(mappedOL));
-			assertThat(mappedCorrect, equalTo(mappedSynced));
-
-			List<Integer> filteredCorrect1 = list.stream().filter(filterFn1).collect(Collectors.toList());
-			assertThat(filteredCorrect1, equalTo(filteredOL1));
-			assertThat(filteredCorrect1, equalTo(filteredSynced1));
-
-			assertThat(synced, equalTo(filterMapOL));
-			assertThat(synced, equalTo(filterMapSynced));
-
-			Set<Integer> groupKeySet = synced.stream().map(groupFn).collect(Collectors.toSet());
-			assertThat(groupKeySet, equalTo(grouped.keySet()));
-			assertThat(groupKeySet, equalTo(groupedSynced.keySet()));
-			for(Integer groupKey : groupKeySet) {
-				List<Integer> values = synced.stream().filter(v -> Objects.equals(groupFn.apply(v), groupKey)).collect(Collectors.toList());
-				assertThat(values, equalTo(grouped.get(groupKey)));
-				assertThat(values, equalTo(groupedSynced.get(groupKey)));
+			@Override
+			public void describeTo(Description arg0) {
+				arg0.appendText("collection contains ").appendValue(value);
 			}
 		};
+	}
 
-		try {
-			testList(list, newCheck, 0);
+	private static <T> Matcher<Collection<T>> containsAll(T... values) {
+		return containsAll(asList(values));
+	}
 
-			testList(mappedOL, newCheck, 0);
-			testList(filterMapOL, newCheck, 0);
-
-			// Test filter adding
-			filteredOL1.add(0);
-			assertEquals(1, filteredOL1.size());
-			newCheck.accept(list);
-
-			try {
-				filteredOL1.add(1);
-				assertTrue("Should have thrown an IllegalArgumentException", false);
-			} catch(IllegalArgumentException e) {
+	private static <T> Matcher<Collection<T>> containsAll(Collection<T> values) {
+		return new org.hamcrest.BaseMatcher<Collection<T>>() {
+			@Override
+			public boolean matches(Object arg0) {
+				return ((Collection<T>) arg0).containsAll(values);
 			}
-			assertEquals(1, filteredOL1.size());
-			newCheck.accept(list);
 
-			filteredOL1.remove(0);
-			assertEquals(0, filteredOL1.size());
-			newCheck.accept(list);
-
-			ListIterator<Integer> listIter = filteredOL1.listIterator();
-			listIter.add(0);
-			assertEquals(1, filteredOL1.size());
-			newCheck.accept(list);
-			try {
-				listIter.add(1);
-				assertTrue("Should have thrown an IllegalArgumentException", false);
-			} catch(IllegalArgumentException e) {
+			@Override
+			public void describeTo(Description arg0) {
+				arg0.appendText("collection contains all of ").appendValue(values);
 			}
-			listIter.previous();
-			listIter.remove();
-			assertEquals(0, filteredOL1.size());
-			newCheck.accept(list);
+		};
+	}
 
-			// TODO Test observable sub-lists
-		} finally {
-			mappedSub.unsubscribe();
-			listSub.unsubscribe();
-			filteredSub1.unsubscribe();
-			filterMapSub.unsubscribe();
+	private static <T> Matcher<Collection<T>> collectionsEqual(Collection<T> values, boolean ordered) {
+		return new org.hamcrest.BaseMatcher<Collection<T>>() {
+			@Override
+			public boolean matches(Object arg0) {
+				Collection<T> arg = (Collection<T>) arg0;
+				if(arg.size() != values.size())
+					return false;
+				if(ordered) {
+					// Must be equivalent
+					Iterator<T> vIter = values.iterator();
+					Iterator<T> aIter = arg.iterator();
+					while(vIter.hasNext() && aIter.hasNext())
+						if(!Objects.equals(vIter.next(), aIter.next()))
+							return false;
+					if(vIter.hasNext() || aIter.hasNext())
+						return false;
+					return true;
+				} else {
+					return values.containsAll(arg);
+				}
+			}
+
+			@Override
+			public void describeTo(Description arg0) {
+				arg0.appendText("collection equivalent to ").appendValue(values);
+			}
+		};
+	}
+
+	private static <T> Collection<T> sequence(int num, Function<Integer, T> map, boolean scramble) {
+		ArrayList<T> ret = new ArrayList<>();
+		for(int i = 0; i < num; i++)
+			ret.add(null);
+		for(int i = 0; i < num; i++) {
+			T value;
+			if(map != null)
+				value = map.apply(i);
+			else
+				value = (T) (Integer) i;
+			int index = i;
+			if(scramble) {
+				switch (i % 3) {
+				case 0:
+					index = i;
+					break;
+				case 1:
+					index = i + 3;
+					if(index >= num)
+						index = 1;
+					break;
+				default:
+					index = ((num / 3) - (i / 3) - 1) * 3 + 2;
+					break;
+				}
+			}
+			ret.set(index, value);
 		}
 
-		// TODO Call testObservableList from the other applicable tests
+		return Collections.unmodifiableCollection(ret);
 	}
 
-	private static <T> Subscription sync(ObservableOrderedCollection<T> list, List<T> synced) {
-		return list.onOrderedElement(el -> {
-			el.subscribe(new Observer<ObservableValueEvent<T>>() {
-				@Override
-				public <V extends ObservableValueEvent<T>> void onNext(V evt) {
-					if(evt.isInitial())
-						synced.add(el.getIndex(), evt.getValue());
-					else {
-						assertEquals(evt.getOldValue(), synced.get(el.getIndex()));
-						synced.set(el.getIndex(), evt.getValue());
-					}
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<T>> void onCompleted(V evt) {
-					synced.remove(el.getIndex());
-				}
-			});
-		});
-	}
-
-	private static <K, V, C extends Collection<V>> Subscription sync(ObservableMultiMap<K, V> map, Map<K, C> synced,
-		Supplier<? extends C> collectCreator) {
-		return map.keySet().onElement(el -> el.subscribe(new Observer<ObservableValueEvent<K>>() {
+	private static <T> Matcher<T> greaterThanOrEqual(T value, Comparator<? super T> comp) {
+		return new org.hamcrest.BaseMatcher<T>() {
 			@Override
-			public <E extends ObservableValueEvent<K>> void onNext(E event) {
-				if(!event.isInitial())
-					return;
-				C collect = collectCreator.get();
-				synced.put(event.getValue(), collect);
-				Subscription elSub = map.get(event.getValue()).onElement(el2 -> el2.subscribe(new Observer<ObservableValueEvent<V>>() {
-					@Override
-					public <E2 extends ObservableValueEvent<V>> void onNext(E2 event2) {
-						if(el2 instanceof ObservableOrderedElement && collect instanceof List) {
-							ObservableOrderedElement<V> orderedEl = (ObservableOrderedElement<V>) el2;
-							if(event2.isInitial())
-								((List<V>) collect).add(orderedEl.getIndex(), event2.getValue());
-							else
-								((List<V>) collect).set(orderedEl.getIndex(), event2.getValue());
-						} else {
-							if(event2.isInitial())
-								collect.add(event2.getValue());
-							else {
-								collect.remove(event2.getOldValue());
-								collect.add(event2.getValue());
-							}
-						}
-					}
-
-					@Override
-					public <E2 extends ObservableValueEvent<V>> void onCompleted(E2 event2) {
-						if(el2 instanceof ObservableOrderedElement && collect instanceof List) {
-							ObservableOrderedElement<V> orderedEl = (ObservableOrderedElement<V>) el2;
-							((List<V>) collect).remove(orderedEl.getIndex());
-						} else
-							collect.remove(event2.getValue());
-					}
-				}));
-				el.completed().act(evt -> elSub.unsubscribe());
+			public boolean matches(Object arg0) {
+				return comp.compare((T) arg0, value) >= 1;
 			}
 
 			@Override
-			public <E extends ObservableValueEvent<K>> void onCompleted(E event) {
-				synced.remove(event.getValue());
+			public void describeTo(Description arg0) {
+				arg0.appendText("value is not greater than " + value);
 			}
-		}));
+		};
 	}
 
-	/** Runs a barrage of tests ({@link #testObservableList(ObservableList, Consumer)}) on {@link ObservableArrayList} */
+	/** Runs a barrage of tests on {@link ObservableArrayList} */
 	@Test
 	public void testObservableArrayList() {
-		testObservableList(new ObservableArrayList<>(new Type(Integer.class)), null);
+		testCollection(new ObservableArrayList<>(new Type(Integer.class)), null, 0);
 	}
 
-	/** Runs a barrage of tests ({@link #testObservableSortedSet(ObservableSortedSet, Consumer)}) on {@link ObservableTreeSet} */
+	/** Runs a barrage of tests on {@link ObservableLinkedList} */
 	@Test
-	public void testObservableTreeSet() {
-		testObservableSortedSet(new ObservableTreeSet<>(new Type(Integer.class), Integer::compareTo), null);
+	public void testObservableLinkedList() {
+		testCollection(new ObservableLinkedList<>(new Type(Integer.class)), null, 0);
 	}
 
-	/** Runs a barrage of tests ({@link #testObservableSet(ObservableSet, Consumer)}) on {@link ObservableHashSet} */
+	/** Runs a barrage of tests on {@link ObservableTreeList} */
+	@Test
+	public void testObservableTreeList() {
+		testCollection(new ObservableTreeList<>(new Type(Integer.class)), null, 0);
+	}
+
+	/** Runs a barrage of tests on {@link ObservableHashSet} */
 	@Test
 	public void testObservableHashSet() {
-		testObservableSet(new ObservableHashSet<>(new Type(Integer.class)), null);
+		testCollection(new ObservableHashSet<>(new Type(Integer.class)), null);
+	}
+
+	/** Runs a barrage of tests on {@link ObservableTreeSet} */
+	@Test
+	public void testObservableTreeSet() {
+		testCollection(new ObservableTreeSet<>(new Type(Integer.class), Integer::compareTo), null);
 	}
 
 	// Older, more specific tests

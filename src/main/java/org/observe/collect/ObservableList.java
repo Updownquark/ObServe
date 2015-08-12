@@ -77,6 +77,39 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		return ObservableReversibleCollection.super.lastIndexOf(o);
 	}
 
+	/**
+	 * Removes from this list all of the elements whose index is between {@code fromIndex}, inclusive, and {@code toIndex}, exclusive.
+	 * Shifts any succeeding elements to the left (reduces their index). This call shortens the list by {@code (toIndex - fromIndex)}
+	 * elements. (If {@code toIndex==fromIndex}, this operation has no effect.)
+	 *
+	 * <p>
+	 * This method is called by the {@code clear} operation on this list and its subLists. Overriding this method to take advantage of the
+	 * internals of the list implementation can <i>substantially</i> improve the performance of the {@code clear} operation on this list and
+	 * its subLists.
+	 *
+	 * <p>
+	 * This implementation gets a list iterator positioned before {@code fromIndex}, and repeatedly calls {@code ListIterator.next} followed
+	 * by {@code ListIterator.remove} until the entire range has been removed. <b>Note: if {@code ListIterator.remove} requires linear time,
+	 * this implementation requires quadratic time.</b>
+	 *
+	 * @param fromIndex index of first element to be removed
+	 * @param toIndex index after last element to be removed
+	 */
+	default void removeRange(int fromIndex, int toIndex) {
+		try (Transaction t = lock(true, null)) {
+			ListIterator<E> it = listIterator(fromIndex);
+			for(int i = 0, n = toIndex - fromIndex; i < n; i++) {
+				it.next();
+				it.remove();
+			}
+		}
+	}
+
+	@Override
+	default void clear() {
+		removeRange(0, size());
+	}
+
 	@Override
 	default ListIterator<E> listIterator() {
 		return listIterator(0);
@@ -761,14 +794,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 		@Override
 		default boolean addAll(Collection<? extends E> c) {
-			try (Transaction t = lock(true, null)) {
-				boolean modified = false;
-				for(E e : c) {
-					add(e);
-					modified = true;
-				}
-				return modified;
-			}
+			return addAll(size(), c);
 		}
 
 		@Override
@@ -788,34 +814,6 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		@Override
 		default Iterator<E> iterator() {
 			return listIterator();
-		}
-
-		/**
-		 * Removes from this list all of the elements whose index is between {@code fromIndex}, inclusive, and {@code toIndex}, exclusive.
-		 * Shifts any succeeding elements to the left (reduces their index). This call shortens the list by {@code (toIndex - fromIndex)}
-		 * elements. (If {@code toIndex==fromIndex}, this operation has no effect.)
-		 *
-		 * <p>
-		 * This method is called by the {@code clear} operation on this list and its subLists. Overriding this method to take advantage of
-		 * the internals of the list implementation can <i>substantially</i> improve the performance of the {@code clear} operation on this
-		 * list and its subLists.
-		 *
-		 * <p>
-		 * This implementation gets a list iterator positioned before {@code fromIndex}, and repeatedly calls {@code ListIterator.next}
-		 * followed by {@code ListIterator.remove} until the entire range has been removed. <b>Note: if {@code ListIterator.remove} requires
-		 * linear time, this implementation requires quadratic time.</b>
-		 *
-		 * @param fromIndex index of first element to be removed
-		 * @param toIndex index after last element to be removed
-		 */
-		default void removeRange(int fromIndex, int toIndex) {
-			try (Transaction t = lock(true, null)) {
-				ListIterator<E> it = listIterator(fromIndex);
-				for(int i = 0, n = toIndex - fromIndex; i < n; i++) {
-					it.next();
-					it.remove();
-				}
-			}
 		}
 	}
 
@@ -901,6 +899,20 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		}
 
 		@Override
+		public boolean addAll(int index, Collection<? extends E> c) {
+			try (Transaction t = theList.lock(true, null)) {
+				int preSize = theList.size();
+				theList.addAll(theOffset + index, c);
+				int sizeDiff = theList.size() - preSize;
+				if(sizeDiff > 0) {
+					theSize += sizeDiff;
+					return true;
+				}
+				return false;
+			}
+		}
+
+		@Override
 		public void add(int index, E value) {
 			try (Transaction t = theList.lock(true, null)) {
 				if(index < 0 || index > theSize)
@@ -935,9 +947,12 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 		@Override
 		public void removeRange(int fromIndex, int toIndex) {
-			for(int i = toIndex - 1; i >= fromIndex; i--)
-				theList.remove(theOffset + i);
-			theSize -= (toIndex - fromIndex);
+			try (Transaction t = theList.lock(true, null)) {
+				int preSize = theList.size();
+				theList.removeRange(fromIndex + theOffset, toIndex + theOffset);
+				int sizeDiff = theList.size() - preSize;
+				theSize += sizeDiff;
+			}
 		}
 
 		@Override
