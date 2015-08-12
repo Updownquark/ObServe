@@ -5,6 +5,7 @@ import static org.observe.ObservableDebug.d;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -16,7 +17,7 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
-import org.observe.util.ObservableUtils;
+import org.observe.datastruct.MultiMap;
 import org.observe.util.Transaction;
 
 import prisms.lang.Type;
@@ -266,20 +267,18 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	 */
 	public static <T> ObservableSet<T> unique(ObservableCollection<T> coll) {
 		class UniqueFilteredElement implements ObservableElement<T> {
-			private ObservableElement<T> theWrappedElement;
+			private ObservableElement<T> theElement;
 
-			private Set<UniqueFilteredElement> theElements;
+			private java.util.concurrent.ConcurrentLinkedQueue<Observer<? super ObservableValueEvent<T>>> theObservers;
 
-			private boolean isIncluded;
-
-			UniqueFilteredElement(ObservableElement<T> wrapped, Set<UniqueFilteredElement> elements) {
-				theWrappedElement = wrapped;
-				theElements = elements;
+			UniqueFilteredElement(ObservableElement<T> element) {
+				theElement = element;
+				theObservers = new java.util.concurrent.ConcurrentLinkedQueue<>();
 			}
 
 			@Override
 			public ObservableValue<T> persistent() {
-				return theWrappedElement.persistent();
+				return theElement.persistent();
 			}
 
 			@Override
@@ -289,69 +288,49 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 
 			@Override
 			public T get() {
-				return theWrappedElement.get();
-			}
-
-			boolean isIncluded() {
-				return isIncluded;
-			}
-
-			boolean shouldBeIncluded(T value) {
-				for(UniqueFilteredElement el : theElements)
-					if(el != this && el.isIncluded && Objects.equals(el.get(), value))
-						return false;
-				return true;
+				return theElement.get();
 			}
 
 			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer2) {
-				Subscription [] innerSub = new Subscription[1];
-				innerSub[0] = theWrappedElement.subscribe(new Observer<ObservableValueEvent<T>>() {
-					@Override
-					public <V2 extends ObservableValueEvent<T>> void onNext(V2 elValue) {
-						boolean shouldBe = shouldBeIncluded(elValue.getValue());
-						if(isIncluded && !shouldBe) {
-							isIncluded = false;
-							observer2.onCompleted(ObservableUtils.wrap(elValue, UniqueFilteredElement.this));
-							if(innerSub[0] != null) {
-								innerSub[0].unsubscribe();
-								innerSub[0] = null;
-							}
-						} else if(!isIncluded && shouldBe) {
-							isIncluded = true;
-							observer2.onNext(createInitialEvent(elValue.getValue()));
-						}
-					}
+				theObservers.add(observer2);
+				observer2.onNext(createInitialEvent(theElement.get()));
+				return () -> theObservers.remove(observer2);
+			}
 
-					@Override
-					public <V2 extends ObservableValueEvent<T>> void onCompleted(V2 elValue) {
-						T oldVal, newVal;
-						if(elValue != null) {
-							oldVal = elValue.getOldValue();
-							newVal = elValue.getValue();
-						} else {
-							oldVal = get();
-							newVal = oldVal;
-						}
-						if(isIncluded)
-							observer2.onCompleted(UniqueFilteredElement.this.createChangeEvent(oldVal, newVal, elValue));
-					}
-				});
-				if(!isIncluded) {
-					return () -> {
-					};
-				}
-				return innerSub[0];
+			void valueChanged(ObservableValueEvent<T> event) {
+				ObservableValueEvent<T> wrapped = org.observe.util.ObservableUtils.wrap(event, this);
+				theObservers.forEach(observer -> observer.onNext(wrapped));
+			}
+
+			void setElement(ObservableElement<T> element, ObservableValueEvent<T> cause) {
+				if(theElement == element)
+					return;
+				ObservableValueEvent<T> event = createChangeEvent(theElement.get(), cause.getValue(), cause);
+				theElement = element;
+				theObservers.forEach(observer -> observer.onNext(event));
+			}
+
+			void remove(ObservableValueEvent<T> cause) {
+				ObservableValueEvent<T> event = createChangeEvent(cause.getOldValue(), cause.getOldValue(), cause);
+				theObservers.forEach(observer -> observer.onCompleted(event));
+				theElement = null;
+				theObservers.clear();
 			}
 
 			@Override
 			public String toString() {
-				return "filter(" + theWrappedElement + ")";
+				return "unique(" + coll + "): " + get();
+			}
+		}
+		class UniqueElementCollection extends java.util.ArrayList<ObservableElement<T>> {
+			final UniqueFilteredElement theUniqueElement;
+
+			UniqueElementCollection(ObservableElement<T> element) {
+				theUniqueElement = new UniqueFilteredElement(element);
 			}
 		}
 		class UniqueSet implements PartialSetImpl<T> {
-			private java.util.concurrent.ConcurrentHashMap<UniqueFilteredElement, Object> theElements = new java.util.concurrent.ConcurrentHashMap<>();
-
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
 				return coll.getSession();
@@ -412,31 +391,62 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 
 			@Override
 			public Subscription onElement(Consumer<? super ObservableElement<T>> observer) {
+				ObservableElement<T> [] newElement = new ObservableElement[1];
+				MultiMap<T, ObservableElement<T>> elements = new org.observe.datastruct.impl.HashMultiMap<>(false,
+					() ->{
+						return d().debug(new UniqueElementCollection(newElement[0])).from("element", this).get();
+					});
+
 				return coll.onElement(element -> {
-					UniqueFilteredElement retElement = d().debug(new UniqueFilteredElement(element, theElements.keySet()))
-						.from("element", this).tag("wrapped", element).get();
-					theElements.put(retElement, 0);
 					element.subscribe(new Observer<ObservableValueEvent<T>>() {
 						@Override
 						public <V2 extends ObservableValueEvent<T>> void onNext(V2 elValue) {
-							if(!retElement.isIncluded() && retElement.shouldBeIncluded(elValue.getValue())) {
-								observer.accept(retElement);
+							if(elValue.isInitial()){
+								addFor(elValue);
+							} else if(!Objects.equals(elValue.getOldValue(), elValue.getValue())) {
+								removeFor(elValue, elValue.getOldValue());
+								addFor(elValue);
+							} else if(elValue.getOldValue() != elValue.getValue()) {
+								UniqueElementCollection elColl = (UniqueElementCollection) elements.get(elValue.getValue());
+								if(!elColl.isEmpty() && elColl.get(0) == element)
+									elColl.theUniqueElement.valueChanged(elValue);
 							}
 						}
 
 						@Override
 						public <V2 extends ObservableValueEvent<T>> void onCompleted(V2 elValue) {
-							theElements.remove(retElement);
-							if(retElement.isIncluded()) {
-								for(UniqueFilteredElement el2 : theElements.keySet()) {
-									if(el2 == retElement)
-										continue;
-									if(!el2.isIncluded() && Objects.equals(el2.get(), elValue.getOldValue())) {
-										observer.accept(el2);
-										break;
-									}
-								}
+							removeFor(elValue, elValue.getValue());
+						}
+
+						private void addFor(ObservableValueEvent<T> elValue) {
+							newElement[0] = element;
+							elements.add(elValue.getValue(), element);
+							newElement[0] = null;
+							UniqueElementCollection elColl = (UniqueElementCollection) elements.get(elValue.getValue());
+							if(elColl.size() == 1)
+								observer.accept(elColl.theUniqueElement);
+							else {
+								if(coll instanceof ObservableOrderedCollection)
+									sortOrdered(elColl);
+								elColl.theUniqueElement.setElement(elColl.get(0), elValue);
 							}
+						}
+
+						private void removeFor(ObservableValueEvent<T> elValue, T oldValue) {
+							UniqueElementCollection elColl = (UniqueElementCollection) elements.get(elValue.getOldValue());
+							elements.remove(elValue.getOldValue(), element);
+							if(elColl.isEmpty()) {
+								elColl.theUniqueElement.remove(elValue);
+							} else {
+								if(coll instanceof ObservableOrderedCollection)
+									sortOrdered(elColl);
+								elColl.theUniqueElement.setElement(elColl.get(0), elValue);
+							}
+						}
+
+						private void sortOrdered(List<? extends ObservableElement<?>> elementList) {
+							java.util.Collections.sort(elementList, (el1, el2) -> ((ObservableOrderedElement<?>) el1).getIndex()
+								- ((ObservableOrderedElement<?>) el2).getIndex());
 						}
 					});
 				});
