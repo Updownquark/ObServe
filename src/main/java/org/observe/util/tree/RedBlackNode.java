@@ -376,6 +376,8 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 	/** A new implementation of balancing, which causes errors if not called from {@link #add(RedBlackNode, boolean)} on the root. */
 	private static final boolean SPECIAL_BALANCING = false;
 
+	static boolean DEBUG_PRINT = false;
+
 	/**
 	 * Adds a new node into this structure, rebalancing if necessary
 	 *
@@ -506,18 +508,21 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 			boolean parentLeft = x.getParent().getSide();
 			RedBlackNode y = x.getParent().getSibling();
 			if(y != null && y.isRed()) {
-				System.out.println("Case 1");
+				if(DEBUG_PRINT)
+					System.out.println("Case 1");
 				x.getParent().setRed(false);
 				y.setRed(false);
 				x.getParent().getParent().setRed(true);
 				x = x.getParent().getParent();
 			} else {
 				if(parentLeft != x.getSide()) {
-					System.out.println("Case 2, rotate " + (parentLeft ? "left" : "right"));
+					if(DEBUG_PRINT)
+						System.out.println("Case 2, rotate " + (parentLeft ? "left" : "right"));
 					x = x.getParent();
 					x.rotate(parentLeft);
 				}
-				System.out.println("Case 3, rotate " + (parentLeft ? "right" : "left"));
+				if(DEBUG_PRINT)
+					System.out.println("Case 3, rotate " + (parentLeft ? "right" : "left"));
 				x.getParent().setRed(false);
 				x.getParent().getParent().setRed(true);
 				x.getParent().getParent().rotate(!parentLeft);

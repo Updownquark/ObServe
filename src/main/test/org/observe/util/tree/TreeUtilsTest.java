@@ -11,6 +11,7 @@ import org.observe.util.tree.RedBlackNode.ValuedRedBlackNode;
 
 /** Runs tests on the red-black tree structures behind the ObServe tree collections */
 public class TreeUtilsTest {
+	private static boolean PRINT = false;
 	/**
 	 * A testing method. Adds sequential nodes into a tree and removes them, checking validity of the tree at each step.
 	 *
@@ -19,29 +20,39 @@ public class TreeUtilsTest {
 	 * @param nodes The sequence of nodes to add to the tree. Must repeat.
 	 */
 	public static <T> void test(ValuedRedBlackNode<T> tree, Iterable<T> nodes) {
+		RedBlackNode.DEBUG_PRINT = PRINT;
 		Iterator<T> iter = nodes.iterator();
 		iter.next(); // Skip the first value, assuming that's what's in the tree
-		System.out.println(RedBlackNode.print(tree));
-		System.out.println(" ---- ");
-		while(iter.hasNext()) {
-			T value = iter.next();
-			System.out.println("Adding " + value);
-			tree = (ValuedRedBlackNode<T>) tree.add(value, false).getNewRoot();
+		if(PRINT) {
 			System.out.println(RedBlackNode.print(tree));
-			tree.checkValid();
 			System.out.println(" ---- ");
 		}
-		System.out.println(" ---- \n ---- \nDeleting:");
+		while(iter.hasNext()) {
+			T value = iter.next();
+			if(PRINT)
+				System.out.println("Adding " + value);
+			tree = (ValuedRedBlackNode<T>) tree.add(value, false).getNewRoot();
+			if(PRINT)
+				System.out.println(RedBlackNode.print(tree));
+			tree.checkValid();
+			if(PRINT)
+				System.out.println(" ---- ");
+		}
+		if(PRINT)
+			System.out.println(" ---- \n ---- \nDeleting:");
 
 		iter = nodes.iterator();
 		while(iter.hasNext()) {
 			T value = iter.next();
-			System.out.println("Deleting " + value);
+			if(PRINT)
+				System.out.println("Deleting " + value);
 			tree = (ValuedRedBlackNode<T>) tree.findValue(value).delete();
-			System.out.println(RedBlackNode.print(tree));
+			if(PRINT)
+				System.out.println(RedBlackNode.print(tree));
 			if(tree != null)
 				tree.checkValid();
-			System.out.println(" ---- ");
+			if(PRINT)
+				System.out.println(" ---- ");
 		}
 	}
 
