@@ -36,4 +36,9 @@ class InternalObservableElementImpl<T> extends DefaultObservableValue<T> {
 	public T get() {
 		return theValue;
 	}
+
+	@Override
+	public String toString() {
+		return String.valueOf(theValue);
+	}
 }

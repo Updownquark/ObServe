@@ -56,6 +56,11 @@ public interface RedBlackTreeMap<K, V, N extends ValuedRedBlackNode<Map.Entry<K,
 			theValue = value;
 			return ret;
 		}
+
+		@Override
+		public String toString() {
+			return theKey + "=" + theValue;
+		}
 	}
 
 	/** @return The root of the tree */
@@ -488,7 +493,7 @@ public interface RedBlackTreeMap<K, V, N extends ValuedRedBlackNode<Map.Entry<K,
 
 	/**
 	 * Implements {@link RedBlackTreeMap#entrySet()}
-	 * 
+	 *
 	 * @param <K> The key type of the map
 	 * @param <V> The value type of the map
 	 * @param <N> The node type used to store the data
@@ -525,7 +530,7 @@ public interface RedBlackTreeMap<K, V, N extends ValuedRedBlackNode<Map.Entry<K,
 
 	/**
 	 * Implements {@link RedBlackTreeMap#keySet()}
-	 * 
+	 *
 	 * @param <K> The key type of the map
 	 * @param <V> The value type of the map
 	 */
@@ -537,7 +542,7 @@ public interface RedBlackTreeMap<K, V, N extends ValuedRedBlackNode<Map.Entry<K,
 
 	/**
 	 * Implements {@link RedBlackTreeMap#values()}
-	 * 
+	 *
 	 * @param <K> The key type of the map
 	 * @param <V> The value type of the map
 	 */
@@ -666,7 +671,7 @@ public interface RedBlackTreeMap<K, V, N extends ValuedRedBlackNode<Map.Entry<K,
 
 	/**
 	 * Implements {@link RedBlackTreeMap#getSubMap(boolean, Object, boolean, Object, boolean)}
-	 * 
+	 *
 	 * @param <K> The key type of the map
 	 * @param <V> The value type of the map
 	 */
