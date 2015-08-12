@@ -841,6 +841,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 		@Override
 		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
+			// TODO This isn't right. Doesn't handle removal or addition of elements before or in the set.
 			List<ObservableOrderedElement<E>> elements = new ArrayList<>();
 			List<Element> wrappers = new ArrayList<>();
 			return theList.onOrderedElement(element -> {
