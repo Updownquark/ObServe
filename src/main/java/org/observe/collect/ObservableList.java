@@ -826,8 +826,9 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		private final ObservableList<E> theList;
 
 		private final int theOffset;
-
 		private int theSize;
+
+		private boolean isSublistChanging;
 
 		protected ObservableSubList(ObservableList<E> list, int fromIndex, int toIndex) {
 			if(fromIndex < 0)
@@ -841,20 +842,71 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 		@Override
 		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
-			// TODO This isn't right. Doesn't handle removal or addition of elements before or in the set.
 			List<ObservableOrderedElement<E>> elements = new ArrayList<>();
 			List<Element> wrappers = new ArrayList<>();
-			return theList.onOrderedElement(element -> {
-				int index = element.getIndex();
-				Element wrapper = new Element(element);
-				elements.add(index, element);
-				wrappers.add(index, wrapper);
-				int removeIdx = theOffset + theSize;
-				if(index < removeIdx && removeIdx < wrappers.size())
-					wrappers.get(removeIdx).remove();
-				if(index < theOffset && theOffset < wrappers.size())
-					onElement.accept(wrappers.get(theOffset));
+			boolean [] initializing = new boolean[] {true};
+			Subscription ret = theList.onOrderedElement(element -> {
+				element.subscribe(new Observer<ObservableValueEvent<E>>() {
+					@Override
+					public <V extends ObservableValueEvent<E>> void onNext(V event) {
+						if(!event.isInitial())
+							return;
+						int index = element.getIndex();
+						elements.add(index, element);
+
+						if(initializing[0]) {
+							if(index >= theOffset && index < theOffset + theSize) {
+								Element toAdd = new Element(element);
+								wrappers.add(index, toAdd);
+								onElement.accept(toAdd);
+							}
+						} else {
+							if(isSublistChanging) {
+								Element toAdd = new Element(element);
+								wrappers.add(index - theOffset, toAdd);
+								onElement.accept(toAdd);
+							} else {
+								// If the main list is changing from under this sub list, then the size remains constant
+								if(index < theOffset + theSize && !wrappers.isEmpty())
+									wrappers.remove(theSize - 1).remove();
+
+								Element toAdd = null;
+								if(index < theOffset)
+									toAdd = new Element(elements.get(theOffset));
+								else if(index < theOffset + theSize)
+									toAdd = new Element(element);
+								if(toAdd != null) {
+									wrappers.add(index - theOffset, toAdd);
+									onElement.accept(toAdd);
+								}
+							}
+						}
+					}
+
+					@Override
+					public <V extends ObservableValueEvent<E>> void onCompleted(V event) {
+						int index = element.getIndex();
+						elements.remove(index);
+						if(isSublistChanging) {
+							wrappers.remove(index - theOffset).remove();
+						} else {
+							if(index < theOffset)
+								wrappers.remove(0).remove();
+							else if(index < theOffset + theSize)
+								wrappers.remove(index - theOffset).remove();
+
+							// If the main list is changing from under this sub list, then the size remains constant
+							if(index < theOffset + theSize && elements.size() >= theOffset + theSize) {
+								Element toAdd = new Element(elements.get(theOffset + theSize - 1));
+								wrappers.add(toAdd);
+								onElement.accept(toAdd);
+							}
+						}
+					}
+				});
 			});
+			initializing[0] = false;
+			return ret;
 		}
 
 		@Override
@@ -874,7 +926,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 		@Override
 		public E get(int index) {
-			rangeCheck(index);
+			rangeCheck(index, false);
 			return theList.get(index + theOffset);
 		}
 
@@ -889,6 +941,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		@Override
 		public boolean add(E value) {
 			try (Transaction t = theList.lock(true, null)) {
+				isSublistChanging = true;
 				int preSize = theList.size();
 				theList.add(theOffset + theSize, value);
 				if(preSize < theList.size()) {
@@ -896,12 +949,16 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 					return true;
 				}
 				return false;
+			} finally {
+				isSublistChanging = false;
 			}
 		}
 
 		@Override
 		public boolean addAll(int index, Collection<? extends E> c) {
 			try (Transaction t = theList.lock(true, null)) {
+				rangeCheck(index, true);
+				isSublistChanging = true;
 				int preSize = theList.size();
 				theList.addAll(theOffset + index, c);
 				int sizeDiff = theList.size() - preSize;
@@ -910,54 +967,72 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 					return true;
 				}
 				return false;
+			} finally {
+				isSublistChanging = false;
 			}
 		}
 
 		@Override
 		public void add(int index, E value) {
 			try (Transaction t = theList.lock(true, null)) {
-				if(index < 0 || index > theSize)
-					throw new IndexOutOfBoundsException(index + " of " + size());
+				rangeCheck(index, true);
+				isSublistChanging = true;
 				int preSize = theList.size();
 				theList.add(theOffset + index, value);
 				if(preSize < theList.size()) {
 					theSize++;
 				}
+			} finally {
+				isSublistChanging = false;
 			}
 		}
 
 		@Override
 		public E remove(int index) {
 			try (Transaction t = theList.lock(true, null)) {
-				rangeCheck(index);
+				rangeCheck(index, false);
+				isSublistChanging = true;
 				int preSize = theList.size();
 				E ret = theList.remove(theOffset + index);
 				if(theList.size() < preSize)
 					theSize--;
 				return ret;
+			} finally {
+				isSublistChanging = false;
 			}
 		}
 
 		@Override
 		public E set(int index, E value) {
 			try (Transaction t = theList.lock(true, null)) {
-				rangeCheck(index);
+				rangeCheck(index, false);
+				isSublistChanging = true;
 				return theList.set(theOffset + index, value);
+			} finally {
+				isSublistChanging = false;
 			}
 		}
 
 		@Override
 		public void removeRange(int fromIndex, int toIndex) {
 			try (Transaction t = theList.lock(true, null)) {
+				rangeCheck(fromIndex, false);
+				rangeCheck(toIndex, true);
+				isSublistChanging = true;
 				int preSize = theList.size();
 				theList.removeRange(fromIndex + theOffset, toIndex + theOffset);
 				int sizeDiff = theList.size() - preSize;
 				theSize += sizeDiff;
+			} finally {
+				isSublistChanging = false;
 			}
 		}
 
 		@Override
 		public ObservableList<E> subList(int fromIndex, int toIndex) {
+			rangeCheck(fromIndex, false);
+			if(toIndex < fromIndex)
+				throw new IllegalArgumentException("" + toIndex);
 			return new ObservableSubList<>(this, fromIndex, toIndex);
 		}
 
@@ -1018,6 +1093,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 				@Override
 				public void remove() {
 					try (Transaction t = theList.lock(true, null)) {
+						isSublistChanging = true;
 						int preSize = theList.size();
 						backing.remove();
 						if(theList.size() < preSize) {
@@ -1025,30 +1101,40 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 							if(!lastPrevious)
 								theIndex--;
 						}
+					} finally {
+						isSublistChanging = false;
 					}
 				}
 
 				@Override
 				public void set(E e) {
-					backing.set(e);
+					try (Transaction t = theList.lock(true, null)) {
+						isSublistChanging = true;
+						backing.set(e);
+					} finally {
+						isSublistChanging = false;
+					}
 				}
 
 				@Override
 				public void add(E e) {
 					try (Transaction t = theList.lock(true, null)) {
+						isSublistChanging = true;
 						int preSize = theList.size();
 						backing.add(e);
 						if(theList.size() > preSize) {
 							theSize++;
 							theIndex++;
 						}
+					} finally {
+						isSublistChanging = false;
 					}
 				}
 			};
 		}
 
-		private void rangeCheck(int index) {
-			if(index < 0 || index >= theSize)
+		private void rangeCheck(int index, boolean withAdd) {
+			if(index < 0 || (!withAdd && index >= theSize) || (withAdd && index > theSize))
 				throw new IndexOutOfBoundsException(outOfBoundsMsg(index));
 		}
 
@@ -1077,8 +1163,9 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 			private final ObservableOrderedElement<E> theWrapped;
 
 			private final DefaultObservable<Void> theRemovedObservable;
-
 			private final Observer<Void> theRemovedController;
+
+			private boolean isRemoved;
 
 			Element(ObservableOrderedElement<E> wrap) {
 				theWrapped = wrap;
@@ -1106,11 +1193,15 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 				return theWrapped.takeUntil(theRemovedObservable).subscribe(new Observer<ObservableValueEvent<E>>() {
 					@Override
 					public <V extends ObservableValueEvent<E>> void onNext(V value) {
+						if(isRemoved)
+							return;
 						observer.onNext(ObservableUtils.wrap(value, Element.this));
 					}
 
 					@Override
 					public <V extends ObservableValueEvent<E>> void onCompleted(V value) {
+						if(isRemoved)
+							return;
 						observer.onCompleted(ObservableUtils.wrap(value, Element.this));
 					}
 				});
@@ -1123,6 +1214,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 			void remove() {
 				theRemovedController.onNext(null);
+				isRemoved = true;
 			}
 		}
 	}

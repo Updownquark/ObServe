@@ -12,8 +12,8 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableList;
-import org.observe.collect.ObservableRandomAccessList;
 import org.observe.collect.ObservableOrderedElement;
+import org.observe.collect.ObservableRandomAccessList;
 import org.observe.util.Transactable;
 import org.observe.util.Transaction;
 
@@ -195,10 +195,12 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	@Override
 	public void removeRange(int fromIndex, int toIndex) {
 		try (Transaction t = theInternals.lock(true, false, null)) {
-			for(int i = toIndex - 1; i >= fromIndex; i--) {
-				theValues.remove(i);
-				InternalOrderedObservableElementImpl<E> removed = theElements.remove(i);
-				removed.setRemovedIndex(i);
+			ArrayList<InternalOrderedObservableElementImpl<E>> toRemove = new ArrayList<>(theElements.subList(fromIndex, toIndex));
+			theElements.subList(fromIndex, toIndex).clear();
+			theValues.subList(fromIndex, toIndex).clear();
+			for(int i = toRemove.size() - 1; i >= 0; i--) {
+				InternalOrderedObservableElementImpl<E> removed = toRemove.get(i);
+				removed.setRemovedIndex(fromIndex + i);
 				removed.remove();
 			}
 		}
