@@ -830,6 +830,8 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 		private boolean isSublistChanging;
 
+		private int theTransitionSize;
+
 		protected ObservableSubList(ObservableList<E> list, int fromIndex, int toIndex) {
 			if(fromIndex < 0)
 				throw new IndexOutOfBoundsException("fromIndex = " + fromIndex);
@@ -855,9 +857,9 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 						elements.add(index, element);
 
 						if(initializing[0]) {
-							if(index >= theOffset && index < theOffset + theSize) {
+							if(index >= theOffset && index < theOffset + theTransitionSize) {
 								Element toAdd = new Element(element);
-								wrappers.add(index, toAdd);
+								wrappers.add(index - theOffset, toAdd);
 								onElement.accept(toAdd);
 							}
 						} else {
@@ -943,6 +945,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 			try (Transaction t = theList.lock(true, null)) {
 				isSublistChanging = true;
 				int preSize = theList.size();
+				theTransitionSize = theSize + 1;
 				theList.add(theOffset + theSize, value);
 				if(preSize < theList.size()) {
 					theSize++;
@@ -950,6 +953,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 				}
 				return false;
 			} finally {
+				theTransitionSize = theSize;
 				isSublistChanging = false;
 			}
 		}
@@ -960,6 +964,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 				rangeCheck(index, true);
 				isSublistChanging = true;
 				int preSize = theList.size();
+				theTransitionSize = theSize + c.size();
 				theList.addAll(theOffset + index, c);
 				int sizeDiff = theList.size() - preSize;
 				if(sizeDiff > 0) {
@@ -968,6 +973,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 				}
 				return false;
 			} finally {
+				theTransitionSize = theSize;
 				isSublistChanging = false;
 			}
 		}
@@ -978,11 +984,13 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 				rangeCheck(index, true);
 				isSublistChanging = true;
 				int preSize = theList.size();
+				theTransitionSize = theSize + 1;
 				theList.add(theOffset + index, value);
 				if(preSize < theList.size()) {
 					theSize++;
 				}
 			} finally {
+				theTransitionSize = theSize;
 				isSublistChanging = false;
 			}
 		}
@@ -993,11 +1001,13 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 				rangeCheck(index, false);
 				isSublistChanging = true;
 				int preSize = theList.size();
+				theTransitionSize = theSize - 1;
 				E ret = theList.remove(theOffset + index);
 				if(theList.size() < preSize)
 					theSize--;
 				return ret;
 			} finally {
+				theTransitionSize = theSize;
 				isSublistChanging = false;
 			}
 		}
@@ -1020,10 +1030,12 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 				rangeCheck(toIndex, true);
 				isSublistChanging = true;
 				int preSize = theList.size();
+				theTransitionSize = theSize - (toIndex - fromIndex);
 				theList.removeRange(fromIndex + theOffset, toIndex + theOffset);
 				int sizeDiff = theList.size() - preSize;
 				theSize += sizeDiff;
 			} finally {
+				theTransitionSize = theSize;
 				isSublistChanging = false;
 			}
 		}
@@ -1095,6 +1107,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 					try (Transaction t = theList.lock(true, null)) {
 						isSublistChanging = true;
 						int preSize = theList.size();
+						theTransitionSize = theSize - 1;
 						backing.remove();
 						if(theList.size() < preSize) {
 							theSize--;
@@ -1102,6 +1115,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 								theIndex--;
 						}
 					} finally {
+						theTransitionSize = theSize;
 						isSublistChanging = false;
 					}
 				}
@@ -1121,12 +1135,14 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 					try (Transaction t = theList.lock(true, null)) {
 						isSublistChanging = true;
 						int preSize = theList.size();
+						theTransitionSize = theSize + 1;
 						backing.add(e);
 						if(theList.size() > preSize) {
 							theSize++;
 							theIndex++;
 						}
 					} finally {
+						theTransitionSize = theSize;
 						isSublistChanging = false;
 					}
 				}

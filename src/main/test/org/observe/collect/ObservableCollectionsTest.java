@@ -3,6 +3,7 @@ package org.observe.collect;
 import static java.util.Arrays.asList;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.not;
+import static org.hamcrest.CoreMatchers.notNullValue;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThat;
@@ -213,7 +214,7 @@ public class ObservableCollectionsTest {
 
 					@Override
 					public <V extends ObservableValueEvent<T>> void onCompleted(V evt) {
-						synced.remove(el.getIndex());
+						assertEquals(evt.getValue(), synced.remove(el.getIndex()));
 					}
 				});
 			});
@@ -225,13 +226,14 @@ public class ObservableCollectionsTest {
 						if(evt.isInitial())
 							synced.add(evt.getValue());
 						else {
-							synced.remove(evt.getOldValue());
+							assertEquals(evt.getOldValue(), synced.remove(evt.getOldValue()));
 							synced.add(evt.getValue());
 						}
 					}
 
 					@Override
 					public <V extends ObservableValueEvent<T>> void onCompleted(V evt) {
+						assertThat(synced, contains(evt.getValue()));
 						synced.remove(evt.getValue());
 					}
 				});
@@ -245,6 +247,7 @@ public class ObservableCollectionsTest {
 			public <E extends ObservableValueEvent<K>> void onNext(E event) {
 				if(!event.isInitial())
 					return;
+				assertEquals(null, synced.get(event.getValue()));
 				C collect = collectCreator.get();
 				synced.put(event.getValue(), collect);
 				Subscription elSub = map.get(event.getValue()).onElement(el2 -> el2.subscribe(new Observer<ObservableValueEvent<V>>() {
@@ -254,13 +257,15 @@ public class ObservableCollectionsTest {
 							ObservableOrderedElement<V> orderedEl = (ObservableOrderedElement<V>) el2;
 							if(event2.isInitial())
 								((List<V>) collect).add(orderedEl.getIndex(), event2.getValue());
-							else
+							else {
+								assertEquals(event2.getOldValue(), ((List<V>) collect).get(orderedEl.getIndex()));
 								((List<V>) collect).set(orderedEl.getIndex(), event2.getValue());
+							}
 						} else {
 							if(event2.isInitial())
 								collect.add(event2.getValue());
 							else {
-								collect.remove(event2.getOldValue());
+								assertEquals(event2.getOldValue(), collect.remove(event2.getOldValue()));
 								collect.add(event2.getValue());
 							}
 						}
@@ -270,9 +275,11 @@ public class ObservableCollectionsTest {
 					public <E2 extends ObservableValueEvent<V>> void onCompleted(E2 event2) {
 						if(el2 instanceof ObservableOrderedElement && collect instanceof List) {
 							ObservableOrderedElement<V> orderedEl = (ObservableOrderedElement<V>) el2;
-							((List<V>) collect).remove(orderedEl.getIndex());
-						} else
+							assertEquals(event2.getValue(), ((List<V>) collect).remove(orderedEl.getIndex()));
+						} else {
+							assertThat(collect, contains(event2.getValue()));
 							collect.remove(event2.getValue());
+						}
 					}
 				}));
 				el.completed().act(evt -> elSub.unsubscribe());
@@ -280,7 +287,7 @@ public class ObservableCollectionsTest {
 
 			@Override
 			public <E extends ObservableValueEvent<K>> void onCompleted(E event) {
-				synced.remove(event.getValue());
+				assertThat(synced.remove(event.getValue()), notNullValue());
 			}
 		}));
 	}
@@ -450,30 +457,30 @@ public class ObservableCollectionsTest {
 		NavigableSet<Integer> subSet = (NavigableSet<Integer>) set.headSet(30);
 		NavigableSet<Integer> copySubSet = (NavigableSet<Integer>) copy.headSet(30);
 		assertThat(subSet, equalTo(copySubSet));
-		testUnobservableSubSet(subSet, null, true, 30, false, ssListener);
+		testSubSet(subSet, null, true, 30, false, ssListener);
 
 		subSet = set.headSet(30, true);
 		copySubSet = copy.headSet(30, true);
 		assertThat(subSet, equalTo(copySubSet));
-		testUnobservableSubSet(subSet, null, true, 30, true, ssListener);
+		testSubSet(subSet, null, true, 30, true, ssListener);
 
 		subSet = (NavigableSet<Integer>) set.tailSet(30);
 		copySubSet = (NavigableSet<Integer>) copy.tailSet(30);
 		assertThat(subSet, equalTo(copySubSet));
-		testUnobservableSubSet(subSet, 30, true, null, true, ssListener);
+		testSubSet(subSet, 30, true, null, true, ssListener);
 
 		subSet = set.tailSet(30, false);
 		copySubSet = copy.tailSet(30, false);
 		assertThat(subSet, equalTo(copySubSet));
-		testUnobservableSubSet(set.tailSet(30, false), 30, false, null, true, ssListener);
+		testSubSet(set.tailSet(30, false), 30, false, null, true, ssListener);
 
 		subSet = (NavigableSet<Integer>) set.subSet(15, 45);
 		copySubSet = (NavigableSet<Integer>) copy.subSet(15, 45);
 		assertThat(subSet, equalTo(copySubSet));
-		testUnobservableSubSet(subSet, 15, true, 45, false, ssListener);
+		testSubSet(subSet, 15, true, 45, false, ssListener);
 	}
 
-	private static void testUnobservableSubSet(NavigableSet<Integer> subSet, Integer min, boolean minInclude, Integer max,
+	private static void testSubSet(NavigableSet<Integer> subSet, Integer min, boolean minInclude, Integer max,
 		boolean maxInclude,
 		Consumer<? super NavigableSet<Integer>> check) {
 		int startSize = subSet.size();
