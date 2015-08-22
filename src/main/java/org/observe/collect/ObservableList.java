@@ -830,7 +830,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 		private boolean isSublistChanging;
 
-		private int theTransitionSize;
+		private int theTransitionSize = -1;
 
 		protected ObservableSubList(ObservableList<E> list, int fromIndex, int toIndex) {
 			if(fromIndex < 0)
@@ -857,7 +857,8 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 						elements.add(index, element);
 
 						if(initializing[0]) {
-							if(index >= theOffset && index < theOffset + theTransitionSize) {
+							int size = theTransitionSize >= 0 ? theTransitionSize : theSize;
+							if(index >= theOffset && index < theOffset + size) {
 								Element toAdd = new Element(element);
 								wrappers.add(index - theOffset, toAdd);
 								onElement.accept(toAdd);
@@ -953,18 +954,49 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 				}
 				return false;
 			} finally {
-				theTransitionSize = theSize;
+				theTransitionSize = -1;
 				isSublistChanging = false;
 			}
 		}
 
 		@Override
 		public boolean addAll(int index, Collection<? extends E> c) {
+			Subscription sub = null;
 			try (Transaction t = theList.lock(true, null)) {
 				rangeCheck(index, true);
 				isSublistChanging = true;
 				int preSize = theList.size();
-				theTransitionSize = theSize + c.size();
+				/* There is a problem here that is very difficult to solve.
+				 *
+				 * 1. When a subscription to a sub-list is created, a subscription is created to the super-list, filtering out all the
+				 * elements that are not in the sub-list's range.
+				 *
+				 * 2. When multiple elements are added to a sub-list in a single operation, the "gate" of the sub-list's range needs to be
+				 * opened to the new elements just before the addition to the super-list so that subscriptions to the sub-list will receive
+				 * the new elements.
+				 *
+				 * When 1 and 2 happen together, i.e. a multi-addition into a sub-list triggers a new subscription to the sub-list, e.g.
+				 * typical subscriptions to the ObservableCollection#groupBy(Function) method, the "gate" that the initial elements
+				 * are coming through is opened wider than the current size of the sub-list to receive the new elements that may not yet be
+				 * added.  The result is that the new subscription will receive extra elements from the super-list that are not actually
+				 * in the sub-list.  It is not possible to distinguish between the initial value events coming from the super-list as a
+				 * result of the new subscription and those resulting from the addition operation.
+				 *
+				 * One way I planned to solve this was to install a temporary listener in the super list just before the addition to the
+				 * super-list.  I would open the gate one element initially to receive the first element.  As each element is added, I would
+				 * open the gate one element wider to allow the next element to be received by initialized listeners.
+				 *
+				 * Unfortunately, neither this nor any other method I tried has worked.  Plus, this method may have a significant
+				 * impact on the behavior of addAll.
+				 */
+				boolean [] initializing = new boolean[] {true};
+				theTransitionSize = theSize + 1;
+				sub = onElement(el -> {
+					if(initializing[0])
+						return;
+					theTransitionSize++;
+				});
+				initializing[0] = false;
 				theList.addAll(theOffset + index, c);
 				int sizeDiff = theList.size() - preSize;
 				if(sizeDiff > 0) {
@@ -973,7 +1005,9 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 				}
 				return false;
 			} finally {
-				theTransitionSize = theSize;
+				if(sub != null)
+					sub.unsubscribe();
+				theTransitionSize = -1;
 				isSublistChanging = false;
 			}
 		}
@@ -990,7 +1024,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 					theSize++;
 				}
 			} finally {
-				theTransitionSize = theSize;
+				theTransitionSize = -1;
 				isSublistChanging = false;
 			}
 		}
@@ -1001,13 +1035,11 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 				rangeCheck(index, false);
 				isSublistChanging = true;
 				int preSize = theList.size();
-				theTransitionSize = theSize - 1;
 				E ret = theList.remove(theOffset + index);
 				if(theList.size() < preSize)
 					theSize--;
 				return ret;
 			} finally {
-				theTransitionSize = theSize;
 				isSublistChanging = false;
 			}
 		}
@@ -1030,12 +1062,10 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 				rangeCheck(toIndex, true);
 				isSublistChanging = true;
 				int preSize = theList.size();
-				theTransitionSize = theSize - (toIndex - fromIndex);
 				theList.removeRange(fromIndex + theOffset, toIndex + theOffset);
 				int sizeDiff = theList.size() - preSize;
 				theSize += sizeDiff;
 			} finally {
-				theTransitionSize = theSize;
 				isSublistChanging = false;
 			}
 		}
@@ -1107,7 +1137,6 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 					try (Transaction t = theList.lock(true, null)) {
 						isSublistChanging = true;
 						int preSize = theList.size();
-						theTransitionSize = theSize - 1;
 						backing.remove();
 						if(theList.size() < preSize) {
 							theSize--;
@@ -1115,7 +1144,6 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 								theIndex--;
 						}
 					} finally {
-						theTransitionSize = theSize;
 						isSublistChanging = false;
 					}
 				}
@@ -1142,7 +1170,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 							theIndex++;
 						}
 					} finally {
-						theTransitionSize = theSize;
+						theTransitionSize = -1;
 						isSublistChanging = false;
 					}
 				}

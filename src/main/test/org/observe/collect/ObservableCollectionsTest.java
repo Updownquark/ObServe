@@ -351,8 +351,7 @@ public class ObservableCollectionsTest {
 			check.accept(coll);
 
 		ArrayList<Integer> copy = new ArrayList<>(coll); // More iterator testing
-		assertThat(coll, containsAll(copy));
-		assertThat(copy, containsAll(coll));
+		assertThat(copy, collectionsEqual(coll, coll instanceof List));
 
 		assertThat(coll, containsAll(1, 2, 11, 99));
 		coll.retainAll(asList(1, 51, 101, 11, 91, 21, 81, 31, 71, 41, 61, 51)); // 101 not in coll. 51 in list twice. Test retainAll.
