@@ -1,7 +1,5 @@
 package org.observe.collect;
 
-import java.util.List;
-
 import org.observe.util.Transactable;
 
 /**
@@ -9,5 +7,5 @@ import org.observe.util.Transactable;
  *
  * @param <E> The type of elements in the list
  */
-public interface TransactableList<E> extends TransactableCollection<E>, List<E> {
+public interface TransactableList<E> extends TransactableCollection<E>, RRList<E> {
 }

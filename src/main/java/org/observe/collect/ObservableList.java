@@ -3,6 +3,7 @@ package org.observe.collect;
 import static org.observe.ObservableDebug.d;
 
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.Collection;
 import java.util.ConcurrentModificationException;
 import java.util.Iterator;
@@ -77,31 +78,10 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		return ObservableReversibleCollection.super.lastIndexOf(o);
 	}
 
-	/**
-	 * Removes from this list all of the elements whose index is between {@code fromIndex}, inclusive, and {@code toIndex}, exclusive.
-	 * Shifts any succeeding elements to the left (reduces their index). This call shortens the list by {@code (toIndex - fromIndex)}
-	 * elements. (If {@code toIndex==fromIndex}, this operation has no effect.)
-	 *
-	 * <p>
-	 * This method is called by the {@code clear} operation on this list and its subLists. Overriding this method to take advantage of the
-	 * internals of the list implementation can <i>substantially</i> improve the performance of the {@code clear} operation on this list and
-	 * its subLists.
-	 *
-	 * <p>
-	 * This implementation gets a list iterator positioned before {@code fromIndex}, and repeatedly calls {@code ListIterator.next} followed
-	 * by {@code ListIterator.remove} until the entire range has been removed. <b>Note: if {@code ListIterator.remove} requires linear time,
-	 * this implementation requires quadratic time.</b>
-	 *
-	 * @param fromIndex index of first element to be removed
-	 * @param toIndex index after last element to be removed
-	 */
+	@Override
 	default void removeRange(int fromIndex, int toIndex) {
 		try (Transaction t = lock(true, null)) {
-			ListIterator<E> it = listIterator(fromIndex);
-			for(int i = 0, n = toIndex - fromIndex; i < n; i++) {
-				it.next();
-				it.remove();
-			}
+			TransactableList.super.removeRange(fromIndex, toIndex);
 		}
 	}
 
@@ -128,8 +108,8 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	 * @see java.util.List#subList(int, int)
 	 */
 	@Override
-	default ObservableList<E> subList(int fromIndex, int toIndex) {
-		return new ObservableSubList<>(this, fromIndex, toIndex);
+	default List<E> subList(int fromIndex, int toIndex) {
+		return new SubListImpl<>(this, this, fromIndex, toIndex);
 	}
 
 	@Override
@@ -728,73 +708,18 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		}
 
 		@Override
-		default boolean retainAll(Collection<?> coll) {
-			return PartialCollectionImpl.super.retainAll(coll);
-		}
-
-		@Override
-		default boolean removeAll(Collection<?> coll) {
-			return PartialCollectionImpl.super.removeAll(coll);
-		}
-
-		@Override
-		default boolean remove(Object o) {
-			return PartialCollectionImpl.super.remove(o);
-		}
-
-		@Override
-		default boolean add(E e) {
-			add(size(), e);
-			return true;
-		}
-
-		@Override
-		default E set(int index, E element) {
-			throw new UnsupportedOperationException(getClass().getName() + " does not implement set(index, value)");
-		}
-
-		@Override
-		default void add(int index, E element) {
-			throw new UnsupportedOperationException(getClass().getName() + " does not implement add(index, value)");
-		}
-
-		@Override
-		default E remove(int index) {
-			throw new UnsupportedOperationException(getClass().getName() + " does not implement remove(index)");
-		}
-
-		@Override
-		default int indexOf(Object o) {
-			try (Transaction t = lock(false, null)) {
-				ListIterator<E> it = listIterator();
-				int i;
-				for(i = 0; it.hasNext(); i++)
-					if(Objects.equals(it.next(), o))
-						return i;
-				return -1;
-			}
-		}
-
-		@Override
-		default int lastIndexOf(Object o) {
-			try (Transaction t = lock(false, null)) {
-				ListIterator<E> it = listIterator(size());
-				int i;
-				for(i = size() - 1; it.hasPrevious(); i--)
-					if(Objects.equals(it.previous(), o))
-						return i;
-				return -1;
-			}
-		}
-
-		@Override
-		default void clear() {
-			removeRange(0, size());
+		default boolean add(E o) {
+			return ObservableList.super.add(o);
 		}
 
 		@Override
 		default boolean addAll(Collection<? extends E> c) {
 			return addAll(size(), c);
+		}
+
+		@Override
+		default void add(int index, E element) {
+			throw new UnsupportedOperationException(getClass().getName() + " does not implement add(index, value)");
 		}
 
 		@Override
@@ -812,6 +737,36 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		}
 
 		@Override
+		default boolean retainAll(Collection<?> coll) {
+			return PartialCollectionImpl.super.retainAll(coll);
+		}
+
+		@Override
+		default boolean removeAll(Collection<?> coll) {
+			return PartialCollectionImpl.super.removeAll(coll);
+		}
+
+		@Override
+		default boolean remove(Object o) {
+			return PartialCollectionImpl.super.remove(o);
+		}
+
+		@Override
+		default E remove(int index) {
+			throw new UnsupportedOperationException(getClass().getName() + " does not implement remove(index)");
+		}
+
+		@Override
+		default void clear() {
+			ObservableList.super.clear();
+		}
+
+		@Override
+		default E set(int index, E element) {
+			throw new UnsupportedOperationException(getClass().getName() + " does not implement set(index, value)");
+		}
+
+		@Override
 		default Iterator<E> iterator() {
 			return listIterator();
 		}
@@ -822,109 +777,23 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	 *
 	 * @param <E>
 	 */
-	class ObservableSubList<E> implements PartialListImpl<E> {
-		private final ObservableList<E> theList;
+	class SubListImpl<E> implements RRList<E> {
+		private final ObservableList<E> theRoot;
+
+		private final RRList<E> theList;
 
 		private final int theOffset;
 		private int theSize;
 
-		private boolean isSublistChanging;
-
-		private int theTransitionSize = -1;
-
-		protected ObservableSubList(ObservableList<E> list, int fromIndex, int toIndex) {
+		protected SubListImpl(ObservableList<E> root, RRList<E> list, int fromIndex, int toIndex) {
 			if(fromIndex < 0)
 				throw new IndexOutOfBoundsException("fromIndex = " + fromIndex);
 			if(fromIndex > toIndex)
 				throw new IllegalArgumentException("fromIndex(" + fromIndex + ") > toIndex(" + toIndex + ")");
-			theList = list;
+			theRoot = root;
+			theList=list;
 			theOffset = fromIndex;
 			theSize = toIndex - fromIndex;
-		}
-
-		@Override
-		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
-			List<ObservableOrderedElement<E>> elements = new ArrayList<>();
-			List<Element> wrappers = new ArrayList<>();
-			boolean [] initializing = new boolean[] {true};
-			Subscription ret = theList.onOrderedElement(element -> {
-				element.subscribe(new Observer<ObservableValueEvent<E>>() {
-					@Override
-					public <V extends ObservableValueEvent<E>> void onNext(V event) {
-						if(!event.isInitial())
-							return;
-						int index = element.getIndex();
-						elements.add(index, element);
-
-						if(initializing[0]) {
-							int size = theTransitionSize >= 0 ? theTransitionSize : theSize;
-							if(index >= theOffset && index < theOffset + size) {
-								Element toAdd = new Element(element);
-								wrappers.add(index - theOffset, toAdd);
-								onElement.accept(toAdd);
-							}
-						} else {
-							if(isSublistChanging) {
-								Element toAdd = new Element(element);
-								wrappers.add(index - theOffset, toAdd);
-								onElement.accept(toAdd);
-							} else {
-								// If the main list is changing from under this sub list, then the size remains constant
-								if(index < theOffset + theSize && !wrappers.isEmpty())
-									wrappers.remove(theSize - 1).remove();
-
-								Element toAdd = null;
-								if(index < theOffset)
-									toAdd = new Element(elements.get(theOffset));
-								else if(index < theOffset + theSize)
-									toAdd = new Element(element);
-								if(toAdd != null) {
-									wrappers.add(index - theOffset, toAdd);
-									onElement.accept(toAdd);
-								}
-							}
-						}
-					}
-
-					@Override
-					public <V extends ObservableValueEvent<E>> void onCompleted(V event) {
-						int index = element.getIndex();
-						elements.remove(index);
-						if(isSublistChanging) {
-							wrappers.remove(index - theOffset).remove();
-						} else {
-							if(index < theOffset)
-								wrappers.remove(0).remove();
-							else if(index < theOffset + theSize)
-								wrappers.remove(index - theOffset).remove();
-
-							// If the main list is changing from under this sub list, then the size remains constant
-							if(index < theOffset + theSize && elements.size() >= theOffset + theSize) {
-								Element toAdd = new Element(elements.get(theOffset + theSize - 1));
-								wrappers.add(toAdd);
-								onElement.accept(toAdd);
-							}
-						}
-					}
-				});
-			});
-			initializing[0] = false;
-			return ret;
-		}
-
-		@Override
-		public Type getType() {
-			return theList.getType();
-		}
-
-		@Override
-		public ObservableValue<CollectionSession> getSession() {
-			return theList.getSession();
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theList.lock(write, cause);
 		}
 
 		@Override
@@ -942,61 +811,109 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		}
 
 		@Override
+		public boolean isEmpty() {
+			return size() == 0;
+		}
+
+		@Override
+		public boolean contains(Object o) {
+			try (Transaction t = theRoot.lock(false, null)) {
+				for(Object value : this)
+					if(Objects.equals(value, o))
+						return true;
+				return false;
+			}
+		}
+
+		@Override
+		public boolean containsAll(Collection<?> c) {
+			if(c.isEmpty())
+				return true;
+			ArrayList<Object> copy = new ArrayList<>(c);
+			BitSet found = new BitSet(copy.size());
+			try (Transaction t = theRoot.lock(false, null)) {
+				Iterator<E> iter = iterator();
+				while(iter.hasNext()) {
+					E next = iter.next();
+					int stop = found.previousClearBit(copy.size());
+					for(int i = found.nextClearBit(0); i < stop; i = found.nextClearBit(i + 1))
+						if(Objects.equals(next, copy.get(i)))
+							found.set(i);
+				}
+				return found.cardinality() == copy.size();
+			}
+		}
+
+		@Override
+		public E [] toArray() {
+			ArrayList<E> ret = new ArrayList<>();
+			try (Transaction t = theRoot.lock(false, null)) {
+				for(E value : this)
+					ret.add(value);
+			}
+			Class<?> base = theRoot.getType().toClass();
+			if(base.isPrimitive())
+				base = Type.getWrapperType(base);
+			return ret.toArray((E []) java.lang.reflect.Array.newInstance(base, ret.size()));
+		}
+
+		@Override
+		public <T> T [] toArray(T [] a) {
+			ArrayList<E> ret = new ArrayList<>();
+			try (Transaction t = theRoot.lock(false, null)) {
+				for(E value : this)
+					ret.add(value);
+			}
+			return ret.toArray(a);
+		}
+
+		@Override
+		public int indexOf(Object o) {
+			try (Transaction t = theRoot.lock(false, null)) {
+				ListIterator<E> it = listIterator();
+				int i;
+				for(i = 0; it.hasNext(); i++)
+					if(Objects.equals(it.next(), o))
+						return i;
+				return -1;
+			}
+		}
+
+		@Override
+		public int lastIndexOf(Object o) {
+			try (Transaction t = theRoot.lock(false, null)) {
+				ListIterator<E> it = listIterator(size());
+				int i;
+				for(i = size() - 1; it.hasPrevious(); i--)
+					if(Objects.equals(it.previous(), o))
+						return i;
+				return -1;
+			}
+		}
+
+		@Override
 		public boolean add(E value) {
-			try (Transaction t = theList.lock(true, null)) {
-				isSublistChanging = true;
+			try (Transaction t = theRoot.lock(true, null)) {
 				int preSize = theList.size();
-				theTransitionSize = theSize + 1;
 				theList.add(theOffset + theSize, value);
 				if(preSize < theList.size()) {
 					theSize++;
 					return true;
 				}
 				return false;
-			} finally {
-				theTransitionSize = -1;
-				isSublistChanging = false;
 			}
 		}
 
 		@Override
+		public boolean addAll(Collection<? extends E> c) {
+			return addAll(size(), c);
+		}
+
+		@Override
 		public boolean addAll(int index, Collection<? extends E> c) {
-			Subscription sub = null;
-			try (Transaction t = theList.lock(true, null)) {
+			try (Transaction t = theRoot.lock(true, null)) {
 				rangeCheck(index, true);
-				isSublistChanging = true;
 				int preSize = theList.size();
-				/* There is a problem here that is very difficult to solve.
-				 *
-				 * 1. When a subscription to a sub-list is created, a subscription is created to the super-list, filtering out all the
-				 * elements that are not in the sub-list's range.
-				 *
-				 * 2. When multiple elements are added to a sub-list in a single operation, the "gate" of the sub-list's range needs to be
-				 * opened to the new elements just before the addition to the super-list so that subscriptions to the sub-list will receive
-				 * the new elements.
-				 *
-				 * When 1 and 2 happen together, i.e. a multi-addition into a sub-list triggers a new subscription to the sub-list, e.g.
-				 * typical subscriptions to the ObservableCollection#groupBy(Function) method, the "gate" that the initial elements
-				 * are coming through is opened wider than the current size of the sub-list to receive the new elements that may not yet be
-				 * added.  The result is that the new subscription will receive extra elements from the super-list that are not actually
-				 * in the sub-list.  It is not possible to distinguish between the initial value events coming from the super-list as a
-				 * result of the new subscription and those resulting from the addition operation.
-				 *
-				 * One way I planned to solve this was to install a temporary listener in the super list just before the addition to the
-				 * super-list.  I would open the gate one element initially to receive the first element.  As each element is added, I would
-				 * open the gate one element wider to allow the next element to be received by initialized listeners.
-				 *
-				 * Unfortunately, neither this nor any other method I tried has worked.  Plus, this method may have a significant
-				 * impact on the behavior of addAll.
-				 */
-				boolean [] initializing = new boolean[] {true};
-				theTransitionSize = theSize + 1;
-				sub = onElement(el -> {
-					if(initializing[0])
-						return;
-					theTransitionSize++;
-				});
-				initializing[0] = false;
 				theList.addAll(theOffset + index, c);
 				int sizeDiff = theList.size() - preSize;
 				if(sizeDiff > 0) {
@@ -1004,78 +921,115 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 					return true;
 				}
 				return false;
-			} finally {
-				if(sub != null)
-					sub.unsubscribe();
-				theTransitionSize = -1;
-				isSublistChanging = false;
 			}
 		}
 
 		@Override
 		public void add(int index, E value) {
-			try (Transaction t = theList.lock(true, null)) {
+			try (Transaction t = theRoot.lock(true, null)) {
 				rangeCheck(index, true);
-				isSublistChanging = true;
 				int preSize = theList.size();
-				theTransitionSize = theSize + 1;
 				theList.add(theOffset + index, value);
 				if(preSize < theList.size()) {
 					theSize++;
 				}
-			} finally {
-				theTransitionSize = -1;
-				isSublistChanging = false;
+			}
+		}
+
+		@Override
+		public boolean remove(Object o) {
+			try (Transaction t = theRoot.lock(true, null)) {
+				Iterator<E> it = iterator();
+				while(it.hasNext()) {
+					if(Objects.equals(it.next(), o)) {
+						it.remove();
+						return true;
+					}
+				}
+				return false;
+			}
+		}
+
+		@Override
+		public boolean removeAll(Collection<?> c) {
+			if(c.isEmpty())
+				return false;
+			try (Transaction t = theRoot.lock(true, null)) {
+				boolean modified = false;
+				Iterator<?> it = iterator();
+				while(it.hasNext()) {
+					if(c.contains(it.next())) {
+						it.remove();
+						modified = true;
+					}
+				}
+				return modified;
+			}
+		}
+
+		@Override
+		public boolean retainAll(Collection<?> c) {
+			if(c.isEmpty()) {
+				clear();
+				return false;
+			}
+			try (Transaction t = theRoot.lock(true, null)) {
+				boolean modified = false;
+				Iterator<E> it = iterator();
+				while(it.hasNext()) {
+					if(!c.contains(it.next())) {
+						it.remove();
+						modified = true;
+					}
+				}
+				return modified;
 			}
 		}
 
 		@Override
 		public E remove(int index) {
-			try (Transaction t = theList.lock(true, null)) {
+			try (Transaction t = theRoot.lock(true, null)) {
 				rangeCheck(index, false);
-				isSublistChanging = true;
 				int preSize = theList.size();
 				E ret = theList.remove(theOffset + index);
 				if(theList.size() < preSize)
 					theSize--;
 				return ret;
-			} finally {
-				isSublistChanging = false;
 			}
 		}
 
 		@Override
+		public void clear() {
+			if(!isEmpty())
+				removeRange(0, size());
+		}
+
+		@Override
 		public E set(int index, E value) {
-			try (Transaction t = theList.lock(true, null)) {
+			try (Transaction t = theRoot.lock(true, null)) {
 				rangeCheck(index, false);
-				isSublistChanging = true;
 				return theList.set(theOffset + index, value);
-			} finally {
-				isSublistChanging = false;
 			}
 		}
 
 		@Override
 		public void removeRange(int fromIndex, int toIndex) {
-			try (Transaction t = theList.lock(true, null)) {
+			try (Transaction t = theRoot.lock(true, null)) {
 				rangeCheck(fromIndex, false);
 				rangeCheck(toIndex, true);
-				isSublistChanging = true;
 				int preSize = theList.size();
 				theList.removeRange(fromIndex + theOffset, toIndex + theOffset);
 				int sizeDiff = theList.size() - preSize;
 				theSize += sizeDiff;
-			} finally {
-				isSublistChanging = false;
 			}
 		}
 
 		@Override
-		public ObservableList<E> subList(int fromIndex, int toIndex) {
+		public List<E> subList(int fromIndex, int toIndex) {
 			rangeCheck(fromIndex, false);
 			if(toIndex < fromIndex)
 				throw new IllegalArgumentException("" + toIndex);
-			return new ObservableSubList<>(this, fromIndex, toIndex);
+			return new SubListImpl<>(theRoot, this, fromIndex, toIndex);
 		}
 
 		@Override
@@ -1134,8 +1088,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 				@Override
 				public void remove() {
-					try (Transaction t = theList.lock(true, null)) {
-						isSublistChanging = true;
+					try (Transaction t = theRoot.lock(true, null)) {
 						int preSize = theList.size();
 						backing.remove();
 						if(theList.size() < preSize) {
@@ -1143,35 +1096,23 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 							if(!lastPrevious)
 								theIndex--;
 						}
-					} finally {
-						isSublistChanging = false;
 					}
 				}
 
 				@Override
 				public void set(E e) {
-					try (Transaction t = theList.lock(true, null)) {
-						isSublistChanging = true;
-						backing.set(e);
-					} finally {
-						isSublistChanging = false;
-					}
+					backing.set(e);
 				}
 
 				@Override
 				public void add(E e) {
-					try (Transaction t = theList.lock(true, null)) {
-						isSublistChanging = true;
+					try (Transaction t = theRoot.lock(true, null)) {
 						int preSize = theList.size();
-						theTransitionSize = theSize + 1;
 						backing.add(e);
 						if(theList.size() > preSize) {
 							theSize++;
 							theIndex++;
 						}
-					} finally {
-						theTransitionSize = -1;
-						isSublistChanging = false;
 					}
 				}
 			};
@@ -1190,7 +1131,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		public String toString() {
 			StringBuilder ret = new StringBuilder("[");
 			boolean first = true;
-			try (Transaction t = lock(false, null)) {
+			try (Transaction t = theRoot.lock(false, null)) {
 				for(E value : this) {
 					if(!first) {
 						ret.append(", ");

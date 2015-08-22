@@ -138,11 +138,6 @@ public class ObservableListWrapper<E> extends ObservableOrderedCollectionWrapper
 	}
 
 	@Override
-	public ObservableList<E> subList(int fromIndex, int toIndex) {
-		return new ObservableListWrapper<>(getWrapped().subList(fromIndex, toIndex), isModifiable());
-	}
-
-	@Override
 	public String toString() {
 		return getWrapped().toString();
 	}
