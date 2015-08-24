@@ -1,6 +1,5 @@
 package org.observe.collect.impl;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.ListIterator;
@@ -129,21 +128,6 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 	}
 
 	@Override
-	public boolean containsAll(Collection<?> coll) {
-		ArrayList<Object> copy = new ArrayList<>(coll);
-		if(copy.isEmpty())
-			return true;
-		try (Transaction t = theInternals.lock(false, false, null)) {
-			LinkedNode node = theFirst;
-			while(node != null && !copy.isEmpty()) {
-				copy.remove(node.get());
-				node = node.getNext();
-			}
-		}
-		return copy.isEmpty();
-	}
-
-	@Override
 	public Iterator<E> iterator() {
 		return iterate(theFirst, LinkedNode::getNext);
 	}
@@ -155,7 +139,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 
 	private Iterator<E> iterate(LinkedNode node, Function<LinkedNode, LinkedNode> next) {
 		return new Iterator<E>() {
-			private LinkedNode theNext;
+			private LinkedNode theNext = node;
 			private LinkedNode thePassed;
 
 			@Override
@@ -424,6 +408,11 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 		};
 	}
 
+	@Override
+	public String toString() {
+		return ObservableList.toString(this);
+	}
+
 	private class LinkedNode extends InternalObservableElementImpl<E> {
 		private LinkedNode thePrevious;
 		private LinkedNode theNext;
@@ -491,7 +480,6 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 				after.theNext = this;
 			}
 			theSize++;
-			theInternals.fireNewElement(this);
 
 			// Maintain cached indexes where possible
 			if(after != null) {
@@ -515,6 +503,8 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 				if(theLowestIndexedFromLast == theNext)
 					theLowestIndexedFromLast = this;
 			}
+
+			theInternals.fireNewElement(this);
 		}
 
 		@Override
