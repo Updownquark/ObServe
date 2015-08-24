@@ -22,6 +22,7 @@ import java.util.NavigableSet;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -119,7 +120,13 @@ public class ObservableCollectionsTest {
 		Map<Integer, List<Integer>> groupedSynced = new LinkedHashMap<>();
 		ObservableCollectionsTest.sync(grouped, groupedSynced, () -> new ArrayList<>());
 
-		// TODO Combined collection
+		BiFunction<Integer, Integer, Integer> combineFn = (v1, v2) -> v1 + v2;
+		BiFunction<Integer, Integer, Integer> reverseCombineFn = (v1, v2) -> v1 - v2;
+		SimpleSettableValue<Integer> combineVar = new SimpleSettableValue<>(Integer.class, false);
+		combineVar.set(10000, null);
+		ObservableCollection<Integer> combinedOL = coll.combine(combineVar, coll.getType(), combineFn, reverseCombineFn);
+		ArrayList<Integer> combinedSynced = new ArrayList<>();
+		Subscription combineSub = sync(combinedOL, combinedSynced);
 
 		return new Checker<ObservableCollection<Integer>>() {
 			@Override
@@ -148,6 +155,10 @@ public class ObservableCollectionsTest {
 					assertThat(grouped.get(groupKey), collectionsEqual(values, ordered));
 					assertThat(groupedSynced.get(groupKey), collectionsEqual(values, ordered));
 				}
+
+				List<Integer> combinedCorrect = coll.stream().map(v -> v + combineVar.get()).collect(Collectors.toList());
+				assertThat(combinedOL, collectionsEqual(combinedCorrect, ordered));
+				assertThat(combinedSynced, collectionsEqual(combinedCorrect, ordered));
 			}
 
 			@Override
@@ -155,6 +166,7 @@ public class ObservableCollectionsTest {
 				if(depth < COLLECTION_TEST_DEPTH) {
 					testCollection(mappedOL, this, depth + 1);
 					testCollection(filterMapOL, this, depth + 1);
+					testCollection(combinedOL, this, depth + 1);
 				}
 
 				// Test filter adding
@@ -194,6 +206,7 @@ public class ObservableCollectionsTest {
 				mappedSub.unsubscribe();
 				filteredSub1.unsubscribe();
 				filterMapSub.unsubscribe();
+				combineSub.unsubscribe();
 			}
 		};
 	}
@@ -2136,12 +2149,21 @@ public class ObservableCollectionsTest {
 	@Test
 	public void testTransactionsCombined() {
 		// TODO
+		throw new sun.reflect.generics.reflectiveObjects.NotImplementedException();
 	}
 
 	/** Tests transactions caused by {@link ObservableCollection#refresh(Observable) refreshing} on an observable */
 	@Test
 	public void testTransactionsRefresh() {
 		// TODO
+		throw new sun.reflect.generics.reflectiveObjects.NotImplementedException();
+	}
+
+	/** Tests {@link ObservableCollection#refreshEach(Function)} */
+	@Test
+	public void testRefreshEach() {
+		// TODO
+		throw new sun.reflect.generics.reflectiveObjects.NotImplementedException();
 	}
 
 	private void testTransactionsByFind(ObservableList<Integer> observable, TransactableList<Integer> controller) {
