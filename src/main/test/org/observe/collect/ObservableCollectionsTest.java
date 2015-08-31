@@ -358,7 +358,9 @@ public class ObservableCollectionsTest {
 			check.accept(coll);
 		assertThat(coll, containsAll(0, 75, 50, 11, 99, 50)); // 50 twice. Test containsAll
 		// 100 not in coll. 50 in list twice. Test removeAll.
-		assertTrue(coll.removeAll(asList(0, 50, 100, 10, 90, 20, 80, 30, 70, 40, 60, 50)));
+		assertTrue(coll.removeAll(
+			// Easier to debug this way
+			asList(0, 50, 100, 10, 90, 20, 80, 30, 70, 40, 60, 50)));
 		assertEquals(90, coll.size());
 		if(check != null)
 			check.accept(coll);
@@ -608,7 +610,7 @@ public class ObservableCollectionsTest {
 		list.remove(31);
 		list.remove(30);
 		for(int i = 0; i < 30; i++) {
-			assertEquals((Integer) i, list.set(i, 30 - i - 1)); // Test set
+			assertEquals("i=" + i, (Integer) i, list.set(i, 30 - i - 1)); // Test set
 			if(check != null)
 				check.accept(list);
 		}
@@ -630,6 +632,29 @@ public class ObservableCollectionsTest {
 		assertEquals(30, list.size());
 		if(check != null)
 			check.accept(list);
+
+		{// This is here so I'm sure this part of the test is valid
+			ArrayList<Integer> test00 = new ArrayList<>(list.size());
+			for(int i = 0; i < list.size(); i++)
+				test00.add(null);
+			ArrayList<Integer> test0 = new ArrayList<>(sequence(30, null, false));
+			ListIterator<Integer> listIter01 = test0.listIterator(test0.size() / 2);
+			ListIterator<Integer> listIter02 = test0.listIterator(test0.size() / 2);
+			while(true) {
+				boolean stop = true;
+				if(listIter01.hasPrevious()) {
+					test00.set(listIter01.previousIndex(), listIter01.previous());
+					stop = false;
+				}
+				if(listIter02.hasNext()) {
+					test00.set(listIter02.nextIndex(), listIter02.next());
+					stop = false;
+				}
+				if(stop)
+					break;
+			}
+			assertThat(test00, equalTo(test0));
+		}
 
 		// Test listIterator
 		ArrayList<Integer> test = new ArrayList<>(list.size());
@@ -888,7 +913,9 @@ public class ObservableCollectionsTest {
 	/** Runs a barrage of tests on {@link ObservableLinkedList} */
 	@Test
 	public void testObservableLinkedList() {
-		testCollection(new ObservableLinkedList<>(new Type(Integer.class)), null, 0);
+		testCollection(new ObservableLinkedList<>(new Type(Integer.class)),
+			// Easier to debug this way
+			list -> list.validate(), 0);
 	}
 
 	/** Runs a barrage of tests on {@link ObservableTreeList} */

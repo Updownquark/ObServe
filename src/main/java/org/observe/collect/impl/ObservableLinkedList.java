@@ -15,6 +15,7 @@ import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableList;
 import org.observe.collect.ObservableOrderedElement;
+import org.observe.util.RollingBuffer;
 import org.observe.util.Transactable;
 import org.observe.util.Transaction;
 
@@ -30,6 +31,21 @@ import prisms.lang.Type;
  * @param <E> The type of element in the list
  */
 public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E> {
+	/**
+	 * <p>
+	 * The number of actions against this list to be recorded too-small and too-large numbers may hurt performance. Currently this value is
+	 * a guess at optimum.
+	 * </p>
+	 *
+	 * <p>
+	 * Too-small values will make it necessary to traverse the entire list frequently when the index of a particular observable element is
+	 * requested.
+	 * </p>
+	 * <p>
+	 * Too-large values will make computing the index expensive, even without traversal.
+	 * </p>
+	 */
+	private static final int ACTION_CAPACITY = 10;
 	private final Type theType;
 
 	private LinkedListInternals theInternals;
@@ -39,8 +55,8 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 
 	private int theSize;
 
-	LinkedNode theHighestIndexedFromFirst;
-	LinkedNode theLowestIndexedFromLast;
+	private RollingBuffer<ListAction> theActions;
+	private int theModCount;
 
 	/**
 	 * Creates the list
@@ -64,6 +80,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 		Transactable sessionController) {
 		theType = type;
 		theInternals = new LinkedListInternals(lock, session, sessionController);
+		theActions = new RollingBuffer<>(ACTION_CAPACITY);
 	}
 
 	@Override
@@ -100,6 +117,22 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 	@Override
 	public int size() {
 		return theSize;
+	}
+
+	/** Internal validation method */
+	public void validate() {
+		if(theFirst != null && theFirst.thePrevious != null)
+			throw new IllegalStateException("First's previous!=null");
+		if(theLast != null && theLast.theNext != null)
+			throw new IllegalStateException("Last's next!=null");
+		if((theFirst != null) != (theLast != null))
+			throw new IllegalStateException("First XOR Last !=null");
+		LinkedNode node = theFirst;
+		while(node != null && node.theNext != null) {
+			if(node.theNext.thePrevious != node)
+				throw new IllegalStateException("Bad links at " + node.getIndex() + "->" + (node.getIndex() + 1));
+			node = node.theNext;
+		}
 	}
 
 	@Override
@@ -172,6 +205,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 	private LinkedNode addImpl(E value, LinkedNode after) {
 		LinkedNode newNode = createElement(value);
 		newNode.added(after);
+		validate();
 		return newNode;
 	}
 
@@ -294,6 +328,8 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 				node.remove();
 				node = node.getPrevious();
 			}
+			theActions.clear();
+			theModCount = 0;
 		}
 	}
 
@@ -314,29 +350,32 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 			indexed = getNodeAt(index);
 		}
 		return new ListIterator<E>() {
-			private LinkedNode theNext = indexed;
+			private LinkedNode theAnchor = indexed;
 
-			private boolean isCursorBefore;
+			private boolean isCursorBefore = true;
 
-			private boolean hasRemoved = true;
+			private boolean hasRemoved = false;
 
 			@Override
 			public boolean hasNext() {
-				if(theNext == null)
+				if(theAnchor == null)
 					return false;
-				if(isCursorBefore && !hasRemoved)
+				if(isCursorBefore)
 					return true;
 				else
-					return theNext.getNext() != null;
+					return theAnchor.getNext() != null;
 			}
 
 			@Override
 			public E next() {
 				if(!hasNext())
 					throw new NoSuchElementException();
-				if(!isCursorBefore || hasRemoved)
-					theNext = theNext.getNext();
-				E ret = theNext.get();
+				if(!isCursorBefore) {
+					theAnchor = theAnchor.getNext();
+					isCursorBefore = true;
+				}
+
+				E ret = theAnchor.get();
 				isCursorBefore = false;
 				hasRemoved = false;
 				return ret;
@@ -344,21 +383,24 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 
 			@Override
 			public boolean hasPrevious() {
-				if(theNext == null)
+				if(theAnchor == null)
 					return false;
 				if(!isCursorBefore && !hasRemoved)
 					return true;
 				else
-					return theNext.getPrevious() != null;
+					return theAnchor.getPrevious() != null;
 			}
 
 			@Override
 			public E previous() {
 				if(!hasPrevious())
 					throw new NoSuchElementException();
-				if(isCursorBefore || hasRemoved)
-					theNext = theNext.getPrevious();
-				E ret = theNext.get();
+				if(isCursorBefore) {
+					theAnchor = theAnchor.getPrevious();
+					isCursorBefore = false;
+				}
+
+				E ret = theAnchor.get();
 				isCursorBefore = true;
 				hasRemoved = false;
 				return ret;
@@ -366,7 +408,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 
 			@Override
 			public int nextIndex() {
-				int nextIndex = theNext.getIndex();
+				int nextIndex = theAnchor.getIndex();
 				if(!isCursorBefore)
 					nextIndex++;
 				return nextIndex;
@@ -374,7 +416,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 
 			@Override
 			public int previousIndex() {
-				int prevIndex = theNext.getIndex();
+				int prevIndex = theAnchor.getIndex();
 				if(isCursorBefore)
 					prevIndex--;
 				return prevIndex;
@@ -386,7 +428,9 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 					throw new IllegalStateException("remove() may only be called (once) after next() or previous()");
 				hasRemoved = true;
 				try (Transaction t = theInternals.lock(true, false, null)) {
-					theNext.remove();
+					theAnchor.remove();
+					theAnchor = theAnchor.getNext();
+					isCursorBefore = true;
 				}
 			}
 
@@ -394,7 +438,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 			public void set(E e) {
 				if(hasRemoved)
 					throw new IllegalStateException("set() may only be called after next() or previous() and not after remove()");
-				theNext.set(e);
+				theAnchor.set(e);
 			}
 
 			@Override
@@ -402,7 +446,10 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 				if(hasRemoved)
 					throw new IllegalStateException("add() may only be called after next() or previous() and not after remove()");
 				try (Transaction t = theInternals.lock(true, false, null)) {
-					addImpl(e, theNext);
+					if(!isCursorBefore)
+						theAnchor = addImpl(e, theAnchor);
+					else
+						addImpl(e, theAnchor.getPrevious());
 				}
 			}
 		};
@@ -417,9 +464,8 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 		private LinkedNode thePrevious;
 		private LinkedNode theNext;
 
-		private int theIndexFromFirst;
-		private int theIndexFromLast;
-
+		private int theIndex;
+		private int theModTracker;
 		private boolean isRemoved;
 
 		public LinkedNode(E value) {
@@ -436,39 +482,83 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 
 		int getIndex() {
 			if(isRemoved)
-				return theIndexFromFirst;
-			if(theIndexFromFirst < theHighestIndexedFromFirst.theIndexFromFirst || this == theHighestIndexedFromFirst)
-				return theIndexFromFirst;
-			else if(theIndexFromLast < theLowestIndexedFromLast.theIndexFromLast || this == theLowestIndexedFromLast)
-				return theSize - theIndexFromLast - 1;
-			// Don't know our index. Find it.
-			return cacheIndex();
+				return theIndex;
+			if(theModTracker == theModCount)
+				return theIndex;
+			if(theModTracker < theModCount - theActions.getCapacity()) {
+				// Can't get the index from the actions. Gotta expand outward along the list.
+				LinkedNode pre = thePrevious;
+				LinkedNode next = theNext;
+				while(pre != null && next != null && pre.theModTracker < theModCount - theActions.getCapacity()
+					&& next.theModTracker < theModCount - theActions.getCapacity()) {
+					pre = pre.thePrevious;
+					next = next.theNext;
+				}
+				int index;
+				boolean forward;
+				if(pre == null) {
+					pre = theFirst;
+					index = 0;
+					forward = true;
+				} else if(next == null) {
+					next = theLast;
+					index = theSize - 1;
+					forward = false;
+				} else if(pre.theModTracker >= theModCount - theActions.getCapacity()) {
+					index = adjustIndex(pre.theIndex, pre.theModTracker);
+					forward = true;
+				} else {
+					index = adjustIndex(next.theIndex, next.theModTracker);
+					forward = false;
+				}
+
+				if(forward) {
+					while(pre != this) {
+						pre.theIndex = index;
+						pre.theModTracker = theModCount;
+						pre = pre.theNext;
+						index++;
+					}
+				} else {
+					while(next != this) {
+						next.theIndex = index;
+						next.theModTracker = theModCount;
+						next = next.thePrevious;
+						index--;
+					}
+				}
+				theIndex = index;
+				theModTracker = theModCount;
+			} else {
+				theIndex = adjustIndex(theIndex, theModTracker);
+				theModTracker = theModCount;
+			}
+			return theIndex;
 		}
 
-		private int cacheIndex() {
-			int lowDiff = theIndexFromFirst - theHighestIndexedFromFirst.theIndexFromFirst;
-			int highDiff = theIndexFromLast - theLowestIndexedFromLast.theIndexFromLast;
-			while(true) {
-				// This loop *should* be safe, since we know we're an element in the collection and we're between the highest and lowest
-				// indexed elements. If this assumption does not hold (due to implementation errors in this list), this loop will just
-				// generate an NPE
-				if(lowDiff < highDiff) {
-					theHighestIndexedFromFirst.theNext.theIndexFromFirst = theHighestIndexedFromFirst.theIndexFromFirst + 1;
-					theHighestIndexedFromFirst = theHighestIndexedFromFirst.theNext;
-					if(this == theHighestIndexedFromFirst)
-						return theIndexFromFirst;
-					lowDiff++;
-				} else {
-					theLowestIndexedFromLast.thePrevious.theIndexFromLast = theLowestIndexedFromLast.theIndexFromLast + 1;
-					theLowestIndexedFromLast = theLowestIndexedFromLast.thePrevious;
-					if(this == theLowestIndexedFromLast)
-						return theIndexFromLast;
-					highDiff++;
-				}
+		int adjustIndex(int index, int mods) {
+			Iterator<ListAction> iter = theActions.iterator();
+			int skip = theActions.size() - (theModCount - mods);
+			for(int i = 0; i < skip; i++)
+				iter.next();
+			while(iter.hasNext()) {
+				ListAction action = iter.next();
+				if(action.theIndex > index)
+					continue;
+				else if(action.isRemove)
+					index--;
+				else
+					index++;
 			}
+			return index;
 		}
 
 		void added(LinkedNode after) {
+			theIndex = after == null ? 0 : after.getIndex() + 1;
+			theActions.add(new ListAction(theIndex, false));
+			theModCount++;
+			theModTracker = theModCount;
+
 			thePrevious = after;
 			if(theLast == after)
 				theLast = this;
@@ -477,38 +567,23 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 				theFirst = this;
 			} else {
 				theNext = after.getNext();
+				if(theNext != null)
+					theNext.thePrevious = this;
 				after.theNext = this;
 			}
 			theSize++;
-
-			// Maintain cached indexes where possible
-			if(after != null) {
-				// For starters, assume we know where after is in relation to first and last. Adjust indexes accordingly.
-				theIndexFromFirst = after.theIndexFromFirst + 1;
-				theIndexFromLast = after.theIndexFromLast;
-				after.theIndexFromLast++;
-
-				if(theHighestIndexedFromFirst == after)
-					theHighestIndexedFromFirst = this;
-				else if(theIndexFromFirst < theHighestIndexedFromFirst.theIndexFromFirst)
-					theHighestIndexedFromFirst = this;
-
-				if(after.theIndexFromLast < theLowestIndexedFromLast.theIndexFromLast)
-					theLowestIndexedFromLast = after;
-			} else {
-				// Inserting at beginning
-				theIndexFromFirst = 0;
-				theIndexFromLast = theSize - 1;
-				theHighestIndexedFromFirst = this;
-				if(theLowestIndexedFromLast == theNext)
-					theLowestIndexedFromLast = this;
-			}
 
 			theInternals.fireNewElement(this);
 		}
 
 		@Override
 		void remove() {
+			getIndex(); // Make sure we have the right index cached before we mark ourselves as removed
+			isRemoved = true;
+			theActions.add(new ListAction(theIndex, true));
+			theModCount++;
+			theModTracker = theModCount;
+
 			if(thePrevious != null)
 				thePrevious.theNext = theNext;
 			if(theNext != null)
@@ -518,24 +593,19 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 			if(this == theLast)
 				theLast = thePrevious;
 			theSize--;
-			theIndexFromFirst = theIndexFromLast = getIndex();
-			isRemoved = true;
-
-			// Maintain cached indexes where possible
-			if(theIndexFromFirst <= theHighestIndexedFromFirst.theIndexFromFirst) {
-				if(thePrevious != null)
-					theHighestIndexedFromFirst = thePrevious;
-				else
-					theHighestIndexedFromFirst = theNext;
-			}
-			if(theIndexFromLast <= theLowestIndexedFromLast.theIndexFromLast) {
-				if(theNext != null)
-					theLowestIndexedFromLast = theNext;
-				else
-					theLowestIndexedFromLast = thePrevious;
-			}
 
 			super.remove();
+		}
+	}
+
+	private static class ListAction {
+		final int theIndex;
+
+		private boolean isRemove;
+
+		ListAction(int index, boolean remove) {
+			theIndex = index;
+			isRemove = remove;
 		}
 	}
 
