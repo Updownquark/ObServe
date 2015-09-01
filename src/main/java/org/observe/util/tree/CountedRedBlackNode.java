@@ -222,6 +222,8 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 	@Override
 	public String toString() {
 		String ret = super.toString();
+		if(getParent() != null && getParent().getParent() == this)
+			return ret;
 		ret = ret.substring(0, ret.length() - 1);
 		ret += ", " + theSize + ") [" + getIndex() + "]";
 		return ret;
@@ -311,6 +313,21 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 		@Override
 		public NodeSet<E, N> nodes(boolean reverse, E fromElement, boolean fromInclusive, E toElement, boolean toInclusive) {
 			return new NodeSet<>(this, reverse, fromElement, fromInclusive, toElement, toInclusive);
+		}
+
+		@Override
+		public String toString() {
+			StringBuilder ret = new StringBuilder("{");
+			boolean first = true;
+			for(Object value : this) {
+				if(!first) {
+					ret.append(", ");
+				} else
+					first = false;
+				ret.append(value);
+			}
+			ret.append('}');
+			return ret.toString();
 		}
 
 		/**

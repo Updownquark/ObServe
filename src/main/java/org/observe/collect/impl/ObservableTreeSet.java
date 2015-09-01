@@ -292,6 +292,11 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 		return theValues.comparator();
 	}
 
+	@Override
+	public String toString() {
+		return org.observe.collect.ObservableSet.toString(this);
+	}
+
 	private class SetIterator implements Iterator<E> {
 		private final Iterator<Map.Entry<E, InternalElement>> backing;
 

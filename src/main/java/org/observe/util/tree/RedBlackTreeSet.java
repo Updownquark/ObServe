@@ -192,7 +192,7 @@ public interface RedBlackTreeSet<E, N extends ValuedRedBlackNode<E>> extends jav
 				if(nextNode == null)
 					throw new java.util.NoSuchElementException();
 				theLastNode = nextNode;
-				theNextNode = (N) nextNode.getClosest(forward);
+				theNextNode = (N) nextNode.getClosest(!forward);
 				return theLastNode;
 			}
 
