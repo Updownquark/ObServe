@@ -210,7 +210,7 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 		int compare = finder.compareTo(this);
 		if(compare == 0 && withExact)
 			return this;
-		if(compare < 0 == lesser)
+		if(compare != 0 && compare > 0 == lesser)
 			found = this;
 		RedBlackNode child = getChild(compare < 0);
 		if(child != null)
@@ -322,15 +322,48 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 		boolean thisRed = isRed;
 		setRed(node.isRed);
 		node.setRed(thisRed);
-		RedBlackNode temp = theLeft;
-		setChild(node.theLeft, true);
-		node.setChild(temp, true);
-		temp = theRight;
-		setChild(node.theRight, false);
-		node.setChild(temp, false);
-		temp = theParent;
-		setParent(node.theParent);
-		node.setParent(temp);
+
+		if(theParent == node) {
+			boolean thisSide = getSide();
+			RedBlackNode sib = node.getChild(!thisSide);
+			if(node.theParent != null)
+				node.theParent.setChild(this, node.getSide());
+			else
+				setParent(null);
+			node.setChild(theLeft, true);
+			node.setChild(theRight, false);
+			setChild(node, thisSide);
+			setChild(sib, !thisSide);
+		} else if(node.theParent == this) {
+			boolean nodeSide = node.getSide();
+			RedBlackNode sib = getChild(!nodeSide);
+			if(theParent != null)
+				theParent.setChild(node, getSide());
+			else
+				node.setParent(null);
+			setChild(node.theLeft, true);
+			setChild(node.theRight, false);
+			node.setChild(this, nodeSide);
+			node.setChild(sib, !nodeSide);
+		} else {
+			boolean thisSide = getSide();
+			RedBlackNode temp = theParent;
+			if(node.theParent != null)
+				node.theParent.setChild(this, node.getSide());
+			else
+				setParent(null);
+			if(temp != null)
+				temp.setChild(node, thisSide);
+			else
+				node.setParent(null);
+
+			temp = theLeft;
+			setChild(node.theLeft, true);
+			node.setChild(temp, true);
+			temp = theRight;
+			setChild(node.theRight, false);
+			node.setChild(temp, false);
+		}
 	}
 
 	/**
@@ -454,7 +487,10 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 
 		if(replacement != null) {
 			boolean oldRed = replacement.isRed;
-			replace(replacement);
+			if(theParent != null)
+				theParent.setChild(replacement, getSide());
+			else
+				replacement.setParent(null);
 			replacement.setRed(oldRed);
 			setParent(null);
 			setChild(null, true);
@@ -504,15 +540,15 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 
 	/** This is not used, but here for reference. It is the rebalancing code from {@link java.util.TreeMap}, refactored for RedBlackTree. */
 	private static RedBlackNode fixAfterInsertion(RedBlackNode x) {
-		while(x != null && x.theParent != null && x.getParent().getParent() != null && x.getParent().isRed()) {
+		while(x != null && isRed(x.theParent) && x.getParent().getParent() != null) {
 			boolean parentLeft = x.getParent().getSide();
 			RedBlackNode y = x.getParent().getSibling();
-			if(y != null && y.isRed()) {
+			if(isRed(y)) {
 				if(DEBUG_PRINT)
 					System.out.println("Case 1");
-				x.getParent().setRed(false);
-				y.setRed(false);
-				x.getParent().getParent().setRed(true);
+				setRed(x.getParent(), false);
+				setRed(y, false);
+				setRed(x.getParent().getParent(), true);
 				x = x.getParent().getParent();
 			} else {
 				if(parentLeft != x.getSide()) {
@@ -523,46 +559,55 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 				}
 				if(DEBUG_PRINT)
 					System.out.println("Case 3, rotate " + (parentLeft ? "right" : "left"));
-				x.getParent().setRed(false);
-				x.getParent().getParent().setRed(true);
+				setRed(x.getParent(), false);
+				setRed(x.getParent().getParent(), true);
 				x.getParent().getParent().rotate(!parentLeft);
 			}
 		}
-		x.getRoot().setRed(false);
+		setRed(x.getRoot(), false);
 		return x.getRoot();
 	}
 
 	private static RedBlackNode fixAfterDeletion(RedBlackNode node) {
-		while(node.theParent != null && !node.isRed) {
+		while(node.theParent != null && !isRed(node)) {
 			boolean parentLeft = node.getSide();
 			RedBlackNode sib = node.theParent.getChild(!parentLeft);
 
-			if(sib.isRed) {
-				sib.setRed(false);
-				node.theParent.setRed(true);
+			if(isRed(sib)) {
+				setRed(sib, false);
+				setRed(node.theParent, true);
 				node.theParent.rotate(parentLeft);
 				sib = node.theParent.getChild(!parentLeft);
 			}
-			if((sib.theLeft == null || !sib.theLeft.isRed) && (sib.theRight == null || !sib.theRight.isRed)) {
-				sib.setRed(true);
+			if(sib == null || !isRed(sib.theLeft) && !isRed(sib.theRight)) {
+				setRed(sib, true);
 				node = node.theParent;
 			} else {
-				if(!sib.getChild(!parentLeft).isRed) {
-					sib.getChild(parentLeft).setRed(false);
-					sib.setRed(true);
+				if(!isRed(sib.getChild(!parentLeft))) {
+					setRed(sib.getChild(parentLeft), false);
+					setRed(sib, true);
 					sib.rotate(!parentLeft);
 					sib = node.theParent.getChild(!parentLeft);
 				}
-				sib.setRed(node.theParent.isRed);
-				node.theParent.setRed(false);
-				sib.getChild(!parentLeft).setRed(false);
+				setRed(sib, isRed(node.theParent));
+				setRed(node.theParent, false);
+				setRed(sib.getChild(!parentLeft), false);
 				node.theParent.rotate(parentLeft);
 				node = node.getRoot();
 			}
 		}
 
-		node.setRed(false);
+		setRed(node, false);
 		return node.getRoot();
+	}
+
+	private static boolean isRed(RedBlackNode node) {
+		return node != null && node.isRed;
+	}
+
+	private static void setRed(RedBlackNode node, boolean red) {
+		if(node != null)
+			node.setRed(red);
 	}
 
 	/**

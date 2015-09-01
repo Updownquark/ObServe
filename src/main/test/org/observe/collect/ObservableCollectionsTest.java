@@ -369,7 +369,9 @@ public class ObservableCollectionsTest {
 		assertThat(copy, collectionsEqual(coll, coll instanceof List));
 
 		assertThat(coll, containsAll(1, 2, 11, 99));
-		coll.retainAll(asList(1, 51, 101, 11, 91, 21, 81, 31, 71, 41, 61, 51)); // 101 not in coll. 51 in list twice. Test retainAll.
+		coll.retainAll(
+			// Easier to debug this way
+			asList(1, 51, 101, 11, 91, 21, 81, 31, 71, 41, 61, 51)); // 101 not in coll. 51 in list twice. Test retainAll.
 		assertEquals(10, coll.size());
 		if(check != null)
 			check.accept(coll);

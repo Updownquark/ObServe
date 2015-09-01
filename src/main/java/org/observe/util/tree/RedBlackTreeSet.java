@@ -103,7 +103,8 @@ public interface RedBlackTreeSet<E, N extends ValuedRedBlackNode<E>> extends jav
 		Iterator<E> iter = iterator();
 		boolean changed = false;
 		while(iter.hasNext()) {
-			if(!c.contains(iter.next())) {
+			E val = iter.next();
+			if(!c.contains(val)) {
 				changed = true;
 				iter.remove();
 			}

@@ -167,17 +167,15 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 	protected void replace(RedBlackNode node) {
 		CountedRedBlackNode<E> counted = (CountedRedBlackNode<E>) node;
 		CountedRedBlackNode<E> parent = getParent();
-		isTransaction = true;
-		counted.isTransaction = true;
+		startCountTransaction();
+		counted.startCountTransaction();
 		if(parent != null)
 			parent.startCountTransaction();
 		try {
 			super.replace(node);
 		} finally {
-			isTransaction = false;
-			counted.isTransaction = false;
-			adjustSize(0);
-			counted.adjustSize(0);
+			endCountTransaction();
+			counted.endCountTransaction();
 			if(parent != null)
 				parent.endCountTransaction();
 		}
