@@ -56,7 +56,6 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 	private int theSize;
 
 	private RollingBuffer<ListAction> theActions;
-	private int theModCount;
 
 	/**
 	 * Creates the list
@@ -205,7 +204,6 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 	private LinkedNode addImpl(E value, LinkedNode after) {
 		LinkedNode newNode = createElement(value);
 		newNode.added(after);
-		validate();
 		return newNode;
 	}
 
@@ -329,7 +327,6 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 				node = node.getPrevious();
 			}
 			theActions.clear();
-			theModCount = 0;
 		}
 	}
 
@@ -483,14 +480,14 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 		int getIndex() {
 			if(isRemoved)
 				return theIndex;
-			if(theModTracker == theModCount)
+			if(theModTracker == theActions.getTotal())
 				return theIndex;
-			if(theModTracker < theModCount - theActions.getCapacity()) {
+			if(theModTracker < theActions.getTotal() - theActions.getCapacity()) {
 				// Can't get the index from the actions. Gotta expand outward along the list.
 				LinkedNode pre = thePrevious;
 				LinkedNode next = theNext;
-				while(pre != null && next != null && pre.theModTracker < theModCount - theActions.getCapacity()
-					&& next.theModTracker < theModCount - theActions.getCapacity()) {
+				while(pre != null && next != null && pre.theModTracker < theActions.getTotal() - theActions.getCapacity()
+					&& next.theModTracker < theActions.getTotal() - theActions.getCapacity()) {
 					pre = pre.thePrevious;
 					next = next.theNext;
 				}
@@ -504,7 +501,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 					next = theLast;
 					index = theSize - 1;
 					forward = false;
-				} else if(pre.theModTracker >= theModCount - theActions.getCapacity()) {
+				} else if(pre.theModTracker >= theActions.getTotal() - theActions.getCapacity()) {
 					index = adjustIndex(pre.theIndex, pre.theModTracker);
 					forward = true;
 				} else {
@@ -515,30 +512,32 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 				if(forward) {
 					while(pre != this) {
 						pre.theIndex = index;
-						pre.theModTracker = theModCount;
+						pre.theModTracker = theActions.getTotal();
 						pre = pre.theNext;
 						index++;
 					}
 				} else {
 					while(next != this) {
 						next.theIndex = index;
-						next.theModTracker = theModCount;
+						next.theModTracker = theActions.getTotal();
 						next = next.thePrevious;
 						index--;
 					}
 				}
 				theIndex = index;
-				theModTracker = theModCount;
+				theModTracker = theActions.getTotal();
 			} else {
 				theIndex = adjustIndex(theIndex, theModTracker);
-				theModTracker = theModCount;
+				theModTracker = theActions.getTotal();
 			}
 			return theIndex;
 		}
 
 		int adjustIndex(int index, int mods) {
+			if(mods == theActions.getTotal())
+				return index;
 			Iterator<ListAction> iter = theActions.iterator();
-			int skip = theActions.size() - (theModCount - mods);
+			int skip = theActions.size() - (theActions.getTotal() - mods);
 			for(int i = 0; i < skip; i++)
 				iter.next();
 			while(iter.hasNext()) {
@@ -556,8 +555,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 		void added(LinkedNode after) {
 			theIndex = after == null ? 0 : after.getIndex() + 1;
 			theActions.add(new ListAction(theIndex, false));
-			theModCount++;
-			theModTracker = theModCount;
+			theModTracker = theActions.getTotal();
 
 			thePrevious = after;
 			if(theLast == after)
@@ -581,8 +579,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 			getIndex(); // Make sure we have the right index cached before we mark ourselves as removed
 			isRemoved = true;
 			theActions.add(new ListAction(theIndex, true));
-			theModCount++;
-			theModTracker = theModCount;
+			theModTracker = theActions.getTotal();
 
 			if(thePrevious != null)
 				thePrevious.theNext = theNext;
