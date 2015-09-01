@@ -447,11 +447,11 @@ public class ObservableCollectionsTest {
 		if(check != null)
 			check.accept(set);
 		assertEquals((Integer) 2, set.pollFirst());
-		assertEquals(29, set.size());
+		assertEquals(27, set.size());
 		if(check != null)
 			check.accept(set);
 		assertEquals((Integer) 56, set.pollLast());
-		assertEquals(28, set.size());
+		assertEquals(26, set.size());
 		if(check != null)
 			check.accept(set);
 
@@ -472,27 +472,27 @@ public class ObservableCollectionsTest {
 		TreeSet<Integer> copy = new TreeSet<>(set);
 		NavigableSet<Integer> subSet = (NavigableSet<Integer>) set.headSet(30);
 		NavigableSet<Integer> copySubSet = (NavigableSet<Integer>) copy.headSet(30);
-		assertThat(subSet, equalTo(copySubSet));
+		assertThat(subSet, collectionsEqual(copySubSet, true));
 		testSubSet(subSet, null, true, 30, false, ssListener);
 
 		subSet = set.headSet(30, true);
 		copySubSet = copy.headSet(30, true);
-		assertThat(subSet, equalTo(copySubSet));
+		assertThat(subSet, collectionsEqual(copySubSet, true));
 		testSubSet(subSet, null, true, 30, true, ssListener);
 
 		subSet = (NavigableSet<Integer>) set.tailSet(30);
 		copySubSet = (NavigableSet<Integer>) copy.tailSet(30);
-		assertThat(subSet, equalTo(copySubSet));
+		assertThat(subSet, collectionsEqual(copySubSet, true));
 		testSubSet(subSet, 30, true, null, true, ssListener);
 
 		subSet = set.tailSet(30, false);
 		copySubSet = copy.tailSet(30, false);
-		assertThat(subSet, equalTo(copySubSet));
+		assertThat(subSet, collectionsEqual(copySubSet, true));
 		testSubSet(set.tailSet(30, false), 30, false, null, true, ssListener);
 
 		subSet = (NavigableSet<Integer>) set.subSet(15, 45);
 		copySubSet = (NavigableSet<Integer>) copy.subSet(15, 45);
-		assertThat(subSet, equalTo(copySubSet));
+		assertThat(subSet, collectionsEqual(copySubSet, true));
 		testSubSet(subSet, 15, true, 45, false, ssListener);
 	}
 
@@ -500,10 +500,16 @@ public class ObservableCollectionsTest {
 		boolean maxInclude,
 		Consumer<? super NavigableSet<Integer>> check) {
 		int startSize = subSet.size();
+		int size = startSize;
+		ArrayList<Integer> remove = new ArrayList<>();
 		if(min != null) {
 			if(minInclude) {
+				if(!subSet.contains(min)) {
+					remove.add(min);
+					size++;
+				}
 				subSet.add(min);
-				assertEquals(startSize + 1, subSet.size());
+				assertEquals(size, subSet.size());
 				check.accept(subSet);
 			}
 			try {
@@ -516,13 +522,18 @@ public class ObservableCollectionsTest {
 			}
 		} else {
 			subSet.add(Integer.MIN_VALUE);
-			assertEquals(startSize + 1, subSet.size());
+			size++;
+			assertEquals(size, subSet.size());
 			check.accept(subSet);
 		}
 		if(max != null) {
 			if(maxInclude) {
+				if(!subSet.contains(max)) {
+					remove.add(max);
+					size++;
+				}
 				subSet.add(max);
-				assertEquals(startSize + 1, subSet.size());
+				assertEquals(size, subSet.size());
 				check.accept(subSet);
 			}
 			try {
@@ -535,10 +546,13 @@ public class ObservableCollectionsTest {
 			}
 		} else {
 			subSet.add(Integer.MAX_VALUE);
-			assertEquals(startSize + 1, subSet.size());
+			size++;
+			assertEquals(size, subSet.size());
 			check.accept(subSet);
 		}
-		subSet.removeAll(asList(min, max, Integer.MIN_VALUE, Integer.MAX_VALUE));
+		remove.add(Integer.MIN_VALUE);
+		remove.add(Integer.MAX_VALUE);
+		subSet.removeAll(remove);
 		assertEquals(startSize, subSet.size());
 		check.accept(subSet);
 	}

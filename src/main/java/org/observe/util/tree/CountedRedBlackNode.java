@@ -296,11 +296,12 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 		@Override
 		public <V> NavigableSet<V> getMappedSubSet(Function<? super E, V> outMap, Function<? super V, E> inMap, boolean reverse,
 			V fromElement, boolean fromInclusive, V toElement, boolean toInclusive) {
+			Function<? super V, E> in = inMap != null ? inMap : v -> (E) v;
 			Comparator<? super E> treeComparator = comparator();
-			Comparator<V> comparator = (o1, o2) -> treeComparator.compare(inMap.apply(o1), inMap.apply(o2));
+			Comparator<V> comparator = (o1, o2) -> treeComparator.compare(in.apply(o1), in.apply(o2));
 			if(fromElement != null && toElement != null) {
 				int compare = comparator.compare(fromElement, toElement);
-				if(compare < 0)
+				if(compare > 0)
 					throw new IllegalArgumentException("Sub Set arguments " + fromElement + " and " + toElement + " are in reverse order");
 				if(compare == 0 && (!fromInclusive || !toInclusive))
 					return java.util.Collections.emptyNavigableSet();
@@ -349,7 +350,7 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 			public int size() {
 				CountedRedBlackNode<E> first = getEndNode(true);
 				CountedRedBlackNode<E> last = getEndNode(false);
-				int idxDiff = last.getIndex() - first.getIndex();
+				int idxDiff = last.getIndex() - first.getIndex() + 1;
 				if(isReversed())
 					idxDiff = -idxDiff;
 				return idxDiff;

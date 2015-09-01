@@ -166,7 +166,7 @@ public interface RedBlackTreeSet<E, N extends ValuedRedBlackNode<E>> extends jav
 		else if(start == null)
 			startNode = getEndNode(forward);
 		else
-			startNode = (N) root.findClosestValue(start, true, includeStart);
+			startNode = (N) root.findClosestValue(start, false, includeStart);
 
 		return new Iterator<N>() {
 			private N theLastNode = null;
@@ -522,7 +522,7 @@ public interface RedBlackTreeSet<E, N extends ValuedRedBlackNode<E>> extends jav
 				while(ret.getChild(first) != null)
 					ret = (ValuedRedBlackNode<E>) ret.getChild(first);
 			} else {
-				ret = ret.findClosestValue(theInMap.apply(min), first, include);
+				ret = ret.findClosestValue(theInMap.apply(min), !first, include);
 			}
 			return ret;
 		}
@@ -632,10 +632,16 @@ public interface RedBlackTreeSet<E, N extends ValuedRedBlackNode<E>> extends jav
 
 		private boolean checkRange(V val) {
 			Comparator<? super V> compare = forwardComparator();
-			if(theMin != null && compare.compare(val, theMin) < 0)
-				return false;
-			if(theMax != null && compare.compare(val, theMax) > 0)
-				return false;
+			if(theMin != null) {
+				int comp = compare.compare(val, theMin);
+				if(comp < 0 || (!isMinInclusive && comp == 0))
+					return false;
+			}
+			if(theMax != null) {
+				int comp = compare.compare(val, theMax);
+				if(comp > 0 || (!isMaxInclusive && comp == 0))
+					return false;
+			}
 			return true;
 		}
 
@@ -741,7 +747,7 @@ public interface RedBlackTreeSet<E, N extends ValuedRedBlackNode<E>> extends jav
 		@Override
 		public boolean add(V e) {
 			if(!checkRange(e))
-				throw new UnsupportedOperationException("Cannot insert an element into a sub-set that cannot include the element");
+				throw new IllegalArgumentException("Cannot insert an element into a sub-set that cannot include the element");
 			E mapped = theInMap.apply(e);
 			return theTreeSet.add(mapped);
 		}
@@ -854,6 +860,21 @@ public interface RedBlackTreeSet<E, N extends ValuedRedBlackNode<E>> extends jav
 		@Override
 		public SortedSet<V> tailSet(V fromElement) {
 			return getSubSet(false, fromElement, true, null, true);
+		}
+
+		@Override
+		public String toString() {
+			StringBuilder ret = new StringBuilder("{");
+			boolean first = true;
+			for(Object value : this) {
+				if(!first) {
+					ret.append(", ");
+				} else
+					first = false;
+				ret.append(value);
+			}
+			ret.append('}');
+			return ret.toString();
 		}
 	}
 
