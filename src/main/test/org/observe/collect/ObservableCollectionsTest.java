@@ -53,11 +53,16 @@ import prisms.lang.Type;
 public class ObservableCollectionsTest {
 	private static final int COLLECTION_TEST_DEPTH = 5;
 
-	private interface Checker<T> extends Consumer<T>, Transaction {
+	/**
+	 * A predicate interface that helps with testing observable structures
+	 *
+	 * @param <T> The type of the item to check
+	 */
+	public static interface Checker<T> extends Consumer<T>, Transaction {
 	}
 
 	/**
-	 * Runs a barrage of tests against a collection, unobservable or not
+	 * Runs a barrage of tests against a collection, observable or not
 	 *
 	 * @param <T> The type of the collection
 	 * @param coll The collection to test
@@ -69,7 +74,7 @@ public class ObservableCollectionsTest {
 
 	private static <T extends Collection<Integer>> void testCollection(T coll, Consumer<? super T> check, int depth) {
 		if(coll instanceof ObservableCollection)
-			check = (Consumer<? super T>) testingObservableBasicCollection((ObservableCollection<Integer>) coll,
+			check = (Consumer<? super T>) testingObservableCollection((ObservableCollection<Integer>) coll,
 				(Consumer<? super ObservableCollection<Integer>>) check, depth);
 
 		if(coll instanceof List)
@@ -82,7 +87,7 @@ public class ObservableCollectionsTest {
 			testBasicCollection(coll, check);
 	}
 
-	private static <T extends ObservableCollection<Integer>> Checker<ObservableCollection<Integer>> testingObservableBasicCollection(T coll,
+	private static <T extends ObservableCollection<Integer>> Checker<ObservableCollection<Integer>> testingObservableCollection(T coll,
 		Consumer<? super T> check, int depth) {
 
 		boolean ordered = coll instanceof ObservableOrderedCollection;
@@ -211,7 +216,15 @@ public class ObservableCollectionsTest {
 		};
 	}
 
-	private static <T> Subscription sync(ObservableCollection<T> coll, List<T> synced) {
+	/**
+	 * Adds a listener to keep a list updated with the contents of an observable collection
+	 *
+	 * @param <T> The type of elements in the collection
+	 * @param coll The observable collection
+	 * @param synced The unobservable collection to synchronize with the observable collection
+	 * @return The subscription to use to terminate the synchronization
+	 */
+	public static <T> Subscription sync(ObservableCollection<T> coll, List<T> synced) {
 		if(coll instanceof ObservableOrderedCollection)
 			return ((ObservableOrderedCollection<T>) coll).onOrderedElement(el -> {
 				el.subscribe(new Observer<ObservableValueEvent<T>>() {
@@ -253,7 +266,18 @@ public class ObservableCollectionsTest {
 			});
 	}
 
-	private static <K, V, C extends Collection<V>> Subscription sync(ObservableMultiMap<K, V> map, Map<K, C> synced,
+	/**
+	 * Adds a listener to keep a map of collections updated with the contents of an observable multi-map
+	 *
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 * @param <C> The type of collection to create for the synced map
+	 * @param map The observable map
+	 * @param synced The unobservable map to synchronize with the observable collection
+	 * @param collectCreator Creates collections for the unobservable map when a new key is observed in the observable map
+	 * @return The subscription to use to terminate the synchronization
+	 */
+	public static <K, V, C extends Collection<V>> Subscription sync(ObservableMultiMap<K, V> map, Map<K, C> synced,
 		Supplier<? extends C> collectCreator) {
 		return map.keySet().onElement(el -> el.subscribe(new Observer<ObservableValueEvent<K>>() {
 			@Override
@@ -494,6 +518,8 @@ public class ObservableCollectionsTest {
 		copySubSet = (NavigableSet<Integer>) copy.subSet(15, 45);
 		assertThat(subSet, collectionsEqual(copySubSet, true));
 		testSubSet(subSet, 15, true, 45, false, ssListener);
+
+		int todo; // TODO Test reversed sets
 	}
 
 	private static void testSubSet(NavigableSet<Integer> subSet, Integer min, boolean minInclude, Integer max,
@@ -845,7 +871,13 @@ public class ObservableCollectionsTest {
 		};
 	}
 
-	private static <T> Matcher<Collection<T>> collectionsEqual(Collection<T> values, boolean ordered) {
+	/**
+	 * @param <T> The element type of the collection
+	 * @param values The collection to test against
+	 * @param ordered Whether to test the equality of the collections as if order matters
+	 * @return A matcher that matches a collection c if c is equivalent to the given collection, in an ordered way if specified
+	 */
+	public static <T> Matcher<Collection<T>> collectionsEqual(Collection<T> values, boolean ordered) {
 		return new org.hamcrest.BaseMatcher<Collection<T>>() {
 			@Override
 			public boolean matches(Object arg0) {
@@ -874,7 +906,16 @@ public class ObservableCollectionsTest {
 		};
 	}
 
-	private static <T> Collection<T> sequence(int num, Function<Integer, T> map, boolean scramble) {
+	/**
+	 * Creates a sequence of values to test against
+	 *
+	 * @param <T> The type of the sequence
+	 * @param num The number of items for the sequence
+	 * @param map The map to transform the sequence indexes into sequence values
+	 * @param scramble Whether to scramble the sequence in a reproducible way
+	 * @return The sequence
+	 */
+	public static <T> Collection<T> sequence(int num, Function<Integer, T> map, boolean scramble) {
 		ArrayList<T> ret = new ArrayList<>();
 		for(int i = 0; i < num; i++)
 			ret.add(null);
@@ -906,7 +947,13 @@ public class ObservableCollectionsTest {
 		return Collections.unmodifiableCollection(ret);
 	}
 
-	private static <T> Matcher<T> greaterThanOrEqual(T value, Comparator<? super T> comp) {
+	/**
+	 * @param <T> The value type
+	 * @param value The value to compare against
+	 * @param comp The comparator to do the comparison
+	 * @return A matcher that matches a value v if v is greater than or equal to the <code>value</code>.
+	 */
+	public static <T> Matcher<T> greaterThanOrEqual(T value, Comparator<? super T> comp) {
 		return new org.hamcrest.BaseMatcher<T>() {
 			@Override
 			public boolean matches(Object arg0) {
