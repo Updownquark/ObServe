@@ -1,10 +1,13 @@
 package org.observe.util.tree;
 
 import java.util.Iterator;
+import java.util.Map;
 
 import org.junit.Test;
 import org.observe.collect.ObservableCollectionsTest;
+import org.observe.datastruct.ObservableDataStructTest;
 import org.observe.util.tree.CountedRedBlackNode.DefaultNode;
+import org.observe.util.tree.CountedRedBlackNode.DefaultTreeMap;
 import org.observe.util.tree.CountedRedBlackNode.DefaultTreeSet;
 import org.observe.util.tree.RedBlackNode.ComparableValuedRedBlackNode;
 import org.observe.util.tree.RedBlackNode.ValuedRedBlackNode;
@@ -117,7 +120,13 @@ public class TreeUtilsTest {
 		});
 	}
 
+	@Test
 	public void testTreeMap() {
-		// TODO
+		DefaultTreeMap<Integer, Integer> map = new DefaultTreeMap<>(Integer::compareTo);
+		ObservableDataStructTest.testMap(map, s -> {
+			DefaultNode<Map.Entry<Integer, Integer>> root = map.getRoot();
+			if(root != null)
+				root.checkValid();
+		});
 	}
 }

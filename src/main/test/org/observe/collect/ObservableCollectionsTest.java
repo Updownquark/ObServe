@@ -839,7 +839,12 @@ public class ObservableCollectionsTest {
 			check.accept(list);
 	}
 
-	private static <T> Matcher<Collection<T>> contains(T value) {
+	/**
+	 * @param <T> The type of the value to check containment for
+	 * @param value The value to check containment for
+	 * @return A matcher that matches a collection if it contains the given value
+	 */
+	public static <T> Matcher<Collection<T>> contains(T value) {
 		return new org.hamcrest.BaseMatcher<Collection<T>>() {
 			@Override
 			public boolean matches(Object arg0) {
@@ -853,11 +858,21 @@ public class ObservableCollectionsTest {
 		};
 	}
 
-	private static <T> Matcher<Collection<T>> containsAll(T... values) {
+	/**
+	 * @param <T> The type of the values to check containment for
+	 * @param values The values to check containment for
+	 * @return A matcher that matches a collection if it contains all of the given values
+	 */
+	public static <T> Matcher<Collection<T>> containsAll(T... values) {
 		return containsAll(asList(values));
 	}
 
-	private static <T> Matcher<Collection<T>> containsAll(Collection<T> values) {
+	/**
+	 * @param <T> The type of the values to check containment for
+	 * @param values The values to check containment for
+	 * @return A matcher that matches a collection if it contains all of the given values
+	 */
+	public static <T> Matcher<Collection<T>> containsAll(Collection<T> values) {
 		return new org.hamcrest.BaseMatcher<Collection<T>>() {
 			@Override
 			public boolean matches(Object arg0) {

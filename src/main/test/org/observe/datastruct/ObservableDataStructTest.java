@@ -1,16 +1,20 @@
 package org.observe.datastruct;
 
+import static java.util.Arrays.asList;
 import static org.hamcrest.CoreMatchers.not;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.observe.collect.ObservableCollectionsTest.collectionsEqual;
+import static org.observe.collect.ObservableCollectionsTest.containsAll;
 import static org.observe.collect.ObservableCollectionsTest.greaterThanOrEqual;
 import static org.observe.collect.ObservableCollectionsTest.sequence;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.NavigableMap;
@@ -51,6 +55,44 @@ public class ObservableDataStructTest {
 	}
 
 	/**
+	 * @param <T> The type of the key to check containment for
+	 * @param value The key to check containment for
+	 * @return A matcher that matches a map if it contains the given key
+	 */
+	public static <T> Matcher<Map<T, ?>> containsKey(T value) {
+		return new org.hamcrest.BaseMatcher<Map<T, ?>>() {
+			@Override
+			public boolean matches(Object arg0) {
+				return ((Map<T, ?>) arg0).containsKey(value);
+			}
+
+			@Override
+			public void describeTo(Description arg0) {
+				arg0.appendText("collection contains ").appendValue(value);
+			}
+		};
+	}
+
+	/**
+	 * @param <T> The type of the value to check containment for
+	 * @param value The value to check containment for
+	 * @return A matcher that matches a map if it contains the given value
+	 */
+	public static <T> Matcher<Map<?, T>> containsValue(T value) {
+		return new org.hamcrest.BaseMatcher<Map<?, T>>() {
+			@Override
+			public boolean matches(Object arg0) {
+				return ((Map<?, T>) arg0).containsValue(value);
+			}
+
+			@Override
+			public void describeTo(Description arg0) {
+				arg0.appendText("collection contains ").appendValue(value);
+			}
+		};
+	}
+
+	/**
 	 * @param <K> The key type of the map
 	 * @param <V> The value type of the map
 	 * @param values The map to test against
@@ -87,7 +129,100 @@ public class ObservableDataStructTest {
 	 *            assert other side effects of map modification
 	 */
 	private static <T extends Map<Integer, Integer>> void testBasicMap(T map, Consumer<? super T> check) {
-		// TODO
+		// Most basic functionality, with iterator
+		assertEquals(0, map.size()); // Start with empty map
+		assertEquals(null, map.put(0, 1)); // Test put
+		assertEquals(1, map.size()); // Test size
+		if(check != null)
+			check.accept(map);
+		Iterator<Integer> iter = map.keySet().iterator(); // Test key iterator
+		assertEquals(true, iter.hasNext());
+		assertEquals(0, (int) iter.next());
+		assertEquals(false, iter.hasNext());
+		iter = map.keySet().iterator();
+		assertEquals(true, iter.hasNext());
+		assertEquals(0, (int) iter.next());
+		iter.remove(); // Test iterator remove
+		assertEquals(0, map.size());
+		if(check != null)
+			check.accept(map);
+		assertEquals(false, iter.hasNext());
+		iter = map.keySet().iterator();
+		assertEquals(false, iter.hasNext());
+		assertEquals(null, map.put(0, 1));
+		assertEquals(1, map.size());
+		assertFalse(map.isEmpty());
+		if(check != null)
+			check.accept(map);
+		assertThat(map, containsKey(0)); // Test containsKey
+		assertThat(map, containsValue(1)); // Test containsValue
+		assertEquals(1, (int) map.get(0));
+		assertEquals(1, (int) map.remove(0)); // Test remove
+		assertEquals(null, map.remove(0));
+		assertTrue(map.isEmpty()); // Test isEmpty
+		if(check != null)
+			check.accept(map);
+		assertThat(map, not(containsKey(0)));
+		assertThat(map, not(containsValue(1)));
+		assertEquals(null, map.get(0));
+
+		Map<Integer, Integer> toAdd = new HashMap<>();
+		for(int i = 0; i < 50; i++)
+			toAdd.put(i, i + 1);
+		for(int i = 99; i >= 50; i--)
+			toAdd.put(i, i + 1);
+		map.putAll(toAdd); // Test putAll
+		assertEquals(100, map.size());
+		if(check != null)
+			check.accept(map);
+		assertThat(map.keySet(), containsAll(0, 75, 50, 11, 99, 50)); // 50 twice. Test containsAll
+		// 100 not in map. 50 in list twice. Test removeAll.
+		assertTrue(map.keySet().removeAll(
+			// Easier to debug this way
+			asList(0, 50, 100, 10, 90, 20, 80, 30, 70, 40, 60, 50)));
+		assertEquals(90, map.size());
+		if(check != null)
+			check.accept(map);
+
+		Map<Integer, Integer> copy = new HashMap<>(map); // More iterator testing
+		assertThat(copy, mapsEqual(map, false));
+
+		assertThat(map.keySet(), containsAll(1, 2, 11, 99));
+		map.keySet().retainAll(
+			// Easier to debug this way
+			asList(1, 51, 101, 11, 91, 21, 81, 31, 71, 41, 61, 51)); // 101 not in map. 51 in list twice. Test retainAll.
+		assertEquals(10, map.size());
+		if(check != null)
+			check.accept(map);
+		assertThat(map.keySet(), not(containsAll(1, 2, 11, 99)));
+		map.clear(); // Test clear
+		assertEquals(0, map.size());
+		if(check != null)
+			check.accept(map);
+		assertThat(map, not(containsKey(2)));
+		// Leave the map empty
+
+		assertEquals(null, map.put(0, 1));
+		assertEquals(1, map.size());
+		if(check != null)
+			check.accept(map);
+		assertEquals(null, map.put(1, 2));
+		assertEquals(2, map.size());
+		if(check != null)
+			check.accept(map);
+		assertEquals((Integer) 1, map.put(0, 2)); // Test uniqueness
+		assertEquals((Integer) 2, map.put(1, 1));
+		assertEquals(2, map.size());
+		if(check != null)
+			check.accept(map);
+		assertEquals((Integer) 1, map.remove(0));
+		assertEquals(1, map.size());
+		if(check != null)
+			check.accept(map);
+		map.clear();
+		assertEquals(0, map.size());
+		if(check != null)
+			check.accept(map);
 	}
 
 	private static <T extends NavigableMap<Integer, Integer>> void testSortedMap(T map, Consumer<? super T> check) {
