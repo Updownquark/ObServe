@@ -1,5 +1,6 @@
 package org.observe.util.tree;
 
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.Map;
 
@@ -122,7 +123,12 @@ public class TreeUtilsTest {
 
 	@Test
 	public void testTreeMap() {
-		DefaultTreeMap<Integer, Integer> map = new DefaultTreeMap<>(Integer::compareTo);
+		DefaultTreeMap<Integer, Integer> map = new DefaultTreeMap<>(new Comparator<Integer>() {
+			@Override
+			public int compare(Integer o1, Integer o2) {
+				return o1.compareTo(o2);
+			}
+		});
 		ObservableDataStructTest.testMap(map, s -> {
 			DefaultNode<Map.Entry<Integer, Integer>> root = map.getRoot();
 			if(root != null)

@@ -119,7 +119,10 @@ public interface RedBlackTreeMap<K, V, N extends ValuedRedBlackNode<Map.Entry<K,
 	 * @return A bona-fide map entry (as opposed to the dummy from {@link #keyEntry(Object)}) that can have its value set
 	 */
 	default Entry<K, V> createEntry(K key) {
-		return new DefaultEntry<>(key, getDefaultValue());
+		if(key == null)
+			return null;
+		else
+			return new DefaultEntry<>(key, getDefaultValue());
 	}
 
 	/**
