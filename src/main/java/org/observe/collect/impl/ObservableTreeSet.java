@@ -140,10 +140,9 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 
 	@Override
 	public Iterable<E> iterateFrom(E start, boolean up, boolean withStart) {
-		Iterable<Entry<E, InternalElement>> backingIterable = (Iterable<Entry<E, InternalElement>>) theValues.entrySet().iterator(up,
-			theValues.keyEntry(start), withStart, null, true);
 		return () -> new Iterator<E>() {
-			private final Iterator<Entry<E, InternalElement>> backing = backingIterable.iterator();
+			private final Iterator<Entry<E, InternalElement>> backing = theValues.entrySet().iterator(up, theValues.keyEntry(start),
+				withStart, null, true);
 
 			@Override
 			public boolean hasNext() {
@@ -184,12 +183,14 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	@Override
 	public boolean removeAll(Collection<?> c) {
 		try (Transaction t = lock(true, null)) {
-			try (Transaction trans = lock(true, null)) {
-				boolean ret = false;
-				for(Object o : c)
-					ret |= removeNodeImpl(o);
-				return ret;
+			boolean ret = false;
+			for(Object o : c) {
+				if(removeNodeImpl(o)) {
+					ret = true;
+					theModCount++;
+				}
 			}
+			return ret;
 		}
 	}
 
@@ -203,6 +204,7 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 				ret = true;
 				InternalElement el = createElement(add);
 				el.setNode(theValues.putGetNode(add, el));
+				theModCount++;
 				theInternals.fireNewElement(el);
 			}
 		}
@@ -213,16 +215,14 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	public boolean retainAll(Collection<?> c) {
 		boolean ret = false;
 		try (Transaction t = lock(true, null)) {
-			try (Transaction trans = lock(true, null)) {
-				Iterator<DefaultNode<Map.Entry<E, InternalElement>>> iter = theValues.nodeIterator();
-				while(iter.hasNext()) {
-					DefaultNode<Map.Entry<E, InternalElement>> node = iter.next();
-					if(c.contains(node.getValue().getKey()))
-						continue;
-					ret = true;
-					removedNodeImpl(node);
-					iter.remove();
-				}
+			Iterator<DefaultNode<Map.Entry<E, InternalElement>>> iter = theValues.nodeIterator(false, null, true, null, true);
+			while(iter.hasNext()) {
+				DefaultNode<Map.Entry<E, InternalElement>> node = iter.next();
+				if(c.contains(node.getValue().getKey()))
+					continue;
+				removedNodeImpl(node, () -> iter.remove());
+				ret = true;
+				theModCount++;
 			}
 		}
 		return ret;
@@ -231,10 +231,10 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	@Override
 	public void clear() {
 		try (Transaction t = lock(true, null)) {
-			Iterator<DefaultNode<Map.Entry<E, InternalElement>>> iter = theValues.nodeIterator();
+			Iterator<DefaultNode<Map.Entry<E, InternalElement>>> iter = theValues.nodeIterator(false, null, true, null, true);
 			while(iter.hasNext()) {
 				DefaultNode<Map.Entry<E, InternalElement>> node = iter.next();
-				removedNodeImpl(node);
+				removedNodeImpl(node, null);
 			}
 			theValues.clear();
 		}
@@ -275,15 +275,16 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	private boolean removeNodeImpl(Object o) {
 		DefaultNode<Map.Entry<E, InternalElement>> node = theValues.getNode(o);
 		if(node != null) {
-			theValues.removeNode(node);
-			removedNodeImpl(node);
+			removedNodeImpl(node, () -> theValues.removeNode(node));
 			return true;
 		} else
 			return false;
 	}
 
-	private void removedNodeImpl(DefaultNode<Map.Entry<E, InternalElement>> node) {
+	private void removedNodeImpl(DefaultNode<Map.Entry<E, InternalElement>> node, Runnable removeAction) {
 		node.getValue().getValue().setRemovedIndex(node.getValue().getValue().getIndex());
+		if(removeAction != null)
+			removeAction.run();
 		node.getValue().getValue().remove();
 	}
 

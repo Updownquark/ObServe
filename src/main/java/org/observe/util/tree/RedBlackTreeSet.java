@@ -166,7 +166,7 @@ public interface RedBlackTreeSet<E, N extends ValuedRedBlackNode<E>> extends jav
 		else if(start == null)
 			startNode = getEndNode(forward);
 		else
-			startNode = (N) root.findClosestValue(start, false, includeStart);
+			startNode = (N) root.findClosestValue(start, !forward, includeStart);
 
 		return new Iterator<N>() {
 			private N theLastNode = null;

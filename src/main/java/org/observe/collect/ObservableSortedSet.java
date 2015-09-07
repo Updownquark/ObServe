@@ -42,16 +42,6 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 	}
 
 	@Override
-	default ObservableValue<E> getFirst(){
-		return relative(null, true, true);
-	}
-
-	@Override
-	default ObservableValue<E> getLast(){
-		return relative(null, false, true);
-	}
-
-	@Override
 	default E first() {
 		if(isEmpty())
 			throw new java.util.NoSuchElementException();
@@ -471,21 +461,21 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 			if(isReversed)
 				reversed = !reversed;
 			if(reversed) {
-				if(theMax != null && compare.compare(start, theMax) > 0) {
+				if(start == null || (theMax != null && compare.compare(start, theMax) > 0)) {
 					start = theMax;
 					included &= isMaxIncluded;
 				}
 				stop = theMin;
 				includeStop = isMinIncluded;
 			} else {
-				if(theMin != null && compare.compare(start, theMin) < 0) {
+				if(start == null || (theMin != null && compare.compare(start, theMin) < 0)) {
 					start = theMin;
 					included &= isMinIncluded;
 				}
 				stop = theMax;
 				includeStop = isMaxIncluded;
 			}
-			Iterable<E> backingIterable = theWrapped.iterateFrom(start, included, reversed);
+			Iterable<E> backingIterable = theWrapped.iterateFrom(start, !reversed, included);
 			return () -> new Iterator<E>() {
 				private final Iterator<E> backing = backingIterable.iterator();
 
