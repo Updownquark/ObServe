@@ -203,7 +203,7 @@ public interface RedBlackTreeMap<K, V, N extends ValuedRedBlackNode<Map.Entry<K,
 				if(nextNode == null)
 					throw new java.util.NoSuchElementException();
 				theLastNode = nextNode;
-				theNextNode = (N) nextNode.getClosest(forward);
+				theNextNode = (N) nextNode.getClosest(!forward);
 				return theLastNode;
 			}
 
@@ -378,6 +378,8 @@ public interface RedBlackTreeMap<K, V, N extends ValuedRedBlackNode<Map.Entry<K,
 			return root;
 		}
 		TreeOpResult result = root.add(new RedBlackTreeMap.DefaultEntry<>(key), false);
+		if(root != result.getNewRoot())
+			setRoot((N) result.getNewRoot());
 		return (N) result.getNewNode();
 	}
 
@@ -814,11 +816,25 @@ public interface RedBlackTreeMap<K, V, N extends ValuedRedBlackNode<Map.Entry<K,
 		}
 
 		private boolean checkRange(K key) {
-			Comparator<? super K> compare = theMap.comparator();
-			if(theMinKey != null && compare.compare(key, theMinKey) < 0)
-				return false;
-			if(theMaxKey != null && compare.compare(key, theMaxKey) > 0)
-				return false;
+			Comparator<? super K> comparator = theMap.comparator();
+			if(theMinKey != null) {
+				int compare = comparator.compare(key, theMinKey);
+				if(compare < 0)
+					return false;
+				if(compare == 0) {
+					if(!isMinInclusive)
+						return false;
+				}
+			}
+			if(theMaxKey != null) {
+				int compare = comparator.compare(key, theMaxKey);
+				if(compare > 0)
+					return false;
+				if(compare == 0) {
+					if(!isMaxInclusive)
+						return false;
+				}
+			}
 			return true;
 		}
 
@@ -844,7 +860,7 @@ public interface RedBlackTreeMap<K, V, N extends ValuedRedBlackNode<Map.Entry<K,
 		@Override
 		public V put(K key, V value) {
 			if(!checkRange(key))
-				throw new UnsupportedOperationException("Cannot insert an entry into a sub-map that cannot include the key");
+				throw new IllegalArgumentException("Cannot insert an entry into a sub-map that cannot include the key");
 			return theMap.put(key, value);
 		}
 
@@ -1033,6 +1049,11 @@ public interface RedBlackTreeMap<K, V, N extends ValuedRedBlackNode<Map.Entry<K,
 		@Override
 		public SortedMap<K, V> tailMap(K fromKey) {
 			return getSubMap(false, fromKey, true, null, true);
+		}
+
+		@Override
+		public String toString() {
+			return entrySet().toString();
 		}
 	}
 }

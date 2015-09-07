@@ -488,6 +488,11 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 			return ret;
 		}
 
+		@Override
+		public String toString() {
+			return entrySet().toString();
+		}
+
 		/**
 		 * Implements {@link CountedRedBlackNode.CountedRedBlackTreeMap#entrySet()}
 		 *

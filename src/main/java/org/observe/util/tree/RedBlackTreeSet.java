@@ -649,7 +649,7 @@ public interface RedBlackTreeSet<E, N extends ValuedRedBlackNode<E>> extends jav
 		public boolean contains(Object o) {
 			if(!checkRange((V) o))
 				return false;
-			return theTreeSet.contains(o);
+			return theTreeSet.contains(theInMap.apply((V) o));
 		}
 
 		@Override

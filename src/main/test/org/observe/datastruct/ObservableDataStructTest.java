@@ -104,9 +104,9 @@ public class ObservableDataStructTest {
 		return new org.hamcrest.BaseMatcher<Map<K, V>>() {
 			@Override
 			public boolean matches(Object arg0) {
-				if(!keyMatcher.matches(arg0))
-					return false;
 				Map<K, V> arg = (Map<K, V>) arg0;
+				if(!keyMatcher.matches(arg.keySet()))
+					return false;
 				for(Map.Entry<K, V> entry : values.entrySet())
 					if(!Objects.equals(entry.getValue(), arg.get(entry.getKey())))
 						return false;
@@ -211,7 +211,7 @@ public class ObservableDataStructTest {
 		if(check != null)
 			check.accept(map);
 		assertEquals((Integer) 1, map.put(0, 2)); // Test uniqueness
-		assertEquals((Integer) 2, map.put(1, 1));
+		assertEquals((Integer) 2, map.put(0, 1));
 		assertEquals(2, map.size());
 		if(check != null)
 			check.accept(map);
@@ -238,8 +238,6 @@ public class ObservableDataStructTest {
 			if(check != null)
 				check.accept(coll);
 		});
-
-		int todo; // TODO Test with values
 
 		// Test the special find methods of NavigableSet
 		for(Integer v : sequence(30, v -> v * 2, true))
@@ -326,9 +324,6 @@ public class ObservableDataStructTest {
 					remove.add(min);
 					size++;
 				}
-				subMap.put(min, -min);
-				assertEquals(size, subMap.size());
-				check.accept(subMap);
 			}
 			try {
 				if(minInclude) {
@@ -350,9 +345,6 @@ public class ObservableDataStructTest {
 					remove.add(max);
 					size++;
 				}
-				subMap.put(max, -max);
-				assertEquals(size, subMap.size());
-				check.accept(subMap);
 			}
 			try {
 				if(maxInclude)
@@ -370,7 +362,8 @@ public class ObservableDataStructTest {
 		}
 		remove.add(Integer.MIN_VALUE);
 		remove.add(Integer.MAX_VALUE);
-		subMap.removeAll(remove);
+		for(Integer rem : remove)
+			subMap.remove(rem);
 		assertEquals(startSize, subMap.size());
 		check.accept(subMap);
 	}
