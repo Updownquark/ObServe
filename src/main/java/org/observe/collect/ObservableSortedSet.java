@@ -688,6 +688,11 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 		public void clear() {
 			PartialSortedSetImpl.super.clear();
 		}
+
+		@Override
+		public String toString() {
+			return ObservableSet.toString(this);
+		}
 	}
 
 	/**

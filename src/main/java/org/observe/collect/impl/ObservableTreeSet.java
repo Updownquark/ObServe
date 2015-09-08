@@ -243,22 +243,22 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	@Override
 	public E pollFirst() {
 		try (Transaction t = lock(true, null)) {
-			Map.Entry<E, InternalElement> entry = theValues.pollFirstEntry();
-			if(entry == null)
+			DefaultNode<Map.Entry<E, InternalElement>> node = theValues.getEndNode(true);
+			if(node == null)
 				return null;
-			entry.getValue().remove();
-			return entry.getKey();
+			removedNodeImpl(node, () -> theValues.removeNode(node));
+			return node.getValue().getKey();
 		}
 	}
 
 	@Override
 	public E pollLast() {
 		try (Transaction t = lock(true, null)) {
-			Map.Entry<E, InternalElement> entry = theValues.pollLastEntry();
-			if(entry == null)
+			DefaultNode<Map.Entry<E, InternalElement>> node = theValues.getEndNode(false);
+			if(node == null)
 				return null;
-			entry.getValue().remove();
-			return entry.getKey();
+			removedNodeImpl(node, () -> theValues.removeNode(node));
+			return node.getValue().getKey();
 		}
 	}
 
