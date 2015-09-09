@@ -68,7 +68,7 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 		if(node != null)
 			ret += size(node.getLeft());
 		else
-			return -ret - 1;
+			return -ret - 1; // There are ret nodes before the insertion point
 		return ret;
 	}
 
@@ -430,18 +430,17 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 			while(true) {
 				N left = (N) node.getLeft();
 				int leftSize = CountedRedBlackNode.size(left);
-				if(leftSize < index)
+				if(leftSize > (index - past))
 					node = left;
+				else if(leftSize == (index - past))
+					return node;
 				else {
 					N right = (N) node.getRight();
 					if(right == null) {
-						if(index == 0)
-							return node;
-						else
-							throw new IndexOutOfBoundsException(index + " of " + past);
+						throw new IndexOutOfBoundsException(index + " of " + past);
 					} else {
-						past += leftSize;
-						node = (N) node.getRight();
+						past += leftSize + 1;
+						node = right;
 					}
 				}
 			}
@@ -452,7 +451,10 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 		 * @return The number of keys in this map less than the given key
 		 */
 		public int indexOfKey(K key) {
-			return getRoot().getIndex(node -> node.compare(keyEntry(key), node.getValue()));
+			N root = getRoot();
+			if(root == null)
+				return -1;
+			return root.getIndex(node -> node.compare(keyEntry(key), node.getValue()));
 		}
 
 		@Override

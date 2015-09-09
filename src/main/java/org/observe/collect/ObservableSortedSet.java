@@ -423,22 +423,22 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 			else {
 				minIndex = theWrapped.indexOf(theMin);
 				if(minIndex < 0)
-					minIndex = -minIndex; // Don't include the element at the insertion index
+					minIndex = -minIndex - 1; // Include the element at the insertion index
 				else if(!isMinIncluded)
 					minIndex++;
 			}
 			int maxIndex;
 			if(theMax == null)
-				maxIndex = theWrapped.size();
+				maxIndex = theWrapped.size() - 1;
 			else {
 				maxIndex = theWrapped.indexOf(theMax);
-				if(maxIndex < 0)
+				if(maxIndex < 0) {
 					maxIndex = -maxIndex - 1;
-				else if(!isMaxIncluded)
+					maxIndex--; // Don't include the element at the insertion index
+				} else if(!isMaxIncluded)
 					maxIndex--;
-				maxIndex++;
 			}
-			int ret = maxIndex - minIndex;
+			int ret = maxIndex - minIndex + 1; // Both minIndex and maxIndex are included here
 			if(ret < 0)
 				ret = 0;
 			return ret;
@@ -490,8 +490,10 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 					if(calledHasNext)
 						return !isEnded;
 					calledHasNext = true;
-					if(!backing.hasNext())
+					if(!backing.hasNext()) {
+						isEnded = true;
 						return false;
+					}
 					theNext = backing.next();
 					if(stop != null) {
 						int comp = compare.compare(theNext, stop);

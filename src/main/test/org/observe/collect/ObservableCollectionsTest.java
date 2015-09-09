@@ -133,7 +133,73 @@ public class ObservableCollectionsTest {
 		ArrayList<Integer> combinedSynced = new ArrayList<>();
 		Subscription combineSub = sync(combinedOL, combinedSynced);
 
-		// TODO If sorted set, test on some synced sub-sets
+		// If sorted set, test on some synced sub-sets
+		class SubSetRange {
+			final Integer min;
+
+			final Integer max;
+
+			final boolean includeMin;
+
+			final boolean includeMax;
+
+			@SuppressWarnings("hiding")
+			SubSetRange(Integer min, Integer max, boolean includeMin, boolean includeMax) {
+				this.min = min;
+				this.max = max;
+				this.includeMin = includeMin;
+				this.includeMax = includeMax;
+			}
+		}
+		List<SubSetRange> subSetRanges;
+		List<ObservableSortedSet<Integer>> subSets;
+		List<List<Integer>> syncedSubSets;
+		List<Subscription> syncedSubSetSubs;
+		if(coll instanceof ObservableSortedSet) {
+			ObservableSortedSet<Integer> sortedSet = (ObservableSortedSet<Integer>) coll;
+			subSetRanges = new ArrayList<>();
+			subSets = new ArrayList<>();
+			syncedSubSets = new ArrayList<>();
+			syncedSubSetSubs = new ArrayList<>();
+
+			int [] divisions = new int[] {0, 15, 30, 45, 60, 100};
+			int lastDiv = divisions[divisions.length - 1];
+			subSetRanges.add(new SubSetRange(null, divisions[0], true, false));
+			subSets.add(sortedSet.headSet(divisions[0]));
+			subSetRanges.add(new SubSetRange(null, divisions[0], true, true));
+			subSets.add(sortedSet.headSet(divisions[0], true));
+			subSetRanges.add(new SubSetRange(lastDiv, null, true, true));
+			subSets.add(sortedSet.tailSet(lastDiv));
+			subSetRanges.add(new SubSetRange(lastDiv, null, false, true));
+			subSets.add(sortedSet.tailSet(lastDiv, false));
+			for(int i = 0; i < divisions.length - 1; i++) {
+				subSetRanges.add(new SubSetRange(divisions[i], divisions[i + 1], true, false));
+				subSets.add(sortedSet.subSet(divisions[i], divisions[i + 1]));
+			}
+			for(int i = 0; i < divisions.length - 1; i++) {
+				subSetRanges.add(new SubSetRange(divisions[i], divisions[i + 1], true, true));
+				subSets.add(sortedSet.subSet(divisions[i], true, divisions[i + 1], true));
+			}
+			for(int i = 0; i < divisions.length - 1; i++) {
+				subSetRanges.add(new SubSetRange(divisions[i], divisions[i + 1], false, false));
+				subSets.add(sortedSet.subSet(divisions[i], false, divisions[i + 1], false));
+			}
+			for(int i = 0; i < divisions.length - 1; i++) {
+				subSetRanges.add(new SubSetRange(divisions[i], divisions[i + 1], false, true));
+				subSets.add(sortedSet.subSet(divisions[i], false, divisions[i + 1], true));
+			}
+
+			for(int i = 0; i < subSets.size(); i++) {
+				ArrayList<Integer> sync = new ArrayList<>();
+				syncedSubSets.add(sync);
+				syncedSubSetSubs.add(sync(subSets.get(i), sync));
+			}
+		} else {
+			subSetRanges = null;
+			subSets = null;
+			syncedSubSets = null;
+			syncedSubSetSubs = null;
+		}
 
 		return new Checker<ObservableCollection<Integer>>() {
 			@Override
@@ -166,6 +232,41 @@ public class ObservableCollectionsTest {
 				List<Integer> combinedCorrect = coll.stream().map(v -> v + combineVar.get()).collect(Collectors.toList());
 				assertThat(combinedOL, collectionsEqual(combinedCorrect, ordered));
 				assertThat(combinedSynced, collectionsEqual(combinedCorrect, ordered));
+
+				if(subSets != null) {
+					for(int i = 0; i < subSets.size(); i++) {
+						ObservableSortedSet<Integer> subSet = subSets.get(i);
+						checkSubSet((ObservableSortedSet<Integer>) coll, subSet, subSetRanges.get(i));
+						assertThat(syncedSubSets.get(i), collectionsEqual(subSet, true));
+					}
+				}
+			}
+
+			private void checkSubSet(ObservableSortedSet<Integer> sortedSet, ObservableSortedSet<Integer> subSet, SubSetRange range) {
+				Iterator<Integer> outerIter = sortedSet.iterator();
+				Iterator<Integer> innerIter = subSet.iterator();
+				boolean isInRange = range.min == null;
+				int innerCount = 0;
+				while(outerIter.hasNext()) {
+					Integer outerNext = outerIter.next();
+					if(!isInRange) {
+						int comp = outerNext.compareTo(range.min);
+						if(comp > 0 || (range.includeMin && comp == 0))
+							isInRange = true;
+					}
+					if(isInRange && range.max != null) {
+						int comp = outerNext.compareTo(range.max);
+						if(comp > 0 || (!range.includeMax && comp == 0))
+							break;
+					}
+					if(isInRange) {
+						innerCount++;
+						Integer innerNext = innerIter.next();
+						assertEquals(innerNext, outerNext);
+					}
+				}
+				assertFalse(innerIter.hasNext());
+				assertEquals(innerCount, subSet.size());
 			}
 
 			@Override
@@ -214,6 +315,10 @@ public class ObservableCollectionsTest {
 				filteredSub1.unsubscribe();
 				filterMapSub.unsubscribe();
 				combineSub.unsubscribe();
+				if(syncedSubSetSubs != null) {
+					for(Subscription sub : syncedSubSetSubs)
+						sub.unsubscribe();
+				}
 			}
 		};
 	}
