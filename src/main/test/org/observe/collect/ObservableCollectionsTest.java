@@ -133,6 +133,8 @@ public class ObservableCollectionsTest {
 		ArrayList<Integer> combinedSynced = new ArrayList<>();
 		Subscription combineSub = sync(combinedOL, combinedSynced);
 
+		// TODO If sorted set, test on some synced sub-sets
+
 		return new Checker<ObservableCollection<Integer>>() {
 			@Override
 			public void accept(ObservableCollection<Integer> value) {
@@ -514,6 +516,8 @@ public class ObservableCollectionsTest {
 		assertThat(subSet, collectionsEqual(copySubSet, true));
 		testSubSet(set.tailSet(30, false), 30, false, null, true, ssListener);
 
+		ssListener.accept(set);
+
 		subSet = (NavigableSet<Integer>) set.subSet(15, 45);
 		copySubSet = (NavigableSet<Integer>) copy.subSet(15, 45);
 		assertThat(subSet, collectionsEqual(copySubSet, true));
@@ -522,8 +526,7 @@ public class ObservableCollectionsTest {
 		int todo; // TODO Test reversed sets
 	}
 
-	private static void testSubSet(NavigableSet<Integer> subSet, Integer min, boolean minInclude, Integer max,
-		boolean maxInclude,
+	private static void testSubSet(NavigableSet<Integer> subSet, Integer min, boolean minInclude, Integer max, boolean maxInclude,
 		Consumer<? super NavigableSet<Integer>> check) {
 		int startSize = subSet.size();
 		int size = startSize;
@@ -1011,7 +1014,7 @@ public class ObservableCollectionsTest {
 	/** Runs a barrage of tests on {@link ObservableTreeSet} */
 	@Test
 	public void testObservableTreeSet() {
-		testCollection(new ObservableTreeSet<>(new Type(Integer.class), Integer::compareTo), null);
+		testCollection(new ObservableTreeSet<>(new Type(Integer.class), Integer::compareTo), set -> set.checkValid());
 	}
 
 	// Older, more specific tests

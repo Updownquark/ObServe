@@ -73,6 +73,13 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 		theValues = new DefaultTreeMap<>(theCompare);
 	}
 
+	/** Checks the internal structure of this set for debugging. TODO Remove this when it's solid. */
+	public void checkValid() {
+		DefaultNode<?> root = theValues.getRoot();
+		if(root != null)
+			root.checkValid();
+	}
+
 	@Override
 	public ObservableValue<CollectionSession> getSession() {
 		return theInternals.getSession();

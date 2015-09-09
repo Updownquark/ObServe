@@ -159,7 +159,8 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 	@Override
 	protected RedBlackNode setChild(RedBlackNode child, boolean left) {
 		RedBlackNode oldChild = super.setChild(child, left);
-		adjustSize(size((CountedRedBlackNode<?>) child) - size((CountedRedBlackNode<?>) oldChild));
+		int sizeDiff = size((CountedRedBlackNode<?>) child) - size((CountedRedBlackNode<?>) oldChild);
+		adjustSize(sizeDiff);
 		return oldChild;
 	}
 
@@ -451,9 +452,7 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 		 * @return The number of keys in this map less than the given key
 		 */
 		public int indexOfKey(K key) {
-			return getRoot().getIndex(
-				node -> node.compare(keyEntry(key),
-					node.getValue()));
+			return getRoot().getIndex(node -> node.compare(keyEntry(key), node.getValue()));
 		}
 
 		@Override

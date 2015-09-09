@@ -399,7 +399,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 			}
 			if(theMax != null) {
 				int comp = compare.compare(value, theMax);
-				if(comp < 0 || (!isMaxIncluded && comp == 0))
+				if(comp > 0 || (!isMaxIncluded && comp == 0))
 					return false;
 			}
 			return true;
@@ -423,7 +423,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 			else {
 				minIndex = theWrapped.indexOf(theMin);
 				if(minIndex < 0)
-					minIndex = -minIndex - 1;
+					minIndex = -minIndex; // Don't include the element at the insertion index
 				else if(!isMinIncluded)
 					minIndex++;
 			}
@@ -436,6 +436,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 					maxIndex = -maxIndex - 1;
 				else if(!isMaxIncluded)
 					maxIndex--;
+				maxIndex++;
 			}
 			int ret = maxIndex - minIndex;
 			if(ret < 0)
