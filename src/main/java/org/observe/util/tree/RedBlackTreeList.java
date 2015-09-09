@@ -23,6 +23,11 @@ public class RedBlackTreeList<N extends CountedRedBlackNode<E>, E> extends Abstr
 		theNodeCreator = nodeCreator;
 	}
 
+	/** @return The root of this list's tree structure */
+	public N getRoot() {
+		return theRoot;
+	}
+
 	/**
 	 * @param value The value to create the node for
 	 * @return The new node for the value

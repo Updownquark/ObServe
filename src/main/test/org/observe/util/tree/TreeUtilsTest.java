@@ -86,11 +86,13 @@ public class TreeUtilsTest {
 		};
 	}
 
+	/** A simple test against {@link RedBlackNode} */
 	@Test
 	public void testTreeBasic() {
 		test(ComparableValuedRedBlackNode.valueOf("a"), alphaBet('q'));
 	}
 
+	/** A simple test against {@link CountedRedBlackNode} */
 	@Test
 	public void countedTreeBasic() {
 		class CountedStringNode extends CountedRedBlackNode<String> {
@@ -111,6 +113,10 @@ public class TreeUtilsTest {
 		test(new CountedStringNode("a"), alphaBet('q'));
 	}
 
+	/**
+	 * Runs the {@link ObservableCollectionsTest#testCollection(java.util.Collection, java.util.function.Consumer)} tests against
+	 * {@link DefaultTreeSet}
+	 */
 	@Test
 	public void testTreeSet() {
 		DefaultTreeSet<Integer> set = new DefaultTreeSet<>(Integer::compareTo);
@@ -121,6 +127,7 @@ public class TreeUtilsTest {
 		});
 	}
 
+	/** Runs the {@link ObservableDataStructTest#testMap(Map, java.util.function.Consumer)} tests against {@link DefaultTreeMap} */
 	@Test
 	public void testTreeMap() {
 		DefaultTreeMap<Integer, Integer> map = new DefaultTreeMap<>(new Comparator<Integer>() {
@@ -131,6 +138,26 @@ public class TreeUtilsTest {
 		});
 		ObservableDataStructTest.testMap(map, s -> {
 			DefaultNode<Map.Entry<Integer, Integer>> root = map.getRoot();
+			if(root != null)
+				root.checkValid();
+		});
+	}
+
+	/**
+	 * Runs the {@link ObservableCollectionsTest#testCollection(java.util.Collection, java.util.function.Consumer)} tests against
+	 * {@link RedBlackTreeList}
+	 */
+	@Test
+	public void testTreeList() {
+		RedBlackTreeList<DefaultNode<Integer>, Integer> list = new RedBlackTreeList<>(value -> new DefaultNode<>(value,
+			new Comparator<Integer>() {
+			@Override
+			public int compare(Integer o1, Integer o2) {
+				return o1.compareTo(o2);
+			}
+		}));
+		ObservableCollectionsTest.testCollection(list, l -> {
+			DefaultNode<Integer> root = list.getRoot();
 			if(root != null)
 				root.checkValid();
 		});
