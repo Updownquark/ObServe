@@ -145,7 +145,7 @@ public class RedBlackTreeList<N extends CountedRedBlackNode<E>, E> extends Abstr
 				if(nextNode == null)
 					throw new java.util.NoSuchElementException();
 				theLastNode = nextNode;
-				theNextNode = (N) nextNode.getClosest(forward);
+				theNextNode = (N) nextNode.getClosest(!forward);
 				return theLastNode;
 			}
 
@@ -227,16 +227,29 @@ public class RedBlackTreeList<N extends CountedRedBlackNode<E>, E> extends Abstr
 	 */
 	public N addAfter(E element, N after) {
 		N newNode = createNode(element);
-		N right = (N) after.getRight();
-		RedBlackNode.TreeOpResult result;
-		if(right == null)
-			result = after.addOnSide(newNode, false, true);
-		else {
-			while(right.getLeft() != null)
-				right = (N) right.getLeft();
-			result = right.addOnSide(newNode, true, true);
+		if(after == null) {
+			if(theRoot == null) {
+				theRoot = newNode;
+				newNode.setRed(false);
+			} else {
+				N farLeft = theRoot;
+				while(farLeft.getChild(true) != null)
+					farLeft = (N) farLeft.getChild(true);
+				RedBlackNode.TreeOpResult result = farLeft.addOnSide(newNode, true, true);
+				theRoot = (N) result.getNewRoot();
+			}
+		} else {
+			N right = (N) after.getRight();
+			RedBlackNode.TreeOpResult result;
+			if(right == null)
+				result = after.addOnSide(newNode, false, true);
+			else {
+				while(right.getLeft() != null)
+					right = (N) right.getLeft();
+				result = right.addOnSide(newNode, true, true);
+			}
+			theRoot = (N) result.getNewRoot();
 		}
-		theRoot = (N) result.getNewRoot();
 		return newNode;
 	}
 
