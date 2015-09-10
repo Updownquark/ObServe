@@ -13,7 +13,10 @@ import java.util.stream.Collectors;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
+import org.observe.Observer;
 import org.observe.Subscription;
+import org.observe.util.ObservableUtils;
 import org.observe.util.Transaction;
 
 import prisms.lang.Type;
@@ -415,8 +418,10 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 			return theWrapped.getSession();
 		}
 
-		@Override
-		public int size() {
+		/**
+		 * @return The first index in the wrapped sorted set that is included in this set
+		 */
+		protected int getMinIndex() {
 			int minIndex;
 			if(theMin == null)
 				minIndex = 0;
@@ -427,6 +432,13 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 				else if(!isMinIncluded)
 					minIndex++;
 			}
+			return minIndex;
+		}
+
+		/**
+		 * @return The last index in the wrapped
+		 */
+		protected int getMaxIndex() {
 			int maxIndex;
 			if(theMax == null)
 				maxIndex = theWrapped.size() - 1;
@@ -438,10 +450,14 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 				} else if(!isMaxIncluded)
 					maxIndex--;
 			}
-			int ret = maxIndex - minIndex + 1; // Both minIndex and maxIndex are included here
-			if(ret < 0)
-				ret = 0;
-			return ret;
+			return maxIndex;
+		}
+
+		@Override
+		public int size() {
+			int minIndex = getMinIndex();
+			int maxIndex = getMaxIndex();
+			return maxIndex - minIndex + 1; // Both minIndex and maxIndex are included here
 		}
 
 		@Override
@@ -529,7 +545,34 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
 			return theWrapped.onOrderedElement(element -> {
 				if(isInRange(element.get()))
-					onElement.accept(element);
+					onElement.accept(new ObservableOrderedElement<E>() {
+						@Override
+						public ObservableValue<E> persistent() {
+							return element.persistent();
+						}
+
+						@Override
+						public Type getType() {
+							return element.getType();
+						}
+
+						@Override
+						public E get() {
+							return element.get();
+						}
+
+						@Override
+						public int getIndex() {
+							int elIndex = element.getIndex();
+							int minIndex = getMinIndex();
+							return elIndex - minIndex;
+						}
+
+						@Override
+						public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
+							return ObservableUtils.wrap(element, this, observer);
+						}
+					});
 			});
 		}
 

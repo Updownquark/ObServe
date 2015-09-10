@@ -211,13 +211,12 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 		if(compare == 0) {
 			if(withExact)
 				return this;
-			RedBlackNode ret = this;
-			while(ret.getChild(lesser) != null)
-				ret = ret.getChild(lesser);
-			if(ret == this)
+			RedBlackNode child = getChild(lesser);
+			if(child == null)
 				return found;
-			else
-				return ret;
+			while(child.getChild(!lesser) != null)
+				child = child.getChild(!lesser);
+			return child;
 		}
 		if(compare > 0 == lesser)
 			found = this;

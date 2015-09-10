@@ -175,16 +175,13 @@ public class ObservableCollectionsTest {
 			for(int i = 0; i < divisions.length - 1; i++) {
 				subSetRanges.add(new SubSetRange(divisions[i], divisions[i + 1], true, false));
 				subSets.add(sortedSet.subSet(divisions[i], divisions[i + 1]));
-			}
-			for(int i = 0; i < divisions.length - 1; i++) {
+
 				subSetRanges.add(new SubSetRange(divisions[i], divisions[i + 1], true, true));
 				subSets.add(sortedSet.subSet(divisions[i], true, divisions[i + 1], true));
-			}
-			for(int i = 0; i < divisions.length - 1; i++) {
+
 				subSetRanges.add(new SubSetRange(divisions[i], divisions[i + 1], false, false));
 				subSets.add(sortedSet.subSet(divisions[i], false, divisions[i + 1], false));
-			}
-			for(int i = 0; i < divisions.length - 1; i++) {
+
 				subSetRanges.add(new SubSetRange(divisions[i], divisions[i + 1], false, true));
 				subSets.add(sortedSet.subSet(divisions[i], false, divisions[i + 1], true));
 			}
