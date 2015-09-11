@@ -838,7 +838,7 @@ public class ObservableCollectionsTest {
 				listIter1.add(toAdd);
 				listIter2.add(toAdd);
 				assertTrue("On Iteration " + i, listIter1.hasPrevious());
-				assertThat("On Iteration " + i, toAdd, equalTo(listIter1.previous())); // Back up over the added value
+				assertThat("On Iteration " + i, listIter1.previous(), equalTo(toAdd)); // Back up over the added value
 				listIter2.previous();
 				break;
 			case 1:

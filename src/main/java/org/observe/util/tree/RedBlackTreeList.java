@@ -189,7 +189,7 @@ public class RedBlackTreeList<N extends CountedRedBlackNode<E>, E> extends Abstr
 		if(index == size())
 			return addAll(c);
 		N node = getNodeAt(index);
-		boolean first = false;
+		boolean first = true;
 		for(E o : c) {
 			if(first) {
 				node = addBefore(o, node);
@@ -269,7 +269,10 @@ public class RedBlackTreeList<N extends CountedRedBlackNode<E>, E> extends Abstr
 	public E set(int index, E element) {
 		N node = getNodeAt(index);
 		E old = node.getValue();
-		node.replace(createNode(element));
+		N replacement = createNode(element);
+		node.replace(replacement);
+		if(theRoot == node)
+			theRoot = replacement;
 		return old;
 	}
 

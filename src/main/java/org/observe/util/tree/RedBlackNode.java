@@ -312,7 +312,7 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 			node.setChild(theRight, false);
 		setChild(null, true);
 		setChild(null, false);
-		setRed(isRed);
+		node.setRed(isRed);
 		if(theParent != null) {
 			theParent.setChild(node, getSide());
 			setParent(null);
