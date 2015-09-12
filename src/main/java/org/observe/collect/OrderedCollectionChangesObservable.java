@@ -6,8 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.observe.ObservableValueEvent;
-
-import prisms.util.IntList;
+import org.qommons.IntList;
 
 class OrderedCollectionChangesObservable<E, OCCE extends OrderedCollectionChangeEvent<E>> extends CollectionChangesObservable<E, OCCE> {
 	OrderedCollectionChangesObservable(ObservableOrderedCollection<E> coll) {

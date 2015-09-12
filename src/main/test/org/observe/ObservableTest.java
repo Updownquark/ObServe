@@ -6,7 +6,7 @@ import org.junit.Test;
 
 import prisms.lang.Type;
 
-/** Tests observable classes in the org.muis.core.rx package */
+/** Tests observable classes in the org.observe package */
 public class ObservableTest {
 	/** Tests simple {@link SimpleSettableValue} functionality */
 	@Test

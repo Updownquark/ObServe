@@ -18,9 +18,9 @@ import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.util.ObservableUtils;
 import org.observe.util.Transaction;
+import org.qommons.ArrayUtils;
 
 import prisms.lang.Type;
-import prisms.util.ArrayUtils;
 
 /**
  * An observable ordered collection that can be reversed

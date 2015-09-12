@@ -1993,7 +1993,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		@Override
 		public Iterator<E> iterator() {
-			return prisms.util.ArrayUtils.immutableIterator(theWrapped.iterator());
+			return org.qommons.ArrayUtils.immutableIterator(theWrapped.iterator());
 		}
 
 		@Override

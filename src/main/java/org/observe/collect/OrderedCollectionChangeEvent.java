@@ -2,7 +2,7 @@ package org.observe.collect;
 
 import java.util.List;
 
-import prisms.util.IntList;
+import org.qommons.IntList;
 
 /**
  * A change event to an ordered collection

@@ -1070,7 +1070,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 				private Object [] subValues = new Object[iters.size()];
 
 				/** This list represents the indexes of the sub values, as they would be in a list sorted according to the comparator. */
-				private prisms.util.IntList indexes = new prisms.util.IntList(subValues.length);
+				private org.qommons.IntList indexes = new org.qommons.IntList(subValues.length);
 
 				private boolean initialized;
 
@@ -1115,7 +1115,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 						} else
 							indexes.add(-1);
 					}
-					prisms.util.ArrayUtils.sort(subValues.clone(), new prisms.util.ArrayUtils.SortListener<Object>() {
+					org.qommons.ArrayUtils.sort(subValues.clone(), new org.qommons.ArrayUtils.SortListener<Object>() {
 						@Override
 						public int compare(Object o1, Object o2) {
 							if(o1 == null && o2 == null)
