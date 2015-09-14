@@ -56,6 +56,12 @@ public class RedBlackTreeList<N extends CountedRedBlackNode<E>, E> extends Abstr
 			return getNodeAt((N) node.getRight(), index - leftCount - 1, passed + leftCount + 1);
 	}
 
+	private void replace(N toReplace, N replacement) {
+		toReplace.replace(replacement);
+		if(theRoot == toReplace)
+			theRoot = replacement;
+	}
+
 	/** @return The last node in this tree */
 	public N getLastNode() {
 		N ret = theRoot;
@@ -269,10 +275,7 @@ public class RedBlackTreeList<N extends CountedRedBlackNode<E>, E> extends Abstr
 	public E set(int index, E element) {
 		N node = getNodeAt(index);
 		E old = node.getValue();
-		N replacement = createNode(element);
-		node.replace(replacement);
-		if(theRoot == node)
-			theRoot = replacement;
+		replace(node, createNode(element));
 		return old;
 	}
 
@@ -375,11 +378,11 @@ public class RedBlackTreeList<N extends CountedRedBlackNode<E>, E> extends Abstr
 					throw new IllegalStateException("set() must be called after next() or previous()");
 				if(calledNextMostRecently) {
 					N newNode = createNode(e);
-					theLastNode.replace(newNode);
+					replace(theLastNode, newNode);
 					theLastNode = newNode;
 				} else {
 					N newNode = createNode(e);
-					theNextNode.replace(newNode);
+					replace(theNextNode, newNode);
 					theNextNode = newNode;
 				}
 			}
@@ -391,7 +394,7 @@ public class RedBlackTreeList<N extends CountedRedBlackNode<E>, E> extends Abstr
 				if(calledNextMostRecently) {
 					theLastNode = addAfter(e, theLastNode);
 				} else {
-					theNextNode = addBefore(e, theNextNode);
+					theLastNode = addBefore(e, theNextNode);
 				}
 			}
 		};

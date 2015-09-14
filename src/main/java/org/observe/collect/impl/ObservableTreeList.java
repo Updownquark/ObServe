@@ -1,7 +1,7 @@
 package org.observe.collect.impl;
 
-import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.ListIterator;
 import java.util.Objects;
@@ -129,7 +129,7 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 
 	@Override
 	public boolean containsAll(Collection<?> coll) {
-		ArrayList<Object> copy = new ArrayList<>(coll);
+		HashSet<Object> copy = new HashSet<>(coll);
 		if(copy.isEmpty())
 			return true;
 		try (Transaction t = theInternals.lock(false, false, null)) {
@@ -153,6 +153,8 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 		return new Iterator<E>() {
 			private Iterator<InternalElement> backing = theElements.iterator(forward);
 
+			private InternalElement theLast;
+
 			@Override
 			public boolean hasNext() {
 				return backing.hasNext();
@@ -160,12 +162,16 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 
 			@Override
 			public E next() {
-				return backing.next().get();
+				theLast = backing.next();
+				return theLast.get();
 			}
 
 			@Override
 			public void remove() {
+				theLast.setRemovedIndex(theLast.getIndex());
 				backing.remove();
+				theLast.remove();
+				theModCount++;
 			}
 		};
 	}
@@ -178,10 +184,11 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 		return true;
 	}
 
-	private InternalElement addBefore(E value, DefaultNode<InternalElement> before) {
-		InternalElement newNode = createElement(value);
-		newNode.setNode(theElements.addBefore(newNode, before));
-		theInternals.fireNewElement(newNode);
+	private DefaultNode<InternalElement> addBefore(E value, DefaultNode<InternalElement> before) {
+		InternalElement newEl = createElement(value);
+		DefaultNode<InternalElement> newNode = theElements.addBefore(newEl, before);
+		newEl.setNode(newNode);
+		theInternals.fireNewElement(newEl);
 		return newNode;
 	}
 
@@ -220,9 +227,15 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 			if(index == 0)
 				after = null;
 			else
-				after = theElements.getNodeAt(0);
-			for(E value : c)
-				after = addAfter(value, after);
+				after = theElements.getNodeAt(index);
+			boolean first = true;
+			for(E value : c) {
+				if(first) {
+					after = addBefore(value, after);
+					first = false;
+				} else
+					after = addAfter(value, after);
+			}
 		}
 		return true;
 	}
@@ -232,6 +245,8 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 		try (Transaction t = theInternals.lock(true, false, null)) {
 			InternalElement node = theElements.get(index);
 			E ret = node.get();
+			node.setRemovedIndex(node.getIndex());
+			theElements.remove(index);
 			node.remove();
 			return ret;
 		}
@@ -293,6 +308,7 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 			@Override
 			public void remove() {
 				try (Transaction t = theInternals.lock(true, false, null)) {
+					theLast.setRemovedIndex(theLast.getIndex());
 					backing.remove();
 					theLast.remove();
 					theLast = null;
@@ -307,13 +323,26 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 			@Override
 			public void add(E e) {
 				try (Transaction t = theInternals.lock(true, false, null)) {
-					if(lastWasNext)
-						addBefore(e, theLast.getNode());
-					else
-						addAfter(e, theLast.getNode());
+					InternalElement el = createElement(e);
+					backing.add(el);
+					DefaultNode<InternalElement> node;
+					if(theLast != null) {
+						node = (DefaultNode<InternalElement>) theLast.getNode().getClosest(!lastWasNext);
+						if(lastWasNext) {
+							theLast = el;
+						}
+					} else
+						node = theElements.getNodeAt(0);
+					el.setNode(node);
+					theInternals.fireNewElement(el);
 				}
 			}
 		};
+	}
+
+	@Override
+	public String toString() {
+		return org.observe.collect.ObservableList.toString(this);
 	}
 
 	private class InternalElement extends InternalOrderedObservableElementImpl<E> {

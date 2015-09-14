@@ -691,7 +691,9 @@ public class ObservableCollectionsTest {
 	private static <T extends List<Integer>> void testList(T list, Consumer<? super T> check, int depth) {
 		testBasicCollection(list, check);
 
-		assertTrue(list.addAll(sequence(10, null, false)));
+		assertTrue(list.addAll(
+			// Easier to debug this way
+			sequence(10, null, false)));
 		assertEquals(10, list.size());
 		if(check != null)
 			check.accept(list);
@@ -703,11 +705,15 @@ public class ObservableCollectionsTest {
 		assertEquals(10, list.size());
 		if(check != null)
 			check.accept(list);
-		assertTrue(list.addAll(sequence(10, v -> v + 20, false)));
+		assertTrue(list.addAll(
+			// Easier to debug this way
+			sequence(10, v -> v + 20, false)));
 		assertEquals(20, list.size());
 		if(check != null)
 			check.accept(list);
-		assertTrue(list.addAll(10, sequence(10, v -> v + 10, false))); // Test addAll at index
+		assertTrue(list.addAll(10,
+			// Easier to debug this way
+			sequence(10, v -> v + 10, false))); // Test addAll at index
 		assertEquals(30, list.size());
 		if(check != null)
 			check.accept(list);
@@ -850,7 +856,7 @@ public class ObservableCollectionsTest {
 				listIter2.set(prev + 50);
 				break;
 			}
-			assertThat("On Iteration " + i, test, equalTo(list));
+			assertThat("On Iteration " + i, list, collectionsEqual(test, true));
 			if(check != null)
 				check.accept(list);
 		}
