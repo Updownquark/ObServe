@@ -1834,12 +1834,15 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 									index = ((ObservableOrderedElement<T>) element).getIndex();
 								WrappingListElement<T> listEl = new WrappingListElement<>(CollectionWrappingList.this, element);
 								theElements.add(index, listEl);
-								theListeners.forEach(listener -> listener.accept(listEl));
 								element.completed().act(event -> {
 									Lock lock2 = theLock.writeLock();
 									lock2.lock();
 									try {
-										theElements.remove(listEl);
+										int idx = listEl.getIndex();
+										if(idx >= 0) {
+											listEl.setRemovedIndex(idx);
+											theElements.remove(idx);
+										}
 									} finally {
 										lock2.unlock();
 									}
@@ -2106,9 +2109,14 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 		private final ObservableElement<T> theWrapped;
 
+		private int theRemovedIndex;
+
 		WrappingListElement(CollectionWrappingList<T> list, ObservableElement<T> wrap) {
 			theList = list;
 			theWrapped = wrap;
+		}
+
+		void setRemovedIndex(int index) {
 		}
 
 		@Override
@@ -2143,6 +2151,8 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 		@Override
 		public int getIndex() {
+			if(theRemovedIndex >= 0)
+				return theRemovedIndex;
 			return theList.theElements.indexOf(this);
 		}
 	}

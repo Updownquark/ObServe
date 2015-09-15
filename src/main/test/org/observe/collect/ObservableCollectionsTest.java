@@ -1462,6 +1462,20 @@ public class ObservableCollectionsTest {
 		assertEquals(correct, new TreeSet<>(unique));
 		assertEquals(correct, new TreeSet<>(compare1));
 		assertEquals(correct.size(), compare1.size());
+
+		for(int i = 0; i < 30; i++) {
+			list.add(i);
+			list.add(i);
+			correct.add(i);
+		}
+		assertEquals(correct, new TreeSet<>(unique));
+		assertEquals(correct, new TreeSet<>(compare1));
+		assertEquals(correct.size(), compare1.size());
+		list.clear();
+		correct.clear();
+		assertEquals(correct, new TreeSet<>(unique));
+		assertEquals(correct, new TreeSet<>(compare1));
+		assertEquals(correct.size(), compare1.size());
 	}
 
 	/** Tests {@link ObservableCollection#flatten(ObservableCollection)} */
@@ -2335,6 +2349,31 @@ public class ObservableCollectionsTest {
 
 			assertEquals(correct, compare);
 		}
+	}
+
+	/**
+	 * Tests {@link ObservableSet#unique(ObservableCollection)} wrapped with {@link ObservableList#asList(ObservableCollection)}. I wrote
+	 * this test to capture a specific test case, but I couldn't reproduce the error here. Not sure this test is super valuable.
+	 */
+	@Test
+	public void observableListFromUnique() {
+		ObservableArrayList<Integer> list = new ObservableArrayList<>(new Type(Integer.TYPE));
+		ObservableList<Integer> uniqued = ObservableList.asList(ObservableSet.unique(list));
+		ArrayList<Integer> compare = new ArrayList<>();
+		ArrayList<Integer> correct = new ArrayList<>();
+		sync(uniqued, compare);
+
+		int count = 30;
+		for(int i = 0; i < count; i++) {
+			list.add(i);
+			list.add(i);
+			correct.add(i);
+
+			assertEquals(correct, compare);
+		}
+		list.clear();
+		correct.clear();
+		assertEquals(correct, compare);
 	}
 
 	/** Tests basic transaction functionality on observable collections */
