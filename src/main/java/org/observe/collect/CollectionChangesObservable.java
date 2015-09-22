@@ -13,7 +13,29 @@ import org.observe.Subscription;
 import org.observe.util.ListenerSet;
 
 class CollectionChangesObservable<E, CCE extends CollectionChangeEvent<E>> implements Observable<CCE> {
+	protected static class SessionChangeTracker<E> {
+		protected CollectionChangeType type;
+
+		protected final List<E> elements;
+		protected final List<E> oldElements;
+
+		protected SessionChangeTracker(CollectionChangeType typ) {
+			type = typ;
+			elements = new ArrayList<>();
+			oldElements = type == CollectionChangeType.set ? new ArrayList<>() : null;
+		}
+
+		protected void clear() {
+			elements.clear();
+			if(oldElements != null)
+				oldElements.clear();
+		}
+	}
+
+	protected static final String SESSION_TRACKER_PROPERTY = "change-tracker";
+
 	protected final ObservableCollection<E> collection;
+
 	protected final Object key = this;
 
 	private final ListenerSet<Observer<? super CCE>> theObservers;
@@ -52,7 +74,7 @@ class CollectionChangesObservable<E, CCE extends CollectionChangeEvent<E>> imple
 						@Override
 						public <V extends ObservableValueEvent<CollectionSession>> void onNext(V value) {
 							if(value.getOldValue() != null)
-								fireEventsFromSessionData(value.getOldValue());
+								fireEventsFromSessionData((SessionChangeTracker<E>) value.getOldValue().get(key, SESSION_TRACKER_PROPERTY));
 						}
 					});
 				} else {
@@ -76,35 +98,20 @@ class CollectionChangesObservable<E, CCE extends CollectionChangeEvent<E>> imple
 	protected void newEvent(CollectionChangeType type, ObservableValueEvent<E> evt) {
 		CollectionSession session = collection.getSession().get();
 		if(session != null) {
-			CollectionChangeType preType = (CollectionChangeType) session.get(key, "type");
-			List<E> elements;
-			List<E> oldElements = null;
-			if(preType == null) {
-				session.put(key, "type", type);
-				elements = new ArrayList<>();
-				session.put(key, "elements", elements);
-				if(type == CollectionChangeType.set) {
-					oldElements = new ArrayList<>();
-					session.put(key, "oldElements", oldElements);
-				}
-			} else{
-				if(preType!=type){
-					fireEventsFromSessionData(session);
-					session.put(key, "type", type);
-					elements = new ArrayList<>();
-					session.put(key, "elements", elements);
-					if(type == CollectionChangeType.set) {
-						oldElements = new ArrayList<>();
-						session.put(key, "oldElements", oldElements);
-					}
-				} else {
-					elements = (List<E>) session.get(key, "elements");
-					oldElements = (List<E>) session.get(key, "oldElements");
+			SessionChangeTracker<E> tracker = (SessionChangeTracker<E>) session.get(key, SESSION_TRACKER_PROPERTY);
+			if(tracker == null) {
+				tracker = new SessionChangeTracker<>(type);
+				session.put(key, SESSION_TRACKER_PROPERTY, tracker);
+			} else {
+				if(tracker.type != type) {
+					fireEventsFromSessionData(tracker);
+					tracker = new SessionChangeTracker<>(type);
+					session.put(key, SESSION_TRACKER_PROPERTY, tracker);
 				}
 			}
-			elements.add(evt.getValue());
-			if(oldElements != null)
-				oldElements.add(evt.getOldValue());
+			tracker.elements.add(evt.getValue());
+			if(tracker.oldElements != null)
+				tracker.oldElements.add(evt.getOldValue());
 		} else {
 			CollectionChangeEvent<E> toFire = new CollectionChangeEvent<>(type, asList(evt.getValue()),
 				type == CollectionChangeType.set ? asList(evt.getOldValue()) : null);
@@ -112,13 +119,10 @@ class CollectionChangesObservable<E, CCE extends CollectionChangeEvent<E>> imple
 		}
 	}
 
-	protected void fireEventsFromSessionData(CollectionSession session) {
-		CollectionChangeType type = (CollectionChangeType) session.put(key, "type", null);
-		if(type==null)
+	protected void fireEventsFromSessionData(SessionChangeTracker<E> tracker) {
+		if(tracker == null)
 			return;
-		List<E> elements = (List<E>) session.put(key, "elements", null);
-		List<E> oldElements = (List<E>) session.put(key, "oldElements", null);
-		CollectionChangeEvent<E> evt = new CollectionChangeEvent<>(type, elements, oldElements);
+		CollectionChangeEvent<E> evt = new CollectionChangeEvent<>(tracker.type, tracker.elements, tracker.oldElements);
 		fireEvent((CCE) evt);
 	}
 

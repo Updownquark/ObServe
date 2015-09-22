@@ -24,7 +24,8 @@ class InternalObservableElementImpl<T> extends DefaultObservableValue<T> {
 	}
 
 	void remove() {
-		theController.onCompleted(createChangeEvent(theValue, theValue, null));
+		ObservableValueEvent<T> event = createChangeEvent(theValue, theValue, null);
+		theController.onCompleted(event);
 	}
 
 	@Override

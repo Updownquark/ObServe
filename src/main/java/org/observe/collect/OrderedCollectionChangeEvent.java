@@ -21,7 +21,7 @@ public class OrderedCollectionChangeEvent<E> extends CollectionChangeEvent<E> {
 	 */
 	public OrderedCollectionChangeEvent(CollectionChangeType aType, List<E> val, List<E> oldVal, IntList idxs) {
 		super(aType, val, oldVal);
-		indexes = idxs;
+		indexes = idxs.clone();
 		indexes.seal();
 	}
 

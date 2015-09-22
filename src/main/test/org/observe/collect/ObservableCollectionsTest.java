@@ -2314,40 +2314,28 @@ public class ObservableCollectionsTest {
 	public void obervableListFromCollection() {
 		ObservableHashSet<Integer> set = new ObservableHashSet<>(new Type(Integer.TYPE));
 		ObservableList<Integer> list = ObservableList.asList(set);
-		ArrayList<Integer> compare = new ArrayList<>();
+		ArrayList<Integer> compare1 = new ArrayList<>();
 		ArrayList<Integer> correct = new ArrayList<>();
-		list.onElement(element -> {
-			ObservableOrderedElement<Integer> orderedEl = (ObservableOrderedElement<Integer>) element;
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
-					if(event.isInitial())
-						compare.add(orderedEl.getIndex(), event.getValue());
-					else
-						compare.set(orderedEl.getIndex(), event.getValue());
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onCompleted(V event) {
-					compare.remove(orderedEl.getIndex());
-				}
-			});
-		});
+		sync(list, compare1);
 
 		int count = 30;
 		for(int i = 0; i < count; i++) {
 			set.add(i);
 			correct.add(i);
 
-			assertEquals(correct, compare);
+			assertEquals(correct, compare1);
 		}
+		ArrayList<Integer> compare2 = new ArrayList<>();
+		sync(list, compare2);
+		assertEquals(correct, compare2);
 		for(int i = count - 1; i >= 0; i--) {
 			if(i % 2 == 0) {
 				set.remove(i);
 				correct.remove(i); // By index
 			}
 
-			assertEquals(correct, compare);
+			assertEquals(correct, compare1);
+			assertEquals(correct, compare2);
 		}
 	}
 
@@ -2374,6 +2362,36 @@ public class ObservableCollectionsTest {
 		list.clear();
 		correct.clear();
 		assertEquals(correct, compare);
+	}
+
+	/** Reproduces a bug I found with list changes */
+	@Test
+	public void observableListChanges() {
+		ObservableArrayList<Integer> list = new ObservableArrayList<>(new Type(Integer.TYPE));
+		ArrayList<Integer> synced = new ArrayList<>();
+		// No idea why I have to cast this
+		((ObservableOrderedCollection<Integer>) list).changes().act(change -> {
+			switch (change.type) {
+			case add:
+				for(int i = 0; i < change.indexes.size(); i++)
+					synced.add(change.indexes.get(i), change.values.get(i));
+				break;
+			case remove:
+				for(int i = 0; i < change.indexes.size(); i++)
+					synced.remove(change.indexes.get(i));
+				break;
+			case set:
+				for(int i = 0; i < change.indexes.size(); i++)
+					synced.set(change.indexes.get(i), change.values.get(i));
+				break;
+			}
+		});
+
+		for(int i = 0; i < 15; i++)
+			list.add(i);
+		try (Transaction t = list.lock(true, null)) {
+
+		}
 	}
 
 	/** Tests basic transaction functionality on observable collections */
@@ -2461,10 +2479,10 @@ public class ObservableCollectionsTest {
 					compare.add(event.indexes.get(i), event.values.get(i));
 					break;
 				case remove:
-					compare.remove(event.indexes.get(i));
+					assertEquals(compare.remove(event.indexes.get(i)), event.values.get(i));
 					break;
 				case set:
-					compare.set(event.indexes.get(i), event.values.get(i));
+					assertEquals(compare.set(event.indexes.get(i), event.values.get(i)), event.oldValues.get(i));
 					break;
 				}
 			}
@@ -2491,9 +2509,11 @@ public class ObservableCollectionsTest {
 			correct.add(toAdd);
 			assertEquals(correct, new ArrayList<>(observable));
 		}
-		assertEquals(31, changeCount[0]);
-		trans.close();
+		// The exact numbers here and down are pretty deep in the weeds of the changes observable. Still need this test to draw attention
+		// to when this changes
 		assertEquals(32, changeCount[0]);
+		trans.close();
+		assertEquals(33, changeCount[0]);
 		assertEquals(correct, compare);
 
 		sub.unsubscribe();

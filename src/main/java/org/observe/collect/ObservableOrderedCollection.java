@@ -47,7 +47,11 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		return onOrderedElement(onElement);
 	}
 
-	/** @return An observable that returns null whenever any elements in this collection are added, removed or changed */
+	/**
+	 * @return An observable that returns null whenever any elements in this collection are added, removed or changed. The order of events as
+	 *         reported by this observable may not be the same as their occurrence in the collection. Any discrepancy will be resolved when
+	 *         the transaction ends.
+	 */
 	@Override
 	default Observable<? extends OrderedCollectionChangeEvent<E>> changes() {
 		return d().debug(new OrderedCollectionChangesObservable<>(this)).from("changes", this).get();
@@ -311,7 +315,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		OrderedCollectionFinder(ObservableOrderedCollection<E> collection, Predicate<? super E> filter, boolean forward) {
 			theCollection = collection;
 			theType = theCollection.getType().isPrimitive() ? new Type(Type.getWrapperType(theCollection.getType().getBaseType()))
-				: theCollection.getType();
+			: theCollection.getType();
 			theFilter = filter;
 			isForward = forward;
 		}
