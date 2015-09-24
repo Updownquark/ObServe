@@ -550,6 +550,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	 * @return An observable list that contains all the values of the given lists
 	 */
 	public static <T> ObservableList<T> flattenLists(TypeToken<T> type, ObservableList<? extends T>... lists) {
+		type = type.wrap();
 		if(lists.length == 0)
 			return constant(type);
 		ObservableList<ObservableList<? extends T>> wrapper = constant(

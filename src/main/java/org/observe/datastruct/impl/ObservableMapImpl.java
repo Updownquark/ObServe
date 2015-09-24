@@ -17,9 +17,8 @@ import org.observe.datastruct.ObservableMap;
 import org.observe.util.DefaultTransactable;
 import org.observe.util.Transaction;
 
+import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
-
-import prisms.lang.Type;
 
 /**
  * A default implementation of {@link ObservableMap}
@@ -108,13 +107,14 @@ public class ObservableMapImpl<K, V> implements ObservableMap<K, V> {
 	 */
 	public ObservableMapImpl(TypeToken<K> keyType, TypeToken<V> valueType,
 		CollectionCreator<ObservableEntry<K, V>, ObservableSet<ObservableEntry<K, V>>> entrySet) {
-		theKeyType = keyType;
-		theValueType = valueType;
+		theKeyType = keyType.wrap();
+		theValueType = valueType.wrap();
 		theLock=new ReentrantReadWriteLock();
 		theSessionController = new DefaultTransactable(theLock);
 
-		theEntries = entrySet.create(new Type(ObservableEntry.class, theKeyType, theKeyType), theLock,
-			theSessionController.getSession(), theSessionController);
+		theEntries = entrySet.create(
+			new TypeToken<ObservableEntry<K, V>>() {}.where(new TypeParameter<K>() {}, theKeyType).where(new TypeParameter<V>() {},
+				theValueType), theLock, theSessionController.getSession(), theSessionController);
 	}
 
 	@Override

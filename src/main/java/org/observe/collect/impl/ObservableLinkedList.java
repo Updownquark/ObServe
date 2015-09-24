@@ -78,7 +78,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 	 */
 	public ObservableLinkedList(TypeToken<E> type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController) {
-		theType = type;
+		theType = type.wrap();
 		theInternals = new LinkedListInternals(lock, session, sessionController);
 		theActions = new RollingBuffer<>(ACTION_CAPACITY);
 	}

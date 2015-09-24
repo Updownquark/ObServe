@@ -278,7 +278,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 */
 	public static <E> ObservableOrderedCollection<E> sort(ObservableCollection<E> coll, java.util.Comparator<? super E> compare) {
 		if(compare == null) {
-			if(!coll.getType().isAssignableFrom(Comparable.class))
+			if(!Comparable.class.isAssignableFrom(coll.getType().wrap().getRawType()))
 				throw new IllegalArgumentException("No natural ordering for collection of type " + coll.getType());
 			compare = (Comparator<? super E>) (E o1, E o2) -> ((Comparable<? super E>) o1).compareTo(o2);
 		}

@@ -696,7 +696,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	public static <T> ObservableCollection<T> flatten(ObservableCollection<? extends ObservableCollection<? extends T>> coll) {
 		class ComposedObservableCollection implements PartialCollectionImpl<T> {
 			private final TypeToken<T> theType = (TypeToken<T>) coll.getType()
-				.resolveType(ObservableCollection.class.getTypeParameters()[1]);
+				.resolveType(ObservableCollection.class.getTypeParameters()[0]);
 			private final CombinedCollectionSessionObservable theSession = new CombinedCollectionSessionObservable(coll);
 
 			@Override

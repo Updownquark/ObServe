@@ -14,7 +14,7 @@ class InternalObservableElementImpl<T> extends DefaultObservableValue<T> {
 
 	InternalObservableElementImpl(TypeToken<T> type, T value) {
 		theType = type;
-		theValue = (T) theType.getRawType().cast(value);
+		theValue = (T) theType.wrap().getRawType().cast(value);
 		theController = control(null);
 	}
 

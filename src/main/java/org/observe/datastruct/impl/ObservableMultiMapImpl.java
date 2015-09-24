@@ -17,9 +17,8 @@ import org.observe.datastruct.ObservableMultiMap;
 import org.observe.util.DefaultTransactable;
 import org.observe.util.Transaction;
 
+import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
-
-import prisms.lang.Type;
 
 /**
  * A default implementation of {@link ObservableMultiMap}
@@ -66,7 +65,6 @@ public class ObservableMultiMapImpl<K, V> implements ObservableMultiMap<K, V> {
 	}
 
 	private final TypeToken<K> theKeyType;
-
 	private final TypeToken<V> theValueType;
 
 	private DefaultTransactable theSessionController;
@@ -89,13 +87,14 @@ public class ObservableMultiMapImpl<K, V> implements ObservableMultiMap<K, V> {
 	 */
 	public ObservableMultiMapImpl(TypeToken<K> keyType, TypeToken<V> valueType,
 		CollectionCreator<ObservableMultiEntry<K, V>, ObservableSet<ObservableMultiEntry<K, V>>> entrySet) {
-		theKeyType = keyType;
-		theValueType = valueType;
+		theKeyType = keyType.wrap();
+		theValueType = valueType.wrap();
 		theLock=new ReentrantReadWriteLock();
 		theSessionController = new DefaultTransactable(theLock);
 
-		theEntries = (ObservableSet<DefaultMultiMapEntry>) (ObservableSet<?>) entrySet
-			.create(new Type(DefaultMultiMapEntry.class), theLock, theSessionController.getSession(), theSessionController);
+		theEntries = (ObservableSet<DefaultMultiMapEntry>) (ObservableSet<?>) entrySet.create(
+			new TypeToken<ObservableMultiEntry<K, V>>() {}.where(new TypeParameter<K>() {}, theKeyType).where(new TypeParameter<V>() {},
+				theValueType), theLock, theSessionController.getSession(), theSessionController);
 	}
 
 	@Override

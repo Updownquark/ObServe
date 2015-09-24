@@ -62,7 +62,7 @@ public class SimpleSettableValue<T> extends DefaultSettableValue<T> {
 	public <V extends T> String isAcceptable(V value) {
 		if(value == null && !isNullable)
 			return "Null values not acceptable for this value";
-		if(value != null && !theType.wrap().isAssignableFrom(value.getClass()))
+		if(value != null && !theType.wrap().getRawType().isInstance(value))
 			return "Value of type " + value.getClass().getName() + " cannot be assigned as " + theType;
 		return null;
 	}

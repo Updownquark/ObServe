@@ -49,7 +49,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 	 */
 	public ObservableHashSet(TypeToken<E> type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController) {
-		theType = type;
+		theType = type.wrap();
 		theInternals = new HashSetInternals(lock, session, sessionController);
 
 		theValues = new LinkedHashMap<>();
@@ -149,7 +149,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 		try (Transaction t = theInternals.lock(true, false, null)) {
 			if(theValues.containsKey(e))
 				return false;
-			InternalObservableElementImpl<E> el = createElement((E) theType.getRawType().cast(e));
+			InternalObservableElementImpl<E> el = createElement(e);
 			theValues.put(e, el);
 			theInternals.fireNewElement(el);
 			return true;
@@ -164,7 +164,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 				if(theValues.containsKey(add))
 					continue;
 				ret = true;
-				InternalObservableElementImpl<E> el = createElement((E) theType.getRawType().cast(add));
+				InternalObservableElementImpl<E> el = createElement(add);
 				theValues.put(add, el);
 				theInternals.fireNewElement(el);
 			}

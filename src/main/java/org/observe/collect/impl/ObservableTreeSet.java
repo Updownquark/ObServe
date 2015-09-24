@@ -63,7 +63,7 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	 */
 	public ObservableTreeSet(TypeToken<E> type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController, Comparator<? super E> compare) {
-		theType = type;
+		theType = type.wrap();
 		theInternals = new TreeSetInternals(lock, session, sessionController, write -> {
 			if(write)
 				theModCount++;

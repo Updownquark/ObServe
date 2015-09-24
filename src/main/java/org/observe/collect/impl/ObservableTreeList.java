@@ -59,7 +59,7 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 	 */
 	public ObservableTreeList(TypeToken<E> type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController) {
-		theType = type;
+		theType = type.wrap();
 		theInternals = new TreeListInternals(lock, session, sessionController, write -> {
 			if(write)
 				theModCount++;

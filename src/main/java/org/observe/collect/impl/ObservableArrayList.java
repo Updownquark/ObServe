@@ -58,7 +58,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	 */
 	public ObservableArrayList(TypeToken<E> type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController) {
-		theType = type;
+		theType = type.wrap();
 		theInternals = new ArrayListInternals(lock, session, sessionController, write -> {
 			if(write)
 				theModCount++;

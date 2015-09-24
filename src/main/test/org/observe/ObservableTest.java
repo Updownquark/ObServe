@@ -6,6 +6,8 @@ import org.junit.Test;
 
 import prisms.lang.Type;
 
+import com.google.common.reflect.TypeToken;
+
 /** Tests observable classes in the org.observe package */
 public class ObservableTest {
 	/** Tests simple {@link SimpleSettableValue} functionality */
@@ -239,15 +241,14 @@ public class ObservableTest {
 	/** Tests {@link ObservableValue#flatten(Type, ObservableValue)} */
 	@Test
 	public void observableValueFlatten() {
-		SimpleSettableValue<ObservableValue<Integer>> outer = new SimpleSettableValue<>(new Type(ObservableValue.class, new Type(
-			Integer.TYPE)), false);
+		SimpleSettableValue<ObservableValue<Integer>> outer = new SimpleSettableValue<>(new TypeToken<ObservableValue<Integer>>() {}, false);
 		SimpleSettableValue<Integer> inner1 = new SimpleSettableValue<>(Integer.TYPE, false);
 		inner1.set(1, null);
 		outer.set(inner1, null);
 		SimpleSettableValue<Integer> inner2 = new SimpleSettableValue<>(Integer.TYPE, false);
 		inner2.set(2, null);
 		int [] received = new int[1];
-		ObservableValue.flatten(new Type(Integer.TYPE), outer).act(value -> received[0] = value.getValue());
+		ObservableValue.flatten(TypeToken.of(Integer.TYPE), outer).act(value -> received[0] = value.getValue());
 
 		assertEquals(1, received[0]);
 		inner1.set(3, null);
