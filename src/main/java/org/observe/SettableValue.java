@@ -5,7 +5,7 @@ import static org.observe.ObservableDebug.d;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 /**
  * An observable value for which a value can be assigned directly
@@ -49,7 +49,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	default ObservableValue<T> unsettable() {
 		return d().debug(new ObservableValue<T>() {
 			@Override
-			public Type getType() {
+			public TypeToken<T> getType() {
 				return SettableValue.this.getType();
 			}
 
@@ -84,7 +84,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 *            result will be null.
 	 * @return The mapped settable value
 	 */
-	public default <R> SettableValue<R> mapV(Type type, Function<? super T, R> function, Function<? super R, ? extends T> reverse,
+	public default <R> SettableValue<R> mapV(TypeToken<R> type, Function<? super T, R> function, Function<? super R, ? extends T> reverse,
 		boolean combineNull) {
 		SettableValue<T> root = this;
 		return d().debug(new ComposedSettableValue<R>(type, d().lambda(args -> {
@@ -138,7 +138,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 *            result will be null.
 	 * @return The composed settable value
 	 */
-	public default <U, R> SettableValue<R> combineV(Type type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
+	public default <U, R> SettableValue<R> combineV(TypeToken<R> type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		BiFunction<? super R, ? super U, ? extends T> reverse, boolean combineNull) {
 		SettableValue<T> root = this;
 		return d().debug(new ComposedSettableValue<R>(type, d().lambda(args -> {
@@ -164,7 +164,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 				return root.isEnabled();
 			}
 		}).from("combine", this).from("with", arg).using("combination", function).using("reverse", reverse).tag("combineNull", combineNull)
-		.get();
+			.get();
 	}
 
 	/**
@@ -180,7 +180,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @param combineNull Whether to apply the filter to null values or simply preserve the null
 	 * @return The composed settable value
 	 */
-	public default <U, R> SettableValue<R> combineV(Type type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
+	public default <U, R> SettableValue<R> combineV(TypeToken<R> type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		BiFunction<? super R, ? super U, String> accept, BiFunction<? super R, ? super U, ? extends T> reverse, boolean combineNull) {
 		SettableValue<T> root = this;
 		return d().debug(new ComposedSettableValue<R>(type, args -> {
@@ -210,7 +210,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 				return root.isEnabled();
 			}
 		}).from("combine", this).from("with", arg).using("combination", function).using("reverse", reverse).using("accept", accept)
-		.tag("combineNull", combineNull).get();
+			.tag("combineNull", combineNull).get();
 	}
 
 	/**
@@ -245,7 +245,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 *            result will be null.
 	 * @return The composed settable value
 	 */
-	public default <U, V, R> SettableValue<R> combineV(Type type, TriFunction<? super T, ? super U, ? super V, R> function,
+	public default <U, V, R> SettableValue<R> combineV(TypeToken<R> type, TriFunction<? super T, ? super U, ? super V, R> function,
 		ObservableValue<U> arg2, ObservableValue<V> arg3, TriFunction<? super R, ? super U, ? super V, ? extends T> reverse,
 		boolean combineNull) {
 		SettableValue<T> root = this;
@@ -273,7 +273,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 				return root.isEnabled();
 			}
 		}).from("combine", this).from("with", arg2).from("with", arg3).using("combination", function).using("reverse", reverse)
-		.tag("combineNull", combineNull).get();
+			.tag("combineNull", combineNull).get();
 	}
 
 	/**
@@ -286,7 +286,8 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			super(function, combineNull, composed);
 		}
 
-		public ComposedSettableValue(Type type, Function<Object [], T> function, boolean combineNull, ObservableValue<?>... composed) {
+		public ComposedSettableValue(TypeToken<T> type, Function<Object [], T> function, boolean combineNull,
+			ObservableValue<?>... composed) {
 			super(type, function, combineNull, composed);
 		}
 	}

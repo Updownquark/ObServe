@@ -19,7 +19,7 @@ import org.observe.Subscription;
 import org.observe.util.ObservableUtils;
 import org.observe.util.Transaction;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 /**
  * A sorted set whose content can be observed. This set is immutable in that none of its methods, including {@link java.util.Set} methods,
@@ -244,7 +244,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 	@Override
 	default <T> ObservableSortedSet<T> filter(Class<T> type) {
 		Function<E, T> map = value -> type.isInstance(value) ? type.cast(value) : null;
-		return d().debug(new StaticFilteredSortedSet<>(this, new Type(type), map)).from("filterMap", this).using("map", map)
+		return d().debug(new StaticFilteredSortedSet<>(this, TypeToken.of(type), map)).from("filterMap", this).using("map", map)
 			.tag("filterType", type).get();
 	}
 
@@ -409,7 +409,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<E> getType() {
 			return theWrapped.getType();
 		}
 
@@ -552,7 +552,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 						}
 
 						@Override
-						public Type getType() {
+						public TypeToken<E> getType() {
 							return element.getType();
 						}
 
@@ -801,7 +801,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 	class StaticFilteredSortedSet<E, T> extends StaticFilteredReversibleCollection<E, T> implements PartialSortedSetImpl<T> {
 		/* Note that everywhere we cast a T-typed value to E is safe because this sorted set is only called from filter, not map */
 
-		protected StaticFilteredSortedSet(ObservableSortedSet<E> wrap, Type type, Function<? super E, T> map) {
+		protected StaticFilteredSortedSet(ObservableSortedSet<E> wrap, TypeToken<T> type, Function<? super E, T> map) {
 			super(wrap, type, map, value -> (E) value);
 		}
 
@@ -843,7 +843,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 	class DynamicFilteredSortedSet<E, T> extends DynamicFilteredReversibleCollection<E, T> implements PartialSortedSetImpl<T> {
 		/* Note that everywhere we cast a T-typed value to E is safe because this sorted set is only called from filter, not map */
 
-		protected DynamicFilteredSortedSet(ObservableSortedSet<E> wrap, Type type, Function<? super E, T> map) {
+		protected DynamicFilteredSortedSet(ObservableSortedSet<E> wrap, TypeToken<T> type, Function<? super E, T> map) {
 			super(wrap, type, map, value -> (E) value);
 		}
 

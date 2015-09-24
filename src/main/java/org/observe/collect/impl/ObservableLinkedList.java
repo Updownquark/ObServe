@@ -19,7 +19,7 @@ import org.observe.util.RollingBuffer;
 import org.observe.util.Transactable;
 import org.observe.util.Transaction;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 /**
  * A list whose content can be observed. This list is a classic linked-type list with the following performance characteristics:
@@ -46,7 +46,8 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 	 * </p>
 	 */
 	private static final int ACTION_CAPACITY = 10;
-	private final Type theType;
+
+	private final TypeToken<E> theType;
 
 	private LinkedListInternals theInternals;
 
@@ -62,7 +63,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 	 *
 	 * @param type The type of elements for this list
 	 */
-	public ObservableLinkedList(Type type) {
+	public ObservableLinkedList(TypeToken<E> type) {
 		this(type, new ReentrantReadWriteLock(), null, null);
 	}
 
@@ -75,7 +76,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 	 * @param sessionController The controller for the session. May be null, in which case the transactional methods in this collection will
 	 *            not actually create transactions.
 	 */
-	public ObservableLinkedList(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
+	public ObservableLinkedList(TypeToken<E> type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController) {
 		theType = type;
 		theInternals = new LinkedListInternals(lock, session, sessionController);
@@ -93,7 +94,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 	}
 
 	@Override
-	public Type getType() {
+	public TypeToken<E> getType() {
 		return theType;
 	}
 

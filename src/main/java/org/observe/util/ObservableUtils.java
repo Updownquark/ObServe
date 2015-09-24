@@ -15,6 +15,8 @@ import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableList;
 import org.observe.collect.ObservableOrderedElement;
 
+import com.google.common.reflect.TypeToken;
+
 import prisms.lang.Type;
 
 /** Utility methods for observables */
@@ -59,7 +61,7 @@ public class ObservableUtils {
 	 * @param list The list to flatten
 	 * @return The flattened list
 	 */
-	public static <T> ObservableList<T> flattenListValues(Type type, ObservableList<? extends ObservableValue<T>> list) {
+	public static <T> ObservableList<T> flattenListValues(TypeToken<T> type, ObservableList<? extends ObservableValue<T>> list) {
 		class FlattenedList implements ObservableList.PartialListImpl<T> {
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
@@ -72,7 +74,7 @@ public class ObservableUtils {
 			}
 
 			@Override
-			public Type getType() {
+			public TypeToken<T> getType() {
 				return type;
 			}
 
@@ -80,7 +82,7 @@ public class ObservableUtils {
 			public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<T>> observer) {
 				return list.onElement(element ->observer.accept(new ObservableOrderedElement<T>() {
 					@Override
-					public Type getType() {
+					public TypeToken<T> getType() {
 						return type != null ? type : element.get().getType();
 					}
 
@@ -162,7 +164,8 @@ public class ObservableUtils {
 	 * @param collection The collection to flatten
 	 * @return The flattened collection
 	 */
-	public static <T> ObservableCollection<T> flattenValues(Type type, ObservableCollection<? extends ObservableValue<T>> collection) {
+	public static <T> ObservableCollection<T> flattenValues(TypeToken<T> type,
+		ObservableCollection<? extends ObservableValue<T>> collection) {
 		class FlattenedCollection implements ObservableCollection.PartialCollectionImpl<T> {
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
@@ -175,7 +178,7 @@ public class ObservableUtils {
 			}
 
 			@Override
-			public Type getType() {
+			public TypeToken<T> getType() {
 				return type;
 			}
 
@@ -183,7 +186,7 @@ public class ObservableUtils {
 			public Subscription onElement(Consumer<? super ObservableElement<T>> observer) {
 				return collection.onElement(element -> observer.accept(new ObservableElement<T>() {
 					@Override
-					public Type getType() {
+					public TypeToken<T> getType() {
 						return type != null ? type : element.get().getType();
 					}
 
@@ -266,7 +269,7 @@ public class ObservableUtils {
 
 	/**
 	 * Wraps an event from an observable value to use a different observable value as the source
-	 * 
+	 *
 	 * @param <T> The type of the value to wrap an event for
 	 * @param event The event to wrap
 	 * @param wrapper The wrapper observable to wrap the event for
@@ -281,7 +284,7 @@ public class ObservableUtils {
 
 	/**
 	 * Wraps all events from an observable value to use a different observable value as the source
-	 * 
+	 *
 	 * @param <T> The type of the value to wrap events for
 	 * @param value The observable value whose events to wrap
 	 * @param wrapper The wrapper observable to wrap the events for

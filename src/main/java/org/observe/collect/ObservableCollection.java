@@ -27,7 +27,8 @@ import org.observe.util.ListenerSet;
 import org.observe.util.ObservableUtils;
 import org.observe.util.Transaction;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeParameter;
+import com.google.common.reflect.TypeToken;
 
 /**
  * A collection whose content can be observed
@@ -36,7 +37,7 @@ import prisms.lang.Type;
  */
 public interface ObservableCollection<E> extends TransactableCollection<E> {
 	/** @return The type of elements in this collection */
-	Type getType();
+	TypeToken<E> getType();
 
 	/**
 	 * @param onElement The listener to be notified when new elements are added to the collection
@@ -107,10 +108,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			for(E value : this)
 				ret.add(value);
 		}
-		Class<?> base = getType().toClass();
-		if(base.isPrimitive())
-			base = Type.getWrapperType(base);
-		return ret.toArray((E []) java.lang.reflect.Array.newInstance(base, ret.size()));
+
+		return ret.toArray((E []) java.lang.reflect.Array.newInstance(getType().wrap().getRawType(), ret.size()));
 	}
 
 	@Override
@@ -126,10 +125,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	/** @return An observable value for the size of this collection */
 	default ObservableValue<Integer> observeSize() {
 		return d().debug(new ObservableValue<Integer>() {
-			private final Type intType = new Type(Integer.TYPE);
+			private final TypeToken<Integer> intType = TypeToken.of(Integer.TYPE);
 
 			@Override
-			public Type getType() {
+			public TypeToken<Integer> getType() {
 				return intType;
 			}
 
@@ -255,10 +254,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	default ObservableValue<Collection<E>> asValue() {
 		ObservableCollection<E> outer = this;
 		return new ObservableValue<Collection<E>>() {
-			final Type theType = new Type(ObservableCollection.class, outer.getType());
+			final TypeToken<Collection<E>> theType = new TypeToken<Collection<E>>() {}.where(new TypeParameter<E>() {}, outer.getType());
 
 			@Override
-			public Type getType() {
+			public TypeToken<Collection<E>> getType() {
 				return theType;
 			}
 
@@ -286,7 +285,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @return An observable collection of a new type backed by this collection and the mapping function
 	 */
 	default <T> ObservableCollection<T> map(Function<? super E, T> map) {
-		return map(ObservableUtils.getReturnType(map), map);
+		return map((TypeToken<T>) TypeToken.of(map.getClass()).resolveType(Function.class.getTypeParameters()[1]), map);
 	}
 
 	/**
@@ -295,7 +294,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @param map The mapping function to map the elements of this collection
 	 * @return The mapped collection
 	 */
-	default <T> ObservableCollection<T> map(Type type, Function<? super E, T> map) {
+	default <T> ObservableCollection<T> map(TypeToken<T> type, Function<? super E, T> map) {
 		return map(type, map, null);
 	}
 
@@ -306,7 +305,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @param reverse The reverse function if addition support is desired for the mapped collection
 	 * @return The mapped collection
 	 */
-	default <T> ObservableCollection<T> map(Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
+	default <T> ObservableCollection<T> map(TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse) {
 		return d().debug(new MappedObservableCollection<>(this, type, map, reverse)).from("map", this).using("map", map)
 			.using("reverse", reverse).get();
 	}
@@ -389,7 +388,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 *         given class
 	 */
 	default <T> ObservableCollection<T> filter(Class<T> type) {
-		return d().label(filterMap(new Type(type), value -> type.isInstance(value) ? type.cast(value) : null, value -> (E) value, true))
+		return d().label(filterMap(TypeToken.of(type), value -> type.isInstance(value) ? type.cast(value) : null, value -> (E) value, true))
 			.tag("filterType", type).get();
 	}
 
@@ -399,7 +398,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @return An observable collection of a new type backed by this collection and the mapping function
 	 */
 	default <T> ObservableCollection<T> filterMap(Function<? super E, T> filterMap) {
-		return filterMap(ObservableUtils.getReturnType(filterMap), filterMap, null, false);
+		return filterMap((TypeToken<T>) TypeToken.of(filterMap.getClass()).resolveType(Function.class.getTypeParameters()[1]), filterMap,
+			null, false);
 	}
 
 	/**
@@ -410,7 +410,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 *            {@link #filterDynamic(Predicate) dynamic}.
 	 * @return A collection containing every element in this collection for which the mapping function returns a non-null value
 	 */
-	default <T> ObservableCollection<T> filterMap(Type type, Function<? super E, T> map, boolean staticFilter) {
+	default <T> ObservableCollection<T> filterMap(TypeToken<T> type, Function<? super E, T> map, boolean staticFilter) {
 		return filterMap(type, map, null, staticFilter);
 	}
 
@@ -423,10 +423,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 *            {@link #filterDynamic(Predicate) dynamic}.
 	 * @return A collection containing every element in this collection for which the mapping function returns a non-null value
 	 */
-	default <T> ObservableCollection<T> filterMap(Type type, Function<? super E, T> map, Function<? super T, E> reverse,
+	default <T> ObservableCollection<T> filterMap(TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse,
 		boolean staticFilter) {
 		if(type == null)
-			type = ObservableUtils.getReturnType(map);
+			type = (TypeToken<T>) TypeToken.of(map.getClass()).resolveType(Function.class.getTypeParameters()[1]);
 		if(staticFilter)
 			return d().debug(new StaticFilteredCollection<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
 				.using("reverse", reverse).get();
@@ -445,11 +445,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	default ObservableValue<E> find(Predicate<E> filter) {
 		ObservableCollection<E> outer = this;
 		return d().debug(new ObservableValue<E>() {
-			private final Type type = outer.getType().isPrimitive() ? new Type(Type.getWrapperType(outer.getType().getBaseType())) : outer
-				.getType();
+			private final TypeToken<E> type = outer.getType().wrap();
 
 			@Override
-			public Type getType() {
+			public TypeToken<E> getType() {
 				return type;
 			}
 
@@ -549,7 +548,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @return An observable collection containing this collection's elements combined with the given argument
 	 */
 	default <T, V> ObservableCollection<V> combine(ObservableValue<T> arg, BiFunction<? super E, ? super T, V> func) {
-		return combine(arg, ObservableUtils.getReturnType(func), func);
+		return combine(arg, (TypeToken<V>) TypeToken.of(func.getClass()).resolveType(BiFunction.class.getTypeParameters()[2]), func);
 	}
 
 	/**
@@ -560,7 +559,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @param func The combination function to apply to this collection's elements and the given value
 	 * @return An observable collection containing this collection's elements combined with the given argument
 	 */
-	default <T, V> ObservableCollection<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
+	default <T, V> ObservableCollection<V> combine(ObservableValue<T> arg, TypeToken<V> type, BiFunction<? super E, ? super T, V> func) {
 		return combine(arg, type, func, null);
 	}
 
@@ -573,7 +572,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @param reverse The reverse function if addition support is desired for the combined collection
 	 * @return An observable collection containing this collection's elements combined with the given argument
 	 */
-	default <T, V> ObservableCollection<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func,
+	default <T, V> ObservableCollection<V> combine(ObservableValue<T> arg, TypeToken<V> type, BiFunction<? super E, ? super T, V> func,
 		BiFunction<? super V, ? super T, E> reverse) {
 		return d().debug(new CombinedObservableCollection<>(this, type, arg, func, reverse)).from("combine", this).from("with", arg)
 			.using("combination", func).using("reverse", reverse).get();
@@ -596,7 +595,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @return A multi-map containing each of this collection's elements, each in the collection of the value mapped by the given function
 	 *         applied to the element
 	 */
-	default <K> ObservableMultiMap<K, E> groupBy(Type keyType, Function<E, K> keyMap) {
+	default <K> ObservableMultiMap<K, E> groupBy(TypeToken<K> keyType, Function<E, K> keyMap) {
 		return new GroupedMultiMap<>(this, keyMap, keyType);
 	}
 
@@ -696,6 +695,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 */
 	public static <T> ObservableCollection<T> flatten(ObservableCollection<? extends ObservableCollection<? extends T>> coll) {
 		class ComposedObservableCollection implements PartialCollectionImpl<T> {
+			private final TypeToken<T> theType = (TypeToken<T>) coll.getType()
+				.resolveType(ObservableCollection.class.getTypeParameters()[1]);
 			private final CombinedCollectionSessionObservable theSession = new CombinedCollectionSessionObservable(coll);
 
 			@Override
@@ -733,8 +734,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			}
 
 			@Override
-			public Type getType() {
-				return coll.getType().getParamTypes().length == 0 ? new Type(Object.class) : coll.getType().getParamTypes()[0];
+			public TypeToken<T> getType() {
+				return theType;
 			}
 
 			@Override
@@ -814,7 +815,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @return A collection containing all elements of the given collections
 	 */
 	public static <T> ObservableCollection<T> flattenCollections(ObservableCollection<? extends T>... colls) {
-		return flatten(ObservableList.constant(new Type(ObservableCollection.class, new Type(Object.class, true)), colls));
+		return flatten(ObservableList.constant(new TypeToken<ObservableCollection<? extends T>>() {}, colls));
 	}
 
 	/**
@@ -952,14 +953,15 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 */
 	class MappedObservableCollection<E, T> implements PartialCollectionImpl<T> {
 		private final ObservableCollection<E> theWrapped;
-		private final Type theType;
+
+		private final TypeToken<T> theType;
 		private final Function<? super E, T> theMap;
 		private final Function<? super T, E> theReverse;
 
-		protected MappedObservableCollection(ObservableCollection<E> wrap, Type type, Function<? super E, T> map,
+		protected MappedObservableCollection(ObservableCollection<E> wrap, TypeToken<T> type, Function<? super E, T> map,
 			Function<? super T, E> reverse) {
 			theWrapped = wrap;
-			theType = type != null ? type : ObservableUtils.getReturnType(map);
+			theType = type != null ? type : (TypeToken<T>) TypeToken.of(map.getClass()).resolveType(Function.class.getTypeParameters()[1]);
 			theMap = map;
 			theReverse = reverse;
 		}
@@ -977,7 +979,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<T> getType() {
 			return theType;
 		}
 
@@ -1095,7 +1097,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	}
 
 	/**
-	 * Implements {@link #filterMap(Type, Function, Function, boolean)}
+	 * Implements {@link #filterMap(TypeToken, Function, Function, boolean)}
 	 *
 	 * @param <E> The type of the collection to filter/map
 	 * @param <T> The type of the filter/mapped collection
@@ -1103,15 +1105,15 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	abstract class FilteredCollection<E, T> implements PartialCollectionImpl<T> {
 		private final ObservableCollection<E> theWrapped;
 
-		private final Type theType;
+		private final TypeToken<T> theType;
 
 		private final Function<? super E, T> theMap;
 
 		private final Function<? super T, E> theReverse;
 
-		FilteredCollection(ObservableCollection<E> wrap, Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
+		FilteredCollection(ObservableCollection<E> wrap, TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse) {
 			theWrapped = wrap;
-			theType = type != null ? type : ObservableUtils.getReturnType(map);
+			theType = type != null ? type : (TypeToken<T>) TypeToken.of(map.getClass()).resolveType(Function.class.getTypeParameters()[1]);
 			theMap = map;
 			theReverse = reverse;
 		}
@@ -1129,7 +1131,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<T> getType() {
 			return theType;
 		}
 
@@ -1283,7 +1285,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @param <T> The type of the mapped collection
 	 */
 	class StaticFilteredCollection<E, T> extends FilteredCollection<E, T> {
-		public StaticFilteredCollection(ObservableCollection<E> wrap, Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
+		public StaticFilteredCollection(ObservableCollection<E> wrap, TypeToken<T> type, Function<? super E, T> map,
+			Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
 
@@ -1303,7 +1306,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @param <T> The type of the mapped collection
 	 */
 	class DynamicFilteredCollection<E, T> extends FilteredCollection<E, T> {
-		DynamicFilteredCollection(ObservableCollection<E> wrap, Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
+		DynamicFilteredCollection(ObservableCollection<E> wrap, TypeToken<T> type, Function<? super E, T> map,
+			Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
 
@@ -1335,7 +1339,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	class FilteredElement<E, T> implements ObservableElement<T> {
 		private final ObservableElement<E> theWrappedElement;
 		private final Function<? super E, T> theMap;
-		private final Type theType;
+
+		private final TypeToken<T> theType;
 
 		private T theValue;
 		private boolean isIncluded;
@@ -1345,7 +1350,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		 * @param map The mapping function to filter on
 		 * @param type The type of the element
 		 */
-		protected FilteredElement(ObservableElement<E> wrapped, Function<? super E, T> map, Type type) {
+		protected FilteredElement(ObservableElement<E> wrapped, Function<? super E, T> map, TypeToken<T> type) {
 			theWrappedElement = wrapped;
 			theMap = map;
 			theType = type;
@@ -1357,7 +1362,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<T> getType() {
 			return theType;
 		}
 
@@ -1440,14 +1445,15 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 */
 	class CombinedObservableCollection<E, T, V> implements PartialCollectionImpl<V> {
 		private final ObservableCollection<E> theWrapped;
-		private final Type theType;
+
+		private final TypeToken<V> theType;
 		private final ObservableValue<T> theValue;
 		private final BiFunction<? super E, ? super T, V> theMap;
 		private final BiFunction<? super V, ? super T, E> theReverse;
 
 		private final SubCollectionTransactionManager theTransactionManager;
 
-		protected CombinedObservableCollection(ObservableCollection<E> wrap, Type type, ObservableValue<T> value,
+		protected CombinedObservableCollection(ObservableCollection<E> wrap, TypeToken<V> type, ObservableValue<T> value,
 			BiFunction<? super E, ? super T, V> map, BiFunction<? super V, ? super T, E> reverse) {
 			theWrapped = wrap;
 			theType = type;
@@ -1489,7 +1495,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<V> getType() {
 			return theType;
 		}
 
@@ -1613,25 +1619,26 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		private final Function<E, K> theKeyMap;
 
-		private final Type theKeyType;
+		private final TypeToken<K> theKeyType;
 
 		private final ObservableSet<K> theKeySet;
 
-		GroupedMultiMap(ObservableCollection<E> wrap, Function<E, K> keyMap, Type keyType) {
+		GroupedMultiMap(ObservableCollection<E> wrap, Function<E, K> keyMap, TypeToken<K> keyType) {
 			theWrapped = wrap;
 			theKeyMap = keyMap;
-			theKeyType = keyType != null ? keyType : ObservableUtils.getReturnType(keyMap);
+			theKeyType = keyType != null ? keyType
+				: (TypeToken<K>) TypeToken.of(keyMap.getClass()).resolveType(Function.class.getTypeParameters()[1]);
 
 			theKeySet = ObservableSet.unique(theWrapped.map(theKeyMap));
 		}
 
 		@Override
-		public Type getKeyType() {
+		public TypeToken<K> getKeyType() {
 			return theKeyType;
 		}
 
 		@Override
-		public Type getValueType() {
+		public TypeToken<E> getValueType() {
 			return theWrapped.getType();
 		}
 
@@ -1691,7 +1698,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<E> getType() {
 			return theElements.getType();
 		}
 
@@ -1794,7 +1801,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<E> getType() {
 			return theWrapped.getType();
 		}
 
@@ -1848,7 +1855,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<E> getType() {
 			return theWrapped.getType();
 		}
 
@@ -1922,7 +1929,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<T> getType() {
 			return subElement.getType();
 		}
 
@@ -1987,7 +1994,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<E> getType() {
 			return theWrapped.getType();
 		}
 
@@ -2038,7 +2045,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<E> getType() {
 			return theWrapped.getType();
 		}
 
@@ -2243,7 +2250,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			}
 
 			@Override
-			public Type getType() {
+			public TypeToken<E> getType() {
 				return theWrapped.getType();
 			}
 
@@ -2322,7 +2329,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<E> getType() {
 			return theWrapped.getType();
 		}
 

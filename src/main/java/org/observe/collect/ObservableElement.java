@@ -14,7 +14,7 @@ import org.observe.Subscription;
 import org.observe.TriFunction;
 import org.observe.TriTuple;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 /**
  * An observable wrapper around an element in a {@link ObservableCollection}. This observable will call its observers'
@@ -43,10 +43,11 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 	};
 
 	@Override
-	default <R> ObservableElement<R> mapV(Type type, Function<? super E, R> function, boolean combineNull) {
-		return d().debug(new ComposedObservableElement<R>(this, type, args -> {
+	default <R> ObservableElement<R> mapV(TypeToken<R> type, Function<? super E, R> function, boolean combineNull) {
+		ComposedObservableElement<R> ret = new ComposedObservableElement<>(this, type, args -> {
 			return function.apply((E) args[0]);
-		}, combineNull, this)).from("map", this).using("map", function).tag("combineNull", combineNull).get();
+		} , combineNull, this);
+		return d().debug(ret).from("map", this).using("map", function).tag("combineNull", combineNull).get();
 	};
 
 	@Override
@@ -55,12 +56,13 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 	}
 
 	@Override
-	default <U, R> ObservableElement<R> combineV(Type type, BiFunction<? super E, ? super U, R> function, ObservableValue<U> arg,
+	default <U, R> ObservableElement<R> combineV(TypeToken<R> type, BiFunction<? super E, ? super U, R> function, ObservableValue<U> arg,
 		boolean combineNull) {
-		return d().debug(new ComposedObservableElement<R>(this, type, args -> {
+		ComposedObservableElement<R> ret = new ComposedObservableElement<>(this, type, args -> {
 			return function.apply((E) args[0], (U) args[1]);
-		}, combineNull, this, arg)).from("combine", this).from("with", arg).using("combination", function).tag("combineNull", combineNull)
-		.get();
+		} , combineNull, this, arg);
+		return d().debug(ret).from("combine", this).from("with", arg).using("combination", function).tag("combineNull", combineNull)
+			.get();
 	}
 
 	@Override
@@ -80,12 +82,13 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 	}
 
 	@Override
-	default <U, V, R> ObservableElement<R> combineV(Type type, TriFunction<? super E, ? super U, ? super V, R> function,
+	default <U, V, R> ObservableElement<R> combineV(TypeToken<R> type, TriFunction<? super E, ? super U, ? super V, R> function,
 		ObservableValue<U> arg2, ObservableValue<V> arg3, boolean combineNull) {
-		return d().debug(new ComposedObservableElement<R>(this, type, args -> {
+		ComposedObservableElement<R> ret = new ComposedObservableElement<>(this, type, args -> {
 			return function.apply((E) args[0], (U) args[1], (V) args[2]);
-		}, combineNull, this, arg2, arg3)).from("combine", this).from("with", arg2, arg3).using("combination", function)
-		.tag("combineNull", combineNull).get();
+		} , combineNull, this, arg2, arg3);
+		return d().debug(ret).from("combine", this).from("with", arg2, arg3).using("combination", function)
+			.tag("combineNull", combineNull).get();
 	}
 
 	@Override
@@ -152,7 +155,7 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 	class ComposedObservableElement<T> extends ComposedObservableValue<T> implements ObservableElement<T> {
 		private final ObservableElement<?> theRoot;
 
-		public ComposedObservableElement(ObservableElement<?> root, Type t, Function<Object [], T> f, boolean combineNull,
+		public ComposedObservableElement(ObservableElement<?> root, TypeToken<T> t, Function<Object [], T> f, boolean combineNull,
 			ObservableValue<?>... composed) {
 			super(t, f, combineNull, composed);
 			theRoot = root;
@@ -211,7 +214,7 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<E> getType() {
 			return theWrapped.getType();
 		}
 

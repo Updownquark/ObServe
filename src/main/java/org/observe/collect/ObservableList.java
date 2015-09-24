@@ -30,7 +30,8 @@ import org.observe.util.ListenerSet;
 import org.observe.util.ObservableUtils;
 import org.observe.util.Transaction;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeParameter;
+import com.google.common.reflect.TypeToken;
 
 /**
  * A list whose content can be observed. This list is immutable in that none of its methods, including {@link List} methods, can modify its
@@ -145,16 +146,16 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 	@Override
 	default <T> ObservableList<T> map(Function<? super E, T> map) {
-		return map(ObservableUtils.getReturnType(map), map);
+		return map((TypeToken<T>) TypeToken.of(map.getClass()).resolveType(Function.class.getTypeParameters()[1]), map);
 	}
 
 	@Override
-	default <T> ObservableList<T> map(Type type, Function<? super E, T> map) {
+	default <T> ObservableList<T> map(TypeToken<T> type, Function<? super E, T> map) {
 		return map(type, map, null);
 	}
 
 	@Override
-	default <T> ObservableList<T> map(Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
+	default <T> ObservableList<T> map(TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse) {
 		return d().debug(new MappedList<>(this, type, map, reverse)).from("map", this).using("map", map).using("reverse", reverse).get();
 	}
 
@@ -189,12 +190,13 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	}
 
 	@Override
-	default <T> ObservableList<T> filterMap(Type type, Function<? super E, T> map, boolean staticFilter) {
+	default <T> ObservableList<T> filterMap(TypeToken<T> type, Function<? super E, T> map, boolean staticFilter) {
 		return (ObservableList<T>) ObservableReversibleCollection.super.filterMap(type, map, staticFilter);
 	}
 
 	@Override
-	default <T> ObservableList<T> filterMap(Type type, Function<? super E, T> map, Function<? super T, E> reverse, boolean staticFilter) {
+	default <T> ObservableList<T> filterMap(TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse,
+		boolean staticFilter) {
 		if(staticFilter)
 			return d().debug(new StaticFilteredList<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
 				.using("reverse", reverse).get();
@@ -205,16 +207,16 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 	@Override
 	default <T, V> ObservableList<V> combine(ObservableValue<T> arg, BiFunction<? super E, ? super T, V> func) {
-		return combine(arg, ObservableUtils.getReturnType(func), func);
+		return combine(arg, (TypeToken<V>) TypeToken.of(func.getClass()).resolveType(BiFunction.class.getTypeParameters()[2]), func);
 	}
 
 	@Override
-	default <T, V> ObservableList<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
+	default <T, V> ObservableList<V> combine(ObservableValue<T> arg, TypeToken<V> type, BiFunction<? super E, ? super T, V> func) {
 		return combine(arg, type, func, null);
 	}
 
 	@Override
-	default <T, V> ObservableList<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func,
+	default <T, V> ObservableList<V> combine(ObservableValue<T> arg, TypeToken<V> type, BiFunction<? super E, ? super T, V> func,
 		BiFunction<? super V, ? super T, E> reverse) {
 		return d().debug(new CombinedObservableList<>(this, arg, type, func, reverse)).from("combine", this).from("with", arg)
 			.using("combination", func).using("reverse", reverse).get();
@@ -276,9 +278,9 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	 * @param list The list of items for the new list
 	 * @return An observable list whose contents are given and never changes
 	 */
-	public static <T> ObservableList<T> constant(Type type, List<T> list) {
+	public static <T> ObservableList<T> constant(TypeToken<T> type, List<T> list) {
 		class ConstantObservableElement implements ObservableOrderedElement<T> {
-			private final Type theType;
+			private final TypeToken<T> theType;
 			private final T theValue;
 			private final int theIndex;
 
@@ -306,7 +308,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 			}
 
 			@Override
-			public Type getType() {
+			public TypeToken<T> getType() {
 				return theType;
 			}
 
@@ -325,7 +327,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		class ConstantObservableList implements PartialListImpl<T> {
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
-				return ObservableValue.constant(new Type(CollectionSession.class), null);
+				return ObservableValue.constant(TypeToken.of(CollectionSession.class), null);
 			}
 
 			@Override
@@ -335,7 +337,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 			}
 
 			@Override
-			public Type getType() {
+			public TypeToken<T> getType() {
 				return type;
 			}
 
@@ -378,7 +380,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	 * @param list The array of items for the new list
 	 * @return An observable list whose contents are given and never changes
 	 */
-	public static <T> ObservableList<T> constant(Type type, T... list) {
+	public static <T> ObservableList<T> constant(TypeToken<T> type, T... list) {
 		return constant(type, java.util.Arrays.asList(list));
 	}
 
@@ -457,8 +459,8 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 			}
 
 			@Override
-			public Type getType() {
-				return list.getType().getParamTypes().length == 0 ? new Type(Object.class) : list.getType().getParamTypes()[0];
+			public TypeToken<T> getType() {
+				return (TypeToken<T>) list.getType().resolveType(ObservableCollection.class.getTypeParameters()[0]);
 			}
 
 			@Override
@@ -543,13 +545,15 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 	/**
 	 * @param <T> The supertype of elements in the lists
+	 * @param type The super type of all possible lists in the outer list
 	 * @param lists The lists to flatten
 	 * @return An observable list that contains all the values of the given lists
 	 */
-	public static <T> ObservableList<T> flattenLists(ObservableList<? extends T>... lists) {
+	public static <T> ObservableList<T> flattenLists(TypeToken<T> type, ObservableList<? extends T>... lists) {
 		if(lists.length == 0)
-			return constant(new Type(Object.class));
-		ObservableList<ObservableList<? extends T>> wrapper = constant(new Type(ObservableList.class, lists[0].getType()), lists);
+			return constant(type);
+		ObservableList<ObservableList<? extends T>> wrapper = constant(
+			new TypeToken<ObservableList<? extends T>>() {}.where(new TypeParameter<T>() {}, type), lists);
 		return flatten(wrapper);
 	}
 
@@ -851,10 +855,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 				for(E value : this)
 					ret.add(value);
 			}
-			Class<?> base = theRoot.getType().toClass();
-			if(base.isPrimitive())
-				base = Type.getWrapperType(base);
-			return ret.toArray((E []) java.lang.reflect.Array.newInstance(base, ret.size()));
+			return ret.toArray((E []) java.lang.reflect.Array.newInstance(theRoot.getType().wrap().getRawType(), ret.size()));
 		}
 
 		@Override
@@ -1164,7 +1165,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 			}
 
 			@Override
-			public Type getType() {
+			public TypeToken<E> getType() {
 				return theWrapped.getType();
 			}
 
@@ -1211,7 +1212,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	 * @param <T> The type of the mapped collection
 	 */
 	class MappedList<E, T> extends MappedReversibleCollection<E, T> implements PartialListImpl<T> {
-		protected MappedList(ObservableList<E> wrap, Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
+		protected MappedList(ObservableList<E> wrap, TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
 
@@ -1490,13 +1491,14 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	}
 
 	/**
-	 * Implements {@link ObservableList#filterMap(Type, Function, Function, boolean)} for static filtering
+	 * Implements {@link ObservableList#filterMap(TypeToken, Function, Function, boolean)} for static filtering
 	 *
 	 * @param <E> The type of the collection to be filter-mapped
 	 * @param <T> The type of the mapped collection
 	 */
 	class StaticFilteredList<E, T> extends StaticFilteredReversibleCollection<E, T> implements PartialFilteredListImpl<E, T> {
-		protected StaticFilteredList(ObservableList<E> wrap, Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
+		protected StaticFilteredList(ObservableList<E> wrap, TypeToken<T> type, Function<? super E, T> map,
+			Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
 
@@ -1524,13 +1526,14 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	}
 
 	/**
-	 * Implements {@link ObservableList#filterMap(Type, Function, Function, boolean)} for dynamic filtering
+	 * Implements {@link ObservableList#filterMap(TypeToken, Function, Function, boolean)} for dynamic filtering
 	 *
 	 * @param <E> The type of the collection to be filter-mapped
 	 * @param <T> The type of the mapped collection
 	 */
 	class DynamicFilteredList<E, T> extends DynamicFilteredReversibleCollection<E, T> implements PartialFilteredListImpl<E, T> {
-		protected DynamicFilteredList(ObservableList<E> wrap, Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
+		protected DynamicFilteredList(ObservableList<E> wrap, TypeToken<T> type, Function<? super E, T> map,
+			Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
 
@@ -1563,7 +1566,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	 * @param <V> The type of the combined collection
 	 */
 	class CombinedObservableList<E, T, V> extends CombinedReversibleCollection<E, T, V> implements PartialListImpl<V> {
-		protected CombinedObservableList(ObservableList<E> wrap, ObservableValue<T> value, Type type,
+		protected CombinedObservableList(ObservableList<E> wrap, ObservableValue<T> value, TypeToken<V> type,
 			BiFunction<? super E, ? super T, V> map, BiFunction<? super V, ? super T, E> reverse) {
 			super(wrap, value, type, map, reverse);
 		}
@@ -1878,7 +1881,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<T> getType() {
 			return theWrapped.getType();
 		}
 
@@ -2133,7 +2136,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<T> getType() {
 			return theWrapped.getType();
 		}
 

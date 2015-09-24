@@ -24,9 +24,9 @@ public class ObservableValueEvent<T> {
 		theObservable = observable;
 		isInitial = initial;
 		if(oldValue != null) // Allow null for old value even for primitive types
-			oldValue = (T) observable.getType().cast(oldValue);
+			oldValue = (T) observable.getType().wrap().getRawType().cast(oldValue);
 		theOldValue = oldValue;
-		theNewValue = (T) observable.getType().cast(newValue);
+		theNewValue = (T) observable.getType().wrap().getRawType().cast(newValue);
 		theCause = cause;
 	}
 
@@ -62,7 +62,7 @@ public class ObservableValueEvent<T> {
 
 	/**
 	 * Creates an event to populate the initial value of an observable to a subscriber
-	 * 
+	 *
 	 * @param <T> The type of the observable value
 	 * @param observable The observable value to populate the value for
 	 * @param value The current value of the observable
@@ -74,7 +74,7 @@ public class ObservableValueEvent<T> {
 
 	/**
 	 * Creates an event representing an observable's change of value
-	 * 
+	 *
 	 * @param <T> The type of the observable value
 	 * @param observable The observable value to populate the value for
 	 * @param oldValue The value of the observable before the change

@@ -9,7 +9,7 @@ import org.observe.Subscription;
 import org.observe.collect.ObservableElement;
 import org.observe.util.ObservableUtils;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 class ExposedObservableElement<E> implements ObservableElement<E> {
 	private final InternalObservableElementImpl<E> theInternalElement;
@@ -26,7 +26,7 @@ class ExposedObservableElement<E> implements ObservableElement<E> {
 	}
 
 	@Override
-	public Type getType() {
+	public TypeToken<E> getType() {
 		return theInternalElement.getType();
 	}
 

@@ -9,14 +9,14 @@ import org.observe.Subscription;
 import org.observe.util.ListenerSet;
 import org.observe.util.ObservableUtils;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 /**
  * A collection session observable for collections that wrap multiple collections. This observable manages its own session which is present
  * whenever the containing collection or any of its elements have sessions.
  */
 public class CombinedCollectionSessionObservable implements ObservableValue<CollectionSession> {
-	private static final Type SESSION_TYPE = new Type(CollectionSession.class);
+	private static final TypeToken<CollectionSession> SESSION_TYPE = TypeToken.of(CollectionSession.class);
 
 	private final ObservableValue<Boolean> theWrappedSessionObservable;
 
@@ -64,7 +64,7 @@ public class CombinedCollectionSessionObservable implements ObservableValue<Coll
 	}
 
 	@Override
-	public Type getType() {
+	public TypeToken<CollectionSession> getType() {
 		return SESSION_TYPE;
 	}
 

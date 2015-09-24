@@ -20,7 +20,7 @@ import org.observe.Subscription;
 import org.observe.datastruct.MultiMap;
 import org.observe.util.Transaction;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 /**
  * A set whose content can be observed
@@ -93,7 +93,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	@Override
 	default <T> ObservableSet<T> filter(Class<T> type) {
 		Function<E, T> map = value -> type.isInstance(value) ? type.cast(value) : null;
-		return d().debug(new StaticFilteredSet<>(this, new Type(type), map)).from("filterMap", this).using("map", map)
+		return d().debug(new StaticFilteredSet<>(this, TypeToken.of(type), map)).from("filterMap", this).using("map", map)
 			.tag("filterType", type).get();
 	}
 
@@ -183,14 +183,14 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	 * @param coll The collection with elements to wrap
 	 * @return A collection containing the given elements that cannot be changed
 	 */
-	public static <T> ObservableSet<T> constant(Type type, java.util.Collection<T> coll) {
+	public static <T> ObservableSet<T> constant(TypeToken<T> type, java.util.Collection<T> coll) {
 		Set<T> modSet = new java.util.LinkedHashSet<>(coll);
 		Set<T> constSet = java.util.Collections.unmodifiableSet(modSet);
 		java.util.List<ObservableElement<T>> els = new java.util.ArrayList<>();
 		class ConstantObservableSet implements PartialSetImpl<T> {
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
-				return ObservableValue.constant(new Type(CollectionSession.class), null);
+				return ObservableValue.constant(TypeToken.of(CollectionSession.class), null);
 			}
 
 			@Override
@@ -200,7 +200,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 			}
 
 			@Override
-			public Type getType() {
+			public TypeToken<T> getType() {
 				return type;
 			}
 
@@ -226,7 +226,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 		for(T value : constSet)
 			els.add(d().debug(new ObservableElement<T>() {
 				@Override
-				public Type getType() {
+				public TypeToken<T> getType() {
 					return type;
 				}
 
@@ -256,7 +256,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	 * @param values The array with elements to wrap
 	 * @return A collection containing the given elements that cannot be changed
 	 */
-	public static <T> ObservableSet<T> constant(Type type, T... values) {
+	public static <T> ObservableSet<T> constant(TypeToken<T> type, T... values) {
 		return constant(type, java.util.Arrays.asList(values));
 	}
 
@@ -282,7 +282,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 			}
 
 			@Override
-			public Type getType() {
+			public TypeToken<T> getType() {
 				return coll.getType();
 			}
 
@@ -342,8 +342,8 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 			}
 
 			@Override
-			public Type getType() {
-				return coll.getType().getParamTypes().length == 0 ? new Type(Object.class) : coll.getType().getParamTypes()[0];
+			public TypeToken<T> getType() {
+				return (TypeToken<T>) coll.getType().resolveType(ObservableCollection.class.getTypeParameters()[0]);
 			}
 
 			@Override
@@ -504,7 +504,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<E> getType() {
 			return theSet.getType();
 		}
 
@@ -563,7 +563,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	 * @param <T> the type of the mapped set
 	 */
 	class StaticFilteredSet<E, T> extends StaticFilteredCollection<E, T> implements PartialSetImpl<T> {
-		protected StaticFilteredSet(ObservableSet<E> wrap, Type type, Function<? super E, T> map) {
+		protected StaticFilteredSet(ObservableSet<E> wrap, TypeToken<T> type, Function<? super E, T> map) {
 			super(wrap, type, map, value -> (E) value);
 		}
 
@@ -580,7 +580,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	 * @param <T> the type of the mapped set
 	 */
 	class DynamicFilteredSet<E, T> extends DynamicFilteredCollection<E, T> implements PartialSetImpl<T> {
-		protected DynamicFilteredSet(ObservableSet<E> wrap, Type type, Function<? super E, T> map) {
+		protected DynamicFilteredSet(ObservableSet<E> wrap, TypeToken<T> type, Function<? super E, T> map) {
 			super(wrap, type, map, value -> (E) value);
 		}
 

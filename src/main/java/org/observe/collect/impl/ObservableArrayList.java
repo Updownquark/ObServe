@@ -17,7 +17,7 @@ import org.observe.collect.ObservableRandomAccessList;
 import org.observe.util.Transactable;
 import org.observe.util.Transaction;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 /**
  * A list whose content can be observed. This list is a classic array-type list with the following performance characteristics:
@@ -29,7 +29,7 @@ import prisms.lang.Type;
  * @param <E> The type of element in the list
  */
 public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, ObservableList.PartialListImpl<E> {
-	private final Type theType;
+	private final TypeToken<E> theType;
 
 	private ArrayListInternals theInternals;
 
@@ -43,7 +43,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	 *
 	 * @param type The type of elements for this list
 	 */
-	public ObservableArrayList(Type type) {
+	public ObservableArrayList(TypeToken<E> type) {
 		this(type, new ReentrantReadWriteLock(), null, null);
 	}
 
@@ -56,7 +56,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	 * @param sessionController The controller for the session. May be null, in which case the transactional methods in this collection will
 	 *            not actually create transactions.
 	 */
-	public ObservableArrayList(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
+	public ObservableArrayList(TypeToken<E> type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController) {
 		theType = type;
 		theInternals = new ArrayListInternals(lock, session, sessionController, write -> {
@@ -79,7 +79,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	}
 
 	@Override
-	public Type getType() {
+	public TypeToken<E> getType() {
 		return theType;
 	}
 
@@ -144,9 +144,8 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	@Override
 	public boolean add(E e) {
 		try (Transaction t = theInternals.lock(true, false, null)) {
-			E val = (E) theType.cast(e);
-			theValues.add(val);
-			InternalOrderedObservableElementImpl<E> add = createElement(val);
+			InternalOrderedObservableElementImpl<E> add = createElement(e);
+			theValues.add(e);
 			add.cacheIndex(theElements.size(), theModCount + 1); // +1 because the mod count will be incremented when the transaction ends
 			theElements.add(add);
 			theInternals.fireNewElement(add);
@@ -157,9 +156,8 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	@Override
 	public void add(int index, E element) {
 		try (Transaction t = theInternals.lock(true, false, null)) {
-			E val = (E) theType.cast(element);
-			theValues.add(index, val);
-			InternalOrderedObservableElementImpl<E> newWrapper = createElement(val);
+			InternalOrderedObservableElementImpl<E> newWrapper = createElement(element);
+			theValues.add(index, element);
 			newWrapper.cacheIndex(index, theModCount + 1);
 			theElements.add(index, newWrapper);
 			theInternals.fireNewElement(newWrapper);
@@ -212,9 +210,8 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 			return false;
 		try (Transaction t = lock(true, null)) {
 			for(E e : c) {
-				E val = (E) theType.cast(e);
-				theValues.add(val);
-				InternalOrderedObservableElementImpl<E> newWrapper = createElement(val);
+				InternalOrderedObservableElementImpl<E> newWrapper = createElement(e);
+				theValues.add(e);
 				newWrapper.cacheIndex(theElements.size(), theModCount + 1);
 				theElements.add(newWrapper);
 				theInternals.fireNewElement(newWrapper);
@@ -230,9 +227,8 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 		try (Transaction t = lock(true, null)) {
 			int idx = index;
 			for(E e : c) {
-				E val = (E) theType.cast(e);
-				theValues.add(idx, val);
-				InternalOrderedObservableElementImpl<E> newWrapper = createElement(val);
+				InternalOrderedObservableElementImpl<E> newWrapper = createElement(e);
+				theValues.add(idx, e);
 				newWrapper.cacheIndex(idx, theModCount + 1);
 				theElements.add(idx, newWrapper);
 				theInternals.fireNewElement(newWrapper);
@@ -303,7 +299,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	@Override
 	public E set(int index, E element) {
 		try (Transaction t = theInternals.lock(true, false, null)) {
-			E val = (E) theType.cast(element);
+			E val = (E) theType.getRawType().cast(element);
 			E ret = theValues.set(index, val);
 			theElements.get(index).set(val);
 			return ret;

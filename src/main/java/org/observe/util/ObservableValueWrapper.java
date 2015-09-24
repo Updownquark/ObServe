@@ -5,7 +5,7 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 /**
  * An observable value that wraps another
@@ -26,7 +26,7 @@ public class ObservableValueWrapper<T> implements ObservableValue<T> {
 	}
 
 	@Override
-	public Type getType() {
+	public TypeToken<T> getType() {
 		return theWrapped.getType();
 	}
 

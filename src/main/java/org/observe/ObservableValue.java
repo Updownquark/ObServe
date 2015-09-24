@@ -8,9 +8,8 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.util.ListenerSet;
-import org.observe.util.ObservableUtils;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 /**
  * A value holder that can notify listeners when the value changes. This type of observable will always notify subscribers with an event
@@ -20,7 +19,7 @@ import prisms.lang.Type;
  */
 public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>, java.util.function.Supplier<T> {
 	/** @return The type of value this observable contains. May be null if this observable's value is always null. */
-	Type getType();
+	TypeToken<T> getType();
 
 	/** @return The current value of this observable */
 	@Override
@@ -87,7 +86,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		ObservableValue<T> outer = this;
 		return d().debug(new ObservableValue<T>() {
 			@Override
-			public Type getType() {
+			public TypeToken<T> getType() {
 				return outer.getType();
 			}
 
@@ -127,7 +126,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @param function The function to apply to this observable's value
 	 * @return The new observable whose value is a function of this observable's value
 	 */
-	default <R> ObservableValue<R> mapV(Type type, Function<? super T, R> function) {
+	default <R> ObservableValue<R> mapV(TypeToken<R> type, Function<? super T, R> function) {
 		return mapV(type, function, false);
 	}
 
@@ -140,10 +139,11 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @param filterNull Whether to apply the filter to null values or simply preserve the null
 	 * @return The new observable whose value is a function of this observable's value
 	 */
-	default <R> ObservableValue<R> mapV(Type type, Function<? super T, R> function, boolean filterNull) {
-		return d().debug(new ComposedObservableValue<R>(type, d().lambda(args -> {
+	default <R> ObservableValue<R> mapV(TypeToken<R> type, Function<? super T, R> function, boolean filterNull) {
+		ComposedObservableValue<R> ret = new ComposedObservableValue<>(type, d().lambda(args -> {
 			return function.apply((T) args[0]);
-		}, "mapV"), filterNull, this)).from("map", this).using("map", function).tag("filterNull", filterNull).get();
+		} , "mapV"), filterNull, this);
+		return d().debug(ret).from("map", this).using("map", function).tag("filterNull", filterNull).get();
 	};
 
 	/**
@@ -171,12 +171,13 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 *            result will be null.
 	 * @return The new observable whose value is a function of this observable's value and the other's
 	 */
-	default <U, R> ObservableValue<R> combineV(Type type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
+	default <U, R> ObservableValue<R> combineV(TypeToken<R> type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		boolean combineNull) {
-		return d().debug(new ComposedObservableValue<R>(type, d().lambda(args -> {
+		ComposedObservableValue<R> ret = new ComposedObservableValue<>(type, d().lambda(args -> {
 			return function.apply((T) args[0], (U) args[1]);
-		}, "combineV"), combineNull, this, arg)).from("combine", this).from("with", arg).using("combination", function)
-		.tag("combineNull", combineNull).get();
+		} , "combineV"), combineNull, this, arg);
+		return d().debug(ret).from("combine", this).from("with", arg).using("combination", function)
+			.tag("combineNull", combineNull).get();
 	}
 
 	/**
@@ -229,12 +230,13 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 *            result will be null.
 	 * @return The new observable whose value is a function of this observable's value and the others'
 	 */
-	default <U, V, R> ObservableValue<R> combineV(Type type, TriFunction<? super T, ? super U, ? super V, R> function,
+	default <U, V, R> ObservableValue<R> combineV(TypeToken<R> type, TriFunction<? super T, ? super U, ? super V, R> function,
 		ObservableValue<U> arg2, ObservableValue<V> arg3, boolean combineNull) {
-		return d().debug(new ComposedObservableValue<R>(type, d().lambda(args -> {
+		ComposedObservableValue<R> ret = new ComposedObservableValue<>(type, d().lambda(args -> {
 			return function.apply((T) args[0], (U) args[1], (V) args[2]);
-		}, "combineV"), combineNull, this, arg2, arg3)).from("combine", this).from("with", arg2).from("with", arg3)
-		.using("combination", function).tag("combineNull", combineNull).get();
+		} , "combineV"), combineNull, this, arg2, arg3);
+		return d().debug(ret).from("combine", this).from("with", arg2).from("with", arg3)
+			.using("combination", function).tag("combineNull", combineNull).get();
 	}
 
 	@Override
@@ -256,8 +258,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @return An observable that always returns the given value
 	 */
 	public static <X> ObservableValue<X> constant(final X value) {
-		return d().debug(new ConstantObservableValue<>(value == null ? Type.NULL : new Type(value.getClass()), value)).label("constant")
-			.tag("value", value).get();
+		return d().debug(new ConstantObservableValue<>(new TypeToken<X>() {}, value)).label("constant").tag("value", value).get();
 	}
 
 	/**
@@ -266,7 +267,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @param value The value to wrap
 	 * @return An observable that always returns the given value
 	 */
-	public static <X> ObservableValue<X> constant(final Type type, final X value) {
+	public static <X> ObservableValue<X> constant(final TypeToken<X> type, final X value) {
 		return d().debug(new ConstantObservableValue<>(type, value)).label("constant").tag("value", value).get();
 	}
 
@@ -277,18 +278,19 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @param ov The nested observable
 	 * @return An observable value whose value is the value of <code>ov.get()</code>
 	 */
-	public static <T> ObservableValue<T> flatten(final Type type, final ObservableValue<? extends ObservableValue<? extends T>> ov) {
+	public static <T> ObservableValue<T> flatten(final TypeToken<T> type,
+		final ObservableValue<? extends ObservableValue<? extends T>> ov) {
 		if(ov == null)
 			throw new NullPointerException("Null observable");
 		return d().debug(new ObservableValue<T>() {
 			@Override
-			public Type getType() {
+			public TypeToken<T> getType() {
 				if(type != null)
 					return type;
 				ObservableValue<? extends T> outerVal = ov.get();
 				if(outerVal == null)
 					throw new IllegalStateException("Flattened observable is null and no type given: " + ov);
-				return outerVal.getType();
+				return (TypeToken<T>) outerVal.getType();
 			}
 
 			@Override
@@ -376,57 +378,59 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @param components The components whose changes require a new value to be produced
 	 * @return The new observable value
 	 */
-	public static <T> ObservableValue<T> assemble(Type type, java.util.function.Supplier<T> value, ObservableValue<?>... components) {
-		Type t = type == null ? ObservableUtils.getReturnType(value) : type;
-		return d().debug(new ObservableValue<T>() {
-			@Override
-			public Type getType() {
-				return t;
-			}
+	public static <T> ObservableValue<T> assemble(TypeToken<T> type, java.util.function.Supplier<T> value,
+		ObservableValue<?>... components) {
+		TypeToken<T> t = type == null
+			? (TypeToken<T>) TypeToken.of(value.getClass()).resolveType(java.util.function.Supplier.class.getTypeParameters()[0]) : type;
+			return d().debug(new ObservableValue<T>() {
+				@Override
+				public TypeToken<T> getType() {
+					return t;
+				}
 
-			@Override
-			public T get() {
-				return value.get();
-			}
+				@Override
+				public T get() {
+					return value.get();
+				}
 
-			@Override
-			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-				ObservableValue<T> outer = this;
-				Subscription [] subSubs = new Subscription[components.length];
-				Object [] oldValue = new Object[1];
-				for(int i = 0; i < subSubs.length; i++)
-					subSubs[i] = components[i].subscribe(new Observer<ObservableValueEvent<?>>() {
-						@Override
-						public <V extends ObservableValueEvent<?>> void onNext(V value2) {
-							T newVal = value.get();
-							T oldVal = (T) oldValue[0];
-							oldValue[0] = newVal;
-							if(value2.isInitial())
-								observer.onNext(outer.createInitialEvent(newVal));
-							else
-								observer.onNext(outer.createChangeEvent(oldVal, newVal, value2.getCause()));
-						}
+				@Override
+				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+					ObservableValue<T> outer = this;
+					Subscription [] subSubs = new Subscription[components.length];
+					Object [] oldValue = new Object[1];
+					for(int i = 0; i < subSubs.length; i++)
+						subSubs[i] = components[i].subscribe(new Observer<ObservableValueEvent<?>>() {
+							@Override
+							public <V extends ObservableValueEvent<?>> void onNext(V value2) {
+								T newVal = value.get();
+								T oldVal = (T) oldValue[0];
+								oldValue[0] = newVal;
+								if(value2.isInitial())
+									observer.onNext(outer.createInitialEvent(newVal));
+								else
+									observer.onNext(outer.createChangeEvent(oldVal, newVal, value2.getCause()));
+							}
 
-						@Override
-						public <V extends ObservableValueEvent<?>> void onCompleted(V value2) {
-						}
+							@Override
+							public <V extends ObservableValueEvent<?>> void onCompleted(V value2) {
+							}
 
-						@Override
-						public void onError(Throwable e) {
-							observer.onError(e);
-						}
-					});
-				return () -> {
-					for(Subscription sub : subSubs)
-						sub.unsubscribe();
-				};
-			}
+							@Override
+							public void onError(Throwable e) {
+								observer.onError(e);
+							}
+						});
+					return () -> {
+						for(Subscription sub : subSubs)
+							sub.unsubscribe();
+					};
+				}
 
-			@Override
-			public String toString(){
-				return "Assembled " + type;
-			}
-		}).from("assemble", (Object []) components).using("assembler", value).get();
+				@Override
+				public String toString(){
+					return "Assembled " + type;
+				}
+			}).from("assemble", (Object []) components).using("assembler", value).get();
 	}
 
 	/**
@@ -463,7 +467,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 
 		private final ListenerSet<Observer<? super ObservableValueEvent<T>>> theObservers;
 
-		private final Type theType;
+		private final TypeToken<T> theType;
 
 		private final boolean combineNulls;
 
@@ -488,10 +492,12 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		 *            result will be null.
 		 * @param composed The argument observables whose values are passed to the function
 		 */
-		public ComposedObservableValue(Type type, Function<Object [], T> function, boolean combineNull, ObservableValue<?>... composed) {
+		public ComposedObservableValue(TypeToken<T> type, Function<Object [], T> function, boolean combineNull,
+			ObservableValue<?>... composed) {
 			theFunction = function;
 			combineNulls = combineNull;
-			theType = type != null ? type : ObservableUtils.getReturnType(function);
+			theType = type != null ? type
+				: (TypeToken<T>) TypeToken.of(function.getClass()).resolveType(Function.class.getTypeParameters()[1]);
 			theComposed = java.util.Collections.unmodifiableList(java.util.Arrays.asList(composed));
 			theObservers = new ListenerSet<>();
 			theComposedValues = new Object[composed.length];
@@ -573,7 +579,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<T> getType() {
 			return theType;
 		}
 
@@ -644,7 +650,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<T> getType() {
 			return getWrapped().getType();
 		}
 
@@ -683,7 +689,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<T> getType() {
 			return theWrapped.getType();
 		}
 
@@ -773,7 +779,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<T> getType() {
 			return theWrapped.getType();
 		}
 
@@ -797,16 +803,16 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @param <T> The type of this value
 	 */
 	public static final class ConstantObservableValue<T> implements ObservableValue<T> {
-		private final Type theType;
+		private final TypeToken<T> theType;
 		private final T theValue;
 
 		/**
 		 * @param type The type of this observable value
 		 * @param value This observable value's value
 		 */
-		public ConstantObservableValue(Type type, T value) {
+		public ConstantObservableValue(TypeToken<T> type, T value) {
 			theType = type;
-			theValue = (T) type.cast(value);
+			theValue = (T) type.getRawType().cast(value);
 		}
 
 		@Override
@@ -817,7 +823,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<T> getType() {
 			return theType;
 		}
 

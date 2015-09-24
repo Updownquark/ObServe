@@ -18,7 +18,7 @@ import org.observe.datastruct.impl.ObservableMultiMapImpl;
 import org.observe.util.Transaction;
 import org.observe.util.WeakReferenceObservable;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 /** A utility class for debugging observables */
 public abstract class ObservableDebug {
@@ -55,13 +55,17 @@ public abstract class ObservableDebug {
 		 */
 		ObservableDerivationBuilder<T> tag(String tagName, Object value);
 
-		/** @return The observable whose debugging properties are modifiable by this builder */
+		/**
+		 * @return The observable whose debugging properties are modifiable by this builder
+		 */
 		T get();
 	}
 
 	/** A quick interface to describe an observable's debug properties */
 	public interface DebugDescription {
-		/** @return The observable being described */
+		/**
+		 * @return The observable being described
+		 */
 		Object get();
 
 		/**
@@ -71,13 +75,19 @@ public abstract class ObservableDebug {
 		 */
 		ObservableMap<String, DebugDescription> parents();
 
-		/** @return Any functions that may be used to generate this observable's values */
+		/**
+		 * @return Any functions that may be used to generate this observable's values
+		 */
 		Map<String, Object> functions();
 
-		/** @return Any labels that have been attached to this observable */
+		/**
+		 * @return Any labels that have been attached to this observable
+		 */
 		ObservableCollection<String> labels();
 
-		/** @return Any properties that have been tagged onto this observable */
+		/**
+		 * @return Any properties that have been tagged onto this observable
+		 */
 		ObservableMultiMap<String, Object> tags();
 	}
 
@@ -98,9 +108,10 @@ public abstract class ObservableDebug {
 		private final ObservableMultiMapImpl<String, Object> tagController;
 
 		private ObservableDebugWrapper(Object ob, Map<String, Object> fns) {
-			observable = new WeakReferenceObservable<>(new Type(Object.class), ob);
-			labels = new org.observe.collect.impl.ObservableArrayList<>(new Type(String.class));
-			tagController = new org.observe.datastruct.impl.ObservableMultiMapImpl<>(new Type(String.class), new Type(Object.class));
+			observable = new WeakReferenceObservable<>(TypeToken.of(Object.class), ob);
+			labels = new org.observe.collect.impl.ObservableArrayList<>(TypeToken.of(String.class));
+			tagController = new org.observe.datastruct.impl.ObservableMultiMapImpl<>(TypeToken.of(String.class),
+				TypeToken.of(Object.class));
 			tags = tagController.immutable();
 			functions = Collections.unmodifiableMap(fns);
 		}
@@ -122,9 +133,13 @@ public abstract class ObservableDebug {
 
 	public interface DebugFrame {
 		Object getObservable();
+
 		DebugType getType();
+
 		DebugFrame getParent();
+
 		ObservableList<DebugFrame> getChildren();
+
 		ObservableValue<Boolean> isDone();
 	}
 
@@ -177,7 +192,7 @@ public abstract class ObservableDebug {
 		}
 	}*/
 
-	//Structural debugging methods
+	// Structural debugging methods
 
 	/**
 	 * Registers an observable for debugging
@@ -217,7 +232,9 @@ public abstract class ObservableDebug {
 	 */
 	public abstract String descLambda(Object lambda);
 
-	/** @return The graph of observable dependencies that the debugging framework knows about */
+	/**
+	 * @return The graph of observable dependencies that the debugging framework knows about
+	 */
 	public abstract ObservableGraph<ObservableDebugWrapper, String> getObservableGraph();
 
 	/**
@@ -226,7 +243,7 @@ public abstract class ObservableDebug {
 	 */
 	public abstract ObservableGraph.Node<ObservableDebugWrapper, String> getGraphNode(Object observable);
 
-	//Execution debugging methods
+	// Execution debugging methods
 
 	/*/** Enables debugging on the current thread until {@link #endDebug()} is called * /
 	public abstract void startDebug();
@@ -253,8 +270,8 @@ public abstract class ObservableDebug {
 	}
 
 	/**
-	 * @param type The type of debugger to create, either one of the default string values (null, structure, full) or the
-	 *            fully-qualified type name of a custom ObservableDebug implementation
+	 * @param type The type of debugger to create, either one of the default string values (null, structure, full) or the fully-qualified
+	 *            type name of a custom ObservableDebug implementation
 	 * @return The ObservableDebug of the given type
 	 */
 	public static ObservableDebug createInstance(String type) {
@@ -277,7 +294,9 @@ public abstract class ObservableDebug {
 		}
 	}
 
-	/** @return The debugging instance to use */
+	/**
+	 * @return The debugging instance to use
+	 */
 	public static ObservableDebug d() {
 		return instance;
 	}
@@ -322,8 +341,8 @@ public abstract class ObservableDebug {
 			}
 		};
 
-		private final ObservableGraph<ObservableDebugWrapper, String> theGraph = ObservableGraph.empty(new Type(
-			ObservableDebugWrapper.class), new Type(String.class));
+		private final ObservableGraph<ObservableDebugWrapper, String> theGraph = ObservableGraph
+			.empty(TypeToken.of(ObservableDebugWrapper.class), TypeToken.of(String.class));
 
 		//
 		// private final ObservableMap<Thread, DebugFrame> theFrameMap = ObservableMap.empty(new Type(Thread.class),
@@ -414,8 +433,8 @@ public abstract class ObservableDebug {
 
 		/** Creates the debugger */
 		public StructuralDebugger() {
-			theObservables = new org.observe.datastruct.impl.DefaultObservableGraph<>(new Type(ObservableDebugWrapper.class), new Type(
-				String.class));
+			theObservables = new org.observe.datastruct.impl.DefaultObservableGraph<>(TypeToken.of(ObservableDebugWrapper.class),
+				TypeToken.of(String.class));
 		}
 
 		@Override
@@ -541,23 +560,23 @@ public abstract class ObservableDebug {
 				@Override
 				public ObservableMap<String, DebugDescription> parents() {
 					return new ObservableMap<String, DebugDescription>() {
-						private final Type keyType = new Type(String.class);
+						private final TypeToken<String> keyType = TypeToken.of(String.class);
 
-						private final Type valueType = new Type(Object.class);
+						private final TypeToken<DebugDescription> valueType = TypeToken.of(DebugDescription.class);
 
 						@Override
-						public Type getKeyType() {
+						public TypeToken<String> getKeyType() {
 							return keyType;
 						}
 
 						@Override
-						public Type getValueType() {
+						public TypeToken<DebugDescription> getValueType() {
 							return valueType;
 						}
 
 						@Override
 						public ObservableValue<CollectionSession> getSession() {
-							return ObservableValue.constant(new Type(CollectionSession.class), null);
+							return ObservableValue.constant(new TypeToken<CollectionSession>() {}, null);
 						}
 
 						@Override
@@ -568,8 +587,8 @@ public abstract class ObservableDebug {
 
 						@Override
 						public ObservableSet<String> keySet() {
-							return ObservableSet.unique(theNode.getEdges().filter(edge -> edge.getEnd() == theNode)
-								.map(edge -> edge.getValue()));
+							return ObservableSet
+								.unique(theNode.getEdges().filter(edge -> edge.getEnd() == theNode).map(edge -> edge.getValue()));
 						}
 
 						@Override

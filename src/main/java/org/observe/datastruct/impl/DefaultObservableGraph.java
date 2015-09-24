@@ -13,7 +13,8 @@ import org.observe.datastruct.ObservableGraph;
 import org.observe.util.DefaultTransactable;
 import org.observe.util.Transaction;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeParameter;
+import com.google.common.reflect.TypeToken;
 
 /**
  * Default mutable implementation of {@link ObservableGraph}
@@ -42,8 +43,11 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E> {
 
 	private class DefaultEdge implements Edge<N, E> {
 		private final Node<N, E> theStart;
+
 		private final Node<N, E> theEnd;
+
 		private final boolean isDirected;
+
 		private final E theValue;
 
 		DefaultEdge(Node<N, E> start, Node<N, E> end, boolean directed, E value) {
@@ -79,16 +83,18 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E> {
 	private DefaultTransactable theSessionController;
 
 	private ObservableList<Node<N, E>> theNodes;
+
 	private ObservableList<Edge<N, E>> theEdges;
 
 	private ObservableList<Node<N, E>> theNodeController;
+
 	private ObservableList<Edge<N, E>> theEdgeController;
 
 	/**
 	 * @param nodeType The type of values associated with nodes
 	 * @param edgeType The type of value associated with edges
 	 */
-	public DefaultObservableGraph(Type nodeType, Type edgeType) {
+	public DefaultObservableGraph(TypeToken<N> nodeType, TypeToken<E> edgeType) {
 		this(nodeType, edgeType, ObservableArrayList::new, ObservableArrayList::new);
 	}
 
@@ -98,17 +104,20 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E> {
 	 * @param nodeList Creates the list of nodes
 	 * @param edgeList Creates the list of edges
 	 */
-	public DefaultObservableGraph(Type nodeType, Type edgeType, CollectionCreator<Node<N, E>, ObservableList<Node<N, E>>> nodeList,
+	public DefaultObservableGraph(TypeToken<N> nodeType, TypeToken<E> edgeType,
+		CollectionCreator<Node<N, E>, ObservableList<Node<N, E>>> nodeList,
 		CollectionCreator<Edge<N, E>, ObservableList<Edge<N, E>>> edgeList) {
 		theLock = new ReentrantReadWriteLock();
 
 		theSessionController = new DefaultTransactable(theLock);
 
-		theNodeController = nodeList.create(new Type(Node.class, nodeType, edgeType), theLock, theSessionController.getSession(),
-			theSessionController);
+		theNodeController = nodeList.create(
+			new TypeToken<Node<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType).where(new TypeParameter<E>() {}, edgeType), theLock,
+			theSessionController.getSession(), theSessionController);
 		theNodes = theNodeController.immutable();
-		theEdgeController = edgeList.create(new Type(Edge.class, nodeType, edgeType), theLock, theSessionController.getSession(),
-			theSessionController);
+		theEdgeController = edgeList.create(
+			new TypeToken<Edge<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType).where(new TypeParameter<E>() {}, edgeType), theLock,
+			theSessionController.getSession(), theSessionController);
 		theEdges = theEdgeController.immutable();
 	}
 

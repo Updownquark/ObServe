@@ -24,7 +24,7 @@ import org.observe.Subscription;
 import org.observe.util.ObservableUtils;
 import org.observe.util.Transaction;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 /**
  * An ordered collection whose content can be observed. All {@link ObservableElement}s returned by this observable will be instances of
@@ -145,12 +145,12 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	@Override
-	default <T> ObservableOrderedCollection<T> map(Type type, Function<? super E, T> map) {
+	default <T> ObservableOrderedCollection<T> map(TypeToken<T> type, Function<? super E, T> map) {
 		return (ObservableOrderedCollection<T>) ObservableCollection.super.map(type, map);
 	}
 
 	@Override
-	default <T> ObservableOrderedCollection<T> map(Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
+	default <T> ObservableOrderedCollection<T> map(TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse) {
 		return d().debug(new MappedOrderedCollection<>(this, type, map, reverse)).from("map", this).using("map", map)
 			.using("reverse", reverse).get();
 	}
@@ -186,12 +186,12 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	@Override
-	default <T> ObservableOrderedCollection<T> filterMap(Type type, Function<? super E, T> map, boolean staticFilter) {
+	default <T> ObservableOrderedCollection<T> filterMap(TypeToken<T> type, Function<? super E, T> map, boolean staticFilter) {
 		return (ObservableOrderedCollection<T>) ObservableCollection.super.filterMap(type, map, staticFilter);
 	}
 
 	@Override
-	default <T> ObservableOrderedCollection<T> filterMap(Type type, Function<? super E, T> map, Function<? super T, E> reverse,
+	default <T> ObservableOrderedCollection<T> filterMap(TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse,
 		boolean staticFilter) {
 		if(staticFilter)
 			return d().debug(new StaticFilteredOrderedCollection<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
@@ -207,12 +207,14 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	@Override
-	default <T, V> ObservableOrderedCollection<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
+	default <T, V> ObservableOrderedCollection<V> combine(ObservableValue<T> arg, TypeToken<V> type,
+		BiFunction<? super E, ? super T, V> func) {
 		return (ObservableOrderedCollection<V>) ObservableCollection.super.combine(arg, type, func);
 	}
 
 	@Override
-	default <T, V> ObservableOrderedCollection<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func,
+	default <T, V> ObservableOrderedCollection<V> combine(ObservableValue<T> arg, TypeToken<V> type,
+		BiFunction<? super E, ? super T, V> func,
 		BiFunction<? super V, ? super T, E> reverse) {
 		return d().debug(new CombinedOrderedCollection<>(this, arg, type, func, reverse)).from("combine", this).from("with", arg)
 			.using("combination", func).using("reverse", reverse).get();
@@ -276,7 +278,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 */
 	public static <E> ObservableOrderedCollection<E> sort(ObservableCollection<E> coll, java.util.Comparator<? super E> compare) {
 		if(compare == null) {
-			if(!new Type(Comparable.class).isAssignable(coll.getType()))
+			if(!coll.getType().isAssignableFrom(Comparable.class))
 				throw new IllegalArgumentException("No natural ordering for collection of type " + coll.getType());
 			compare = (Comparator<? super E>) (E o1, E o2) -> ((Comparable<? super E>) o1).compareTo(o2);
 		}
@@ -306,7 +308,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	public class OrderedCollectionFinder<E> implements ObservableValue<E> {
 		private final ObservableOrderedCollection<E> theCollection;
 
-		private final Type theType;
+		private final TypeToken<E> theType;
 
 		private final Predicate<? super E> theFilter;
 
@@ -314,8 +316,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 		OrderedCollectionFinder(ObservableOrderedCollection<E> collection, Predicate<? super E> filter, boolean forward) {
 			theCollection = collection;
-			theType = theCollection.getType().isPrimitive() ? new Type(Type.getWrapperType(theCollection.getType().getBaseType()))
-			: theCollection.getType();
+			theType = theCollection.getType().wrap();
 			theFilter = filter;
 			isForward = forward;
 		}
@@ -336,7 +337,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<E> getType() {
 			return theType;
 		}
 
@@ -462,7 +463,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @param <T> The type of the mapped collection
 	 */
 	class MappedOrderedCollection<E, T> extends MappedObservableCollection<E, T> implements ObservableOrderedCollection<T> {
-		protected MappedOrderedCollection(ObservableOrderedCollection<E> wrap, Type type, Function<? super E, T> map,
+		protected MappedOrderedCollection(ObservableOrderedCollection<E> wrap, TypeToken<T> type, Function<? super E, T> map,
 			Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
@@ -480,7 +481,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @param <T> The type of the mapped collection
 	 */
 	class StaticFilteredOrderedCollection<E, T> extends StaticFilteredCollection<E, T> implements ObservableOrderedCollection<T> {
-		StaticFilteredOrderedCollection(ObservableOrderedCollection<E> wrap, Type type, Function<? super E, T> map,
+		StaticFilteredOrderedCollection(ObservableOrderedCollection<E> wrap, TypeToken<T> type, Function<? super E, T> map,
 			Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
@@ -505,7 +506,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	class DynamicFilteredOrderedCollection<E, T> extends DynamicFilteredCollection<E, T> implements ObservableOrderedCollection<T> {
 		private List<FilteredOrderedElement<E, T>> theFilteredElements = new java.util.ArrayList<>();
 
-		DynamicFilteredOrderedCollection(ObservableOrderedCollection<E> wrap, Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
+		DynamicFilteredOrderedCollection(ObservableOrderedCollection<E> wrap, TypeToken<T> type, Function<? super E, T> map,
+			Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
 
@@ -540,7 +542,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	class FilteredOrderedElement<E, T> extends FilteredElement<E, T> implements ObservableOrderedElement<T> {
 		private List<FilteredOrderedElement<E, T>> theFilteredElements;
 
-		FilteredOrderedElement(ObservableOrderedElement<E> wrapped, Function<? super E, T> map, Type type,
+		FilteredOrderedElement(ObservableOrderedElement<E> wrapped, Function<? super E, T> map, TypeToken<T> type,
 			List<FilteredOrderedElement<E, T>> filteredEls) {
 			super(wrapped, map, type);
 			theFilteredElements = filteredEls;
@@ -570,7 +572,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @param <V> The type of the combined collection
 	 */
 	class CombinedOrderedCollection<E, T, V> extends CombinedObservableCollection<E, T, V> implements ObservableOrderedCollection<V> {
-		CombinedOrderedCollection(ObservableOrderedCollection<E> collection, ObservableValue<T> value, Type type,
+		CombinedOrderedCollection(ObservableOrderedCollection<E> collection, ObservableValue<T> value, TypeToken<V> type,
 			BiFunction<? super E, ? super T, V> map, BiFunction<? super V, ? super T, E> reverse) {
 			super(collection, type, value, map, reverse);
 		}
@@ -659,7 +661,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<E> getType() {
 			return theWrapped.getType();
 		}
 
@@ -782,7 +784,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<E> getType() {
 			return theWrapped.getType();
 		}
 
@@ -1053,8 +1055,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		}
 
 		@Override
-		public Type getType() {
-			return theOuter.getType().getParamTypes().length == 0 ? new Type(Object.class) : theOuter.getType().getParamTypes()[0];
+		public TypeToken<E> getType() {
+			return (TypeToken<E>) theOuter.getType().resolveType(ObservableCollection.class.getTypeParameters()[0]);
 		}
 
 		@Override

@@ -1,6 +1,6 @@
 package org.observe.collect.impl;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 class InternalOrderedObservableElementImpl<T> extends InternalObservableElementImpl<T> {
 	private int theCachedIndex;
@@ -8,7 +8,7 @@ class InternalOrderedObservableElementImpl<T> extends InternalObservableElementI
 	private int theModTracker = -1;
 	private boolean isRemoved;
 
-	InternalOrderedObservableElementImpl(Type type, T value) {
+	InternalOrderedObservableElementImpl(TypeToken<T> type, T value) {
 		super(type, value);
 	}
 

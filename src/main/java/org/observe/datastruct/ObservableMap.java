@@ -16,7 +16,8 @@ import org.observe.collect.ObservableSet;
 import org.observe.util.ObservableUtils;
 import org.observe.util.Transaction;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeParameter;
+import com.google.common.reflect.TypeToken;
 
 /**
  * A map with observable capabilities
@@ -40,10 +41,10 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 	}
 
 	/** @return The type of keys this map uses */
-	Type getKeyType();
+	TypeToken<K> getKeyType();
 
 	/** @return The type of values this map stores */
-	Type getValueType();
+	TypeToken<V> getValueType();
 
 	/**
 	 * @return The observable value for the current session of this map. The session allows listeners to retain state for the duration of a
@@ -178,7 +179,7 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 	/** @return An observable collection of all the values stored in this map */
 	@Override
 	default ObservableCollection<V> values() {
-		Type obValType = new Type(ObservableValue.class, getValueType());
+		TypeToken<ObservableValue<V>> obValType = new TypeToken<ObservableValue<V>>() {}.where(new TypeParameter<V>() {}, getValueType());
 		return ObservableUtils.flattenValues(getValueType(), keySet().map(obValType, this::observe));
 	}
 
@@ -228,7 +229,8 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 	default <T> ObservableMap<K, T> map(Function<? super V, T> map) {
 		ObservableMap<K, V> outer = this;
 		return new ObservableMap<K, T>() {
-			private Type theValueType = ObservableUtils.getReturnType(map);
+			private TypeToken<T> theValueType = (TypeToken<T>) TypeToken.of(map.getClass())
+				.resolveType(Function.class.getTypeParameters()[1]);
 
 			@Override
 			public Transaction lock(boolean write, Object cause) {
@@ -241,12 +243,12 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 			}
 
 			@Override
-			public Type getKeyType() {
+			public TypeToken<K> getKeyType() {
 				return outer.getKeyType();
 			}
 
 			@Override
-			public Type getValueType() {
+			public TypeToken<T> getValueType() {
 				return theValueType;
 			}
 
@@ -272,12 +274,12 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 		ObservableMap<K, V> outer = this;
 		class Immutable implements ObservableMap<K, V> {
 			@Override
-			public Type getKeyType() {
+			public TypeToken<K> getKeyType() {
 				return outer.getKeyType();
 			}
 
 			@Override
-			public Type getValueType() {
+			public TypeToken<V> getValueType() {
 				return outer.getValueType();
 			}
 
@@ -325,21 +327,21 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 	 * @param valueType The value type for the map
 	 * @return An immutable, empty map with the given types
 	 */
-	static <K, V> ObservableMap<K, V> empty(Type keyType, Type valueType) {
+	static <K, V> ObservableMap<K, V> empty(TypeToken<K> keyType, TypeToken<V> valueType) {
 		return new ObservableMap<K, V>() {
 			@Override
-			public Type getKeyType() {
+			public TypeToken<K> getKeyType() {
 				return keyType;
 			}
 
 			@Override
-			public Type getValueType() {
+			public TypeToken<V> getValueType() {
 				return valueType;
 			}
 
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
-				return ObservableValue.constant(new Type(CollectionSession.class), null);
+				return ObservableValue.constant(TypeToken.of(CollectionSession.class), null);
 			}
 
 			@Override
@@ -428,7 +430,7 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<V> getType() {
 			return theValue.getType();
 		}
 

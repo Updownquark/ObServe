@@ -9,7 +9,7 @@ import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableElement;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 /**
  * Wraps an observable set
@@ -47,7 +47,7 @@ public class ObservableCollectionWrapper<E> implements ObservableCollection<E> {
 	}
 
 	@Override
-	public Type getType() {
+	public TypeToken<E> getType() {
 		return theWrapped.getType();
 	}
 

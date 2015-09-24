@@ -16,7 +16,7 @@ import org.observe.collect.ObservableSet;
 import org.observe.util.Transactable;
 import org.observe.util.Transaction;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 /**
  * A set whose content can be observed.
@@ -24,7 +24,7 @@ import prisms.lang.Type;
  * @param <E> The type of element in the set
  */
 public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, ObservableFastFindCollection<E> {
-	private final Type theType;
+	private final TypeToken<E> theType;
 	private LinkedHashMap<E, InternalObservableElementImpl<E>> theValues;
 
 	private HashSetInternals theInternals;
@@ -34,7 +34,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 	 *
 	 * @param type The type of elements for this set
 	 */
-	public ObservableHashSet(Type type) {
+	public ObservableHashSet(TypeToken<E> type) {
 		this(type, new ReentrantReadWriteLock(), null, null);
 	}
 
@@ -47,7 +47,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 	 * @param sessionController The controller for the session. May be null, in which case the transactional methods in this collection will
 	 *            not actually create transactions.
 	 */
-	public ObservableHashSet(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
+	public ObservableHashSet(TypeToken<E> type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController) {
 		theType = type;
 		theInternals = new HashSetInternals(lock, session, sessionController);
@@ -66,7 +66,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 	}
 
 	@Override
-	public Type getType() {
+	public TypeToken<E> getType() {
 		return theType;
 	}
 
@@ -149,7 +149,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 		try (Transaction t = theInternals.lock(true, false, null)) {
 			if(theValues.containsKey(e))
 				return false;
-			InternalObservableElementImpl<E> el = createElement(e);
+			InternalObservableElementImpl<E> el = createElement((E) theType.getRawType().cast(e));
 			theValues.put(e, el);
 			theInternals.fireNewElement(el);
 			return true;
@@ -164,7 +164,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 				if(theValues.containsKey(add))
 					continue;
 				ret = true;
-				InternalObservableElementImpl<E> el = createElement(add);
+				InternalObservableElementImpl<E> el = createElement((E) theType.getRawType().cast(add));
 				theValues.put(add, el);
 				theInternals.fireNewElement(el);
 			}

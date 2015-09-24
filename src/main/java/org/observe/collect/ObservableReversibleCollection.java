@@ -16,11 +16,10 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
-import org.observe.util.ObservableUtils;
 import org.observe.util.Transaction;
 import org.qommons.ArrayUtils;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 /**
  * An observable ordered collection that can be reversed
@@ -92,12 +91,12 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	}
 
 	@Override
-	default <T> ObservableReversibleCollection<T> map(Type type, Function<? super E, T> map) {
+	default <T> ObservableReversibleCollection<T> map(TypeToken<T> type, Function<? super E, T> map) {
 		return (ObservableReversibleCollection<T>) ObservableOrderedCollection.super.map(type, map);
 	}
 
 	@Override
-	default <T> ObservableReversibleCollection<T> map(Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
+	default <T> ObservableReversibleCollection<T> map(TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse) {
 		return d().debug(new MappedReversibleCollection<>(this, type, map, reverse)).from("map", this).using("map", map)
 			.using("reverse", reverse).get();
 	}
@@ -133,12 +132,12 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	}
 
 	@Override
-	default <T> ObservableReversibleCollection<T> filterMap(Type type, Function<? super E, T> map, boolean staticFilter) {
+	default <T> ObservableReversibleCollection<T> filterMap(TypeToken<T> type, Function<? super E, T> map, boolean staticFilter) {
 		return (ObservableReversibleCollection<T>) ObservableOrderedCollection.super.filterMap(type, map, staticFilter);
 	}
 
 	@Override
-	default <T> ObservableReversibleCollection<T> filterMap(Type type, Function<? super E, T> map, Function<? super T, E> reverse,
+	default <T> ObservableReversibleCollection<T> filterMap(TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse,
 		boolean staticFilter) {
 		if(staticFilter)
 			return d().debug(new StaticFilteredReversibleCollection<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
@@ -150,16 +149,18 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 
 	@Override
 	default <T, V> ObservableReversibleCollection<V> combine(ObservableValue<T> arg, BiFunction<? super E, ? super T, V> func) {
-		return combine(arg, ObservableUtils.getReturnType(func), func);
+		return combine(arg, (TypeToken<V>) TypeToken.of(func.getClass()).resolveType(BiFunction.class.getTypeParameters()[2]), func);
 	}
 
 	@Override
-	default <T, V> ObservableReversibleCollection<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
+	default <T, V> ObservableReversibleCollection<V> combine(ObservableValue<T> arg, TypeToken<V> type,
+		BiFunction<? super E, ? super T, V> func) {
 		return combine(arg, type, func, null);
 	}
 
 	@Override
-	default <T, V> ObservableReversibleCollection<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func,
+	default <T, V> ObservableReversibleCollection<V> combine(ObservableValue<T> arg, TypeToken<V> type,
+		BiFunction<? super E, ? super T, V> func,
 		BiFunction<? super V, ? super T, E> reverse) {
 		return d().debug(new CombinedReversibleCollection<>(this, arg, type, func, reverse)).from("combine", this).from("with", arg)
 			.using("combination", func).using("reverse", reverse).get();
@@ -231,7 +232,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<E> getType() {
 			return theWrapped.getType();
 		}
 
@@ -309,7 +310,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 			}
 
 			@Override
-			public Type getType() {
+			public TypeToken<E> getType() {
 				return theWrappedElement.getType();
 			}
 
@@ -368,7 +369,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 * @param <T> The type of the mapped collection
 	 */
 	class MappedReversibleCollection<E, T> extends MappedOrderedCollection<E, T> implements ObservableReversibleCollection<T> {
-		protected MappedReversibleCollection(ObservableReversibleCollection<E> wrap, Type type, Function<? super E, T> map,
+		protected MappedReversibleCollection(ObservableReversibleCollection<E> wrap, TypeToken<T> type, Function<? super E, T> map,
 			Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
@@ -402,7 +403,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 */
 	class StaticFilteredReversibleCollection<E, T> extends StaticFilteredOrderedCollection<E, T> implements
 	ObservableReversibleCollection<T> {
-		public StaticFilteredReversibleCollection(ObservableReversibleCollection<E> wrap, Type type, Function<? super E, T> map,
+		public StaticFilteredReversibleCollection(ObservableReversibleCollection<E> wrap, TypeToken<T> type, Function<? super E, T> map,
 			Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
@@ -430,7 +431,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 * @param <T> The type of the filter/mapped collection
 	 */
 	class DynamicFilteredReversibleCollection<E, T> extends DynamicFilteredOrderedCollection<E, T> implements ObservableReversibleCollection<T> {
-		public DynamicFilteredReversibleCollection(ObservableReversibleCollection<E> wrap, Type type, Function<? super E, T> map,
+		public DynamicFilteredReversibleCollection(ObservableReversibleCollection<E> wrap, TypeToken<T> type, Function<? super E, T> map,
 			Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
@@ -473,7 +474,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 * @param <V> The type of the combined collection
 	 */
 	class CombinedReversibleCollection<E, T, V> extends CombinedOrderedCollection<E, T, V> implements ObservableReversibleCollection<V> {
-		public CombinedReversibleCollection(ObservableReversibleCollection<E> collection, ObservableValue<T> value, Type type,
+		public CombinedReversibleCollection(ObservableReversibleCollection<E> collection, ObservableValue<T> value, TypeToken<V> type,
 			BiFunction<? super E, ? super T, V> map, BiFunction<? super V, ? super T, E> reverse) {
 			super(collection, value, type, map, reverse);
 		}

@@ -10,7 +10,7 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 /** Manages transactions for a derived collection in a thread-safe way */
 class SubCollectionTransactionManager {
@@ -25,10 +25,10 @@ class SubCollectionTransactionManager {
 	public SubCollectionTransactionManager(ObservableCollection<?> collection) {
 		theLock = new ReentrantLock();
 		theInternalSession = new DefaultObservableValue<CollectionSession>() {
-			private final Type TYPE = new Type(CollectionSession.class);
+			private final TypeToken<CollectionSession> TYPE = TypeToken.of(CollectionSession.class);
 
 			@Override
-			public Type getType() {
+			public TypeToken<CollectionSession> getType() {
 				return TYPE;
 			}
 

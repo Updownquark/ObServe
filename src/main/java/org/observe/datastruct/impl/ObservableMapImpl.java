@@ -17,6 +17,8 @@ import org.observe.datastruct.ObservableMap;
 import org.observe.util.DefaultTransactable;
 import org.observe.util.Transaction;
 
+import com.google.common.reflect.TypeToken;
+
 import prisms.lang.Type;
 
 /**
@@ -62,7 +64,7 @@ public class ObservableMapImpl<K, V> implements ObservableMap<K, V> {
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<V> getType() {
 			return theValueType;
 		}
 
@@ -82,8 +84,9 @@ public class ObservableMapImpl<K, V> implements ObservableMap<K, V> {
 		}
 	}
 
-	private final Type theKeyType;
-	private final Type theValueType;
+	private final TypeToken<K> theKeyType;
+
+	private final TypeToken<V> theValueType;
 
 	private DefaultTransactable theSessionController;
 	private final ReentrantReadWriteLock theLock;
@@ -94,7 +97,7 @@ public class ObservableMapImpl<K, V> implements ObservableMap<K, V> {
 	 * @param keyType The type of key used by this map
 	 * @param valueType The type of value stored in this map
 	 */
-	public ObservableMapImpl(Type keyType, Type valueType) {
+	public ObservableMapImpl(TypeToken<K> keyType, TypeToken<V> valueType) {
 		this(keyType, valueType, ObservableHashSet::new);
 	}
 
@@ -103,7 +106,7 @@ public class ObservableMapImpl<K, V> implements ObservableMap<K, V> {
 	 * @param valueType The type of value stored in this map
 	 * @param entrySet Creates the set to hold this map's entries
 	 */
-	public ObservableMapImpl(Type keyType, Type valueType,
+	public ObservableMapImpl(TypeToken<K> keyType, TypeToken<V> valueType,
 		CollectionCreator<ObservableEntry<K, V>, ObservableSet<ObservableEntry<K, V>>> entrySet) {
 		theKeyType = keyType;
 		theValueType = valueType;
@@ -115,12 +118,12 @@ public class ObservableMapImpl<K, V> implements ObservableMap<K, V> {
 	}
 
 	@Override
-	public Type getKeyType() {
+	public TypeToken<K> getKeyType() {
 		return theKeyType;
 	}
 
 	@Override
-	public Type getValueType() {
+	public TypeToken<V> getValueType() {
 		return theValueType;
 	}
 

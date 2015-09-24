@@ -11,7 +11,7 @@ import org.observe.ObservableValue;
 import org.observe.TriFunction;
 import org.observe.TriTuple;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 /**
  * An observable element that knows its position in the collection
@@ -53,7 +53,7 @@ public interface ObservableOrderedElement<E> extends ObservableElement<E> {
 	 * @return The new observable whose value is a function of this observable's value
 	 */
 	@Override
-	default <R> ObservableOrderedElement<R> mapV(Type type, Function<? super E, R> function, boolean combineNull) {
+	default <R> ObservableOrderedElement<R> mapV(TypeToken<R> type, Function<? super E, R> function, boolean combineNull) {
 		return new ComposedObservableListElement<>(this, type, args -> {
 			return function.apply((E) args[0]);
 		}, combineNull, this);
@@ -84,7 +84,8 @@ public interface ObservableOrderedElement<E> extends ObservableElement<E> {
 	 * @return The new observable whose value is a function of this observable's value and the other's
 	 */
 	@Override
-	default <U, R> ObservableOrderedElement<R> combineV(Type type, BiFunction<? super E, ? super U, R> function, ObservableValue<U> arg,
+	default <U, R> ObservableOrderedElement<R> combineV(TypeToken<R> type, BiFunction<? super E, ? super U, R> function,
+		ObservableValue<U> arg,
 		boolean combineNull) {
 		return new ComposedObservableListElement<>(this, type, args -> {
 			return function.apply((E) args[0], (U) args[1]);
@@ -143,7 +144,7 @@ public interface ObservableOrderedElement<E> extends ObservableElement<E> {
 	 * @return The new observable whose value is a function of this observable's value and the others'
 	 */
 	@Override
-	default <U, V, R> ObservableOrderedElement<R> combineV(Type type, TriFunction<? super E, ? super U, ? super V, R> function,
+	default <U, V, R> ObservableOrderedElement<R> combineV(TypeToken<R> type, TriFunction<? super E, ? super U, ? super V, R> function,
 		ObservableValue<U> arg2, ObservableValue<V> arg3, boolean combineNull) {
 		return new ComposedObservableListElement<>(this, type, args -> {
 			return function.apply((E) args[0], (U) args[1], (V) args[2]);
@@ -211,7 +212,8 @@ public interface ObservableOrderedElement<E> extends ObservableElement<E> {
 	class ComposedObservableListElement<T> extends ComposedObservableValue<T> implements ObservableOrderedElement<T> {
 		private final ObservableOrderedElement<?> theRoot;
 
-		public ComposedObservableListElement(ObservableOrderedElement<?> root, Type t, Function<Object [], T> f, boolean combineNull,
+		public ComposedObservableListElement(ObservableOrderedElement<?> root, TypeToken<T> t, Function<Object [], T> f,
+			boolean combineNull,
 			ObservableValue<?>... composed) {
 			super(t, f, combineNull, composed);
 			theRoot = root;

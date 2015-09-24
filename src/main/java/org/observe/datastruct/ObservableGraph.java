@@ -15,7 +15,8 @@ import org.observe.collect.ObservableElement;
 import org.observe.util.Transactable;
 import org.observe.util.Transaction;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeParameter;
+import com.google.common.reflect.TypeToken;
 
 /**
  * A graph implementation based on observable collections
@@ -310,26 +311,29 @@ public interface ObservableGraph<N, E> extends Transactable {
 	// }
 
 	/**
-	 * @param nodeType The type for the {@link #getNodes() nodes} collection
-	 * @param edgeType the type for the {@link #getEdges() edges} collection
+	 * @param <N> The type of node values in the graph
+	 * @param <E> The type of edge values in the graph
+	 * @param nodeType The node type for the graph
+	 * @param edgeType The edge type for the graph
 	 * @return An empty graph
 	 */
-	@SuppressWarnings("rawtypes")
-	static ObservableGraph empty(Type nodeType, Type edgeType) {
-		return new ObservableGraph() {
+	static <N, E> ObservableGraph<N, E> empty(TypeToken<N> nodeType, TypeToken<E> edgeType) {
+		return new ObservableGraph<N, E>() {
 			@Override
-			public ObservableCollection getNodes() {
-				return org.observe.collect.ObservableSet.constant(nodeType);
+			public ObservableCollection<Node<N, E>> getNodes() {
+				return org.observe.collect.ObservableSet.constant(
+					new TypeToken<Node<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType).where(new TypeParameter<E>() {}, edgeType));
 			}
 
 			@Override
-			public ObservableCollection getEdges() {
-				return org.observe.collect.ObservableSet.constant(edgeType);
+			public ObservableCollection<Edge<N, E>> getEdges() {
+				return org.observe.collect.ObservableSet.constant(
+					new TypeToken<Edge<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType).where(new TypeParameter<E>() {}, edgeType));
 			}
 
 			@Override
-			public ObservableValue getSession() {
-				return ObservableValue.constant(new Type(CollectionSession.class), null);
+			public ObservableValue<CollectionSession> getSession() {
+				return ObservableValue.constant(TypeToken.of(CollectionSession.class), null);
 			}
 
 			@Override

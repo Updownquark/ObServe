@@ -7,7 +7,7 @@ import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.Transactable;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 /**
  * Creates a collection, given the internals. This interface allows creation of observable structures that use observable collections in
@@ -29,5 +29,5 @@ public interface CollectionCreator<T, C extends ObservableCollection<T>> {
 	 *            not actually create transactions.
 	 * @return The new collection
 	 */
-	C create(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session, Transactable sessionController);
+	C create(TypeToken<T> type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session, Transactable sessionController);
 }
