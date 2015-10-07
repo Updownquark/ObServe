@@ -52,6 +52,7 @@ public class ObservableDataStructTest {
 
 	private static <T extends ObservableMap<Integer, Integer>> Checker<ObservableMap<Integer, Integer>> testingObservableMap(T map,
 		Consumer<? super T> check, int depth) {
+		throw new sun.reflect.generics.reflectiveObjects.NotImplementedException();
 	}
 
 	/**
