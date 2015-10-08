@@ -5,6 +5,8 @@ import static org.observe.ObservableDebug.d;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
+import org.qommons.TriFunction;
+
 import prisms.lang.Type;
 
 /**

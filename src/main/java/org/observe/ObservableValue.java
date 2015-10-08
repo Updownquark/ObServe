@@ -9,6 +9,9 @@ import java.util.function.Function;
 
 import org.observe.util.ListenerSet;
 import org.observe.util.ObservableUtils;
+import org.qommons.BiTuple;
+import org.qommons.TriFunction;
+import org.qommons.TriTuple;
 
 import prisms.lang.Type;
 

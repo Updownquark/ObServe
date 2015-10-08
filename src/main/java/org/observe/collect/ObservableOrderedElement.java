@@ -5,11 +5,11 @@ import static org.observe.ObservableDebug.d;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
-import org.observe.BiTuple;
 import org.observe.Observable;
 import org.observe.ObservableValue;
-import org.observe.TriFunction;
-import org.observe.TriTuple;
+import org.qommons.BiTuple;
+import org.qommons.TriFunction;
+import org.qommons.TriTuple;
 
 import prisms.lang.Type;
 
