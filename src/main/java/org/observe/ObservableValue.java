@@ -7,7 +7,7 @@ import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import org.observe.util.ListenerSet;
+import org.qommons.ListenerSet;
 
 import com.google.common.reflect.TypeToken;
 
@@ -724,11 +724,11 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 
 		private T theValue;
 
-		private org.observe.util.ListenerSet<Observer<? super ObservableValueEvent<T>>> theObservers;
+		private org.qommons.ListenerSet<Observer<? super ObservableValueEvent<T>>> theObservers;
 
 		public CachedObservableValue(ObservableValue<T> wrapped) {
 			theWrapped = wrapped;
-			theObservers = new org.observe.util.ListenerSet<>();
+			theObservers = new org.qommons.ListenerSet<>();
 			theObservers.setUsedListener(new java.util.function.Consumer<Boolean>() {
 				private Subscription sub;
 

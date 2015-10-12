@@ -45,7 +45,7 @@ import org.observe.collect.impl.ObservableTreeList;
 import org.observe.collect.impl.ObservableTreeSet;
 import org.observe.datastruct.ObservableMultiMap;
 import org.observe.util.ObservableUtils;
-import org.observe.util.Transaction;
+import org.qommons.Transaction;
 
 import prisms.lang.Type;
 

@@ -18,7 +18,7 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.datastruct.MultiMap;
-import org.observe.util.Transaction;
+import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeToken;
 

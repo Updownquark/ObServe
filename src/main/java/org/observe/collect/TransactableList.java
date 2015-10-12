@@ -1,6 +1,6 @@
 package org.observe.collect;
 
-import org.observe.util.Transactable;
+import org.qommons.Transactable;
 
 /**
  * A list to which modifications can be batched according to the {@link Transactable} spec.

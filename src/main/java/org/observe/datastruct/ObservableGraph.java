@@ -12,8 +12,8 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableElement;
-import org.observe.util.Transactable;
-import org.observe.util.Transaction;
+import org.qommons.Transactable;
+import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -216,8 +216,8 @@ public interface ObservableGraph<N, E> extends Transactable {
 			}
 		}
 		class FilteredGraph implements ObservableGraph<N, E> {
-			private final Map<Node<N, E>, FilteredNode> theNodeMap = new org.observe.util.ConcurrentIdentityHashMap<>();
-			private final Map<Edge<N, E>, FilteredEdge> theEdgeMap = new org.observe.util.ConcurrentIdentityHashMap<>();
+			private final Map<Node<N, E>, FilteredNode> theNodeMap = new org.qommons.ConcurrentIdentityHashMap<>();
+			private final Map<Edge<N, E>, FilteredEdge> theEdgeMap = new org.qommons.ConcurrentIdentityHashMap<>();
 			private final ObservableCollection<Node<N, E>> theCachedNodes = outer.getNodes().cached();
 			private final ObservableCollection<Edge<N, E>> theCachedEdges = outer.getEdges().cached();
 

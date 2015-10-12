@@ -2,7 +2,7 @@ package org.observe.collect;
 
 import java.util.Set;
 
-import org.observe.util.Transactable;
+import org.qommons.Transactable;
 
 /**
  * A set to which modifications can be batched according to the {@link Transactable} spec.

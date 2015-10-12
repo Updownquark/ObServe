@@ -1,6 +1,6 @@
 package org.observe.datastruct;
 
-import org.observe.util.Transactable;
+import org.qommons.Transactable;
 
 /**
  * A multi-map that is transactable

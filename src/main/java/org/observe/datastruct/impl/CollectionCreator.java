@@ -5,7 +5,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.observe.ObservableValue;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
-import org.observe.util.Transactable;
+import org.qommons.Transactable;
 
 import com.google.common.reflect.TypeToken;
 

@@ -8,6 +8,7 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableElement;
+import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeToken;
 

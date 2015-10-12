@@ -16,8 +16,8 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
-import org.observe.util.Transaction;
 import org.qommons.ArrayUtils;
+import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeToken;
 

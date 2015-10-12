@@ -22,7 +22,7 @@ import org.observe.collect.ObservableOrderedElement;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.datastruct.ObservableMap.ObsEntryImpl;
-import org.observe.util.Transaction;
+import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;

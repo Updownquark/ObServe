@@ -9,7 +9,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-import org.observe.util.ListenerSet;
+import org.qommons.ListenerSet;
 
 /**
  * A stream of values that can be filtered, mapped, composed, etc. and evaluated on

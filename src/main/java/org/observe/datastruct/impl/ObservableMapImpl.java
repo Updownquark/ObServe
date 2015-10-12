@@ -15,7 +15,7 @@ import org.observe.collect.ObservableSet;
 import org.observe.collect.impl.ObservableHashSet;
 import org.observe.datastruct.ObservableMap;
 import org.observe.util.DefaultTransactable;
-import org.observe.util.Transaction;
+import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;

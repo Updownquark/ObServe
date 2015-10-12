@@ -23,9 +23,9 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.datastruct.ObservableMultiMap;
-import org.observe.util.ListenerSet;
 import org.observe.util.ObservableUtils;
-import org.observe.util.Transaction;
+import org.qommons.ListenerSet;
+import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -774,7 +774,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 					private java.util.Map<ObservableCollection<?>, Subscription> subCollSubscriptions;
 
 					{
-						subCollSubscriptions = new org.observe.util.ConcurrentIdentityHashMap<>();
+						subCollSubscriptions = new org.qommons.ConcurrentIdentityHashMap<>();
 					}
 
 					@Override
@@ -2286,7 +2286,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		private ObservableCollection<E> theWrapped;
 		private final ListenerSet<Consumer<? super ObservableElement<E>>> theListeners;
-		private final org.observe.util.ConcurrentIdentityHashMap<ObservableElement<E>, CachedElement<E>> theCache;
+		private final org.qommons.ConcurrentIdentityHashMap<ObservableElement<E>, CachedElement<E>> theCache;
 		private final ReentrantLock theLock;
 		private final Consumer<ObservableElement<E>> theWrappedOnElement;
 
@@ -2296,7 +2296,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		protected SafeCachedObservableCollection(ObservableCollection<E> wrap) {
 			theWrapped = wrap;
 			theListeners = new ListenerSet<>();
-			theCache = new org.observe.util.ConcurrentIdentityHashMap<>();
+			theCache = new org.qommons.ConcurrentIdentityHashMap<>();
 			theLock = new ReentrantLock();
 			theWrappedOnElement = element -> {
 				CachedElement<E> cached = d().debug(createElement(element)).from("element", this).tag("wrapped", element).get();

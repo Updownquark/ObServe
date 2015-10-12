@@ -26,9 +26,9 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
-import org.observe.util.ListenerSet;
 import org.observe.util.ObservableUtils;
-import org.observe.util.Transaction;
+import org.qommons.ListenerSet;
+import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -499,7 +499,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 					private Map<ObservableList<?>, Subscription> subListSubscriptions;
 
 					{
-						subListSubscriptions = new org.observe.util.ConcurrentIdentityHashMap<>();
+						subListSubscriptions = new org.qommons.ConcurrentIdentityHashMap<>();
 					}
 
 					@Override

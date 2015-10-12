@@ -2,7 +2,7 @@ package org.observe.datastruct;
 
 import java.util.Map;
 
-import org.observe.util.Transactable;
+import org.qommons.Transactable;
 
 /**
  * A transactable map

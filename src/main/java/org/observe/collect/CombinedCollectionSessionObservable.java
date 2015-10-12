@@ -6,8 +6,8 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
-import org.observe.util.ListenerSet;
 import org.observe.util.ObservableUtils;
+import org.qommons.ListenerSet;
 
 import com.google.common.reflect.TypeToken;
 

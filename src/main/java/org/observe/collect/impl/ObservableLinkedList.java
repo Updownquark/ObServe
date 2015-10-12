@@ -15,9 +15,9 @@ import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableList;
 import org.observe.collect.ObservableOrderedElement;
-import org.observe.util.RollingBuffer;
-import org.observe.util.Transactable;
-import org.observe.util.Transaction;
+import org.qommons.RollingBuffer;
+import org.qommons.Transactable;
+import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeToken;
 

@@ -15,8 +15,8 @@ import org.observe.datastruct.ObservableGraph.Node;
 import org.observe.datastruct.ObservableMap;
 import org.observe.datastruct.ObservableMultiMap;
 import org.observe.datastruct.impl.ObservableMultiMapImpl;
-import org.observe.util.Transaction;
 import org.observe.util.WeakReferenceObservable;
+import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeToken;
 

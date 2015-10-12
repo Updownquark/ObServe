@@ -10,7 +10,7 @@ import org.observe.Observable;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
-import org.observe.util.ListenerSet;
+import org.qommons.ListenerSet;
 
 class CollectionChangesObservable<E, CCE extends CollectionChangeEvent<E>> implements Observable<CCE> {
 	protected static class SessionChangeTracker<E> {
