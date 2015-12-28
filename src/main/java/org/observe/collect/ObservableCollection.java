@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
@@ -443,9 +444,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @return A value in this list passing the filter, or null if none of this collection's elements pass.
 	 */
 	default ObservableValue<E> find(Predicate<E> filter) {
-		ObservableCollection<E> outer = this;
 		return d().debug(new ObservableValue<E>() {
-			private final TypeToken<E> type = outer.getType().wrap();
+			private final TypeToken<E> type = ObservableCollection.this.getType().wrap();
 
 			@Override
 			public TypeToken<E> getType() {
@@ -576,6 +576,171 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		BiFunction<? super V, ? super T, E> reverse) {
 		return d().debug(new CombinedObservableCollection<>(this, type, arg, func, reverse)).from("combine", this).from("with", arg)
 			.using("combination", func).using("reverse", reverse).get();
+	}
+
+	/**
+	 * Equivalent to {@link #reduce(Object, BiFunction, BiFunction)} with null for the remove function
+	 *
+	 * @param <T> The type of the reduced value
+	 * @param init The seed value before the reduction
+	 * @param reducer The reducer function to accumulate the values. Must be associative.
+	 * @return The reduced value
+	 */
+	default <T> ObservableValue<T> reduce(T init, BiFunction<? super T, ? super E, T> reducer) {
+		return reduce(init, reducer, null);
+	}
+
+	/**
+	 * Equivalent to {@link #reduce(TypeToken, Object, BiFunction, BiFunction)} using the type derived from the reducer's return type
+	 *
+	 * @param <T> The type of the reduced value
+	 * @param init The seed value before the reduction
+	 * @param add The reducer function to accumulate the values. Must be associative.
+	 * @param remove The de-reducer function to handle removal or replacement of values. This may be null, in which case removal or
+	 *            replacement of values will result in the entire collection being iterated over for each subscription. Null here will have
+	 *            no consequence if the result is never observed. Must be associative.
+	 * @return The reduced value
+	 */
+	default <T> ObservableValue<T> reduce(T init, BiFunction<? super T, ? super E, T> add, BiFunction<? super T, ? super E, T> remove) {
+		return reduce((TypeToken<T>) TypeToken.of(add.getClass()).resolveType(BiFunction.class.getTypeParameters()[2]), init, add, remove);
+	}
+
+	/**
+	 * Reduces all values in this collection to a single value
+	 *
+	 * TODO TEST ME!
+	 *
+	 * @param <T> The compile-time type of the reduced value
+	 * @param type The run-time type of the reduced value
+	 * @param init The seed value before the reduction
+	 * @param add The reducer function to accumulate the values. Must be associative.
+	 * @param remove The de-reducer function to handle removal or replacement of values. This may be null, in which case removal or
+	 *            replacement of values will result in the entire collection being iterated over for each subscription. Null here will have
+	 *            no consequence if the result is never observed. Must be associative.
+	 * @return The reduced value
+	 */
+	default <T> ObservableValue<T> reduce(TypeToken<T> type, T init, BiFunction<? super T, ? super E, T> add,
+		BiFunction<? super T, ? super E, T> remove) {
+		return d().debug(new ObservableValue<T>() {
+			@Override
+			public TypeToken<T> getType() {
+				return type;
+			}
+
+			@Override
+			public T get() {
+				T ret = init;
+				for(E element : ObservableCollection.this)
+					ret = add.apply(ret, element);
+				return ret;
+			}
+
+			@Override
+			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+				final boolean [] initElements = new boolean[1];
+				final Object key = new Object();
+				Subscription collSub = ObservableCollection.this.onElement(new Consumer<ObservableElement<E>>() {
+					private T theValue = init;
+
+					@Override
+					public void accept(ObservableElement<E> element) {
+						initElements[0] = true;
+						element.subscribe(new Observer<ObservableValueEvent<E>>() {
+							@Override
+							public <V3 extends ObservableValueEvent<E>> void onNext(V3 value) {
+								T newValue = theValue;
+								if(value.isInitial())
+									newValue = add.apply(newValue, value.getValue());
+								else if(remove != null) {
+									newValue = remove.apply(newValue, value.getOldValue());
+									newValue = add.apply(newValue, value.getValue());
+								} else
+									newValue = get();
+								newValue(newValue);
+							}
+
+							@Override
+							public <V3 extends ObservableValueEvent<E>> void onCompleted(V3 value) {
+								if(remove != null)
+									newValue(remove.apply(theValue, value.getOldValue()));
+								else
+									newValue(get());
+							}
+						});
+					}
+
+					void newValue(T value) {
+						T oldValue = theValue;
+						theValue = value;
+						CollectionSession session = getSession().get();
+						if(session == null)
+							observer.onNext(createChangeEvent(oldValue, theValue, null));
+						else {
+							session.putIfAbsent(key, "oldValue", oldValue);
+							session.put(key, "newValue", theValue);
+						}
+					}
+				});
+				Subscription transSub = getSession().subscribe(new Observer<ObservableValueEvent<CollectionSession>>() {
+					@Override
+					public <V2 extends ObservableValueEvent<CollectionSession>> void onNext(V2 value) {
+						CollectionSession completed = value.getOldValue();
+						if(completed == null)
+							return;
+						T oldValue = (T) completed.get(key, "oldValue");
+						T newValue = (T) completed.get(key, "newValue");
+						if(oldValue == null && newValue == null)
+							return;
+						observer.onNext(createChangeEvent(oldValue, newValue, value));
+					}
+				});
+				if(!initElements[0])
+					observer.onNext(createInitialEvent(init));
+				return () -> {
+					collSub.unsubscribe();
+					transSub.unsubscribe();
+				};
+			}
+
+			@Override
+			public String toString() {
+				return "reduce " + ObservableCollection.this;
+			}
+		}).from("reduce", this).using("add", add).using("remove", remove).get();
+	}
+
+	/**
+	 * @param compare The comparator to use to compare this collection's values
+	 * @return An observable value containing the minimum of the values, by the given comparator
+	 */
+	default ObservableValue<E> minBy(Comparator<? super E> compare) {
+		return reduce(getType(), null, (v1, v2) -> {
+			if(v1 == null)
+				return v2;
+			else if(v2 == null)
+				return v1;
+			else if(compare.compare(v1, v2) <= 0)
+				return v1;
+			else
+				return v2;
+		} , null);
+	}
+
+	/**
+	 * @param compare The comparator to use to compare this collection's values
+	 * @return An observable value containing the maximum of the values, by the given comparator
+	 */
+	default ObservableValue<E> maxBy(Comparator<? super E> compare) {
+		return reduce(getType(), null, (v1, v2) -> {
+			if(v1 == null)
+				return v2;
+			else if(v2 == null)
+				return v1;
+			else if(compare.compare(v1, v2) >= 0)
+				return v1;
+			else
+				return v2;
+		} , null);
 	}
 
 	/**
