@@ -8,6 +8,8 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.qommons.ListenerSet;
+import org.qommons.TriFunction;
+import org.qommons.TriTuple;
 
 import com.google.common.reflect.TypeToken;
 

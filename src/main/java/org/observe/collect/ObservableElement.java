@@ -11,8 +11,8 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
-import org.observe.TriFunction;
-import org.observe.TriTuple;
+import org.qommons.TriFunction;
+import org.qommons.TriTuple;
 
 import com.google.common.reflect.TypeToken;
 
