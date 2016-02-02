@@ -639,8 +639,13 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 				final boolean [] initElements = new boolean[1];
 				final Object key = new Object();
+				class THolder {
+					public T theValue = init;
+
+					public boolean recalc = false;
+				}
+				THolder holder = new THolder();
 				Subscription collSub = ObservableCollection.this.onElement(new Consumer<ObservableElement<E>>() {
-					private T theValue = init;
 
 					@Override
 					public void accept(ObservableElement<E> element) {
@@ -648,36 +653,50 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						element.subscribe(new Observer<ObservableValueEvent<E>>() {
 							@Override
 							public <V3 extends ObservableValueEvent<E>> void onNext(V3 value) {
-								T newValue = theValue;
-								if(value.isInitial())
+								T newValue = holder.theValue;
+								if(holder.recalc) {
+								} else if(value.isInitial()) {
 									newValue = add.apply(newValue, value.getValue());
-								else if(remove != null) {
+									newValue(newValue);
+								} else if(remove != null) {
 									newValue = remove.apply(newValue, value.getOldValue());
 									newValue = add.apply(newValue, value.getValue());
+									newValue(newValue);
 								} else
-									newValue = get();
-								newValue(newValue);
+									recalc();
 							}
 
 							@Override
 							public <V3 extends ObservableValueEvent<E>> void onCompleted(V3 value) {
-								if(remove != null)
-									newValue(remove.apply(theValue, value.getOldValue()));
+								if(holder.recalc) {
+								} else if(remove != null)
+									newValue(remove.apply(holder.theValue, value.getOldValue()));
 								else
-									newValue(get());
+									recalc();
 							}
 						});
 					}
 
 					void newValue(T value) {
-						T oldValue = theValue;
-						theValue = value;
+						T oldValue = holder.theValue;
+						holder.theValue = value;
 						CollectionSession session = getSession().get();
 						if(session == null)
-							observer.onNext(createChangeEvent(oldValue, theValue, null));
+							observer.onNext(createChangeEvent(oldValue, holder.theValue, null));
 						else {
 							session.putIfAbsent(key, "oldValue", oldValue);
-							session.put(key, "newValue", theValue);
+							session.put(key, "newValue", holder.theValue);
+						}
+					}
+
+					private void recalc() {
+						CollectionSession session = getSession().get();
+						if(session == null)
+							newValue(get());
+						else {
+							holder.recalc = true;
+							session.putIfAbsent(key, "oldValue", holder.theValue);
+							session.put(key, "recalc", true);
 						}
 					}
 				});
@@ -688,7 +707,12 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						if(completed == null)
 							return;
 						T oldValue = (T) completed.get(key, "oldValue");
-						T newValue = (T) completed.get(key, "newValue");
+						T newValue;
+						if(completed.get(key, "recalc") != null) {
+							holder.theValue = newValue = get();
+							holder.recalc = false;
+						} else
+							newValue = (T) completed.get(key, "newValue");
 						if(oldValue == null && newValue == null)
 							return;
 						observer.onNext(createChangeEvent(oldValue, newValue, value));

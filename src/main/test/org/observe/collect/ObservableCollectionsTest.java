@@ -20,9 +20,10 @@ import java.util.ListIterator;
 import java.util.Map;
 import java.util.NavigableSet;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.function.BiFunction;
+import java.util.function.BinaryOperator;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -47,9 +48,9 @@ import org.observe.datastruct.ObservableMultiMap;
 import org.observe.util.ObservableUtils;
 import org.qommons.Transaction;
 
-import prisms.lang.Type;
-
 import com.google.common.reflect.TypeToken;
+
+import prisms.lang.Type;
 
 /** Tests observable collections and their default implementations */
 public class ObservableCollectionsTest {
@@ -127,13 +128,23 @@ public class ObservableCollectionsTest {
 		Map<Integer, List<Integer>> groupedSynced = new LinkedHashMap<>();
 		ObservableCollectionsTest.sync(grouped, groupedSynced, () -> new ArrayList<>());
 
-		BiFunction<Integer, Integer, Integer> combineFn = (v1, v2) -> v1 + v2;
-		BiFunction<Integer, Integer, Integer> reverseCombineFn = (v1, v2) -> v1 - v2;
+		BinaryOperator<Integer> combineFn = (v1, v2) -> v1 + v2;
+		BinaryOperator<Integer> reverseCombineFn = (v1, v2) -> v1 - v2;
 		SimpleSettableValue<Integer> combineVar = new SimpleSettableValue<>(Integer.class, false);
 		combineVar.set(10000, null);
 		ObservableCollection<Integer> combinedOL = coll.combine(combineVar, coll.getType(), combineFn, reverseCombineFn);
 		ArrayList<Integer> combinedSynced = new ArrayList<>();
 		Subscription combineSub = sync(combinedOL, combinedSynced);
+
+		BinaryOperator<Integer> maxFn = (v1, v2) -> v1 >= v2 ? v1 : v2;
+		ObservableValue<Integer> sum = coll.reduce(0, combineFn, reverseCombineFn);
+		ObservableValue<Integer> max = coll.reduce(Integer.MIN_VALUE, maxFn);
+		Integer [] observedSum = new Integer[1];
+		Integer [] observedMax = new Integer[1];
+		sum.value().act(v -> observedSum[0] = v);
+		max.value().act(v -> {
+			observedMax[0] = v;
+		});
 
 		// If sorted set, test on some synced sub-sets
 		class SubSetRange {
@@ -238,6 +249,23 @@ public class ObservableCollectionsTest {
 						checkSubSet((ObservableSortedSet<Integer>) coll, subSet, subSetRanges.get(i));
 						assertThat(syncedSubSets.get(i), collectionsEqual(subSet, true));
 					}
+				}
+
+				Optional<Integer> actualSum = coll.stream().reduce(combineFn);
+				if(actualSum.isPresent()) {
+					assertEquals(actualSum.get(), sum.get());
+					assertEquals(actualSum.get(), observedSum[0]);
+				} else {
+					assertEquals(Integer.valueOf(0), sum.get());
+					assertEquals(Integer.valueOf(0), observedSum[0]);
+				}
+				Optional<Integer> actualMax = coll.stream().reduce(maxFn);
+				if(actualMax.isPresent()) {
+					assertEquals(actualMax.get(), max.get());
+					assertEquals(actualMax.get(), observedMax[0]);
+				} else {
+					assertEquals(Integer.valueOf(Integer.MIN_VALUE), max.get());
+					assertEquals(Integer.valueOf(Integer.MIN_VALUE), observedMax[0]);
 				}
 			}
 
