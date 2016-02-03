@@ -2476,23 +2476,6 @@ public class ObservableCollectionsTest {
 		testTransactionsByChanges(flat, list2);
 	}
 
-	/**
-	 * Tests transactions caused by {@link ObservableCollection#combine(ObservableValue, java.util.function.BiFunction) combining} a list
-	 * with an observable value
-	 */
-	@Test
-	public void testTransactionsCombined() {
-		// TODO
-		throw new sun.reflect.generics.reflectiveObjects.NotImplementedException();
-	}
-
-	/** Tests transactions caused by {@link ObservableCollection#refresh(Observable) refreshing} on an observable */
-	@Test
-	public void testTransactionsRefresh() {
-		// TODO
-		throw new sun.reflect.generics.reflectiveObjects.NotImplementedException();
-	}
-
 	private void testTransactionsByFind(ObservableList<Integer> observable, TransactableList<Integer> controller) {
 		Integer [] found = new Integer[1];
 		int [] findCount = new int[1];
@@ -2572,5 +2555,64 @@ public class ObservableCollectionsTest {
 
 		sub.unsubscribe();
 		controller.clear();
+	}
+
+	/** Tests transactions caused by {@link ObservableCollection#refresh(Observable) refreshing} on an observable */
+	@Test
+	public void testTransactionsRefresh() {
+		ObservableArrayList<Integer> list = new ObservableArrayList<>(new TypeToken<Integer>() {});
+		DefaultObservable<Void> refresh = new DefaultObservable<>();
+		Observer<Void> control = refresh.control(null);
+
+		for(int i = 0; i < 30; i++)
+			list.add(i);
+
+		int [] changes = new int[1];
+		int correctChanges = 0;
+		list.refresh(refresh).simpleChanges().act(v -> changes[0]++);
+
+		assertEquals(correctChanges, changes[0]);
+
+		control.onNext(null);
+		correctChanges++;
+		assertEquals(correctChanges, changes[0]);
+
+		Transaction trans = list.lock(true, null);
+		control.onNext(null);
+		control.onNext(null);
+		trans.close();
+		correctChanges++;
+		assertEquals(correctChanges, changes[0]);
+
+		trans = list.lock(true, null);
+		for(int i = 0; i < 30; i++)
+			list.set(i, i + 1);
+		control.onNext(null);
+		trans.close();
+		correctChanges++;
+		assertEquals(correctChanges, changes[0]);
+
+		list.clear();
+		correctChanges++;
+		assertEquals(correctChanges, changes[0]);
+		control.onNext(null);
+		assertEquals(correctChanges, changes[0]);
+
+		list.addAll(java.util.Arrays.asList(0, 1, 2, 3, 4));
+		correctChanges++;
+		assertEquals(correctChanges, changes[0]);
+		control.onNext(null);
+		correctChanges++;
+		assertEquals(correctChanges, changes[0]);
+	}
+
+	/**
+	 * Tests transactions caused by {@link ObservableCollection#combine(ObservableValue, java.util.function.BiFunction) combining} a list
+	 * with an observable value
+	 */
+	@Test
+	public void testTransactionsCombined() {
+		// TODO
+		throw new sun.reflect.generics.reflectiveObjects.NotImplementedException();
 	}
 }
