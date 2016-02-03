@@ -157,8 +157,9 @@ public interface ObservableOrderedElement<E> extends ObservableElement<E> {
 	}
 
 	@Override
-	default ObservableOrderedElement<E> refreshForValue(Function<? super E, Observable<?>> refresh) {
-		return d().debug(new ValueRefreshingOrderedObservableElement<>(this, refresh)).from("refresh", this).using("on", refresh).get();
+	default ObservableOrderedElement<E> refreshForValue(Function<? super E, Observable<?>> refresh, Observable<Void> unsubscribe) {
+		return d().debug(new ValueRefreshingOrderedObservableElement<>(this, refresh, unsubscribe)).from("refresh", this)
+			.using("on", refresh).get();
 	}
 
 	/**
@@ -259,8 +260,9 @@ public interface ObservableOrderedElement<E> extends ObservableElement<E> {
 	 * @param <E> The type of the element
 	 */
 	class ValueRefreshingOrderedObservableElement<E> extends ValueRefreshingObservableElement<E> implements ObservableOrderedElement<E> {
-		protected ValueRefreshingOrderedObservableElement(ObservableOrderedElement<E> wrap, Function<? super E, Observable<?>> refresh) {
-			super(wrap, refresh);
+		protected ValueRefreshingOrderedObservableElement(ObservableOrderedElement<E> wrap, Function<? super E, Observable<?>> refresh,
+			Observable<Void> unsubscribe) {
+			super(wrap, refresh, unsubscribe);
 		}
 
 		@Override

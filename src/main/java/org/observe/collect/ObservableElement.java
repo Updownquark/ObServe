@@ -5,6 +5,7 @@ import static org.observe.ObservableDebug.d;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
+import org.observe.Action;
 import org.observe.BiTuple;
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -98,10 +99,12 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 
 	/**
 	 * @param refresh A function providing an observable to refresh on as a function of a value
+	 * @param unsubscribe An observable that fires when this element's collection subscription is unsubscribed
 	 * @return An observable element that refires its value when the observable returned by the given function fires
 	 */
-	default ObservableElement<E> refreshForValue(Function<? super E, Observable<?>> refresh) {
-		return d().debug(new ValueRefreshingObservableElement<>(this, refresh)).from("refresh", this).using("on", refresh).get();
+	default ObservableElement<E> refreshForValue(Function<? super E, Observable<?>> refresh, Observable<Void> unsubscribe) {
+		return d().debug(new ValueRefreshingObservableElement<>(this, refresh, unsubscribe)).from("refresh", this).using("on", refresh)
+			.get();
 	}
 
 	/**
@@ -200,9 +203,13 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 
 		private final Function<? super E, Observable<?>> theRefresh;
 
-		protected ValueRefreshingObservableElement(ObservableElement<E> wrap, Function<? super E, Observable<?>> refresh) {
+		private final Observable<Void> theUnsubscribe;
+
+		protected ValueRefreshingObservableElement(ObservableElement<E> wrap, Function<? super E, Observable<?>> refresh,
+			Observable<Void> unsubscribe) {
 			theWrapped = wrap;
 			theRefresh = refresh;
+			theUnsubscribe = unsubscribe;
 		}
 
 		protected ObservableElement<E> getWrapped() {
@@ -231,26 +238,16 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 		@Override
 		public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
 			Subscription [] refireSub = new Subscription[1];
-			Observer<Object> refireObs = new Observer<Object>() {
-				@Override
-				public <V> void onNext(V value) {
-					E outerVal = get();
-					ObservableValueEvent<E> event2 = theWrapped.createChangeEvent(outerVal, outerVal, value);
-					observer.onNext(event2);
-				}
-
-				@Override
-				public <V> void onCompleted(V value) {
-					E outerVal = get();
-					ObservableValueEvent<E> event2 = theWrapped.createChangeEvent(outerVal, outerVal, value);
-					observer.onNext(event2);
-					refireSub[0] = null;
-				}
+			Action<Object> refireObs = value -> {
+				E outerVal = get();
+				ObservableValueEvent<E> event2 = theWrapped.createChangeEvent(outerVal, outerVal, value);
+				observer.onNext(event2);
 			};
 			Subscription outerSub = theWrapped.subscribe(new Observer<ObservableValueEvent<E>>() {
 				@Override
 				public <V extends ObservableValueEvent<E>> void onNext(V value) {
-					refireSub[0] = theRefresh.apply(value.getValue()).noInit().takeUntil(theWrapped).subscribe(refireObs);
+					refireSub[0] = theRefresh.apply(value.getValue()).noInit().takeUntil(theWrapped.noInit()).takeUntil(theUnsubscribe)
+						.act(refireObs);
 					observer.onNext(value);
 				}
 
@@ -258,6 +255,7 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 				public <V extends ObservableValueEvent<E>> void onCompleted(V value) {
 					if(refireSub[0] != null)
 						refireSub[0].unsubscribe();
+					refireSub[0] = null;
 					observer.onCompleted(value);
 				}
 
@@ -266,7 +264,6 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 					observer.onError(e);
 				}
 			});
-			refireSub[0] = theRefresh.apply(theWrapped.get()).noInit().takeUntil(theWrapped).subscribe(refireObs);
 			return () -> {
 				outerSub.unsubscribe();
 				if(refireSub[0] != null)

@@ -11,6 +11,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
+import org.observe.DefaultObservable;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
@@ -546,7 +547,14 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 
 		@Override
 		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<E>> onElement) {
-			return getWrapped().onElementReverse(element -> onElement.accept(element.refreshForValue(getRefresh())));
+			DefaultObservable<Void> unSubObs = new DefaultObservable<>();
+			Observer<Void> unSubControl = unSubObs.control(null);
+			Subscription collSub = getWrapped()
+				.onElementReverse(element -> onElement.accept(element.refreshForValue(getRefresh(), unSubObs)));
+			return () -> {
+				unSubControl.onCompleted(null);
+				collSub.unsubscribe();
+			};
 		}
 
 		@Override

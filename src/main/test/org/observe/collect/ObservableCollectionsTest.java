@@ -363,11 +363,16 @@ public class ObservableCollectionsTest {
 	 * @return The subscription to use to terminate the synchronization
 	 */
 	public static <T> Subscription sync(ObservableCollection<T> coll, List<T> synced) {
+		return sync(coll, synced, new int[1]);
+	}
+
+	private static <T> Subscription sync(ObservableCollection<T> coll, List<T> synced, int [] opCount) {
 		if(coll instanceof ObservableOrderedCollection)
 			return ((ObservableOrderedCollection<T>) coll).onOrderedElement(el -> {
 				el.subscribe(new Observer<ObservableValueEvent<T>>() {
 					@Override
 					public <V extends ObservableValueEvent<T>> void onNext(V evt) {
+						opCount[0]++;
 						if(evt.isInitial())
 							synced.add(el.getIndex(), evt.getValue());
 						else {
@@ -378,6 +383,7 @@ public class ObservableCollectionsTest {
 
 					@Override
 					public <V extends ObservableValueEvent<T>> void onCompleted(V evt) {
+						opCount[0]++;
 						assertEquals(evt.getValue(), synced.remove(el.getIndex()));
 					}
 				});
@@ -387,6 +393,7 @@ public class ObservableCollectionsTest {
 				el.subscribe(new Observer<ObservableValueEvent<T>>() {
 					@Override
 					public <V extends ObservableValueEvent<T>> void onNext(V evt) {
+						opCount[0]++;
 						if(evt.isInitial())
 							synced.add(evt.getValue());
 						else {
@@ -397,6 +404,7 @@ public class ObservableCollectionsTest {
 
 					@Override
 					public <V extends ObservableValueEvent<T>> void onCompleted(V evt) {
+						opCount[0]++;
 						assertThat(synced, contains(evt.getValue()));
 						synced.remove(evt.getValue());
 					}
@@ -2395,36 +2403,6 @@ public class ObservableCollectionsTest {
 		assertEquals(correct, compare);
 	}
 
-	/** Reproduces a bug I found with list changes */
-	@Test
-	public void observableListChanges() {
-		ObservableArrayList<Integer> list = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
-		ArrayList<Integer> synced = new ArrayList<>();
-		// No idea why I have to cast this
-		((ObservableOrderedCollection<Integer>) list).changes().act(change -> {
-			switch (change.type) {
-			case add:
-				for(int i = 0; i < change.indexes.size(); i++)
-					synced.add(change.indexes.get(i), change.values.get(i));
-				break;
-			case remove:
-				for(int i = 0; i < change.indexes.size(); i++)
-					synced.remove(change.indexes.get(i));
-				break;
-			case set:
-				for(int i = 0; i < change.indexes.size(); i++)
-					synced.set(change.indexes.get(i), change.values.get(i));
-				break;
-			}
-		});
-
-		for(int i = 0; i < 15; i++)
-			list.add(i);
-		try (Transaction t = list.lock(true, null)) {
-
-		}
-	}
-
 	/** Tests {@link ObservableCollection#refreshEach(Function)} */
 	@Test
 	public void testRefreshEach() {
@@ -2440,7 +2418,8 @@ public class ObservableCollectionsTest {
 		}
 		ObservableList<Integer> values = list.refreshEach(el -> elObservables.get(el)).map(el -> el[0]);
 		List<Integer> syncedValues = new ArrayList<>();
-		sync(values, syncedValues);
+		int [] opCount = new int[1];
+		Subscription sub = sync(values, syncedValues, opCount);
 
 		assertThat(syncedValues, collectionsEqual(values, true));
 
@@ -2467,6 +2446,13 @@ public class ObservableCollectionsTest {
 			controllers.get(list.get(i)).onNext(null);
 			assertThat(syncedValues, collectionsEqual(values, true));
 		}
+
+		int preOp = opCount[0];
+		sub.unsubscribe();
+		for(int i = 0; i < list.size(); i++) {
+			controllers.get(list.get(i)).onNext(null);
+		}
+		assertEquals(preOp, opCount[0]);
 	}
 
 	/** Tests basic transaction functionality on observable collections */

@@ -18,6 +18,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import org.observe.DefaultObservable;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
@@ -2016,7 +2017,14 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		@Override
 		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
-			return theTransactionManager.onElement(theWrapped, theRefresh, element -> onElement.accept(element.refresh(theRefresh)), true);
+			DefaultObservable<Void> unSubObs = new DefaultObservable<>();
+			Observer<Void> unSubControl = unSubObs.control(null);
+			Subscription collSub = theTransactionManager.onElement(theWrapped, theRefresh,
+				element -> onElement.accept(element.takeUntil(unSubObs).refresh(theRefresh)), true);
+			return () -> {
+				unSubControl.onCompleted(null);
+				collSub.unsubscribe();
+			};
 		}
 
 		@Override
@@ -2075,7 +2083,13 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		@Override
 		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
-			return theWrapped.onElement(element -> onElement.accept(element.refreshForValue(theRefresh)));
+			DefaultObservable<Void> unSubObs = new DefaultObservable<>();
+			Observer<Void> unSubControl = unSubObs.control(null);
+			Subscription collSub = theWrapped.onElement(element -> onElement.accept(element.refreshForValue(theRefresh, unSubObs)));
+			return () -> {
+				unSubControl.onCompleted(null);
+				collSub.unsubscribe();
+			};
 		}
 
 		@Override

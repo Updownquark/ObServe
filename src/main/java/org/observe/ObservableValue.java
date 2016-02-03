@@ -703,12 +703,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		@Override
 		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 			Subscription outerSub = theWrapped.subscribe(observer);
-			Subscription refireSub = theRefresh.subscribe(new Observer<Object>() {
-				@Override
-				public <V> void onNext(V value) {
-					observer.onNext(createChangeEvent(get(), get(), value));
-				}
-			});
+			Subscription refireSub = theRefresh.act(evt -> observer.onNext(createChangeEvent(get(), get(), evt)));
 			return () -> {
 				outerSub.unsubscribe();
 				refireSub.unsubscribe();
