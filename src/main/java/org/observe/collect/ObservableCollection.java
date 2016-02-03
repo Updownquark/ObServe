@@ -2018,6 +2018,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
 			return theTransactionManager.onElement(theWrapped, theRefresh, element -> onElement.accept(element.refresh(theRefresh)), true);
 		}
+
+		@Override
+		public String toString() {
+			return theWrapped.toString();
+		}
 	}
 
 	/**
@@ -2071,6 +2076,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		@Override
 		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
 			return theWrapped.onElement(element -> onElement.accept(element.refreshForValue(theRefresh)));
+		}
+
+		@Override
+		public String toString() {
+			return theWrapped.toString();
 		}
 	}
 
@@ -2200,6 +2210,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		@Override
 		public ImmutableObservableCollection<E> immutable() {
 			return this;
+		}
+
+		@Override
+		public String toString() {
+			return theWrapped.toString();
 		}
 	}
 
@@ -2411,6 +2426,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 				i++;
 			}
 		}
+
+		@Override
+		public String toString() {
+			return theWrapped.toString();
+		}
 	}
 
 	/**
@@ -2607,6 +2627,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		@Override
 		public ObservableCollection<E> cached() {
 			return this;
+		}
+
+		@Override
+		public String toString() {
+			return theWrapped.toString();
 		}
 	}
 }

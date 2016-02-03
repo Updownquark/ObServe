@@ -17,14 +17,21 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.NavigableMap;
 import java.util.Objects;
 import java.util.TreeMap;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import org.hamcrest.Description;
 import org.hamcrest.Matcher;
+import org.observe.ObservableValueEvent;
+import org.observe.Observer;
+import org.observe.Subscription;
 import org.observe.collect.ObservableCollectionsTest.Checker;
+import org.observe.collect.ObservableOrderedCollection;
+import org.observe.collect.ObservableSortedSet;
 
 /** Runs tests on the data structures built on top of observable collections */
 public class ObservableDataStructTest {
@@ -52,6 +59,61 @@ public class ObservableDataStructTest {
 
 	private static <T extends ObservableMap<Integer, Integer>> Checker<ObservableMap<Integer, Integer>> testingObservableMap(T map,
 		Consumer<? super T> check, int depth) {
+
+		boolean sorted = map.keySet() instanceof ObservableSortedSet;
+		Map<Integer, Integer> synced = sorted ? new TreeMap<>() : new HashMap<>();
+		Subscription syncSub = sync(map, synced);
+
+		Function<Integer, Integer> mapFn = v -> v * 2;
+		ObservableMap<Integer, Integer> mapped = map.map(mapFn);
+		Map<Integer, Integer> syncMapped = sorted ? new TreeMap<>() : new HashMap<>();
+		Subscription mappedSub = sync(mapped, syncMapped);
+
+		int todo; // TODO Probably want more tests here
+
+		return new Checker<ObservableMap<Integer, Integer>>() {
+			@Override
+			public void accept(ObservableMap<Integer, Integer> value) {
+				assertThat(map, mapsEqual(synced, sorted));
+				if(check != null)
+					check.accept(map);
+
+				Map<Integer, Integer> realMapped = sorted ? new TreeMap<>() : new HashMap<>();
+				for(Map.Entry<Integer, Integer> entry : map.entrySet())
+					realMapped.put(entry.getKey(), mapFn.apply(entry.getValue()));
+				assertThat(realMapped, mapsEqual(mapped, sorted));
+				assertThat(realMapped, mapsEqual(syncMapped, sorted));
+			}
+
+			@Override
+			public void close() {
+				syncSub.unsubscribe();
+				mappedSub.unsubscribe();
+			}
+		};
+	}
+
+	private static <K, V> Subscription sync(ObservableMap<K, V> map, Map<K, V> syncMap) {
+		return ((ObservableOrderedCollection<Map.Entry<K, V>>) map.entrySet()).onElement(entryEl -> {
+			entryEl.subscribe(new Observer<ObservableValueEvent<Map.Entry<K, V>>>() {
+				@Override
+				public <V2 extends ObservableValueEvent<Entry<K, V>>> void onNext(V2 evt) {
+					((ObservableMap.ObservableEntry<K, V>) evt.getValue()).takeUntil(entryEl)
+					.subscribe(new Observer<ObservableValueEvent<V>>() {
+						@Override
+						public <V3 extends ObservableValueEvent<V>> void onNext(V3 evt2) {
+							V oldValue = syncMap.put(evt.getValue().getKey(), evt2.getValue());
+							assertEquals(evt.isInitial() ? null : evt2.getOldValue(), oldValue);
+						}
+					});
+				}
+
+				@Override
+				public <V2 extends ObservableValueEvent<Entry<K, V>>> void onCompleted(V2 evt) {
+					assertEquals(evt.getOldValue(), syncMap.remove(evt.getValue().getKey()));
+				}
+			});
+		});
 	}
 
 	/**

@@ -33,6 +33,7 @@ import java.util.stream.Collectors;
 import org.hamcrest.Description;
 import org.hamcrest.Matcher;
 import org.junit.Test;
+import org.observe.DefaultObservable;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
@@ -141,8 +142,8 @@ public class ObservableCollectionsTest {
 		ObservableValue<Integer> max = coll.reduce(Integer.MIN_VALUE, maxFn);
 		Integer [] observedSum = new Integer[1];
 		Integer [] observedMax = new Integer[1];
-		sum.value().act(v -> observedSum[0] = v);
-		max.value().act(v -> {
+		Subscription sumSub = sum.value().act(v -> observedSum[0] = v);
+		Subscription maxSub = max.value().act(v -> {
 			observedMax[0] = v;
 		});
 
@@ -346,6 +347,9 @@ public class ObservableCollectionsTest {
 					for(Subscription sub : syncedSubSetSubs)
 						sub.unsubscribe();
 				}
+
+				sumSub.unsubscribe();
+				maxSub.unsubscribe();
 			}
 		};
 	}
@@ -2421,6 +2425,50 @@ public class ObservableCollectionsTest {
 		}
 	}
 
+	/** Tests {@link ObservableCollection#refreshEach(Function)} */
+	@Test
+	public void testRefreshEach() {
+		ObservableArrayList<int []> list = new ObservableArrayList<>(new TypeToken<int []>() {});
+		Map<int [], Observable<Void>> elObservables = new LinkedHashMap<>();
+		Map<int [], Observer<Void>> controllers = new LinkedHashMap<>();
+		for(int i = 0; i < 30; i++) {
+			int [] el = new int[] {i};
+			DefaultObservable<Void> elObs = new DefaultObservable<>();
+			elObservables.put(el, elObs);
+			controllers.put(el, elObs.control(null));
+			list.add(el);
+		}
+		ObservableList<Integer> values = list.refreshEach(el -> elObservables.get(el)).map(el -> el[0]);
+		List<Integer> syncedValues = new ArrayList<>();
+		sync(values, syncedValues);
+
+		assertThat(syncedValues, collectionsEqual(values, true));
+
+		for(int i = 0; i < list.size(); i++) {
+			list.get(i)[0]++;
+			controllers.get(list.get(i)).onNext(null);
+			assertThat(syncedValues, collectionsEqual(values, true));
+		}
+
+		for(int i = 0; i < list.size(); i++) {
+			list.get(i)[0] *= 50;
+			controllers.get(list.get(i)).onNext(null);
+			assertThat(syncedValues, collectionsEqual(values, true));
+		}
+
+		for(int i = 0; i < list.size(); i++) {
+			list.get(i)[0]--;
+			controllers.get(list.get(i)).onNext(null);
+			assertThat(syncedValues, collectionsEqual(values, true));
+		}
+
+		for(int i = 0; i < list.size(); i++) {
+			list.get(i)[0] = 0;
+			controllers.get(list.get(i)).onNext(null);
+			assertThat(syncedValues, collectionsEqual(values, true));
+		}
+	}
+
 	/** Tests basic transaction functionality on observable collections */
 	@Test
 	public void testTransactionsBasic() {
@@ -2455,13 +2503,6 @@ public class ObservableCollectionsTest {
 	/** Tests transactions caused by {@link ObservableCollection#refresh(Observable) refreshing} on an observable */
 	@Test
 	public void testTransactionsRefresh() {
-		// TODO
-		throw new sun.reflect.generics.reflectiveObjects.NotImplementedException();
-	}
-
-	/** Tests {@link ObservableCollection#refreshEach(Function)} */
-	@Test
-	public void testRefreshEach() {
 		// TODO
 		throw new sun.reflect.generics.reflectiveObjects.NotImplementedException();
 	}

@@ -1255,6 +1255,11 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 			else
 				return getMap().apply(getWrapped().set(index, getReverse().apply(element)));
 		}
+
+		@Override
+		public String toString() {
+			return ObservableList.toString(this);
+		}
 	}
 
 	/**
@@ -1615,6 +1620,11 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 				T combinedValue = getValue().get();
 				return getMap().apply(getWrapped().set(index, getReverse().apply(element, combinedValue)), combinedValue);
 			}
+		}
+
+		@Override
+		public String toString() {
+			return ObservableList.toString(this);
 		}
 	}
 
