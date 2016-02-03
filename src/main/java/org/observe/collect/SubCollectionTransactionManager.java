@@ -21,8 +21,13 @@ class SubCollectionTransactionManager {
 	private final ObservableValue<CollectionSession> theExposedSession;
 	private final Observer<ObservableValueEvent<CollectionSession>> theSessionController;
 
-	/** @param collection The parent of the collection to manage the transactions for */
-	public SubCollectionTransactionManager(ObservableCollection<?> collection) {
+	private final Observable<?> theRefresh;
+
+	/**
+	 * @param collection The parent of the collection to manage the transactions for
+	 * @param refresh The observable to refresh the collection when fired
+	 */
+	public SubCollectionTransactionManager(ObservableCollection<?> collection, Observable<?> refresh) {
 		theLock = new ReentrantLock();
 		theInternalSession = new DefaultObservableValue<CollectionSession>() {
 			private final TypeToken<CollectionSession> TYPE = TypeToken.of(CollectionSession.class);
@@ -41,6 +46,8 @@ class SubCollectionTransactionManager {
 			sessions -> (CollectionSession) (sessions[0] != null ? sessions[0]
 				: sessions[1]), true, theInternalSession, collection.getSession());
 		theSessionController = theInternalSession.control(null);
+
+		theRefresh = refresh;
 	}
 
 	/** @return The session observable to use for the collection */
@@ -59,10 +66,10 @@ class SubCollectionTransactionManager {
 	 *            reversible} collections)
 	 * @return The runnable to execute to uninstall the observer
 	 */
-	public <E> Subscription onElement(ObservableCollection<E> collection, Observable<?> refresh,
-		Consumer<? super ObservableElement<E>> onElement, boolean forward) {
+	public <E> Subscription onElement(ObservableCollection<E> collection, Consumer<? super ObservableElement<E>> onElement,
+		boolean forward) {
 		// Here we're relying on observers being fired in the order they were subscribed
-		Subscription refreshStartSub = refresh == null ? null : refresh.subscribe(new Observer<Object>() {
+		Subscription refreshStartSub = theRefresh == null ? null : theRefresh.subscribe(new Observer<Object>() {
 			@Override
 			public <V> void onNext(V value) {
 				startTransaction(value);
@@ -84,12 +91,12 @@ class SubCollectionTransactionManager {
 				endTransaction();
 			}
 		};
-		Subscription [] refreshEndSub = new Subscription[] {refresh.subscribe(refreshEnd)};
+		Subscription [] refreshEndSub = new Subscription[] {theRefresh.subscribe(refreshEnd)};
 		Consumer<ObservableElement<E>> elFn = element -> {
 			onElement.accept(element);
 			// The refresh end always needs to be after the elements
 			Subscription oldRefreshEnd = refreshEndSub[0];
-			refreshEndSub[0] = refresh.subscribe(refreshEnd);
+			refreshEndSub[0] = theRefresh.subscribe(refreshEnd);
 			oldRefreshEnd.unsubscribe();
 		};
 		Subscription collSub;

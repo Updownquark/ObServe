@@ -6,12 +6,12 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import org.observe.Action;
-import org.observe.BiTuple;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
+import org.qommons.BiTuple;
 import org.qommons.TriFunction;
 import org.qommons.TriTuple;
 

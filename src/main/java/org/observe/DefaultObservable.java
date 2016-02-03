@@ -77,6 +77,7 @@ public class DefaultObservable<T> implements Observable<T> {
 	private void fireNext(T value) {
 		if(!isAlive.get())
 			throw new IllegalStateException("Firing a value on a completed observable");
+		// This allows listeners to be added by listeners. Those new listeners will be fired last.
 		for(Observer<? super T> observer : theListeners) {
 			try {
 				observer.onNext(value);

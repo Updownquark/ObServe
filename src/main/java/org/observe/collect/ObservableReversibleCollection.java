@@ -487,7 +487,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 
 		@Override
 		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<V>> onElement) {
-			return getManager().onElement(getWrapped(), getValue(),
+			return getManager().onElement(getWrapped(),
 				element -> onElement.accept((ObservableOrderedElement<V>) element.combineV(getMap(), getValue())), false);
 		}
 
@@ -519,7 +519,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 
 		@Override
 		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<E>> onElement) {
-			return getManager().onElement(getWrapped(), getRefresh(),
+			return getManager().onElement(getWrapped(),
 				element -> onElement.accept((ObservableOrderedElement<E>) element.refresh(getRefresh())), false);
 		}
 

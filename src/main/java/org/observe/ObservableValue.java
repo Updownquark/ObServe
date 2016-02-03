@@ -7,6 +7,7 @@ import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import org.qommons.BiTuple;
 import org.qommons.ListenerSet;
 import org.qommons.TriFunction;
 import org.qommons.TriTuple;

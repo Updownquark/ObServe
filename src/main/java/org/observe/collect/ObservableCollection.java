@@ -1651,7 +1651,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			theMap = map;
 			theReverse = reverse;
 
-			theTransactionManager = new SubCollectionTransactionManager(theWrapped);
+			theTransactionManager = new SubCollectionTransactionManager(theWrapped, value.noInit());
 		}
 
 		protected ObservableCollection<E> getWrapped() {
@@ -1793,7 +1793,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		@Override
 		public Subscription onElement(Consumer<? super ObservableElement<V>> onElement) {
-			return theTransactionManager.onElement(theWrapped, theValue, element -> onElement.accept(element.combineV(theMap, theValue)),
+			return theTransactionManager.onElement(theWrapped, element -> onElement.accept(element.combineV(theMap, theValue)),
 				true);
 		}
 	}
@@ -1975,7 +1975,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			theWrapped = wrap;
 			theRefresh = refresh;
 
-			theTransactionManager = new SubCollectionTransactionManager(theWrapped);
+			theTransactionManager = new SubCollectionTransactionManager(theWrapped, refresh);
 		}
 
 		protected ObservableCollection<E> getWrapped() {
@@ -2002,7 +2002,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		@Override
 		public Transaction lock(boolean write, Object cause) {
-			return theWrapped.lock(write, cause);
+			theTransactionManager.startTransaction(cause);
+			return () -> theTransactionManager.endTransaction();
 		}
 
 		@Override
@@ -2019,7 +2020,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
 			DefaultObservable<Void> unSubObs = new DefaultObservable<>();
 			Observer<Void> unSubControl = unSubObs.control(null);
-			Subscription collSub = theTransactionManager.onElement(theWrapped, theRefresh,
+			Subscription collSub = theTransactionManager.onElement(theWrapped,
 				element -> onElement.accept(element.takeUntil(unSubObs).refresh(theRefresh)), true);
 			return () -> {
 				unSubControl.onCompleted(null);

@@ -1650,7 +1650,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 		@Override
 		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<E>> onElement) {
-			return getManager().onElement(getWrapped(), getRefresh(),
+			return getManager().onElement(getWrapped(),
 				element -> onElement.accept((ObservableOrderedElement<E>) element.refresh(getRefresh())), false);
 		}
 	}
