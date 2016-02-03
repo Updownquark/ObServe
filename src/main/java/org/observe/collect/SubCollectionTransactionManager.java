@@ -9,6 +9,7 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
+import org.qommons.ListenerSet;
 
 import com.google.common.reflect.TypeToken;
 
@@ -20,6 +21,8 @@ class SubCollectionTransactionManager {
 	private final DefaultObservableValue<CollectionSession> theInternalSession;
 	private final ObservableValue<CollectionSession> theExposedSession;
 	private final Observer<ObservableValueEvent<CollectionSession>> theSessionController;
+
+	private final ListenerSet<Object> theListeners;
 
 	private final Observable<?> theRefresh;
 
@@ -47,6 +50,39 @@ class SubCollectionTransactionManager {
 				: sessions[1]), true, theInternalSession, collection.getSession());
 		theSessionController = theInternalSession.control(null);
 
+		theListeners = new ListenerSet<>();
+		theListeners.setUsedListener(new Consumer<Boolean>() {
+			private Subscription sub;
+
+			@Override
+			public void accept(Boolean used) {
+				// Here we're relying on observers being fired in the order they were subscribed
+				// We're also relying on the ability to add an observer from an observer and have that observer invoked for the same
+				// "firing"
+				if(used) {
+					sub = theRefresh.act(v -> {
+						startTransaction(v);
+						Subscription [] endSub = new Subscription[1];
+						boolean [] fired = new boolean[1];
+						endSub[0] = theRefresh.act(v2 -> {
+							if(fired[0])
+								return;
+							endTransaction();
+							fired[0] = true;
+							if(endSub[0] != null) {
+								endSub[0].unsubscribe();
+								endSub[0] = null;
+							}
+						});
+						if(fired[0] && endSub[0] != null)
+							endSub[0].unsubscribe();
+					});
+				} else {
+					sub.unsubscribe();
+					sub = null;
+				}
+			}
+		});
 		theRefresh = refresh;
 	}
 
@@ -68,45 +104,15 @@ class SubCollectionTransactionManager {
 	 */
 	public <E> Subscription onElement(ObservableCollection<E> collection, Consumer<? super ObservableElement<E>> onElement,
 		boolean forward) {
-		// Here we're relying on observers being fired in the order they were subscribed
-		Subscription refreshStartSub = theRefresh == null ? null : theRefresh.subscribe(new Observer<Object>() {
-			@Override
-			public <V> void onNext(V value) {
-				startTransaction(value);
-			}
-
-			@Override
-			public <V> void onCompleted(V value) {
-				startTransaction(value);
-			}
-		});
-		Observer<Object> refreshEnd = new Observer<Object>() {
-			@Override
-			public <V> void onNext(V value) {
-				endTransaction();
-			}
-
-			@Override
-			public <V> void onCompleted(V value) {
-				endTransaction();
-			}
-		};
-		Subscription [] refreshEndSub = new Subscription[] {theRefresh.subscribe(refreshEnd)};
-		Consumer<ObservableElement<E>> elFn = element -> {
-			onElement.accept(element);
-			// The refresh end always needs to be after the elements
-			Subscription oldRefreshEnd = refreshEndSub[0];
-			refreshEndSub[0] = theRefresh.subscribe(refreshEnd);
-			oldRefreshEnd.unsubscribe();
-		};
+		Consumer<ObservableElement<E>> elFn = el -> onElement.accept(el.refresh(theRefresh));
 		Subscription collSub;
+		theListeners.add(onElement);
 		if(forward)
 			collSub = collection.onElement(elFn);
 		else
-			collSub = ((ObservableReversibleCollection<E>) collection).onElementReverse(onElement);
+			collSub = ((ObservableReversibleCollection<E>) collection).onElementReverse(elFn);
 		return () -> {
-			refreshStartSub.unsubscribe();
-			refreshEndSub[0].unsubscribe();
+			theListeners.remove(onElement);
 			collSub.unsubscribe();
 		};
 	}
