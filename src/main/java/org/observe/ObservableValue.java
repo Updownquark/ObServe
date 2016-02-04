@@ -510,9 +510,6 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 				@Override
 				public void accept(Boolean used) {
 					if(used) {
-						/*Don't need to initialize this explicitly, because these will be populated when the components are subscribed to
-						 * for(int i = 0; i < args.length; i++)
-						 * 	args[i] = theComposed.get(i).get(); */
 						boolean [] initialized = new boolean[1];
 						for(int i = 0; i < theComposedValues.length; i++) {
 							int index = i;
@@ -553,14 +550,24 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 
 								private void fireCompleted(ObservableValueEvent<T> next) {
 									theObservers.forEach(listener -> listener.onCompleted(next));
+									for(int j = 0; j < theComposed.size(); j++) {
+										theComposedValues[j] = null;
+										if(composedSubs[j] != null) {
+											composedSubs[j].unsubscribe();
+											composedSubs[j] = null;
+										}
+									}
 								}
 
 								private void fireError(Throwable error) {
 									theObservers.forEach(listener -> listener.onError(error));
 								}
 							});
+							if(completed[0])
+								break;
 						}
-						theValue = combine(theComposedValues);
+						if(!completed[0])
+							theValue = combine(theComposedValues);
 						initialized[0] = true;
 					} else {
 						for(int i = 0; i < theComposed.size(); i++) {

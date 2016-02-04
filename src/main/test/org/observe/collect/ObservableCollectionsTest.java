@@ -2577,10 +2577,10 @@ public class ObservableCollectionsTest {
 			list.add(i);
 
 		int [] changes = new int[1];
-		int correctChanges = 0;
-		list.refresh(refresh).simpleChanges().act(v -> {
+		Subscription sub = list.refresh(refresh).simpleChanges().act(v -> {
 			changes[0]++;
 		});
+		int correctChanges = 0;
 
 		assertEquals(correctChanges, changes[0]);
 
@@ -2615,6 +2615,11 @@ public class ObservableCollectionsTest {
 		control.onNext(null);
 		correctChanges++;
 		assertEquals(correctChanges, changes[0]);
+
+		int preChanges = changes[0];
+		sub.unsubscribe();
+		control.onNext(null);
+		assertEquals(preChanges, changes[0]);
 	}
 
 	/**
@@ -2623,7 +2628,57 @@ public class ObservableCollectionsTest {
 	 */
 	@Test
 	public void testTransactionsCombined() {
-		// TODO
-		throw new sun.reflect.generics.reflectiveObjects.NotImplementedException();
+		ObservableArrayList<Integer> list = new ObservableArrayList<>(new TypeToken<Integer>() {});
+		SimpleSettableValue<Integer> mult = new SimpleSettableValue<>(new TypeToken<Integer>() {}, false);
+		mult.set(1, null);
+		ObservableList<Integer> product = list.combine(mult, (v1, v2) -> v1 * v2);
+
+		for(int i = 0; i < 30; i++)
+			list.add(i);
+
+		int [] changes = new int[1];
+		Subscription sub = product.simpleChanges().act(v -> {
+			changes[0]++;
+		});
+		int correctChanges = 0;
+
+		assertEquals(correctChanges, changes[0]);
+
+		mult.set(2, null);
+		correctChanges++;
+		assertEquals(correctChanges, changes[0]);
+
+		Transaction trans = list.lock(true, null);
+		mult.set(3, null);
+		mult.set(4, null);
+		trans.close();
+		correctChanges++;
+		assertEquals(correctChanges, changes[0]);
+
+		trans = list.lock(true, null);
+		for(int i = 0; i < 30; i++)
+			list.set(i, i + 1);
+		mult.set(5, null);
+		trans.close();
+		correctChanges++;
+		assertEquals(correctChanges, changes[0]);
+
+		list.clear();
+		correctChanges++;
+		assertEquals(correctChanges, changes[0]);
+		mult.set(6, null);
+		assertEquals(correctChanges, changes[0]);
+
+		list.addAll(java.util.Arrays.asList(0, 1, 2, 3, 4));
+		correctChanges++;
+		assertEquals(correctChanges, changes[0]);
+		mult.set(7, null);
+		correctChanges++;
+		assertEquals(correctChanges, changes[0]);
+
+		int preChanges = changes[0];
+		sub.unsubscribe();
+		mult.set(8, null);
+		assertEquals(preChanges, changes[0]);
 	}
 }
