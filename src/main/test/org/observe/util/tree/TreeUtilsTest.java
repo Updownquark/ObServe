@@ -5,8 +5,8 @@ import java.util.Iterator;
 import java.util.Map;
 
 import org.junit.Test;
+import org.observe.assoc.ObservableDataStructTest;
 import org.observe.collect.ObservableCollectionsTest;
-import org.observe.datastruct.ObservableDataStructTest;
 import org.observe.util.tree.CountedRedBlackNode.DefaultNode;
 import org.observe.util.tree.CountedRedBlackNode.DefaultTreeMap;
 import org.observe.util.tree.CountedRedBlackNode.DefaultTreeSet;

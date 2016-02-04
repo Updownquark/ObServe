@@ -1,4 +1,4 @@
-package org.observe.datastruct;
+package org.observe.assoc;
 
 import static java.util.Arrays.asList;
 import static org.hamcrest.CoreMatchers.not;
@@ -29,6 +29,7 @@ import org.hamcrest.Matcher;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
+import org.observe.assoc.ObservableMap;
 import org.observe.collect.ObservableCollectionsTest.Checker;
 import org.observe.collect.ObservableOrderedCollection;
 import org.observe.collect.ObservableSortedSet;

@@ -25,7 +25,7 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
-import org.observe.datastruct.ObservableMultiMap;
+import org.observe.assoc.ObservableMultiMap;
 import org.observe.util.ObservableUtils;
 import org.qommons.ListenerSet;
 import org.qommons.Transaction;

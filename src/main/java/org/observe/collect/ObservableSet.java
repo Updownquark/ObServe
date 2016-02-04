@@ -17,7 +17,7 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
-import org.observe.datastruct.MultiMap;
+import org.observe.assoc.MultiMap;
 import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeToken;
@@ -392,7 +392,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 			@Override
 			public Subscription onElement(Consumer<? super ObservableElement<T>> observer) {
 				ObservableElement<T> [] newElement = new ObservableElement[1];
-				MultiMap<T, ObservableElement<T>> elements = new org.observe.datastruct.impl.HashMultiMap<>(false,
+				MultiMap<T, ObservableElement<T>> elements = new org.observe.assoc.impl.HashMultiMap<>(false,
 					() ->{
 						return d().debug(new UniqueElementCollection(newElement[0])).from("element", this).get();
 					});

@@ -40,12 +40,12 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.SimpleSettableValue;
 import org.observe.Subscription;
+import org.observe.assoc.ObservableMultiMap;
 import org.observe.collect.impl.ObservableArrayList;
 import org.observe.collect.impl.ObservableHashSet;
 import org.observe.collect.impl.ObservableLinkedList;
 import org.observe.collect.impl.ObservableTreeList;
 import org.observe.collect.impl.ObservableTreeSet;
-import org.observe.datastruct.ObservableMultiMap;
 import org.observe.util.ObservableUtils;
 import org.qommons.Transaction;
 

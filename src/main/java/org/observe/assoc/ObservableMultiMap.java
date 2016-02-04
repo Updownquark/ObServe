@@ -1,4 +1,4 @@
-package org.observe.datastruct;
+package org.observe.assoc;
 
 import java.util.Collection;
 import java.util.Comparator;
@@ -13,6 +13,7 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
+import org.observe.assoc.ObservableMap.ObsEntryImpl;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableElement;
@@ -21,7 +22,6 @@ import org.observe.collect.ObservableOrderedCollection;
 import org.observe.collect.ObservableOrderedElement;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedSet;
-import org.observe.datastruct.ObservableMap.ObsEntryImpl;
 import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeParameter;

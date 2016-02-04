@@ -6,15 +6,15 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiFunction;
 
+import org.observe.assoc.ObservableGraph;
+import org.observe.assoc.ObservableMap;
+import org.observe.assoc.ObservableMultiMap;
+import org.observe.assoc.ObservableGraph.Node;
+import org.observe.assoc.impl.ObservableMultiMapImpl;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableList;
 import org.observe.collect.ObservableSet;
-import org.observe.datastruct.ObservableGraph;
-import org.observe.datastruct.ObservableGraph.Node;
-import org.observe.datastruct.ObservableMap;
-import org.observe.datastruct.ObservableMultiMap;
-import org.observe.datastruct.impl.ObservableMultiMapImpl;
 import org.observe.util.WeakReferenceObservable;
 import org.qommons.Transaction;
 
@@ -110,7 +110,7 @@ public abstract class ObservableDebug {
 		private ObservableDebugWrapper(Object ob, Map<String, Object> fns) {
 			observable = new WeakReferenceObservable<>(TypeToken.of(Object.class), ob);
 			labels = new org.observe.collect.impl.ObservableArrayList<>(TypeToken.of(String.class));
-			tagController = new org.observe.datastruct.impl.ObservableMultiMapImpl<>(TypeToken.of(String.class),
+			tagController = new org.observe.assoc.impl.ObservableMultiMapImpl<>(TypeToken.of(String.class),
 				TypeToken.of(Object.class));
 			tags = tagController.immutable();
 			functions = Collections.unmodifiableMap(fns);
@@ -427,13 +427,13 @@ public abstract class ObservableDebug {
 
 	/** Supports the structural debugging methods, but not execution */
 	public static class StructuralDebugger extends ObservableDebug {
-		private final org.observe.datastruct.impl.DefaultObservableGraph<ObservableDebugWrapper, String> theObservables;
+		private final org.observe.assoc.impl.DefaultObservableGraph<ObservableDebugWrapper, String> theObservables;
 
 		private final ConcurrentHashMap<Class<?>, String> theModFunctions = new ConcurrentHashMap<>();
 
 		/** Creates the debugger */
 		public StructuralDebugger() {
-			theObservables = new org.observe.datastruct.impl.DefaultObservableGraph<>(TypeToken.of(ObservableDebugWrapper.class),
+			theObservables = new org.observe.assoc.impl.DefaultObservableGraph<>(TypeToken.of(ObservableDebugWrapper.class),
 				TypeToken.of(String.class));
 		}
 
