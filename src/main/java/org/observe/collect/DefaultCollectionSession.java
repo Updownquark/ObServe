@@ -65,4 +65,9 @@ public class DefaultCollectionSession implements CollectionSession {
 			return null;
 		return theValues.putIfAbsent(new Key(listener, key), value);
 	}
+
+	@Override
+	public String toString() {
+		return "session" + theValues;
+	}
 }

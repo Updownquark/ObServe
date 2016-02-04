@@ -2171,7 +2171,7 @@ public class ObservableCollectionsTest {
 	@Test
 	public void observableListFind() {
 		ObservableArrayList<Integer> list = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
-		ObservableValue<Integer> found = list.find(value -> value % 3 == 0);
+		ObservableValue<Integer> found = list.findFirst(value -> value % 3 == 0);
 		Integer [] received = new Integer[] {0};
 		found.act(value -> received[0] = value.getValue());
 		Integer [] correct = new Integer[] {null};
@@ -2214,7 +2214,7 @@ public class ObservableCollectionsTest {
 		list.addAll(java.util.Arrays.asList(value1, value2, value3, value4));
 
 		Integer [] received = new Integer[1];
-		ObservableUtils.flattenListValues(TypeToken.of(Integer.TYPE), list).find(value -> value % 3 == 0).value()
+		ObservableUtils.flattenListValues(TypeToken.of(Integer.TYPE), list).findFirst(value -> value % 3 == 0).value()
 		.act(value -> received[0] = value);
 		assertEquals(Integer.valueOf(3), received[0]);
 		value3.set(4, null);
@@ -2447,7 +2447,16 @@ public class ObservableCollectionsTest {
 			assertThat(syncedValues, collectionsEqual(values, true));
 		}
 
+		list.clear();
 		int preOp = opCount[0];
+		for(Observer<Void> controller : controllers.values())
+			controller.onNext(null);
+		assertEquals(preOp, opCount[0]);
+
+		for(int [] value : controllers.keySet())
+			list.add(value);
+
+		preOp = opCount[0];
 		sub.unsubscribe();
 		for(int i = 0; i < list.size(); i++) {
 			controllers.get(list.get(i)).onNext(null);
@@ -2479,7 +2488,7 @@ public class ObservableCollectionsTest {
 	private void testTransactionsByFind(ObservableList<Integer> observable, TransactableList<Integer> controller) {
 		Integer [] found = new Integer[1];
 		int [] findCount = new int[1];
-		Subscription sub = observable.find(value -> value % 5 == 4).act(event -> {
+		Subscription sub = observable.findFirst(value -> value % 5 == 4).act(event -> {
 			findCount[0]++;
 			found[0] = event.getValue();
 		});
@@ -2569,7 +2578,9 @@ public class ObservableCollectionsTest {
 
 		int [] changes = new int[1];
 		int correctChanges = 0;
-		list.refresh(refresh).simpleChanges().act(v -> changes[0]++);
+		list.refresh(refresh).simpleChanges().act(v -> {
+			changes[0]++;
+		});
 
 		assertEquals(correctChanges, changes[0]);
 

@@ -61,8 +61,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @param filter The filter function
 	 * @return The first value in this collection passing the filter, or null if none of this collection's elements pass
 	 */
-	@Override
-	default ObservableValue<E> find(Predicate<E> filter) {
+	default ObservableValue<E> findFirst(Predicate<E> filter) {
 		return d().debug(new OrderedCollectionFinder<>(this, filter, true)).from("find", this).using("filter", filter).get();
 	}
 

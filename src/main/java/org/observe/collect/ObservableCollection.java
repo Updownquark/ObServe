@@ -8,6 +8,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -439,7 +440,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 	/**
 	 * Searches in this collection for an element. Since an ObservableCollection's order may or may not be significant, the element
-	 * reflected in the value may not be the first element in the collection (by {@link #iterator()}) to match the filter.
+	 * reflected in the value may not be the first element in the collection (by {@link #iterator()}) to match the filter. As an
+	 * optimization, subscribers to this method will not be called if an element matching the filter is inserted in this collection when a
+	 * match is already present, regardless of the relative positions of the two matches. A side effect of this is that the latest value
+	 * passed to the subscription and the value returned from the {@link ObservableValue#get()} method may not be the same, since the get
+	 * method always returns the first match.
 	 *
 	 * @param filter The filter function
 	 * @return A value in this list passing the filter, or null if none of this collection's elements pass.
@@ -464,9 +469,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
-				final boolean [] isFound=new boolean[1];
 				final Object key = new Object();
-				Subscription collSub = ObservableCollection.this.onElement(new Consumer<ObservableElement<E>>() {
+				class FindOnElement implements Consumer<ObservableElement<E>> {
+					private Collection<ObservableElement<E>> theMatching = new LinkedHashSet<>();
+					ObservableElement<E> theMatchingElement;
 					private E theValue;
 
 					@Override
@@ -474,34 +480,40 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						element.subscribe(new Observer<ObservableValueEvent<E>>() {
 							@Override
 							public <V3 extends ObservableValueEvent<E>> void onNext(V3 value) {
-								if(!isFound[0] && filter.test(value.getValue())) {
-									isFound[0] = true;
-									newBest(value.getValue());
+								boolean hasMatch = !theMatching.isEmpty();
+								boolean preMatches = hasMatch && !value.isInitial() && theMatching.contains(element);
+								boolean matches = filter.test(value.getValue());
+								if(matches && !preMatches)
+									theMatching.add(element);
+								if(!hasMatch && matches)
+									newBest(element, value.getValue());
+								else if(preMatches && !matches) {
+									theMatching.remove(element);
+									if(theMatchingElement == element)
+										findNextBest();
 								}
 							}
 
 							@Override
 							public <V3 extends ObservableValueEvent<E>> void onCompleted(V3 value) {
-								if(theValue == value.getOldValue())
+								theMatching.remove(element);
+								if(theMatchingElement == element)
 									findNextBest();
 							}
 
 							private void findNextBest() {
-								isFound[0] = false;
-								for(E value : ObservableCollection.this) {
-									if(filter.test(value)) {
-										isFound[0] = true;
-										newBest(value);
-										break;
-									}
+								if(theMatching.isEmpty())
+									newBest(null, null);
+								else {
+									theMatchingElement = theMatching.iterator().next();
+									newBest(theMatchingElement, theMatchingElement.get());
 								}
-								if(!isFound[0])
-									newBest(null);
 							}
 						});
 					}
 
-					void newBest(E value) {
+					void newBest(ObservableElement<E> element, E value) {
+						theMatchingElement = element;
 						E oldValue = theValue;
 						theValue = value;
 						CollectionSession session = getSession().get();
@@ -512,7 +524,9 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 							session.put(key, "newBest", theValue);
 						}
 					}
-				});
+				}
+				FindOnElement collOnEl = new FindOnElement();
+				Subscription collSub = ObservableCollection.this.onElement(collOnEl);
 				Subscription transSub = getSession().subscribe(new Observer<ObservableValueEvent<CollectionSession>>() {
 					@Override
 					public <V2 extends ObservableValueEvent<CollectionSession>> void onNext(V2 value) {
@@ -526,7 +540,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						observer.onNext(createChangeEvent(oldBest, newBest, value));
 					}
 				});
-				if(!isFound[0])
+				if(collOnEl.theMatchingElement == null) // If no initial match, fire an initial null
 					observer.onNext(createInitialEvent(null));
 				return () -> {
 					collSub.unsubscribe();

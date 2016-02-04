@@ -9,6 +9,8 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
+import org.observe.collect.impl.ObservableArrayList;
+import org.observe.util.ObservableUtils;
 import org.qommons.ListenerSet;
 
 import com.google.common.reflect.TypeToken;
@@ -17,20 +19,24 @@ import com.google.common.reflect.TypeToken;
 class SubCollectionTransactionManager {
 	private final ReentrantLock theLock;
 
+	private final ObservableCollection<?> theCollection;
+	private final Observable<?> theRefresh;
 	private CollectionSession theInternalSessionValue;
 	private final DefaultObservableValue<CollectionSession> theInternalSession;
 	private final ObservableValue<CollectionSession> theExposedSession;
 	private final Observer<ObservableValueEvent<CollectionSession>> theSessionController;
 
-	private final ListenerSet<Object> theListeners;
+	private int theTransactionDepth;
 
-	private final Observable<?> theRefresh;
+	private final ListenerSet<Object> theListeners;
 
 	/**
 	 * @param collection The parent of the collection to manage the transactions for
 	 * @param refresh The observable to refresh the collection when fired
 	 */
 	public SubCollectionTransactionManager(ObservableCollection<?> collection, Observable<?> refresh) {
+		theCollection = collection;
+		theRefresh = refresh;
 		theLock = new ReentrantLock();
 		theInternalSession = new DefaultObservableValue<CollectionSession>() {
 			private final TypeToken<CollectionSession> TYPE = TypeToken.of(CollectionSession.class);
@@ -45,9 +51,12 @@ class SubCollectionTransactionManager {
 				return theInternalSessionValue;
 			}
 		};
-		theExposedSession = new org.observe.ObservableValue.ComposedObservableValue<>(
-			sessions -> (CollectionSession) (sessions[0] != null ? sessions[0]
-				: sessions[1]), true, theInternalSession, collection.getSession());
+		ObservableArrayList<ObservableValue<CollectionSession>> sessions = new ObservableArrayList<>(
+			new TypeToken<ObservableValue<CollectionSession>>() {});
+		sessions.add(collection.getSession()); // The collection's session takes precedence
+		sessions.add(theInternalSession);
+		theExposedSession = ObservableUtils.flattenListValues(new TypeToken<CollectionSession>() {}, sessions)
+			.findFirst(session -> session != null);
 		theSessionController = theInternalSession.control(null);
 
 		theListeners = new ListenerSet<>();
@@ -83,7 +92,6 @@ class SubCollectionTransactionManager {
 				}
 			}
 		});
-		theRefresh = refresh;
 	}
 
 	/** @return The session observable to use for the collection */
@@ -126,9 +134,12 @@ class SubCollectionTransactionManager {
 		CollectionSession newSession, oldSession;
 		theLock.lock();
 		try {
-			oldSession = theInternalSessionValue;
-			newSession = theInternalSessionValue = new DefaultCollectionSession(cause);
-			theSessionController.onNext(theInternalSession.createChangeEvent(oldSession, newSession, cause));
+			if(theInternalSessionValue == null) {
+				oldSession = theInternalSessionValue;
+				newSession = theInternalSessionValue = new DefaultCollectionSession(cause);
+				theSessionController.onNext(theInternalSession.createChangeEvent(oldSession, newSession, cause));
+			} else
+				theTransactionDepth++;
 		} finally {
 			theLock.unlock();
 		}
@@ -139,12 +150,21 @@ class SubCollectionTransactionManager {
 		CollectionSession session;
 		theLock.lock();
 		try {
-			session = theInternalSessionValue;
-			theInternalSessionValue = null;
-			if(session != null)
-				theSessionController.onNext(theInternalSession.createChangeEvent(session, null, session.getCause()));
+			if(theTransactionDepth > 0)
+				theTransactionDepth--;
+			else {
+				session = theInternalSessionValue;
+				theInternalSessionValue = null;
+				if(session != null)
+					theSessionController.onNext(theInternalSession.createChangeEvent(session, null, session.getCause()));
+			}
 		} finally {
 			theLock.unlock();
 		}
+	}
+
+	@Override
+	public String toString() {
+		return "Managing transactions of " + theCollection + " refreshing by " + theRefresh;
 	}
 }
