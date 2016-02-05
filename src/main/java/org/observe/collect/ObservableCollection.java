@@ -1807,8 +1807,14 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		@Override
 		public Subscription onElement(Consumer<? super ObservableElement<V>> onElement) {
-			return theTransactionManager.onElement(theWrapped, element -> onElement.accept(element.combineV(theMap, theValue)),
-				true);
+			DefaultObservable<Void> unSubObs = new DefaultObservable<>();
+			Observer<Void> unSubControl = unSubObs.control(null);
+			Subscription collSub = theTransactionManager.onElement(theWrapped,
+				element -> onElement.accept(element.combineV(theMap, theValue).unsubscribeOn(unSubObs)), true);
+			return () -> {
+				unSubControl.onCompleted(null);
+				collSub.unsubscribe();
+			};
 		}
 	}
 
@@ -2035,7 +2041,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			DefaultObservable<Void> unSubObs = new DefaultObservable<>();
 			Observer<Void> unSubControl = unSubObs.control(null);
 			Subscription collSub = theTransactionManager.onElement(theWrapped,
-				element -> onElement.accept(element.takeUntil(unSubObs).refresh(theRefresh)), true);
+				element -> onElement.accept(element.refresh(theRefresh).unsubscribeOn(unSubObs)), true);
 			return () -> {
 				unSubControl.onCompleted(null);
 				collSub.unsubscribe();

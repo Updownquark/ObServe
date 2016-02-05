@@ -244,7 +244,14 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 
 	@Override
 	default ObservableValue<T> takeUntil(Observable<?> until) {
-		return d().debug(new ObservableValueTakenUntil<>(this, until)).from("take", this).from("until", until).get();
+		return d().debug(new ObservableValueTakenUntil<>(this, until, true)).from("take", this).from("until", until)
+			.tag("withCompletion", true).get();
+	}
+
+	@Override
+	default Observable<ObservableValueEvent<T>> unsubscribeOn(Observable<?> until) {
+		return d().debug(new ObservableValueTakenUntil<>(this, until, false)).from("take", this).from("until", until)
+			.tag("withCompletion", false).get();
 	}
 
 	/**
@@ -570,13 +577,15 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 							theValue = combine(theComposedValues);
 						initialized[0] = true;
 					} else {
+						theValue = null;
 						for(int i = 0; i < theComposed.size(); i++) {
-							composedSubs[i].unsubscribe();
-							composedSubs[i] = null;
 							theComposedValues[i] = null;
-							theValue = null;
-							completed[0] = false;
+							if(composedSubs[i] != null) {
+								composedSubs[i].unsubscribe();
+								composedSubs[i] = null;
+							}
 						}
+						completed[0] = false;
 					}
 				}
 			});
@@ -650,8 +659,8 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @param <T> The type of the value
 	 */
 	class ObservableValueTakenUntil<T> extends Observable.ObservableTakenUntil<ObservableValueEvent<T>> implements ObservableValue<T> {
-		protected ObservableValueTakenUntil(ObservableValue<T> wrap, Observable<?> until) {
-			super(wrap, until);
+		protected ObservableValueTakenUntil(ObservableValue<T> wrap, Observable<?> until, boolean withCompletion) {
+			super(wrap, until, withCompletion);
 		}
 
 		@Override

@@ -30,7 +30,14 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 
 	@Override
 	default ObservableElement<E> takeUntil(Observable<?> until) {
-		return new ObservableElementTakenUntil<>(this, until);
+		return d().debug(new ObservableElementTakenUntil<>(this, until, true)).from("take", this).from("until", until)
+			.tag("withCompletion", true).get();
+	}
+
+	@Override
+	default ObservableElement<E> unsubscribeOn(Observable<?> until) {
+		return d().debug(new ObservableElementTakenUntil<>(this, until, false)).from("take", this).from("until", until)
+			.tag("withCompletion", false).get();
 	}
 
 	@Override
@@ -113,8 +120,8 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 	 * @param <T> The type of the element value
 	 */
 	class ObservableElementTakenUntil<T> extends ObservableValueTakenUntil<T> implements ObservableElement<T> {
-		public ObservableElementTakenUntil(ObservableElement<T> wrap, Observable<?> until) {
-			super(wrap, until);
+		public ObservableElementTakenUntil(ObservableElement<T> wrap, Observable<?> until, boolean withCompletion) {
+			super(wrap, until, withCompletion);
 		}
 
 		@Override

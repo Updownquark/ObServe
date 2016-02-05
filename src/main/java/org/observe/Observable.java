@@ -154,7 +154,20 @@ public interface Observable<T> {
 	 * @return An observable that provides the same values as this observable until the first value is observed from the given observable
 	 */
 	default Observable<T> takeUntil(Observable<?> until) {
-		return d().debug(new ObservableTakenUntil<>(this, until)).from("take", this).from("until", until).get();
+		return d().debug(new ObservableTakenUntil<>(this, until, true)).from("take", this).from("until", until).tag("withCompletion", true)
+			.get();
+	}
+
+	/**
+	 * A different form of {@link #takeUntil(Observable)} that does not complete the observable when <code>until</code> fires, but merely
+	 * unsubscribes all subscriptions
+	 * 
+	 * @param until the observable to watch
+	 * @return An observable that provides the same values as this observable until the first value is observed from the given observable
+	 */
+	default Observable<T> unsubscribeOn(Observable<?> until) {
+		return d().debug(new ObservableTakenUntil<>(this, until, false)).from("take", this).from("until", until)
+			.tag("withCompletion", false).get();
 	}
 
 	/**
@@ -567,9 +580,12 @@ public interface Observable<T> {
 		private final Observable<T> theWrapped;
 		private final Observable<?> theUntil;
 
-		protected ObservableTakenUntil(Observable<T> wrap, Observable<?> until) {
+		private final boolean isWithCompletion;
+
+		protected ObservableTakenUntil(Observable<T> wrap, Observable<?> until, boolean withCompletion) {
 			theWrapped = wrap;
 			theUntil = until;
+			isWithCompletion = withCompletion;
 		}
 
 		protected Observable<T> getWrapped() {
@@ -601,7 +617,8 @@ public interface Observable<T> {
 						return;
 					complete[0] = true;
 					outerSub.unsubscribe();
-					observer.onCompleted(getDefaultValue());
+					if(isWithCompletion)
+						observer.onCompleted(getDefaultValue());
 				}
 			});
 			return () -> {
