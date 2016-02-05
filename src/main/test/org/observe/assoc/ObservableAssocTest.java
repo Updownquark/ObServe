@@ -26,16 +26,16 @@ import java.util.function.Function;
 
 import org.hamcrest.Description;
 import org.hamcrest.Matcher;
+import org.junit.Test;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
-import org.observe.assoc.ObservableMap;
 import org.observe.collect.ObservableCollectionsTest.Checker;
 import org.observe.collect.ObservableOrderedCollection;
 import org.observe.collect.ObservableSortedSet;
 
 /** Runs tests on the data structures built on top of observable collections */
-public class ObservableDataStructTest {
+public class ObservableAssocTest {
 	/**
 	 * Runs a barrage of tests against a map, observable or not
 	 *
@@ -429,5 +429,14 @@ public class ObservableDataStructTest {
 			subMap.remove(rem);
 		assertEquals(startSize, subMap.size());
 		check.accept(subMap);
+	}
+
+	/**
+	 * TODO This method is here just so no initialization error happens when this test is loaded from the suite. Still need to write the
+	 * associative data structures tests.
+	 */
+	@Test
+	public void doNothing() {
+		int todo; // TODO
 	}
 }

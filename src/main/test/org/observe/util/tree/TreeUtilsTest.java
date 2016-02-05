@@ -5,7 +5,7 @@ import java.util.Iterator;
 import java.util.Map;
 
 import org.junit.Test;
-import org.observe.assoc.ObservableDataStructTest;
+import org.observe.assoc.ObservableAssocTest;
 import org.observe.collect.ObservableCollectionsTest;
 import org.observe.util.tree.CountedRedBlackNode.DefaultNode;
 import org.observe.util.tree.CountedRedBlackNode.DefaultTreeMap;
@@ -127,7 +127,7 @@ public class TreeUtilsTest {
 		});
 	}
 
-	/** Runs the {@link ObservableDataStructTest#testMap(Map, java.util.function.Consumer)} tests against {@link DefaultTreeMap} */
+	/** Runs the {@link ObservableAssocTest#testMap(Map, java.util.function.Consumer)} tests against {@link DefaultTreeMap} */
 	@Test
 	public void testTreeMap() {
 		DefaultTreeMap<Integer, Integer> map = new DefaultTreeMap<>(new Comparator<Integer>() {
@@ -136,7 +136,7 @@ public class TreeUtilsTest {
 				return o1.compareTo(o2);
 			}
 		});
-		ObservableDataStructTest.testMap(map, s -> {
+		ObservableAssocTest.testMap(map, s -> {
 			DefaultNode<Map.Entry<Integer, Integer>> root = map.getRoot();
 			if(root != null)
 				root.checkValid();

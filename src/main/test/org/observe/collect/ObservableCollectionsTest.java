@@ -139,11 +139,11 @@ public class ObservableCollectionsTest {
 
 		BinaryOperator<Integer> maxFn = (v1, v2) -> v1 >= v2 ? v1 : v2;
 		ObservableValue<Integer> sum = coll.reduce(0, combineFn, reverseCombineFn);
-		ObservableValue<Integer> max = coll.reduce(Integer.MIN_VALUE, maxFn);
+		ObservableValue<Integer> maxValue = coll.reduce(Integer.MIN_VALUE, maxFn);
 		Integer [] observedSum = new Integer[1];
 		Integer [] observedMax = new Integer[1];
 		Subscription sumSub = sum.value().act(v -> observedSum[0] = v);
-		Subscription maxSub = max.value().act(v -> {
+		Subscription maxSub = maxValue.value().act(v -> {
 			observedMax[0] = v;
 		});
 
@@ -262,10 +262,10 @@ public class ObservableCollectionsTest {
 				}
 				Optional<Integer> actualMax = coll.stream().reduce(maxFn);
 				if(actualMax.isPresent()) {
-					assertEquals(actualMax.get(), max.get());
+					assertEquals(actualMax.get(), maxValue.get());
 					assertEquals(actualMax.get(), observedMax[0]);
 				} else {
-					assertEquals(Integer.valueOf(Integer.MIN_VALUE), max.get());
+					assertEquals(Integer.valueOf(Integer.MIN_VALUE), maxValue.get());
 					assertEquals(Integer.valueOf(Integer.MIN_VALUE), observedMax[0]);
 				}
 			}
