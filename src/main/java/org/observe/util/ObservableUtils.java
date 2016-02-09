@@ -1,9 +1,7 @@
 package org.observe.util;
 
 import java.util.Iterator;
-import java.util.function.BiFunction;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
@@ -18,42 +16,8 @@ import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeToken;
 
-import prisms.lang.Type;
-
 /** Utility methods for observables */
 public class ObservableUtils {
-	/**
-	 * @param function The function
-	 * @return The return type of the function
-	 */
-	public static Type getReturnType(Function<?, ?> function) {
-		return getReturnType(function, "apply", Object.class);
-	}
-
-	/**
-	 * @param function The function
-	 * @return The return type of the function
-	 */
-	public static Type getReturnType(BiFunction<?, ?, ?> function) {
-		return getReturnType(function, "apply", Object.class, Object.class);
-	}
-
-	/**
-	 * @param function The function
-	 * @return The return type of the function
-	 */
-	public static Type getReturnType(java.util.function.Supplier<?> function) {
-		return getReturnType(function, "get");
-	}
-
-	private static Type getReturnType(Object function, String methodName, Class<?>... types) {
-		try {
-			return new Type(function.getClass().getMethod(methodName, types).getGenericReturnType());
-		} catch(NoSuchMethodException | SecurityException e) {
-			throw new IllegalStateException("No apply method on a function?", e);
-		}
-	}
-
 	/**
 	 * Turns a list of observable values into a list composed of those holders' values
 	 *

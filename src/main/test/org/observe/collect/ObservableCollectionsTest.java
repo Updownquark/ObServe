@@ -51,8 +51,6 @@ import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeToken;
 
-import prisms.lang.Type;
-
 /** Tests observable collections and their default implementations */
 public class ObservableCollectionsTest {
 	private static final int COLLECTION_TEST_DEPTH = 5;

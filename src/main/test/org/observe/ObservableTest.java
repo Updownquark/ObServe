@@ -3,8 +3,7 @@ package org.observe;
 import static org.junit.Assert.assertEquals;
 
 import org.junit.Test;
-
-import prisms.lang.Type;
+import org.qommons.TriFunction;
 
 import com.google.common.reflect.TypeToken;
 
