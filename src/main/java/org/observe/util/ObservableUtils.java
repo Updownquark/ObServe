@@ -1,7 +1,10 @@
 package org.observe.util;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.function.Consumer;
 
 import org.observe.DefaultObservable;
@@ -236,13 +239,49 @@ public class ObservableUtils {
 
 	/**
 	 * Turns an observable value containing an observable collection into the contents of the value
-	 * 
+	 *
 	 * @param type The type of elements in the collection
 	 * @param collectionObservable The observable value
 	 * @return A collection representing the contents of the value, or a zero-length collection when null
 	 */
 	public static <T> ObservableCollection<T> flattenValue(TypeToken<T> type,
 			ObservableValue<ObservableCollection<T>> collectionObservable) {
+		class EndingObservableElement implements ObservableElement<T> {
+			private final ObservableElement<T> theWrapped;
+			private final ObservableElement<T> theEndingWrapped;
+			private final Observer<Void> theEndControl;
+
+			EndingObservableElement(ObservableElement<T> wrap) {
+				theWrapped = wrap;
+				DefaultObservable<Void> end = new DefaultObservable<>();
+				theEndControl = end.control(null);
+				theEndingWrapped = theWrapped.takeUntil(end);
+			}
+
+			@Override
+			public TypeToken<T> getType() {
+				return theWrapped.getType();
+			}
+
+			@Override
+			public T get() {
+				return theWrapped.get();
+			}
+
+			@Override
+			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+				return theEndingWrapped.subscribe(observer);
+			}
+
+			@Override
+			public ObservableValue<T> persistent() {
+				return theWrapped.persistent();
+			}
+
+			void end() {
+				theEndControl.onNext(null);
+			}
+		}
 		class FlattenedCollectionObservable implements ObservableCollection.PartialCollectionImpl<T> {
 			@Override
 			public TypeToken<T> getType() {
@@ -277,21 +316,43 @@ public class ObservableUtils {
 			public Subscription onElement(Consumer<? super ObservableElement<T>> onElement) {
 				return collectionObservable.subscribe(new Observer<ObservableValueEvent<ObservableCollection<T>>>() {
 					private ObservableCollection<T> theCurrent;
-					private DefaultObservable<Void> theEnd;
-					private Observer<Void> theEndControl;
+					private final Map<ObservableElement<T>, EndingObservableElement> theElements = new LinkedHashMap<>();
 
 					@Override
 					public <V extends ObservableValueEvent<ObservableCollection<T>>> void onNext(V event) {
-						theEndControl.onNext(null);
+						clearCurrent();
 						theCurrent = event.getValue();
 						if (theCurrent != null) {
-							theCurrent.onElement(element -> onElement.accept(element.takeUntil(theEnd)));
+							theCurrent.onElement(element -> {
+								EndingObservableElement ending = new EndingObservableElement(element);
+								element.subscribe(new Observer<ObservableValueEvent<T>>() {
+									@Override
+									public <V2 extends ObservableValueEvent<T>> void onNext(V2 event2) {
+										if (!event2.isInitial())
+											return;
+										theElements.put(element, ending);
+									}
+
+									@Override
+									public <V2 extends ObservableValueEvent<T>> void onCompleted(V2 event2) {
+										theElements.remove(element);
+									}
+								});
+								onElement.accept(ending);
+							});
 						}
 					}
 
 					@Override
 					public <V extends ObservableValueEvent<ObservableCollection<T>>> void onCompleted(V event) {
-						theEndControl.onNext(null);
+						clearCurrent();
+					}
+
+					private void clearCurrent() {
+						ArrayList<EndingObservableElement> endings = new ArrayList<>(theElements.values());
+						theElements.clear();
+						for (int i = endings.size() - 1; i >= 0; i--)
+							endings.get(i).end();
 						theCurrent = null;
 					}
 				});
@@ -302,12 +363,53 @@ public class ObservableUtils {
 
 	/**
 	 * Turns an observable value containing an observable list into the contents of the value
-	 * 
+	 *
 	 * @param type The type of elements in the list
 	 * @param listObservable The observable value
 	 * @return A list representing the contents of the value, or a zero-length list when null
 	 */
 	public static <T> ObservableList<T> flattenListValue(TypeToken<T> type, ObservableValue<ObservableList<T>> listObservable) {
+		class EndingObservableElement implements ObservableOrderedElement<T> {
+			private final ObservableOrderedElement<T> theWrapped;
+			private final ObservableOrderedElement<T> theEndingWrapped;
+			private final Observer<Void> theEndControl;
+
+			EndingObservableElement(ObservableOrderedElement<T> wrap) {
+				theWrapped = wrap;
+				DefaultObservable<Void> end = new DefaultObservable<>();
+				theEndControl = end.control(null);
+				theEndingWrapped = theWrapped.takeUntil(end);
+			}
+
+			@Override
+			public TypeToken<T> getType() {
+				return theWrapped.getType();
+			}
+
+			@Override
+			public int getIndex() {
+				return theWrapped.getIndex();
+			}
+
+			@Override
+			public T get() {
+				return theWrapped.get();
+			}
+
+			@Override
+			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+				return theEndingWrapped.subscribe(observer);
+			}
+
+			@Override
+			public ObservableValue<T> persistent() {
+				return theWrapped.persistent();
+			}
+
+			void end() {
+				theEndControl.onNext(null);
+			}
+		}
 		class FlattenedListObservable implements ObservableList.PartialListImpl<T> {
 			@Override
 			public TypeToken<T> getType() {
@@ -316,13 +418,13 @@ public class ObservableUtils {
 
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
-				return ObservableValue.flatten(new TypeToken<CollectionSession>() {}, listObservable.mapV(list -> list.getSession()));
+				return ObservableValue.flatten(new TypeToken<CollectionSession>() {}, listObservable.mapV(coll -> coll.getSession()));
 			}
 
 			@Override
 			public int size() {
-				ObservableList<T> list = listObservable.get();
-				return list == null ? 0 : list.size();
+				ObservableCollection<T> coll = listObservable.get();
+				return coll == null ? 0 : coll.size();
 			}
 
 			@Override
@@ -335,30 +437,51 @@ public class ObservableUtils {
 
 			@Override
 			public Transaction lock(boolean write, Object cause) {
-				ObservableList<T> list = listObservable.get();
-				return list == null ? () -> {
-				} : list.lock(write, cause);
+				ObservableCollection<T> coll = listObservable.get();
+				return coll == null ? () -> {
+				} : coll.lock(write, cause);
 			}
 
 			@Override
 			public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<T>> onElement) {
 				return listObservable.subscribe(new Observer<ObservableValueEvent<ObservableList<T>>>() {
 					private ObservableList<T> theCurrent;
-					private DefaultObservable<Void> theEnd = new DefaultObservable<>();
-					private Observer<Void> theEndControl = theEnd.control(null);
+					private final ArrayList<EndingObservableElement> theElements = new ArrayList<>();
 
 					@Override
 					public <V extends ObservableValueEvent<ObservableList<T>>> void onNext(V event) {
-						theEndControl.onNext(null);
+						clearCurrent();
 						theCurrent = event.getValue();
 						if (theCurrent != null) {
-							theCurrent.onOrderedElement(element -> onElement.accept(element.takeUntil(theEnd)));
+							theCurrent.onOrderedElement(element -> {
+								EndingObservableElement ending = new EndingObservableElement(element);
+								element.subscribe(new Observer<ObservableValueEvent<T>>() {
+									@Override
+									public <V2 extends ObservableValueEvent<T>> void onNext(V2 event2) {
+										if (!event2.isInitial())
+											return;
+										theElements.add(element.getIndex(), ending);
+									}
+
+									@Override
+									public <V2 extends ObservableValueEvent<T>> void onCompleted(V2 event2) {
+										theElements.remove(element.getIndex());
+									}
+								});
+								onElement.accept(ending);
+							});
 						}
 					}
 
 					@Override
 					public <V extends ObservableValueEvent<ObservableList<T>>> void onCompleted(V event) {
-						theEndControl.onNext(null);
+						clearCurrent();
+					}
+
+					private void clearCurrent() {
+						for (int i = theElements.size() - 1; i >= 0; i--)
+							theElements.get(i).end();
+						theElements.clear();
 						theCurrent = null;
 					}
 				});
