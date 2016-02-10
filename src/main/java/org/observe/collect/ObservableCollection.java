@@ -310,7 +310,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 */
 	default <T> ObservableCollection<T> map(TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse) {
 		return d().debug(new MappedObservableCollection<>(this, type, map, reverse)).from("map", this).using("map", map)
-			.using("reverse", reverse).get();
+				.using("reverse", reverse).get();
 	}
 
 	/**
@@ -392,7 +392,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 */
 	default <T> ObservableCollection<T> filter(Class<T> type) {
 		return d().label(filterMap(TypeToken.of(type), value -> type.isInstance(value) ? type.cast(value) : null, value -> (E) value, true))
-			.tag("filterType", type).get();
+				.tag("filterType", type).get();
 	}
 
 	/**
@@ -402,7 +402,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 */
 	default <T> ObservableCollection<T> filterMap(Function<? super E, T> filterMap) {
 		return filterMap((TypeToken<T>) TypeToken.of(filterMap.getClass()).resolveType(Function.class.getTypeParameters()[1]), filterMap,
-			null, false);
+				null, false);
 	}
 
 	/**
@@ -427,15 +427,15 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @return A collection containing every element in this collection for which the mapping function returns a non-null value
 	 */
 	default <T> ObservableCollection<T> filterMap(TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse,
-		boolean staticFilter) {
+			boolean staticFilter) {
 		if(type == null)
 			type = (TypeToken<T>) TypeToken.of(map.getClass()).resolveType(Function.class.getTypeParameters()[1]);
 		if(staticFilter)
 			return d().debug(new StaticFilteredCollection<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
-				.using("reverse", reverse).get();
+					.using("reverse", reverse).get();
 		else
 			return d().debug(new DynamicFilteredCollection<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
-				.using("reverse", reverse).get();
+					.using("reverse", reverse).get();
 	}
 
 	/**
@@ -555,6 +555,93 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}).from("find", this).using("filter", filter).get();
 	}
 
+	/** @return An observable value containing the only value in this collection while its size==1, otherwise null TODO TEST ME! */
+	default ObservableValue<E> only() {
+		return d().debug(new ObservableValue<E>() {
+			private final TypeToken<E> type = ObservableCollection.this.getType().wrap();
+
+			@Override
+			public TypeToken<E> getType() {
+				return type;
+			}
+
+			@Override
+			public E get() {
+				return size() == 1 ? iterator().next() : null;
+			}
+
+			@Override
+			public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
+				boolean[] initialized = new boolean[1];
+				final Object key = new Object();
+				class OnlyElement implements Consumer<ObservableElement<E>> {
+					private Collection<ObservableElement<E>> theElements = new LinkedHashSet<>();
+					private E theValue;
+
+					@Override
+					public void accept(ObservableElement<E> element) {
+						theElements.add(element);
+						element.subscribe(new Observer<ObservableValueEvent<E>>() {
+							@Override
+							public <V3 extends ObservableValueEvent<E>> void onNext(V3 event) {
+								if (event.isInitial()) {
+									if (theElements.isEmpty())
+										newValue(event.getValue(), event);
+									else
+										newValue(null, event);
+								} else if (theElements.size() == 1)
+									newValue(event.getValue(), event);
+							}
+
+							@Override
+							public <V3 extends ObservableValueEvent<E>> void onCompleted(V3 event) {
+								theElements.remove(element);
+								if (theElements.isEmpty())
+									newValue(null, event);
+								else if (theElements.size() == 1)
+									newValue(theElements.iterator().next().get(), event);
+							}
+						});
+					}
+
+					private void newValue(E value, ObservableValueEvent<E> cause) {
+						E oldValue = theValue;
+						theValue = value;
+						if (initialized[0]) {
+							CollectionSession session = getSession().get();
+							if (session == null)
+								observer.onNext(createChangeEvent(oldValue, theValue, null));
+							else {
+								session.putIfAbsent(key, "oldValue", oldValue);
+								session.put(key, "newValue", theValue);
+							}
+						}
+					}
+				}
+				OnlyElement collOnEl = new OnlyElement();
+				Subscription collSub = ObservableCollection.this.onElement(collOnEl);
+				Subscription transSub = getSession().subscribe(new Observer<ObservableValueEvent<CollectionSession>>() {
+					@Override
+					public <V2 extends ObservableValueEvent<CollectionSession>> void onNext(V2 value) {
+						CollectionSession completed = value.getOldValue();
+						if (completed == null)
+							return;
+						E oldBest = (E) completed.get(key, "oldValue");
+						E newBest = (E) completed.get(key, "newValue");
+						if (oldBest == null && newBest == null)
+							return;
+						observer.onNext(createChangeEvent(oldBest, newBest, value));
+					}
+				});
+				observer.onNext(createInitialEvent(collOnEl.theValue));
+				return () -> {
+					collSub.unsubscribe();
+					transSub.unsubscribe();
+				};
+			}
+		}).from("only", this).get();
+	}
+
 	/**
 	 * @param <T> The type of the argument value
 	 * @param <V> The type of the new observable collection
@@ -588,9 +675,9 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @return An observable collection containing this collection's elements combined with the given argument
 	 */
 	default <T, V> ObservableCollection<V> combine(ObservableValue<T> arg, TypeToken<V> type, BiFunction<? super E, ? super T, V> func,
-		BiFunction<? super V, ? super T, E> reverse) {
+			BiFunction<? super V, ? super T, E> reverse) {
 		return d().debug(new CombinedObservableCollection<>(this, type, arg, func, reverse)).from("combine", this).from("with", arg)
-			.using("combination", func).using("reverse", reverse).get();
+				.using("combination", func).using("reverse", reverse).get();
 	}
 
 	/**
@@ -635,7 +722,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @return The reduced value
 	 */
 	default <T> ObservableValue<T> reduce(TypeToken<T> type, T init, BiFunction<? super T, ? super E, T> add,
-		BiFunction<? super T, ? super E, T> remove) {
+			BiFunction<? super T, ? super E, T> remove) {
 		return d().debug(new ObservableValue<T>() {
 			@Override
 			public TypeToken<T> getType() {
@@ -900,7 +987,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	public static <T> ObservableCollection<T> flatten(ObservableCollection<? extends ObservableCollection<? extends T>> coll) {
 		class ComposedObservableCollection implements PartialCollectionImpl<T> {
 			private final TypeToken<T> theType = (TypeToken<T>) coll.getType()
-				.resolveType(ObservableCollection.class.getTypeParameters()[0]);
+					.resolveType(ObservableCollection.class.getTypeParameters()[0]);
 			private final CombinedCollectionSessionObservable theSession = new CombinedCollectionSessionObservable(coll);
 
 			@Override
@@ -986,23 +1073,23 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						subColl.subscribe(new Observer<ObservableValueEvent<? extends ObservableCollection<? extends T>>>() {
 							@Override
 							public <V2 extends ObservableValueEvent<? extends ObservableCollection<? extends T>>> void onNext(
-								V2 subCollEvent) {
+									V2 subCollEvent) {
 								if(subCollEvent.getOldValue() != null && subCollEvent.getOldValue() != subCollEvent.getValue()) {
 									Subscription subCollSub = subCollSubscriptions.get(subCollEvent.getOldValue());
 									if(subCollSub != null)
 										subCollSub.unsubscribe();
 								}
 								Subscription subCollSub = subCollEvent.getValue().onElement(
-									subElement -> observer.accept(d()
-										.debug(new FlattenedElement<>((ObservableElement<T>) subElement, subColl))
-										.from("element", ComposedObservableCollection.this).tag("wrappedCollectionElement", subColl)
-										.tag("wrappedSubElement", subElement).get()));
+										subElement -> observer.accept(d()
+												.debug(new FlattenedElement<>((ObservableElement<T>) subElement, subColl))
+												.from("element", ComposedObservableCollection.this).tag("wrappedCollectionElement", subColl)
+												.tag("wrappedSubElement", subElement).get()));
 								subCollSubscriptions.put(subCollEvent.getValue(), subCollSub);
 							}
 
 							@Override
 							public <V2 extends ObservableValueEvent<? extends ObservableCollection<? extends T>>> void onCompleted(
-								V2 subCollEvent) {
+									V2 subCollEvent) {
 								subCollSubscriptions.remove(subCollEvent.getValue()).unsubscribe();
 							}
 						});
@@ -1163,7 +1250,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		private final Function<? super T, E> theReverse;
 
 		protected MappedObservableCollection(ObservableCollection<E> wrap, TypeToken<T> type, Function<? super E, T> map,
-			Function<? super T, E> reverse) {
+				Function<? super T, E> reverse) {
 			theWrapped = wrap;
 			theType = type != null ? type : (TypeToken<T>) TypeToken.of(map.getClass()).resolveType(Function.class.getTypeParameters()[1]);
 			theMap = map;
@@ -1490,7 +1577,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 */
 	class StaticFilteredCollection<E, T> extends FilteredCollection<E, T> {
 		public StaticFilteredCollection(ObservableCollection<E> wrap, TypeToken<T> type, Function<? super E, T> map,
-			Function<? super T, E> reverse) {
+				Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
 
@@ -1511,7 +1598,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 */
 	class DynamicFilteredCollection<E, T> extends FilteredCollection<E, T> {
 		DynamicFilteredCollection(ObservableCollection<E> wrap, TypeToken<T> type, Function<? super E, T> map,
-			Function<? super T, E> reverse) {
+				Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
 
@@ -1658,7 +1745,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		private final SubCollectionTransactionManager theTransactionManager;
 
 		protected CombinedObservableCollection(ObservableCollection<E> wrap, TypeToken<V> type, ObservableValue<T> value,
-			BiFunction<? super E, ? super T, V> map, BiFunction<? super V, ? super T, E> reverse) {
+				BiFunction<? super E, ? super T, V> map, BiFunction<? super V, ? super T, E> reverse) {
 			theWrapped = wrap;
 			theType = type;
 			theValue = value;
@@ -1810,7 +1897,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			DefaultObservable<Void> unSubObs = new DefaultObservable<>();
 			Observer<Void> unSubControl = unSubObs.control(null);
 			Subscription collSub = theTransactionManager.onElement(theWrapped,
-				element -> onElement.accept(element.combineV(theMap, theValue).unsubscribeOn(unSubObs)), true);
+					element -> onElement.accept(element.combineV(theMap, theValue).unsubscribeOn(unSubObs)), true);
 			return () -> {
 				unSubControl.onCompleted(null);
 				collSub.unsubscribe();
@@ -1837,7 +1924,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			theWrapped = wrap;
 			theKeyMap = keyMap;
 			theKeyType = keyType != null ? keyType
-				: (TypeToken<K>) TypeToken.of(keyMap.getClass()).resolveType(Function.class.getTypeParameters()[1]);
+					: (TypeToken<K>) TypeToken.of(keyMap.getClass()).resolveType(Function.class.getTypeParameters()[1]);
 
 			theKeySet = ObservableSet.unique(theWrapped.map(theKeyMap));
 		}
@@ -2041,7 +2128,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			DefaultObservable<Void> unSubObs = new DefaultObservable<>();
 			Observer<Void> unSubControl = unSubObs.control(null);
 			Subscription collSub = theTransactionManager.onElement(theWrapped,
-				element -> onElement.accept(element.refresh(theRefresh).unsubscribeOn(unSubObs)), true);
+					element -> onElement.accept(element.refresh(theRefresh).unsubscribeOn(unSubObs)), true);
 			return () -> {
 				unSubControl.onCompleted(null);
 				collSub.unsubscribe();
