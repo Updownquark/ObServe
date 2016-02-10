@@ -1,7 +1,6 @@
 package org.observe.util.swing;
 
 import java.awt.EventQueue;
-import java.util.ArrayList;
 import java.util.IdentityHashMap;
 
 import javax.swing.ListModel;
@@ -12,7 +11,6 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableList;
 import org.observe.collect.OrderedCollectionChangeEvent;
-import org.qommons.IntList;
 
 /**
  * A swing ListModel backed by an ObservableList
@@ -65,40 +63,22 @@ public class ObservableListModel<E> implements ListModel<E> {
 		}));
 	}
 
-	private void handleEvent(ListDataListener l, OrderedCollectionChangeEvent<E> event){int[][] split = splitContiguous(event.indexes.toArray());
-	for (int[] indexes : split) {
-		ListDataEvent wrappedEvent = new ListDataEvent(ObservableListModel.this, getSwingType(event.type), indexes[0], indexes[1]);
-		switch (event.type) {
-		case add:
-			l.intervalAdded(wrappedEvent);
-			break;
-		case remove:
-			l.intervalRemoved(wrappedEvent);
-			break;
-		case set:
-			l.contentsChanged(wrappedEvent);
-			break;
-		}
-	}
-	}
-
-	private int[][] splitContiguous(int[] indexes) {
-		if (indexes.length == 0) {
-			return new int[0][];
-		}
-		IntList list = new IntList(true, true);
-		list.addAll(indexes);
-		ArrayList<int[]> split = new ArrayList<>();
-		split.add(new int[] { list.get(0), list.get(0) });
-		for (int i = 1; i < list.size(); i++) {
-			int[] lastSplit = split.get(split.size() - 1);
-			if (list.get(i) == lastSplit[1] + 1) {
-				lastSplit[1]++;
-			} else {
-				split.add(new int[] { list.get(i), list.get(i) });
+	private void handleEvent(ListDataListener l, OrderedCollectionChangeEvent<E> event) {
+		int[][] split = ObservableSwingUtils.getContinuousIntervals(event.indexes.toArray(), true);
+		for (int[] indexes : split) {
+			ListDataEvent wrappedEvent = new ListDataEvent(ObservableListModel.this, getSwingType(event.type), indexes[0], indexes[1]);
+			switch (event.type) {
+			case add:
+				l.intervalAdded(wrappedEvent);
+				break;
+			case remove:
+				l.intervalRemoved(wrappedEvent);
+				break;
+			case set:
+				l.contentsChanged(wrappedEvent);
+				break;
 			}
 		}
-		return split.toArray(new int[split.size()][]);
 	}
 
 	private int getSwingType(CollectionChangeType type) {

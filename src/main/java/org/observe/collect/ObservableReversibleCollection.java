@@ -99,7 +99,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	@Override
 	default <T> ObservableReversibleCollection<T> map(TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse) {
 		return d().debug(new MappedReversibleCollection<>(this, type, map, reverse)).from("map", this).using("map", map)
-			.using("reverse", reverse).get();
+				.using("reverse", reverse).get();
 	}
 
 	@Override
@@ -139,13 +139,13 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 
 	@Override
 	default <T> ObservableReversibleCollection<T> filterMap(TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse,
-		boolean staticFilter) {
+			boolean staticFilter) {
 		if(staticFilter)
 			return d().debug(new StaticFilteredReversibleCollection<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
-				.using("reverse", reverse).get();
+					.using("reverse", reverse).get();
 		else
 			return d().debug(new DynamicFilteredReversibleCollection<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
-				.using("reverse", reverse).get();
+					.using("reverse", reverse).get();
 	}
 
 	@Override
@@ -155,16 +155,16 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 
 	@Override
 	default <T, V> ObservableReversibleCollection<V> combine(ObservableValue<T> arg, TypeToken<V> type,
-		BiFunction<? super E, ? super T, V> func) {
+			BiFunction<? super E, ? super T, V> func) {
 		return combine(arg, type, func, null);
 	}
 
 	@Override
 	default <T, V> ObservableReversibleCollection<V> combine(ObservableValue<T> arg, TypeToken<V> type,
-		BiFunction<? super E, ? super T, V> func,
-		BiFunction<? super V, ? super T, E> reverse) {
+			BiFunction<? super E, ? super T, V> func,
+			BiFunction<? super V, ? super T, E> reverse) {
 		return d().debug(new CombinedReversibleCollection<>(this, arg, type, func, reverse)).from("combine", this).from("with", arg)
-			.using("combination", func).using("reverse", reverse).get();
+				.using("combination", func).using("reverse", reverse).get();
 	}
 
 	/**
@@ -339,7 +339,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 */
 	class OrderedReversibleCollectionFinder<E> extends OrderedCollectionFinder<E> {
 		protected OrderedReversibleCollectionFinder(ObservableReversibleCollection<E> collection, Predicate<? super E> filter,
-			boolean forward) {
+				boolean forward) {
 			super(collection, filter, forward);
 		}
 
@@ -371,7 +371,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 */
 	class MappedReversibleCollection<E, T> extends MappedOrderedCollection<E, T> implements ObservableReversibleCollection<T> {
 		protected MappedReversibleCollection(ObservableReversibleCollection<E> wrap, TypeToken<T> type, Function<? super E, T> map,
-			Function<? super T, E> reverse) {
+				Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
 
@@ -405,7 +405,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	class StaticFilteredReversibleCollection<E, T> extends StaticFilteredOrderedCollection<E, T> implements
 	ObservableReversibleCollection<T> {
 		public StaticFilteredReversibleCollection(ObservableReversibleCollection<E> wrap, TypeToken<T> type, Function<? super E, T> map,
-			Function<? super T, E> reverse) {
+				Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
 
@@ -433,7 +433,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 */
 	class DynamicFilteredReversibleCollection<E, T> extends DynamicFilteredOrderedCollection<E, T> implements ObservableReversibleCollection<T> {
 		public DynamicFilteredReversibleCollection(ObservableReversibleCollection<E> wrap, TypeToken<T> type, Function<? super E, T> map,
-			Function<? super T, E> reverse) {
+				Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
 
@@ -476,7 +476,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 */
 	class CombinedReversibleCollection<E, T, V> extends CombinedOrderedCollection<E, T, V> implements ObservableReversibleCollection<V> {
 		public CombinedReversibleCollection(ObservableReversibleCollection<E> collection, ObservableValue<T> value, TypeToken<V> type,
-			BiFunction<? super E, ? super T, V> map, BiFunction<? super V, ? super T, E> reverse) {
+				BiFunction<? super E, ? super T, V> map, BiFunction<? super V, ? super T, E> reverse) {
 			super(collection, value, type, map, reverse);
 		}
 
@@ -488,7 +488,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 		@Override
 		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<V>> onElement) {
 			return getManager().onElement(getWrapped(),
-				element -> onElement.accept((ObservableOrderedElement<V>) element.combineV(getMap(), getValue())), false);
+					element -> onElement.accept((ObservableOrderedElement<V>) element.combineV(getMap(), getValue())), false);
 		}
 
 		@Override
@@ -520,7 +520,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 		@Override
 		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<E>> onElement) {
 			return getManager().onElement(getWrapped(),
-				element -> onElement.accept((ObservableOrderedElement<E>) element.refresh(getRefresh())), false);
+					element -> onElement.accept((ObservableOrderedElement<E>) element.refresh(getRefresh())), false);
 		}
 
 		@Override
@@ -550,7 +550,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 			DefaultObservable<Void> unSubObs = new DefaultObservable<>();
 			Observer<Void> unSubControl = unSubObs.control(null);
 			Subscription collSub = getWrapped()
-				.onElementReverse(element -> onElement.accept(element.refreshForValue(getRefresh(), unSubObs)));
+					.onElementReverse(element -> onElement.accept(element.refreshForValue(getRefresh(), unSubObs)));
 			return () -> {
 				unSubControl.onCompleted(null);
 				collSub.unsubscribe();
@@ -601,7 +601,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 */
 	class ModFilteredReversibleCollection<E> extends ModFilteredOrderedCollection<E> implements ObservableReversibleCollection<E> {
 		public ModFilteredReversibleCollection(ObservableReversibleCollection<E> wrapped, Predicate<? super E> removeFilter,
-			Predicate<? super E> addFilter) {
+				Predicate<? super E> addFilter) {
 			super(wrapped, removeFilter, addFilter);
 		}
 
@@ -637,6 +637,23 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 						backing.remove();
 				}
 			};
+		}
+
+		@Override
+		public String toString() {
+			StringBuilder ret = new StringBuilder("[");
+			boolean first = true;
+			try (Transaction t = lock(false, null)) {
+				for (Object value : this) {
+					if (!first) {
+						ret.append(", ");
+					} else
+						first = false;
+					ret.append(value);
+				}
+			}
+			ret.append(']');
+			return ret.toString();
 		}
 	}
 
