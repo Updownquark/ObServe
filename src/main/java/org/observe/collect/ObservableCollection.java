@@ -1073,35 +1073,17 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			@Override
 			public Subscription onElement(Consumer<? super ObservableElement<T>> observer) {
 				return coll.onElement(new Consumer<ObservableElement<? extends ObservableCollection<? extends T>>>() {
-					private java.util.Map<ObservableCollection<?>, Subscription> subCollSubscriptions;
-
-					{
-						subCollSubscriptions = new org.qommons.ConcurrentIdentityHashMap<>();
-					}
-
 					@Override
 					public void accept(ObservableElement<? extends ObservableCollection<? extends T>> subColl) {
-						subColl.subscribe(new Observer<ObservableValueEvent<? extends ObservableCollection<? extends T>>>() {
-							@Override
-							public <V2 extends ObservableValueEvent<? extends ObservableCollection<? extends T>>> void onNext(
-									V2 subCollEvent) {
-								if(subCollEvent.getOldValue() != null && subCollEvent.getOldValue() != subCollEvent.getValue()) {
-									Subscription subCollSub = subCollSubscriptions.get(subCollEvent.getOldValue());
-									if(subCollSub != null)
-										subCollSub.unsubscribe();
+						subColl.act(subCollEvent -> {
+							if (subCollEvent.getValue() != null) {
+								Observable<?> until = subColl.noInit().fireOnComplete();
+								if (!subCollEvent.isInitial()) {
+									/* If we don't do this, the listener for the until will get added to the end of the queue and will
+									 * be called for the same change event we're in now.  So we skip one. */
+									until = until.skip(1);
 								}
-								Subscription subCollSub = subCollEvent.getValue().onElement(
-										subElement -> observer.accept(d()
-												.debug(new FlattenedElement<>((ObservableElement<T>) subElement, subColl))
-												.from("element", ComposedObservableCollection.this).tag("wrappedCollectionElement", subColl)
-												.tag("wrappedSubElement", subElement).get()));
-								subCollSubscriptions.put(subCollEvent.getValue(), subCollSub);
-							}
-
-							@Override
-							public <V2 extends ObservableValueEvent<? extends ObservableCollection<? extends T>>> void onCompleted(
-									V2 subCollEvent) {
-								subCollSubscriptions.remove(subCollEvent.getValue()).unsubscribe();
+								((ObservableCollection<T>) subCollEvent.getValue()).takeUntil(until).onElement(observer);
 							}
 						});
 					}
@@ -1133,22 +1115,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 					element.subscribe(new Observer<ObservableValueEvent<? extends Observable<T>>>() {
 						@Override
 						public <V2 extends ObservableValueEvent<? extends Observable<T>>> void onNext(V2 value) {
-							value.getValue().takeUntil(element.noInit()).subscribe(new Observer<T>() {
-								@Override
-								public <V3 extends T> void onNext(V3 value3) {
-									observer.onNext(value3);
-								}
-
-								@Override
-								public void onError(Throwable e) {
-									observer.onError(e);
-								}
-							});
-						}
-
-						@Override
-						public void onError(Throwable e) {
-							observer.onError(e);
+							Observable<?> until = element.noInit().fireOnComplete();
+							if (!value.isInitial())
+								until = until.skip(1);
+							value.getValue().takeUntil(until).subscribe(observer);
 						}
 					});
 				});
