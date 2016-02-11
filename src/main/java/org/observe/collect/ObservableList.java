@@ -196,13 +196,13 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 	@Override
 	default <T> ObservableList<T> filterMap(TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse,
-		boolean staticFilter) {
+			boolean staticFilter) {
 		if(staticFilter)
 			return d().debug(new StaticFilteredList<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
-				.using("reverse", reverse).get();
+					.using("reverse", reverse).get();
 		else
 			return d().debug(new DynamicFilteredList<>(this, type, map, reverse)).from("filterMap", this).using("map", map).using("reverse", reverse)
-				.get();
+					.get();
 	}
 
 	@Override
@@ -217,9 +217,9 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 	@Override
 	default <T, V> ObservableList<V> combine(ObservableValue<T> arg, TypeToken<V> type, BiFunction<? super E, ? super T, V> func,
-		BiFunction<? super V, ? super T, E> reverse) {
+			BiFunction<? super V, ? super T, E> reverse) {
 		return d().debug(new CombinedObservableList<>(this, arg, type, func, reverse)).from("combine", this).from("with", arg)
-			.using("combination", func).using("reverse", reverse).get();
+				.using("combination", func).using("reverse", reverse).get();
 	}
 
 	@Override
@@ -265,6 +265,11 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	@Override
 	default ObservableList<E> cached() {
 		return d().debug(new SafeCachedObservableList<>(this)).from("cached", this).get();
+	}
+
+	@Override
+	default ObservableList<E> takeUntil(Observable<?> until) {
+		return d().debug(new TakenUntilObservableList<>(this, until)).from("take", this).from("until", until).get();
 	}
 
 	@Override
@@ -370,7 +375,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		ConstantObservableList ret = d().debug(new ConstantObservableList()).tag("constant", list).get();
 		for(int i = 0; i < constList.size(); i++)
 			obsEls.add(d().debug(new ConstantObservableElement(constList.get(i), i)).from("element", ret).tag("value", constList.get(i))
-				.get());
+					.get());
 		return ret;
 	}
 
@@ -397,7 +402,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 				private final ObservableOrderedElement<? extends ObservableList<? extends T>> theSubList;
 
 				FlattenedListElement(ObservableOrderedElement<? extends T> subEl, List<FlattenedListElement> subListEls,
-					ObservableOrderedElement<? extends ObservableList<? extends T>> subList) {
+						ObservableOrderedElement<? extends ObservableList<? extends T>> subList) {
 					super((ObservableElement<T>) subEl, subList);
 					subListElements = subListEls;
 					theSubList = subList;
@@ -516,8 +521,8 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 								}
 								Consumer<ObservableOrderedElement<? extends T>> innerConsumer = subElement -> {
 									FlattenedListElement flatEl = d().debug(new FlattenedListElement(subElement, subListEls, subList))
-										.from("element", FlattenedObservableList.this).tag("wrappedCollectionElement", subList)
-										.tag("wrappedSubElement", subElement).get();
+											.from("element", FlattenedObservableList.this).tag("wrappedCollectionElement", subList)
+											.tag("wrappedSubElement", subElement).get();
 									subListEls.add(subElement.getIndex(), flatEl);
 									subElement.completed().act(x -> subListEls.remove(subElement.getIndex()));
 									onElement.accept(flatEl);
@@ -554,7 +559,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		if(lists.length == 0)
 			return constant(type);
 		ObservableList<ObservableList<? extends T>> wrapper = constant(
-			new TypeToken<ObservableList<? extends T>>() {}.where(new TypeParameter<T>() {}, type), lists);
+				new TypeToken<ObservableList<? extends T>>() {}.where(new TypeParameter<T>() {}, type), lists);
 		return flatten(wrapper);
 	}
 
@@ -1504,7 +1509,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	 */
 	class StaticFilteredList<E, T> extends StaticFilteredReversibleCollection<E, T> implements PartialFilteredListImpl<E, T> {
 		protected StaticFilteredList(ObservableList<E> wrap, TypeToken<T> type, Function<? super E, T> map,
-			Function<? super T, E> reverse) {
+				Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
 
@@ -1539,7 +1544,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	 */
 	class DynamicFilteredList<E, T> extends DynamicFilteredReversibleCollection<E, T> implements PartialFilteredListImpl<E, T> {
 		protected DynamicFilteredList(ObservableList<E> wrap, TypeToken<T> type, Function<? super E, T> map,
-			Function<? super T, E> reverse) {
+				Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
 
@@ -1573,7 +1578,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	 */
 	class CombinedObservableList<E, T, V> extends CombinedReversibleCollection<E, T, V> implements PartialListImpl<V> {
 		protected CombinedObservableList(ObservableList<E> wrap, ObservableValue<T> value, TypeToken<V> type,
-			BiFunction<? super E, ? super T, V> map, BiFunction<? super V, ? super T, E> reverse) {
+				BiFunction<? super E, ? super T, V> map, BiFunction<? super V, ? super T, E> reverse) {
 			super(wrap, value, type, map, reverse);
 		}
 
@@ -1651,7 +1656,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		@Override
 		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<E>> onElement) {
 			return getManager().onElement(getWrapped(),
-				element -> onElement.accept((ObservableOrderedElement<E>) element.refresh(getRefresh())), false);
+					element -> onElement.accept((ObservableOrderedElement<E>) element.refresh(getRefresh())), false);
 		}
 	}
 
@@ -1795,6 +1800,27 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		@Override
 		public ObservableList<E> cached() {
 			return this;
+		}
+	}
+
+	/**
+	 * Backs {@link ObservableList#takeUntil(Observable)}
+	 * 
+	 * @param <E> The type of elements in the collection
+	 */
+	class TakenUntilObservableList<E> extends TakenUntilOrderedCollection<E> implements PartialListImpl<E> {
+		public TakenUntilObservableList(ObservableList<E> wrap, Observable<?> until) {
+			super(wrap, until);
+		}
+
+		@Override
+		public ObservableList<E> getWrapped() {
+			return (ObservableList<E>) super.getWrapped();
+		}
+
+		@Override
+		public E get(int index) {
+			return getWrapped().get(index);
 		}
 	}
 

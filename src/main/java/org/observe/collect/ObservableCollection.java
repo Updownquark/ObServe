@@ -7,9 +7,11 @@ import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
@@ -977,6 +979,15 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 */
 	default ObservableCollection<E> cached() {
 		return d().debug(new SafeCachedObservableCollection<>(this)).from("cached", this).get();
+	}
+
+	/**
+	 * @param until The observable to end the collection on
+	 * @return A collection that mirrors this collection's values until the given observable fires a value, upon which the returned
+	 *         collection's elements will be removed and collection subscriptions unsubscribed
+	 */
+	default ObservableCollection<E> takeUntil(Observable<?> until) {
+		return d().debug(new TakenUntilObservableCollection<>(this, until)).from("take", this).from("until", until).get();
 	}
 
 	/**
@@ -2754,6 +2765,127 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		@Override
 		public String toString() {
 			return theWrapped.toString();
+		}
+	}
+
+	/**
+	 * Backs {@link ObservableCollection#takeUntil(Observable)}
+	 *
+	 * @param <E> The type of elements in the collection
+	 */
+	class TakenUntilObservableCollection<E> implements PartialCollectionImpl<E> {
+		private final ObservableCollection<E> theWrapped;
+		private final Observable<?> theUntil;
+
+		public TakenUntilObservableCollection(ObservableCollection<E> wrap, Observable<?> until) {
+			theWrapped = wrap;
+			theUntil = until;
+		}
+
+		/** @return The collection that this taken until collection wraps */
+		protected ObservableCollection<E> getWrapped() {
+			return theWrapped;
+		}
+
+		/** @return The observable that ends this collection */
+		protected Observable<?> getUntil() {
+			return theUntil;
+		}
+
+		@Override
+		public TypeToken<E> getType() {
+			return theWrapped.getType();
+		}
+
+		@Override
+		public int size() {
+			return theWrapped.size();
+		}
+
+		@Override
+		public Iterator<E> iterator() {
+			return theWrapped.iterator();
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			return theWrapped.getSession();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theWrapped.lock(write, cause);
+		}
+
+		@Override
+		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
+			final Map<ObservableElement<E>, TakenUntilElement<E>> elements = new HashMap<>();
+			Subscription[] collSub = new Subscription[] { theWrapped.onElement(element -> {
+				TakenUntilElement<E> untilEl = new TakenUntilElement<>(element);
+				elements.put(element, untilEl);
+				onElement.accept(untilEl);
+			}) };
+			Subscription untilSub = theUntil.act(v -> {
+				if (collSub[0] != null)
+					collSub[0].unsubscribe();
+				collSub[0] = null;
+				for (TakenUntilElement<E> el : elements.values())
+					el.end();
+				elements.clear();
+			});
+			return () -> {
+				if (collSub[0] != null)
+					collSub[0].unsubscribe();
+				collSub[0] = null;
+				untilSub.unsubscribe();
+			};
+		}
+	}
+
+	/**
+	 * An element in a {@link ObservableCollection.TakenUntilObservableCollection}
+	 *
+	 * @param <E> The type of value in the element
+	 */
+	class TakenUntilElement<E> implements ObservableElement<E> {
+		private final ObservableElement<E> theWrapped;
+		private final ObservableElement<E> theEndingElement;
+		private final Observer<Void> theEndControl;
+
+		public TakenUntilElement(ObservableElement<E> wrap) {
+			theWrapped = wrap;
+			DefaultObservable<Void> end = new DefaultObservable<>();
+			theEndingElement = theWrapped.takeUntil(end);
+			theEndControl = end.control(null);
+		}
+
+		/** @return The element that this element wraps */
+		protected ObservableElement<E> getWrapped() {
+			return theWrapped;
+		}
+
+		@Override
+		public TypeToken<E> getType() {
+			return theWrapped.getType();
+		}
+
+		@Override
+		public E get() {
+			return theWrapped.get();
+		}
+
+		@Override
+		public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
+			return theEndingElement.subscribe(observer);
+		}
+
+		@Override
+		public ObservableValue<E> persistent() {
+			return theWrapped.persistent();
+		}
+
+		protected void end() {
+			theEndControl.onNext(null);
 		}
 	}
 }

@@ -99,6 +99,31 @@ public interface Observable<T> {
 	}
 
 	/**
+	 * @return An observable that fires the same values as this observable, but calls its observers' {@link Observer#onNext(Object)} method
+	 *         as well when this observable completes.
+	 */
+	default Observable<T> fireOnComplete() {
+		Observable<T> outer = this;
+		return d().debug(new Observable<T>() {
+			@Override
+			public Subscription subscribe(Observer<? super T> observer) {
+				return outer.subscribe(new Observer<T>() {
+					@Override
+					public <V extends T> void onNext(V value) {
+						observer.onNext(value);
+					}
+
+					@Override
+					public <V extends T> void onCompleted(V value) {
+						observer.onNext(value);
+						observer.onCompleted(value);
+					}
+				});
+			}
+		}).from("fireOnComplete", this).get();
+	}
+
+	/**
 	 * @return An observable that returns the same values as this one except that any initialization events (for cold observables) will be
 	 *         ignored.
 	 */
@@ -155,19 +180,19 @@ public interface Observable<T> {
 	 */
 	default Observable<T> takeUntil(Observable<?> until) {
 		return d().debug(new ObservableTakenUntil<>(this, until, true)).from("take", this).from("until", until).tag("withCompletion", true)
-			.get();
+				.get();
 	}
 
 	/**
 	 * A different form of {@link #takeUntil(Observable)} that does not complete the observable when <code>until</code> fires, but merely
 	 * unsubscribes all subscriptions
-	 * 
+	 *
 	 * @param until the observable to watch
 	 * @return An observable that provides the same values as this observable until the first value is observed from the given observable
 	 */
 	default Observable<T> unsubscribeOn(Observable<?> until) {
 		return d().debug(new ObservableTakenUntil<>(this, until, false)).from("take", this).from("until", until)
-			.tag("withCompletion", false).get();
+				.tag("withCompletion", false).get();
 	}
 
 	/**
