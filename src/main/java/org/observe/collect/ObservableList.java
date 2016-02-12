@@ -394,6 +394,166 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	}
 
 	/**
+	 * Turns a list of observable values into a list composed of those holders' values
+	 *
+	 * @param <T> The type of elements held in the values
+	 * @param type The run-time type of elements held in the values
+	 * @param list The list to flatten
+	 * @return The flattened list
+	 */
+	public static <T> ObservableList<T> flattenListValues(TypeToken<T> type, ObservableList<? extends ObservableValue<T>> list) {
+		class FlattenedList implements ObservableList.PartialListImpl<T> {
+			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return list.getSession();
+			}
+
+			@Override
+			public Transaction lock(boolean write, Object cause) {
+				return list.lock(write, cause);
+			}
+
+			@Override
+			public TypeToken<T> getType() {
+				return type;
+			}
+
+			@Override
+			public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<T>> observer) {
+				return list.onElement(element -> observer.accept(new ObservableOrderedElement<T>() {
+					@Override
+					public TypeToken<T> getType() {
+						return type != null ? type : element.get().getType();
+					}
+
+					@Override
+					public T get() {
+						return get(element.get());
+					}
+
+					@Override
+					public int getIndex() {
+						return ((ObservableOrderedElement<?>) element).getIndex();
+					}
+
+					@Override
+					public ObservableValue<T> persistent() {
+						return ObservableValue.flatten(getType(), element.persistent());
+					}
+
+					private T get(ObservableValue<? extends T> value) {
+						return value == null ? null : value.get();
+					}
+
+					@Override
+					public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer2) {
+						ObservableOrderedElement<T> retObs = this;
+						return element.subscribe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends T>>>() {
+							@Override
+							public <V2 extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onNext(V2 value) {
+								if (value.getValue() != null) {
+									value.getValue().takeUntil(element.noInit()).act(innerEvent -> {
+										observer2.onNext(ObservableUtils.wrap(innerEvent, retObs));
+									});
+								} else if (value.isInitial())
+									observer2.onNext(retObs.createInitialEvent(null));
+								else
+									observer2.onNext(retObs.createChangeEvent(get(value.getOldValue()), null, value.getCause()));
+							}
+
+							@Override
+							public <V2 extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onCompleted(V2 value) {
+								if (value.isInitial())
+									observer2.onCompleted(retObs.createInitialEvent(get(value.getValue())));
+								else
+									observer2.onCompleted(
+											retObs.createChangeEvent(get(value.getOldValue()), get(value.getValue()), value.getCause()));
+							}
+						});
+					}
+				}));
+			}
+
+			@Override
+			public T get(int index) {
+				return list.get(index).get();
+			}
+
+			@Override
+			public int size() {
+				return list.size();
+			}
+
+			@Override
+			public String toString() {
+				return "flatValue(" + list + ")";
+			}
+		}
+		return new FlattenedList();
+	}
+
+	/**
+	 * Turns an observable value containing an observable list into the contents of the value
+	 *
+	 * @param type The type of elements in the list
+	 * @param listObservable The observable value
+	 * @return A list representing the contents of the value, or a zero-length list when null
+	 */
+	public static <T> ObservableList<T> flattenListValue(TypeToken<T> type, ObservableValue<ObservableList<T>> listObservable) {
+		class FlattenedListObservable implements ObservableList.PartialListImpl<T> {
+			@Override
+			public TypeToken<T> getType() {
+				return type;
+			}
+
+			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return ObservableValue.flatten(new TypeToken<CollectionSession>() {}, listObservable.mapV(coll -> coll.getSession()));
+			}
+
+			@Override
+			public int size() {
+				ObservableCollection<T> coll = listObservable.get();
+				return coll == null ? 0 : coll.size();
+			}
+
+			@Override
+			public T get(int index) {
+				ObservableList<T> list = listObservable.get();
+				if (list == null)
+					throw new IndexOutOfBoundsException(index + " of 0");
+				return list.get(index);
+			}
+
+			@Override
+			public Transaction lock(boolean write, Object cause) {
+				ObservableCollection<T> coll = listObservable.get();
+				return coll == null ? () -> {
+				} : coll.lock(write, cause);
+			}
+
+			@Override
+			public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<T>> onElement) {
+				return listObservable.subscribe(new Observer<ObservableValueEvent<ObservableList<T>>>() {
+					@Override
+					public <V extends ObservableValueEvent<ObservableList<T>>> void onNext(V event) {
+						if (event.getValue() != null) {
+							Observable<?> until = listObservable.noInit().fireOnComplete();
+							if (!event.isInitial()) {
+								/* If we don't do this, the listener for the until will get added to the end of the queue and will be
+								 * called for the same change event we're in now.  So we skip one. */
+								until = until.skip(1);
+							}
+							event.getValue().takeUntil(until).onOrderedElement(onElement);
+						}
+					}
+				});
+			}
+		}
+		return new FlattenedListObservable();
+	}
+
+	/**
 	 * @param <T> The super-type of all lists in the wrapping list
 	 * @param list The list to flatten
 	 * @return A list containing all elements of all lists in the outer list

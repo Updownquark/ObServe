@@ -22,7 +22,6 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableList;
 import org.observe.collect.ObservableOrderedCollection;
 import org.observe.collect.impl.ObservableArrayList;
-import org.observe.util.ObservableUtils;
 import org.observe.util.swing.ObservableComboBoxModel;
 import org.observe.util.swing.ObservableListModel;
 import org.observe.util.swing.ObservableListSelectionModel;
@@ -104,7 +103,7 @@ public class ObservableDemoGui extends JPanel {
 		theCategoryRemoveButton = new JButton("Remove Selected Category");
 		theCategoryRemoveButton
 		.addActionListener(evt -> theCategoryRemoveObservable.onNext((ValueCategory) theCategoryCombo.getSelectedItem()));
-		ObservableList<Integer> selectedValues = ObservableUtils.flattenListValue(new TypeToken<Integer>() {},
+		ObservableList<Integer> selectedValues = ObservableList.flattenListValue(new TypeToken<Integer>() {},
 				theSelectedCategory.mapV(cat -> cat.values));
 		theValueList = new JList<>(new ObservableListModel<>(selectedValues));
 		ObservableListSelectionModel<Integer> selectionModel = new ObservableListSelectionModel<>(selectedValues);
@@ -140,7 +139,7 @@ public class ObservableDemoGui extends JPanel {
 			private ObservableMultiMap<Long, Integer> theMap;
 
 			{
-				ObservableList<Integer> values = ObservableUtils.flattenListValue(new TypeToken<Integer>() {},
+				ObservableList<Integer> values = ObservableList.flattenListValue(new TypeToken<Integer>() {},
 						theSelectedCategory.mapV(cat -> cat.values));
 				theMap = values.groupBy(v -> Long.valueOf(v % 5));
 			}

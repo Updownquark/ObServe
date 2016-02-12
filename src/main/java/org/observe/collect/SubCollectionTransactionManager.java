@@ -10,7 +10,6 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.collect.impl.ObservableArrayList;
-import org.observe.util.ObservableUtils;
 import org.qommons.ListenerSet;
 
 import com.google.common.reflect.TypeToken;
@@ -55,7 +54,7 @@ class SubCollectionTransactionManager {
 			new TypeToken<ObservableValue<CollectionSession>>() {});
 		sessions.add(collection.getSession()); // The collection's session takes precedence
 		sessions.add(theInternalSession);
-		theExposedSession = ObservableUtils.flattenListValues(new TypeToken<CollectionSession>() {}, sessions)
+		theExposedSession = ObservableList.flattenListValues(new TypeToken<CollectionSession>() {}, sessions)
 			.findFirst(session -> session != null);
 		theSessionController = theInternalSession.control(null);
 

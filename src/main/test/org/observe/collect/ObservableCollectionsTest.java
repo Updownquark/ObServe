@@ -41,7 +41,6 @@ import org.observe.collect.impl.ObservableHashSet;
 import org.observe.collect.impl.ObservableLinkedList;
 import org.observe.collect.impl.ObservableTreeList;
 import org.observe.collect.impl.ObservableTreeSet;
-import org.observe.util.ObservableUtils;
 import org.qommons.QommonsTestUtils;
 import org.qommons.Transaction;
 
@@ -1526,7 +1525,7 @@ public class ObservableCollectionsTest {
 		}
 	}
 
-	/** Tests {@link ObservableUtils#flattenListValues(TypeToken, ObservableList)} */
+	/** Tests {@link ObservableList#flattenListValues(TypeToken, ObservableList)} */
 	@Test
 	public void flattenListValues() {
 		ObservableArrayList<ObservableValue<Integer>> list = new ObservableArrayList<>(new TypeToken<ObservableValue<Integer>>() {});
@@ -1543,7 +1542,7 @@ public class ObservableCollectionsTest {
 		list.addAll(java.util.Arrays.asList(value1, value2, value3, value4));
 
 		Integer [] received = new Integer[1];
-		ObservableUtils.flattenListValues(TypeToken.of(Integer.TYPE), list).findFirst(value -> value % 3 == 0).value()
+		ObservableList.flattenListValues(TypeToken.of(Integer.TYPE), list).findFirst(value -> value % 3 == 0).value()
 		.act(value -> received[0] = value);
 		assertEquals(Integer.valueOf(3), received[0]);
 		value3.set(4, null);

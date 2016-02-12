@@ -13,7 +13,6 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
-import org.observe.util.ObservableUtils;
 import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeParameter;
@@ -180,7 +179,7 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 	@Override
 	default ObservableCollection<V> values() {
 		TypeToken<ObservableValue<V>> obValType = new TypeToken<ObservableValue<V>>() {}.where(new TypeParameter<V>() {}, getValueType());
-		return ObservableUtils.flattenValues(getValueType(), keySet().map(obValType, this::observe));
+		return ObservableCollection.flattenValues(getValueType(), keySet().map(obValType, this::observe));
 	}
 
 	@Override
@@ -230,7 +229,7 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 		ObservableMap<K, V> outer = this;
 		return new ObservableMap<K, T>() {
 			private TypeToken<T> theValueType = (TypeToken<T>) TypeToken.of(map.getClass())
-				.resolveType(Function.class.getTypeParameters()[1]);
+					.resolveType(Function.class.getTypeParameters()[1]);
 
 			@Override
 			public Transaction lock(boolean write, Object cause) {

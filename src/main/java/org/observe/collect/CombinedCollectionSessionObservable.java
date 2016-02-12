@@ -6,7 +6,6 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
-import org.observe.util.ObservableUtils;
 import org.qommons.ListenerSet;
 
 import com.google.common.reflect.TypeToken;
@@ -28,7 +27,7 @@ public class CombinedCollectionSessionObservable implements ObservableValue<Coll
 
 	/** @param collection The collection of collections that this session observable is for */
 	public CombinedCollectionSessionObservable(ObservableCollection<? extends ObservableCollection<?>> collection) {
-		theWrappedSessionObservable = ObservableUtils
+		theWrappedSessionObservable = ObservableCollection
 			.flattenValues(SESSION_TYPE, collection.map(collect -> collect.getSession()))
 			.filterMap(null, session -> session, false)
 			.observeSize()

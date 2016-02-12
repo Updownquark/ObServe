@@ -28,6 +28,7 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
+import org.observe.util.ObservableUtils;
 import org.qommons.ListenerSet;
 import org.qommons.Transaction;
 
@@ -990,6 +991,173 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	}
 
 	/**
+	 * Turns a collection of observable values into a collection composed of those holders' values
+	 *
+	 * @param <T> The type of elements held in the values
+	 * @param type The run-time type of elements held in the values
+	 * @param collection The collection to flatten
+	 * @return The flattened collection
+	 */
+	public static <T> ObservableCollection<T> flattenValues(TypeToken<T> type,
+			ObservableCollection<? extends ObservableValue<T>> collection) {
+		class FlattenedCollection implements ObservableCollection.PartialCollectionImpl<T> {
+			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return collection.getSession();
+			}
+
+			@Override
+			public Transaction lock(boolean write, Object cause) {
+				return collection.lock(write, cause);
+			}
+
+			@Override
+			public TypeToken<T> getType() {
+				return type;
+			}
+
+			@Override
+			public Subscription onElement(Consumer<? super ObservableElement<T>> observer) {
+				return collection.onElement(element -> observer.accept(new ObservableElement<T>() {
+					@Override
+					public TypeToken<T> getType() {
+						return type != null ? type : element.get().getType();
+					}
+
+					@Override
+					public T get() {
+						return get(element.get());
+					}
+
+					@Override
+					public ObservableValue<T> persistent() {
+						return ObservableValue.flatten(getType(), element.persistent());
+					}
+
+					private T get(ObservableValue<? extends T> value) {
+						return value == null ? null : value.get();
+					}
+
+					@Override
+					public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer2) {
+						ObservableElement<T> retObs = this;
+						return element.subscribe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends T>>>() {
+							@Override
+							public <V2 extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onNext(V2 value) {
+								if (value.getValue() != null) {
+									value.getValue().takeUntil(element.noInit()).act(innerEvent -> {
+										observer2.onNext(ObservableUtils.wrap(innerEvent, retObs));
+									});
+								} else if (value.isInitial())
+									observer2.onNext(retObs.createInitialEvent(null));
+								else
+									observer2.onNext(retObs.createChangeEvent(get(value.getOldValue()), null, value.getCause()));
+							}
+
+							@Override
+							public <V2 extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onCompleted(V2 value) {
+								if (value.isInitial())
+									observer2.onCompleted(retObs.createInitialEvent(get(value.getValue())));
+								else
+									observer2.onCompleted(
+											retObs.createChangeEvent(get(value.getOldValue()), get(value.getValue()), value.getCause()));
+							}
+						});
+					}
+				}));
+			}
+
+			@Override
+			public Iterator<T> iterator() {
+				return new Iterator<T>() {
+					private final Iterator<? extends ObservableValue<T>> wrapped = collection.iterator();
+
+					@Override
+					public boolean hasNext() {
+						return wrapped.hasNext();
+					}
+
+					@Override
+					public T next() {
+						return wrapped.next().get();
+					}
+
+					@Override
+					public void remove() {
+						wrapped.remove();
+					}
+				};
+			}
+
+			@Override
+			public int size() {
+				return collection.size();
+			}
+		}
+		return new FlattenedCollection();
+	}
+
+	/**
+	 * Turns an observable value containing an observable collection into the contents of the value
+	 *
+	 * @param type The type of elements in the collection
+	 * @param collectionObservable The observable value
+	 * @return A collection representing the contents of the value, or a zero-length collection when null
+	 */
+	public static <T> ObservableCollection<T> flattenValue(TypeToken<T> type,
+			ObservableValue<ObservableCollection<T>> collectionObservable) {
+		class FlattenedCollectionObservable implements ObservableCollection.PartialCollectionImpl<T> {
+			@Override
+			public TypeToken<T> getType() {
+				return type;
+			}
+
+			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return ObservableValue.flatten(new TypeToken<CollectionSession>() {}, collectionObservable.mapV(coll -> coll.getSession()));
+			}
+
+			@Override
+			public int size() {
+				ObservableCollection<T> coll = collectionObservable.get();
+				return coll == null ? 0 : coll.size();
+			}
+
+			@Override
+			public Iterator<T> iterator() {
+				ObservableCollection<T> coll = collectionObservable.get();
+				return coll == null ? Collections.EMPTY_LIST.iterator() : coll.iterator();
+			}
+
+			@Override
+			public Transaction lock(boolean write, Object cause) {
+				ObservableCollection<T> coll = collectionObservable.get();
+				return coll == null ? () -> {
+				} : coll.lock(write, cause);
+			}
+
+			@Override
+			public Subscription onElement(Consumer<? super ObservableElement<T>> onElement) {
+				return collectionObservable.subscribe(new Observer<ObservableValueEvent<ObservableCollection<T>>>() {
+					@Override
+					public <V extends ObservableValueEvent<ObservableCollection<T>>> void onNext(V event) {
+						if (event.getValue() != null) {
+							Observable<?> until = collectionObservable.noInit().fireOnComplete();
+							if (!event.isInitial()) {
+								/* If we don't do this, the listener for the until will get added to the end of the queue and will be
+								 * called for the same change event we're in now.  So we skip one. */
+								until = until.skip(1);
+							}
+							event.getValue().takeUntil(until).onElement(onElement);
+						}
+					}
+				});
+			}
+		}
+		return new FlattenedCollectionObservable();
+	}
+
+	/**
 	 * @param <T> An observable collection that contains all elements in all collections in the wrapping collection
 	 * @param coll The collection to flatten
 	 * @return A collection containing all elements of all collections in the outer collection
@@ -1138,7 +1306,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 	/**
 	 * A simple toString implementation for collections
-	 * 
+	 *
 	 * @param coll The collection to print
 	 * @return The string representation of the collection's contents
 	 */
