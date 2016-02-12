@@ -9,7 +9,6 @@ import java.util.ConcurrentModificationException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
-import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.concurrent.locks.Lock;
@@ -371,6 +370,11 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 			public int size() {
 				return constList.size();
 			}
+
+			@Override
+			public String toString() {
+				return ObservableList.toString(this);
+			}
 		}
 		ConstantObservableList ret = d().debug(new ConstantObservableList()).tag("constant", list).get();
 		for(int i = 0; i < constList.size(); i++)
@@ -394,158 +398,8 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	 * @param list The list to flatten
 	 * @return A list containing all elements of all lists in the outer list
 	 */
-	public static <T> ObservableList<T> flatten(ObservableList<? extends ObservableList<? extends T>> list) {
-		class FlattenedObservableList implements PartialListImpl<T> {
-			class FlattenedListElement extends FlattenedElement<T> implements ObservableOrderedElement<T> {
-				private final List<FlattenedListElement> subListElements;
-
-				private final ObservableOrderedElement<? extends ObservableList<? extends T>> theSubList;
-
-				FlattenedListElement(ObservableOrderedElement<? extends T> subEl, List<FlattenedListElement> subListEls,
-						ObservableOrderedElement<? extends ObservableList<? extends T>> subList) {
-					super((ObservableElement<T>) subEl, subList);
-					subListElements = subListEls;
-					theSubList = subList;
-				}
-
-				@Override
-				protected ObservableOrderedElement<T> getSubElement() {
-					return (ObservableOrderedElement<T>) super.getSubElement();
-				}
-
-				@Override
-				public int getIndex() {
-					int subListIndex = theSubList.getIndex();
-					int ret = 0;
-					for(int i = 0; i < subListIndex; i++)
-						ret += list.get(i).size();
-					int innerIndex = getSubElement().getIndex();
-					for(int i = 0; i < innerIndex; i++)
-						if(!subListElements.get(i).isRemoved())
-							ret++;
-					return ret;
-				}
-			}
-
-			private final CombinedCollectionSessionObservable theSession = new CombinedCollectionSessionObservable(list);
-
-			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return theSession;
-			}
-
-			@Override
-			public Transaction lock(boolean write, Object cause) {
-				Transaction outerLock = list.lock(write, cause);
-				Transaction [] innerLocks = new Transaction[list.size()];
-				int i = 0;
-				for(ObservableCollection<? extends T> c : list) {
-					innerLocks[i++] = c.lock(write, cause);
-				}
-				return new Transaction() {
-					private volatile boolean hasRun;
-
-					@Override
-					public void close() {
-						if(hasRun)
-							return;
-						hasRun = true;
-						for(int j = innerLocks.length - 1; j >= 0; j--)
-							innerLocks[j].close();
-						outerLock.close();
-					}
-
-					@Override
-					protected void finalize() {
-						if(!hasRun)
-							close();
-					}
-				};
-			}
-
-			@Override
-			public TypeToken<T> getType() {
-				return (TypeToken<T>) list.getType().resolveType(ObservableCollection.class.getTypeParameters()[0]);
-			}
-
-			@Override
-			public T get(int index) {
-				int idx = index;
-				for(ObservableList<? extends T> subList : list) {
-					if(idx < subList.size())
-						return subList.get(idx);
-					else
-						idx -= subList.size();
-				}
-				throw new IndexOutOfBoundsException(index + " out of " + size());
-			}
-
-			@Override
-			public int size() {
-				int ret = 0;
-				for(ObservableList<? extends T> subList : list)
-					ret += subList.size();
-				return ret;
-			}
-
-			@Override
-			public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<T>> onElement) {
-				return onElement(onElement, true);
-			}
-
-			@Override
-			public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<T>> onElement) {
-				return onElement(onElement, false);
-			}
-
-			private Subscription onElement(Consumer<? super ObservableOrderedElement<T>> onElement, boolean forward) {
-				Consumer<ObservableOrderedElement<? extends ObservableList<? extends T>>> outerConsumer;
-				outerConsumer = new Consumer<ObservableOrderedElement<? extends ObservableList<? extends T>>>() {
-					private Map<ObservableList<?>, Subscription> subListSubscriptions;
-
-					{
-						subListSubscriptions = new org.qommons.ConcurrentIdentityHashMap<>();
-					}
-
-					@Override
-					public void accept(ObservableOrderedElement<? extends ObservableList<? extends T>> subList) {
-						subList.subscribe(new Observer<ObservableValueEvent<? extends ObservableList<? extends T>>>() {
-							private List<FlattenedListElement> subListEls = new java.util.ArrayList<>();
-
-							@Override
-							public <V2 extends ObservableValueEvent<? extends ObservableList<? extends T>>> void onNext(V2 subListEvent) {
-								if(subListEvent.getOldValue() != null && subListEvent.getOldValue() != subListEvent.getValue()) {
-									Subscription subListSub = subListSubscriptions.get(subListEvent.getOldValue());
-									if(subListSub != null)
-										subListSub.unsubscribe();
-								}
-								Consumer<ObservableOrderedElement<? extends T>> innerConsumer = subElement -> {
-									FlattenedListElement flatEl = d().debug(new FlattenedListElement(subElement, subListEls, subList))
-											.from("element", FlattenedObservableList.this).tag("wrappedCollectionElement", subList)
-											.tag("wrappedSubElement", subElement).get();
-									subListEls.add(subElement.getIndex(), flatEl);
-									subElement.completed().act(x -> subListEls.remove(subElement.getIndex()));
-									onElement.accept(flatEl);
-								};
-								Subscription subListSub;
-								if(forward)
-									subListSub = subListEvent.getValue().onOrderedElement(innerConsumer);
-								else
-									subListSub = subListEvent.getValue().onElementReverse(innerConsumer);
-								subListSubscriptions.put(subListEvent.getValue(), subListSub);
-							}
-
-							@Override
-							public <V2 extends ObservableValueEvent<? extends ObservableList<? extends T>>> void onCompleted(V2 subListEvent) {
-								subListSubscriptions.remove(subListEvent.getValue()).unsubscribe();
-							}
-						});
-					}
-				};
-				return forward ? list.onOrderedElement(outerConsumer) : list.onElementReverse(outerConsumer);
-			}
-		}
-		return d().debug(new FlattenedObservableList()).from("flatten", list).get();
+	public static <T> ObservableList<T> flatten(ObservableList<? extends ObservableList<T>> list) {
+		return d().debug(new FlattenedObservableList<>(list)).from("flatten", list).get();
 	}
 
 	/**
@@ -554,12 +408,12 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	 * @param lists The lists to flatten
 	 * @return An observable list that contains all the values of the given lists
 	 */
-	public static <T> ObservableList<T> flattenLists(TypeToken<T> type, ObservableList<? extends T>... lists) {
+	public static <T> ObservableList<T> flattenLists(TypeToken<T> type, ObservableList<T>... lists) {
 		type = type.wrap();
 		if(lists.length == 0)
 			return constant(type);
-		ObservableList<ObservableList<? extends T>> wrapper = constant(
-				new TypeToken<ObservableList<? extends T>>() {}.where(new TypeParameter<T>() {}, type), lists);
+		ObservableList<ObservableList<T>> wrapper = constant(new TypeToken<ObservableList<T>>() {}.where(new TypeParameter<T>() {}, type),
+				lists);
 		return flatten(wrapper);
 	}
 
@@ -1805,7 +1659,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 	/**
 	 * Backs {@link ObservableList#takeUntil(Observable)}
-	 * 
+	 *
 	 * @param <E> The type of elements in the collection
 	 */
 	class TakenUntilObservableList<E> extends TakenUntilOrderedCollection<E> implements PartialListImpl<E> {
@@ -1837,6 +1691,39 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		@Override
 		protected ObservableList<E> getWrapped() {
 			return (ObservableList<E>) super.getWrapped();
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableList#flatten(ObservableList)}
+	 *
+	 * @param <E> The type of elements in the collection
+	 */
+	class FlattenedObservableList<E> extends FlattenedOrderedCollection<E> implements PartialListImpl<E> {
+		public FlattenedObservableList(ObservableList<? extends ObservableList<E>> outer) {
+			super(outer);
+		}
+
+		@Override
+		protected ObservableList<? extends ObservableList<E>> getOuter() {
+			return (ObservableList<? extends ObservableList<E>>) super.getOuter();
+		}
+
+		@Override
+		public E get(int index) {
+			int idx = index;
+			for (ObservableList<? extends E> subList : getOuter()) {
+				if (idx < subList.size())
+					return subList.get(idx);
+				else
+					idx -= subList.size();
+			}
+			throw new IndexOutOfBoundsException(index + " out of " + size());
+		}
+
+		@Override
+		public String toString() {
+			return ObservableList.toString(this);
 		}
 	}
 

@@ -49,11 +49,6 @@ class ExposedObservableElement<E> implements ObservableElement<E> {
 				ObservableValueEvent<E> event2 = createChangeEvent(event.getOldValue(), event.getValue(), event.getCause());
 				observer.onCompleted(event2);
 			}
-
-			@Override
-			public void onError(Throwable e) {
-				observer.onError(e);
-			}
 		});
 		theSubscriptions.add(ret);
 		return ret;

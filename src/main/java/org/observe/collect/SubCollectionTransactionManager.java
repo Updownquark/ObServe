@@ -104,7 +104,6 @@ class SubCollectionTransactionManager {
 	 *
 	 * @param <E> The type of the elements in the collection
 	 * @param collection The parent of the collection to observe
-	 * @param refresh The observable to refresh the collection on
 	 * @param onElement The code to deliver the elements to the observer
 	 * @param forward Whether to iterate forward through initial elements, or backward (only for {@link ObservableReversibleCollection
 	 *            reversible} collections)

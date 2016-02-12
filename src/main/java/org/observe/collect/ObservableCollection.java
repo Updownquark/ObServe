@@ -28,7 +28,6 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
-import org.observe.util.ObservableUtils;
 import org.qommons.ListenerSet;
 import org.qommons.Transaction;
 
@@ -1089,6 +1088,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 					}
 				});
 			}
+
+			@Override
+			public String toString() {
+				return ObservableCollection.toString(this);
+			}
 		}
 		return d().debug(new ComposedObservableCollection()).from("flatten", coll).get();
 	}
@@ -1130,6 +1134,28 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 				return "fold(" + coll + ")";
 			}
 		}).from("fold", coll).get();
+	}
+
+	/**
+	 * A simple toString implementation for collections
+	 * 
+	 * @param coll The collection to print
+	 * @return The string representation of the collection's contents
+	 */
+	public static String toString(ObservableCollection<?> coll) {
+		StringBuilder ret = new StringBuilder("(");
+		boolean first = true;
+		try (Transaction t = coll.lock(false, null)) {
+			for (Object value : coll) {
+				if (!first) {
+					ret.append(", ");
+				} else
+					first = false;
+				ret.append(value);
+			}
+		}
+		ret.append(')');
+		return ret.toString();
 	}
 
 	/**
@@ -2188,80 +2214,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	}
 
 	/**
-	 * An element in a {@link ObservableCollection#flatten(ObservableCollection) flattened} collection
-	 *
-	 * @param <T> The type of the element
-	 */
-	class FlattenedElement<T> implements ObservableElement<T> {
-		private final ObservableElement<T> subElement;
-
-		private final ObservableElement<? extends ObservableCollection<? extends T>> subCollectionEl;
-		private boolean isRemoved;
-
-		/**
-		 * @param subEl The sub-collection element to wrap
-		 * @param subColl The element containing the sub-collection
-		 */
-		protected FlattenedElement(ObservableElement<T> subEl, ObservableElement<? extends ObservableCollection<? extends T>> subColl) {
-			if(subEl == null)
-				throw new NullPointerException();
-			subElement = subEl;
-			subCollectionEl = subColl;
-			subColl.completed().act(value -> isRemoved = true);
-		}
-
-		/** @return The element in the outer collection containing the inner collection that contains this element's wrapped element */
-		protected ObservableElement<? extends ObservableCollection<? extends T>> getSubCollectionElement() {
-			return subCollectionEl;
-		}
-
-		/** @return The wrapped sub-collection element */
-		protected ObservableElement<T> getSubElement() {
-			return subElement;
-		}
-
-		@Override
-		public ObservableValue<T> persistent() {
-			return subElement;
-		}
-
-		/** @return Whether this element has been removed or not */
-		protected boolean isRemoved() {
-			return isRemoved;
-		}
-
-		@Override
-		public TypeToken<T> getType() {
-			return subElement.getType();
-		}
-
-		@Override
-		public T get() {
-			return subElement.get();
-		}
-
-		@Override
-		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer2) {
-			return subElement.takeUntil(subCollectionEl.completed()).subscribe(new Observer<ObservableValueEvent<T>>() {
-				@Override
-				public <V extends ObservableValueEvent<T>> void onNext(V event) {
-					observer2.onNext(ObservableUtils.wrap(event, FlattenedElement.this));
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<T>> void onCompleted(V event) {
-					observer2.onCompleted(ObservableUtils.wrap(event, FlattenedElement.this));
-				}
-			});
-		}
-
-		@Override
-		public String toString() {
-			return "flattened(" + subElement.toString() + ")";
-		}
-	}
-
-	/**
 	 * An observable collection that cannot be modified directly, but reflects the value of a wrapped collection as it changes
 	 *
 	 * @param <E> The type of elements in the collection
@@ -2810,6 +2762,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 				untilSub.unsubscribe();
 			};
 		}
+
+		@Override
+		public String toString() {
+			return theWrapped.toString();
+		}
 	}
 
 	/**
@@ -2856,6 +2813,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		protected void end() {
 			theEndControl.onNext(null);
+		}
+
+		@Override
+		public String toString() {
+			return theWrapped.toString();
 		}
 	}
 }

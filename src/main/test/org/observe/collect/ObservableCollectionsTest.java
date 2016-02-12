@@ -77,7 +77,7 @@ public class ObservableCollectionsTest {
 	private static <T extends Collection<Integer>> void testCollection(T coll, Consumer<? super T> check, int depth) {
 		if(coll instanceof ObservableCollection)
 			check = (Consumer<? super T>) testingObservableCollection((ObservableCollection<Integer>) coll,
-				(Consumer<? super ObservableCollection<Integer>>) check, depth);
+					(Consumer<? super ObservableCollection<Integer>>) check, depth);
 
 		if(coll instanceof List)
 			testList((List<Integer>) coll, (Consumer<? super List<Integer>>) check, depth);
@@ -90,7 +90,7 @@ public class ObservableCollectionsTest {
 	}
 
 	private static <T extends ObservableCollection<Integer>> Checker<ObservableCollection<Integer>> testingObservableCollection(T coll,
-		Consumer<? super T> check, int depth) {
+			Consumer<? super T> check, int depth) {
 
 		boolean ordered = coll instanceof ObservableOrderedCollection;
 		ArrayList<Integer> synced = new ArrayList<>();
@@ -233,7 +233,7 @@ public class ObservableCollectionsTest {
 				assertThat(groupedSynced.keySet(), collectionsEqual(groupKeySet, false));
 				for(Integer groupKey : groupKeySet) {
 					List<Integer> values = synced.stream().filter(v -> Objects.equals(groupFn.apply(v), groupKey))
-						.collect(Collectors.toList());
+							.collect(Collectors.toList());
 					assertThat(grouped.get(groupKey), collectionsEqual(values, ordered));
 					assertThat(groupedSynced.get(groupKey), collectionsEqual(values, ordered));
 				}
@@ -422,7 +422,7 @@ public class ObservableCollectionsTest {
 	 * @return The subscription to use to terminate the synchronization
 	 */
 	public static <K, V, C extends Collection<V>> Subscription sync(ObservableMultiMap<K, V> map, Map<K, C> synced,
-		Supplier<? extends C> collectCreator) {
+			Supplier<? extends C> collectCreator) {
 		return map.keySet().onElement(el -> el.subscribe(new Observer<ObservableValueEvent<K>>() {
 			@Override
 			public <E extends ObservableValueEvent<K>> void onNext(E event) {
@@ -527,8 +527,8 @@ public class ObservableCollectionsTest {
 		assertThat(coll, containsAll(0, 75, 50, 11, 99, 50)); // 50 twice. Test containsAll
 		// 100 not in coll. 50 in list twice. Test removeAll.
 		assertTrue(coll.removeAll(
-			// Easier to debug this way
-			asList(0, 50, 100, 10, 90, 20, 80, 30, 70, 40, 60, 50)));
+				// Easier to debug this way
+				asList(0, 50, 100, 10, 90, 20, 80, 30, 70, 40, 60, 50)));
 		assertEquals(90, coll.size());
 		if(check != null)
 			check.accept(coll);
@@ -538,8 +538,8 @@ public class ObservableCollectionsTest {
 
 		assertThat(coll, containsAll(1, 2, 11, 99));
 		coll.retainAll(
-			// Easier to debug this way
-			asList(1, 51, 101, 11, 91, 21, 81, 31, 71, 41, 61, 51)); // 101 not in coll. 51 in list twice. Test retainAll.
+				// Easier to debug this way
+				asList(1, 51, 101, 11, 91, 21, 81, 31, 71, 41, 61, 51)); // 101 not in coll. 51 in list twice. Test retainAll.
 		assertEquals(10, coll.size());
 		if(check != null)
 			check.accept(coll);
@@ -669,7 +669,7 @@ public class ObservableCollectionsTest {
 	}
 
 	private static void testSubSet(NavigableSet<Integer> subSet, Integer min, boolean minInclude, Integer max, boolean maxInclude,
-		Consumer<? super NavigableSet<Integer>> check) {
+			Consumer<? super NavigableSet<Integer>> check) {
 		int startSize = subSet.size();
 		int size = startSize;
 		ArrayList<Integer> remove = new ArrayList<>();
@@ -732,8 +732,8 @@ public class ObservableCollectionsTest {
 		testBasicCollection(list, check);
 
 		assertTrue(list.addAll(
-			// Easier to debug this way
-			sequence(10, null, false)));
+				// Easier to debug this way
+				sequence(10, null, false)));
 		assertEquals(10, list.size());
 		if(check != null)
 			check.accept(list);
@@ -746,14 +746,14 @@ public class ObservableCollectionsTest {
 		if(check != null)
 			check.accept(list);
 		assertTrue(list.addAll(
-			// Easier to debug this way
-			sequence(10, v -> v + 20, false)));
+				// Easier to debug this way
+				sequence(10, v -> v + 20, false)));
 		assertEquals(20, list.size());
 		if(check != null)
 			check.accept(list);
 		assertTrue(list.addAll(10,
-			// Easier to debug this way
-			sequence(10, v -> v + 10, false))); // Test addAll at index
+				// Easier to debug this way
+				sequence(10, v -> v + 10, false))); // Test addAll at index
 		assertEquals(30, list.size());
 		if(check != null)
 			check.accept(list);
@@ -1143,8 +1143,8 @@ public class ObservableCollectionsTest {
 	@Test
 	public void testObservableLinkedList() {
 		testCollection(new ObservableLinkedList<>(TypeToken.of(Integer.class)),
-			// Easier to debug this way
-			list -> list.validate(), 0);
+				// Easier to debug this way
+				list -> list.validate(), 0);
 	}
 
 	/** Runs a barrage of tests on {@link ObservableTreeList} */
@@ -2231,7 +2231,7 @@ public class ObservableCollectionsTest {
 		ObservableArrayList<Integer> list = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
 
 		List<Integer> compare = new ArrayList<>();
-		ObservableOrderedCollection.sort(list, null).onElement(element -> {
+		list.sorted(Integer::compareTo).onElement(element -> {
 			ObservableOrderedElement<Integer> orderedEl = (ObservableOrderedElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
@@ -2267,11 +2267,14 @@ public class ObservableCollectionsTest {
 		}
 	}
 
-	/** Tests {@link ObservableOrderedCollection#flatten(ObservableOrderedCollection, java.util.Comparator)} */
+	/**
+	 * Tests {@link ObservableOrderedCollection#flatten(ObservableOrderedCollection)} and
+	 * {@link ObservableOrderedCollection#sorted(Comparator)}
+	 */
 	@Test
 	public void observableOrderedFlatten() {
-		observableOrderedFlatten(Comparable::compareTo);
 		observableOrderedFlatten(null);
+		observableOrderedFlatten(Comparable::compareTo);
 	}
 
 	private void observableOrderedFlatten(java.util.Comparator<Integer> comparator) {
@@ -2302,7 +2305,10 @@ public class ObservableCollectionsTest {
 			}
 		}
 
-		Subscription sub = ObservableOrderedCollection.flatten(outer, comparator).onElement(element -> {
+		ObservableOrderedCollection<Integer> flat = ObservableOrderedCollection.flatten(outer);
+		if (comparator != null)
+			flat = flat.sorted(comparator);
+		Subscription sub = flat.onElement(element -> {
 			ObservableOrderedElement<Integer> orderedEl = (ObservableOrderedElement<Integer>) element;
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override

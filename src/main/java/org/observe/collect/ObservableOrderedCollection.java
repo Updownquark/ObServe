@@ -3,13 +3,11 @@ package org.observe.collect;
 import static org.observe.ObservableDebug.d;
 
 import java.util.ArrayList;
-import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -22,6 +20,7 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.util.ObservableUtils;
+import org.qommons.ArrayUtils;
 import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeToken;
@@ -233,6 +232,14 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		return d().debug(new ElementRefreshingOrderedCollection<>(this, refire)).from("refreshEach", this).using("on", refire).get();
 	}
 
+	/**
+	 * @param compare The comparator to use to sort this collection's elements
+	 * @return A new collection containing all the same elements as this collection, but ordered according to the given comparator
+	 */
+	default ObservableOrderedCollection<E> sorted(Comparator<? super E> compare) {
+		return d().debug(new SortedOrderedCollectionWrapper<>(this, compare)).from("sorted", this).using("compare", compare).get();
+	}
+
 	@Override
 	default ObservableOrderedCollection<E> immutable() {
 		return d().debug(new ImmutableOrderedCollection<>(this)).from("immutable", this).get();
@@ -274,35 +281,18 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	/**
-	 * @param <E> The type of the collection to sort
-	 * @param coll The collection whose elements to sort
-	 * @param compare The comparator to sort the elements
-	 * @return An observable collection containing all elements in <code>coll</code> (even multiples for which <code>compare</code>
-	 *         {@link Comparator#compare(Object, Object) .compare} returns 0), sorted according to <code>compare()</code>.
-	 */
-	public static <E> ObservableOrderedCollection<E> sort(ObservableCollection<E> coll, java.util.Comparator<? super E> compare) {
-		if(compare == null) {
-			if(!Comparable.class.isAssignableFrom(coll.getType().wrap().getRawType()))
-				throw new IllegalArgumentException("No natural ordering for collection of type " + coll.getType());
-			compare = (Comparator<? super E>) (E o1, E o2) -> ((Comparable<? super E>) o1).compareTo(o2);
-		}
-		return d().debug(new SortedOrderedCollectionWrapper<>(coll, compare)).from("sort", coll).using("compare", compare).get();
-	}
-
-	/**
 	 * Flattens a collection of ordered collections. The inner collections must be sorted according to the given comparator in order for the
 	 * result to be correctly sorted.
 	 *
 	 * @param <E> The super-type of all collections in the wrapping collection
 	 * @param list The collection to flatten
-	 * @param compare The comparator to compare elements between collections. May be null.
 	 * @return A collection containing all elements of all collections in the outer collection, sorted according to the given comparator,
 	 *         then by order in the outer collection.
 	 */
-	public static <E> ObservableOrderedCollection<E> flatten(ObservableOrderedCollection<? extends ObservableOrderedCollection<E>> list,
-			Comparator<? super E> compare) {
-		return d().debug(new FlattenedOrderedCollection<>(list, compare)).from("flatten", list).using("compare", compare).get();
+	public static <E> ObservableOrderedCollection<E> flatten(ObservableOrderedCollection<? extends ObservableOrderedCollection<E>> list) {
+		return d().debug(new FlattenedOrderedCollection<>(list)).from("flatten", list).get();
 	}
+
 
 	/**
 	 * Finds something in an {@link ObservableOrderedCollection}
@@ -367,28 +357,32 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
 			final Object key = new Object();
 			int [] index = new int[] {-1};
-			Subscription collSub = theCollection.onElement(new Consumer<ObservableElement<E>>() {
+			Subscription collSub = theCollection.onOrderedElement(new Consumer<ObservableOrderedElement<E>>() {
+				private List<ObservableOrderedElement<E>> theElements = new ArrayList<>();
 				private E theValue;
 
 				@Override
-				public void accept(ObservableElement<E> element) {
+				public void accept(ObservableOrderedElement<E> element) {
 					element.subscribe(new Observer<ObservableValueEvent<E>>() {
 						@Override
 						public <V3 extends ObservableValueEvent<E>> void onNext(V3 value) {
-							int listIndex = ((ObservableOrderedElement<?>) value.getObservable()).getIndex();
+							int listIndex = element.getIndex();
+							if (value.isInitial())
+								theElements.add(listIndex, element);
 							if(index[0] < 0 || isBetterIndex(listIndex, index[0])) {
 								if(theFilter.test(value.getValue()))
 									newBest(value.getValue(), listIndex);
 								else if(listIndex == index[0])
-									findNextBest(listIndex + 1);
+									findNextBest(listIndex);
 							}
 						}
 
 						@Override
 						public <V3 extends ObservableValueEvent<E>> void onCompleted(V3 value) {
+							theElements.remove(element.getIndex());
 							int listIndex = ((ObservableOrderedElement<?>) value.getObservable()).getIndex();
 							if(listIndex == index[0]) {
-								findNextBest(listIndex + 1);
+								findNextBest(listIndex);
 							} else if(listIndex < index[0])
 								index[0]--;
 						}
@@ -402,16 +396,23 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 						private void findNextBest(int newIndex) {
 							boolean found = false;
-							java.util.Iterator<E> iter = theCollection.iterator();
-							int idx = 0;
-							for(idx = 0; iter.hasNext() && idx < newIndex; idx++)
-								iter.next();
-							for(; iter.hasNext(); idx++) {
-								E val = iter.next();
-								if(theFilter.test(val)) {
-									found = true;
-									newBest(val, idx);
-									break;
+							if (isForward) {
+								for (int i = newIndex + 1; i < theElements.size(); i++) {
+									E value = theElements.get(i).get();
+									if (theFilter.test(value)) {
+										found = true;
+										newBest(value, i);
+										break;
+									}
+								}
+							} else {
+								for (int i = newIndex - 1; i >= 0; i--) {
+									E value = theElements.get(i).get();
+									if (theFilter.test(value)) {
+										found = true;
+										newBest(value, i);
+										break;
+									}
 								}
 							}
 							if(!found)
@@ -635,7 +636,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	/**
-	 * Backs elements in {@link ObservableOrderedCollection#sort(ObservableCollection, Comparator)}
+	 * Backs elements in {@link ObservableOrderedCollection#sorted(Comparator)}
 	 *
 	 * @param <E> The type of the element
 	 */
@@ -759,7 +760,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	/**
-	 * Backs {@link ObservableOrderedCollection#sort(ObservableCollection, Comparator)}
+	 * Backs {@link ObservableOrderedCollection#sorted(Comparator)}
 	 *
 	 * @param <E> The type of the elements in the collection
 	 */
@@ -856,7 +857,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	/**
-	 * Used by {@link ObservableOrderedCollection#sort(ObservableCollection, Comparator)}
+	 * Used by {@link ObservableOrderedCollection#sorted(Comparator)}
 	 *
 	 * @param <E> The type of the elements in the collection
 	 */
@@ -999,7 +1000,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 	/**
 	 * Backs {@link ObservableOrderedCollection#takeUntil(Observable)}
-	 * 
+	 *
 	 * @param <E> The type of elements in the collection
 	 */
 	class TakenUntilOrderedCollection<E> extends TakenUntilObservableCollection<E> implements ObservableOrderedCollection<E> {
@@ -1044,7 +1045,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 	/**
 	 * An element in a {@link ObservableOrderedCollection.TakenUntilOrderedCollection}
-	 * 
+	 *
 	 * @param <E> The type of value in the element
 	 */
 	class TakenUntilOrderedElement<E> extends TakenUntilElement<E> implements ObservableOrderedElement<E> {
@@ -1064,30 +1065,22 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	/**
-	 * Implements {@link ObservableOrderedCollection#flatten(ObservableOrderedCollection, Comparator)}
+	 * Implements {@link ObservableOrderedCollection#flatten(ObservableOrderedCollection)}
 	 *
 	 * @param <E> The type of the collection
 	 */
 	class FlattenedOrderedCollection<E> implements PartialCollectionImpl<E>, ObservableOrderedCollection<E> {
 		private final ObservableOrderedCollection<? extends ObservableOrderedCollection<E>> theOuter;
 
-		private final Comparator<? super E> theCompare;
-
 		private final CombinedCollectionSessionObservable theSession;
 
-		protected FlattenedOrderedCollection(ObservableOrderedCollection<? extends ObservableOrderedCollection<E>> outer,
-				Comparator<? super E> compare) {
+		protected FlattenedOrderedCollection(ObservableOrderedCollection<? extends ObservableOrderedCollection<E>> outer) {
 			theOuter = outer;
-			theCompare = compare;
 			theSession = new CombinedCollectionSessionObservable(theOuter);
 		}
 
 		protected ObservableOrderedCollection<? extends ObservableOrderedCollection<E>> getOuter() {
 			return theOuter;
-		}
-
-		public Comparator<? super E> comparator() {
-			return theCompare;
 		}
 
 		@Override
@@ -1139,243 +1132,119 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 		@Override
 		public Iterator<E> iterator() {
-			ArrayList<Iterator<? extends E>> iters = new ArrayList<>();
-			for(ObservableOrderedCollection<E> subList : theOuter)
-				iters.add(subList.iterator());
-			return new Iterator<E>() {
-				private Object [] subValues = new Object[iters.size()];
-
-				/** This list represents the indexes of the sub values, as they would be in a list sorted according to the comparator. */
-				private org.qommons.IntList indexes = new org.qommons.IntList(subValues.length);
-
-				private boolean initialized;
-
-				@Override
-				public boolean hasNext() {
-					if(!initialized)
-						init();
-					return !indexes.isEmpty();
-				}
-
-				@Override
-				public E next() {
-					if(!initialized)
-						init();
-					if(indexes.isEmpty())
-						throw new java.util.NoSuchElementException();
-					int nextIndex = indexes.remove(0);
-					E ret = (E) subValues[nextIndex];
-					if(iters.get(nextIndex).hasNext()) {
-						E nextVal = iters.get(nextIndex).next();
-						subValues[nextIndex] = nextVal;
-						int i;
-						for(i = 0; i < indexes.size(); i++) {
-							int comp = theCompare.compare(nextVal, (E) subValues[indexes.get(i)]);
-							if(comp < 0)
-								continue;
-							if(comp == 0 && nextIndex > indexes.get(i))
-								continue;
-						}
-						indexes.add(i, nextIndex);
-					} else
-						subValues[nextIndex] = null;
-					return ret;
-				}
-
-				private void init() {
-					initialized = true;
-					for(int i = 0; i < subValues.length; i++) {
-						if(iters.get(i).hasNext()) {
-							subValues[i] = iters.get(i).next();
-							indexes.add(i);
-						} else
-							indexes.add(-1);
-					}
-					org.qommons.ArrayUtils.sort(subValues.clone(), new org.qommons.ArrayUtils.SortListener<Object>() {
-						@Override
-						public int compare(Object o1, Object o2) {
-							if(o1 == null && o2 == null)
-								return 0;
-							// Place nulls last
-							else if(o1 == null)
-								return 1;
-							else if(o2 == null)
-								return -1;
-							return theCompare.compare((E) o1, (E) o2);
-						}
-
-						@Override
-						public void swapped(Object o1, int idx1, Object o2, int idx2) {
-							int firstIdx = indexes.get(idx1);
-							indexes.set(idx1, indexes.get(idx2));
-							indexes.set(idx2, firstIdx);
-						}
-					});
-					for(int i = 0; i < indexes.size(); i++) {
-						if(indexes.get(i) < 0) {
-							indexes.remove(i);
-							i--;
-						}
-					}
-				}
-			};
+			return ArrayUtils.flatten(theOuter).iterator();
 		}
 
 		@Override
 		public boolean contains(Object o) {
 			for(ObservableOrderedCollection<E> subList : theOuter)
-				if(subList.contains(o))
+				if (subList.contains(o))
 					return true;
 			return false;
 		}
 
 		@Override
-		public boolean containsAll(Collection<?> c) {
-			Object [] ca = c.toArray();
-			BitSet contained = new BitSet(ca.length);
-			for(ObservableOrderedCollection<E> subList : theOuter) {
-				for(int i = contained.nextClearBit(0); i < ca.length; i = contained.nextClearBit(i))
-					if(subList.contains(ca[i]))
-						contained.set(i);
-				if(contained.nextClearBit(0) == ca.length)
-					break;
+		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
+			class OuterNode {
+				final ObservableOrderedElement<? extends ObservableOrderedCollection<E>> element;
+				final List<ObservableOrderedElement<? extends E>> subElements;
+				Subscription subscription;
+
+				OuterNode(ObservableOrderedElement<? extends ObservableOrderedCollection<E>> el) {
+					element = el;
+					subElements = new ArrayList<>();
+				}
 			}
-			return contained.nextClearBit(0) == ca.length;
-		}
+			List<OuterNode> nodes = new ArrayList<>();
+			class InnerElement implements ObservableOrderedElement<E> {
+				private final ObservableOrderedElement<E> theWrapped;
+				private final OuterNode theOuterNode;
 
-		@Override
-		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> observer) {
-			/* This has to be handled a little differently.  If the initial elements were simply handed to the observer, they could be
-			 * out of order, since the first sub-collection might contain elements that compare greater to elements in a following
-			 * sub-collection.  Thus, for example, the first element fed to the observer might have non-zero index.  This violates the
-			 * contract of an ordered collection and will frequently cause problems in the observer.
-			 * Thus, we compile an ordered list of the initial elements and then send them all to the observer after all the lists have
-			 * delivered their initial elements.  Subsequent elements can be delivered in the normal way. */
-			final List<FlattenedOrderedElement<E>> initialElements = new ArrayList<>();
-			final boolean [] initializing = new boolean[] {true};
-			Subscription ret = theOuter.onElement(new Consumer<ObservableElement<? extends ObservableOrderedCollection<E>>>() {
-				private Map<ObservableOrderedCollection<E>, Subscription> subListSubscriptions;
-
-				{
-					subListSubscriptions = new org.qommons.ConcurrentIdentityHashMap<>();
+				InnerElement(ObservableOrderedElement<E> wrap, OuterNode outerNode) {
+					theWrapped = wrap;
+					theOuterNode = outerNode;
 				}
 
 				@Override
-				public void accept(ObservableElement<? extends ObservableOrderedCollection<E>> subList) {
-					subList.subscribe(new Observer<ObservableValueEvent<? extends ObservableOrderedCollection<E>>>() {
-						@Override
-						public <V2 extends ObservableValueEvent<? extends ObservableOrderedCollection<E>>> void onNext(V2 subListEvent) {
-							if(subListEvent.getOldValue() != null && subListEvent.getOldValue() != subListEvent.getValue()) {
-								Subscription subListSub = subListSubscriptions.get(subListEvent.getOldValue());
-								if(subListSub != null)
-									subListSub.unsubscribe();
-							}
-							Subscription subListSub = subListEvent.getValue().onElement(
-									subElement -> {
-										ObservableOrderedElement<E> subListEl = (ObservableOrderedElement<E>) subElement;
-										FlattenedOrderedElement<E> flatEl = d()
-												.debug(new FlattenedOrderedElement<>(theOuter, theCompare, subListEl, subList))
-												.from("element", this).tag("wrappedCollectionElement", subList).tag("wrappedSubElement", subListEl)
-												.get();
-										if(initializing[0]) {
-											int index = flatEl.getIndex();
-											while(initialElements.size() <= index)
-												initialElements.add(null);
-											initialElements.set(index, flatEl);
-										} else
-											observer.accept(flatEl);
-									});
-							subListSubscriptions.put(subListEvent.getValue(), subListSub);
-						}
-
-						@Override
-						public <V2 extends ObservableValueEvent<? extends ObservableOrderedCollection<E>>> void onCompleted(V2 subListEvent) {
-							subListSubscriptions.remove(subListEvent.getValue()).unsubscribe();
-						}
-					});
+				public TypeToken<E> getType() {
+					return theWrapped.getType();
 				}
-			});
-			initializing[0] = false;
-			for(FlattenedOrderedElement<E> el : initialElements)
-				observer.accept(el);
-			initialElements.clear();
-			return ret;
-		}
-	}
 
-	/**
-	 * Implements an element in {@link ObservableOrderedCollection#flatten(ObservableOrderedCollection, Comparator)}
-	 *
-	 * @param <E> The type of the element
-	 */
-	class FlattenedOrderedElement<E> extends FlattenedElement<E> implements ObservableOrderedElement<E> {
-		private final ObservableOrderedCollection<? extends ObservableOrderedCollection<E>> theOuter;
-
-		private final Comparator<? super E> theCompare;
-
-		protected FlattenedOrderedElement(ObservableOrderedCollection<? extends ObservableOrderedCollection<E>> outer,
-				Comparator<? super E> compare, ObservableOrderedElement<E> subEl,
-				ObservableElement<? extends ObservableOrderedCollection<E>> subList) {
-			super(subEl, subList);
-			theOuter = outer;
-			theCompare = compare;
-		}
-
-		protected ObservableOrderedCollection<? extends ObservableOrderedCollection<E>> getOuter() {
-			return theOuter;
-		}
-
-		protected Comparator<? super E> comparator() {
-			return theCompare;
-		}
-
-		@Override
-		protected ObservableOrderedElement<? extends ObservableOrderedCollection<E>> getSubCollectionElement() {
-			return (ObservableOrderedElement<? extends ObservableOrderedCollection<E>>) super.getSubCollectionElement();
-		}
-
-		@Override
-		protected ObservableOrderedElement<E> getSubElement() {
-			return (ObservableOrderedElement<E>) super.getSubElement();
-		}
-
-		@Override
-		public int getIndex() {
-			int subListIndex = getSubCollectionElement().getIndex();
-			int subElIdx = getSubElement().getIndex();
-			int ret = 0;
-			if(theCompare != null) {
-				E value = get();
-				int index = 0;
-				for(ObservableOrderedCollection<E> sub : theOuter) {
-					if(index == subListIndex) {
-						ret += subElIdx;
-						index++;
-						continue;
-					}
-					for(E el : sub) {
-						int comp = theCompare.compare(value, el);
-						if(comp < 0)
-							break;
-						if(index > subListIndex && comp == 0)
-							break;
-						ret++;
-					}
-					index++;
+				@Override
+				public E get() {
+					return theWrapped.get();
 				}
-			} else {
-				int i = 0;
-				for(ObservableOrderedCollection<E> sub : theOuter) {
-					if(i < subListIndex)
-						ret += sub.size();
-					else if(i == subListIndex && sub == getSubCollectionElement().get())
-						ret += subElIdx;
-					else
-						break;
-					i++;
+
+				@Override
+				public int getIndex() {
+					int index = 0;
+					for (int i = 0; i < theOuterNode.element.getIndex(); i++) {
+						index += nodes.get(i).subElements.size();
+					}
+					index += theWrapped.getIndex();
+					return index;
+				}
+
+				@Override
+				public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
+					return ObservableUtils.wrap(theWrapped, this, observer);
+				}
+
+				@Override
+				public ObservableValue<E> persistent() {
+					return theWrapped.persistent();
+				}
+
+				@Override
+				public String toString() {
+					return getType() + "list[" + getIndex() + "]";
 				}
 			}
-			return ret;
+			Subscription outerSub = theOuter.onOrderedElement(outerEl -> {
+				OuterNode outerNode = new OuterNode(outerEl);
+				outerEl.subscribe(new Observer<ObservableValueEvent<? extends ObservableOrderedCollection<E>>>() {
+					@Override
+					public <E1 extends ObservableValueEvent<? extends ObservableOrderedCollection<E>>> void onNext(E1 outerEvent) {
+						Observable<?> until = outerEl.noInit().fireOnComplete();
+						if (outerEvent.isInitial())
+							nodes.add(outerEl.getIndex(), outerNode);
+						else
+							until = until.skip(1);
+						outerNode.subscription = outerEvent.getValue().takeUntil(until).onOrderedElement(innerEl -> {
+							innerEl.subscribe(new Observer<ObservableValueEvent<? extends E>>() {
+								@Override
+								public <E2 extends ObservableValueEvent<? extends E>> void onNext(E2 innerEvent) {
+									if (innerEvent.isInitial())
+										outerNode.subElements.add(innerEl.getIndex(), innerEl);
+								}
+
+								@Override
+								public <E2 extends ObservableValueEvent<? extends E>> void onCompleted(E2 innerEvent) {
+									outerNode.subElements.remove(innerEl.getIndex());
+								}
+							});
+							InnerElement innerWrappedEl = new InnerElement(innerEl, outerNode);
+							onElement.accept(innerWrappedEl);
+						});
+					}
+
+					@Override
+					public <E1 extends ObservableValueEvent<? extends ObservableOrderedCollection<E>>> void onCompleted(E1 outerEvent) {
+						nodes.remove(outerEl.getIndex());
+					}
+				});
+			});
+			return () -> {
+				outerSub.unsubscribe();
+				for (int i = nodes.size() - 1; i >= 0; i--)
+					nodes.get(i).subscription.unsubscribe();
+				nodes.clear();
+			};
+		}
+
+		@Override
+		public String toString() {
+			return ObservableCollection.toString(this);
 		}
 	}
 }

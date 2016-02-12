@@ -48,7 +48,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 	 *            not actually create transactions.
 	 */
 	public ObservableHashSet(TypeToken<E> type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
-		Transactable sessionController) {
+			Transactable sessionController) {
 		theType = type.wrap();
 		theInternals = new HashSetInternals(lock, session, sessionController);
 
@@ -226,6 +226,11 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 				el.remove();
 			}
 		}
+	}
+
+	@Override
+	public String toString() {
+		return ObservableSet.toString(this);
 	}
 
 	private class HashSetInternals extends DefaultCollectionInternals<E> {
