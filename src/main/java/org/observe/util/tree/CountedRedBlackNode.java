@@ -263,6 +263,11 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 		protected int compare(E o1, E o2) {
 			return theCompare.compare(o1, o2);
 		}
+
+		@Override
+		public RedBlackNode delete() {
+			return super.delete();
+		}
 	}
 
 	/**
@@ -296,7 +301,7 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 
 		@Override
 		public <V> NavigableSet<V> getMappedSubSet(Function<? super E, V> outMap, Function<? super V, E> inMap, boolean reverse,
-			V fromElement, boolean fromInclusive, V toElement, boolean toInclusive) {
+				V fromElement, boolean fromInclusive, V toElement, boolean toInclusive) {
 			Function<? super V, E> in = inMap != null ? inMap : v -> (E) v;
 			Comparator<? super E> treeComparator = comparator();
 			Comparator<V> comparator = (o1, o2) -> treeComparator.compare(in.apply(o1), in.apply(o2));
@@ -338,7 +343,7 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 		 */
 		public static class MappedSubSet<E, V> extends RedBlackTreeSet.MappedSubSet<E, V> {
 			MappedSubSet(CountedRedBlackTreeSet<E, ?> tree, Function<? super E, V> outMap, Function<? super V, E> inMap, boolean reverse,
-				V min, boolean includeMin, V max, boolean includeMax) {
+					V min, boolean includeMin, V max, boolean includeMax) {
 				super(tree, outMap, inMap, reverse, min, includeMin, max, includeMax);
 			}
 
@@ -566,7 +571,7 @@ public abstract class CountedRedBlackNode<E> extends ValuedRedBlackNode<E> {
 			 * @param maxInclusive Whether to include the endKey in the sub-map
 			 */
 			public SubMap(CountedRedBlackTreeMap<K, V, ?> map, boolean reversed, K minKey, boolean minInclusive, K maxKey,
-				boolean maxInclusive) {
+					boolean maxInclusive) {
 				super(map, reversed, minKey, minInclusive, maxKey, maxInclusive);
 			}
 

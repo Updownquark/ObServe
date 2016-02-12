@@ -20,6 +20,9 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.util.ObservableUtils;
+import org.observe.util.tree.CountedRedBlackNode;
+import org.observe.util.tree.CountedRedBlackNode.DefaultNode;
+import org.observe.util.tree.CountedRedBlackNode.DefaultTreeSet;
 import org.qommons.ArrayUtils;
 import org.qommons.Transaction;
 
@@ -237,7 +240,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @return A new collection containing all the same elements as this collection, but ordered according to the given comparator
 	 */
 	default ObservableOrderedCollection<E> sorted(Comparator<? super E> compare) {
-		return d().debug(new SortedOrderedCollectionWrapper<>(this, compare)).from("sorted", this).using("compare", compare).get();
+		return d().debug(new SortedObservableCollection<>(this, compare)).from("sorted", this).using("compare", compare).get();
 	}
 
 	@Override
@@ -636,33 +639,17 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	/**
-	 * Backs elements in {@link ObservableOrderedCollection#sorted(Comparator)}
+	 * Implements {@link ObservableOrderedCollection#sorted(Comparator)}
 	 *
-	 * @param <E> The type of the element
+	 * @param <E> The type of the elements in the collection
 	 */
-	static class SortedElementWrapper<E> implements ObservableOrderedElement<E> {
-		private final SortedOrderedCollectionWrapper<E> theList;
+	class SortedObservableCollection<E> implements PartialCollectionImpl<E>, ObservableOrderedCollection<E> {
+		private final ObservableOrderedCollection<E> theWrapped;
+		private final Comparator<? super E> theCompare;
 
-		private final ObservableElement<E> theWrapped;
-
-		private final SortedOrderedWrapperObserver<E> theParentObserver;
-
-		SortedElementWrapper<E> theLeft;
-
-		SortedElementWrapper<E> theRight;
-
-		SortedElementWrapper(SortedOrderedCollectionWrapper<E> list, ObservableElement<E> wrap,
-				SortedOrderedWrapperObserver<E> parentObs, SortedElementWrapper<E> anchor) {
-			theList = list;
+		public SortedObservableCollection(ObservableOrderedCollection<E> wrap, Comparator<? super E> compare) {
 			theWrapped = wrap;
-			theParentObserver = parentObs;
-			if(anchor != null)
-				findPlace(theWrapped.get(), anchor);
-		}
-
-		@Override
-		public ObservableValue<E> persistent() {
-			return theWrapped.persistent();
+			theCompare = compare;
 		}
 
 		@Override
@@ -670,108 +657,9 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 			return theWrapped.getType();
 		}
 
-		@Override
-		public E get() {
-			return theWrapped.get();
-		}
-
-		@Override
-		public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
-			return theWrapped.subscribe(new Observer<ObservableValueEvent<E>>() {
-				@Override
-				public <V extends ObservableValueEvent<E>> void onNext(V event) {
-					if(theLeft != null && theList.getCompare().compare(event.getValue(), theLeft.get()) < 0) {
-						observer.onCompleted(ObservableUtils.wrap(event, SortedElementWrapper.this));
-						theLeft.theRight = theRight;
-						if(theRight != null)
-							theRight.theLeft = theLeft;
-						findPlace(event.getValue(), theLeft);
-						theParentObserver.theOuterObserver.accept(SortedElementWrapper.this);
-					} else if(theRight != null && theList.getCompare().compare(event.getValue(), theRight.get()) > 0) {
-						observer.onCompleted(ObservableUtils.wrap(event, SortedElementWrapper.this));
-						if(theLeft != null)
-							theLeft.theRight = theRight;
-						theRight.theLeft = theLeft;
-						findPlace(event.getValue(), theRight);
-						theParentObserver.theOuterObserver.accept(SortedElementWrapper.this);
-					} else
-						observer.onNext(ObservableUtils.wrap(event, SortedElementWrapper.this));
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<E>> void onCompleted(V event) {
-					if(theParentObserver.theAnchor == SortedElementWrapper.this) {
-						if(theLeft != null)
-							theParentObserver.theAnchor = theLeft;
-						else if(theRight != null)
-							theParentObserver.theAnchor = theRight;
-						else
-							theParentObserver.theAnchor = null;
-					}
-					observer.onCompleted(ObservableUtils.wrap(event, SortedElementWrapper.this));
-				}
-			});
-		}
-
-		@Override
-		public int getIndex() {
-			SortedElementWrapper<E> left = theLeft;
-			int ret = 0;
-			while(left != null) {
-				ret++;
-				left = left.theLeft;
-			}
-			return ret;
-		}
-
-		private void findPlace(E value, SortedElementWrapper<E> anchor) {
-			SortedElementWrapper<E> test = anchor;
-			int comp = theList.getCompare().compare(value, test.get());
-			if(comp >= 0) {
-				while(test.theRight != null && comp >= 0) {
-					test = test.theRight;
-					comp = theList.getCompare().compare(value, test.get());
-				}
-
-				if(comp >= 0) { // New element is right-most
-					theLeft = test;
-					test.theRight = this;
-				} else { // New element to be inserted to the left of test
-					theLeft = test.theLeft;
-					theRight = test;
-					test.theLeft = this;
-				}
-			} else {
-				while(test.theLeft != null && comp < 0) {
-					test = test.theLeft;
-					comp = theList.getCompare().compare(value, test.get());
-				}
-
-				if(comp < 0) { // New element is left-most
-					theRight = test;
-					test.theLeft = this;
-				} else { // New element to be inserted to the right of test
-					theLeft = test;
-					theRight = test.theRight;
-					test.theRight = this;
-				}
-			}
-		}
-	}
-
-	/**
-	 * Backs {@link ObservableOrderedCollection#sorted(Comparator)}
-	 *
-	 * @param <E> The type of the elements in the collection
-	 */
-	static class SortedOrderedCollectionWrapper<E> implements PartialCollectionImpl<E>, ObservableOrderedCollection<E> {
-		private final ObservableCollection<E> theWrapped;
-
-		private final Comparator<? super E> theCompare;
-
-		SortedOrderedCollectionWrapper(ObservableCollection<E> wrap, Comparator<? super E> compare) {
-			theWrapped = wrap;
-			theCompare = compare;
+		/** @return The comparator sorting this collection's elements */
+		public Comparator<? super E> comparator() {
+			return theCompare;
 		}
 
 		@Override
@@ -784,103 +672,125 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 			return theWrapped.lock(write, cause);
 		}
 
-		Comparator<? super E> getCompare() {
-			return theCompare;
-		}
-
-		@Override
-		public TypeToken<E> getType() {
-			return theWrapped.getType();
-		}
-
 		@Override
 		public int size() {
 			return theWrapped.size();
 		}
 
 		@Override
-		public boolean isEmpty() {
-			return theWrapped.isEmpty();
-		}
-
-		@Override
-		public boolean contains(Object o) {
-			return theWrapped.contains(o);
-		}
-
-		@Override
-		public boolean containsAll(Collection<?> c) {
-			return theWrapped.containsAll(c);
-		}
-
-		@Override
 		public Iterator<E> iterator() {
-			ArrayList<E> list = new ArrayList<>(theWrapped);
-			Collections.sort(new ArrayList<>(theWrapped), theCompare);
-			return Collections.unmodifiableCollection(list).iterator();
+			ArrayList<E> sorted = new ArrayList<>(theWrapped);
+			Collections.sort(sorted, theCompare);
+			return sorted.iterator();
 		}
 
 		@Override
-		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> observer) {
-			return theWrapped.onElement(new SortedOrderedWrapperObserver<>(this, observer));
+		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
+			class SortedElement implements ObservableOrderedElement<E>, Comparable<SortedElement> {
+				private final ObservableOrderedElement<E> theWrappedEl;
+				private DefaultNode<SortedElement> node;
+				private int theRemovedIndex;
+				private Subscription subscription;
+
+				SortedElement(ObservableOrderedElement<E> wrap){
+					theWrappedEl=wrap;
+				}
+
+				@Override
+				public TypeToken<E> getType() {
+					return theWrappedEl.getType();
+				}
+
+				@Override
+				public int getIndex() {
+					return node != null ? node.getIndex() : theRemovedIndex;
+				}
+
+				@Override
+				public E get() {
+					return theWrappedEl.get();
+				}
+
+				@Override
+				public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
+					return ObservableUtils.wrap(theWrappedEl, this, observer);
+				}
+
+				@Override
+				public ObservableValue<E> persistent() {
+					return theWrappedEl.persistent();
+				}
+
+				@Override
+				public int compareTo(SortedElement el) {
+					int compare = theCompare.compare(get(), el.get());
+					if (compare != 0)
+						return compare;
+					return theWrappedEl.getIndex() - el.theWrappedEl.getIndex();
+				}
+
+				void delete() {
+					theRemovedIndex = node.getIndex();
+					node.delete();
+					node = null;
+				}
+			}
+			DefaultTreeSet<SortedElement> elements = new DefaultTreeSet<>(SortedElement::compareTo);
+			Subscription collSub = theWrapped.onOrderedElement(element -> {
+				SortedElement sortedEl = new SortedElement(element);
+				sortedEl.subscription = element.subscribe(new Observer<ObservableValueEvent<E>>() {
+					@Override
+					public <V extends ObservableValueEvent<E>> void onNext(V event) {
+						if (event.isInitial()) {
+							sortedEl.node = elements.addGetNode(sortedEl);
+						} else {
+							// See if the value change has changed the sorting
+							CountedRedBlackNode<SortedElement> parent = sortedEl.node.getParent();
+							boolean isLeft = sortedEl.node.getSide();
+							CountedRedBlackNode<SortedElement> left = sortedEl.node.getLeft();
+							CountedRedBlackNode<SortedElement> right = sortedEl.node.getRight();
+
+							boolean changed = false;
+							if (parent != null) {
+								int compare = theCompare.compare(parent.getValue().get(), sortedEl.get());
+								if (compare == 0)
+									changed = true;
+								else if (compare > 0 != isLeft)
+									changed = true;
+							}
+							if (!changed && left != null) {
+								if (theCompare.compare(left.getValue().get(), sortedEl.get()) >= 0)
+									changed = true;
+							}
+							if (!changed && right != null) {
+								if (theCompare.compare(right.getValue().get(), sortedEl.get()) <= 0)
+									changed = true;
+							}
+							if (changed) {
+								sortedEl.node.delete();
+								sortedEl.node = elements.addGetNode(sortedEl);
+							}
+						}
+					}
+
+					@Override
+					public <V extends ObservableValueEvent<E>> void onCompleted(V event) {
+						sortedEl.delete();
+					}
+				});
+				onElement.accept(sortedEl);
+			});
+			return () -> {
+				collSub.unsubscribe();
+				for (SortedElement el : elements)
+					el.subscription.unsubscribe();
+				elements.clear();
+			};
 		}
 
 		@Override
-		public boolean add(E e) {
-			return theWrapped.add(e);
-		}
-
-		@Override
-		public boolean addAll(Collection<? extends E> c) {
-			return theWrapped.addAll(c);
-		}
-
-		@Override
-		public boolean remove(Object o) {
-			return theWrapped.remove(o);
-		}
-
-		@Override
-		public boolean removeAll(Collection<?> c) {
-			return theWrapped.removeAll(c);
-		}
-
-		@Override
-		public boolean retainAll(Collection<?> c) {
-			return theWrapped.retainAll(c);
-		}
-
-		@Override
-		public void clear() {
-			theWrapped.clear();
-		}
-	}
-
-	/**
-	 * Used by {@link ObservableOrderedCollection#sorted(Comparator)}
-	 *
-	 * @param <E> The type of the elements in the collection
-	 */
-	static class SortedOrderedWrapperObserver<E> implements Consumer<ObservableElement<E>> {
-		private final SortedOrderedCollectionWrapper<E> theList;
-
-		final Consumer<? super ObservableOrderedElement<E>> theOuterObserver;
-
-		private SortedElementWrapper<E> theAnchor;
-
-		SortedOrderedWrapperObserver(SortedOrderedCollectionWrapper<E> list, Consumer<? super ObservableOrderedElement<E>> outerObs) {
-			theList = list;
-			theOuterObserver = outerObs;
-		}
-
-		@Override
-		public void accept(ObservableElement<E> outerEl) {
-			SortedElementWrapper<E> newEl = d().debug(new SortedElementWrapper<>(theList, outerEl, this, theAnchor))
-					.from("element", theList)
-					.tag("wrapped", outerEl).get();
-			if(theAnchor == null)
-				theAnchor = newEl;
-			theOuterObserver.accept(newEl);
+		public String toString() {
+			return ObservableCollection.toString(this);
 		}
 	}
 
@@ -1197,7 +1107,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 				@Override
 				public String toString() {
-					return getType() + "list[" + getIndex() + "]";
+					return getType() + " list[" + getIndex() + "]";
 				}
 			}
 			Subscription outerSub = theOuter.onOrderedElement(outerEl -> {

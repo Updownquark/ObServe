@@ -7,6 +7,7 @@ import java.util.NavigableSet;
 import java.util.SortedSet;
 import java.util.function.Function;
 
+import org.observe.util.tree.RedBlackNode.TreeOpResult;
 import org.observe.util.tree.RedBlackNode.ValuedRedBlackNode;
 
 /**
@@ -209,23 +210,33 @@ public interface RedBlackTreeSet<E, N extends ValuedRedBlackNode<E>> extends jav
 
 	@Override
 	default boolean add(E value) {
-		int preSize = size();
-		simpleAdd(value);
-		return preSize != size();
+		N root = getRoot();
+		if (root == null) {
+			setRoot(createNode(value));
+			return true;
+		} else {
+			TreeOpResult res = root.add(value, true);
+			setRoot((N) res.getNewRoot());
+			return res.getFoundNode() == null;
+		}
 	}
 
 	/**
-	 * Like {@link #add(Object)}, but doesn't incur the O(n) cost of checking size before and after addition to see whether the addition
-	 * succeeded
-	 *
-	 * @param value The value to add
+	 * @param value The value to add to the set
+	 * @return The tree node containing the value after the addition
 	 */
-	default void simpleAdd(E value) {
+	default N addGetNode(E value) {
 		N root = getRoot();
-		if(root == null)
-			setRoot(createNode(value));
-		else
-			setRoot((N) root.add(value, true).getNewRoot());
+		N addedNode;
+		if (root == null) {
+			addedNode = createNode(value);
+			setRoot(addedNode);
+		} else {
+			TreeOpResult res = root.add(value, true);
+			setRoot((N) res.getNewRoot());
+			addedNode = (N) res.getNewNode();
+		}
+		return addedNode;
 	}
 
 	@Override
@@ -379,7 +390,7 @@ public interface RedBlackTreeSet<E, N extends ValuedRedBlackNode<E>> extends jav
 	 * @return The sub set
 	 */
 	default <V> NavigableSet<V> getMappedSubSet(Function<? super E, V> outMap, Function<? super V, E> inMap, boolean reverse,
-		V fromElement, boolean fromInclusive, V toElement, boolean toInclusive) {
+			V fromElement, boolean fromInclusive, V toElement, boolean toInclusive) {
 		Comparator<? super E> treeComparator = comparator();
 		Comparator<V> comparator = (o1, o2) -> treeComparator.compare(inMap.apply(o1), inMap.apply(o2));
 		if(fromElement != null && toElement != null) {
@@ -461,7 +472,7 @@ public interface RedBlackTreeSet<E, N extends ValuedRedBlackNode<E>> extends jav
 		private final boolean isMaxInclusive;
 
 		MappedSubSet(RedBlackTreeSet<E, ?> tree, Function<? super E, V> outMap, Function<? super V, E> inMap, boolean reverse, V min,
-			boolean includeMin, V max, boolean includeMax) {
+				boolean includeMin, V max, boolean includeMax) {
 			theTreeSet = tree;
 			theOutMap = outMap == null ? value -> (V) value : outMap;
 			theInMap = inMap == null ? value -> (E) value : inMap;
@@ -700,7 +711,7 @@ public interface RedBlackTreeSet<E, N extends ValuedRedBlackNode<E>> extends jav
 				includeEnd = isMaxInclusive;
 			}
 			Iterator<E> backing = theTreeSet.iterator(forward ^ isReversed, theInMap.apply(start), includeStart, theInMap.apply(end),
-				includeEnd);
+					includeEnd);
 			return new Iterator<V>() {
 				@Override
 				public boolean hasNext() {
@@ -1200,7 +1211,7 @@ public interface RedBlackTreeSet<E, N extends ValuedRedBlackNode<E>> extends jav
 
 		public NodeSet<E, N> getSubSet(boolean reverse, N fromElement, boolean fromInclusive, N toElement, boolean toInclusive) {
 			return getSubSet(reverse, fromElement == null ? null : fromElement.getValue(), fromInclusive, toElement == null ? null
-				: toElement.getValue(), toInclusive);
+					: toElement.getValue(), toInclusive);
 		}
 
 		public NodeSet<E, N> getSubSet(boolean reverse, E fromElement, boolean fromInclusive, E toElement, boolean toInclusive) {

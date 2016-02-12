@@ -152,7 +152,7 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 	@Override
 	public abstract int compareTo(RedBlackNode node);
 
-	/** @return Whether this node is on the right or the left of its parent. False for the root. */
+	/** @return Whether this node is on the right (false) or the left (true) of its parent. False for the root. */
 	public boolean getSide() {
 		if(theParent == null)
 			return false;
@@ -276,7 +276,7 @@ public abstract class RedBlackNode implements Comparable<RedBlackNode>, Cloneabl
 	protected RedBlackNode setChild(RedBlackNode child, boolean left) {
 		if(child == this)
 			throw new IllegalArgumentException("A tree node cannot have itself as a child: " + this + " (" + (left ? "left" : "right")
-				+ ")");
+					+ ")");
 		RedBlackNode oldChild;
 		if(left) {
 			oldChild = theLeft;

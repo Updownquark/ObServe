@@ -2195,7 +2195,7 @@ public class ObservableCollectionsTest {
 		}
 	}
 
-	/** Tests {@link ObservableUtils#flattenListValues(Type, ObservableList)} */
+	/** Tests {@link ObservableUtils#flattenListValues(TypeToken, ObservableList)} */
 	@Test
 	public void flattenListValues() {
 		ObservableArrayList<ObservableValue<Integer>> list = new ObservableArrayList<>(new TypeToken<ObservableValue<Integer>>() {});
@@ -2225,7 +2225,7 @@ public class ObservableCollectionsTest {
 		assertEquals(Integer.valueOf(9), received[0]);
 	}
 
-	/** Tests {@link ObservableOrderedCollection#sort(ObservableCollection, java.util.Comparator)} */
+	/** Tests {@link ObservableOrderedCollection#sorted(java.util.Comparator)} */
 	@Test
 	public void sortedObservableList() {
 		ObservableArrayList<Integer> list = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
@@ -2308,20 +2308,19 @@ public class ObservableCollectionsTest {
 		ObservableOrderedCollection<Integer> flat = ObservableOrderedCollection.flatten(outer);
 		if (comparator != null)
 			flat = flat.sorted(comparator);
-		Subscription sub = flat.onElement(element -> {
-			ObservableOrderedElement<Integer> orderedEl = (ObservableOrderedElement<Integer>) element;
+		Subscription sub = flat.onOrderedElement(element -> {
 			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
 					if(event.isInitial())
-						compare.add(orderedEl.getIndex(), event.getValue());
+						compare.add(element.getIndex(), event.getValue());
 					else
-						compare.set(orderedEl.getIndex(), event.getValue());
+						compare.set(element.getIndex(), event.getValue());
 				}
 
 				@Override
 				public <V extends ObservableValueEvent<Integer>> void onCompleted(V event) {
-					compare.remove(orderedEl.getIndex());
+					compare.remove(element.getIndex());
 				}
 			});
 		});
