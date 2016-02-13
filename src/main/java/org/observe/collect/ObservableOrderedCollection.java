@@ -696,12 +696,15 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
 			class SortedElement implements ObservableOrderedElement<E>, Comparable<SortedElement> {
 				private final ObservableOrderedElement<E> theWrappedEl;
-				private DefaultNode<SortedElement> node;
+				private final DefaultTreeSet<SortedElement> theElements;
+				private final SimpleObservable<Void> theRemoveObservable;
+				private DefaultNode<SortedElement> theNode;
 				private int theRemovedIndex;
-				private Subscription subscription;
 
-				SortedElement(ObservableOrderedElement<E> wrap){
+				SortedElement(ObservableOrderedElement<E> wrap, DefaultTreeSet<SortedElement> elements) {
 					theWrappedEl=wrap;
+					theElements = elements;
+					theRemoveObservable = new SimpleObservable<>();
 				}
 
 				@Override
@@ -711,7 +714,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 				@Override
 				public int getIndex() {
-					return node != null ? node.getIndex() : theRemovedIndex;
+					return theNode != null ? theNode.getIndex() : theRemovedIndex;
 				}
 
 				@Override
@@ -721,7 +724,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 				@Override
 				public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
-					return ObservableUtils.wrap(theWrappedEl, this, observer);
+					return ObservableUtils.wrap(theWrappedEl.takeUntil(theRemoveObservable), this, observer);
 				}
 
 				@Override
@@ -738,47 +741,56 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 				}
 
 				void delete() {
-					theRemovedIndex = node.getIndex();
-					node.delete();
-					node = null;
+					theRemovedIndex = theNode.getIndex();
+					theNode.delete();
+					theNode = null;
+				}
+
+				void checkOrdering() {
+					CountedRedBlackNode<SortedElement> parent = theNode.getParent();
+					boolean isLeft = theNode.getSide();
+					CountedRedBlackNode<SortedElement> left = theNode.getLeft();
+					CountedRedBlackNode<SortedElement> right = theNode.getRight();
+
+					boolean changed = false;
+					if (parent != null) {
+						int compare = theCompare.compare(parent.getValue().get(), get());
+						if (compare == 0)
+							changed = true;
+						else if (compare > 0 != isLeft)
+							changed = true;
+					}
+					if (!changed && left != null) {
+						if (theCompare.compare(left.getValue().get(), get()) >= 0)
+							changed = true;
+					}
+					if (!changed && right != null) {
+						if (theCompare.compare(right.getValue().get(), get()) <= 0)
+							changed = true;
+					}
+					if (changed) {
+						theRemoveObservable.onNext(null);
+						theNode.delete();
+						addIn();
+					}
+				}
+
+				void addIn() {
+					theNode = theElements.addGetNode(this);
+					onElement.accept(this);
 				}
 			}
 			DefaultTreeSet<SortedElement> elements = new DefaultTreeSet<>(SortedElement::compareTo);
+			SimpleObservable<Void> unSubObs = new SimpleObservable<>();
 			Subscription collSub = theWrapped.onOrderedElement(element -> {
-				SortedElement sortedEl = new SortedElement(element);
-				sortedEl.subscription = element.subscribe(new Observer<ObservableValueEvent<E>>() {
+				SortedElement sortedEl = new SortedElement(element, elements);
+				element.unsubscribeOn(unSubObs).subscribe(new Observer<ObservableValueEvent<E>>() {
 					@Override
 					public <V extends ObservableValueEvent<E>> void onNext(V event) {
-						if (event.isInitial()) {
-							sortedEl.node = elements.addGetNode(sortedEl);
-						} else {
-							// See if the value change has changed the sorting
-							CountedRedBlackNode<SortedElement> parent = sortedEl.node.getParent();
-							boolean isLeft = sortedEl.node.getSide();
-							CountedRedBlackNode<SortedElement> left = sortedEl.node.getLeft();
-							CountedRedBlackNode<SortedElement> right = sortedEl.node.getRight();
-
-							boolean changed = false;
-							if (parent != null) {
-								int compare = theCompare.compare(parent.getValue().get(), sortedEl.get());
-								if (compare == 0)
-									changed = true;
-								else if (compare > 0 != isLeft)
-									changed = true;
-							}
-							if (!changed && left != null) {
-								if (theCompare.compare(left.getValue().get(), sortedEl.get()) >= 0)
-									changed = true;
-							}
-							if (!changed && right != null) {
-								if (theCompare.compare(right.getValue().get(), sortedEl.get()) <= 0)
-									changed = true;
-							}
-							if (changed) {
-								sortedEl.node.delete();
-								sortedEl.node = elements.addGetNode(sortedEl);
-							}
-						}
+						if (event.isInitial())
+							sortedEl.addIn();
+						else
+							sortedEl.checkOrdering();// Compensate if the value change has changed the sorting
 					}
 
 					@Override
@@ -786,12 +798,10 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 						sortedEl.delete();
 					}
 				});
-				onElement.accept(sortedEl);
 			});
 			return () -> {
 				collSub.unsubscribe();
-				for (SortedElement el : elements)
-					el.subscription.unsubscribe();
+				unSubObs.onNext(null);
 				elements.clear();
 			};
 		}

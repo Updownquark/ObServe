@@ -1579,7 +1579,7 @@ public class ObservableCollectionsTest {
 			});
 		});
 
-		List<Integer> correct = new ArrayList<>();
+		List<Integer> correct = new ArrayList<>(30);
 
 		for(int i = 30; i >= 0; i--) {
 			list.add(i);
@@ -1588,6 +1588,14 @@ public class ObservableCollectionsTest {
 
 		java.util.Collections.sort(correct);
 		assertEquals(correct, compare);
+
+		for (int i = 0; i < list.size(); i++) {
+			list.set(i, list.get(i) - 50);
+			correct.clear();
+			correct.addAll(list);
+			java.util.Collections.sort(correct);
+			assertEquals(correct, compare);
+		}
 
 		for(int i = 30; i >= 0; i--) {
 			list.remove((Integer) i);
