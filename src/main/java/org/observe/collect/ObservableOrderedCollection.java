@@ -18,6 +18,7 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
+import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.util.ObservableUtils;
 import org.qommons.ArrayUtils;
@@ -280,7 +281,14 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 	@Override
 	default ObservableOrderedCollection<E> takeUntil(Observable<?> until) {
-		return d().debug(new TakenUntilOrderedCollection<>(this, until)).from("taken", this).from("until", until).get();
+		return d().debug(new TakenUntilOrderedCollection<>(this, until, true)).from("taken", this).from("until", until)
+				.tag("terminate", true).get();
+	}
+
+	@Override
+	default ObservableOrderedCollection<E> unsubscribeOn(Observable<?> until) {
+		return d().debug(new TakenUntilOrderedCollection<>(this, until, false)).from("taken", this).from("until", until)
+				.tag("terminate", false).get();
 	}
 
 	/**
@@ -914,8 +922,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @param <E> The type of elements in the collection
 	 */
 	class TakenUntilOrderedCollection<E> extends TakenUntilObservableCollection<E> implements ObservableOrderedCollection<E> {
-		public TakenUntilOrderedCollection(ObservableOrderedCollection<E> wrap, Observable<?> until) {
-			super(wrap, until);
+		public TakenUntilOrderedCollection(ObservableOrderedCollection<E> wrap, Observable<?> until, boolean terminate) {
+			super(wrap, until, terminate);
 		}
 
 		@Override
@@ -932,7 +940,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
 			List<TakenUntilOrderedElement<E>> elements = new ArrayList<>();
 			Subscription[] collSub = new Subscription[] { getWrapped().onOrderedElement(element -> {
-				TakenUntilOrderedElement<E> untilEl = new TakenUntilOrderedElement<>(element);
+				TakenUntilOrderedElement<E> untilEl = new TakenUntilOrderedElement<>(element, isTerminating());
 				elements.add(element.getIndex(), untilEl);
 				onElement.accept(untilEl);
 			}) };
@@ -959,8 +967,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @param <E> The type of value in the element
 	 */
 	class TakenUntilOrderedElement<E> extends TakenUntilElement<E> implements ObservableOrderedElement<E> {
-		public TakenUntilOrderedElement(ObservableOrderedElement<E> wrap) {
-			super(wrap);
+		public TakenUntilOrderedElement(ObservableOrderedElement<E> wrap, boolean terminate) {
+			super(wrap, terminate);
 		}
 
 		@Override
@@ -1058,7 +1066,6 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 			class OuterNode {
 				final ObservableOrderedElement<? extends ObservableOrderedCollection<E>> element;
 				final List<ObservableOrderedElement<? extends E>> subElements;
-				Subscription subscription;
 
 				OuterNode(ObservableOrderedElement<? extends ObservableOrderedCollection<E>> el) {
 					element = el;
@@ -1110,17 +1117,16 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 					return getType() + " list[" + getIndex() + "]";
 				}
 			}
+			SimpleObservable<Void> unSubObs = new SimpleObservable<>();
 			Subscription outerSub = theOuter.onOrderedElement(outerEl -> {
 				OuterNode outerNode = new OuterNode(outerEl);
 				outerEl.subscribe(new Observer<ObservableValueEvent<? extends ObservableOrderedCollection<E>>>() {
 					@Override
 					public <E1 extends ObservableValueEvent<? extends ObservableOrderedCollection<E>>> void onNext(E1 outerEvent) {
-						Observable<?> until = outerEl.noInit().fireOnComplete();
+						Observable<?> until = ObservableUtils.makeUntil(outerEl, outerEvent);
 						if (outerEvent.isInitial())
 							nodes.add(outerEl.getIndex(), outerNode);
-						else
-							until = until.skip(1);
-						outerNode.subscription = outerEvent.getValue().takeUntil(until).onOrderedElement(innerEl -> {
+						outerEvent.getValue().takeUntil(until).unsubscribeOn(unSubObs).onOrderedElement(innerEl -> {
 							innerEl.subscribe(new Observer<ObservableValueEvent<? extends E>>() {
 								@Override
 								public <E2 extends ObservableValueEvent<? extends E>> void onNext(E2 innerEvent) {
@@ -1146,8 +1152,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 			});
 			return () -> {
 				outerSub.unsubscribe();
-				for (int i = nodes.size() - 1; i >= 0; i--)
-					nodes.get(i).subscription.unsubscribe();
+				unSubObs.onNext(null);
 				nodes.clear();
 			};
 		}

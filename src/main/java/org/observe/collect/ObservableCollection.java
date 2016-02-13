@@ -26,6 +26,7 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
+import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.util.ObservableUtils;
@@ -987,7 +988,17 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 *         collection's elements will be removed and collection subscriptions unsubscribed
 	 */
 	default ObservableCollection<E> takeUntil(Observable<?> until) {
-		return d().debug(new TakenUntilObservableCollection<>(this, until)).from("take", this).from("until", until).get();
+		return d().debug(new TakenUntilObservableCollection<>(this, until, true)).from("take", this).from("until", until).get();
+	}
+
+	/**
+	 * @param until The observable to unsubscribe the collection on
+	 * @return A collection that mirrors this collection's values until the given observable fires a value, upon which the returned
+	 *         collection's subscriptions will be removed. Unlike {@link #takeUntil(Observable)} however, the returned collection's elements
+	 *         will not be removed when the observable fires.
+	 */
+	default ObservableCollection<E> unsubscribeOn(Observable<?> until) {
+		return d().debug(new TakenUntilObservableCollection<>(this, until, true)).from("take", this).from("until", until).get();
 	}
 
 	/**
@@ -1018,20 +1029,26 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 			@Override
 			public Subscription onElement(Consumer<? super ObservableElement<T>> observer) {
-				return collection.onElement(element -> observer.accept(new ObservableElement<T>() {
+				class FlattenedValueElement implements ObservableElement<T> {
+					private final ObservableElement<? extends ObservableValue<T>> theWrapped;
+
+					FlattenedValueElement(ObservableElement<? extends ObservableValue<T>> wrap) {
+						theWrapped = wrap;
+					}
+
 					@Override
 					public TypeToken<T> getType() {
-						return type != null ? type : element.get().getType();
+						return type != null ? type : theWrapped.get().getType();
 					}
 
 					@Override
 					public T get() {
-						return get(element.get());
+						return get(theWrapped.get());
 					}
 
 					@Override
 					public ObservableValue<T> persistent() {
-						return ObservableValue.flatten(getType(), element.persistent());
+						return ObservableValue.flatten(getType(), theWrapped.persistent());
 					}
 
 					private T get(ObservableValue<? extends T> value) {
@@ -1041,11 +1058,12 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 					@Override
 					public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer2) {
 						ObservableElement<T> retObs = this;
-						return element.subscribe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends T>>>() {
+						return theWrapped.subscribe(new Observer<ObservableValueEvent<? extends ObservableValue<T>>>() {
 							@Override
-							public <V2 extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onNext(V2 value) {
+							public <V2 extends ObservableValueEvent<? extends ObservableValue<T>>> void onNext(V2 value) {
 								if (value.getValue() != null) {
-									value.getValue().takeUntil(element.noInit()).act(innerEvent -> {
+									Observable<?> until = ObservableUtils.makeUntil(theWrapped, value);
+									value.getValue().takeUntil(until).act(innerEvent -> {
 										observer2.onNext(ObservableUtils.wrap(innerEvent, retObs));
 									});
 								} else if (value.isInitial())
@@ -1055,7 +1073,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 							}
 
 							@Override
-							public <V2 extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onCompleted(V2 value) {
+							public <V2 extends ObservableValueEvent<? extends ObservableValue<T>>> void onCompleted(V2 value) {
 								if (value.isInitial())
 									observer2.onCompleted(retObs.createInitialEvent(get(value.getValue())));
 								else
@@ -1064,7 +1082,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 							}
 						});
 					}
-				}));
+				}
+				return collection.onElement(element -> observer.accept(new FlattenedValueElement(element)));
 			}
 
 			@Override
@@ -1138,20 +1157,20 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 			@Override
 			public Subscription onElement(Consumer<? super ObservableElement<T>> onElement) {
-				return collectionObservable.subscribe(new Observer<ObservableValueEvent<ObservableCollection<T>>>() {
+				SimpleObservable<Void> unSubObs = new SimpleObservable<>();
+				Subscription collSub = collectionObservable.subscribe(new Observer<ObservableValueEvent<ObservableCollection<T>>>() {
 					@Override
 					public <V extends ObservableValueEvent<ObservableCollection<T>>> void onNext(V event) {
 						if (event.getValue() != null) {
-							Observable<?> until = collectionObservable.noInit().fireOnComplete();
-							if (!event.isInitial()) {
-								/* If we don't do this, the listener for the until will get added to the end of the queue and will be
-								 * called for the same change event we're in now.  So we skip one. */
-								until = until.skip(1);
-							}
-							event.getValue().takeUntil(until).onElement(onElement);
+							Observable<?> until = ObservableUtils.makeUntil(collectionObservable, event);
+							event.getValue().takeUntil(until).unsubscribeOn(unSubObs).onElement(onElement);
 						}
 					}
 				});
+				return () -> {
+					collSub.unsubscribe();
+					unSubObs.onNext(null);
+				};
 			}
 		}
 		return new FlattenedCollectionObservable();
@@ -1244,12 +1263,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 					public void accept(ObservableElement<? extends ObservableCollection<? extends T>> subColl) {
 						subColl.act(subCollEvent -> {
 							if (subCollEvent.getValue() != null) {
-								Observable<?> until = subColl.noInit().fireOnComplete();
-								if (!subCollEvent.isInitial()) {
-									/* If we don't do this, the listener for the until will get added to the end of the queue and will
-									 * be called for the same change event we're in now.  So we skip one. */
-									until = until.skip(1);
-								}
+								Observable<?> until = ObservableUtils.makeUntil(subColl, subCollEvent);
 								((ObservableCollection<T>) subCollEvent.getValue()).takeUntil(until).onElement(observer);
 							}
 						});
@@ -2866,10 +2880,12 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	class TakenUntilObservableCollection<E> implements PartialCollectionImpl<E> {
 		private final ObservableCollection<E> theWrapped;
 		private final Observable<?> theUntil;
+		private final boolean isTerminating;
 
-		public TakenUntilObservableCollection(ObservableCollection<E> wrap, Observable<?> until) {
+		public TakenUntilObservableCollection(ObservableCollection<E> wrap, Observable<?> until, boolean terminate) {
 			theWrapped = wrap;
 			theUntil = until;
+			isTerminating = terminate;
 		}
 
 		/** @return The collection that this taken until collection wraps */
@@ -2880,6 +2896,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		/** @return The observable that ends this collection */
 		protected Observable<?> getUntil() {
 			return theUntil;
+		}
+
+		/** @return Whether this collection's elements will be removed when the {@link #getUntil() until} observable fires */
+		protected boolean isTerminating() {
+			return isTerminating;
 		}
 
 		@Override
@@ -2911,7 +2932,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
 			final Map<ObservableElement<E>, TakenUntilElement<E>> elements = new HashMap<>();
 			Subscription[] collSub = new Subscription[] { theWrapped.onElement(element -> {
-				TakenUntilElement<E> untilEl = new TakenUntilElement<>(element);
+				TakenUntilElement<E> untilEl = new TakenUntilElement<>(element, isTerminating);
 				elements.put(element, untilEl);
 				onElement.accept(untilEl);
 			}) };
@@ -2946,11 +2967,16 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		private final ObservableElement<E> theWrapped;
 		private final ObservableElement<E> theEndingElement;
 		private final Observer<Void> theEndControl;
+		private final boolean isTerminating;
 
-		public TakenUntilElement(ObservableElement<E> wrap) {
+		public TakenUntilElement(ObservableElement<E> wrap, boolean terminate) {
 			theWrapped = wrap;
+			isTerminating = terminate;
 			DefaultObservable<Void> end = new DefaultObservable<>();
-			theEndingElement = theWrapped.takeUntil(end);
+			if (isTerminating)
+				theEndingElement = theWrapped.takeUntil(end);
+			else
+				theEndingElement = theWrapped.unsubscribeOn(end);
 			theEndControl = end.control(null);
 		}
 

@@ -24,14 +24,14 @@ public interface ObservableOrderedElement<E> extends ObservableElement<E> {
 
 	@Override
 	default ObservableOrderedElement<E> takeUntil(Observable<?> until) {
-		return d().debug(new OrderedElementTakenUntil<>(this, until, true)).from("take", this).from("until", until)
-				.tag("withCompletion", true).get();
+		return d().debug(new OrderedElementTakenUntil<>(this, until, true)).from("take", this).from("until", until).tag("terminate", true)
+				.get();
 	}
 
 	@Override
 	default ObservableOrderedElement<E> unsubscribeOn(Observable<?> until) {
-		return d().debug(new OrderedElementTakenUntil<>(this, until, false)).from("take", this).from("until", until)
-				.tag("withCompletion", false).get();
+		return d().debug(new OrderedElementTakenUntil<>(this, until, false)).from("take", this).from("until", until).tag("terminate", false)
+				.get();
 	}
 
 	@Override
@@ -175,8 +175,8 @@ public interface ObservableOrderedElement<E> extends ObservableElement<E> {
 	 * @param <T> The type of the element value
 	 */
 	class OrderedElementTakenUntil<T> extends ObservableElementTakenUntil<T> implements ObservableOrderedElement<T> {
-		public OrderedElementTakenUntil(ObservableOrderedElement<T> wrap, Observable<?> until, boolean withCompletion) {
-			super(wrap, until, withCompletion);
+		public OrderedElementTakenUntil(ObservableOrderedElement<T> wrap, Observable<?> until, boolean terminate) {
+			super(wrap, until, terminate);
 		}
 
 		@Override

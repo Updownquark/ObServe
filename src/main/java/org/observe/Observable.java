@@ -179,7 +179,7 @@ public interface Observable<T> {
 	 * @return An observable that provides the same values as this observable until the first value is observed from the given observable
 	 */
 	default Observable<T> takeUntil(Observable<?> until) {
-		return d().debug(new ObservableTakenUntil<>(this, until, true)).from("take", this).from("until", until).tag("withCompletion", true)
+		return d().debug(new ObservableTakenUntil<>(this, until, true)).from("take", this).from("until", until).tag("terminate", true)
 				.get();
 	}
 
@@ -192,7 +192,8 @@ public interface Observable<T> {
 	 */
 	default Observable<T> unsubscribeOn(Observable<?> until) {
 		return d().debug(new ObservableTakenUntil<>(this, until, false)).from("take", this).from("until", until)
-				.tag("withCompletion", false).get();
+.tag("terminate", false)
+				.get();
 	}
 
 	/**
@@ -604,13 +605,12 @@ public interface Observable<T> {
 	class ObservableTakenUntil<T> implements Observable<T> {
 		private final Observable<T> theWrapped;
 		private final Observable<?> theUntil;
+		private final boolean isTerminating;
 
-		private final boolean isWithCompletion;
-
-		protected ObservableTakenUntil(Observable<T> wrap, Observable<?> until, boolean withCompletion) {
+		protected ObservableTakenUntil(Observable<T> wrap, Observable<?> until, boolean terminate) {
 			theWrapped = wrap;
 			theUntil = until;
-			isWithCompletion = withCompletion;
+			isTerminating = terminate;
 		}
 
 		protected Observable<T> getWrapped() {
@@ -642,7 +642,7 @@ public interface Observable<T> {
 						return;
 					complete[0] = true;
 					outerSub.unsubscribe();
-					if(isWithCompletion)
+					if (isTerminating)
 						observer.onCompleted(getDefaultValue());
 				}
 			});

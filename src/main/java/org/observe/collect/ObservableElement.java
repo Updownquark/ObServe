@@ -31,13 +31,13 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 	@Override
 	default ObservableElement<E> takeUntil(Observable<?> until) {
 		return d().debug(new ObservableElementTakenUntil<>(this, until, true)).from("take", this).from("until", until)
-				.tag("withCompletion", true).get();
+				.tag("terminate", true).get();
 	}
 
 	@Override
 	default ObservableElement<E> unsubscribeOn(Observable<?> until) {
 		return d().debug(new ObservableElementTakenUntil<>(this, until, false)).from("take", this).from("until", until)
-				.tag("withCompletion", false).get();
+				.tag("terminate", false).get();
 	}
 
 	@Override
@@ -120,8 +120,8 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 	 * @param <T> The type of the element value
 	 */
 	class ObservableElementTakenUntil<T> extends ObservableValueTakenUntil<T> implements ObservableElement<T> {
-		public ObservableElementTakenUntil(ObservableElement<T> wrap, Observable<?> until, boolean withCompletion) {
-			super(wrap, until, withCompletion);
+		public ObservableElementTakenUntil(ObservableElement<T> wrap, Observable<?> until, boolean terminate) {
+			super(wrap, until, terminate);
 		}
 
 		@Override

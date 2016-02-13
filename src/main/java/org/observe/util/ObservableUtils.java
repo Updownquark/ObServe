@@ -1,5 +1,6 @@
 package org.observe.util;
 
+import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
@@ -17,7 +18,7 @@ public class ObservableUtils {
 	 * @return An event with the same values as the given event, but created by the given observable
 	 */
 	public static <T> ObservableValueEvent<T> wrap(ObservableValueEvent<? extends T> event, ObservableValue<T> wrapper) {
-		if(event.isInitial())
+		if (event.isInitial())
 			return wrapper.createInitialEvent(event.getValue());
 		else
 			return wrapper.createChangeEvent(event.getOldValue(), event.getValue(), event.getCause());
@@ -47,6 +48,25 @@ public class ObservableUtils {
 		});
 	}
 
+	/**
+	 * A seemingly narrow use case. Makes an observable to be used as the until in
+	 * {@link org.observe.collect.ObservableCollection#takeUntil(Observable)} when this will be called as a result of an observable value
+	 * containing an observable collection being called
+	 *
+	 * @param value The collection-containing value
+	 * @param cause The event on the value that is the cause of this call
+	 * @return The until observable to use
+	 */
+	public static Observable<?> makeUntil(ObservableValue<?> value, ObservableValueEvent<?> cause) {
+		Observable<?> until = value.noInit().fireOnComplete();
+		if (!cause.isInitial()) {
+			/* If we don't do this, the listener for the until will get added to the end of the queue and will be
+			 * called for the same change event we're in now.  So we skip one. */
+			until = until.skip(1);
+		}
+		return until;
+	}
+
 	private static class ControllableObservableList<T> extends ObservableListWrapper<T> {
 		private volatile boolean isControlled;
 
@@ -55,9 +75,9 @@ public class ObservableUtils {
 		}
 
 		protected ObservableList<T> getController() {
-			if(isControlled)
+			if (isControlled)
 				throw new IllegalStateException("This list is already controlled");
-			isControlled=true;
+			isControlled = true;
 			return super.getWrapped();
 		}
 	}
@@ -84,7 +104,7 @@ public class ObservableUtils {
 	 * @throws IllegalStateException If the given list is already controlled
 	 */
 	public static <T> ObservableList<T> getController(ObservableList<T> controllableList) {
-		if(!(controllableList instanceof ControllableObservableList))
+		if (!(controllableList instanceof ControllableObservableList))
 			throw new IllegalArgumentException("This list is not controllable.  Use control(ObservableList) to create a controllable list");
 		return ((ControllableObservableList<T>) controllableList).getController();
 	}

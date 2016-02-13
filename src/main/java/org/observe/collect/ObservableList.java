@@ -268,7 +268,14 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 	@Override
 	default ObservableList<E> takeUntil(Observable<?> until) {
-		return d().debug(new TakenUntilObservableList<>(this, until)).from("take", this).from("until", until).get();
+		return d().debug(new TakenUntilObservableList<>(this, until, true)).from("take", this).from("until", until).tag("terminate", true)
+				.get();
+	}
+
+	@Override
+	default ObservableList<E> unsubscribeOn(Observable<?> until) {
+		return d().debug(new TakenUntilObservableList<>(this, until, false)).from("take", this).from("until", until).tag("terminate", false)
+				.get();
 	}
 
 	@Override
@@ -1823,8 +1830,8 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	 * @param <E> The type of elements in the collection
 	 */
 	class TakenUntilObservableList<E> extends TakenUntilOrderedCollection<E> implements PartialListImpl<E> {
-		public TakenUntilObservableList(ObservableList<E> wrap, Observable<?> until) {
-			super(wrap, until);
+		public TakenUntilObservableList(ObservableList<E> wrap, Observable<?> until, boolean terminate) {
+			super(wrap, until, terminate);
 		}
 
 		@Override
