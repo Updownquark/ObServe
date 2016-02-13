@@ -179,7 +179,7 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 	@Override
 	default ObservableCollection<V> values() {
 		TypeToken<ObservableValue<V>> obValType = new TypeToken<ObservableValue<V>>() {}.where(new TypeParameter<V>() {}, getValueType());
-		return ObservableCollection.flattenValues(getValueType(), keySet().map(obValType, this::observe));
+		return ObservableCollection.flattenValues(keySet().map(obValType, this::observe));
 	}
 
 	@Override
