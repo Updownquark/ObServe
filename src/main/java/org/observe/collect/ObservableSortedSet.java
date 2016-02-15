@@ -444,9 +444,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 			return theWrapped.getSession();
 		}
 
-		/**
-		 * @return The first index in the wrapped sorted set that is included in this set
-		 */
+		/** @return The first index in the wrapped sorted set that is included in this set */
 		protected int getMinIndex() {
 			int minIndex;
 			if(theMin == null)
@@ -461,9 +459,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 			return minIndex;
 		}
 
-		/**
-		 * @return The last index in the wrapped
-		 */
+		/** @return The last index in the wrapped */
 		protected int getMaxIndex() {
 			int maxIndex;
 			if(theMax == null)

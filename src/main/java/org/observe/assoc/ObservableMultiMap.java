@@ -1,6 +1,7 @@
 package org.observe.assoc;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.Map;
@@ -803,6 +804,12 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			if(current != null)
 				return current.last();
 			throw new java.util.NoSuchElementException();
+		}
+
+		@Override
+		public Iterable<V> iterateFrom(V element, boolean included, boolean reversed) {
+			ObservableSortedSet<V> current = getWrapped();
+			return current == null ? Collections.EMPTY_LIST : current.iterateFrom(element, included, reversed);
 		}
 
 		@Override
