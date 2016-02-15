@@ -41,6 +41,7 @@ import org.observe.collect.impl.ObservableHashSet;
 import org.observe.collect.impl.ObservableLinkedList;
 import org.observe.collect.impl.ObservableTreeList;
 import org.observe.collect.impl.ObservableTreeSet;
+import org.qommons.Equalizer;
 import org.qommons.QommonsTestUtils;
 import org.qommons.Transaction;
 
@@ -385,7 +386,7 @@ public class ObservableCollectionsTest {
 						if(evt.isInitial())
 							synced.add(evt.getValue());
 						else {
-							assertEquals(evt.getOldValue(), synced.remove(evt.getOldValue()));
+							assertTrue(synced.remove(evt.getOldValue()));
 							synced.add(evt.getValue());
 						}
 					}
@@ -393,8 +394,7 @@ public class ObservableCollectionsTest {
 					@Override
 					public <V extends ObservableValueEvent<T>> void onCompleted(V evt) {
 						opCount[0]++;
-						assertThat(synced, contains(evt.getValue()));
-						synced.remove(evt.getValue());
+						assertTrue(synced.remove(evt.getValue()));
 					}
 				});
 			});
@@ -765,29 +765,15 @@ public class ObservableCollectionsTest {
 		}
 	}
 
-	/** Tests {@link ObservableSet#unique(ObservableCollection)} */
+	/** Tests {@link ObservableSet#unique(ObservableCollection, Equalizer)} */
 	@Test
 	public void observableSetUnique() {
 		ObservableArrayList<Integer> list = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
-		ObservableSet<Integer> unique = ObservableSet.unique(list);
+		ObservableSet<Integer> unique = ObservableSet.unique(list, Objects::equals);
 		List<Integer> compare1 = new ArrayList<>();
 		Set<Integer> correct = new TreeSet<>();
 
-		unique.onElement(element -> {
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
-					if(!event.isInitial())
-						compare1.remove(event.getOldValue());
-					compare1.add(event.getValue());
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onCompleted(V event) {
-					compare1.remove(event.getValue());
-				}
-			});
-		});
+		sync(unique, compare1);
 
 		for(int i = 0; i < 30; i++) {
 			list.add(i);
@@ -1542,7 +1528,7 @@ public class ObservableCollectionsTest {
 		list.addAll(java.util.Arrays.asList(value1, value2, value3, value4));
 
 		Integer [] received = new Integer[1];
-		ObservableList.flattenListValues(TypeToken.of(Integer.TYPE), list).findFirst(value -> value % 3 == 0).value()
+		ObservableList.flattenValues(list).findFirst(value -> value % 3 == 0).value()
 		.act(value -> received[0] = value);
 		assertEquals(Integer.valueOf(3), received[0]);
 		value3.set(4, null);
@@ -1720,13 +1706,13 @@ public class ObservableCollectionsTest {
 	}
 
 	/**
-	 * Tests {@link ObservableSet#unique(ObservableCollection)} wrapped with {@link ObservableList#asList(ObservableCollection)}. I wrote
-	 * this test to capture a specific test case, but I couldn't reproduce the error here. Not sure this test is super valuable.
+	 * Tests {@link ObservableSet#unique(ObservableCollection, Equalizer)} wrapped with {@link ObservableList#asList(ObservableCollection)}.
+	 * I wrote this test to capture a specific test case, but I couldn't reproduce the error here. Not sure this test is super valuable.
 	 */
 	@Test
 	public void observableListFromUnique() {
 		ObservableArrayList<Integer> list = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
-		ObservableList<Integer> uniqued = ObservableList.asList(ObservableSet.unique(list));
+		ObservableList<Integer> uniqued = ObservableList.asList(ObservableSet.unique(list, Objects::equals));
 		ArrayList<Integer> compare = new ArrayList<>();
 		ArrayList<Integer> correct = new ArrayList<>();
 		sync(uniqued, compare);

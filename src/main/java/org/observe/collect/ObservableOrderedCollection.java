@@ -194,6 +194,12 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	@Override
 	default <T> ObservableOrderedCollection<T> filterMap(TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse,
 			boolean staticFilter) {
+		return (ObservableOrderedCollection<T>) ObservableCollection.super.filterMap(type, map, reverse, staticFilter);
+	}
+
+	@Override
+	default <T> ObservableOrderedCollection<T> filterMap2(TypeToken<T> type, Function<? super E, FilterMapResult<T>> map,
+			Function<? super T, E> reverse, boolean staticFilter) {
 		if(staticFilter)
 			return d().debug(new StaticFilteredOrderedCollection<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
 					.using("reverse", reverse).get();
@@ -293,12 +299,13 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	/**
 	 * Turns a collection of observable values into a collection composed of those holders' values
 	 *
-	 * @param <T> The type of elements held in the values
+	 * @param <E> The type of elements held in the values
 	 * @param collection The collection to flatten
 	 * @return The flattened collection
 	 */
-	public static <T> ObservableOrderedCollection<T> flattenValues(ObservableOrderedCollection<? extends ObservableValue<T>> collection) {
-		return d().debug(new FlattenedOrderedValuesCollection<>(collection)).from("flatten", collection).get();
+	public static <E> ObservableOrderedCollection<E> flattenValues(
+			ObservableOrderedCollection<? extends ObservableValue<? extends E>> collection) {
+		return d().debug(new FlattenedOrderedValuesCollection<E>(collection)).from("flatten", collection).get();
 	}
 
 	/**
@@ -307,23 +314,21 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @param collectionObservable The observable value
 	 * @return A collection representing the contents of the value, or a zero-length collection when null
 	 */
-	public static <E> ObservableOrderedCollection<E> flattenValue(ObservableValue<ObservableOrderedCollection<E>> collectionObservable) {
-		return d().debug(new FlattenedOrderedValueCollection<>(collectionObservable)).from("flatten", collectionObservable).get();
+	public static <E> ObservableOrderedCollection<E> flattenValue(
+			ObservableValue<? extends ObservableOrderedCollection<? extends E>> collectionObservable) {
+		return d().debug(new FlattenedOrderedValueCollection<E>(collectionObservable)).from("flatten", collectionObservable).get();
 	}
 
 	/**
-	 * Flattens a collection of ordered collections. The inner collections must be sorted according to the given comparator in order for the
-	 * result to be correctly sorted.
+	 * Flattens a collection of ordered collections
 	 *
 	 * @param <E> The super-type of all collections in the wrapping collection
 	 * @param list The collection to flatten
-	 * @return A collection containing all elements of all collections in the outer collection, sorted according to the given comparator,
-	 *         then by order in the outer collection.
+	 * @return A collection containing all elements of all collections in the outer collection
 	 */
 	public static <E> ObservableOrderedCollection<E> flatten(ObservableOrderedCollection<? extends ObservableOrderedCollection<E>> list) {
 		return d().debug(new FlattenedOrderedCollection<>(list)).from("flatten", list).get();
 	}
-
 
 	/**
 	 * Finds something in an {@link ObservableOrderedCollection}
@@ -517,7 +522,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @param <T> The type of the mapped collection
 	 */
 	class StaticFilteredOrderedCollection<E, T> extends StaticFilteredCollection<E, T> implements ObservableOrderedCollection<T> {
-		StaticFilteredOrderedCollection(ObservableOrderedCollection<E> wrap, TypeToken<T> type, Function<? super E, T> map,
+		StaticFilteredOrderedCollection(ObservableOrderedCollection<E> wrap, TypeToken<T> type, Function<? super E, FilterMapResult<T>> map,
 				Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
@@ -542,8 +547,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	class DynamicFilteredOrderedCollection<E, T> extends DynamicFilteredCollection<E, T> implements ObservableOrderedCollection<T> {
 		private List<FilteredOrderedElement<E, T>> theFilteredElements = new java.util.ArrayList<>();
 
-		DynamicFilteredOrderedCollection(ObservableOrderedCollection<E> wrap, TypeToken<T> type, Function<? super E, T> map,
-				Function<? super T, E> reverse) {
+		DynamicFilteredOrderedCollection(ObservableOrderedCollection<E> wrap, TypeToken<T> type,
+				Function<? super E, FilterMapResult<T>> map, Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
 
@@ -578,7 +583,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	class FilteredOrderedElement<E, T> extends FilteredElement<E, T> implements ObservableOrderedElement<T> {
 		private List<FilteredOrderedElement<E, T>> theFilteredElements;
 
-		FilteredOrderedElement(ObservableOrderedElement<E> wrapped, Function<? super E, T> map, TypeToken<T> type,
+		FilteredOrderedElement(ObservableOrderedElement<E> wrapped, Function<? super E, FilterMapResult<T>> map, TypeToken<T> type,
 				List<FilteredOrderedElement<E, T>> filteredEls) {
 			super(wrapped, map, type);
 			theFilteredElements = filteredEls;
@@ -1013,6 +1018,101 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	/**
+	 * Implements {@link ObservableOrderedCollection#flattenValues(ObservableOrderedCollection)}
+	 *
+	 * @param <E> The type of elements in the collection
+	 */
+	class FlattenedOrderedValuesCollection<E> extends FlattenedValuesCollection<E> implements ObservableOrderedCollection<E> {
+		protected FlattenedOrderedValuesCollection(ObservableOrderedCollection<? extends ObservableValue<? extends E>> collection) {
+			super(collection);
+		}
+
+		@Override
+		protected ObservableOrderedCollection<? extends ObservableValue<? extends E>> getWrapped() {
+			return (ObservableOrderedCollection<? extends ObservableValue<? extends E>>) super.getWrapped();
+		}
+
+		@Override
+		protected FlattenedOrderedValueElement<E> createFlattenedElement(
+				ObservableElement<? extends ObservableValue<? extends E>> element) {
+			return new FlattenedOrderedValueElement<>((ObservableOrderedElement<? extends ObservableValue<? extends E>>) element,
+					getType());
+		}
+
+		@Override
+		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
+			return getWrapped().onOrderedElement(element -> onElement.accept(createFlattenedElement(element)));
+		}
+
+		@Override
+		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
+			return onOrderedElement(onElement);
+		}
+	}
+
+	/**
+	 * Implements elements for {@link ObservableOrderedCollection#flattenValues(ObservableOrderedCollection)}
+	 *
+	 * @param <E> The type of value in the element
+	 */
+	class FlattenedOrderedValueElement<E> extends FlattenedValueElement<E> implements ObservableOrderedElement<E> {
+		public FlattenedOrderedValueElement(ObservableOrderedElement<? extends ObservableValue<? extends E>> wrap, TypeToken<E> type) {
+			super(wrap, type);
+		}
+
+		@Override
+		protected ObservableOrderedElement<? extends ObservableValue<? extends E>> getWrapped() {
+			return (ObservableOrderedElement<? extends ObservableValue<? extends E>>) super.getWrapped();
+		}
+
+		@Override
+		public int getIndex() {
+			return getWrapped().getIndex();
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableOrderedCollection#flattenValue(ObservableValue)}
+	 *
+	 * @param <E> The type of elements in the collection
+	 */
+	class FlattenedOrderedValueCollection<E> extends FlattenedValueCollection<E> implements ObservableOrderedCollection<E> {
+		public FlattenedOrderedValueCollection(ObservableValue<? extends ObservableOrderedCollection<? extends E>> collectionObservable) {
+			super(collectionObservable);
+		}
+
+		@Override
+		protected ObservableValue<? extends ObservableOrderedCollection<? extends E>> getWrapped() {
+			return (ObservableValue<? extends ObservableOrderedCollection<? extends E>>) super.getWrapped();
+		}
+
+		@Override
+		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
+			SimpleObservable<Void> unSubObs = new SimpleObservable<>();
+			Subscription collSub = getWrapped()
+					.subscribe(new Observer<ObservableValueEvent<? extends ObservableOrderedCollection<? extends E>>>() {
+						@Override
+						public <V extends ObservableValueEvent<? extends ObservableOrderedCollection<? extends E>>> void onNext(V event) {
+							if (event.getValue() != null) {
+								Observable<?> until = ObservableUtils.makeUntil(getWrapped(), event);
+								((ObservableOrderedCollection<E>) event.getValue().takeUntil(until).unsubscribeOn(unSubObs))
+								.onOrderedElement(onElement);
+							}
+						}
+					});
+			return () -> {
+				collSub.unsubscribe();
+				unSubObs.onNext(null);
+			};
+		}
+
+		@Override
+		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
+			return onOrderedElement(onElement);
+		}
+	}
+
+	/**
 	 * Implements {@link ObservableOrderedCollection#flatten(ObservableOrderedCollection)}
 	 *
 	 * @param <E> The type of the collection
@@ -1029,6 +1129,14 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 		@Override
 		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
+			return onElement(ObservableOrderedCollection::onOrderedElement, onElement);
+		}
+
+		protected interface ElementSubscriber {
+			<E> Subscription onElement(ObservableOrderedCollection<E> coll, Consumer<? super ObservableOrderedElement<E>> onElement);
+		}
+
+		protected Subscription onElement(ElementSubscriber subscriber, Consumer<? super ObservableOrderedElement<E>> onElement) {
 			class OuterNode {
 				final ObservableOrderedElement<? extends ObservableOrderedCollection<? extends E>> element;
 				final List<ObservableOrderedElement<? extends E>> subElements;
@@ -1084,7 +1192,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 				}
 			}
 			SimpleObservable<Void> unSubObs = new SimpleObservable<>();
-			Subscription outerSub = getOuter().onOrderedElement(outerEl -> {
+			Subscription outerSub = subscriber.onElement(getOuter(), outerEl -> {
 				OuterNode outerNode = new OuterNode(outerEl);
 				outerEl.subscribe(new Observer<ObservableValueEvent<? extends ObservableOrderedCollection<? extends E>>>() {
 					@Override
@@ -1128,11 +1236,6 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		@Override
 		public Subscription onElement(Consumer<? super ObservableElement<E>> observer) {
 			return onOrderedElement(observer);
-		}
-
-		@Override
-		public String toString() {
-			return ObservableCollection.toString(this);
 		}
 	}
 }

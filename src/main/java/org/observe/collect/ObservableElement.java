@@ -10,7 +10,9 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
+import org.observe.SimpleObservable;
 import org.observe.Subscription;
+import org.observe.util.ObservableUtils;
 import org.qommons.BiTuple;
 import org.qommons.TriFunction;
 import org.qommons.TriTuple;
@@ -112,6 +114,14 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 	default ObservableElement<E> refreshForValue(Function<? super E, Observable<?>> refresh, Observable<Void> unsubscribe) {
 		return d().debug(new ValueRefreshingObservableElement<>(this, refresh, unsubscribe)).from("refresh", this).using("on", refresh)
 				.get();
+	}
+
+	/**
+	 * @param elementValue An observable value containing an observable element
+	 * @return An element representing the value in the nested element
+	 */
+	public static <E> ObservableElement<E> flatten(ObservableValue<? extends ObservableElement<E>> elementValue) {
+		return new FlattenedElementValue<>(elementValue);
 	}
 
 	/**
@@ -281,6 +291,95 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 		@Override
 		public String toString() {
 			return theWrapped + ".refireWhen(" + theRefresh + ")";
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableElement#flatten(ObservableValue)}
+	 * @param <E> The type of value in the element
+	 */
+	class FlattenedElementValue<E> implements ObservableElement<E> {
+		private final ObservableValue<? extends ObservableElement<E>> theValue;
+		private final TypeToken<E> theType;
+
+		public FlattenedElementValue(ObservableValue<? extends ObservableElement<E>> value) {
+			theValue = value;
+			theType = (TypeToken<E>) theValue.getType().resolveType(ObservableElement.class.getTypeParameters()[0]);
+		}
+
+		protected ObservableValue<? extends ObservableElement<E>> getValue() {
+			return theValue;
+		}
+
+		@Override
+		public TypeToken<E> getType() {
+			return theType;
+		}
+
+		@Override
+		public E get() {
+			return get(theValue.get());
+		}
+
+		protected E get(ObservableElement<E> el) {
+			return el == null ? null : el.get();
+		}
+
+		@Override
+		public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
+			SimpleObservable<Void> completeObs = new SimpleObservable<>();
+			return theValue.unsubscribeOn(completeObs).subscribe(new Observer<ObservableValueEvent<? extends ObservableElement<E>>>() {
+				E preValue;
+				boolean firedInitial;
+				int theSwitchCount = 0;
+
+				@Override
+				public <V extends ObservableValueEvent<? extends ObservableElement<E>>> void onNext(V event) {
+					theSwitchCount++;
+					if (event.getValue() == null) {
+						if (firedInitial)
+							observer.onCompleted(createChangeEvent(preValue, preValue, event.getCause()));
+						completeObs.onNext(null);
+						return;
+					}
+					event.getValue().unsubscribeOn(ObservableUtils.makeUntil(theValue, event))
+					.subscribe(new Observer<ObservableValueEvent<E>>() {
+						private final int theSwitchTrack = theSwitchCount;
+						@Override
+						public <V2 extends ObservableValueEvent<E>> void onNext(V2 event2) {
+							if (theSwitchTrack != theSwitchCount)
+								return;
+							if (!firedInitial) {
+								firedInitial = true;
+								observer.onNext(createInitialEvent(event2.getValue()));
+							} else
+								observer.onNext(createChangeEvent(preValue, event2.getValue(), event2.getCause()));
+							preValue = event2.getValue();
+						}
+
+						@Override
+						public <V2 extends ObservableValueEvent<E>> void onCompleted(V2 event2) {
+							if (theSwitchTrack != theSwitchCount)
+								return;
+							completeObs.onNext(null);
+							observer.onCompleted(createChangeEvent(preValue, preValue, event2.getCause()));
+						}
+					});
+				}
+
+				@Override
+				public <V extends ObservableValueEvent<? extends ObservableElement<E>>> void onCompleted(V event) {
+					theSwitchCount++;
+					if (firedInitial)
+						observer.onCompleted(createChangeEvent(preValue, preValue, event.getCause()));
+				}
+			});
+		}
+
+		@Override
+		public ObservableValue<E> persistent() {
+			ObservableElement<E> el = theValue.get();
+			return el == null ? ObservableValue.constant(theType, null) : el.persistent();
 		}
 	}
 }

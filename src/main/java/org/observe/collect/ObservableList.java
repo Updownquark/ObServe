@@ -196,12 +196,18 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	@Override
 	default <T> ObservableList<T> filterMap(TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse,
 			boolean staticFilter) {
-		if(staticFilter)
+		return (ObservableList<T>) ObservableReversibleCollection.super.filterMap(type, map, reverse, staticFilter);
+	}
+
+	@Override
+	default <T> ObservableList<T> filterMap2(TypeToken<T> type, Function<? super E, FilterMapResult<T>> map, Function<? super T, E> reverse,
+			boolean staticFilter) {
+		if (staticFilter)
 			return d().debug(new StaticFilteredList<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
 					.using("reverse", reverse).get();
 		else
-			return d().debug(new DynamicFilteredList<>(this, type, map, reverse)).from("filterMap", this).using("map", map).using("reverse", reverse)
-					.get();
+			return d().debug(new DynamicFilteredList<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
+					.using("reverse", reverse).get();
 	}
 
 	@Override
@@ -403,169 +409,32 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	/**
 	 * Turns a list of observable values into a list composed of those holders' values
 	 *
-	 * @param <T> The type of elements held in the values
-	 * @param type The run-time type of elements held in the values
-	 * @param list The list to flatten
-	 * @return The flattened list
+	 * @param <E> The type of elements held in the values
+	 * @param collection The collection to flatten
+	 * @return The flattened collection
 	 */
-	public static <T> ObservableList<T> flattenListValues(TypeToken<T> type, ObservableList<? extends ObservableValue<T>> list) {
-		class FlattenedList implements ObservableList.PartialListImpl<T> {
-			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return list.getSession();
-			}
-
-			@Override
-			public Transaction lock(boolean write, Object cause) {
-				return list.lock(write, cause);
-			}
-
-			@Override
-			public TypeToken<T> getType() {
-				return type;
-			}
-
-			@Override
-			public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<T>> observer) {
-				return list.onElement(element -> observer.accept(new ObservableOrderedElement<T>() {
-					@Override
-					public TypeToken<T> getType() {
-						return type != null ? type : element.get().getType();
-					}
-
-					@Override
-					public T get() {
-						return get(element.get());
-					}
-
-					@Override
-					public int getIndex() {
-						return ((ObservableOrderedElement<?>) element).getIndex();
-					}
-
-					@Override
-					public ObservableValue<T> persistent() {
-						return ObservableValue.flatten(getType(), element.persistent());
-					}
-
-					private T get(ObservableValue<? extends T> value) {
-						return value == null ? null : value.get();
-					}
-
-					@Override
-					public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer2) {
-						ObservableOrderedElement<T> retObs = this;
-						return element.subscribe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends T>>>() {
-							@Override
-							public <V2 extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onNext(V2 value) {
-								if (value.getValue() != null) {
-									value.getValue().takeUntil(element.noInit()).act(innerEvent -> {
-										observer2.onNext(ObservableUtils.wrap(innerEvent, retObs));
-									});
-								} else if (value.isInitial())
-									observer2.onNext(retObs.createInitialEvent(null));
-								else
-									observer2.onNext(retObs.createChangeEvent(get(value.getOldValue()), null, value.getCause()));
-							}
-
-							@Override
-							public <V2 extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onCompleted(V2 value) {
-								if (value.isInitial())
-									observer2.onCompleted(retObs.createInitialEvent(get(value.getValue())));
-								else
-									observer2.onCompleted(
-											retObs.createChangeEvent(get(value.getOldValue()), get(value.getValue()), value.getCause()));
-							}
-						});
-					}
-				}));
-			}
-
-			@Override
-			public T get(int index) {
-				return list.get(index).get();
-			}
-
-			@Override
-			public int size() {
-				return list.size();
-			}
-
-			@Override
-			public String toString() {
-				return "flatValue(" + list + ")";
-			}
-		}
-		return new FlattenedList();
+	public static <E> ObservableList<E> flattenValues(ObservableList<? extends ObservableValue<? extends E>> collection) {
+		return d().debug(new FlattenedObservableValuesList<E>(collection)).from("flatten", collection).get();
 	}
 
 	/**
 	 * Turns an observable value containing an observable list into the contents of the value
 	 *
-	 * @param type The type of elements in the list
-	 * @param listObservable The observable value
+	 * @param collectionObservable The observable value
 	 * @return A list representing the contents of the value, or a zero-length list when null
 	 */
-	public static <T> ObservableList<T> flattenListValue(TypeToken<T> type, ObservableValue<ObservableList<T>> listObservable) {
-		class FlattenedListObservable implements ObservableList.PartialListImpl<T> {
-			@Override
-			public TypeToken<T> getType() {
-				return type;
-			}
-
-			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return ObservableValue.flatten(new TypeToken<CollectionSession>() {}, listObservable.mapV(coll -> coll.getSession()));
-			}
-
-			@Override
-			public int size() {
-				ObservableCollection<T> coll = listObservable.get();
-				return coll == null ? 0 : coll.size();
-			}
-
-			@Override
-			public T get(int index) {
-				ObservableList<T> list = listObservable.get();
-				if (list == null)
-					throw new IndexOutOfBoundsException(index + " of 0");
-				return list.get(index);
-			}
-
-			@Override
-			public Transaction lock(boolean write, Object cause) {
-				ObservableCollection<T> coll = listObservable.get();
-				return coll == null ? () -> {
-				} : coll.lock(write, cause);
-			}
-
-			@Override
-			public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<T>> onElement) {
-				return listObservable.subscribe(new Observer<ObservableValueEvent<ObservableList<T>>>() {
-					@Override
-					public <V extends ObservableValueEvent<ObservableList<T>>> void onNext(V event) {
-						if (event.getValue() != null) {
-							Observable<?> until = listObservable.noInit().fireOnComplete();
-							if (!event.isInitial()) {
-								/* If we don't do this, the listener for the until will get added to the end of the queue and will be
-								 * called for the same change event we're in now.  So we skip one. */
-								until = until.skip(1);
-							}
-							event.getValue().takeUntil(until).onOrderedElement(onElement);
-						}
-					}
-				});
-			}
-		}
-		return new FlattenedListObservable();
+	public static <E> ObservableList<E> flattenValue(ObservableValue<ObservableList<? extends E>> collectionObservable) {
+		return d().debug(new FlattenedObservableValueList<>(collectionObservable)).from("flatten", collectionObservable).get();
 	}
 
 	/**
-	 * @param <T> The super-type of all lists in the wrapping list
+	 * Flattens a collection of lists.
+	 *
+	 * @param <E> The super-type of all list in the wrapping list
 	 * @param list The list to flatten
 	 * @return A list containing all elements of all lists in the outer list
 	 */
-	public static <T> ObservableList<T> flatten(ObservableList<? extends ObservableList<T>> list) {
+	public static <E> ObservableList<E> flatten(ObservableList<? extends ObservableList<E>> list) {
 		return d().debug(new FlattenedObservableList<>(list)).from("flatten", list).get();
 	}
 
@@ -1298,7 +1167,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	interface PartialFilteredListImpl<E, T> extends PartialListImpl<T> {
 		ObservableList<E> getWrapped();
 
-		Function<? super E, T> getMap();
+		Function<? super E, FilterMapResult<T>> getMap();
 
 		Function<? super T, E> getReverse();
 
@@ -1310,11 +1179,11 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 			int idx = index;
 			try (Transaction t = lock(false, null)) {
 				for(E el : getWrapped()) {
-					T mapped = getMap().apply(el);
-					if(mapped != null) {
+					FilterMapResult<T> mapped = getMap().apply(el);
+					if (mapped.passed) {
 						size++;
 						if(idx == 0)
-							return mapped;
+							return mapped.mapped;
 						else
 							idx--;
 					}
@@ -1335,8 +1204,8 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 				ListIterator<E> iter = getWrapped().listIterator();
 				while(iter.hasNext()) {
 					E el = iter.next();
-					T mapped = getMap().apply(el);
-					if(mapped != null) {
+					FilterMapResult<T> mapped = getMap().apply(el);
+					if (mapped.passed) {
 						size++;
 						idx--;
 					}
@@ -1361,8 +1230,8 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 				ListIterator<E> iter = getWrapped().listIterator();
 				while(iter.hasNext()) {
 					E el = iter.next();
-					T mapped = getMap().apply(el);
-					if(mapped != null) {
+					FilterMapResult<T> mapped = getMap().apply(el);
+					if (mapped.passed) {
 						size++;
 						idx--;
 					}
@@ -1386,12 +1255,12 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 				Iterator<E> iter = getWrapped().iterator();
 				while(iter.hasNext()) {
 					E el = iter.next();
-					T mapped = getMap().apply(el);
-					if(mapped != null) {
+					FilterMapResult<T> mapped = getMap().apply(el);
+					if (mapped.passed) {
 						size++;
 						if(idx == 0) {
 							iter.remove();
-							return mapped;
+							return mapped.mapped;
 						} else
 							idx--;
 					}
@@ -1412,12 +1281,12 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 				ListIterator<E> iter = getWrapped().listIterator();
 				while(iter.hasNext()) {
 					E el = iter.next();
-					T mapped = getMap().apply(el);
-					if(mapped != null) {
+					FilterMapResult<T> mapped = getMap().apply(el);
+					if (mapped.passed) {
 						size++;
 						if(idx == 0) {
 							iter.set(getReverse().apply(element));
-							return mapped;
+							return mapped.mapped;
 						} else
 							idx--;
 					}
@@ -1431,25 +1300,25 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 			return new ListIterator<T>() {
 				private final ListIterator<E> backing = getWrapped().listIterator(index);
 
-				private T thePreviousValue;
+				private FilterMapResult<T> thePreviousValue;
 
-				private T theNextValue;
+				private FilterMapResult<T> theNextValue;
 
 				private int theIndex = index;
 
 				@Override
 				public boolean hasNext() {
-					while(theNextValue == null && backing.hasNext()) {
+					while ((theNextValue == null || !theNextValue.passed) && backing.hasNext()) {
 						theNextValue = getMap().apply(backing.next());
 					}
-					return theNextValue != null;
+					return theNextValue != null && theNextValue.passed;
 				}
 
 				@Override
 				public T next() {
-					if(theNextValue == null && !hasNext())
+					if ((theNextValue == null || !theNextValue.passed) && !hasNext())
 						throw new NoSuchElementException();
-					T ret = theNextValue;
+					T ret = theNextValue.mapped;
 					theNextValue = null;
 					thePreviousValue = null;
 					theIndex++;
@@ -1458,17 +1327,17 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 				@Override
 				public boolean hasPrevious() {
-					while(thePreviousValue == null && backing.hasPrevious()) {
+					while ((thePreviousValue == null || !thePreviousValue.passed) && backing.hasPrevious()) {
 						thePreviousValue = getMap().apply(backing.previous());
 					}
-					return thePreviousValue != null;
+					return thePreviousValue != null && thePreviousValue.passed;
 				}
 
 				@Override
 				public T previous() {
-					if(thePreviousValue == null && !hasPrevious())
+					if ((thePreviousValue == null || !thePreviousValue.passed) && !hasPrevious())
 						throw new NoSuchElementException();
-					T ret = thePreviousValue;
+					T ret = thePreviousValue.mapped;
 					thePreviousValue = null;
 					theNextValue = null;
 					theIndex--;
@@ -1496,7 +1365,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 					if(getReverse() == null)
 						throw new UnsupportedOperationException();
 					E toSet = getReverse().apply(e);
-					if(getMap().apply(toSet) == null)
+					if (!getMap().apply(toSet).passed)
 						throw new IllegalArgumentException("Value " + e + " is not acceptable in this mapped list");
 					backing.set(toSet);
 					theNextValue = null;
@@ -1512,7 +1381,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 					if(getReverse() == null)
 						throw new UnsupportedOperationException();
 					E toAdd = getReverse().apply(e);
-					if(getMap().apply(toAdd) == null)
+					if (!getMap().apply(toAdd).passed)
 						throw new IllegalArgumentException("Value " + e + " is not acceptable in this mapped list");
 					backing.add(toAdd);
 					theIndex++;
@@ -1529,12 +1398,12 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	 * @param <T> The type of the mapped collection
 	 */
 	class StaticFilteredList<E, T> extends StaticFilteredReversibleCollection<E, T> implements PartialFilteredListImpl<E, T> {
-		protected StaticFilteredList(ObservableList<E> wrap, TypeToken<T> type, Function<? super E, T> map,
+		protected StaticFilteredList(ObservableList<E> wrap, TypeToken<T> type, Function<? super E, FilterMapResult<T>> map,
 				Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
 
-		// Have to expose these as public to satsify the interface
+		// Have to expose these as public to satisfy the interface
 
 		@Override
 		public ObservableList<E> getWrapped() {
@@ -1542,7 +1411,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		}
 
 		@Override
-		public Function<? super E, T> getMap() {
+		public Function<? super E, FilterMapResult<T>> getMap() {
 			return super.getMap();
 		}
 
@@ -1564,10 +1433,12 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	 * @param <T> The type of the mapped collection
 	 */
 	class DynamicFilteredList<E, T> extends DynamicFilteredReversibleCollection<E, T> implements PartialFilteredListImpl<E, T> {
-		protected DynamicFilteredList(ObservableList<E> wrap, TypeToken<T> type, Function<? super E, T> map,
+		protected DynamicFilteredList(ObservableList<E> wrap, TypeToken<T> type, Function<? super E, FilterMapResult<T>> map,
 				Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
+
+		// Have to expose these as public to satisfy the interface
 
 		@Override
 		public ObservableList<E> getWrapped() {
@@ -1575,7 +1446,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		}
 
 		@Override
-		public Function<? super E, T> getMap() {
+		public Function<? super E, FilterMapResult<T>> getMap() {
 			return super.getMap();
 		}
 
@@ -1829,7 +1700,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	class TakenUntilObservableList<E> extends TakenUntilOrderedCollection<E> implements PartialListImpl<E> {
+	class TakenUntilObservableList<E> extends TakenUntilReversibleCollection<E> implements PartialListImpl<E> {
 		public TakenUntilObservableList(ObservableList<E> wrap, Observable<?> until, boolean terminate) {
 			super(wrap, until, terminate);
 		}
@@ -1862,11 +1733,67 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	}
 
 	/**
+	 * Implements {@link ObservableList#flattenValues(ObservableList)}
+	 *
+	 * @param <E> The type of elements in the collection
+	 */
+	class FlattenedObservableValuesList<E> extends FlattenedReversibleValuesCollection<E> implements PartialListImpl<E> {
+		protected FlattenedObservableValuesList(ObservableList<? extends ObservableValue<? extends E>> collection) {
+			super(collection);
+		}
+
+		@Override
+		protected ObservableList<? extends ObservableValue<? extends E>> getWrapped() {
+			return (ObservableList<? extends ObservableValue<? extends E>>) super.getWrapped();
+		}
+
+		@Override
+		public E get(int index) {
+			ObservableValue<? extends E> v = getWrapped().get(index);
+			return v == null ? null : v.get();
+		}
+
+		@Override
+		public String toString() {
+			return ObservableList.toString(this);
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableList#flattenValue(ObservableValue)}
+	 *
+	 * @param <E> The type of elements in the collection
+	 */
+	class FlattenedObservableValueList<E> extends FlattenedReversibleValueCollection<E> implements PartialListImpl<E> {
+		public FlattenedObservableValueList(ObservableValue<? extends ObservableList<? extends E>> collectionObservable) {
+			super(collectionObservable);
+		}
+
+		@Override
+		protected ObservableValue<? extends ObservableList<? extends E>> getWrapped() {
+			return (ObservableValue<? extends ObservableList<? extends E>>) super.getWrapped();
+		}
+
+		@Override
+		public E get(int index) {
+			ObservableList<? extends E> list = getWrapped().get();
+			if (list == null)
+				throw new IndexOutOfBoundsException(index + " of 0");
+			return list.get(index);
+		}
+
+		@Override
+		public String toString() {
+			return ObservableList.toString(this);
+		}
+	}
+
+	/**
 	 * Implements {@link ObservableList#flatten(ObservableList)}
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	class FlattenedObservableList<E> extends FlattenedOrderedCollection<E> implements PartialListImpl<E> {
+	class FlattenedObservableList<E> extends FlattenedReversibleCollection<E> implements PartialListImpl<E> {
 		public FlattenedObservableList(ObservableList<? extends ObservableList<E>> outer) {
 			super(outer);
 		}

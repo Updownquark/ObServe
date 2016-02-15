@@ -3,13 +3,14 @@ package org.observe;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiFunction;
 
 import org.observe.assoc.ObservableGraph;
+import org.observe.assoc.ObservableGraph.Node;
 import org.observe.assoc.ObservableMap;
 import org.observe.assoc.ObservableMultiMap;
-import org.observe.assoc.ObservableGraph.Node;
 import org.observe.assoc.impl.ObservableMultiMapImpl;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
@@ -111,7 +112,7 @@ public abstract class ObservableDebug {
 			observable = new WeakReferenceObservable<>(TypeToken.of(Object.class), ob);
 			labels = new org.observe.collect.impl.ObservableArrayList<>(TypeToken.of(String.class));
 			tagController = new org.observe.assoc.impl.ObservableMultiMapImpl<>(TypeToken.of(String.class),
-				TypeToken.of(Object.class));
+					TypeToken.of(Object.class));
 			tags = tagController.immutable();
 			functions = Collections.unmodifiableMap(fns);
 		}
@@ -287,7 +288,7 @@ public abstract class ObservableDebug {
 				return (ObservableDebug) Class.forName(type).newInstance();
 			} catch(Throwable e) {
 				System.err.println("Could not instantiate custom debugger type: " + type
-					+ ".\nThe default available debugger types are null or none (for disabled debugging), structural, and full.");
+						+ ".\nThe default available debugger types are null or none (for disabled debugging), structural, and full.");
 				e.printStackTrace();
 				return null;
 			}
@@ -342,7 +343,7 @@ public abstract class ObservableDebug {
 		};
 
 		private final ObservableGraph<ObservableDebugWrapper, String> theGraph = ObservableGraph
-			.empty(TypeToken.of(ObservableDebugWrapper.class), TypeToken.of(String.class));
+				.empty(TypeToken.of(ObservableDebugWrapper.class), TypeToken.of(String.class));
 
 		//
 		// private final ObservableMap<Thread, DebugFrame> theFrameMap = ObservableMap.empty(new Type(Thread.class),
@@ -434,7 +435,7 @@ public abstract class ObservableDebug {
 		/** Creates the debugger */
 		public StructuralDebugger() {
 			theObservables = new org.observe.assoc.impl.DefaultObservableGraph<>(TypeToken.of(ObservableDebugWrapper.class),
-				TypeToken.of(String.class));
+					TypeToken.of(String.class));
 		}
 
 		@Override
@@ -587,14 +588,15 @@ public abstract class ObservableDebug {
 
 						@Override
 						public ObservableSet<String> keySet() {
-							return ObservableSet
-								.unique(theNode.getEdges().filter(edge -> edge.getEnd() == theNode).map(edge -> edge.getValue()));
+							return ObservableSet.unique(
+									theNode.getEdges().filter(edge -> edge.getEnd() == theNode).map(edge -> edge.getValue()),
+									Objects::equals);
 						}
 
 						@Override
 						public ObservableValue<DebugDescription> observe(Object key) {
 							return theNode.getEdges().find(edge -> edge.getEnd() == theNode && edge.getValue().equals(key))
-								.mapV(edge -> new NodeDebugDescription(edge.getStart()));
+									.mapV(edge -> new NodeDebugDescription(edge.getStart()));
 						}
 
 						@Override

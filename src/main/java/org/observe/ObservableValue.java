@@ -283,15 +283,13 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 
 	/**
 	 * @param <T> The compile-time super type of all observables contained in the nested observable
-	 * @param type The super type of all observables possibly contained in the given nested observable, or null to use the type of the
-	 *            contained observable
 	 * @param ov The nested observable
 	 * @return An observable value whose value is the value of <code>ov.get()</code>
 	 */
-	public static <T> ObservableValue<T> flatten(final TypeToken<T> type,
-			final ObservableValue<? extends ObservableValue<? extends T>> ov) {
+	public static <T> ObservableValue<T> flatten(ObservableValue<? extends ObservableValue<? extends T>> ov) {
 		if(ov == null)
 			throw new NullPointerException("Null observable");
+		TypeToken<T> type = (TypeToken<T>) ov.getType().resolveType(ObservableValue.class.getTypeParameters()[0]);
 		return d().debug(new ObservableValue<T>() {
 			@Override
 			public TypeToken<T> getType() {

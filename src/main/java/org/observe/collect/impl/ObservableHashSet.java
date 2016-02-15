@@ -4,6 +4,7 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 
@@ -13,6 +14,7 @@ import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableFastFindCollection;
 import org.observe.collect.ObservableSet;
+import org.qommons.Equalizer;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 
@@ -53,6 +55,11 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 		theInternals = new HashSetInternals(lock, session, sessionController);
 
 		theValues = new LinkedHashMap<>();
+	}
+
+	@Override
+	public Equalizer getEqualizer() {
+		return Objects::equals;
 	}
 
 	@Override

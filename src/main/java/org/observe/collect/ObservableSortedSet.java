@@ -17,6 +17,7 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.util.ObservableUtils;
+import org.qommons.Equalizer;
 import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeToken;
@@ -28,7 +29,12 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <E> The type of element in the set
  */
-public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReversibleCollection<E>, TransactableSortedSet<E> {
+public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, ObservableReversibleCollection<E>, TransactableSortedSet<E> {
+	@Override
+	default Equalizer getEqualizer() {
+		return (o1, o2) -> comparator().compare((E) o1, (E) o1) == 0;
+	}
+
 	/**
 	 * Returns a value at or adjacent to another value
 	 *
@@ -226,26 +232,24 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 
 	@Override
 	default ObservableSortedSet<E> filter(Predicate<? super E> filter, boolean staticFilter) {
-		return (ObservableSortedSet<E>) ObservableSet.super.filter(filter, staticFilter);
+		return (ObservableSortedSet<E>) ObservableOrderedSet.super.filter(filter, staticFilter);
 	}
 
 	@Override
 	default ObservableSortedSet<E> filterDynamic(Predicate<? super E> filter){
-		Function<E, E> map = value -> (value != null && filter.test(value)) ? value : null;
-		return d().debug(new DynamicFilteredSortedSet<>(this, getType(), map)).from("filter", this).using("filter", filter).get();
+		return d().debug(new DynamicFilteredSortedSet<>(this, getType(), filter)).from("filter", this).using("filter", filter).get();
 	}
 
 	@Override
 	default ObservableSortedSet<E> filterStatic(Predicate<? super E> filter){
-		Function<E, E> map = value -> (value != null && filter.test(value)) ? value : null;
-		return d().debug(new StaticFilteredSortedSet<>(this, getType(), map)).from("filter", this).using("filter", filter).get();
+		return d().debug(new StaticFilteredSortedSet<>(this, getType(), filter)).from("filter", this).using("filter", filter).get();
 	}
 
 	@Override
 	default <T> ObservableSortedSet<T> filter(Class<T> type) {
-		Function<E, T> map = value -> type.isInstance(value) ? type.cast(value) : null;
-		return d().debug(new StaticFilteredSortedSet<>(this, TypeToken.of(type), map)).from("filterMap", this).using("map", map)
-			.tag("filterType", type).get();
+		Predicate<E> filter = value -> type.isInstance(value);
+		return d().debug(new StaticFilteredSortedSet<>(this, TypeToken.of(type), filter)).from("filter", this).using("filter", filter)
+				.tag("filterType", type).get();
 	}
 
 	/**
@@ -299,6 +303,28 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 	@Override
 	default ObservableSortedSet<E> cached() {
 		return d().debug(new SafeCachedObservableSortedSet<>(this)).from("cached", this).get();
+	}
+
+	@Override
+	default ObservableSortedSet<E> takeUntil(Observable<?> until) {
+		return d().debug(new TakenUntilSortedSet<>(this, until, true)).from("taken", this).from("until", until).tag("terminate", true)
+				.get();
+	}
+
+	@Override
+	default ObservableSortedSet<E> unsubscribeOn(Observable<?> until) {
+		return d().debug(new TakenUntilSortedSet<>(this, until, false)).from("taken", this).from("until", until).tag("terminate", false)
+				.get();
+	}
+
+	/**
+	 * Turns an observable value containing an observable sorted set into the contents of the value
+	 *
+	 * @param collectionObservable The observable value
+	 * @return A sorted set representing the contents of the value, or a zero-length set when null
+	 */
+	public static <E> ObservableSortedSet<E> flattenValue(ObservableValue<? extends ObservableSortedSet<E>> collectionObservable) {
+		return d().debug(new FlattenedValueSortedSet<>(collectionObservable)).from("flatten", collectionObservable).get();
 	}
 
 	/**
@@ -801,7 +827,14 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 	class StaticFilteredSortedSet<E, T> extends StaticFilteredReversibleCollection<E, T> implements PartialSortedSetImpl<T> {
 		/* Note that everywhere we cast a T-typed value to E is safe because this sorted set is only called from filter, not map */
 
-		protected StaticFilteredSortedSet(ObservableSortedSet<E> wrap, TypeToken<T> type, Function<? super E, T> map) {
+		protected StaticFilteredSortedSet(ObservableSortedSet<E> wrap, TypeToken<T> type, Predicate<? super E> filter) {
+			super(wrap, type, value -> {
+				boolean pass = filter.test(value);
+				return new FilterMapResult<>(pass ? (T) value : null, pass);
+			} , value -> (E) value);
+		}
+
+		private StaticFilteredSortedSet(ObservableSortedSet<E> wrap, TypeToken<T> type, Function<? super E, FilterMapResult<T>> map) {
 			super(wrap, type, map, value -> (E) value);
 		}
 
@@ -813,7 +846,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 		@Override
 		public ObservableSortedSet<T> subSet(T fromElement, boolean fromInclusive, T toElement, boolean toInclusive) {
 			return new StaticFilteredSortedSet<>(getWrapped().subSet((E) fromElement, fromInclusive, (E) toElement, toInclusive),
-				getType(), getMap());
+					getType(), getMap());
 		}
 
 		@Override
@@ -843,7 +876,14 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 	class DynamicFilteredSortedSet<E, T> extends DynamicFilteredReversibleCollection<E, T> implements PartialSortedSetImpl<T> {
 		/* Note that everywhere we cast a T-typed value to E is safe because this sorted set is only called from filter, not map */
 
-		protected DynamicFilteredSortedSet(ObservableSortedSet<E> wrap, TypeToken<T> type, Function<? super E, T> map) {
+		protected DynamicFilteredSortedSet(ObservableSortedSet<E> wrap, TypeToken<T> type, Predicate<? super E> filter) {
+			super(wrap, type, value -> {
+				boolean pass = filter.test(value);
+				return new FilterMapResult<>(pass ? (T) value : null, pass);
+			} , value -> (E) value);
+		}
+
+		private DynamicFilteredSortedSet(ObservableSortedSet<E> wrap, TypeToken<T> type, Function<? super E, FilterMapResult<T>> map) {
 			super(wrap, type, map, value -> (E) value);
 		}
 
@@ -855,7 +895,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 		@Override
 		public ObservableSortedSet<T> subSet(T fromElement, boolean fromInclusive, T toElement, boolean toInclusive) {
 			return new DynamicFilteredSortedSet<>(getWrapped().subSet((E) fromElement, fromInclusive, (E) toElement, toInclusive), getType(),
-				getMap());
+					getMap());
 		}
 
 		@Override
@@ -1033,6 +1073,49 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, ObservableReve
 		@Override
 		public ObservableSortedSet<E> cached() {
 			return this;
+		}
+	}
+
+	/**
+	 * Backs {@link ObservableSortedSet#takeUntil(Observable)}
+	 *
+	 * @param <E> The type of elements in the set
+	 */
+	class TakenUntilSortedSet<E> extends TakenUntilReversibleCollection<E> implements PartialSortedSetImpl<E> {
+		public TakenUntilSortedSet(ObservableSortedSet<E> wrap, Observable<?> until, boolean terminate) {
+			super(wrap, until, terminate);
+		}
+
+		@Override
+		protected ObservableSortedSet<E> getWrapped() {
+			return (ObservableSortedSet<E>) super.getWrapped();
+		}
+
+		@Override
+		public Comparator<? super E> comparator() {
+			return getWrapped().comparator();
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableSortedSet#flattenValue(ObservableValue)}
+	 *
+	 * @param <E> The type of elements in the set
+	 */
+	class FlattenedValueSortedSet<E> extends FlattenedReversibleValueCollection<E> implements PartialSortedSetImpl<E> {
+		public FlattenedValueSortedSet(ObservableValue<? extends ObservableSortedSet<? extends E>> collectionObservable) {
+			super(collectionObservable);
+		}
+
+		@Override
+		protected ObservableValue<? extends ObservableSortedSet<? extends E>> getWrapped() {
+			return (ObservableValue<? extends ObservableSortedSet<? extends E>>) super.getWrapped();
+		}
+
+		@Override
+		public Comparator<? super E> comparator() {
+			ObservableSortedSet<? extends E> set = getWrapped().get();
+			return set == null ? (o1, o2) -> -1 : (Comparator<? super E>) set.comparator();
 		}
 	}
 }

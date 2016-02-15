@@ -51,11 +51,10 @@ class SubCollectionTransactionManager {
 			}
 		};
 		ObservableArrayList<ObservableValue<CollectionSession>> sessions = new ObservableArrayList<>(
-			new TypeToken<ObservableValue<CollectionSession>>() {});
+				new TypeToken<ObservableValue<CollectionSession>>() {});
 		sessions.add(collection.getSession()); // The collection's session takes precedence
 		sessions.add(theInternalSession);
-		theExposedSession = ObservableList.flattenListValues(new TypeToken<CollectionSession>() {}, sessions)
-			.findFirst(session -> session != null);
+		theExposedSession = ObservableList.flattenValues(sessions).findFirst(session -> session != null);
 		theSessionController = theInternalSession.control(null);
 
 		theListeners = new ListenerSet<>();
@@ -109,7 +108,7 @@ class SubCollectionTransactionManager {
 	 * @return The runnable to execute to uninstall the observer
 	 */
 	public <E> Subscription onElement(ObservableCollection<E> collection, Consumer<? super ObservableElement<E>> onElement,
-		boolean forward) {
+			boolean forward) {
 		Consumer<ObservableElement<E>> elFn = el -> onElement.accept(el.refresh(theRefresh));
 		Subscription collSub;
 		theListeners.add(onElement);

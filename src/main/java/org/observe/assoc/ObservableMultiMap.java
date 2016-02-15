@@ -10,8 +10,6 @@ import java.util.function.Function;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
-import org.observe.ObservableValueEvent;
-import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMap.ObsEntryImpl;
 import org.observe.collect.CollectionSession;
@@ -20,8 +18,10 @@ import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableList;
 import org.observe.collect.ObservableOrderedCollection;
 import org.observe.collect.ObservableOrderedElement;
+import org.observe.collect.ObservableReversibleCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedSet;
+import org.qommons.Equalizer;
 import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeParameter;
@@ -56,8 +56,8 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	 *         threaded interactions with a session. A transaction may encompass events fired and received on multiple threads. In short,
 	 *         the only thing guaranteed about sessions is that they will end. Therefore, if a session is present, observers may assume that
 	 *         they can delay expensive results of map events until the session completes. The {@link ObservableCollection#getSession()
-	 *         sessions} of the {@link #entrySet() entries}, {@link #observeKeys() keys}, and {@link #entrySet() values} collections should
-	 *         be the same as this one.
+	 *         sessions} of the {@link #entrySet() entries}, {@link #keySet() keys}, and {@link #entrySet() values} collections should be
+	 *         the same as this one.
 	 */
 	ObservableValue<CollectionSession> getSession();
 
@@ -86,7 +86,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	 * @return A key set for the map
 	 */
 	public static <K, V> ObservableSet<K> defaultKeySet(ObservableMultiMap<K, V> map) {
-		return ObservableSet.unique(map.entrySet().map(ObservableMultiEntry::getKey));
+		return ObservableSet.unique(map.entrySet().map(ObservableMultiEntry::getKey), Objects::equals);
 	}
 
 	/**
@@ -144,10 +144,10 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			return new ObsMultiEntryList<>(map, (K) key, map.getValueType(), (ObservableValue<? extends ObservableList<V>>) equiv);
 		} else if(equiv.getType().isAssignableFrom(ObservableSortedSet.class)) {
 			return new ObsMultiEntrySortedSet<>(map, (K) key, map.getValueType(),
-				(ObservableValue<? extends ObservableSortedSet<V>>) equiv);
+					(ObservableValue<? extends ObservableSortedSet<V>>) equiv);
 		} else if(equiv.getType().isAssignableFrom(ObservableOrderedCollection.class)) {
 			return new ObsMultiEntryOrdered<>(map, (K) key, map.getValueType(),
-				(ObservableValue<? extends ObservableOrderedCollection<V>>) equiv);
+					(ObservableValue<? extends ObservableOrderedCollection<V>>) equiv);
 		} else if(equiv.getType().isAssignableFrom(ObservableSet.class)) {
 			return new ObsMultiEntrySet<>(map, (K) key, map.getValueType(), (ObservableValue<? extends ObservableSet<V>>) equiv);
 		} else {
@@ -200,7 +200,8 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	 * @return An entry set for the map
 	 */
 	public static <K, V> ObservableSet<? extends ObservableMultiEntry<K, V>> defaultEntrySet(ObservableMultiMap<K, V> map) {
-		return ObservableSet.unique(map.keySet().map(map::entryFor));
+		return ObservableSet.unique(map.keySet().map(map::entryFor), (entry1, entry2) -> map.keySet().getEqualizer()
+				.equals(((ObservableMultiEntry<K, V>) entry1).getKey(), ((ObservableMultiEntry<K, V>) entry2).getKey()));
 	}
 
 	/**
@@ -245,11 +246,6 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		return ret;
 	}
 
-	/** @return All keys stored in this map */
-	default ObservableSet<K> observeKeys() {
-		return ObservableSet.unique(entrySet().map(getKeyType(), ObservableMultiEntry<K, V>::getKey));
-	}
-
 	/** @return All values stored in this map */
 	@Override
 	default ObservableCollection<V> values() {
@@ -292,8 +288,8 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	 */
 	default ObservableMultiEntry<K, V> subscribe(K key) {
 		ObservableValue<? extends ObservableMultiEntry<K, V>> existingEntry = entrySet()
-			.find(
-				entry -> java.util.Objects.equals(entry.getKey(), key));
+				.find(
+						entry -> java.util.Objects.equals(entry.getKey(), key));
 		class WrappingMultiEntry implements ObservableCollection.PartialCollectionImpl<V>, ObservableMultiEntry<K, V> {
 			@Override
 			public TypeToken<V> getType() {
@@ -322,7 +318,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
-				return ObservableValue.flatten(TypeToken.of(CollectionSession.class), existingEntry.mapV(ObservableCollection::getSession));
+				return ObservableValue.flatten(existingEntry.mapV(ObservableCollection::getSession));
 			}
 
 			@Override
@@ -370,7 +366,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		ObservableMultiMap<K, V> outer = this;
 		class CollectionMap implements ObservableMap<K, Collection<V>> {
 			private TypeToken<Collection<V>> theValueType = new TypeToken<Collection<V>>() {}.where(new TypeParameter<V>() {},
-				outer.getValueType());
+					outer.getValueType());
 			@Override
 			public TypeToken<K> getKeyType() {
 				return outer.getKeyType();
@@ -468,7 +464,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		ObservableMultiMap<K, V> outer = this;
 		return new ObservableMultiMap<K, T>() {
 			private TypeToken<T> theValueType = (TypeToken<T>) TypeToken.of(map.getClass())
-				.resolveType(Function.class.getTypeParameters()[1]);
+					.resolveType(Function.class.getTypeParameters()[1]);
 
 			@Override
 			public Transaction lock(boolean write, Object cause) {
@@ -564,11 +560,11 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 
 		ObsMultiEntryImpl(ObservableMultiMap<K, V> map, K key, ObservableCollection<V> values) {
 			this(map, key, values.getType(), ObservableValue
-				.constant(new TypeToken<ObservableCollection<V>>() {}.where(new TypeParameter<V>() {}, values.getType()), values));
+					.constant(new TypeToken<ObservableCollection<V>>() {}.where(new TypeParameter<V>() {}, values.getType()), values));
 		}
 
 		ObsMultiEntryImpl(ObservableMultiMap<K, V> map, K key, TypeToken<V> valueType,
-			ObservableValue<? extends ObservableCollection<V>> values) {
+				ObservableValue<? extends ObservableCollection<V>> values) {
 			theMap = map;
 			theKey = key;
 			theValueType = valueType;
@@ -599,22 +595,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 
 		@Override
 		public Subscription onElement(Consumer<? super ObservableElement<V>> onElement) {
-			return theValues.subscribe(new Observer<ObservableValueEvent<? extends ObservableCollection<V>>>() {
-				private Subscription theSubscription;
-
-				@Override
-				public <V2 extends ObservableValueEvent<? extends ObservableCollection<V>>> void onNext(V2 event) {
-					if(theSubscription != null) {
-						theSubscription.unsubscribe();
-						theSubscription = null;
-					}
-					if(event.getValue() != null) {
-						event.getValue().onElement(element -> {
-							onElement.accept(element.takeUntil(theValues));
-						});
-					}
-				}
-			});
+			return ObservableCollection.flattenValue(getWrappedObservable()).onElement(onElement);
 		}
 
 		@Override
@@ -721,7 +702,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		}
 
 		public ObsMultiEntryOrdered(ObservableMultiMap<K, V> map, K key, TypeToken<V> valueType,
-			ObservableValue<? extends ObservableOrderedCollection<V>> values) {
+				ObservableValue<? extends ObservableOrderedCollection<V>> values) {
 			super(map, key, valueType, values);
 		}
 
@@ -737,23 +718,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 
 		@Override
 		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<V>> onElement) {
-			ObservableValue<? extends ObservableOrderedCollection<V>> values = getWrappedObservable();
-			return values.subscribe(new Observer<ObservableValueEvent<? extends ObservableOrderedCollection<V>>>() {
-				private Subscription theSubscription;
-
-				@Override
-				public <V2 extends ObservableValueEvent<? extends ObservableOrderedCollection<V>>> void onNext(V2 event) {
-					if(theSubscription != null) {
-						theSubscription.unsubscribe();
-						theSubscription = null;
-					}
-					if(event.getValue() != null) {
-						event.getValue().onOrderedElement(element -> {
-							onElement.accept(element.takeUntil(values));
-						});
-					}
-				}
-			});
+			return ObservableOrderedCollection.flattenValue(getWrappedObservable()).onOrderedElement(onElement);
 		}
 	}
 
@@ -769,13 +734,18 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		}
 
 		public ObsMultiEntrySortedSet(ObservableMultiMap<K, V> map, K key, TypeToken<V> valueType,
-			ObservableValue<? extends ObservableSortedSet<V>> values) {
+				ObservableValue<? extends ObservableSortedSet<V>> values) {
 			super(map, key, valueType, values);
 		}
 
 		@Override
 		protected ObservableSortedSet<V> getWrapped() {
 			return (ObservableSortedSet<V>) super.getWrapped();
+		}
+
+		@Override
+		protected ObservableValue<? extends ObservableSortedSet<V>> getWrappedObservable() {
+			return (ObservableValue<? extends ObservableSortedSet<V>>) super.getWrappedObservable();
 		}
 
 		@Override
@@ -834,6 +804,11 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 				return current.last();
 			throw new java.util.NoSuchElementException();
 		}
+
+		@Override
+		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<V>> onElement) {
+			return ObservableReversibleCollection.flattenValue(getWrappedObservable()).onElementReverse(onElement);
+		}
 	}
 
 	/**
@@ -848,8 +823,13 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		}
 
 		public ObsMultiEntryList(ObservableMultiMap<K, V> map, K key, TypeToken<V> valueType,
-			ObservableValue<? extends ObservableList<V>> values) {
+				ObservableValue<? extends ObservableList<V>> values) {
 			super(map, key, valueType, values);
+		}
+
+		@Override
+		protected ObservableValue<? extends ObservableList<V>> getWrappedObservable() {
+			return (ObservableValue<? extends ObservableList<V>>) super.getWrappedObservable();
 		}
 
 		@Override
@@ -918,6 +898,11 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			ObservableList<V> current = getWrapped();
 			return current != null ? current.lastIndexOf(o) : -1;
 		}
+
+		@Override
+		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<V>> onElement) {
+			return ObservableReversibleCollection.flattenValue(getWrappedObservable()).onElementReverse(onElement);
+		}
 	}
 
 	/**
@@ -932,13 +917,18 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		}
 
 		public ObsMultiEntrySet(ObservableMultiMap<K, V> map, K key, TypeToken<V> valueType,
-			ObservableValue<? extends ObservableSet<V>> values) {
+				ObservableValue<? extends ObservableSet<V>> values) {
 			super(map, key, valueType, values);
 		}
 
 		@Override
 		protected ObservableSet<V> getWrapped() {
 			return (ObservableSet<V>) super.getWrapped();
+		}
+
+		@Override
+		public Equalizer getEqualizer() {
+			return getWrapped().getEqualizer();
 		}
 	}
 }

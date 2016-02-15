@@ -81,7 +81,7 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 	 * @return A key set for the map
 	 */
 	public static <K, V> ObservableSet<K> defaultKeySet(ObservableMap<K, V> map) {
-		return ObservableSet.unique(map.observeEntries().map(Entry::getKey));
+		return ObservableSet.unique(map.observeEntries().map(Entry::getKey), Objects::equals);
 	}
 
 	/**
@@ -128,7 +128,7 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 				return null;
 			}
 		};
-		return ObservableValue.flatten(map.getValueType(), map.observeEntries().equivalent(keyEntry));
+		return ObservableValue.flatten(map.observeEntries().equivalent(keyEntry));
 	}
 
 	/**
@@ -167,7 +167,8 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 	 * @return An entry set for the map
 	 */
 	public static <K, V> ObservableSet<? extends ObservableEntry<K, V>> defaultObserveEntries(ObservableMap<K, V> map) {
-		return ObservableSet.unique(map.keySet().map(map::entryFor));
+		return ObservableSet.unique(map.keySet().map(map::entryFor), (entry1, entry2) -> map.keySet().getEqualizer()
+				.equals(((ObservableEntry<K, V>) entry1).getKey(), ((ObservableEntry<K, V>) entry2).getKey()));
 	}
 
 	/** @return An observable value reflecting the number of key-value pairs stored in this map */

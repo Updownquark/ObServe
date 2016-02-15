@@ -237,7 +237,7 @@ public class ObservableTest {
 		}
 	}
 
-	/** Tests {@link ObservableValue#flatten(Type, ObservableValue)} */
+	/** Tests {@link ObservableValue#flatten(ObservableValue)} */
 	@Test
 	public void observableValueFlatten() {
 		SimpleSettableValue<ObservableValue<Integer>> outer = new SimpleSettableValue<>(new TypeToken<ObservableValue<Integer>>() {}, false);
@@ -247,7 +247,7 @@ public class ObservableTest {
 		SimpleSettableValue<Integer> inner2 = new SimpleSettableValue<>(Integer.TYPE, false);
 		inner2.set(2, null);
 		int [] received = new int[1];
-		ObservableValue.flatten(TypeToken.of(Integer.TYPE), outer).act(value -> received[0] = value.getValue());
+		ObservableValue.flatten(outer).act(value -> received[0] = value.getValue());
 
 		assertEquals(1, received[0]);
 		inner1.set(3, null);

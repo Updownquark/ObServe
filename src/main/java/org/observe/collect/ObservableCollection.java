@@ -30,7 +30,7 @@ import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.util.ObservableUtils;
-import org.qommons.ArrayUtils;
+import org.qommons.IterableUtils;
 import org.qommons.ListenerSet;
 import org.qommons.Transaction;
 
@@ -382,10 +382,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @return A collection containing all non-null elements passing the given test
 	 */
 	default ObservableCollection<E> filter(Predicate<? super E> filter, boolean staticFilter) {
-		Function<E, E> map = value -> {
-			return (value != null && filter.test(value)) ? value : null;
-		};
-		return d().label(filterMap(getType(), map, value -> value, staticFilter)).tag("filter", filter).get();
+		return d().label(filterMap2(getType(), value -> {
+			boolean pass = filter.test(value);
+			return new FilterMapResult<>(pass ? value : null, pass);
+		} , value -> value, staticFilter)).tag("filter", filter).get();
 	}
 
 	/**
@@ -395,8 +395,12 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 *         given class
 	 */
 	default <T> ObservableCollection<T> filter(Class<T> type) {
-		return d().label(filterMap(TypeToken.of(type), value -> type.isInstance(value) ? type.cast(value) : null, value -> (E) value, true))
-				.tag("filterType", type).get();
+		return d().label(filterMap2(TypeToken.of(type), value -> {
+			if (type.isInstance(value))
+				return new FilterMapResult<>(type.cast(value), true);
+			else
+				return new FilterMapResult<>(null, false);
+		} , value -> (E) value, true)).tag("filterType", type).get();
 	}
 
 	/**
@@ -425,13 +429,30 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @param <T> The type of the mapped collection
 	 * @param type The run-time type of the mapped collection
 	 * @param map The mapping function
-	 * @param reverse The reverse function if addition support is desired for the filtered collection
+	 * @param reverse The reverse function if addition support is desired for the mapped collection
 	 * @param staticFilter Whether the filtering on the filtered collection is to be {@link #filterStatic(Predicate) static} or
-	 *            {@link #filterDynamic(Predicate) dynamic}.
+	 *        {@link #filterDynamic(Predicate) dynamic}.
 	 * @return A collection containing every element in this collection for which the mapping function returns a non-null value
 	 */
 	default <T> ObservableCollection<T> filterMap(TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse,
 			boolean staticFilter) {
+		return filterMap2(type, value -> {
+			T mapped = map.apply(value);
+			return new FilterMapResult<>(mapped, mapped != null);
+		} , reverse, staticFilter);
+	}
+
+	/**
+	 * @param <T> The type of the mapped collection
+	 * @param type The run-time type of the mapped collection
+	 * @param map The filter/mapping function
+	 * @param reverse The reverse function if addition support is desired for the mapped collection
+	 * @param staticFilter Whether the filtering on the filtered collection is to be {@link #filterStatic(Predicate) static} or
+	 *        {@link #filterDynamic(Predicate) dynamic}.
+	 * @return A collection containing every element in this collection for which the mapping function returns a passing value
+	 */
+	default <T> ObservableCollection<T> filterMap2(TypeToken<T> type, Function<? super E, FilterMapResult<T>> map,
+			Function<? super T, E> reverse, boolean staticFilter) {
 		if(type == null)
 			type = (TypeToken<T>) TypeToken.of(map.getClass()).resolveType(Function.class.getTypeParameters()[1]);
 		if(staticFilter)
@@ -1019,7 +1040,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @param collectionObservable The observable value
 	 * @return A collection representing the contents of the value, or a zero-length collection when null
 	 */
-	public static <E> ObservableCollection<E> flattenValue(ObservableValue<ObservableCollection<E>> collectionObservable) {
+	public static <E> ObservableCollection<E> flattenValue(ObservableValue<? extends ObservableCollection<E>> collectionObservable) {
 		return d().debug(new FlattenedValueCollection<>(collectionObservable)).from("flatten", collectionObservable).get();
 	}
 
@@ -1330,6 +1351,27 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	}
 
 	/**
+	 * The result of a filter/map operation
+	 *
+	 * @param <T> The type of the mapped value
+	 */
+	class FilterMapResult<T> {
+		/** The mapped result */
+		public final T mapped;
+		/** Whether the value passed the filter */
+		public final boolean passed;
+
+		/**
+		 * @param _mapped The mapped result
+		 * @param _passed Whether the value passed the filter
+		 */
+		public FilterMapResult(T _mapped, boolean _passed) {
+			mapped = _mapped;
+			passed = _passed;
+		}
+	}
+
+	/**
 	 * Implements {@link #filterMap(TypeToken, Function, Function, boolean)}
 	 *
 	 * @param <E> The type of the collection to filter/map
@@ -1337,14 +1379,12 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 */
 	abstract class FilteredCollection<E, T> implements PartialCollectionImpl<T> {
 		private final ObservableCollection<E> theWrapped;
-
 		private final TypeToken<T> theType;
-
-		private final Function<? super E, T> theMap;
-
+		private final Function<? super E, FilterMapResult<T>> theMap;
 		private final Function<? super T, E> theReverse;
 
-		FilteredCollection(ObservableCollection<E> wrap, TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse) {
+		FilteredCollection(ObservableCollection<E> wrap, TypeToken<T> type, Function<? super E, FilterMapResult<T>> map,
+				Function<? super T, E> reverse) {
 			theWrapped = wrap;
 			theType = type != null ? type : (TypeToken<T>) TypeToken.of(map.getClass()).resolveType(Function.class.getTypeParameters()[1]);
 			theMap = map;
@@ -1355,7 +1395,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			return theWrapped;
 		}
 
-		protected Function<? super E, T> getMap() {
+		protected Function<? super E, FilterMapResult<T>> getMap() {
 			return theMap;
 		}
 
@@ -1382,7 +1422,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		public int size() {
 			int ret = 0;
 			for(E el : theWrapped)
-				if(theMap.apply(el) != null)
+				if (theMap.apply(el).passed)
 					ret++;
 			return ret;
 		}
@@ -1398,7 +1438,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 				return PartialCollectionImpl.super.add(e);
 			else {
 				E reversed = theReverse.apply(e);
-				if(theMap.apply(reversed) == null)
+				if (!theMap.apply(reversed).passed)
 					throw new IllegalArgumentException("The value " + e + " is not acceptable in this mapped list");
 				return theWrapped.add(reversed);
 			}
@@ -1411,7 +1451,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			else {
 				List<E> toAdd = c.stream().map(theReverse).collect(Collectors.toList());
 				for(E value : toAdd)
-					if(theMap.apply(value) == null)
+					if (!theMap.apply(value).passed)
 						throw new IllegalArgumentException("Value " + value + " is not acceptable in this mapped list");
 				return theWrapped.addAll(toAdd);
 			}
@@ -1423,8 +1463,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 				Iterator<E> iter = theWrapped.iterator();
 				while(iter.hasNext()) {
 					E el = iter.next();
-					T mapped = getMap().apply(el);
-					if(mapped != null && Objects.equals(mapped, o)) {
+					FilterMapResult<T> mapped = getMap().apply(el);
+					if (mapped.passed && Objects.equals(mapped.mapped, o)) {
 						iter.remove();
 						return true;
 					}
@@ -1440,8 +1480,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 				Iterator<E> iter = theWrapped.iterator();
 				while(iter.hasNext()) {
 					E el = iter.next();
-					T mapped = getMap().apply(el);
-					if(mapped != null && c.contains(mapped)) {
+					FilterMapResult<T> mapped = getMap().apply(el);
+					if (mapped.passed && c.contains(mapped.mapped)) {
 						iter.remove();
 						ret = true;
 					}
@@ -1457,8 +1497,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 				Iterator<E> iter = theWrapped.iterator();
 				while(iter.hasNext()) {
 					E el = iter.next();
-					T mapped = getMap().apply(el);
-					if(mapped != null && !c.contains(mapped)) {
+					FilterMapResult<T> mapped = getMap().apply(el);
+					if (mapped.passed && !c.contains(mapped.mapped)) {
 						iter.remove();
 						ret = true;
 					}
@@ -1473,8 +1513,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 				Iterator<E> iter = getWrapped().iterator();
 				while(iter.hasNext()) {
 					E el = iter.next();
-					T mapped = getMap().apply(el);
-					if(mapped != null) {
+					FilterMapResult<T> mapped = getMap().apply(el);
+					if (mapped.passed) {
 						iter.remove();
 					}
 				}
@@ -1483,21 +1523,21 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		protected Iterator<T> filter(Iterator<E> iter) {
 			return new Iterator<T>() {
-				private T nextVal;
+				private FilterMapResult<T> nextVal;
 
 				@Override
 				public boolean hasNext() {
-					while(nextVal == null && iter.hasNext()) {
+					while ((nextVal == null || !nextVal.passed) && iter.hasNext()) {
 						nextVal = theMap.apply(iter.next());
 					}
-					return nextVal != null;
+					return nextVal != null && nextVal.passed;
 				}
 
 				@Override
 				public T next() {
-					if(nextVal == null && !hasNext())
+					if ((nextVal == null || !nextVal.passed) && !hasNext())
 						throw new java.util.NoSuchElementException();
-					T ret = nextVal;
+					T ret = nextVal.mapped;
 					nextVal = null;
 					return ret;
 				}
@@ -1518,7 +1558,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @param <T> The type of the mapped collection
 	 */
 	class StaticFilteredCollection<E, T> extends FilteredCollection<E, T> {
-		public StaticFilteredCollection(ObservableCollection<E> wrap, TypeToken<T> type, Function<? super E, T> map,
+		public StaticFilteredCollection(ObservableCollection<E> wrap, TypeToken<T> type, Function<? super E, FilterMapResult<T>> map,
 				Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
@@ -1526,8 +1566,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		@Override
 		public Subscription onElement(Consumer<? super ObservableElement<T>> observer) {
 			return getWrapped().onElement(element -> {
-				if(getMap().apply(element.get())!=null)
-					observer.accept(element.mapV(getMap()));
+				if (getMap().apply(element.get()).passed)
+					observer.accept(element.mapV(value -> getMap().apply(value).mapped));
 			});
 		}
 	}
@@ -1539,7 +1579,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @param <T> The type of the mapped collection
 	 */
 	class DynamicFilteredCollection<E, T> extends FilteredCollection<E, T> {
-		DynamicFilteredCollection(ObservableCollection<E> wrap, TypeToken<T> type, Function<? super E, T> map,
+		DynamicFilteredCollection(ObservableCollection<E> wrap, TypeToken<T> type, Function<? super E, FilterMapResult<T>> map,
 				Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
@@ -1549,17 +1589,22 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public Subscription onElement(Consumer<? super ObservableElement<T>> observer) {
-			return getWrapped().onElement(element -> {
+		public Subscription onElement(Consumer<? super ObservableElement<T>> onElement) {
+			SimpleObservable<Void> unSubObs = new SimpleObservable<>();
+			Subscription collSub = getWrapped().onElement(element -> {
 				FilteredElement<E, T> retElement = filter(element);
-				element.act(elValue -> {
+				element.unsubscribeOn(unSubObs).act(elValue -> {
 					if(!retElement.isIncluded()) {
-						T mapped = getMap().apply(elValue.getValue());
-						if(mapped != null)
-							observer.accept(retElement);
+						FilterMapResult<T> mapped = getMap().apply(elValue.getValue());
+						if (mapped.passed)
+							onElement.accept(retElement);
 					}
 				});
 			});
+			return () -> {
+				collSub.unsubscribe();
+				unSubObs.onNext(null);
+			};
 		}
 	}
 
@@ -1571,11 +1616,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 */
 	class FilteredElement<E, T> implements ObservableElement<T> {
 		private final ObservableElement<E> theWrappedElement;
-		private final Function<? super E, T> theMap;
+		private final Function<? super E, FilterMapResult<T>> theMap;
 
 		private final TypeToken<T> theType;
 
-		private T theValue;
+		private FilterMapResult<T> theValue;
 		private boolean isIncluded;
 
 		/**
@@ -1583,7 +1628,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		 * @param map The mapping function to filter on
 		 * @param type The type of the element
 		 */
-		protected FilteredElement(ObservableElement<E> wrapped, Function<? super E, T> map, TypeToken<T> type) {
+		protected FilteredElement(ObservableElement<E> wrapped, Function<? super E, FilterMapResult<T>> map, TypeToken<T> type) {
 			theWrappedElement = wrapped;
 			theMap = map;
 			theType = type;
@@ -1591,7 +1636,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		@Override
 		public ObservableValue<T> persistent() {
-			return theWrappedElement.mapV(theMap);
+			return theWrappedElement.mapV(value -> theMap.apply(value).mapped);
 		}
 
 		@Override
@@ -1601,7 +1646,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		@Override
 		public T get() {
-			return theValue;
+			return theValue.mapped;
 		}
 
 		/** @return The element that this filtered element wraps */
@@ -1610,7 +1655,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		/** @return The mapping function used by this element */
-		protected Function<? super E, T> getMap() {
+		protected Function<? super E, FilterMapResult<T>> getMap() {
 			return theMap;
 		}
 
@@ -1625,13 +1670,12 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			innerSub[0] = theWrappedElement.subscribe(new Observer<ObservableValueEvent<E>>() {
 				@Override
 				public <V2 extends ObservableValueEvent<E>> void onNext(V2 elValue) {
-					T oldValue = theValue;
+					T oldValue = theValue == null ? null : theValue.mapped;
 					theValue = theMap.apply(elValue.getValue());
-					if(theValue == null) {
+					if (!theValue.passed) {
 						if(!isIncluded)
 							return;
 						isIncluded = false;
-						theValue = null;
 						observer2.onCompleted(createChangeEvent(oldValue, oldValue, elValue));
 						if(innerSub[0] != null) {
 							innerSub[0].unsubscribe();
@@ -1641,9 +1685,9 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						boolean initial = !isIncluded;
 						isIncluded = true;
 						if(initial)
-							observer2.onNext(createInitialEvent(theValue));
+							observer2.onNext(createInitialEvent(theValue.mapped));
 						else
-							observer2.onNext(createChangeEvent(oldValue, theValue, elValue));
+							observer2.onNext(createChangeEvent(oldValue, theValue.mapped, elValue));
 					}
 				}
 
@@ -1651,9 +1695,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 				public <V2 extends ObservableValueEvent<E>> void onCompleted(V2 elValue) {
 					if(!isIncluded)
 						return;
-					T oldValue = theValue;
-					T newValue = elValue == null ? null : theMap.apply(elValue.getValue());
-					observer2.onCompleted(createChangeEvent(oldValue, newValue, elValue));
+					T oldValue = theValue.mapped;
+					observer2.onCompleted(createChangeEvent(oldValue, oldValue, elValue));
 				}
 			});
 			if(!isIncluded) {
@@ -1868,7 +1911,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			theKeyType = keyType != null ? keyType
 					: (TypeToken<K>) TypeToken.of(keyMap.getClass()).resolveType(Function.class.getTypeParameters()[1]);
 
-			theKeySet = ObservableSet.unique(theWrapped.map(theKeyMap));
+			theKeySet = ObservableSet.unique(theWrapped.map(theKeyMap), Objects::equals);
 		}
 
 		@Override
@@ -2189,7 +2232,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		@Override
 		public Iterator<E> iterator() {
-			return org.qommons.ArrayUtils.immutableIterator(theWrapped.iterator());
+			return org.qommons.IterableUtils.immutableIterator(theWrapped.iterator());
 		}
 
 		@Override
@@ -2782,6 +2825,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			theType = (TypeToken<E>) theCollection.getType().resolveType(ObservableValue.class.getTypeParameters()[0]);
 		}
 
+		/** @return The collection of values that this collection flattens */
+		protected ObservableCollection<? extends ObservableValue<? extends E>> getWrapped() {
+			return theCollection;
+		}
+
 		@Override
 		public ObservableValue<CollectionSession> getSession() {
 			return theCollection.getSession();
@@ -2799,7 +2847,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		@Override
 		public Subscription onElement(Consumer<? super ObservableElement<E>> observer) {
-			return theCollection.onElement(element -> observer.accept(new FlattenedValueElement<>(element, theType)));
+			return theCollection.onElement(element -> observer.accept(createFlattenedElement(element)));
+		}
+
+		protected FlattenedValueElement<E> createFlattenedElement(ObservableElement<? extends ObservableValue<? extends E>> element) {
+			return new FlattenedValueElement<>(element, theType);
 		}
 
 		@Override
@@ -2839,9 +2891,13 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		private final ObservableElement<? extends ObservableValue<? extends E>> theWrapped;
 		private final TypeToken<E> theType;
 
-		FlattenedValueElement(ObservableElement<? extends ObservableValue<? extends E>> wrap, TypeToken<E> type) {
+		protected FlattenedValueElement(ObservableElement<? extends ObservableValue<? extends E>> wrap, TypeToken<E> type) {
 			theWrapped = wrap;
 			theType = type;
+		}
+
+		protected ObservableElement<? extends ObservableValue<? extends E>> getWrapped() {
+			return theWrapped;
 		}
 
 		@Override
@@ -2856,7 +2912,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		@Override
 		public ObservableValue<E> persistent() {
-			return ObservableValue.flatten(getType(), theWrapped.persistent());
+			return ObservableValue.flatten(theWrapped.persistent());
 		}
 
 		private E get(ObservableValue<? extends E> value) {
@@ -2897,12 +2953,16 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @param <E> The type of elements in the collection
 	 */
 	class FlattenedValueCollection<E> implements ObservableCollection.PartialCollectionImpl<E> {
-		private final ObservableValue<? extends ObservableCollection<E>> theCollectionObservable;
+		private final ObservableValue<? extends ObservableCollection<? extends E>> theCollectionObservable;
 		private final TypeToken<E> theType;
 
-		protected FlattenedValueCollection(ObservableValue<? extends ObservableCollection<E>> collectionObservable) {
+		protected FlattenedValueCollection(ObservableValue<? extends ObservableCollection<? extends E>> collectionObservable) {
 			theCollectionObservable = collectionObservable;
 			theType = (TypeToken<E>) theCollectionObservable.getType().resolveType(ObservableCollection.class.getTypeParameters()[0]);
+		}
+
+		protected ObservableValue<? extends ObservableCollection<? extends E>> getWrapped() {
+			return theCollectionObservable;
 		}
 
 		@Override
@@ -2912,24 +2972,24 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		@Override
 		public ObservableValue<CollectionSession> getSession() {
-			return ObservableValue.flatten(new TypeToken<CollectionSession>() {}, theCollectionObservable.mapV(coll -> coll.getSession()));
+			return ObservableValue.flatten(theCollectionObservable.mapV(coll -> coll.getSession()));
 		}
 
 		@Override
 		public int size() {
-			ObservableCollection<E> coll = theCollectionObservable.get();
+			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			return coll == null ? 0 : coll.size();
 		}
 
 		@Override
 		public Iterator<E> iterator() {
-			ObservableCollection<E> coll = theCollectionObservable.get();
-			return coll == null ? Collections.EMPTY_LIST.iterator() : coll.iterator();
+			ObservableCollection<? extends E> coll = theCollectionObservable.get();
+			return coll == null ? Collections.EMPTY_LIST.iterator() : (Iterator<E>) coll.iterator();
 		}
 
 		@Override
 		public Transaction lock(boolean write, Object cause) {
-			ObservableCollection<E> coll = theCollectionObservable.get();
+			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			return coll == null ? () -> {
 			} : coll.lock(write, cause);
 		}
@@ -2938,12 +2998,12 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
 			SimpleObservable<Void> unSubObs = new SimpleObservable<>();
 			Subscription collSub = theCollectionObservable
-					.subscribe(new Observer<ObservableValueEvent<? extends ObservableCollection<E>>>() {
+					.subscribe(new Observer<ObservableValueEvent<? extends ObservableCollection<? extends E>>>() {
 						@Override
-						public <V extends ObservableValueEvent<? extends ObservableCollection<E>>> void onNext(V event) {
+						public <V extends ObservableValueEvent<? extends ObservableCollection<? extends E>>> void onNext(V event) {
 							if (event.getValue() != null) {
 								Observable<?> until = ObservableUtils.makeUntil(theCollectionObservable, event);
-								event.getValue().takeUntil(until).unsubscribeOn(unSubObs).onElement(onElement);
+								((ObservableCollection<E>) event.getValue().takeUntil(until).unsubscribeOn(unSubObs)).onElement(onElement);
 							}
 						}
 					});
@@ -3023,7 +3083,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		@Override
 		public Iterator<E> iterator() {
-			return (Iterator<E>) ArrayUtils.flatten(theOuter).iterator();
+			return (Iterator<E>) IterableUtils.flatten(theOuter).iterator();
 		}
 
 		@Override

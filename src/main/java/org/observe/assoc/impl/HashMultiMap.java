@@ -9,6 +9,9 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 import org.observe.assoc.MultiMap;
+import org.qommons.Equalizer;
+import org.qommons.Equalizer.EqualizerNode;
+import org.qommons.IterableUtils;
 
 /**
  * A simple unobservable implementation of MultiMap
@@ -17,21 +20,24 @@ import org.observe.assoc.MultiMap;
  * @param <V> The value type of the map
  */
 public class HashMultiMap<K, V> implements MultiMap<K, V> {
-	private final Map<K, Collection<V>> theMap;
+	private final Equalizer theEqualizer;
+	private final Map<EqualizerNode<K>, Collection<V>> theMap;
 	private final Supplier<? extends Collection<V>> theCollectionCreator;
 
 	private int theSize;
 
-	/** Creates a simple, non-concurrent multi-map */
-	public HashMultiMap() {
-		this(false, null);
+	/** @param equalizer The equalizer to determining uniqueness in this map */
+	public HashMultiMap(Equalizer equalizer) {
+		this(equalizer, false, null);
 	}
 
 	/**
+	 * @param equalizer The equalizer to determining uniqueness in this map
 	 * @param concurrent Whether the map should handle multi-thread access
 	 * @param collectCreator Creates collections for this map. May be null to use a default.
 	 */
-	public HashMultiMap(boolean concurrent, Supplier<? extends Collection<V>> collectCreator) {
+	public HashMultiMap(Equalizer equalizer, boolean concurrent, Supplier<? extends Collection<V>> collectCreator) {
+		theEqualizer = equalizer;
 		if(collectCreator == null) {
 			collectCreator = java.util.ArrayList::new;
 		}
@@ -41,7 +47,64 @@ public class HashMultiMap<K, V> implements MultiMap<K, V> {
 
 	@Override
 	public Set<K> keySet() {
-		return theMap.keySet();
+		return new AbstractSet<K>() {
+			private final Set<EqualizerNode<K>> keySet = theMap.keySet();
+
+			@Override
+			public int size() {
+				return keySet.size();
+			}
+
+			@Override
+			public boolean isEmpty() {
+				return keySet.isEmpty();
+			}
+
+			@Override
+			public boolean contains(Object o) {
+				return keySet.contains(o);
+			}
+
+			@Override
+			public Iterator<K> iterator() {
+				return IterableUtils.map(keySet, EqualizerNode::get).iterator();
+			}
+
+			@Override
+			public boolean add(K e) {
+				throw new UnsupportedOperationException();
+			}
+
+			@Override
+			public boolean remove(Object o) {
+				return keySet.remove(o);
+			}
+
+			@Override
+			public boolean containsAll(Collection<?> c) {
+				return keySet.containsAll(c);
+			}
+
+			@Override
+			public boolean addAll(Collection<? extends K> c) {
+				throw new UnsupportedOperationException();
+			}
+
+			@Override
+			public boolean retainAll(Collection<?> c) {
+				return keySet.retainAll(c);
+			}
+
+			@Override
+			public boolean removeAll(Collection<?> c) {
+				return keySet.removeAll(c);
+			}
+
+			@Override
+			public void clear() {
+				keySet.clear();
+			}
+		};
 	}
 
 	@Override
@@ -89,7 +152,7 @@ public class HashMultiMap<K, V> implements MultiMap<K, V> {
 			@Override
 			public Iterator<MultiEntry<K, V>> iterator() {
 				return new Iterator<MultiEntry<K, V>>() {
-					private final Iterator<Map.Entry<K, Collection<V>>> backing = theMap.entrySet().iterator();
+					private final Iterator<Map.Entry<EqualizerNode<K>, Collection<V>>> backing = theMap.entrySet().iterator();
 
 					@Override
 					public boolean hasNext() {
@@ -99,11 +162,11 @@ public class HashMultiMap<K, V> implements MultiMap<K, V> {
 					@Override
 					public MultiEntry<K, V> next() {
 						class MultEntryImpl extends AbstractCollection<V>implements MultiEntry<K, V> {
-							private Map.Entry<K, Collection<V>> backingEntry = backing.next();
+							private Map.Entry<EqualizerNode<K>, Collection<V>> backingEntry = backing.next();
 
 							@Override
 							public K getKey() {
-								return backingEntry.getKey();
+								return backingEntry.getKey().get();
 							}
 
 							@Override
@@ -145,7 +208,7 @@ public class HashMultiMap<K, V> implements MultiMap<K, V> {
 		Collection<V> coll = theMap.get(key);
 		if(coll == null) {
 			coll = theCollectionCreator.get();
-			theMap.put(key, coll);
+			theMap.put(new EqualizerNode<>(theEqualizer, key), coll);
 		}
 		return coll;
 	}
