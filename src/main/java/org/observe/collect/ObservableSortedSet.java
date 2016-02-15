@@ -772,7 +772,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	class ReversedSortedSet<E> extends ReversedCollection<E> implements PartialSortedSetImpl<E> {
+	class ReversedSortedSet<E> extends ObservableReversedCollection<E> implements PartialSortedSetImpl<E> {
 		ReversedSortedSet(ObservableSortedSet<E> wrap) {
 			super(wrap);
 		}

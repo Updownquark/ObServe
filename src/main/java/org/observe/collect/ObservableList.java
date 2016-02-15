@@ -1721,7 +1721,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	class ReversedList<E> extends ReversedCollection<E> implements PartialListImpl<E> {
+	class ReversedList<E> extends ObservableReversedCollection<E> implements PartialListImpl<E> {
 		protected ReversedList(ObservableList<E> list) {
 			super(list);
 		}

@@ -21,6 +21,7 @@ import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.util.ObservableUtils;
 import org.qommons.IterableUtils;
+import org.qommons.ReversibleCollection;
 import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeToken;
@@ -30,7 +31,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <E> The type of elements in the collection
  */
-public interface ObservableReversibleCollection<E> extends ObservableOrderedCollection<E> {
+public interface ObservableReversibleCollection<E> extends ObservableOrderedCollection<E>, ReversibleCollection<E> {
 	/**
 	 * Identical to {@link #onOrderedElement(Consumer)}, except that initial elements are given to the consumer in reverse.
 	 *
@@ -56,12 +57,10 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 		return ret;
 	}
 
-	/** @return An iterable that iterates through this collection's values in reverse */
-	Iterable<E> descending();
-
 	/** @return A collection that is identical to this one, but with its elements reversed */
+	@Override
 	default ObservableReversibleCollection<E> reverse() {
-		return new ReversedCollection<>(this);
+		return new ObservableReversedCollection<>(this);
 	}
 
 	/* Overridden for performance.  get() is linear in the super, constant time here */
@@ -277,10 +276,10 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	class ReversedCollection<E> implements PartialCollectionImpl<E>, ObservableReversibleCollection<E> {
+	class ObservableReversedCollection<E> implements PartialCollectionImpl<E>, ObservableReversibleCollection<E> {
 		private final ObservableReversibleCollection<E> theWrapped;
 
-		protected ReversedCollection(ObservableReversibleCollection<E> wrap) {
+		protected ObservableReversedCollection(ObservableReversibleCollection<E> wrap) {
 			theWrapped = wrap;
 		}
 
@@ -462,7 +461,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	ObservableReversibleCollection<T> {
 		public StaticFilteredReversibleCollection(ObservableReversibleCollection<E> wrap, TypeToken<T> type,
 				Function<? super E, FilterMapResult<T>> map,
-				Function<? super T, E> reverse) {
+						Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
 
@@ -499,7 +498,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	class DynamicFilteredReversibleCollection<E, T> extends DynamicFilteredOrderedCollection<E, T> implements ObservableReversibleCollection<T> {
 		public DynamicFilteredReversibleCollection(ObservableReversibleCollection<E> wrap, TypeToken<T> type,
 				Function<? super E, FilterMapResult<T>> map,
-				Function<? super T, E> reverse) {
+						Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
 
