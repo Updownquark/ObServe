@@ -1118,7 +1118,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @param <E> The type of the collection
 	 */
 	class FlattenedOrderedCollection<E> extends FlattenedObservableCollection<E> implements ObservableOrderedCollection<E> {
-		protected FlattenedOrderedCollection(ObservableOrderedCollection<? extends ObservableOrderedCollection<E>> outer) {
+		protected FlattenedOrderedCollection(ObservableOrderedCollection<? extends ObservableOrderedCollection<? extends E>> outer) {
 			super(outer);
 		}
 

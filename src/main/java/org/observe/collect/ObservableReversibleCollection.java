@@ -45,7 +45,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	/**
 	 * A default implementation of {@link #onElementReverse(Consumer)} that simply obtains all the elements and feeds them to the consumer
 	 * in reverse. This implementation should only be used where a more performant implementation is not possible.
-	 * 
+	 *
 	 * @param coll The collection to get the reverse elements of
 	 * @param onElement The consumer for the elements
 	 * @return The subscription for the elements
@@ -927,7 +927,8 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 * @param <E> The type of the collection
 	 */
 	class FlattenedReversibleCollection<E> extends FlattenedOrderedCollection<E> implements ObservableReversibleCollection<E> {
-		protected FlattenedReversibleCollection(ObservableReversibleCollection<? extends ObservableReversibleCollection<E>> outer) {
+		protected FlattenedReversibleCollection(
+				ObservableReversibleCollection<? extends ObservableReversibleCollection<? extends E>> outer) {
 			super(outer);
 		}
 

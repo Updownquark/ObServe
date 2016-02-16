@@ -295,7 +295,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	 * @param list The list of items for the new list
 	 * @return An observable list whose contents are given and never changes
 	 */
-	public static <T> ObservableList<T> constant(TypeToken<T> type, List<T> list) {
+	public static <T> ObservableList<T> constant(TypeToken<T> type, List<? extends T> list) {
 		class ConstantObservableElement implements ObservableOrderedElement<T> {
 			private final TypeToken<T> theType;
 			private final T theValue;
@@ -434,8 +434,8 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	 * @param list The list to flatten
 	 * @return A list containing all elements of all lists in the outer list
 	 */
-	public static <E> ObservableList<E> flatten(ObservableList<? extends ObservableList<E>> list) {
-		return d().debug(new FlattenedObservableList<>(list)).from("flatten", list).get();
+	public static <E> ObservableList<E> flatten(ObservableList<? extends ObservableList<? extends E>> list) {
+		return d().debug(new FlattenedObservableList<E>(list)).from("flatten", list).get();
 	}
 
 	/**
@@ -444,12 +444,12 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	 * @param lists The lists to flatten
 	 * @return An observable list that contains all the values of the given lists
 	 */
-	public static <T> ObservableList<T> flattenLists(TypeToken<T> type, ObservableList<T>... lists) {
+	public static <T> ObservableList<T> flattenLists(TypeToken<T> type, ObservableList<? extends T>... lists) {
 		type = type.wrap();
 		if(lists.length == 0)
 			return constant(type);
 		ObservableList<ObservableList<T>> wrapper = constant(new TypeToken<ObservableList<T>>() {}.where(new TypeParameter<T>() {}, type),
-				lists);
+				(ObservableList<T>[]) lists);
 		return flatten(wrapper);
 	}
 
@@ -1794,7 +1794,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	 * @param <E> The type of elements in the collection
 	 */
 	class FlattenedObservableList<E> extends FlattenedReversibleCollection<E> implements PartialListImpl<E> {
-		public FlattenedObservableList(ObservableList<? extends ObservableList<E>> outer) {
+		public FlattenedObservableList(ObservableList<? extends ObservableList<? extends E>> outer) {
 			super(outer);
 		}
 
