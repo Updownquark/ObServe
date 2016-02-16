@@ -263,8 +263,8 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 			Subscription outerSub = theWrapped.subscribe(new Observer<ObservableValueEvent<E>>() {
 				@Override
 				public <V extends ObservableValueEvent<E>> void onNext(V value) {
-					refireSub[0] = theRefresh.apply(value.getValue()).noInit().takeUntil(theWrapped.noInit()).takeUntil(theUnsubscribe)
-							.act(refireObs);
+					refireSub[0] = theRefresh.apply(value.getValue()).noInit().takeUntil(ObservableUtils.makeUntil(theWrapped, value))
+							.takeUntil(theUnsubscribe).act(refireObs);
 					observer.onNext(value);
 				}
 

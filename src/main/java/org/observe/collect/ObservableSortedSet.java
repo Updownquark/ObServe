@@ -152,6 +152,57 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 	}
 
 	/**
+	 * <p>
+	 * Starts iteration in either direction from a starting point.
+	 * </p>
+	 *
+	 * <p>
+	 * This default implementation of the {@link #iterateFrom(Object, boolean, boolean)} method just takes a default iterator and skips over
+	 * elements until the given starting point is passed. This method should be only be used when no other better performance is possible.
+	 * </p>
+	 *
+	 * @param set The set to iterate on
+	 * @param element The element to start iteration at
+	 * @param included Whether to include the given element in the iteration
+	 * @param reversed Whether to iterate backward or forward from the given element
+	 * @return An iterable that starts iteration from the given element
+	 */
+	public static <E> Iterable<E> defaultIterateFrom(ObservableSubSet<E> set, E element, boolean included, boolean reversed) {
+		return () -> new Iterator<E>() {
+			private final Iterator<E> backing = reversed ? set.descendingIterator() : set.iterator();
+
+			private E theFirst;
+
+			{
+				if (element != null) {
+					Comparator<? super E> compare = set.comparator();
+					while (backing.hasNext()) {
+						theFirst = backing.next();
+						int comp = compare.compare(theFirst, element);
+						if (comp > 0 || (included && comp == 0))
+							break;
+					}
+				}
+			}
+
+			@Override
+			public boolean hasNext() {
+				return backing.hasNext();
+			}
+
+			@Override
+			public E next() {
+				return backing.next();
+			}
+
+			@Override
+			public void remove() {
+				backing.remove();
+			}
+		};
+	}
+
+	/**
 	 * A sub-set of this set. Like {@link #subSet(Object, boolean, Object, boolean)}, but may be reversed.
 	 *
 	 * @param fromElement The minimum bounding element for the sub set
