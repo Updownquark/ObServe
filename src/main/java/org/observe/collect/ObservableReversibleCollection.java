@@ -40,10 +40,21 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 * @param onElement The element accepter
 	 * @return The unsubscribe runnable
 	 */
-	default Subscription onElementReverse(Consumer<? super ObservableOrderedElement<E>> onElement) {
+	Subscription onElementReverse(Consumer<? super ObservableOrderedElement<E>> onElement);
+
+	/**
+	 * A default implementation of {@link #onElementReverse(Consumer)} that simply obtains all the elements and feeds them to the consumer
+	 * in reverse. This implementation should only be used where a more performant implementation is not possible.
+	 * 
+	 * @param coll The collection to get the reverse elements of
+	 * @param onElement The consumer for the elements
+	 * @return The subscription for the elements
+	 */
+	static <E> Subscription defaultOnElementReverse(ObservableReversibleCollection<E> coll,
+			Consumer<? super ObservableOrderedElement<E>> onElement) {
 		List<ObservableOrderedElement<E>> initElements = new ArrayList<>();
 		boolean [] initialized = new boolean[1];
-		Subscription ret = onOrderedElement(element -> {
+		Subscription ret = coll.onOrderedElement(element -> {
 			if(initialized[0])
 				onElement.accept(element);
 			else
