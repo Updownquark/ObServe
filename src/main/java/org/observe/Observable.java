@@ -192,7 +192,7 @@ public interface Observable<T> {
 	 */
 	default Observable<T> unsubscribeOn(Observable<?> until) {
 		return d().debug(new ObservableTakenUntil<>(this, until, false)).from("take", this).from("until", until)
-.tag("terminate", false)
+				.tag("terminate", false)
 				.get();
 	}
 
@@ -681,16 +681,22 @@ public interface Observable<T> {
 
 		@Override
 		public Subscription subscribe(Observer<? super T> observer) {
-			return theWrapped.subscribe(new Observer<T>() {
-				private AtomicInteger theCounter = new AtomicInteger();
+			Subscription[] wrapSub = new Subscription[1];
+			boolean[] completed = new boolean[1];
+			wrapSub[0] = theWrapped.subscribe(new Observer<T>() {
+				private final AtomicInteger theCounter = new AtomicInteger();
 
 				@Override
 				public <V extends T> void onNext(V value) {
 					int count = theCounter.getAndIncrement();
 					if(count < theTimes)
 						observer.onNext(value);
-					if(count == theTimes - 1)
+					if (count == theTimes - 1) {
 						observer.onCompleted(value);
+						if (wrapSub[0] != null)
+							wrapSub[0].unsubscribe();
+						completed[0] = true;
+					}
 				}
 
 				@Override
@@ -705,6 +711,14 @@ public interface Observable<T> {
 						observer.onError(e);
 				}
 			});
+			if (completed[0])
+				wrapSub[0].unsubscribe();
+			return () -> {
+				if (!completed[0]) {
+					completed[0] = true;
+					wrapSub[0].unsubscribe();
+				}
+			};
 		}
 	}
 
