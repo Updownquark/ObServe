@@ -773,11 +773,19 @@ public class ObservableCollectionsTest {
 		testUnique(list, unique);
 	}
 
-	/** Tests {@link ObservableSet#unique(ObservableCollection, Equalizer)} */
+	/** Tests {@link ObservableOrderedSet#unique(ObservableOrderedCollection, Equalizer, boolean)} */
 	@Test
 	public void observableOrderedSetUnique() {
 		ObservableArrayList<Integer> list = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
 		ObservableOrderedSet<Integer> unique = ObservableOrderedSet.unique(list, Objects::equals, true);
+		testUnique(list, unique);
+	}
+
+	/** Tests {@link ObservableSortedSet#unique(ObservableCollection, Comparator)} */
+	@Test
+	public void observableSortedSetUnique() {
+		ObservableArrayList<Integer> list = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
+		ObservableSortedSet<Integer> unique = ObservableSortedSet.unique(list, Integer::compareTo);
 		testUnique(list, unique);
 	}
 

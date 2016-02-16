@@ -10,6 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -664,9 +665,11 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 
 		@Override
 		public Iterator<E> iterator() {
-			return new Iterator<E>() {
-				private final Iterator<E> backing = theCollection.iterator();
+			return unique(theCollection.iterator());
+		}
 
+		protected Iterator<E> unique(Iterator<E> backing) {
+			return new Iterator<E>() {
 				private final HashSet<EqualizerNode<E>> set = new HashSet<>();
 
 				private E nextVal;
@@ -703,8 +706,13 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 
 		@Override
 		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
+			return onElement(onElement, ObservableCollection::onElement);
+		}
+
+		protected Subscription onElement(Consumer<? super ObservableElement<E>> onElement,
+				BiFunction<ObservableCollection<E>, Consumer<? super ObservableElement<E>>, Subscription> subscriber) {
 			final UniqueElementTracking tracking = createElementTracking();
-			return theCollection.onElement(element -> {
+			return subscriber.apply(theCollection, element -> {
 				element.subscribe(new Observer<ObservableValueEvent<E>>() {
 					@Override
 					public <EV extends ObservableValueEvent<E>> void onNext(EV event) {

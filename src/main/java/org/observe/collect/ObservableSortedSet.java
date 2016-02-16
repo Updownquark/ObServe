@@ -2,6 +2,7 @@ package org.observe.collect;
 
 import static org.observe.ObservableDebug.d;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.Iterator;
@@ -18,8 +19,11 @@ import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.util.ObservableUtils;
 import org.qommons.Equalizer;
+import org.qommons.Equalizer.EqualizerNode;
 import org.qommons.IterableUtils;
 import org.qommons.Transaction;
+import org.qommons.tree.CountedRedBlackNode.DefaultNode;
+import org.qommons.tree.CountedRedBlackNode.DefaultTreeSet;
 
 import com.google.common.reflect.TypeToken;
 
@@ -342,6 +346,16 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 	 */
 	public static <E> ObservableSortedSet<E> flattenValue(ObservableValue<? extends ObservableSortedSet<E>> collectionObservable) {
 		return d().debug(new FlattenedValueSortedSet<>(collectionObservable)).from("flatten", collectionObservable).get();
+	}
+
+	/**
+	 * @param <T> The type of the collection
+	 * @param coll The collection to turn into a set
+	 * @param compare The comparator to determine ordering of elements
+	 * @return A sorted set containing all unique elements of the given collection
+	 */
+	public static <T> ObservableSortedSet<T> unique(ObservableCollection<T> coll, Comparator<? super T> compare) {
+		return d().debug(new CollectionWrappingSortedSet<>(coll, compare)).from("unique", coll).using("compare", compare).get();
 	}
 
 	/**
@@ -1213,6 +1227,106 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 		public Iterable<E> iterateFrom(E element, boolean included, boolean reversed) {
 			ObservableSortedSet<E> set = getWrapped().get();
 			return set == null ? java.util.Collections.EMPTY_LIST : set.iterateFrom(element, included, reversed);
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableSortedSet#unique(ObservableCollection, Comparator)}
+	 *
+	 * @param <E> The type of elements in the set
+	 */
+	class CollectionWrappingSortedSet<E> extends CollectionWrappingSet<E> implements PartialSortedSetImpl<E> {
+		private final Comparator<? super E> theCompare;
+
+		public CollectionWrappingSortedSet(ObservableCollection<E> collection, Comparator<? super E> compare) {
+			super(collection, (o1, o2) -> compare.compare((E) o1, (E) o2) == 0);
+			theCompare = compare;
+		}
+
+		@Override
+		public Comparator<? super E> comparator() {
+			return theCompare;
+		}
+
+		protected class UniqueSortedElementTracking extends UniqueElementTracking {
+			DefaultTreeSet<UniqueSortedElement<E>> sortedElements = new DefaultTreeSet<>((el1, el2) -> {
+				return theCompare.compare(el1.get(), el2.get());
+			});
+		}
+
+		@Override
+		protected CollectionWrappingSet<E>.UniqueElementTracking createElementTracking() {
+			return new UniqueSortedElementTracking();
+		}
+
+		@Override
+		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
+			return onElement(element -> onElement.accept((ObservableOrderedElement<E>) element));
+		}
+
+		@Override
+		public Iterable<E> descending() {
+			if (getWrapped() instanceof ObservableReversedCollection) {
+				return () -> unique(((ObservableReversedCollection<E>) getWrapped()).descending().iterator());
+			} else {
+				ArrayList<E> ret = new ArrayList<>(this);
+				java.util.Collections.reverse(ret);
+				return ret;
+			}
+		}
+
+		@Override
+		public Iterable<E> iterateFrom(E element, boolean included, boolean reversed) {
+			return ObservableSortedSet.defaultIterateFrom(this, element, included, reversed);
+		}
+
+		@Override
+		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<E>> onElement) {
+			if (getWrapped() instanceof ObservableReversedCollection)
+				return onElement((Consumer<? super ObservableElement<E>>) onElement, (coll, onEl) -> {
+					return ((ObservableReversibleCollection<E>) coll).onElementReverse(onEl);
+				});
+			else
+				return ObservableReversibleCollection.defaultOnElementReverse(this, onElement);
+		}
+
+		@Override
+		protected UniqueElement<E> addUniqueElement(UniqueElementTracking tracking, EqualizerNode<E> node) {
+			UniqueSortedElement<E> unique = new UniqueSortedElement<>(getType(), ((UniqueSortedElementTracking) tracking).sortedElements);
+			tracking.elements.put(node, unique);
+			return unique;
+		}
+	}
+
+	/**
+	 * Implements elements for {@link ObservableSortedSet#unique(ObservableCollection, Comparator)}
+	 *
+	 * @param <E> The type of value in the element
+	 */
+	class UniqueSortedElement<E> extends UniqueElement<E> implements ObservableOrderedElement<E> {
+		private final DefaultTreeSet<UniqueSortedElement<E>> sortedElements;
+		private DefaultNode<UniqueSortedElement<E>> node;
+
+		public UniqueSortedElement(TypeToken<E> type, DefaultTreeSet<UniqueSortedElement<E>> orderedEls) {
+			super(type, false);
+			sortedElements = orderedEls;
+		}
+
+		@Override
+		public int getIndex() {
+			return node.getIndex();
+		}
+
+		@Override
+		protected boolean setCurrentElement(ObservableElement<E> element, Object cause) {
+			super.setCurrentElement(element, cause);
+			if (node == null && element != null)
+				node = sortedElements.addGetNode(this);
+			else if (element == null && node != null) {
+				sortedElements.setRoot((DefaultNode<UniqueSortedElement<E>>) node.delete());
+				node = null;
+			}
+			return false;
 		}
 	}
 }

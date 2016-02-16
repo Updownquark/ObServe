@@ -475,7 +475,7 @@ public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableOrd
 			if (node == null && element != null)
 				node = orderedElements.addGetNode(this);
 			else if (element == null && node != null) {
-				node.delete();
+				orderedElements.setRoot((DefaultNode<UniqueOrderedElement<E>>) node.delete());
 				node = null;
 			}
 			return false;
