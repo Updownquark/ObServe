@@ -224,14 +224,14 @@ public interface Observable<T> {
 		return d().debug(new SkippingObservable<>(this, times)).from("skip", this).using("times", times).get();
 	}
 
-	/** @return An observable that only fires values on a single thread */
+	/** @return An observable that only fires values on a single thread at a time */
 	default Observable<T> safe() {
 		return d().debug(new SafeObservable<>(this, null)).from("safe", this).get();
 	}
 
 	/**
 	 * @param lock The lock to use
-	 * @return An observable that only fires values on a single thread
+	 * @return An observable that only fires values on a single thread at a time, using the given lock
 	 */
 	default Observable<T> safe(Lock lock) {
 		return d().debug(new SafeObservable<>(this, lock)).from("safe", this).using("lock", lock).get();

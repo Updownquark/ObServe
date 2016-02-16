@@ -34,9 +34,9 @@ class SubCollectionTransactionManager {
 	 * @param refresh The observable to refresh the collection when fired
 	 */
 	public SubCollectionTransactionManager(ObservableCollection<?> collection, Observable<?> refresh) {
-		theCollection = collection;
-		theRefresh = refresh;
 		theLock = new ReentrantLock();
+		theCollection = collection;
+		theRefresh = refresh.safe(theLock);
 		theInternalSession = new DefaultObservableValue<CollectionSession>() {
 			private final TypeToken<CollectionSession> TYPE = TypeToken.of(CollectionSession.class);
 
