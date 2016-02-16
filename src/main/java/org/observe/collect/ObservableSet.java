@@ -713,20 +713,26 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 						if (newUnique == null)
 							newUnique = addUniqueElement(tracking, newNode);
 						boolean addElement = newUnique.isEmpty();
+						boolean reAdd;
 						if (event.isInitial()) {
-							newUnique.addElement(element, event);
+							reAdd = newUnique.addElement(element, event);
 						} else {
 							EqualizerNode<E> oldNode = new EqualizerNode<>(theEqualizer, event.getOldValue());
 							UniqueElement<E> oldUnique = tracking.elements.get(oldNode);
 							if (oldUnique == newUnique) {
+								reAdd = newUnique.changed(element);
 							} else {
 								if (oldUnique != null)
 									removeFromOld(oldUnique, oldNode, event);
-								newUnique.addElement(element, event);
+								reAdd = newUnique.addElement(element, event);
 							}
 						}
 						if (addElement)
 							onElement.accept(newUnique);
+						else if (reAdd) {
+							newUnique.reset(event);
+							onElement.accept(newUnique);
+						}
 					}
 
 					@Override
@@ -738,9 +744,13 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 					}
 
 					void removeFromOld(UniqueElement<E> unique, EqualizerNode<E> node, Object cause) {
-						unique.removeElement(element, cause);
+						boolean reAdd = unique.removeElement(element, cause);
 						if (unique.isEmpty())
 							tracking.elements.remove(node);
+						else if (reAdd) {
+							unique.reset(cause);
+							onElement.accept(unique);
+						}
 					}
 				});
 			});
@@ -803,7 +813,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 			return theCurrentElement.get();
 		}
 
-		protected void addElement(ObservableElement<E> element, Object cause) {
+		protected boolean addElement(ObservableElement<E> element, Object cause) {
 			theElements.add(element);
 			boolean newBest;
 			if (isAlwaysUsingFirst)
@@ -811,17 +821,30 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 			else
 				newBest = theCurrentElement.get() == null;
 			if (newBest)
-				setCurrentElement(element, cause);
+				return setCurrentElement(element, cause);
+			else
+				return false;
 		}
 
-		protected void removeElement(ObservableElement<E> element, Object cause) {
+		protected boolean removeElement(ObservableElement<E> element, Object cause) {
 			theElements.remove(element);
 			if (theCurrentElement.get() == element)
-				setCurrentElement(theElements.isEmpty() ? null : theElements.iterator().next(), cause);
+				return setCurrentElement(theElements.isEmpty() ? null : theElements.iterator().next(), cause);
+			else
+				return false;
 		}
 
-		protected void setCurrentElement(ObservableElement<E> element, Object cause) {
+		protected boolean changed(ObservableElement<E> element) {
+			return false;
+		}
+
+		protected void reset(Object cause) {
+			theCurrentElement.set(theElements.iterator().next(), cause);
+		}
+
+		protected boolean setCurrentElement(ObservableElement<E> element, Object cause) {
 			theCurrentElement.set(element, cause);
+			return false;
 		}
 
 		protected boolean isEmpty() {

@@ -770,6 +770,18 @@ public class ObservableCollectionsTest {
 	public void observableSetUnique() {
 		ObservableArrayList<Integer> list = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
 		ObservableSet<Integer> unique = ObservableSet.unique(list, Objects::equals);
+		testUnique(list, unique);
+	}
+
+	/** Tests {@link ObservableSet#unique(ObservableCollection, Equalizer)} */
+	@Test
+	public void observableOrderedSetUnique() {
+		ObservableArrayList<Integer> list = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
+		ObservableOrderedSet<Integer> unique = ObservableOrderedSet.unique(list, Objects::equals, true);
+		testUnique(list, unique);
+	}
+
+	private void testUnique(ObservableList<Integer> list, ObservableSet<Integer> unique) {
 		List<Integer> compare1 = new ArrayList<>();
 		Set<Integer> correct = new TreeSet<>();
 
@@ -782,6 +794,8 @@ public class ObservableCollectionsTest {
 		assertEquals(correct, new TreeSet<>(unique));
 		assertEquals(correct, new TreeSet<>(compare1));
 		assertEquals(correct.size(), compare1.size());
+		if (unique instanceof ObservableOrderedCollection)
+			assertThat(compare1, collectionsEqual(correct, true));
 
 		for(int i = 0; i < 30; i++) {
 			list.add(i);
@@ -789,6 +803,8 @@ public class ObservableCollectionsTest {
 		assertEquals(correct, new TreeSet<>(unique));
 		assertEquals(correct, new TreeSet<>(compare1));
 		assertEquals(correct.size(), compare1.size());
+		if (unique instanceof ObservableOrderedCollection)
+			assertThat(compare1, collectionsEqual(correct, true));
 
 		for(int i = 29; i >= 0; i--) {
 			list.remove(30 + i);
@@ -796,6 +812,8 @@ public class ObservableCollectionsTest {
 		assertEquals(correct, new TreeSet<>(unique));
 		assertEquals(correct, new TreeSet<>(compare1));
 		assertEquals(correct.size(), compare1.size());
+		if (unique instanceof ObservableOrderedCollection)
+			assertThat(compare1, collectionsEqual(correct, true));
 
 		for(int i = 0; i < 30; i++) {
 			list.add(i);
@@ -803,6 +821,8 @@ public class ObservableCollectionsTest {
 		assertEquals(correct, new TreeSet<>(unique));
 		assertEquals(correct, new TreeSet<>(compare1));
 		assertEquals(correct.size(), compare1.size());
+		if (unique instanceof ObservableOrderedCollection)
+			assertThat(compare1, collectionsEqual(correct, true));
 
 		for(int i = 29; i >= 0; i--) {
 			list.remove(i);
@@ -810,6 +830,8 @@ public class ObservableCollectionsTest {
 		assertEquals(correct, new TreeSet<>(unique));
 		assertEquals(correct, new TreeSet<>(compare1));
 		assertEquals(correct.size(), compare1.size());
+		if (unique instanceof ObservableOrderedCollection)
+			assertThat(compare1, collectionsEqual(correct, true));
 
 		for(int i = 29; i >= 0; i--) {
 			list.remove(i);
@@ -818,6 +840,8 @@ public class ObservableCollectionsTest {
 		assertEquals(correct, new TreeSet<>(unique));
 		assertEquals(correct, new TreeSet<>(compare1));
 		assertEquals(correct.size(), compare1.size());
+		if (unique instanceof ObservableOrderedCollection)
+			assertThat(compare1, collectionsEqual(correct, true));
 
 		for(int i = 0; i < 30; i++) {
 			list.add(i);
@@ -827,11 +851,15 @@ public class ObservableCollectionsTest {
 		assertEquals(correct, new TreeSet<>(unique));
 		assertEquals(correct, new TreeSet<>(compare1));
 		assertEquals(correct.size(), compare1.size());
+		if (unique instanceof ObservableOrderedCollection)
+			assertThat(compare1, collectionsEqual(correct, true));
 		list.clear();
 		correct.clear();
 		assertEquals(correct, new TreeSet<>(unique));
 		assertEquals(correct, new TreeSet<>(compare1));
 		assertEquals(correct.size(), compare1.size());
+		if (unique instanceof ObservableOrderedCollection)
+			assertThat(compare1, collectionsEqual(correct, true));
 	}
 
 	/** Tests {@link ObservableCollection#flatten(ObservableCollection)} */

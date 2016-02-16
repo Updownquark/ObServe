@@ -394,10 +394,14 @@ public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableOrd
 		}
 
 		@Override
+		protected CollectionWrappingSet<E>.UniqueElementTracking createElementTracking() {
+			return new UniqueOrderedElementTracking();
+		}
+
+		@Override
 		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
 			return onElement(element -> onElement.accept((ObservableOrderedElement<E>) element));
 		}
-
 
 		@Override
 		protected UniqueElement<E> addUniqueElement(UniqueElementTracking tracking, EqualizerNode<E> node) {
@@ -416,6 +420,7 @@ public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableOrd
 	class UniqueOrderedElement<E> extends UniqueElement<E> implements ObservableOrderedElement<E> {
 		private final DefaultTreeSet<UniqueOrderedElement<E>> orderedElements;
 		private DefaultNode<UniqueOrderedElement<E>> node;
+		private int theRemovedIndex;
 
 		public UniqueOrderedElement(TypeToken<E> type, boolean alwaysUseFirst, DefaultTreeSet<UniqueOrderedElement<E>> orderedEls) {
 			super(type, alwaysUseFirst);
@@ -428,7 +433,11 @@ public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableOrd
 		}
 
 		int getInternalIndex() {
-			return ((ObservableOrderedElement<E>) getCurrentElement()).getIndex();
+			ObservableOrderedElement<E> element = ((ObservableOrderedElement<E>) getCurrentElement());
+			if (element != null)
+				return element.getIndex();
+			else
+				return theRemovedIndex;
 		}
 
 		@Override
@@ -438,10 +447,45 @@ public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableOrd
 		}
 
 		@Override
-		protected void setCurrentElement(ObservableElement<E> element, Object cause) {
-			if (node != null)
-				node.delete();
+		protected boolean setCurrentElement(ObservableElement<E> element, Object cause) {
+			if (node != null && element != null) {
+				DefaultNode<UniqueOrderedElement<E>> parent = (DefaultNode<UniqueOrderedElement<E>>) node.getParent();
+				boolean isLeft = node.getSide();
+				DefaultNode<UniqueOrderedElement<E>> left = (DefaultNode<UniqueOrderedElement<E>>) node.getLeft();
+				DefaultNode<UniqueOrderedElement<E>> right = (DefaultNode<UniqueOrderedElement<E>>) node.getRight();
+				int index = ((ObservableOrderedElement<E>) element).getIndex();
+				boolean ok = true;
+				if (parent != null) {
+					ok = parent.getValue().getInternalIndex() > index == isLeft;
+				}
+				if (ok && left != null) {
+					ok = left.getValue().getInternalIndex() < index;
+				}
+				if (ok && right != null) {
+					ok = right.getValue().getInternalIndex() > index;
+				}
+				if (!ok) {
+					// This element needs to be re-indexed. The next calls will cause it to be removed and re-added.
+					theRemovedIndex = getInternalIndex();
+					super.setCurrentElement(null, cause);
+					return true;
+				}
+			}
 			super.setCurrentElement(element, cause);
+			if (node == null && element != null)
+				node = orderedElements.addGetNode(this);
+			else if (element == null && node != null) {
+				node.delete();
+				node = null;
+			}
+			return false;
+		}
+
+		@Override
+		protected void reset(Object cause) {
+			// We've been removed and we're about to be re-added
+			node.delete();
+			super.reset(cause);
 			node = orderedElements.addGetNode(this);
 		}
 	}
