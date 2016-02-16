@@ -4,6 +4,7 @@ import static org.observe.ObservableDebug.d;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.Lock;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -221,6 +222,19 @@ public interface Observable<T> {
 	 */
 	default Observable<T> skip(java.util.function.Supplier<Integer> times) {
 		return d().debug(new SkippingObservable<>(this, times)).from("skip", this).using("times", times).get();
+	}
+
+	/** @return An observable that only fires values on a single thread */
+	default Observable<T> safe() {
+		return d().debug(new SafeObservable<>(this, null)).from("safe", this).get();
+	}
+
+	/**
+	 * @param lock The lock to use
+	 * @return An observable that only fires values on a single thread
+	 */
+	default Observable<T> safe(Lock lock) {
+		return d().debug(new SafeObservable<>(this, lock)).from("safe", this).using("lock", lock).get();
 	}
 
 	/**
@@ -772,6 +786,77 @@ public interface Observable<T> {
 		@Override
 		public String toString() {
 			return theWrapped + ".skip(" + theTimes + ")";
+		}
+	}
+
+	/**
+	 * Implements {@link Observable#safe()}
+	 *
+	 * @param <T> The type of values that the observable publishes
+	 */
+	class SafeObservable<T> implements Observable<T> {
+		private final Observable<T> theWrapped;
+		private final Lock theLock;
+
+		protected SafeObservable(Observable<T> wrap, Lock lock) {
+			theWrapped = wrap;
+			theLock = lock == null ? lock : new java.util.concurrent.locks.ReentrantLock();
+		}
+
+		protected Observable<T> getWrapped() {
+			return theWrapped;
+		}
+
+		protected Lock getLock() {
+			return theLock;
+		}
+
+		@Override
+		public Subscription subscribe(Observer<? super T> observer) {
+			return theWrapped.subscribe(new Observer<T>() {
+				@Override
+				public <V extends T> void onNext(V value) {
+					theLock.lock();
+					try {
+						observer.onNext(value);
+					} finally {
+						theLock.unlock();
+					}
+				}
+
+				@Override
+				public <V extends T> void onCompleted(V value) {
+					theLock.lock();
+					try {
+						observer.onCompleted(value);
+					} finally {
+						theLock.unlock();
+					}
+				}
+
+				@Override
+				public void onError(Throwable e) {
+					theLock.lock();
+					try {
+						observer.onError(e);
+					} finally {
+						theLock.unlock();
+					}
+				}
+			});
+		}
+
+		@Override
+		public Observable<T> safe() {
+			return this;
+		}
+
+		@Override
+		public Observable<T> safe(Lock lock) {
+			if (theLock == lock)
+				return this;
+			else
+				return Observable.super.safe(lock);
 		}
 	}
 }

@@ -3,9 +3,12 @@ package org.observe;
 import static org.observe.ObservableDebug.d;
 
 import java.util.List;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import org.qommons.BiTuple;
 import org.qommons.ListenerSet;
@@ -262,6 +265,16 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		return d().debug(new RefreshingObservableValue<>(this, refresh)).from("refresh", this).from("on", refresh).get();
 	}
 
+	@Override
+	default ObservableValue<T> safe() {
+		return d().debug(new SafeObservableValue<>(this, null)).from("safe", this).get();
+	}
+
+	@Override
+	default ObservableValue<T> safe(Lock lock){
+		return d().debug(new SafeObservableValue<>(this, lock)).from("safe", this).using("lock", lock).get();
+	}
+
 	/**
 	 * @param <X> The type of the value to wrap
 	 * @param value The value to wrap
@@ -315,50 +328,56 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 				ObservableValue<T> retObs = this;
 				Subscription [] innerSub = new Subscription[1];
 				Subscription outerSub = ov.subscribe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends T>>>() {
+					private final ReentrantLock theLock = new ReentrantLock();
 					@Override
 					public <V extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onNext(V value) {
-						if(innerSub[0] != null) {
-							innerSub[0].unsubscribe();
-							innerSub[0] = null;
-						}
-						Object[] old = new Object[1];
-						if(value.getValue() != null) {
-							innerSub[0] = value.getValue().subscribe(new Observer<ObservableValueEvent<? extends T>>() {
-								@Override
-								public <V2 extends ObservableValueEvent<? extends T>> void onNext(V2 value2) {
-									T innerOld;
-									if (value2.isInitial())
-										innerOld = (T) old[0];
-									else {
-										innerOld = value2.getOldValue();
-										old[0] = innerOld;
+						theLock.lock();
+						try {
+							if (innerSub[0] != null) {
+								innerSub[0].unsubscribe();
+								innerSub[0] = null;
+							}
+							Object[] old = new Object[1];
+							if (value.getValue() != null) {
+								innerSub[0] = value.getValue().subscribe(new Observer<ObservableValueEvent<? extends T>>() {
+									@Override
+									public <V2 extends ObservableValueEvent<? extends T>> void onNext(V2 value2) {
+										theLock.lock();
+										try {
+											T innerOld;
+											if (value2.isInitial())
+												innerOld = (T) old[0];
+											else {
+												innerOld = value2.getOldValue();
+												old[0] = innerOld;
+											}
+											if (value.isInitial() && value2.isInitial())
+												observer.onNext(retObs.createInitialEvent(value2.getValue()));
+											else
+												observer.onNext(retObs.createChangeEvent(innerOld, value2.getValue(), value2.getCause()));
+										} finally {
+											theLock.unlock();
+										}
 									}
-									if(value.isInitial() && value2.isInitial())
-										observer.onNext(retObs.createInitialEvent(value2.getValue()));
-									else
-										observer.onNext(retObs.createChangeEvent(innerOld, value2.getValue(), value2.getCause()));
-								}
-
-								@Override
-								public void onError(Throwable e) {
-									observer.onError(e);
-								}
-							});
-						} else if(value.isInitial())
-							observer.onNext(retObs.createInitialEvent(null));
-						else
-							observer.onNext(retObs.createChangeEvent((T) old[0], null, value.getCause()));
+								});
+							} else if (value.isInitial())
+								observer.onNext(retObs.createInitialEvent(null));
+							else
+								observer.onNext(retObs.createChangeEvent((T) old[0], null, value.getCause()));
+						} finally {
+							theLock.unlock();
+						}
 					}
 
 					@Override
 					public <V extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onCompleted(V value) {
-						observer.onCompleted(retObs.createChangeEvent(get(value.getOldValue()), get(value.getValue()), value
-								.getCause()));
-					}
-
-					@Override
-					public void onError(Throwable e) {
-						observer.onError(e);
+						theLock.lock();
+						try {
+							observer.onCompleted(
+									retObs.createChangeEvent(get(value.getOldValue()), get(value.getValue()), value.getCause()));
+						} finally {
+							theLock.unlock();
+						}
 					}
 				});
 				return () -> {
@@ -386,59 +405,58 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @param components The components whose changes require a new value to be produced
 	 * @return The new observable value
 	 */
-	public static <T> ObservableValue<T> assemble(TypeToken<T> type, java.util.function.Supplier<T> value,
-			ObservableValue<?>... components) {
-		TypeToken<T> t = type == null
-				? (TypeToken<T>) TypeToken.of(value.getClass()).resolveType(java.util.function.Supplier.class.getTypeParameters()[0]) : type;
-				return d().debug(new ObservableValue<T>() {
-					@Override
-					public TypeToken<T> getType() {
-						return t;
-					}
+	public static <T> ObservableValue<T> assemble(TypeToken<T> type, Supplier<T> value, ObservableValue<?>... components) {
+		TypeToken<T> t = type == null ? (TypeToken<T>) TypeToken.of(value.getClass()).resolveType(Supplier.class.getTypeParameters()[0])
+				: type;
+		return d().debug(new ObservableValue<T>() {
+			@Override
+			public TypeToken<T> getType() {
+				return t;
+			}
 
-					@Override
-					public T get() {
-						return value.get();
-					}
+			@Override
+			public T get() {
+				return value.get();
+			}
 
-					@Override
-					public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-						ObservableValue<T> outer = this;
-						Subscription [] subSubs = new Subscription[components.length];
-						Object [] oldValue = new Object[1];
-						for(int i = 0; i < subSubs.length; i++)
-							subSubs[i] = components[i].subscribe(new Observer<ObservableValueEvent<?>>() {
-								@Override
-								public <V extends ObservableValueEvent<?>> void onNext(V value2) {
-									T newVal = value.get();
-									T oldVal = (T) oldValue[0];
-									oldValue[0] = newVal;
-									if(value2.isInitial())
-										observer.onNext(outer.createInitialEvent(newVal));
-									else
-										observer.onNext(outer.createChangeEvent(oldVal, newVal, value2.getCause()));
-								}
+			@Override
+			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+				final ReentrantLock lock = new ReentrantLock();
+				ObservableValue<T> outer = this;
+				Subscription[] subSubs = new Subscription[components.length];
+				Object[] oldValue = new Object[1];
+				for (int i = 0; i < subSubs.length; i++)
+					subSubs[i] = components[i].subscribe(new Observer<ObservableValueEvent<?>>() {
+						@Override
+						public <V extends ObservableValueEvent<?>> void onNext(V value2) {
+							lock.lock();
+							try {
+								T newVal = value.get();
+								T oldVal = (T) oldValue[0];
+								oldValue[0] = newVal;
+								if (value2.isInitial())
+									observer.onNext(outer.createInitialEvent(newVal));
+								else
+									observer.onNext(outer.createChangeEvent(oldVal, newVal, value2.getCause()));
+							} finally {
+								lock.unlock();
+							}
+						}
 
-								@Override
-								public <V extends ObservableValueEvent<?>> void onCompleted(V value2) {
-								}
+						@Override
+						public <V extends ObservableValueEvent<?>> void onCompleted(V value2) {}
+					});
+				return () -> {
+					for (Subscription sub : subSubs)
+						sub.unsubscribe();
+				};
+			}
 
-								@Override
-								public void onError(Throwable e) {
-									observer.onError(e);
-								}
-							});
-						return () -> {
-							for(Subscription sub : subSubs)
-								sub.unsubscribe();
-						};
-					}
-
-					@Override
-					public String toString(){
-						return "Assembled " + type;
-					}
-				}).from("assemble", (Object []) components).using("assembler", value).get();
+			@Override
+			public String toString() {
+				return "Assembled " + type;
+			}
+		}).from("assemble", (Object[]) components).using("assembler", value).get();
 	}
 
 	/**
@@ -839,7 +857,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 *
 	 * @param <T> The type of this value
 	 */
-	public static final class ConstantObservableValue<T> implements ObservableValue<T> {
+	class ConstantObservableValue<T> implements ObservableValue<T> {
 		private final TypeToken<T> theType;
 		private final T theValue;
 
@@ -872,6 +890,45 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		@Override
 		public String toString() {
 			return "" + theValue;
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableValue#safe()}
+	 *
+	 * @param <T> The type of the value
+	 */
+	class SafeObservableValue<T> extends SafeObservable<ObservableValueEvent<T>> implements ObservableValue<T> {
+		public SafeObservableValue(ObservableValue<T> wrap, Lock lock) {
+			super(wrap, lock);
+		}
+
+		@Override
+		protected ObservableValue<T> getWrapped() {
+			return (ObservableValue<T>) super.getWrapped();
+		}
+
+		@Override
+		public TypeToken<T> getType() {
+			return getWrapped().getType();
+		}
+
+		@Override
+		public T get() {
+			return getWrapped().get();
+		}
+
+		@Override
+		public ObservableValue<T> safe() {
+			return this;
+		}
+
+		@Override
+		public ObservableValue<T> safe(Lock lock) {
+			if (getLock() == lock)
+				return this;
+			else
+				return ObservableValue.super.safe(lock);
 		}
 	}
 }

@@ -2,6 +2,7 @@ package org.observe.collect;
 
 import static org.observe.ObservableDebug.d;
 
+import java.util.concurrent.locks.Lock;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
@@ -169,6 +170,16 @@ public interface ObservableOrderedElement<E> extends ObservableElement<E> {
 				.using("on", refresh).get();
 	}
 
+	@Override
+	default ObservableOrderedElement<E> safe() {
+		return d().debug(new SafeObservableOrderedElement<>(this, null)).from("safe", this).get();
+	}
+
+	@Override
+	default ObservableOrderedElement<E> safe(Lock lock) {
+		return d().debug(new SafeObservableOrderedElement<>(this, lock)).from("safe", this).using("lock", lock).get();
+	}
+
 	/**
 	 * Implements {@link ObservableElement#takeUntil(Observable)}
 	 *
@@ -280,6 +291,40 @@ public interface ObservableOrderedElement<E> extends ObservableElement<E> {
 		@Override
 		public int getIndex() {
 			return getWrapped().getIndex();
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableOrderedElement#safe()}
+	 * 
+	 * @param <E> The type of value in the element
+	 */
+	class SafeObservableOrderedElement<E> extends SafeObservableElement<E> implements ObservableOrderedElement<E> {
+		public SafeObservableOrderedElement(ObservableOrderedElement<E> wrap, Lock lock) {
+			super(wrap, lock);
+		}
+
+		@Override
+		protected ObservableOrderedElement<E> getWrapped() {
+			return (ObservableOrderedElement<E>) super.getWrapped();
+		}
+
+		@Override
+		public int getIndex() {
+			return getWrapped().getIndex();
+		}
+
+		@Override
+		public ObservableOrderedElement<E> safe() {
+			return this;
+		}
+
+		@Override
+		public ObservableOrderedElement<E> safe(Lock lock) {
+			if (getLock() == lock)
+				return this;
+			else
+				return ObservableOrderedElement.super.safe();
 		}
 	}
 }

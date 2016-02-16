@@ -2,6 +2,7 @@ package org.observe.collect;
 
 import static org.observe.ObservableDebug.d;
 
+import java.util.concurrent.locks.Lock;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
@@ -114,6 +115,16 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 	default ObservableElement<E> refreshForValue(Function<? super E, Observable<?>> refresh, Observable<Void> unsubscribe) {
 		return d().debug(new ValueRefreshingObservableElement<>(this, refresh, unsubscribe)).from("refresh", this).using("on", refresh)
 				.get();
+	}
+
+	@Override
+	default ObservableElement<E> safe() {
+		return d().debug(new SafeObservableElement<>(this, null)).from("safe", this).get();
+	}
+
+	@Override
+	default ObservableElement<E> safe(Lock lock) {
+		return d().debug(new SafeObservableElement<>(this, lock)).from("safe", this).using("lock", lock).get();
 	}
 
 	/**
@@ -291,6 +302,40 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 		@Override
 		public String toString() {
 			return theWrapped + ".refireWhen(" + theRefresh + ")";
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableElement#safe()}
+	 *
+	 * @param <E> The type of value in the element
+	 */
+	class SafeObservableElement<E> extends SafeObservableValue<E> implements ObservableElement<E> {
+		public SafeObservableElement(ObservableElement<E> wrap, Lock lock) {
+			super(wrap, lock);
+		}
+
+		@Override
+		protected ObservableElement<E> getWrapped() {
+			return (ObservableElement<E>) super.getWrapped();
+		}
+
+		@Override
+		public ObservableValue<E> persistent() {
+			return getWrapped().persistent().safe(getLock());
+		}
+
+		@Override
+		public ObservableElement<E> safe() {
+			return this;
+		}
+
+		@Override
+		public ObservableElement<E> safe(Lock lock) {
+			if (getLock() == lock)
+				return this;
+			else
+				return ObservableElement.super.safe(lock);
 		}
 	}
 
