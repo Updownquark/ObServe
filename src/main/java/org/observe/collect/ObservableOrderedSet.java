@@ -354,13 +354,13 @@ public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableOrd
 	 * @param <E> The type of elements in the set
 	 */
 	class FlattenedValueOrderedSet<E> extends FlattenedOrderedValueCollection<E> implements PartialSetImpl<E>, ObservableOrderedSet<E> {
-		public FlattenedValueOrderedSet(ObservableValue<? extends ObservableOrderedSet<? extends E>> collectionObservable) {
+		public FlattenedValueOrderedSet(ObservableValue<? extends ObservableOrderedSet<E>> collectionObservable) {
 			super(collectionObservable);
 		}
 
 		@Override
-		protected ObservableValue<? extends ObservableOrderedSet<? extends E>> getWrapped() {
-			return (ObservableValue<? extends ObservableOrderedSet<? extends E>>) super.getWrapped();
+		protected ObservableValue<? extends ObservableOrderedSet<E>> getWrapped() {
+			return (ObservableValue<? extends ObservableOrderedSet<E>>) super.getWrapped();
 		}
 
 		@Override

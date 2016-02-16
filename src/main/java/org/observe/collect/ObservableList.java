@@ -423,7 +423,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	 * @param collectionObservable The observable value
 	 * @return A list representing the contents of the value, or a zero-length list when null
 	 */
-	public static <E> ObservableList<E> flattenValue(ObservableValue<ObservableList<? extends E>> collectionObservable) {
+	public static <E> ObservableList<E> flattenValue(ObservableValue<ObservableList<E>> collectionObservable) {
 		return d().debug(new FlattenedObservableValueList<>(collectionObservable)).from("flatten", collectionObservable).get();
 	}
 
@@ -1765,13 +1765,13 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	 * @param <E> The type of elements in the collection
 	 */
 	class FlattenedObservableValueList<E> extends FlattenedReversibleValueCollection<E> implements PartialListImpl<E> {
-		public FlattenedObservableValueList(ObservableValue<? extends ObservableList<? extends E>> collectionObservable) {
+		public FlattenedObservableValueList(ObservableValue<? extends ObservableList<E>> collectionObservable) {
 			super(collectionObservable);
 		}
 
 		@Override
-		protected ObservableValue<? extends ObservableList<? extends E>> getWrapped() {
-			return (ObservableValue<? extends ObservableList<? extends E>>) super.getWrapped();
+		protected ObservableValue<? extends ObservableList<E>> getWrapped() {
+			return (ObservableValue<? extends ObservableList<E>>) super.getWrapped();
 		}
 
 		@Override

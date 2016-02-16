@@ -18,6 +18,7 @@ import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.util.ObservableUtils;
 import org.qommons.Equalizer;
+import org.qommons.IterableUtils;
 import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeToken;
@@ -105,10 +106,8 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 	 * </p>
 	 *
 	 * <p>
-	 * By default, this method just takes a default iterator and skips over elements until the given starting point is passed. This method
-	 * should be overridden by implementations and extensions where performance improvement is possible. This method is used by the default
-	 * implementation of {@link #subSet(Object, boolean, Object, boolean, boolean)}, so implementations and sub-interfaces should <b>NOT</b>
-	 * call any of the sub-set methods from this method unless the subSet method itself is overridden.
+	 * This method is used by the default implementation of {@link #subSet(Object, boolean, Object, boolean, boolean)}, so implementations
+	 * and sub-interfaces should <b>NOT</b> call any of the sub-set methods from this method unless the subSet method itself is overridden.
 	 * </p>
 	 *
 	 * @param element The element to start iteration at
@@ -116,40 +115,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 	 * @param reversed Whether to iterate backward or forward from the given element
 	 * @return An iterable that starts iteration from the given element
 	 */
-	default Iterable<E> iterateFrom(E element, boolean included, boolean reversed) {
-		return () -> new Iterator<E>() {
-			private final Iterator<E> backing = reversed ? descendingIterator() : ObservableSortedSet.this.iterator();
-
-			private E theFirst;
-
-			{
-				if(element != null) {
-					Comparator<? super E> compare = comparator();
-					while(backing.hasNext()) {
-						theFirst = backing.next();
-						int comp = compare.compare(theFirst, element);
-						if(comp > 0 || (included && comp == 0))
-							break;
-					}
-				}
-			}
-
-			@Override
-			public boolean hasNext() {
-				return backing.hasNext();
-			}
-
-			@Override
-			public E next() {
-				return backing.next();
-			}
-
-			@Override
-			public void remove() {
-				backing.remove();
-			}
-		};
-	}
+	Iterable<E> iterateFrom(E element, boolean included, boolean reversed);
 
 	/**
 	 * <p>
@@ -167,7 +133,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 	 * @param reversed Whether to iterate backward or forward from the given element
 	 * @return An iterable that starts iteration from the given element
 	 */
-	public static <E> Iterable<E> defaultIterateFrom(ObservableSubSet<E> set, E element, boolean included, boolean reversed) {
+	public static <E> Iterable<E> defaultIterateFrom(ObservableSortedSet<E> set, E element, boolean included, boolean reversed) {
 		return () -> new Iterator<E>() {
 			private final Iterator<E> backing = reversed ? set.descendingIterator() : set.iterator();
 
@@ -863,6 +829,11 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 		public Comparator<? super E> comparator() {
 			return getWrapped().comparator().reversed();
 		}
+
+		@Override
+		public Iterable<E> iterateFrom(E element, boolean included, boolean reversed) {
+			return getWrapped().iterateFrom(element, included, !reversed);
+		}
 	}
 
 	/**
@@ -911,6 +882,18 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 			return (o1, o2) -> {
 				return getWrapped().comparator().compare((E) o1, (E) o2);
 			};
+		}
+
+		@Override
+		public Iterable<T> iterateFrom(T element, boolean included, boolean reversed) {
+			if (getReverse() != null) {
+				Iterable<E> iter = getWrapped().iterateFrom(getReverse().apply(element), included, reversed);
+				Iterable<FilterMapResult<T>> fm = IterableUtils.map(iter, getMap());
+				Iterable<FilterMapResult<T>> filtered = IterableUtils.filter(fm, res -> res.passed);
+				Iterable<T> mapped = IterableUtils.map(filtered, (FilterMapResult<T> res) -> res.mapped);
+				return mapped;
+			} else
+				return ObservableSortedSet.<T> defaultIterateFrom(this, element, included, reversed);
 		}
 	}
 
@@ -961,6 +944,18 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 				return getWrapped().comparator().compare((E) o1, (E) o2);
 			};
 		}
+
+		@Override
+		public Iterable<T> iterateFrom(T element, boolean included, boolean reversed) {
+			if (getReverse() != null) {
+				Iterable<E> iter = getWrapped().iterateFrom(getReverse().apply(element), included, reversed);
+				Iterable<FilterMapResult<T>> fm = IterableUtils.map(iter, getMap());
+				Iterable<FilterMapResult<T>> filtered = IterableUtils.filter(fm, res -> res.passed);
+				Iterable<T> mapped = IterableUtils.map(filtered, (FilterMapResult<T> res) -> res.mapped);
+				return mapped;
+			} else
+				return ObservableSortedSet.<T> defaultIterateFrom(this, element, included, reversed);
+		}
 	}
 
 	/**
@@ -997,6 +992,11 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 		public Comparator<? super E> comparator() {
 			return getWrapped().comparator();
 		}
+
+		@Override
+		public Iterable<E> iterateFrom(E element, boolean included, boolean reversed) {
+			return getWrapped().iterateFrom(element, included, reversed);
+		}
 	}
 
 	/**
@@ -1032,6 +1032,11 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 		@Override
 		public Comparator<? super E> comparator() {
 			return getWrapped().comparator();
+		}
+
+		@Override
+		public Iterable<E> iterateFrom(E element, boolean included, boolean reversed) {
+			return getWrapped().iterateFrom(element, included, reversed);
 		}
 	}
 
@@ -1074,6 +1079,11 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 		public ImmutableObservableSortedSet<E> immutable() {
 			return this;
 		}
+
+		@Override
+		public Iterable<E> iterateFrom(E element, boolean included, boolean reversed) {
+			return IterableUtils.immutableIterable(getWrapped().iterateFrom(element, included, reversed));
+		}
 	}
 
 	/**
@@ -1094,6 +1104,30 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 		@Override
 		public Comparator<? super E> comparator() {
 			return getWrapped().comparator();
+		}
+
+		@Override
+		public Iterable<E> iterateFrom(E element, boolean included, boolean reversed) {
+			return () -> new Iterator<E>() {
+				private final Iterator<E> backing = getWrapped().iterateFrom(element, included, reversed).iterator();
+				private E theLast;
+
+				@Override
+				public boolean hasNext() {
+					return backing.hasNext();
+				}
+
+				@Override
+				public E next() {
+					return theLast = backing.next();
+				}
+
+				@Override
+				public void remove() {
+					if (getRemoveFilter() == null || getRemoveFilter().test(theLast))
+						backing.remove();
+				}
+			};
 		}
 	}
 
@@ -1121,6 +1155,11 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 		public ObservableSortedSet<E> cached() {
 			return this;
 		}
+
+		@Override
+		public Iterable<E> iterateFrom(E element, boolean included, boolean reversed) {
+			return getWrapped().iterateFrom(element, included, reversed);
+		}
 	}
 
 	/**
@@ -1142,6 +1181,11 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 		public Comparator<? super E> comparator() {
 			return getWrapped().comparator();
 		}
+
+		@Override
+		public Iterable<E> iterateFrom(E element, boolean included, boolean reversed) {
+			return getWrapped().iterateFrom(element, included, reversed);
+		}
 	}
 
 	/**
@@ -1150,19 +1194,25 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 	 * @param <E> The type of elements in the set
 	 */
 	class FlattenedValueSortedSet<E> extends FlattenedReversibleValueCollection<E> implements PartialSortedSetImpl<E> {
-		public FlattenedValueSortedSet(ObservableValue<? extends ObservableSortedSet<? extends E>> collectionObservable) {
+		public FlattenedValueSortedSet(ObservableValue<? extends ObservableSortedSet<E>> collectionObservable) {
 			super(collectionObservable);
 		}
 
 		@Override
-		protected ObservableValue<? extends ObservableSortedSet<? extends E>> getWrapped() {
-			return (ObservableValue<? extends ObservableSortedSet<? extends E>>) super.getWrapped();
+		protected ObservableValue<? extends ObservableSortedSet<E>> getWrapped() {
+			return (ObservableValue<? extends ObservableSortedSet<E>>) super.getWrapped();
 		}
 
 		@Override
 		public Comparator<? super E> comparator() {
-			ObservableSortedSet<? extends E> set = getWrapped().get();
+			ObservableSortedSet<E> set = getWrapped().get();
 			return set == null ? (o1, o2) -> -1 : (Comparator<? super E>) set.comparator();
+		}
+
+		@Override
+		public Iterable<E> iterateFrom(E element, boolean included, boolean reversed) {
+			ObservableSortedSet<E> set = getWrapped().get();
+			return set == null ? java.util.Collections.EMPTY_LIST : set.iterateFrom(element, included, reversed);
 		}
 	}
 }

@@ -735,8 +735,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	/**
 	 * Reduces all values in this collection to a single value
 	 *
-	 * TODO TEST ME!
-	 *
 	 * @param <T> The compile-time type of the reduced value
 	 * @param type The run-time type of the reduced value
 	 * @param init The seed value before the reduction
@@ -2953,15 +2951,15 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @param <E> The type of elements in the collection
 	 */
 	class FlattenedValueCollection<E> implements ObservableCollection.PartialCollectionImpl<E> {
-		private final ObservableValue<? extends ObservableCollection<? extends E>> theCollectionObservable;
+		private final ObservableValue<? extends ObservableCollection<E>> theCollectionObservable;
 		private final TypeToken<E> theType;
 
-		protected FlattenedValueCollection(ObservableValue<? extends ObservableCollection<? extends E>> collectionObservable) {
+		protected FlattenedValueCollection(ObservableValue<? extends ObservableCollection<E>> collectionObservable) {
 			theCollectionObservable = collectionObservable;
 			theType = (TypeToken<E>) theCollectionObservable.getType().resolveType(ObservableCollection.class.getTypeParameters()[0]);
 		}
 
-		protected ObservableValue<? extends ObservableCollection<? extends E>> getWrapped() {
+		protected ObservableValue<? extends ObservableCollection<E>> getWrapped() {
 			return theCollectionObservable;
 		}
 

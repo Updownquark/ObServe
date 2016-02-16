@@ -255,8 +255,8 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 * @return A collection representing the contents of the value, or a zero-length collection when null
 	 */
 	public static <E> ObservableReversibleCollection<E> flattenValue(
-			ObservableValue<? extends ObservableReversibleCollection<? extends E>> collectionObservable) {
-		return d().debug(new FlattenedReversibleValueCollection<E>(collectionObservable)).from("flatten", collectionObservable).get();
+			ObservableValue<? extends ObservableReversibleCollection<E>> collectionObservable) {
+		return d().debug(new FlattenedReversibleValueCollection<>(collectionObservable)).from("flatten", collectionObservable).get();
 	}
 
 	/**
@@ -870,14 +870,13 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 * @param <E> The type of elements in the collection
 	 */
 	class FlattenedReversibleValueCollection<E> extends FlattenedOrderedValueCollection<E> implements ObservableReversibleCollection<E> {
-		public FlattenedReversibleValueCollection(
-				ObservableValue<? extends ObservableReversibleCollection<? extends E>> collectionObservable) {
+		public FlattenedReversibleValueCollection(ObservableValue<? extends ObservableReversibleCollection<E>> collectionObservable) {
 			super(collectionObservable);
 		}
 
 		@Override
-		protected ObservableValue<? extends ObservableReversibleCollection<? extends E>> getWrapped() {
-			return (ObservableValue<? extends ObservableReversibleCollection<? extends E>>) super.getWrapped();
+		protected ObservableValue<? extends ObservableReversibleCollection<E>> getWrapped() {
+			return (ObservableValue<? extends ObservableReversibleCollection<E>>) super.getWrapped();
 		}
 
 		@Override

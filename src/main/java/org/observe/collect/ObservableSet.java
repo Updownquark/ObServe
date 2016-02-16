@@ -600,13 +600,13 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	 * @param <E> The type of elements in the set
 	 */
 	class FlattenedValueSet<E> extends FlattenedValueCollection<E> implements PartialSetImpl<E> {
-		public FlattenedValueSet(ObservableValue<? extends ObservableSet<? extends E>> collectionObservable) {
+		public FlattenedValueSet(ObservableValue<? extends ObservableSet<E>> collectionObservable) {
 			super(collectionObservable);
 		}
 
 		@Override
-		protected ObservableValue<? extends ObservableSet<? extends E>> getWrapped() {
-			return (ObservableValue<? extends ObservableSet<? extends E>>) super.getWrapped();
+		protected ObservableValue<? extends ObservableSet<E>> getWrapped() {
+			return (ObservableValue<? extends ObservableSet<E>>) super.getWrapped();
 		}
 
 		@Override

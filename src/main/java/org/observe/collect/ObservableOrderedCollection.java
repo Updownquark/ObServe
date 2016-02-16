@@ -315,8 +315,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @return A collection representing the contents of the value, or a zero-length collection when null
 	 */
 	public static <E> ObservableOrderedCollection<E> flattenValue(
-			ObservableValue<? extends ObservableOrderedCollection<? extends E>> collectionObservable) {
-		return d().debug(new FlattenedOrderedValueCollection<E>(collectionObservable)).from("flatten", collectionObservable).get();
+			ObservableValue<? extends ObservableOrderedCollection<E>> collectionObservable) {
+		return d().debug(new FlattenedOrderedValueCollection<>(collectionObservable)).from("flatten", collectionObservable).get();
 	}
 
 	/**
@@ -1077,13 +1077,13 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @param <E> The type of elements in the collection
 	 */
 	class FlattenedOrderedValueCollection<E> extends FlattenedValueCollection<E> implements ObservableOrderedCollection<E> {
-		public FlattenedOrderedValueCollection(ObservableValue<? extends ObservableOrderedCollection<? extends E>> collectionObservable) {
+		public FlattenedOrderedValueCollection(ObservableValue<? extends ObservableOrderedCollection<E>> collectionObservable) {
 			super(collectionObservable);
 		}
 
 		@Override
-		protected ObservableValue<? extends ObservableOrderedCollection<? extends E>> getWrapped() {
-			return (ObservableValue<? extends ObservableOrderedCollection<? extends E>>) super.getWrapped();
+		protected ObservableValue<? extends ObservableOrderedCollection<E>> getWrapped() {
+			return (ObservableValue<? extends ObservableOrderedCollection<E>>) super.getWrapped();
 		}
 
 		@Override
