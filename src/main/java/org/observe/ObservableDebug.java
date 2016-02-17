@@ -118,31 +118,31 @@ public abstract class ObservableDebug {
 		}
 	}
 
-	@FunctionalInterface
+	/*@FunctionalInterface
 	public interface D extends AutoCloseable {
 		void done();
-
+	
 		@Override
 		default void close() {
 			done();
 		}
 	}
-
+	
 	public static enum DebugType {
 		next, complete, subscribe;
 	}
-
+	
 	public interface DebugFrame {
 		Object getObservable();
-
+	
 		DebugType getType();
-
+	
 		DebugFrame getParent();
-
+	
 		ObservableList<DebugFrame> getChildren();
-
+	
 		ObservableValue<Boolean> isDone();
-	}
+	}*/
 
 	/** Returned from execution debugging methods. The {@link #done(String)} method on this must be called before the method exits. */
 	/*public static final class DImpl implements DebugFrame {
