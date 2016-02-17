@@ -30,6 +30,7 @@ import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.util.ObservableUtils;
+import org.qommons.Equalizer;
 import org.qommons.IterableUtils;
 import org.qommons.ListenerSet;
 import org.qommons.Transaction;
@@ -899,18 +900,40 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 *         applied to the element
 	 */
 	default <K> ObservableMultiMap<K, E> groupBy(Function<E, K> keyMap) {
-		return groupBy(null, keyMap);
+		return groupBy(keyMap, Objects::equals);
+	}
+
+	/**
+	 * @param <K> The type of the key
+	 * @param keyMap The mapping function to group this collection's values by
+	 * @param equalizer The equalizer to use to group the keys
+	 * @return A multi-map containing each of this collection's elements, each in the collection of the value mapped by the given function
+	 *         applied to the element
+	 */
+	default <K> ObservableMultiMap<K, E> groupBy(Function<E, K> keyMap, Equalizer equalizer) {
+		return groupBy(null, keyMap, equalizer);
+	}
+
+	/**
+	 * @param equalizer The equalizer to group the values by
+	 * @return A multi-map containing each of this collection's elements, each in the collection of one value that it matches according to
+	 *         the equalizer
+	 */
+	default ObservableMultiMap<E, E> groupBy(Equalizer equalizer) {
+		return groupBy(getType(), null, equalizer);
 	}
 
 	/**
 	 * @param <K> The type of the key
 	 * @param keyType The type of the key
 	 * @param keyMap The mapping function to group this collection's values by
+	 * @param equalizer The equalizer to use to group the keys
 	 * @return A multi-map containing each of this collection's elements, each in the collection of the value mapped by the given function
 	 *         applied to the element
 	 */
-	default <K> ObservableMultiMap<K, E> groupBy(TypeToken<K> keyType, Function<E, K> keyMap) {
-		return new GroupedMultiMap<>(this, keyMap, keyType);
+	default <K> ObservableMultiMap<K, E> groupBy(TypeToken<K> keyType, Function<E, K> keyMap, Equalizer equalizer) {
+		return d().debug(new GroupedMultiMap<>(this, keyMap, keyType, equalizer)).from("grouped", this).using("keyMap", keyMap)
+				.using("equalizer", equalizer).get();
 	}
 
 	/**
@@ -1896,20 +1919,33 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 */
 	class GroupedMultiMap<K, E> implements ObservableMultiMap<K, E> {
 		private final ObservableCollection<E> theWrapped;
-
 		private final Function<E, K> theKeyMap;
-
 		private final TypeToken<K> theKeyType;
+		private final Equalizer theEqualizer;
 
 		private final ObservableSet<K> theKeySet;
 
-		GroupedMultiMap(ObservableCollection<E> wrap, Function<E, K> keyMap, TypeToken<K> keyType) {
+		GroupedMultiMap(ObservableCollection<E> wrap, Function<E, K> keyMap, TypeToken<K> keyType, Equalizer equalizer) {
 			theWrapped = wrap;
 			theKeyMap = keyMap;
 			theKeyType = keyType != null ? keyType
 					: (TypeToken<K>) TypeToken.of(keyMap.getClass()).resolveType(Function.class.getTypeParameters()[1]);
+			theEqualizer = equalizer;
 
-			theKeySet = ObservableSet.unique(theWrapped.map(theKeyMap), Objects::equals);
+			ObservableCollection<K> mapped;
+			if (theKeyMap != null)
+				mapped = theWrapped.map(theKeyMap);
+			else
+				mapped = (ObservableCollection<K>) theWrapped;
+			theKeySet = unique(mapped);
+		}
+
+		protected Equalizer getEqualizer() {
+			return theEqualizer;
+		}
+
+		protected ObservableSet<K> unique(ObservableCollection<K> keyCollection) {
+			return ObservableSet.unique(keyCollection, theEqualizer);
 		}
 
 		@Override
@@ -1939,7 +1975,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		@Override
 		public ObservableCollection<E> get(Object key) {
-			return theWrapped.filter(el -> Objects.equals(theKeyMap.apply(el), key));
+			return theWrapped.filter(el -> theEqualizer.equals(theKeyMap.apply(el), key));
 		}
 
 		@Override

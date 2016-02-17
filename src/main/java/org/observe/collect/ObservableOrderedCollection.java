@@ -20,7 +20,9 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
+import org.observe.assoc.ObservableMultiMap;
 import org.observe.util.ObservableUtils;
+import org.qommons.Equalizer;
 import org.qommons.Transaction;
 import org.qommons.tree.CountedRedBlackNode;
 import org.qommons.tree.CountedRedBlackNode.DefaultNode;
@@ -225,6 +227,12 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 			BiFunction<? super V, ? super T, E> reverse) {
 		return d().debug(new CombinedOrderedCollection<>(this, arg, type, func, reverse)).from("combine", this).from("with", arg)
 				.using("combination", func).using("reverse", reverse).get();
+	}
+
+	@Override
+	default <K> ObservableMultiMap<K, E> groupBy(TypeToken<K> keyType, Function<E, K> keyMap, Equalizer equalizer) {
+		return d().debug(new GroupedOrderedMultiMap<>(this, keyMap, keyType, equalizer)).from("grouped", this).using("keyMap", keyMap)
+				.using("equalizer", equalizer).get();
 	}
 
 	/**
@@ -626,6 +634,24 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		@Override
 		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<V>> onElement) {
 			return onElement(element -> onElement.accept((ObservableOrderedElement<V>) element));
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableOrderedCollection#groupBy(Function, Equalizer)}
+	 *
+	 * @param <K> The key type of the map
+	 * @param <V> The value type of the map
+	 */
+	class GroupedOrderedMultiMap<K, V> extends GroupedMultiMap<K, V> {
+		public GroupedOrderedMultiMap(ObservableOrderedCollection<V> wrap, Function<V, K> keyMap, TypeToken<K> keyType,
+				Equalizer equalizer) {
+			super(wrap, keyMap, keyType, equalizer);
+		}
+
+		@Override
+		protected ObservableSet<K> unique(ObservableCollection<K> keyCollection) {
+			return ObservableOrderedSet.unique((ObservableOrderedCollection<K>) keyCollection, getEqualizer(), false);
 		}
 	}
 
