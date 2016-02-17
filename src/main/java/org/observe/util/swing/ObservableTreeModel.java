@@ -180,13 +180,13 @@ public abstract class ObservableTreeModel implements TreeModel {
 		}
 
 		private void added(int[] indexes, Object[] values) {
+			// Swing expects indexes to be in ascending order
+			sort(indexes, values);
 			for (int i = 0; i < indexes.length; i++) {
 				TreeNode newNode = newChild(values[i]);
 				theChildNodes.add(indexes[i], newNode);
 			}
 
-			// Swing expects indexes to be in ascending order
-			sort(indexes, values);
 			TreeModelEvent event = new TreeModelEvent(this, getPath(), indexes, values);
 
 			for (TreeModelListener listener : theListeners) {
@@ -195,7 +195,9 @@ public abstract class ObservableTreeModel implements TreeModel {
 		}
 
 		private void removed(int[] indexes, Object[] values) {
-			for (int i = 0; i < indexes.length; i++) {
+			// Swing expects indexes to be in ascending order
+			sort(indexes, values);
+			for (int i = indexes.length - 1; i >= 0; i--) {
 				TreeNode node = theChildNodes.get(indexes[i]);
 				theNodes.remove(node.theValue);
 				theChildNodes.remove(indexes[i]);
@@ -203,8 +205,6 @@ public abstract class ObservableTreeModel implements TreeModel {
 				values[i] = node.theValue;
 			}
 
-			// Swing expects indexes to be in ascending order
-			sort(indexes, values);
 			TreeModelEvent event = new TreeModelEvent(this, getPath(), indexes, values);
 
 			for (TreeModelListener listener : theListeners) {

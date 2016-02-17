@@ -24,6 +24,8 @@ public interface Observer<T> {
 
 	/** @param e The error that occurred in the observable */
 	default void onError(Throwable e) {
+		if (e instanceof ObservableErrorException)
+			throw (ObservableErrorException) e;
 		throw new ObservableErrorException(e);
 	}
 }

@@ -1918,8 +1918,8 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 				if(initialized[0])
 					onElement.accept(element);
 			};
-			initialized[0] = true;
 			theListeners.add(listener);
+			initialized[0] = true;
 			for(int i = theElements.size() - 1; i >= 0; i--)
 				onElement.accept(theElements.get(i));
 			return () -> {
@@ -2165,17 +2165,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 		@Override
 		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-			return theWrapped.subscribe(new Observer<ObservableValueEvent<T>>() {
-				@Override
-				public <V extends ObservableValueEvent<T>> void onNext(V value) {
-					observer.onNext(ObservableUtils.wrap(value, WrappingListElement.this));
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<T>> void onCompleted(V value) {
-					observer.onCompleted(ObservableUtils.wrap(value, WrappingListElement.this));
-				}
-			});
+			return ObservableUtils.wrap(theWrapped, this, observer);
 		}
 
 		@Override
