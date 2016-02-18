@@ -3,7 +3,6 @@ package org.observe;
 import static org.observe.ObservableDebug.d;
 
 import java.util.List;
-import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -47,6 +46,11 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 						observer.onCompleted(value.getValue());
 					}
 				});
+			}
+
+			@Override
+			public boolean isSafe() {
+				return ObservableValue.this.isSafe();
 			}
 
 			@Override
@@ -104,6 +108,11 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 				return outer.map(eventMap).subscribe(observer);
+			}
+
+			@Override
+			public boolean isSafe() {
+				return outer.isSafe();
 			}
 
 			@Override
@@ -267,12 +276,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 
 	@Override
 	default ObservableValue<T> safe() {
-		return d().debug(new SafeObservableValue<>(this, null)).from("safe", this).get();
-	}
-
-	@Override
-	default ObservableValue<T> safe(Lock lock){
-		return d().debug(new SafeObservableValue<>(this, lock)).from("safe", this).using("lock", lock).get();
+		return d().debug(new SafeObservableValue<>(this)).from("safe", this).get();
 	}
 
 	/**
@@ -390,6 +394,11 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 			}
 
 			@Override
+			public boolean isSafe() {
+				return false;
+			}
+
+			@Override
 			public String toString() {
 				return "flat(" + ov + ")";
 			}
@@ -421,7 +430,6 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 
 			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-				final ReentrantLock lock = new ReentrantLock();
 				ObservableValue<T> outer = this;
 				Subscription[] subSubs = new Subscription[components.length];
 				Object[] oldValue = new Object[1];
@@ -429,18 +437,13 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 					subSubs[i] = components[i].subscribe(new Observer<ObservableValueEvent<?>>() {
 						@Override
 						public <V extends ObservableValueEvent<?>> void onNext(V value2) {
-							lock.lock();
-							try {
-								T newVal = value.get();
-								T oldVal = (T) oldValue[0];
-								oldValue[0] = newVal;
-								if (value2.isInitial())
-									observer.onNext(outer.createInitialEvent(newVal));
-								else
-									observer.onNext(outer.createChangeEvent(oldVal, newVal, value2.getCause()));
-							} finally {
-								lock.unlock();
-							}
+							T newVal = value.get();
+							T oldVal = (T) oldValue[0];
+							oldValue[0] = newVal;
+							if (value2.isInitial())
+								observer.onNext(outer.createInitialEvent(newVal));
+							else
+								observer.onNext(outer.createChangeEvent(oldVal, newVal, value2.getCause()));
 						}
 
 						@Override
@@ -450,6 +453,11 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 					for (Subscription sub : subSubs)
 						sub.unsubscribe();
 				};
+			}
+
+			@Override
+			public boolean isSafe() {
+				return false;
 			}
 
 			@Override
@@ -664,6 +672,11 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		}
 
 		@Override
+		public boolean isSafe() {
+			return true;
+		}
+
+		@Override
 		public String toString() {
 			return theComposed.toString();
 		}
@@ -767,6 +780,12 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 					refireSub[0].unsubscribe();
 			};
 		}
+
+		@Override
+		public boolean isSafe() {
+			return false;
+		}
+
 	}
 
 	/**
@@ -850,6 +869,12 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		public ObservableValue<T> cached() {
 			return this;
 		}
+
+		@Override
+		public boolean isSafe() {
+			return true;
+		}
+
 	}
 
 	/**
@@ -888,6 +913,11 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		}
 
 		@Override
+		public boolean isSafe() {
+			return true;
+		}
+
+		@Override
 		public String toString() {
 			return "" + theValue;
 		}
@@ -899,8 +929,8 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @param <T> The type of the value
 	 */
 	class SafeObservableValue<T> extends SafeObservable<ObservableValueEvent<T>> implements ObservableValue<T> {
-		public SafeObservableValue(ObservableValue<T> wrap, Lock lock) {
-			super(wrap, lock);
+		public SafeObservableValue(ObservableValue<T> wrap) {
+			super(wrap);
 		}
 
 		@Override
@@ -921,14 +951,6 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		@Override
 		public ObservableValue<T> safe() {
 			return this;
-		}
-
-		@Override
-		public ObservableValue<T> safe(Lock lock) {
-			if (getLock() == lock)
-				return this;
-			else
-				return ObservableValue.super.safe(lock);
 		}
 	}
 }

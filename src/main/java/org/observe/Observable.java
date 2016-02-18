@@ -68,6 +68,11 @@ public interface Observable<T> {
 			public Subscription subscribe(Observer<? super Throwable> observer) {
 				return outer.subscribe(new ErrorObserver(observer));
 			}
+
+			@Override
+			public boolean isSafe() {
+				return outer.isSafe();
+			}
 		}).from("error", outer).get();
 	}
 
@@ -96,6 +101,11 @@ public interface Observable<T> {
 			public Subscription subscribe(Observer<? super T> observer) {
 				return outer.subscribe(new CompleteObserver(observer));
 			}
+
+			@Override
+			public boolean isSafe() {
+				return outer.isSafe();
+			}
 		}).from("completed", outer).get();
 	}
 
@@ -120,6 +130,11 @@ public interface Observable<T> {
 						observer.onCompleted(value);
 					}
 				});
+			}
+
+			@Override
+			public boolean isSafe() {
+				return outer.isSafe();
 			}
 		}).from("fireOnComplete", this).get();
 	}
@@ -224,17 +239,15 @@ public interface Observable<T> {
 		return d().debug(new SkippingObservable<>(this, times)).from("skip", this).using("times", times).get();
 	}
 
+	/** @return Whether this observable is constrained to only fire values on a single thread at a time */
+	boolean isSafe();
+
 	/** @return An observable that only fires values on a single thread at a time */
 	default Observable<T> safe() {
-		return d().debug(new SafeObservable<>(this, null)).from("safe", this).get();
-	}
-
-	/**
-	 * @param lock The lock to use
-	 * @return An observable that only fires values on a single thread at a time, using the given lock
-	 */
-	default Observable<T> safe(Lock lock) {
-		return d().debug(new SafeObservable<>(this, lock)).from("safe", this).using("lock", lock).get();
+		if (isSafe())
+			return this;
+		else
+			return d().debug(new SafeObservable<>(this)).from("safe", this).get();
 	}
 
 	/**
@@ -271,6 +284,11 @@ public interface Observable<T> {
 			}
 
 			@Override
+			public boolean isSafe() {
+				return false;
+			}
+
+			@Override
 			public String toString() {
 				StringBuilder ret = new StringBuilder("or(");
 				for(int i = 0; i < obs.length; i++) {
@@ -296,6 +314,11 @@ public interface Observable<T> {
 				return () -> {
 				};
 			}
+
+			@Override
+			public boolean isSafe() {
+				return true;
+			}
 		}).tag("constant", value).get();
 	}
 
@@ -305,6 +328,11 @@ public interface Observable<T> {
 		public Subscription subscribe(Observer<? super Object> observer) {
 			return () -> {
 			};
+		}
+
+		@Override
+		public boolean isSafe() {
+			return true;
 		}
 	};
 
@@ -409,6 +437,11 @@ public interface Observable<T> {
 		public ChainingObservable<T> skip(Supplier<Integer> times) {
 			return new DefaultChainingObservable<>(theWrapped.skip(times), theCompletion, theCompletionController);
 		}
+
+		@Override
+		public boolean isSafe() {
+			return theWrapped.isSafe();
+		}
 	}
 
 	/**
@@ -449,6 +482,11 @@ public interface Observable<T> {
 			});
 			initialized[0] = true;
 			return ret;
+		}
+
+		@Override
+		public boolean isSafe() {
+			return theWrapped.isSafe();
 		}
 	}
 
@@ -500,6 +538,11 @@ public interface Observable<T> {
 					observer.onError(e);
 				}
 			});
+		}
+
+		@Override
+		public boolean isSafe() {
+			return theWrapped.isSafe();
 		}
 
 		@Override
@@ -606,6 +649,11 @@ public interface Observable<T> {
 		}
 
 		@Override
+		public boolean isSafe() {
+			return true;
+		}
+
+		@Override
 		public String toString() {
 			return theComposed.toString();
 		}
@@ -667,6 +715,11 @@ public interface Observable<T> {
 				outerSub.unsubscribe();
 				untilSub[0].unsubscribe();
 			};
+		}
+
+		@Override
+		public boolean isSafe() {
+			return theWrapped.isSafe();
 		}
 	}
 
@@ -734,6 +787,11 @@ public interface Observable<T> {
 				}
 			};
 		}
+
+		@Override
+		public boolean isSafe() {
+			return theWrapped.isSafe();
+		}
 	}
 
 	/**
@@ -784,6 +842,11 @@ public interface Observable<T> {
 		}
 
 		@Override
+		public boolean isSafe() {
+			return theWrapped.isSafe();
+		}
+
+		@Override
 		public String toString() {
 			return theWrapped + ".skip(" + theTimes + ")";
 		}
@@ -798,9 +861,9 @@ public interface Observable<T> {
 		private final Observable<T> theWrapped;
 		private final Lock theLock;
 
-		protected SafeObservable(Observable<T> wrap, Lock lock) {
+		protected SafeObservable(Observable<T> wrap) {
 			theWrapped = wrap;
-			theLock = lock == null ? lock : new java.util.concurrent.locks.ReentrantLock();
+			theLock = new java.util.concurrent.locks.ReentrantLock();
 		}
 
 		protected Observable<T> getWrapped() {
@@ -847,16 +910,8 @@ public interface Observable<T> {
 		}
 
 		@Override
-		public Observable<T> safe() {
-			return this;
-		}
-
-		@Override
-		public Observable<T> safe(Lock lock) {
-			if (theLock == lock)
-				return this;
-			else
-				return Observable.super.safe(lock);
+		public boolean isSafe() {
+			return true;
 		}
 	}
 }

@@ -2,7 +2,6 @@ package org.observe.collect;
 
 import static org.observe.ObservableDebug.d;
 
-import java.util.concurrent.locks.Lock;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
@@ -119,12 +118,7 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 
 	@Override
 	default ObservableElement<E> safe() {
-		return d().debug(new SafeObservableElement<>(this, null)).from("safe", this).get();
-	}
-
-	@Override
-	default ObservableElement<E> safe(Lock lock) {
-		return d().debug(new SafeObservableElement<>(this, lock)).from("safe", this).using("lock", lock).get();
+		return d().debug(new SafeObservableElement<>(this)).from("safe", this).get();
 	}
 
 	/**
@@ -300,6 +294,11 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 		}
 
 		@Override
+		public boolean isSafe() {
+			return false;
+		}
+
+		@Override
 		public String toString() {
 			return theWrapped + ".refireWhen(" + theRefresh + ")";
 		}
@@ -311,8 +310,8 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 	 * @param <E> The type of value in the element
 	 */
 	class SafeObservableElement<E> extends SafeObservableValue<E> implements ObservableElement<E> {
-		public SafeObservableElement(ObservableElement<E> wrap, Lock lock) {
-			super(wrap, lock);
+		public SafeObservableElement(ObservableElement<E> wrap) {
+			super(wrap);
 		}
 
 		@Override
@@ -322,20 +321,12 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 
 		@Override
 		public ObservableValue<E> persistent() {
-			return getWrapped().persistent().safe(getLock());
+			return getWrapped().persistent().safe();
 		}
 
 		@Override
 		public ObservableElement<E> safe() {
 			return this;
-		}
-
-		@Override
-		public ObservableElement<E> safe(Lock lock) {
-			if (getLock() == lock)
-				return this;
-			else
-				return ObservableElement.super.safe(lock);
 		}
 	}
 
@@ -425,6 +416,11 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 		public ObservableValue<E> persistent() {
 			ObservableElement<E> el = theValue.get();
 			return el == null ? ObservableValue.constant(theType, null) : el.persistent();
+		}
+
+		@Override
+		public boolean isSafe() {
+			return false;
 		}
 	}
 }

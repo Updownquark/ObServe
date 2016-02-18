@@ -2,7 +2,6 @@ package org.observe.collect;
 
 import static org.observe.ObservableDebug.d;
 
-import java.util.concurrent.locks.Lock;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
@@ -172,12 +171,7 @@ public interface ObservableOrderedElement<E> extends ObservableElement<E> {
 
 	@Override
 	default ObservableOrderedElement<E> safe() {
-		return d().debug(new SafeObservableOrderedElement<>(this, null)).from("safe", this).get();
-	}
-
-	@Override
-	default ObservableOrderedElement<E> safe(Lock lock) {
-		return d().debug(new SafeObservableOrderedElement<>(this, lock)).from("safe", this).using("lock", lock).get();
+		return d().debug(new SafeObservableOrderedElement<>(this)).from("safe", this).get();
 	}
 
 	/**
@@ -296,12 +290,12 @@ public interface ObservableOrderedElement<E> extends ObservableElement<E> {
 
 	/**
 	 * Implements {@link ObservableOrderedElement#safe()}
-	 * 
+	 *
 	 * @param <E> The type of value in the element
 	 */
 	class SafeObservableOrderedElement<E> extends SafeObservableElement<E> implements ObservableOrderedElement<E> {
-		public SafeObservableOrderedElement(ObservableOrderedElement<E> wrap, Lock lock) {
-			super(wrap, lock);
+		public SafeObservableOrderedElement(ObservableOrderedElement<E> wrap) {
+			super(wrap);
 		}
 
 		@Override
@@ -317,14 +311,6 @@ public interface ObservableOrderedElement<E> extends ObservableElement<E> {
 		@Override
 		public ObservableOrderedElement<E> safe() {
 			return this;
-		}
-
-		@Override
-		public ObservableOrderedElement<E> safe(Lock lock) {
-			if (getLock() == lock)
-				return this;
-			else
-				return ObservableOrderedElement.super.safe();
 		}
 	}
 }

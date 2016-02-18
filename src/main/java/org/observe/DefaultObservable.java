@@ -108,6 +108,11 @@ public class DefaultObservable<T> implements Observable<T> {
 			observer.onError(e);
 	}
 
+	@Override
+	public boolean isSafe() {
+		return false;
+	}
+
 	/**
 	 * Clones this value into a new observable that is NOT yet controlled. Note that this class does not implement {@link Cloneable}, so
 	 * subclasses will need to implement Cloneable for this method to not throw the {@link CloneNotSupportedException}

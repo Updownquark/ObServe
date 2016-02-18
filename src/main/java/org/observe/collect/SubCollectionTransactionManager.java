@@ -36,7 +36,7 @@ class SubCollectionTransactionManager {
 	public SubCollectionTransactionManager(ObservableCollection<?> collection, Observable<?> refresh) {
 		theLock = new ReentrantLock();
 		theCollection = collection;
-		theRefresh = refresh.safe(theLock);
+		theRefresh = refresh;
 		theInternalSession = new DefaultObservableValue<CollectionSession>() {
 			private final TypeToken<CollectionSession> TYPE = TypeToken.of(CollectionSession.class);
 

@@ -83,4 +83,9 @@ public class CombinedCollectionSessionObservable implements ObservableValue<Coll
 		ObservableValueEvent<CollectionSession> evt = createChangeEvent(old, newSession, cause);
 		theObservers.forEach(listener -> listener.onNext(evt));
 	}
+
+	@Override
+	public boolean isSafe() {
+		return true;
+	}
 }

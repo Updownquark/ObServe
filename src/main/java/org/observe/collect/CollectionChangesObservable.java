@@ -114,7 +114,7 @@ class CollectionChangesObservable<E, CCE extends CollectionChangeEvent<E>> imple
 				tracker.oldElements.add(evt.getOldValue());
 		} else {
 			CollectionChangeEvent<E> toFire = new CollectionChangeEvent<>(type, asList(evt.getValue()),
-				type == CollectionChangeType.set ? asList(evt.getOldValue()) : null);
+					type == CollectionChangeType.set ? asList(evt.getOldValue()) : null);
 			fireEvent((CCE) toFire);
 		}
 	}
@@ -128,6 +128,11 @@ class CollectionChangesObservable<E, CCE extends CollectionChangeEvent<E>> imple
 
 	protected final void fireEvent(CCE evt) {
 		theObservers.forEach(observer -> observer.onNext(evt));
+	}
+
+	@Override
+	public boolean isSafe() {
+		return collection.isSafe();
 	}
 
 	@Override
