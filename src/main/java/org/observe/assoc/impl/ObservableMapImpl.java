@@ -138,6 +138,11 @@ public class ObservableMapImpl<K, V> implements ObservableMap<K, V> {
 	}
 
 	@Override
+	public boolean isSafe() {
+		return true;
+	}
+
+	@Override
 	public ObservableSet<K> keySet() {
 		return ObservableMap.defaultKeySet(this);
 	}

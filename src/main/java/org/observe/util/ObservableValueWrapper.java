@@ -36,6 +36,11 @@ public class ObservableValueWrapper<T> implements ObservableValue<T> {
 	}
 
 	@Override
+	public boolean isSafe() {
+		return theWrapped.isSafe();
+	}
+
+	@Override
 	public String toString() {
 		return theWrapped.toString();
 	}

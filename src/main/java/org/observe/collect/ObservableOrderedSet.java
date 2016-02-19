@@ -405,7 +405,7 @@ public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableOrd
 
 		@Override
 		protected UniqueElement<E> addUniqueElement(UniqueElementTracking tracking, EqualizerNode<E> node) {
-			UniqueOrderedElement<E> unique = new UniqueOrderedElement<>(getType(), isAlwaysUsingFirst,
+			UniqueOrderedElement<E> unique = new UniqueOrderedElement<>(this, isAlwaysUsingFirst,
 					((UniqueOrderedElementTracking) tracking).orderedElements);
 			tracking.elements.put(node, unique);
 			return unique;
@@ -422,8 +422,9 @@ public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableOrd
 		private DefaultNode<UniqueOrderedElement<E>> node;
 		private int theRemovedIndex;
 
-		public UniqueOrderedElement(TypeToken<E> type, boolean alwaysUseFirst, DefaultTreeSet<UniqueOrderedElement<E>> orderedEls) {
-			super(type, alwaysUseFirst);
+		public UniqueOrderedElement(CollectionWrappingOrderedSet<E> set, boolean alwaysUseFirst,
+				DefaultTreeSet<UniqueOrderedElement<E>> orderedEls) {
+			super(set, alwaysUseFirst);
 			orderedElements = orderedEls;
 		}
 

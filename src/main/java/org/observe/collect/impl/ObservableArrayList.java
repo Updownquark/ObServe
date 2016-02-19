@@ -57,7 +57,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	 *            not actually create transactions.
 	 */
 	public ObservableArrayList(TypeToken<E> type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
-		Transactable sessionController) {
+			Transactable sessionController) {
 		theType = type.wrap();
 		theInternals = new ArrayListInternals(lock, session, sessionController, write -> {
 			if(write)
@@ -76,6 +76,11 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	@Override
 	public Transaction lock(boolean write, Object cause) {
 		return theInternals.lock(write, true, cause);
+	}
+
+	@Override
+	public boolean isSafe() {
+		return true;
 	}
 
 	@Override
@@ -313,7 +318,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 
 	private class ArrayListInternals extends DefaultCollectionInternals<E> {
 		ArrayListInternals(ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session, Transactable sessionController,
-			Consumer<? super Boolean> postAction) {
+				Consumer<? super Boolean> postAction) {
 			super(lock, session, sessionController, null, postAction);
 		}
 

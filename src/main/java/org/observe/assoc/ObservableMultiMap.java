@@ -205,6 +205,11 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 				.equals(((ObservableMultiEntry<K, V>) entry1).getKey(), ((ObservableMultiEntry<K, V>) entry2).getKey()));
 	}
 
+	/** @return Whether this map is thread-safe, meaning it is constrained to only fire events on a single thread at a time */
+	boolean isSafe();
+
+	// TODO default ObservableGraph<N, E> safe(){}
+
 	/**
 	 * @param key The key to store the value by
 	 * @param value The value to store
@@ -328,6 +333,11 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			}
 
 			@Override
+			public boolean isSafe() {
+				return existingEntry.isSafe();
+			}
+
+			@Override
 			public K getKey() {
 				return key;
 			}
@@ -389,6 +399,11 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			}
 
 			@Override
+			public boolean isSafe() {
+				return outer.isSafe();
+			}
+
+			@Override
 			public ObservableSet<K> keySet() {
 				return outer.keySet();
 			}
@@ -428,6 +443,11 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			@Override
 			public Transaction lock(boolean write, Object cause) {
 				return outer.lock(write, cause);
+			}
+
+			@Override
+			public boolean isSafe() {
+				return outer.isSafe();
 			}
 
 			@Override
@@ -475,6 +495,11 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
 				return outer.getSession();
+			}
+
+			@Override
+			public boolean isSafe() {
+				return outer.isSafe();
 			}
 
 			@Override
@@ -526,6 +551,11 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			@Override
 			public Transaction lock(boolean write, Object cause) {
 				return outer.lock(write, cause);
+			}
+
+			@Override
+			public boolean isSafe() {
+				return outer.isSafe();
 			}
 
 			@Override
@@ -607,6 +637,11 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		@Override
 		public Transaction lock(boolean write, Object cause) {
 			return theMap.lock(write, cause);
+		}
+
+		@Override
+		public boolean isSafe() {
+			return false;
 		}
 
 		@Override

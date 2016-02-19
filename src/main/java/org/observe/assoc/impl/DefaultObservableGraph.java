@@ -105,19 +105,19 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E> {
 	 * @param edgeList Creates the list of edges
 	 */
 	public DefaultObservableGraph(TypeToken<N> nodeType, TypeToken<E> edgeType,
-		CollectionCreator<Node<N, E>, ObservableList<Node<N, E>>> nodeList,
-		CollectionCreator<Edge<N, E>, ObservableList<Edge<N, E>>> edgeList) {
+			CollectionCreator<Node<N, E>, ObservableList<Node<N, E>>> nodeList,
+			CollectionCreator<Edge<N, E>, ObservableList<Edge<N, E>>> edgeList) {
 		theLock = new ReentrantReadWriteLock();
 
 		theSessionController = new DefaultTransactable(theLock);
 
 		theNodeController = nodeList.create(
-			new TypeToken<Node<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType).where(new TypeParameter<E>() {}, edgeType), theLock,
-			theSessionController.getSession(), theSessionController);
+				new TypeToken<Node<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType).where(new TypeParameter<E>() {}, edgeType), theLock,
+				theSessionController.getSession(), theSessionController);
 		theNodes = theNodeController.immutable();
 		theEdgeController = edgeList.create(
-			new TypeToken<Edge<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType).where(new TypeParameter<E>() {}, edgeType), theLock,
-			theSessionController.getSession(), theSessionController);
+				new TypeToken<Edge<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType).where(new TypeParameter<E>() {}, edgeType), theLock,
+				theSessionController.getSession(), theSessionController);
 		theEdges = theEdgeController.immutable();
 	}
 
@@ -139,6 +139,11 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E> {
 	@Override
 	public Transaction lock(boolean write, Object cause) {
 		return theSessionController.lock(write, cause);
+	}
+
+	@Override
+	public boolean isSafe() {
+		return true;
 	}
 
 	/**

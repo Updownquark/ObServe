@@ -243,6 +243,11 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 			}
 
 			@Override
+			public boolean isSafe() {
+				return true;
+			}
+
+			@Override
 			public TypeToken<T> getType() {
 				return type;
 			}
@@ -283,6 +288,11 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 					observer.onNext(createInitialEvent(value));
 					return () -> {
 					};
+				}
+
+				@Override
+				public boolean isSafe() {
+					return true;
 				}
 
 				@Override
@@ -406,6 +416,11 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 			if(!isMatch[0])
 				observer.onNext(createInitialEvent(null));
 			return ret;
+		}
+
+		@Override
+		public boolean isSafe() {
+			return theSet.isSafe();
 		}
 	}
 
@@ -656,6 +671,11 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 		}
 
 		@Override
+		public boolean isSafe() {
+			return theCollection.isSafe();
+		}
+
+		@Override
 		public int size() {
 			HashSet<EqualizerNode<E>> set = new HashSet<>();
 			for (E value : theCollection)
@@ -769,7 +789,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 		}
 
 		protected UniqueElement<E> addUniqueElement(UniqueElementTracking tracking, EqualizerNode<E> node) {
-			UniqueElement<E> unique = new UniqueElement<>(getType(), false);
+			UniqueElement<E> unique = new UniqueElement<>(this, false);
 			tracking.elements.put(node, unique);
 			return unique;
 		}
@@ -781,16 +801,17 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	 * @param <E> The type of value in the element
 	 */
 	class UniqueElement<E> implements ObservableElement<E>{
-		private final TypeToken<E> theType;
+		private final CollectionWrappingSet<E> theSet;
 		private final boolean isAlwaysUsingFirst;
 		private final Collection<ObservableElement<E>> theElements;
 		private final SimpleSettableValue<ObservableElement<E>> theCurrentElement;
 
-		UniqueElement(TypeToken<E> type, boolean alwaysUseFirst) {
-			theType=type;
+		UniqueElement(CollectionWrappingSet<E> set, boolean alwaysUseFirst) {
+			theSet = set;
 			isAlwaysUsingFirst = alwaysUseFirst;
 			theElements = createElements();
-			theCurrentElement=new SimpleSettableValue<>(new TypeToken<ObservableElement<E>>(){}.where(new TypeParameter<E>(){}, type), true);
+			theCurrentElement = new SimpleSettableValue<>(
+					new TypeToken<ObservableElement<E>>() {}.where(new TypeParameter<E>() {}, theSet.getType()), true);
 		}
 
 		protected Collection<ObservableElement<E>> createElements() {
@@ -799,7 +820,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 
 		@Override
 		public TypeToken<E> getType() {
-			return theType;
+			return theSet.getType();
 		}
 
 		@Override
@@ -813,8 +834,13 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 		}
 
 		@Override
+		public boolean isSafe() {
+			return theSet.isSafe();
+		}
+
+		@Override
 		public ObservableValue<E> persistent() {
-			return theElements.isEmpty() ? ObservableValue.constant(theType, null) : theElements.iterator().next().persistent();
+			return theElements.isEmpty() ? ObservableValue.constant(theSet.getType(), null) : theElements.iterator().next().persistent();
 		}
 
 		protected ObservableElement<E> getCurrentElement() {

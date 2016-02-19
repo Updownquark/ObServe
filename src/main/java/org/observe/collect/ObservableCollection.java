@@ -29,6 +29,7 @@ import org.observe.Observer;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
+import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.ObservableUtils;
 import org.qommons.Equalizer;
 import org.qommons.IterableUtils;
@@ -74,6 +75,17 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @return The observable value for the current session of this collection
 	 */
 	ObservableValue<CollectionSession> getSession();
+
+	/** @return Whether this collection is thread-safe, meaning it is constrained to only fire events on a single thread at a time */
+	boolean isSafe();
+
+	/** @return An observable collection with the same values but that only fires events on a single thread at a time */
+	default ObservableCollection<E> safe() {
+		if (isSafe())
+			return this;
+		else
+			return d().debug(new SafeObservableCollection<>(this)).from("safe", this).get();
+	}
 
 	@Override
 	default boolean isEmpty() {
@@ -180,6 +192,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			}
 
 			@Override
+			public boolean isSafe() {
+				return ObservableCollection.this.isSafe();
+			}
+
+			@Override
 			public String toString() {
 				return ObservableCollection.this + ".size()";
 			}
@@ -199,46 +216,54 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 *         observable will only fire 1 event per transaction.
 	 */
 	default Observable<Void> simpleChanges() {
-		return observer -> {
-			boolean [] initialized = new boolean[1];
-			Object key = new Object();
-			Subscription collSub = onElement(element -> {
-				element.subscribe(new Observer<Object>() {
-					@Override
-					public void onNext(Object value) {
-						if(!initialized[0])
-							return;
-						CollectionSession session = getSession().get();
-						if(session == null)
-							observer.onNext(null);
-						else
-							session.put(key, "changed", true);
-					}
+		return new Observable<Void>() {
+			@Override
+			public Subscription subscribe(Observer<? super Void> observer) {
+				boolean[] initialized = new boolean[1];
+				Object key = new Object();
+				Subscription collSub = onElement(element -> {
+					element.subscribe(new Observer<Object>() {
+						@Override
+						public void onNext(Object value) {
+							if (!initialized[0])
+								return;
+							CollectionSession session = getSession().get();
+							if (session == null)
+								observer.onNext(null);
+							else
+								session.put(key, "changed", true);
+						}
 
-					@Override
-					public void onCompleted(Object value) {
-						if(!initialized[0])
-							return;
-						CollectionSession session = getSession().get();
-						if(session == null)
-							observer.onNext(null);
-						else
-							session.put(key, "changed", true);
+						@Override
+						public void onCompleted(Object value) {
+							if (!initialized[0])
+								return;
+							CollectionSession session = getSession().get();
+							if (session == null)
+								observer.onNext(null);
+							else
+								session.put(key, "changed", true);
+						}
+					});
+				});
+				Subscription transSub = getSession().act(event -> {
+					if (!initialized[0])
+						return;
+					if (event.getOldValue() != null && event.getOldValue().put(key, "changed", null) != null) {
+						observer.onNext(null);
 					}
 				});
-			});
-			Subscription transSub = getSession().act(event -> {
-				if(!initialized[0])
-					return;
-				if(event.getOldValue() != null && event.getOldValue().put(key, "changed", null) != null) {
-					observer.onNext(null);
-				}
-			});
-			initialized[0] = true;
-			return () -> {
-				collSub.unsubscribe();
-				transSub.unsubscribe();
-			};
+				initialized[0] = true;
+				return () -> {
+					collSub.unsubscribe();
+					transSub.unsubscribe();
+				};
+			}
+
+			@Override
+			public boolean isSafe() {
+				return ObservableCollection.this.isSafe();
+			}
 		};
 	}
 
@@ -249,6 +274,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
 				return coll.onElement(element -> element.completed().act(value -> observer.onNext(value)));
+			}
+
+			@Override
+			public boolean isSafe() {
+				return ObservableCollection.this.isSafe();
 			}
 
 			@Override
@@ -283,6 +313,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 					value[0] = get();
 					observer.onNext(createChangeEvent(old, value[0], null));
 				});
+			}
+
+			@Override
+			public boolean isSafe() {
+				return outer.isSafe();
 			}
 		};
 	}
@@ -575,6 +610,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			}
 
 			@Override
+			public boolean isSafe() {
+				return ObservableCollection.this.isSafe();
+			}
+
+			@Override
 			public String toString() {
 				return "find in " + ObservableCollection.this;
 			}
@@ -664,6 +704,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 					collSub.unsubscribe();
 					transSub.unsubscribe();
 				};
+			}
+
+			@Override
+			public boolean isSafe() {
+				return ObservableCollection.this.isSafe();
 			}
 		}).from("only", this).get();
 	}
@@ -850,6 +895,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 					collSub.unsubscribe();
 					transSub.unsubscribe();
 				};
+			}
+
+			@Override
+			public boolean isSafe() {
+				return ObservableCollection.this.isSafe();
 			}
 
 			@Override
@@ -1107,6 +1157,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			}
 
 			@Override
+			public boolean isSafe() {
+				return false;
+			}
+
+			@Override
 			public String toString() {
 				return "fold(" + coll + ")";
 			}
@@ -1217,6 +1272,147 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 					it.remove();
 				}
 			}
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableCollection#safe()}
+	 *
+	 * @param <E> The type of elements in the collection
+	 */
+	class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> {
+		private final ReentrantLock theLock;
+
+		protected SafeObservableCollection(ObservableCollection<E> wrap) {
+			super(wrap);
+			theLock = new ReentrantLock();
+		}
+
+		protected ReentrantLock getLock() {
+			return theLock;
+		}
+
+		@Override
+		public TypeToken<E> getType() {
+			return getWrapped().getType();
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			return new ObservableValue<CollectionSession>() {
+				@Override
+				public TypeToken<CollectionSession> getType() {
+					return getWrapped().getSession().getType();
+				}
+
+				@Override
+				public CollectionSession get() {
+					return getWrapped().getSession().get();
+				}
+
+				@Override
+				public boolean isSafe() {
+					return true;
+				}
+
+				@Override
+				public Subscription subscribe(Observer<? super ObservableValueEvent<CollectionSession>> observer) {
+					ObservableValue<CollectionSession> sessionObservable = this;
+					return getWrapped().getSession().subscribe(new Observer<ObservableValueEvent<CollectionSession>>() {
+						@Override
+						public <V extends ObservableValueEvent<CollectionSession>> void onNext(V event) {
+							theLock.lock();
+							try {
+								observer.onNext(ObservableUtils.wrap(event, sessionObservable));
+							} finally {
+								theLock.unlock();
+							}
+						}
+
+						@Override
+						public <V extends ObservableValueEvent<CollectionSession>> void onCompleted(V event) {
+							theLock.lock();
+							try {
+								observer.onCompleted(ObservableUtils.wrap(event, sessionObservable));
+							} finally {
+								theLock.unlock();
+							}
+						}
+					});
+				}
+			};
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return getWrapped().lock(write, cause);
+		}
+
+		@Override
+		public boolean isSafe() {
+			return true;
+		}
+
+		@Override
+		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
+			return getWrapped().onElement(element -> {
+				theLock.lock();
+				try {
+					onElement.accept(wrapElement(element));
+				} finally {
+					theLock.unlock();
+				}
+			});
+		}
+
+		protected ObservableElement<E> wrapElement(ObservableElement<E> wrap) {
+			return new ObservableElement<E>() {
+				@Override
+				public TypeToken<E> getType() {
+					return wrap.getType();
+				}
+
+				@Override
+				public E get() {
+					return wrap.get();
+				}
+
+				@Override
+				public boolean isSafe() {
+					return true;
+				}
+
+				@Override
+				public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
+					ObservableElement<E> wrapper = this;
+					return wrap.subscribe(new Observer<ObservableValueEvent<E>>() {
+						@Override
+						public <V extends ObservableValueEvent<E>> void onNext(V event) {
+							theLock.lock();
+							try {
+								observer.onNext(ObservableUtils.wrap(event, wrapper));
+							} finally {
+								theLock.unlock();
+							}
+						}
+
+						@Override
+						public <V extends ObservableValueEvent<E>> void onCompleted(V event) {
+							theLock.lock();
+							try {
+								observer.onCompleted(ObservableUtils.wrap(event, wrapper));
+							} finally {
+								theLock.unlock();
+							}
+						}
+					});
+				}
+
+				@Override
+				public ObservableValue<E> persistent() {
+					return wrap.persistent();
+				}
+			};
 		}
 	}
 
@@ -1368,6 +1564,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		@Override
 		public Subscription onElement(Consumer<? super ObservableElement<T>> onElement) {
 			return theWrapped.onElement(element -> onElement.accept(element.mapV(theMap)));
+		}
+
+		@Override
+		public boolean isSafe() {
+			return theWrapped.isSafe();
 		}
 	}
 
@@ -1570,6 +1771,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			};
 		}
 
+		@Override
+		public boolean isSafe() {
+			return theWrapped.isSafe();
+		}
 	}
 
 	/**
@@ -1730,6 +1935,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		@Override
 		public String toString() {
 			return "filter(" + theWrappedElement + ")";
+		}
+
+		@Override
+		public boolean isSafe() {
+			return theWrappedElement.isSafe();
 		}
 	}
 
@@ -1909,6 +2119,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 				collSub.unsubscribe();
 			};
 		}
+
+		@Override
+		public boolean isSafe() {
+			return false;
+		}
 	}
 
 	/**
@@ -1966,6 +2181,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		@Override
 		public Transaction lock(boolean write, Object cause) {
 			return theWrapped.lock(write, cause);
+		}
+
+		@Override
+		public boolean isSafe() {
+			return theWrapped.isSafe();
 		}
 
 		@Override
@@ -2074,6 +2294,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
+		public boolean isSafe() {
+			return theElements.isSafe();
+		}
+
+		@Override
 		public boolean equals(Object o) {
 			if(this == o)
 				return true;
@@ -2155,6 +2380,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
+		public boolean isSafe() {
+			return false;
+		}
+
+		@Override
 		public String toString() {
 			return theWrapped.toString();
 		}
@@ -2220,6 +2450,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
+		public boolean isSafe() {
+			return false;
+		}
+
+		@Override
 		public String toString() {
 			return theWrapped.toString();
 		}
@@ -2280,6 +2515,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
+		public boolean isSafe() {
+			return theWrapped.isSafe();
+		}
+
+		@Override
 		public String toString() {
 			return theWrapped.toString();
 		}
@@ -2333,6 +2573,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		@Override
 		public Transaction lock(boolean write, Object cause) {
 			return theWrapped.lock(write, cause);
+		}
+
+		@Override
+		public boolean isSafe() {
+			return theWrapped.isSafe();
 		}
 
 		@Override
@@ -2531,6 +2776,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			}
 
 			@Override
+			public boolean isSafe() {
+				return true;
+			}
+
+			@Override
 			public E get() {
 				return theCachedValue;
 			}
@@ -2630,6 +2880,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		@Override
 		public Transaction lock(boolean write, Object cause) {
 			return theWrapped.lock(write, cause);
+		}
+
+		@Override
+		public boolean isSafe() {
+			return true;
 		}
 
 		@Override
@@ -2783,6 +3038,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
+		public boolean isSafe() {
+			return false;
+		}
+
+		@Override
 		public String toString() {
 			return theWrapped.toString();
 		}
@@ -2835,6 +3095,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			return theWrapped.persistent();
 		}
 
+		@Override
+		public boolean isSafe() {
+			return false;
+		}
+
 		protected void end() {
 			theEndControl.onNext(null);
 		}
@@ -2877,6 +3142,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		@Override
 		public TypeToken<E> getType() {
 			return theType;
+		}
+
+		@Override
+		public boolean isSafe() {
+			return false;
 		}
 
 		@Override
@@ -2937,6 +3207,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		@Override
 		public TypeToken<E> getType() {
 			return theType;
+		}
+
+		@Override
+		public boolean isSafe() {
+			return false;
 		}
 
 		@Override
@@ -3029,6 +3304,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
+		public boolean isSafe() {
+			return false;
+		}
+
+		@Override
 		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
 			SimpleObservable<Void> unSubObs = new SimpleObservable<>();
 			Subscription collSub = theCollectionObservable
@@ -3105,6 +3385,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		@Override
 		public TypeToken<E> getType() {
 			return theType;
+		}
+
+		@Override
+		public boolean isSafe() {
+			return false;
 		}
 
 		@Override

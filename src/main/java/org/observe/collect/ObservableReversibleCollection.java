@@ -319,6 +319,11 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 		}
 
 		@Override
+		public boolean isSafe() {
+			return theWrapped.isSafe();
+		}
+
+		@Override
 		public int size() {
 			return theWrapped.size();
 		}
@@ -389,6 +394,11 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
 				return theWrappedElement.subscribe(observer);
+			}
+
+			@Override
+			public boolean isSafe() {
+				return theWrappedElement.isSafe();
 			}
 
 			@Override

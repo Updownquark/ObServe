@@ -23,6 +23,11 @@ public class ObservableWrapper<T> implements Observable<T> {
 	}
 
 	@Override
+	public boolean isSafe() {
+		return theWrapped.isSafe();
+	}
+
+	@Override
 	public String toString() {
 		return theWrapped.toString();
 	}

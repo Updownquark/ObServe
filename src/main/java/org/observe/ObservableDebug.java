@@ -109,7 +109,7 @@ public abstract class ObservableDebug {
 		private final ObservableMultiMapImpl<String, Object> tagController;
 
 		private ObservableDebugWrapper(Object ob, Map<String, Object> fns) {
-			observable = new WeakReferenceObservable<>(TypeToken.of(Object.class), ob);
+			observable = new WeakReferenceObservable<>(TypeToken.of(Object.class), ob, false);
 			labels = new org.observe.collect.impl.ObservableArrayList<>(TypeToken.of(String.class));
 			tagController = new org.observe.assoc.impl.ObservableMultiMapImpl<>(TypeToken.of(String.class),
 					TypeToken.of(Object.class));
@@ -121,26 +121,26 @@ public abstract class ObservableDebug {
 	/*@FunctionalInterface
 	public interface D extends AutoCloseable {
 		void done();
-	
+
 		@Override
 		default void close() {
 			done();
 		}
 	}
-	
+
 	public static enum DebugType {
 		next, complete, subscribe;
 	}
-	
+
 	public interface DebugFrame {
 		Object getObservable();
-	
+
 		DebugType getType();
-	
+
 		DebugFrame getParent();
-	
+
 		ObservableList<DebugFrame> getChildren();
-	
+
 		ObservableValue<Boolean> isDone();
 	}*/
 
@@ -578,6 +578,11 @@ public abstract class ObservableDebug {
 						@Override
 						public ObservableValue<CollectionSession> getSession() {
 							return ObservableValue.constant(new TypeToken<CollectionSession>() {}, null);
+						}
+
+						@Override
+						public boolean isSafe() {
+							return false;
 						}
 
 						@Override

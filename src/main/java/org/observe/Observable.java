@@ -239,10 +239,10 @@ public interface Observable<T> {
 		return d().debug(new SkippingObservable<>(this, times)).from("skip", this).using("times", times).get();
 	}
 
-	/** @return Whether this observable is constrained to only fire values on a single thread at a time */
+	/** @return Whether this observable is thread-safe, meaning it is constrained to only fire values on a single thread at a time */
 	boolean isSafe();
 
-	/** @return An observable that only fires values on a single thread at a time */
+	/** @return An observable firing the same values that only fires values on a single thread at a time */
 	default Observable<T> safe() {
 		if (isSafe())
 			return this;

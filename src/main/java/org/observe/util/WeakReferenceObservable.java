@@ -19,16 +19,19 @@ import com.google.common.reflect.TypeToken;
 public class WeakReferenceObservable<T> implements ObservableValue<T> {
 	private final TypeToken<T> theType;
 	private final WeakReference<T> theRef;
+	private final boolean isSafe;
 	private final java.util.concurrent.ConcurrentLinkedQueue<Observer<? super ObservableValueEvent<T>>> theObservers;
 
 	/**
 	 * @param type The type of value in this observable
 	 * @param value The value for this observable
+	 * @param safe Whether the {@link #check()} method will only be called from a single thread at a time
 	 */
-	public WeakReferenceObservable(TypeToken<T> type, T value) {
+	public WeakReferenceObservable(TypeToken<T> type, T value, boolean safe) {
 		theType = type;
 		theType.getRawType().cast(value);
 		theRef = new WeakReference<>(value);
+		isSafe = safe;
 		theObservers = new java.util.concurrent.ConcurrentLinkedQueue<>();
 	}
 
@@ -55,6 +58,11 @@ public class WeakReferenceObservable<T> implements ObservableValue<T> {
 	@Override
 	public T get() {
 		return theRef.get();
+	}
+
+	@Override
+	public boolean isSafe() {
+		return isSafe;
 	}
 
 	/**

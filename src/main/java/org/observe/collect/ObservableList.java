@@ -315,6 +315,11 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 			}
 
 			@Override
+			public boolean isSafe() {
+				return true;
+			}
+
+			@Override
 			public ObservableValue<T> persistent() {
 				return this;
 			}
@@ -351,6 +356,11 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 			public Transaction lock(boolean write, Object cause) {
 				return () -> {
 				};
+			}
+
+			@Override
+			public boolean isSafe() {
+				return true;
 			}
 
 			@Override
@@ -1087,6 +1097,11 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 						observer.onCompleted(ObservableUtils.wrap(value, Element.this));
 					}
 				});
+			}
+
+			@Override
+			public boolean isSafe() {
+				return theWrapped.isSafe();
 			}
 
 			@Override
@@ -1938,6 +1953,11 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		}
 
 		@Override
+		public boolean isSafe() {
+			return theWrapped.isSafe();
+		}
+
+		@Override
 		public boolean addAll(int index, Collection<? extends T> c) {
 			throw new UnsupportedOperationException();
 		}
@@ -2166,6 +2186,11 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		@Override
 		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 			return ObservableUtils.wrap(theWrapped, this, observer);
+		}
+
+		@Override
+		public boolean isSafe() {
+			return theWrapped.isSafe();
 		}
 
 		@Override

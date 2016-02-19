@@ -118,6 +118,11 @@ public class ObservableMultiMapImpl<K, V> implements ObservableMultiMap<K, V> {
 	}
 
 	@Override
+	public boolean isSafe() {
+		return true;
+	}
+
+	@Override
 	public ObservableSet<K> keySet() {
 		return ObservableMultiMap.defaultKeySet(this);
 	}

@@ -73,6 +73,11 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 	}
 
 	@Override
+	public boolean isSafe() {
+		return true;
+	}
+
+	@Override
 	public TypeToken<E> getType() {
 		return theType;
 	}

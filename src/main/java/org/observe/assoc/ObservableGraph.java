@@ -89,54 +89,67 @@ public interface ObservableGraph<N, E> extends Transactable {
 	 */
 	ObservableValue<CollectionSession> getSession();
 
+	/** @return Whether this graph is thread-safe, meaning it is constrained to only fire events on a single thread at a time */
+	boolean isSafe();
+
+	// TODO default ObservableGraph<N, E> safe(){}
+
 	/**
 	 * @return An observable that fires a (null) value whenever anything in this collection changes. This observable will only fire 1 event
 	 *         per transaction.
 	 */
 	default Observable<Void> changes() {
-		return observer -> {
-			boolean [] initialized = new boolean[1];
-			Object key = new Object();
-			java.util.function.Consumer<ObservableElement<?>> listener = element -> {
-				element.subscribe(new Observer<ObservableValueEvent<?>>() {
-					@Override
-					public <V extends ObservableValueEvent<?>> void onNext(V value) {
-						if(!initialized[0])
-							return;
-						CollectionSession session = getSession().get();
-						if(session == null)
-							observer.onNext(null);
-						else
-							session.put(key, "changed", true);
-					}
+		return new Observable<Void>() {
+			@Override
+			public Subscription subscribe(Observer<? super Void> observer) {
+				boolean[] initialized = new boolean[1];
+				Object key = new Object();
+				java.util.function.Consumer<ObservableElement<?>> listener = element -> {
+					element.subscribe(new Observer<ObservableValueEvent<?>>() {
+						@Override
+						public <V extends ObservableValueEvent<?>> void onNext(V value) {
+							if (!initialized[0])
+								return;
+							CollectionSession session = getSession().get();
+							if (session == null)
+								observer.onNext(null);
+							else
+								session.put(key, "changed", true);
+						}
 
-					@Override
-					public <V extends ObservableValueEvent<?>> void onCompleted(V value) {
-						if(!initialized[0])
-							return;
-						CollectionSession session = getSession().get();
-						if(session == null)
-							observer.onNext(null);
-						else
-							session.put(key, "changed", true);
+						@Override
+						public <V extends ObservableValueEvent<?>> void onCompleted(V value) {
+							if (!initialized[0])
+								return;
+							CollectionSession session = getSession().get();
+							if (session == null)
+								observer.onNext(null);
+							else
+								session.put(key, "changed", true);
+						}
+					});
+				};
+				Subscription nodeSub = getNodes().onElement(listener);
+				Subscription edgeSub = getEdges().onElement(listener);
+				Subscription transSub = getSession().act(event -> {
+					if (!initialized[0])
+						return;
+					if (event.getOldValue() != null && event.getOldValue().put(key, "changed", null) != null) {
+						observer.onNext(null);
 					}
 				});
-			};
-			Subscription nodeSub = getNodes().onElement(listener);
-			Subscription edgeSub = getEdges().onElement(listener);
-			Subscription transSub = getSession().act(event -> {
-				if(!initialized[0])
-					return;
-				if(event.getOldValue() != null && event.getOldValue().put(key, "changed", null) != null) {
-					observer.onNext(null);
-				}
-			});
-			initialized[0] = true;
-			return () -> {
-				nodeSub.unsubscribe();
-				edgeSub.unsubscribe();
-				transSub.unsubscribe();
-			};
+				initialized[0] = true;
+				return () -> {
+					nodeSub.unsubscribe();
+					edgeSub.unsubscribe();
+					transSub.unsubscribe();
+				};
+			}
+
+			@Override
+			public boolean isSafe() {
+				return ObservableGraph.this.isSafe();
+			}
 		};
 	}
 
@@ -241,6 +254,11 @@ public interface ObservableGraph<N, E> extends Transactable {
 				return outer.lock(write, cause);
 			}
 
+			@Override
+			public boolean isSafe() {
+				return outer.isSafe();
+			}
+
 			private FilteredNode filter(Node<N, E> node) {
 				// TODO Not completely thread-safe
 				FilteredNode ret = theNodeMap.get(node);
@@ -301,6 +319,11 @@ public interface ObservableGraph<N, E> extends Transactable {
 			}
 
 			@Override
+			public boolean isSafe() {
+				return outer.isSafe();
+			}
+
+			@Override
 			public Transaction lock(boolean write, Object cause) {
 				return outer.lock(write, cause);
 			}
@@ -322,13 +345,13 @@ public interface ObservableGraph<N, E> extends Transactable {
 			@Override
 			public ObservableCollection<Node<N, E>> getNodes() {
 				return org.observe.collect.ObservableSet.constant(
-					new TypeToken<Node<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType).where(new TypeParameter<E>() {}, edgeType));
+						new TypeToken<Node<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType).where(new TypeParameter<E>() {}, edgeType));
 			}
 
 			@Override
 			public ObservableCollection<Edge<N, E>> getEdges() {
 				return org.observe.collect.ObservableSet.constant(
-					new TypeToken<Edge<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType).where(new TypeParameter<E>() {}, edgeType));
+						new TypeToken<Edge<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType).where(new TypeParameter<E>() {}, edgeType));
 			}
 
 			@Override
@@ -340,6 +363,11 @@ public interface ObservableGraph<N, E> extends Transactable {
 			public Transaction lock(boolean write, Object cause) {
 				return () -> {
 				};
+			}
+
+			@Override
+			public boolean isSafe() {
+				return true;
 			}
 		};
 	}

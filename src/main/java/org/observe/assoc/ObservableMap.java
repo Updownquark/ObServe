@@ -171,6 +171,11 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 				.equals(((ObservableEntry<K, V>) entry1).getKey(), ((ObservableEntry<K, V>) entry2).getKey()));
 	}
 
+	/** @return Whether this map is thread-safe, meaning it is constrained to only fire events on a single thread at a time */
+	boolean isSafe();
+
+	// TODO default ObservableGraph<N, E> safe(){}
+
 	/** @return An observable value reflecting the number of key-value pairs stored in this map */
 	default ObservableValue<Integer> observeSize() {
 		return keySet().observeSize();
@@ -240,6 +245,11 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 			@Override
 			public ObservableValue<CollectionSession> getSession() {
 				return outer.getSession();
+			}
+
+			@Override
+			public boolean isSafe() {
+				return outer.isSafe();
 			}
 
 			@Override
@@ -316,6 +326,11 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 			public Transaction lock(boolean write, Object cause) {
 				return outer.lock(write, cause);
 			}
+
+			@Override
+			public boolean isSafe() {
+				return outer.isSafe();
+			}
 		}
 		return new Immutable();
 	}
@@ -348,6 +363,11 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 			public Transaction lock(boolean write, Object cause) {
 				return () -> {
 				};
+			}
+
+			@Override
+			public boolean isSafe() {
+				return true;
 			}
 
 			@Override
@@ -427,6 +447,11 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 		@Override
 		public V setValue(V value) {
 			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public boolean isSafe() {
+			return theValue.isSafe();
 		}
 
 		@Override

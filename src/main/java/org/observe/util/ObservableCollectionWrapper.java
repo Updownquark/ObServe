@@ -63,6 +63,11 @@ public class ObservableCollectionWrapper<E> implements ObservableCollection<E> {
 	}
 
 	@Override
+	public boolean isSafe() {
+		return theWrapped.isSafe();
+	}
+
+	@Override
 	public Subscription onElement(java.util.function.Consumer<? super ObservableElement<E>> observer) {
 		return theWrapped.onElement(observer);
 	}

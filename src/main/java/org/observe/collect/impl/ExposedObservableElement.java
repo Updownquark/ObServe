@@ -60,6 +60,11 @@ class ExposedObservableElement<E> implements ObservableElement<E> {
 	}
 
 	@Override
+	public boolean isSafe() {
+		return theInternalElement.isSafe();
+	}
+
+	@Override
 	public String toString() {
 		return getType() + " set element (" + get() + ")";
 	}

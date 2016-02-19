@@ -500,6 +500,11 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		}
 
 		@Override
+		public boolean isSafe() {
+			return theCollection.isSafe();
+		}
+
+		@Override
 		public String toString() {
 			return "find in " + theCollection;
 		}
@@ -732,6 +737,11 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		}
 
 		@Override
+		public boolean isSafe() {
+			return theWrapped.isSafe();
+		}
+
+		@Override
 		public int size() {
 			return theWrapped.size();
 		}
@@ -761,6 +771,11 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 				@Override
 				public TypeToken<E> getType() {
 					return theWrappedEl.getType();
+				}
+
+				@Override
+				public boolean isSafe() {
+					return theWrappedEl.isSafe();
 				}
 
 				@Override
@@ -1185,6 +1200,11 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 				@Override
 				public TypeToken<E> getType() {
 					return FlattenedOrderedCollection.this.getType();
+				}
+
+				@Override
+				public boolean isSafe() {
+					return theWrapped.isSafe();
 				}
 
 				@Override

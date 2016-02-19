@@ -595,6 +595,11 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 		}
 
 		@Override
+		public boolean isSafe() {
+			return theWrapped.isSafe();
+		}
+
+		@Override
 		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
 			return theWrapped.onOrderedElement(element -> {
 				if(isInRange(element.get()))
@@ -624,6 +629,11 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 						@Override
 						public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
 							return ObservableUtils.wrap(element, this, observer);
+						}
+
+						@Override
+						public boolean isSafe() {
+							return element.isSafe();
 						}
 					});
 			});
@@ -1292,7 +1302,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 
 		@Override
 		protected UniqueElement<E> addUniqueElement(UniqueElementTracking tracking, EqualizerNode<E> node) {
-			UniqueSortedElement<E> unique = new UniqueSortedElement<>(getType(), ((UniqueSortedElementTracking) tracking).sortedElements);
+			UniqueSortedElement<E> unique = new UniqueSortedElement<>(this, ((UniqueSortedElementTracking) tracking).sortedElements);
 			tracking.elements.put(node, unique);
 			return unique;
 		}
@@ -1307,8 +1317,8 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 		private final DefaultTreeSet<UniqueSortedElement<E>> sortedElements;
 		private DefaultNode<UniqueSortedElement<E>> node;
 
-		public UniqueSortedElement(TypeToken<E> type, DefaultTreeSet<UniqueSortedElement<E>> orderedEls) {
-			super(type, false);
+		public UniqueSortedElement(CollectionWrappingSortedSet<E> set, DefaultTreeSet<UniqueSortedElement<E>> orderedEls) {
+			super(set, false);
 			sortedElements = orderedEls;
 		}
 
