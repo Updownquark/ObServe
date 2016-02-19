@@ -20,7 +20,6 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
-import org.observe.assoc.ObservableMultiMap;
 import org.observe.util.ObservableUtils;
 import org.qommons.Equalizer;
 import org.qommons.Transaction;
@@ -229,11 +228,11 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 				.using("combination", func).using("reverse", reverse).get();
 	}
 
-	@Override
-	default <K> ObservableMultiMap<K, E> groupBy(TypeToken<K> keyType, Function<E, K> keyMap, Equalizer equalizer) {
-		return d().debug(new GroupedOrderedMultiMap<>(this, keyMap, keyType, equalizer)).from("grouped", this).using("keyMap", keyMap)
-				.using("equalizer", equalizer).get();
-	}
+	// @Override
+	// default <K> ObservableMultiMap<K, E> groupBy(TypeToken<K> keyType, Function<E, K> keyMap, Equalizer equalizer) {
+	// return d().debug(new GroupedOrderedMultiMap<>(this, keyMap, keyType, equalizer)).from("grouped", this).using("keyMap", keyMap)
+	// .using("equalizer", equalizer).get();
+	// }
 
 	/**
 	 * @param refresh The observable to re-fire events on
