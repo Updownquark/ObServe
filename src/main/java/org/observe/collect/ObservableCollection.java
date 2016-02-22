@@ -29,6 +29,7 @@ import org.observe.Observer;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
+import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.ObservableUtils;
 import org.qommons.Equalizer;
@@ -984,6 +985,39 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	default <K> ObservableMultiMap<K, E> groupBy(TypeToken<K> keyType, Function<E, K> keyMap, Equalizer equalizer) {
 		return d().debug(new GroupedMultiMap<>(this, keyMap, keyType, equalizer)).from("grouped", this).using("keyMap", keyMap)
 				.using("equalizer", equalizer).get();
+	}
+
+	/**
+	 * @param <K> The type of the key
+	 * @param keyMap The mapping function to group this collection's values by
+	 * @param compare The comparator to use to sort the keys
+	 * @return A sorted multi-map containing each of this collection's elements, each in the collection of the value mapped by the given
+	 *         function applied to the element
+	 */
+	default <K> ObservableSortedMultiMap<K, E> groupBy(Function<E, K> keyMap, Comparator<? super K> compare) {
+		return groupBy(null, keyMap, compare);
+	}
+
+	/**
+	 * @param compare The comparator to use to group the value
+	 * @return A sorted multi-map containing each of this collection's elements, each in the collection of one value that it matches
+	 *         according to the comparator
+	 */
+	default ObservableSortedMultiMap<E, E> groupBy(Comparator<? super E> compare) {
+		return groupBy(getType(), null, compare);
+	}
+
+	/**
+	 * @param <K> The type of the key
+	 * @param keyType The type of the key
+	 * @param keyMap The mapping function to group this collection's values by
+	 * @param compare The comparator to use to sort the keys
+	 * @return A sorted multi-map containing each of this collection's elements, each in the collection of the value mapped by the given
+	 *         function applied to the element
+	 */
+	default <K> ObservableSortedMultiMap<K, E> groupBy(TypeToken<K> keyType, Function<E, K> keyMap, Comparator<? super K> compare) {
+		return d().debug(new GroupedSortedMultiMap<>(this, keyMap, keyType, compare)).from("grouped", this).using("keyMap", keyMap)
+				.using("compare", compare).get();
 	}
 
 	/**
@@ -2308,6 +2342,92 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		@Override
 		public int hashCode() {
 			return Objects.hashCode(theKey);
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableCollection#groupBy(Function, Comparator)}
+	 *
+	 * @param <K> The key type of the map
+	 * @param <E> The value type of the map
+	 */
+	class GroupedSortedMultiMap<K, E> implements ObservableSortedMultiMap<K, E> {
+		private final ObservableCollection<E> theWrapped;
+		private final Function<E, K> theKeyMap;
+		private final TypeToken<K> theKeyType;
+		private final Comparator<? super K> theCompare;
+
+		private final ObservableSortedSet<K> theKeySet;
+
+		GroupedSortedMultiMap(ObservableCollection<E> wrap, Function<E, K> keyMap, TypeToken<K> keyType, Comparator<? super K> compare) {
+			theWrapped = wrap;
+			theKeyMap = keyMap;
+			theKeyType = keyType != null ? keyType
+					: (TypeToken<K>) TypeToken.of(keyMap.getClass()).resolveType(Function.class.getTypeParameters()[1]);
+			theCompare = compare;
+
+			ObservableCollection<K> mapped;
+			if (theKeyMap != null)
+				mapped = theWrapped.map(theKeyMap);
+			else
+				mapped = (ObservableCollection<K>) theWrapped;
+			theKeySet = unique(mapped);
+		}
+
+		@Override
+		public Comparator<? super K> comparator() {
+			return theCompare;
+		}
+
+		protected ObservableSortedSet<K> unique(ObservableCollection<K> keyCollection) {
+			return ObservableSortedSet.unique(keyCollection, theCompare);
+		}
+
+		@Override
+		public TypeToken<K> getKeyType() {
+			return theKeyType;
+		}
+
+		@Override
+		public TypeToken<E> getValueType() {
+			return theWrapped.getType();
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			return theWrapped.getSession();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theWrapped.lock(write, cause);
+		}
+
+		@Override
+		public boolean isSafe() {
+			return theWrapped.isSafe();
+		}
+
+		@Override
+		public ObservableSortedSet<K> keySet() {
+			return theKeySet;
+		}
+
+		@Override
+		public ObservableCollection<E> get(Object key) {
+			if (!theKeyType.getRawType().isInstance(key))
+				return ObservableList.constant(getValueType());
+			return theWrapped.filter(el -> theCompare.compare(theKeyMap.apply(el), (K) key) == 0);
+		}
+
+		@Override
+		public ObservableSortedSet<? extends ObservableMultiEntry<K, E>> entrySet() {
+			return ObservableSortedMultiMap.defaultEntrySet(this);
+		}
+
+		@Override
+		public String toString() {
+			return entrySet().toString();
 		}
 	}
 

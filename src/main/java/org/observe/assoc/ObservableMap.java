@@ -37,6 +37,49 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 		default V get() {
 			return getValue();
 		}
+
+		/**
+		 * @param type The value type for the entry
+		 * @param key The key for the entry
+		 * @param value The value for the entry
+		 * @return A constant-value observable entry
+		 */
+		public static <K, V> ObservableEntry<K, V> constEntry(TypeToken<V> type, K key, V value) {
+			class ObservableKeyEntry implements ObservableEntry<K, V> {
+				@Override
+				public TypeToken<V> getType() {
+					return type;
+				}
+
+				@Override
+				public Subscription subscribe(Observer<? super ObservableValueEvent<V>> observer) {
+					observer.onNext(createInitialEvent(value));
+					return () -> {
+					};
+				}
+
+				@Override
+				public boolean isSafe() {
+					return true;
+				}
+
+				@Override
+				public K getKey() {
+					return key;
+				}
+
+				@Override
+				public V getValue() {
+					return value;
+				}
+
+				@Override
+				public V setValue(V value2) {
+					return value;
+				}
+			}
+			return new ObservableKeyEntry();
+		}
 	}
 
 	/** @return The type of keys this map uses */
@@ -65,7 +108,7 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 	 * A default implementation of {@link #keySet()}.
 	 * </p>
 	 * <p>
-	 * No {@link ObservableMultiMap} implementation may use the default implementations for its {@link #keySet()}, {@link #get(Object)}, and
+	 * No {@link ObservableMap} implementation may use the default implementations for its {@link #keySet()}, {@link #get(Object)}, and
 	 * {@link #observeEntries()} methods. {@link #defaultObserveEntries(ObservableMap)} may not be used in the same implementation as
 	 * {@link #defaultKeySet(ObservableMap)} or {@link #defaultObserve(ObservableMap, Object)}. Either {@link #observeEntries()} or both
 	 * {@link #keySet()} and {@link #get(Object)} must be custom. If an implementation supplies custom {@link #keySet()} and
@@ -151,7 +194,7 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 	 * A default implementation of {@link #observeEntries()}.
 	 * </p>
 	 * <p>
-	 * No {@link ObservableMultiMap} implementation may use the default implementations for its {@link #keySet()}, {@link #get(Object)}, and
+	 * No {@link ObservableMap} implementation may use the default implementations for its {@link #keySet()}, {@link #get(Object)}, and
 	 * {@link #observeEntries()} methods. {@link #defaultObserveEntries(ObservableMap)} may not be used in the same implementation as
 	 * {@link #defaultKeySet(ObservableMap)} or {@link #defaultObserve(ObservableMap, Object)}. Either {@link #observeEntries()} or both
 	 * {@link #keySet()} and {@link #get(Object)} must be custom. If an implementation supplies custom {@link #keySet()} and
