@@ -142,6 +142,14 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	@Override
+	default ObservableOrderedCollection<E> safe() {
+		if (isSafe())
+			return this;
+		else
+			return d().debug(new SafeOrderedCollection<>(this)).from("safe", this).get();
+	}
+
+	@Override
 	default <T> ObservableOrderedCollection<T> map(Function<? super E, T> map) {
 		return (ObservableOrderedCollection<T>) ObservableCollection.super.map(map);
 	}
@@ -342,7 +350,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 *
 	 * @param <E> The type of value to find
 	 */
-	public class OrderedCollectionFinder<E> implements ObservableValue<E> {
+	class OrderedCollectionFinder<E> implements ObservableValue<E> {
 		private final ObservableOrderedCollection<E> theCollection;
 
 		private final TypeToken<E> theType;
@@ -506,6 +514,83 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		@Override
 		public String toString() {
 			return "find in " + theCollection;
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableOrderedCollection#safe()}
+	 *
+	 * @param <E> The type of elements in the collection
+	 */
+	class SafeOrderedCollection<E> extends SafeObservableCollection<E> implements ObservableOrderedCollection<E> {
+		public SafeOrderedCollection(ObservableOrderedCollection<E> wrap) {
+			super(wrap);
+		}
+
+		@Override
+		protected ObservableOrderedCollection<E> getWrapped() {
+			return (ObservableOrderedCollection<E>) super.getWrapped();
+		}
+
+		@Override
+		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
+			return onElement(element -> onElement.accept((ObservableOrderedElement<E>) element));
+		}
+
+		@Override
+		protected ObservableOrderedElement<E> wrapElement(ObservableElement<E> wrap) {
+			return new ObservableOrderedElement<E>() {
+				@Override
+				public TypeToken<E> getType() {
+					return wrap.getType();
+				}
+
+				@Override
+				public E get() {
+					return wrap.get();
+				}
+
+				@Override
+				public int getIndex() {
+					return ((ObservableOrderedElement<E>) wrap).getIndex();
+				}
+
+				@Override
+				public boolean isSafe() {
+					return true;
+				}
+
+				@Override
+				public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
+					ObservableOrderedElement<E> wrapper = this;
+					return wrap.subscribe(new Observer<ObservableValueEvent<E>>() {
+						@Override
+						public <V extends ObservableValueEvent<E>> void onNext(V event) {
+							getLock().lock();
+							try {
+								observer.onNext(ObservableUtils.wrap(event, wrapper));
+							} finally {
+								getLock().unlock();
+							}
+						}
+
+						@Override
+						public <V extends ObservableValueEvent<E>> void onCompleted(V event) {
+							getLock().lock();
+							try {
+								observer.onCompleted(ObservableUtils.wrap(event, wrapper));
+							} finally {
+								getLock().unlock();
+							}
+						}
+					});
+				}
+
+				@Override
+				public ObservableValue<E> persistent() {
+					return wrap.persistent();
+				}
+			};
 		}
 	}
 

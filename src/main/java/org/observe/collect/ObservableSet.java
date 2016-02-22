@@ -70,6 +70,14 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 		return ObservableCollection.super.toArray(a);
 	}
 
+	@Override
+	default ObservableSet<E> safe() {
+		if (isSafe())
+			return this;
+		else
+			return d().debug(new SafeObservableSet<>(this)).from("safe", this).get();
+	}
+
 	/**
 	 * @param filter The filter function
 	 * @return A set containing all elements passing the given test
@@ -421,6 +429,27 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 		@Override
 		public boolean isSafe() {
 			return theSet.isSafe();
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableSet#safe()}
+	 * 
+	 * @param <E> The type of elements in the set
+	 */
+	class SafeObservableSet<E> extends SafeObservableCollection<E> implements ObservableSet<E> {
+		public SafeObservableSet(ObservableSet<E> wrap) {
+			super(wrap);
+		}
+
+		@Override
+		protected ObservableSet<E> getWrapped() {
+			return (ObservableSet<E>) super.getWrapped();
+		}
+
+		@Override
+		public Equalizer getEqualizer() {
+			return getWrapped().getEqualizer();
 		}
 	}
 

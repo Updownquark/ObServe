@@ -144,6 +144,14 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 	}
 
 	@Override
+	default ObservableList<E> safe() {
+		if (isSafe())
+			return this;
+		else
+			return d().debug(new SafeObservableList<>(this)).from("safe", this).get();
+	}
+
+	@Override
 	default <T> ObservableList<T> map(Function<? super E, T> map) {
 		return map((TypeToken<T>) TypeToken.of(map.getClass()).resolveType(Function.class.getTypeParameters()[1]), map);
 	}
@@ -1113,6 +1121,27 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 				theRemovedController.onNext(null);
 				isRemoved = true;
 			}
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableList#safe()}
+	 * 
+	 * @param <E> The type of elements in the list
+	 */
+	class SafeObservableList<E> extends SafeReversibleCollection<E> implements PartialListImpl<E> {
+		public SafeObservableList(ObservableList<E> wrap) {
+			super(wrap);
+		}
+
+		@Override
+		protected ObservableList<E> getWrapped() {
+			return (ObservableList<E>) super.getWrapped();
+		}
+
+		@Override
+		public E get(int index) {
+			return getWrapped().get(index);
 		}
 	}
 

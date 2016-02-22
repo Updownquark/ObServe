@@ -1008,6 +1008,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	}
 
 	/**
+	 * TODO TEST ME!
+	 * 
 	 * @param <K> The type of the key
 	 * @param keyType The type of the key
 	 * @param keyMap The mapping function to group this collection's values by

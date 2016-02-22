@@ -242,6 +242,14 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 		return indexOf(o);
 	}
 
+	@Override
+	default ObservableSortedSet<E> safe() {
+		if (isSafe())
+			return this;
+		else
+			return d().debug(new SafeSortedSet<>(this)).from("safe", this).get();
+	}
+
 	/**
 	 * @param filter The filter function
 	 * @return A set containing all elements passing the given test
@@ -857,6 +865,32 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 		@Override
 		public Iterable<E> iterateFrom(E element, boolean included, boolean reversed) {
 			return getWrapped().iterateFrom(element, included, !reversed);
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableSortedSet#safe()}
+	 * 
+	 * @param <E> The type of elements in the set
+	 */
+	class SafeSortedSet<E> extends SafeReversibleCollection<E> implements PartialSortedSetImpl<E> {
+		public SafeSortedSet(ObservableSortedSet<E> wrap) {
+			super(wrap);
+		}
+
+		@Override
+		protected ObservableSortedSet<E> getWrapped() {
+			return (ObservableSortedSet<E>) super.getWrapped();
+		}
+
+		@Override
+		public Comparator<? super E> comparator() {
+			return getWrapped().comparator();
+		}
+
+		@Override
+		public Iterable<E> iterateFrom(E element, boolean included, boolean reversed) {
+			return getWrapped().iterateFrom(element, included, reversed);
 		}
 	}
 

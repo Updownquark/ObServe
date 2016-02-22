@@ -100,6 +100,14 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	}
 
 	@Override
+	default ObservableReversibleCollection<E> safe() {
+		if (isSafe())
+			return this;
+		else
+			return d().debug(new SafeReversibleCollection<>(this)).from("safe", this).get();
+	}
+
+	@Override
 	default <T> ObservableReversibleCollection<T> map(Function<? super E, T> map) {
 		return (ObservableReversibleCollection<T>) ObservableOrderedCollection.super.map(map);
 	}
@@ -436,6 +444,32 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 				}
 				return null;
 			}
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableReversibleCollection#safe()}
+	 * 
+	 * @param <E> The type of elements in the collection
+	 */
+	class SafeReversibleCollection<E> extends SafeOrderedCollection<E> implements ObservableReversibleCollection<E> {
+		public SafeReversibleCollection(ObservableReversibleCollection<E> wrap) {
+			super(wrap);
+		}
+
+		@Override
+		protected ObservableReversibleCollection<E> getWrapped() {
+			return (ObservableReversibleCollection<E>) super.getWrapped();
+		}
+
+		@Override
+		public Iterable<E> descending() {
+			return getWrapped().descending();
+		}
+
+		@Override
+		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<E>> onElement) {
+			return getWrapped().onElementReverse(element -> onElement.accept(wrapElement(element)));
 		}
 	}
 

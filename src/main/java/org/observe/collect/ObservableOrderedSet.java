@@ -25,6 +25,14 @@ import com.google.common.reflect.TypeToken;
  * @param <E> The type of elements in the set
  */
 public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableOrderedCollection<E> {
+	@Override
+	default ObservableOrderedSet<E> safe() {
+		if (isSafe())
+			return this;
+		else
+			return d().debug(new SafeOrderedSet<>(this)).from("safe", this).get();
+	}
+
 	/**
 	 * @param filter The filter function
 	 * @return A set containing all elements passing the given test
@@ -159,6 +167,27 @@ public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableOrd
 	 */
 	public static <T> ObservableOrderedSet<T> unique(ObservableOrderedCollection<T> coll, Equalizer equalizer, boolean alwaysUseFirst) {
 		return d().debug(new CollectionWrappingOrderedSet<>(coll, equalizer, alwaysUseFirst)).from("unique", coll).get();
+	}
+
+	/**
+	 * Implements {@link ObservableOrderedSet#safe()}
+	 * 
+	 * @param <E> The type of elements in the set
+	 */
+	class SafeOrderedSet<E> extends SafeOrderedCollection<E> implements ObservableOrderedSet<E> {
+		public SafeOrderedSet(ObservableOrderedSet<E> wrap) {
+			super(wrap);
+		}
+
+		@Override
+		protected ObservableOrderedSet<E> getWrapped() {
+			return (ObservableOrderedSet<E>) super.getWrapped();
+		}
+
+		@Override
+		public Equalizer getEqualizer() {
+			return getWrapped().getEqualizer();
+		}
 	}
 
 	/**
