@@ -357,6 +357,16 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 		default void clear() {
 			PartialCollectionImpl.super.clear();
 		}
+
+		@Override
+		default boolean add(E value) {
+			return PartialCollectionImpl.super.add(value);
+		}
+
+		@Override
+		default boolean addAll(Collection<? extends E> c) {
+			return PartialCollectionImpl.super.addAll(c);
+		}
 	}
 
 	/**

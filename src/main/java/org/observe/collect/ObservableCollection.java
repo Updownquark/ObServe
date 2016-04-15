@@ -951,7 +951,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 *         applied to the element
 	 */
 	default <K> ObservableMultiMap<K, E> groupBy(Function<E, K> keyMap) {
-		return groupBy(keyMap, Objects::equals);
+		return groupBy(keyMap, (org.qommons.Equalizer)Objects::equals);
 	}
 
 	/**

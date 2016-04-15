@@ -47,7 +47,7 @@ public interface Observable<T> {
 	/** @return An observable for this observable's errors */
 	default Observable<Throwable> error() {
 		Observable<T> outer = this;
-		class ErrorObserver implements Observer<T> {
+		class ErrorObserver implements Observer<Object> {
 			private final Observer<? super Throwable> wrapped;
 
 			ErrorObserver(Observer<? super Throwable> wrap) {
@@ -55,7 +55,7 @@ public interface Observable<T> {
 			}
 
 			@Override
-			public <V extends T> void onNext(V value) {
+			public <V> void onNext(V value) {
 			}
 
 			@Override
