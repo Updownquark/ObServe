@@ -170,6 +170,21 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 			public Object setValue(Object value) {
 				return null;
 			}
+
+			@Override
+			public int hashCode() {
+				return Objects.hashCode(key);
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				return obj instanceof Map.Entry && Objects.equals(((Map.Entry<?, ?>) obj).getKey(), key);
+			}
+
+			@Override
+			public String toString() {
+				return String.valueOf(key);
+			}
 		};
 		return ObservableValue.flatten(map.observeEntries().equivalent(keyEntry));
 	}
@@ -211,7 +226,7 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 	 */
 	public static <K, V> ObservableSet<? extends ObservableEntry<K, V>> defaultObserveEntries(ObservableMap<K, V> map) {
 		return ObservableSet.unique(map.keySet().map(map::entryFor), (entry1, entry2) -> map.keySet().getEqualizer()
-				.equals(((ObservableEntry<K, V>) entry1).getKey(), ((ObservableEntry<K, V>) entry2).getKey()));
+			.equals(((ObservableEntry<K, V>) entry1).getKey(), ((ObservableEntry<K, V>) entry2).getKey()));
 	}
 
 	/** @return Whether this map is thread-safe, meaning it is constrained to only fire events on a single thread at a time */
@@ -278,7 +293,7 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 		ObservableMap<K, V> outer = this;
 		return new ObservableMap<K, T>() {
 			private TypeToken<T> theValueType = (TypeToken<T>) TypeToken.of(map.getClass())
-					.resolveType(Function.class.getTypeParameters()[1]);
+				.resolveType(Function.class.getTypeParameters()[1]);
 
 			@Override
 			public Transaction lock(boolean write, Object cause) {
@@ -318,6 +333,11 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 			@Override
 			public ObservableSet<? extends ObservableEntry<K, T>> observeEntries() {
 				return ObservableMap.defaultObserveEntries(this);
+			}
+
+			@Override
+			public String toString() {
+				return entrySet().toString();
 			}
 		};
 	}
@@ -374,6 +394,11 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 			public boolean isSafe() {
 				return outer.isSafe();
 			}
+
+			@Override
+			public String toString() {
+				return entrySet().toString();
+			}
 		}
 		return new Immutable();
 	}
@@ -426,6 +451,11 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 			@Override
 			public ObservableSet<? extends ObservableEntry<K, V>> observeEntries() {
 				return ObservableMap.defaultObserveEntries(this);
+			}
+
+			@Override
+			public String toString() {
+				return entrySet().toString();
 			}
 		};
 	}
@@ -517,6 +547,11 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 			if(this == obj)
 				return true;
 			return obj instanceof ObsEntryImpl && Objects.equals(theKey, ((ObsEntryImpl<?, ?>) obj).theKey);
+		}
+
+		@Override
+		public String toString() {
+			return theKey + "=" + theValue;
 		}
 	}
 
