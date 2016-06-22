@@ -656,7 +656,11 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 			}
 		}
 
-		private T combine(Object [] args) {
+		/**
+		 * @param args The arguments to combine
+		 * @return The combined value
+		 */
+		protected T combine(Object[] args) {
 			if(!combineNulls) {
 				for(Object arg : args)
 					if(arg == null)
