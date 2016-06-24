@@ -138,6 +138,21 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			public Object setValue(Object value) {
 				return null;
 			}
+
+			@Override
+			public int hashCode() {
+				return Objects.hashCode(key);
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				return obj instanceof Map.Entry && Objects.equals(((Map.Entry<?, ?>) obj).getKey(), key);
+			}
+
+			@Override
+			public String toString() {
+				return String.valueOf(key);
+			}
 		};
 
 		ObservableValue<? extends ObservableMultiEntry<K, V>> equiv = entries.equivalent(keyEntry);
@@ -145,10 +160,10 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			return new ObsMultiEntryList<>(map, (K) key, map.getValueType(), (ObservableValue<? extends ObservableList<V>>) equiv);
 		} else if(equiv.getType().isAssignableFrom(ObservableSortedSet.class)) {
 			return new ObsMultiEntrySortedSet<>(map, (K) key, map.getValueType(),
-					(ObservableValue<? extends ObservableSortedSet<V>>) equiv);
+				(ObservableValue<? extends ObservableSortedSet<V>>) equiv);
 		} else if(equiv.getType().isAssignableFrom(ObservableOrderedCollection.class)) {
 			return new ObsMultiEntryOrdered<>(map, (K) key, map.getValueType(),
-					(ObservableValue<? extends ObservableOrderedCollection<V>>) equiv);
+				(ObservableValue<? extends ObservableOrderedCollection<V>>) equiv);
 		} else if(equiv.getType().isAssignableFrom(ObservableSet.class)) {
 			return new ObsMultiEntrySet<>(map, (K) key, map.getValueType(), (ObservableValue<? extends ObservableSet<V>>) equiv);
 		} else {
@@ -202,7 +217,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	 */
 	public static <K, V> ObservableSet<? extends ObservableMultiEntry<K, V>> defaultEntrySet(ObservableMultiMap<K, V> map) {
 		return ObservableSet.unique(map.keySet().map(map::entryFor), (entry1, entry2) -> map.keySet().getEqualizer()
-				.equals(((ObservableMultiEntry<K, V>) entry1).getKey(), ((ObservableMultiEntry<K, V>) entry2).getKey()));
+			.equals(((ObservableMultiEntry<K, V>) entry1).getKey(), ((ObservableMultiEntry<K, V>) entry2).getKey()));
 	}
 
 	/** @return Whether this map is thread-safe, meaning it is constrained to only fire events on a single thread at a time */
@@ -284,6 +299,21 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			public V setValue(V value) {
 				throw new UnsupportedOperationException();
 			}
+
+			@Override
+			public int hashCode() {
+				return Objects.hashCode(theKey);
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				return obj instanceof Map.Entry && Objects.equals(((Map.Entry<?, ?>) obj).getKey(), theKey);
+			}
+
+			@Override
+			public String toString() {
+				return theKey + "=" + theValue;
+			}
 		}
 		return ObservableCollection.flatten(entrySet().map(entry -> entry.map(value -> new DefaultMapEntry(entry.getKey(), value))));
 	}
@@ -294,8 +324,8 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	 */
 	default ObservableMultiEntry<K, V> subscribe(K key) {
 		ObservableValue<? extends ObservableMultiEntry<K, V>> existingEntry = entrySet()
-				.find(
-						entry -> java.util.Objects.equals(entry.getKey(), key));
+			.find(
+				entry -> java.util.Objects.equals(entry.getKey(), key));
 		class WrappingMultiEntry implements ObservableCollection.PartialCollectionImpl<V>, ObservableMultiEntry<K, V> {
 			@Override
 			public TypeToken<V> getType() {
@@ -378,6 +408,11 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			public void clear() {
 				ObservableMultiMap.this.removeAll(key);
 			}
+
+			@Override
+			public String toString() {
+				return ObservableCollection.toString(this);
+			}
 		}
 		return new WrappingMultiEntry();
 	}
@@ -387,7 +422,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		ObservableMultiMap<K, V> outer = this;
 		class CollectionMap implements ObservableMap<K, Collection<V>> {
 			private TypeToken<Collection<V>> theValueType = new TypeToken<Collection<V>>() {}.where(new TypeParameter<V>() {},
-					outer.getValueType());
+				outer.getValueType());
 			@Override
 			public TypeToken<K> getKeyType() {
 				return outer.getKeyType();
@@ -426,6 +461,11 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			@Override
 			public ObservableSet<? extends ObservableEntry<K, Collection<V>>> observeEntries() {
 				return ObservableMap.defaultObserveEntries(this);
+			}
+
+			@Override
+			public String toString() {
+				return entrySet().toString();
 			}
 		}
 		return new CollectionMap();
@@ -474,6 +514,11 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			public ObservableSet<? extends ObservableEntry<K, V>> observeEntries() {
 				return ObservableMap.defaultObserveEntries(this);
 			}
+
+			@Override
+			public String toString() {
+				return entrySet().toString();
+			}
 		}
 		return new UniqueMap();
 	}
@@ -495,7 +540,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		ObservableMultiMap<K, V> outer = this;
 		return new ObservableMultiMap<K, T>() {
 			private TypeToken<T> theValueType = (TypeToken<T>) TypeToken.of(map.getClass())
-					.resolveType(Function.class.getTypeParameters()[1]);
+				.resolveType(Function.class.getTypeParameters()[1]);
 
 			@Override
 			public Transaction lock(boolean write, Object cause) {
@@ -535,6 +580,11 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			@Override
 			public ObservableSet<? extends ObservableMultiEntry<K, T>> entrySet() {
 				return ObservableMultiMap.defaultEntrySet(this);
+			}
+
+			@Override
+			public String toString() {
+				return entrySet().toString();
 			}
 		};
 	}
@@ -582,6 +632,11 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			public ObservableSet<? extends ObservableMultiEntry<K, V>> entrySet() {
 				return outer.entrySet().immutable();
 			}
+
+			@Override
+			public String toString() {
+				return entrySet().toString();
+			}
 		};
 	}
 
@@ -601,11 +656,11 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 
 		ObsMultiEntryImpl(ObservableMultiMap<K, V> map, K key, ObservableCollection<V> values) {
 			this(map, key, values.getType(), ObservableValue
-					.constant(new TypeToken<ObservableCollection<V>>() {}.where(new TypeParameter<V>() {}, values.getType()), values));
+				.constant(new TypeToken<ObservableCollection<V>>() {}.where(new TypeParameter<V>() {}, values.getType()), values));
 		}
 
 		ObsMultiEntryImpl(ObservableMultiMap<K, V> map, K key, TypeToken<V> valueType,
-				ObservableValue<? extends ObservableCollection<V>> values) {
+			ObservableValue<? extends ObservableCollection<V>> values) {
 			theMap = map;
 			theKey = key;
 			theValueType = valueType;
@@ -764,7 +819,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		}
 
 		public ObsMultiEntryOrdered(ObservableMultiMap<K, V> map, K key, TypeToken<V> valueType,
-				ObservableValue<? extends ObservableOrderedCollection<V>> values) {
+			ObservableValue<? extends ObservableOrderedCollection<V>> values) {
 			super(map, key, valueType, values);
 		}
 
@@ -796,7 +851,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		}
 
 		public ObsMultiEntrySortedSet(ObservableMultiMap<K, V> map, K key, TypeToken<V> valueType,
-				ObservableValue<? extends ObservableSortedSet<V>> values) {
+			ObservableValue<? extends ObservableSortedSet<V>> values) {
 			super(map, key, valueType, values);
 		}
 
@@ -891,7 +946,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		}
 
 		public ObsMultiEntryList(ObservableMultiMap<K, V> map, K key, TypeToken<V> valueType,
-				ObservableValue<? extends ObservableList<V>> values) {
+			ObservableValue<? extends ObservableList<V>> values) {
 			super(map, key, valueType, values);
 		}
 
@@ -985,7 +1040,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		}
 
 		public ObsMultiEntrySet(ObservableMultiMap<K, V> map, K key, TypeToken<V> valueType,
-				ObservableValue<? extends ObservableSet<V>> values) {
+			ObservableValue<? extends ObservableSet<V>> values) {
 			super(map, key, valueType, values);
 		}
 
