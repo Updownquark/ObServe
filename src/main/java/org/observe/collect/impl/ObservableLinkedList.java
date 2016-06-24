@@ -459,6 +459,16 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 	}
 
 	@Override
+	public boolean canRemove(E value) {
+		return value == null || theType.getRawType().isInstance(value);
+	}
+
+	@Override
+	public boolean canAdd(E value) {
+		return value == null || theType.getRawType().isInstance(value);
+	}
+
+	@Override
 	public String toString() {
 		return ObservableList.toString(this);
 	}

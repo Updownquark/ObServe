@@ -277,6 +277,15 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 			public Iterator<T> iterator() {
 				return constSet.iterator();
 			}
+			@Override
+			public boolean canRemove(T value) {
+				return false;
+			}
+
+			@Override
+			public boolean canAdd(T value) {
+				return false;
+			}
 		}
 		ConstantObservableSet ret = d().debug(new ConstantObservableSet()).tag("constant", coll).tag("type", type).get();
 		for(T value : constSet)
@@ -444,7 +453,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 
 	/**
 	 * Implements {@link ObservableSet#safe()}
-	 * 
+	 *
 	 * @param <E> The type of elements in the set
 	 */
 	class SafeObservableSet<E> extends SafeObservableCollection<E> implements ObservableSet<E> {
@@ -725,6 +734,21 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 		@Override
 		public Iterator<E> iterator() {
 			return unique(theCollection.iterator());
+		}
+
+		@Override
+		public boolean canRemove(E value) {
+			return theCollection.canRemove(value);
+		}
+
+		@Override
+		public boolean canAdd(E value) {
+			if (!theCollection.canAdd(value))
+				return false;
+			HashSet<EqualizerNode<E>> set = new HashSet<>();
+			for (E v : theCollection)
+				set.add(new EqualizerNode<>(theEqualizer, v));
+			return !set.contains(new EqualizerNode<>(theEqualizer, value));
 		}
 
 		protected Iterator<E> unique(Iterator<E> backing) {

@@ -306,6 +306,22 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	}
 
 	@Override
+	public boolean canRemove(E value) {
+		return value == null || theType.getRawType().isInstance(value);
+	}
+
+	@Override
+	public boolean canAdd(E value) {
+		if (value != null && !theType.getRawType().isInstance(value))
+			return false;
+		try (Transaction t = lock(false, null)) {
+			if (theValues.containsKey(value))
+				return false;
+		}
+		return true;
+	}
+
+	@Override
 	public String toString() {
 		return org.observe.collect.ObservableSet.toString(this);
 	}

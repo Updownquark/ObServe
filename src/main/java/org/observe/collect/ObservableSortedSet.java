@@ -532,6 +532,20 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 		}
 
 		@Override
+		public boolean canRemove(E value) {
+			if (!isInRange(value))
+				return false;
+			return theWrapped.canRemove(value);
+		}
+
+		@Override
+		public boolean canAdd(E value) {
+			if (!isInRange(value))
+				return false;
+			return theWrapped.canAdd(value);
+		}
+
+		@Override
 		public Iterable<E> iterateFrom(E start, boolean included, boolean reversed) {
 			E stop;
 			boolean includeStop;
@@ -870,7 +884,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 
 	/**
 	 * Implements {@link ObservableSortedSet#safe()}
-	 * 
+	 *
 	 * @param <E> The type of elements in the set
 	 */
 	class SafeSortedSet<E> extends SafeReversibleCollection<E> implements PartialSortedSetImpl<E> {

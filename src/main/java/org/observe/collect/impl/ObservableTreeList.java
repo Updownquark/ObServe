@@ -346,6 +346,16 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 	}
 
 	@Override
+	public boolean canRemove(E value) {
+		return value == null || theType.getRawType().isInstance(value);
+	}
+
+	@Override
+	public boolean canAdd(E value) {
+		return value == null || theType.getRawType().isInstance(value);
+	}
+
+	@Override
 	public String toString() {
 		return org.observe.collect.ObservableList.toString(this);
 	}

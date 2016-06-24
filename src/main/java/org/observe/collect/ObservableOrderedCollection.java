@@ -831,6 +831,16 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		}
 
 		@Override
+		public boolean canRemove(E value) {
+			return theWrapped.canRemove(value);
+		}
+
+		@Override
+		public boolean canAdd(E value) {
+			return theWrapped.canAdd(value);
+		}
+
+		@Override
 		public Iterator<E> iterator() {
 			ArrayList<E> sorted = new ArrayList<>(theWrapped);
 			Collections.sort(sorted, theCompare);

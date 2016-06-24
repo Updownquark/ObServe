@@ -168,6 +168,16 @@ public class ObservableCollectionWrapper<E> implements ObservableCollection<E> {
 	}
 
 	@Override
+	public boolean canRemove(E value) {
+		return isModifiable && theWrapped.canRemove(value);
+	}
+
+	@Override
+	public boolean canAdd(E value) {
+		return isModifiable && theWrapped.canAdd(value);
+	}
+
+	@Override
 	public String toString() {
 		return theWrapped.toString();
 	}

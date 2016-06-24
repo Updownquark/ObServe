@@ -347,6 +347,16 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 		}
 
 		@Override
+		public boolean canRemove(E value) {
+			return theWrapped.canRemove(value);
+		}
+
+		@Override
+		public boolean canAdd(E value) {
+			return theWrapped.canAdd(value);
+		}
+
+		@Override
 		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
 			return theWrapped.onElementReverse(element -> {
 				onElement.accept(new ReversedElement(element));
@@ -449,7 +459,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 
 	/**
 	 * Implements {@link ObservableReversibleCollection#safe()}
-	 * 
+	 *
 	 * @param <E> The type of elements in the collection
 	 */
 	class SafeReversibleCollection<E> extends SafeOrderedCollection<E> implements ObservableReversibleCollection<E> {

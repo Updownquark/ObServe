@@ -5,6 +5,7 @@ import static org.observe.ObservableDebug.d;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.ConcurrentModificationException;
 import java.util.Iterator;
 import java.util.List;
@@ -24,6 +25,7 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
+import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.util.ObservableUtils;
 import org.qommons.ListenerSet;
@@ -67,6 +69,171 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 	@Override
 	abstract E get(int index);
+
+	/**
+	 * @param index The index to observe the value of
+	 * @param defValueGen The function to generate the value for the observable if this collection's size is {@code &lt;=index}. The
+	 *        argument is the current size. This function may throw a runtime exception, such as {@link IndexOutOfBoundsException}. Null is
+	 *        acceptable here, which will mean a null default value.
+	 * @return The observable, settable value
+	 */
+	default SettableValue<E> observe(int index, Function<Integer, E> defValueGen) {
+		class ElementValue implements SettableValue<E> {
+			@Override
+			public TypeToken<E> getType() {
+				return ObservableList.this.getType();
+			}
+
+			@Override
+			public E get() {
+				if (index < size())
+					return ObservableList.this.get(index);
+				else if (defValueGen != null)
+					return defValueGen.apply(size());
+				else
+					throw new IndexOutOfBoundsException(index + " of " + size());
+			}
+
+			@Override
+			public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
+				final boolean[] initialized = new boolean[1];
+				final Object sessionKey = new Object();
+				final boolean[] hasValue = new boolean[1];
+				class ElConsumer implements Consumer<ObservableOrderedElement<E>> {
+					class ElObserver implements Observer<ObservableValueEvent<E>> {
+						private final ObservableOrderedElement<E> element;
+
+						ElObserver(ObservableOrderedElement<E> el) {
+							element = el;
+						}
+
+						@Override
+						public <V extends ObservableValueEvent<E>> void onNext(V evt) {
+							if (element.getIndex() == index) {
+								if (!initialized[0]) {
+									hasValue[0] = true;
+									currentValue = evt.getValue();
+									observer.onNext(createInitialEvent(currentValue));
+								} else
+									newValue(evt.getValue());
+							}
+						}
+
+						@Override
+						public <V extends ObservableValueEvent<E>> void onCompleted(V evt) {
+							elSubs.add(els.get(index).subscribe(new ElObserver(els.get(index))));
+						}
+					}
+
+					private final List<ObservableOrderedElement<E>> els;
+					private final List<Subscription> elSubs;
+					E currentValue;
+
+					{
+						if (ObservableList.this.isSafe()) {
+							els = new ArrayList<>(size());
+							elSubs = new ArrayList<>(size());
+						} else {
+							els = Collections.synchronizedList(new ArrayList<>(size()));
+							elSubs = Collections.synchronizedList(new ArrayList<>(size()));
+						}
+					}
+
+					@Override
+					public void accept(ObservableOrderedElement<E> el) {
+						els.add(el.getIndex(), el);
+						if (el.getIndex() <= index) {
+							elSubs.add(el.getIndex(), el.subscribe(new ElObserver(el)));
+							if (elSubs.size() > index + 1)
+								elSubs.remove(index + 1).unsubscribe();
+							if (initialized[0] && el.getIndex() != index) {
+								newValue(els.get(index).get());
+							}
+						}
+					}
+
+					private void newValue(E newValue) {
+						hasValue[0] = true;
+						E oldValue = currentValue;
+						currentValue = newValue;
+
+						CollectionSession session = getSession().get();
+						if (session == null) {
+							observer.onNext(createChangeEvent(oldValue, currentValue, null));
+						} else {
+							if (session.get(sessionKey, "changed") == null) {
+								session.put(sessionKey, "changed", true);
+								session.put(sessionKey, "oldValue", oldValue);
+							}
+							session.put(sessionKey, "newValue", currentValue);
+						}
+					}
+				}
+				ElConsumer consumer = new ElConsumer();
+				Subscription listSub = onOrderedElement(consumer);
+				initialized[0] = true;
+				Subscription sessionSub = getSession().act(evt -> {
+					if (evt.getOldValue() != null && evt.getOldValue().get(sessionKey, "changed") != null) {
+						observer.onNext(createChangeEvent((E) evt.getOldValue().get(sessionKey, "oldValue"),
+								(E) evt.getOldValue().get(sessionKey, "newValue"), evt.getCause()));
+					}
+				});
+				if (!hasValue[0]) {
+					if (defValueGen != null) {
+						try {
+							consumer.currentValue = defValueGen.apply(size());
+						} catch (RuntimeException e) {
+							// Just set a null value if the value generator throws an exception
+							consumer.currentValue = null;
+						}
+					}
+					hasValue[0] = true;
+					observer.onNext(createInitialEvent(consumer.currentValue));
+				}
+				return () -> {
+					listSub.unsubscribe();
+					sessionSub.unsubscribe();
+				};
+			}
+
+			@Override
+			public boolean isSafe() {
+				return ObservableList.this.isSafe();
+			}
+
+			@Override
+			public <V extends E> E set(V value, Object cause) throws IllegalArgumentException {
+				int size = size();
+				if (index >= size)
+					throw new IllegalArgumentException("Index=" + index + ", Size=" + size);
+				try (Transaction t = lock(true, cause)) {
+					return ObservableList.this.set(index, value);
+				}
+			}
+
+			@Override
+			public <V extends E> String isAcceptable(V value) {
+				int size = size();
+				if (index >= size)
+					return "Index=" + index + ", Size=" + size;
+				else if (!canAdd(value))
+					return "Unacceptable value for this list";
+				else
+					return null;
+			}
+
+			@Override
+			public ObservableValue<String> isEnabled() {
+				return observeSize().mapV(size -> {
+					if (index < size)
+						return null;
+					else
+						return "Index=" + index + ", Size=" + size;
+				});
+			}
+		}
+		return new ElementValue();
+	}
 
 	@Override
 	default int indexOf(Object o) {
@@ -400,6 +567,16 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 			@Override
 			public int size() {
 				return constList.size();
+			}
+
+			@Override
+			public boolean canRemove(T value) {
+				return false;
+			}
+
+			@Override
+			public boolean canAdd(T value) {
+				return false;
 			}
 
 			@Override
@@ -1126,7 +1303,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 	/**
 	 * Implements {@link ObservableList#safe()}
-	 * 
+	 *
 	 * @param <E> The type of elements in the list
 	 */
 	class SafeObservableList<E> extends SafeReversibleCollection<E> implements PartialListImpl<E> {
@@ -2109,6 +2286,16 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 			} finally {
 				lock.unlock();
 			}
+		}
+
+		@Override
+		public boolean canRemove(T value) {
+			return theWrapped.canRemove(value);
+		}
+
+		@Override
+		public boolean canAdd(T value) {
+			return theWrapped.canAdd(value);
 		}
 
 		@Override

@@ -547,7 +547,7 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 		}
 
 		@Override
-		public ObservableValue<Boolean> isEnabled() {
+		public ObservableValue<String> isEnabled() {
 			return getWrapped().isEnabled();
 		}
 	}

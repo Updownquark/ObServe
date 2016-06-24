@@ -34,7 +34,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	<V extends T> String isAcceptable(V value);
 
 	/** @return An observable whose value reports whether or not this value can be set directly */
-	ObservableValue<Boolean> isEnabled();
+	ObservableValue<String> isEnabled();
 
 	/**
 	 * @param <V> The type of the value to set
@@ -111,7 +111,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			}
 
 			@Override
-			public ObservableValue<Boolean> isEnabled() {
+			public ObservableValue<String> isEnabled() {
 				return root.isEnabled();
 			}
 
@@ -172,7 +172,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			}
 
 			@Override
-			public ObservableValue<Boolean> isEnabled() {
+			public ObservableValue<String> isEnabled() {
 				return root.isEnabled();
 			}
 		}).from("combine", this).from("with", arg).using("combination", function).using("reverse", reverse).tag("combineNull", combineNull)
@@ -218,7 +218,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			}
 
 			@Override
-			public ObservableValue<Boolean> isEnabled() {
+			public ObservableValue<String> isEnabled() {
 				return root.isEnabled();
 			}
 		}).from("combine", this).from("with", arg).using("combination", function).using("reverse", reverse).using("accept", accept)
@@ -281,7 +281,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			}
 
 			@Override
-			public ObservableValue<Boolean> isEnabled() {
+			public ObservableValue<String> isEnabled() {
 				return root.isEnabled();
 			}
 		}).from("combine", this).from("with", arg2).from("with", arg3).using("combination", function).using("reverse", reverse)

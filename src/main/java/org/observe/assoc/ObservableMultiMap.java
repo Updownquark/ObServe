@@ -365,6 +365,16 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			}
 
 			@Override
+			public boolean canRemove(V value) {
+				return entryFor(key).canRemove(value);
+			}
+
+			@Override
+			public boolean canAdd(V value) {
+				return entryFor(key).canAdd(value);
+			}
+
+			@Override
 			public void clear() {
 				ObservableMultiMap.this.removeAll(key);
 			}
@@ -706,6 +716,22 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			if(current == null)
 				return;
 			current.clear();
+		}
+
+		@Override
+		public boolean canRemove(V value) {
+			ObservableCollection<V> current = getWrapped();
+			if (current == null)
+				return false;
+			return current.canRemove(value);
+		}
+
+		@Override
+		public boolean canAdd(V value) {
+			ObservableCollection<V> current = getWrapped();
+			if (current == null)
+				return false;
+			return current.canAdd(value);
 		}
 
 		@Override
