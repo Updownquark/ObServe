@@ -141,6 +141,17 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		}
 	}
 
+	/**
+	 * @param index The index to observe the value of
+	 * @param defValueGen The function to generate the value for the observable if this collection's size is {@code &lt;=index}. The
+	 *        argument is the current size. This function may throw a runtime exception, such as {@link IndexOutOfBoundsException}. Null is
+	 *        acceptable here, which will mean a null default value.
+	 * @return The observable value at the given position in the collection
+	 */
+	default ObservableValue<E> observeAt(int index, Function<Integer, E> defValueGen) {
+		return new PositionObservable<>(this, index, defValueGen);
+	}
+
 	@Override
 	default ObservableOrderedCollection<E> safe() {
 		if (isSafe())
@@ -162,7 +173,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	@Override
 	default <T> ObservableOrderedCollection<T> map(TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse) {
 		return d().debug(new MappedOrderedCollection<>(this, type, map, reverse)).from("map", this).using("map", map)
-				.using("reverse", reverse).get();
+			.using("reverse", reverse).get();
 	}
 
 	@Override
@@ -202,19 +213,19 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 	@Override
 	default <T> ObservableOrderedCollection<T> filterMap(TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse,
-			boolean staticFilter) {
+		boolean staticFilter) {
 		return (ObservableOrderedCollection<T>) ObservableCollection.super.filterMap(type, map, reverse, staticFilter);
 	}
 
 	@Override
 	default <T> ObservableOrderedCollection<T> filterMap2(TypeToken<T> type, Function<? super E, FilterMapResult<T>> map,
-			Function<? super T, E> reverse, boolean staticFilter) {
+		Function<? super T, E> reverse, boolean staticFilter) {
 		if(staticFilter)
 			return d().debug(new StaticFilteredOrderedCollection<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
-					.using("reverse", reverse).get();
+				.using("reverse", reverse).get();
 		else
 			return d().debug(new DynamicFilteredOrderedCollection<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
-					.using("reverse", reverse).get();
+				.using("reverse", reverse).get();
 	}
 
 	@Override
@@ -224,16 +235,16 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 	@Override
 	default <T, V> ObservableOrderedCollection<V> combine(ObservableValue<T> arg, TypeToken<V> type,
-			BiFunction<? super E, ? super T, V> func) {
+		BiFunction<? super E, ? super T, V> func) {
 		return (ObservableOrderedCollection<V>) ObservableCollection.super.combine(arg, type, func);
 	}
 
 	@Override
 	default <T, V> ObservableOrderedCollection<V> combine(ObservableValue<T> arg, TypeToken<V> type,
-			BiFunction<? super E, ? super T, V> func,
-			BiFunction<? super V, ? super T, E> reverse) {
+		BiFunction<? super E, ? super T, V> func,
+		BiFunction<? super V, ? super T, E> reverse) {
 		return d().debug(new CombinedOrderedCollection<>(this, arg, type, func, reverse)).from("combine", this).from("with", arg)
-				.using("combination", func).using("reverse", reverse).get();
+			.using("combination", func).using("reverse", reverse).get();
 	}
 
 	// @Override
@@ -302,13 +313,13 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	@Override
 	default ObservableOrderedCollection<E> takeUntil(Observable<?> until) {
 		return d().debug(new TakenUntilOrderedCollection<>(this, until, true)).from("taken", this).from("until", until)
-				.tag("terminate", true).get();
+			.tag("terminate", true).get();
 	}
 
 	@Override
 	default ObservableOrderedCollection<E> unsubscribeOn(Observable<?> until) {
 		return d().debug(new TakenUntilOrderedCollection<>(this, until, false)).from("taken", this).from("until", until)
-				.tag("terminate", false).get();
+			.tag("terminate", false).get();
 	}
 
 	/**
@@ -319,7 +330,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @return The flattened collection
 	 */
 	public static <E> ObservableOrderedCollection<E> flattenValues(
-			ObservableOrderedCollection<? extends ObservableValue<? extends E>> collection) {
+		ObservableOrderedCollection<? extends ObservableValue<? extends E>> collection) {
 		return d().debug(new FlattenedOrderedValuesCollection<E>(collection)).from("flatten", collection).get();
 	}
 
@@ -330,7 +341,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @return A collection representing the contents of the value, or a zero-length collection when null
 	 */
 	public static <E> ObservableOrderedCollection<E> flattenValue(
-			ObservableValue<? extends ObservableOrderedCollection<E>> collectionObservable) {
+		ObservableValue<? extends ObservableOrderedCollection<E>> collectionObservable) {
 		return d().debug(new FlattenedOrderedValueCollection<>(collectionObservable)).from("flatten", collectionObservable).get();
 	}
 
@@ -518,6 +529,157 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	/**
+	 * Implements {@link ObservableOrderedCollection#observeAt(int, Function)}
+	 *
+	 * @param <E> The type of the element
+	 */
+	class PositionObservable<E> implements ObservableValue<E> {
+		private final ObservableOrderedCollection<E> theCollection;
+		private final int theIndex;
+		private final Function<Integer, E> theDefaultValueGenerator;
+
+		protected PositionObservable(ObservableOrderedCollection<E> collection, int index, Function<Integer, E> defValueGen) {
+			theCollection = collection;
+			theIndex = index;
+			theDefaultValueGenerator = defValueGen;
+		}
+
+		protected ObservableOrderedCollection<E> getCollection() {
+			return theCollection;
+		}
+
+		protected int getIndex() {
+			return theIndex;
+		}
+
+		protected Function<Integer, E> getDefaultValueGenerator() {
+			return theDefaultValueGenerator;
+		}
+
+		@Override
+		public TypeToken<E> getType() {
+			return theCollection.getType();
+		}
+
+		@Override
+		public E get() {
+			if (theIndex < theCollection.size())
+				return theCollection.get(theIndex);
+			else if (theDefaultValueGenerator != null)
+				return theDefaultValueGenerator.apply(theCollection.size());
+			else
+				throw new IndexOutOfBoundsException(theIndex + " of " + theCollection.size());
+		}
+
+		@Override
+		public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
+			final boolean[] initialized = new boolean[1];
+			final Object sessionKey = new Object();
+			final boolean[] hasValue = new boolean[1];
+			class ElConsumer implements Consumer<ObservableOrderedElement<E>> {
+				class ElObserver implements Observer<ObservableValueEvent<E>> {
+					private final ObservableOrderedElement<E> element;
+
+					ElObserver(ObservableOrderedElement<E> el) {
+						element = el;
+					}
+
+					@Override
+					public <V extends ObservableValueEvent<E>> void onNext(V evt) {
+						if (element.getIndex() == theIndex) {
+							if (!initialized[0]) {
+								hasValue[0] = true;
+								currentValue = evt.getValue();
+								observer.onNext(createInitialEvent(currentValue));
+							} else
+								newValue(evt.getValue());
+						}
+					}
+
+					@Override
+					public <V extends ObservableValueEvent<E>> void onCompleted(V evt) {
+						elSubs.add(els.get(theIndex).subscribe(new ElObserver(els.get(theIndex))));
+					}
+				}
+
+				private final List<ObservableOrderedElement<E>> els;
+				private final List<Subscription> elSubs;
+				E currentValue;
+
+				{
+					if (theCollection.isSafe()) {
+						els = new ArrayList<>(theCollection.size());
+						elSubs = new ArrayList<>(theCollection.size());
+					} else {
+						els = Collections.synchronizedList(new ArrayList<>(theCollection.size()));
+						elSubs = Collections.synchronizedList(new ArrayList<>(theCollection.size()));
+					}
+				}
+
+				@Override
+				public void accept(ObservableOrderedElement<E> el) {
+					els.add(el.getIndex(), el);
+					if (el.getIndex() <= theIndex) {
+						elSubs.add(el.getIndex(), el.subscribe(new ElObserver(el)));
+						if (elSubs.size() > theIndex + 1)
+							elSubs.remove(theIndex + 1).unsubscribe();
+						if (initialized[0] && el.getIndex() != theIndex) {
+							newValue(els.get(theIndex).get());
+						}
+					}
+				}
+
+				private void newValue(E newValue) {
+					hasValue[0] = true;
+					E oldValue = currentValue;
+					currentValue = newValue;
+
+					CollectionSession session = theCollection.getSession().get();
+					if (session == null) {
+						observer.onNext(createChangeEvent(oldValue, currentValue, null));
+					} else {
+						if (session.get(sessionKey, "changed") == null) {
+							session.put(sessionKey, "changed", true);
+							session.put(sessionKey, "oldValue", oldValue);
+						}
+						session.put(sessionKey, "newValue", currentValue);
+					}
+				}
+			}
+			ElConsumer consumer = new ElConsumer();
+			Subscription listSub = theCollection.onOrderedElement(consumer);
+			initialized[0] = true;
+			Subscription sessionSub = theCollection.getSession().act(evt -> {
+				if (evt.getOldValue() != null && evt.getOldValue().get(sessionKey, "changed") != null) {
+					observer.onNext(createChangeEvent((E) evt.getOldValue().get(sessionKey, "oldValue"),
+						(E) evt.getOldValue().get(sessionKey, "newValue"), evt.getCause()));
+				}
+			});
+			if (!hasValue[0]) {
+				if (theDefaultValueGenerator != null) {
+					try {
+						consumer.currentValue = theDefaultValueGenerator.apply(theCollection.size());
+					} catch (RuntimeException e) {
+						// Just set a null value if the value generator throws an exception
+						consumer.currentValue = null;
+					}
+				}
+				hasValue[0] = true;
+				observer.onNext(createInitialEvent(consumer.currentValue));
+			}
+			return () -> {
+				listSub.unsubscribe();
+				sessionSub.unsubscribe();
+			};
+		}
+
+		@Override
+		public boolean isSafe() {
+			return theCollection.isSafe();
+		}
+	}
+
+	/**
 	 * Implements {@link ObservableOrderedCollection#safe()}
 	 *
 	 * @param <E> The type of elements in the collection
@@ -602,7 +764,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 */
 	class MappedOrderedCollection<E, T> extends MappedObservableCollection<E, T> implements ObservableOrderedCollection<T> {
 		protected MappedOrderedCollection(ObservableOrderedCollection<E> wrap, TypeToken<T> type, Function<? super E, T> map,
-				Function<? super T, E> reverse) {
+			Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
 
@@ -620,7 +782,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 */
 	class StaticFilteredOrderedCollection<E, T> extends StaticFilteredCollection<E, T> implements ObservableOrderedCollection<T> {
 		StaticFilteredOrderedCollection(ObservableOrderedCollection<E> wrap, TypeToken<T> type, Function<? super E, FilterMapResult<T>> map,
-				Function<? super T, E> reverse) {
+			Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
 
@@ -645,7 +807,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		private List<FilteredOrderedElement<E, T>> theFilteredElements = new java.util.ArrayList<>();
 
 		DynamicFilteredOrderedCollection(ObservableOrderedCollection<E> wrap, TypeToken<T> type,
-				Function<? super E, FilterMapResult<T>> map, Function<? super T, E> reverse) {
+			Function<? super E, FilterMapResult<T>> map, Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
 
@@ -658,8 +820,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		protected FilteredOrderedElement<E, T> filter(ObservableElement<E> element) {
 			ObservableOrderedElement<E> outerEl = (ObservableOrderedElement<E>) element;
 			FilteredOrderedElement<E, T> retElement = d()
-					.debug(new FilteredOrderedElement<>(outerEl, getMap(), getType(), theFilteredElements))
-					.from("element", this).tag("wrapped", element).get();
+				.debug(new FilteredOrderedElement<>(outerEl, getMap(), getType(), theFilteredElements))
+				.from("element", this).tag("wrapped", element).get();
 			theFilteredElements.add(outerEl.getIndex(), retElement);
 			outerEl.completed().act(elValue -> theFilteredElements.remove(outerEl.getIndex()));
 			return retElement;
@@ -681,7 +843,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		private List<FilteredOrderedElement<E, T>> theFilteredElements;
 
 		FilteredOrderedElement(ObservableOrderedElement<E> wrapped, Function<? super E, FilterMapResult<T>> map, TypeToken<T> type,
-				List<FilteredOrderedElement<E, T>> filteredEls) {
+			List<FilteredOrderedElement<E, T>> filteredEls) {
 			super(wrapped, map, type);
 			theFilteredElements = filteredEls;
 		}
@@ -711,7 +873,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 */
 	class CombinedOrderedCollection<E, T, V> extends CombinedObservableCollection<E, T, V> implements ObservableOrderedCollection<V> {
 		CombinedOrderedCollection(ObservableOrderedCollection<E> collection, ObservableValue<T> value, TypeToken<V> type,
-				BiFunction<? super E, ? super T, V> map, BiFunction<? super V, ? super T, E> reverse) {
+			BiFunction<? super E, ? super T, V> map, BiFunction<? super V, ? super T, E> reverse) {
 			super(collection, type, value, map, reverse);
 		}
 
@@ -734,7 +896,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 */
 	class GroupedOrderedMultiMap<K, V> extends GroupedMultiMap<K, V> {
 		public GroupedOrderedMultiMap(ObservableOrderedCollection<V> wrap, Function<V, K> keyMap, TypeToken<K> keyType,
-				Equalizer equalizer) {
+			Equalizer equalizer) {
 			super(wrap, keyMap, keyType, equalizer);
 		}
 
@@ -1006,7 +1168,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 */
 	class ModFilteredOrderedCollection<E> extends ModFilteredCollection<E> implements ObservableOrderedCollection<E> {
 		public ModFilteredOrderedCollection(ObservableOrderedCollection<E> wrapped, Predicate<? super E> removeFilter,
-				Predicate<? super E> addFilter) {
+			Predicate<? super E> addFilter) {
 			super(wrapped, removeFilter, addFilter);
 		}
 
@@ -1060,9 +1222,9 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		@Override
 		protected List<OrderedCachedElement<E>> cachedElements() {
 			ArrayList<OrderedCachedElement<E>> ret = new ArrayList<>(
-					(Collection<OrderedCachedElement<E>>) (Collection<?>) super.cachedElements());
+				(Collection<OrderedCachedElement<E>>) (Collection<?>) super.cachedElements());
 			Comparator<OrderedCachedElement<E>> compare = (OrderedCachedElement<E> el1, OrderedCachedElement<E> el2) -> el1.getIndex()
-					- el2.getIndex();
+				- el2.getIndex();
 			Collections.sort(ret, compare);
 			return ret;
 		}
@@ -1169,9 +1331,9 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 		@Override
 		protected FlattenedOrderedValueElement<E> createFlattenedElement(
-				ObservableElement<? extends ObservableValue<? extends E>> element) {
+			ObservableElement<? extends ObservableValue<? extends E>> element) {
 			return new FlattenedOrderedValueElement<>((ObservableOrderedElement<? extends ObservableValue<? extends E>>) element,
-					getType());
+				getType());
 		}
 
 		@Override
@@ -1225,16 +1387,16 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
 			SimpleObservable<Void> unSubObs = new SimpleObservable<>();
 			Subscription collSub = getWrapped()
-					.subscribe(new Observer<ObservableValueEvent<? extends ObservableOrderedCollection<? extends E>>>() {
-						@Override
-						public <V extends ObservableValueEvent<? extends ObservableOrderedCollection<? extends E>>> void onNext(V event) {
-							if (event.getValue() != null) {
-								Observable<?> until = ObservableUtils.makeUntil(getWrapped(), event);
-								((ObservableOrderedCollection<E>) event.getValue().takeUntil(until).unsubscribeOn(unSubObs))
-								.onOrderedElement(onElement);
-							}
+				.subscribe(new Observer<ObservableValueEvent<? extends ObservableOrderedCollection<? extends E>>>() {
+					@Override
+					public <V extends ObservableValueEvent<? extends ObservableOrderedCollection<? extends E>>> void onNext(V event) {
+						if (event.getValue() != null) {
+							Observable<?> until = ObservableUtils.makeUntil(getWrapped(), event);
+							((ObservableOrderedCollection<E>) event.getValue().takeUntil(until).unsubscribeOn(unSubObs))
+							.onOrderedElement(onElement);
 						}
-					});
+					}
+				});
 			return () -> {
 				collSub.unsubscribe();
 				unSubObs.onNext(null);
@@ -1337,7 +1499,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 				outerEl.subscribe(new Observer<ObservableValueEvent<? extends ObservableOrderedCollection<? extends E>>>() {
 					@Override
 					public <E1 extends ObservableValueEvent<? extends ObservableOrderedCollection<? extends E>>> void onNext(
-							E1 outerEvent) {
+						E1 outerEvent) {
 						Observable<?> until = ObservableUtils.makeUntil(outerEl, outerEvent);
 						if (outerEvent.isInitial())
 							nodes.add(outerEl.getIndex(), outerNode);
@@ -1361,7 +1523,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 					@Override
 					public <E1 extends ObservableValueEvent<? extends ObservableOrderedCollection<? extends E>>> void onCompleted(
-							E1 outerEvent) {
+						E1 outerEvent) {
 						nodes.remove(outerEl.getIndex());
 					}
 				});
