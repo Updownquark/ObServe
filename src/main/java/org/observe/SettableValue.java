@@ -92,7 +92,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @return The mapped settable value
 	 */
 	public default <R> SettableValue<R> mapV(TypeToken<R> type, Function<? super T, R> function, Function<? super R, ? extends T> reverse,
-			boolean combineNull) {
+		boolean combineNull) {
 		SettableValue<T> root = this;
 		return d().debug(new ComposedSettableValue<R>(type, d().lambda(args -> {
 			return function.apply((T) args[0]);
@@ -133,7 +133,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @return The composed settable value
 	 */
 	public default <U, R> SettableValue<R> composeV(BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
-			BiFunction<? super R, ? super U, ? extends T> reverse) {
+		BiFunction<? super R, ? super U, ? extends T> reverse) {
 		return combineV(null, function, arg, reverse, false);
 	}
 
@@ -151,7 +151,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @return The composed settable value
 	 */
 	public default <U, R> SettableValue<R> combineV(TypeToken<R> type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
-			BiFunction<? super R, ? super U, ? extends T> reverse, boolean combineNull) {
+		BiFunction<? super R, ? super U, ? extends T> reverse, boolean combineNull) {
 		SettableValue<T> root = this;
 		return d().debug(new ComposedSettableValue<R>(type, d().lambda(args -> {
 			return function.apply((T) args[0], (U) args[1]);
@@ -176,7 +176,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 				return root.isEnabled();
 			}
 		}).from("combine", this).from("with", arg).using("combination", function).using("reverse", reverse).tag("combineNull", combineNull)
-				.get();
+			.get();
 	}
 
 	/**
@@ -193,7 +193,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @return The composed settable value
 	 */
 	public default <U, R> SettableValue<R> combineV(TypeToken<R> type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
-			BiFunction<? super R, ? super U, String> accept, BiFunction<? super R, ? super U, ? extends T> reverse, boolean combineNull) {
+		BiFunction<? super R, ? super U, String> accept, BiFunction<? super R, ? super U, ? extends T> reverse, boolean combineNull) {
 		SettableValue<T> root = this;
 		return d().debug(new ComposedSettableValue<R>(type, args -> {
 			return function.apply((T) args[0], (U) args[1]);
@@ -222,7 +222,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 				return root.isEnabled();
 			}
 		}).from("combine", this).from("with", arg).using("combination", function).using("reverse", reverse).using("accept", accept)
-				.tag("combineNull", combineNull).get();
+			.tag("combineNull", combineNull).get();
 	}
 
 	/**
@@ -238,7 +238,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @return The composed settable value
 	 */
 	public default <U, V, R> SettableValue<R> combineV(TriFunction<? super T, ? super U, ? super V, R> function, ObservableValue<U> arg2,
-			ObservableValue<V> arg3, TriFunction<? super R, ? super U, ? super V, ? extends T> reverse) {
+		ObservableValue<V> arg3, TriFunction<? super R, ? super U, ? super V, ? extends T> reverse) {
 		return combineV(null, function, arg2, arg3, reverse, false);
 	}
 
@@ -258,8 +258,8 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @return The composed settable value
 	 */
 	public default <U, V, R> SettableValue<R> combineV(TypeToken<R> type, TriFunction<? super T, ? super U, ? super V, R> function,
-			ObservableValue<U> arg2, ObservableValue<V> arg3, TriFunction<? super R, ? super U, ? super V, ? extends T> reverse,
-			boolean combineNull) {
+		ObservableValue<U> arg2, ObservableValue<V> arg3, TriFunction<? super R, ? super U, ? super V, ? extends T> reverse,
+		boolean combineNull) {
 		SettableValue<T> root = this;
 		return d().debug(new ComposedSettableValue<R>(type, args -> {
 			return function.apply((T) args[0], (U) args[1], (V) args[2]);
@@ -285,7 +285,15 @@ public interface SettableValue<T> extends ObservableValue<T> {
 				return root.isEnabled();
 			}
 		}).from("combine", this).from("with", arg2).from("with", arg3).using("combination", function).using("reverse", reverse)
-				.tag("combineNull", combineNull).get();
+			.tag("combineNull", combineNull).get();
+	}
+
+	/**
+	 * @param value An observable value that supplies settable values
+	 * @return A settable value that represents the current value in the outer observable
+	 */
+	public static <T> SettableValue<T> flatten(ObservableValue<SettableValue<T>> value) {
+		return new SettableFlattenedObservableValue<>(value);
 	}
 
 	/**
@@ -299,7 +307,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 		}
 
 		public ComposedSettableValue(TypeToken<T> type, Function<Object [], T> function, boolean combineNull,
-				ObservableValue<?>... composed) {
+			ObservableValue<?>... composed) {
 			super(type, function, combineNull, composed);
 		}
 
@@ -308,6 +316,51 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			return true;
 			// Should be able to do this. Don't understand why it won't compile.
 			// return ComposedObservableValue.super.isSafe();
+		}
+	}
+
+	/**
+	 * Implements {@link SettableValue#flatten(ObservableValue)}
+	 * 
+	 * @param <T> The type of the value
+	 */
+	class SettableFlattenedObservableValue<T> extends FlattenedObservableValue<T> implements SettableValue<T> {
+		public SettableFlattenedObservableValue(ObservableValue<? extends SettableValue<? extends T>> value) {
+			super(value);
+		}
+
+		@Override
+		protected ObservableValue<? extends SettableValue<? extends T>> getWrapped() {
+			return (ObservableValue<? extends SettableValue<? extends T>>) super.getWrapped();
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			ObservableValue<ObservableValue<String>> wrapE = getWrapped().mapV(sv -> {
+				if (sv == null)
+					return ObservableValue.constant("No wrapped value to set");
+				else
+					return sv.isEnabled();
+			});
+			return ObservableValue.flatten(wrapE);
+		}
+
+		@Override
+		public <V extends T> String isAcceptable(V value) {
+			SettableValue<? extends T> sv = getWrapped().get();
+			if (sv == null)
+				return "No wrapped value to set";
+			else
+				return ((SettableValue<T>) sv).isAcceptable(value);
+		}
+
+		@Override
+		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
+			SettableValue<? extends T> sv = getWrapped().get();
+			if (sv == null)
+				throw new IllegalArgumentException("No wrapped value to set");
+			else
+				return ((SettableValue<T>) sv).set(value, cause);
 		}
 	}
 }

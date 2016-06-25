@@ -187,12 +187,12 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @return The new observable whose value is a function of this observable's value and the other's
 	 */
 	default <U, R> ObservableValue<R> combineV(TypeToken<R> type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
-			boolean combineNull) {
+		boolean combineNull) {
 		ComposedObservableValue<R> ret = new ComposedObservableValue<>(type, d().lambda(args -> {
 			return function.apply((T) args[0], (U) args[1]);
 		} , "combineV"), combineNull, this, arg);
 		return d().debug(ret).from("combine", this).from("with", arg).using("combination", function)
-				.tag("combineNull", combineNull).get();
+			.tag("combineNull", combineNull).get();
 	}
 
 	/**
@@ -227,7 +227,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @return The new observable whose value is a function of this observable's value and the others'
 	 */
 	default <U, V, R> ObservableValue<R> combineV(TriFunction<? super T, ? super U, ? super V, R> function, ObservableValue<U> arg2,
-			ObservableValue<V> arg3) {
+		ObservableValue<V> arg3) {
 		return combineV(null, function, arg2, arg3, false);
 	}
 
@@ -246,24 +246,24 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @return The new observable whose value is a function of this observable's value and the others'
 	 */
 	default <U, V, R> ObservableValue<R> combineV(TypeToken<R> type, TriFunction<? super T, ? super U, ? super V, R> function,
-			ObservableValue<U> arg2, ObservableValue<V> arg3, boolean combineNull) {
+		ObservableValue<U> arg2, ObservableValue<V> arg3, boolean combineNull) {
 		ComposedObservableValue<R> ret = new ComposedObservableValue<>(type, d().lambda(args -> {
 			return function.apply((T) args[0], (U) args[1], (V) args[2]);
 		} , "combineV"), combineNull, this, arg2, arg3);
 		return d().debug(ret).from("combine", this).from("with", arg2).from("with", arg3)
-				.using("combination", function).tag("combineNull", combineNull).get();
+			.using("combination", function).tag("combineNull", combineNull).get();
 	}
 
 	@Override
 	default ObservableValue<T> takeUntil(Observable<?> until) {
 		return d().debug(new ObservableValueTakenUntil<>(this, until, true)).from("take", this).from("until", until).tag("terminate", true)
-				.get();
+			.get();
 	}
 
 	@Override
 	default Observable<ObservableValueEvent<T>> unsubscribeOn(Observable<?> until) {
 		return d().debug(new ObservableValueTakenUntil<>(this, until, false)).from("take", this).from("until", until)
-				.tag("terminate", false).get();
+			.tag("terminate", false).get();
 	}
 
 	/**
@@ -304,105 +304,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @return An observable value whose value is the value of <code>ov.get()</code>
 	 */
 	public static <T> ObservableValue<T> flatten(ObservableValue<? extends ObservableValue<? extends T>> ov) {
-		if(ov == null)
-			throw new NullPointerException("Null observable");
-		TypeToken<T> type = (TypeToken<T>) ov.getType().resolveType(ObservableValue.class.getTypeParameters()[0]);
-		return d().debug(new ObservableValue<T>() {
-			@Override
-			public TypeToken<T> getType() {
-				if(type != null)
-					return type;
-				ObservableValue<? extends T> outerVal = ov.get();
-				if(outerVal == null)
-					throw new IllegalStateException("Flattened observable is null and no type given: " + ov);
-				return (TypeToken<T>) outerVal.getType();
-			}
-
-			@Override
-			public T get() {
-				return get(ov.get());
-			}
-
-			private T get(ObservableValue<? extends T> value) {
-				return value == null ? null : value.get();
-			}
-
-			@Override
-			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-				ObservableValue<T> retObs = this;
-				Subscription [] innerSub = new Subscription[1];
-				Subscription outerSub = ov.subscribe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends T>>>() {
-					private final ReentrantLock theLock = new ReentrantLock();
-					@Override
-					public <V extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onNext(V value) {
-						theLock.lock();
-						try {
-							if (innerSub[0] != null) {
-								innerSub[0].unsubscribe();
-								innerSub[0] = null;
-							}
-							Object[] old = new Object[1];
-							if (value.getValue() != null) {
-								innerSub[0] = value.getValue().subscribe(new Observer<ObservableValueEvent<? extends T>>() {
-									@Override
-									public <V2 extends ObservableValueEvent<? extends T>> void onNext(V2 value2) {
-										theLock.lock();
-										try {
-											T innerOld;
-											if (value2.isInitial())
-												innerOld = (T) old[0];
-											else {
-												innerOld = value2.getOldValue();
-												old[0] = innerOld;
-											}
-											if (value.isInitial() && value2.isInitial())
-												observer.onNext(retObs.createInitialEvent(value2.getValue()));
-											else
-												observer.onNext(retObs.createChangeEvent(innerOld, value2.getValue(), value2.getCause()));
-										} finally {
-											theLock.unlock();
-										}
-									}
-								});
-							} else if (value.isInitial())
-								observer.onNext(retObs.createInitialEvent(null));
-							else
-								observer.onNext(retObs.createChangeEvent((T) old[0], null, value.getCause()));
-						} finally {
-							theLock.unlock();
-						}
-					}
-
-					@Override
-					public <V extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onCompleted(V value) {
-						theLock.lock();
-						try {
-							observer.onCompleted(
-									retObs.createChangeEvent(get(value.getOldValue()), get(value.getValue()), value.getCause()));
-						} finally {
-							theLock.unlock();
-						}
-					}
-				});
-				return () -> {
-					outerSub.unsubscribe();
-					if(innerSub[0] != null) {
-						innerSub[0].unsubscribe();
-						innerSub[0] = null;
-					}
-				};
-			}
-
-			@Override
-			public boolean isSafe() {
-				return false;
-			}
-
-			@Override
-			public String toString() {
-				return "flat(" + ov + ")";
-			}
-		}).from("flatten", ov).get();
+		return d().debug(new FlattenedObservableValue<T>(ov)).from("flatten", ov).get();
 	}
 
 	/**
@@ -416,7 +318,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 */
 	public static <T> ObservableValue<T> assemble(TypeToken<T> type, Supplier<T> value, ObservableValue<?>... components) {
 		TypeToken<T> t = type == null ? (TypeToken<T>) TypeToken.of(value.getClass()).resolveType(Supplier.class.getTypeParameters()[0])
-				: type;
+			: type;
 		return d().debug(new ObservableValue<T>() {
 			@Override
 			public TypeToken<T> getType() {
@@ -527,11 +429,11 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		 * @param composed The argument observables whose values are passed to the function
 		 */
 		public ComposedObservableValue(TypeToken<T> type, Function<Object [], T> function, boolean combineNull,
-				ObservableValue<?>... composed) {
+			ObservableValue<?>... composed) {
 			theFunction = function;
 			combineNulls = combineNull;
 			theType = type != null ? type
-					: (TypeToken<T>) TypeToken.of(function.getClass()).resolveType(Function.class.getTypeParameters()[1]);
+				: (TypeToken<T>) TypeToken.of(function.getClass()).resolveType(Function.class.getTypeParameters()[1]);
 			theComposed = java.util.Collections.unmodifiableList(java.util.Arrays.asList(composed));
 			theObservers = new ListenerSet<>();
 			theComposedValues = new Object[composed.length];
@@ -553,7 +455,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 									T oldValue = theValue;
 									theValue = combine(theComposedValues);
 									ObservableValueEvent<T> toFire = ComposedObservableValue.this.createChangeEvent(oldValue, theValue,
-											event);
+										event);
 									fireNext(toFire);
 								}
 
@@ -955,6 +857,122 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		@Override
 		public ObservableValue<T> safe() {
 			return this;
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableValue#flatten(ObservableValue)}
+	 * 
+	 * @param <T> The type of the value
+	 */
+	class FlattenedObservableValue<T> implements ObservableValue<T> {
+		private final ObservableValue<? extends ObservableValue<? extends T>> theValue;
+		private final TypeToken<T> theType;
+
+		protected FlattenedObservableValue(ObservableValue<? extends ObservableValue<? extends T>> value) {
+			if (value == null)
+				throw new NullPointerException("Null observable");
+			theValue = value;
+			theType = (TypeToken<T>) value.getType().resolveType(ObservableValue.class.getTypeParameters()[0]);
+		}
+
+		protected ObservableValue<? extends ObservableValue<? extends T>> getWrapped() {
+			return theValue;
+		}
+
+		@Override
+		public TypeToken<T> getType() {
+			if (theType != null)
+				return theType;
+			ObservableValue<? extends T> outerVal = theValue.get();
+			if (outerVal == null)
+				throw new IllegalStateException("Flattened observable is null and no type given: " + theValue);
+			return (TypeToken<T>) outerVal.getType();
+		}
+
+		@Override
+		public T get() {
+			return get(theValue.get());
+		}
+
+		private T get(ObservableValue<? extends T> value) {
+			return value == null ? null : value.get();
+		}
+
+		@Override
+		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+			ObservableValue<T> retObs = this;
+			Subscription[] innerSub = new Subscription[1];
+			Subscription outerSub = theValue.subscribe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends T>>>() {
+				private final ReentrantLock theLock = new ReentrantLock();
+
+				@Override
+				public <V extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onNext(V value) {
+					theLock.lock();
+					try {
+						if (innerSub[0] != null) {
+							innerSub[0].unsubscribe();
+							innerSub[0] = null;
+						}
+						Object[] old = new Object[1];
+						if (value.getValue() != null) {
+							innerSub[0] = value.getValue().subscribe(new Observer<ObservableValueEvent<? extends T>>() {
+								@Override
+								public <V2 extends ObservableValueEvent<? extends T>> void onNext(V2 value2) {
+									theLock.lock();
+									try {
+										T innerOld;
+										if (value2.isInitial())
+											innerOld = (T) old[0];
+										else {
+											innerOld = value2.getOldValue();
+											old[0] = innerOld;
+										}
+										if (value.isInitial() && value2.isInitial())
+											observer.onNext(retObs.createInitialEvent(value2.getValue()));
+										else
+											observer.onNext(retObs.createChangeEvent(innerOld, value2.getValue(), value2.getCause()));
+									} finally {
+										theLock.unlock();
+									}
+								}
+							});
+						} else if (value.isInitial())
+							observer.onNext(retObs.createInitialEvent(null));
+						else
+							observer.onNext(retObs.createChangeEvent((T) old[0], null, value.getCause()));
+					} finally {
+						theLock.unlock();
+					}
+				}
+
+				@Override
+				public <V extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onCompleted(V value) {
+					theLock.lock();
+					try {
+						observer.onCompleted(retObs.createChangeEvent(get(value.getOldValue()), get(value.getValue()), value.getCause()));
+					} finally {
+						theLock.unlock();
+					}
+				}
+			});
+			return () -> {
+				outerSub.unsubscribe();
+				if (innerSub[0] != null) {
+					innerSub[0].unsubscribe();
+					innerSub[0] = null;
+				}
+			};
+		}
+
+		@Override
+		public boolean isSafe() {
+			return false;
+		}
+
+		@Override
+		public String toString() {
+			return "flat(" + theValue + ")";
 		}
 	}
 }
