@@ -33,8 +33,33 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 */
 	<V extends T> String isAcceptable(V value);
 
-	/** @return An observable whose value reports whether or not this value can be set directly */
+	/** @return An observable whose value reports null if this value can be set directly, or a string describing why it cannot */
 	ObservableValue<String> isEnabled();
+
+	/**
+	 * @param value The value to assign this settable to
+	 * @return An action whose {@link ObservableAction#isEnabled() enabled} property is tied to this settable's {@link #isEnabled() enabled}
+	 *         property and the current value's {@link #isAcceptable(Object) acceptability} for this settable.
+	 */
+	default <V extends T> ObservableAction assignmentTo(ObservableValue<? extends V> value) {
+		return new ObservableAction() {
+			@Override
+			public void act(Object cause) throws IllegalStateException {
+				try {
+					set(value.get(), cause);
+				} catch (IllegalArgumentException e) {
+					throw new IllegalStateException(e.getMessage(), e);
+				}
+			}
+
+			@Override
+			public ObservableValue<String> isEnabled() {
+				BiFunction<String, String, String> combineFn = (str1, str2) -> str1 != null ? str1 : str2;
+				return SettableValue.this.isEnabled().combineV(TypeToken.of(String.class), combineFn, value.mapV(v -> isAcceptable(v)),
+					true);
+			}
+		};
+	}
 
 	/**
 	 * @param <V> The type of the value to set
@@ -321,7 +346,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 
 	/**
 	 * Implements {@link SettableValue#flatten(ObservableValue)}
-	 * 
+	 *
 	 * @param <T> The type of the value
 	 */
 	class SettableFlattenedObservableValue<T> extends FlattenedObservableValue<T> implements SettableValue<T> {
