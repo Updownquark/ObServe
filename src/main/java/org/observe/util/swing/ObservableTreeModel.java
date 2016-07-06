@@ -182,7 +182,7 @@ public abstract class ObservableTreeModel implements TreeModel {
 		private void added(int[] indexes, Object[] values) {
 			// Swing expects indexes to be in ascending order
 			sort(indexes, values);
-			for (int i = indexes.length - 1; i >= 0; i--) {
+			for (int i = 0; i < indexes.length; i++) {
 				TreeNode newNode = newChild(values[i]);
 				theChildNodes.add(indexes[i], newNode);
 			}
