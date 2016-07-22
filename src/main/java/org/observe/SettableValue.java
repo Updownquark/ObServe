@@ -4,6 +4,7 @@ import static org.observe.ObservableDebug.d;
 
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import org.qommons.TriFunction;
 
@@ -318,7 +319,16 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @return A settable value that represents the current value in the outer observable
 	 */
 	public static <T> SettableValue<T> flatten(ObservableValue<SettableValue<T>> value) {
-		return new SettableFlattenedObservableValue<>(value);
+		return flatten(value, () -> null);
+	}
+
+	/**
+	 * @param value An observable value that supplies settable values
+	 * @param defaultValue The default value supplier for when the outer observable is empty
+	 * @return A settable value that represents the current value in the outer observable
+	 */
+	public static <T> SettableValue<T> flatten(ObservableValue<SettableValue<T>> value, Supplier<? extends T> defaultValue) {
+		return new SettableFlattenedObservableValue<>(value, defaultValue);
 	}
 
 	/**
@@ -350,8 +360,9 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @param <T> The type of the value
 	 */
 	class SettableFlattenedObservableValue<T> extends FlattenedObservableValue<T> implements SettableValue<T> {
-		public SettableFlattenedObservableValue(ObservableValue<? extends SettableValue<? extends T>> value) {
-			super(value);
+		protected SettableFlattenedObservableValue(ObservableValue<? extends SettableValue<? extends T>> value,
+			Supplier<? extends T> defaultValue) {
+			super(value, defaultValue);
 		}
 
 		@Override

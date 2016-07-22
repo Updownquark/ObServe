@@ -33,7 +33,8 @@ public interface ObservableAction {
 
 		@Override
 		public ObservableValue<String> isEnabled() {
-			return ObservableValue.flatten(theWrapper.mapV(action -> action.isEnabled()));
+			return ObservableValue.flatten(theWrapper.mapV(action -> action.isEnabled()),
+				() -> "This wrapper (" + theWrapper + ") is empty");
 		}
 	}
 }

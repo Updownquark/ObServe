@@ -304,7 +304,18 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @return An observable value whose value is the value of <code>ov.get()</code>
 	 */
 	public static <T> ObservableValue<T> flatten(ObservableValue<? extends ObservableValue<? extends T>> ov) {
-		return d().debug(new FlattenedObservableValue<T>(ov)).from("flatten", ov).get();
+		return flatten(ov, () -> null);
+	}
+
+	/**
+	 * @param <T> The compile-time super type of all observables contained in the nested observable
+	 * @param ov The nested observable
+	 * @param defaultValue The default value supplier for when the outer observable is empty
+	 * @return An observable value whose value is the value of <code>ov.get()</code>
+	 */
+	public static <T> ObservableValue<T> flatten(ObservableValue<? extends ObservableValue<? extends T>> ov,
+		Supplier<? extends T> defaultValue) {
+		return d().debug(new FlattenedObservableValue<>(ov, defaultValue)).from("flatten", ov).get();
 	}
 
 	/**
@@ -862,18 +873,21 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 
 	/**
 	 * Implements {@link ObservableValue#flatten(ObservableValue)}
-	 * 
+	 *
 	 * @param <T> The type of the value
 	 */
 	class FlattenedObservableValue<T> implements ObservableValue<T> {
 		private final ObservableValue<? extends ObservableValue<? extends T>> theValue;
 		private final TypeToken<T> theType;
+		private final Supplier<? extends T> theDefaultValue;
 
-		protected FlattenedObservableValue(ObservableValue<? extends ObservableValue<? extends T>> value) {
+		protected FlattenedObservableValue(ObservableValue<? extends ObservableValue<? extends T>> value,
+			Supplier<? extends T> defaultValue) {
 			if (value == null)
 				throw new NullPointerException("Null observable");
 			theValue = value;
 			theType = (TypeToken<T>) value.getType().resolveType(ObservableValue.class.getTypeParameters()[0]);
+			theDefaultValue = defaultValue;
 		}
 
 		protected ObservableValue<? extends ObservableValue<? extends T>> getWrapped() {
@@ -890,13 +904,18 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 			return (TypeToken<T>) outerVal.getType();
 		}
 
+		/** @return The supplier of the default value, in case the outer observable is empty */
+		protected Supplier<? extends T> getDefaultValue() {
+			return theDefaultValue;
+		}
+
 		@Override
 		public T get() {
 			return get(theValue.get());
 		}
 
 		private T get(ObservableValue<? extends T> value) {
-			return value == null ? null : value.get();
+			return value != null ? value.get() : theDefaultValue.get();
 		}
 
 		@Override
@@ -938,9 +957,9 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 								}
 							});
 						} else if (value.isInitial())
-							observer.onNext(retObs.createInitialEvent(null));
+							observer.onNext(retObs.createInitialEvent(get(null)));
 						else
-							observer.onNext(retObs.createChangeEvent((T) old[0], null, value.getCause()));
+							observer.onNext(retObs.createChangeEvent((T) old[0], get(null), value.getCause()));
 					} finally {
 						theLock.unlock();
 					}
