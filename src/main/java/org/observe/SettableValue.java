@@ -316,7 +316,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 
 	/**
 	 * @param value An observable value that supplies settable values
-	 * @return A settable value that represents the current value in the outer observable
+	 * @return A settable value that represents the current value in the inner observable
 	 */
 	public static <T> SettableValue<T> flatten(ObservableValue<SettableValue<T>> value) {
 		return flatten(value, () -> null);
@@ -325,9 +325,19 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	/**
 	 * @param value An observable value that supplies settable values
 	 * @param defaultValue The default value supplier for when the outer observable is empty
-	 * @return A settable value that represents the current value in the outer observable
+	 * @return A settable value that represents the current value in the inner observable
 	 */
 	public static <T> SettableValue<T> flatten(ObservableValue<SettableValue<T>> value, Supplier<? extends T> defaultValue) {
+		return new SettableFlattenedObservableValue<>(value, defaultValue);
+	}
+
+	/**
+	 * @param value An observable value that supplies observable values that may possibly be settable
+	 * @param defaultValue The default value supplier for when the outer observable is empty
+	 * @return A settable value that represents the current value in the inner observable
+	 */
+	public static <T> SettableValue<T> flattenAsSettable(ObservableValue<? extends ObservableValue<T>> value,
+		Supplier<? extends T> defaultValue) {
 		return new SettableFlattenedObservableValue<>(value, defaultValue);
 	}
 
@@ -360,14 +370,9 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @param <T> The type of the value
 	 */
 	class SettableFlattenedObservableValue<T> extends FlattenedObservableValue<T> implements SettableValue<T> {
-		protected SettableFlattenedObservableValue(ObservableValue<? extends SettableValue<? extends T>> value,
+		protected SettableFlattenedObservableValue(ObservableValue<? extends ObservableValue<? extends T>> value,
 			Supplier<? extends T> defaultValue) {
 			super(value, defaultValue);
-		}
-
-		@Override
-		protected ObservableValue<? extends SettableValue<? extends T>> getWrapped() {
-			return (ObservableValue<? extends SettableValue<? extends T>>) super.getWrapped();
 		}
 
 		@Override
@@ -375,28 +380,34 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			ObservableValue<ObservableValue<String>> wrapE = getWrapped().mapV(sv -> {
 				if (sv == null)
 					return ObservableValue.constant("No wrapped value to set");
+				else if (sv instanceof SettableValue)
+					return ((SettableValue<? extends T>) sv).isEnabled();
 				else
-					return sv.isEnabled();
+					return ObservableValue.constant("Wrapped value is not settable");
 			});
 			return ObservableValue.flatten(wrapE);
 		}
 
 		@Override
 		public <V extends T> String isAcceptable(V value) {
-			SettableValue<? extends T> sv = getWrapped().get();
+			ObservableValue<? extends T> sv = getWrapped().get();
 			if (sv == null)
 				return "No wrapped value to set";
-			else
+			else if (sv instanceof SettableValue)
 				return ((SettableValue<T>) sv).isAcceptable(value);
+			else
+				return "Wrapped value is not settable";
 		}
 
 		@Override
 		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
-			SettableValue<? extends T> sv = getWrapped().get();
+			ObservableValue<? extends T> sv = getWrapped().get();
 			if (sv == null)
 				throw new IllegalArgumentException("No wrapped value to set");
-			else
+			else if (sv instanceof SettableValue)
 				return ((SettableValue<T>) sv).set(value, cause);
+			else
+				throw new IllegalArgumentException("Wrapped value is not settable");
 		}
 	}
 }

@@ -11,14 +11,21 @@ public interface ObservableAction {
 	/** @return An observable whose value reports null if this value can be set directly, or a string describing why it cannot */
 	ObservableValue<String> isEnabled();
 
+	/**
+	 * @param wrapper An observable value that supplies actions
+	 * @return An action based on the content of the wrapper
+	 */
 	static ObservableAction flatten(ObservableValue<? extends ObservableAction> wrapper) {
 		return new FlattenedObservableAction(wrapper);
 	}
 
+	/**
+	 * An observable action whose methods reflect those of the content of an observable value, or a disabled action when the content is null
+	 */
 	class FlattenedObservableAction implements ObservableAction {
 		private final ObservableValue<? extends ObservableAction> theWrapper;
 
-		public FlattenedObservableAction(ObservableValue<? extends ObservableAction> wrapper) {
+		protected FlattenedObservableAction(ObservableValue<? extends ObservableAction> wrapper) {
 			theWrapper = wrapper;
 		}
 
