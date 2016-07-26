@@ -5,7 +5,7 @@ package org.observe;
  *
  * @param <T> The compile-time type of the observable's value
  */
-public class ObservableValueEvent<T> {
+public class ObservableValueEvent<T> implements Causable {
 	private final ObservableValue<T> theObservable;
 
 	private final boolean isInitial;
@@ -50,7 +50,7 @@ public class ObservableValueEvent<T> {
 		return theNewValue;
 	}
 
-	/** @return The cause of this event--typically another event or null */
+	@Override
 	public Object getCause() {
 		return theCause;
 	}

@@ -196,7 +196,7 @@ public interface Observable<T> {
 	 */
 	default Observable<T> takeUntil(Observable<?> until) {
 		return d().debug(new ObservableTakenUntil<>(this, until, true)).from("take", this).from("until", until).tag("terminate", true)
-				.get();
+			.get();
 	}
 
 	/**
@@ -208,8 +208,8 @@ public interface Observable<T> {
 	 */
 	default Observable<T> unsubscribeOn(Observable<?> until) {
 		return d().debug(new ObservableTakenUntil<>(this, until, false)).from("take", this).from("until", until)
-				.tag("terminate", false)
-				.get();
+			.tag("terminate", false)
+			.get();
 	}
 
 	/**
@@ -320,6 +320,14 @@ public interface Observable<T> {
 				return true;
 			}
 		}).tag("constant", value).get();
+	}
+
+	/**
+	 * @param ov An observable of observables
+	 * @return An observable reflecting the values of the inner observables
+	 */
+	public static <T> Observable<T> flatten(Observable<Observable<T>> ov) {
+		return new FlattenedObservable<>(ov);
 	}
 
 	/** An empty observable that never does anything */
@@ -912,6 +920,57 @@ public interface Observable<T> {
 		@Override
 		public boolean isSafe() {
 			return true;
+		}
+	}
+
+	/**
+	 * Implements {@link Observable#flatten(Observable)}
+	 *
+	 * @param <T> The type of value fired by the inner observable
+	 */
+	class FlattenedObservable<T> implements Observable<T> {
+		private final Observable<? extends Observable<? extends T>> theWrapper;
+
+		protected FlattenedObservable(Observable<? extends Observable<? extends T>> wrapper) {
+			theWrapper = wrapper;
+		}
+
+		protected Observable<? extends Observable<? extends T>> getWrapper() {
+			return theWrapper;
+		}
+
+		@Override
+		public Subscription subscribe(Observer<? super T> observer) {
+			return theWrapper.subscribe(new Observer<Observable<? extends T>>() {
+				private T theLastValue;
+
+				@Override
+				public <O extends Observable<? extends T>> void onNext(O innerObs) {
+					if (innerObs != null) {
+						innerObs.takeUntil(theWrapper.noInit()).subscribe(new Observer<T>() {
+							@Override
+							public <V extends T> void onNext(V value) {
+								theLastValue = value;
+								observer.onNext(value);
+							}
+						});
+					} else {
+						theLastValue = null;
+						observer.onNext(null);
+					}
+				}
+
+				@Override
+				public <O extends Observable<? extends T>> void onCompleted(O innerObs) {
+					observer.onCompleted(theLastValue);
+					theLastValue = null;
+				}
+			});
+		}
+
+		@Override
+		public boolean isSafe() {
+			return false; // Can't guarantee that all values in the wrapper will be safe
 		}
 	}
 }
