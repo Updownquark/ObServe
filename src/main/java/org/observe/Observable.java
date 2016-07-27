@@ -178,6 +178,14 @@ public interface Observable<T> {
 	}
 
 	/**
+	 * @param type The type to filter on
+	 * @return An observable that provides all of this observable's values that are also an instance of the given type
+	 */
+	default <R> Observable<R> filterMap(Class<R> type) {
+		return filterMap(v -> type.isInstance(type) ? type.cast(v) : null);
+	}
+
+	/**
 	 * @param <V> The type of the other observable to be combined with this one
 	 * @param <R> The type of the returned observable
 	 * @param other The other observable to compose
