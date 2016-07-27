@@ -809,7 +809,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		 */
 		public ConstantObservableValue(TypeToken<T> type, T value) {
 			theType = type;
-			theValue = (T) type.getRawType().cast(value);
+			theValue = (T) type.wrap().getRawType().cast(value);
 		}
 
 		@Override
