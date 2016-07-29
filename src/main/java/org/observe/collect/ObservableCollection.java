@@ -213,35 +213,35 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	}
 
 	/**
-	 * @return An observable that fires a (null) value whenever anything in this collection changes. Unlike {@link #changes()}, this
-	 *         observable will only fire 1 event per transaction.
+	 * @return An observable that fires a value (the cause event of the change) whenever anything in this collection changes. Unlike
+	 *         {@link #changes()}, this observable will only fire 1 event per transaction.
 	 */
-	default Observable<Void> simpleChanges() {
-		return new Observable<Void>() {
+	default Observable<ObservableValueEvent<?>> simpleChanges() {
+		return new Observable<ObservableValueEvent<?>>() {
 			@Override
-			public Subscription subscribe(Observer<? super Void> observer) {
+			public Subscription subscribe(Observer<? super ObservableValueEvent<?>> observer) {
 				boolean[] initialized = new boolean[1];
 				Object key = new Object();
 				Subscription collSub = onElement(element -> {
-					element.subscribe(new Observer<Object>() {
+					element.subscribe(new Observer<ObservableValueEvent<? extends E>>() {
 						@Override
-						public void onNext(Object value) {
+						public <V extends ObservableValueEvent<? extends E>> void onNext(V event) {
 							if (!initialized[0])
 								return;
 							CollectionSession session = getSession().get();
 							if (session == null)
-								observer.onNext(null);
+								observer.onNext(event);
 							else
 								session.put(key, "changed", true);
 						}
 
 						@Override
-						public void onCompleted(Object value) {
+						public <V extends ObservableValueEvent<? extends E>> void onCompleted(V event) {
 							if (!initialized[0])
 								return;
 							CollectionSession session = getSession().get();
 							if (session == null)
-								observer.onNext(null);
+								observer.onNext(event);
 							else
 								session.put(key, "changed", true);
 						}
@@ -251,7 +251,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 					if (!initialized[0])
 						return;
 					if (event.getOldValue() != null && event.getOldValue().put(key, "changed", null) != null) {
-						observer.onNext(null);
+						observer.onNext(event);
 					}
 				});
 				initialized[0] = true;
