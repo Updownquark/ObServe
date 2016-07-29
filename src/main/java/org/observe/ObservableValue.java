@@ -280,12 +280,22 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	}
 
 	/**
+	 * A shortened version of {@link #constant(TypeToken, Object)}. The type of the object will be value's class. This is not always a good
+	 * idea. If the variable passed to this method may have a value that is a subclass of the variable's type, there may be unintended
+	 * consequences of using this method. Also, the type cannot be derived if the value is null, so an {@link IllegalArgumentException} will
+	 * be thrown in this case.
+	 *
+	 * In general, this shorthand method should only be used if the value is a literal or a newly constructed value.
+	 *
 	 * @param <X> The type of the value to wrap
 	 * @param value The value to wrap
 	 * @return An observable that always returns the given value
 	 */
 	public static <X> ObservableValue<X> constant(final X value) {
-		return d().debug(new ConstantObservableValue<>(new TypeToken<X>() {}, value)).label("constant").tag("value", value).get();
+		if (value == null)
+			throw new IllegalArgumentException("Cannot call constant(value) with a null value.  Use constant(TypeToken<X>, X).");
+		return d().debug(new ConstantObservableValue<>(TypeToken.of((Class<X>) value.getClass()), value)).label("constant")
+			.tag("value", value).get();
 	}
 
 	/**
