@@ -371,7 +371,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		private final boolean isForward;
 
 		OrderedCollectionFinder(ObservableOrderedCollection<E> collection, Predicate<? super E> filter, boolean forward) {
-			theCollection = collection;
+			theCollection = collection.safe();
 			theType = theCollection.getType().wrap();
 			theFilter = filter;
 			isForward = forward;
@@ -441,8 +441,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 						@Override
 						public <V3 extends ObservableValueEvent<E>> void onCompleted(V3 value) {
-							theElements.remove(element.getIndex());
-							int listIndex = ((ObservableOrderedElement<?>) value.getObservable()).getIndex();
+							int listIndex = element.getIndex();
+							theElements.remove(listIndex);
 							if(listIndex == index[0]) {
 								findNextBest(listIndex);
 							} else if(listIndex < index[0])

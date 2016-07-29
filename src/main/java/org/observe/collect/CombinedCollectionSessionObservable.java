@@ -28,9 +28,9 @@ public class CombinedCollectionSessionObservable implements ObservableValue<Coll
 	/** @param collection The collection of collections that this session observable is for */
 	public CombinedCollectionSessionObservable(ObservableCollection<? extends ObservableCollection<?>> collection) {
 		theWrappedSessionObservable = ObservableCollection.flattenValues(collection.map(collect -> collect.getSession()))
-				.filterMap(null, session -> session, false).observeSize().mapV(size -> size > 0)
-				.combineV((Boolean value1, Boolean value2) -> value1 || value2,
-						collection.getSession().mapV(null, session -> session != null, true));
+			.filterMap(null, session -> session, false).observeSize().mapV(size -> size > 0)
+			.combineV((Boolean value1, Boolean value2) -> value1 || value2,
+				collection.getSession().mapV(null, session -> session != null, true));
 		theObservers = new ListenerSet<>();
 		isInTransaction = new AtomicBoolean();
 
@@ -40,15 +40,18 @@ public class CombinedCollectionSessionObservable implements ObservableValue<Coll
 				wrappedSessionListener[0] = theWrappedSessionObservable.subscribe(new Observer<ObservableValueEvent<Boolean>>() {
 					@Override
 					public <V extends ObservableValueEvent<Boolean>> void onNext(V value) {
-						if(isInTransaction.getAndSet(value.getValue()) == value.getValue())
+						if (isInTransaction.getAndSet(value.getValue()) == value.getValue()) {
+							if (value.isInitial())
+								fire(null, theSession, value);
 							return; // No change
+						}
 						if(value.getValue()) {
 							theSession = createSession(value.getCause());
-							fire(null, theSession, value.getCause());
+							fire(null, theSession, value);
 						} else {
 							CollectionSession session = theSession;
 							theSession = null;
-							fire(session, null, value.getCause());
+							fire(session, null, value);
 						}
 					}
 				});
@@ -79,8 +82,12 @@ public class CombinedCollectionSessionObservable implements ObservableValue<Coll
 		return new DefaultCollectionSession(cause);
 	}
 
-	private void fire(CollectionSession old, CollectionSession newSession, Object cause) {
-		ObservableValueEvent<CollectionSession> evt = createChangeEvent(old, newSession, cause);
+	private void fire(CollectionSession old, CollectionSession newSession, ObservableValueEvent<?> cause) {
+		ObservableValueEvent<CollectionSession> evt;
+		if (cause.isInitial())
+			evt = createInitialEvent(newSession);
+		else
+			evt = createChangeEvent(old, newSession, cause);
 		theObservers.forEach(listener -> listener.onNext(evt));
 	}
 
