@@ -11,6 +11,7 @@ import java.util.function.Function;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMap.ObsEntryImpl;
 import org.observe.collect.CollectionSession;
@@ -527,7 +528,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	 * @return An observable that fires a (null) value whenever anything in this structure changes. This observable will only fire 1 event
 	 *         per transaction.
 	 */
-	default Observable<Void> changes() {
+	default Observable<ObservableValueEvent<?>> changes() {
 		return keySet().refreshEach(key -> get(key).simpleChanges()).simpleChanges();
 	}
 

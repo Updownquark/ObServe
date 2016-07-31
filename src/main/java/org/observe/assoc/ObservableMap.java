@@ -280,7 +280,7 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 	 * @return An observable that fires a (null) value whenever anything in this structure changes. This observable will only fire 1 event
 	 *         per transaction.
 	 */
-	default Observable<Void> changes() {
+	default Observable<ObservableValueEvent<?>> changes() {
 		return keySet().refreshEach(this::observe).simpleChanges();
 	}
 
