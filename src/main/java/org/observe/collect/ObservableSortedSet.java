@@ -4,9 +4,13 @@ import static org.observe.ObservableDebug.d;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
+import java.util.NavigableSet;
+import java.util.Objects;
+import java.util.TreeSet;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -278,7 +282,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 	default <T> ObservableSortedSet<T> filter(Class<T> type) {
 		Predicate<E> filter = value -> type.isInstance(value);
 		return d().debug(new StaticFilteredSortedSet<>(this, TypeToken.of(type), filter)).from("filter", this).using("filter", filter)
-				.tag("filterType", type).get();
+			.tag("filterType", type).get();
 	}
 
 	/**
@@ -337,13 +341,18 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 	@Override
 	default ObservableSortedSet<E> takeUntil(Observable<?> until) {
 		return d().debug(new TakenUntilSortedSet<>(this, until, true)).from("taken", this).from("until", until).tag("terminate", true)
-				.get();
+			.get();
 	}
 
 	@Override
 	default ObservableSortedSet<E> unsubscribeOn(Observable<?> until) {
 		return d().debug(new TakenUntilSortedSet<>(this, until, false)).from("taken", this).from("until", until).tag("terminate", false)
-				.get();
+			.get();
+	}
+
+	public static <E> ObservableSortedSet<E> flatten(ObservableOrderedCollection<? extends ObservableSortedSet<? extends E>> outer,
+		Comparator<? super E> compare) {
+		return ObservableSortedSet.unique(ObservableCollection.flatten(outer), compare);
 	}
 
 	/**
@@ -364,6 +373,224 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 	 */
 	public static <T> ObservableSortedSet<T> unique(ObservableCollection<T> coll, Comparator<? super T> compare) {
 		return d().debug(new CollectionWrappingSortedSet<>(coll, compare)).from("unique", coll).using("compare", compare).get();
+	}
+
+	public static <T> ObservableSortedSet<T> empty(TypeToken<T> type) {
+		class EmptySortedSet implements PartialSortedSetImpl<T> {
+			@Override
+			public Equalizer getEqualizer() {
+				return Objects::equals;
+			}
+
+			@Override
+			public TypeToken<T> getType() {
+				return type;
+			}
+
+			@Override
+			public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<T>> onElement) {
+				return () -> {
+				};
+			}
+
+			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return ObservableValue.constant(TypeToken.of(CollectionSession.class), null);
+			}
+
+			@Override
+			public boolean isSafe() {
+				return true;
+			}
+
+			@Override
+			public boolean canRemove(T value) {
+				return false;
+			}
+
+			@Override
+			public boolean canAdd(T value) {
+				return false;
+			}
+
+			@Override
+			public int size() {
+				return 0;
+			}
+
+			@Override
+			public boolean isEmpty() {
+				return true;
+			}
+
+			@Override
+			public boolean contains(Object o) {
+				return false;
+			}
+
+			@Override
+			public Iterator<T> iterator() {
+				return Collections.<T> emptyList().iterator();
+			}
+
+			@Override
+			public void clear() {
+			}
+
+			@Override
+			public Transaction lock(boolean write, Object cause) {
+				return () -> {
+				};
+			}
+
+			@Override
+			public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<T>> onElement) {
+				return () -> {
+				};
+			}
+
+			@Override
+			public Iterable<T> descending() {
+				return Collections.emptyList();
+			}
+
+			@Override
+			public Comparator<? super T> comparator() {
+				return (o1, o2) -> 0;
+			}
+
+			@Override
+			public Iterable<T> iterateFrom(T element, boolean included, boolean reversed) {
+				return Collections.emptyList();
+			}
+		}
+		return new EmptySortedSet();
+	}
+
+	public static <T> ObservableSortedSet<T> constant(TypeToken<T> type, Collection<? extends T> coll, Comparator<? super T> compare) {
+		NavigableSet<T> modSet = new TreeSet<>(compare);
+		modSet.addAll(coll);
+		NavigableSet<T> constSet = Collections.unmodifiableNavigableSet(modSet);
+		java.util.List<ObservableOrderedElement<T>> els = new java.util.ArrayList<>();
+		class ConstantObservableSet implements PartialSortedSetImpl<T> {
+			@Override
+			public Equalizer getEqualizer() {
+				return (o1, o2) -> compare.compare((T) o1, (T) o2) == 0;
+			}
+
+			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return ObservableValue.constant(TypeToken.of(CollectionSession.class), null);
+			}
+
+			@Override
+			public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<T>> onElement) {
+				for (ObservableOrderedElement<T> el : els)
+					onElement.accept(el);
+				return () -> {
+				};
+			}
+
+			@Override
+			public Transaction lock(boolean write, Object cause) {
+				return () -> {
+				};
+			}
+
+			@Override
+			public boolean isSafe() {
+				return true;
+			}
+
+			@Override
+			public TypeToken<T> getType() {
+				return type;
+			}
+
+			@Override
+			public int size() {
+				return constSet.size();
+			}
+
+			@Override
+			public Iterator<T> iterator() {
+				return constSet.iterator();
+			}
+
+			@Override
+			public boolean canRemove(T value) {
+				return false;
+			}
+
+			@Override
+			public boolean canAdd(T value) {
+				return false;
+			}
+
+			@Override
+			public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<T>> onElement) {
+				for (int i = els.size() - 1; i >= 0; i--)
+					onElement.accept(els.get(i));
+				return () -> {
+				};
+			}
+
+			@Override
+			public Iterable<T> iterateFrom(T element, boolean included, boolean reversed) {
+				NavigableSet<T> partial = reversed ? constSet.headSet(element, included) : constSet.tailSet(element, included);
+				return reversed ? partial.descendingSet() : partial;
+			}
+
+			@Override
+			public Iterable<T> descending() {
+				return constSet.descendingSet();
+			}
+
+			@Override
+			public Comparator<? super T> comparator() {
+				return compare;
+			}
+		}
+		ConstantObservableSet ret = d().debug(new ConstantObservableSet()).tag("constant", coll).tag("type", type).get();
+		int i = 0;
+		for (T value : constSet) {
+			int index = i;
+			els.add(d().debug(new ObservableOrderedElement<T>() {
+				@Override
+				public TypeToken<T> getType() {
+					return type;
+				}
+
+				@Override
+				public int getIndex() {
+					return index;
+				}
+
+				@Override
+				public T get() {
+					return value;
+				}
+
+				@Override
+				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+					observer.onNext(createInitialEvent(value));
+					return () -> {
+					};
+				}
+
+				@Override
+				public boolean isSafe() {
+					return true;
+				}
+
+				@Override
+				public ObservableValue<T> persistent() {
+					return this;
+				}
+			}).from("element", ret).tag("value", value).get());
+			i++;
+		}
+		return ret;
 	}
 
 	/**
@@ -936,7 +1163,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 		@Override
 		public ObservableSortedSet<T> subSet(T fromElement, boolean fromInclusive, T toElement, boolean toInclusive) {
 			return new StaticFilteredSortedSet<>(getWrapped().subSet((E) fromElement, fromInclusive, (E) toElement, toInclusive),
-					getType(), getMap());
+				getType(), getMap());
 		}
 
 		@Override
@@ -997,7 +1224,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 		@Override
 		public ObservableSortedSet<T> subSet(T fromElement, boolean fromInclusive, T toElement, boolean toInclusive) {
 			return new DynamicFilteredSortedSet<>(getWrapped().subSet((E) fromElement, fromInclusive, (E) toElement, toInclusive), getType(),
-					getMap());
+				getMap());
 		}
 
 		@Override

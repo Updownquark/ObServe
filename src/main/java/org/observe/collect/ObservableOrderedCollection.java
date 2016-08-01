@@ -1503,7 +1503,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 						Observable<?> until = ObservableUtils.makeUntil(outerEl, outerEvent);
 						if (outerEvent.isInitial())
 							nodes.add(outerEl.getIndex(), outerNode);
-						outerEvent.getValue().takeUntil(until).unsubscribeOn(unSubObs).onOrderedElement(innerEl -> {
+						outerEvent.getValue().safe().takeUntil(until).unsubscribeOn(unSubObs).onOrderedElement(innerEl -> {
 							innerEl.subscribe(new Observer<ObservableValueEvent<? extends E>>() {
 								@Override
 								public <E2 extends ObservableValueEvent<? extends E>> void onNext(E2 innerEvent) {
