@@ -328,6 +328,10 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		return d().debug(new FlattenedObservableValue<>(ov, defaultValue)).from("flatten", ov).get();
 	}
 
+	public static <T> ObservableValue<T> first(ObservableValue<? extends T>... values) {
+
+	}
+
 	/**
 	 * Assembles an observable value, with changes occurring on the basis of changes to a set of components
 	 *
