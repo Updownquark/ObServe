@@ -261,4 +261,56 @@ public class ObservableTest {
 		inner2.set(6, null);
 		assertEquals(6, received[0]);
 	}
+
+	/**
+	 * Tests {@link ObservableValue#firstValue(TypeToken, java.util.function.Predicate, java.util.function.Supplier, ObservableValue...)}
+	 */
+	@Test
+	public void observableFirstValue() {
+		SimpleSettableValue<Integer> v1 = new SimpleSettableValue<>(TypeToken.of(Integer.class), true);
+		SimpleSettableValue<Integer> v2 = new SimpleSettableValue<>(TypeToken.of(Integer.class), true);
+		SimpleSettableValue<Integer> v3 = new SimpleSettableValue<>(TypeToken.of(Integer.class), true);
+		ObservableValue<Integer> first = ObservableValue.firstValue(TypeToken.of(Integer.class), null, null, v1, v2, v3);
+
+		assertEquals(null, first.get());
+		v2.set(2, null);
+		v3.set(3, null);
+		assertEquals(Integer.valueOf(2), first.get());
+		Integer[] reported = new Integer[1];
+		int[] events = new int[1];
+		Subscription sub = first.act(evt -> {
+			reported[0] = evt.getValue();
+			events[0]++;
+		});
+		assertEquals(1, events[0]);
+		assertEquals(Integer.valueOf(2), reported[0]);
+		v3.set(4, null);
+		assertEquals(1, events[0]);
+		assertEquals(Integer.valueOf(2), reported[0]);
+		v1.set(1, null);
+		assertEquals(2, events[0]);
+		assertEquals(Integer.valueOf(1), reported[0]);
+		v2.set(3, null);
+		assertEquals(2, events[0]);
+		assertEquals(Integer.valueOf(1), reported[0]);
+		v1.set(null, null);
+		assertEquals(3, events[0]);
+		assertEquals(Integer.valueOf(3), reported[0]);
+		v2.set(null, null);
+		assertEquals(4, events[0]);
+		assertEquals(Integer.valueOf(4), reported[0]);
+		v3.set(null, null);
+		assertEquals(5, events[0]);
+		assertEquals(null, reported[0]);
+		v2.set(2, null);
+		assertEquals(6, events[0]);
+		assertEquals(Integer.valueOf(2), reported[0]);
+		v3.set(3, null);
+		assertEquals(6, events[0]);
+		assertEquals(Integer.valueOf(2), reported[0]);
+		sub.unsubscribe();
+		v1.set(1, null);
+		assertEquals(6, events[0]);
+		assertEquals(Integer.valueOf(2), reported[0]);
+	}
 }

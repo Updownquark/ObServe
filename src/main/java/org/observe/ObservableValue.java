@@ -3,12 +3,16 @@ package org.observe;
 import static org.observe.ObservableDebug.d;
 
 import java.util.List;
+import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
+import org.observe.collect.ObservableList;
+import org.observe.collect.ObservableOrderedCollection;
 import org.qommons.BiTuple;
 import org.qommons.ListenerSet;
 import org.qommons.TriFunction;
@@ -328,8 +332,29 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		return d().debug(new FlattenedObservableValue<>(ov, defaultValue)).from("flatten", ov).get();
 	}
 
-	public static <T> ObservableValue<T> first(ObservableValue<? extends T>... values) {
-
+	/**
+	 * Creates an observable value that reflects the value of the first value in the given sequence passing the given test, or the value
+	 * given by the default if none of the values in the sequence pass. This can also be accomplished via:
+	 *
+	 * <code>
+	 * 	{@link ObservableList#constant(TypeToken, Object...) ObservableList.constant(type, values)}
+	 * {@link ObservableOrderedCollection#findFirst(Predicate) .findFirst(test)}{{@link #mapV(Function) .mapV(v->v!=null ? v : def.get()}
+	 * </code>
+	 *
+	 * but this method only subscribes to the values in the sequence up to the one that has a passing value. This can be of great advantage
+	 * if one of the earlier values is likely to pass and some of the later values are expensive to compute.
+	 *
+	 * @param <T> The compile-time type of the value
+	 * @param type The run-time type of the value
+	 * @param test The test to for the value. If null, <code>v->v!=null</code> will be used
+	 * @param def Supplies a default value in the case that none of the values in the sequence pass the test. If null, a null default will
+	 *        be used.
+	 * @param values The sequence of ObservableValues to get the first passing value of
+	 * @return The observable for the first passing value in the sequence
+	 */
+	public static <T> ObservableValue<T> firstValue(TypeToken<T> type, Predicate<? super T> test, Supplier<? extends T> def,
+		ObservableValue<? extends T>... values) {
+		return d().debug(new FirstObservableValue<>(type, values, test, def)).from("values", (Object[]) values).get();
 	}
 
 	/**
@@ -1006,6 +1031,146 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		@Override
 		public String toString() {
 			return "flat(" + theValue + ")";
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableValue#firstValue(TypeToken, Predicate, Supplier, ObservableValue...)}
+	 *
+	 * @param <T> The type of the value
+	 */
+	class FirstObservableValue<T> implements ObservableValue<T> {
+		private final TypeToken<T> theType;
+		private final ObservableValue<? extends T>[] theValues;
+		private final Predicate<? super T> theTest;
+		private final Supplier<? extends T> theDefault;
+
+		protected FirstObservableValue(TypeToken<T> type, ObservableValue<? extends T>[] values, Predicate<? super T> test,
+			Supplier<? extends T> def) {
+			theType = type;
+			theValues = values;
+			theTest = test == null ? v -> v != null : test;
+			theDefault = def == null ? () -> null : def;
+		}
+
+		@Override
+		public TypeToken<T> getType() {
+			return theType;
+		}
+
+		@Override
+		public T get() {
+			T value = null;
+			for (ObservableValue<? extends T> v : theValues) {
+				value = v.get();
+				if (value != null)
+					break;
+			}
+			return value;
+		}
+
+		@Override
+		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+			if (theValues.length == 0) {
+				observer.onNext(createInitialEvent(null));
+				return () -> {
+				};
+			}
+			Subscription[] valueSubs = new Subscription[theValues.length];
+			boolean[] finished = new boolean[theValues.length];
+			Object [] lastValue=new Object[1];
+			boolean[] hasFiredInit = new boolean[1];
+			Lock lock = new ReentrantLock();
+			class ElementFirstObserver implements Observer<ObservableValueEvent<? extends T>> {
+				private final int index;
+				private boolean isFound;
+
+				ElementFirstObserver(int idx) {
+					index = idx;
+				}
+
+				@Override
+				public <V extends ObservableValueEvent<? extends T>> void onNext(V event) {
+					event(event, false);
+				}
+
+				@Override
+				public <V extends ObservableValueEvent<? extends T>> void onCompleted(V event) {
+					event(event, true);
+				}
+
+				private void event(ObservableValueEvent<? extends T> event, boolean complete){
+					lock.lock();
+					try{
+						boolean found = !complete && theTest.test(event.getValue());
+						int nextIndex = index + 1;
+						if (!found) {
+							while (nextIndex < theValues.length && finished[nextIndex])
+								nextIndex++;
+						}
+						T oldValue = (T) lastValue[0];
+						ObservableValueEvent<T> toFire;
+						if (complete) {
+							finished[index] = true;
+							valueSubs[index] = null;
+							if (allCompleted())
+								toFire = new ObservableValueEvent<>(FirstObservableValue.this, !hasFiredInit[0], oldValue, oldValue, event);
+							else
+								toFire = null;
+						} else {
+							if (found) {
+								lastValue[0] = event.getValue();
+								toFire = new ObservableValueEvent<>(FirstObservableValue.this, !hasFiredInit[0], oldValue, event.getValue(),
+									event);
+							} else if (nextIndex == theValues.length)
+								toFire = new ObservableValueEvent<>(FirstObservableValue.this, !hasFiredInit[0], oldValue, theDefault.get(),
+									event);
+							else
+								toFire = null;
+						}
+						if (toFire != null) {
+							hasFiredInit[0] = true;
+							observer.onNext(toFire);
+						}
+						if (found != isFound) {
+							isFound = found;
+							if(found){
+								for (int i = index + 1; i < valueSubs.length; i++) {
+									if (valueSubs[i] != null) {
+										valueSubs[i].unsubscribe();
+										valueSubs[i] = null;
+									}
+								}
+							} else if (nextIndex < theValues.length)
+								valueSubs[nextIndex] = theValues[nextIndex].subscribe(new ElementFirstObserver(nextIndex));
+						} else if (!hasFiredInit[0])
+							valueSubs[nextIndex] = theValues[nextIndex].subscribe(new ElementFirstObserver(nextIndex));
+					} finally{
+						lock.unlock();
+					}
+				}
+
+				private boolean allCompleted() {
+					for (boolean f : finished)
+						if (f)
+							return false;
+					return true;
+				}
+			}
+			valueSubs[0] = theValues[0].safe().subscribe(new ElementFirstObserver(0));
+			return () -> {
+				for (int i = 0; i < valueSubs.length; i++){
+					if(valueSubs[i]!=null){
+						valueSubs[i].unsubscribe();
+						valueSubs[i]=null;
+					}
+				}
+			};
+		}
+
+		@Override
+		public boolean isSafe() {
+			return true;
 		}
 	}
 }
