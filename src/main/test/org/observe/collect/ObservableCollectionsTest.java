@@ -664,6 +664,40 @@ public class ObservableCollectionsTest {
 		}
 	}
 
+	/** Tests {@link ObservableSet#filterStatic(Predicate)} */
+	@Test
+	public void observableSetFilterStatic() {
+		ObservableHashSet<Integer> set = new ObservableHashSet<>(TypeToken.of(Integer.TYPE));
+		Set<Integer> compare1 = new TreeSet<>();
+		Set<Integer> correct = new TreeSet<>();
+		set.filterStatic(value -> (value != null && value % 2 == 0)).onElement(element -> {
+			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
+				@Override
+				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
+					compare1.add(value.getValue());
+				}
+
+				@Override
+				public <V extends ObservableValueEvent<Integer>> void onCompleted(V value) {
+					compare1.remove(value.getValue());
+				}
+			});
+		});
+
+		for (int i = 0; i < 30; i++) {
+			set.add(i);
+			if (i % 2 == 0)
+				correct.add(i);
+			assertEquals(correct, compare1);
+		}
+		for (int i = 0; i < 30; i++) {
+			set.remove(i);
+			if (i % 2 == 0)
+				correct.remove(i);
+			assertEquals(correct, compare1);
+		}
+	}
+
 	/** Tests {@link ObservableSet#filterMap(java.util.function.Function)} */
 	@Test
 	public void observableSetFilterMap() {
@@ -1082,7 +1116,7 @@ public class ObservableCollectionsTest {
 		}
 	}
 
-	/** Tests {@link ObservableList#filter(java.util.function.Predicate)} */
+	/** Tests {@link ObservableList#filter(Predicate)} */
 	@Test
 	public void observableListFilter() {
 		ObservableArrayList<Integer> list = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
@@ -1121,6 +1155,50 @@ public class ObservableCollectionsTest {
 		for(int i = 0; i < 30; i++) {
 			list.remove(Integer.valueOf(i));
 			if(i % 2 == 0)
+				correct.remove(Integer.valueOf(i));
+			assertEquals(correct, compare1);
+		}
+	}
+
+	/** Tests {@link ObservableList#filterStatic(Predicate)} */
+	@Test
+	public void observableListFilterStatic() {
+		ObservableArrayList<Integer> list = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
+		List<Integer> compare1 = new ArrayList<>();
+		List<Integer> correct = new ArrayList<>();
+		list.filterStatic(value -> value != null && value % 2 == 0).onElement(element -> {
+			ObservableOrderedElement<Integer> listEl = (ObservableOrderedElement<Integer>) element;
+			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
+				@Override
+				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
+					if (!value.isInitial())
+						compare1.set(listEl.getIndex(), value.getValue());
+					else
+						compare1.add(listEl.getIndex(), value.getValue());
+				}
+
+				@Override
+				public <V extends ObservableValueEvent<Integer>> void onCompleted(V value) {
+					compare1.remove(listEl.getIndex());
+				}
+			});
+		});
+
+		for (int i = 0; i < 30; i++) {
+			list.add(i);
+			if (i % 2 == 0)
+				correct.add(i);
+			assertEquals(correct, compare1);
+		}
+		for (int i = 0; i < 30; i++) {
+			list.add(i);
+			if (i % 2 == 0)
+				correct.add(i);
+			assertEquals(correct, compare1);
+		}
+		for (int i = 0; i < 30; i++) {
+			list.remove(Integer.valueOf(i));
+			if (i % 2 == 0)
 				correct.remove(Integer.valueOf(i));
 			assertEquals(correct, compare1);
 		}

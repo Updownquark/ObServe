@@ -781,8 +781,6 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @param <T> The type of the mapped collection
 	 */
 	class StaticFilteredOrderedCollection<E, T> extends StaticFilteredCollection<E, T> implements ObservableOrderedCollection<T> {
-		private final List<StaticFilteredOrderedElement<T>> theFilteredElements = new java.util.ArrayList<>();
-
 		StaticFilteredOrderedCollection(ObservableOrderedCollection<E> wrap, TypeToken<T> type, Function<? super E, FilterMapResult<T>> map,
 			Function<? super T, E> reverse) {
 			super(wrap.safe(), type, map, reverse);
@@ -795,11 +793,24 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 		@Override
 		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<T>> onElement) {
-			return onElement(element -> {
+			return onElement(element -> onElement.accept((ObservableOrderedElement<T>) element));
+		}
+
+		@Override
+		public Subscription onElement(Consumer<? super ObservableElement<T>> onElement) {
+			final List<StaticFilteredOrderedElement<T>> filteredElements = new java.util.ArrayList<>();
+			return super.onElement(element -> {
 				StaticFilteredOrderedElement<T> filteredEl = new StaticFilteredOrderedElement<>((ObservableOrderedElement<T>) element,
-					theFilteredElements);
-				// TODO similar to dynamic, but only keep track of the passing ones
-				onElement.accept((ObservableOrderedElement<T>) element);
+					filteredElements);
+				int filteredIndex = Collections.binarySearch(filteredElements, filteredEl,
+					(fEl1, fEl2) -> fEl1.getWrapped().getIndex() - fEl2.getWrapped().getIndex());
+				if (filteredIndex >= 0)
+					throw new IllegalStateException(
+						"Index " + filteredEl.getWrapped().getIndex() + " already present in filtered elements");
+				filteredElements.add(-filteredIndex - 1, filteredEl);
+				onElement.accept(filteredEl);
+				filteredEl.getWrapped().completed().act(elValue -> filteredElements.remove(filteredEl.getIndex()));
+				// onElement.accept((ObservableOrderedElement<T>) element);
 			});
 		}
 	}
@@ -860,8 +871,6 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @param <T> The type of the mapped collection
 	 */
 	class DynamicFilteredOrderedCollection<E, T> extends DynamicFilteredCollection<E, T> implements ObservableOrderedCollection<T> {
-		private final List<DynamicFilteredOrderedElement<E, T>> theFilteredElements = new java.util.ArrayList<>();
-
 		DynamicFilteredOrderedCollection(ObservableOrderedCollection<E> wrap, TypeToken<T> type,
 			Function<? super E, FilterMapResult<T>> map, Function<? super T, E> reverse) {
 			super(wrap.safe(), type, map, reverse);
@@ -873,19 +882,25 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		}
 
 		@Override
-		protected DynamicFilteredOrderedElement<E, T> filter(ObservableElement<E> element) {
+		protected DynamicFilteredOrderedElement<E, T> filter(ObservableElement<E> element, Object meta) {
+			List<DynamicFilteredOrderedElement<E, T>> filteredElements = (List<DynamicFilteredOrderedElement<E, T>>) meta;
 			ObservableOrderedElement<E> outerEl = (ObservableOrderedElement<E>) element;
 			DynamicFilteredOrderedElement<E, T> retElement = d()
-				.debug(new DynamicFilteredOrderedElement<>(outerEl, getMap(), getType(), theFilteredElements))
+				.debug(new DynamicFilteredOrderedElement<>(outerEl, getMap(), getType(), filteredElements))
 				.from("element", this).tag("wrapped", element).get();
-			theFilteredElements.add(outerEl.getIndex(), retElement);
-			outerEl.completed().act(elValue -> theFilteredElements.remove(outerEl.getIndex()));
+			filteredElements.add(outerEl.getIndex(), retElement);
+			outerEl.completed().act(elValue -> filteredElements.remove(outerEl.getIndex()));
 			return retElement;
 		}
 
 		@Override
+		public Subscription onElement(Consumer<? super ObservableElement<T>> onElement) {
+			return onOrderedElement(onElement);
+		}
+
+		@Override
 		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<T>> onElement) {
-			return onElement(element -> onElement.accept((ObservableOrderedElement<T>) element));
+			return super.onElement(element -> onElement.accept((ObservableOrderedElement<T>) element), new ArrayList<>());
 		}
 	}
 
@@ -895,13 +910,13 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @param <T> The type of this element
 	 * @param <E> The type of element wrapped by this element
 	 */
-	class DynamicFilteredOrderedElement<E, T> extends FilteredElement<E, T> implements ObservableOrderedElement<T> {
-		private List<DynamicFilteredOrderedElement<E, T>> theFilteredElements;
+	class DynamicFilteredOrderedElement<E, T> extends DynamicFilteredElement<E, T> implements ObservableOrderedElement<T> {
+		private final List<DynamicFilteredOrderedElement<E, T>> theFilteredElements;
 
 		DynamicFilteredOrderedElement(ObservableOrderedElement<E> wrapped, Function<? super E, FilterMapResult<T>> map, TypeToken<T> type,
-			List<DynamicFilteredOrderedElement<E, T>> filteredEls) {
+			List<DynamicFilteredOrderedElement<E, T>> filteredElements) {
 			super(wrapped, map, type);
-			theFilteredElements = filteredEls;
+			theFilteredElements = filteredElements;
 		}
 
 		@Override

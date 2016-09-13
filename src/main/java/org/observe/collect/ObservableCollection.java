@@ -1915,15 +1915,14 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			super(wrap, type, map, reverse);
 		}
 
-		protected FilteredElement<E, T> filter(ObservableElement<E> element) {
-			return d().debug(new FilteredElement<>(element, getMap(), getType())).from("element", this).tag("wrapped", element).get();
+		protected DynamicFilteredElement<E, T> filter(ObservableElement<E> element, Object meta) {
+			return d().debug(new DynamicFilteredElement<>(element, getMap(), getType())).from("element", this).tag("wrapped", element).get();
 		}
 
-		@Override
-		public Subscription onElement(Consumer<? super ObservableElement<T>> onElement) {
+		protected Subscription onElement(Consumer<? super ObservableElement<T>> onElement, Object meta) {
 			SimpleObservable<Void> unSubObs = new SimpleObservable<>();
 			Subscription collSub = getWrapped().onElement(element -> {
-				FilteredElement<E, T> retElement = filter(element);
+				DynamicFilteredElement<E, T> retElement = filter(element, meta);
 				element.unsubscribeOn(unSubObs).act(elValue -> {
 					if(!retElement.isIncluded()) {
 						FilterMapResult<T> mapped = getMap().apply(elValue.getValue());
@@ -1937,6 +1936,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 				unSubObs.onNext(null);
 			};
 		}
+
+		@Override
+		public Subscription onElement(Consumer<? super ObservableElement<T>> onElement) {
+			return onElement(onElement, null);
+		}
 	}
 
 	/**
@@ -1945,7 +1949,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @param <T> The type of this element
 	 * @param <E> The type of element being wrapped
 	 */
-	class FilteredElement<E, T> implements ObservableElement<T> {
+	class DynamicFilteredElement<E, T> implements ObservableElement<T> {
 		private final ObservableElement<E> theWrappedElement;
 		private final Function<? super E, FilterMapResult<T>> theMap;
 
@@ -1959,7 +1963,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		 * @param map The mapping function to filter on
 		 * @param type The type of the element
 		 */
-		protected FilteredElement(ObservableElement<E> wrapped, Function<? super E, FilterMapResult<T>> map, TypeToken<T> type) {
+		protected DynamicFilteredElement(ObservableElement<E> wrapped, Function<? super E, FilterMapResult<T>> map, TypeToken<T> type) {
 			theWrappedElement = wrapped;
 			theMap = map;
 			theType = type;
