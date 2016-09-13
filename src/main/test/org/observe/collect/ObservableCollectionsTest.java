@@ -72,14 +72,14 @@ public class ObservableCollectionsTest {
 		QommonsTestUtils.testCollection(coll, check, v -> {
 			if (v instanceof ObservableCollection)
 				return (Consumer<? super T>) testingObservableCollection((ObservableCollection<Integer>) v,
-						(Consumer<? super ObservableCollection<Integer>>) check, depth);
+					(Consumer<? super ObservableCollection<Integer>>) check, depth);
 			else
 				return null;
 		} , depth);
 	}
 
 	private static <T extends ObservableCollection<Integer>> Checker<ObservableCollection<Integer>> testingObservableCollection(T coll,
-			Consumer<? super T> check, int depth) {
+		Consumer<? super T> check, int depth) {
 
 		boolean ordered = coll instanceof ObservableOrderedCollection;
 		ArrayList<Integer> synced = new ArrayList<>();
@@ -224,7 +224,7 @@ public class ObservableCollectionsTest {
 				assertThat(groupedSynced.keySet(), collectionsEqual(groupKeySet, false));
 				for(Integer groupKey : groupKeySet) {
 					List<Integer> values = synced.stream().filter(v -> Objects.equals(groupFn.apply(v), groupKey))
-							.collect(Collectors.toList());
+						.collect(Collectors.toList());
 					assertThat(grouped.get(groupKey), collectionsEqual(values, ordered));
 					assertThat(groupedSynced.get(groupKey), collectionsEqual(values, ordered));
 				}
@@ -412,7 +412,7 @@ public class ObservableCollectionsTest {
 	 * @return The subscription to use to terminate the synchronization
 	 */
 	public static <K, V, C extends Collection<V>> Subscription sync(ObservableMultiMap<K, V> map, Map<K, C> synced,
-			Supplier<? extends C> collectCreator) {
+		Supplier<? extends C> collectCreator) {
 		return map.keySet().onElement(el -> el.subscribe(new Observer<ObservableValueEvent<K>>() {
 			@Override
 			public <E extends ObservableValueEvent<K>> void onNext(E event) {
@@ -473,8 +473,8 @@ public class ObservableCollectionsTest {
 	@Test
 	public void testObservableLinkedList() {
 		testCollection(new ObservableLinkedList<>(TypeToken.of(Integer.class)),
-				// Easier to debug this way
-				list -> list.validate(), 0);
+			// Easier to debug this way
+			list -> list.validate(), 0);
 	}
 
 	/** Runs a barrage of tests on {@link ObservableTreeList} */
@@ -1619,7 +1619,7 @@ public class ObservableCollectionsTest {
 			assertEquals(correct, compare);
 		}
 
-		for(int i = 30; i >= 0; i--) {
+		for (int i = -20; i >= -50; i--) {
 			list.remove((Integer) i);
 			correct.remove((Integer) i);
 
