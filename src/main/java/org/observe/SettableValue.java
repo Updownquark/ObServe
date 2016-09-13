@@ -181,7 +181,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 		SettableValue<T> root = this;
 		return d().debug(new ComposedSettableValue<R>(type, d().lambda(args -> {
 			return function.apply((T) args[0], (U) args[1]);
-		}, "combineV"), combineNull, this) {
+		}, "combineV"), combineNull, this, arg) {
 			@Override
 			public <V extends R> R set(V value, Object cause) throws IllegalArgumentException {
 				U argVal = arg.get();
@@ -223,7 +223,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 		SettableValue<T> root = this;
 		return d().debug(new ComposedSettableValue<R>(type, args -> {
 			return function.apply((T) args[0], (U) args[1]);
-		}, combineNull, this) {
+		}, combineNull, this, arg) {
 			@Override
 			public <V extends R> R set(V value, Object cause) throws IllegalArgumentException {
 				U argVal = arg.get();
@@ -289,7 +289,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 		SettableValue<T> root = this;
 		return d().debug(new ComposedSettableValue<R>(type, args -> {
 			return function.apply((T) args[0], (U) args[1], (V) args[2]);
-		}, combineNull, this) {
+		}, combineNull, this, arg2, arg3) {
 			@Override
 			public <V2 extends R> R set(V2 value, Object cause) throws IllegalArgumentException {
 				U arg2Val = arg2.get();
