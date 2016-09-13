@@ -576,7 +576,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<T>> onElement) {
 			SimpleObservable<Void> unSubObs = new SimpleObservable<>();
 			Subscription collSub = getWrapped().onElementReverse(element -> {
-				FilteredOrderedElement<E, T> retElement = filter(element);
+				DynamicFilteredOrderedElement<E, T> retElement = filter(element);
 				element.unsubscribeOn(unSubObs).act(elValue -> {
 					if(!retElement.isIncluded()) {
 						FilterMapResult<T> mapped = getMap().apply(elValue.getValue());
