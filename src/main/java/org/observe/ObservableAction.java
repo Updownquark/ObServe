@@ -1,39 +1,64 @@
 package org.observe;
 
-/** An action with an observable enabled property */
-public interface ObservableAction {
+import com.google.common.reflect.TypeToken;
+
+/**
+ * An action with an observable enabled property
+ *
+ * @param <T> The type of value the action produces
+ */
+public interface ObservableAction<T> {
+	/** @return The run-time type of values that this action produces */
+	TypeToken<T> getType();
+
 	/**
 	 * @param cause An object that may have caused the action (e.g. a user event)
+	 * @return The result of the action
 	 * @throws IllegalStateException If this action is not enabled
 	 */
-	void act(Object cause) throws IllegalStateException;
+	T act(Object cause) throws IllegalStateException;
 
 	/** @return An observable whose value reports null if this value can be set directly, or a string describing why it cannot */
 	ObservableValue<String> isEnabled();
 
 	/**
+	 * @param <T> The type of the action
 	 * @param wrapper An observable value that supplies actions
 	 * @return An action based on the content of the wrapper
 	 */
-	static ObservableAction flatten(ObservableValue<? extends ObservableAction> wrapper) {
-		return new FlattenedObservableAction(wrapper);
+	static <T> ObservableAction<T> flatten(ObservableValue<? extends ObservableAction<? extends T>> wrapper) {
+		return new FlattenedObservableAction<>(wrapper);
 	}
 
 	/**
 	 * An observable action whose methods reflect those of the content of an observable value, or a disabled action when the content is null
+	 *
+	 * @param <T> The type of value the action produces
 	 */
-	class FlattenedObservableAction implements ObservableAction {
-		private final ObservableValue<? extends ObservableAction> theWrapper;
+	class FlattenedObservableAction<T> implements ObservableAction<T> {
+		private final ObservableValue<? extends ObservableAction<? extends T>> theWrapper;
+		private final TypeToken<T> theType;
 
-		protected FlattenedObservableAction(ObservableValue<? extends ObservableAction> wrapper) {
+		protected FlattenedObservableAction(ObservableValue<? extends ObservableAction<? extends T>> wrapper) {
 			theWrapper = wrapper;
+			theType = (TypeToken<T>) wrapper.getType().resolveType(ObservableValue.class.getTypeParameters()[0]);
 		}
 
 		@Override
-		public void act(Object cause) throws IllegalStateException {
-			ObservableAction wrapped = theWrapper.get();
+		public TypeToken<T> getType() {
+			if (theType != null)
+				return theType;
+			ObservableAction<? extends T> outerVal = theWrapper.get();
+			if (outerVal == null)
+				throw new IllegalStateException("Flattened action is null and no type given: " + theWrapper);
+			return (TypeToken<T>) outerVal.getType();
+		}
+
+		@Override
+		public T act(Object cause) throws IllegalStateException {
+			ObservableAction<? extends T> wrapped = theWrapper.get();
 			if (wrapped != null)
-				wrapped.act(cause);
+				return wrapped.act(cause);
 			else
 				throw new IllegalStateException("This wrapper (" + theWrapper + ") is empty");
 		}
