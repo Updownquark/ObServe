@@ -1063,7 +1063,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 			T value = null;
 			for (ObservableValue<? extends T> v : theValues) {
 				value = v.get();
-				if (value != null)
+				if (theTest.test(value))
 					break;
 			}
 			return value;

@@ -1566,6 +1566,13 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 		}
 
 		@Override
+		public Iterator<E> iterator() {
+			TreeSet<E> sorted = new TreeSet<>(theCompare);
+			sorted.addAll(getWrapped());
+			return sorted.iterator();
+		}
+
+		@Override
 		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<E>> onElement) {
 			if (getWrapped() instanceof ObservableReversedCollection)
 				return onElement((Consumer<? super ObservableElement<E>>) onElement, (coll, onEl) -> {
