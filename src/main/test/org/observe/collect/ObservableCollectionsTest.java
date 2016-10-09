@@ -598,6 +598,32 @@ public class ObservableCollectionsTest {
 		}
 	}
 
+	/** Tests {@link ObservableCollection#observeContainsAll(ObservableCollection)} */
+	@Test
+	public void observableContainsAll() {
+		ObservableArrayList<Integer> list1 = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
+		ObservableArrayList<Integer> list2 = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
+		list1.addValues(0, 1, 2, 4, 5, 6, 7, 8);
+		list2.addValues(0, 2, 4, 6, 8, 10);
+		ObservableValue<Boolean> containsAll = list1.observeContainsAll(list2);
+		assertEquals(false, containsAll.get());
+		boolean[] reported = new boolean[1];
+		Subscription sub = containsAll.value().act(ca -> reported[0] = ca);
+		assertEquals(false, reported[0]);
+		list1.add(10);
+		assertEquals(true, reported[0]);
+		list1.remove(10);
+		assertEquals(false, reported[0]);
+		list2.remove(10);
+		assertEquals(true, reported[0]);
+		list2.add(10);
+		assertEquals(false, reported[0]);
+
+		sub.unsubscribe();
+		list2.remove(10);
+		assertEquals(false, reported[0]);
+	}
+
 	/** Tests {@link ObservableSet#map(java.util.function.Function)} */
 	@Test
 	public void observableSetMap() {

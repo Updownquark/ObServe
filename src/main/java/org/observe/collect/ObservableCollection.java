@@ -8,11 +8,16 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Queue;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiFunction;
@@ -30,6 +35,7 @@ import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
+import org.observe.collect.ObservableCollection.1.SatisfiableElement;
 import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.ObservableUtils;
 import org.qommons.Equalizer;
@@ -141,6 +147,18 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 				ret.add(value);
 		}
 		return ret.toArray(a);
+	}
+
+	/**
+	 * @param values The values to add to the collection
+	 * @return This collection
+	 */
+	public default ObservableCollection<E> addValues(E... values) {
+		try (Transaction t = lock(true, null)) {
+			for (E value : values)
+				add(value);
+		}
+		return this;
 	}
 
 	/** @return An observable value for the size of this collection */
@@ -319,6 +337,170 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			@Override
 			public boolean isSafe() {
 				return outer.isSafe();
+			}
+		};
+	}
+
+	/**
+	 * TODO Make this method transaction-sensitive
+	 *
+	 * @param <X> The type of the collection to test
+	 * @param collection The collection to test
+	 * @return An observable boolean whose value is whether this collection contains every element of the given collection, according to
+	 *         {@link Object#equals(Object)}
+	 */
+	default <X> ObservableValue<Boolean> observeContainsAll(ObservableCollection<X> collection) {
+		return new ObservableValue<Boolean>() {
+			@Override
+			public TypeToken<Boolean> getType() {
+				return TypeToken.of(Boolean.TYPE);
+			}
+
+			@Override
+			public boolean isSafe() {
+				return true;
+			}
+
+			@Override
+			public Boolean get() {
+				return containsAll(collection);
+			}
+
+			@Override
+			public Subscription subscribe(Observer<? super ObservableValueEvent<Boolean>> observer) {
+				AtomicBoolean allSatisfied = new AtomicBoolean(true);
+				Queue<ObservableElement<E>> emptyElements = new LinkedList<>();
+				Map<E, Queue<ObservableElement<E>>> elementsByValue = new HashMap<>();
+				boolean[] init = new boolean[] { true };
+				class SatisfiableElement implements Observer<ObservableValueEvent<X>> {
+					private final Collection<SatisfiableElement> xElements;
+					private boolean isSatisfied;
+					private Subscription satisfierSub;
+
+					SatisfiableElement(Collection<SatisfiableElement> els) {
+						xElements = els;
+					}
+
+					@Override
+					public <V extends ObservableValueEvent<X>> void onNext(V event) {
+						if (!event.isInitial() && Objects.equals(event.getValue(), event.getOldValue()))
+							return;
+						if (!event.isInitial())
+							release();
+						check(event.getValue(), event);
+					}
+
+					@Override
+					public <V extends ObservableValueEvent<X>> void onCompleted(V event) {
+						release();
+						xElements.remove(this);
+						if (!isSatisfied && !allSatisfied.get())
+							checkAll(event);
+					}
+
+					private void release() {
+						if (satisfierSub != null) {
+							satisfierSub.unsubscribe();
+							satisfierSub = null;
+						}
+					}
+
+					void check(X value, Object cause) {
+						boolean[] initSatisfied = new boolean[1];
+						while (!initSatisfied[0]) {
+							ObservableElement<E> element = elementsByValue.getOrDefault(value, emptyElements).peek();
+							if (element == null) {
+								setSatisfied(false, cause);
+								break;
+							} else {
+								element.subscribe(new Observer<ObservableValueEvent<E>>() {
+									@Override
+									public <V extends ObservableValueEvent<E>> void onNext(V event2) {
+										if (event2.isInitial()) {
+											initSatisfied[0] = Objects.equals(value, event2.getValue());
+											if (initSatisfied[0])
+												setSatisfied(true, event2);
+										} else if (!Objects.equals(value, event2.getValue())) {
+											release();
+											check(value, event2);
+										}
+									}
+
+									@Override
+									public <V extends ObservableValueEvent<E>> void onCompleted(V event2) {
+										release();
+										check(value, event2);
+									}
+								});
+							}
+						}
+					}
+
+					private void setSatisfied(boolean satisfied, Object cause) {
+						if (init[0])
+							isSatisfied = satisfied;
+						else if (satisfied != isSatisfied) {
+							isSatisfied = satisfied;
+							if (!isSatisfied && allSatisfied.getAndSet(false)) {
+								observer.onNext(createChangeEvent(!isSatisfied, isSatisfied, cause));
+							} else if (isSatisfied && !allSatisfied.get())
+								checkAll(cause);
+						}
+					}
+				}
+				Set<SatisfiableElement> xElements = new HashSet<>();
+				Subscription sub1 = ObservableCollection.this.safe().onElement(el -> {
+					el.subscribe(new Observer<ObservableValueEvent<E>>() {
+						@Override
+						public <V extends ObservableValueEvent<E>> void onNext(V event) {
+							Queue<ObservableElement<E>> elements = elementsByValue.computeIfAbsent(event.getValue(),
+								v -> new LinkedList<>());
+							if (!event.isInitial())
+								elements.remove(event.getOldValue());
+							elements.add(el);
+							if (!allSatisfied.get()) {
+							}
+						}
+
+						@Override
+						public <V extends ObservableValueEvent<E>> void onCompleted(V event) {
+							elementsByValue.computeIfAbsent(event.getValue(), v -> new LinkedList<>()).remove(event.getValue());
+						}
+					});
+				});
+				Subscription sub2 = collection.safe().onElement(el -> {
+					SatisfiableElement xEl = new SatisfiableElement(xElements);
+					xElements.add(xEl);
+					el.subscribe(xEl);
+				});
+				init[0] = false;
+				{
+					boolean allSat = true;
+					for (SatisfiableElement el : xElements) {
+						if (!el.isSatisfied) {
+							allSat = false;
+							break;
+						}
+					}
+					allSatisfied.set(allSat);
+					observer.onNext(createInitialEvent(allSat));
+				}
+				return () -> {
+					sub1.unsubscribe();
+					sub2.unsubscribe();
+				};
+			}
+
+			private void checkAll(Object cause) {
+				boolean allSat = true;
+				for (SatisfiableElement el : xElements) {
+					if (!el.isSatisfied) {
+						allSat = false;
+						break;
+					}
+				}
+				if (!init[0] && allSat != allSatisfied.getAndSet(allSat))
+					observer.onNext(createChangeEvent(!allSat, allSat, cause));
 			}
 		};
 	}
