@@ -1293,7 +1293,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @param value The value to test removability for
 	 * @return Whether the given value could possibly be removed from this collection
 	 */
-	boolean canRemove(E value);
+	boolean canRemove(Object value);
 
 	/**
 	 * Tests the compatibility of an object with this collection. This method exposes a "best guess" on whether an element could be added to
@@ -1332,6 +1332,15 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 */
 	default ObservableCollection<E> unsubscribeOn(Observable<?> until) {
 		return d().debug(new TakenUntilObservableCollection<>(this, until, true)).from("take", this).from("until", until).get();
+	}
+
+	/**
+	 * @param type The type of the collection
+	 * @param collection The collection
+	 * @return An immutable collection with the same values as those in the given collection
+	 */
+	public static <E> ObservableCollection<E> constant(TypeToken<E> type, Collection<E> collection){
+		return d().debug(new ConstantObservableCollection<>(type, collection)).get();
 	}
 
 	/**
@@ -1807,9 +1816,9 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public boolean canRemove(T value) {
-			if (theReverse != null)
-				return theWrapped.canRemove(theReverse.apply(value));
+		public boolean canRemove(Object value) {
+			if (theReverse != null && (value == null || theType.getRawType().isInstance(value)))
+				return theWrapped.canRemove(theReverse.apply((T) value));
 			else
 				return false;
 		}
@@ -2010,9 +2019,9 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public boolean canRemove(T value) {
-			if (theReverse != null)
-				return theWrapped.canRemove(theReverse.apply(value));
+		public boolean canRemove(Object value) {
+			if (theReverse != null && (value == null || theType.getRawType().isInstance(value)))
+				return theWrapped.canRemove(theReverse.apply((T) value));
 			else
 				return false;
 		}
@@ -2381,9 +2390,9 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public boolean canRemove(V value) {
-			if (theReverse != null)
-				return theWrapped.canRemove(theReverse.apply(value, theValue.get()));
+		public boolean canRemove(Object value) {
+			if (theReverse != null && (value == null || theType.getRawType().isInstance(value)))
+				return theWrapped.canRemove(theReverse.apply((V) value, theValue.get()));
 			else
 				return false;
 		}
@@ -2606,7 +2615,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public boolean canRemove(E value) {
+		public boolean canRemove(Object value) {
 			return theElements.canRemove(value);
 		}
 
@@ -2781,7 +2790,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public boolean canRemove(E value) {
+		public boolean canRemove(Object value) {
 			return theWrapped.canRemove(value);
 		}
 
@@ -2862,7 +2871,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public boolean canRemove(E value) {
+		public boolean canRemove(Object value) {
 			return theWrapped.canRemove(value);
 		}
 
@@ -2943,7 +2952,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public boolean canRemove(E value) {
+		public boolean canRemove(Object value) {
 			return false;
 		}
 
@@ -3183,8 +3192,9 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public boolean canRemove(E value) {
-			if (theRemoveFilter != null && !theRemoveFilter.test(value))
+		public boolean canRemove(Object value) {
+			if (theRemoveFilter != null && (value == null || theWrapped.getType().getRawType().isInstance(value))
+				&& !theRemoveFilter.test((E) value))
 				return false;
 			return theWrapped.canRemove(value);
 		}
@@ -3377,7 +3387,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public boolean canRemove(E value) {
+		public boolean canRemove(Object value) {
 			return theWrapped.canRemove(value);
 		}
 
@@ -3471,7 +3481,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public boolean canRemove(E value) {
+		public boolean canRemove(Object value) {
 			return theWrapped.canRemove(value);
 		}
 
@@ -3588,6 +3598,97 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	}
 
 	/**
+	 * Implements {@link ObservableCollection#constant(TypeToken, Collection)}
+	 * 
+	 * @param <E> The type of elements in the collection
+	 */
+	class ConstantObservableCollection<E> implements PartialCollectionImpl<E> {
+		private final TypeToken<E> theType;
+		private final Collection<E> theCollection;
+
+		public ConstantObservableCollection(TypeToken<E> type, Collection<E> collection) {
+			theType = type;
+			theCollection = collection;
+		}
+
+		@Override
+		public TypeToken<E> getType() {
+			return theType;
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			return ObservableValue.constant(TypeToken.of(CollectionSession.class), null);
+		}
+
+		@Override
+		public boolean isSafe() {
+			return true;
+		}
+
+		@Override
+		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
+			for (E value : theCollection)
+				onElement.accept(new ObservableElement<E>() {
+					@Override
+					public TypeToken<E> getType() {
+						return theType;
+					}
+
+					@Override
+					public E get() {
+						return value;
+					}
+
+					@Override
+					public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
+						observer.onNext(createInitialEvent(value));
+						return () -> {
+						};
+					}
+
+					@Override
+					public boolean isSafe() {
+						return true;
+					}
+
+					@Override
+					public ObservableValue<E> persistent() {
+						return this;
+					}
+				});
+			return () -> {
+			};
+		}
+
+		@Override
+		public boolean canRemove(Object value) {
+			return false;
+		}
+
+		@Override
+		public boolean canAdd(E value) {
+			return false;
+		}
+
+		@Override
+		public int size() {
+			return theCollection.size();
+		}
+
+		@Override
+		public Iterator<E> iterator() {
+			return IterableUtils.immutableIterator(theCollection.iterator());
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return () -> {
+			};
+		}
+	}
+
+	/**
 	 * Implements {@link ObservableCollection#flattenValues(ObservableCollection)}
 	 *
 	 * @param <E> The type of elements in the collection
@@ -3658,7 +3759,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public boolean canRemove(E value) {
+		public boolean canRemove(Object value) {
 			return false;
 		}
 
@@ -3789,7 +3890,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public boolean canRemove(E value) {
+		public boolean canRemove(Object value) {
 			ObservableCollection<E> current = theCollectionObservable.get();
 			if (current == null)
 				return false;
@@ -3868,31 +3969,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		@Override
 		public Transaction lock(boolean write, Object cause) {
-			Transaction outerLock = theOuter.lock(write, cause);
-			Transaction[] innerLocks = new Transaction[theOuter.size()];
-			int i = 0;
-			for (ObservableCollection<? extends E> c : theOuter) {
-				innerLocks[i++] = c.lock(write, cause);
-			}
-			return new Transaction() {
-				private volatile boolean hasRun;
-
-				@Override
-				public void close() {
-					if (hasRun)
-						return;
-					hasRun = true;
-					for (int j = innerLocks.length - 1; j >= 0; j--)
-						innerLocks[j].close();
-					outerLock.close();
-				}
-
-				@Override
-				protected void finalize() {
-					if (!hasRun)
-						close();
-				}
-			};
+			return CombinedCollectionSessionObservable.lock(theOuter, write, cause);
 		}
 
 		@Override
@@ -3919,7 +3996,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public boolean canRemove(E value) {
+		public boolean canRemove(Object value) {
 			return false;
 		}
 

@@ -404,7 +404,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 			}
 
 			@Override
-			public boolean canRemove(T value) {
+			public boolean canRemove(Object value) {
 				return false;
 			}
 
@@ -518,7 +518,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 			}
 
 			@Override
-			public boolean canRemove(T value) {
+			public boolean canRemove(Object value) {
 				return false;
 			}
 
@@ -759,8 +759,10 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 		}
 
 		@Override
-		public boolean canRemove(E value) {
-			if (!isInRange(value))
+		public boolean canRemove(Object value) {
+			if (value != null || !theWrapped.getType().getRawType().isInstance(value))
+				return false;
+			if (!isInRange((E) value))
 				return false;
 			return theWrapped.canRemove(value);
 		}

@@ -7,6 +7,7 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
 import org.qommons.ListenerSet;
+import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeToken;
 
@@ -94,5 +95,42 @@ public class CombinedCollectionSessionObservable implements ObservableValue<Coll
 	@Override
 	public boolean isSafe() {
 		return true;
+	}
+
+	/**
+	 * An implementation of {@link ObservableCollection#lock(boolean, Object)} for a collection implementation that uses a collection of
+	 * collections
+	 * 
+	 * @param collection The collection of collections
+	 * @param write Whether to lock for write
+	 * @param cause The cause of the change
+	 * @return The transaction to close when the operation is finished
+	 */
+	public static Transaction lock(ObservableCollection<? extends ObservableCollection<?>> collection, boolean write, Object cause) {
+		Transaction outerLock = collection.lock(write, cause);
+		Transaction[] innerLocks = new Transaction[collection.size()];
+		int i = 0;
+		for (ObservableCollection<?> c : collection) {
+			innerLocks[i++] = c.lock(write, cause);
+		}
+		return new Transaction() {
+			private volatile boolean hasRun;
+
+			@Override
+			public void close() {
+				if (hasRun)
+					return;
+				hasRun = true;
+				for (int j = innerLocks.length - 1; j >= 0; j--)
+					innerLocks[j].close();
+				outerLock.close();
+			}
+
+			@Override
+			protected void finalize() {
+				if (!hasRun)
+					close();
+			}
+		};
 	}
 }

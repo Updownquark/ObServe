@@ -409,7 +409,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 			}
 
 			@Override
-			public boolean canRemove(T value) {
+			public boolean canRemove(Object value) {
 				return false;
 			}
 
@@ -1142,7 +1142,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 	/**
 	 * Implements {@link ObservableList#observeAt(int, Function)}
-	 * 
+	 *
 	 * @param <E> The type of the element
 	 */
 	class ListPositionObservable<E> extends PositionObservable<E> implements SettableValue<E> {
@@ -2175,7 +2175,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		}
 
 		@Override
-		public boolean canRemove(T value) {
+		public boolean canRemove(Object value) {
 			return theWrapped.canRemove(value);
 		}
 

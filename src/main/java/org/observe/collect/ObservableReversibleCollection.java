@@ -347,7 +347,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 		}
 
 		@Override
-		public boolean canRemove(E value) {
+		public boolean canRemove(Object value) {
 			return theWrapped.canRemove(value);
 		}
 

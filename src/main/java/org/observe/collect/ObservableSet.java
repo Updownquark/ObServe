@@ -10,10 +10,13 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -109,7 +112,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	default <T> ObservableSet<T> filter(Class<T> type) {
 		Predicate<E> filter = value -> type.isInstance(value);
 		return d().debug(new StaticFilteredSet<>(this, TypeToken.of(type), filter)).from("filterMap", this).using("filter", filter)
-				.tag("filterType", type).get();
+			.tag("filterType", type).get();
 	}
 
 	/**
@@ -201,6 +204,23 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 		return d().debug(new FlattenedValueSet<>(collectionObservable)).from("flatten", collectionObservable).get();
 	}
 
+	public static <E> ObservableSet<E> intersect(TypeToken<E> type, Collection<? extends ObservableSet<? extends E>> sets, Equalizer equalizer) {
+		TypeToken<ObservableSet<? extends E>> setType = new TypeToken<ObservableSet<? extends E>>() {}.where(new TypeParameter<E>() {},
+			type);
+		ObservableCollection<ObservableSet<? extends E>> obSets = ObservableCollection.constant(setType,
+			(Collection<ObservableSet<? extends E>>) sets);
+		return combine(obSets, equalizer, sets.size(), Integer.MAX_VALUE);
+	}
+
+	public static <E> ObservableSet<E> union(ObservableCollection<? extends ObservableSet<? extends E>> sets, Equalizer equalizer) {
+		return combine(sets, equalizer, 1, Integer.MAX_VALUE);
+	}
+
+	public static <E> ObservableSet<E> combine(ObservableCollection<? extends ObservableSet<? extends E>> sets, Equalizer equalizer,
+		int minCount, int maxCount) {
+		return new SetCombination<>(sets, equalizer, minCount, maxCount);
+	}
+
 	/**
 	 * A default toString() method for set implementations to use
 	 *
@@ -278,7 +298,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 				return constSet.iterator();
 			}
 			@Override
-			public boolean canRemove(T value) {
+			public boolean canRemove(Object value) {
 				return false;
 			}
 
@@ -659,6 +679,232 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	}
 
 	/**
+	 * Implements {@link ObservableSet#combine(ObservableCollection, Equalizer, Supplier, Supplier)}
+	 *
+	 * @param <E> The super type of elements in the collection
+	 */
+	class SetCombination<E> implements PartialSetImpl<E> {
+		private final ObservableCollection<? extends ObservableSet<? extends E>> theSets;
+		private final TypeToken<E> theType;
+		private final Equalizer theEqualizer;
+		private final int theMinCount;
+		private final int theMaxCount;
+		private final CombinedCollectionSessionObservable theSession;
+
+		public SetCombination(ObservableCollection<? extends ObservableSet<? extends E>> sets, Equalizer equalizer,
+			int minCount, int maxCount) {
+			theSets = sets;
+			theType = (TypeToken<E>) theSets.getType().resolveType(ObservableCollection.class.getTypeParameters()[0]);
+			theEqualizer = equalizer;
+			theMinCount = minCount;
+			theMaxCount = maxCount;
+			theSession = new CombinedCollectionSessionObservable(theSets);
+		}
+
+		@Override
+		public TypeToken<E> getType() {
+			return theType;
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			return theSession;
+		}
+
+		@Override
+		public boolean isSafe() {
+			return false;
+		}
+
+		@Override
+		public boolean canRemove(Object value) {
+			int count = 0;
+			for (ObservableSet<? extends E> setEl : theSets) {
+				if (!setEl.canRemove(value) && setEl.contains(value))
+					count++;
+			}
+			return count < theMinCount;
+		}
+
+		@Override
+		public boolean canAdd(E value) {
+			int count = 0;
+			int addableCount = 0;
+			int removableCount = 0;
+			for (ObservableSet<? extends E> setEl : theSets) {
+				if (setEl.contains(value)) {
+					count++;
+					if (setEl.canRemove(value))
+						removableCount++;
+				} else if (canAdd(setEl, value))
+					addableCount++;
+			}
+			return count + addableCount >= theMinCount && count - removableCount <= theMaxCount;
+		}
+
+		private <T extends E> boolean canAdd(ObservableSet<T> setEl, E value) {
+			if (value == null || setEl.getType().getRawType().isInstance(value))
+				return setEl.canAdd((T) value);
+			else
+				return false;
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return CombinedCollectionSessionObservable.lock(theSets, write, cause);
+		}
+
+		@Override
+		public int size() {
+			Map<Equalizer.EqualizerNode<E>, int[]> elementCounts = new LinkedHashMap<>();
+			for (ObservableSet<? extends E> setEl : theSets)
+				for (E el : setEl)
+					elementCounts.computeIfAbsent(theEqualizer.nodeFor(el), n -> new int[1])[0]++;
+			return (int) elementCounts.entrySet().stream().filter(e -> e.getValue()[0] >= theMinCount && e.getValue()[0] <= theMaxCount)
+				.count();
+		}
+
+		@Override
+		public Iterator<E> iterator() {
+			if (theMaxCount >= theSets.size()) {
+				return new Iterator<E>() {
+					private final Iterator<? extends ObservableSet<? extends E>> outerIter = theSets.iterator();
+					private Iterator<? extends E> innerIter;
+					private Map<Equalizer.EqualizerNode<E>, int[]> elementCounts = new LinkedHashMap<>();
+					private boolean isReady;
+					private E theNextValue;
+					private boolean hadGoodValue;
+
+					@Override
+					public boolean hasNext() {
+						if (isReady)
+							return true;
+						while (!isReady) {
+							if (innerIter == null || !innerIter.hasNext()) {
+								if (outerIter.hasNext()) {
+									hadGoodValue = false; // Don't remove from the new iterator
+									innerIter = outerIter.next().iterator();
+								} else
+									break;
+							}
+							while (innerIter.hasNext()) {
+								E value = innerIter.next();
+								int[] count = elementCounts.computeIfAbsent(theEqualizer.nodeFor(value), n -> new int[1]);
+								count[0]++;
+								if (count[0] == theMinCount) {
+									theNextValue = value;
+									isReady = true;
+									break;
+								}
+							}
+						}
+						return isReady;
+					}
+
+					@Override
+					public E next() {
+						if (!isReady && !hasNext())
+							throw new java.util.NoSuchElementException();
+						isReady = false;
+						hadGoodValue = true;
+						return theNextValue;
+					}
+
+					@Override
+					public void remove() {
+						if (hadGoodValue) {
+							hadGoodValue = false;
+							innerIter.remove();
+						} else
+							throw new IllegalStateException("Call remove() right after next()");
+					}
+				};
+			} else {
+				Map<Equalizer.EqualizerNode<E>, int[]> elementCounts = new LinkedHashMap<>();
+				for (ObservableSet<? extends E> setEl : theSets)
+					for (E el : setEl)
+						elementCounts.computeIfAbsent(theEqualizer.nodeFor(el), n -> new int[1])[0]++;
+				return new Iterator<E>() {
+					private final Iterator<Map.Entry<Equalizer.EqualizerNode<E>, int[]>> entryIter = elementCounts.entrySet().iterator();
+					private Map.Entry<Equalizer.EqualizerNode<E>, int[]> theLastEntry;
+					private boolean isReady;
+					private boolean hadGoodValue;
+
+					@Override
+					public boolean hasNext() {
+						if (isReady)
+							return true;
+						hadGoodValue = false;
+						while (entryIter.hasNext()) {
+							theLastEntry = entryIter.next();
+							if (theLastEntry.getValue()[0] >= theMinCount && theLastEntry.getValue()[0] <= theMaxCount)
+								break;
+						}
+						return isReady;
+					}
+
+					@Override
+					public E next() {
+						if (!isReady && !hasNext())
+							throw new java.util.NoSuchElementException();
+						isReady = false;
+						hadGoodValue = true;
+						return theLastEntry.getKey().get();
+					}
+
+					@Override
+					public void remove() {
+						if (!hadGoodValue)
+							throw new IllegalStateException("Call remove() right after next()");
+						hadGoodValue = false;
+						entryIter.remove();
+						for (ObservableSet<? extends E> setEl : theSets) {
+							if (setEl.canRemove(theLastEntry.getKey().get()) && setEl.remove(theLastEntry.getKey().get())) {
+								theLastEntry.getValue()[0]--;
+								if (theLastEntry.getValue()[0] < theMinCount)
+									break;
+							}
+						}
+					}
+				};
+			}
+		}
+
+		@Override
+		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
+			class CountedElement{
+				final AtomicInteger count=new AtomicInteger();
+				final java.util.concurrent.ConcurrentLinkedQueue<ObservableElement<? ex>
+			}
+			ConcurrentHashMap<Equalizer.EqualizerNode<E>, AtomicInteger> elementCounts=new ConcurrentHashMap<>();
+			return theSets.onElement(outerEl->{
+				outerEl.get().takeUntil(outerEl).onElement(innerEl->{
+					innerEl.subscribe(new Observer<ObservableValueEvent<? extends E>>(){
+						@Override
+						public <V extends ObservableValueEvent<? extends E>> void onNext(V event) {
+							// TODO Auto-generated method stub
+
+						}
+
+						@Override
+						public <V extends ObservableValueEvent<? extends E>> void onCompleted(V event) {
+							int newCount=elementCounts.get(theEqualizer.nodeFor(event.getValue())).decrementAndGet();
+							if(newCount<theMinCount)
+								// TODO Auto-generated method stub
+
+						}
+					});
+				});
+			});
+		}
+
+		@Override
+		public Equalizer getEqualizer() {
+			return theEqualizer;
+		}
+	}
+
+	/**
 	 * Implements {@link ObservableSet#flattenValue(ObservableValue)}
 	 *
 	 * @param <E> The type of elements in the set
@@ -737,7 +983,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 		}
 
 		@Override
-		public boolean canRemove(E value) {
+		public boolean canRemove(Object value) {
 			return theCollection.canRemove(value);
 		}
 
@@ -793,7 +1039,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 		}
 
 		protected Subscription onElement(Consumer<? super ObservableElement<E>> onElement,
-				BiFunction<ObservableCollection<E>, Consumer<? super ObservableElement<E>>, Subscription> subscriber) {
+			BiFunction<ObservableCollection<E>, Consumer<? super ObservableElement<E>>, Subscription> subscriber) {
 			final UniqueElementTracking tracking = createElementTracking();
 			return subscriber.apply(theCollection, element -> {
 				element.subscribe(new Observer<ObservableValueEvent<E>>() {
@@ -874,7 +1120,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 			isAlwaysUsingFirst = alwaysUseFirst;
 			theElements = createElements();
 			theCurrentElement = new SimpleSettableValue<>(
-					new TypeToken<ObservableElement<E>>() {}.where(new TypeParameter<E>() {}, theSet.getType()), true);
+				new TypeToken<ObservableElement<E>>() {}.where(new TypeParameter<E>() {}, theSet.getType()), true);
 		}
 
 		protected Collection<ObservableElement<E>> createElements() {

@@ -1064,7 +1064,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		}
 
 		@Override
-		public boolean canRemove(E value) {
+		public boolean canRemove(Object value) {
 			return theWrapped.canRemove(value);
 		}
 
