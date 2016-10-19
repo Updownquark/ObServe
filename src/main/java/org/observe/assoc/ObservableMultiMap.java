@@ -396,7 +396,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			}
 
 			@Override
-			public boolean canRemove(V value) {
+			public boolean canRemove(Object value) {
 				return entryFor(key).canRemove(value);
 			}
 
@@ -775,7 +775,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		}
 
 		@Override
-		public boolean canRemove(V value) {
+		public boolean canRemove(Object value) {
 			ObservableCollection<V> current = getWrapped();
 			if (current == null)
 				return false;

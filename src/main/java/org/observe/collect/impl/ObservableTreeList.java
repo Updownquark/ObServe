@@ -58,7 +58,7 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 	 *            not actually create transactions.
 	 */
 	public ObservableTreeList(TypeToken<E> type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
-			Transactable sessionController) {
+		Transactable sessionController) {
 		theType = type.wrap();
 		theInternals = new TreeListInternals(lock, session, sessionController, write -> {
 			if(write)
@@ -346,7 +346,7 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 	}
 
 	@Override
-	public boolean canRemove(E value) {
+	public boolean canRemove(Object value) {
 		return value == null || theType.getRawType().isInstance(value);
 	}
 
@@ -407,7 +407,7 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 
 	private class TreeListInternals extends DefaultCollectionInternals<E> {
 		TreeListInternals(ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session, Transactable sessionController,
-				Consumer<? super Boolean> postAction) {
+			Consumer<? super Boolean> postAction) {
 			super(lock, session, sessionController, null, postAction);
 		}
 

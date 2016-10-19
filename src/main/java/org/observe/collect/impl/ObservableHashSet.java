@@ -50,7 +50,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 	 *            not actually create transactions.
 	 */
 	public ObservableHashSet(TypeToken<E> type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
-			Transactable sessionController) {
+		Transactable sessionController) {
 		theType = type.wrap();
 		theInternals = new HashSetInternals(lock, session, sessionController);
 
@@ -241,7 +241,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 	}
 
 	@Override
-	public boolean canRemove(E value) {
+	public boolean canRemove(Object value) {
 		return value == null || theType.getRawType().isInstance(value);
 	}
 

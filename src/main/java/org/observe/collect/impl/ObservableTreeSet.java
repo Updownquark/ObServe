@@ -62,7 +62,7 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	 *            natural ordering.
 	 */
 	public ObservableTreeSet(TypeToken<E> type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
-			Transactable sessionController, Comparator<? super E> compare) {
+		Transactable sessionController, Comparator<? super E> compare) {
 		theType = type.wrap();
 		theInternals = new TreeSetInternals(lock, session, sessionController, write -> {
 			if(write)
@@ -154,7 +154,7 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	public Iterable<E> iterateFrom(E start, boolean up, boolean withStart) {
 		return () -> new Iterator<E>() {
 			private final Iterator<Entry<E, InternalElement>> backing = theValues.entrySet().iterator(up, theValues.keyEntry(start),
-					withStart, null, true);
+				withStart, null, true);
 
 			@Override
 			public boolean hasNext() {
@@ -306,7 +306,7 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	}
 
 	@Override
-	public boolean canRemove(E value) {
+	public boolean canRemove(Object value) {
 		return value == null || theType.getRawType().isInstance(value);
 	}
 
@@ -404,7 +404,7 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 
 	private class TreeSetInternals extends DefaultCollectionInternals<E> {
 		TreeSetInternals(ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session, Transactable sessionController,
-				Consumer<? super Boolean> postAction) {
+			Consumer<? super Boolean> postAction) {
 			super(lock, session, sessionController, null, postAction);
 		}
 

@@ -77,7 +77,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 	 *            not actually create transactions.
 	 */
 	public ObservableLinkedList(TypeToken<E> type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
-			Transactable sessionController) {
+		Transactable sessionController) {
 		theType = type.wrap();
 		theInternals = new LinkedListInternals(lock, session, sessionController);
 		theActions = new RollingBuffer<>(ACTION_CAPACITY);
@@ -459,7 +459,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 	}
 
 	@Override
-	public boolean canRemove(E value) {
+	public boolean canRemove(Object value) {
 		return value == null || theType.getRawType().isInstance(value);
 	}
 
@@ -503,7 +503,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 				LinkedNode pre = thePrevious;
 				LinkedNode next = theNext;
 				while(pre != null && next != null && pre.theModTracker < theActions.getTotal() - theActions.getCapacity()
-						&& next.theModTracker < theActions.getTotal() - theActions.getCapacity()) {
+					&& next.theModTracker < theActions.getTotal() - theActions.getCapacity()) {
 					pre = pre.thePrevious;
 					next = next.theNext;
 				}
