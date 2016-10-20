@@ -603,25 +603,71 @@ public class ObservableCollectionsTest {
 	public void observableContainsAll() {
 		ObservableArrayList<Integer> list1 = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
 		ObservableArrayList<Integer> list2 = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
-		list1.addValues(0, 1, 2, 4, 5, 6, 7, 8);
-		list2.addValues(0, 2, 4, 6, 8, 10);
+		list1.addValues(0, 1, 2, 4, 5, 6, 7, 8, 8);
+		list2.addValues(0, 2, 4, 6, 8, 10, 10);
 		ObservableValue<Boolean> containsAll = list1.observeContainsAll(list2);
 		assertEquals(false, containsAll.get());
 		boolean[] reported = new boolean[1];
-		Subscription sub = containsAll.value().act(ca -> reported[0] = ca);
+		int[] events = new int[1];
+		Subscription sub = containsAll.value().act(//
+			ca -> {
+				reported[0] = ca;
+				events[0]++;
+			});
+		int correctEvents = 1;
 		assertEquals(false, reported[0]);
+		assertEquals(correctEvents, events[0]);
 		list1.add(10);
+		correctEvents++;
 		assertEquals(true, reported[0]);
-		list1.remove(10);
+		assertEquals(correctEvents, events[0]);
+		list1.remove(Integer.valueOf(10));
+		correctEvents++;
 		assertEquals(false, reported[0]);
-		list2.remove(10);
+		assertEquals(correctEvents, events[0]);
+		list2.remove(Integer.valueOf(10));
+		assertEquals(false, reported[0]);
+		assertEquals(correctEvents, events[0]);
+		list2.remove(Integer.valueOf(10));
+		correctEvents++;
 		assertEquals(true, reported[0]);
+		assertEquals(correctEvents, events[0]);
 		list2.add(10);
+		correctEvents++;
 		assertEquals(false, reported[0]);
+		assertEquals(correctEvents, events[0]);
+		list2.remove(Integer.valueOf(10));
+		correctEvents++;
+		assertEquals(true, reported[0]);
+		assertEquals(correctEvents, events[0]);
+		list1.remove(Integer.valueOf(8));
+		assertEquals(true, reported[0]);
+		assertEquals(correctEvents, events[0]);
+		list1.remove(Integer.valueOf(8));
+		correctEvents++;
+		assertEquals(false, reported[0]);
+		assertEquals(correctEvents, events[0]);
+		try (Transaction t = list1.lock(true, null)) {
+			list1.add(8);
+			list1.remove(Integer.valueOf(8));
+			list1.add(8);
+			list1.remove(Integer.valueOf(8));
+		}
+		assertEquals(false, reported[0]);
+		assertEquals(correctEvents, events[0]);
+		try (Transaction t = list1.lock(true, null)) {
+			list1.add(8);
+			list1.remove(Integer.valueOf(8));
+			list1.add(8);
+		}
+		correctEvents++;
+		assertEquals(true, reported[0]);
+		assertEquals(correctEvents, events[0]);
 
 		sub.unsubscribe();
-		list2.remove(10);
-		assertEquals(false, reported[0]);
+		list1.remove(Integer.valueOf(8));
+		assertEquals(true, reported[0]);
+		assertEquals(correctEvents, events[0]);
 	}
 
 	/** Tests {@link ObservableSet#map(java.util.function.Function)} */
