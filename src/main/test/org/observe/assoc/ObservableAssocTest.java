@@ -1,5 +1,7 @@
 package org.observe.assoc;
 
+import static java.util.Arrays.asList;
+
 import java.util.List;
 
 import org.junit.Test;
@@ -51,6 +53,38 @@ public class ObservableAssocTest {
 		ObservableCollection<List<Integer>> terminalPaths = ObservableTree.valuePathsOf(tree, true);
 		ObservableCollectionTester<List<Integer>> allPathsTester = new ObservableCollectionTester<>(allPaths);
 		ObservableCollectionTester<List<Integer>> terminalPathsTester = new ObservableCollectionTester<>(terminalPaths);
+
+		allPathsTester.set(//
+			asList(0), //
+			asList(0, 1), asList(0, 2), asList(0, 3), //
+			asList(0, 1, 4), asList(0, 1, 7), asList(0, 1, 10), //
+			asList(0, 2, 5), asList(0, 2, 8), asList(0, 2, 11), //
+			asList(0, 3, 6), asList(0, 3, 9), asList(0, 3, 12));
+		terminalPathsTester.set(//
+			asList(0, 1, 4), asList(0, 1, 7), asList(0, 1, 10), //
+			asList(0, 2, 5), asList(0, 2, 8), asList(0, 2, 11), //
+			asList(0, 3, 6), asList(0, 3, 9), asList(0, 3, 12));
+
+		allPathsTester.check();
+		terminalPathsTester.check();
+
+		root.children.get(1).children.get(1).addChild(12, 15, 18);
+		allPathsTester.addItems(//
+			asList(0, 2, 8, 12), asList(0, 2, 8, 15), asList(0, 2, 8, 18));
+		terminalPathsTester.removeItems(asList(0, 2, 8)).addItems(//
+			asList(0, 2, 8, 12), asList(0, 2, 8, 15), asList(0, 2, 8, 18));
+
+		allPathsTester.check();
+		terminalPathsTester.check();
+
+		root.children.remove(1);
+		allPathsTester.removeItems(//
+			asList(0, 2), //
+			asList(0, 2, 5), asList(0, 2, 8), asList(0, 2, 11), //
+			asList(0, 2, 8, 12), asList(0, 2, 8, 15), asList(0, 2, 8, 18));
+		terminalPathsTester.removeItems(//
+			asList(0, 2, 5), asList(0, 2, 11), //
+			asList(0, 2, 8, 12), asList(0, 2, 8, 15), asList(0, 2, 8, 18));
 
 		allPathsTester.check();
 		terminalPathsTester.check();

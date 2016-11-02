@@ -5,6 +5,7 @@ import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.function.Consumer;
@@ -28,9 +29,23 @@ public class ObservableCollectionTester<E> extends ArrayList<E> {
 		theSyncSubscription= sync();
 	}
 
+	public ObservableCollectionTester<E> set(E... values) {
+		return set(Arrays.asList(values));
+	}
+
 	public ObservableCollectionTester<E> set(Collection<? extends E> values) {
 		clear();
 		addAll(values);
+		return this;
+	}
+
+	public ObservableCollectionTester<E> addItems(E... values) {
+		addAll(Arrays.asList(values));
+		return this;
+	}
+
+	public ObservableCollectionTester<E> removeItems(E... values) {
+		removeAll(Arrays.asList(values));
 		return this;
 	}
 
