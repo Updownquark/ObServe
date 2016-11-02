@@ -1423,6 +1423,42 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	}
 
 	/**
+	 * A typical hashCode implementation for collections
+	 *
+	 * @param coll The collection to hash
+	 * @return The hash code of the collection's contents
+	 */
+	public static int hashCode(ObservableCollection<?> coll) {
+		int hashCode = 1;
+		for (Object e : coll)
+			hashCode = 31 * hashCode + (e == null ? 0 : e.hashCode());
+		return hashCode;
+	}
+
+	/**
+	 * A typical equals implementation for collections
+	 *
+	 * @param coll The collection to test
+	 * @param o The object to test the collection against
+	 * @return Whether the two objects are equal
+	 */
+	public static boolean equals(ObservableCollection<?> coll, Object o) {
+		if (!(o instanceof Collection))
+			return false;
+		Collection<?> c = (Collection<?>) o;
+
+		Iterator<?> e1 = coll.iterator();
+		Iterator<?> e2 = c.iterator();
+		while (e1.hasNext() && e2.hasNext()) {
+			Object o1 = e1.next();
+			Object o2 = e2.next();
+			if (!Objects.equals(o1, o2))
+				return false;
+		}
+		return !(e1.hasNext() || e2.hasNext());
+	}
+
+	/**
 	 * A simple toString implementation for collections
 	 *
 	 * @param coll The collection to print

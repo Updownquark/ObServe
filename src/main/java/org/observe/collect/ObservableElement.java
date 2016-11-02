@@ -27,7 +27,11 @@ import com.google.common.reflect.TypeToken;
  * @param <E> The type of the element
  */
 public interface ObservableElement<E> extends ObservableValue<E> {
-	/** @return An observable value that keeps reporting updates after the subscription to the parent collection is unsubscribed */
+	/**
+	 * @return An observable value that keeps reporting updates after the subscription to the parent collection is unsubscribed.
+	 *
+	 *         TODO This seems unnecessary. Maybe remove it.
+	 */
 	ObservableValue<E> persistent();
 
 	@Override
