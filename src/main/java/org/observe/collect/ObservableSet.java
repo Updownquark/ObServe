@@ -34,7 +34,8 @@ import com.google.common.reflect.TypeToken;
  * @param <E> The type of element in the set
  */
 public interface ObservableSet<E> extends ObservableCollection<E>, TransactableSet<E> {
-	/** @return The equalizer that governs uniqueness of this set */
+	/** @return The equalizer that governs uniqueness of this set
+	 * TODO Remove this and just make Object.equals the standard */
 	Equalizer getEqualizer();
 
 	@Override
@@ -110,6 +111,33 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 		Predicate<E> filter = value -> type.isInstance(value);
 		return d().debug(new StaticFilteredSet<>(this, TypeToken.of(type), filter)).from("filterMap", this).using("filter", filter)
 			.tag("filterType", type).get();
+	}
+
+	/**
+	 * Creates a mapped set, relying on the caller to guarantee that values returned by the function are equivalent to the argument
+	 *
+	 * @param <T> The type of the mapped collection
+	 * @param type The run-time type for the mapped collection (may be null)
+	 * @param map The mapping function to map the elements of this collection
+	 * @param reverse The reverse function if addition support is desired for the mapped collection
+	 * @return The mapped collection
+	 */
+	default <T> ObservableSet<T> mapEquivalent(Function<? super E, T> map, Function<? super T, E> reverse) {
+		return mapEquivalent((TypeToken<T>) TypeToken.of(map.getClass()).resolveType(Function.class.getTypeParameters()[1]), map, reverse);
+	}
+
+	/**
+	 * Creates a mapped set, relying on the caller to guarantee that values returned by the function are equivalent to the argument
+	 *
+	 * @param <T> The type of the mapped collection
+	 * @param type The run-time type for the mapped collection (may be null)
+	 * @param map The mapping function to map the elements of this collection
+	 * @param reverse The reverse function if addition support is desired for the mapped collection
+	 * @return The mapped collection
+	 */
+	default <T> ObservableSet<T> mapEquivalent(TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse) {
+		return d().debug(new MappedObservableSet<>(this, type, map, reverse)).from("map", this).using("map", map).using("reverse", reverse)
+			.get();
 	}
 
 	/**
@@ -208,11 +236,11 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 			(Collection<ObservableSet<? extends E>>) sets);
 		return combine(obSets, equalizer, sets.size(), Integer.MAX_VALUE);
 	}
-	
+
 	public static <E> ObservableSet<E> union(ObservableCollection<? extends ObservableSet<? extends E>> sets, Equalizer equalizer) {
 		return combine(sets, equalizer, 1, Integer.MAX_VALUE);
 	}
-	
+
 	public static <E> ObservableSet<E> combine(ObservableCollection<? extends ObservableSet<? extends E>> sets, Equalizer equalizer,
 		int minCount, int maxCount) {
 		return new SetCombination<>(sets, equalizer, minCount, maxCount);
@@ -540,6 +568,34 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	}
 
 	/**
+	 * Implements {@link ObservableSet#mapEquivalent(TypeToken, Function, Function)}
+	 *
+	 * @param <E> The type of the set to map
+	 * @param <T> The type of the mapped set
+	 */
+	class MappedObservableSet<E, T> extends MappedObservableCollection<E, T> implements ObservableSet<T> {
+		protected MappedObservableSet(ObservableSet<E> wrap, TypeToken<T> type, Function<? super E, T> map,
+			Function<? super T, E> reverse) {
+			super(wrap, type, map, reverse);
+		}
+
+		@Override
+		public Equalizer getEqualizer() {
+			Function<? super T, ?> eqMap;
+			if (getReverse() != null)
+				eqMap = getReverse();
+			else
+				eqMap = o -> o;
+				return (o1, o2) -> getWrapped().getEqualizer().equals(eqMap.apply((T) o1), eqMap.apply((T) o2));
+		}
+
+		@Override
+		protected ObservableSet<E> getWrapped() {
+			return (ObservableSet<E>) super.getWrapped();
+		}
+	}
+
+	/**
 	 * Implements {@link ObservableSet#refresh(Observable)}
 	 *
 	 * @param <E> The type of the set
@@ -682,85 +738,85 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	 *        ObservableCollection<? extends ObservableSet<? extends E>> theSets; private final TypeToken<E> theType; private final
 	 *        Equalizer theEqualizer; private final int theMinCount; private final int theMaxCount; private final
 	 *        CombinedCollectionSessionObservable theSession;
-	 * 
+	 *
 	 *        public SetCombination(ObservableCollection<? extends ObservableSet<? extends E>> sets, Equalizer equalizer, int minCount, int
 	 *        maxCount) { theSets = sets; theType = (TypeToken<E>)
 	 *        theSets.getType().resolveType(ObservableCollection.class.getTypeParameters()[0]); theEqualizer = equalizer; theMinCount =
 	 *        minCount; theMaxCount = maxCount; theSession = new CombinedCollectionSessionObservable(theSets); }
-	 * 
+	 *
 	 * @Override public TypeToken<E> getType() { return theType; }
-	 * 
+	 *
 	 * @Override public ObservableValue<CollectionSession> getSession() { return theSession; }
-	 * 
+	 *
 	 * @Override public boolean isSafe() { return false; }
-	 * 
+	 *
 	 * @Override public boolean canRemove(Object value) { int count = 0; for (ObservableSet<? extends E> setEl : theSets) { if
 	 *           (!setEl.canRemove(value) && setEl.contains(value)) count++; } return count < theMinCount; }
-	 * 
+	 *
 	 * @Override public boolean canAdd(E value) { int count = 0; int addableCount = 0; int removableCount = 0; for (ObservableSet<? extends
 	 *           E> setEl : theSets) { if (setEl.contains(value)) { count++; if (setEl.canRemove(value)) removableCount++; } else if
 	 *           (canAdd(setEl, value)) addableCount++; } return count + addableCount >= theMinCount && count - removableCount <=
 	 *           theMaxCount; }
-	 * 
+	 *
 	 *           private <T extends E> boolean canAdd(ObservableSet<T> setEl, E value) { if (value == null ||
 	 *           setEl.getType().getRawType().isInstance(value)) return setEl.canAdd((T) value); else return false; }
-	 * 
+	 *
 	 * @Override public Transaction lock(boolean write, Object cause) { return CombinedCollectionSessionObservable.lock(theSets, write,
 	 *           cause); }
-	 * 
+	 *
 	 * @Override public int size() { Map<Equalizer.EqualizerNode<E>, int[]> elementCounts = new LinkedHashMap<>(); for (ObservableSet<?
 	 *           extends E> setEl : theSets) for (E el : setEl) elementCounts.computeIfAbsent(theEqualizer.nodeFor(el), n -> new
 	 *           int[1])[0]++; return (int) elementCounts.entrySet().stream().filter(e -> e.getValue()[0] >= theMinCount && e.getValue()[0]
 	 *           <= theMaxCount) .count(); }
-	 * 
+	 *
 	 * @Override public Iterator<E> iterator() { if (theMaxCount >= theSets.size()) { return new Iterator<E>() { private final Iterator<?
 	 *           extends ObservableSet<? extends E>> outerIter = theSets.iterator(); private Iterator<? extends E> innerIter; private
 	 *           Map<Equalizer.EqualizerNode<E>, int[]> elementCounts = new LinkedHashMap<>(); private boolean isReady; private E
 	 *           theNextValue; private boolean hadGoodValue;
-	 * 
+	 *
 	 * @Override public boolean hasNext() { if (isReady) return true; while (!isReady) { if (innerIter == null || !innerIter.hasNext()) { if
 	 *           (outerIter.hasNext()) { hadGoodValue = false; // Don't remove from the new iterator innerIter =
 	 *           outerIter.next().iterator(); } else break; } while (innerIter.hasNext()) { E value = innerIter.next(); int[] count =
 	 *           elementCounts.computeIfAbsent(theEqualizer.nodeFor(value), n -> new int[1]); count[0]++; if (count[0] == theMinCount) {
 	 *           theNextValue = value; isReady = true; break; } } } return isReady; }
-	 * 
+	 *
 	 * @Override public E next() { if (!isReady && !hasNext()) throw new java.util.NoSuchElementException(); isReady = false; hadGoodValue =
 	 *           true; return theNextValue; }
-	 * 
+	 *
 	 * @Override public void remove() { if (hadGoodValue) { hadGoodValue = false; innerIter.remove(); } else throw new
 	 *           IllegalStateException("Call remove() right after next()"); } }; } else { Map<Equalizer.EqualizerNode<E>, int[]>
 	 *           elementCounts = new LinkedHashMap<>(); for (ObservableSet<? extends E> setEl : theSets) for (E el : setEl)
 	 *           elementCounts.computeIfAbsent(theEqualizer.nodeFor(el), n -> new int[1])[0]++; return new Iterator<E>() { private final
 	 *           Iterator<Map.Entry<Equalizer.EqualizerNode<E>, int[]>> entryIter = elementCounts.entrySet().iterator(); private
 	 *           Map.Entry<Equalizer.EqualizerNode<E>, int[]> theLastEntry; private boolean isReady; private boolean hadGoodValue;
-	 * 
+	 *
 	 * @Override public boolean hasNext() { if (isReady) return true; hadGoodValue = false; while (entryIter.hasNext()) { theLastEntry =
 	 *           entryIter.next(); if (theLastEntry.getValue()[0] >= theMinCount && theLastEntry.getValue()[0] <= theMaxCount) break; }
 	 *           return isReady; }
-	 * 
+	 *
 	 * @Override public E next() { if (!isReady && !hasNext()) throw new java.util.NoSuchElementException(); isReady = false; hadGoodValue =
 	 *           true; return theLastEntry.getKey().get(); }
-	 * 
+	 *
 	 * @Override public void remove() { if (!hadGoodValue) throw new IllegalStateException("Call remove() right after next()"); hadGoodValue
 	 *           = false; entryIter.remove(); for (ObservableSet<? extends E> setEl : theSets) { if
 	 *           (setEl.canRemove(theLastEntry.getKey().get()) && setEl.remove(theLastEntry.getKey().get())) { theLastEntry.getValue()[0]--;
 	 *           if (theLastEntry.getValue()[0] < theMinCount) break; } } } }; } }
-	 * 
+	 *
 	 * @Override public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) { class CountedElement{ final AtomicInteger
 	 *           count=new AtomicInteger(); final java.util.concurrent.ConcurrentLinkedQueue<ObservableElement<? ex> }
 	 *           ConcurrentHashMap<Equalizer.EqualizerNode<E>, AtomicInteger> elementCounts=new ConcurrentHashMap<>(); return
 	 *           theSets.onElement(outerEl->{ outerEl.get().takeUntil(outerEl).onElement(innerEl->{ innerEl.subscribe(new
 	 *           Observer<ObservableValueEvent<? extends E>>(){
 	 * @Override public <V extends ObservableValueEvent<? extends E>> void onNext(V event) { // TODO Auto-generated method stub
-	 * 
+	 *
 	 *           }
-	 * 
+	 *
 	 * @Override public <V extends ObservableValueEvent<? extends E>> void onCompleted(V event) { int
 	 *           newCount=elementCounts.get(theEqualizer.nodeFor(event.getValue())).decrementAndGet(); if(newCount<theMinCount) // TODO
 	 *           Auto-generated method stub
-	 * 
+	 *
 	 *           } }); }); }); }
-	 * 
+	 *
 	 * @Override public Equalizer getEqualizer() { return theEqualizer; } }
 	 */
 

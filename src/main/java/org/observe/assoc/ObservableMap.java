@@ -3,6 +3,8 @@ package org.observe.assoc;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -79,6 +81,35 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 				}
 			}
 			return new ObservableKeyEntry();
+		}
+
+		/**
+		 * @param entry The entry to flatten
+		 * @return An Observable entry whose value is the value of the observable value in the given entry
+		 */
+		static <K, V> ObservableEntry<K, V> flatten(ObservableEntry<K, ? extends ObservableValue<V>> entry) {
+			class FlattenedObservableEntry extends SettableValue.SettableFlattenedObservableValue<V> implements ObservableEntry<K, V> {
+				FlattenedObservableEntry(ObservableValue<? extends ObservableValue<? extends V>> value,
+					Supplier<? extends V> defaultValue) {
+					super(value, defaultValue);
+				}
+
+				@Override
+				public K getKey() {
+					return entry.getKey();
+				}
+
+				@Override
+				public V getValue() {
+					return get();
+				}
+
+				@Override
+				public V setValue(V value) {
+					return set(value, null);
+				}
+			}
+			return new FlattenedObservableEntry(entry, () -> null);
 		}
 	}
 
@@ -342,6 +373,58 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 		};
 	}
 
+	/**
+	 * @param keyFilter The filter to pare down this map's keys
+	 * @return A map that has the same content as this map, except for the keys filtered out by the key filter
+	 */
+	default ObservableMap<K, V> filterKeys(Predicate<? super K> keyFilter) {
+		ObservableMap<K, V> outer = this;
+		return new ObservableMap<K, V>() {
+			@Override
+			public Transaction lock(boolean write, Object cause) {
+				return outer.lock(write, cause);
+			}
+
+			@Override
+			public TypeToken<K> getKeyType() {
+				return outer.getKeyType();
+			}
+
+			@Override
+			public TypeToken<V> getValueType() {
+				return outer.getValueType();
+			}
+
+			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return outer.getSession();
+			}
+
+			@Override
+			public ObservableSet<K> keySet() {
+				return outer.keySet().filter(keyFilter);
+			}
+
+			@Override
+			public ObservableValue<V> observe(Object key) {
+				if (getKeyType().getRawType().isInstance(key) && keyFilter.test((K) key))
+					return outer.observe(key);
+				else
+					return ObservableValue.constant(getValueType(), null);
+			}
+
+			@Override
+			public ObservableSet<? extends ObservableEntry<K, V>> observeEntries() {
+				return outer.observeEntries().filter(entry -> keyFilter.test(entry.getKey()));
+			}
+
+			@Override
+			public boolean isSafe() {
+				return outer.isSafe();
+			}
+		};
+	}
+
 	/** @return An immutable copy of this map */
 	default ObservableMap<K, V> immutable() {
 		ObservableMap<K, V> outer = this;
@@ -485,6 +568,54 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 	@Override
 	default void clear() {
 		keySet().clear();
+	}
+
+	/**
+	 * @param map The map to flatten
+	 * @return A map whose values are the values of this map's observable values
+	 */
+	public static <K, V> ObservableMap<K, V> flatten(ObservableMap<K, ? extends ObservableValue<? extends V>> map) {
+		return new ObservableMap<K, V>() {
+			@Override
+			public boolean isSafe() {
+				return false;
+			}
+
+			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return ObservableValue.constant(TypeToken.of(CollectionSession.class), null);
+			}
+
+			@Override
+			public Transaction lock(boolean write, Object cause) {
+				return map.lock(write, cause);
+			}
+
+			@Override
+			public TypeToken<K> getKeyType() {
+				return map.getKeyType();
+			}
+
+			@Override
+			public TypeToken<V> getValueType() {
+				return (TypeToken<V>) map.getValueType().resolveType(ObservableValue.class.getTypeParameters()[0]);
+			}
+
+			@Override
+			public ObservableSet<K> keySet() {
+				return map.keySet();
+			}
+
+			@Override
+			public ObservableValue<V> observe(Object key) {
+				return ObservableValue.flatten(map.observe(key));
+			}
+
+			@Override
+			public ObservableSet<? extends ObservableEntry<K, V>> observeEntries() {
+				return map.observeEntries().mapEquivalent(entry -> (ObservableEntry<K, V>) ObservableEntry.flatten(entry), null);
+			}
+		};
 	}
 
 	/**

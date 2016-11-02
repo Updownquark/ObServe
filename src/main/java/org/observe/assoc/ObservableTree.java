@@ -32,7 +32,7 @@ public interface ObservableTree<N, V> extends Transactable {
 
 	ObservableValue<? extends V> getValue(N node);
 
-	ObservableOrderedCollection<? extends N> getChildren(N node);
+	ObservableCollection<? extends N> getChildren(N node);
 
 	boolean isSafe();
 
@@ -40,7 +40,7 @@ public interface ObservableTree<N, V> extends Transactable {
 
 	public static <N, V> ObservableTree<N, V> of(ObservableValue<N> root, TypeToken<V> valueType,
 		Function<? super N, ? extends ObservableValue<? extends V>> getValue,
-			Function<? super N, ? extends ObservableOrderedCollection<? extends N>> getChildren) {
+			Function<? super N, ? extends ObservableCollection<? extends N>> getChildren) {
 		return new ComposedTree<>(root, valueType, getValue, getChildren);
 	}
 
@@ -57,11 +57,11 @@ public interface ObservableTree<N, V> extends Transactable {
 		private final ObservableValue<N> theRoot;
 		private final TypeToken<V> theValueType;
 		private final Function<? super N, ? extends ObservableValue<? extends V>> theValueGetter;
-		private final Function<? super N, ? extends ObservableOrderedCollection<? extends N>> theChildrenGetter;
+		private final Function<? super N, ? extends ObservableCollection<? extends N>> theChildrenGetter;
 
 		public ComposedTree(ObservableValue<N> root, TypeToken<V> valueType,
 			Function<? super N, ? extends ObservableValue<? extends V>> valueGetter,
-				Function<? super N, ? extends ObservableOrderedCollection<? extends N>> childrenGetter) {
+				Function<? super N, ? extends ObservableCollection<? extends N>> childrenGetter) {
 			theRoot = root;
 			theValueType = valueType;
 			theValueGetter = valueGetter;
@@ -100,7 +100,7 @@ public interface ObservableTree<N, V> extends Transactable {
 		}
 
 		@Override
-		public ObservableOrderedCollection<? extends N> getChildren(N node) {
+		public ObservableCollection<? extends N> getChildren(N node) {
 			return theChildrenGetter.apply(node);
 		}
 	}
@@ -137,7 +137,7 @@ public interface ObservableTree<N, V> extends Transactable {
 		}
 
 		private int size(N node) {
-			ObservableOrderedCollection<? extends N> children = theTree.getChildren(node);
+			ObservableCollection<? extends N> children = theTree.getChildren(node);
 			if (isOnlyTerminal && children.isEmpty())
 				return 1; // The node itself is the terminus of one path
 			int size = isOnlyTerminal ? 0 : 1; // If we're not just terminal paths, then this node is the end of a path too
@@ -237,7 +237,7 @@ public interface ObservableTree<N, V> extends Transactable {
 				return false;
 
 			N node = theTree.getRoot().get();
-			ObservableOrderedCollection<? extends N> children = null;
+			ObservableCollection<? extends N> children = null;
 			V pathValue = null;
 			int i;
 			for (i = 0; i < path.size() - 1; i++) {
@@ -289,7 +289,7 @@ public interface ObservableTree<N, V> extends Transactable {
 				return false;
 
 			N node = theTree.getRoot().get();
-			ObservableOrderedCollection<? extends N> children = null;
+			ObservableCollection<? extends N> children = null;
 			V pathValue = null;
 			int i;
 			for (i = 0; i < path.size(); i++) {
@@ -452,7 +452,7 @@ public interface ObservableTree<N, V> extends Transactable {
 
 				@Override
 				public <E extends ObservableValueEvent<? extends N>> void onNext(E nodeEvent) {
-					ObservableOrderedCollection<? extends N> children = theTree.getChildren(nodeEvent.getValue());
+					ObservableCollection<? extends N> children = theTree.getChildren(nodeEvent.getValue());
 					if (!isOnlyTerminal) {
 						// The easy case
 						onElement.accept(new PathNode(thePathValues));
@@ -471,7 +471,7 @@ public interface ObservableTree<N, V> extends Transactable {
 					}
 				}
 
-				private void publishNodePath(ObservableOrderedCollection<? extends N> children) {
+				private void publishNodePath(ObservableCollection<? extends N> children) {
 					List<ObservableValue<? extends V>> values = new ArrayList<>(thePathValues.size());
 					values.addAll(thePathValues);
 					values.set(values.size() - 1, thePathValues.get(thePathValues.size() - 1).takeUntil(children.observeSize().noInit()));
