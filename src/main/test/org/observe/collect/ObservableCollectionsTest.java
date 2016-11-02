@@ -81,35 +81,30 @@ public class ObservableCollectionsTest {
 	private static <T extends ObservableCollection<Integer>> Checker<ObservableCollection<Integer>> testingObservableCollection(T coll,
 		Consumer<? super T> check, int depth) {
 
-		boolean ordered = coll instanceof ObservableOrderedCollection;
-		ArrayList<Integer> synced = new ArrayList<>();
-		Subscription syncSub = sync(coll, synced);
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(coll);
 
 		// Quick test first
 		coll.addAll(QommonsTestUtils.sequence(50, null, true));
-		assertThat(coll, collectionsEqual(synced, ordered));
+		tester.checkSynced();
 		if(check != null)
 			check.accept(coll);
 		coll.clear();
-		assertThat(coll, collectionsEqual(synced, ordered));
+		tester.checkSynced();
 		if(check != null)
 			check.accept(coll);
 
 		Function<Integer, Integer> mapFn = v -> v + 1000;
 		Function<Integer, Integer> reverseMapFn = v -> v - 1000;
 		ObservableCollection<Integer> mappedOL = coll.map(null, mapFn, reverseMapFn);
-		ArrayList<Integer> mappedSynced = new ArrayList<>();
-		Subscription mappedSub = sync(mappedOL, mappedSynced);
+		ObservableCollectionTester<Integer> mappedTester = new ObservableCollectionTester<>(mappedOL);
 
 		Predicate<Integer> filterFn1 = v -> v % 3 == 0;
 		ObservableCollection<Integer> filteredOL1 = coll.filter(filterFn1);
-		ArrayList<Integer> filteredSynced1 = new ArrayList<>();
-		Subscription filteredSub1 = sync(filteredOL1, filteredSynced1);
+		ObservableCollectionTester<Integer> filterTester1 = new ObservableCollectionTester<>(filteredOL1);
 
 		Function<Integer, Integer> filterMap = v -> v;
 		ObservableCollection<Integer> filterMapOL = coll.filterMap(null, filterMap, filterMap, false);
-		ArrayList<Integer> filterMapSynced = new ArrayList<>();
-		Subscription filterMapSub = sync(filterMapOL, filterMapSynced);
+		ObservableCollectionTester<Integer> filterMapTester = new ObservableCollectionTester<>(filterMapOL);
 
 		Function<Integer, Integer> groupFn = v -> v % 3;
 		ObservableMultiMap<Integer, Integer> grouped = coll.groupBy(groupFn);
@@ -121,8 +116,7 @@ public class ObservableCollectionsTest {
 		SimpleSettableValue<Integer> combineVar = new SimpleSettableValue<>(Integer.class, false);
 		combineVar.set(10000, null);
 		ObservableCollection<Integer> combinedOL = coll.combine(combineVar, coll.getType(), combineFn, reverseCombineFn);
-		ArrayList<Integer> combinedSynced = new ArrayList<>();
-		Subscription combineSub = sync(combinedOL, combinedSynced);
+		ObservableCollectionTester<Integer> combinedTester = new ObservableCollectionTester<>(combinedOL);
 
 		int todo; // TODO Test reversed sets
 
@@ -146,7 +140,6 @@ public class ObservableCollectionsTest {
 
 			final boolean includeMax;
 
-			@SuppressWarnings("hiding")
 			SubSetRange(Integer min, Integer max, boolean includeMin, boolean includeMax) {
 				this.min = min;
 				this.max = max;
@@ -204,34 +197,32 @@ public class ObservableCollectionsTest {
 		return new Checker<ObservableCollection<Integer>>() {
 			@Override
 			public void accept(ObservableCollection<Integer> value) {
-				assertThat(coll, collectionsEqual(synced, ordered));
+				boolean ordered = coll instanceof ObservableOrderedCollection;
+				tester.checkSynced();
 				if(check != null)
 					check.accept(coll);
 
-				List<Integer> mappedCorrect = coll.stream().map(mapFn).collect(Collectors.toList());
-				assertThat(mappedOL, collectionsEqual(mappedCorrect, ordered));
-				assertThat(mappedSynced, collectionsEqual(mappedCorrect, ordered));
+				mappedTester.set(coll.stream().map(mapFn).collect(Collectors.toList()));
+				mappedTester.check();
 
-				List<Integer> filteredCorrect1 = coll.stream().filter(filterFn1).collect(Collectors.toList());
-				assertThat(filteredOL1, collectionsEqual(filteredCorrect1, ordered));
-				assertThat(filteredSynced1, collectionsEqual(filteredCorrect1, ordered));
+				filterTester1.set(coll.stream().filter(filterFn1).collect(Collectors.toList()));
+				filterTester1.check();
 
-				assertThat(filterMapOL, collectionsEqual(synced, ordered));
-				assertThat(filterMapSynced, collectionsEqual(synced, ordered));
+				filterMapTester.set(tester.getSyncedCopy());
+				filterMapTester.check();
 
-				Set<Integer> groupKeySet = synced.stream().map(groupFn).collect(Collectors.toSet());
+				Set<Integer> groupKeySet = tester.getSyncedCopy().stream().map(groupFn).collect(Collectors.toSet());
 				assertThat(grouped.keySet(), collectionsEqual(groupKeySet, false));
 				assertThat(groupedSynced.keySet(), collectionsEqual(groupKeySet, false));
 				for(Integer groupKey : groupKeySet) {
-					List<Integer> values = synced.stream().filter(v -> Objects.equals(groupFn.apply(v), groupKey))
+					List<Integer> values = tester.getSyncedCopy().stream().filter(v -> Objects.equals(groupFn.apply(v), groupKey))
 						.collect(Collectors.toList());
 					assertThat(grouped.get(groupKey), collectionsEqual(values, ordered));
 					assertThat(groupedSynced.get(groupKey), collectionsEqual(values, ordered));
 				}
 
-				List<Integer> combinedCorrect = coll.stream().map(v -> v + combineVar.get()).collect(Collectors.toList());
-				assertThat(combinedOL, collectionsEqual(combinedCorrect, ordered));
-				assertThat(combinedSynced, collectionsEqual(combinedCorrect, ordered));
+				combinedTester.set(coll.stream().map(v -> v + combineVar.get()).collect(Collectors.toList()));
+				combinedTester.check();
 
 				if(subSets != null) {
 					for(int i = 0; i < subSets.size(); i++) {
@@ -327,11 +318,11 @@ public class ObservableCollectionsTest {
 					accept(coll);
 				}
 
-				syncSub.unsubscribe();
-				mappedSub.unsubscribe();
-				filteredSub1.unsubscribe();
-				filterMapSub.unsubscribe();
-				combineSub.unsubscribe();
+				tester.setSynced(false);
+				mappedTester.setSynced(false);
+				filterTester1.setSynced(false);
+				filterMapTester.setSynced(false);
+				combinedTester.setSynced(false);
 				if(syncedSubSetSubs != null) {
 					for(Subscription sub : syncedSubSetSubs)
 						sub.unsubscribe();
@@ -1866,28 +1857,26 @@ public class ObservableCollectionsTest {
 	public void obervableListFromCollection() {
 		ObservableHashSet<Integer> set = new ObservableHashSet<>(TypeToken.of(Integer.TYPE));
 		ObservableList<Integer> list = ObservableList.asList(set);
-		ArrayList<Integer> compare1 = new ArrayList<>();
-		ArrayList<Integer> correct = new ArrayList<>();
-		sync(list, compare1);
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(list);
 
 		int count = 30;
 		for(int i = 0; i < count; i++) {
 			set.add(i);
-			correct.add(i);
+			tester.add(i);
 
-			assertEquals(correct, compare1);
+			tester.check();
 		}
 		ArrayList<Integer> compare2 = new ArrayList<>();
 		sync(list, compare2);
-		assertEquals(correct, compare2);
+		assertEquals(tester, compare2);
 		for(int i = count - 1; i >= 0; i--) {
 			if(i % 2 == 0) {
 				set.remove(i);
-				correct.remove(i); // By index
+				tester.remove(i); // By index
 			}
 
-			assertEquals(correct, compare1);
-			assertEquals(correct, compare2);
+			tester.check();
+			assertEquals(tester, compare2);
 		}
 	}
 
@@ -1899,21 +1888,19 @@ public class ObservableCollectionsTest {
 	public void observableListFromUnique() {
 		ObservableArrayList<Integer> list = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
 		ObservableList<Integer> uniqued = ObservableList.asList(ObservableSet.unique(list, Objects::equals));
-		ArrayList<Integer> compare = new ArrayList<>();
-		ArrayList<Integer> correct = new ArrayList<>();
-		sync(uniqued, compare);
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(uniqued);
 
 		int count = 30;
 		for(int i = 0; i < count; i++) {
 			list.add(i);
 			list.add(i);
-			correct.add(i);
+			tester.add(i);
 
-			assertEquals(correct, compare);
+			tester.check();
 		}
 		list.clear();
-		correct.clear();
-		assertEquals(correct, compare);
+		tester.clear();
+		tester.check();
 	}
 
 	/** Tests {@link ObservableCollection#refreshEach(Function)} */
@@ -1930,51 +1917,50 @@ public class ObservableCollectionsTest {
 			list.add(el);
 		}
 		ObservableList<Integer> values = list.refreshEach(el -> elObservables.get(el)).map(el -> el[0]);
-		List<Integer> syncedValues = new ArrayList<>();
-		int [] opCount = new int[1];
-		Subscription sub = sync(values, syncedValues, opCount);
-
-		assertThat(syncedValues, collectionsEqual(values, true));
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(values);
+		tester.check();
 
 		for(int i = 0; i < list.size(); i++) {
 			list.get(i)[0]++;
+			tester.set(i, list.get(i)[0]);
 			controllers.get(list.get(i)).onNext(null);
-			assertThat(syncedValues, collectionsEqual(values, true));
+			tester.check();
 		}
 
 		for(int i = 0; i < list.size(); i++) {
 			list.get(i)[0] *= 50;
+			tester.set(i, list.get(i)[0]);
 			controllers.get(list.get(i)).onNext(null);
-			assertThat(syncedValues, collectionsEqual(values, true));
+			tester.check();
 		}
 
 		for(int i = 0; i < list.size(); i++) {
 			list.get(i)[0]--;
+			tester.set(i, list.get(i)[0]);
 			controllers.get(list.get(i)).onNext(null);
-			assertThat(syncedValues, collectionsEqual(values, true));
+			tester.check();
 		}
 
 		for(int i = 0; i < list.size(); i++) {
 			list.get(i)[0] = 0;
+			tester.set(i, list.get(i)[0]);
 			controllers.get(list.get(i)).onNext(null);
-			assertThat(syncedValues, collectionsEqual(values, true));
+			tester.check();
 		}
 
 		list.clear();
-		int preOp = opCount[0];
 		for(Observer<Void> controller : controllers.values())
 			controller.onNext(null);
-		assertEquals(preOp, opCount[0]);
+		tester.checkOps(0);
 
 		for(int [] value : controllers.keySet())
 			list.add(value);
 
-		preOp = opCount[0];
-		sub.unsubscribe();
+		tester.setSynced(false);
 		for(int i = 0; i < list.size(); i++) {
 			controllers.get(list.get(i)).onNext(null);
 		}
-		assertEquals(preOp, opCount[0]);
+		tester.checkOps(0);
 	}
 
 	/** Tests basic transaction functionality on observable collections */

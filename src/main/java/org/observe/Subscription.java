@@ -12,8 +12,12 @@ public interface Subscription {
 	 */
 	static Subscription forAll(Subscription... subs) {
 		return () -> {
-			for (Subscription sub : subs)
-				sub.unsubscribe();
+			for (int s = 0; s < subs.length; s++) {
+				if (subs[s] != null) {
+					subs[s].unsubscribe();
+					subs[s] = null;
+				}
+			}
 		};
 	}
 }
