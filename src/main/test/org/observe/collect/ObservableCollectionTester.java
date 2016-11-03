@@ -10,23 +10,27 @@ import java.util.Collection;
 import java.util.List;
 import java.util.function.Consumer;
 
+import org.observe.AbstractObservableTester;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
 import org.qommons.QommonsTestUtils;
 
-public class ObservableCollectionTester<E> extends ArrayList<E> {
+public class ObservableCollectionTester<E> extends AbstractObservableTester<Collection<E>> {
 	private final ObservableCollection<E> theCollection;
 	private final ArrayList<E> theSyncedCopy;
-	private Subscription theSyncSubscription;
-	private int theOldOpCount;
-	private int theOpCount;
+	private final ArrayList<E> theExpected;
 
 	public ObservableCollectionTester(ObservableCollection<E> collect) {
 		theCollection = collect;
-		addAll(collect);
 		theSyncedCopy=new ArrayList<>();
-		theSyncSubscription= sync();
+		setSynced(true);
+		theExpected = new ArrayList<>();
+		theExpected.addAll(collect);
+	}
+
+	public List<E> getExpected() {
+		return theExpected;
 	}
 
 	public ObservableCollectionTester<E> set(E... values) {
@@ -34,18 +38,23 @@ public class ObservableCollectionTester<E> extends ArrayList<E> {
 	}
 
 	public ObservableCollectionTester<E> set(Collection<? extends E> values) {
-		clear();
-		addAll(values);
+		theExpected.clear();
+		theExpected.addAll(values);
 		return this;
 	}
 
-	public ObservableCollectionTester<E> addItems(E... values) {
-		addAll(Arrays.asList(values));
+	public ObservableCollectionTester<E> add(E... values) {
+		theExpected.addAll(Arrays.asList(values));
 		return this;
 	}
 
-	public ObservableCollectionTester<E> removeItems(E... values) {
-		removeAll(Arrays.asList(values));
+	public ObservableCollectionTester<E> remove(E... values) {
+		theExpected.removeAll(Arrays.asList(values));
+		return this;
+	}
+
+	public ObservableCollectionTester<E> clear() {
+		theExpected.clear();
 		return this;
 	}
 
@@ -54,54 +63,31 @@ public class ObservableCollectionTester<E> extends ArrayList<E> {
 	}
 
 	public void check() {
-		check(0, 0);
+		check(theExpected);
 	}
 
 	public void check(int ops) {
-		check(ops, ops);
+		check(theExpected, ops);
 	}
 
 	public void check(int minOps, int maxOps) {
-		checkOps(minOps, maxOps);
-		checkSynced();
-		boolean ordered = theCollection instanceof ObservableOrderedCollection;
-		assertThat(this, QommonsTestUtils.collectionsEqual(theSyncedCopy, ordered));
+		check(theExpected, minOps, maxOps);
 	}
 
+	@Override
+	public void checkValue(Collection<E> expected) {
+		boolean ordered = theCollection instanceof ObservableOrderedCollection;
+		assertThat(theExpected, QommonsTestUtils.collectionsEqual(theSyncedCopy, ordered));
+	}
+
+	@Override
 	public void checkSynced() {
 		boolean ordered = theCollection instanceof ObservableOrderedCollection;
 		assertThat(theSyncedCopy, QommonsTestUtils.collectionsEqual(theCollection, ordered));
 	}
 
-	public void checkOps(int ops) {
-		checkOps(ops, ops);
-	}
-
-	public void checkOps(int minOps, int maxOps) {
-		int ops = theOpCount - theOldOpCount;
-		if (minOps == maxOps && maxOps > 0)
-			assertEquals(minOps, ops);
-		else {
-			if (minOps > 0)
-				assertTrue("Expected at least " + minOps + " operations, got " + ops, ops >= minOps);
-			else if (maxOps > 0 && maxOps < Integer.MAX_VALUE)
-				assertTrue("Expected at most " + maxOps + " operations, got " + ops, ops <= maxOps);
-		}
-		theOldOpCount = theOpCount;
-	}
-
-	public void setSynced(boolean synced){
-		if(synced==(theSyncSubscription!=null))
-			return;
-		if(synced)
-			theSyncSubscription=sync();
-		else{
-			theSyncSubscription.unsubscribe();
-			theSyncSubscription=null;
-		}
-	}
-
-	private Subscription sync() {
+	@Override
+	protected Subscription sync() {
 		if (theCollection instanceof ObservableOrderedCollection)
 			return ((ObservableOrderedCollection<E>) theCollection).onOrderedElement(new Consumer<ObservableOrderedElement<E>>() {
 				@Override
@@ -109,7 +95,7 @@ public class ObservableCollectionTester<E> extends ArrayList<E> {
 					el.subscribe(new Observer<ObservableValueEvent<E>>() {
 						@Override
 						public <V extends ObservableValueEvent<E>> void onNext(V evt) {
-							theOpCount++;
+							op();
 							if (evt.isInitial())
 								theSyncedCopy.add(el.getIndex(), evt.getValue());
 							else {
@@ -120,7 +106,7 @@ public class ObservableCollectionTester<E> extends ArrayList<E> {
 
 						@Override
 						public <V extends ObservableValueEvent<E>> void onCompleted(V evt) {
-							theOpCount++;
+							op();
 							assertEquals(evt.getValue(), theSyncedCopy.remove(el.getIndex()));
 						}
 					});
@@ -133,7 +119,7 @@ public class ObservableCollectionTester<E> extends ArrayList<E> {
 					el.subscribe(new Observer<ObservableValueEvent<E>>() {
 						@Override
 						public <V extends ObservableValueEvent<E>> void onNext(V evt) {
-							theOpCount++;
+							op();
 							if (evt.isInitial())
 								theSyncedCopy.add(evt.getValue());
 							else {
@@ -144,7 +130,7 @@ public class ObservableCollectionTester<E> extends ArrayList<E> {
 
 						@Override
 						public <V extends ObservableValueEvent<E>> void onCompleted(V evt) {
-							theOpCount++;
+							op();
 							assertTrue(theSyncedCopy.remove(evt.getValue()));
 						}
 					});

@@ -13,7 +13,6 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Subscription;
-import org.observe.assoc.ObservableMap.ObsEntryImpl;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableElement;
@@ -44,6 +43,14 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	 */
 	public interface ObservableMultiEntry<K, V> extends MultiEntry<K, V>, ObservableCollection<V> {
 	}
+
+	/**
+	 * A {@link ObservableMultiMap.ObservableMultiEntry} whose values are sorted
+	 *
+	 * @param <K> The type of key this entry uses
+	 * @param <V> The type of value this entry stores
+	 */
+	public interface ValueSortedMultiEntry<K, V> extends ObservableMultiEntry<K, V>, ObservableSortedSet<V> {}
 
 	/** @return The type of keys this map uses */
 	TypeToken<K> getKeyType();
@@ -124,20 +131,14 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			return ObservableList.constant(map.getValueType());
 
 		ObservableSet<? extends ObservableMultiEntry<K, V>> entries = map.entrySet();
-		Map.Entry<Object, ?> keyEntry = new Map.Entry<Object, Object>() {
+		class KeyEntry extends ObservableCollection.ConstantObservableCollection<Object> implements MultiEntry<Object, Object> {
+			KeyEntry() {
+				super(TypeToken.of(Object.class), Collections.emptyList());
+			}
+
 			@Override
 			public Object getKey() {
 				return key;
-			}
-
-			@Override
-			public Object getValue() {
-				return null;
-			}
-
-			@Override
-			public Object setValue(Object value) {
-				return null;
 			}
 
 			@Override
@@ -147,29 +148,18 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 
 			@Override
 			public boolean equals(Object obj) {
-				return obj instanceof Map.Entry && Objects.equals(((Map.Entry<?, ?>) obj).getKey(), key);
+				return obj instanceof MultiEntry && Objects.equals(((MultiEntry<?, ?>) obj).getKey(), key);
 			}
 
 			@Override
 			public String toString() {
 				return String.valueOf(key);
 			}
-		};
+		}
+		KeyEntry keyEntry = new KeyEntry();
 
 		ObservableValue<? extends ObservableMultiEntry<K, V>> equiv = entries.equivalent(keyEntry);
-		if(equiv.getType().isAssignableFrom(ObservableList.class)) {
-			return new ObsMultiEntryList<>(map, (K) key, map.getValueType(), (ObservableValue<? extends ObservableList<V>>) equiv);
-		} else if(equiv.getType().isAssignableFrom(ObservableSortedSet.class)) {
-			return new ObsMultiEntrySortedSet<>(map, (K) key, map.getValueType(),
-				(ObservableValue<? extends ObservableSortedSet<V>>) equiv);
-		} else if(equiv.getType().isAssignableFrom(ObservableOrderedCollection.class)) {
-			return new ObsMultiEntryOrdered<>(map, (K) key, map.getValueType(),
-				(ObservableValue<? extends ObservableOrderedCollection<V>>) equiv);
-		} else if(equiv.getType().isAssignableFrom(ObservableSet.class)) {
-			return new ObsMultiEntrySet<>(map, (K) key, map.getValueType(), (ObservableValue<? extends ObservableSet<V>>) equiv);
-		} else {
-			return new ObsMultiEntryImpl<>(map, (K) key, map.getValueType(), equiv);
-		}
+		return map.entryFor((K) key, equiv);
 	}
 
 	/**
@@ -180,7 +170,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		ObservableCollection<V> values = get(key);
 		if(values instanceof ObservableMultiEntry)
 			return (ObservableMultiEntry<K, V>) values;
-		if(values instanceof ObservableList)
+		else if (values instanceof ObservableList)
 			return new ObsMultiEntryList<>(this, key, (ObservableList<V>) values);
 		else if(values instanceof ObservableSortedSet)
 			return new ObsMultiEntrySortedSet<>(this, key, (ObservableSortedSet<V>) values);
@@ -190,6 +180,28 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			return new ObsMultiEntrySet<>(this, key, (ObservableSet<V>) values);
 		else
 			return new ObsMultiEntryImpl<>(this, key, values);
+	}
+
+	/**
+	 * @param key The key to get the entry for
+	 * @param values The values to represent in the entry
+	 * @return A multi-entry that represents the given key and values
+	 */
+	default ObservableMultiEntry<K, V> entryFor(K key, ObservableValue<? extends ObservableMultiEntry<K, V>> values) {
+		if (TypeToken.of(ValueSortedMultiEntry.class).isAssignableFrom(values.getType()))
+			return new ObsMultiEntrySortedSet<>(this, key, getValueType(), (ObservableValue<? extends ValueSortedMultiEntry<K, V>>) values);
+		else if (TypeToken.of(ObservableList.class).isAssignableFrom(values.getType())) {
+			return new ObsMultiEntryList<>(this, key, getValueType(), (ObservableValue<? extends ObservableList<V>>) values);
+		} else if (TypeToken.of(ObservableSortedSet.class).isAssignableFrom(values.getType())) {
+			return new ObsMultiEntrySortedSet<>(this, key, getValueType(), (ObservableValue<? extends ObservableSortedSet<V>>) values);
+		} else if (TypeToken.of(ObservableOrderedCollection.class).isAssignableFrom(values.getType())) {
+			return new ObsMultiEntryOrdered<>(this, key, getValueType(),
+				(ObservableValue<? extends ObservableOrderedCollection<V>>) values);
+		} else if (TypeToken.of(ObservableSet.class).isAssignableFrom(values.getType())) {
+			return new ObsMultiEntrySet<>(this, key, getValueType(), (ObservableValue<? extends ObservableSet<V>>) values);
+		} else {
+			return new ObsMultiEntryImpl<>(this, key, getValueType(), values);
+		}
 	}
 
 	/** @return An observable collection of {@link ObservableMultiEntry observable entries} of all the key-value set pairs stored in this map */
@@ -408,6 +420,16 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			@Override
 			public void clear() {
 				ObservableMultiMap.this.removeAll(key);
+			}
+
+			@Override
+			public int hashCode() {
+				return Objects.hashCode(key);
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				return obj instanceof MultiEntry && Objects.equals(((MultiEntry<?, ?>) obj).getKey(), key);
 			}
 
 			@Override
@@ -799,7 +821,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		public boolean equals(Object obj) {
 			if(this == obj)
 				return true;
-			return obj instanceof ObsEntryImpl && Objects.equals(theKey, ((ObsMultiEntryImpl<?, ?>) obj).theKey);
+			return obj instanceof MultiEntry && Objects.equals(theKey, ((MultiEntry<?, ?>) obj).getKey());
 		}
 
 		@Override
@@ -846,7 +868,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	 * @param <K> The key type for this entry
 	 * @param <V> The value type for this entry
 	 */
-	class ObsMultiEntrySortedSet<K, V> extends ObsMultiEntryOrdered<K, V> implements ObservableSortedSet<V> {
+	class ObsMultiEntrySortedSet<K, V> extends ObsMultiEntryOrdered<K, V> implements ValueSortedMultiEntry<K, V> {
 		public ObsMultiEntrySortedSet(ObservableMultiMap<K, V> map, K key, ObservableSortedSet<V> values) {
 			super(map, key, values);
 		}

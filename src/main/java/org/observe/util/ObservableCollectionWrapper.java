@@ -105,7 +105,10 @@ public class ObservableCollectionWrapper<E> implements ObservableCollection<E> {
 	@Override
 	public Iterator<E> iterator() {
 		return new Iterator<E>() {
-			private final Iterator<E> backing = getWrapped().iterator();
+			private final Iterator<E> backing;
+			{
+				backing = getWrapped().iterator();
+			}
 
 			@Override
 			public boolean hasNext() {

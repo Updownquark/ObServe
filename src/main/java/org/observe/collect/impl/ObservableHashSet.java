@@ -10,6 +10,7 @@ import java.util.function.Consumer;
 
 import org.observe.ObservableValue;
 import org.observe.Subscription;
+import org.observe.assoc.impl.CollectionCreator;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableFastFindCollection;
@@ -55,6 +56,11 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 		theInternals = new HashSetInternals(lock, session, sessionController);
 
 		theValues = new LinkedHashMap<>();
+	}
+
+	/** @return A {@link CollectionCreator} that creates hash sets of this type to back an associative data structure */
+	public static <E> CollectionCreator<E, ObservableHashSet<E>> creator() {
+		return (type, lock, session, controller) -> new ObservableHashSet<>(type, lock, session, controller);
 	}
 
 	@Override

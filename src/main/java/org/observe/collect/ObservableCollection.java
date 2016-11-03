@@ -28,6 +28,7 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
+import org.observe.assoc.MultiMap.MultiEntry;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.util.ObservableCollectionWrapper;
@@ -2674,7 +2675,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		public boolean equals(Object o) {
 			if(this == o)
 				return true;
-			return o instanceof GroupedMultiEntry && Objects.equals(theKey, ((GroupedMultiEntry<?, ?>) o).theKey);
+			return o instanceof MultiEntry && Objects.equals(theKey, ((MultiEntry<?, ?>) o).getKey());
 		}
 
 		@Override
@@ -2764,7 +2765,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public ObservableSortedSet<? extends ObservableMultiEntry<K, E>> entrySet() {
+		public ObservableSortedSet<? extends ObservableSortedMultiEntry<K, E>> entrySet() {
 			return ObservableSortedMultiMap.defaultEntrySet(this);
 		}
 

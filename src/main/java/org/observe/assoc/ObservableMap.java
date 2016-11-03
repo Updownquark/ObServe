@@ -79,6 +79,16 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 				public V setValue(V value2) {
 					return value;
 				}
+
+				@Override
+				public int hashCode() {
+					return Objects.hashCode(key);
+				}
+
+				@Override
+				public boolean equals(Object obj) {
+					return obj instanceof Map.Entry && Objects.equals(((Map.Entry<?, ?>) obj).getKey(), key);
+				}
 			}
 			return new ObservableKeyEntry();
 		}
@@ -107,6 +117,16 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 				@Override
 				public V setValue(V value) {
 					return set(value, null);
+				}
+
+				@Override
+				public int hashCode() {
+					return Objects.hashCode(getKey());
+				}
+
+				@Override
+				public boolean equals(Object obj) {
+					return obj instanceof Map.Entry && Objects.equals(((Map.Entry<?, ?>) obj).getKey(), getKey());
 				}
 			}
 			return new FlattenedObservableEntry(entry, () -> null);

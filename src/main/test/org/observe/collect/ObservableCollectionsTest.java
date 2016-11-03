@@ -1688,7 +1688,7 @@ public class ObservableCollectionsTest {
 		}
 	}
 
-	/** Tests {@link ObservableList#flattenListValues(TypeToken, ObservableList)} */
+	/** Tests {@link ObservableList#flattenValues(ObservableList)} */
 	@Test
 	public void flattenListValues() {
 		ObservableArrayList<ObservableValue<Integer>> list = new ObservableArrayList<>(new TypeToken<ObservableValue<Integer>>() {});
@@ -1868,7 +1868,7 @@ public class ObservableCollectionsTest {
 		}
 		ArrayList<Integer> compare2 = new ArrayList<>();
 		sync(list, compare2);
-		assertEquals(tester, compare2);
+		assertEquals(tester.getExpected(), compare2);
 		for(int i = count - 1; i >= 0; i--) {
 			if(i % 2 == 0) {
 				set.remove(i);
@@ -1876,7 +1876,7 @@ public class ObservableCollectionsTest {
 			}
 
 			tester.check();
-			assertEquals(tester, compare2);
+			assertEquals(tester.getExpected(), compare2);
 		}
 	}
 
@@ -1922,28 +1922,28 @@ public class ObservableCollectionsTest {
 
 		for(int i = 0; i < list.size(); i++) {
 			list.get(i)[0]++;
-			tester.set(i, list.get(i)[0]);
+			tester.getExpected().set(i, list.get(i)[0]);
 			controllers.get(list.get(i)).onNext(null);
 			tester.check();
 		}
 
 		for(int i = 0; i < list.size(); i++) {
 			list.get(i)[0] *= 50;
-			tester.set(i, list.get(i)[0]);
+			tester.getExpected().set(i, list.get(i)[0]);
 			controllers.get(list.get(i)).onNext(null);
 			tester.check();
 		}
 
 		for(int i = 0; i < list.size(); i++) {
 			list.get(i)[0]--;
-			tester.set(i, list.get(i)[0]);
+			tester.getExpected().set(i, list.get(i)[0]);
 			controllers.get(list.get(i)).onNext(null);
 			tester.check();
 		}
 
 		for(int i = 0; i < list.size(); i++) {
 			list.get(i)[0] = 0;
-			tester.set(i, list.get(i)[0]);
+			tester.getExpected().set(i, list.get(i)[0]);
 			controllers.get(list.get(i)).onNext(null);
 			tester.check();
 		}

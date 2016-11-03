@@ -73,6 +73,24 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 		theValues = new DefaultTreeMap<>(theCompare);
 	}
 
+	/**
+	 * This method is for creating a tree set of comparable element while specifying some of the internals of the collection. This method
+	 * matches the signature for
+	 * {@link org.observe.assoc.impl.CollectionCreator#create(TypeToken, ReentrantReadWriteLock, ObservableValue, Transactable)} for easy
+	 * use with the assoc implementation constructors.
+	 *
+	 * @param type The type of elements for this collection
+	 * @param lock The lock for this collection to use
+	 * @param session The session for this collection to use (see {@link #getSession()})
+	 * @param sessionController The controller for the session. May be null, in which case the transactional methods in this collection will
+	 *        not actually create transactions.
+	 * @return The new tree set
+	 */
+	public static <E extends Comparable<E>> ObservableTreeSet<E> of(TypeToken<E> type, ReentrantReadWriteLock lock,
+		ObservableValue<CollectionSession> session, Transactable sessionController) {
+		return new ObservableTreeSet<>(type, lock, session, sessionController, (o1, o2) -> o1.compareTo(o2));
+	}
+
 	/** Checks the internal structure of this set for debugging. TODO Remove this when it's solid. */
 	public void checkValid() {
 		DefaultNode<?> root = theValues.getRoot();
