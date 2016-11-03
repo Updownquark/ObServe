@@ -14,6 +14,7 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.impl.ObservableArrayList;
 import org.observe.collect.impl.ObservableHashSet;
+import org.observe.collect.impl.ObservableSortedArrayList;
 import org.observe.collect.impl.ObservableTreeSet;
 import org.observe.util.DefaultTransactable;
 import org.qommons.Transactable;
@@ -235,7 +236,7 @@ public class ObservableMultiMapImpl<K, V> implements ObservableMultiMap<K, V> {
 	 * @return An entry creator that sorts its values (extends {@link ObservableTreeSet})
 	 */
 	public static <K, V> MultiEntryCreator<K, V> sortedEntryCreator(Comparator<? super V> valueCompare) {
-		return (key, keyType, valueType, lock, session, controller) -> new SortedMultiEntry<>(key, valueType, lock, session, controller,
+		return (key, keyType, valueType, lock, session, controller) -> new SortedSetMultiEntry<>(key, valueType, lock, session, controller,
 			valueCompare);
 	}
 
@@ -259,6 +260,88 @@ public class ObservableMultiMapImpl<K, V> implements ObservableMultiMap<K, V> {
 		 *        for natural ordering.
 		 */
 		public SortedMultiEntry(K key, TypeToken<V> type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
+			Transactable sessionController, Comparator<? super V> compare) {
+			super(type, lock, session, sessionController, compare);
+			theKey = key;
+		}
+
+		@Override
+		public K getKey() {
+			return theKey;
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hashCode(theKey);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return obj instanceof MultiEntry && Objects.equals(theKey, ((MultiEntry<?, ?>) obj).getKey());
+		}
+	}
+
+	/**
+	 * A sorted set multi-entry implementation
+	 *
+	 * @param <K> The key-type for the entry
+	 * @param <V> The value-type for the entry
+	 */
+	public static class SortedSetMultiEntry<K, V> extends ObservableTreeSet<V> implements ObservableMultiEntry<K, V> {
+		private final K theKey;
+
+		/**
+		 * @param key The key for the entry
+		 * @param type The type of values in the entry
+		 * @param lock The lock for this collection to use
+		 * @param session The session for this collection to use (see {@link #getSession()})
+		 * @param sessionController The controller for the session. May be null, in which case the transactional methods in this collection
+		 *        will not actually create transactions.
+		 * @param compare The comparator to sort this set's elements. Use {@link Comparable}::{@link Comparable#compareTo(Object) compareTo}
+		 *        for natural ordering.
+		 */
+		public SortedSetMultiEntry(K key, TypeToken<V> type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
+			Transactable sessionController, Comparator<? super V> compare) {
+			super(type, lock, session, sessionController, compare);
+			theKey = key;
+		}
+
+		@Override
+		public K getKey() {
+			return theKey;
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hashCode(theKey);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return obj instanceof MultiEntry && Objects.equals(theKey, ((MultiEntry<?, ?>) obj).getKey());
+		}
+	}
+
+	/**
+	 * A sorted set multi-entry implementation
+	 *
+	 * @param <K> The key-type for the entry
+	 * @param <V> The value-type for the entry
+	 */
+	public static class SortedListMultiEntry<K, V> extends ObservableSortedArrayList<V> implements ObservableMultiEntry<K, V> {
+		private final K theKey;
+
+		/**
+		 * @param key The key for the entry
+		 * @param type The type of values in the entry
+		 * @param lock The lock for this collection to use
+		 * @param session The session for this collection to use (see {@link #getSession()})
+		 * @param sessionController The controller for the session. May be null, in which case the transactional methods in this collection
+		 *        will not actually create transactions.
+		 * @param compare The comparator to sort this set's elements. Use {@link Comparable}::{@link Comparable#compareTo(Object) compareTo}
+		 *        for natural ordering.
+		 */
+		public SortedListMultiEntry(K key, TypeToken<V> type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 			Transactable sessionController, Comparator<? super V> compare) {
 			super(type, lock, session, sessionController, compare);
 			theKey = key;
