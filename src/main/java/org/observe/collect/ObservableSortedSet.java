@@ -550,6 +550,11 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 			public Comparator<? super T> comparator() {
 				return compare;
 			}
+
+			@Override
+			public String toString() {
+				return ObservableSet.toString(this);
+			}
 		}
 		ConstantObservableSet ret = d().debug(new ConstantObservableSet()).tag("constant", coll).tag("type", type).get();
 		int i = 0;
@@ -1568,6 +1573,14 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 		}
 
 		@Override
+		public int size() {
+			TreeSet<E> set = new TreeSet<>(theCompare);
+			for (E value : getWrapped())
+				set.add(value);
+			return set.size();
+		}
+
+		@Override
 		public Iterator<E> iterator() {
 			TreeSet<E> sorted = new TreeSet<>(theCompare);
 			sorted.addAll(getWrapped());
@@ -1589,6 +1602,11 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 			UniqueSortedElement<E> unique = new UniqueSortedElement<>(this, ((UniqueSortedElementTracking) tracking).sortedElements);
 			tracking.elements.put(node, unique);
 			return unique;
+		}
+
+		@Override
+		public String toString() {
+			return ObservableSet.toString(this);
 		}
 	}
 
