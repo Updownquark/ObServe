@@ -435,7 +435,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 								if(theFilter.test(value.getValue()))
 									newBest(value.getValue(), listIndex);
 								else if(listIndex == index[0])
-									findNextBest(listIndex);
+									findNextBest(listIndex, false);
 							}
 						}
 
@@ -444,7 +444,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 							int listIndex = element.getIndex();
 							theElements.remove(listIndex);
 							if(listIndex == index[0]) {
-								findNextBest(listIndex);
+								findNextBest(listIndex, true);
 							} else if(listIndex < index[0])
 								index[0]--;
 						}
@@ -456,10 +456,12 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 								return test >= current;
 						}
 
-						private void findNextBest(int newIndex) {
+						private void findNextBest(int newIndex, boolean removed) {
 							boolean found = false;
 							if (isForward) {
-								for (int i = newIndex + 1; i < theElements.size(); i++) {
+								if (!removed)
+									newIndex++;
+								for (int i = newIndex; i < theElements.size(); i++) {
 									E value = theElements.get(i).get();
 									if (theFilter.test(value)) {
 										found = true;
