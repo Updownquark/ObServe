@@ -65,6 +65,7 @@ public class ObservableSortedMultiMapImpl<K, V> extends ObservableMultiMapImpl<K
 	/**
 	 * @param keyType The key type for the map
 	 * @param valueType The value type for the map
+	 * @param entryType The type of entry that the entry creator will create
 	 * @param entrySet The collection creator for the entry set
 	 * @param entryCreator Creates individual map entries for this map
 	 */
@@ -110,6 +111,7 @@ public class ObservableSortedMultiMapImpl<K, V> extends ObservableMultiMapImpl<K
 		 * @param session The session for this collection to use (see {@link #getSession()})
 		 * @param sessionController The controller for the session. May be null, in which case the transactional methods in this collection
 		 *        will not actually create transactions.
+		 * @param keyCompare The comparator to sort the keys by in the map
 		 * @param valueCompare The comparator to sort this set's elements. Use {@link Comparable}::{@link Comparable#compareTo(Object)
 		 *        compareTo} for natural ordering.
 		 */
