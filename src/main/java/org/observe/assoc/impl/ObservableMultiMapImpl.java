@@ -202,7 +202,7 @@ public class ObservableMultiMapImpl<K, V> implements ObservableMultiMap<K, V> {
 					if (size == 1 && Objects.equals(entry.iterator().next(), value)) {
 						entryIter.remove();
 						return true;
-					} else if(size != 1)
+					} else if (size == 1)
 						return false; // Values not equal
 					else
 						return entry.remove(value);
