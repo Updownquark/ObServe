@@ -136,6 +136,7 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	}
 
 	private InternalElement createElement(E value) {
+		theModCount++;
 		return new InternalElement(theType, value);
 	}
 
@@ -186,7 +187,9 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 
 			@Override
 			public void remove() {
-				backing.remove();
+				try (Transaction t = theInternals.lock(true, false, null)) {
+					backing.remove();
+				}
 			}
 		};
 	}
@@ -312,6 +315,7 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	}
 
 	private void removedNodeImpl(DefaultNode<Map.Entry<E, InternalElement>> node, Runnable removeAction) {
+		theModCount++;
 		node.getValue().getValue().setRemovedIndex(node.getValue().getValue().getIndex());
 		if(removeAction != null)
 			removeAction.run();
