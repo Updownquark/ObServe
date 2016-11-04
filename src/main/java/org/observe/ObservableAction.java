@@ -1,5 +1,10 @@
 package org.observe;
 
+import java.lang.reflect.Array;
+
+import org.observe.collect.ObservableList;
+
+import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 /**
@@ -28,6 +33,15 @@ public interface ObservableAction<T> {
 	 */
 	static <T> ObservableAction<T> flatten(ObservableValue<? extends ObservableAction<? extends T>> wrapper) {
 		return new FlattenedObservableAction<>(wrapper);
+	}
+
+	static <T> ObservableAction<T[]> and(TypeToken<T> type, ObservableAction<? extends T>... actions) {
+		return and(ObservableList.constant(new TypeToken<ObservableAction<? extends T>>() {}.where(new TypeParameter<T>() {}, type),
+			java.util.Arrays.asList(actions)));
+	}
+
+	static <T> ObservableAction<T[]> and(ObservableList<? extends ObservableAction<? extends T>> actions) {
+		return new AndObservableAction<>(actions);
 	}
 
 	/**
@@ -67,6 +81,41 @@ public interface ObservableAction<T> {
 		public ObservableValue<String> isEnabled() {
 			return ObservableValue.flatten(theWrapper.mapV(action -> action.isEnabled()),
 				() -> "This wrapper (" + theWrapper + ") is empty");
+		}
+	}
+
+	class AndObservableAction<T> implements ObservableAction<T[]> {
+		private final ObservableList<? extends ObservableAction<? extends T>> theActions;
+		private final TypeToken<T[]> theArrayType;
+
+		protected AndObservableAction(ObservableList<? extends ObservableAction<? extends T>> actions) {
+			theActions = actions;
+			theArrayType = new TypeToken<T[]>() {}.where(new TypeParameter<T>() {}, (TypeToken<T>) actions.getType()
+				.resolveType(ObservableList.class.getTypeParameters()[0]).resolveType(ObservableAction.class.getTypeParameters()[0]));
+		}
+
+		@Override
+		public TypeToken<T []> getType() {
+			return theArrayType;
+		}
+
+		@Override
+		public T[] act(Object cause) throws IllegalStateException {
+			ObservableAction<? extends T>[] actions = theActions.toArray();
+			for (ObservableAction<? extends T> action : actions) {
+				String msg = action.isEnabled().get();
+				if (msg != null)
+					throw new IllegalStateException(msg);
+			}
+			T[] values = (T[]) Array.newInstance(theArrayType.getRawType(), actions.length);
+			for (int i = 0; i < values.length; i++)
+				values[i] = actions[i].act(cause);
+			return values;
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			return ObservableList.flattenValues(theActions.map(action -> action.isEnabled())).findFirst(e -> e != null);
 		}
 	}
 }
