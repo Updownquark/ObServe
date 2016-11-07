@@ -106,6 +106,56 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	}
 
 	/**
+	 * @param accept The filter
+	 * @return A settable value that rejects values that return other than null for the given test
+	 */
+	default SettableValue<T> filterAccept(Function<? super T, String> accept) {
+		SettableValue<T> outer = this;
+		return new SettableValue<T>() {
+			@Override
+			public TypeToken<T> getType() {
+				return outer.getType();
+			}
+
+			@Override
+			public T get() {
+				return outer.get();
+			}
+
+			@Override
+			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+				return outer.subscribe(observer);
+			}
+
+			@Override
+			public boolean isSafe() {
+				return outer.isSafe();
+			}
+
+			@Override
+			public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
+				String error = accept.apply(value);
+				if (error != null)
+					throw new IllegalArgumentException(error);
+				return outer.set(value, cause);
+			}
+
+			@Override
+			public <V extends T> String isAcceptable(V value) {
+				String error = accept.apply(value);
+				if (error != null)
+					return error;
+				return outer.isAcceptable(value);
+			}
+
+			@Override
+			public ObservableValue<String> isEnabled() {
+				return outer.isEnabled();
+			}
+		};
+	}
+
+	/**
 	 * @param <R> The type of the new settable value to create
 	 * @param function The function to map this value to another
 	 * @param reverse The function to map the other value to this one
@@ -321,6 +371,11 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			.tag("combineNull", combineNull).get();
 	}
 
+	@Override
+	default SettableValue<T> refresh(Observable<?> refresh) {
+		return new RefreshingSettableValue<>(this, refresh);
+	}
+
 	/**
 	 * @param value An observable value that supplies settable values
 	 * @return A settable value that represents the current value in the inner observable
@@ -368,6 +423,37 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			return true;
 			// Should be able to do this. Don't understand why it won't compile.
 			// return ComposedObservableValue.super.isSafe();
+		}
+	}
+
+	/**
+	 * Implements {@link SettableValue#refresh(Observable)}
+	 *
+	 * @param <T> The type of value
+	 */
+	class RefreshingSettableValue<T> extends RefreshingObservableValue<T> implements SettableValue<T> {
+		public RefreshingSettableValue(SettableValue<T> wrap, Observable<?> refresh) {
+			super(wrap, refresh);
+		}
+
+		@Override
+		protected SettableValue<T> getWrapped() {
+			return (SettableValue<T>) super.getWrapped();
+		}
+
+		@Override
+		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
+			return getWrapped().set(value, cause);
+		}
+
+		@Override
+		public <V extends T> String isAcceptable(V value) {
+			return getWrapped().isAcceptable(value);
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			return getWrapped().isEnabled();
 		}
 	}
 
