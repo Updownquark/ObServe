@@ -68,8 +68,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 
 	@Override
 	default E last() {
-		if(isEmpty())
-			throw new java.util.NoSuchElementException();
+		// Can't throw NoSuchElementException to comply with ObservableOrderedCollection.last()
 		return getLast().get();
 	}
 

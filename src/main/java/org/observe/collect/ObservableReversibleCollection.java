@@ -100,6 +100,14 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	}
 
 	@Override
+	default E last() {
+		try (Transaction t = lock(false, null)) {
+			Iterator<E> iter = descending().iterator();
+			return iter.hasNext() ? iter.next() : null;
+		}
+	}
+
+	@Override
 	default ObservableReversibleCollection<E> safe() {
 		if (isSafe())
 			return this;

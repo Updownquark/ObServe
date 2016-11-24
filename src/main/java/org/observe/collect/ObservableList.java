@@ -5,6 +5,7 @@ import static org.observe.ObservableDebug.d;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.ConcurrentModificationException;
 import java.util.Iterator;
 import java.util.List;
@@ -222,6 +223,11 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		else
 			return d().debug(new DynamicFilteredList<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
 				.using("reverse", reverse).get();
+	}
+
+	@Override
+	default ObservableList<E> sorted(Comparator<? super E> compare) {
+		return new SortedObservableList<>(this, compare);
 	}
 
 	@Override
@@ -1565,6 +1571,30 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 		@Override
 		public String toString() {
 			return ObservableList.toString(this);
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableList#sorted(Comparator)}
+	 *
+	 * @param <E> The type of elements in the list
+	 */
+	class SortedObservableList<E> extends SortedObservableCollection<E> implements PartialListImpl<E> {
+		public SortedObservableList(ObservableList<E> wrap, Comparator<? super E> compare) {
+			super(wrap, compare);
+		}
+
+		@Override
+		public E get(int index) {
+			// TODO Any way to do this better?
+			return new ArrayList<>(this).get(index);
+		}
+
+		@Override
+		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<E>> onElement) {
+			// TODO This is not quite right because there may be 2 elements in the collection that compare the same, and these would be
+			// ordered the same forward as reverse using this implementation.
+			return onOrderedElement(onElement, comparator().reversed());
 		}
 	}
 

@@ -152,6 +152,18 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		return new PositionObservable<>(this, index, defValueGen);
 	}
 
+	/** @return The last value in this collection, or null if the collection is empty */
+	default E last() {
+		E lastValue = null;
+		try (Transaction t = lock(false, null)) {
+			Iterator<E> iter = iterator();
+			while (iter.hasNext()) {
+				lastValue = iter.next();
+			}
+		}
+		return lastValue;
+	}
+
 	@Override
 	default ObservableOrderedCollection<E> safe() {
 		if (isSafe())
@@ -1077,13 +1089,13 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 		@Override
 		public Iterator<E> iterator() {
+			// TODO Any way to do this better?
 			ArrayList<E> sorted = new ArrayList<>(theWrapped);
 			Collections.sort(sorted, theCompare);
 			return sorted.iterator();
 		}
 
-		@Override
-		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
+		protected Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement, Comparator<? super E> comparator) {
 			class SortedElement implements ObservableOrderedElement<E>, Comparable<SortedElement> {
 				private final ObservableOrderedElement<E> theWrappedEl;
 				private final DefaultTreeSet<SortedElement> theElements;
@@ -1129,7 +1141,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 				@Override
 				public int compareTo(SortedElement el) {
-					int compare = theCompare.compare(get(), el.get());
+					int compare = comparator.compare(get(), el.get());
 					if (compare != 0)
 						return compare;
 					return theWrappedEl.getIndex() - el.theWrappedEl.getIndex();
@@ -1149,18 +1161,18 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 					boolean changed = false;
 					if (parent != null) {
-						int compare = theCompare.compare(parent.getValue().get(), get());
+						int compare = comparator.compare(parent.getValue().get(), get());
 						if (compare == 0)
 							changed = true;
 						else if (compare > 0 != isLeft)
 							changed = true;
 					}
 					if (!changed && left != null) {
-						if (theCompare.compare(left.getValue().get(), get()) >= 0)
+						if (comparator.compare(left.getValue().get(), get()) >= 0)
 							changed = true;
 					}
 					if (!changed && right != null) {
-						if (theCompare.compare(right.getValue().get(), get()) <= 0)
+						if (comparator.compare(right.getValue().get(), get()) <= 0)
 							changed = true;
 					}
 					if (changed) {
@@ -1199,6 +1211,11 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 				unSubObs.onNext(null);
 				elements.clear();
 			};
+		}
+
+		@Override
+		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
+			return onOrderedElement(onElement, comparator());
 		}
 
 		@Override
