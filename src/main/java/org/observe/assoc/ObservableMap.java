@@ -445,6 +445,58 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 		};
 	}
 
+	/**
+	 * @param keyFilter The filter to pare down this map's keys
+	 * @return A map that has the same content as this map, except for the keys filtered out by the key filter
+	 */
+	default ObservableMap<K, V> filterKeysStatic(Predicate<? super K> keyFilter) {
+		ObservableMap<K, V> outer = this;
+		return new ObservableMap<K, V>() {
+			@Override
+			public Transaction lock(boolean write, Object cause) {
+				return outer.lock(write, cause);
+			}
+
+			@Override
+			public TypeToken<K> getKeyType() {
+				return outer.getKeyType();
+			}
+
+			@Override
+			public TypeToken<V> getValueType() {
+				return outer.getValueType();
+			}
+
+			@Override
+			public ObservableValue<CollectionSession> getSession() {
+				return outer.getSession();
+			}
+
+			@Override
+			public ObservableSet<K> keySet() {
+				return outer.keySet().filterStatic(keyFilter);
+			}
+
+			@Override
+			public ObservableValue<V> observe(Object key) {
+				if (getKeyType().getRawType().isInstance(key) && keyFilter.test((K) key))
+					return outer.observe(key);
+				else
+					return ObservableValue.constant(getValueType(), null);
+			}
+
+			@Override
+			public ObservableSet<? extends ObservableEntry<K, V>> observeEntries() {
+				return outer.observeEntries().filterStatic(entry -> keyFilter.test(entry.getKey()));
+			}
+
+			@Override
+			public boolean isSafe() {
+				return outer.isSafe();
+			}
+		};
+	}
+
 	/** @return An immutable copy of this map */
 	default ObservableMap<K, V> immutable() {
 		ObservableMap<K, V> outer = this;

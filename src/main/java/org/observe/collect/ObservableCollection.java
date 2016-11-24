@@ -337,8 +337,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	}
 
 	/**
-	 * TODO Make this method transaction-sensitive
-	 *
 	 * @param <X> The type of the collection to test
 	 * @param collection The collection to test
 	 * @return An observable boolean whose value is whether this collection contains every element of the given collection, according to

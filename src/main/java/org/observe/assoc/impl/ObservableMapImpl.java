@@ -81,6 +81,11 @@ public class ObservableMapImpl<K, V> implements ObservableMap<K, V> {
 		public boolean equals(Object o) {
 			return o instanceof Map.Entry && Objects.equals(((Map.Entry<?, ?>) o).getKey(), theKey);
 		}
+
+		@Override
+		public String toString() {
+			return getKey() + "=" + getValue();
+		}
 	}
 
 	private final TypeToken<K> theKeyType;
