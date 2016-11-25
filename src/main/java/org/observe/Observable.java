@@ -268,7 +268,9 @@ public interface Observable<T> {
 			@Override
 			public Subscription subscribe(Observer<? super V> observer) {
 				Subscription [] subs = new Subscription[obs.length];
-				for(int i = 0; i < subs.length; i++)
+				boolean[] init = new boolean[] { true };
+				for (int i = 0; i < subs.length; i++) {
+					int index = i;
 					subs[i] = obs[i].subscribe(new Observer<V>() {
 						@Override
 						public <V2 extends V> void onNext(V2 value) {
@@ -277,18 +279,24 @@ public interface Observable<T> {
 
 						@Override
 						public <V2 extends V> void onCompleted(V2 value) {
-							observer.onCompleted(value);
-						}
-
-						@Override
-						public void onError(Throwable e) {
-							observer.onError(e);
+							subs[index] = null;
+							boolean allDone = !init[0];
+							for (int j = 0; allDone && j < subs.length; j++)
+								if (subs[j] != null)
+									allDone = false;
+							if (allDone)
+								observer.onCompleted(value);
 						}
 					});
-				return () -> {
-					for(Subscription sub : subs)
-						sub.unsubscribe();
-				};
+				}
+				init[0] = false;
+				boolean allDone = true;
+				for (int j = 0; allDone && j < subs.length; j++)
+					if (subs[j] != null)
+						allDone = false;
+				if (allDone)
+					observer.onCompleted(null);
+				return Subscription.forAll(subs);
 			}
 
 			@Override
@@ -304,9 +312,10 @@ public interface Observable<T> {
 						ret.append(", ");
 					ret.append(obs[i]);
 				}
+				ret.append(')');
 				return ret.toString();
 			}
-		}).from("or", (Object []) obs).get(); // TODO
+		}).from("or", (Object[]) obs).get();
 	}
 
 	/**
