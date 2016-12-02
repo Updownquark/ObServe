@@ -1018,6 +1018,11 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 			tracking.elements.put(node, unique);
 			return unique;
 		}
+
+		@Override
+		public String toString() {
+			return ObservableSet.toString(this);
+		}
 	}
 
 	/**
