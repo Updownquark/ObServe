@@ -21,7 +21,7 @@ public interface Causable {
 	/**
 	 * Applies a function to each cause in the chain of events that led to this event and returns the first non-null value. Allows a quick
 	 * search through the chain of events
-	 * 
+	 *
 	 * @param test The test to use to search through the causes
 	 * @return The first non-null results of the test on the chain of events
 	 */
@@ -36,7 +36,7 @@ public interface Causable {
 			if (value != null)
 				return value;
 		}
-		while (cause != null && value == null) {
+		while (cause instanceof Causable && value == null) {
 			root = (Causable) cause;
 			cause = root.getCause();
 			value = test.apply(cause);

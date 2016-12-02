@@ -74,7 +74,8 @@ class CollectionChangesObservable<E, CCE extends CollectionChangeEvent<E>> imple
 						@Override
 						public <V extends ObservableValueEvent<CollectionSession>> void onNext(V value) {
 							if(value.getOldValue() != null)
-								fireEventsFromSessionData((SessionChangeTracker<E>) value.getOldValue().get(key, SESSION_TRACKER_PROPERTY));
+								fireEventsFromSessionData((SessionChangeTracker<E>) value.getOldValue().get(key, SESSION_TRACKER_PROPERTY),
+									value.getOldValue().getCause());
 						}
 					});
 				} else {
@@ -104,7 +105,7 @@ class CollectionChangesObservable<E, CCE extends CollectionChangeEvent<E>> imple
 				session.put(key, SESSION_TRACKER_PROPERTY, tracker);
 			} else {
 				if(tracker.type != type) {
-					fireEventsFromSessionData(tracker);
+					fireEventsFromSessionData(tracker, evt);
 					tracker = new SessionChangeTracker<>(type);
 					session.put(key, SESSION_TRACKER_PROPERTY, tracker);
 				}
@@ -114,15 +115,15 @@ class CollectionChangesObservable<E, CCE extends CollectionChangeEvent<E>> imple
 				tracker.oldElements.add(evt.getOldValue());
 		} else {
 			CollectionChangeEvent<E> toFire = new CollectionChangeEvent<>(type, asList(evt.getValue()),
-					type == CollectionChangeType.set ? asList(evt.getOldValue()) : null);
+				type == CollectionChangeType.set ? asList(evt.getOldValue()) : null, evt);
 			fireEvent((CCE) toFire);
 		}
 	}
 
-	protected void fireEventsFromSessionData(SessionChangeTracker<E> tracker) {
+	protected void fireEventsFromSessionData(SessionChangeTracker<E> tracker, Object cause) {
 		if(tracker == null)
 			return;
-		CollectionChangeEvent<E> evt = new CollectionChangeEvent<>(tracker.type, tracker.elements, tracker.oldElements);
+		CollectionChangeEvent<E> evt = new CollectionChangeEvent<>(tracker.type, tracker.elements, tracker.oldElements, cause);
 		fireEvent((CCE) evt);
 	}
 

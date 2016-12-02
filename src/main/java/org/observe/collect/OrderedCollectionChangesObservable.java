@@ -52,7 +52,7 @@ class OrderedCollectionChangesObservable<E, OCCE extends OrderedCollectionChange
 			tracker.indexes.add(index[0]);
 		} else {
 			OrderedCollectionChangeEvent<E> toFire = new OrderedCollectionChangeEvent<>(type, asList(evt.getValue()),
-				type == CollectionChangeType.set ? asList(evt.getOldValue()) : null, new IntList(index));
+				type == CollectionChangeType.set ? asList(evt.getOldValue()) : null, new IntList(index), evt);
 			fireEvent((OCCE) toFire);
 		}
 	}
@@ -60,7 +60,7 @@ class OrderedCollectionChangesObservable<E, OCCE extends OrderedCollectionChange
 	private OrderedSessionChangeTracker<E> adjustTrackerForChange(OrderedSessionChangeTracker<E> tracker, CollectionChangeType type,
 		int [] index, ObservableValueEvent<E> evt) {
 		if(tracker.type != type) {
-			fireEventsUpTo(tracker, type, index);
+			fireEventsUpTo(tracker, type, index, evt);
 			if(adjustEventsPast(tracker, type, index, evt))
 				return null;
 			OrderedSessionChangeTracker<E> newTracker = new OrderedSessionChangeTracker<>(type);
@@ -68,8 +68,8 @@ class OrderedCollectionChangesObservable<E, OCCE extends OrderedCollectionChange
 			newTracker.elements.add(evt.getValue());
 			if(newTracker.oldElements != null)
 				newTracker.oldElements.add(evt.getOldValue());
-			fireEventsFromSessionData(newTracker);
-			fireEventsFromSessionData(tracker);
+			fireEventsFromSessionData(newTracker, evt);
+			fireEventsFromSessionData(tracker, evt);
 			tracker.clear();
 			return tracker;
 		} else {
@@ -79,7 +79,7 @@ class OrderedCollectionChangesObservable<E, OCCE extends OrderedCollectionChange
 		}
 	}
 
-	private void fireEventsUpTo(OrderedSessionChangeTracker<E> tracker, CollectionChangeType type, int [] index) {
+	private void fireEventsUpTo(OrderedSessionChangeTracker<E> tracker, CollectionChangeType type, int[] index, Object cause) {
 		// Fire events for indexes before the new change index, since otherwise those changes would affect the index
 		if(tracker.indexes.size() < 25) {
 			// If it's not too expensive, let's see if we need to do anything before constructing the lists needlessly
@@ -105,7 +105,7 @@ class OrderedCollectionChangesObservable<E, OCCE extends OrderedCollectionChange
 				i--;
 			}
 		}
-		fireEventsFromSessionData(subTracker);
+		fireEventsFromSessionData(subTracker, cause);
 	}
 
 	private boolean adjustEventsPast(OrderedSessionChangeTracker<E> tracker, CollectionChangeType type, int [] index,
@@ -185,12 +185,12 @@ class OrderedCollectionChangesObservable<E, OCCE extends OrderedCollectionChange
 	}
 
 	@Override
-	protected void fireEventsFromSessionData(SessionChangeTracker<E> tracker) {
+	protected void fireEventsFromSessionData(SessionChangeTracker<E> tracker, Object cause) {
 		OrderedSessionChangeTracker<E> orderedTracker = (OrderedSessionChangeTracker<E>) tracker;
 		if(tracker == null || tracker.elements.isEmpty())
 			return;
 		OrderedCollectionChangeEvent<E> evt = new OrderedCollectionChangeEvent<>(tracker.type, tracker.elements, tracker.oldElements,
-			orderedTracker.indexes);
+			orderedTracker.indexes, cause);
 		fireEvent((OCCE) evt);
 	}
 }
