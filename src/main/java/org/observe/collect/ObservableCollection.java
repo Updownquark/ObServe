@@ -1348,6 +1348,15 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	}
 
 	/**
+	 * @param type The type of the collection
+	 * @param values The values for the new collection
+	 * @return An immutable collection with the same values as those in the given collection
+	 */
+	public static <E> ObservableCollection<E> constant(TypeToken<E> type, E... values) {
+		return constant(type, java.util.Arrays.asList(values));
+	}
+
+	/**
 	 * Turns a collection of observable values into a collection composed of those holders' values
 	 *
 	 * @param <T> The type of elements held in the values
