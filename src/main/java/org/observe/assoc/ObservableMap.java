@@ -754,7 +754,7 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 
 		@Override
 		public String toString() {
-			return theKey + "=" + theValue;
+			return theKey + "=" + theValue.get();
 		}
 	}
 
