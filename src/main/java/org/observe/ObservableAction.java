@@ -35,6 +35,25 @@ public interface ObservableAction<T> {
 		return new FlattenedObservableAction<>(wrapper);
 	}
 
+	static <T> ObservableAction<T> nullAction(TypeToken<T> type, T value) {
+		return new ObservableAction<T>() {
+			@Override
+			public TypeToken<T> getType() {
+				return type;
+			}
+
+			@Override
+			public T act(Object cause) throws IllegalStateException {
+				return value;
+			}
+
+			@Override
+			public ObservableValue<String> isEnabled() {
+				return ObservableValue.constant(TypeToken.of(String.class), null);
+			}
+		};
+	}
+
 	static <T> ObservableAction<T[]> and(TypeToken<T> type, ObservableAction<? extends T>... actions) {
 		return and(ObservableList.constant(new TypeToken<ObservableAction<? extends T>>() {}.where(new TypeParameter<T>() {}, type),
 			java.util.Arrays.asList(actions)));
@@ -107,7 +126,7 @@ public interface ObservableAction<T> {
 				if (msg != null)
 					throw new IllegalStateException(msg);
 			}
-			T[] values = (T[]) Array.newInstance(theArrayType.getRawType(), actions.length);
+			T[] values = (T[]) Array.newInstance(theArrayType.getComponentType().getRawType(), actions.length);
 			for (int i = 0; i < values.length; i++)
 				values[i] = actions[i].act(cause);
 			return values;
