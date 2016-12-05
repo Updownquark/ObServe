@@ -93,4 +93,19 @@ public class ObservableSortedArrayList<E> extends ObservableArrayList<E> {
 		add(element);
 		return ret;
 	}
+
+	/**
+	 * @param index The index of the value that has changed, which may require resorting
+	 * @return Whether a resort operation was performed
+	 */
+	public boolean updated(int index) {
+		if (index > 0 && theCompare.compare(get(index - 1), get(index)) > 0) {
+			add(remove(index));
+			return true;
+		} else if (index < size() - 1 && theCompare.compare(get(index), get(index + 1)) > 0) {
+			add(remove(index));
+			return true;
+		} else
+			return false;
+	}
 }
