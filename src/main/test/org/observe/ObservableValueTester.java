@@ -3,15 +3,15 @@ package org.observe;
 import static org.junit.Assert.assertEquals;
 
 public class ObservableValueTester<T> extends AbstractObservableTester<T> {
-	private final ObservableValue<T> theValue;
+	private final ObservableValue<? extends T> theValue;
 	private T theSynced;
 	private double theTolerance;
 
-	public ObservableValueTester(ObservableValue<T> value) {
+	public ObservableValueTester(ObservableValue<? extends T> value) {
 		this(value, Double.NaN);
 	}
 
-	public ObservableValueTester(ObservableValue<T> value, double tolerance) {
+	public ObservableValueTester(ObservableValue<? extends T> value, double tolerance) {
 		theValue = value;
 		theTolerance = tolerance;
 		setSynced(true);
