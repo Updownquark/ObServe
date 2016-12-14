@@ -15,6 +15,7 @@ import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.impl.ObservableHashSet;
 import org.observe.util.DefaultTransactable;
+import org.qommons.Transactable;
 import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeParameter;
@@ -92,7 +93,8 @@ public class ObservableMapImpl<K, V> implements ObservableMap<K, V> {
 
 	private final TypeToken<V> theValueType;
 
-	private DefaultTransactable theSessionController;
+	private final ObservableValue<CollectionSession> theSession;
+	private final Transactable theSessionController;
 	private final ReentrantReadWriteLock theLock;
 
 	private final ObservableSet<ObservableEntry<K, V>> theEntries;
@@ -116,10 +118,33 @@ public class ObservableMapImpl<K, V> implements ObservableMap<K, V> {
 		theValueType = valueType.wrap();
 		theLock=new ReentrantReadWriteLock();
 		theSessionController = new DefaultTransactable(theLock);
+		theSession = ((DefaultTransactable) theSessionController).getSession();
 
 		theEntries = entrySet.create(
 			new TypeToken<ObservableEntry<K, V>>() {}.where(new TypeParameter<K>() {}, theKeyType).where(new TypeParameter<V>() {},
-				theValueType), theLock, theSessionController.getSession(), theSessionController);
+				theValueType),
+			theLock, theSession, theSessionController);
+	}
+
+	/**
+	 * @param keyType The type of key used by this map
+	 * @param valueType The type of value stored in this map
+	 * @param entrySet Creates the set to hold this map's entries
+	 * @param lock The lock for this map to use
+	 * @param session The session observable for this map
+	 * @param sessionController The session controller for this map
+	 */
+	public ObservableMapImpl(TypeToken<K> keyType, TypeToken<V> valueType,
+		CollectionCreator<ObservableEntry<K, V>, ObservableSet<ObservableEntry<K, V>>> entrySet, ReentrantReadWriteLock lock,
+		ObservableValue<CollectionSession> session, Transactable sessionController) {
+		theKeyType = keyType.wrap();
+		theValueType = valueType.wrap();
+		theLock = lock;
+		theSession = session;
+		theSessionController = sessionController;
+
+		theEntries = entrySet.create(new TypeToken<ObservableEntry<K, V>>() {}.where(new TypeParameter<K>() {}, theKeyType)
+			.where(new TypeParameter<V>() {}, theValueType), theLock, theSession, theSessionController);
 	}
 
 	@Override
@@ -134,7 +159,7 @@ public class ObservableMapImpl<K, V> implements ObservableMap<K, V> {
 
 	@Override
 	public ObservableValue<CollectionSession> getSession() {
-		return theSessionController.getSession();
+		return theSession;
 	}
 
 	@Override
@@ -227,5 +252,20 @@ public class ObservableMapImpl<K, V> implements ObservableMap<K, V> {
 				}
 			}
 		}
+	}
+
+	@Override
+	public String toString() {
+		StringBuilder str = new StringBuilder();
+		str.append('{');
+		boolean first = true;
+		for (Map.Entry<K, V> entry : entrySet()) {
+			if (!first)
+				str.append(", ");
+			first = false;
+			str.append(entry);
+		}
+		str.append('}');
+		return str.toString();
 	}
 }
