@@ -35,6 +35,12 @@ public interface ObservableAction<T> {
 		return new FlattenedObservableAction<>(wrapper);
 	}
 
+	/**
+	 * @param <T> The type of the acton's value
+	 * @param type The run-time type of the action's value
+	 * @param value The value to be returned each time by the action
+	 * @return An action that does nothing but return the given value
+	 */
 	static <T> ObservableAction<T> nullAction(TypeToken<T> type, T value) {
 		return new ObservableAction<T>() {
 			@Override
@@ -54,11 +60,26 @@ public interface ObservableAction<T> {
 		};
 	}
 
+	/**
+	 * Combines several actions into one
+	 * 
+	 * @param <T> The type of the actions
+	 * @param type The run-time type of the actions
+	 * @param actions The actions to combine
+	 * @return A single action that invokes the given actions and returns their values as an array
+	 */
 	static <T> ObservableAction<T[]> and(TypeToken<T> type, ObservableAction<? extends T>... actions) {
 		return and(ObservableList.constant(new TypeToken<ObservableAction<? extends T>>() {}.where(new TypeParameter<T>() {}, type),
 			java.util.Arrays.asList(actions)));
 	}
 
+	/**
+	 * Combines several actions into one
+	 * 
+	 * @param <T> The type of the actions
+	 * @param actions The actions to combine
+	 * @return A single action that invokes the given actions and returns their values as an array
+	 */
 	static <T> ObservableAction<T[]> and(ObservableList<? extends ObservableAction<? extends T>> actions) {
 		return new AndObservableAction<>(actions);
 	}
@@ -103,6 +124,11 @@ public interface ObservableAction<T> {
 		}
 	}
 
+	/**
+	 * Implements {@link ObservableAction#and(ObservableList)}
+	 * 
+	 * @param <T> The type of the actions
+	 */
 	class AndObservableAction<T> implements ObservableAction<T[]> {
 		private final ObservableList<? extends ObservableAction<? extends T>> theActions;
 		private final TypeToken<T[]> theArrayType;

@@ -25,40 +25,97 @@ import org.qommons.Transaction;
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
+/**
+ * Represents an observable, hierarchical data structure
+ *
+ * @param <N> The type of nodes (containers) in the tree
+ * @param <V> The type of values in the tree
+ */
 public interface ObservableTree<N, V> extends Transactable {
+	/** @return The root node of the tree */
 	ObservableValue<N> getRoot();
 
+	/** @return The value type of the tree */
 	TypeToken<V> getValueType();
 
+	/**
+	 * @param node The node to get the value for
+	 * @return The value for the given node
+	 */
 	ObservableValue<? extends V> getValue(N node);
 
+	/**
+	 * @param node The node to get the children of
+	 * @return All nodes with the given node as their parent
+	 */
 	ObservableCollection<? extends N> getChildren(N node);
 
+	/**
+	 * @return Whether this tree is safe, in that all observables returned by this tree obey a common safe scheme such that events are only
+	 *         fired on one thread at a time.
+	 */
 	boolean isSafe();
 
+	/** @return The session for this tree */
 	ObservableValue<CollectionSession> getSession();
 
+	/**
+	 * Builds a tree from components
+	 *
+	 * @param root The root for the tree
+	 * @param valueType The value type of the tree
+	 * @param getValue The node-value getter for the tree
+	 * @param getChildren The children getter for the tree
+	 * @return The built tree
+	 */
 	public static <N, V> ObservableTree<N, V> of(ObservableValue<N> root, TypeToken<V> valueType,
 		Function<? super N, ? extends ObservableValue<? extends V>> getValue,
 			Function<? super N, ? extends ObservableCollection<? extends N>> getChildren) {
 		return new ComposedTree<>(root, valueType, getValue, getChildren);
 	}
 
+	/**
+	 * @param tree The tree to get the value paths of
+	 * @param onlyTerminal Whether to include only terminal paths, or also to include intermediate paths (paths ending in a node that also
+	 *        has children not in the path)
+	 * @return A collection of immutable, constant lists of values. Each list is the values from the root to a node. The number of lists is
+	 *         equal to the total number of nodes (if <code>onlyTerminal</code> is false) or leaf nodes in the tree
+	 */
 	public static <N, V> ObservableCollection<List<V>> valuePathsOf(ObservableTree<N, V> tree, boolean onlyTerminal) {
 		return valuePathsOf(tree, null, onlyTerminal);
 	}
 
+	/**
+	 * @param tree The tree to get the value paths of
+	 * @param nodeCreator Used to add values into a tree
+	 * @param onlyTerminal Whether to include only terminal paths, or also to include intermediate paths (paths ending in a node that also
+	 *        has children not in the path)
+	 * @return A collection of immutable, constant lists of values. Each list is the values from the root to a node. The number of lists is
+	 *         equal to the total number of nodes (if <code>onlyTerminal</code> is false) or leaf nodes in the tree
+	 */
 	public static <N, V> ObservableCollection<List<V>> valuePathsOf(ObservableTree<N, V> tree,
 		Function<? super V, ? extends N> nodeCreator, boolean onlyTerminal) {
 		return new ValuePathCollection<>(tree, nodeCreator, onlyTerminal);
 	}
 
+	/**
+	 * Implements {@link ObservableTree#of(ObservableValue, TypeToken, Function, Function)}
+	 *
+	 * @param <N> The type of node
+	 * @param <V> The type of value
+	 */
 	public static class ComposedTree<N, V> implements ObservableTree<N, V> {
 		private final ObservableValue<N> theRoot;
 		private final TypeToken<V> theValueType;
 		private final Function<? super N, ? extends ObservableValue<? extends V>> theValueGetter;
 		private final Function<? super N, ? extends ObservableCollection<? extends N>> theChildrenGetter;
 
+		/**
+		 * @param root The root for the tree
+		 * @param valueType The value type of the tree
+		 * @param valueGetter The node-value getter for the tree
+		 * @param childrenGetter The children getter for the tree
+		 */
 		public ComposedTree(ObservableValue<N> root, TypeToken<V> valueType,
 			Function<? super N, ? extends ObservableValue<? extends V>> valueGetter,
 				Function<? super N, ? extends ObservableCollection<? extends N>> childrenGetter) {
@@ -105,11 +162,23 @@ public interface ObservableTree<N, V> extends Transactable {
 		}
 	}
 
+	/**
+	 * Implements {@link ObservableTree#valuePathsOf(ObservableTree, Function, boolean)}
+	 * 
+	 * @param <N> The node type of the tree
+	 * @param <V> The value type of the tree
+	 */
 	public static class ValuePathCollection<N, V> implements ObservableCollection.PartialCollectionImpl<List<V>> {
 		private final ObservableTree<N, V> theTree;
 		private final Function<? super V, ? extends N> theNodeCreator;
 		private final boolean isOnlyTerminal;
 
+		/**
+		 * @param tree The tree to get the value paths of
+		 * @param nodeCreator Used to add values into a tree
+		 * @param onlyTerminal Whether to include only terminal paths, or also to include intermediate paths (paths ending in a node that
+		 *        also has children not in the path)
+		 */
 		protected ValuePathCollection(ObservableTree<N, V> tree, Function<? super V, ? extends N> nodeCreator, boolean onlyTerminal) {
 			theTree = tree;
 			theNodeCreator = nodeCreator;

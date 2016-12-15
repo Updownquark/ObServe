@@ -349,6 +349,12 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 			.get();
 	}
 
+	/**
+	 * @param <E> The type of elements in the collection
+	 * @param outer The collection of collections
+	 * @param compare The comparator to use to sort the elements
+	 * @return An observable sorted set containing all unique elements in any collection in the outer collection
+	 */
 	public static <E> ObservableSortedSet<E> flatten(ObservableOrderedCollection<? extends ObservableSortedSet<? extends E>> outer,
 		Comparator<? super E> compare) {
 		return ObservableSortedSet.unique(ObservableCollection.flatten(outer), compare);
@@ -374,6 +380,11 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 		return d().debug(new CollectionWrappingSortedSet<>(coll, compare)).from("unique", coll).using("compare", compare).get();
 	}
 
+	/**
+	 * @param <T> The type for the collection
+	 * @param type The run-time type for the collection
+	 * @return An empty sorted set with the given type
+	 */
 	public static <T> ObservableSortedSet<T> empty(TypeToken<T> type) {
 		class EmptySortedSet implements PartialSortedSetImpl<T> {
 			@Override
@@ -466,6 +477,13 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 		return new EmptySortedSet();
 	}
 
+	/**
+	 * @param <T> The type of elements in the collection
+	 * @param type The run-time type of elements in the collection
+	 * @param coll The values for the collection
+	 * @param compare The comparator to determine ordering of the values
+	 * @return An observable sorted set containing all the values in the given collection
+	 */
 	public static <T> ObservableSortedSet<T> constant(TypeToken<T> type, Collection<? extends T> coll, Comparator<? super T> compare) {
 		NavigableSet<T> modSet = new TreeSet<>(compare);
 		modSet.addAll(coll);
