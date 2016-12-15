@@ -1,6 +1,7 @@
 package org.observe.util;
 
 import org.observe.collect.ObservableSet;
+import org.qommons.Equalizer;
 
 /**
  * Wraps an observable set
@@ -25,5 +26,10 @@ public class ObservableSetWrapper<T> extends ObservableCollectionWrapper<T> impl
 	@Override
 	protected ObservableSet<T> getWrapped() {
 		return (ObservableSet<T>) super.getWrapped();
+	}
+
+	@Override
+	public Equalizer getEqualizer() {
+		return getWrapped().getEqualizer();
 	}
 }

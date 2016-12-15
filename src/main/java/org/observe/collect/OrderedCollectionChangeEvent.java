@@ -18,9 +18,10 @@ public class OrderedCollectionChangeEvent<E> extends CollectionChangeEvent<E> {
 	 * @param val The values that were added, removed, or changed in the collection
 	 * @param oldVal The old values from the set events
 	 * @param idxs The indexes of the elements added, removed, or changed, in the same order as <code>val</code>
+	 * @param cause The cause of the event
 	 */
-	public OrderedCollectionChangeEvent(CollectionChangeType aType, List<E> val, List<E> oldVal, IntList idxs) {
-		super(aType, val, oldVal);
+	public OrderedCollectionChangeEvent(CollectionChangeType aType, List<E> val, List<E> oldVal, IntList idxs, Object cause) {
+		super(aType, val, oldVal, cause);
 		indexes = idxs.clone();
 		indexes.seal();
 	}

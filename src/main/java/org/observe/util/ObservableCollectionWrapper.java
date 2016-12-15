@@ -8,8 +8,9 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableElement;
+import org.qommons.Transaction;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 /**
  * Wraps an observable set
@@ -47,7 +48,7 @@ public class ObservableCollectionWrapper<E> implements ObservableCollection<E> {
 	}
 
 	@Override
-	public Type getType() {
+	public TypeToken<E> getType() {
 		return theWrapped.getType();
 	}
 
@@ -59,6 +60,11 @@ public class ObservableCollectionWrapper<E> implements ObservableCollection<E> {
 	@Override
 	public Transaction lock(boolean write, Object cause) {
 		return theWrapped.lock(write, cause);
+	}
+
+	@Override
+	public boolean isSafe() {
+		return theWrapped.isSafe();
 	}
 
 	@Override
@@ -99,7 +105,10 @@ public class ObservableCollectionWrapper<E> implements ObservableCollection<E> {
 	@Override
 	public Iterator<E> iterator() {
 		return new Iterator<E>() {
-			private final Iterator<E> backing = getWrapped().iterator();
+			private final Iterator<E> backing;
+			{
+				backing = getWrapped().iterator();
+			}
 
 			@Override
 			public boolean hasNext() {
@@ -159,6 +168,16 @@ public class ObservableCollectionWrapper<E> implements ObservableCollection<E> {
 	public void clear() {
 		assertModifiable();
 		theWrapped.clear();
+	}
+
+	@Override
+	public boolean canRemove(Object value) {
+		return isModifiable && theWrapped.canRemove(value);
+	}
+
+	@Override
+	public boolean canAdd(E value) {
+		return isModifiable && theWrapped.canAdd(value);
 	}
 
 	@Override

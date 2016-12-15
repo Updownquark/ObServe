@@ -9,7 +9,7 @@ import org.observe.Subscription;
 import org.observe.collect.ObservableElement;
 import org.observe.util.ObservableUtils;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 class ExposedObservableElement<E> implements ObservableElement<E> {
 	private final InternalObservableElementImpl<E> theInternalElement;
@@ -26,7 +26,7 @@ class ExposedObservableElement<E> implements ObservableElement<E> {
 	}
 
 	@Override
-	public Type getType() {
+	public TypeToken<E> getType() {
 		return theInternalElement.getType();
 	}
 
@@ -49,11 +49,6 @@ class ExposedObservableElement<E> implements ObservableElement<E> {
 				ObservableValueEvent<E> event2 = createChangeEvent(event.getOldValue(), event.getValue(), event.getCause());
 				observer.onCompleted(event2);
 			}
-
-			@Override
-			public void onError(Throwable e) {
-				observer.onError(e);
-			}
 		});
 		theSubscriptions.add(ret);
 		return ret;
@@ -62,6 +57,11 @@ class ExposedObservableElement<E> implements ObservableElement<E> {
 	@Override
 	public ObservableValue<E> persistent() {
 		return theInternalElement;
+	}
+
+	@Override
+	public boolean isSafe() {
+		return theInternalElement.isSafe();
 	}
 
 	@Override

@@ -10,8 +10,10 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.DefaultCollectionSession;
+import org.qommons.Transactable;
+import org.qommons.Transaction;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 /** A simple transactable that manages a reentrant session for an observable collection or data structure */
 public class DefaultTransactable implements Transactable {
@@ -30,10 +32,10 @@ public class DefaultTransactable implements Transactable {
 		theLock = lock;
 		theDepth = new AtomicInteger();
 		theObservableSession = new DefaultObservableValue<CollectionSession>() {
-			private final Type TYPE = new Type(CollectionSession.class);
+			private final TypeToken<CollectionSession> TYPE = TypeToken.of(CollectionSession.class);
 
 			@Override
-			public Type getType() {
+			public TypeToken<CollectionSession> getType() {
 				return TYPE;
 			}
 

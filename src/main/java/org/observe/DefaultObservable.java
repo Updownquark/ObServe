@@ -1,6 +1,6 @@
 package org.observe;
 
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.Queue;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -22,11 +22,21 @@ public class DefaultObservable<T> implements Observable<T> {
 	private OnSubscribe<T> theOnSubscribe;
 	private AtomicBoolean isAlive = new AtomicBoolean(true);
 	private AtomicBoolean hasIssuedController = new AtomicBoolean(false);
-	private ConcurrentLinkedQueue<Observer<? super T>> theListeners;
+	private Queue<Observer<? super T>> theListeners;
 
 	/** Creates the observable */
 	public DefaultObservable() {
-		theListeners = new ConcurrentLinkedQueue<>();
+		/* Java's ConcurrentLinkedQueue has a problem (for me) that makes the class unusable here.  As documented in fireNext() below, the
+		 * behavior of observables is advertised such that if a listener is added by a listener, the new listener will be added at the end
+		 * of the listeners and will be notified for the currently firing value.  ConcurrentLinkedQueue allows for this except when the
+		 * listener adding the new listener was previously the last listener in the queue.  ConcurrentLinkedQueue's iterator looks ahead in
+		 * the next() method, not hasNext(); so if a listener returned by that iterator adds another value to the queue, that iterator will
+		 * not see it.
+		 * That's why the following line is commented out and replaced with a possibly less efficient but more predictable implementation of
+		 * mine.
+		 */
+		// theListeners = new ConcurrentLinkedQueue<>();
+		theListeners = new org.qommons.LinkedQueue<>();
 	}
 
 	/**
@@ -77,6 +87,7 @@ public class DefaultObservable<T> implements Observable<T> {
 	private void fireNext(T value) {
 		if(!isAlive.get())
 			throw new IllegalStateException("Firing a value on a completed observable");
+		// This allows listeners to be added by listeners. Those new listeners will be fired last.
 		for(Observer<? super T> observer : theListeners) {
 			try {
 				observer.onNext(value);
@@ -107,6 +118,11 @@ public class DefaultObservable<T> implements Observable<T> {
 			observer.onError(e);
 	}
 
+	@Override
+	public boolean isSafe() {
+		return false;
+	}
+
 	/**
 	 * Clones this value into a new observable that is NOT yet controlled. Note that this class does not implement {@link Cloneable}, so
 	 * subclasses will need to implement Cloneable for this method to not throw the {@link CloneNotSupportedException}
@@ -114,7 +130,8 @@ public class DefaultObservable<T> implements Observable<T> {
 	@Override
 	protected DefaultObservable<T> clone() throws CloneNotSupportedException {
 		DefaultObservable<T> ret = (DefaultObservable<T>) super.clone();
-		ret.theListeners = new ConcurrentLinkedQueue<>();
+		// ret.theListeners = new ConcurrentLinkedQueue<>();
+		ret.theListeners = new org.qommons.LinkedQueue<>();
 		ret.isAlive = new AtomicBoolean(true);
 		ret.hasIssuedController = new AtomicBoolean(false);
 		return ret;

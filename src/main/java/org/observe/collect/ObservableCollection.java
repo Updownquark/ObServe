@@ -6,8 +6,12 @@ import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
@@ -17,17 +21,25 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import org.observe.DefaultObservable;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
+import org.observe.SimpleObservable;
 import org.observe.Subscription;
-import org.observe.datastruct.ObservableMultiMap;
-import org.observe.util.ListenerSet;
+import org.observe.assoc.MultiMap.MultiEntry;
+import org.observe.assoc.ObservableMultiMap;
+import org.observe.assoc.ObservableSortedMultiMap;
+import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.ObservableUtils;
-import org.observe.util.Transaction;
+import org.qommons.Equalizer;
+import org.qommons.IterableUtils;
+import org.qommons.ListenerSet;
+import org.qommons.Transaction;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeParameter;
+import com.google.common.reflect.TypeToken;
 
 /**
  * A collection whose content can be observed
@@ -36,7 +48,7 @@ import prisms.lang.Type;
  */
 public interface ObservableCollection<E> extends TransactableCollection<E> {
 	/** @return The type of elements in this collection */
-	Type getType();
+	TypeToken<E> getType();
 
 	/**
 	 * @param onElement The listener to be notified when new elements are added to the collection
@@ -65,6 +77,17 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @return The observable value for the current session of this collection
 	 */
 	ObservableValue<CollectionSession> getSession();
+
+	/** @return Whether this collection is thread-safe, meaning it is constrained to only fire events on a single thread at a time */
+	boolean isSafe();
+
+	/** @return An observable collection with the same values but that only fires events on a single thread at a time */
+	default ObservableCollection<E> safe() {
+		if (isSafe())
+			return this;
+		else
+			return d().debug(new SafeObservableCollection<>(this)).from("safe", this).get();
+	}
 
 	@Override
 	default boolean isEmpty() {
@@ -107,10 +130,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			for(E value : this)
 				ret.add(value);
 		}
-		Class<?> base = getType().toClass();
-		if(base.isPrimitive())
-			base = Type.getWrapperType(base);
-		return ret.toArray((E []) java.lang.reflect.Array.newInstance(base, ret.size()));
+
+		return ret.toArray((E []) java.lang.reflect.Array.newInstance(getType().wrap().getRawType(), ret.size()));
 	}
 
 	@Override
@@ -123,13 +144,25 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		return ret.toArray(a);
 	}
 
+	/**
+	 * @param values The values to add to the collection
+	 * @return This collection
+	 */
+	public default ObservableCollection<E> addValues(E... values) {
+		try (Transaction t = lock(true, null)) {
+			for (E value : values)
+				add(value);
+		}
+		return this;
+	}
+
 	/** @return An observable value for the size of this collection */
 	default ObservableValue<Integer> observeSize() {
 		return d().debug(new ObservableValue<Integer>() {
-			private final Type intType = new Type(Integer.TYPE);
+			private final TypeToken<Integer> intType = TypeToken.of(Integer.TYPE);
 
 			@Override
-			public Type getType() {
+			public TypeToken<Integer> getType() {
 				return intType;
 			}
 
@@ -173,6 +206,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			}
 
 			@Override
+			public boolean isSafe() {
+				return ObservableCollection.this.isSafe();
+			}
+
+			@Override
 			public String toString() {
 				return ObservableCollection.this + ".size()";
 			}
@@ -188,50 +226,58 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	}
 
 	/**
-	 * @return An observable that fires a (null) value whenever anything in this collection changes. Unlike {@link #changes()}, this
-	 *         observable will only fire 1 event per transaction.
+	 * @return An observable that fires a value (the cause event of the change) whenever anything in this collection changes. Unlike
+	 *         {@link #changes()}, this observable will only fire 1 event per transaction.
 	 */
-	default Observable<Void> simpleChanges() {
-		return observer -> {
-			boolean [] initialized = new boolean[1];
-			Object key = new Object();
-			Subscription collSub = onElement(element -> {
-				element.subscribe(new Observer<Object>() {
-					@Override
-					public void onNext(Object value) {
-						if(!initialized[0])
-							return;
-						CollectionSession session = getSession().get();
-						if(session == null)
-							observer.onNext(null);
-						else
-							session.put(key, "changed", true);
-					}
+	default Observable<ObservableValueEvent<?>> simpleChanges() {
+		return new Observable<ObservableValueEvent<?>>() {
+			@Override
+			public Subscription subscribe(Observer<? super ObservableValueEvent<?>> observer) {
+				boolean[] initialized = new boolean[1];
+				Object key = new Object();
+				Subscription collSub = onElement(element -> {
+					element.subscribe(new Observer<ObservableValueEvent<? extends E>>() {
+						@Override
+						public <V extends ObservableValueEvent<? extends E>> void onNext(V event) {
+							if (!initialized[0])
+								return;
+							CollectionSession session = getSession().get();
+							if (session == null)
+								observer.onNext(event);
+							else
+								session.put(key, "changed", true);
+						}
 
-					@Override
-					public void onCompleted(Object value) {
-						if(!initialized[0])
-							return;
-						CollectionSession session = getSession().get();
-						if(session == null)
-							observer.onNext(null);
-						else
-							session.put(key, "changed", true);
+						@Override
+						public <V extends ObservableValueEvent<? extends E>> void onCompleted(V event) {
+							if (!initialized[0])
+								return;
+							CollectionSession session = getSession().get();
+							if (session == null)
+								observer.onNext(event);
+							else
+								session.put(key, "changed", true);
+						}
+					});
+				});
+				Subscription transSub = getSession().act(event -> {
+					if (!initialized[0])
+						return;
+					if (event.getOldValue() != null && event.getOldValue().put(key, "changed", null) != null) {
+						observer.onNext(event);
 					}
 				});
-			});
-			Subscription transSub = getSession().act(event -> {
-				if(!initialized[0])
-					return;
-				if(event.getOldValue() != null && event.getOldValue().put(key, "changed", null) != null) {
-					observer.onNext(null);
-				}
-			});
-			initialized[0] = true;
-			return () -> {
-				collSub.unsubscribe();
-				transSub.unsubscribe();
-			};
+				initialized[0] = true;
+				return () -> {
+					collSub.unsubscribe();
+					transSub.unsubscribe();
+				};
+			}
+
+			@Override
+			public boolean isSafe() {
+				return ObservableCollection.this.isSafe();
+			}
 		};
 	}
 
@@ -245,6 +291,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			}
 
 			@Override
+			public boolean isSafe() {
+				return ObservableCollection.this.isSafe();
+			}
+
+			@Override
 			public String toString() {
 				return "removes(" + coll + ")";
 			}
@@ -255,10 +306,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	default ObservableValue<Collection<E>> asValue() {
 		ObservableCollection<E> outer = this;
 		return new ObservableValue<Collection<E>>() {
-			final Type theType = new Type(ObservableCollection.class, outer.getType());
+			final TypeToken<Collection<E>> theType = new TypeToken<Collection<E>>() {}.where(new TypeParameter<E>() {}, outer.getType());
 
 			@Override
-			public Type getType() {
+			public TypeToken<Collection<E>> getType() {
 				return theType;
 			}
 
@@ -277,6 +328,184 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 					observer.onNext(createChangeEvent(old, value[0], null));
 				});
 			}
+
+			@Override
+			public boolean isSafe() {
+				return outer.isSafe();
+			}
+		};
+	}
+
+	/**
+	 * @param <X> The type of the collection to test
+	 * @param collection The collection to test
+	 * @return An observable boolean whose value is whether this collection contains every element of the given collection, according to
+	 *         {@link Object#equals(Object)}
+	 */
+	default <X> ObservableValue<Boolean> observeContainsAll(ObservableCollection<X> collection) {
+		return new ObservableValue<Boolean>() {
+			@Override
+			public TypeToken<Boolean> getType() {
+				return TypeToken.of(Boolean.TYPE);
+			}
+
+			@Override
+			public boolean isSafe() {
+				return true;
+			}
+
+			@Override
+			public Boolean get() {
+				return containsAll(collection);
+			}
+
+			@Override
+			public Subscription subscribe(Observer<? super ObservableValueEvent<Boolean>> observer) {
+				class ValueCount {
+					final Object value;
+					int left;
+					int right;
+					boolean satisfied = true;
+
+					ValueCount(Object val) {
+						value = val;
+					}
+
+					int modify(boolean add, boolean lft, int unsatisfied) {
+						if (add) {
+							if (lft)
+								left++;
+							else
+								right++;
+						} else {
+							if (lft)
+								left--;
+							else
+								right--;
+						}
+						if (satisfied) {
+							if (!checkSatisfied()) {
+								satisfied = false;
+								return unsatisfied + 1;
+							}
+						} else if (unsatisfied > 0) {
+							if (checkSatisfied()) {
+								satisfied = true;
+								return unsatisfied - 1;
+							}
+						}
+						return unsatisfied;
+					}
+
+					private boolean checkSatisfied() {
+						return left > 0 || right == 0;
+					}
+
+					boolean isEmpty() {
+						return left == 0 && right == 0;
+					}
+
+					@Override
+					public String toString() {
+						return value + " (" + left + "/" + right + ")";
+					}
+				}
+				Map<Object, ValueCount> allValueCounts = new HashMap<>();
+				final int[] unsatisfied = new int[1];
+				final int[] transUnsatisfied = new int[1];
+				final boolean[] init = new boolean[] { true };
+				final ReentrantLock lock = new ReentrantLock();
+				abstract class ValueCountModifier {
+					final void doNotify(Object cause) {
+						if (init[0] || (transUnsatisfied[0] > 0) == (unsatisfied[0] > 0))
+							return; // Still (un)satisfied, no change
+						if (ObservableCollection.this.getSession().get() == null && collection.getSession().get() == null) {
+							observer.onNext(createChangeEvent(unsatisfied[0] == 0, transUnsatisfied[0] == 0, cause));
+							unsatisfied[0] = transUnsatisfied[0];
+						}
+					}
+				}
+				class ValueCountElModifier extends ValueCountModifier implements Observer<ObservableValueEvent<?>>{
+					final boolean left;
+					ValueCountElModifier(boolean lft){
+						left = lft;
+					}
+
+					@Override
+					public <V extends ObservableValueEvent<?>> void onNext(V event) {
+						if (event.isInitial() || !Objects.equals(event.getOldValue(), event.getValue())) {
+							lock.lock();
+							try {
+								if (event.isInitial())
+									modify(event.getValue(), true);
+								else if (!Objects.equals(event.getOldValue(), event.getValue())) {
+									modify(event.getOldValue(), false);
+									modify(event.getValue(), true);
+								}
+								doNotify(event);
+							} finally {
+								lock.unlock();
+							}
+						}
+					}
+
+					@Override
+					public <V extends ObservableValueEvent<?>> void onCompleted(V event) {
+						lock.lock();
+						try {
+							modify(event.getValue(), false);
+							doNotify(event);
+						} finally {
+							lock.unlock();
+						}
+					}
+
+					private void modify(Object value, boolean add) {
+						ValueCount count;
+						if (add)
+							count = allValueCounts.computeIfAbsent(value, v -> new ValueCount(v));
+						else {
+							count = allValueCounts.get(value);
+							if (count == null)
+								return;
+						}
+						transUnsatisfied[0] = count.modify(add, left, transUnsatisfied[0]);
+						if (!add && count.isEmpty())
+							allValueCounts.remove(value);
+					}
+				}
+				class ValueCountSessModifier extends ValueCountModifier implements Observer<ObservableValueEvent<? extends CollectionSession>> {
+					@Override
+					public <V extends ObservableValueEvent<? extends CollectionSession>> void onNext(V event) {
+						if (event.getOldValue() != null) {
+							lock.lock();
+							try {
+								doNotify(event);
+							} finally {
+								lock.unlock();
+							}
+						}
+					}
+				}
+				Subscription thisElSub = onElement(el -> {
+					el.subscribe(new ValueCountElModifier(true));
+				});
+				Subscription collElSub = collection.onElement(el -> {
+					el.subscribe(new ValueCountElModifier(false));
+				});
+				Subscription thisSessSub = getSession().subscribe(new ValueCountSessModifier());
+				Subscription collSessSub = collection.getSession().subscribe(new ValueCountSessModifier());
+				// Fire initial event
+				lock.lock();
+				try {
+					unsatisfied[0] = transUnsatisfied[0];
+					observer.onNext(createInitialEvent(unsatisfied[0] == 0));
+					init[0] = false;
+				} finally {
+					lock.unlock();
+				}
+				return Subscription.forAll(thisElSub, collElSub, thisSessSub, collSessSub);
+			}
 		};
 	}
 
@@ -286,7 +515,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @return An observable collection of a new type backed by this collection and the mapping function
 	 */
 	default <T> ObservableCollection<T> map(Function<? super E, T> map) {
-		return map(ObservableUtils.getReturnType(map), map);
+		return map((TypeToken<T>) TypeToken.of(map.getClass()).resolveType(Function.class.getTypeParameters()[1]), map);
 	}
 
 	/**
@@ -295,7 +524,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @param map The mapping function to map the elements of this collection
 	 * @return The mapped collection
 	 */
-	default <T> ObservableCollection<T> map(Type type, Function<? super E, T> map) {
+	default <T> ObservableCollection<T> map(TypeToken<T> type, Function<? super E, T> map) {
 		return map(type, map, null);
 	}
 
@@ -306,7 +535,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @param reverse The reverse function if addition support is desired for the mapped collection
 	 * @return The mapped collection
 	 */
-	default <T> ObservableCollection<T> map(Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
+	default <T> ObservableCollection<T> map(TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse) {
 		return d().debug(new MappedObservableCollection<>(this, type, map, reverse)).from("map", this).using("map", map)
 			.using("reverse", reverse).get();
 	}
@@ -376,10 +605,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @return A collection containing all non-null elements passing the given test
 	 */
 	default ObservableCollection<E> filter(Predicate<? super E> filter, boolean staticFilter) {
-		Function<E, E> map = value -> {
-			return (value != null && filter.test(value)) ? value : null;
-		};
-		return d().label(filterMap(getType(), map, value -> value, staticFilter)).tag("filter", filter).get();
+		return d().label(filterMap2(getType(), value -> {
+			boolean pass = filter.test(value);
+			return new FilterMapResult<>(pass ? value : null, pass);
+		} , value -> value, staticFilter)).tag("filter", filter).get();
 	}
 
 	/**
@@ -389,8 +618,12 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 *         given class
 	 */
 	default <T> ObservableCollection<T> filter(Class<T> type) {
-		return d().label(filterMap(new Type(type), value -> type.isInstance(value) ? type.cast(value) : null, value -> (E) value, true))
-			.tag("filterType", type).get();
+		return d().label(filterMap2(TypeToken.of(type), value -> {
+			if (type.isInstance(value))
+				return new FilterMapResult<>(type.cast(value), true);
+			else
+				return new FilterMapResult<>(null, false);
+		} , value -> (E) value, true)).tag("filterType", type).get();
 	}
 
 	/**
@@ -399,7 +632,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @return An observable collection of a new type backed by this collection and the mapping function
 	 */
 	default <T> ObservableCollection<T> filterMap(Function<? super E, T> filterMap) {
-		return filterMap(ObservableUtils.getReturnType(filterMap), filterMap, null, false);
+		return filterMap((TypeToken<T>) TypeToken.of(filterMap.getClass()).resolveType(Function.class.getTypeParameters()[1]), filterMap,
+			null, false);
 	}
 
 	/**
@@ -410,7 +644,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 *            {@link #filterDynamic(Predicate) dynamic}.
 	 * @return A collection containing every element in this collection for which the mapping function returns a non-null value
 	 */
-	default <T> ObservableCollection<T> filterMap(Type type, Function<? super E, T> map, boolean staticFilter) {
+	default <T> ObservableCollection<T> filterMap(TypeToken<T> type, Function<? super E, T> map, boolean staticFilter) {
 		return filterMap(type, map, null, staticFilter);
 	}
 
@@ -418,15 +652,32 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @param <T> The type of the mapped collection
 	 * @param type The run-time type of the mapped collection
 	 * @param map The mapping function
-	 * @param reverse The reverse function if addition support is desired for the filtered collection
+	 * @param reverse The reverse function if addition support is desired for the mapped collection
 	 * @param staticFilter Whether the filtering on the filtered collection is to be {@link #filterStatic(Predicate) static} or
-	 *            {@link #filterDynamic(Predicate) dynamic}.
+	 *        {@link #filterDynamic(Predicate) dynamic}.
 	 * @return A collection containing every element in this collection for which the mapping function returns a non-null value
 	 */
-	default <T> ObservableCollection<T> filterMap(Type type, Function<? super E, T> map, Function<? super T, E> reverse,
+	default <T> ObservableCollection<T> filterMap(TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse,
 		boolean staticFilter) {
+		return filterMap2(type, value -> {
+			T mapped = map.apply(value);
+			return new FilterMapResult<>(mapped, mapped != null);
+		} , reverse, staticFilter);
+	}
+
+	/**
+	 * @param <T> The type of the mapped collection
+	 * @param type The run-time type of the mapped collection
+	 * @param map The filter/mapping function
+	 * @param reverse The reverse function if addition support is desired for the mapped collection
+	 * @param staticFilter Whether the filtering on the filtered collection is to be {@link #filterStatic(Predicate) static} or
+	 *        {@link #filterDynamic(Predicate) dynamic}.
+	 * @return A collection containing every element in this collection for which the mapping function returns a passing value
+	 */
+	default <T> ObservableCollection<T> filterMap2(TypeToken<T> type, Function<? super E, FilterMapResult<T>> map,
+		Function<? super T, E> reverse, boolean staticFilter) {
 		if(type == null)
-			type = ObservableUtils.getReturnType(map);
+			type = (TypeToken<T>) TypeToken.of(map.getClass()).resolveType(Function.class.getTypeParameters()[1]);
 		if(staticFilter)
 			return d().debug(new StaticFilteredCollection<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
 				.using("reverse", reverse).get();
@@ -437,19 +688,21 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 	/**
 	 * Searches in this collection for an element. Since an ObservableCollection's order may or may not be significant, the element
-	 * reflected in the value may not be the first element in the collection (by {@link #iterator()}) to match the filter.
+	 * reflected in the value may not be the first element in the collection (by {@link #iterator()}) to match the filter. As an
+	 * optimization, subscribers to this method will not be called if an element matching the filter is inserted in this collection when a
+	 * match is already present, regardless of the relative positions of the two matches. A side effect of this is that the latest value
+	 * passed to the subscription and the value returned from the {@link ObservableValue#get()} method may not be the same, since the get
+	 * method always returns the first match.
 	 *
 	 * @param filter The filter function
 	 * @return A value in this list passing the filter, or null if none of this collection's elements pass.
 	 */
 	default ObservableValue<E> find(Predicate<E> filter) {
-		ObservableCollection<E> outer = this;
 		return d().debug(new ObservableValue<E>() {
-			private final Type type = outer.getType().isPrimitive() ? new Type(Type.getWrapperType(outer.getType().getBaseType())) : outer
-				.getType();
+			private final TypeToken<E> type = ObservableCollection.this.getType().wrap();
 
 			@Override
-			public Type getType() {
+			public TypeToken<E> getType() {
 				return type;
 			}
 
@@ -464,9 +717,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
-				final boolean [] isFound=new boolean[1];
 				final Object key = new Object();
-				Subscription collSub = ObservableCollection.this.onElement(new Consumer<ObservableElement<E>>() {
+				class FindOnElement implements Consumer<ObservableElement<E>> {
+					private Collection<ObservableElement<E>> theMatching = new LinkedHashSet<>();
+					ObservableElement<E> theMatchingElement;
 					private E theValue;
 
 					@Override
@@ -474,34 +728,40 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						element.subscribe(new Observer<ObservableValueEvent<E>>() {
 							@Override
 							public <V3 extends ObservableValueEvent<E>> void onNext(V3 value) {
-								if(!isFound[0] && filter.test(value.getValue())) {
-									isFound[0] = true;
-									newBest(value.getValue());
+								boolean hasMatch = !theMatching.isEmpty();
+								boolean preMatches = hasMatch && !value.isInitial() && theMatching.contains(element);
+								boolean matches = filter.test(value.getValue());
+								if(matches && !preMatches)
+									theMatching.add(element);
+								if(!hasMatch && matches)
+									newBest(element, value.getValue());
+								else if(preMatches && !matches) {
+									theMatching.remove(element);
+									if(theMatchingElement == element)
+										findNextBest();
 								}
 							}
 
 							@Override
 							public <V3 extends ObservableValueEvent<E>> void onCompleted(V3 value) {
-								if(theValue == value.getOldValue())
+								theMatching.remove(element);
+								if(theMatchingElement == element)
 									findNextBest();
 							}
 
 							private void findNextBest() {
-								isFound[0] = false;
-								for(E value : ObservableCollection.this) {
-									if(filter.test(value)) {
-										isFound[0] = true;
-										newBest(value);
-										break;
-									}
+								if(theMatching.isEmpty())
+									newBest(null, null);
+								else {
+									theMatchingElement = theMatching.iterator().next();
+									newBest(theMatchingElement, theMatchingElement.get());
 								}
-								if(!isFound[0])
-									newBest(null);
 							}
 						});
 					}
 
-					void newBest(E value) {
+					void newBest(ObservableElement<E> element, E value) {
+						theMatchingElement = element;
 						E oldValue = theValue;
 						theValue = value;
 						CollectionSession session = getSession().get();
@@ -512,7 +772,9 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 							session.put(key, "newBest", theValue);
 						}
 					}
-				});
+				}
+				FindOnElement collOnEl = new FindOnElement();
+				Subscription collSub = ObservableCollection.this.onElement(collOnEl);
 				Subscription transSub = getSession().subscribe(new Observer<ObservableValueEvent<CollectionSession>>() {
 					@Override
 					public <V2 extends ObservableValueEvent<CollectionSession>> void onNext(V2 value) {
@@ -526,7 +788,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						observer.onNext(createChangeEvent(oldBest, newBest, value));
 					}
 				});
-				if(!isFound[0])
+				if(collOnEl.theMatchingElement == null) // If no initial match, fire an initial null
 					observer.onNext(createInitialEvent(null));
 				return () -> {
 					collSub.unsubscribe();
@@ -535,10 +797,107 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			}
 
 			@Override
+			public boolean isSafe() {
+				return ObservableCollection.this.isSafe();
+			}
+
+			@Override
 			public String toString() {
 				return "find in " + ObservableCollection.this;
 			}
 		}).from("find", this).using("filter", filter).get();
+	}
+
+	/** @return An observable value containing the only value in this collection while its size==1, otherwise null TODO TEST ME! */
+	default ObservableValue<E> only() {
+		return d().debug(new ObservableValue<E>() {
+			private final TypeToken<E> type = ObservableCollection.this.getType().wrap();
+
+			@Override
+			public TypeToken<E> getType() {
+				return type;
+			}
+
+			@Override
+			public E get() {
+				return size() == 1 ? iterator().next() : null;
+			}
+
+			@Override
+			public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
+				boolean[] initialized = new boolean[1];
+				final Object key = new Object();
+				class OnlyElement implements Consumer<ObservableElement<E>> {
+					private Collection<ObservableElement<E>> theElements = new LinkedHashSet<>();
+					private E theValue;
+
+					@Override
+					public void accept(ObservableElement<E> element) {
+						theElements.add(element);
+						element.subscribe(new Observer<ObservableValueEvent<E>>() {
+							@Override
+							public <V3 extends ObservableValueEvent<E>> void onNext(V3 event) {
+								if (event.isInitial()) {
+									if (theElements.isEmpty())
+										newValue(event.getValue(), event);
+									else
+										newValue(null, event);
+								} else if (theElements.size() == 1)
+									newValue(event.getValue(), event);
+							}
+
+							@Override
+							public <V3 extends ObservableValueEvent<E>> void onCompleted(V3 event) {
+								theElements.remove(element);
+								if (theElements.isEmpty())
+									newValue(null, event);
+								else if (theElements.size() == 1)
+									newValue(theElements.iterator().next().get(), event);
+							}
+						});
+					}
+
+					private void newValue(E value, ObservableValueEvent<E> cause) {
+						E oldValue = theValue;
+						theValue = value;
+						if (initialized[0]) {
+							CollectionSession session = getSession().get();
+							if (session == null)
+								observer.onNext(createChangeEvent(oldValue, theValue, null));
+							else {
+								session.putIfAbsent(key, "oldValue", oldValue);
+								session.put(key, "newValue", theValue);
+							}
+						}
+					}
+				}
+				OnlyElement collOnEl = new OnlyElement();
+				Subscription collSub = ObservableCollection.this.onElement(collOnEl);
+				Subscription transSub = getSession().subscribe(new Observer<ObservableValueEvent<CollectionSession>>() {
+					@Override
+					public <V2 extends ObservableValueEvent<CollectionSession>> void onNext(V2 value) {
+						CollectionSession completed = value.getOldValue();
+						if (completed == null)
+							return;
+						E oldBest = (E) completed.get(key, "oldValue");
+						E newBest = (E) completed.get(key, "newValue");
+						if (oldBest == null && newBest == null)
+							return;
+						observer.onNext(createChangeEvent(oldBest, newBest, value));
+					}
+				});
+				observer.onNext(createInitialEvent(collOnEl.theValue));
+				return () -> {
+					collSub.unsubscribe();
+					transSub.unsubscribe();
+				};
+			}
+
+			@Override
+			public boolean isSafe() {
+				return ObservableCollection.this.isSafe();
+			}
+		}).from("only", this).get();
 	}
 
 	/**
@@ -549,7 +908,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @return An observable collection containing this collection's elements combined with the given argument
 	 */
 	default <T, V> ObservableCollection<V> combine(ObservableValue<T> arg, BiFunction<? super E, ? super T, V> func) {
-		return combine(arg, ObservableUtils.getReturnType(func), func);
+		return combine(arg, (TypeToken<V>) TypeToken.of(func.getClass()).resolveType(BiFunction.class.getTypeParameters()[2]), func);
 	}
 
 	/**
@@ -560,7 +919,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @param func The combination function to apply to this collection's elements and the given value
 	 * @return An observable collection containing this collection's elements combined with the given argument
 	 */
-	default <T, V> ObservableCollection<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func) {
+	default <T, V> ObservableCollection<V> combine(ObservableValue<T> arg, TypeToken<V> type, BiFunction<? super E, ? super T, V> func) {
 		return combine(arg, type, func, null);
 	}
 
@@ -573,10 +932,202 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @param reverse The reverse function if addition support is desired for the combined collection
 	 * @return An observable collection containing this collection's elements combined with the given argument
 	 */
-	default <T, V> ObservableCollection<V> combine(ObservableValue<T> arg, Type type, BiFunction<? super E, ? super T, V> func,
+	default <T, V> ObservableCollection<V> combine(ObservableValue<T> arg, TypeToken<V> type, BiFunction<? super E, ? super T, V> func,
 		BiFunction<? super V, ? super T, E> reverse) {
 		return d().debug(new CombinedObservableCollection<>(this, type, arg, func, reverse)).from("combine", this).from("with", arg)
 			.using("combination", func).using("reverse", reverse).get();
+	}
+
+	/**
+	 * Equivalent to {@link #reduce(Object, BiFunction, BiFunction)} with null for the remove function
+	 *
+	 * @param <T> The type of the reduced value
+	 * @param init The seed value before the reduction
+	 * @param reducer The reducer function to accumulate the values. Must be associative.
+	 * @return The reduced value
+	 */
+	default <T> ObservableValue<T> reduce(T init, BiFunction<? super T, ? super E, T> reducer) {
+		return reduce(init, reducer, null);
+	}
+
+	/**
+	 * Equivalent to {@link #reduce(TypeToken, Object, BiFunction, BiFunction)} using the type derived from the reducer's return type
+	 *
+	 * @param <T> The type of the reduced value
+	 * @param init The seed value before the reduction
+	 * @param add The reducer function to accumulate the values. Must be associative.
+	 * @param remove The de-reducer function to handle removal or replacement of values. This may be null, in which case removal or
+	 *            replacement of values will result in the entire collection being iterated over for each subscription. Null here will have
+	 *            no consequence if the result is never observed. Must be associative.
+	 * @return The reduced value
+	 */
+	default <T> ObservableValue<T> reduce(T init, BiFunction<? super T, ? super E, T> add, BiFunction<? super T, ? super E, T> remove) {
+		return reduce((TypeToken<T>) TypeToken.of(add.getClass()).resolveType(BiFunction.class.getTypeParameters()[2]), init, add, remove);
+	}
+
+	/**
+	 * Reduces all values in this collection to a single value
+	 *
+	 * @param <T> The compile-time type of the reduced value
+	 * @param type The run-time type of the reduced value
+	 * @param init The seed value before the reduction
+	 * @param add The reducer function to accumulate the values. Must be associative.
+	 * @param remove The de-reducer function to handle removal or replacement of values. This may be null, in which case removal or
+	 *            replacement of values will result in the entire collection being iterated over for each subscription. Null here will have
+	 *            no consequence if the result is never observed. Must be associative.
+	 * @return The reduced value
+	 */
+	default <T> ObservableValue<T> reduce(TypeToken<T> type, T init, BiFunction<? super T, ? super E, T> add,
+		BiFunction<? super T, ? super E, T> remove) {
+		return d().debug(new ObservableValue<T>() {
+			@Override
+			public TypeToken<T> getType() {
+				return type;
+			}
+
+			@Override
+			public T get() {
+				T ret = init;
+				for(E element : ObservableCollection.this)
+					ret = add.apply(ret, element);
+				return ret;
+			}
+
+			@Override
+			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+				final boolean [] initElements = new boolean[1];
+				final Object key = new Object();
+				class THolder {
+					public T theValue = init;
+
+					public boolean recalc = false;
+				}
+				THolder holder = new THolder();
+				Subscription collSub = ObservableCollection.this.onElement(new Consumer<ObservableElement<E>>() {
+
+					@Override
+					public void accept(ObservableElement<E> element) {
+						initElements[0] = true;
+						element.subscribe(new Observer<ObservableValueEvent<E>>() {
+							@Override
+							public <V3 extends ObservableValueEvent<E>> void onNext(V3 value) {
+								T newValue = holder.theValue;
+								if(holder.recalc) {
+								} else if(value.isInitial()) {
+									newValue = add.apply(newValue, value.getValue());
+									newValue(newValue);
+								} else if(remove != null) {
+									newValue = remove.apply(newValue, value.getOldValue());
+									newValue = add.apply(newValue, value.getValue());
+									newValue(newValue);
+								} else
+									recalc();
+							}
+
+							@Override
+							public <V3 extends ObservableValueEvent<E>> void onCompleted(V3 value) {
+								if(holder.recalc) {
+								} else if(remove != null)
+									newValue(remove.apply(holder.theValue, value.getOldValue()));
+								else
+									recalc();
+							}
+						});
+					}
+
+					void newValue(T value) {
+						T oldValue = holder.theValue;
+						holder.theValue = value;
+						CollectionSession session = getSession().get();
+						if(session == null)
+							observer.onNext(createChangeEvent(oldValue, holder.theValue, null));
+						else {
+							session.putIfAbsent(key, "oldValue", oldValue);
+							session.put(key, "newValue", holder.theValue);
+						}
+					}
+
+					private void recalc() {
+						CollectionSession session = getSession().get();
+						if(session == null)
+							newValue(get());
+						else {
+							holder.recalc = true;
+							session.putIfAbsent(key, "oldValue", holder.theValue);
+							session.put(key, "recalc", true);
+						}
+					}
+				});
+				Subscription transSub = getSession().subscribe(new Observer<ObservableValueEvent<CollectionSession>>() {
+					@Override
+					public <V2 extends ObservableValueEvent<CollectionSession>> void onNext(V2 value) {
+						CollectionSession completed = value.getOldValue();
+						if(completed == null)
+							return;
+						T oldValue = (T) completed.get(key, "oldValue");
+						T newValue;
+						if(completed.get(key, "recalc") != null) {
+							holder.theValue = newValue = get();
+							holder.recalc = false;
+						} else
+							newValue = (T) completed.get(key, "newValue");
+						if(oldValue == null && newValue == null)
+							return;
+						observer.onNext(createChangeEvent(oldValue, newValue, value));
+					}
+				});
+				if(!initElements[0])
+					observer.onNext(createInitialEvent(init));
+				return () -> {
+					collSub.unsubscribe();
+					transSub.unsubscribe();
+				};
+			}
+
+			@Override
+			public boolean isSafe() {
+				return ObservableCollection.this.isSafe();
+			}
+
+			@Override
+			public String toString() {
+				return "reduce " + ObservableCollection.this;
+			}
+		}).from("reduce", this).using("add", add).using("remove", remove).get();
+	}
+
+	/**
+	 * @param compare The comparator to use to compare this collection's values
+	 * @return An observable value containing the minimum of the values, by the given comparator
+	 */
+	default ObservableValue<E> minBy(Comparator<? super E> compare) {
+		return reduce(getType(), null, (v1, v2) -> {
+			if(v1 == null)
+				return v2;
+			else if(v2 == null)
+				return v1;
+			else if(compare.compare(v1, v2) <= 0)
+				return v1;
+			else
+				return v2;
+		} , null);
+	}
+
+	/**
+	 * @param compare The comparator to use to compare this collection's values
+	 * @return An observable value containing the maximum of the values, by the given comparator
+	 */
+	default ObservableValue<E> maxBy(Comparator<? super E> compare) {
+		return reduce(getType(), null, (v1, v2) -> {
+			if(v1 == null)
+				return v2;
+			else if(v2 == null)
+				return v1;
+			else if(compare.compare(v1, v2) >= 0)
+				return v1;
+			else
+				return v2;
+		} , null);
 	}
 
 	/**
@@ -586,18 +1137,75 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 *         applied to the element
 	 */
 	default <K> ObservableMultiMap<K, E> groupBy(Function<E, K> keyMap) {
-		return groupBy(null, keyMap);
+		return groupBy(keyMap, (org.qommons.Equalizer)Objects::equals);
+	}
+
+	/**
+	 * @param <K> The type of the key
+	 * @param keyMap The mapping function to group this collection's values by
+	 * @param equalizer The equalizer to use to group the keys
+	 * @return A multi-map containing each of this collection's elements, each in the collection of the value mapped by the given function
+	 *         applied to the element
+	 */
+	default <K> ObservableMultiMap<K, E> groupBy(Function<E, K> keyMap, Equalizer equalizer) {
+		return groupBy(null, keyMap, equalizer);
+	}
+
+	/**
+	 * @param equalizer The equalizer to group the values by
+	 * @return A multi-map containing each of this collection's elements, each in the collection of one value that it matches according to
+	 *         the equalizer
+	 */
+	default ObservableMultiMap<E, E> groupBy(Equalizer equalizer) {
+		return groupBy(getType(), null, equalizer);
 	}
 
 	/**
 	 * @param <K> The type of the key
 	 * @param keyType The type of the key
 	 * @param keyMap The mapping function to group this collection's values by
+	 * @param equalizer The equalizer to use to group the keys
 	 * @return A multi-map containing each of this collection's elements, each in the collection of the value mapped by the given function
 	 *         applied to the element
 	 */
-	default <K> ObservableMultiMap<K, E> groupBy(Type keyType, Function<E, K> keyMap) {
-		return new GroupedMultiMap<>(this, keyMap, keyType);
+	default <K> ObservableMultiMap<K, E> groupBy(TypeToken<K> keyType, Function<E, K> keyMap, Equalizer equalizer) {
+		return d().debug(new GroupedMultiMap<>(this, keyMap, keyType, equalizer)).from("grouped", this).using("keyMap", keyMap)
+			.using("equalizer", equalizer).get();
+	}
+
+	/**
+	 * @param <K> The type of the key
+	 * @param keyMap The mapping function to group this collection's values by
+	 * @param compare The comparator to use to sort the keys
+	 * @return A sorted multi-map containing each of this collection's elements, each in the collection of the value mapped by the given
+	 *         function applied to the element
+	 */
+	default <K> ObservableSortedMultiMap<K, E> groupBy(Function<E, K> keyMap, Comparator<? super K> compare) {
+		return groupBy(null, keyMap, compare);
+	}
+
+	/**
+	 * @param compare The comparator to use to group the value
+	 * @return A sorted multi-map containing each of this collection's elements, each in the collection of one value that it matches
+	 *         according to the comparator
+	 */
+	default ObservableSortedMultiMap<E, E> groupBy(Comparator<? super E> compare) {
+		return groupBy(getType(), null, compare);
+	}
+
+	/**
+	 * TODO TEST ME!
+	 *
+	 * @param <K> The type of the key
+	 * @param keyType The type of the key
+	 * @param keyMap The mapping function to group this collection's values by
+	 * @param compare The comparator to use to sort the keys
+	 * @return A sorted multi-map containing each of this collection's elements, each in the collection of the value mapped by the given
+	 *         function applied to the element
+	 */
+	default <K> ObservableSortedMultiMap<K, E> groupBy(TypeToken<K> keyType, Function<E, K> keyMap, Comparator<? super K> compare) {
+		return d().debug(new GroupedSortedMultiMap<>(this, keyMap, keyType, compare)).from("grouped", this).using("keyMap", keyMap)
+			.using("compare", compare).get();
 	}
 
 	/**
@@ -681,6 +1289,28 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	}
 
 	/**
+	 * Tests the removability of an element from this collection. This method exposes a "best guess" on whether an element in the collection
+	 * could be removed, but does not provide any guarantee. This method should return true for any object for which {@link #remove(Object)}
+	 * is successful, but the fact that an object passes this test does not guarantee that it would be removed successfully. E.g. the
+	 * position of the element in the collection may be a factor, but may not be tested for here.
+	 *
+	 * @param value The value to test removability for
+	 * @return Whether the given value could possibly be removed from this collection
+	 */
+	boolean canRemove(Object value);
+
+	/**
+	 * Tests the compatibility of an object with this collection. This method exposes a "best guess" on whether an element could be added to
+	 * the collection , but does not provide any guarantee. This method should return true for any object for which {@link #add(Object)} is
+	 * successful, but the fact that an object passes this test does not guarantee that it would be removed successfully. E.g. the position
+	 * of the element in the collection may be a factor, but is tested for here.
+	 *
+	 * @param value The value to test compatibility for
+	 * @return Whether the given value could possibly be added to this collection
+	 */
+	boolean canAdd(E value);
+
+	/**
 	 * Creates a collection with the same elements as this collection, but cached, such that the
 	 *
 	 * @return The cached collection
@@ -690,122 +1320,70 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	}
 
 	/**
-	 * @param <T> An observable collection that contains all elements in all collections in the wrapping collection
+	 * @param until The observable to end the collection on
+	 * @return A collection that mirrors this collection's values until the given observable fires a value, upon which the returned
+	 *         collection's elements will be removed and collection subscriptions unsubscribed
+	 */
+	default ObservableCollection<E> takeUntil(Observable<?> until) {
+		return d().debug(new TakenUntilObservableCollection<>(this, until, true)).from("take", this).from("until", until).get();
+	}
+
+	/**
+	 * @param until The observable to unsubscribe the collection on
+	 * @return A collection that mirrors this collection's values until the given observable fires a value, upon which the returned
+	 *         collection's subscriptions will be removed. Unlike {@link #takeUntil(Observable)} however, the returned collection's elements
+	 *         will not be removed when the observable fires.
+	 */
+	default ObservableCollection<E> unsubscribeOn(Observable<?> until) {
+		return d().debug(new TakenUntilObservableCollection<>(this, until, true)).from("take", this).from("until", until).get();
+	}
+
+	/**
+	 * @param type The type of the collection
+	 * @param collection The collection
+	 * @return An immutable collection with the same values as those in the given collection
+	 */
+	public static <E> ObservableCollection<E> constant(TypeToken<E> type, Collection<E> collection){
+		return d().debug(new ConstantObservableCollection<>(type, collection)).get();
+	}
+
+	/**
+	 * @param type The type of the collection
+	 * @param values The values for the new collection
+	 * @return An immutable collection with the same values as those in the given collection
+	 */
+	public static <E> ObservableCollection<E> constant(TypeToken<E> type, E... values) {
+		return constant(type, java.util.Arrays.asList(values));
+	}
+
+	/**
+	 * Turns a collection of observable values into a collection composed of those holders' values
+	 *
+	 * @param <T> The type of elements held in the values
+	 * @param collection The collection to flatten
+	 * @return The flattened collection
+	 */
+	public static <T> ObservableCollection<T> flattenValues(ObservableCollection<? extends ObservableValue<T>> collection) {
+		return d().debug(new FlattenedValuesCollection<>(collection)).from("flatten", collection).get();
+	}
+
+	/**
+	 * Turns an observable value containing an observable collection into the contents of the value
+	 *
+	 * @param collectionObservable The observable value
+	 * @return A collection representing the contents of the value, or a zero-length collection when null
+	 */
+	public static <E> ObservableCollection<E> flattenValue(ObservableValue<? extends ObservableCollection<E>> collectionObservable) {
+		return d().debug(new FlattenedValueCollection<>(collectionObservable)).from("flatten", collectionObservable).get();
+	}
+
+	/**
+	 * @param <E> The super-type of elements in the inner collections
 	 * @param coll The collection to flatten
 	 * @return A collection containing all elements of all collections in the outer collection
 	 */
-	public static <T> ObservableCollection<T> flatten(ObservableCollection<? extends ObservableCollection<? extends T>> coll) {
-		class ComposedObservableCollection implements PartialCollectionImpl<T> {
-			private final CombinedCollectionSessionObservable theSession = new CombinedCollectionSessionObservable(coll);
-
-			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return theSession;
-			}
-
-			@Override
-			public Transaction lock(boolean write, Object cause) {
-				Transaction outerLock = coll.lock(write, cause);
-				Transaction [] innerLocks = new Transaction[coll.size()];
-				int i = 0;
-				for(ObservableCollection<? extends T> c : coll) {
-					innerLocks[i++] = c.lock(write, cause);
-				}
-				return new Transaction() {
-					private volatile boolean hasRun;
-
-					@Override
-					public void close() {
-						if(hasRun)
-							return;
-						hasRun = true;
-						for(int j = innerLocks.length - 1; j >= 0; j--)
-							innerLocks[j].close();
-						outerLock.close();
-					}
-
-					@Override
-					protected void finalize() {
-						if(!hasRun)
-							close();
-					}
-				};
-			}
-
-			@Override
-			public Type getType() {
-				return coll.getType().getParamTypes().length == 0 ? new Type(Object.class) : coll.getType().getParamTypes()[0];
-			}
-
-			@Override
-			public int size() {
-				int ret = 0;
-				for(ObservableCollection<? extends T> subColl : coll)
-					ret += subColl.size();
-				return ret;
-			}
-
-			@Override
-			public Iterator<T> iterator() {
-				return new Iterator<T>() {
-					private Iterator<? extends ObservableCollection<? extends T>> outerBacking = coll.iterator();
-					private Iterator<? extends T> innerBacking;
-
-					@Override
-					public boolean hasNext() {
-						while((innerBacking == null || !innerBacking.hasNext()) && outerBacking.hasNext())
-							innerBacking = outerBacking.next().iterator();
-						return innerBacking != null && innerBacking.hasNext();
-					}
-
-					@Override
-					public T next() {
-						if(!hasNext())
-							throw new java.util.NoSuchElementException();
-						return innerBacking.next();
-					}
-				};
-			}
-
-			@Override
-			public Subscription onElement(Consumer<? super ObservableElement<T>> observer) {
-				return coll.onElement(new Consumer<ObservableElement<? extends ObservableCollection<? extends T>>>() {
-					private java.util.Map<ObservableCollection<?>, Subscription> subCollSubscriptions;
-
-					{
-						subCollSubscriptions = new org.observe.util.ConcurrentIdentityHashMap<>();
-					}
-
-					@Override
-					public void accept(ObservableElement<? extends ObservableCollection<? extends T>> subColl) {
-						subColl.subscribe(new Observer<ObservableValueEvent<? extends ObservableCollection<? extends T>>>() {
-							@Override
-							public <V2 extends ObservableValueEvent<? extends ObservableCollection<? extends T>>> void onNext(
-								V2 subCollEvent) {
-								if(subCollEvent.getOldValue() != null && subCollEvent.getOldValue() != subCollEvent.getValue()) {
-									Subscription subCollSub = subCollSubscriptions.get(subCollEvent.getOldValue());
-									if(subCollSub != null)
-										subCollSub.unsubscribe();
-								}
-								Subscription subCollSub = subCollEvent.getValue().onElement(
-									subElement -> observer.accept(d()
-										.debug(new FlattenedElement<>((ObservableElement<T>) subElement, subColl))
-										.from("element", ComposedObservableCollection.this).tag("wrappedCollectionElement", subColl)
-										.tag("wrappedSubElement", subElement).get()));
-								subCollSubscriptions.put(subCollEvent.getValue(), subCollSub);
-							}
-
-							@Override
-							public <V2 extends ObservableValueEvent<? extends ObservableCollection<? extends T>>> void onCompleted(
-								V2 subCollEvent) {
-								subCollSubscriptions.remove(subCollEvent.getValue()).unsubscribe();
-							}
-						});
-					}
-				});
-			}
-		}
-		return d().debug(new ComposedObservableCollection()).from("flatten", coll).get();
+	public static <E> ObservableCollection<E> flatten(ObservableCollection<? extends ObservableCollection<? extends E>> coll) {
+		return d().debug(new FlattenedObservableCollection<E>(coll)).from("flatten", coll).get();
 	}
 
 	/**
@@ -814,7 +1392,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @return A collection containing all elements of the given collections
 	 */
 	public static <T> ObservableCollection<T> flattenCollections(ObservableCollection<? extends T>... colls) {
-		return flatten(ObservableList.constant(new Type(ObservableCollection.class, new Type(Object.class, true)), colls));
+		return flatten(ObservableList.constant(new TypeToken<ObservableCollection<? extends T>>() {}, colls));
 	}
 
 	/**
@@ -830,22 +1408,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 					element.subscribe(new Observer<ObservableValueEvent<? extends Observable<T>>>() {
 						@Override
 						public <V2 extends ObservableValueEvent<? extends Observable<T>>> void onNext(V2 value) {
-							value.getValue().takeUntil(element.noInit()).subscribe(new Observer<T>() {
-								@Override
-								public <V3 extends T> void onNext(V3 value3) {
-									observer.onNext(value3);
-								}
-
-								@Override
-								public void onError(Throwable e) {
-									observer.onError(e);
-								}
-							});
-						}
-
-						@Override
-						public void onError(Throwable e) {
-							observer.onError(e);
+							Observable<?> until = element.noInit().fireOnComplete();
+							if (!value.isInitial())
+								until = until.skip(1);
+							value.getValue().takeUntil(until).subscribe(observer);
 						}
 					});
 				});
@@ -853,10 +1419,73 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			}
 
 			@Override
+			public boolean isSafe() {
+				return false;
+			}
+
+			@Override
 			public String toString() {
 				return "fold(" + coll + ")";
 			}
 		}).from("fold", coll).get();
+	}
+
+	/**
+	 * A typical hashCode implementation for collections
+	 *
+	 * @param coll The collection to hash
+	 * @return The hash code of the collection's contents
+	 */
+	public static int hashCode(ObservableCollection<?> coll) {
+		int hashCode = 1;
+		for (Object e : coll)
+			hashCode = 31 * hashCode + (e == null ? 0 : e.hashCode());
+		return hashCode;
+	}
+
+	/**
+	 * A typical equals implementation for collections
+	 *
+	 * @param coll The collection to test
+	 * @param o The object to test the collection against
+	 * @return Whether the two objects are equal
+	 */
+	public static boolean equals(ObservableCollection<?> coll, Object o) {
+		if (!(o instanceof Collection))
+			return false;
+		Collection<?> c = (Collection<?>) o;
+
+		Iterator<?> e1 = coll.iterator();
+		Iterator<?> e2 = c.iterator();
+		while (e1.hasNext() && e2.hasNext()) {
+			Object o1 = e1.next();
+			Object o2 = e2.next();
+			if (!Objects.equals(o1, o2))
+				return false;
+		}
+		return !(e1.hasNext() || e2.hasNext());
+	}
+
+	/**
+	 * A simple toString implementation for collections
+	 *
+	 * @param coll The collection to print
+	 * @return The string representation of the collection's contents
+	 */
+	public static String toString(ObservableCollection<?> coll) {
+		StringBuilder ret = new StringBuilder("(");
+		boolean first = true;
+		try (Transaction t = coll.lock(false, null)) {
+			for (Object value : coll) {
+				if (!first) {
+					ret.append(", ");
+				} else
+					first = false;
+				ret.append(value);
+			}
+		}
+		ret.append(')');
+		return ret.toString();
 	}
 
 	/**
@@ -945,6 +1574,152 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	}
 
 	/**
+	 * Implements {@link ObservableCollection#safe()}
+	 *
+	 * @param <E> The type of elements in the collection
+	 */
+	class SafeObservableCollection<E> extends ObservableCollectionWrapper<E> {
+		private final ReentrantLock theLock;
+
+		protected SafeObservableCollection(ObservableCollection<E> wrap) {
+			super(wrap);
+			theLock = new ReentrantLock();
+		}
+
+		protected ReentrantLock getLock() {
+			return theLock;
+		}
+
+		@Override
+		public TypeToken<E> getType() {
+			return getWrapped().getType();
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			return new ObservableValue<CollectionSession>() {
+				@Override
+				public TypeToken<CollectionSession> getType() {
+					return getWrapped().getSession().getType();
+				}
+
+				@Override
+				public CollectionSession get() {
+					return getWrapped().getSession().get();
+				}
+
+				@Override
+				public boolean isSafe() {
+					return true;
+				}
+
+				@Override
+				public Subscription subscribe(Observer<? super ObservableValueEvent<CollectionSession>> observer) {
+					ObservableValue<CollectionSession> sessionObservable = this;
+					return getWrapped().getSession().subscribe(new Observer<ObservableValueEvent<CollectionSession>>() {
+						@Override
+						public <V extends ObservableValueEvent<CollectionSession>> void onNext(V event) {
+							theLock.lock();
+							try {
+								observer.onNext(ObservableUtils.wrap(event, sessionObservable));
+							} finally {
+								theLock.unlock();
+							}
+						}
+
+						@Override
+						public <V extends ObservableValueEvent<CollectionSession>> void onCompleted(V event) {
+							theLock.lock();
+							try {
+								observer.onCompleted(ObservableUtils.wrap(event, sessionObservable));
+							} finally {
+								theLock.unlock();
+							}
+						}
+					});
+				}
+			};
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return getWrapped().lock(write, cause);
+		}
+
+		@Override
+		public boolean isSafe() {
+			return true;
+		}
+
+		@Override
+		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
+			return getWrapped().onElement(element -> {
+				theLock.lock();
+				try {
+					onElement.accept(wrapElement(element));
+				} finally {
+					theLock.unlock();
+				}
+			});
+		}
+
+		protected ObservableElement<E> wrapElement(ObservableElement<E> wrap) {
+			return new ObservableElement<E>() {
+				@Override
+				public TypeToken<E> getType() {
+					return wrap.getType();
+				}
+
+				@Override
+				public E get() {
+					return wrap.get();
+				}
+
+				@Override
+				public boolean isSafe() {
+					return true;
+				}
+
+				@Override
+				public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
+					ObservableElement<E> wrapper = this;
+					return wrap.subscribe(new Observer<ObservableValueEvent<E>>() {
+						@Override
+						public <V extends ObservableValueEvent<E>> void onNext(V event) {
+							theLock.lock();
+							try {
+								observer.onNext(ObservableUtils.wrap(event, wrapper));
+							} finally {
+								theLock.unlock();
+							}
+						}
+
+						@Override
+						public <V extends ObservableValueEvent<E>> void onCompleted(V event) {
+							theLock.lock();
+							try {
+								observer.onCompleted(ObservableUtils.wrap(event, wrapper));
+							} finally {
+								theLock.unlock();
+							}
+						}
+					});
+				}
+
+				@Override
+				public ObservableValue<E> persistent() {
+					return wrap.persistent();
+				}
+			};
+		}
+
+		@Override
+		public String toString() {
+			return ObservableCollection.toString(this);
+		}
+	}
+
+	/**
 	 * Implements {@link ObservableCollection#map(Function)}
 	 *
 	 * @param <E> The type of the collection to map
@@ -952,14 +1727,15 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 */
 	class MappedObservableCollection<E, T> implements PartialCollectionImpl<T> {
 		private final ObservableCollection<E> theWrapped;
-		private final Type theType;
+
+		private final TypeToken<T> theType;
 		private final Function<? super E, T> theMap;
 		private final Function<? super T, E> theReverse;
 
-		protected MappedObservableCollection(ObservableCollection<E> wrap, Type type, Function<? super E, T> map,
+		protected MappedObservableCollection(ObservableCollection<E> wrap, TypeToken<T> type, Function<? super E, T> map,
 			Function<? super T, E> reverse) {
 			theWrapped = wrap;
-			theType = type != null ? type : ObservableUtils.getReturnType(map);
+			theType = type != null ? type : (TypeToken<T>) TypeToken.of(map.getClass()).resolveType(Function.class.getTypeParameters()[1]);
 			theMap = map;
 			theReverse = reverse;
 		}
@@ -977,7 +1753,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<T> getType() {
 			return theType;
 		}
 
@@ -1089,29 +1865,74 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
+		public boolean canRemove(Object value) {
+			if (theReverse != null && (value == null || theType.getRawType().isInstance(value)))
+				return theWrapped.canRemove(theReverse.apply((T) value));
+			else
+				return false;
+		}
+
+		@Override
+		public boolean canAdd(T value) {
+			if (theReverse != null)
+				return theWrapped.canAdd(theReverse.apply(value));
+			else
+				return false;
+		}
+
+		@Override
 		public Subscription onElement(Consumer<? super ObservableElement<T>> onElement) {
 			return theWrapped.onElement(element -> onElement.accept(element.mapV(theMap)));
+		}
+
+		@Override
+		public boolean isSafe() {
+			return theWrapped.isSafe();
+		}
+
+		@Override
+		public String toString() {
+			return ObservableCollection.toString(this);
 		}
 	}
 
 	/**
-	 * Implements {@link #filterMap(Type, Function, Function, boolean)}
+	 * The result of a filter/map operation
+	 *
+	 * @param <T> The type of the mapped value
+	 */
+	class FilterMapResult<T> {
+		/** The mapped result */
+		public final T mapped;
+		/** Whether the value passed the filter */
+		public final boolean passed;
+
+		/**
+		 * @param _mapped The mapped result
+		 * @param _passed Whether the value passed the filter
+		 */
+		public FilterMapResult(T _mapped, boolean _passed) {
+			mapped = _mapped;
+			passed = _passed;
+		}
+	}
+
+	/**
+	 * Implements {@link #filterMap(TypeToken, Function, Function, boolean)}
 	 *
 	 * @param <E> The type of the collection to filter/map
 	 * @param <T> The type of the filter/mapped collection
 	 */
 	abstract class FilteredCollection<E, T> implements PartialCollectionImpl<T> {
 		private final ObservableCollection<E> theWrapped;
-
-		private final Type theType;
-
-		private final Function<? super E, T> theMap;
-
+		private final TypeToken<T> theType;
+		private final Function<? super E, FilterMapResult<T>> theMap;
 		private final Function<? super T, E> theReverse;
 
-		FilteredCollection(ObservableCollection<E> wrap, Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
+		FilteredCollection(ObservableCollection<E> wrap, TypeToken<T> type, Function<? super E, FilterMapResult<T>> map,
+			Function<? super T, E> reverse) {
 			theWrapped = wrap;
-			theType = type != null ? type : ObservableUtils.getReturnType(map);
+			theType = type != null ? type : (TypeToken<T>) TypeToken.of(map.getClass()).resolveType(Function.class.getTypeParameters()[1]);
 			theMap = map;
 			theReverse = reverse;
 		}
@@ -1120,7 +1941,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			return theWrapped;
 		}
 
-		protected Function<? super E, T> getMap() {
+		protected Function<? super E, FilterMapResult<T>> getMap() {
 			return theMap;
 		}
 
@@ -1129,7 +1950,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<T> getType() {
 			return theType;
 		}
 
@@ -1147,7 +1968,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		public int size() {
 			int ret = 0;
 			for(E el : theWrapped)
-				if(theMap.apply(el) != null)
+				if (theMap.apply(el).passed)
 					ret++;
 			return ret;
 		}
@@ -1163,7 +1984,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 				return PartialCollectionImpl.super.add(e);
 			else {
 				E reversed = theReverse.apply(e);
-				if(theMap.apply(reversed) == null)
+				if (!theMap.apply(reversed).passed)
 					throw new IllegalArgumentException("The value " + e + " is not acceptable in this mapped list");
 				return theWrapped.add(reversed);
 			}
@@ -1176,7 +1997,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			else {
 				List<E> toAdd = c.stream().map(theReverse).collect(Collectors.toList());
 				for(E value : toAdd)
-					if(theMap.apply(value) == null)
+					if (!theMap.apply(value).passed)
 						throw new IllegalArgumentException("Value " + value + " is not acceptable in this mapped list");
 				return theWrapped.addAll(toAdd);
 			}
@@ -1188,8 +2009,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 				Iterator<E> iter = theWrapped.iterator();
 				while(iter.hasNext()) {
 					E el = iter.next();
-					T mapped = getMap().apply(el);
-					if(mapped != null && Objects.equals(mapped, o)) {
+					FilterMapResult<T> mapped = getMap().apply(el);
+					if (mapped.passed && Objects.equals(mapped.mapped, o)) {
 						iter.remove();
 						return true;
 					}
@@ -1205,8 +2026,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 				Iterator<E> iter = theWrapped.iterator();
 				while(iter.hasNext()) {
 					E el = iter.next();
-					T mapped = getMap().apply(el);
-					if(mapped != null && c.contains(mapped)) {
+					FilterMapResult<T> mapped = getMap().apply(el);
+					if (mapped.passed && c.contains(mapped.mapped)) {
 						iter.remove();
 						ret = true;
 					}
@@ -1222,8 +2043,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 				Iterator<E> iter = theWrapped.iterator();
 				while(iter.hasNext()) {
 					E el = iter.next();
-					T mapped = getMap().apply(el);
-					if(mapped != null && !c.contains(mapped)) {
+					FilterMapResult<T> mapped = getMap().apply(el);
+					if (mapped.passed && !c.contains(mapped.mapped)) {
 						iter.remove();
 						ret = true;
 					}
@@ -1238,31 +2059,47 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 				Iterator<E> iter = getWrapped().iterator();
 				while(iter.hasNext()) {
 					E el = iter.next();
-					T mapped = getMap().apply(el);
-					if(mapped != null) {
+					FilterMapResult<T> mapped = getMap().apply(el);
+					if (mapped.passed) {
 						iter.remove();
 					}
 				}
 			}
 		}
 
+		@Override
+		public boolean canRemove(Object value) {
+			if (theReverse != null && (value == null || theType.getRawType().isInstance(value)))
+				return theWrapped.canRemove(theReverse.apply((T) value));
+			else
+				return false;
+		}
+
+		@Override
+		public boolean canAdd(T value) {
+			if (theReverse != null)
+				return theWrapped.canAdd(theReverse.apply(value));
+			else
+				return false;
+		}
+
 		protected Iterator<T> filter(Iterator<E> iter) {
 			return new Iterator<T>() {
-				private T nextVal;
+				private FilterMapResult<T> nextVal;
 
 				@Override
 				public boolean hasNext() {
-					while(nextVal == null && iter.hasNext()) {
+					while ((nextVal == null || !nextVal.passed) && iter.hasNext()) {
 						nextVal = theMap.apply(iter.next());
 					}
-					return nextVal != null;
+					return nextVal != null && nextVal.passed;
 				}
 
 				@Override
 				public T next() {
-					if(nextVal == null && !hasNext())
+					if ((nextVal == null || !nextVal.passed) && !hasNext())
 						throw new java.util.NoSuchElementException();
-					T ret = nextVal;
+					T ret = nextVal.mapped;
 					nextVal = null;
 					return ret;
 				}
@@ -1274,6 +2111,15 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			};
 		}
 
+		@Override
+		public boolean isSafe() {
+			return theWrapped.isSafe();
+		}
+
+		@Override
+		public String toString() {
+			return ObservableCollection.toString(this);
+		}
 	}
 
 	/**
@@ -1283,15 +2129,16 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @param <T> The type of the mapped collection
 	 */
 	class StaticFilteredCollection<E, T> extends FilteredCollection<E, T> {
-		public StaticFilteredCollection(ObservableCollection<E> wrap, Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
+		public StaticFilteredCollection(ObservableCollection<E> wrap, TypeToken<T> type, Function<? super E, FilterMapResult<T>> map,
+			Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
 
 		@Override
 		public Subscription onElement(Consumer<? super ObservableElement<T>> observer) {
 			return getWrapped().onElement(element -> {
-				if(getMap().apply(element.get())!=null)
-					observer.accept(element.mapV(getMap()));
+				if (getMap().apply(element.get()).passed)
+					observer.accept(element.mapV(value -> getMap().apply(value).mapped));
 			});
 		}
 	}
@@ -1303,26 +2150,36 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @param <T> The type of the mapped collection
 	 */
 	class DynamicFilteredCollection<E, T> extends FilteredCollection<E, T> {
-		DynamicFilteredCollection(ObservableCollection<E> wrap, Type type, Function<? super E, T> map, Function<? super T, E> reverse) {
+		DynamicFilteredCollection(ObservableCollection<E> wrap, TypeToken<T> type, Function<? super E, FilterMapResult<T>> map,
+			Function<? super T, E> reverse) {
 			super(wrap, type, map, reverse);
 		}
 
-		protected FilteredElement<E, T> filter(ObservableElement<E> element) {
-			return d().debug(new FilteredElement<>(element, getMap(), getType())).from("element", this).tag("wrapped", element).get();
+		protected DynamicFilteredElement<E, T> filter(ObservableElement<E> element, Object meta) {
+			return d().debug(new DynamicFilteredElement<>(element, getMap(), getType())).from("element", this).tag("wrapped", element).get();
 		}
 
-		@Override
-		public Subscription onElement(Consumer<? super ObservableElement<T>> observer) {
-			return getWrapped().onElement(element -> {
-				FilteredElement<E, T> retElement = filter(element);
-				element.act(elValue -> {
+		protected Subscription onElement(Consumer<? super ObservableElement<T>> onElement, Object meta) {
+			SimpleObservable<Void> unSubObs = new SimpleObservable<>();
+			Subscription collSub = getWrapped().onElement(element -> {
+				DynamicFilteredElement<E, T> retElement = filter(element, meta);
+				element.unsubscribeOn(unSubObs).act(elValue -> {
 					if(!retElement.isIncluded()) {
-						T mapped = getMap().apply(elValue.getValue());
-						if(mapped != null)
-							observer.accept(retElement);
+						FilterMapResult<T> mapped = getMap().apply(elValue.getValue());
+						if (mapped.passed)
+							onElement.accept(retElement);
 					}
 				});
 			});
+			return () -> {
+				collSub.unsubscribe();
+				unSubObs.onNext(null);
+			};
+		}
+
+		@Override
+		public Subscription onElement(Consumer<? super ObservableElement<T>> onElement) {
+			return onElement(onElement, null);
 		}
 	}
 
@@ -1332,12 +2189,13 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @param <T> The type of this element
 	 * @param <E> The type of element being wrapped
 	 */
-	class FilteredElement<E, T> implements ObservableElement<T> {
+	class DynamicFilteredElement<E, T> implements ObservableElement<T> {
 		private final ObservableElement<E> theWrappedElement;
-		private final Function<? super E, T> theMap;
-		private final Type theType;
+		private final Function<? super E, FilterMapResult<T>> theMap;
 
-		private T theValue;
+		private final TypeToken<T> theType;
+
+		private FilterMapResult<T> theValue;
 		private boolean isIncluded;
 
 		/**
@@ -1345,7 +2203,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		 * @param map The mapping function to filter on
 		 * @param type The type of the element
 		 */
-		protected FilteredElement(ObservableElement<E> wrapped, Function<? super E, T> map, Type type) {
+		protected DynamicFilteredElement(ObservableElement<E> wrapped, Function<? super E, FilterMapResult<T>> map, TypeToken<T> type) {
 			theWrappedElement = wrapped;
 			theMap = map;
 			theType = type;
@@ -1353,17 +2211,17 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		@Override
 		public ObservableValue<T> persistent() {
-			return theWrappedElement.mapV(theMap);
+			return theWrappedElement.mapV(value -> theMap.apply(value).mapped);
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<T> getType() {
 			return theType;
 		}
 
 		@Override
 		public T get() {
-			return theValue;
+			return theValue.mapped;
 		}
 
 		/** @return The element that this filtered element wraps */
@@ -1372,7 +2230,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		/** @return The mapping function used by this element */
-		protected Function<? super E, T> getMap() {
+		protected Function<? super E, FilterMapResult<T>> getMap() {
 			return theMap;
 		}
 
@@ -1387,13 +2245,12 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			innerSub[0] = theWrappedElement.subscribe(new Observer<ObservableValueEvent<E>>() {
 				@Override
 				public <V2 extends ObservableValueEvent<E>> void onNext(V2 elValue) {
-					T oldValue = theValue;
+					T oldValue = theValue == null ? null : theValue.mapped;
 					theValue = theMap.apply(elValue.getValue());
-					if(theValue == null) {
+					if (!theValue.passed) {
 						if(!isIncluded)
 							return;
 						isIncluded = false;
-						theValue = null;
 						observer2.onCompleted(createChangeEvent(oldValue, oldValue, elValue));
 						if(innerSub[0] != null) {
 							innerSub[0].unsubscribe();
@@ -1403,9 +2260,9 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						boolean initial = !isIncluded;
 						isIncluded = true;
 						if(initial)
-							observer2.onNext(createInitialEvent(theValue));
+							observer2.onNext(createInitialEvent(theValue.mapped));
 						else
-							observer2.onNext(createChangeEvent(oldValue, theValue, elValue));
+							observer2.onNext(createChangeEvent(oldValue, theValue.mapped, elValue));
 					}
 				}
 
@@ -1413,9 +2270,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 				public <V2 extends ObservableValueEvent<E>> void onCompleted(V2 elValue) {
 					if(!isIncluded)
 						return;
-					T oldValue = theValue;
-					T newValue = elValue == null ? null : theMap.apply(elValue.getValue());
-					observer2.onCompleted(createChangeEvent(oldValue, newValue, elValue));
+					T oldValue = theValue.mapped;
+					observer2.onCompleted(createChangeEvent(oldValue, oldValue, elValue));
 				}
 			});
 			if(!isIncluded) {
@@ -1429,6 +2285,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		public String toString() {
 			return "filter(" + theWrappedElement + ")";
 		}
+
+		@Override
+		public boolean isSafe() {
+			return theWrappedElement.isSafe();
+		}
 	}
 
 	/**
@@ -1440,14 +2301,15 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 */
 	class CombinedObservableCollection<E, T, V> implements PartialCollectionImpl<V> {
 		private final ObservableCollection<E> theWrapped;
-		private final Type theType;
+
+		private final TypeToken<V> theType;
 		private final ObservableValue<T> theValue;
 		private final BiFunction<? super E, ? super T, V> theMap;
 		private final BiFunction<? super V, ? super T, E> theReverse;
 
 		private final SubCollectionTransactionManager theTransactionManager;
 
-		protected CombinedObservableCollection(ObservableCollection<E> wrap, Type type, ObservableValue<T> value,
+		protected CombinedObservableCollection(ObservableCollection<E> wrap, TypeToken<V> type, ObservableValue<T> value,
 			BiFunction<? super E, ? super T, V> map, BiFunction<? super V, ? super T, E> reverse) {
 			theWrapped = wrap;
 			theType = type;
@@ -1455,7 +2317,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			theMap = map;
 			theReverse = reverse;
 
-			theTransactionManager = new SubCollectionTransactionManager(theWrapped);
+			theTransactionManager = new SubCollectionTransactionManager(theWrapped, value.noInit());
 		}
 
 		protected ObservableCollection<E> getWrapped() {
@@ -1489,7 +2351,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<V> getType() {
 			return theType;
 		}
 
@@ -1576,6 +2438,22 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			getWrapped().clear();
 		}
 
+		@Override
+		public boolean canRemove(Object value) {
+			if (theReverse != null && (value == null || theType.getRawType().isInstance(value)))
+				return theWrapped.canRemove(theReverse.apply((V) value, theValue.get()));
+			else
+				return false;
+		}
+
+		@Override
+		public boolean canAdd(V value) {
+			if (theReverse != null)
+				return theWrapped.canAdd(theReverse.apply(value, theValue.get()));
+			else
+				return false;
+		}
+
 		protected Iterator<V> combine(Iterator<E> iter) {
 			return new Iterator<V>() {
 				@Override
@@ -1597,8 +2475,24 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		@Override
 		public Subscription onElement(Consumer<? super ObservableElement<V>> onElement) {
-			return theTransactionManager.onElement(theWrapped, theValue, element -> onElement.accept(element.combineV(theMap, theValue)),
-				true);
+			DefaultObservable<Void> unSubObs = new DefaultObservable<>();
+			Observer<Void> unSubControl = unSubObs.control(null);
+			Subscription collSub = theTransactionManager.onElement(theWrapped,
+				element -> onElement.accept(element.combineV(theMap, theValue).unsubscribeOn(unSubObs)), true);
+			return () -> {
+				unSubControl.onCompleted(null);
+				collSub.unsubscribe();
+			};
+		}
+
+		@Override
+		public boolean isSafe() {
+			return false;
+		}
+
+		@Override
+		public String toString() {
+			return ObservableCollection.toString(this);
 		}
 	}
 
@@ -1610,28 +2504,42 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 */
 	class GroupedMultiMap<K, E> implements ObservableMultiMap<K, E> {
 		private final ObservableCollection<E> theWrapped;
-
 		private final Function<E, K> theKeyMap;
-
-		private final Type theKeyType;
+		private final TypeToken<K> theKeyType;
+		private final Equalizer theEqualizer;
 
 		private final ObservableSet<K> theKeySet;
 
-		GroupedMultiMap(ObservableCollection<E> wrap, Function<E, K> keyMap, Type keyType) {
+		GroupedMultiMap(ObservableCollection<E> wrap, Function<E, K> keyMap, TypeToken<K> keyType, Equalizer equalizer) {
 			theWrapped = wrap;
 			theKeyMap = keyMap;
-			theKeyType = keyType != null ? keyType : ObservableUtils.getReturnType(keyMap);
+			theKeyType = keyType != null ? keyType
+				: (TypeToken<K>) TypeToken.of(keyMap.getClass()).resolveType(Function.class.getTypeParameters()[1]);
+			theEqualizer = equalizer;
 
-			theKeySet = ObservableSet.unique(theWrapped.map(theKeyMap));
+			ObservableCollection<K> mapped;
+			if (theKeyMap != null)
+				mapped = theWrapped.map(theKeyMap);
+			else
+				mapped = (ObservableCollection<K>) theWrapped;
+			theKeySet = unique(mapped);
+		}
+
+		protected Equalizer getEqualizer() {
+			return theEqualizer;
+		}
+
+		protected ObservableSet<K> unique(ObservableCollection<K> keyCollection) {
+			return ObservableSet.unique(keyCollection, theEqualizer);
 		}
 
 		@Override
-		public Type getKeyType() {
+		public TypeToken<K> getKeyType() {
 			return theKeyType;
 		}
 
 		@Override
-		public Type getValueType() {
+		public TypeToken<E> getValueType() {
 			return theWrapped.getType();
 		}
 
@@ -1646,13 +2554,18 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
+		public boolean isSafe() {
+			return theWrapped.isSafe();
+		}
+
+		@Override
 		public ObservableSet<K> keySet() {
 			return theKeySet;
 		}
 
 		@Override
 		public ObservableCollection<E> get(Object key) {
-			return theWrapped.filter(el -> Objects.equals(theKeyMap.apply(el), key));
+			return theWrapped.filter(el -> theEqualizer.equals(theKeyMap.apply(el), key));
 		}
 
 		@Override
@@ -1691,7 +2604,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<E> getType() {
 			return theElements.getType();
 		}
 
@@ -1751,15 +2664,121 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
+		public boolean canRemove(Object value) {
+			return theElements.canRemove(value);
+		}
+
+		@Override
+		public boolean canAdd(E value) {
+			return theElements.canAdd(value);
+		}
+
+		@Override
+		public boolean isSafe() {
+			return theElements.isSafe();
+		}
+
+		@Override
 		public boolean equals(Object o) {
 			if(this == o)
 				return true;
-			return o instanceof GroupedMultiEntry && Objects.equals(theKey, ((GroupedMultiEntry<?, ?>) o).theKey);
+			return o instanceof MultiEntry && Objects.equals(theKey, ((MultiEntry<?, ?>) o).getKey());
 		}
 
 		@Override
 		public int hashCode() {
 			return Objects.hashCode(theKey);
+		}
+
+		@Override
+		public String toString() {
+			return getKey() + "=" + ObservableCollection.toString(this);
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableCollection#groupBy(Function, Comparator)}
+	 *
+	 * @param <K> The key type of the map
+	 * @param <E> The value type of the map
+	 */
+	class GroupedSortedMultiMap<K, E> implements ObservableSortedMultiMap<K, E> {
+		private final ObservableCollection<E> theWrapped;
+		private final Function<E, K> theKeyMap;
+		private final TypeToken<K> theKeyType;
+		private final Comparator<? super K> theCompare;
+
+		private final ObservableSortedSet<K> theKeySet;
+
+		GroupedSortedMultiMap(ObservableCollection<E> wrap, Function<E, K> keyMap, TypeToken<K> keyType, Comparator<? super K> compare) {
+			theWrapped = wrap;
+			theKeyMap = keyMap;
+			theKeyType = keyType != null ? keyType
+				: (TypeToken<K>) TypeToken.of(keyMap.getClass()).resolveType(Function.class.getTypeParameters()[1]);
+			theCompare = compare;
+
+			ObservableCollection<K> mapped;
+			if (theKeyMap != null)
+				mapped = theWrapped.map(theKeyMap);
+			else
+				mapped = (ObservableCollection<K>) theWrapped;
+			theKeySet = unique(mapped);
+		}
+
+		@Override
+		public Comparator<? super K> comparator() {
+			return theCompare;
+		}
+
+		protected ObservableSortedSet<K> unique(ObservableCollection<K> keyCollection) {
+			return ObservableSortedSet.unique(keyCollection, theCompare);
+		}
+
+		@Override
+		public TypeToken<K> getKeyType() {
+			return theKeyType;
+		}
+
+		@Override
+		public TypeToken<E> getValueType() {
+			return theWrapped.getType();
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			return theWrapped.getSession();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theWrapped.lock(write, cause);
+		}
+
+		@Override
+		public boolean isSafe() {
+			return theWrapped.isSafe();
+		}
+
+		@Override
+		public ObservableSortedSet<K> keySet() {
+			return theKeySet;
+		}
+
+		@Override
+		public ObservableCollection<E> get(Object key) {
+			if (!theKeyType.getRawType().isInstance(key))
+				return ObservableList.constant(getValueType());
+			return theWrapped.filter(el -> theCompare.compare(theKeyMap.apply(el), (K) key) == 0);
+		}
+
+		@Override
+		public ObservableSortedSet<? extends ObservableSortedMultiEntry<K, E>> entrySet() {
+			return ObservableSortedMultiMap.defaultEntrySet(this);
+		}
+
+		@Override
+		public String toString() {
+			return entrySet().toString();
 		}
 	}
 
@@ -1778,7 +2797,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			theWrapped = wrap;
 			theRefresh = refresh;
 
-			theTransactionManager = new SubCollectionTransactionManager(theWrapped);
+			theTransactionManager = new SubCollectionTransactionManager(theWrapped, refresh);
 		}
 
 		protected ObservableCollection<E> getWrapped() {
@@ -1794,7 +2813,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<E> getType() {
 			return theWrapped.getType();
 		}
 
@@ -1805,7 +2824,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		@Override
 		public Transaction lock(boolean write, Object cause) {
-			return theWrapped.lock(write, cause);
+			theTransactionManager.startTransaction(cause);
+			return () -> theTransactionManager.endTransaction();
 		}
 
 		@Override
@@ -1819,8 +2839,35 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
+		public boolean canRemove(Object value) {
+			return theWrapped.canRemove(value);
+		}
+
+		@Override
+		public boolean canAdd(E value) {
+			return theWrapped.canAdd(value);
+		}
+
+		@Override
 		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
-			return theTransactionManager.onElement(theWrapped, theRefresh, element -> onElement.accept(element.refresh(theRefresh)), true);
+			DefaultObservable<Void> unSubObs = new DefaultObservable<>();
+			Observer<Void> unSubControl = unSubObs.control(null);
+			Subscription collSub = theTransactionManager.onElement(theWrapped,
+				element -> onElement.accept(element.refresh(theRefresh).unsubscribeOn(unSubObs)), true);
+			return () -> {
+				unSubControl.onCompleted(null);
+				collSub.unsubscribe();
+			};
+		}
+
+		@Override
+		public boolean isSafe() {
+			return false;
+		}
+
+		@Override
+		public String toString() {
+			return theWrapped.toString();
 		}
 	}
 
@@ -1848,7 +2895,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<E> getType() {
 			return theWrapped.getType();
 		}
 
@@ -1873,82 +2920,34 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
+		public boolean canRemove(Object value) {
+			return theWrapped.canRemove(value);
+		}
+
+		@Override
+		public boolean canAdd(E value) {
+			return theWrapped.canAdd(value);
+		}
+
+		@Override
 		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
-			return theWrapped.onElement(element -> onElement.accept(element.refreshForValue(theRefresh)));
-		}
-	}
-
-	/**
-	 * An element in a {@link ObservableCollection#flatten(ObservableCollection) flattened} collection
-	 *
-	 * @param <T> The type of the element
-	 */
-	class FlattenedElement<T> implements ObservableElement<T> {
-		private final ObservableElement<T> subElement;
-
-		private final ObservableElement<? extends ObservableCollection<? extends T>> subCollectionEl;
-		private boolean isRemoved;
-
-		/**
-		 * @param subEl The sub-collection element to wrap
-		 * @param subColl The element containing the sub-collection
-		 */
-		protected FlattenedElement(ObservableElement<T> subEl, ObservableElement<? extends ObservableCollection<? extends T>> subColl) {
-			if(subEl == null)
-				throw new NullPointerException();
-			subElement = subEl;
-			subCollectionEl = subColl;
-			subColl.completed().act(value -> isRemoved = true);
-		}
-
-		/** @return The element in the outer collection containing the inner collection that contains this element's wrapped element */
-		protected ObservableElement<? extends ObservableCollection<? extends T>> getSubCollectionElement() {
-			return subCollectionEl;
-		}
-
-		/** @return The wrapped sub-collection element */
-		protected ObservableElement<T> getSubElement() {
-			return subElement;
+			DefaultObservable<Void> unSubObs = new DefaultObservable<>();
+			Observer<Void> unSubControl = unSubObs.control(null);
+			Subscription collSub = theWrapped.onElement(element -> onElement.accept(element.refreshForValue(theRefresh, unSubObs)));
+			return () -> {
+				unSubControl.onCompleted(null);
+				collSub.unsubscribe();
+			};
 		}
 
 		@Override
-		public ObservableValue<T> persistent() {
-			return subElement;
-		}
-
-		/** @return Whether this element has been removed or not */
-		protected boolean isRemoved() {
-			return isRemoved;
-		}
-
-		@Override
-		public Type getType() {
-			return subElement.getType();
-		}
-
-		@Override
-		public T get() {
-			return subElement.get();
-		}
-
-		@Override
-		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer2) {
-			return subElement.takeUntil(subCollectionEl.completed()).subscribe(new Observer<ObservableValueEvent<T>>() {
-				@Override
-				public <V extends ObservableValueEvent<T>> void onNext(V event) {
-					observer2.onNext(ObservableUtils.wrap(event, FlattenedElement.this));
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<T>> void onCompleted(V event) {
-					observer2.onCompleted(ObservableUtils.wrap(event, FlattenedElement.this));
-				}
-			});
+		public boolean isSafe() {
+			return false;
 		}
 
 		@Override
 		public String toString() {
-			return "flattened(" + subElement.toString() + ")";
+			return theWrapped.toString();
 		}
 	}
 
@@ -1987,13 +2986,13 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<E> getType() {
 			return theWrapped.getType();
 		}
 
 		@Override
 		public Iterator<E> iterator() {
-			return org.qommons.ArrayUtils.immutableIterator(theWrapped.iterator());
+			return org.qommons.IterableUtils.immutableIterator(theWrapped.iterator());
 		}
 
 		@Override
@@ -2002,8 +3001,28 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
+		public boolean canRemove(Object value) {
+			return false;
+		}
+
+		@Override
+		public boolean canAdd(E value) {
+			return false;
+		}
+
+		@Override
 		public ImmutableObservableCollection<E> immutable() {
 			return this;
+		}
+
+		@Override
+		public boolean isSafe() {
+			return theWrapped.isSafe();
+		}
+
+		@Override
+		public String toString() {
+			return theWrapped.toString();
 		}
 	}
 
@@ -2038,7 +3057,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<E> getType() {
 			return theWrapped.getType();
 		}
 
@@ -2055,6 +3074,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		@Override
 		public Transaction lock(boolean write, Object cause) {
 			return theWrapped.lock(write, cause);
+		}
+
+		@Override
+		public boolean isSafe() {
+			return theWrapped.isSafe();
 		}
 
 		@Override
@@ -2215,6 +3239,26 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 				i++;
 			}
 		}
+
+		@Override
+		public boolean canRemove(Object value) {
+			if (theRemoveFilter != null && (value == null || theWrapped.getType().getRawType().isInstance(value))
+				&& !theRemoveFilter.test((E) value))
+				return false;
+			return theWrapped.canRemove(value);
+		}
+
+		@Override
+		public boolean canAdd(E value) {
+			if (theAddFilter != null && !theAddFilter.test(value))
+				return false;
+			return theWrapped.canAdd(value);
+		}
+
+		@Override
+		public String toString() {
+			return theWrapped.toString();
+		}
 	}
 
 	/**
@@ -2243,8 +3287,13 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			}
 
 			@Override
-			public Type getType() {
+			public TypeToken<E> getType() {
 				return theWrapped.getType();
+			}
+
+			@Override
+			public boolean isSafe() {
+				return true;
 			}
 
 			@Override
@@ -2279,7 +3328,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		private ObservableCollection<E> theWrapped;
 		private final ListenerSet<Consumer<? super ObservableElement<E>>> theListeners;
-		private final org.observe.util.ConcurrentIdentityHashMap<ObservableElement<E>, CachedElement<E>> theCache;
+		private final org.qommons.ConcurrentIdentityHashMap<ObservableElement<E>, CachedElement<E>> theCache;
 		private final ReentrantLock theLock;
 		private final Consumer<ObservableElement<E>> theWrappedOnElement;
 
@@ -2289,7 +3338,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		protected SafeCachedObservableCollection(ObservableCollection<E> wrap) {
 			theWrapped = wrap;
 			theListeners = new ListenerSet<>();
-			theCache = new org.observe.util.ConcurrentIdentityHashMap<>();
+			theCache = new org.qommons.ConcurrentIdentityHashMap<>();
 			theLock = new ReentrantLock();
 			theWrappedOnElement = element -> {
 				CachedElement<E> cached = d().debug(createElement(element)).from("element", this).tag("wrapped", element).get();
@@ -2322,7 +3371,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		}
 
 		@Override
-		public Type getType() {
+		public TypeToken<E> getType() {
 			return theWrapped.getType();
 		}
 
@@ -2347,6 +3396,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		@Override
 		public Transaction lock(boolean write, Object cause) {
 			return theWrapped.lock(write, cause);
+		}
+
+		@Override
+		public boolean isSafe() {
+			return true;
 		}
 
 		@Override
@@ -2381,6 +3435,16 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			return ret.size();
 		}
 
+		@Override
+		public boolean canRemove(Object value) {
+			return theWrapped.canRemove(value);
+		}
+
+		@Override
+		public boolean canAdd(E value) {
+			return theWrapped.canAdd(value);
+		}
+
 		private void setUsed(boolean used) {
 			if(used && theUnsubscribe == null) {
 				theLock.lock();
@@ -2411,6 +3475,599 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		@Override
 		public ObservableCollection<E> cached() {
 			return this;
+		}
+
+		@Override
+		public String toString() {
+			return theWrapped.toString();
+		}
+	}
+
+	/**
+	 * Backs {@link ObservableCollection#takeUntil(Observable)}
+	 *
+	 * @param <E> The type of elements in the collection
+	 */
+	class TakenUntilObservableCollection<E> implements PartialCollectionImpl<E> {
+		private final ObservableCollection<E> theWrapped;
+		private final Observable<?> theUntil;
+		private final boolean isTerminating;
+
+		public TakenUntilObservableCollection(ObservableCollection<E> wrap, Observable<?> until, boolean terminate) {
+			theWrapped = wrap;
+			theUntil = until;
+			isTerminating = terminate;
+		}
+
+		/** @return The collection that this taken until collection wraps */
+		protected ObservableCollection<E> getWrapped() {
+			return theWrapped;
+		}
+
+		/** @return The observable that ends this collection */
+		protected Observable<?> getUntil() {
+			return theUntil;
+		}
+
+		/** @return Whether this collection's elements will be removed when the {@link #getUntil() until} observable fires */
+		protected boolean isTerminating() {
+			return isTerminating;
+		}
+
+		@Override
+		public TypeToken<E> getType() {
+			return theWrapped.getType();
+		}
+
+		@Override
+		public int size() {
+			return theWrapped.size();
+		}
+
+		@Override
+		public Iterator<E> iterator() {
+			return theWrapped.iterator();
+		}
+
+		@Override
+		public boolean canRemove(Object value) {
+			return theWrapped.canRemove(value);
+		}
+
+		@Override
+		public boolean canAdd(E value) {
+			return theWrapped.canAdd(value);
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			return theWrapped.getSession();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theWrapped.lock(write, cause);
+		}
+
+		@Override
+		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
+			final Map<ObservableElement<E>, TakenUntilElement<E>> elements = new HashMap<>();
+			Subscription[] collSub = new Subscription[] { theWrapped.onElement(element -> {
+				TakenUntilElement<E> untilEl = new TakenUntilElement<>(element, isTerminating);
+				elements.put(element, untilEl);
+				onElement.accept(untilEl);
+			}) };
+			Subscription untilSub = theUntil.act(v -> {
+				if (collSub[0] != null)
+					collSub[0].unsubscribe();
+				collSub[0] = null;
+				for (TakenUntilElement<E> el : elements.values())
+					el.end();
+				elements.clear();
+			});
+			return () -> {
+				if (collSub[0] != null)
+					collSub[0].unsubscribe();
+				collSub[0] = null;
+				untilSub.unsubscribe();
+			};
+		}
+
+		@Override
+		public boolean isSafe() {
+			return false;
+		}
+
+		@Override
+		public String toString() {
+			return theWrapped.toString();
+		}
+	}
+
+	/**
+	 * An element in a {@link ObservableCollection.TakenUntilObservableCollection}
+	 *
+	 * @param <E> The type of value in the element
+	 */
+	class TakenUntilElement<E> implements ObservableElement<E> {
+		private final ObservableElement<E> theWrapped;
+		private final ObservableElement<E> theEndingElement;
+		private final Observer<Void> theEndControl;
+		private final boolean isTerminating;
+
+		public TakenUntilElement(ObservableElement<E> wrap, boolean terminate) {
+			theWrapped = wrap;
+			isTerminating = terminate;
+			DefaultObservable<Void> end = new DefaultObservable<>();
+			if (isTerminating)
+				theEndingElement = theWrapped.takeUntil(end);
+			else
+				theEndingElement = theWrapped.unsubscribeOn(end);
+			theEndControl = end.control(null);
+		}
+
+		/** @return The element that this element wraps */
+		protected ObservableElement<E> getWrapped() {
+			return theWrapped;
+		}
+
+		@Override
+		public TypeToken<E> getType() {
+			return theWrapped.getType();
+		}
+
+		@Override
+		public E get() {
+			return theWrapped.get();
+		}
+
+		@Override
+		public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
+			return theEndingElement.subscribe(observer);
+		}
+
+		@Override
+		public ObservableValue<E> persistent() {
+			return theWrapped.persistent();
+		}
+
+		@Override
+		public boolean isSafe() {
+			return false;
+		}
+
+		protected void end() {
+			theEndControl.onNext(null);
+		}
+
+		@Override
+		public String toString() {
+			return theWrapped.toString();
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableCollection#constant(TypeToken, Collection)}
+	 *
+	 * @param <E> The type of elements in the collection
+	 */
+	class ConstantObservableCollection<E> implements PartialCollectionImpl<E> {
+		private final TypeToken<E> theType;
+		private final Collection<E> theCollection;
+
+		public ConstantObservableCollection(TypeToken<E> type, Collection<E> collection) {
+			theType = type;
+			theCollection = collection;
+		}
+
+		@Override
+		public TypeToken<E> getType() {
+			return theType;
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			return ObservableValue.constant(TypeToken.of(CollectionSession.class), null);
+		}
+
+		@Override
+		public boolean isSafe() {
+			return true;
+		}
+
+		@Override
+		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
+			for (E value : theCollection)
+				onElement.accept(new ObservableElement<E>() {
+					@Override
+					public TypeToken<E> getType() {
+						return theType;
+					}
+
+					@Override
+					public E get() {
+						return value;
+					}
+
+					@Override
+					public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
+						observer.onNext(createInitialEvent(value));
+						return () -> {
+						};
+					}
+
+					@Override
+					public boolean isSafe() {
+						return true;
+					}
+
+					@Override
+					public ObservableValue<E> persistent() {
+						return this;
+					}
+				});
+			return () -> {
+			};
+		}
+
+		@Override
+		public boolean canRemove(Object value) {
+			return false;
+		}
+
+		@Override
+		public boolean canAdd(E value) {
+			return false;
+		}
+
+		@Override
+		public int size() {
+			return theCollection.size();
+		}
+
+		@Override
+		public Iterator<E> iterator() {
+			return IterableUtils.immutableIterator(theCollection.iterator());
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return () -> {
+			};
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableCollection#flattenValues(ObservableCollection)}
+	 *
+	 * @param <E> The type of elements in the collection
+	 */
+	class FlattenedValuesCollection<E> implements ObservableCollection.PartialCollectionImpl<E> {
+		private ObservableCollection<? extends ObservableValue<? extends E>> theCollection;
+		private final TypeToken<E> theType;
+
+		protected FlattenedValuesCollection(ObservableCollection<? extends ObservableValue<? extends E>> collection) {
+			theCollection = collection;
+			theType = (TypeToken<E>) theCollection.getType().resolveType(ObservableValue.class.getTypeParameters()[0]);
+		}
+
+		/** @return The collection of values that this collection flattens */
+		protected ObservableCollection<? extends ObservableValue<? extends E>> getWrapped() {
+			return theCollection;
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			return theCollection.getSession();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theCollection.lock(write, cause);
+		}
+
+		@Override
+		public TypeToken<E> getType() {
+			return theType;
+		}
+
+		@Override
+		public boolean isSafe() {
+			return false;
+		}
+
+		@Override
+		public Subscription onElement(Consumer<? super ObservableElement<E>> observer) {
+			return theCollection.onElement(element -> observer.accept(createFlattenedElement(element)));
+		}
+
+		protected FlattenedValueElement<E> createFlattenedElement(ObservableElement<? extends ObservableValue<? extends E>> element) {
+			return new FlattenedValueElement<>(element, theType);
+		}
+
+		@Override
+		public Iterator<E> iterator() {
+			return new Iterator<E>() {
+				private final Iterator<? extends ObservableValue<? extends E>> wrapped = theCollection.iterator();
+
+				@Override
+				public boolean hasNext() {
+					return wrapped.hasNext();
+				}
+
+				@Override
+				public E next() {
+					return wrapped.next().get();
+				}
+
+				@Override
+				public void remove() {
+					wrapped.remove();
+				}
+			};
+		}
+
+		@Override
+		public boolean canRemove(Object value) {
+			return false;
+		}
+
+		@Override
+		public boolean canAdd(E value) {
+			return false;
+		}
+
+		@Override
+		public int size() {
+			return theCollection.size();
+		}
+
+		@Override
+		public String toString() {
+			return ObservableCollection.toString(this);
+		}
+	}
+
+	/**
+	 * Implements elements for {@link ObservableCollection#flattenValues(ObservableCollection)}
+	 *
+	 * @param <E> The type value in the element
+	 */
+	class FlattenedValueElement<E> implements ObservableElement<E> {
+		private final ObservableElement<? extends ObservableValue<? extends E>> theWrapped;
+		private final TypeToken<E> theType;
+
+		protected FlattenedValueElement(ObservableElement<? extends ObservableValue<? extends E>> wrap, TypeToken<E> type) {
+			theWrapped = wrap;
+			theType = type;
+		}
+
+		protected ObservableElement<? extends ObservableValue<? extends E>> getWrapped() {
+			return theWrapped;
+		}
+
+		@Override
+		public TypeToken<E> getType() {
+			return theType;
+		}
+
+		@Override
+		public boolean isSafe() {
+			return false;
+		}
+
+		@Override
+		public E get() {
+			return get(theWrapped.get());
+		}
+
+		@Override
+		public ObservableValue<E> persistent() {
+			return ObservableValue.flatten(theWrapped.persistent());
+		}
+
+		private E get(ObservableValue<? extends E> value) {
+			return value == null ? null : value.get();
+		}
+
+		@Override
+		public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer2) {
+			ObservableElement<E> retObs = this;
+			return theWrapped.subscribe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends E>>>() {
+				@Override
+				public <V2 extends ObservableValueEvent<? extends ObservableValue<? extends E>>> void onNext(V2 value) {
+					if (value.getValue() != null) {
+						Observable<?> until = ObservableUtils.makeUntil(theWrapped, value);
+						value.getValue().takeUntil(until).act(innerEvent -> {
+							observer2.onNext(ObservableUtils.wrap(innerEvent, retObs));
+						});
+					} else if (value.isInitial())
+						observer2.onNext(retObs.createInitialEvent(null));
+					else
+						observer2.onNext(retObs.createChangeEvent(get(value.getOldValue()), null, value.getCause()));
+				}
+
+				@Override
+				public <V2 extends ObservableValueEvent<? extends ObservableValue<? extends E>>> void onCompleted(V2 value) {
+					if (value.isInitial())
+						observer2.onCompleted(retObs.createInitialEvent(get(value.getValue())));
+					else
+						observer2.onCompleted(retObs.createChangeEvent(get(value.getOldValue()), get(value.getValue()), value.getCause()));
+				}
+			});
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableCollection#flattenValue(ObservableValue)}
+	 *
+	 * @param <E> The type of elements in the collection
+	 */
+	class FlattenedValueCollection<E> implements ObservableCollection.PartialCollectionImpl<E> {
+		private final ObservableValue<? extends ObservableCollection<E>> theCollectionObservable;
+		private final TypeToken<E> theType;
+
+		protected FlattenedValueCollection(ObservableValue<? extends ObservableCollection<E>> collectionObservable) {
+			theCollectionObservable = collectionObservable;
+			theType = (TypeToken<E>) theCollectionObservable.getType().resolveType(ObservableCollection.class.getTypeParameters()[0]);
+		}
+
+		protected ObservableValue<? extends ObservableCollection<E>> getWrapped() {
+			return theCollectionObservable;
+		}
+
+		@Override
+		public TypeToken<E> getType() {
+			return theType;
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			return ObservableValue.flatten(theCollectionObservable.mapV(coll -> coll.getSession()));
+		}
+
+		@Override
+		public int size() {
+			ObservableCollection<? extends E> coll = theCollectionObservable.get();
+			return coll == null ? 0 : coll.size();
+		}
+
+		@Override
+		public Iterator<E> iterator() {
+			ObservableCollection<? extends E> coll = theCollectionObservable.get();
+			return coll == null ? Collections.EMPTY_LIST.iterator() : (Iterator<E>) coll.iterator();
+		}
+
+		@Override
+		public boolean canRemove(Object value) {
+			ObservableCollection<E> current = theCollectionObservable.get();
+			if (current == null)
+				return false;
+			return current.canRemove(value);
+		}
+
+		@Override
+		public boolean canAdd(E value) {
+			ObservableCollection<E> current = theCollectionObservable.get();
+			if (current == null)
+				return false;
+			return current.canAdd(value);
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			ObservableCollection<? extends E> coll = theCollectionObservable.get();
+			return coll == null ? () -> {
+			} : coll.lock(write, cause);
+		}
+
+		@Override
+		public boolean isSafe() {
+			return false;
+		}
+
+		@Override
+		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
+			SimpleObservable<Void> unSubObs = new SimpleObservable<>();
+			Subscription collSub = theCollectionObservable
+				.subscribe(new Observer<ObservableValueEvent<? extends ObservableCollection<? extends E>>>() {
+					@Override
+					public <V extends ObservableValueEvent<? extends ObservableCollection<? extends E>>> void onNext(V event) {
+						if (event.getValue() != null) {
+							Observable<?> until = ObservableUtils.makeUntil(theCollectionObservable, event);
+							((ObservableCollection<E>) event.getValue().takeUntil(until).unsubscribeOn(unSubObs)).onElement(onElement);
+						}
+					}
+				});
+			return () -> {
+				collSub.unsubscribe();
+				unSubObs.onNext(null);
+			};
+		}
+
+		@Override
+		public String toString() {
+			return ObservableCollection.toString(this);
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableCollection#flatten(ObservableCollection)}
+	 *
+	 * @param <E> The type of elements in the collection
+	 */
+	class FlattenedObservableCollection<E> implements PartialCollectionImpl<E> {
+		private final ObservableCollection<? extends ObservableCollection<? extends E>> theOuter;
+		private final TypeToken<E> theType;
+		private final CombinedCollectionSessionObservable theSession;
+
+		protected FlattenedObservableCollection(ObservableCollection<? extends ObservableCollection<? extends E>> collection) {
+			theOuter = collection;
+			theType = (TypeToken<E>) theOuter.getType().resolveType(ObservableCollection.class.getTypeParameters()[0]);
+			theSession = new CombinedCollectionSessionObservable(theOuter);
+		}
+
+		protected ObservableCollection<? extends ObservableCollection<? extends E>> getOuter() {
+			return theOuter;
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			return theSession;
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return CombinedCollectionSessionObservable.lock(theOuter, write, cause);
+		}
+
+		@Override
+		public TypeToken<E> getType() {
+			return theType;
+		}
+
+		@Override
+		public boolean isSafe() {
+			return false;
+		}
+
+		@Override
+		public int size() {
+			int ret = 0;
+			for (ObservableCollection<? extends E> subColl : theOuter)
+				ret += subColl.size();
+			return ret;
+		}
+
+		@Override
+		public Iterator<E> iterator() {
+			return (Iterator<E>) IterableUtils.flatten(theOuter).iterator();
+		}
+
+		@Override
+		public boolean canRemove(Object value) {
+			return false;
+		}
+
+		@Override
+		public boolean canAdd(E value) {
+			return false;
+		}
+
+		@Override
+		public Subscription onElement(Consumer<? super ObservableElement<E>> observer) {
+			SimpleObservable<Void> unSubObs = new SimpleObservable<>();
+			Subscription collSub = theOuter.onElement(element -> flattenValue((ObservableValue<ObservableCollection<E>>) element)
+				.unsubscribeOn(unSubObs).onElement(observer));
+			return () -> {
+				collSub.unsubscribe();
+				unSubObs.onNext(null);
+			};
+		}
+
+		@Override
+		public String toString() {
+			return ObservableCollection.toString(this);
 		}
 	}
 }

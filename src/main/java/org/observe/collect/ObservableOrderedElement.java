@@ -11,7 +11,7 @@ import org.qommons.BiTuple;
 import org.qommons.TriFunction;
 import org.qommons.TriTuple;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 /**
  * An observable element that knows its position in the collection
@@ -24,7 +24,14 @@ public interface ObservableOrderedElement<E> extends ObservableElement<E> {
 
 	@Override
 	default ObservableOrderedElement<E> takeUntil(Observable<?> until) {
-		return new OrderedElementTakenUntil<>(this, until);
+		return d().debug(new OrderedElementTakenUntil<>(this, until, true)).from("take", this).from("until", until).tag("terminate", true)
+				.get();
+	}
+
+	@Override
+	default ObservableOrderedElement<E> unsubscribeOn(Observable<?> until) {
+		return d().debug(new OrderedElementTakenUntil<>(this, until, false)).from("take", this).from("until", until).tag("terminate", false)
+				.get();
 	}
 
 	@Override
@@ -53,7 +60,7 @@ public interface ObservableOrderedElement<E> extends ObservableElement<E> {
 	 * @return The new observable whose value is a function of this observable's value
 	 */
 	@Override
-	default <R> ObservableOrderedElement<R> mapV(Type type, Function<? super E, R> function, boolean combineNull) {
+	default <R> ObservableOrderedElement<R> mapV(TypeToken<R> type, Function<? super E, R> function, boolean combineNull) {
 		return new ComposedObservableListElement<>(this, type, args -> {
 			return function.apply((E) args[0]);
 		}, combineNull, this);
@@ -84,8 +91,9 @@ public interface ObservableOrderedElement<E> extends ObservableElement<E> {
 	 * @return The new observable whose value is a function of this observable's value and the other's
 	 */
 	@Override
-	default <U, R> ObservableOrderedElement<R> combineV(Type type, BiFunction<? super E, ? super U, R> function, ObservableValue<U> arg,
-		boolean combineNull) {
+	default <U, R> ObservableOrderedElement<R> combineV(TypeToken<R> type, BiFunction<? super E, ? super U, R> function,
+			ObservableValue<U> arg,
+			boolean combineNull) {
 		return new ComposedObservableListElement<>(this, type, args -> {
 			return function.apply((E) args[0], (U) args[1]);
 		}, combineNull, this, arg);
@@ -126,7 +134,7 @@ public interface ObservableOrderedElement<E> extends ObservableElement<E> {
 	 */
 	@Override
 	default <U, V, R> ObservableOrderedElement<R> combineV(TriFunction<? super E, ? super U, ? super V, R> function, ObservableValue<U> arg2,
-		ObservableValue<V> arg3) {
+			ObservableValue<V> arg3) {
 		return combineV(null, function, arg2, arg3, false);
 	}
 
@@ -143,8 +151,8 @@ public interface ObservableOrderedElement<E> extends ObservableElement<E> {
 	 * @return The new observable whose value is a function of this observable's value and the others'
 	 */
 	@Override
-	default <U, V, R> ObservableOrderedElement<R> combineV(Type type, TriFunction<? super E, ? super U, ? super V, R> function,
-		ObservableValue<U> arg2, ObservableValue<V> arg3, boolean combineNull) {
+	default <U, V, R> ObservableOrderedElement<R> combineV(TypeToken<R> type, TriFunction<? super E, ? super U, ? super V, R> function,
+			ObservableValue<U> arg2, ObservableValue<V> arg3, boolean combineNull) {
 		return new ComposedObservableListElement<>(this, type, args -> {
 			return function.apply((E) args[0], (U) args[1], (V) args[2]);
 		}, combineNull, this, arg2, arg3);
@@ -156,8 +164,14 @@ public interface ObservableOrderedElement<E> extends ObservableElement<E> {
 	}
 
 	@Override
-	default ObservableOrderedElement<E> refreshForValue(Function<? super E, Observable<?>> refresh) {
-		return d().debug(new ValueRefreshingOrderedObservableElement<>(this, refresh)).from("refresh", this).using("on", refresh).get();
+	default ObservableOrderedElement<E> refreshForValue(Function<? super E, Observable<?>> refresh, Observable<Void> unsubscribe) {
+		return d().debug(new ValueRefreshingOrderedObservableElement<>(this, refresh, unsubscribe)).from("refresh", this)
+				.using("on", refresh).get();
+	}
+
+	@Override
+	default ObservableOrderedElement<E> safe() {
+		return d().debug(new SafeObservableOrderedElement<>(this)).from("safe", this).get();
 	}
 
 	/**
@@ -166,8 +180,8 @@ public interface ObservableOrderedElement<E> extends ObservableElement<E> {
 	 * @param <T> The type of the element value
 	 */
 	class OrderedElementTakenUntil<T> extends ObservableElementTakenUntil<T> implements ObservableOrderedElement<T> {
-		public OrderedElementTakenUntil(ObservableOrderedElement<T> wrap, Observable<?> until) {
-			super(wrap, until);
+		public OrderedElementTakenUntil(ObservableOrderedElement<T> wrap, Observable<?> until, boolean terminate) {
+			super(wrap, until, terminate);
 		}
 
 		@Override
@@ -211,8 +225,9 @@ public interface ObservableOrderedElement<E> extends ObservableElement<E> {
 	class ComposedObservableListElement<T> extends ComposedObservableValue<T> implements ObservableOrderedElement<T> {
 		private final ObservableOrderedElement<?> theRoot;
 
-		public ComposedObservableListElement(ObservableOrderedElement<?> root, Type t, Function<Object [], T> f, boolean combineNull,
-			ObservableValue<?>... composed) {
+		public ComposedObservableListElement(ObservableOrderedElement<?> root, TypeToken<T> t, Function<Object [], T> f,
+				boolean combineNull,
+				ObservableValue<?>... composed) {
 			super(t, f, combineNull, composed);
 			theRoot = root;
 		}
@@ -252,13 +267,14 @@ public interface ObservableOrderedElement<E> extends ObservableElement<E> {
 	}
 
 	/**
-	 * Implements {@link ObservableOrderedElement#refreshForValue(Function)}
+	 * Implements {@link ObservableOrderedElement#refreshForValue(Function, Observable)}
 	 *
 	 * @param <E> The type of the element
 	 */
 	class ValueRefreshingOrderedObservableElement<E> extends ValueRefreshingObservableElement<E> implements ObservableOrderedElement<E> {
-		protected ValueRefreshingOrderedObservableElement(ObservableOrderedElement<E> wrap, Function<? super E, Observable<?>> refresh) {
-			super(wrap, refresh);
+		protected ValueRefreshingOrderedObservableElement(ObservableOrderedElement<E> wrap, Function<? super E, Observable<?>> refresh,
+				Observable<Void> unsubscribe) {
+			super(wrap, refresh, unsubscribe);
 		}
 
 		@Override
@@ -269,6 +285,32 @@ public interface ObservableOrderedElement<E> extends ObservableElement<E> {
 		@Override
 		public int getIndex() {
 			return getWrapped().getIndex();
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableOrderedElement#safe()}
+	 *
+	 * @param <E> The type of value in the element
+	 */
+	class SafeObservableOrderedElement<E> extends SafeObservableElement<E> implements ObservableOrderedElement<E> {
+		public SafeObservableOrderedElement(ObservableOrderedElement<E> wrap) {
+			super(wrap);
+		}
+
+		@Override
+		protected ObservableOrderedElement<E> getWrapped() {
+			return (ObservableOrderedElement<E>) super.getWrapped();
+		}
+
+		@Override
+		public int getIndex() {
+			return getWrapped().getIndex();
+		}
+
+		@Override
+		public ObservableOrderedElement<E> safe() {
+			return this;
 		}
 	}
 }

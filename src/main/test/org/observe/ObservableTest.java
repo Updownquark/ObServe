@@ -5,7 +5,7 @@ import static org.junit.Assert.assertEquals;
 import org.junit.Test;
 import org.qommons.TriFunction;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 /** Tests observable classes in the org.observe package */
 public class ObservableTest {
@@ -237,18 +237,17 @@ public class ObservableTest {
 		}
 	}
 
-	/** Tests {@link ObservableValue#flatten(Type, ObservableValue)} */
+	/** Tests {@link ObservableValue#flatten(ObservableValue)} */
 	@Test
 	public void observableValueFlatten() {
-		SimpleSettableValue<ObservableValue<Integer>> outer = new SimpleSettableValue<>(new Type(ObservableValue.class, new Type(
-			Integer.TYPE)), false);
+		SimpleSettableValue<ObservableValue<Integer>> outer = new SimpleSettableValue<>(new TypeToken<ObservableValue<Integer>>() {}, false);
 		SimpleSettableValue<Integer> inner1 = new SimpleSettableValue<>(Integer.TYPE, false);
 		inner1.set(1, null);
 		outer.set(inner1, null);
 		SimpleSettableValue<Integer> inner2 = new SimpleSettableValue<>(Integer.TYPE, false);
 		inner2.set(2, null);
 		int [] received = new int[1];
-		ObservableValue.flatten(new Type(Integer.TYPE), outer).act(value -> received[0] = value.getValue());
+		ObservableValue.flatten(outer).act(value -> received[0] = value.getValue());
 
 		assertEquals(1, received[0]);
 		inner1.set(3, null);
@@ -261,5 +260,57 @@ public class ObservableTest {
 		assertEquals(4, received[0]);
 		inner2.set(6, null);
 		assertEquals(6, received[0]);
+	}
+
+	/**
+	 * Tests {@link ObservableValue#firstValue(TypeToken, java.util.function.Predicate, java.util.function.Supplier, ObservableValue...)}
+	 */
+	@Test
+	public void observableFirstValue() {
+		SimpleSettableValue<Integer> v1 = new SimpleSettableValue<>(TypeToken.of(Integer.class), true);
+		SimpleSettableValue<Integer> v2 = new SimpleSettableValue<>(TypeToken.of(Integer.class), true);
+		SimpleSettableValue<Integer> v3 = new SimpleSettableValue<>(TypeToken.of(Integer.class), true);
+		ObservableValue<Integer> first = ObservableValue.firstValue(TypeToken.of(Integer.class), null, null, v1, v2, v3);
+
+		assertEquals(null, first.get());
+		v2.set(2, null);
+		v3.set(3, null);
+		assertEquals(Integer.valueOf(2), first.get());
+		Integer[] reported = new Integer[1];
+		int[] events = new int[1];
+		Subscription sub = first.act(evt -> {
+			reported[0] = evt.getValue();
+			events[0]++;
+		});
+		assertEquals(1, events[0]);
+		assertEquals(Integer.valueOf(2), reported[0]);
+		v3.set(4, null);
+		assertEquals(1, events[0]);
+		assertEquals(Integer.valueOf(2), reported[0]);
+		v1.set(1, null);
+		assertEquals(2, events[0]);
+		assertEquals(Integer.valueOf(1), reported[0]);
+		v2.set(3, null);
+		assertEquals(2, events[0]);
+		assertEquals(Integer.valueOf(1), reported[0]);
+		v1.set(null, null);
+		assertEquals(3, events[0]);
+		assertEquals(Integer.valueOf(3), reported[0]);
+		v2.set(null, null);
+		assertEquals(4, events[0]);
+		assertEquals(Integer.valueOf(4), reported[0]);
+		v3.set(null, null);
+		assertEquals(5, events[0]);
+		assertEquals(null, reported[0]);
+		v2.set(2, null);
+		assertEquals(6, events[0]);
+		assertEquals(Integer.valueOf(2), reported[0]);
+		v3.set(3, null);
+		assertEquals(6, events[0]);
+		assertEquals(Integer.valueOf(2), reported[0]);
+		sub.unsubscribe();
+		v1.set(1, null);
+		assertEquals(6, events[0]);
+		assertEquals(Integer.valueOf(2), reported[0]);
 	}
 }

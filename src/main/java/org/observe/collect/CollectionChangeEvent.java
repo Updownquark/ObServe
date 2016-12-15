@@ -3,12 +3,14 @@ package org.observe.collect;
 import java.util.Collections;
 import java.util.List;
 
+import org.observe.Causable;
+
 /**
  * Represents a set of changes to a collection with a common {@link CollectionChangeType type}.
  *
  * @param <E> The type of element in the changed collection
  */
-public class CollectionChangeEvent<E> {
+public class CollectionChangeEvent<E> implements Causable {
 	/** The type of the changes that this event represents */
 	public final CollectionChangeType type;
 
@@ -21,15 +23,24 @@ public class CollectionChangeEvent<E> {
 	/** The old values from the {@link CollectionChangeType#set} events, or null if this is not a set event */
 	public final List<E> oldValues;
 
+	private final Object theCause;
+
 	/**
 	 * @param aType The common type of the changes
 	 * @param val The values that were added, removed, or changed in the collection
 	 * @param oldVal The old values from the set events
+	 * @param cause The cause of the event
 	 */
-	public CollectionChangeEvent(CollectionChangeType aType, List<E> val, List<E> oldVal) {
+	public CollectionChangeEvent(CollectionChangeType aType, List<E> val, List<E> oldVal, Object cause) {
 		type = aType;
 		values = Collections.unmodifiableList(val);
 		oldValues = oldVal == null ? null : Collections.unmodifiableList(oldVal);
+		theCause = cause;
+	}
+
+	@Override
+	public Object getCause() {
+		return theCause;
 	}
 
 	@Override

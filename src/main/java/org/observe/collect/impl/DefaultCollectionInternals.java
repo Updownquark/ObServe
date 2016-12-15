@@ -12,8 +12,8 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableElement;
 import org.observe.util.DefaultTransactable;
-import org.observe.util.Transactable;
-import org.observe.util.Transaction;
+import org.qommons.Transactable;
+import org.qommons.Transaction;
 
 abstract class DefaultCollectionInternals<E> {
 	private final java.util.concurrent.ConcurrentHashMap<Consumer<? super ObservableElement<E>>, ConcurrentLinkedQueue<Subscription>> theObservers;

@@ -15,12 +15,12 @@ import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableFastFindCollection;
 import org.observe.collect.ObservableOrderedElement;
 import org.observe.collect.ObservableSortedSet;
-import org.observe.util.Transactable;
-import org.observe.util.Transaction;
-import org.observe.util.tree.CountedRedBlackNode.DefaultNode;
-import org.observe.util.tree.CountedRedBlackNode.DefaultTreeMap;
+import org.qommons.Transactable;
+import org.qommons.Transaction;
+import org.qommons.tree.CountedRedBlackNode.DefaultNode;
+import org.qommons.tree.CountedRedBlackNode.DefaultTreeMap;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 /**
  * TODO This class has not been tested
@@ -30,7 +30,7 @@ import prisms.lang.Type;
  * @param <E> The type of element in the set
  */
 public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableFastFindCollection<E> {
-	private final Type theType;
+	private final TypeToken<E> theType;
 
 	private TreeSetInternals theInternals;
 
@@ -46,7 +46,7 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	 * @param compare The comparator to sort this set's elements. Use {@link Comparable}::{@link Comparable#compareTo(Object) compareTo} for
 	 *            natural ordering.
 	 */
-	public ObservableTreeSet(Type type, Comparator<? super E> compare) {
+	public ObservableTreeSet(TypeToken<E> type, Comparator<? super E> compare) {
 		this(type, new ReentrantReadWriteLock(), null, null, compare);
 	}
 
@@ -61,9 +61,9 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	 * @param compare The comparator to sort this set's elements. Use {@link Comparable}::{@link Comparable#compareTo(Object) compareTo} for
 	 *            natural ordering.
 	 */
-	public ObservableTreeSet(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
+	public ObservableTreeSet(TypeToken<E> type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController, Comparator<? super E> compare) {
-		theType = type;
+		theType = type.wrap();
 		theInternals = new TreeSetInternals(lock, session, sessionController, write -> {
 			if(write)
 				theModCount++;
@@ -71,6 +71,24 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 		theCompare = compare;
 
 		theValues = new DefaultTreeMap<>(theCompare);
+	}
+
+	/**
+	 * This method is for creating a tree set of comparable element while specifying some of the internals of the collection. This method
+	 * matches the signature for
+	 * {@link org.observe.assoc.impl.CollectionCreator#create(TypeToken, ReentrantReadWriteLock, ObservableValue, Transactable)} for easy
+	 * use with the assoc implementation constructors.
+	 *
+	 * @param type The type of elements for this collection
+	 * @param lock The lock for this collection to use
+	 * @param session The session for this collection to use (see {@link #getSession()})
+	 * @param sessionController The controller for the session. May be null, in which case the transactional methods in this collection will
+	 *        not actually create transactions.
+	 * @return The new tree set
+	 */
+	public static <E extends Comparable<E>> ObservableTreeSet<E> of(TypeToken<E> type, ReentrantReadWriteLock lock,
+		ObservableValue<CollectionSession> session, Transactable sessionController) {
+		return new ObservableTreeSet<>(type, lock, session, sessionController, (o1, o2) -> o1.compareTo(o2));
 	}
 
 	/** Checks the internal structure of this set for debugging. TODO Remove this when it's solid. */
@@ -91,7 +109,12 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	}
 
 	@Override
-	public Type getType() {
+	public boolean isSafe() {
+		return true;
+	}
+
+	@Override
+	public TypeToken<E> getType() {
 		return theType;
 	}
 
@@ -113,6 +136,7 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	}
 
 	private InternalElement createElement(E value) {
+		theModCount++;
 		return new InternalElement(theType, value);
 	}
 
@@ -163,7 +187,9 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 
 			@Override
 			public void remove() {
-				backing.remove();
+				try (Transaction t = theInternals.lock(true, false, null)) {
+					backing.remove();
+				}
 			}
 		};
 	}
@@ -173,7 +199,7 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 		try (Transaction t = theInternals.lock(true, false, null)) {
 			if(theValues.containsKey(e))
 				return false;
-			InternalElement el = createElement(e);
+			InternalElement el = createElement((E) theType.getRawType().cast(e));
 			el.setNode(theValues.putGetNode(e, el));
 			theInternals.fireNewElement(el);
 			return true;
@@ -209,7 +235,7 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 				if(theValues.containsKey(add))
 					continue;
 				ret = true;
-				InternalElement el = createElement(add);
+				InternalElement el = createElement((E) theType.getRawType().cast(add));
 				el.setNode(theValues.putGetNode(add, el));
 				theModCount++;
 				theInternals.fireNewElement(el);
@@ -289,6 +315,7 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	}
 
 	private void removedNodeImpl(DefaultNode<Map.Entry<E, InternalElement>> node, Runnable removeAction) {
+		theModCount++;
 		node.getValue().getValue().setRemovedIndex(node.getValue().getValue().getIndex());
 		if(removeAction != null)
 			removeAction.run();
@@ -298,6 +325,22 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	@Override
 	public Comparator<? super E> comparator() {
 		return theValues.comparator();
+	}
+
+	@Override
+	public boolean canRemove(Object value) {
+		return value == null || theType.getRawType().isInstance(value);
+	}
+
+	@Override
+	public boolean canAdd(E value) {
+		if (value != null && !theType.getRawType().isInstance(value))
+			return false;
+		try (Transaction t = lock(false, null)) {
+			if (theValues.containsKey(value))
+				return false;
+		}
+		return true;
 	}
 
 	@Override
@@ -343,7 +386,7 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	private class InternalElement extends InternalOrderedObservableElementImpl<E> {
 		private DefaultNode<Map.Entry<E, InternalElement>> theNode;
 
-		InternalElement(Type type, E value) {
+		InternalElement(TypeToken<E> type, E value) {
 			super(type, value);
 		}
 

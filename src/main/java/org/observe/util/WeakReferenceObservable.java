@@ -7,7 +7,7 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 /**
  * An observable holding a {@link WeakReference weak reference} to a value. When the {@link #check()} method is called, this class checks
@@ -17,18 +17,21 @@ import prisms.lang.Type;
  * @param <T> The type of value in this observable
  */
 public class WeakReferenceObservable<T> implements ObservableValue<T> {
-	private final Type theType;
+	private final TypeToken<T> theType;
 	private final WeakReference<T> theRef;
+	private final boolean isSafe;
 	private final java.util.concurrent.ConcurrentLinkedQueue<Observer<? super ObservableValueEvent<T>>> theObservers;
 
 	/**
 	 * @param type The type of value in this observable
 	 * @param value The value for this observable
+	 * @param safe Whether the {@link #check()} method will only be called from a single thread at a time
 	 */
-	public WeakReferenceObservable(Type type, T value) {
+	public WeakReferenceObservable(TypeToken<T> type, T value, boolean safe) {
 		theType = type;
-		theType.cast(value);
+		theType.getRawType().cast(value);
 		theRef = new WeakReference<>(value);
+		isSafe = safe;
 		theObservers = new java.util.concurrent.ConcurrentLinkedQueue<>();
 	}
 
@@ -48,13 +51,18 @@ public class WeakReferenceObservable<T> implements ObservableValue<T> {
 	}
 
 	@Override
-	public Type getType() {
+	public TypeToken<T> getType() {
 		return theType;
 	}
 
 	@Override
 	public T get() {
 		return theRef.get();
+	}
+
+	@Override
+	public boolean isSafe() {
+		return isSafe;
 	}
 
 	/**

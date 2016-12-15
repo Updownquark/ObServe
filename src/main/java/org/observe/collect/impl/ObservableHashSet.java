@@ -4,19 +4,22 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 
 import org.observe.ObservableValue;
 import org.observe.Subscription;
+import org.observe.assoc.impl.CollectionCreator;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableFastFindCollection;
 import org.observe.collect.ObservableSet;
-import org.observe.util.Transactable;
-import org.observe.util.Transaction;
+import org.qommons.Equalizer;
+import org.qommons.Transactable;
+import org.qommons.Transaction;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 /**
  * A set whose content can be observed.
@@ -24,7 +27,7 @@ import prisms.lang.Type;
  * @param <E> The type of element in the set
  */
 public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, ObservableFastFindCollection<E> {
-	private final Type theType;
+	private final TypeToken<E> theType;
 	private LinkedHashMap<E, InternalObservableElementImpl<E>> theValues;
 
 	private HashSetInternals theInternals;
@@ -34,7 +37,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 	 *
 	 * @param type The type of elements for this set
 	 */
-	public ObservableHashSet(Type type) {
+	public ObservableHashSet(TypeToken<E> type) {
 		this(type, new ReentrantReadWriteLock(), null, null);
 	}
 
@@ -47,12 +50,22 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 	 * @param sessionController The controller for the session. May be null, in which case the transactional methods in this collection will
 	 *            not actually create transactions.
 	 */
-	public ObservableHashSet(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
+	public ObservableHashSet(TypeToken<E> type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController) {
-		theType = type;
+		theType = type.wrap();
 		theInternals = new HashSetInternals(lock, session, sessionController);
 
 		theValues = new LinkedHashMap<>();
+	}
+
+	/** @return A {@link CollectionCreator} that creates hash sets of this type to back an associative data structure */
+	public static <E> CollectionCreator<E, ObservableHashSet<E>> creator() {
+		return (type, lock, session, controller) -> new ObservableHashSet<>(type, lock, session, controller);
+	}
+
+	@Override
+	public Equalizer getEqualizer() {
+		return Objects::equals;
 	}
 
 	@Override
@@ -66,7 +79,12 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 	}
 
 	@Override
-	public Type getType() {
+	public boolean isSafe() {
+		return true;
+	}
+
+	@Override
+	public TypeToken<E> getType() {
 		return theType;
 	}
 
@@ -226,6 +244,27 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 				el.remove();
 			}
 		}
+	}
+
+	@Override
+	public boolean canRemove(Object value) {
+		return value == null || theType.getRawType().isInstance(value);
+	}
+
+	@Override
+	public boolean canAdd(E value) {
+		if (value != null && !theType.getRawType().isInstance(value))
+			return false;
+		try (Transaction t = lock(false, null)) {
+			if (theValues.containsKey(value))
+				return false;
+		}
+		return true;
+	}
+
+	@Override
+	public String toString() {
+		return ObservableSet.toString(this);
 	}
 
 	private class HashSetInternals extends DefaultCollectionInternals<E> {

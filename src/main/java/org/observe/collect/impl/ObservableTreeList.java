@@ -14,12 +14,12 @@ import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableList.PartialListImpl;
 import org.observe.collect.ObservableOrderedElement;
-import org.observe.util.Transactable;
-import org.observe.util.Transaction;
-import org.observe.util.tree.CountedRedBlackNode.DefaultNode;
-import org.observe.util.tree.RedBlackTreeList;
+import org.qommons.Transactable;
+import org.qommons.Transaction;
+import org.qommons.tree.CountedRedBlackNode.DefaultNode;
+import org.qommons.tree.RedBlackTreeList;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 /**
  * A list whose content can be observed. This list is backed by a tree structure and has the following performance characteristics:
@@ -31,7 +31,7 @@ import prisms.lang.Type;
  * @param <E> The type of element in the list
  */
 public class ObservableTreeList<E> implements PartialListImpl<E> {
-	private final Type theType;
+	private final TypeToken<E> theType;
 
 	private TreeListInternals theInternals;
 
@@ -44,7 +44,7 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 	 *
 	 * @param type The type of elements for this set
 	 */
-	public ObservableTreeList(Type type) {
+	public ObservableTreeList(TypeToken<E> type) {
 		this(type, new ReentrantReadWriteLock(), null, null);
 	}
 
@@ -57,9 +57,9 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 	 * @param sessionController The controller for the session. May be null, in which case the transactional methods in this collection will
 	 *            not actually create transactions.
 	 */
-	public ObservableTreeList(Type type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
+	public ObservableTreeList(TypeToken<E> type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController) {
-		theType = type;
+		theType = type.wrap();
 		theInternals = new TreeListInternals(lock, session, sessionController, write -> {
 			if(write)
 				theModCount++;
@@ -79,7 +79,12 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 	}
 
 	@Override
-	public Type getType() {
+	public boolean isSafe() {
+		return true;
+	}
+
+	@Override
+	public TypeToken<E> getType() {
 		return theType;
 	}
 
@@ -341,6 +346,16 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 	}
 
 	@Override
+	public boolean canRemove(Object value) {
+		return value == null || theType.getRawType().isInstance(value);
+	}
+
+	@Override
+	public boolean canAdd(E value) {
+		return value == null || theType.getRawType().isInstance(value);
+	}
+
+	@Override
 	public String toString() {
 		return org.observe.collect.ObservableList.toString(this);
 	}
@@ -348,7 +363,7 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 	private class InternalElement extends InternalOrderedObservableElementImpl<E> {
 		private DefaultNode<InternalElement> theNode;
 
-		InternalElement(Type type, E value) {
+		InternalElement(TypeToken<E> type, E value) {
 			super(type, value);
 		}
 

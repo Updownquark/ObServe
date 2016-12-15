@@ -4,22 +4,23 @@ import org.observe.DefaultObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 class InternalObservableElementImpl<T> extends DefaultObservableValue<T> {
 	private Observer<ObservableValueEvent<T>> theController;
-	private final Type theType;
+
+	private final TypeToken<T> theType;
 	private T theValue;
 
-	InternalObservableElementImpl(Type type, T value) {
+	InternalObservableElementImpl(TypeToken<T> type, T value) {
 		theType = type;
-		theValue = value;
+		theValue = (T) theType.wrap().getRawType().cast(value);
 		theController = control(null);
 	}
 
 	void set(T newValue) {
 		T oldValue = theValue;
-		theValue = newValue;
+		theValue = (T) theType.getRawType().cast(newValue);
 		theController.onNext(createChangeEvent(oldValue, newValue, null));
 	}
 
@@ -29,7 +30,7 @@ class InternalObservableElementImpl<T> extends DefaultObservableValue<T> {
 	}
 
 	@Override
-	public Type getType() {
+	public TypeToken<T> getType() {
 		return theType;
 	}
 

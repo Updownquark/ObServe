@@ -9,26 +9,39 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
+import org.observe.collect.impl.ObservableArrayList;
+import org.qommons.ListenerSet;
 
-import prisms.lang.Type;
+import com.google.common.reflect.TypeToken;
 
 /** Manages transactions for a derived collection in a thread-safe way */
 class SubCollectionTransactionManager {
 	private final ReentrantLock theLock;
 
+	private final ObservableCollection<?> theCollection;
+	private final Observable<?> theRefresh;
 	private CollectionSession theInternalSessionValue;
 	private final DefaultObservableValue<CollectionSession> theInternalSession;
 	private final ObservableValue<CollectionSession> theExposedSession;
 	private final Observer<ObservableValueEvent<CollectionSession>> theSessionController;
 
-	/** @param collection The parent of the collection to manage the transactions for */
-	public SubCollectionTransactionManager(ObservableCollection<?> collection) {
+	private int theTransactionDepth;
+
+	private final ListenerSet<Object> theListeners;
+
+	/**
+	 * @param collection The parent of the collection to manage the transactions for
+	 * @param refresh The observable to refresh the collection when fired
+	 */
+	public SubCollectionTransactionManager(ObservableCollection<?> collection, Observable<?> refresh) {
 		theLock = new ReentrantLock();
+		theCollection = collection;
+		theRefresh = refresh;
 		theInternalSession = new DefaultObservableValue<CollectionSession>() {
-			private final Type TYPE = new Type(CollectionSession.class);
+			private final TypeToken<CollectionSession> TYPE = TypeToken.of(CollectionSession.class);
 
 			@Override
-			public Type getType() {
+			public TypeToken<CollectionSession> getType() {
 				return TYPE;
 			}
 
@@ -37,10 +50,46 @@ class SubCollectionTransactionManager {
 				return theInternalSessionValue;
 			}
 		};
-		theExposedSession = new org.observe.ObservableValue.ComposedObservableValue<>(
-			sessions -> (CollectionSession) (sessions[0] != null ? sessions[0]
-				: sessions[1]), true, theInternalSession, collection.getSession());
+		ObservableArrayList<ObservableValue<CollectionSession>> sessions = new ObservableArrayList<>(
+				new TypeToken<ObservableValue<CollectionSession>>() {});
+		sessions.add(collection.getSession()); // The collection's session takes precedence
+		sessions.add(theInternalSession);
+		theExposedSession = ObservableList.flattenValues(sessions).findFirst(session -> session != null);
 		theSessionController = theInternalSession.control(null);
+
+		theListeners = new ListenerSet<>();
+		theListeners.setUsedListener(new Consumer<Boolean>() {
+			private Subscription sub;
+
+			@Override
+			public void accept(Boolean used) {
+				// Here we're relying on observers being fired in the order they were subscribed
+				// We're also relying on the ability to add an observer from an observer and have that observer invoked for the same
+				// "firing"
+				if(used) {
+					sub = theRefresh.act(v -> {
+						startTransaction(v);
+						Subscription [] endSub = new Subscription[1];
+						boolean [] fired = new boolean[1];
+						endSub[0] = theRefresh.act(v2 -> {
+							if(fired[0])
+								return;
+							endTransaction();
+							fired[0] = true;
+							if(endSub[0] != null) {
+								endSub[0].unsubscribe();
+								endSub[0] = null;
+							}
+						});
+						if(fired[0] && endSub[0] != null)
+							endSub[0].unsubscribe();
+					});
+				} else {
+					sub.unsubscribe();
+					sub = null;
+				}
+			}
+		});
 	}
 
 	/** @return The session observable to use for the collection */
@@ -53,53 +102,22 @@ class SubCollectionTransactionManager {
 	 *
 	 * @param <E> The type of the elements in the collection
 	 * @param collection The parent of the collection to observe
-	 * @param refresh The observable to refresh the collection on
 	 * @param onElement The code to deliver the elements to the observer
 	 * @param forward Whether to iterate forward through initial elements, or backward (only for {@link ObservableReversibleCollection
 	 *            reversible} collections)
 	 * @return The runnable to execute to uninstall the observer
 	 */
-	public <E> Subscription onElement(ObservableCollection<E> collection, Observable<?> refresh,
-		Consumer<? super ObservableElement<E>> onElement, boolean forward) {
-		// Here we're relying on observers being fired in the order they were subscribed
-		Subscription refreshStartSub = refresh == null ? null : refresh.subscribe(new Observer<Object>() {
-			@Override
-			public <V> void onNext(V value) {
-				startTransaction(value);
-			}
-
-			@Override
-			public <V> void onCompleted(V value) {
-				startTransaction(value);
-			}
-		});
-		Observer<Object> refreshEnd = new Observer<Object>() {
-			@Override
-			public <V> void onNext(V value) {
-				endTransaction();
-			}
-
-			@Override
-			public <V> void onCompleted(V value) {
-				endTransaction();
-			}
-		};
-		Subscription [] refreshEndSub = new Subscription[] {refresh.subscribe(refreshEnd)};
-		Consumer<ObservableElement<E>> elFn = element -> {
-			onElement.accept(element);
-			// The refresh end always needs to be after the elements
-			Subscription oldRefreshEnd = refreshEndSub[0];
-			refreshEndSub[0] = refresh.subscribe(refreshEnd);
-			oldRefreshEnd.unsubscribe();
-		};
+	public <E> Subscription onElement(ObservableCollection<E> collection, Consumer<? super ObservableElement<E>> onElement,
+			boolean forward) {
+		Consumer<ObservableElement<E>> elFn = el -> onElement.accept(el.refresh(theRefresh));
 		Subscription collSub;
+		theListeners.add(onElement);
 		if(forward)
 			collSub = collection.onElement(elFn);
 		else
-			collSub = ((ObservableReversibleCollection<E>) collection).onElementReverse(onElement);
+			collSub = ((ObservableReversibleCollection<E>) collection).onElementReverse(elFn);
 		return () -> {
-			refreshStartSub.unsubscribe();
-			refreshEndSub[0].unsubscribe();
+			theListeners.remove(onElement);
 			collSub.unsubscribe();
 		};
 	}
@@ -113,9 +131,12 @@ class SubCollectionTransactionManager {
 		CollectionSession newSession, oldSession;
 		theLock.lock();
 		try {
-			oldSession = theInternalSessionValue;
-			newSession = theInternalSessionValue = new DefaultCollectionSession(cause);
-			theSessionController.onNext(theInternalSession.createChangeEvent(oldSession, newSession, cause));
+			if(theInternalSessionValue == null) {
+				oldSession = theInternalSessionValue;
+				newSession = theInternalSessionValue = new DefaultCollectionSession(cause);
+				theSessionController.onNext(theInternalSession.createChangeEvent(oldSession, newSession, cause));
+			} else
+				theTransactionDepth++;
 		} finally {
 			theLock.unlock();
 		}
@@ -126,12 +147,21 @@ class SubCollectionTransactionManager {
 		CollectionSession session;
 		theLock.lock();
 		try {
-			session = theInternalSessionValue;
-			theInternalSessionValue = null;
-			if(session != null)
-				theSessionController.onNext(theInternalSession.createChangeEvent(session, null, session.getCause()));
+			if(theTransactionDepth > 0)
+				theTransactionDepth--;
+			else {
+				session = theInternalSessionValue;
+				theInternalSessionValue = null;
+				if(session != null)
+					theSessionController.onNext(theInternalSession.createChangeEvent(session, null, session.getCause()));
+			}
 		} finally {
 			theLock.unlock();
 		}
+	}
+
+	@Override
+	public String toString() {
+		return "Managing transactions of " + theCollection + " refreshing by " + theRefresh;
 	}
 }
