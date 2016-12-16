@@ -36,6 +36,7 @@ public class ObservableAssocTest {
 		}
 	}
 
+	/** Tests {@link ObservableTree#valuePathsOf(ObservableTree, boolean)} */
 	@Test
 	public void testTreeValuePaths() {
 		TypeToken<Integer> type=TypeToken.of(Integer.class);

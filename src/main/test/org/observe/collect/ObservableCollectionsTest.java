@@ -118,7 +118,7 @@ public class ObservableCollectionsTest {
 		ObservableCollection<Integer> combinedOL = coll.combine(combineVar, coll.getType(), combineFn, reverseCombineFn);
 		ObservableCollectionTester<Integer> combinedTester = new ObservableCollectionTester<>(combinedOL);
 
-		int todo; // TODO Test reversed sets
+		// TODO Test reversed sets
 
 		BinaryOperator<Integer> maxFn = (v1, v2) -> v1 >= v2 ? v1 : v2;
 		ObservableValue<Integer> sum = coll.reduce(0, combineFn, reverseCombineFn);
