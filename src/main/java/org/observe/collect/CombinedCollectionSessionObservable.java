@@ -42,8 +42,8 @@ public class CombinedCollectionSessionObservable implements ObservableValue<Coll
 					@Override
 					public <V extends ObservableValueEvent<Boolean>> void onNext(V value) {
 						if (isInTransaction.getAndSet(value.getValue()) == value.getValue()) {
-							if (value.isInitial())
-								fire(null, theSession, value);
+							// if (value.isInitial())
+							// fire(null, theSession, value);
 							return; // No change
 						}
 						if(value.getValue()) {
@@ -60,6 +60,9 @@ public class CombinedCollectionSessionObservable implements ObservableValue<Coll
 				wrappedSessionListener[0].unsubscribe();
 				wrappedSessionListener[0] = null;
 			}
+		});
+		theObservers.setOnSubscribe(observer -> {
+			observer.onNext(createInitialEvent(theSession));
 		});
 	}
 
@@ -100,7 +103,7 @@ public class CombinedCollectionSessionObservable implements ObservableValue<Coll
 	/**
 	 * An implementation of {@link ObservableCollection#lock(boolean, Object)} for a collection implementation that uses a collection of
 	 * collections
-	 * 
+	 *
 	 * @param collection The collection of collections
 	 * @param write Whether to lock for write
 	 * @param cause The cause of the change

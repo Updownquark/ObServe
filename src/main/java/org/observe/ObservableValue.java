@@ -505,15 +505,17 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 				@Override
 				public void accept(Boolean used) {
 					if(used) {
-						boolean [] initialized = new boolean[1];
+						boolean[] initialized = new boolean[theComposedValues.length];
 						for(int i = 0; i < theComposedValues.length; i++) {
 							int index = i;
 							composedSubs[i] = theComposed.get(i).subscribe(new Observer<ObservableValueEvent<?>>() {
 								@Override
 								public <V extends ObservableValueEvent<?>> void onNext(V event) {
 									theComposedValues[index] = event.getValue();
-									if(!initialized[0])
+									if (!initialized[index]) {
+										initialized[index] = true;
 										return;
+									}
 									T oldValue = theValue;
 									theValue = combine(theComposedValues);
 									ObservableValueEvent<T> toFire = ComposedObservableValue.this.createChangeEvent(oldValue, theValue,
@@ -561,9 +563,12 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 							if(completed[0])
 								break;
 						}
-						if(!completed[0])
+						for (int i = 0; i < theComposedValues.length; i++)
+							if (!initialized[i])
+								throw new IllegalStateException(theComposed.get(i) + " did not fire an initial value");
+						if (!completed[0])
 							theValue = combine(theComposedValues);
-						initialized[0] = true;
+						// initialized[0] = true;
 					} else {
 						theValue = null;
 						for(int i = 0; i < theComposed.size(); i++) {
