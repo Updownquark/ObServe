@@ -469,8 +469,6 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 
 		private final boolean combineNulls;
 
-		private Object [] theComposedValues;
-
 		private T theValue;
 
 		/**
@@ -498,39 +496,47 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 				: (TypeToken<T>) TypeToken.of(function.getClass()).resolveType(Function.class.getTypeParameters()[1]);
 			theComposed = java.util.Collections.unmodifiableList(java.util.Arrays.asList(composed));
 			theObservers = new ListenerSet<>();
-			theComposedValues = new Object[composed.length];
 			final Subscription [] composedSubs = new Subscription[theComposed.size()];
 			boolean [] completed = new boolean[1];
 			theObservers.setUsedListener(new Consumer<Boolean>() {
 				@Override
 				public void accept(Boolean used) {
 					if(used) {
-						boolean[] initialized = new boolean[theComposedValues.length];
-						for(int i = 0; i < theComposedValues.length; i++) {
+						Object[] composedValues = new Object[theComposed.size()];
+						boolean[] initialized = new boolean[composedValues.length];
+						for (int i = 0; i < composedValues.length; i++) {
 							int index = i;
 							composedSubs[i] = theComposed.get(i).subscribe(new Observer<ObservableValueEvent<?>>() {
 								@Override
 								public <V extends ObservableValueEvent<?>> void onNext(V event) {
-									theComposedValues[index] = event.getValue();
-									if (!initialized[index]) {
+									composedValues[index] = event.getValue();
+									if (event.isInitial()) {
 										initialized[index] = true;
 										return;
-									}
+									} else if (!isInitialized())
+										return;
 									T oldValue = theValue;
-									theValue = combine(theComposedValues);
+									theValue = combine(composedValues);
 									ObservableValueEvent<T> toFire = ComposedObservableValue.this.createChangeEvent(oldValue, theValue,
 										event);
 									fireNext(toFire);
 								}
 
+								private boolean isInitialized() {
+									for (boolean b : initialized)
+										if (!b)
+											return false;
+									return true;
+								}
+
 								@Override
 								public <V extends ObservableValueEvent<?>> void onCompleted(V event) {
-									theComposedValues[index] = event.getValue();
+									composedValues[index] = event.getValue();
 									completed[0] = true;
-									if(!initialized[0])
+									if (!isInitialized())
 										return;
 									T oldValue = theValue;
-									T newValue = combine(theComposedValues);
+									T newValue = combine(composedValues);
 									theValue = null;
 									ObservableValueEvent<T> toFire = createChangeEvent(oldValue, newValue, event);
 									fireCompleted(toFire);
@@ -547,13 +553,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 
 								private void fireCompleted(ObservableValueEvent<T> next) {
 									theObservers.forEach(listener -> listener.onCompleted(next));
-									for(int j = 0; j < theComposed.size(); j++) {
-										theComposedValues[j] = null;
-										if(composedSubs[j] != null) {
-											composedSubs[j].unsubscribe();
-											composedSubs[j] = null;
-										}
-									}
+									Subscription.forAll(composedSubs).unsubscribe();
 								}
 
 								private void fireError(Throwable error) {
@@ -563,16 +563,15 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 							if(completed[0])
 								break;
 						}
-						for (int i = 0; i < theComposedValues.length; i++)
+						for (int i = 0; i < composedValues.length; i++)
 							if (!initialized[i])
 								throw new IllegalStateException(theComposed.get(i) + " did not fire an initial value");
 						if (!completed[0])
-							theValue = combine(theComposedValues);
+							theValue = combine(composedValues);
 						// initialized[0] = true;
 					} else {
 						theValue = null;
 						for(int i = 0; i < theComposed.size(); i++) {
-							theComposedValues[i] = null;
 							if(composedSubs[i] != null) {
 								composedSubs[i].unsubscribe();
 								composedSubs[i] = null;
