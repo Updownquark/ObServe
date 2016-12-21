@@ -3,6 +3,7 @@ package org.observe;
 import static org.observe.ObservableDebug.d;
 
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -145,6 +146,55 @@ public interface SettableValue<T> extends ObservableValue<T> {
 				String error = accept.apply(value);
 				if (error != null)
 					return error;
+				return outer.isAcceptable(value);
+			}
+
+			@Override
+			public ObservableValue<String> isEnabled() {
+				return outer.isEnabled();
+			}
+		};
+	}
+
+	/**
+	 * Allows an alert when {@link #set(Object, Object)} on this value is called. This is different than subscribing to the value in that
+	 * the action is <b>not</b> called when the value changes behind the scenes, but only when the {@link #set(Object, Object)} method on
+	 * this value is called.
+	 * 
+	 * @param onSetAction The action to invoke just before {@link #set(Object, Object)} is called
+	 * @return The settable
+	 */
+	default SettableValue<T> onSet(Consumer<T> onSetAction) {
+		SettableValue<T> outer = this;
+		return new SettableValue<T>() {
+			@Override
+			public TypeToken<T> getType() {
+				return outer.getType();
+			}
+
+			@Override
+			public T get() {
+				return outer.get();
+			}
+
+			@Override
+			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+				return outer.subscribe(observer);
+			}
+
+			@Override
+			public boolean isSafe() {
+				return outer.isSafe();
+			}
+
+			@Override
+			public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
+				onSetAction.accept(value);
+				return outer.set(value, cause);
+			}
+
+			@Override
+			public <V extends T> String isAcceptable(V value) {
 				return outer.isAcceptable(value);
 			}
 
