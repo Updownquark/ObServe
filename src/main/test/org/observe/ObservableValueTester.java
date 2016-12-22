@@ -24,8 +24,8 @@ public class ObservableValueTester<T> extends AbstractObservableTester<T> {
 	 * @param tolerance The tolerance to use when checking the observable's value against internal or external state
 	 */
 	public ObservableValueTester(ObservableValue<? extends T> value, double tolerance) {
-		if (!TypeToken.of(Number.class).isAssignableFrom(value.getType()))
-			throw new IllegalArgumentException("Cannot use a tolerance with a non-number value");
+		if (!TypeToken.of(Number.class).isAssignableFrom(value.getType().wrap()))
+			throw new IllegalArgumentException("Cannot use a tolerance with a non-number value type: " + value.getType());
 		theValue = value;
 		theTolerance = tolerance;
 		setSynced(true);

@@ -284,6 +284,12 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 			.tag("filterType", type).get();
 	}
 
+	@Override
+	default <T> ObservableSortedSet<T> mapEquivalent(TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse) {
+		return d().debug(new MappedObservableSortedSet<>(this, type, map, reverse)).from("map", this).using("map", map)
+			.using("reverse", reverse).get();
+	}
+
 	/**
 	 * @param refresh The observable to re-fire events on
 	 * @return A set whose elements fire additional value events when the given observable fires
@@ -1278,6 +1284,49 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 				return mapped;
 			} else
 				return ObservableSortedSet.<T> defaultIterateFrom(this, element, included, reversed);
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableSortedSet#mapEquivalent(TypeToken, Function, Function)}
+	 * 
+	 * @param <E> The type of the collection to map
+	 * @param <T> The type of the mapped collection
+	 */
+	class MappedObservableSortedSet<E, T> extends MappedObservableSet<E, T> implements PartialSortedSetImpl<T> {
+		protected MappedObservableSortedSet(ObservableSortedSet<E> wrap, TypeToken<T> type, Function<? super E, T> map,
+			Function<? super T, E> reverse) {
+			super(wrap, type, map, reverse);
+		}
+
+		@Override
+		protected ObservableSortedSet<E> getWrapped() {
+			return (ObservableSortedSet<E>) super.getWrapped();
+		}
+
+		@Override
+		public Iterable<T> iterateFrom(T element, boolean included, boolean reversed) {
+			return () -> map(getWrapped().iterateFrom(getReverse().apply(element), included, reversed).iterator());
+		}
+
+		@Override
+		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<T>> onElement) {
+			return getWrapped().onElementReverse(el -> onElement.accept(el.mapV(getMap())));
+		}
+
+		@Override
+		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<T>> onElement) {
+			return getWrapped().onOrderedElement(el -> onElement.accept(el.mapV(getMap())));
+		}
+
+		@Override
+		public Iterable<T> descending() {
+			return () -> map(getWrapped().descending().iterator());
+		}
+
+		@Override
+		public Comparator<? super T> comparator() {
+			return (t1, t2) -> getWrapped().comparator().compare(getReverse().apply(t1), getReverse().apply(t2));
 		}
 	}
 
