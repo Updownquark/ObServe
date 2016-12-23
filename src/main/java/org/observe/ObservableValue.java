@@ -3,6 +3,7 @@ package org.observe;
 import static org.observe.ObservableDebug.d;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiFunction;
@@ -976,66 +977,71 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		@Override
 		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 			ObservableValue<T> retObs = this;
-			Subscription[] innerSub = new Subscription[1];
+			AtomicReference<Subscription> innerSub = new AtomicReference<>();
+			boolean[] firedInit = new boolean[1];
 			Subscription outerSub = theValue.subscribe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends T>>>() {
 				private final ReentrantLock theLock = new ReentrantLock();
 
 				@Override
-				public <V extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onNext(V value) {
+				public <V extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onNext(V event) {
+					firedInit[0] = true;
 					theLock.lock();
 					try {
-						if (innerSub[0] != null) {
-							innerSub[0].unsubscribe();
-							innerSub[0] = null;
-						}
+						// Shouldn't have 2 inner observables potentially generating events at the same time
+						Subscription.unsubscribe(innerSub.getAndSet(null));
 						Object[] old = new Object[1];
-						if (value.getValue() != null) {
-							innerSub[0] = value.getValue().subscribe(new Observer<ObservableValueEvent<? extends T>>() {
-								@Override
-								public <V2 extends ObservableValueEvent<? extends T>> void onNext(V2 value2) {
-									theLock.lock();
-									try {
-										T innerOld;
-										if (value2.isInitial())
-											innerOld = (T) old[0];
-										else {
-											innerOld = value2.getOldValue();
-											old[0] = innerOld;
+						final ObservableValue<? extends T> innerObs = event.getValue();
+						if (innerObs != null && !innerObs.equals(event.getOldValue())) {
+							boolean[] firedInit2 = new boolean[1];
+							Subscription.unsubscribe(
+								innerSub.getAndSet(innerObs.subscribe(new Observer<ObservableValueEvent<? extends T>>() {
+									@Override
+									public <V2 extends ObservableValueEvent<? extends T>> void onNext(V2 event2) {
+										firedInit2[0] = true;
+										theLock.lock();
+										try {
+											T innerOld;
+											if (event2.isInitial())
+												innerOld = (T) old[0];
+											else
+												old[0] = innerOld = event2.getOldValue();
+											if (event.isInitial() && event2.isInitial())
+												observer.onNext(retObs.createInitialEvent(event2.getValue()));
+											else
+												observer.onNext(retObs.createChangeEvent(innerOld, event2.getValue(), event2.getCause()));
+										} finally {
+											theLock.unlock();
 										}
-										if (value.isInitial() && value2.isInitial())
-											observer.onNext(retObs.createInitialEvent(value2.getValue()));
-										else
-											observer.onNext(retObs.createChangeEvent(innerOld, value2.getValue(), value2.getCause()));
-									} finally {
-										theLock.unlock();
 									}
-								}
-							});
-						} else if (value.isInitial())
+								})));
+							if (!firedInit2[0])
+								throw new IllegalStateException(innerObs + " did not fire an initial value");
+						} else if (event.isInitial())
 							observer.onNext(retObs.createInitialEvent(get(null)));
-						else
-							observer.onNext(retObs.createChangeEvent((T) old[0], get(null), value.getCause()));
+						else if (old[0] != null)
+							observer.onNext(retObs.createChangeEvent((T) old[0], get(null), event.getCause()));
 					} finally {
 						theLock.unlock();
 					}
 				}
 
 				@Override
-				public <V extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onCompleted(V value) {
+				public <V extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onCompleted(V event) {
+					firedInit[0] = true;
+					Subscription.unsubscribe(innerSub.getAndSet(null));
 					theLock.lock();
 					try {
-						observer.onCompleted(retObs.createChangeEvent(get(value.getOldValue()), get(value.getValue()), value.getCause()));
+						observer.onCompleted(retObs.createChangeEvent(get(event.getOldValue()), get(event.getValue()), event.getCause()));
 					} finally {
 						theLock.unlock();
 					}
 				}
 			});
+			if (!firedInit[0])
+				throw new IllegalStateException(theValue + " did not fire an initial value");
 			return () -> {
 				outerSub.unsubscribe();
-				if (innerSub[0] != null) {
-					innerSub[0].unsubscribe();
-					innerSub[0] = null;
-				}
+				Subscription.unsubscribe(innerSub.getAndSet(null));
 			};
 		}
 

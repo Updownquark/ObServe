@@ -468,7 +468,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 							if(isMatch[0]) {
 								E old = theCurrentMatch;
 								theCurrentMatch = event.getValue();
-								if(initialized[0])
+								if (!initialized[0])
 									observer.onNext(createInitialEvent(event.getValue()));
 								else
 									observer.onNext(createChangeEvent(old, event.getValue(), event));
@@ -485,6 +485,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 					});
 				}
 			});
+			initialized[0] = true;
 			if(!isMatch[0])
 				observer.onNext(createInitialEvent(null));
 			return ret;

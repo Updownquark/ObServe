@@ -431,6 +431,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
 			final Object key = new Object();
 			int [] index = new int[] {-1};
+			boolean[] firedInit = new boolean[1];
 			Subscription collSub = theCollection.onOrderedElement(new Consumer<ObservableOrderedElement<E>>() {
 				private List<ObservableOrderedElement<E>> theElements = new ArrayList<>();
 				private E theValue;
@@ -502,16 +503,21 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 					theValue = value;
 					index[0] = newIndex;
 					CollectionSession session = theCollection.getSession().get();
-					if(session == null)
-						observer.onNext(createChangeEvent(oldValue, theValue, null));
-					else {
+					if (session != null) {
 						session.putIfAbsent(key, "oldBest", oldValue);
 						session.put(key, "newBest", theValue);
 					}
+					if (!firedInit[0]) {
+						firedInit[0] = true;
+						observer.onNext(createInitialEvent(theValue));
+					} else if (session == null)
+						observer.onNext(createChangeEvent(oldValue, theValue, null));
 				}
 			});
-			if(index[0] < 0)
+			if (!firedInit[0]) {
+				firedInit[0] = true;
 				observer.onNext(createInitialEvent(null));
+			}
 			Subscription transSub = theCollection.getSession().subscribe(new Observer<ObservableValueEvent<CollectionSession>>() {
 				@Override
 				public <V2 extends ObservableValueEvent<CollectionSession>> void onNext(V2 value) {

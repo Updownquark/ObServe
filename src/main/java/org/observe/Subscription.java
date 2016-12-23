@@ -13,11 +13,21 @@ public interface Subscription {
 	static Subscription forAll(Subscription... subs) {
 		return () -> {
 			for (int s = 0; s < subs.length; s++) {
-				if (subs[s] != null) {
-					subs[s].unsubscribe();
+				if (unsubscribe(subs[s]))
 					subs[s] = null;
-				}
 			}
 		};
+	}
+
+	/**
+	 * @param sub The subscription to unsubscribe
+	 * @return If the subscription was non-null
+	 */
+	static boolean unsubscribe(Subscription sub) {
+		if (sub != null) {
+			sub.unsubscribe();
+			return true;
+		} else
+			return false;
 	}
 }
