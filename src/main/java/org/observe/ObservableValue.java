@@ -3,6 +3,7 @@ package org.observe;
 import static org.observe.ObservableDebug.d;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -987,10 +988,11 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 					firedInit[0] = true;
 					theLock.lock();
 					try {
-						// Shouldn't have 2 inner observables potentially generating events at the same time
-						Subscription.unsubscribe(innerSub.getAndSet(null));
-						Object[] old = new Object[1];
 						final ObservableValue<? extends T> innerObs = event.getValue();
+						// Shouldn't have 2 inner observables potentially generating events at the same time
+						if (!Objects.equals(innerObs, event.getOldValue()))
+							Subscription.unsubscribe(innerSub.getAndSet(null));
+						Object[] old = new Object[1];
 						if (innerObs != null && !innerObs.equals(event.getOldValue())) {
 							boolean[] firedInit2 = new boolean[1];
 							Subscription.unsubscribe(

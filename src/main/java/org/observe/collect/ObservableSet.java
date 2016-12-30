@@ -464,14 +464,19 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 					element.subscribe(new Observer<ObservableValueEvent<E>>() {
 						@Override
 						public <V extends ObservableValueEvent<E>> void onNext(V event) {
-							isMatch[0] = Objects.equals(event.getValue(), theKey);
-							if(isMatch[0]) {
-								E old = theCurrentMatch;
+							boolean match = Objects.equals(event.getValue(), theKey);
+							E old = theCurrentMatch;
+							if (match) {
+								isMatch[0] = true;
 								theCurrentMatch = event.getValue();
 								if (!initialized[0])
 									observer.onNext(createInitialEvent(event.getValue()));
-								else
+								else if (event.getValue() != theCurrentMatch)
 									observer.onNext(createChangeEvent(old, event.getValue(), event));
+							} else if (isMatch[0] && Objects.equals(event.getOldValue(), theKey)) {
+								isMatch[0] = false;
+								theCurrentMatch = null;
+								observer.onNext(createChangeEvent(old, null, event));
 							}
 						}
 
