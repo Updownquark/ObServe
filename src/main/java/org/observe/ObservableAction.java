@@ -61,8 +61,33 @@ public interface ObservableAction<T> {
 	}
 
 	/**
+	 * @param <T> The type of the action
+	 * @param type The type for the action
+	 * @param message The disabled message for the action
+	 * @return An action that is always disabled with the given message
+	 */
+	static <T> ObservableAction<T> disabled(TypeToken<T> type, String message) {
+		return new ObservableAction<T>() {
+			@Override
+			public TypeToken<T> getType() {
+				return type;
+			}
+
+			@Override
+			public T act(Object cause) throws IllegalStateException {
+				throw new IllegalStateException(message);
+			}
+
+			@Override
+			public ObservableValue<String> isEnabled() {
+				return ObservableValue.constant(message);
+			}
+		};
+	}
+
+	/**
 	 * Combines several actions into one
-	 * 
+	 *
 	 * @param <T> The type of the actions
 	 * @param type The run-time type of the actions
 	 * @param actions The actions to combine
@@ -75,7 +100,7 @@ public interface ObservableAction<T> {
 
 	/**
 	 * Combines several actions into one
-	 * 
+	 *
 	 * @param <T> The type of the actions
 	 * @param actions The actions to combine
 	 * @return A single action that invokes the given actions and returns their values as an array
@@ -126,7 +151,7 @@ public interface ObservableAction<T> {
 
 	/**
 	 * Implements {@link ObservableAction#and(ObservableList)}
-	 * 
+	 *
 	 * @param <T> The type of the actions
 	 */
 	class AndObservableAction<T> implements ObservableAction<T[]> {
