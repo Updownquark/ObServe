@@ -961,6 +961,17 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 			return (TypeToken<T>) outerVal.getType();
 		}
 
+		/** @return The type of the currently held observable */
+		public TypeToken<? extends T> getDeepType() {
+			ObservableValue<? extends T> inner = theValue.get();
+			if (inner == null)
+				return getType();
+			else if (inner instanceof FlattenedObservableValue)
+				return ((FlattenedObservableValue<? extends T>) inner).getDeepType();
+			else
+				return inner.getType();
+		}
+
 		/** @return The supplier of the default value, in case the outer observable is empty */
 		protected Supplier<? extends T> getDefaultValue() {
 			return theDefaultValue;
