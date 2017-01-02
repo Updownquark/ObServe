@@ -46,7 +46,13 @@ class ExposedObservableElement<E> implements ObservableElement<E> {
 
 			@Override
 			public <V extends ObservableValueEvent<E>> void onCompleted(V event) {
-				ObservableValueEvent<E> event2 = createChangeEvent(event.getOldValue(), event.getValue(), event.getCause());
+				ObservableValueEvent<E> event2;
+				if (event != null)
+					event2 = createChangeEvent(event.getOldValue(), event.getValue(), event.getCause());
+				else {
+					E value = get();
+					event2 = createChangeEvent(value, value, null);
+				}
 				observer.onCompleted(event2);
 			}
 		});
