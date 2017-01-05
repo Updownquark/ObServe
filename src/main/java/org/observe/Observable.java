@@ -336,6 +336,11 @@ public interface Observable<T> {
 			public boolean isSafe() {
 				return true;
 			}
+
+			@Override
+			public String toString() {
+				return "" + value;
+			}
 		}).tag("constant", value).get();
 	}
 
@@ -358,6 +363,11 @@ public interface Observable<T> {
 		@Override
 		public boolean isSafe() {
 			return true;
+		}
+
+		@Override
+		public String toString() {
+			return "empty";
 		}
 	};
 
@@ -467,6 +477,11 @@ public interface Observable<T> {
 		public boolean isSafe() {
 			return theWrapped.isSafe();
 		}
+
+		@Override
+		public String toString() {
+			return theWrapped.toString();
+		}
 	}
 
 	/**
@@ -512,6 +527,11 @@ public interface Observable<T> {
 		@Override
 		public boolean isSafe() {
 			return theWrapped.isSafe();
+		}
+
+		@Override
+		public String toString() {
+			return theWrapped + ".noInit()";
 		}
 	}
 
@@ -746,6 +766,11 @@ public interface Observable<T> {
 		public boolean isSafe() {
 			return theWrapped.isSafe();
 		}
+
+		@Override
+		public String toString() {
+			return theWrapped + ".takeUntil(" + theUntil + ")";
+		}
 	}
 
 	/**
@@ -816,6 +841,11 @@ public interface Observable<T> {
 		@Override
 		public boolean isSafe() {
 			return theWrapped.isSafe();
+		}
+
+		@Override
+		public String toString() {
+			return theWrapped + ".take(" + theTimes + ")";
 		}
 	}
 
@@ -937,6 +967,11 @@ public interface Observable<T> {
 		@Override
 		public boolean isSafe() {
 			return true;
+		}
+
+		@Override
+		public String toString() {
+			return theWrapped.toString();
 		}
 	}
 

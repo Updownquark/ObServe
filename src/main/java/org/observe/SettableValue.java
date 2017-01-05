@@ -64,8 +64,13 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			@Override
 			public ObservableValue<String> isEnabled() {
 				BiFunction<String, String, String> combineFn = (str1, str2) -> str1 != null ? str1 : str2;
-				return SettableValue.this.isEnabled().combineV(TypeToken.of(String.class), combineFn, value.mapV(v -> isAcceptable(v)),
-					true);
+				return SettableValue.this.isEnabled().combineV(TypeToken.of(String.class), combineFn,
+					value.refresh(SettableValue.this.noInit()).mapV(v -> isAcceptable(v)), true);
+			}
+
+			@Override
+			public String toString() {
+				return SettableValue.this + "=" + value;
 			}
 		};
 	}
@@ -102,6 +107,11 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			@Override
 			public boolean isSafe() {
 				return SettableValue.this.isSafe();
+			}
+
+			@Override
+			public String toString() {
+				return SettableValue.this.toString();
 			}
 		}).from("unsettable", this).get();
 	}
@@ -153,6 +163,11 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			public ObservableValue<String> isEnabled() {
 				return outer.isEnabled();
 			}
+
+			@Override
+			public String toString() {
+				return SettableValue.this.toString();
+			}
 		};
 	}
 
@@ -160,7 +175,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * Allows an alert when {@link #set(Object, Object)} on this value is called. This is different than subscribing to the value in that
 	 * the action is <b>not</b> called when the value changes behind the scenes, but only when the {@link #set(Object, Object)} method on
 	 * this value is called.
-	 * 
+	 *
 	 * @param onSetAction The action to invoke just before {@link #set(Object, Object)} is called
 	 * @return The settable
 	 */
@@ -201,6 +216,11 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			@Override
 			public ObservableValue<String> isEnabled() {
 				return outer.isEnabled();
+			}
+
+			@Override
+			public String toString() {
+				return SettableValue.this.toString();
 			}
 		};
 	}

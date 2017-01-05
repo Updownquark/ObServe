@@ -519,9 +519,11 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 										return;
 									T oldValue = theValue;
 									theValue = combine(composedValues);
-									ObservableValueEvent<T> toFire = ComposedObservableValue.this.createChangeEvent(oldValue, theValue,
-										event);
-									fireNext(toFire);
+									if (theValue != oldValue) {
+										ObservableValueEvent<T> toFire = ComposedObservableValue.this.createChangeEvent(oldValue, theValue,
+											event);
+										fireNext(toFire);
+									}
 								}
 
 								private boolean isInitialized() {
@@ -760,6 +762,10 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 			return false;
 		}
 
+		@Override
+		public String toString() {
+			return theWrapped.toString();
+		}
 	}
 
 	/**
@@ -849,6 +855,10 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 			return true;
 		}
 
+		@Override
+		public String toString() {
+			return theWrapped.toString();
+		}
 	}
 
 	/**

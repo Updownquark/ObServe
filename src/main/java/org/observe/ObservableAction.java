@@ -187,5 +187,18 @@ public interface ObservableAction<T> {
 		public ObservableValue<String> isEnabled() {
 			return ObservableList.flattenValues(theActions.map(action -> action.isEnabled())).findFirst(e -> e != null);
 		}
+
+		@Override
+		public String toString() {
+			StringBuilder str = new StringBuilder();
+			boolean first = true;
+			for (ObservableAction<?> action : theActions) {
+				if (!first)
+					str.append(';');
+				first = false;
+				str.append(action);
+			}
+			return str.toString();
+		}
 	}
 }
