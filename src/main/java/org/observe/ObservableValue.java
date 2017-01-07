@@ -347,6 +347,44 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	}
 
 	/**
+	 * @param <T> The type of observables in the value
+	 * @param value An observable value containing an observable
+	 * @return An observable that fires whenever the current contents of the value fires. This observable will not complete until the value
+	 *         completes.
+	 */
+	public static <T> Observable<T> flattenObservableValue(ObservableValue<? extends Observable<? extends T>> value) {
+		return new Observable<T>() {
+			@Override
+			public Subscription subscribe(Observer<? super T> observer) {
+				return value.subscribe(new Observer<ObservableValueEvent<? extends Observable<? extends T>>>() {
+					@Override
+					public <E extends ObservableValueEvent<? extends Observable<? extends T>>> void onNext(E event) {
+						if (event.getValue() != null) {
+							event.getValue().takeUntil(value.noInit()).subscribe(new Observer<T>() {
+								@Override
+								public <V extends T> void onNext(V value2) {
+									observer.onNext(value2);
+								}
+								// Don't use the completed events because the contents of this observable may be replaced
+							});
+						}
+					}
+
+					@Override
+					public <E extends ObservableValueEvent<? extends Observable<? extends T>>> void onCompleted(E event) {
+						observer.onCompleted(null);
+					}
+				});
+			}
+
+			@Override
+			public boolean isSafe() {
+				return false; // Can't guarantee that the contents will always be safe
+			}
+		};
+	}
+
+	/**
 	 * Creates an observable value that reflects the value of the first value in the given sequence passing the given test, or the value
 	 * given by the default if none of the values in the sequence pass. This can also be accomplished via:
 	 *
@@ -504,6 +542,8 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 				@Override
 				public void accept(Boolean used) {
 					if(used) {
+						if (theComposed.toString().equals("[model.flash.value, 0]"))
+							System.out.print("");
 						Object[] composedValues = new Object[theComposed.size()];
 						boolean[] initialized = new boolean[composedValues.length];
 						for (int i = 0; i < composedValues.length; i++) {
