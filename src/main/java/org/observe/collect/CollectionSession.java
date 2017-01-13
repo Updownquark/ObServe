@@ -1,11 +1,14 @@
 package org.observe.collect;
 
+import org.observe.Causable;
+
 /**
  * Available from {@link ObservableCollection#getSession()} for listeners to store state information, allowing them to take advantage of
  * batched operations during a transaction.
  */
-public interface CollectionSession {
+public interface CollectionSession extends Causable {
 	/** @return The cause of the set of modifications. May be null. */
+	@Override
 	Object getCause();
 
 	/**
@@ -25,7 +28,7 @@ public interface CollectionSession {
 
 	/**
 	 * Stores a value in this session if no value is currently stored for the given listener and key
-	 * 
+	 *
 	 * @param listener The listener requesting to store a value
 	 * @param key The listener-specific key to store the value under
 	 * @param value The value to store for the given listener and key
