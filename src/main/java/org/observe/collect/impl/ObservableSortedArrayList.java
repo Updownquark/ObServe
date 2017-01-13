@@ -57,9 +57,8 @@ public class ObservableSortedArrayList<E> extends ObservableArrayList<E> {
 			if (idx < 0)
 				super.add(-(idx + 1), e);
 			else {
-				do {
+				while (idx < size() && theCompare.compare(e, get(idx)) <= 0)
 					idx++;
-				} while (theCompare.compare(e, get(idx)) <= 0);
 				super.add(idx, e);
 			}
 		}
@@ -89,8 +88,18 @@ public class ObservableSortedArrayList<E> extends ObservableArrayList<E> {
 
 	@Override
 	public E set(int index, E element) {
-		E ret = remove(index);
-		add(element);
+		E ret;
+		try (Transaction t = lock(true, null)) {
+			E current = get(index);
+			if (current == element) {
+				ret = element;
+				if (!updated(index))
+					super.set(index, element);
+			} else {
+				ret = remove(index);
+				add(element);
+			}
+		}
 		return ret;
 	}
 
