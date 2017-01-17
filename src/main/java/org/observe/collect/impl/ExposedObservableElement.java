@@ -42,6 +42,7 @@ class ExposedObservableElement<E> implements ObservableElement<E> {
 			public <V extends ObservableValueEvent<E>> void onNext(V event) {
 				ObservableValueEvent<E> event2 = ObservableUtils.wrap(event, ExposedObservableElement.this);
 				observer.onNext(event2);
+				event2.finish();
 			}
 
 			@Override
@@ -54,6 +55,7 @@ class ExposedObservableElement<E> implements ObservableElement<E> {
 					event2 = createChangeEvent(value, value, null);
 				}
 				observer.onCompleted(event2);
+				event2.finish();
 			}
 		});
 		theSubscriptions.add(ret);

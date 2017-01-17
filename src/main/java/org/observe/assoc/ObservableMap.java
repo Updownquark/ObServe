@@ -55,7 +55,7 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 
 				@Override
 				public Subscription subscribe(Observer<? super ObservableValueEvent<V>> observer) {
-					observer.onNext(createInitialEvent(value));
+					observer.onNext(createInitialEvent(value, null));
 					return () -> {
 					};
 				}

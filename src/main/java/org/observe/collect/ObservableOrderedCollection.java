@@ -509,14 +509,14 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 					}
 					if (!firedInit[0]) {
 						firedInit[0] = true;
-						observer.onNext(createInitialEvent(theValue));
+						Observer.onNextAndFinish(observer, createInitialEvent(theValue, null));
 					} else if (session == null)
-						observer.onNext(createChangeEvent(oldValue, theValue, null));
+						Observer.onNextAndFinish(observer, createChangeEvent(oldValue, theValue, null));
 				}
 			});
 			if (!firedInit[0]) {
 				firedInit[0] = true;
-				observer.onNext(createInitialEvent(null));
+				Observer.onNextAndFinish(observer, createInitialEvent(null, null));
 			}
 			Subscription transSub = theCollection.getSession().subscribe(new Observer<ObservableValueEvent<CollectionSession>>() {
 				@Override
@@ -528,7 +528,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 					E newBest = (E) completed.get(key, "newBest");
 					if(oldBest == null && newBest == null)
 						return;
-					observer.onNext(createChangeEvent(oldBest, newBest, value));
+					Observer.onNextAndFinish(observer, createChangeEvent(oldBest, newBest, value));
 				}
 			});
 			return () -> {
@@ -610,7 +610,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 							if (!initialized[0]) {
 								hasValue[0] = true;
 								currentValue = evt.getValue();
-								observer.onNext(createInitialEvent(currentValue));
+								Observer.onNextAndFinish(observer, createInitialEvent(currentValue, evt));
 							} else
 								newValue(evt.getValue());
 						}
@@ -656,7 +656,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 					CollectionSession session = theCollection.getSession().get();
 					if (session == null) {
-						observer.onNext(createChangeEvent(oldValue, currentValue, null));
+						Observer.onNextAndFinish(observer, createChangeEvent(oldValue, currentValue, null));
 					} else {
 						if (session.get(sessionKey, "changed") == null) {
 							session.put(sessionKey, "changed", true);
@@ -671,7 +671,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 			initialized[0] = true;
 			Subscription sessionSub = theCollection.getSession().act(evt -> {
 				if (evt.getOldValue() != null && evt.getOldValue().get(sessionKey, "changed") != null) {
-					observer.onNext(createChangeEvent((E) evt.getOldValue().get(sessionKey, "oldValue"),
+					Observer.onNextAndFinish(observer, createChangeEvent((E) evt.getOldValue().get(sessionKey, "oldValue"),
 						(E) evt.getOldValue().get(sessionKey, "newValue"), evt.getCause()));
 				}
 			});
@@ -685,7 +685,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 					}
 				}
 				hasValue[0] = true;
-				observer.onNext(createInitialEvent(consumer.currentValue));
+				Observer.onNextAndFinish(observer, createInitialEvent(consumer.currentValue, null));
 			}
 			return () -> {
 				listSub.unsubscribe();
@@ -750,7 +750,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 						public <V extends ObservableValueEvent<E>> void onNext(V event) {
 							getLock().lock();
 							try {
-								observer.onNext(ObservableUtils.wrap(event, wrapper));
+								Observer.onNextAndFinish(observer, ObservableUtils.wrap(event, wrapper));
 							} finally {
 								getLock().unlock();
 							}
@@ -760,7 +760,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 						public <V extends ObservableValueEvent<E>> void onCompleted(V event) {
 							getLock().lock();
 							try {
-								observer.onCompleted(ObservableUtils.wrap(event, wrapper));
+								Observer.onCompletedAndFinish(observer, ObservableUtils.wrap(event, wrapper));
 							} finally {
 								getLock().unlock();
 							}

@@ -54,7 +54,7 @@ public class SimpleSettableValue<T> extends DefaultSettableValue<T> {
 			throw new IllegalArgumentException(accept);
 		T old = theValue;
 		theValue = value;
-		theController.onNext(createChangeEvent(old, value, cause));
+		Observer.onNextAndFinish(theController, createChangeEvent(old, value, cause));
 		return old;
 	}
 

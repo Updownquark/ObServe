@@ -51,7 +51,7 @@ class SubCollectionTransactionManager {
 			}
 		};
 		ObservableArrayList<ObservableValue<CollectionSession>> sessions = new ObservableArrayList<>(
-				new TypeToken<ObservableValue<CollectionSession>>() {});
+			new TypeToken<ObservableValue<CollectionSession>>() {});
 		sessions.add(collection.getSession()); // The collection's session takes precedence
 		sessions.add(theInternalSession);
 		theExposedSession = ObservableList.flattenValues(sessions).findFirst(session -> session != null);
@@ -108,7 +108,7 @@ class SubCollectionTransactionManager {
 	 * @return The runnable to execute to uninstall the observer
 	 */
 	public <E> Subscription onElement(ObservableCollection<E> collection, Consumer<? super ObservableElement<E>> onElement,
-			boolean forward) {
+		boolean forward) {
 		Consumer<ObservableElement<E>> elFn = el -> onElement.accept(el.refresh(theRefresh));
 		Subscription collSub;
 		theListeners.add(onElement);
@@ -134,7 +134,7 @@ class SubCollectionTransactionManager {
 			if(theInternalSessionValue == null) {
 				oldSession = theInternalSessionValue;
 				newSession = theInternalSessionValue = new DefaultCollectionSession(cause);
-				theSessionController.onNext(theInternalSession.createChangeEvent(oldSession, newSession, cause));
+				Observer.onNextAndFinish(theSessionController, theInternalSession.createChangeEvent(oldSession, newSession, cause));
 			} else
 				theTransactionDepth++;
 		} finally {
@@ -153,7 +153,7 @@ class SubCollectionTransactionManager {
 				session = theInternalSessionValue;
 				theInternalSessionValue = null;
 				if(session != null)
-					theSessionController.onNext(theInternalSession.createChangeEvent(session, null, session.getCause()));
+					Observer.onNextAndFinish(theSessionController, theInternalSession.createChangeEvent(session, null, session.getCause()));
 			}
 		} finally {
 			theLock.unlock();

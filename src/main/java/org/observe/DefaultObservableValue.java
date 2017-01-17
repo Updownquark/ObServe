@@ -17,7 +17,7 @@ public abstract class DefaultObservableValue<T> extends DefaultObservable<Observ
 	}
 
 	private void fireInitial(Observer<? super ObservableValueEvent<T>> observer) {
-		ObservableValueEvent<T> event = createInitialEvent(get());
+		ObservableValueEvent<T> event = createInitialEvent(get(), null);
 		try {
 			observer.onNext(event);
 		} catch(Throwable e) {

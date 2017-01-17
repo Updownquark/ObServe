@@ -10,6 +10,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+import org.qommons.Causable;
 import org.qommons.ListenerSet;
 
 /**
@@ -749,8 +750,12 @@ public interface Observable<T> {
 						return;
 					complete[0] = true;
 					outerSub.unsubscribe();
-					if (isTerminating)
-						observer.onCompleted(getDefaultValue());
+					if (isTerminating) {
+						T defValue = getDefaultValue();
+						observer.onCompleted(defValue);
+						if (defValue instanceof Causable)
+							((Causable) defValue).finish();
+					}
 				}
 			});
 			return () -> {

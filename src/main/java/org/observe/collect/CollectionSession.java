@@ -1,6 +1,6 @@
 package org.observe.collect;
 
-import org.observe.Causable;
+import org.qommons.Causable;
 
 /**
  * Available from {@link ObservableCollection#getSession()} for listeners to store state information, allowing them to take advantage of

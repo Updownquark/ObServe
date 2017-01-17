@@ -164,7 +164,7 @@ public interface ObservableTree<N, V> extends Transactable {
 
 	/**
 	 * Implements {@link ObservableTree#valuePathsOf(ObservableTree, Function, boolean)}
-	 * 
+	 *
 	 * @param <N> The node type of the tree
 	 * @param <V> The value type of the tree
 	 */
@@ -467,7 +467,7 @@ public interface ObservableTree<N, V> extends Transactable {
 										newValue.add(value_i);
 									}
 								}
-								observer.onNext(createChangeEvent(Collections.unmodifiableList(oldValue),
+								Observer.onNextAndFinish(observer, createChangeEvent(Collections.unmodifiableList(oldValue),
 									Collections.unmodifiableList(newValue), valueEvent));
 							}
 
@@ -483,7 +483,7 @@ public interface ObservableTree<N, V> extends Transactable {
 									}
 								}
 								value = Collections.unmodifiableList(value);
-								observer.onCompleted(createChangeEvent(value, value, valueEvent));
+								Observer.onCompletedAndFinish(observer, createChangeEvent(value, value, valueEvent));
 								Subscription.forAll(subs).unsubscribe();
 							}
 						});
@@ -492,7 +492,7 @@ public interface ObservableTree<N, V> extends Transactable {
 						List<V> initValue = new ArrayList<>(theValues.size());
 						for (ObservableValue<? extends V> valueObs : theValues)
 							initValue.add(valueObs.get());
-						observer.onNext(createInitialEvent(Collections.unmodifiableList(initValue)));
+						Observer.onNextAndFinish(observer, createInitialEvent(Collections.unmodifiableList(initValue), null));
 					}
 					return Subscription.forAll(subs);
 				}

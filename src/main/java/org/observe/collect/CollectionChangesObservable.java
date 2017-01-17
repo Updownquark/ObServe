@@ -117,6 +117,7 @@ class CollectionChangesObservable<E, CCE extends CollectionChangeEvent<E>> imple
 			CollectionChangeEvent<E> toFire = new CollectionChangeEvent<>(type, asList(evt.getValue()),
 				type == CollectionChangeType.set ? asList(evt.getOldValue()) : null, evt);
 			fireEvent((CCE) toFire);
+			toFire.finish();
 		}
 	}
 
@@ -125,6 +126,7 @@ class CollectionChangesObservable<E, CCE extends CollectionChangeEvent<E>> imple
 			return;
 		CollectionChangeEvent<E> evt = new CollectionChangeEvent<>(tracker.type, tracker.elements, tracker.oldElements, cause);
 		fireEvent((CCE) evt);
+		evt.finish();
 	}
 
 	protected final void fireEvent(CCE evt) {

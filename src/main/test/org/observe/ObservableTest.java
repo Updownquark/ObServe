@@ -220,7 +220,7 @@ public class ObservableTest {
 		SimpleSettableValue<Integer> obs1 = new SimpleSettableValue<>(Integer.TYPE, false);
 		obs1.set(0, null);
 		SimpleSettableValue<Integer> obs2 = new SimpleSettableValue<>(Integer.TYPE, false);
-		obs2.set(10, null);
+		obs2.set(1, null);
 		SimpleSettableValue<Integer> obs3 = new SimpleSettableValue<>(Integer.TYPE, false);
 		obs3.set(0, null);
 		int [] received = new int[] {0};

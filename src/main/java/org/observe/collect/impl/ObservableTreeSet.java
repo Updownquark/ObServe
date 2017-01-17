@@ -30,6 +30,15 @@ import com.google.common.reflect.TypeToken;
  * @param <E> The type of element in the set
  */
 public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableFastFindCollection<E> {
+	/**
+	 * @param <T> The type of key for the set
+	 * @param compare The comparator for the set
+	 * @return The CollectionCreator to create tree sets
+	 */
+	public static <T> org.observe.assoc.impl.CollectionCreator<T, ObservableTreeSet<T>> creator(Comparator<? super T> compare) {
+		return (type, lock, session, controller) -> new ObservableTreeSet<>(type, lock, session, controller, compare);
+	};
+
 	private final TypeToken<E> theType;
 
 	private TreeSetInternals theInternals;

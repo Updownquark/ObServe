@@ -601,7 +601,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 
 				@Override
 				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-					observer.onNext(createInitialEvent(value));
+					observer.onNext(createInitialEvent(value, null));
 					return () -> {
 					};
 				}
@@ -1289,7 +1289,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 
 	/**
 	 * Implements {@link ObservableSortedSet#mapEquivalent(TypeToken, Function, Function)}
-	 * 
+	 *
 	 * @param <E> The type of the collection to map
 	 * @param <T> The type of the mapped collection
 	 */

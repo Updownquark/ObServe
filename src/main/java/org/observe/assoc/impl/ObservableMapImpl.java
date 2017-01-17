@@ -52,14 +52,14 @@ public class ObservableMapImpl<K, V> implements ObservableMap<K, V> {
 		public V setValue(V value) {
 			V oldValue = theValue;
 			theValue = value;
-			theController.onNext(createChangeEvent(oldValue, theValue, null));
+			Observer.onNextAndFinish(theController, createChangeEvent(oldValue, theValue, null));
 			return oldValue;
 		}
 
 		private V remove() {
 			V oldValue = theValue;
 			theValue = null;
-			theController.onCompleted(createChangeEvent(oldValue, oldValue, null));
+			Observer.onCompletedAndFinish(theController, createChangeEvent(oldValue, oldValue, null));
 			return oldValue;
 		}
 

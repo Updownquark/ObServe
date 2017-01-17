@@ -54,6 +54,7 @@ class OrderedCollectionChangesObservable<E, OCCE extends OrderedCollectionChange
 			OrderedCollectionChangeEvent<E> toFire = new OrderedCollectionChangeEvent<>(type, asList(evt.getValue()),
 				type == CollectionChangeType.set ? asList(evt.getOldValue()) : null, new IntList(index), evt);
 			fireEvent((OCCE) toFire);
+			toFire.finish();
 		}
 	}
 
@@ -192,5 +193,6 @@ class OrderedCollectionChangesObservable<E, OCCE extends OrderedCollectionChange
 		OrderedCollectionChangeEvent<E> evt = new OrderedCollectionChangeEvent<>(tracker.type, tracker.elements, tracker.oldElements,
 			orderedTracker.indexes, cause);
 		fireEvent((OCCE) evt);
+		evt.finish();
 	}
 }

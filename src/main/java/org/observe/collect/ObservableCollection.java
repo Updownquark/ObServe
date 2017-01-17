@@ -197,11 +197,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 					private void fire(int oldSize, int newSize, Object cause) {
 						if(initialized[0])
-							observer.onNext(sizeObs.createChangeEvent(oldSize, newSize, cause));
+							Observer.onNextAndFinish(observer, sizeObs.createChangeEvent(oldSize, newSize, cause));
 					}
 				});
 				initialized[0] = true;
-				observer.onNext(sizeObs.createInitialEvent(size()));
+				Observer.onNextAndFinish(observer, sizeObs.createInitialEvent(size(), null));
 				return sub;
 			}
 
@@ -321,11 +321,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<Collection<E>>> observer) {
 				Collection<E> [] value = new Collection[] {get()};
-				observer.onNext(createInitialEvent(value[0]));
+				Observer.onNextAndFinish(observer, createInitialEvent(value[0], null));
 				return outer.simpleChanges().act(v -> {
 					Collection<E> old = value[0];
 					value[0] = get();
-					observer.onNext(createChangeEvent(old, value[0], null));
+					Observer.onNextAndFinish(observer, createChangeEvent(old, value[0], null));
 				});
 			}
 
@@ -420,7 +420,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						if (init[0] || (transUnsatisfied[0] > 0) == (unsatisfied[0] > 0))
 							return; // Still (un)satisfied, no change
 						if (ObservableCollection.this.getSession().get() == null && collection.getSession().get() == null) {
-							observer.onNext(createChangeEvent(unsatisfied[0] == 0, transUnsatisfied[0] == 0, cause));
+							Observer.onNextAndFinish(observer, createChangeEvent(unsatisfied[0] == 0, transUnsatisfied[0] == 0, cause));
 							unsatisfied[0] = transUnsatisfied[0];
 						}
 					}
@@ -499,7 +499,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 				lock.lock();
 				try {
 					unsatisfied[0] = transUnsatisfied[0];
-					observer.onNext(createInitialEvent(unsatisfied[0] == 0));
+					Observer.onNextAndFinish(observer, createInitialEvent(unsatisfied[0] == 0, null));
 					init[0] = false;
 				} finally {
 					lock.unlock();
@@ -766,7 +766,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						theValue = value;
 						CollectionSession session = getSession().get();
 						if(session == null)
-							observer.onNext(createChangeEvent(oldValue, theValue, null));
+							Observer.onNextAndFinish(observer, createChangeEvent(oldValue, theValue, null));
 						else {
 							session.putIfAbsent(key, "oldBest", oldValue);
 							session.put(key, "newBest", theValue);
@@ -785,11 +785,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						E newBest = (E) completed.get(key, "newBest");
 						if(oldBest == null && newBest == null)
 							return;
-						observer.onNext(createChangeEvent(oldBest, newBest, value));
+						Observer.onNextAndFinish(observer, createChangeEvent(oldBest, newBest, value));
 					}
 				});
 				if(collOnEl.theMatchingElement == null) // If no initial match, fire an initial null
-					observer.onNext(createInitialEvent(null));
+					Observer.onNextAndFinish(observer, createInitialEvent(null, null));
 				return () -> {
 					collSub.unsubscribe();
 					transSub.unsubscribe();
@@ -863,7 +863,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						if (initialized[0]) {
 							CollectionSession session = getSession().get();
 							if (session == null)
-								observer.onNext(createChangeEvent(oldValue, theValue, null));
+								Observer.onNextAndFinish(observer, createChangeEvent(oldValue, theValue, null));
 							else {
 								session.putIfAbsent(key, "oldValue", oldValue);
 								session.put(key, "newValue", theValue);
@@ -883,10 +883,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						E newBest = (E) completed.get(key, "newValue");
 						if (oldBest == null && newBest == null)
 							return;
-						observer.onNext(createChangeEvent(oldBest, newBest, value));
+						Observer.onNextAndFinish(observer, createChangeEvent(oldBest, newBest, value));
 					}
 				});
-				observer.onNext(createInitialEvent(collOnEl.theValue));
+				Observer.onNextAndFinish(observer, createInitialEvent(collOnEl.theValue, null));
 				return () -> {
 					collSub.unsubscribe();
 					transSub.unsubscribe();
@@ -1040,7 +1040,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						holder.theValue = value;
 						CollectionSession session = getSession().get();
 						if(session == null)
-							observer.onNext(createChangeEvent(oldValue, holder.theValue, null));
+							Observer.onNextAndFinish(observer, createChangeEvent(oldValue, holder.theValue, null));
 						else {
 							session.putIfAbsent(key, "oldValue", oldValue);
 							session.put(key, "newValue", holder.theValue);
@@ -1073,11 +1073,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 							newValue = (T) completed.get(key, "newValue");
 						if(oldValue == null && newValue == null)
 							return;
-						observer.onNext(createChangeEvent(oldValue, newValue, value));
+						Observer.onNextAndFinish(observer, createChangeEvent(oldValue, newValue, value));
 					}
 				});
 				if(!initElements[0])
-					observer.onNext(createInitialEvent(init));
+					Observer.onNextAndFinish(observer, createInitialEvent(init, null));
 				return () -> {
 					collSub.unsubscribe();
 					transSub.unsubscribe();
@@ -1621,7 +1621,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						public <V extends ObservableValueEvent<CollectionSession>> void onNext(V event) {
 							theLock.lock();
 							try {
-								observer.onNext(ObservableUtils.wrap(event, sessionObservable));
+								Observer.onNextAndFinish(observer, ObservableUtils.wrap(event, sessionObservable));
 							} finally {
 								theLock.unlock();
 							}
@@ -1631,7 +1631,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						public <V extends ObservableValueEvent<CollectionSession>> void onCompleted(V event) {
 							theLock.lock();
 							try {
-								observer.onCompleted(ObservableUtils.wrap(event, sessionObservable));
+								Observer.onCompletedAndFinish(observer, ObservableUtils.wrap(event, sessionObservable));
 							} finally {
 								theLock.unlock();
 							}
@@ -1688,7 +1688,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						public <V extends ObservableValueEvent<E>> void onNext(V event) {
 							theLock.lock();
 							try {
-								observer.onNext(ObservableUtils.wrap(event, wrapper));
+								Observer.onNextAndFinish(observer, ObservableUtils.wrap(event, wrapper));
 							} finally {
 								theLock.unlock();
 							}
@@ -1698,7 +1698,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						public <V extends ObservableValueEvent<E>> void onCompleted(V event) {
 							theLock.lock();
 							try {
-								observer.onCompleted(ObservableUtils.wrap(event, wrapper));
+								Observer.onCompletedAndFinish(observer, ObservableUtils.wrap(event, wrapper));
 							} finally {
 								theLock.unlock();
 							}
@@ -2251,7 +2251,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						if(!isIncluded)
 							return;
 						isIncluded = false;
-						observer2.onCompleted(createChangeEvent(oldValue, oldValue, elValue));
+						Observer.onCompletedAndFinish(observer2, createChangeEvent(oldValue, oldValue, elValue));
 						if(innerSub[0] != null) {
 							innerSub[0].unsubscribe();
 							innerSub[0] = null;
@@ -2260,9 +2260,9 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						boolean initial = !isIncluded;
 						isIncluded = true;
 						if(initial)
-							observer2.onNext(createInitialEvent(theValue.mapped));
+							Observer.onNextAndFinish(observer2, createInitialEvent(theValue.mapped, elValue));
 						else
-							observer2.onNext(createChangeEvent(oldValue, theValue.mapped, elValue));
+							Observer.onNextAndFinish(observer2, createChangeEvent(oldValue, theValue.mapped, elValue));
 					}
 				}
 
@@ -2271,7 +2271,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 					if(!isIncluded)
 						return;
 					T oldValue = theValue.mapped;
-					observer2.onCompleted(createChangeEvent(oldValue, oldValue, elValue));
+					Observer.onCompletedAndFinish(observer2, createChangeEvent(oldValue, oldValue, elValue));
 				}
 			});
 			if(!isIncluded) {
@@ -3304,7 +3304,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
 				theElementListeners.add(observer);
-				observer.onNext(createInitialEvent(theCachedValue));
+				Observer.onNextAndFinish(observer, createInitialEvent(theCachedValue, null));
 				return () -> theElementListeners.remove(observer);
 			}
 
@@ -3318,11 +3318,13 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 				theCachedValue = event.getValue();
 				ObservableValueEvent<E> cachedEvent = createChangeEvent(oldValue, theCachedValue, event);
 				theElementListeners.forEach(observer -> observer.onNext(cachedEvent));
+				cachedEvent.finish();
 			}
 
 			private void completed(ObservableValueEvent<E> event) {
 				ObservableValueEvent<E> cachedEvent = createChangeEvent(theCachedValue, theCachedValue, event);
 				theElementListeners.forEach(observer -> observer.onCompleted(cachedEvent));
+				cachedEvent.finish();
 			}
 		}
 
@@ -3691,7 +3693,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 					@Override
 					public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
-						observer.onNext(createInitialEvent(value));
+						Observer.onNextAndFinish(observer, createInitialEvent(value, null));
 						return () -> {
 						};
 					}
@@ -3879,20 +3881,21 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 					if (value.getValue() != null) {
 						Observable<?> until = ObservableUtils.makeUntil(theWrapped, value);
 						value.getValue().takeUntil(until).act(innerEvent -> {
-							observer2.onNext(ObservableUtils.wrap(innerEvent, retObs));
+							Observer.onNextAndFinish(observer2, ObservableUtils.wrap(innerEvent, retObs));
 						});
 					} else if (value.isInitial())
-						observer2.onNext(retObs.createInitialEvent(null));
+						Observer.onNextAndFinish(observer2, retObs.createInitialEvent(null, value.getCause()));
 					else
-						observer2.onNext(retObs.createChangeEvent(get(value.getOldValue()), null, value.getCause()));
+						Observer.onNextAndFinish(observer2, retObs.createChangeEvent(get(value.getOldValue()), null, value.getCause()));
 				}
 
 				@Override
 				public <V2 extends ObservableValueEvent<? extends ObservableValue<? extends E>>> void onCompleted(V2 value) {
 					if (value.isInitial())
-						observer2.onCompleted(retObs.createInitialEvent(get(value.getValue())));
+						Observer.onCompletedAndFinish(observer2, retObs.createInitialEvent(get(value.getValue()), value.getCause()));
 					else
-						observer2.onCompleted(retObs.createChangeEvent(get(value.getOldValue()), get(value.getValue()), value.getCause()));
+						Observer.onCompletedAndFinish(observer2,
+							retObs.createChangeEvent(get(value.getOldValue()), get(value.getValue()), value.getCause()));
 				}
 			});
 		}

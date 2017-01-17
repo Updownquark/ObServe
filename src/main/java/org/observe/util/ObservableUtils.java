@@ -19,7 +19,7 @@ public class ObservableUtils {
 	 */
 	public static <T> ObservableValueEvent<T> wrap(ObservableValueEvent<? extends T> event, ObservableValue<T> wrapper) {
 		if (event.isInitial())
-			return wrapper.createInitialEvent(event.getValue());
+			return wrapper.createInitialEvent(event.getValue(), event.getCause());
 		else
 			return wrapper.createChangeEvent(event.getOldValue(), event.getValue(), event.getCause());
 	}
@@ -38,12 +38,12 @@ public class ObservableUtils {
 		return value.subscribe(new Observer<ObservableValueEvent<? extends T>>() {
 			@Override
 			public <V extends ObservableValueEvent<? extends T>> void onNext(V event) {
-				observer.onNext(wrap(event, wrapper));
+				Observer.onNextAndFinish(observer, wrap(event, wrapper));
 			}
 
 			@Override
 			public <V extends ObservableValueEvent<? extends T>> void onCompleted(V event) {
-				observer.onCompleted(wrap(event, wrapper));
+				Observer.onCompletedAndFinish(observer, wrap(event, wrapper));
 			}
 		});
 	}

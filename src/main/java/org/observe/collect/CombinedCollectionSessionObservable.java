@@ -53,6 +53,7 @@ public class CombinedCollectionSessionObservable implements ObservableValue<Coll
 							CollectionSession session = theSession;
 							theSession = null;
 							fire(session, null, value);
+							session.finish();
 						}
 					}
 				});
@@ -62,7 +63,7 @@ public class CombinedCollectionSessionObservable implements ObservableValue<Coll
 			}
 		});
 		theObservers.setOnSubscribe(observer -> {
-			observer.onNext(createInitialEvent(theSession));
+			Observer.onNextAndFinish(observer, createInitialEvent(theSession, theSession));
 		});
 	}
 
@@ -89,10 +90,11 @@ public class CombinedCollectionSessionObservable implements ObservableValue<Coll
 	private void fire(CollectionSession old, CollectionSession newSession, ObservableValueEvent<?> cause) {
 		ObservableValueEvent<CollectionSession> evt;
 		if (cause.isInitial())
-			evt = createInitialEvent(newSession);
+			evt = createInitialEvent(newSession, cause);
 		else
 			evt = createChangeEvent(old, newSession, cause);
 		theObservers.forEach(listener -> listener.onNext(evt));
+		evt.finish();
 	}
 
 	@Override

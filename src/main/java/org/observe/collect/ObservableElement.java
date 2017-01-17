@@ -37,13 +37,13 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 	@Override
 	default ObservableElement<E> takeUntil(Observable<?> until) {
 		return d().debug(new ObservableElementTakenUntil<>(this, until, true)).from("take", this).from("until", until)
-				.tag("terminate", true).get();
+			.tag("terminate", true).get();
 	}
 
 	@Override
 	default ObservableElement<E> unsubscribeOn(Observable<?> until) {
 		return d().debug(new ObservableElementTakenUntil<>(this, until, false)).from("take", this).from("until", until)
-				.tag("terminate", false).get();
+			.tag("terminate", false).get();
 	}
 
 	@Override
@@ -71,12 +71,12 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 
 	@Override
 	default <U, R> ObservableElement<R> combineV(TypeToken<R> type, BiFunction<? super E, ? super U, R> function, ObservableValue<U> arg,
-			boolean combineNull) {
+		boolean combineNull) {
 		ComposedObservableElement<R> ret = new ComposedObservableElement<>(this, type, args -> {
 			return function.apply((E) args[0], (U) args[1]);
 		} , combineNull, this, arg);
 		return d().debug(ret).from("combine", this).from("with", arg).using("combination", function).tag("combineNull", combineNull)
-				.get();
+			.get();
 	}
 
 	@Override
@@ -91,18 +91,18 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 
 	@Override
 	default <U, V, R> ObservableElement<R> combineV(TriFunction<? super E, ? super U, ? super V, R> function, ObservableValue<U> arg2,
-			ObservableValue<V> arg3) {
+		ObservableValue<V> arg3) {
 		return combineV(null, function, arg2, arg3, false);
 	}
 
 	@Override
 	default <U, V, R> ObservableElement<R> combineV(TypeToken<R> type, TriFunction<? super E, ? super U, ? super V, R> function,
-			ObservableValue<U> arg2, ObservableValue<V> arg3, boolean combineNull) {
+		ObservableValue<U> arg2, ObservableValue<V> arg3, boolean combineNull) {
 		ComposedObservableElement<R> ret = new ComposedObservableElement<>(this, type, args -> {
 			return function.apply((E) args[0], (U) args[1], (V) args[2]);
 		} , combineNull, this, arg2, arg3);
 		return d().debug(ret).from("combine", this).from("with", arg2, arg3).using("combination", function)
-				.tag("combineNull", combineNull).get();
+			.tag("combineNull", combineNull).get();
 	}
 
 	@Override
@@ -117,7 +117,7 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 	 */
 	default ObservableElement<E> refreshForValue(Function<? super E, Observable<?>> refresh, Observable<Void> unsubscribe) {
 		return d().debug(new ValueRefreshingObservableElement<>(this, refresh, unsubscribe)).from("refresh", this).using("on", refresh)
-				.get();
+			.get();
 	}
 
 	@Override
@@ -185,7 +185,7 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 		private final ObservableElement<?> theRoot;
 
 		public ComposedObservableElement(ObservableElement<?> root, TypeToken<T> t, Function<Object [], T> f, boolean combineNull,
-				ObservableValue<?>... composed) {
+			ObservableValue<?>... composed) {
 			super(t, f, combineNull, composed);
 			theRoot = root;
 		}
@@ -232,7 +232,7 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 		private final Observable<Void> theUnsubscribe;
 
 		protected ValueRefreshingObservableElement(ObservableElement<E> wrap, Function<? super E, Observable<?>> refresh,
-				Observable<Void> unsubscribe) {
+			Observable<Void> unsubscribe) {
 			theWrapped = wrap;
 			theRefresh = refresh;
 			theUnsubscribe = unsubscribe;
@@ -268,12 +268,13 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 				E outerVal = get();
 				ObservableValueEvent<E> event2 = theWrapped.createChangeEvent(outerVal, outerVal, value);
 				observer.onNext(event2);
+				event2.finish();
 			};
 			Subscription outerSub = theWrapped.subscribe(new Observer<ObservableValueEvent<E>>() {
 				@Override
 				public <V extends ObservableValueEvent<E>> void onNext(V value) {
 					refireSub[0] = theRefresh.apply(value.getValue()).noInit().takeUntil(ObservableUtils.makeUntil(theWrapped, value))
-							.takeUntil(theUnsubscribe).act(refireObs);
+						.takeUntil(theUnsubscribe).act(refireObs);
 					observer.onNext(value);
 				}
 
@@ -378,7 +379,7 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 					theSwitchCount++;
 					if (event.getValue() == null) {
 						if (firedInitial)
-							observer.onCompleted(createChangeEvent(preValue, preValue, event.getCause()));
+							Observer.onCompletedAndFinish(observer, createChangeEvent(preValue, preValue, event.getCause()));
 						completeObs.onNext(null);
 						return;
 					}
@@ -391,9 +392,9 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 								return;
 							if (!firedInitial) {
 								firedInitial = true;
-								observer.onNext(createInitialEvent(event2.getValue()));
+								Observer.onNextAndFinish(observer, createInitialEvent(event2.getValue(), event2.getCause()));
 							} else
-								observer.onNext(createChangeEvent(preValue, event2.getValue(), event2.getCause()));
+								Observer.onNextAndFinish(observer, createChangeEvent(preValue, event2.getValue(), event2.getCause()));
 							preValue = event2.getValue();
 						}
 
@@ -402,7 +403,7 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 							if (theSwitchTrack != theSwitchCount)
 								return;
 							completeObs.onNext(null);
-							observer.onCompleted(createChangeEvent(preValue, preValue, event2.getCause()));
+							Observer.onCompletedAndFinish(observer, createChangeEvent(preValue, preValue, event2.getCause()));
 						}
 					});
 				}
@@ -411,7 +412,7 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 				public <V extends ObservableValueEvent<? extends ObservableElement<E>>> void onCompleted(V event) {
 					theSwitchCount++;
 					if (firedInitial)
-						observer.onCompleted(createChangeEvent(preValue, preValue, event.getCause()));
+						Observer.onCompletedAndFinish(observer, createChangeEvent(preValue, preValue, event.getCause()));
 				}
 			});
 		}

@@ -1,7 +1,9 @@
 package org.observe.collect;
 
+import org.qommons.AbstractCausable;
+
 /** Simple, default implementation of CollectionSession */
-public class DefaultCollectionSession implements CollectionSession {
+public class DefaultCollectionSession extends AbstractCausable implements CollectionSession {
 	private static class Key {
 		final Object listener;
 		final String key;
@@ -27,8 +29,6 @@ public class DefaultCollectionSession implements CollectionSession {
 		}
 	}
 
-	private final Object theCause;
-
 	private final java.util.concurrent.ConcurrentHashMap<Key, Object> theValues;
 
 	/**
@@ -37,13 +37,8 @@ public class DefaultCollectionSession implements CollectionSession {
 	 * @param cause The cause of the set of changes to come
 	 */
 	public DefaultCollectionSession(Object cause) {
-		theCause = cause;
+		super(cause);
 		theValues = new java.util.concurrent.ConcurrentHashMap<>();
-	}
-
-	@Override
-	public Object getCause() {
-		return theCause;
 	}
 
 	@Override

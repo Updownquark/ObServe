@@ -21,12 +21,13 @@ class InternalObservableElementImpl<T> extends DefaultObservableValue<T> {
 	void set(T newValue) {
 		T oldValue = theValue;
 		theValue = (T) theType.getRawType().cast(newValue);
-		theController.onNext(createChangeEvent(oldValue, newValue, null));
+		Observer.onNextAndFinish(theController, createChangeEvent(oldValue, newValue, null));
 	}
 
 	void remove() {
 		ObservableValueEvent<T> event = createChangeEvent(theValue, theValue, null);
 		theController.onCompleted(event);
+		event.finish();
 	}
 
 	@Override

@@ -329,7 +329,7 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 
 			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-				observer.onNext(createInitialEvent(theValue));
+				Observer.onNextAndFinish(observer, createInitialEvent(theValue, null));
 				return () -> {
 				};
 			}
@@ -1117,14 +1117,14 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Tr
 					public <V extends ObservableValueEvent<E>> void onNext(V value) {
 						if(isRemoved)
 							return;
-						observer.onNext(ObservableUtils.wrap(value, Element.this));
+						Observer.onNextAndFinish(observer, ObservableUtils.wrap(value, Element.this));
 					}
 
 					@Override
 					public <V extends ObservableValueEvent<E>> void onCompleted(V value) {
 						if(isRemoved)
 							return;
-						observer.onCompleted(ObservableUtils.wrap(value, Element.this));
+						Observer.onCompletedAndFinish(observer, ObservableUtils.wrap(value, Element.this));
 					}
 				});
 			}

@@ -1,5 +1,7 @@
 package org.observe;
 
+import org.qommons.Causable;
+
 /**
  * Listens to an observable
  *
@@ -27,5 +29,27 @@ public interface Observer<T> {
 		if (e instanceof ObservableErrorException)
 			throw (ObservableErrorException) e;
 		throw new ObservableErrorException(e);
+	}
+
+	/**
+	 * Calls an observer and then calls {@link Causable#finish()} on the value
+	 * 
+	 * @param observer The observer to call {@link #onNext(Object)} with the value
+	 * @param value The value to call with the the observable
+	 */
+	static <T extends Causable> void onNextAndFinish(Observer<? super T> observer, T value) {
+		observer.onNext(value);
+		value.finish();
+	}
+
+	/**
+	 * Calls an observer and then calls {@link Causable#finish()} on the value
+	 * 
+	 * @param observer The observer to call {@link #onCompleted(Object)} with the value
+	 * @param value The value to call with the the observable
+	 */
+	static <T extends Causable> void onCompletedAndFinish(Observer<? super T> observer, T value) {
+		observer.onCompleted(value);
+		value.finish();
 	}
 }

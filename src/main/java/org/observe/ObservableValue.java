@@ -78,8 +78,8 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @param cause The cause of the change
 	 * @return The event to propagate
 	 */
-	default ObservableValueEvent<T> createInitialEvent(T value) {
-		return ObservableValueEvent.createInitialEvent(this, value);
+	default ObservableValueEvent<T> createInitialEvent(T value, Object cause) {
+		return ObservableValueEvent.createInitialEvent(this, value, cause);
 	}
 
 	/**
@@ -445,9 +445,9 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 							T oldVal = (T) oldValue[0];
 							oldValue[0] = newVal;
 							if (value2.isInitial())
-								observer.onNext(outer.createInitialEvent(newVal));
+								Observer.onNextAndFinish(observer, outer.createInitialEvent(newVal, value2.getCause()));
 							else
-								observer.onNext(outer.createChangeEvent(oldVal, newVal, value2.getCause()));
+								Observer.onNextAndFinish(observer, outer.createChangeEvent(oldVal, newVal, value2.getCause()));
 						}
 
 						@Override
@@ -593,11 +593,13 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 
 								private void fireNext(ObservableValueEvent<T> next) {
 									theObservers.forEach(listener -> listener.onNext(next));
+									next.finish();
 								}
 
 								private void fireCompleted(ObservableValueEvent<T> next) {
 									theObservers.forEach(listener -> listener.onCompleted(next));
 									Subscription.forAll(composedSubs).unsubscribe();
+									next.finish();
 								}
 
 								private void fireError(Throwable error) {
@@ -627,9 +629,9 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 			});
 			theObservers.setOnSubscribe(observer -> {
 				if(completed[0])
-					observer.onCompleted(createInitialEvent(theValue));
+					Observer.onCompletedAndFinish(observer, createInitialEvent(theValue, null));
 				else
-					observer.onNext(createInitialEvent(theValue));
+					Observer.onNextAndFinish(observer, createInitialEvent(theValue, null));
 			});
 		}
 
@@ -788,7 +790,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 			}
 			refireSub[0] = theRefresh.act(evt -> {
 				T value = get();
-				observer.onNext(createChangeEvent(value, value, evt));
+				Observer.onNextAndFinish(observer, createChangeEvent(value, value, evt));
 			});
 			return () -> {
 				outerSub.unsubscribe();
@@ -838,6 +840,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 								if(initialized[0]) {
 									ObservableValueEvent<T> cachedEvent = createChangeEvent(oldValue, theValue, value.getCause());
 									theObservers.forEach(observer -> observer.onNext(cachedEvent));
+									cachedEvent.finish();
 								}
 							}
 
@@ -848,6 +851,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 								if(initialized[0]) {
 									ObservableValueEvent<T> cachedEvent = createChangeEvent(oldValue, newValue, value.getCause());
 									theObservers.forEach(observer -> observer.onNext(cachedEvent));
+									cachedEvent.finish();
 								}
 							}
 						});
@@ -921,7 +925,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 
 		@Override
 		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-			observer.onNext(createInitialEvent(theValue));
+			Observer.onNextAndFinish(observer, createInitialEvent(theValue, null));
 			return () -> {
 			};
 		}
@@ -1069,9 +1073,11 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 											else
 												old[0] = innerOld = event2.getOldValue();
 											if (event.isInitial() && event2.isInitial())
-												observer.onNext(retObs.createInitialEvent(event2.getValue()));
+												Observer.onNextAndFinish(observer,
+													retObs.createInitialEvent(event2.getValue(), event2.getCause()));
 											else
-												observer.onNext(retObs.createChangeEvent(innerOld, event2.getValue(), event2.getCause()));
+												Observer.onNextAndFinish(observer,
+													retObs.createChangeEvent(innerOld, event2.getValue(), event2.getCause()));
 										} finally {
 											theLock.unlock();
 										}
@@ -1080,9 +1086,9 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 							if (!firedInit2[0])
 								throw new IllegalStateException(innerObs + " did not fire an initial value");
 						} else if (event.isInitial())
-							observer.onNext(retObs.createInitialEvent(get(null)));
+							Observer.onNextAndFinish(observer, retObs.createInitialEvent(get(null), event.getCause()));
 						else if (old[0] != null)
-							observer.onNext(retObs.createChangeEvent((T) old[0], get(null), event.getCause()));
+							Observer.onNextAndFinish(observer, retObs.createChangeEvent((T) old[0], get(null), event.getCause()));
 					} finally {
 						theLock.unlock();
 					}
@@ -1094,7 +1100,8 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 					Subscription.unsubscribe(innerSub.getAndSet(null));
 					theLock.lock();
 					try {
-						observer.onCompleted(retObs.createChangeEvent(get(event.getOldValue()), get(event.getValue()), event.getCause()));
+						Observer.onCompletedAndFinish(observer,
+							retObs.createChangeEvent(get(event.getOldValue()), get(event.getValue()), event.getCause()));
 					} finally {
 						theLock.unlock();
 					}
@@ -1157,7 +1164,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		@Override
 		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 			if (theValues.length == 0) {
-				observer.onNext(createInitialEvent(null));
+				Observer.onNextAndFinish(observer, createInitialEvent(null, null));
 				return () -> {
 				};
 			}
@@ -1216,6 +1223,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 						if (toFire != null) {
 							hasFiredInit[0] = true;
 							observer.onNext(toFire);
+							toFire.finish();
 						}
 						if (found != isFound) {
 							isFound = found;

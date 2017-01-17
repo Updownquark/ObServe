@@ -347,7 +347,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 
 				@Override
 				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-					observer.onNext(createInitialEvent(value));
+					Observer.onNextAndFinish(observer, createInitialEvent(value, null));
 					return () -> {
 					};
 				}
@@ -470,13 +470,13 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 								isMatch[0] = true;
 								theCurrentMatch = event.getValue();
 								if (!initialized[0])
-									observer.onNext(createInitialEvent(event.getValue()));
+									Observer.onNextAndFinish(observer, createInitialEvent(event.getValue(), event));
 								else if (event.getValue() != theCurrentMatch)
-									observer.onNext(createChangeEvent(old, event.getValue(), event));
+									Observer.onNextAndFinish(observer, createChangeEvent(old, event.getValue(), event));
 							} else if (isMatch[0] && Objects.equals(event.getOldValue(), theKey)) {
 								isMatch[0] = false;
 								theCurrentMatch = null;
-								observer.onNext(createChangeEvent(old, null, event));
+								Observer.onNextAndFinish(observer, createChangeEvent(old, null, event));
 							}
 						}
 
@@ -484,7 +484,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 						public <V extends ObservableValueEvent<E>> void onCompleted(V event) {
 							if(isMatch[0] && theCurrentMatch == event.getValue()) {
 								theCurrentMatch = null;
-								observer.onNext(createChangeEvent(event.getValue(), null, event));
+								Observer.onNextAndFinish(observer, createChangeEvent(event.getValue(), null, event));
 							}
 						}
 					});
@@ -492,7 +492,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 			});
 			initialized[0] = true;
 			if(!isMatch[0])
-				observer.onNext(createInitialEvent(null));
+				Observer.onNextAndFinish(observer, createInitialEvent(null, null));
 			return ret;
 		}
 
