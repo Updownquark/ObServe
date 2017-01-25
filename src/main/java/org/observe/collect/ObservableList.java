@@ -30,6 +30,8 @@ import org.observe.Subscription;
 import org.observe.util.ObservableUtils;
 import org.qommons.ListenerSet;
 import org.qommons.Transaction;
+import org.qommons.collect.RRList;
+import org.qommons.collect.TransactableList;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;

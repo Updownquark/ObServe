@@ -8,9 +8,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
 
-import org.observe.assoc.MultiMap;
 import org.qommons.Equalizer;
 import org.qommons.Equalizer.EqualizerNode;
+import org.qommons.collect.MultiMap;
 import org.qommons.IterableUtils;
 
 /**

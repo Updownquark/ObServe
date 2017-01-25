@@ -1,5 +1,6 @@
 package org.observe.assoc.impl;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -12,6 +13,8 @@ import org.observe.collect.ObservableList;
 import org.observe.collect.impl.ObservableArrayList;
 import org.observe.util.DefaultTransactable;
 import org.qommons.Transaction;
+import org.qommons.collect.Graph;
+import org.qommons.collect.MutableGraph;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -22,8 +25,8 @@ import com.google.common.reflect.TypeToken;
  * @param <N> The type of values associated with nodes
  * @param <E> The type of values associated with edges
  */
-public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E> {
-	private class DefaultNode implements Node<N, E> {
+public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, MutableGraph<N, E> {
+	private class DefaultNode implements ObservableGraph.Node<N, E> {
 		private final N theValue;
 
 		DefaultNode(N value) {
@@ -31,7 +34,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E> {
 		}
 
 		@Override
-		public ObservableCollection<Edge<N, E>> getEdges() {
+		public ObservableCollection<? extends ObservableGraph.Edge<N, E>> getEdges() {
 			return DefaultObservableGraph.this.getEdges().filter(edge -> edge.getStart() == this || edge.getEnd() == this);
 		}
 
@@ -41,16 +44,16 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E> {
 		}
 	}
 
-	private class DefaultEdge implements Edge<N, E> {
-		private final Node<N, E> theStart;
+	private class DefaultEdge implements ObservableGraph.Edge<N, E> {
+		private final ObservableGraph.Node<N, E> theStart;
 
-		private final Node<N, E> theEnd;
+		private final ObservableGraph.Node<N, E> theEnd;
 
 		private final boolean isDirected;
 
 		private final E theValue;
 
-		DefaultEdge(Node<N, E> start, Node<N, E> end, boolean directed, E value) {
+		DefaultEdge(ObservableGraph.Node<N, E> start, ObservableGraph.Node<N, E> end, boolean directed, E value) {
 			theStart = start;
 			theEnd = end;
 			isDirected = directed;
@@ -58,12 +61,12 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E> {
 		}
 
 		@Override
-		public Node<N, E> getStart() {
+		public ObservableGraph.Node<N, E> getStart() {
 			return theStart;
 		}
 
 		@Override
-		public Node<N, E> getEnd() {
+		public ObservableGraph.Node<N, E> getEnd() {
 			return theEnd;
 		}
 
@@ -82,13 +85,13 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E> {
 
 	private DefaultTransactable theSessionController;
 
-	private ObservableList<Node<N, E>> theNodes;
+	private ObservableList<ObservableGraph.Node<N, E>> theNodes;
 
-	private ObservableList<Edge<N, E>> theEdges;
+	private ObservableList<ObservableGraph.Edge<N, E>> theEdges;
 
-	private ObservableList<Node<N, E>> theNodeController;
+	private ObservableList<ObservableGraph.Node<N, E>> theNodeController;
 
-	private ObservableList<Edge<N, E>> theEdgeController;
+	private ObservableList<ObservableGraph.Edge<N, E>> theEdgeController;
 
 	/**
 	 * @param nodeType The type of values associated with nodes
@@ -105,29 +108,33 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E> {
 	 * @param edgeList Creates the list of edges
 	 */
 	public DefaultObservableGraph(TypeToken<N> nodeType, TypeToken<E> edgeType,
-			CollectionCreator<Node<N, E>, ObservableList<Node<N, E>>> nodeList,
-			CollectionCreator<Edge<N, E>, ObservableList<Edge<N, E>>> edgeList) {
+		CollectionCreator<ObservableGraph.Node<N, E>, ObservableList<ObservableGraph.Node<N, E>>> nodeList,
+		CollectionCreator<ObservableGraph.Edge<N, E>, ObservableList<ObservableGraph.Edge<N, E>>> edgeList) {
 		theLock = new ReentrantReadWriteLock();
 
 		theSessionController = new DefaultTransactable(theLock);
 
 		theNodeController = nodeList.create(
-				new TypeToken<Node<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType).where(new TypeParameter<E>() {}, edgeType), theLock,
-				theSessionController.getSession(), theSessionController);
+			new TypeToken<ObservableGraph.Node<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType).where(new TypeParameter<E>() {},
+				edgeType),
+			theLock,
+			theSessionController.getSession(), theSessionController);
 		theNodes = theNodeController.immutable();
 		theEdgeController = edgeList.create(
-				new TypeToken<Edge<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType).where(new TypeParameter<E>() {}, edgeType), theLock,
-				theSessionController.getSession(), theSessionController);
+			new TypeToken<ObservableGraph.Edge<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType).where(new TypeParameter<E>() {},
+				edgeType),
+			theLock,
+			theSessionController.getSession(), theSessionController);
 		theEdges = theEdgeController.immutable();
 	}
 
 	@Override
-	public ObservableCollection<Node<N, E>> getNodes() {
+	public ObservableCollection<ObservableGraph.Node<N, E>> getNodes() {
 		return theNodes;
 	}
 
 	@Override
-	public ObservableCollection<Edge<N, E>> getEdges() {
+	public ObservableCollection<ObservableGraph.Edge<N, E>> getEdges() {
 		return theEdges;
 	}
 
@@ -146,58 +153,40 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E> {
 		return true;
 	}
 
-	/**
-	 * Adds a node to the graph
-	 *
-	 * @param value The value for the node to have
-	 * @return The node that was created and added
-	 */
-	public Node<N, E> addNode(N value) {
+	@Override
+	public ObservableGraph.Node<N, E> addNode(N value) {
 		DefaultNode node = new DefaultNode(value);
 		theNodeController.add(node);
 		return node;
 	}
 
-	/**
-	 * Adds a collection of nodes to a graph
-	 *
-	 * @param values The node values to add
-	 */
-	public void addNodes(Collection<? extends N> values) {
+	@Override
+	public Collection<? extends ObservableGraph.Node<N, E>> addNodes(Collection<? extends N> values) {
+		ArrayList<ObservableGraph.Node<N, E>> ret = new ArrayList<>(values.size());
 		for(N value : values)
-			addNode(value);
+			ret.add(addNode(value));
+		return ret;
 	}
 
-	/**
-	 * Adds an edge between two nodes which must already be in the graph. The nodes cannot be the same.
-	 *
-	 * @param start The node for the edge to start at
-	 * @param end The node for the edge to end at
-	 * @param directed Whether the edge is directed (i.e. one-way)
-	 * @param value The value to associate with the new edge
-	 * @return The edge that was created and added
-	 */
-	public Edge<N, E> addEdge(Node<N, E> start, Node<N, E> end, boolean directed, E value) {
+	@Override
+	public ObservableGraph.Edge<N, E> addEdge(Graph.Node<N, E> start, Graph.Node<N, E> end, boolean directed, E value) {
 		if(!theNodes.contains(start) || !theNodes.contains(end))
 			throw new IllegalArgumentException("Edges may only be created between nodes already present in the graph");
 		if(start == end)
 			throw new IllegalArgumentException("An edge may not start and end at the same node");
-		DefaultEdge edge = new DefaultEdge(start, end, directed, value);
+		DefaultEdge edge = new DefaultEdge((ObservableGraph.Node<N, E>) start, (ObservableGraph.Node<N, E>) end, directed, value);
 		theEdgeController.add(edge);
 		return edge;
 	}
 
-	/**
-	 * @param node The node to remove from the graph along with all its edges
-	 * @return Whether the node was found in the graph
-	 */
-	public boolean removeNode(Node<N, E> node) {
+	@Override
+	public boolean removeNode(Graph.Node<N, E> node) {
 		if(!theNodes.contains(node))
 			return false;
 		try (Transaction trans = lock(true, null)) {
-			java.util.Iterator<Edge<N, E>> edgeIter = theEdgeController.iterator();
+			java.util.Iterator<ObservableGraph.Edge<N, E>> edgeIter = theEdgeController.iterator();
 			while(edgeIter.hasNext()) {
-				Edge<N, E> edge = edgeIter.next();
+				ObservableGraph.Edge<N, E> edge = edgeIter.next();
 				if(edge.getStart() == node || edge.getEnd() == node)
 					edgeIter.remove();
 			}
@@ -206,32 +195,22 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E> {
 		}
 	}
 
-	/**
-	 * @param edge The edge to remove from the graph
-	 * @return Whether the edge was found in the graph
-	 */
-	public boolean removeEdge(Edge<N, E> edge) {
+	@Override
+	public boolean removeEdge(Graph.Edge<N, E> edge) {
 		return theEdgeController.remove(edge);
 	}
 
-	/**
-	 * Replaces a node in the graph with a new node having a different value. This method is useful because the value of a node cannot be
-	 * directly modified. All edges referring to the given node will be replaced with equivalent edges referring to the new node.
-	 *
-	 * @param node The node to replace
-	 * @param newValue The value for the new node to have
-	 * @return The node that was created and added
-	 */
-	public Node<N, E> replaceNode(Node<N, E> node, N newValue) {
+	@Override
+	public ObservableGraph.Node<N, E> replaceNode(Graph.Node<N, E> node, N newValue) {
 		DefaultNode newNode = new DefaultNode(newValue);
 		int index = theNodeController.indexOf(node);
 		if(index < 0)
 			return null;
 		try (Transaction trans = lock(true, null)) {
 			theNodeController.add(index + 1, newNode);
-			java.util.ListIterator<Edge<N, E>> edgeIter = theEdgeController.listIterator();
+			java.util.ListIterator<ObservableGraph.Edge<N, E>> edgeIter = theEdgeController.listIterator();
 			while(edgeIter.hasNext()) {
-				Edge<N, E> edge = edgeIter.next();
+				ObservableGraph.Edge<N, E> edge = edgeIter.next();
 				if(edge.getStart() == node)
 					edgeIter.set(new DefaultEdge(newNode, edge.getEnd(), edge.isDirected(), edge.getValue()));
 				else if(edge.getEnd() == node)
@@ -247,7 +226,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E> {
 	 *
 	 * @param node The node to fire the event on
 	 */
-	public void reset(Node<N, E> node) {
+	public void reset(ObservableGraph.Node<N, E> node) {
 		Lock lock = theLock.writeLock();
 		lock.lock();
 		try {
@@ -265,7 +244,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E> {
 	 *
 	 * @param edge The edge to fire the event on
 	 */
-	public void reset(Edge<N, E> edge) {
+	public void reset(ObservableGraph.Edge<N, E> edge) {
 		Lock lock = theLock.writeLock();
 		lock.lock();
 		try {
@@ -278,7 +257,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E> {
 		}
 	}
 
-	/** Removes all nodes and edges from this graph */
+	@Override
 	public void clear() {
 		try (Transaction trans = lock(true, null)) {
 			theEdgeController.clear();
@@ -286,7 +265,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E> {
 		}
 	}
 
-	/** Removes all edges from this graph */
+	@Override
 	public void clearEdges() {
 		try (Transaction trans = lock(true, null)) {
 			theEdgeController.clear();

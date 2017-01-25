@@ -28,7 +28,6 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
-import org.observe.assoc.MultiMap.MultiEntry;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.util.ObservableCollectionWrapper;
@@ -37,6 +36,8 @@ import org.qommons.Equalizer;
 import org.qommons.IterableUtils;
 import org.qommons.ListenerSet;
 import org.qommons.Transaction;
+import org.qommons.collect.TransactableCollection;
+import org.qommons.collect.MultiMap.MultiEntry;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;

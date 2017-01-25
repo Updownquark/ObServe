@@ -12,8 +12,9 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableElement;
-import org.qommons.Transactable;
 import org.qommons.Transaction;
+import org.qommons.collect.Graph;
+import org.qommons.collect.TransactableGraph;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -24,27 +25,27 @@ import com.google.common.reflect.TypeToken;
  * @param <N> The type of values stored in the nodes of the graph
  * @param <E> The type of values stored in the edges of the graph
  */
-public interface ObservableGraph<N, E> extends Transactable {
+public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 	/**
 	 * A node in a graph
 	 *
 	 * @param <N> The type of values stored in the nodes of the graph
 	 * @param <E> The type of values stored in the edges of the graph
 	 */
-	interface Node<N, E> {
-		/** @return All edges that go to or from this node */
-		ObservableCollection<Edge<N, E>> getEdges();
+	interface Node<N, E> extends Graph.Node<N, E> {
+		@Override
+		ObservableCollection<? extends Edge<N, E>> getEdges();
 
-		/** @return The value associated with this node */
+		@Override
 		N getValue();
 
-		/** @return The collection of edges going outward from this node */
-		default ObservableCollection<Edge<N, E>> getOutward() {
+		@Override
+		default ObservableCollection<? extends Edge<N, E>> getOutward() {
 			return getEdges().filter(edge -> edge.getStart() == Node.this);
 		}
 
-		/** @return The collection of edges going inward toward this node */
-		default ObservableCollection<Edge<N, E>> getInward() {
+		@Override
+		default ObservableCollection<? extends Edge<N, E>> getInward() {
 			return getEdges().filter(edge -> edge.getEnd() == Node.this);
 		}
 	}
@@ -55,28 +56,25 @@ public interface ObservableGraph<N, E> extends Transactable {
 	 * @param <N> The type of values stored in the nodes of the graph
 	 * @param <E> The type of values stored in the edges of the graph
 	 */
-	interface Edge<N, E> {
-		/** @return The node that this edge starts from */
+	interface Edge<N, E> extends Graph.Edge<N, E>{
+		@Override
 		Node<N, E> getStart();
 
-		/** @return The node that this edge goes to */
+		@Override
 		Node<N, E> getEnd();
 
-		/**
-		 * @return Whether this graph edge is to be interpreted as directional, i.e. if true, this edge does not represent a connection from
-		 *         {@link #getEnd() end} to {@link #getStart() start}.
-		 */
+		@Override
 		boolean isDirected();
 
-		/** @return The value associated with this edge */
+		@Override
 		E getValue();
 	}
 
-	/** @return An observable collection containing all nodes stored in this graph */
-	ObservableCollection<Node<N, E>> getNodes();
+	@Override
+	ObservableCollection<? extends Node<N, E>> getNodes();
 
-	/** @return An observable collection containing all edges stored in this graph */
-	ObservableCollection<Edge<N, E>> getEdges();
+	@Override
+	ObservableCollection<? extends Edge<N, E>> getEdges();
 
 	/**
 	 * @return The observable value for the current session of this graph. The session allows listeners to retain state for the duration of
@@ -157,7 +155,7 @@ public interface ObservableGraph<N, E> extends Transactable {
 	 * @param nodeValue The value to get the node for
 	 * @return An observable value containing the node in this graph whose value is equal to the argument. The value may be null.
 	 */
-	default ObservableValue<Node<N, E>> getNode(N nodeValue) {
+	default ObservableValue<? extends Node<N, E>> getNode(N nodeValue) {
 		return getNodes().find(node -> node.getValue().equals(nodeValue));
 	}
 
@@ -231,8 +229,8 @@ public interface ObservableGraph<N, E> extends Transactable {
 		class FilteredGraph implements ObservableGraph<N, E> {
 			private final Map<Node<N, E>, FilteredNode> theNodeMap = new org.qommons.ConcurrentIdentityHashMap<>();
 			private final Map<Edge<N, E>, FilteredEdge> theEdgeMap = new org.qommons.ConcurrentIdentityHashMap<>();
-			private final ObservableCollection<Node<N, E>> theCachedNodes = outer.getNodes().cached();
-			private final ObservableCollection<Edge<N, E>> theCachedEdges = outer.getEdges().cached();
+			private final ObservableCollection<? extends Node<N, E>> theCachedNodes = outer.getNodes().cached();
+			private final ObservableCollection<? extends Edge<N, E>> theCachedEdges = outer.getEdges().cached();
 
 			@Override
 			public ObservableCollection<Node<N, E>> getNodes() {
@@ -304,12 +302,12 @@ public interface ObservableGraph<N, E> extends Transactable {
 		ObservableGraph<N, E> outer = this;
 		return new ObservableGraph<N, E>() {
 			@Override
-			public ObservableCollection<Node<N, E>> getNodes() {
+			public ObservableCollection<? extends Node<N, E>> getNodes() {
 				return outer.getNodes().immutable();
 			}
 
 			@Override
-			public ObservableCollection<Edge<N, E>> getEdges() {
+			public ObservableCollection<? extends Edge<N, E>> getEdges() {
 				return outer.getEdges().immutable();
 			}
 
@@ -345,13 +343,13 @@ public interface ObservableGraph<N, E> extends Transactable {
 			@Override
 			public ObservableCollection<Node<N, E>> getNodes() {
 				return org.observe.collect.ObservableSet.constant(
-						new TypeToken<Node<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType).where(new TypeParameter<E>() {}, edgeType));
+					new TypeToken<Node<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType).where(new TypeParameter<E>() {}, edgeType));
 			}
 
 			@Override
 			public ObservableCollection<Edge<N, E>> getEdges() {
 				return org.observe.collect.ObservableSet.constant(
-						new TypeToken<Edge<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType).where(new TypeParameter<E>() {}, edgeType));
+					new TypeToken<Edge<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType).where(new TypeParameter<E>() {}, edgeType));
 			}
 
 			@Override

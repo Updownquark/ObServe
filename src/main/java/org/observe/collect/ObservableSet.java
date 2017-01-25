@@ -23,6 +23,7 @@ import org.observe.SimpleSettableValue;
 import org.observe.Subscription;
 import org.qommons.Equalizer;
 import org.qommons.Equalizer.EqualizerNode;
+import org.qommons.collect.TransactableSet;
 import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeParameter;

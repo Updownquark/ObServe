@@ -24,6 +24,7 @@ import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedSet;
 import org.qommons.Equalizer;
 import org.qommons.Transaction;
+import org.qommons.collect.TransactableMultiMap;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;

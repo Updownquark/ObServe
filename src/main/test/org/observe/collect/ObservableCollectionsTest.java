@@ -44,6 +44,7 @@ import org.observe.collect.impl.ObservableTreeSet;
 import org.qommons.Equalizer;
 import org.qommons.QommonsTestUtils;
 import org.qommons.Transaction;
+import org.qommons.collect.TransactableList;
 
 import com.google.common.reflect.TypeToken;
 
