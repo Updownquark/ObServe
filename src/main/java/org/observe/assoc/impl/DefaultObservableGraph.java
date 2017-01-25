@@ -271,4 +271,9 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 			theEdgeController.clear();
 		}
 	}
+
+	@Override
+	public ObservableGraph<N, E> immutable() {
+		return ObservableGraph.super.immutable();
+	}
 }
