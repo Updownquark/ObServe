@@ -74,7 +74,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 		return new ObservableReversedCollection<>(this);
 	}
 
-	/* Overridden for performance.  get() is linear in the super, constant time here */
+	/* Overridden for performance */
 	@Override
 	default ObservableValue<E> findLast(Predicate<E> filter) {
 		return d().debug(new OrderedReversibleCollectionFinder<>(this, filter, false)).from("findLast", this).using("filter", filter).get();
