@@ -226,6 +226,59 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	}
 
 	/**
+	 * @param enabled The observable value to use to disable the value
+	 * @return A settable value reflecting this value's value and enablement, but which is also disabled when <code>enabled</code> contains
+	 *         a non-null value
+	 */
+	default SettableValue<T> disableWith(ObservableValue<String> enabled) {
+		SettableValue<T> outer = this;
+		return new SettableValue<T>() {
+			@Override
+			public TypeToken<T> getType() {
+				return outer.getType();
+			}
+
+			@Override
+			public T get() {
+				return outer.get();
+			}
+
+			@Override
+			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+				return outer.subscribe(observer);
+			}
+
+			@Override
+			public boolean isSafe() {
+				return outer.isSafe();
+			}
+
+			@Override
+			public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
+				String msg = enabled.get();
+				if (msg != null)
+					throw new IllegalArgumentException(msg);
+				return outer.set(value, cause);
+			}
+
+			@Override
+			public <V extends T> String isAcceptable(V value) {
+				return outer.isAcceptable(value);
+			}
+
+			@Override
+			public ObservableValue<String> isEnabled() {
+				return ObservableValue.firstValue(TypeToken.of(String.class), s -> s != null, () -> null, enabled, outer.isEnabled());
+			}
+
+			@Override
+			public String toString() {
+				return SettableValue.this.toString();
+			}
+		};
+	}
+
+	/**
 	 * @param <R> The type of the new settable value to create
 	 * @param function The function to map this value to another
 	 * @param reverse The function to map the other value to this one
