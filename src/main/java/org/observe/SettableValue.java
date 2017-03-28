@@ -495,8 +495,23 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	}
 
 	@Override
+	default SettableValue<T> takeUntil(Observable<?> until){
+		return new SettableValueTakenUntil<>(this, until, true);
+	}
+
+	@Override
+	default SettableValue<T> unsubscribeOn(Observable<?> until) {
+		return new SettableValueTakenUntil<>(this, until, false);
+	}
+
+	@Override
 	default SettableValue<T> refresh(Observable<?> refresh) {
 		return new RefreshingSettableValue<>(this, refresh);
+	}
+
+	@Override
+	default SettableValue<T> safe() {
+		return new SafeSettableValue<>(this);
 	}
 
 	/**
@@ -550,6 +565,40 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	}
 
 	/**
+	 * Implements {@link SettableValue#takeUntil(Observable)}
+	 *
+	 * @param <T> The type of the value
+	 */
+	class SettableValueTakenUntil<T> extends ObservableValueTakenUntil<T> implements SettableValue<T> {
+		private final ObservableValue<String> isEnabled;
+
+		public SettableValueTakenUntil(SettableValue<T> wrap, Observable<?> until, boolean terminate) {
+			super(wrap, until, terminate);
+			isEnabled = wrap.isEnabled().takeUntil(until);
+		}
+
+		@Override
+		protected SettableValue<T> getWrapped() {
+			return (SettableValue<T>) super.getWrapped();
+		}
+
+		@Override
+		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
+			return getWrapped().set(value, cause);
+		}
+
+		@Override
+		public <V extends T> String isAcceptable(V value) {
+			return getWrapped().isAcceptable(value);
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			return isEnabled;
+		}
+	}
+
+	/**
 	 * Implements {@link SettableValue#refresh(Observable)}
 	 *
 	 * @param <T> The type of value
@@ -577,6 +626,45 @@ public interface SettableValue<T> extends ObservableValue<T> {
 		@Override
 		public ObservableValue<String> isEnabled() {
 			return getWrapped().isEnabled();
+		}
+	}
+
+	/**
+	 * Implements {@link SettableValue#safe()}
+	 *
+	 * @param <T> The type of the value
+	 */
+	class SafeSettableValue<T> extends SafeObservableValue<T> implements SettableValue<T> {
+		private final ObservableValue<String> isEnabled;
+
+		public SafeSettableValue(SettableValue<T> wrap) {
+			super(wrap);
+			isEnabled = wrap.isEnabled().safe();
+		}
+
+		@Override
+		protected SettableValue<T> getWrapped() {
+			return (SettableValue<T>) super.getWrapped();
+		}
+
+		@Override
+		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
+			return getWrapped().set(value, cause);
+		}
+
+		@Override
+		public <V extends T> String isAcceptable(V value) {
+			return getWrapped().isAcceptable(value);
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			return isEnabled;
+		}
+
+		@Override
+		public SettableValue<T> safe() {
+			return this;
 		}
 	}
 
