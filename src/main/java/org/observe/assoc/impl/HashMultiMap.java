@@ -5,13 +5,15 @@ import java.util.AbstractSet;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Supplier;
 
 import org.qommons.Equalizer;
 import org.qommons.Equalizer.EqualizerNode;
-import org.qommons.collect.MultiMap;
+import org.qommons.Hasher;
 import org.qommons.IterableUtils;
+import org.qommons.collect.MultiMap;
 
 /**
  * A simple unobservable implementation of MultiMap
@@ -21,23 +23,27 @@ import org.qommons.IterableUtils;
  */
 public class HashMultiMap<K, V> implements MultiMap<K, V> {
 	private final Equalizer theEqualizer;
+	private final Hasher<? super K> theHasher;
 	private final Map<EqualizerNode<K>, Collection<V>> theMap;
 	private final Supplier<? extends Collection<V>> theCollectionCreator;
 
 	private int theSize;
 
-	/** @param equalizer The equalizer to determining uniqueness in this map */
-	public HashMultiMap(Equalizer equalizer) {
-		this(equalizer, false, null);
+	/** Creates a multi-map with key uniqueness by basic Object equality */
+	public HashMultiMap() {
+		this(Objects::equals, Objects::hashCode, false, null);
 	}
 
 	/**
 	 * @param equalizer The equalizer to determining uniqueness in this map
+	 * @param hasher The hasher to provide hash codes for keys in this map
 	 * @param concurrent Whether the map should handle multi-thread access
 	 * @param collectCreator Creates collections for this map. May be null to use a default.
 	 */
-	public HashMultiMap(Equalizer equalizer, boolean concurrent, Supplier<? extends Collection<V>> collectCreator) {
+	public HashMultiMap(Equalizer equalizer, Hasher<? super K> hasher, boolean concurrent,
+		Supplier<? extends Collection<V>> collectCreator) {
 		theEqualizer = equalizer;
+		theHasher = hasher;
 		if(collectCreator == null) {
 			collectCreator = java.util.ArrayList::new;
 		}
@@ -208,7 +214,7 @@ public class HashMultiMap<K, V> implements MultiMap<K, V> {
 		Collection<V> coll = theMap.get(key);
 		if(coll == null) {
 			coll = theCollectionCreator.get();
-			theMap.put(new EqualizerNode<>(theEqualizer, key), coll);
+			theMap.put(new EqualizerNode<>(theEqualizer, key, theHasher.hash(key)), coll);
 		}
 		return coll;
 	}
