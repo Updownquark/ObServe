@@ -13,6 +13,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Spliterator;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiFunction;
@@ -30,26 +32,70 @@ import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
+import org.observe.collect.ElementSpliterator.CollectionElement;
+import org.observe.collect.ObservableCollection.FilterMapResult;
 import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.ObservableUtils;
 import org.qommons.Equalizer;
 import org.qommons.IterableUtils;
 import org.qommons.ListenerSet;
 import org.qommons.Transaction;
-import org.qommons.collect.TransactableCollection;
 import org.qommons.collect.MultiMap.MultiEntry;
+import org.qommons.collect.Qollection;
+import org.qommons.collect.Quiterator;
+import org.qommons.collect.TransactableCollection;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 /**
- * A collection whose content can be observed
+ * An enhanced collection.
+ *
+ * The biggest differences between Qollection and Collection are:
+ * <ul>
+ * <li><b>Observability</b> The {@link #onElement(Consumer)} method provides {@link ObservableElement}s for each element in the collection
+ * that allows subscribers to be notified of updates, additions, and deletions.</li>
+ * <li><b>Dynamic Transformation</b> The stream api allows transforming of the content of one collection into another, but the
+ * transformation is done once for all, creating a new collection independent of the source. Sometimes it is desirable to make a transformed
+ * collection that does its transformation dynamically, keeping the same data source, so that when the source is modified, the transformed
+ * collection is also updated accordingly. #map(Function), #filter(Function), #groupBy(Function), and others allow this. In addition, the
+ * syntax of creating these dynamic transformations is much simpler and cleaner: e.g.<br />
+ * &nbsp;&nbsp;&nbsp;&nbsp; <code>coll.{@link #map(Function) map}(Function)</code><br />
+ * instead of<br />
+ * &nbsp;&nbsp;&nbsp;&nbsp;<code>coll.stream().map(Function).collect(Collectors.toList())</code>.</li>
+ * <li><b>Modification Control</b> The {@link #filterAdd(Function)} and {@link #filterRemove(Function)} methods create collections that
+ * forbid certain types of modifications to a collection. The {@link #immutable(String)} prevents any API modification at all. Modification
+ * control can also be used to intercept and perform actions based on modifications to a collection.</li>
+ * <li><b>Quiterator</b> Qollections must implement {@link #spliterator()}, which returns a {@link Quiterator}, which is an enhanced
+ * {@link Spliterator}. This had potential for the improved performance associated with using {@link Spliterator} instead of
+ * {@link Iterator} as well as the utility added by {@link Quiterator}.</li>
+ * <li><b>Transactionality</b> Qollections support the {@link org.qommons.Transactable} interface, allowing callers to reserve a collection
+ * for write or to ensure that the collection is not written to during an operation (for implementations that support this. See
+ * {@link org.qommons.Transactable#isLockSupported() isLockSupported()}).</li>
+ * <li><b>Run-time type safety</b> Qollections have a {@link #getType() type} associated with them, allowing them to enforce type-safety at
+ * run time. How strictly this type-safety is enforced is implementation-dependent.</li>
+ * </ul>
  *
  * @param <E> The type of element in the collection
  */
 public interface ObservableCollection<E> extends TransactableCollection<E> {
+	/** Standard messages returned by this class */
+	interface StdMsg {
+		static String BAD_TYPE = "Object is the wrong type for this collection";
+		static String UNSUPPORTED_OPERATION = "Unsupported Operation";
+		static String NULL_DISALLOWED = "Null is not allowed";
+		static String GROUP_EXISTS = "Group already exists";
+		static String WRONG_GROUP = "Item does not belong to this group";
+		static String NOT_FOUND = "No such item found";
+	}
+
+	// Additional contract methods
+
 	/** @return The type of elements in this collection */
 	TypeToken<E> getType();
+
+	@Override
+	abstract ElementSpliterator<E> spliterator();
 
 	/**
 	 * @param onElement The listener to be notified when new elements are added to the collection
@@ -90,72 +136,91 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			return d().debug(new SafeObservableCollection<>(this)).from("safe", this).get();
 	}
 
+	/**
+	 * Tests the removability of an element from this collection. This method exposes a "best guess" on whether an element in the collection
+	 * could be removed, but does not provide any guarantee. This method should return true for any object for which {@link #remove(Object)}
+	 * is successful, but the fact that an object passes this test does not guarantee that it would be removed successfully. E.g. the
+	 * position of the element in the collection may be a factor, but may not be tested for here.
+	 *
+	 * @param value The value to test removability for
+	 * @return Null if given value could possibly be removed from this collection, or a message why it can't
+	 */
+	String canRemove(Object value);
+
+	/**
+	 * Tests the compatibility of an object with this collection. This method exposes a "best guess" on whether an element could be added to
+	 * the collection , but does not provide any guarantee. This method should return true for any object for which {@link #add(Object)} is
+	 * successful, but the fact that an object passes this test does not guarantee that it would be removed successfully. E.g. the position
+	 * of the element in the collection may be a factor, but is tested for here.
+	 *
+	 * @param value The value to test compatibility for
+	 * @return Null if given value could possibly be added to this collection, or a message why it can't
+	 */
+	String canAdd(E value);
+
+	/**
+	 * @param c collection to be checked for containment in this collection
+	 * @return Whether this collection contains at least one of the elements in the specified collection
+	 * @see #containsAll(Collection)
+	 */
+	boolean containsAny(Collection<?> c);
+
+	// Default implementations of redundant Collection methods
+
 	@Override
-	default boolean isEmpty() {
-		return size() == 0;
+	default Iterator<E> iterator() {
+		return new SpliteratorIterator<>(spliterator());
 	}
 
 	@Override
-	default boolean contains(Object o) {
+	default E[] toArray() {
+		ArrayList<E> ret;
 		try (Transaction t = lock(false, null)) {
-			for(Object value : this)
-				if(Objects.equals(value, o))
-					return true;
-			return false;
+			ret = new ArrayList<>(size());
+			spliterator().forEachRemaining(v -> ret.add(v));
 		}
+
+		return ret.toArray((E[]) java.lang.reflect.Array.newInstance(getType().wrap().getRawType(), ret.size()));
 	}
 
 	@Override
-	default boolean containsAll(Collection<?> c) {
-		if(c.isEmpty())
-			return true;
-		ArrayList<Object> copy = new ArrayList<>(c);
-		BitSet found = new BitSet(copy.size());
+	default <T> T[] toArray(T[] a) {
+		ArrayList<E> ret;
 		try (Transaction t = lock(false, null)) {
-			Iterator<E> iter = iterator();
-			while(iter.hasNext()) {
-				E next = iter.next();
-				int stop = found.previousClearBit(copy.size());
-				for(int i = found.nextClearBit(0); i < stop; i = found.nextClearBit(i + 1))
-					if(Objects.equals(next, copy.get(i)))
-						found.set(i);
-			}
-			return found.cardinality() == copy.size();
-		}
-	}
-
-	@Override
-	default E [] toArray() {
-		ArrayList<E> ret = new ArrayList<>();
-		try (Transaction t = lock(false, null)) {
-			for(E value : this)
-				ret.add(value);
-		}
-
-		return ret.toArray((E []) java.lang.reflect.Array.newInstance(getType().wrap().getRawType(), ret.size()));
-	}
-
-	@Override
-	default <T> T [] toArray(T [] a) {
-		ArrayList<E> ret = new ArrayList<>();
-		try (Transaction t = lock(false, null)) {
-			for(E value : this)
-				ret.add(value);
+			ret = new ArrayList<>();
+			spliterator().forEachRemaining(v -> ret.add(v));
 		}
 		return ret.toArray(a);
 	}
+
+	// Simple utility methods
 
 	/**
 	 * @param values The values to add to the collection
 	 * @return This collection
 	 */
-	public default ObservableCollection<E> addValues(E... values) {
-		try (Transaction t = lock(true, null)) {
-			for (E value : values)
-				add(value);
-		}
+	default ObservableCollection<E> addValues(E... values) {
+		addAll(java.util.Arrays.asList(values));
 		return this;
 	}
+
+	/**
+	 * Searches in this collection for an element.
+	 *
+	 * @param filter The filter function
+	 * @return A value in this list passing the filter, or empty if none of this collection's elements pass.
+	 */
+	default Optional<E> find(Predicate<? super E> filter) {
+		try (Transaction t = lock(false, null)) {
+			for (E element : this) {
+				if (filter.test(element))
+					return Optional.of(element);
+			}
+			return Optional.empty();
+		}
+	}
+
+	// Derived observable changes
 
 	/** @return An observable value for the size of this collection */
 	default ObservableValue<Integer> observeSize() {
@@ -337,6 +402,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		};
 	}
 
+	// Observable containment
+
+	default <X> ObservableValue<Boolean> observeContains(ObservableValue<X> value) {}
+
 	/**
 	 * @param <X> The type of the collection to test
 	 * @param collection The collection to test
@@ -510,35 +579,85 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		};
 	}
 
+	default <X> ObservableValue<Boolean> observeContainsAny(ObservableCollection<X> collection) {}
+
+	// Filter/mapping
+
 	/**
 	 * @param <T> The type of the new collection
 	 * @param map The mapping function
 	 * @return An observable collection of a new type backed by this collection and the mapping function
 	 */
 	default <T> ObservableCollection<T> map(Function<? super E, T> map) {
-		return map((TypeToken<T>) TypeToken.of(map.getClass()).resolveType(Function.class.getTypeParameters()[1]), map);
+		return buildMap(MappedCollectionBuilder.returnType(map)).map(map, false).build(true);
 	}
 
 	/**
-	 * @param <T> The type of the mapped collection
-	 * @param type The run-time type for the mapped collection (may be null)
-	 * @param map The mapping function to map the elements of this collection
-	 * @return The mapped collection
+	 * @param filter The filter function
+	 * @return A collection containing all non-null elements passing the given test
 	 */
-	default <T> ObservableCollection<T> map(TypeToken<T> type, Function<? super E, T> map) {
-		return map(type, map, null);
+	default ObservableCollection<E> filter(Function<? super E, String> filter) {
+		return this.<E> buildMap(getType()).filter(filter, false).build(true);
 	}
 
 	/**
-	 * @param <T> The type of the mapped collection
-	 * @param type The run-time type for the mapped collection (may be null)
-	 * @param map The mapping function to map the elements of this collection
-	 * @param reverse The reverse function if addition support is desired for the mapped collection
-	 * @return The mapped collection
+	 * @param <T> The type for the new collection
+	 * @param type The type to filter this collection by
+	 * @return A collection backed by this collection, consisting only of elements in this collection whose values are instances of the
+	 *         given class
 	 */
-	default <T> ObservableCollection<T> map(TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse) {
-		return d().debug(new MappedObservableCollection<>(this, type, map, reverse)).from("map", this).using("map", map)
-			.using("reverse", reverse).get();
+	default <T> ObservableCollection<T> filter(Class<T> type) {
+		return buildMap(TypeToken.of(type)).filter(value -> {
+			if (type == null || type.isInstance(value))
+				return null;
+			else
+				return StdMsg.BAD_TYPE;
+		}, true).build(false);
+	}
+
+	/**
+	 * Creates a builder that can be used to create a highly customized and efficient chain of filter-mappings. The
+	 * {@link MappedCollectionBuilder#build() result} will be a collection backed by this collection's values but filtered/mapped according
+	 * to the methods called on the builder.
+	 *
+	 * @param <T> The type of values to map to
+	 * @param type The run-time type of values to map to
+	 * @return A builder to customize the filter/mapped collection
+	 */
+	default <T> MappedCollectionBuilder<E, E, T> buildMap(TypeToken<T> type) {
+		return new MappedCollectionBuilder<>(this, null, type);
+	}
+
+	/**
+	 * Creates a collection using the results of a {@link MappedCollectionBuilder}
+	 *
+	 * @param <T> The type of values to map to
+	 * @param filterMap The definition for the filter/mapping
+	 * @return The filter/mapped collection
+	 */
+	default <T> ObservableCollection<T> filterMap(FilterMapDef<E, ?, T> filterMap, boolean dynamic) {
+		return new FilterMappedObservableCollection<>(this, filterMap, dynamic);
+	}
+
+	/**
+	 * Shorthand for {@link #flatten(Qollection) flatten}({@link #map(Function) map}(Function))
+	 *
+	 * @param <T> The type of the values produced
+	 * @param type The type of the values produced
+	 * @param map The value producer
+	 * @return A collection whose values are the accumulation of all those produced by applying the given function to all of this
+	 *         collection's values
+	 */
+	default <T> ObservableCollection<T> flatMap(TypeToken<T> type, Function<? super E, ? extends ObservableCollection<? extends T>> map) {
+		TypeToken<Qollection<? extends T>> collectionType;
+		if (type == null) {
+			collectionType = (TypeToken<Qollection<? extends T>>) TypeToken.of(map.getClass())
+				.resolveType(Function.class.getTypeParameters()[1]);
+			if (!collectionType.isAssignableFrom(new TypeToken<Qollection<T>>() {}))
+				collectionType = new TypeToken<Qollection<? extends T>>() {};
+		} else
+			collectionType = new TypeToken<Qollection<? extends T>>() {}.where(new TypeParameter<T>() {}, type);
+			return flatten(this.<ObservableCollection<? extends T>> buildMap(collectionType).map(map, false).build());
 	}
 
 	/**
@@ -1290,28 +1409,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	}
 
 	/**
-	 * Tests the removability of an element from this collection. This method exposes a "best guess" on whether an element in the collection
-	 * could be removed, but does not provide any guarantee. This method should return true for any object for which {@link #remove(Object)}
-	 * is successful, but the fact that an object passes this test does not guarantee that it would be removed successfully. E.g. the
-	 * position of the element in the collection may be a factor, but may not be tested for here.
-	 *
-	 * @param value The value to test removability for
-	 * @return Whether the given value could possibly be removed from this collection
-	 */
-	boolean canRemove(Object value);
-
-	/**
-	 * Tests the compatibility of an object with this collection. This method exposes a "best guess" on whether an element could be added to
-	 * the collection , but does not provide any guarantee. This method should return true for any object for which {@link #add(Object)} is
-	 * successful, but the fact that an object passes this test does not guarantee that it would be removed successfully. E.g. the position
-	 * of the element in the collection may be a factor, but is tested for here.
-	 *
-	 * @param value The value to test compatibility for
-	 * @return Whether the given value could possibly be added to this collection
-	 */
-	boolean canAdd(E value);
-
-	/**
 	 * Creates a collection with the same elements as this collection, but cached, such that the
 	 *
 	 * @return The cached collection
@@ -1490,51 +1587,133 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	}
 
 	/**
-	 * An extension of ObservableCollection that implements some of the redundant methods and throws UnsupportedOperationExceptions for
-	 * modifications. Mostly copied from {@link java.util.AbstractCollection}.
+	 * An iterator backed by a Quiterator
 	 *
-	 * @param <E> The type of element in the collection
+	 * @param <E> The type of elements to iterate over
 	 */
-	interface PartialCollectionImpl<E> extends ObservableCollection<E> {
-		@Override
-		default boolean add(E e) {
-			throw new UnsupportedOperationException(getClass().getName() + " does not implement add(value)");
+	class SpliteratorIterator<E> implements Iterator<E> {
+		private final ElementSpliterator<E> theSpliterator;
+
+		private boolean isNextCached;
+		private boolean isDone;
+		private CollectionElement<? extends E> cachedNext;
+
+		public SpliteratorIterator(ElementSpliterator<E> spliterator) {
+			theSpliterator = spliterator;
 		}
 
 		@Override
-		default boolean addAll(Collection<? extends E> c) {
-			try (Transaction t = lock(true, null)) {
-				boolean modified = false;
-				for(E e : c)
-					if(add(e))
-						modified = true;
-				return modified;
+		public boolean hasNext() {
+			cachedNext = null;
+			if (!isNextCached && !isDone) {
+				if (theSpliterator.tryAdvanceElement(element -> {
+					cachedNext = element;
+				}))
+					isNextCached = true;
+				else
+					isDone = true;
+			}
+			return isNextCached;
+		}
+
+		@Override
+		public E next() {
+			if (!hasNext())
+				throw new java.util.NoSuchElementException();
+			isNextCached = false;
+			return cachedNext.get();
+		}
+
+		@Override
+		public void remove() {
+			if (cachedNext == null)
+				throw new IllegalStateException(
+					"First element has not been read, element has already been removed, or iterator has finished");
+			if (isNextCached)
+				throw new IllegalStateException("remove() must be called after next() and before the next call to hasNext()");
+			cachedNext.remove();
+			cachedNext = null;
+		}
+
+		@Override
+		public void forEachRemaining(Consumer<? super E> action) {
+			if (isNextCached)
+				action.accept(next());
+			cachedNext = null;
+			isDone = true;
+			theSpliterator.forEachRemaining(action);
+		}
+	}
+
+	/**
+	 * Static implementations to Collection methods that may be implemented in a generic way. These are not implemented as default methods
+	 * In order to highly encourage subclasses to implement them in a more performant way if possible.
+	 */
+	class DefaultCollectionMethods {
+		public static boolean contains(ObservableCollection<?> coll, Object value) {
+			try (Transaction t = coll.lock(false, null)) {
+				ElementSpliterator<?> iter = coll.spliterator();
+				boolean[] found = new boolean[1];
+				while (!found[0] && iter.tryAdvance(v -> {
+					if (Objects.equals(v, value))
+						found[0] = true;
+				})) {
+				}
+				return found[0];
 			}
 		}
 
-		@Override
-		default boolean remove(Object o) {
-			try (Transaction t = lock(true, null)) {
-				Iterator<E> it = iterator();
-				while(it.hasNext()) {
-					if(Objects.equals(it.next(), o)) {
-						it.remove();
+		public static boolean containsAny(ObservableCollection<?> coll, Collection<?> values) {
+			try (Transaction t = coll.lock(false, null)) {
+				for (Object o : values)
+					if (coll.contains(o))
 						return true;
+			}
+			return false;
+		}
+
+		public static boolean containsAll(ObservableCollection<?> coll, Collection<?> values) {
+			if (values.isEmpty())
+				return true;
+			ArrayList<Object> copy = new ArrayList<>(values);
+			BitSet found = new BitSet(copy.size());
+			try (Transaction t = coll.lock(false, null)) {
+				ElementSpliterator<?> iter = coll.spliterator();
+				boolean[] foundOne = new boolean[1];
+				while (iter.tryAdvance(next -> {
+					int stop = found.previousClearBit(copy.size());
+					for (int i = found.nextClearBit(0); i < stop; i = found.nextClearBit(i + 1))
+						if (Objects.equals(next, copy.get(i))) {
+							found.set(i);
+							foundOne[0] = true;
+						}
+				})) {
+					if (foundOne[0] && found.cardinality() == copy.size()) {
+						break;
 					}
+					foundOne[0] = false;
 				}
-				return false;
+				return found.cardinality() == copy.size();
 			}
 		}
 
-		@Override
-		default boolean removeAll(Collection<?> c) {
-			if(c.isEmpty())
+		public static <E> boolean addAll(ObservableCollection<E> coll, Collection<? extends E> values) {
+			boolean mod = false;
+			try (Transaction t = coll.lock(true, null)) {
+				for (E o : values)
+					mod |= coll.add(o);
+			}
+			return mod;
+		}
+
+		public static boolean removeAll(ObservableCollection<?> coll, Collection<?> values) {
+			if (values.isEmpty())
 				return false;
-			try (Transaction t = lock(true, null)) {
+			try (Transaction t = coll.lock(true, null)) {
 				boolean modified = false;
-				Iterator<?> it = iterator();
-				while(it.hasNext()) {
-					if(c.contains(it.next())) {
+				Iterator<?> it = coll.iterator();
+				while (it.hasNext()) {
+					if (values.contains(it.next())) {
 						it.remove();
 						modified = true;
 					}
@@ -1543,17 +1722,16 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			}
 		}
 
-		@Override
-		default boolean retainAll(Collection<?> c) {
-			if(c.isEmpty()) {
-				clear();
+		public static boolean retainAll(ObservableCollection<?> coll, Collection<?> values) {
+			if (values.isEmpty()) {
+				coll.clear();
 				return false;
 			}
-			try (Transaction t = lock(true, null)) {
+			try (Transaction t = coll.lock(true, null)) {
 				boolean modified = false;
-				Iterator<E> it = iterator();
-				while(it.hasNext()) {
-					if(!c.contains(it.next())) {
+				Iterator<?> it = coll.iterator();
+				while (it.hasNext()) {
+					if (!values.contains(it.next())) {
 						it.remove();
 						modified = true;
 					}
@@ -1561,16 +1739,302 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 				return modified;
 			}
 		}
+	}
 
-		@Override
-		default void clear() {
-			try (Transaction t = lock(true, null)) {
-				Iterator<E> it = iterator();
-				while(it.hasNext()) {
-					it.next();
-					it.remove();
-				}
+	/**
+	 * Builds a filtered and/or mapped collection
+	 *
+	 * @param <E> The type of values in the source collection
+	 * @param <I> Intermediate type
+	 * @param <T> The type of values in the mapped collection
+	 */
+	class MappedCollectionBuilder<E, I, T> {
+		private final ObservableCollection<E> theWrapped;
+		private final MappedCollectionBuilder<E, ?, I> theParent;
+		private final TypeToken<T> theType;
+		private Function<? super I, String> theFilter;
+		private boolean areNullsFiltered;
+		private Function<? super I, ? extends T> theMap;
+		private boolean areNullsMapped;
+		private Function<? super T, ? extends I> theReverse;
+		private boolean areNullsReversed;
+
+		protected MappedCollectionBuilder(ObservableCollection<E> wrapped, MappedCollectionBuilder<E, ?, I> parent, TypeToken<T> type) {
+			theWrapped = wrapped;
+			theParent = parent;
+			theType = type;
+		}
+
+		protected ObservableCollection<E> getQollection() {
+			return theWrapped;
+		}
+
+		protected MappedCollectionBuilder<E, ?, I> getParent() {
+			return theParent;
+		}
+
+		protected TypeToken<T> getType() {
+			return theType;
+		}
+
+		protected Function<? super I, String> getFilter() {
+			return theFilter;
+		}
+
+		protected boolean areNullsFiltered() {
+			return areNullsFiltered;
+		}
+
+		protected Function<? super I, ? extends T> getMap() {
+			return theMap;
+		}
+
+		protected boolean areNullsMapped() {
+			return areNullsMapped;
+		}
+
+		protected Function<? super T, ? extends I> getReverse() {
+			return theReverse;
+		}
+
+		protected boolean areNullsReversed() {
+			return areNullsReversed;
+		}
+
+		static <T> TypeToken<T> returnType(Function<?, ? extends T> fn) {
+			return (TypeToken<T>) TypeToken.of(fn.getClass()).resolveType(Function.class.getTypeParameters()[1]);
+		}
+
+		public MappedCollectionBuilder<E, I, T> filter(Function<? super I, String> filter, boolean filterNulls) {
+			theFilter = filter;
+			areNullsFiltered = filterNulls;
+			return this;
+		}
+
+		public MappedCollectionBuilder<E, I, T> map(Function<? super I, ? extends T> map, boolean mapNulls) {
+			theMap = map;
+			areNullsMapped = mapNulls;
+			return this;
+		}
+
+		public MappedCollectionBuilder<E, I, T> withReverse(Function<? super T, ? extends I> reverse, boolean reverseNulls) {
+			theReverse = reverse;
+			areNullsReversed = reverseNulls;
+			return this;
+		}
+
+		public FilterMapDef<E, I, T> toDef() {
+			FilterMapDef<E, ?, I> parent = theParent == null ? null : theParent.toDef();
+			TypeToken<I> intermediate = parent == null ? (TypeToken<I>) theWrapped.getType() : parent.destType;
+			return new FilterMapDef<>(theWrapped.getType(), intermediate, theType, parent, theFilter, areNullsFiltered, theMap,
+				areNullsMapped, theReverse, areNullsReversed);
+		}
+
+		public ObservableCollection<T> build(boolean dynamic) {
+			if (theMap == null && !theWrapped.getType().equals(theType))
+				throw new IllegalStateException("Building a type-mapped collection with no map defined");
+			return theWrapped.filterMap(toDef(), dynamic);
+		}
+
+		public <X> MappedCollectionBuilder<E, T, X> andThen(TypeToken<X> nextType) {
+			if (theMap == null && !theWrapped.getType().equals(theType))
+				throw new IllegalStateException("Type-mapped collection builder with no map defined");
+			return new MappedCollectionBuilder<>(theWrapped, this, nextType);
+		}
+	}
+
+	/**
+	 * A definition for a filter/mapped collection
+	 *
+	 * @param <E> The type of values in the source collection
+	 * @param <I> Intermediate type, not exposed
+	 * @param <T> The type of values for the mapped collection
+	 */
+	class FilterMapDef<E, I, T> {
+		public final TypeToken<E> sourceType;
+		private final TypeToken<I> intermediateType;
+		public final TypeToken<T> destType;
+		private final FilterMapDef<E, ?, I> parent;
+		private final Function<? super I, String> filter;
+		private final boolean filterNulls;
+		private final Function<? super I, ? extends T> map;
+		private final boolean mapNulls;
+		private final Function<? super T, ? extends I> reverse;
+		private final boolean reverseNulls;
+
+		public FilterMapDef(TypeToken<E> sourceType, TypeToken<I> intermediateType, TypeToken<T> type, FilterMapDef<E, ?, I> parent,
+			Function<? super I, String> filter, boolean filterNulls, Function<? super I, ? extends T> map, boolean mapNulls,
+			Function<? super T, ? extends I> reverse, boolean reverseNulls) {
+			this.sourceType = sourceType;
+			this.intermediateType = intermediateType;
+			this.destType = type;
+			this.parent = parent;
+			this.filter = filter;
+			this.filterNulls = filterNulls;
+			this.map = map;
+			this.mapNulls = mapNulls;
+			this.reverse = reverse;
+			this.reverseNulls = reverseNulls;
+
+			if (parent == null && !sourceType.equals(intermediateType))
+				throw new IllegalArgumentException("A " + getClass().getName()
+					+ " with no parent must have identical source and intermediate types: " + sourceType + ", " + intermediateType);
+		}
+
+		public boolean checkSourceType(Object value) {
+			return value == null || sourceType.getRawType().isInstance(value);
+		}
+
+		private boolean checkIntermediateType(I value) {
+			return value == null || intermediateType.getRawType().isInstance(value);
+		}
+
+		public boolean checkDestType(Object value) {
+			return value == null || destType.getRawType().isInstance(value);
+		}
+
+		public FilterMapResult<E, ?> checkSourceValue(FilterMapResult<E, ?> result) {
+			return internalCheckSourceValue((FilterMapResult<E, I>) result);
+		}
+
+		private FilterMapResult<E, I> internalCheckSourceValue(FilterMapResult<E, I> result) {
+			result.error = null;
+
+			// Get the starting point for this def
+			I interm;
+			if (parent != null) {
+				interm = parent.map(result).result;
+				result.result = null;
+				if (result.error != null)
+					return result;
+				if (!checkIntermediateType(interm))
+					throw new IllegalStateException(
+						"Implementation error: intermediate value " + interm + " is not an instance of " + intermediateType);
+			} else {
+				interm = (I) result.source;
+				if (!checkIntermediateType(interm))
+					throw new IllegalStateException("Source value " + interm + " is not an instance of " + intermediateType);
 			}
+			if (result.error != null) {
+				return result;
+			}
+
+			// Filter
+			if (filter != null) {
+				if (!filterNulls && interm == null)
+					result.error = StdMsg.NULL_DISALLOWED;
+				else
+					result.error = filter.apply(interm);
+			}
+
+			return result;
+		}
+
+		public boolean isFiltered() {
+			FilterMapDef<?, ?, ?> def = this;
+			while (def != null) {
+				if (def.filter != null)
+					return true;
+				def = def.parent;
+			}
+			return false;
+		}
+
+		public boolean isMapped() {
+			FilterMapDef<?, ?, ?> def = this;
+			while (def != null) {
+				if (def.map != null)
+					return true;
+				def = def.parent;
+			}
+			return false;
+		}
+
+		public boolean isReversible() {
+			FilterMapDef<?, ?, ?> def = this;
+			while (def != null) {
+				if (def.map != null && def.reverse == null)
+					return false;
+				def = def.parent;
+			}
+			return true;
+		}
+
+		public FilterMapResult<E, T> map(FilterMapResult<E, T> result) {
+			internalCheckSourceValue((FilterMapResult<E, I>) result);
+			I interm = ((FilterMapResult<E, I>) result).result;
+
+			// Map
+			if (map == null)
+				result.result = (T) interm;
+			else if (interm == null && !mapNulls)
+				result.result = null;
+			else
+				result.result = map.apply(interm);
+
+			if (result.result != null && !destType.getRawType().isInstance(result.result))
+				throw new IllegalStateException("Result value " + result.result + " is not an instance of " + destType);
+
+			return result;
+		}
+
+		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> result) {
+			if (!isReversible())
+				throw new IllegalStateException("This filter map is not reversible");
+
+			result.error = null;
+
+			if (!checkDestType(result.source))
+				throw new IllegalStateException("Value to reverse " + result.source + " is not an instance of " + destType);
+			// reverse map
+			I interm;
+			if (map == null)
+				interm = (I) result.source;
+			else if (result.source != null || reverseNulls)
+				interm = reverse.apply(result.source);
+			else
+				interm = null;
+			if (!checkIntermediateType(interm))
+				throw new IllegalStateException("Reversed value " + interm + " is not an instance of " + intermediateType);
+
+			// Filter
+			if (filter != null) {
+				if (!filterNulls && interm == null)
+					result.error = StdMsg.NULL_DISALLOWED;
+				else
+					result.error = filter.apply(interm);
+			}
+			if (result.error != null)
+				return result;
+
+			if (parent != null) {
+				((FilterMapResult<I, E>) result).source = interm;
+				parent.reverse((FilterMapResult<I, E>) result);
+			} else
+				result.result = (E) interm;
+			return result;
+		}
+	}
+
+	/**
+	 * Used to query {@link Qollection.FilterMapDef}
+	 *
+	 * @see Qollection.FilterMapDef#checkSourceValue(FilterMapResult)
+	 * @see Qollection.FilterMapDef#map(FilterMapResult)
+	 * @see Qollection.FilterMapDef#reverse(FilterMapResult)
+	 *
+	 * @param <E> The source type
+	 * @param <T> The destination type
+	 */
+	class FilterMapResult<E, T> {
+		public E source;
+		public T result;
+		public String error;
+
+		public FilterMapResult() {}
+
+		public FilterMapResult(E src) {
+			source = src;
 		}
 	}
 
