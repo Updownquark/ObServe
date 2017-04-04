@@ -1,14 +1,16 @@
 package org.observe.util;
 
 import java.util.Collection;
-import java.util.Iterator;
 
 import org.observe.ObservableValue;
 import org.observe.Subscription;
+import org.observe.collect.CollectionElement;
 import org.observe.collect.CollectionSession;
+import org.observe.collect.ElementSpliterator;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableElement;
 import org.qommons.Transaction;
+import org.qommons.value.Value;
 
 import com.google.common.reflect.TypeToken;
 
@@ -93,6 +95,11 @@ public class ObservableCollectionWrapper<E> implements ObservableCollection<E> {
 	}
 
 	@Override
+	public boolean containsAny(Collection<?> c) {
+		return theWrapped.containsAny(c);
+	}
+
+	@Override
 	public E [] toArray() {
 		return theWrapped.toArray();
 	}
@@ -103,35 +110,65 @@ public class ObservableCollectionWrapper<E> implements ObservableCollection<E> {
 	}
 
 	@Override
-	public Iterator<E> iterator() {
-		return new Iterator<E>() {
-			private final Iterator<E> backing;
-			{
-				backing = getWrapped().iterator();
-			}
+	public ElementSpliterator<E> spliterator() {
+		return new ElementSpliterator.WrappingQuiterator<>(theWrapped.spliterator(), theWrapped.getType(),
+			() -> el -> new CollectionElement<E>() {
+				@Override
+				public TypeToken<E> getType() {
+					return (TypeToken<E>) el.getType();
+				}
 
-			@Override
-			public boolean hasNext() {
-				return backing.hasNext();
-			}
+				@Override
+				public E get() {
+					return el.get();
+				}
 
-			@Override
-			public E next() {
-				return backing.next();
-			}
+				@Override
+				public <V extends E> E set(V value, Object cause) throws IllegalArgumentException {
+					assertModifiable();
+					return ((CollectionElement<E>) el).set(value, cause);
+				}
 
-			@Override
-			public void remove() {
-				assertModifiable();
-				backing.remove();
-			}
-		};
+				@Override
+				public <V extends E> String isAcceptable(V value) {
+					if (!isModifiable())
+						return ObservableCollection.StdMsg.UNSUPPORTED_OPERATION;
+					return ((CollectionElement<E>) el).isAcceptable(value);
+				}
+
+				@Override
+				public Value<String> isEnabled() {
+					if (!isModifiable())
+						return Value.constant(ObservableCollection.StdMsg.UNSUPPORTED_OPERATION);
+					return el.isEnabled();
+				}
+
+				@Override
+				public String canRemove() {
+					if (!isModifiable())
+						return ObservableCollection.StdMsg.UNSUPPORTED_OPERATION;
+					return el.canRemove();
+				}
+
+				@Override
+				public void remove() throws IllegalArgumentException {
+					assertModifiable();
+					el.remove();
+				}
+			});
 	}
 
 	/** Throws an {@link UnsupportedOperationException} if this collection is not {@link #isModifiable() modifiable} */
 	protected void assertModifiable() {
 		if(!isModifiable)
-			throw new UnsupportedOperationException("This collection is not modifiable");
+			throw new UnsupportedOperationException(ObservableCollection.StdMsg.UNSUPPORTED_OPERATION);
+	}
+
+	@Override
+	public String canAdd(E value) {
+		if (!isModifiable)
+			return ObservableCollection.StdMsg.UNSUPPORTED_OPERATION;
+		return theWrapped.canAdd(value);
 	}
 
 	@Override
@@ -144,6 +181,20 @@ public class ObservableCollectionWrapper<E> implements ObservableCollection<E> {
 	public boolean addAll(Collection<? extends E> c) {
 		assertModifiable();
 		return theWrapped.addAll(c);
+	}
+
+	@Override
+	public ObservableCollection<E> addValues(E... values) {
+		assertModifiable();
+		theWrapped.addValues(values);
+		return this;
+	}
+
+	@Override
+	public String canRemove(Object value) {
+		if (!isModifiable)
+			return ObservableCollection.StdMsg.UNSUPPORTED_OPERATION;
+		return theWrapped.canRemove(value);
 	}
 
 	@Override
@@ -168,16 +219,6 @@ public class ObservableCollectionWrapper<E> implements ObservableCollection<E> {
 	public void clear() {
 		assertModifiable();
 		theWrapped.clear();
-	}
-
-	@Override
-	public boolean canRemove(Object value) {
-		return isModifiable && theWrapped.canRemove(value);
-	}
-
-	@Override
-	public boolean canAdd(E value) {
-		return isModifiable && theWrapped.canAdd(value);
 	}
 
 	@Override

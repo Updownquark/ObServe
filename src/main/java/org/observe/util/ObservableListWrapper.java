@@ -1,6 +1,7 @@
 package org.observe.util;
 
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.ListIterator;
 import java.util.function.Consumer;
 
@@ -36,6 +37,11 @@ public class ObservableListWrapper<E> extends ObservableOrderedCollectionWrapper
 	@Override
 	public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<E>> onElement) {
 		return getWrapped().onElementReverse(onElement);
+	}
+
+	@Override
+	public Iterator<E> iterator() {
+		return super.iterator();
 	}
 
 	@Override

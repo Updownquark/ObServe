@@ -1,13 +1,12 @@
 package org.observe;
 
-import static org.observe.ObservableDebug.d;
-
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
 import org.qommons.TriFunction;
+import org.qommons.value.Settable;
 
 import com.google.common.reflect.TypeToken;
 
@@ -16,26 +15,9 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <T> The type of the value
  */
-public interface SettableValue<T> extends ObservableValue<T> {
-	/**
-	 * @param <V> The type of the value to set
-	 * @param value The value to assign to this value
-	 * @param cause Something that may have caused this change
-	 * @return The value that was previously set for in this container
-	 * @throws IllegalArgumentException If the value is not acceptable or setting it fails
-	 */
-	<V extends T> T set(V value, Object cause) throws IllegalArgumentException;
-
-	/**
-	 * @param <V> The type of the value to check
-	 * @param value The value to check
-	 * @return null if the value is not known to be unacceptable for this value, or an error text if it is known to be unacceptable. A null
-	 *         value returned from this method does not guarantee that a call to {@link #set(Object, Object)} for the same value will not
-	 *         throw an IllegalArgumentException
-	 */
-	<V extends T> String isAcceptable(V value);
-
+public interface SettableValue<T> extends ObservableValue<T>, Settable<T> {
 	/** @return An observable whose value reports null if this value can be set directly, or a string describing why it cannot */
+	@Override
 	ObservableValue<String> isEnabled();
 
 	/**
@@ -81,14 +63,15 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @return A subscription by which the link may be canceled
 	 */
 	default <V extends T> Subscription link(ObservableValue<V> value) {
-		return value.act(d().lambda(event -> {
+		return value.act(event -> {
 			set(event.getValue(), event);
-		}, "link"));
+		});
 	}
 
 	/** @return This value, but not settable */
+	@Override
 	default ObservableValue<T> unsettable() {
-		return d().debug(new ObservableValue<T>() {
+		return new ObservableValue<T>() {
 			@Override
 			public TypeToken<T> getType() {
 				return SettableValue.this.getType();
@@ -113,13 +96,14 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			public String toString() {
 				return SettableValue.this.toString();
 			}
-		}).from("unsettable", this).get();
+		};
 	}
 
 	/**
 	 * @param accept The filter
 	 * @return A settable value that rejects values that return other than null for the given test
 	 */
+	@Override
 	default SettableValue<T> filterAccept(Function<? super T, String> accept) {
 		SettableValue<T> outer = this;
 		return new SettableValue<T>() {
@@ -179,6 +163,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @param onSetAction The action to invoke just before {@link #set(Object, Object)} is called
 	 * @return The settable
 	 */
+	@Override
 	default SettableValue<T> onSet(Consumer<T> onSetAction) {
 		SettableValue<T> outer = this;
 		return new SettableValue<T>() {
@@ -297,12 +282,13 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 *            result will be null.
 	 * @return The mapped settable value
 	 */
+	@Override
 	public default <R> SettableValue<R> mapV(TypeToken<R> type, Function<? super T, R> function, Function<? super R, ? extends T> reverse,
 		boolean combineNull) {
 		SettableValue<T> root = this;
-		return d().debug(new ComposedSettableValue<R>(type, d().lambda(args -> {
+		return new ComposedSettableValue<R>(type, args -> {
 			return function.apply((T) args[0]);
-		}, "mapV"), combineNull, this) {
+		}, combineNull, this) {
 			@Override
 			public <V extends R> R set(V value, Object cause) throws IllegalArgumentException {
 				T old = root.set(reverse.apply(value), cause);
@@ -325,7 +311,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			public boolean isSafe() {
 				return root.isSafe();
 			}
-		}).from("map", this).using("map", function).using("reverse", reverse).tag("combineNull", combineNull).get();
+		};
 	}
 
 	/**
@@ -359,9 +345,9 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	public default <U, R> SettableValue<R> combineV(TypeToken<R> type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		BiFunction<? super R, ? super U, ? extends T> reverse, boolean combineNull) {
 		SettableValue<T> root = this;
-		return d().debug(new ComposedSettableValue<R>(type, d().lambda(args -> {
+		return new ComposedSettableValue<R>(type, args -> {
 			return function.apply((T) args[0], (U) args[1]);
-		}, "combineV"), combineNull, this, arg) {
+		}, combineNull, this, arg) {
 			@Override
 			public <V extends R> R set(V value, Object cause) throws IllegalArgumentException {
 				U argVal = arg.get();
@@ -381,8 +367,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			public ObservableValue<String> isEnabled() {
 				return root.isEnabled();
 			}
-		}).from("combine", this).from("with", arg).using("combination", function).using("reverse", reverse).tag("combineNull", combineNull)
-			.get();
+		};
 	}
 
 	/**
@@ -401,7 +386,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	public default <U, R> SettableValue<R> combineV(TypeToken<R> type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		BiFunction<? super R, ? super U, String> accept, BiFunction<? super R, ? super U, ? extends T> reverse, boolean combineNull) {
 		SettableValue<T> root = this;
-		return d().debug(new ComposedSettableValue<R>(type, args -> {
+		return new ComposedSettableValue<R>(type, args -> {
 			return function.apply((T) args[0], (U) args[1]);
 		}, combineNull, this, arg) {
 			@Override
@@ -427,8 +412,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			public ObservableValue<String> isEnabled() {
 				return root.isEnabled();
 			}
-		}).from("combine", this).from("with", arg).using("combination", function).using("reverse", reverse).using("accept", accept)
-			.tag("combineNull", combineNull).get();
+		};
 	}
 
 	/**
@@ -467,7 +451,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 		ObservableValue<U> arg2, ObservableValue<V> arg3, TriFunction<? super R, ? super U, ? super V, ? extends T> reverse,
 		boolean combineNull) {
 		SettableValue<T> root = this;
-		return d().debug(new ComposedSettableValue<R>(type, args -> {
+		return new ComposedSettableValue<R>(type, args -> {
 			return function.apply((T) args[0], (U) args[1], (V) args[2]);
 		}, combineNull, this, arg2, arg3) {
 			@Override
@@ -490,8 +474,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			public ObservableValue<String> isEnabled() {
 				return root.isEnabled();
 			}
-		}).from("combine", this).from("with", arg2).from("with", arg3).using("combination", function).using("reverse", reverse)
-			.tag("combineNull", combineNull).get();
+		};
 	}
 
 	@Override

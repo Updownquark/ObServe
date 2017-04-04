@@ -15,36 +15,16 @@ import com.google.common.reflect.TypeToken;
  * A {@link Spliterator} that allows the option of providing its values wrapped in a {@link CollectionElement}, which allows elements in the
  * source collection to be replaced (using {@link Settable#set(Object, Object)}) or {@link CollectionElement#remove() removed} during
  * iteration.
- * 
+ *
  * @param <T> The type of values that this Quiterator provides
  */
 public interface ElementSpliterator<T> extends Spliterator<T> {
-	/**
-	 * Represents an element in a collection returned by a {@link ElementSpliterator} that contains a value (retrieved via {@link Settable#get()})
-	 * that may {@link Settable#isAcceptable(Object) possibly} be {@link Settable#set(Object, Object) replaced} or (again
-	 * {@link #canRemove() possibly}) {@link #remove() removed} during iteration.
-	 * 
-	 * @param <T>
-	 */
-	interface CollectionElement<T> extends Settable<T> {
-		/** @return null if this element can be removed. Non-null indicates a message describing why removal is prevented. */
-		String canRemove();
-
-		/**
-		 * Removes this element from the source collection
-		 * 
-		 * @throws IllegalArgumentException If the element cannot be removed
-		 * @see #canRemove()
-		 */
-		void remove() throws IllegalArgumentException;
-	}
-
 	/** @return The type of elements returned by this Quiterator */
 	TypeToken<T> getType();
 
 	/**
 	 * Iterates through each element covered by this Quiterator
-	 * 
+	 *
 	 * @param action Accepts each element in sequence. Unless a sub-type of Quiterator or a specific supplier of a Quiterator advertises
 	 *        otherwise, the element object may only be treated as valid until the next element is returned and also should not be kept
 	 *        longer than the reference to the Quiterator.
@@ -54,7 +34,7 @@ public interface ElementSpliterator<T> extends Spliterator<T> {
 
 	/**
 	 * Operates on each element remaining in this Quiterator
-	 * 
+	 *
 	 * @param action The action to perform on each element
 	 */
 	default void forEachElement(Consumer<? super CollectionElement<T>> action) {
@@ -139,7 +119,7 @@ public interface ElementSpliterator<T> extends Spliterator<T> {
 
 	/**
 	 * Implements {@link ElementSpliterator#map(TypeToken, Function, Function)}
-	 * 
+	 *
 	 * @param <T> The type of values returned by the wrapped Quiterator
 	 * @param <V> The type of values returned by this Quiterator
 	 */
@@ -180,7 +160,7 @@ public interface ElementSpliterator<T> extends Spliterator<T> {
 
 	/**
 	 * Implements {@link ElementSpliterator#filter(Predicate)}
-	 * 
+	 *
 	 * @param <T> The type of values returned by this Quiterator
 	 */
 	class FilteredQuiterator<T> implements ElementSpliterator<T> {
@@ -236,7 +216,7 @@ public interface ElementSpliterator<T> extends Spliterator<T> {
 
 	/**
 	 * A Quiterator whose elements are the result of some filter-map operation on a vanilla {@link Spliterator}'s elements
-	 * 
+	 *
 	 * @param <T> The type of elements in the wrapped Spliterator
 	 * @param <V> The type of this Quiterator's elements
 	 */
@@ -247,7 +227,7 @@ public interface ElementSpliterator<T> extends Spliterator<T> {
 		private final Function<? super T, ? extends CollectionElement<V>> theInstanceMap;
 
 		public SimpleQuiterator(Spliterator<T> wrap, TypeToken<V> type,
-			Supplier<? extends Function<? super T, ? extends ElementSpliterator.CollectionElement<V>>> map) {
+			Supplier<? extends Function<? super T, ? extends CollectionElement<V>>> map) {
 			theWrapped = wrap;
 			theType = type;
 			theMap = map;
@@ -303,7 +283,7 @@ public interface ElementSpliterator<T> extends Spliterator<T> {
 
 	/**
 	 * A Quiterator whose elements are the result of some filter-map operation on another Quiterator's elements
-	 * 
+	 *
 	 * @param <T> The type of elements in the wrapped Quiterator
 	 * @param <V> The type of this Quiterator's elements
 	 */
@@ -379,7 +359,7 @@ public interface ElementSpliterator<T> extends Spliterator<T> {
 
 	/**
 	 * An element returned from {@link ElementSpliterator.WrappingQuiterator}
-	 * 
+	 *
 	 * @param <T> The type of value in the element wrapped by this element
 	 * @param <V> The type of this element
 	 */

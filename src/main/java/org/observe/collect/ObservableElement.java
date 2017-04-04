@@ -1,7 +1,5 @@
 package org.observe.collect;
 
-import static org.observe.ObservableDebug.d;
-
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
@@ -10,6 +8,7 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
+import org.observe.SettableValue;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.util.ObservableUtils;
@@ -26,29 +25,23 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <E> The type of the element
  */
-public interface ObservableElement<E> extends ObservableValue<E> {
-	/**
-	 * @return An observable value that keeps reporting updates after the subscription to the parent collection is unsubscribed.
-	 *
-	 *         TODO This seems unnecessary. Maybe remove it.
-	 */
-	ObservableValue<E> persistent();
+public interface ObservableElement<E> extends SettableValue<E>, CollectionElement<E> {
+	@Override
+	ObservableValue<String> isEnabled();
 
 	@Override
 	default ObservableElement<E> takeUntil(Observable<?> until) {
-		return d().debug(new ObservableElementTakenUntil<>(this, until, true)).from("take", this).from("until", until)
-			.tag("terminate", true).get();
+		return new ObservableElementTakenUntil<>(this, until, true);
 	}
 
 	@Override
 	default ObservableElement<E> unsubscribeOn(Observable<?> until) {
-		return d().debug(new ObservableElementTakenUntil<>(this, until, false)).from("take", this).from("until", until)
-			.tag("terminate", false).get();
+		return new ObservableElementTakenUntil<>(this, until, false);
 	}
 
 	@Override
 	default ObservableElement<E> cached() {
-		return d().debug(new CachedObservableElement<>(this)).from("cached", this).get();
+		return new CachedObservableElement<>(this);
 	}
 
 	@Override
@@ -58,10 +51,9 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 
 	@Override
 	default <R> ObservableElement<R> mapV(TypeToken<R> type, Function<? super E, R> function, boolean combineNull) {
-		ComposedObservableElement<R> ret = new ComposedObservableElement<>(this, type, args -> {
+		return new ComposedObservableElement<>(this, type, args -> {
 			return function.apply((E) args[0]);
 		} , combineNull, this);
-		return d().debug(ret).from("map", this).using("map", function).tag("combineNull", combineNull).get();
 	};
 
 	@Override
@@ -72,11 +64,9 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 	@Override
 	default <U, R> ObservableElement<R> combineV(TypeToken<R> type, BiFunction<? super E, ? super U, R> function, ObservableValue<U> arg,
 		boolean combineNull) {
-		ComposedObservableElement<R> ret = new ComposedObservableElement<>(this, type, args -> {
+		return new ComposedObservableElement<>(this, type, args -> {
 			return function.apply((E) args[0], (U) args[1]);
 		} , combineNull, this, arg);
-		return d().debug(ret).from("combine", this).from("with", arg).using("combination", function).tag("combineNull", combineNull)
-			.get();
 	}
 
 	@Override
@@ -98,16 +88,14 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 	@Override
 	default <U, V, R> ObservableElement<R> combineV(TypeToken<R> type, TriFunction<? super E, ? super U, ? super V, R> function,
 		ObservableValue<U> arg2, ObservableValue<V> arg3, boolean combineNull) {
-		ComposedObservableElement<R> ret = new ComposedObservableElement<>(this, type, args -> {
+		return new ComposedObservableElement<>(this, type, args -> {
 			return function.apply((E) args[0], (U) args[1], (V) args[2]);
 		} , combineNull, this, arg2, arg3);
-		return d().debug(ret).from("combine", this).from("with", arg2, arg3).using("combination", function)
-			.tag("combineNull", combineNull).get();
 	}
 
 	@Override
 	default ObservableElement<E> refresh(Observable<?> refresh) {
-		return d().debug(new RefreshingObservableElement<>(this, refresh)).from("refresh", this).from("on", refresh).get();
+		return new RefreshingObservableElement<>(this, refresh);
 	}
 
 	/**
@@ -116,13 +104,12 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 	 * @return An observable element that refires its value when the observable returned by the given function fires
 	 */
 	default ObservableElement<E> refreshForValue(Function<? super E, Observable<?>> refresh, Observable<Void> unsubscribe) {
-		return d().debug(new ValueRefreshingObservableElement<>(this, refresh, unsubscribe)).from("refresh", this).using("on", refresh)
-			.get();
+		return new ValueRefreshingObservableElement<>(this, refresh, unsubscribe);
 	}
 
 	@Override
 	default ObservableElement<E> safe() {
-		return d().debug(new SafeObservableElement<>(this)).from("safe", this).get();
+		return new SafeObservableElement<>(this);
 	}
 
 	/**
@@ -149,8 +136,28 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 		}
 
 		@Override
-		public ObservableValue<T> persistent() {
-			return getWrapped().persistent();
+		public String canRemove() {
+			return getWrapped().canRemove();
+		}
+
+		@Override
+		public void remove() throws IllegalArgumentException {
+			getWrapped().remove();
+		}
+
+		@Override
+		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
+			return getWrapped().set(value, cause);
+		}
+
+		@Override
+		public <V extends T> String isAcceptable(V value) {
+			return getWrapped().isAcceptable(value);
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			return getWrapped().isEnabled().takeUntil(getUntil());
 		}
 	}
 
@@ -165,11 +172,6 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 		}
 
 		@Override
-		public ObservableValue<T> persistent() {
-			return getWrapped().persistent();
-		}
-
-		@Override
 		protected ObservableElement<T> getWrapped() {
 			return (ObservableElement<T>) super.getWrapped();
 		}
@@ -178,10 +180,35 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 		public ObservableElement<T> cached() {
 			return this;
 		}
+
+		@Override
+		public String canRemove() {
+			return getWrapped().canRemove();
+		}
+
+		@Override
+		public void remove() throws IllegalArgumentException {
+			getWrapped().remove();
+		}
+
+		@Override
+		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
+			return getWrapped().set(value, cause);
+		}
+
+		@Override
+		public <V extends T> String isAcceptable(V value) {
+			return getWrapped().isAcceptable(value);
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			return getWrapped().isEnabled().cached();
+		}
 	}
 
 	/** @param <T> The type of the element */
-	class ComposedObservableElement<T> extends ComposedObservableValue<T> implements ObservableElement<T> {
+	class ComposedObservableElement<T> extends SettableValue.ComposedSettableValue<T> implements ObservableElement<T> {
 		private final ObservableElement<?> theRoot;
 
 		public ComposedObservableElement(ObservableElement<?> root, TypeToken<T> t, Function<Object [], T> f, boolean combineNull,
@@ -191,10 +218,28 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 		}
 
 		@Override
-		public ObservableValue<T> persistent() {
-			ObservableValue<?> [] composed = getComposed();
-			composed[0] = theRoot.persistent();
-			return new ComposedObservableValue<>(getType(), getFunction(), isNullCombined(), composed);
+		public String canRemove() {
+			return theRoot.canRemove();
+		}
+
+		@Override
+		public void remove() throws IllegalArgumentException {
+			theRoot.remove();
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			return ObservableValue.constant(ObservableCollection.StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
+			throw new IllegalArgumentException(ObservableCollection.StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public <V extends T> String isAcceptable(V value) {
+			return ObservableCollection.StdMsg.UNSUPPORTED_OPERATION;
 		}
 	}
 
@@ -203,7 +248,7 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 	 *
 	 * @param <E> The type of the element
 	 */
-	class RefreshingObservableElement<E> extends ObservableValue.RefreshingObservableValue<E> implements ObservableElement<E> {
+	class RefreshingObservableElement<E> extends SettableValue.RefreshingSettableValue<E> implements ObservableElement<E> {
 		protected RefreshingObservableElement(ObservableElement<E> wrap, Observable<?> refresh) {
 			super(wrap, refresh);
 		}
@@ -214,8 +259,13 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 		}
 
 		@Override
-		public ObservableValue<E> persistent() {
-			return getWrapped().persistent().refresh(getRefresh());
+		public String canRemove() {
+			return getWrapped().canRemove();
+		}
+
+		@Override
+		public void remove() throws IllegalArgumentException {
+			getWrapped().remove();
 		}
 	}
 
@@ -254,11 +304,6 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 		@Override
 		public E get() {
 			return theWrapped.get();
-		}
-
-		@Override
-		public ObservableValue<E> persistent() {
-			return theWrapped.persistent().refresh(theRefresh.apply(get()));
 		}
 
 		@Override
@@ -304,6 +349,32 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 		}
 
 		@Override
+		public String canRemove() {
+			return theWrapped.canRemove();
+		}
+
+		@Override
+		public void remove() throws IllegalArgumentException {
+			theWrapped.remove();
+		}
+
+		@Override
+		public <V extends E> E set(V value, Object cause) throws IllegalArgumentException {
+			return theWrapped.set(value, cause);
+		}
+
+		@Override
+		public <V extends E> String isAcceptable(V value) {
+			return theWrapped.isAcceptable(value);
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			E value = get();
+			return theWrapped.isEnabled().refresh(theRefresh.apply(value).noInit().takeUntil(theUnsubscribe));
+		}
+
+		@Override
 		public String toString() {
 			return theWrapped + ".refireWhen(" + theRefresh + ")";
 		}
@@ -314,7 +385,7 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 	 *
 	 * @param <E> The type of value in the element
 	 */
-	class SafeObservableElement<E> extends SafeObservableValue<E> implements ObservableElement<E> {
+	class SafeObservableElement<E> extends SettableValue.SafeSettableValue<E> implements ObservableElement<E> {
 		public SafeObservableElement(ObservableElement<E> wrap) {
 			super(wrap);
 		}
@@ -325,13 +396,18 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 		}
 
 		@Override
-		public ObservableValue<E> persistent() {
-			return getWrapped().persistent().safe();
+		public ObservableElement<E> safe() {
+			return this;
 		}
 
 		@Override
-		public ObservableElement<E> safe() {
-			return this;
+		public String canRemove() {
+			return getWrapped().canRemove();
+		}
+
+		@Override
+		public void remove() throws IllegalArgumentException {
+			getWrapped().remove();
 		}
 	}
 
@@ -418,14 +494,45 @@ public interface ObservableElement<E> extends ObservableValue<E> {
 		}
 
 		@Override
-		public ObservableValue<E> persistent() {
-			ObservableElement<E> el = theValue.get();
-			return el == null ? ObservableValue.constant(theType, null) : el.persistent();
+		public boolean isSafe() {
+			return false;
 		}
 
 		@Override
-		public boolean isSafe() {
-			return false;
+		public <V extends E> E set(V value, Object cause) throws IllegalArgumentException {
+			ObservableElement<E> el = theValue.get();
+			if (el == null)
+				throw new IllegalArgumentException("Empty element");
+			return el.set(value, cause);
+		}
+
+		@Override
+		public <V extends E> String isAcceptable(V value) {
+			ObservableElement<E> el = theValue.get();
+			if (el == null)
+				return ObservableCollection.StdMsg.UNSUPPORTED_OPERATION;
+			return el.isAcceptable(value);
+		}
+
+		@Override
+		public String canRemove() {
+			ObservableElement<E> el = theValue.get();
+			if (el == null)
+				return ObservableCollection.StdMsg.UNSUPPORTED_OPERATION;
+			return el.canRemove();
+		}
+
+		@Override
+		public void remove() throws IllegalArgumentException {
+			ObservableElement<E> el = theValue.get();
+			if (el == null)
+				throw new IllegalArgumentException(ObservableCollection.StdMsg.UNSUPPORTED_OPERATION);
+			el.remove();
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			return theValue.flatMapV(el -> el.isEnabled());
 		}
 	}
 }

@@ -1,5 +1,7 @@
 package org.observe.util;
 
+import java.util.Iterator;
+
 import org.observe.collect.ObservableSet;
 import org.qommons.Equalizer;
 
@@ -31,5 +33,10 @@ public class ObservableSetWrapper<T> extends ObservableCollectionWrapper<T> impl
 	@Override
 	public Equalizer getEqualizer() {
 		return getWrapped().getEqualizer();
+	}
+
+	@Override
+	public Iterator<T> iterator() {
+		return super.iterator();
 	}
 }
