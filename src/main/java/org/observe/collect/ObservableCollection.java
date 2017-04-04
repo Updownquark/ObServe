@@ -9,14 +9,12 @@ import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Spliterator;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Predicate;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -123,17 +121,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	}
 
 	/**
-	 * Tests the removability of an element from this collection. This method exposes a "best guess" on whether an element in the collection
-	 * could be removed, but does not provide any guarantee. This method should return true for any object for which {@link #remove(Object)}
-	 * is successful, but the fact that an object passes this test does not guarantee that it would be removed successfully. E.g. the
-	 * position of the element in the collection may be a factor, but may not be tested for here.
-	 *
-	 * @param value The value to test removability for
-	 * @return Null if given value could possibly be removed from this collection, or a message why it can't
-	 */
-	String canRemove(Object value);
-
-	/**
 	 * Tests the compatibility of an object with this collection. This method exposes a "best guess" on whether an element could be added to
 	 * the collection , but does not provide any guarantee. This method should return true for any object for which {@link #add(Object)} is
 	 * successful, but the fact that an object passes this test does not guarantee that it would be removed successfully. E.g. the position
@@ -145,11 +132,27 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	String canAdd(E value);
 
 	/**
+	 * Tests the removability of an element from this collection. This method exposes a "best guess" on whether an element in the collection
+	 * could be removed, but does not provide any guarantee. This method should return true for any object for which {@link #remove(Object)}
+	 * is successful, but the fact that an object passes this test does not guarantee that it would be removed successfully. E.g. the
+	 * position of the element in the collection may be a factor, but may not be tested for here.
+	 *
+	 * @param value The value to test removability for
+	 * @return Null if given value could possibly be removed from this collection, or a message why it can't
+	 */
+	String canRemove(Object value);
+
+	/**
 	 * @param c collection to be checked for containment in this collection
 	 * @return Whether this collection contains at least one of the elements in the specified collection
 	 * @see #containsAll(Collection)
 	 */
 	boolean containsAny(Collection<?> c);
+
+	/** @return Any element in this collection */
+	default ObservableValue<E> element() {
+		// TODO
+	}
 
 	// Default implementations of redundant Collection methods
 
@@ -188,22 +191,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	default ObservableCollection<E> addValues(E... values) {
 		addAll(java.util.Arrays.asList(values));
 		return this;
-	}
-
-	/**
-	 * Searches in this collection for an element.
-	 *
-	 * @param filter The filter function
-	 * @return A value in this list passing the filter, or empty if none of this collection's elements pass.
-	 */
-	default Optional<E> find(Predicate<? super E> filter) {
-		try (Transaction t = lock(false, null)) {
-			for (E element : this) {
-				if (filter.test(element))
-					return Optional.of(element);
-			}
-			return Optional.empty();
-		}
 	}
 
 	// Derived observable changes
@@ -356,6 +343,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 	/** @return This collection, as an observable value containing an immutable collection */
 	default ObservableValue<Collection<E>> asValue() {
+		// TODO This is inefficient. Keep an updated list
 		ObservableCollection<E> outer = this;
 		return new ObservableValue<Collection<E>>() {
 			final TypeToken<Collection<E>> theType = new TypeToken<Collection<E>>() {}.where(new TypeParameter<E>() {}, outer.getType());
@@ -632,7 +620,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	}
 
 	/**
-	 * Shorthand for {@link #flatten(Qollection) flatten}({@link #map(Function) map}(Function))
+	 * Shorthand for {@link #flatten(ObservableCollection) flatten}({@link #map(Function) map}(Function))
 	 *
 	 * @param <T> The type of the values produced
 	 * @param type The type of the values produced
@@ -650,128 +638,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		} else
 			collectionType = new TypeToken<ObservableCollection<? extends T>>() {}.where(new TypeParameter<T>() {}, type);
 			return flatten(this.<ObservableCollection<? extends T>> buildMap(collectionType).map(map, false).build(true));
-	}
-
-	/**
-	 * Searches in this collection for an element. Since an ObservableCollection's order may or may not be significant, the element
-	 * reflected in the value may not be the first element in the collection (by {@link #iterator()}) to match the filter. As an
-	 * optimization, subscribers to this method will not be called if an element matching the filter is inserted in this collection when a
-	 * match is already present, regardless of the relative positions of the two matches. A side effect of this is that the latest value
-	 * passed to the subscription and the value returned from the {@link ObservableValue#get()} method may not be the same, since the get
-	 * method always returns the first match.
-	 *
-	 * @param filter The filter function
-	 * @return A value in this list passing the filter, or null if none of this collection's elements pass.
-	 */
-	default ObservableValue<E> find(Predicate<E> filter) {
-		return new ObservableValue<E>() {
-			private final TypeToken<E> type = ObservableCollection.this.getType().wrap();
-
-			@Override
-			public TypeToken<E> getType() {
-				return type;
-			}
-
-			@Override
-			public E get() {
-				for(E element : ObservableCollection.this) {
-					if(filter.test(element))
-						return element;
-				}
-				return null;
-			}
-
-			@Override
-			public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
-				final Object key = new Object();
-				class FindOnElement implements Consumer<ObservableElement<E>> {
-					private Collection<ObservableElement<E>> theMatching = new LinkedHashSet<>();
-					ObservableElement<E> theMatchingElement;
-					private E theValue;
-
-					@Override
-					public void accept(ObservableElement<E> element) {
-						element.subscribe(new Observer<ObservableValueEvent<E>>() {
-							@Override
-							public <V3 extends ObservableValueEvent<E>> void onNext(V3 value) {
-								boolean hasMatch = !theMatching.isEmpty();
-								boolean preMatches = hasMatch && !value.isInitial() && theMatching.contains(element);
-								boolean matches = filter.test(value.getValue());
-								if(matches && !preMatches)
-									theMatching.add(element);
-								if(!hasMatch && matches)
-									newBest(element, value.getValue());
-								else if(preMatches && !matches) {
-									theMatching.remove(element);
-									if(theMatchingElement == element)
-										findNextBest();
-								}
-							}
-
-							@Override
-							public <V3 extends ObservableValueEvent<E>> void onCompleted(V3 value) {
-								theMatching.remove(element);
-								if(theMatchingElement == element)
-									findNextBest();
-							}
-
-							private void findNextBest() {
-								if(theMatching.isEmpty())
-									newBest(null, null);
-								else {
-									theMatchingElement = theMatching.iterator().next();
-									newBest(theMatchingElement, theMatchingElement.get());
-								}
-							}
-						});
-					}
-
-					void newBest(ObservableElement<E> element, E value) {
-						theMatchingElement = element;
-						E oldValue = theValue;
-						theValue = value;
-						CollectionSession session = getSession().get();
-						if(session == null)
-							Observer.onNextAndFinish(observer, createChangeEvent(oldValue, theValue, null));
-						else {
-							session.putIfAbsent(key, "oldBest", oldValue);
-							session.put(key, "newBest", theValue);
-						}
-					}
-				}
-				FindOnElement collOnEl = new FindOnElement();
-				Subscription collSub = ObservableCollection.this.onElement(collOnEl);
-				Subscription transSub = getSession().subscribe(new Observer<ObservableValueEvent<CollectionSession>>() {
-					@Override
-					public <V2 extends ObservableValueEvent<CollectionSession>> void onNext(V2 value) {
-						CollectionSession completed = value.getOldValue();
-						if(completed == null)
-							return;
-						E oldBest = (E) completed.get(key, "oldBest");
-						E newBest = (E) completed.get(key, "newBest");
-						if(oldBest == null && newBest == null)
-							return;
-						Observer.onNextAndFinish(observer, createChangeEvent(oldBest, newBest, value));
-					}
-				});
-				if(collOnEl.theMatchingElement == null) // If no initial match, fire an initial null
-					Observer.onNextAndFinish(observer, createInitialEvent(null, null));
-				return () -> {
-					collSub.unsubscribe();
-					transSub.unsubscribe();
-				};
-			}
-
-			@Override
-			public boolean isSafe() {
-				return ObservableCollection.this.isSafe();
-			}
-
-			@Override
-			public String toString() {
-				return "find in " + ObservableCollection.this;
-			}
-		};
 	}
 
 	/** @return An observable value containing the only value in this collection while its size==1, otherwise null TODO TEST ME! */
