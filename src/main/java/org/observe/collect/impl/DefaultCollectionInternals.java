@@ -72,12 +72,6 @@ abstract class DefaultCollectionInternals<E> {
 					if(sessTrans != null)
 						sessTrans.close();
 				}
-
-				@Override
-				protected void finalize() throws Throwable {
-					if(!hasRun)
-						close();
-				}
 			};
 		} finally {
 			if(!success) {

@@ -137,8 +137,7 @@ public interface ObservableTree<N, V> extends Transactable {
 
 		@Override
 		public Transaction lock(boolean write, Object cause) {
-			return () -> {
-			}; // Can't think of a good mechanism to do locking on this kind of tree
+			return Transaction.NONE; // Can't think of a good mechanism to do locking on this kind of tree
 		}
 
 		@Override

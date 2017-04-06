@@ -1,6 +1,7 @@
 package org.observe.assoc;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -75,6 +76,14 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 
 	@Override
 	ObservableCollection<? extends Edge<N, E>> getEdges();
+
+	@Override
+	default Node<N, E> nodeFor(N value) {
+		for (Node<N, E> node : getNodes())
+			if (Objects.equals(node.getValue(), value))
+				return node;
+		return null;
+	}
 
 	/**
 	 * @return The observable value for the current session of this graph. The session allows listeners to retain state for the duration of

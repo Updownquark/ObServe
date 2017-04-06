@@ -2643,8 +2643,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Transaction lock(boolean write, Object cause) {
-			return () -> {
-			};
+			return Transaction.NONE;
 		}
 	}
 
@@ -2869,8 +2868,7 @@ public final class ObservableCollectionImpl {
 		@Override
 		public Transaction lock(boolean write, Object cause) {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
-			return coll == null ? () -> {
-			} : coll.lock(write, cause);
+			return coll == null ? Transaction.NONE : coll.lock(write, cause);
 		}
 
 		@Override
