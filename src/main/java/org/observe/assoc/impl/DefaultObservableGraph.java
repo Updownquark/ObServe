@@ -2,6 +2,7 @@ package org.observe.assoc.impl;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -161,7 +162,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 	}
 
 	@Override
-	public Collection<? extends ObservableGraph.Node<N, E>> addNodes(Collection<? extends N> values) {
+	public List<? extends ObservableGraph.Node<N, E>> addNodes(Collection<? extends N> values) {
 		ArrayList<ObservableGraph.Node<N, E>> ret = new ArrayList<>(values.size());
 		for(N value : values)
 			ret.add(addNode(value));
