@@ -150,16 +150,47 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 */
 	boolean containsAny(Collection<?> c);
 
-	/** @return Any element in this collection */
+	/**
+	 * @return The equalizer that this collection uses to determine containment with {@link #contains(Object)},
+	 *         {@link #containsAll(Collection)}, or {@link #containsAny(Collection)}
+	 */
+	default Equalizer equalizer() {
+		return Equalizer.object;
+	}
+
+	/** @return Any element in this collection, or null if the collection is empty */
 	default ObservableValue<E> element() {
-		// TODO
+		return new ObservableValue<E>() {
+			@Override
+			public TypeToken<E> getType() {
+				return ObservableCollection.this.getType();
+			}
+
+			@Override
+			public boolean isSafe() {
+				return ObservableCollection.this.isSafe();
+			}
+
+			@Override
+			public E get() {
+				Object[] value = new Object[1];
+				if (!spliterator().tryAdvance(v -> value[0] = v))
+					return null;
+				return (E) value[0];
+			}
+
+			@Override
+			public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
+				// TODO Auto-generated method stub
+			}
+		};
 	}
 
 	// Default implementations of redundant Collection methods
 
 	@Override
-	default Iterator<E> iterator() {
-		return new ObservableCollectionImpl.SpliteratorIterator<>(spliterator());
+	default Betterator<E> iterator() {
+		return new ObservableCollectionImpl.SpliteratorBetterator<>(spliterator());
 	}
 
 	@Override
@@ -379,7 +410,30 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 	// Observable containment
 
-	default <X> ObservableValue<Boolean> observeContains(ObservableValue<X> value) {}
+	default <X> ObservableValue<Boolean> observeContains(ObservableValue<X> value) {
+		return new ObservableValue<Boolean>() {
+			@Override
+			public TypeToken<Boolean> getType() {
+				return TypeToken.of(Boolean.TYPE);
+			}
+
+			@Override
+			public boolean isSafe() {
+				return ObservableCollection.this.isSafe();
+			}
+
+			@Override
+			public Boolean get() {
+				return contains(value.get());
+			}
+
+			@Override
+			public Subscription subscribe(Observer<? super ObservableValueEvent<Boolean>> observer) {
+				// TODO Auto-generated method stub
+				return null;
+			}
+		};
+	}
 
 	/**
 	 * @param <X> The type of the collection to test
