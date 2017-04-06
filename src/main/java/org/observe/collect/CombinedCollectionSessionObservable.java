@@ -130,12 +130,6 @@ public class CombinedCollectionSessionObservable implements ObservableValue<Coll
 					innerLocks[j].close();
 				outerLock.close();
 			}
-
-			@Override
-			protected void finalize() {
-				if (!hasRun)
-					close();
-			}
 		};
 	}
 }

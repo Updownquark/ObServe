@@ -36,8 +36,8 @@ import org.qommons.Equalizer;
 import org.qommons.IterableUtils;
 import org.qommons.ListenerSet;
 import org.qommons.Transaction;
-import org.qommons.collect.TransactableCollection;
 import org.qommons.collect.MultiMap.MultiEntry;
+import org.qommons.collect.TransactableCollection;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -3735,8 +3735,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 		@Override
 		public Transaction lock(boolean write, Object cause) {
-			return () -> {
-			};
+			return Transaction.NONE;
 		}
 	}
 
@@ -3961,8 +3960,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 		@Override
 		public Transaction lock(boolean write, Object cause) {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
-			return coll == null ? () -> {
-			} : coll.lock(write, cause);
+			return coll == null ? Transaction.NONE : coll.lock(write, cause);
 		}
 
 		@Override

@@ -119,11 +119,5 @@ public class DefaultTransactable implements Transactable {
 			hasRun = true;
 			endTransaction(theTransactionLock, isWrite);
 		}
-
-		@Override
-		protected void finalize() {
-			if(!hasRun)
-				close();
-		}
 	}
 }

@@ -23,8 +23,8 @@ import org.observe.SimpleSettableValue;
 import org.observe.Subscription;
 import org.qommons.Equalizer;
 import org.qommons.Equalizer.EqualizerNode;
-import org.qommons.collect.TransactableSet;
 import org.qommons.Transaction;
+import org.qommons.collect.TransactableSet;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -292,8 +292,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 
 			@Override
 			public Transaction lock(boolean write, Object cause) {
-				return () -> {
-				};
+				return Transaction.NONE;
 			}
 
 			@Override
