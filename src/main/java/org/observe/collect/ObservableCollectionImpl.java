@@ -143,14 +143,14 @@ public final class ObservableCollectionImpl {
 	 *
 	 * @param <E> The type of elements to iterate over
 	 */
-	public static class SpliteratorIterator<E> implements Iterator<E> {
+	public static class SpliteratorBetterator<E> implements Betterator<E> {
 		private final ElementSpliterator<E> theSpliterator;
 
 		private boolean isNextCached;
 		private boolean isDone;
 		private CollectionElement<? extends E> cachedNext;
 
-		public SpliteratorIterator(ElementSpliterator<E> spliterator) {
+		public SpliteratorBetterator(ElementSpliterator<E> spliterator) {
 			theSpliterator = spliterator;
 		}
 
@@ -177,6 +177,16 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public String canRemove() {
+			if (cachedNext == null)
+				throw new IllegalStateException(
+					"First element has not been read, element has already been removed, or iterator has finished");
+			if (isNextCached)
+				throw new IllegalStateException("canRemove() must be called after next() and before the next call to hasNext()");
+			return cachedNext.canRemove();
+		}
+
+		@Override
 		public void remove() {
 			if (cachedNext == null)
 				throw new IllegalStateException(
@@ -188,6 +198,30 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public String isAcceptable(E value) {
+			if (cachedNext == null)
+				throw new IllegalStateException(
+					"First element has not been read, element has already been removed, or iterator has finished");
+			if (isNextCached)
+				throw new IllegalStateException("isAcceptable() must be called after next() and before the next call to hasNext()");
+			if (!cachedNext.getType().getRawType().isInstance(value))
+				return StdMsg.BAD_TYPE;
+			return ((CollectionElement<E>) cachedNext).isAcceptable(value);
+		}
+
+		@Override
+		public E set(E value, Object cause) {
+			if (cachedNext == null)
+				throw new IllegalStateException(
+					"First element has not been read, element has already been removed, or iterator has finished");
+			if (isNextCached)
+				throw new IllegalStateException("set() must be called after next() and before the next call to hasNext()");
+			if (!cachedNext.getType().getRawType().isInstance(value))
+				throw new IllegalStateException(StdMsg.BAD_TYPE);
+			return ((CollectionElement<E>) cachedNext).set(value, cause);
+		}
+
+		@Override
 		public void forEachRemaining(Consumer<? super E> action) {
 			if (isNextCached)
 				action.accept(next());
@@ -196,6 +230,305 @@ public final class ObservableCollectionImpl {
 			theSpliterator.forEachRemaining(action);
 		}
 	}
+
+	public static class IntersectionCollection<E, X> implements ObservableCollection<E> {
+		private final ObservableCollection<E> theLeft;
+		private final ObservableCollection<X> theRight;
+
+		public IntersectionCollection(ObservableCollection<E> left, ObservableCollection<X> right) {
+			theLeft = left;
+			theRight = right;
+		}
+
+		@Override
+		public TypeToken<E> getType() {
+			return theLeft.getType();
+		}
+
+		@Override
+		public int size() {
+			// TODO Auto-generated method stub
+			return 0;
+		}
+
+		@Override
+		public boolean isEmpty() {
+			// TODO Auto-generated method stub
+			return false;
+		}
+
+		@Override
+		public boolean contains(Object o) {
+			// TODO Auto-generated method stub
+			return false;
+		}
+
+		@Override
+		public boolean add(E e) {
+			// TODO Auto-generated method stub
+			return false;
+		}
+
+		@Override
+		public boolean remove(Object o) {
+			// TODO Auto-generated method stub
+			return false;
+		}
+
+		@Override
+		public boolean containsAll(Collection<?> c) {
+			// TODO Auto-generated method stub
+			return false;
+		}
+
+		@Override
+		public boolean addAll(Collection<? extends E> c) {
+			// TODO Auto-generated method stub
+			return false;
+		}
+
+		@Override
+		public boolean removeAll(Collection<?> c) {
+			// TODO Auto-generated method stub
+			return false;
+		}
+
+		@Override
+		public boolean retainAll(Collection<?> c) {
+			// TODO Auto-generated method stub
+			return false;
+		}
+
+		@Override
+		public void clear() {
+			// TODO Auto-generated method stub
+
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public ElementSpliterator<E> spliterator() {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public boolean isSafe() {
+			// TODO Auto-generated method stub
+			return false;
+		}
+
+		@Override
+		public String canAdd(E value) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public String canRemove(Object value) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public boolean containsAny(Collection<?> c) {
+			// TODO Auto-generated method stub
+			return false;
+		}
+
+	}
+
+	public static class ContainsAllValue<E, X> implements ObservableValue<Boolean> {
+		static class ValueCount {
+			final Object value;
+			int left;
+			int right;
+			boolean satisfied = true;
+
+			ValueCount(Object val) {
+				value = val;
+			}
+
+			int modify(boolean add, boolean lft, int unsatisfied) {
+				if (add) {
+					if (lft)
+						left++;
+					else
+						right++;
+				} else {
+					if (lft)
+						left--;
+					else
+						right--;
+				}
+				if (satisfied) {
+					if (!checkSatisfied()) {
+						satisfied = false;
+						return unsatisfied + 1;
+					}
+				} else if (unsatisfied > 0) {
+					if (checkSatisfied()) {
+						satisfied = true;
+						return unsatisfied - 1;
+					}
+				}
+				return unsatisfied;
+			}
+
+			private boolean checkSatisfied() {
+				return left > 0 || right == 0;
+			}
+
+			boolean isEmpty() {
+				return left == 0 && right == 0;
+			}
+
+			@Override
+			public String toString() {
+				return value + " (" + left + "/" + right + ")";
+			}
+		}
+
+		private final ObservableCollection<E> theLeft;
+		private final ObservableCollection<X> theRight;
+
+		public ContainsAllValue(ObservableCollection<E> left, ObservableCollection<X> right) {
+			theLeft = left;
+			theRight = right;
+		}
+
+		@Override
+		public TypeToken<Boolean> getType() {
+			return TypeToken.of(Boolean.TYPE);
+		}
+
+		@Override
+		public boolean isSafe() {
+			return true;
+		}
+
+		@Override
+		public Boolean get() {
+			return theLeft.containsAll(theRight);
+		}
+
+		@Override
+		public Subscription subscribe(Observer<? super ObservableValueEvent<Boolean>> observer) {
+			Map<Object, ValueCount> allValueCounts = new HashMap<>();
+			final int[] unsatisfied = new int[1];
+			final int[] transUnsatisfied = new int[1];
+			final boolean[] init = new boolean[] { true };
+			final ReentrantLock lock = new ReentrantLock();
+			abstract class ValueCountModifier {
+				final void doNotify(Object cause) {
+					if (init[0] || (transUnsatisfied[0] > 0) == (unsatisfied[0] > 0))
+						return; // Still (un)satisfied, no change
+					if (theLeft.getSession().get() == null && theRight.getSession().get() == null) {
+						Observer.onNextAndFinish(observer, createChangeEvent(unsatisfied[0] == 0, transUnsatisfied[0] == 0, cause));
+						unsatisfied[0] = transUnsatisfied[0];
+					}
+				}
+			}
+			class ValueCountElModifier extends ValueCountModifier implements Observer<ObservableValueEvent<?>> {
+				final boolean left;
+
+				ValueCountElModifier(boolean lft) {
+					left = lft;
+				}
+
+				@Override
+				public <V extends ObservableValueEvent<?>> void onNext(V event) {
+					if (event.isInitial() || !Objects.equals(event.getOldValue(), event.getValue())) {
+						lock.lock();
+						try {
+							if (event.isInitial())
+								modify(event.getValue(), true);
+							else if (!Objects.equals(event.getOldValue(), event.getValue())) {
+								modify(event.getOldValue(), false);
+								modify(event.getValue(), true);
+							}
+							doNotify(event);
+						} finally {
+							lock.unlock();
+						}
+					}
+				}
+
+				@Override
+				public <V extends ObservableValueEvent<?>> void onCompleted(V event) {
+					lock.lock();
+					try {
+						modify(event.getValue(), false);
+						doNotify(event);
+					} finally {
+						lock.unlock();
+					}
+				}
+
+				private void modify(Object value, boolean add) {
+					ValueCount count;
+					if (add)
+						count = allValueCounts.computeIfAbsent(value, v -> new ValueCount(v));
+					else {
+						count = allValueCounts.get(value);
+						if (count == null)
+							return;
+					}
+					transUnsatisfied[0] = count.modify(add, left, transUnsatisfied[0]);
+					if (!add && count.isEmpty())
+						allValueCounts.remove(value);
+				}
+			}
+			class ValueCountSessModifier extends ValueCountModifier implements Observer<ObservableValueEvent<? extends CollectionSession>> {
+				@Override
+				public <V extends ObservableValueEvent<? extends CollectionSession>> void onNext(V event) {
+					if (event.getOldValue() != null) {
+						lock.lock();
+						try {
+							doNotify(event);
+						} finally {
+							lock.unlock();
+						}
+					}
+				}
+			}
+			Subscription thisElSub = theLeft.onElement(el -> {
+				el.subscribe(new ValueCountElModifier(true));
+			});
+			Subscription collElSub = theRight.onElement(el -> {
+				el.subscribe(new ValueCountElModifier(false));
+			});
+			Subscription thisSessSub = theLeft.getSession().subscribe(new ValueCountSessModifier());
+			Subscription collSessSub = theRight.getSession().subscribe(new ValueCountSessModifier());
+			// Fire initial event
+			lock.lock();
+			try {
+				unsatisfied[0] = transUnsatisfied[0];
+				Observer.onNextAndFinish(observer, createInitialEvent(unsatisfied[0] == 0, null));
+				init[0] = false;
+			} finally {
+				lock.unlock();
+			}
+			return Subscription.forAll(thisElSub, collElSub, thisSessSub, collSessSub);
+		}
+	};
 
 	/**
 	 * Implements {@link ObservableCollection#filterMap(FilterMapDef, boolean)}
