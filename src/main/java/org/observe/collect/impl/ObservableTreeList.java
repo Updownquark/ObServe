@@ -60,10 +60,7 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 	public ObservableTreeList(TypeToken<E> type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController) {
 		theType = type.wrap();
-		theInternals = new TreeListInternals(lock, session, sessionController, write -> {
-			if(write)
-				theModCount++;
-		});
+		theInternals = new TreeListInternals(lock, session, sessionController, () -> theModCount++);
 
 		theElements = new RedBlackTreeList<>(element -> new DefaultNode<>(element, null));
 	}
@@ -407,8 +404,8 @@ public class ObservableTreeList<E> implements PartialListImpl<E> {
 
 	private class TreeListInternals extends DefaultCollectionInternals<E> {
 		TreeListInternals(ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session, Transactable sessionController,
-			Consumer<? super Boolean> postAction) {
-			super(lock, session, sessionController, null, postAction);
+			Runnable postAction) {
+			super(lock, session, sessionController, postAction);
 		}
 
 		@Override

@@ -269,7 +269,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 
 	private class HashSetInternals extends DefaultCollectionInternals<E> {
 		HashSetInternals(ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session, Transactable sessionController) {
-			super(lock, session, sessionController, null, null);
+			super(lock, session, sessionController, null);
 		}
 
 		@Override

@@ -22,17 +22,15 @@ abstract class DefaultCollectionInternals<E> {
 	private final Transactable theSessionController;
 	private Consumer<? super Consumer<? super ObservableElement<E>>> theOnSubscribe;
 
-	private final Consumer<? super Boolean> thePreAction;
-	private final Consumer<? super Boolean> thePostAction;
+	private final Runnable thePostWriteAction;
 
 	DefaultCollectionInternals(ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session, Transactable sessionController,
-		Consumer<? super Boolean> preAction, Consumer<? super Boolean> postAction) {
+		Runnable postWriteAction) {
 		theObservers = new java.util.concurrent.ConcurrentHashMap<>();
 		theLock = lock;
 		theSessionController = session != null ? sessionController : new DefaultTransactable(theLock);
 		theSession = session != null ? session : ((DefaultTransactable) theSessionController).getSession();
-		thePreAction = preAction;
-		thePostAction = postAction;
+		thePostWriteAction = postWriteAction;
 	}
 
 	ReentrantReadWriteLock getLock() {
@@ -49,24 +47,36 @@ abstract class DefaultCollectionInternals<E> {
 
 	Transaction lock(boolean write, boolean withSession, Object cause) {
 		Transaction sessTrans = (withSession && theSessionController != null) ? theSessionController.lock(write, cause) : null;
-		Lock lock = sessTrans == null ? (write ? theLock.writeLock() : theLock.readLock()) : null;
-		if(lock != null)
+		Lock lock;
+		if (sessTrans != null) {
+			lock = null; // The session controller is doing the locking
+		} else if (theLock.isWriteLockedByCurrentThread())
+			lock = null; // If we're already locked, don't grab another one. May also let us avoid creating a transaction below.
+		else if (theLock.getReadHoldCount() > 0) {
+			if (write)
+				throw new IllegalStateException("Cannot upgrade from read to write lock");
+			else
+				lock = null;// If we're already locked, don't grab another one. May also let us avoid creating a transaction below.
+		} else {
+			lock = write ? theLock.writeLock() : theLock.readLock();
+		}
+		if (lock != null)
 			lock.lock();
+		if (lock == null && sessTrans == null && (!write || thePostWriteAction == null))
+			return Transaction.NONE;
 		boolean success = false;
 		try {
-			if(thePreAction != null)
-				thePreAction.accept(write);
 			success = true;
 			return new Transaction() {
 				private volatile boolean hasRun;
 
 				@Override
 				public void close() {
-					if(hasRun)
+					if (hasRun)
 						return;
 					hasRun = true;
-					if(thePostAction != null)
-						thePostAction.accept(write);
+					if (write && thePostWriteAction != null)
+						thePostWriteAction.run();
 					if(lock != null)
 						lock.unlock();
 					if(sessTrans != null)
@@ -74,10 +84,10 @@ abstract class DefaultCollectionInternals<E> {
 				}
 			};
 		} finally {
-			if(!success) {
-				if(lock != null)
+			if (!success) {
+				if (lock != null)
 					lock.unlock();
-				if(sessTrans != null)
+				if (sessTrans != null)
 					sessTrans.close();
 			}
 		}
