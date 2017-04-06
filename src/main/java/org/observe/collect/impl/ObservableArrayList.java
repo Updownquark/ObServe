@@ -59,10 +59,7 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 	public ObservableArrayList(TypeToken<E> type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController) {
 		theType = type.wrap();
-		theInternals = new ArrayListInternals(lock, session, sessionController, write -> {
-			if(write)
-				theModCount++;
-		});
+		theInternals = new ArrayListInternals(lock, session, sessionController, () -> theModCount++);
 
 		theValues = new ArrayList<>();
 		theElements = new ArrayList<>();
@@ -328,8 +325,8 @@ public class ObservableArrayList<E> implements ObservableRandomAccessList<E>, Ob
 
 	private class ArrayListInternals extends DefaultCollectionInternals<E> {
 		ArrayListInternals(ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session, Transactable sessionController,
-			Consumer<? super Boolean> postAction) {
-			super(lock, session, sessionController, null, postAction);
+			Runnable postAction) {
+			super(lock, session, sessionController, postAction);
 		}
 
 		@Override

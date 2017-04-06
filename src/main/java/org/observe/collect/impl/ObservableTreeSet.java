@@ -73,10 +73,7 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 	public ObservableTreeSet(TypeToken<E> type, ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session,
 		Transactable sessionController, Comparator<? super E> compare) {
 		theType = type.wrap();
-		theInternals = new TreeSetInternals(lock, session, sessionController, write -> {
-			if(write)
-				theModCount++;
-		});
+		theInternals = new TreeSetInternals(lock, session, sessionController, () -> theModCount++);
 		theCompare = compare;
 
 		theValues = new DefaultTreeMap<>(theCompare);
@@ -435,8 +432,8 @@ public class ObservableTreeSet<E> implements ObservableSortedSet<E>, ObservableF
 
 	private class TreeSetInternals extends DefaultCollectionInternals<E> {
 		TreeSetInternals(ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session, Transactable sessionController,
-			Consumer<? super Boolean> postAction) {
-			super(lock, session, sessionController, null, postAction);
+			Runnable postAction) {
+			super(lock, session, sessionController, postAction);
 		}
 
 		@Override

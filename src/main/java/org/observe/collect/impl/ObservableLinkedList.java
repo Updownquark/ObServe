@@ -624,7 +624,7 @@ public class ObservableLinkedList<E> implements ObservableList.PartialListImpl<E
 
 	private class LinkedListInternals extends DefaultCollectionInternals<E> {
 		public LinkedListInternals(ReentrantReadWriteLock lock, ObservableValue<CollectionSession> session, Transactable sessionController) {
-			super(lock, session, sessionController, null, null);
+			super(lock, session, sessionController, null);
 		}
 
 		@Override
