@@ -20,14 +20,17 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
+import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
+import org.observe.util.ObservableUtils;
 import org.qommons.Equalizer;
+import org.qommons.IterableUtils;
 import org.qommons.Transaction;
-import org.qommons.collect.MultiMap.MultiEntry;
+import org.qommons.collect.Betterator;
+import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.Qollection;
-import org.qommons.collect.Quiterator;
 import org.qommons.collect.TransactableCollection;
 
 import com.google.common.reflect.TypeParameter;
@@ -51,9 +54,9 @@ import com.google.common.reflect.TypeToken;
  * <li><b>Modification Control</b> The {@link #filterAdd(Function)} and {@link #filterRemove(Function)} methods create collections that
  * forbid certain types of modifications to a collection. The {@link #immutable(String)} prevents any API modification at all. Modification
  * control can also be used to intercept and perform actions based on modifications to a collection.</li>
- * <li><b>Quiterator</b> Qollections must implement {@link #spliterator()}, which returns a {@link Quiterator}, which is an enhanced
- * {@link Spliterator}. This had potential for the improved performance associated with using {@link Spliterator} instead of
- * {@link Iterator} as well as the utility added by {@link Quiterator}.</li>
+ * <li><b>ElementSpliterator</b> Qollections must implement {@link #spliterator()}, which returns a {@link ElementSpliterator}, which is an
+ * enhanced {@link Spliterator}. This had potential for the improved performance associated with using {@link Spliterator} instead of
+ * {@link Iterator} as well as the utility added by {@link ElementSpliterator}.</li>
  * <li><b>Transactionality</b> Qollections support the {@link org.qommons.Transactable} interface, allowing callers to reserve a collection
  * for write or to ensure that the collection is not written to during an operation (for implementations that support this. See
  * {@link org.qommons.Transactable#isLockSupported() isLockSupported()}).</li>
@@ -150,14 +153,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 */
 	boolean containsAny(Collection<?> c);
 
-	/**
-	 * @return The equalizer that this collection uses to determine containment with {@link #contains(Object)},
-	 *         {@link #containsAll(Collection)}, or {@link #containsAny(Collection)}
-	 */
-	default Equalizer equalizer() {
-		return Equalizer.object;
-	}
-
 	/** @return Any element in this collection, or null if the collection is empty */
 	default ObservableValue<E> element() {
 		return new ObservableValue<E>() {
@@ -181,6 +176,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
+
 				// TODO Auto-generated method stub
 			}
 		};
