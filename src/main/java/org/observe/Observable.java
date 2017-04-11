@@ -10,6 +10,7 @@ import java.util.function.Supplier;
 
 import org.qommons.Causable;
 import org.qommons.ListenerSet;
+import org.qommons.collect.CircularArrayList;
 
 /**
  * A stream of values that can be filtered, mapped, composed, etc. and evaluated on
@@ -257,6 +258,14 @@ public interface Observable<T> {
 			return this;
 		else
 			return new SafeObservable<>(this);
+	}
+
+	/**
+	 * @param limit The maximum number of items from this observable to keep in the cache
+	 * @return A cache that keeps up to the given number of values from this observable which may be accessed lazily
+	 */
+	default ObservableCache<T> cache(int limit) {
+		return new SimpleObservableCache<>(this, limit);
 	}
 
 	/**
@@ -978,6 +987,13 @@ public interface Observable<T> {
 		public String toString() {
 			return theWrapped.toString();
 		}
+	}
+
+	class SimpleObservableCache<T> implements ObservableCache<T> {
+		private final Observable<T> theObservable;
+		private final CircularArrayList<T> theCache;
+
+		public SimpleObservableCache(Observable<T> observable, int limit) {}
 	}
 
 	/**
