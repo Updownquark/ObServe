@@ -15,6 +15,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -181,6 +182,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			}
 		};
 	}
+
+	@Override
+	boolean removeIf(Predicate<? super E> filter);
+
+	boolean replace(Function<? super E, ? extends E> map);
 
 	// Default implementations of redundant Collection methods
 
