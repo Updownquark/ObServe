@@ -21,8 +21,8 @@ import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.util.ObservableUtils;
 import org.qommons.IterableUtils;
-import org.qommons.ReversibleCollection;
 import org.qommons.Transaction;
+import org.qommons.collect.ReversibleCollection;
 
 import com.google.common.reflect.TypeToken;
 
