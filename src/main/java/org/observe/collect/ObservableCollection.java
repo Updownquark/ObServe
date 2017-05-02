@@ -4,11 +4,11 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Spliterator;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
@@ -29,7 +29,7 @@ import org.observe.util.ObservableUtils;
 import org.qommons.Equalizer;
 import org.qommons.IterableUtils;
 import org.qommons.Transaction;
-import org.qommons.collect.Betterator;
+import org.qommons.collect.BetterCollection;
 import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.Qollection;
 import org.qommons.collect.TransactableCollection;
@@ -67,7 +67,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <E> The type of element in the collection
  */
-public interface ObservableCollection<E> extends TransactableCollection<E> {
+public interface ObservableCollection<E> extends TransactableCollection<E>, BetterCollection<E> {
 	/** Standard messages returned by this class */
 	interface StdMsg {
 		static String BAD_TYPE = "Object is the wrong type for this collection";
@@ -126,8 +126,30 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	}
 
 	/**
+	 * Gets access to the equivalence scheme that this collection uses. {@link ObservableCollection}s are permitted to compare their
+	 * elements using any consistent scheme. This scheme is exposed here and should affect any operations on the collection that require
+	 * element comparison, e.g.:
+	 * <ul>
+	 * <li>{@link #contains(Object)}, which will return true for an argument <code>arg</code> if and only if there is an
+	 * <code>element</code> in the collection for which this <code>elementEquals(element, arg)</code> returns true</li>
+	 * <li>{@link #remove(Object)}, which will only remove elements that match according to this method</li>
+	 * </ul>
+	 *
+	 * The equivalence's {@link Equivalence#isElement(Object)} method must return true for any element in this collection or any element for
+	 * which {@link #canAdd(Object)} returns null.
+	 *
+	 * For {@link ObservableSet}s, this method exposes a test of the set's exclusiveness. I.e. a set may not contain any 2 elements for
+	 * which this method returns true.
+	 *
+	 * @return The equivalence that governs this collection
+	 */
+	default Equivalence<? super E> equivalence() {
+		return Equivalence.DEFAULT;
+	}
+
+	/**
 	 * Tests the compatibility of an object with this collection. This method exposes a "best guess" on whether an element could be added to
-	 * the collection , but does not provide any guarantee. This method should return true for any object for which {@link #add(Object)} is
+	 * the collection , but does not provide any guarantee. This method should return null for any object for which {@link #add(Object)} is
 	 * successful, but the fact that an object passes this test does not guarantee that it would be removed successfully. E.g. the position
 	 * of the element in the collection may be a factor, but is tested for here.
 	 *
@@ -138,7 +160,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 	/**
 	 * Tests the removability of an element from this collection. This method exposes a "best guess" on whether an element in the collection
-	 * could be removed, but does not provide any guarantee. This method should return true for any object for which {@link #remove(Object)}
+	 * could be removed, but does not provide any guarantee. This method should return null for any object for which {@link #remove(Object)}
 	 * is successful, but the fact that an object passes this test does not guarantee that it would be removed successfully. E.g. the
 	 * position of the element in the collection may be a factor, but may not be tested for here.
 	 *
@@ -152,7 +174,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @return Whether this collection contains at least one of the elements in the specified collection
 	 * @see #containsAll(Collection)
 	 */
+	@Override
 	boolean containsAny(Collection<?> c);
+
+	Optional<E> find(Predicate<? super E> test);
 
 	/** @return Any element in this collection, or null if the collection is empty */
 	default ObservableValue<E> element() {
@@ -189,11 +214,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	boolean replace(Function<? super E, ? extends E> map);
 
 	// Default implementations of redundant Collection methods
-
-	@Override
-	default Betterator<E> iterator() {
-		return new ObservableCollectionImpl.SpliteratorBetterator<>(spliterator());
-	}
 
 	@Override
 	default E[] toArray() {
@@ -412,6 +432,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 
 	// Observable containment
 
+	default <X> ObservableCollection<E> intersect(ObservableCollection<X> collection){
+		return ObservableCollectionImpl.IntersectedCollection<>(this, collection);
+	}
+
 	default <X> ObservableValue<Boolean> observeContains(ObservableValue<X> value) {
 		return new ObservableValue<Boolean>() {
 			@Override
@@ -432,7 +456,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<Boolean>> observer) {
 				// TODO Auto-generated method stub
-				return null;
 			}
 		};
 	}
@@ -441,7 +464,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 	 * @param <X> The type of the collection to test
 	 * @param collection The collection to test
 	 * @return An observable boolean whose value is whether this collection contains every element of the given collection, according to
-	 *         {@link Object#equals(Object)}
+	 *         {@link #elementEquals(Object, Object)}
 	 */
 	default <X> ObservableValue<Boolean> observeContainsAll(ObservableCollection<X> collection) {
 		return new ObservableValue<Boolean>() {
@@ -511,7 +534,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 						return value + " (" + left + "/" + right + ")";
 					}
 				}
-				Map<Object, ValueCount> allValueCounts = new HashMap<>();
+				Map<E, ValueCount> allValueCounts = equivalence().emptyMap();
 				final int[] unsatisfied = new int[1];
 				final int[] transUnsatisfied = new int[1];
 				final boolean[] init = new boolean[] { true };
@@ -539,7 +562,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E> {
 							try {
 								if (event.isInitial())
 									modify(event.getValue(), true);
-								else if (!Objects.equals(event.getOldValue(), event.getValue())) {
+								else if (!elementEquals(event.getOldValue(), event.getValue())) {
 									modify(event.getOldValue(), false);
 									modify(event.getValue(), true);
 								}

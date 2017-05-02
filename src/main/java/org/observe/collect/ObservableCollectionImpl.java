@@ -11,6 +11,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -139,13 +140,20 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
-	public static class IntersectionCollection<E, X> implements ObservableCollection<E> {
+	public static class IntersectedCollection<E, X> implements ObservableCollection<E> {
+		// Note: Several (E) v casts below are technically incorrect, as the values may not be of type E
+		// But they are runtime-safe because of the isElement tests
 		private final ObservableCollection<E> theLeft;
 		private final ObservableCollection<X> theRight;
+		private final CombinedCollectionSessionObservable theSession;
+		private final boolean sameEquivalence;
 
-		public IntersectionCollection(ObservableCollection<E> left, ObservableCollection<X> right) {
+		public IntersectedCollection(ObservableCollection<E> left, ObservableCollection<X> right) {
 			theLeft = left;
 			theRight = right;
+			theSession = new CombinedCollectionSessionObservable(
+				ObservableCollection.constant(new TypeToken<ObservableCollection<?>>() {}, theLeft, theRight));
+			sameEquivalence = left.equivalence().equals(right.equivalence());
 		}
 
 		@Override
@@ -154,87 +162,18 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public int size() {
-			// TODO Auto-generated method stub
-			return 0;
-		}
-
-		@Override
-		public boolean isEmpty() {
-			// TODO Auto-generated method stub
-			return false;
-		}
-
-		@Override
-		public boolean contains(Object o) {
-			// TODO Auto-generated method stub
-			return false;
-		}
-
-		@Override
-		public boolean add(E e) {
-			// TODO Auto-generated method stub
-			return false;
-		}
-
-		@Override
-		public boolean remove(Object o) {
-			// TODO Auto-generated method stub
-			return false;
-		}
-
-		@Override
-		public boolean containsAll(Collection<?> c) {
-			// TODO Auto-generated method stub
-			return false;
-		}
-
-		@Override
-		public boolean addAll(Collection<? extends E> c) {
-			// TODO Auto-generated method stub
-			return false;
-		}
-
-		@Override
-		public boolean removeAll(Collection<?> c) {
-			// TODO Auto-generated method stub
-			return false;
-		}
-
-		@Override
-		public boolean retainAll(Collection<?> c) {
-			// TODO Auto-generated method stub
-			return false;
-		}
-
-		@Override
-		public void clear() {
-			// TODO Auto-generated method stub
-
-		}
-
-		@Override
 		public Transaction lock(boolean write, Object cause) {
-			// TODO Auto-generated method stub
-			return null;
-		}
-
-		@Override
-		public ElementSpliterator<E> spliterator() {
-			// TODO Auto-generated method stub
-			return null;
-		}
-
-		@Override
-		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
-			// TODO Auto-generated method stub
-			return null;
+			Transaction lt = theLeft.lock(write, cause);
+			Transaction rt = theRight.lock(write, cause);
+			return () -> {
+				lt.close();
+				rt.close();
+			};
 		}
 
 		@Override
 		public ObservableValue<CollectionSession> getSession() {
-			// TODO Auto-generated method stub
-			return null;
+			return theSession;
 		}
 
 		@Override
@@ -243,25 +182,254 @@ public final class ObservableCollectionImpl {
 			return false;
 		}
 
-		@Override
-		public String canAdd(E value) {
-			// TODO Auto-generated method stub
-			return null;
+		protected Set<? super E> getRightSet() {
+			Equivalence<? super E> equiv = theLeft.equivalence();
+			Set<? super E> rightSet = equiv.createSet();
+			try (Transaction t = theRight.lock(false, null)) {
+				for (X v : theRight)
+					if (equiv.isElement(v))
+						rightSet.add((E) v);
+			}
+			return rightSet;
 		}
 
 		@Override
-		public String canRemove(Object value) {
-			// TODO Auto-generated method stub
-			return null;
+		public int size() {
+			if (theLeft.isEmpty() || theRight.isEmpty())
+				return 0;
+			Equivalence<? super E> equiv = theLeft.equivalence();
+			Set<? super E> rightSet = getRightSet();
+			try (Transaction t = theLeft.lock(false, null)) {
+				return (int) theLeft.stream().filter(rightSet::contains).count();
+			}
+		}
+
+		@Override
+		public boolean isEmpty() {
+			if (theLeft.isEmpty() || theRight.isEmpty())
+				return true;
+			try (Transaction t = theRight.lock(false, null)) {
+				return !theLeft.containsAny(theRight);
+			}
+		}
+
+		@Override
+		public ElementSpliterator<E> spliterator() {
+			if (theLeft.isEmpty() || theRight.isEmpty())
+				return ElementSpliterator.empty(theLeft.getType());
+			Set<? super E> rightSet = getRightSet();
+			ElementSpliterator<E> leftSplit = theLeft.spliterator();
+			return new ElementSpliterator.FilteredSpliterator<>(leftSplit, el -> rightSet.contains(el));
+		}
+
+		@Override
+		public boolean contains(Object o) {
+			if (!theLeft.contains(o))
+				return false;
+			if (sameEquivalence)
+				return theRight.contains(o);
+			else {
+				try (Transaction t = theRight.lock(false, null)) {
+					Equivalence<? super E> equiv = theLeft.equivalence();
+					return theRight.stream().anyMatch(v -> equiv.isElement(v) && equiv.elementEquals((E) v, o));
+				}
+			}
+		}
+
+		@Override
+		public boolean containsAll(Collection<?> c) {
+			if (c.isEmpty())
+				return true;
+			if (theRight.isEmpty())
+				return false;
+			if (!theLeft.containsAll(c))
+				return false;
+			if (sameEquivalence)
+				return theRight.containsAll(c);
+			else
+				return getRightSet().containsAll(c);
 		}
 
 		@Override
 		public boolean containsAny(Collection<?> c) {
-			// TODO Auto-generated method stub
+			if (c.isEmpty())
+				return false;
+			if (theLeft.isEmpty() || theRight.isEmpty())
+				return false;
+			Set<? super E> rightSet = getRightSet();
+			try (Transaction t = theLeft.lock(false, null)) {
+				for (Object o : c)
+					if (theLeft.contains(o) && rightSet.contains(o))
+						return true;
+			}
 			return false;
 		}
 
+		@Override
+		public String canAdd(E value) {
+			String msg = theLeft.canAdd(value);
+			if (msg != null)
+				return msg;
+			if (value != null && !theRight.getType().getRawType().isInstance(value))
+				return ObservableCollection.StdMsg.BAD_TYPE;
+			msg = theRight.canAdd((X) value);
+			if (msg != null)
+				return msg;
+			return null;
+		}
+
+		@Override
+		public boolean add(E e) {
+			String msg;
+			try (Transaction lt = theLeft.lock(true, null); Transaction rt = theRight.lock(true, null)) {
+				boolean addedLeft = false;
+				if (!theLeft.contains(e)) {
+					if (!theLeft.add(e))
+						return false;
+					addedLeft = true;
+				}
+				if (!theRight.contains(e)) {
+					try {
+						if (!theRight.add((X) e)) {
+							if (addedLeft)
+								theLeft.remove(e);
+							return false;
+						}
+					} catch (RuntimeException ex) {
+						if (addedLeft)
+							theLeft.remove(e);
+						throw ex;
+					}
+				}
+				return true;
+			}
+		}
+
+		@Override
+		public boolean addAll(Collection<? extends E> c) {
+			boolean addedAny = false;
+			try (Transaction lt = theLeft.lock(true, null); Transaction rt = theRight.lock(true, null)) {
+				for (E o : c) {
+					boolean addedLeft = false;
+					if (!theLeft.contains(o)) {
+						if (!theLeft.add(o))
+							continue;
+						addedLeft = true;
+					}
+					boolean addedRight = false;
+					if (!theRight.contains(o)) {
+						addedRight = true;
+						if (!theRight.add((X) o)) {
+							if (addedLeft)
+								theLeft.remove(o);
+							continue;
+						}
+					}
+					if (addedLeft || addedRight)
+						addedAny = true;
+				}
+			}
+			return addedAny;
+		}
+
+		@Override
+		public String canRemove(Object value) {
+			String msg = theLeft.canRemove(value);
+			if (msg != null)
+				return msg;
+			msg = theRight.canRemove(value);
+			if (msg != null)
+				return msg;
+			return null;
+		}
+
+		@Override
+		public boolean remove(Object o) {
+			return theLeft.remove(o);
+		}
+
+		@Override
+		public boolean removeAll(Collection<?> c) {
+			return theLeft.removeAll(c);
+		}
+
+		@Override
+		public boolean retainAll(Collection<?> c) {
+			return theLeft.retainAll(c);
+		}
+
+		@Override
+		public void clear() {
+			if (theLeft.isEmpty() || theRight.isEmpty())
+				return;
+			Set<? super E> rightSet = getRightSet();
+			theLeft.removeAll(rightSet);
+		}
+
+		@Override
+		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
+			// TODO Auto-generated method stub
+			return null;
+		}
 	}
+
+	private static class ValueCount<E> {
+		final E value;
+		int left;
+		int right;
+		boolean satisfied = true;
+
+		ValueCount(E val) {
+			value = val;
+		}
+
+		int modify(boolean add, boolean lft, int unsatisfied) {
+			if (add) {
+				if (lft)
+					left++;
+				else
+					right++;
+			} else {
+				if (lft)
+					left--;
+				else
+					right--;
+			}
+			if (satisfied) {
+				if (!checkSatisfied()) {
+					satisfied = false;
+					return unsatisfied + 1;
+				}
+			} else if (unsatisfied > 0) {
+				if (checkSatisfied()) {
+					satisfied = true;
+					return unsatisfied - 1;
+				}
+			}
+			return unsatisfied;
+		}
+
+		private boolean checkSatisfied() {
+			return left > 0 || right == 0;
+		}
+
+		boolean isEmpty() {
+			return left == 0 && right == 0;
+		}
+
+		@Override
+		public String toString() {
+			return value + " (" + left + "/" + right + ")";
+		}
+	}
+
+	private static class ValueCounts<E> {
+		final Map<E, ValueCount<E>> counts;
+
+	}
+
+	private static <E, X> Subscription maintainValueCount(Map<E, ValueCount> counts, ObservableCollection<E> left,
+		ObservableCollection<X> right) {}
 
 	public static class ContainsAllValue<E, X> implements ObservableValue<Boolean> {
 		static class ValueCount {

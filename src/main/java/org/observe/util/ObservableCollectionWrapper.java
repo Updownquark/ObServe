@@ -111,7 +111,7 @@ public class ObservableCollectionWrapper<E> implements ObservableCollection<E> {
 
 	@Override
 	public ElementSpliterator<E> spliterator() {
-		return new ElementSpliterator.WrappingQuiterator<>(theWrapped.spliterator(), theWrapped.getType(),
+		return new ElementSpliterator.WrappingSplterator<>(theWrapped.spliterator(), theWrapped.getType(),
 			() -> el -> new CollectionElement<E>() {
 				@Override
 				public TypeToken<E> getType() {
