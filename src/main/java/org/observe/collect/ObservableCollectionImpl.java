@@ -178,8 +178,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean isSafe() {
-			// TODO Auto-generated method stub
-			return false;
+			return true;
 		}
 
 		protected Set<? super E> getRightSet() {
@@ -377,40 +376,31 @@ public final class ObservableCollectionImpl {
 		final E value;
 		int left;
 		int right;
-		boolean satisfied = true;
 
 		ValueCount(E val) {
 			value = val;
 		}
 
-		int modify(boolean add, boolean lft, int unsatisfied) {
+		boolean modify(boolean add, boolean lft) {
+			boolean modified;
 			if (add) {
-				if (lft)
+				if (lft) {
+					modified = left == 0;
 					left++;
-				else
+				} else {
+					modified = right == 0;
 					right++;
+				}
 			} else {
-				if (lft)
+				if (lft) {
+					modified = left == 1;
 					left--;
-				else
+				} else {
+					modified = right == 1;
 					right--;
-			}
-			if (satisfied) {
-				if (!checkSatisfied()) {
-					satisfied = false;
-					return unsatisfied + 1;
-				}
-			} else if (unsatisfied > 0) {
-				if (checkSatisfied()) {
-					satisfied = true;
-					return unsatisfied - 1;
 				}
 			}
-			return unsatisfied;
-		}
-
-		private boolean checkSatisfied() {
-			return left > 0 || right == 0;
+			return modified;
 		}
 
 		boolean isEmpty() {
@@ -423,13 +413,167 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
-	private static class ValueCounts<E> {
-		final Map<E, ValueCount<E>> counts;
+	private static abstract class ValueCounts<E, X> {
+		final Equivalence<? super E> leftEquiv;
+		final Equivalence<? super X> rightEquiv;
+		final Map<E, ValueCount<E>> leftCounts;
+		final Map<X, ValueCount<X>> rightCounts;
+		int leftCount;
+		int commonCount;
+		int rightCount;
 
+		ValueCounts(Equivalence<? super E> leftEquiv, Equivalence<? super X> rightEquiv) {
+			this.leftEquiv = leftEquiv;
+			this.rightEquiv = rightEquiv;
+			leftCounts = leftEquiv.createMap();
+			rightCounts = rightEquiv == null ? null : rightEquiv.createMap();
+		}
+
+		abstract void check(boolean initial);
 	}
 
-	private static <E, X> Subscription maintainValueCount(Map<E, ValueCount> counts, ObservableCollection<E> left,
-		ObservableCollection<X> right) {}
+	private static <E, X> Subscription maintainValueCount(ValueCounts<E, X> counts, ObservableCollection<E> left,
+		ObservableCollection<X> right) {
+		final ReentrantLock lock = new ReentrantLock();
+		boolean[] initialized = new boolean[1];
+		abstract class ValueCountModifier {
+			final void doNotify(Object cause) {
+				if (initialized[0] && left.getSession().get() == null && right.getSession().get() == null)
+					counts.check(false);
+			}
+		}
+		class ValueCountElModifier extends ValueCountModifier implements Observer<ObservableValueEvent<?>> {
+			final boolean onLeft;
+
+			ValueCountElModifier(boolean lft) {
+				onLeft = lft;
+			}
+
+			@Override
+			public <V extends ObservableValueEvent<?>> void onNext(V event) {
+				if (event.isInitial() || !Objects.equals(event.getOldValue(), event.getValue())) {
+					if (!initialized[0])
+						lock.lock();
+					try {
+						if (event.isInitial())
+							modify(event.getValue(), true);
+						else if (!Objects.equals(event.getOldValue(), event.getValue())) {
+							modify(event.getOldValue(), false);
+							modify(event.getValue(), true);
+						}
+						doNotify(event);
+					} finally {
+						if (!initialized[0])
+							lock.unlock();
+					}
+				}
+			}
+
+			@Override
+			public <V extends ObservableValueEvent<?>> void onCompleted(V event) {
+				lock.lock();
+				try {
+					modify(event.getValue(), false);
+					doNotify(event);
+				} finally {
+					lock.unlock();
+				}
+			}
+
+			private <V> void modify(V value, boolean add) {
+				Map<V, ValueCount<V>> countMap;
+				boolean leftMap = true;
+				if (!onLeft) {
+					if (counts.leftEquiv.isElement(value))
+						countMap = (Map<V, ValueCount<V>>) (Map<?, ?>) counts.leftCounts;
+					else if (counts.rightCounts == null)
+						return;
+					else {
+						countMap = (Map<V, ValueCount<V>>) (Map<?, ?>) counts.rightCounts;
+						leftMap = false;
+					}
+				} else
+					countMap = (Map<V, ValueCount<V>>) (Map<?, ?>) counts.leftCounts;
+				ValueCount<V> count;
+				if (add) {
+					boolean[] added = new boolean[1];
+					count = countMap.computeIfAbsent(value, v -> {
+						added[0] = true;
+						return new ValueCount<>(v);
+					});
+					if (added[0]) {
+						count.modify(true, onLeft);
+						if (onLeft)
+							counts.leftCount++;
+						else
+							counts.rightCount++;
+						return;
+					}
+				} else {
+					count = countMap.get(value);
+					if (count == null)
+						return;
+				}
+				if (count.modify(add, onLeft)) {
+					if (add) {
+						if (onLeft)
+							counts.rightCount--;
+						else
+							counts.leftCount--;
+						counts.commonCount++;
+					} else if (count.isEmpty()) {
+						countMap.remove(value);
+						if (onLeft)
+							counts.leftCount--;
+						else
+							counts.rightCount--;
+					} else {
+						counts.commonCount--;
+						if (onLeft)
+							counts.rightCount++;
+						else
+							counts.leftCount++;
+					}
+				}
+			}
+		}
+		class ValueCountSessModifier extends ValueCountModifier implements Observer<ObservableValueEvent<? extends CollectionSession>> {
+			@Override
+			public <V extends ObservableValueEvent<? extends CollectionSession>> void onNext(V event) {
+				if (initialized[0] && event.getOldValue() != null) {
+					if (initialized[0])
+						lock.lock();
+					try {
+						doNotify(event);
+					} finally {
+						lock.unlock();
+					}
+				}
+			}
+		}
+		Subscription thisElSub;
+		Subscription collElSub;
+		Subscription thisSessSub;
+		Subscription collSessSub;
+		lock.lock();
+		try {
+			thisElSub = left.onElement(el -> {
+				el.subscribe(new ValueCountElModifier(true));
+			});
+			collElSub = right.onElement(el -> {
+				el.subscribe(new ValueCountElModifier(false));
+			});
+
+			thisSessSub = left.getSession().subscribe(new ValueCountSessModifier());
+			collSessSub = right.getSession().subscribe(new ValueCountSessModifier());
+
+			counts.check(true);
+		} finally {
+			initialized[0] = true;
+			lock.unlock();
+		}
+		return Subscription.forAll(thisElSub, collElSub, thisSessSub, collSessSub);
+	}
 
 	public static class ContainsAllValue<E, X> implements ObservableValue<Boolean> {
 		static class ValueCount {
