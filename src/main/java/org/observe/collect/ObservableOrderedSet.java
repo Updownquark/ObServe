@@ -404,7 +404,7 @@ public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableOrd
 	 *
 	 * @param <E> The type of elements in the set
 	 */
-	class CollectionWrappingOrderedSet<E> extends CollectionWrappingSet<E> implements ObservableOrderedSet<E> {
+	class CollectionWrappingOrderedSet<E> extends ObservableSetImpl.CollectionWrappingSet<E> implements ObservableOrderedSet<E> {
 		private final boolean isAlwaysUsingFirst;
 
 		public CollectionWrappingOrderedSet(ObservableOrderedCollection<E> collection, Equalizer equalizer, boolean alwaysUseFirst) {
@@ -423,7 +423,7 @@ public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableOrd
 		}
 
 		@Override
-		protected CollectionWrappingSet<E>.UniqueElementTracking createElementTracking() {
+		protected ObservableSetImpl.CollectionWrappingSet<E>.UniqueElementTracking createElementTracking() {
 			return new UniqueOrderedElementTracking();
 		}
 
@@ -433,7 +433,7 @@ public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableOrd
 		}
 
 		@Override
-		protected UniqueElement<E> addUniqueElement(UniqueElementTracking tracking, EqualizerNode<E> node) {
+		protected ObservableSetImpl.UniqueElement<E> addUniqueElement(UniqueElementTracking tracking, EqualizerNode<E> node) {
 			UniqueOrderedElement<E> unique = new UniqueOrderedElement<>(this, isAlwaysUsingFirst,
 					((UniqueOrderedElementTracking) tracking).orderedElements);
 			tracking.elements.put(node, unique);
@@ -446,7 +446,7 @@ public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableOrd
 	 *
 	 * @param <E> The type of value in the element
 	 */
-	class UniqueOrderedElement<E> extends UniqueElement<E> implements ObservableOrderedElement<E> {
+	class UniqueOrderedElement<E> extends ObservableSetImpl.UniqueElement<E> implements ObservableOrderedElement<E> {
 		private final DefaultTreeSet<UniqueOrderedElement<E>> orderedElements;
 		private DefaultNode<UniqueOrderedElement<E>> node;
 		private int theRemovedIndex;

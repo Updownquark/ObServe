@@ -234,11 +234,6 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			.equals(((ObservableMultiEntry<K, V>) entry1).getKey(), ((ObservableMultiEntry<K, V>) entry2).getKey()));
 	}
 
-	/** @return Whether this map is thread-safe, meaning it is constrained to only fire events on a single thread at a time */
-	boolean isSafe();
-
-	// TODO default ObservableGraph<N, E> safe(){}
-
 	/**
 	 * @param key The key to store the value by
 	 * @param value The value to store

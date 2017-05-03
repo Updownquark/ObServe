@@ -15,6 +15,7 @@ import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableFastFindCollection;
 import org.observe.collect.ObservableSet;
+import org.observe.collect.ObservableSetImpl;
 import org.qommons.Equalizer;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
@@ -151,7 +152,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 
 	@Override
 	public ObservableValue<E> equivalent(Object o) {
-		return new ObservableSet.ObservableSetEquivalentFinder<E>(this, o){
+		return new ObservableSetImpl.ObservableSetEquivalentFinder<E>(this, o){
 			@Override
 			public E get() {
 				try (Transaction t = theInternals.lock(false, false, null)) {

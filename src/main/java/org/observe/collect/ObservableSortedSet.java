@@ -1594,7 +1594,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 	 *
 	 * @param <E> The type of elements in the set
 	 */
-	class CollectionWrappingSortedSet<E> extends CollectionWrappingSet<E> implements PartialSortedSetImpl<E> {
+	class CollectionWrappingSortedSet<E> extends ObservableSetImpl.CollectionWrappingSet<E> implements PartialSortedSetImpl<E> {
 		private final Comparator<? super E> theCompare;
 
 		public CollectionWrappingSortedSet(ObservableCollection<E> collection, Comparator<? super E> compare) {
@@ -1614,7 +1614,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 		}
 
 		@Override
-		protected CollectionWrappingSet<E>.UniqueElementTracking createElementTracking() {
+		protected ObservableSetImpl.CollectionWrappingSet<E>.UniqueElementTracking createElementTracking() {
 			return new UniqueSortedElementTracking();
 		}
 
@@ -1665,7 +1665,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 		}
 
 		@Override
-		protected UniqueElement<E> addUniqueElement(UniqueElementTracking tracking, EqualizerNode<E> node) {
+		protected ObservableSetImpl.UniqueElement<E> addUniqueElement(UniqueElementTracking tracking, EqualizerNode<E> node) {
 			UniqueSortedElement<E> unique = new UniqueSortedElement<>(this, ((UniqueSortedElementTracking) tracking).sortedElements);
 			tracking.elements.put(node, unique);
 			return unique;
@@ -1682,7 +1682,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 	 *
 	 * @param <E> The type of value in the element
 	 */
-	class UniqueSortedElement<E> extends UniqueElement<E> implements ObservableOrderedElement<E> {
+	class UniqueSortedElement<E> extends ObservableSetImpl.UniqueElement<E> implements ObservableOrderedElement<E> {
 		private final DefaultTreeSet<UniqueSortedElement<E>> sortedElements;
 		private DefaultNode<UniqueSortedElement<E>> node;
 

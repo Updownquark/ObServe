@@ -15,6 +15,7 @@ import org.observe.util.ObservableUtils;
 import org.qommons.BiTuple;
 import org.qommons.TriFunction;
 import org.qommons.TriTuple;
+import org.qommons.collect.CollectionElement;
 
 import com.google.common.reflect.TypeToken;
 
@@ -28,6 +29,11 @@ import com.google.common.reflect.TypeToken;
 public interface ObservableElement<E> extends SettableValue<E>, CollectionElement<E> {
 	@Override
 	ObservableValue<String> isEnabled();
+
+	@Override
+	default boolean isSafe() {
+		return true; // ObservableCollections are safe
+	}
 
 	@Override
 	default ObservableElement<E> takeUntil(Observable<?> until) {

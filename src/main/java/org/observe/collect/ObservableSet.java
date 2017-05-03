@@ -1,32 +1,22 @@
 package org.observe.collect;
 
-import static org.observe.ObservableDebug.d;
-
-import java.util.ArrayDeque;
-import java.util.Collection;
-import java.util.HashSet;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Predicate;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
-import org.observe.SimpleSettableValue;
 import org.observe.Subscription;
 import org.qommons.Equalizer;
-import org.qommons.Equalizer.EqualizerNode;
 import org.qommons.Transaction;
+import org.qommons.collect.Betterator;
+import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.TransactableSet;
 
-import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 /**
@@ -35,31 +25,20 @@ import com.google.common.reflect.TypeToken;
  * @param <E> The type of element in the set
  */
 public interface ObservableSet<E> extends ObservableCollection<E>, TransactableSet<E> {
-	/** @return The equalizer that governs uniqueness of this set
-	 * TODO Remove this and just make Object.equals the standard */
-	Equalizer getEqualizer();
-
 	@Override
-	default boolean isEmpty() {
-		return ObservableCollection.super.isEmpty();
+	default Betterator<E> iterator() {
+		return ObservableCollection.super.iterator();
 	}
 
 	@Override
-	default boolean contains(Object o) {
-		return ObservableCollection.super.contains(o);
-	}
-
-	@Override
-	default boolean containsAll(java.util.Collection<?> coll) {
-		return ObservableCollection.super.containsAll(coll);
-	}
+	ElementSpliterator<E> spliterator();
 
 	/**
 	 * @param o The object to get the equivalent of
 	 * @return The object in this set whose value is equivalent to the given value
 	 */
 	default ObservableValue<E> equivalent(Object o) {
-		return new ObservableSetEquivalentFinder<>(this, o);
+		return new ObservableSetImpl.ObservableSetEquivalentFinder<>(this, o);
 	}
 
 	@Override
@@ -72,73 +51,43 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 		return ObservableCollection.super.toArray(a);
 	}
 
+	default <X> ObservableSet<E> intersect(ObservableCollection<X> collection){
+		return new ObservableSetImpl.IntersectedSet<>(this, collection);
+	}
+
+	// Filter/mapping
+
 	@Override
-	default ObservableSet<E> safe() {
-		if (isSafe())
-			return this;
-		else
-			return d().debug(new SafeObservableSet<>(this)).from("safe", this).get();
+	default <T> MappedSetOrCollectionBuilder<E, E, T> buildMap(TypeToken<T> type) {
+		return new MappedSetOrCollectionBuilder<>(this, null, type);
 	}
 
 	/**
-	 * @param filter The filter function
-	 * @return A set containing all elements passing the given test
+	 * Similar to {@link #filterMap(FilterMapDef, boolean)}, but produces a set, as {@link EquivalentFilterMapDef} instances can only be
+	 * produced with the assertion that any map operations preserve the Set's uniqueness contract.
+	 *
+	 * @param <T> The type to map to
+	 * @param filterMap The filter-map definition
+	 * @param dynamic Whether the filtering on the set (if <code>filterMap</code> is {@link ObservableCollection.FilterMapDef#isFiltered()
+	 *        filtered}) should be done dynamically or statically. Dynamic filtering allows for the possibility that changes to individual
+	 *        elements in the collection may result in those elements passing or failing the filter. Static filtering uses the initial (on
+	 *        subscription) value of the element to determine whether that element is included in the collection and this inclusion does not
+	 *        change. Static filtering may offer potentially large performance improvements, particularly for filtering a small subset of a
+	 *        large collection, but may cause incorrect results if the initial inclusion assumption is wrong.
+	 * @return A set, filtered and mapped with the given definition
 	 */
+	default <T> ObservableSet<T> filterMap(EquivalentFilterMapDef<E, ?, T> filterMap, boolean dynamic) {
+		return new ObservableSetImpl.FilterMappedSet<>(this, filterMap, dynamic);
+	}
+
 	@Override
-	default ObservableSet<E> filter(Predicate<? super E> filter) {
+	default ObservableSet<E> filter(Function<? super E, String> filter) {
 		return (ObservableSet<E>) ObservableCollection.super.filter(filter);
 	}
 
 	@Override
-	default ObservableSet<E> filter(Predicate<? super E> filter, boolean staticFilter) {
-		if(staticFilter)
-			return filterStatic(filter);
-		else
-			return filterDynamic(filter);
-	}
-
-	@Override
-	default ObservableSet<E> filterDynamic(Predicate<? super E> filter) {
-		return d().debug(new DynamicFilteredSet<>(this, getType(), filter)).from("filter", this).using("filter", filter).get();
-	}
-
-	@Override
-	default ObservableSet<E> filterStatic(Predicate<? super E> filter) {
-		return d().debug(new StaticFilteredSet<>(this, getType(), filter)).from("filter", this).using("filter", filter).get();
-	}
-
-	@Override
 	default <T> ObservableSet<T> filter(Class<T> type) {
-		Predicate<E> filter = value -> type.isInstance(value);
-		return d().debug(new StaticFilteredSet<>(this, TypeToken.of(type), filter)).from("filterMap", this).using("filter", filter)
-			.tag("filterType", type).get();
-	}
-
-	/**
-	 * Creates a mapped set, relying on the caller to guarantee that values returned by the function are equivalent to the argument
-	 *
-	 * @param <T> The type of the mapped collection
-	 * @param type The run-time type for the mapped collection (may be null)
-	 * @param map The mapping function to map the elements of this collection
-	 * @param reverse The reverse function if addition support is desired for the mapped collection
-	 * @return The mapped collection
-	 */
-	default <T> ObservableSet<T> mapEquivalent(Function<? super E, T> map, Function<? super T, E> reverse) {
-		return mapEquivalent((TypeToken<T>) TypeToken.of(map.getClass()).resolveType(Function.class.getTypeParameters()[1]), map, reverse);
-	}
-
-	/**
-	 * Creates a mapped set, relying on the caller to guarantee that values returned by the function are equivalent to the argument
-	 *
-	 * @param <T> The type of the mapped collection
-	 * @param type The run-time type for the mapped collection (may be null)
-	 * @param map The mapping function to map the elements of this collection
-	 * @param reverse The reverse function if addition support is desired for the mapped collection
-	 * @return The mapped collection
-	 */
-	default <T> ObservableSet<T> mapEquivalent(TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse) {
-		return d().debug(new MappedObservableSet<>(this, type, map, reverse)).from("map", this).using("map", map).using("reverse", reverse)
-			.get();
+		return (ObservableSet<T>) ObservableCollection.super.filter(type);
 	}
 
 	/**
@@ -147,7 +96,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	 */
 	@Override
 	default ObservableSet<E> refresh(Observable<?> refresh) {
-		return d().debug(new RefreshingSet<>(this, refresh)).from("refresh", this).from("on", refresh).get();
+		return new ObservableSetImpl.RefreshingSet<>(this, refresh);
 	}
 
 	/**
@@ -156,47 +105,42 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	 */
 	@Override
 	default ObservableSet<E> refreshEach(Function<? super E, Observable<?>> refresh) {
-		return d().debug(new ElementRefreshingSet<>(this, refresh)).from("refreshEach", this).using("on", refresh).get();
+		return new ObservableSetImpl.ElementRefreshingSet<>(this, refresh);
 	}
 
 	@Override
-	default ObservableSet<E> immutable() {
-		return d().debug(new ImmutableObservableSet<>(this)).from("immutable", this).get();
+	default ObservableSet<E> immutable(String modMsg) {
+		return (ObservableSet<E>) ObservableCollection.super.immutable(modMsg);
 	}
 
 	@Override
-	default ObservableSet<E> filterRemove(Predicate<? super E> filter) {
+	default ObservableSet<E> filterRemove(Function<? super E, String> filter) {
 		return (ObservableSet<E>) ObservableCollection.super.filterRemove(filter);
 	}
 
 	@Override
-	default ObservableSet<E> noRemove() {
-		return (ObservableSet<E>) ObservableCollection.super.noRemove();
+	default ObservableSet<E> noRemove(String removeMsg) {
+		return (ObservableSet<E>) ObservableCollection.super.noRemove(removeMsg);
 	}
 
 	@Override
-	default ObservableSet<E> filterAdd(Predicate<? super E> filter) {
+	default ObservableSet<E> filterAdd(Function<? super E, String> filter) {
 		return (ObservableSet<E>) ObservableCollection.super.filterAdd(filter);
 	}
 
 	@Override
-	default ObservableSet<E> noAdd() {
-		return (ObservableSet<E>) ObservableCollection.super.noAdd();
+	default ObservableSet<E> noAdd(String addMsg) {
+		return (ObservableSet<E>) ObservableCollection.super.noAdd(addMsg);
 	}
 
 	@Override
-	default ObservableSet<E> filterModification(Predicate<? super E> removeFilter, Predicate<? super E> addFilter) {
-		return new ModFilteredSet<>(this, removeFilter, addFilter);
+	default ObservableSet<E> filterModification(Function<? super E, String> removeFilter, Function<? super E, String> addFilter) {
+		return (ObservableSet<E>) ObservableCollection.super.filterModification(removeFilter, addFilter);
 	}
 
-	/**
-	 * Creates a collection with the same elements as this collection, but cached, such that the
-	 *
-	 * @return The cached collection
-	 */
 	@Override
-	default ObservableSet<E> cached() {
-		return d().debug(new SafeCachedObservableSet<>(this)).from("cached", this).get();
+	default ObservableSet<E> cached(Observable<?> until) {
+		return new SafeCachedObservableSet<>(this, until);
 	}
 
 	/**
@@ -206,7 +150,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	 */
 	@Override
 	default ObservableSet<E> takeUntil(Observable<?> until) {
-		return d().debug(new TakenUntilObservableSet<>(this, until, true)).from("take", this).from("until", until).get();
+		return new ObservableSetImpl.TakenUntilObservableSet<>(this, until, true);
 	}
 
 	/**
@@ -217,7 +161,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	 */
 	@Override
 	default ObservableSet<E> unsubscribeOn(Observable<?> until) {
-		return d().debug(new TakenUntilObservableSet<>(this, until, true)).from("take", this).from("until", until).get();
+		return new ObservableSetImpl.TakenUntilObservableSet<>(this, until, true);
 	}
 
 	/**
@@ -227,7 +171,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	 * @return A collection representing the contents of the value, or a zero-length collection when null
 	 */
 	public static <E> ObservableSet<E> flattenValue(ObservableValue<? extends ObservableSet<E>> collectionObservable) {
-		return d().debug(new FlattenedValueSet<>(collectionObservable)).from("flatten", collectionObservable).get();
+		return new ObservableSetImpl.FlattenedValueSet<>(collectionObservable);
 	}
 
 	/*public static <E> ObservableSet<E> intersect(TypeToken<E> type, Collection<? extends ObservableSet<? extends E>> sets, Equalizer equalizer) {
@@ -332,9 +276,9 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 				return false;
 			}
 		}
-		ConstantObservableSet ret = d().debug(new ConstantObservableSet()).tag("constant", coll).tag("type", type).get();
+		ConstantObservableSet ret = new ConstantObservableSet();
 		for(T value : constSet)
-			els.add(d().debug(new ObservableElement<T>() {
+			els.add(new ObservableElement<T>() {
 				@Override
 				public TypeToken<T> getType() {
 					return type;
@@ -351,17 +295,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 					return () -> {
 					};
 				}
-
-				@Override
-				public boolean isSafe() {
-					return true;
-				}
-
-				@Override
-				public ObservableValue<T> persistent() {
-					return this;
-				}
-			}).from("element", ret).tag("value", value).get());
+			});
 		return ret;
 	}
 
@@ -378,747 +312,112 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	/**
 	 * @param <T> The type of the collection
 	 * @param coll The collection to turn into a set
-	 * @param equalizer The equalizer to determine uniqueness between elements
 	 * @return A set containing all unique elements of the given collection
 	 */
-	public static <T> ObservableSet<T> unique(ObservableCollection<T> coll, Equalizer equalizer) {
-		return d().debug(new CollectionWrappingSet<>(coll, equalizer)).from("unique", coll).get();
+	public static <T> ObservableSet<T> unique(ObservableCollection<T> coll) {
+		return new ObservableSetImpl.CollectionWrappingSet<>(coll);
 	}
 
 	/**
-	 * An extension of ObservableSet that implements some of the redundant methods and throws UnsupportedOperationExceptions for
-	 * modifications.
+	 * A filter-map builder that may produce either a plain {@link ObservableCollection} or a {@link ObservableSet}. It will produce a
+	 * ObservableSet unless {#link #map(Function, boolean)} is called, producing a plain
+	 * {@link ObservableCollection.MappedCollectionBuilder} that will produce a ObservableCollection as normal.
+	 * {@link #mapEquiv(Function, boolean, Function, boolean)} may be used alternatively to preserve the uniqueness contract and produce a
+	 * mapped ObservableSet.
 	 *
-	 * @param <E> The type of element in the set
+	 * @param <E> The type of values in the source collection
+	 * @param <I> Intermediate type
+	 * @param <T> The type of values in the mapped collection
 	 */
-	interface PartialSetImpl<E> extends PartialCollectionImpl<E>, ObservableSet<E> {
-		@Override
-		default boolean remove(Object o) {
-			return PartialCollectionImpl.super.remove(o);
+	class MappedSetOrCollectionBuilder<E, I, T> extends MappedCollectionBuilder<E, I, T> {
+		public MappedSetOrCollectionBuilder(ObservableSet<E> wrapped, MappedSetOrCollectionBuilder<E, ?, I> parent, TypeToken<T> type) {
+			super(wrapped, parent, type);
 		}
 
 		@Override
-		default boolean removeAll(Collection<?> c) {
-			return PartialCollectionImpl.super.removeAll(c);
+		public ObservableSet<E> getCollection() {
+			return (ObservableSet<E>) super.getCollection();
 		}
 
 		@Override
-		default boolean retainAll(Collection<?> c) {
-			return PartialCollectionImpl.super.retainAll(c);
+		protected MappedSetOrCollectionBuilder<E, ?, I> getParent() {
+			return (MappedSetOrCollectionBuilder<E, ?, I>) super.getParent();
 		}
 
+		/**
+		 * This method differs from its super method slightly in that it does not return this builder. Since no assumption can be made that
+		 * a set mapped with the given function would retain its unique contract, this method returns a different builder that produces a
+		 * plain {@link ObservableCollection} instead of a {@link ObservableSet}. If it is known that the given function preserves the
+		 * uniqueness quality required of {@link Set} implementations and a {@link ObservableSet} is desired for the result, use
+		 * {@link #mapEquiv(Function, boolean, Function, boolean)}.
+		 *
+		 * @param map The mapping function
+		 * @param mapNulls Whether to apply the function to null values or simply pass them through to the mapped set as null values
+		 * @return A plain {@link ObservableCollection} builder with the same properties as this builder, plus the given map
+		 */
 		@Override
-		default void clear() {
-			PartialCollectionImpl.super.clear();
-		}
-
-		@Override
-		default boolean add(E value) {
-			return PartialCollectionImpl.super.add(value);
-		}
-
-		@Override
-		default boolean addAll(Collection<? extends E> c) {
-			return PartialCollectionImpl.super.addAll(c);
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableSet#equivalent(Object)}
-	 *
-	 * @param <E> The type of the set to find the value in
-	 */
-	class ObservableSetEquivalentFinder<E> implements ObservableValue<E> {
-		private final ObservableSet<E> theSet;
-
-		private final Object theKey;
-
-		protected ObservableSetEquivalentFinder(ObservableSet<E> set, Object key) {
-			theSet = set;
-			theKey = key;
-		}
-
-		@Override
-		public TypeToken<E> getType() {
-			return theSet.getType();
-		}
-
-		@Override
-		public E get() {
-			for(E value : theSet) {
-				if(Objects.equals(value, theKey))
-					return value;
-			}
-			return null;
-		}
-
-		@Override
-		public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
-			boolean [] isMatch = new boolean[1];
-			boolean [] initialized = new boolean[1];
-			Subscription ret = theSet.onElement(new Consumer<ObservableElement<E>>() {
-				private E theCurrentMatch;
-
-				@Override
-				public void accept(ObservableElement<E> element) {
-					element.subscribe(new Observer<ObservableValueEvent<E>>() {
-						@Override
-						public <V extends ObservableValueEvent<E>> void onNext(V event) {
-							boolean match = Objects.equals(event.getValue(), theKey);
-							E old = theCurrentMatch;
-							if (match) {
-								isMatch[0] = true;
-								theCurrentMatch = event.getValue();
-								if (!initialized[0])
-									Observer.onNextAndFinish(observer, createInitialEvent(event.getValue(), event));
-								else if (event.getValue() != theCurrentMatch)
-									Observer.onNextAndFinish(observer, createChangeEvent(old, event.getValue(), event));
-							} else if (isMatch[0] && Objects.equals(event.getOldValue(), theKey)) {
-								isMatch[0] = false;
-								theCurrentMatch = null;
-								Observer.onNextAndFinish(observer, createChangeEvent(old, null, event));
-							}
-						}
-
-						@Override
-						public <V extends ObservableValueEvent<E>> void onCompleted(V event) {
-							if(isMatch[0] && theCurrentMatch == event.getValue()) {
-								theCurrentMatch = null;
-								Observer.onNextAndFinish(observer, createChangeEvent(event.getValue(), null, event));
-							}
-						}
-					});
-				}
-			});
-			initialized[0] = true;
-			if(!isMatch[0])
-				Observer.onNextAndFinish(observer, createInitialEvent(null, null));
-			return ret;
-		}
-
-		@Override
-		public boolean isSafe() {
-			return theSet.isSafe();
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableSet#safe()}
-	 *
-	 * @param <E> The type of elements in the set
-	 */
-	class SafeObservableSet<E> extends SafeObservableCollection<E> implements ObservableSet<E> {
-		public SafeObservableSet(ObservableSet<E> wrap) {
-			super(wrap);
-		}
-
-		@Override
-		protected ObservableSet<E> getWrapped() {
-			return (ObservableSet<E>) super.getWrapped();
-		}
-
-		@Override
-		public Equalizer getEqualizer() {
-			return getWrapped().getEqualizer();
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableSet#filter(Predicate)} and {@link ObservableSet#filter(Class)}
-	 *
-	 * @param <E> The type of the set to filter
-	 * @param <T> the type of the mapped set
-	 */
-	class StaticFilteredSet<E, T> extends StaticFilteredCollection<E, T> implements PartialSetImpl<T> {
-		protected StaticFilteredSet(ObservableSet<E> wrap, TypeToken<T> type, Predicate<? super E> filter) {
-			super(wrap, type, value -> {
-				boolean pass = filter.test(value);
-				return new FilterMapResult<>(pass ? (T) value : null, pass);
-			} , value -> (E) value);
-		}
-
-		@Override
-		public Equalizer getEqualizer() {
-			return getWrapped().getEqualizer();
-		}
-
-		@Override
-		protected ObservableSet<E> getWrapped() {
-			return (ObservableSet<E>) super.getWrapped();
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableSet#filter(Predicate)} and {@link ObservableSet#filter(Class)}
-	 *
-	 * @param <E> The type of the set to filter
-	 * @param <T> the type of the mapped set
-	 */
-	class DynamicFilteredSet<E, T> extends DynamicFilteredCollection<E, T> implements PartialSetImpl<T> {
-		protected DynamicFilteredSet(ObservableSet<E> wrap, TypeToken<T> type, Predicate<? super E> filter) {
-			super(wrap, type, value -> {
-				boolean pass = filter.test(value);
-				return new FilterMapResult<>(pass ? (T) value : null, pass);
-			} , value -> (E) value);
-		}
-
-		@Override
-		public Equalizer getEqualizer() {
-			return getWrapped().getEqualizer();
-		}
-
-		@Override
-		protected ObservableSet<E> getWrapped() {
-			return (ObservableSet<E>) super.getWrapped();
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableSet#mapEquivalent(TypeToken, Function, Function)}
-	 *
-	 * @param <E> The type of the set to map
-	 * @param <T> The type of the mapped set
-	 */
-	class MappedObservableSet<E, T> extends MappedObservableCollection<E, T> implements ObservableSet<T> {
-		protected MappedObservableSet(ObservableSet<E> wrap, TypeToken<T> type, Function<? super E, T> map,
-			Function<? super T, E> reverse) {
-			super(wrap, type, map, reverse);
-		}
-
-		@Override
-		public Equalizer getEqualizer() {
-			Function<? super T, ?> eqMap;
+		public MappedCollectionBuilder<E, I, T> map(Function<? super I, ? extends T> map, boolean mapNulls) {
+			MappedCollectionBuilder<E, I, T> nonEquivBuilder = new MappedCollectionBuilder<>(getCollection(), getParent(), getType());
+			if (getFilter() != null)
+				nonEquivBuilder.filter(getFilter(), areNullsFiltered());
 			if (getReverse() != null)
-				eqMap = getReverse();
-			else
-				eqMap = o -> o;
-				return (o1, o2) -> getWrapped().getEqualizer().equals(eqMap.apply((T) o1), eqMap.apply((T) o2));
+				nonEquivBuilder.withReverse(getReverse(), areNullsReversed());
+			return nonEquivBuilder.map(map, mapNulls);
+		}
+
+		/**
+		 * Similar to {@link #map(Function, boolean)}, but with the additional (unenforced) assertion that the given function applied to
+		 * this set will produce a set of similarly unique values. Although this assertion is not enforced here and no exceptions will be
+		 * thrown for violation of it, uniqueness is part of the contract of a {@link Set} that may be relied on by other code that may fail
+		 * if that contract is not met.
+		 *
+		 * @param map The mapping function
+		 * @param mapNulls Whether to apply the mapping function to null values or simply pass them through to the mapped set as null values
+		 * @param reverse The reverse function to map from the results of a map operation back to objects that the wrapped set can
+		 *        understand
+		 * @param reverseNulls Whether to apply the reverse function to null values or simply pass them through to the wrapped set as null
+		 *        values
+		 * @return This builder
+		 */
+		public MappedSetOrCollectionBuilder<E, I, T> mapEquiv(Function<? super I, ? extends T> map, boolean mapNulls,
+			Function<? super T, ? extends I> reverse, boolean reverseNulls) {
+			Objects.requireNonNull(map);
+			Objects.requireNonNull(reverse);
+			return (MappedSetOrCollectionBuilder<E, I, T>) super.map(map, mapNulls).withReverse(reverse, reverseNulls);
 		}
 
 		@Override
-		protected ObservableSet<E> getWrapped() {
-			return (ObservableSet<E>) super.getWrapped();
+		public <X> MappedSetOrCollectionBuilder<E, T, X> andThen(TypeToken<X> nextType) {
+			return new MappedSetOrCollectionBuilder<>(getCollection(), this, nextType);
+		}
+
+		@Override
+		public EquivalentFilterMapDef<E, I, T> toDef() {
+			EquivalentFilterMapDef<E, ?, I> parent = getParent() == null ? null : getParent().toDef();
+			TypeToken<I> intermediate = parent == null ? (TypeToken<I>) getCollection().getType() : parent.destType;
+			return new EquivalentFilterMapDef<>(getCollection().getType(), intermediate, getType(), parent, getFilter(), areNullsFiltered(),
+				getMap(), areNullsMapped(), getReverse(), areNullsReversed());
+		}
+
+		@Override
+		public ObservableSet<T> build(boolean dynamic) {
+			return getCollection().filterMap(toDef(), dynamic);
 		}
 	}
 
 	/**
-	 * Implements {@link ObservableSet#refresh(Observable)}
+	 * The type of {@link ObservableCollection.FilterMapDef} produced by {@link ObservableSet.MappedSetOrCollectionBuilder}s when the
+	 * uniqueness contract is preserved.
 	 *
-	 * @param <E> The type of the set
+	 * @param <E> The type of values in the source collection
+	 * @param <I> Intermediate type
+	 * @param <T> The type of values in the mapped collection
 	 */
-	class RefreshingSet<E> extends RefreshingCollection<E> implements PartialSetImpl<E> {
-		protected RefreshingSet(ObservableSet<E> wrap, Observable<?> refresh) {
-			super(wrap, refresh);
-		}
-
-		@Override
-		protected ObservableSet<E> getWrapped() {
-			return (ObservableSet<E>) super.getWrapped();
-		}
-
-		@Override
-		public Equalizer getEqualizer() {
-			return getWrapped().getEqualizer();
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableSet#refreshEach(Function)}
-	 *
-	 * @param <E> The type of the set
-	 */
-	class ElementRefreshingSet<E> extends ElementRefreshingCollection<E> implements PartialSetImpl<E> {
-		protected ElementRefreshingSet(ObservableSet<E> wrap, Function<? super E, Observable<?>> refresh) {
-			super(wrap, refresh);
-		}
-
-		@Override
-		protected ObservableSet<E> getWrapped() {
-			return (ObservableSet<E>) super.getWrapped();
-		}
-
-		@Override
-		public Equalizer getEqualizer() {
-			return getWrapped().getEqualizer();
-		}
-	}
-
-	/**
-	 * An observable set that cannot be modified directly, but reflects the value of a wrapped set as it changes
-	 *
-	 * @param <E> The type of elements in the set
-	 */
-	class ImmutableObservableSet<E> extends ImmutableObservableCollection<E> implements PartialSetImpl<E> {
-		protected ImmutableObservableSet(ObservableSet<E> wrap) {
-			super(wrap);
-		}
-
-		@Override
-		protected ObservableSet<E> getWrapped() {
-			return (ObservableSet<E>) super.getWrapped();
-		}
-
-		@Override
-		public ImmutableObservableSet<E> immutable() {
-			return this;
-		}
-
-		@Override
-		public Equalizer getEqualizer() {
-			return getWrapped().getEqualizer();
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableSet#filterModification(Predicate, Predicate)}
-	 *
-	 * @param <E> The type of elements in the set
-	 */
-	class ModFilteredSet<E> extends ModFilteredCollection<E> implements PartialSetImpl<E> {
-		public ModFilteredSet(ObservableSet<E> wrapped, Predicate<? super E> removeFilter, Predicate<? super E> addFilter) {
-			super(wrapped, removeFilter, addFilter);
-		}
-
-		@Override
-		protected ObservableSet<E> getWrapped() {
-			return (ObservableSet<E>) super.getWrapped();
-		}
-
-		@Override
-		public Equalizer getEqualizer() {
-			return getWrapped().getEqualizer();
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableSet#cached()}
-	 *
-	 * @param <E> The type of elements in the set
-	 */
-	class SafeCachedObservableSet<E> extends SafeCachedObservableCollection<E> implements PartialSetImpl<E> {
-		protected SafeCachedObservableSet(ObservableSet<E> wrap) {
-			super(wrap);
-		}
-
-		@Override
-		protected ObservableSet<E> getWrapped() {
-			return (ObservableSet<E>) super.getWrapped();
-		}
-
-		@Override
-		public ObservableSet<E> cached() {
-			return this;
-		}
-
-		@Override
-		public Equalizer getEqualizer() {
-			return getWrapped().getEqualizer();
-		}
-	}
-
-	/**
-	 * Backs {@link ObservableSet#takeUntil(Observable)}
-	 *
-	 * @param <E> The type of elements in the set
-	 */
-	class TakenUntilObservableSet<E> extends TakenUntilObservableCollection<E> implements PartialSetImpl<E> {
-		public TakenUntilObservableSet(ObservableSet<E> wrap, Observable<?> until, boolean terminate) {
-			super(wrap, until, terminate);
-		}
-
-		@Override
-		protected ObservableSet<E> getWrapped() {
-			return (ObservableSet<E>) super.getWrapped();
-		}
-
-		@Override
-		public Equalizer getEqualizer() {
-			return getWrapped().getEqualizer();
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableSet#combine(ObservableCollection, Equalizer, Supplier, Supplier)}
-	 *
-	 * @param <E> The super type of elements in the collection / class SetCombination<E> implements PartialSetImpl<E> { private final
-	 *        ObservableCollection<? extends ObservableSet<? extends E>> theSets; private final TypeToken<E> theType; private final
-	 *        Equalizer theEqualizer; private final int theMinCount; private final int theMaxCount; private final
-	 *        CombinedCollectionSessionObservable theSession;
-	 *
-	 *        public SetCombination(ObservableCollection<? extends ObservableSet<? extends E>> sets, Equalizer equalizer, int minCount, int
-	 *        maxCount) { theSets = sets; theType = (TypeToken<E>)
-	 *        theSets.getType().resolveType(ObservableCollection.class.getTypeParameters()[0]); theEqualizer = equalizer; theMinCount =
-	 *        minCount; theMaxCount = maxCount; theSession = new CombinedCollectionSessionObservable(theSets); }
-	 *
-	 * @Override public TypeToken<E> getType() { return theType; }
-	 *
-	 * @Override public ObservableValue<CollectionSession> getSession() { return theSession; }
-	 *
-	 * @Override public boolean isSafe() { return false; }
-	 *
-	 * @Override public boolean canRemove(Object value) { int count = 0; for (ObservableSet<? extends E> setEl : theSets) { if
-	 *           (!setEl.canRemove(value) && setEl.contains(value)) count++; } return count < theMinCount; }
-	 *
-	 * @Override public boolean canAdd(E value) { int count = 0; int addableCount = 0; int removableCount = 0; for (ObservableSet<? extends
-	 *           E> setEl : theSets) { if (setEl.contains(value)) { count++; if (setEl.canRemove(value)) removableCount++; } else if
-	 *           (canAdd(setEl, value)) addableCount++; } return count + addableCount >= theMinCount && count - removableCount <=
-	 *           theMaxCount; }
-	 *
-	 *           private <T extends E> boolean canAdd(ObservableSet<T> setEl, E value) { if (value == null ||
-	 *           setEl.getType().getRawType().isInstance(value)) return setEl.canAdd((T) value); else return false; }
-	 *
-	 * @Override public Transaction lock(boolean write, Object cause) { return CombinedCollectionSessionObservable.lock(theSets, write,
-	 *           cause); }
-	 *
-	 * @Override public int size() { Map<Equalizer.EqualizerNode<E>, int[]> elementCounts = new LinkedHashMap<>(); for (ObservableSet<?
-	 *           extends E> setEl : theSets) for (E el : setEl) elementCounts.computeIfAbsent(theEqualizer.nodeFor(el), n -> new
-	 *           int[1])[0]++; return (int) elementCounts.entrySet().stream().filter(e -> e.getValue()[0] >= theMinCount && e.getValue()[0]
-	 *           <= theMaxCount) .count(); }
-	 *
-	 * @Override public Iterator<E> iterator() { if (theMaxCount >= theSets.size()) { return new Iterator<E>() { private final Iterator<?
-	 *           extends ObservableSet<? extends E>> outerIter = theSets.iterator(); private Iterator<? extends E> innerIter; private
-	 *           Map<Equalizer.EqualizerNode<E>, int[]> elementCounts = new LinkedHashMap<>(); private boolean isReady; private E
-	 *           theNextValue; private boolean hadGoodValue;
-	 *
-	 * @Override public boolean hasNext() { if (isReady) return true; while (!isReady) { if (innerIter == null || !innerIter.hasNext()) { if
-	 *           (outerIter.hasNext()) { hadGoodValue = false; // Don't remove from the new iterator innerIter =
-	 *           outerIter.next().iterator(); } else break; } while (innerIter.hasNext()) { E value = innerIter.next(); int[] count =
-	 *           elementCounts.computeIfAbsent(theEqualizer.nodeFor(value), n -> new int[1]); count[0]++; if (count[0] == theMinCount) {
-	 *           theNextValue = value; isReady = true; break; } } } return isReady; }
-	 *
-	 * @Override public E next() { if (!isReady && !hasNext()) throw new java.util.NoSuchElementException(); isReady = false; hadGoodValue =
-	 *           true; return theNextValue; }
-	 *
-	 * @Override public void remove() { if (hadGoodValue) { hadGoodValue = false; innerIter.remove(); } else throw new
-	 *           IllegalStateException("Call remove() right after next()"); } }; } else { Map<Equalizer.EqualizerNode<E>, int[]>
-	 *           elementCounts = new LinkedHashMap<>(); for (ObservableSet<? extends E> setEl : theSets) for (E el : setEl)
-	 *           elementCounts.computeIfAbsent(theEqualizer.nodeFor(el), n -> new int[1])[0]++; return new Iterator<E>() { private final
-	 *           Iterator<Map.Entry<Equalizer.EqualizerNode<E>, int[]>> entryIter = elementCounts.entrySet().iterator(); private
-	 *           Map.Entry<Equalizer.EqualizerNode<E>, int[]> theLastEntry; private boolean isReady; private boolean hadGoodValue;
-	 *
-	 * @Override public boolean hasNext() { if (isReady) return true; hadGoodValue = false; while (entryIter.hasNext()) { theLastEntry =
-	 *           entryIter.next(); if (theLastEntry.getValue()[0] >= theMinCount && theLastEntry.getValue()[0] <= theMaxCount) break; }
-	 *           return isReady; }
-	 *
-	 * @Override public E next() { if (!isReady && !hasNext()) throw new java.util.NoSuchElementException(); isReady = false; hadGoodValue =
-	 *           true; return theLastEntry.getKey().get(); }
-	 *
-	 * @Override public void remove() { if (!hadGoodValue) throw new IllegalStateException("Call remove() right after next()"); hadGoodValue
-	 *           = false; entryIter.remove(); for (ObservableSet<? extends E> setEl : theSets) { if
-	 *           (setEl.canRemove(theLastEntry.getKey().get()) && setEl.remove(theLastEntry.getKey().get())) { theLastEntry.getValue()[0]--;
-	 *           if (theLastEntry.getValue()[0] < theMinCount) break; } } } }; } }
-	 *
-	 * @Override public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) { class CountedElement{ final AtomicInteger
-	 *           count=new AtomicInteger(); final java.util.concurrent.ConcurrentLinkedQueue<ObservableElement<? ex> }
-	 *           ConcurrentHashMap<Equalizer.EqualizerNode<E>, AtomicInteger> elementCounts=new ConcurrentHashMap<>(); return
-	 *           theSets.onElement(outerEl->{ outerEl.get().takeUntil(outerEl).onElement(innerEl->{ innerEl.subscribe(new
-	 *           Observer<ObservableValueEvent<? extends E>>(){
-	 * @Override public <V extends ObservableValueEvent<? extends E>> void onNext(V event) { // TODO Auto-generated method stub
-	 *
-	 *           }
-	 *
-	 * @Override public <V extends ObservableValueEvent<? extends E>> void onCompleted(V event) { int
-	 *           newCount=elementCounts.get(theEqualizer.nodeFor(event.getValue())).decrementAndGet(); if(newCount<theMinCount) // TODO
-	 *           Auto-generated method stub
-	 *
-	 *           } }); }); }); }
-	 *
-	 * @Override public Equalizer getEqualizer() { return theEqualizer; } }
-	 */
-
-	/**
-	 * Implements {@link ObservableSet#flattenValue(ObservableValue)}
-	 *
-	 * @param <E> The type of elements in the set
-	 */
-	class FlattenedValueSet<E> extends FlattenedValueCollection<E> implements PartialSetImpl<E> {
-		public FlattenedValueSet(ObservableValue<? extends ObservableSet<E>> collectionObservable) {
-			super(collectionObservable);
-		}
-
-		@Override
-		protected ObservableValue<? extends ObservableSet<E>> getWrapped() {
-			return (ObservableValue<? extends ObservableSet<E>>) super.getWrapped();
-		}
-
-		@Override
-		public Equalizer getEqualizer() {
-			ObservableSet<? extends E> wrapped = getWrapped().get();
-			return wrapped == null ? Objects::equals : wrapped.getEqualizer();
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableSet#unique(ObservableCollection, Equalizer)}
-	 *
-	 * @param <E> The type of elements in the set
-	 */
-	class CollectionWrappingSet<E> implements PartialSetImpl<E> {
-		private final ObservableCollection<E> theCollection;
-		private final Equalizer theEqualizer;
-
-		public CollectionWrappingSet(ObservableCollection<E> collection, Equalizer equalizer) {
-			theCollection = collection;
-			theEqualizer = equalizer;
-		}
-
-		protected ObservableCollection<E> getWrapped() {
-			return theCollection;
-		}
-
-		@Override
-		public Equalizer getEqualizer() {
-			return theEqualizer;
-		}
-
-		@Override
-		public TypeToken<E> getType() {
-			return theCollection.getType();
-		}
-
-		@Override
-		public ObservableValue<CollectionSession> getSession() {
-			return theCollection.getSession();
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theCollection.lock(write, cause);
-		}
-
-		@Override
-		public boolean isSafe() {
-			return theCollection.isSafe();
-		}
-
-		@Override
-		public int size() {
-			HashSet<EqualizerNode<E>> set = new HashSet<>();
-			for (E value : theCollection)
-				set.add(new EqualizerNode<>(theEqualizer, value));
-			return set.size();
-		}
-
-		@Override
-		public Iterator<E> iterator() {
-			return unique(theCollection.iterator());
-		}
-
-		@Override
-		public boolean canRemove(Object value) {
-			return theCollection.canRemove(value);
-		}
-
-		@Override
-		public boolean canAdd(E value) {
-			if (!theCollection.canAdd(value))
-				return false;
-			HashSet<EqualizerNode<E>> set = new HashSet<>();
-			for (E v : theCollection)
-				set.add(new EqualizerNode<>(theEqualizer, v));
-			return !set.contains(new EqualizerNode<>(theEqualizer, value));
-		}
-
-		protected Iterator<E> unique(Iterator<E> backing) {
-			return new Iterator<E>() {
-				private final HashSet<EqualizerNode<E>> set = new HashSet<>();
-
-				private E nextVal;
-
-				@Override
-				public boolean hasNext() {
-					while (nextVal == null && backing.hasNext()) {
-						nextVal = backing.next();
-						if (!set.add(new EqualizerNode<>(theEqualizer, nextVal)))
-							nextVal = null;
-					}
-					return nextVal != null;
-				}
-
-				@Override
-				public E next() {
-					if (nextVal == null && !hasNext())
-						throw new java.util.NoSuchElementException();
-					E ret = nextVal;
-					nextVal = null;
-					return ret;
-				}
-
-				@Override
-				public void remove() {
-					backing.remove();
-				}
-			};
-		}
-
-		protected class UniqueElementTracking {
-			protected Map<EqualizerNode<E>, UniqueElement<E>> elements = new LinkedHashMap<>();
-		}
-
-		@Override
-		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
-			return onElement(onElement, ObservableCollection::onElement);
-		}
-
-		protected Subscription onElement(Consumer<? super ObservableElement<E>> onElement,
-			BiFunction<ObservableCollection<E>, Consumer<? super ObservableElement<E>>, Subscription> subscriber) {
-			final UniqueElementTracking tracking = createElementTracking();
-			return subscriber.apply(theCollection, element -> {
-				element.subscribe(new Observer<ObservableValueEvent<E>>() {
-					@Override
-					public <EV extends ObservableValueEvent<E>> void onNext(EV event) {
-						EqualizerNode<E> newNode = new EqualizerNode<>(theEqualizer, event.getValue());
-						UniqueElement<E> newUnique = tracking.elements.get(newNode);
-						if (newUnique == null)
-							newUnique = addUniqueElement(tracking, newNode);
-						boolean addElement = newUnique.isEmpty();
-						boolean reAdd;
-						if (event.isInitial()) {
-							reAdd = newUnique.addElement(element, event);
-						} else {
-							EqualizerNode<E> oldNode = new EqualizerNode<>(theEqualizer, event.getOldValue());
-							UniqueElement<E> oldUnique = tracking.elements.get(oldNode);
-							if (oldUnique == newUnique) {
-								reAdd = newUnique.changed(element);
-							} else {
-								if (oldUnique != null)
-									removeFromOld(oldUnique, oldNode, event);
-								reAdd = newUnique.addElement(element, event);
-							}
-						}
-						if (addElement)
-							onElement.accept(newUnique);
-						else if (reAdd) {
-							newUnique.reset(event);
-							onElement.accept(newUnique);
-						}
-					}
-
-					@Override
-					public <EV extends ObservableValueEvent<E>> void onCompleted(EV event) {
-						EqualizerNode<E> node = new EqualizerNode<>(theEqualizer, event.getValue());
-						UniqueElement<E> unique = tracking.elements.get(node);
-						if (unique != null)
-							removeFromOld(unique, node, event);
-					}
-
-					void removeFromOld(UniqueElement<E> unique, EqualizerNode<E> node, Object cause) {
-						boolean reAdd = unique.removeElement(element, cause);
-						if (unique.isEmpty())
-							tracking.elements.remove(node);
-						else if (reAdd) {
-							unique.reset(cause);
-							onElement.accept(unique);
-						}
-					}
-				});
-			});
-		}
-
-		protected UniqueElementTracking createElementTracking() {
-			return new UniqueElementTracking();
-		}
-
-		protected UniqueElement<E> addUniqueElement(UniqueElementTracking tracking, EqualizerNode<E> node) {
-			UniqueElement<E> unique = new UniqueElement<>(this, false);
-			tracking.elements.put(node, unique);
-			return unique;
-		}
-
-		@Override
-		public String toString() {
-			return ObservableSet.toString(this);
-		}
-	}
-
-	/**
-	 * Implements elements for {@link ObservableSet#unique(ObservableCollection, Equalizer)}
-	 *
-	 * @param <E> The type of value in the element
-	 */
-	class UniqueElement<E> implements ObservableElement<E>{
-		private final CollectionWrappingSet<E> theSet;
-		private final boolean isAlwaysUsingFirst;
-		private final Collection<ObservableElement<E>> theElements;
-		private final SimpleSettableValue<ObservableElement<E>> theCurrentElement;
-
-		UniqueElement(CollectionWrappingSet<E> set, boolean alwaysUseFirst) {
-			theSet = set;
-			isAlwaysUsingFirst = alwaysUseFirst;
-			theElements = createElements();
-			theCurrentElement = new SimpleSettableValue<>(
-				new TypeToken<ObservableElement<E>>() {}.where(new TypeParameter<E>() {}, theSet.getType()), true);
-		}
-
-		protected Collection<ObservableElement<E>> createElements() {
-			return new ArrayDeque<>();
-		}
-
-		@Override
-		public TypeToken<E> getType() {
-			return theSet.getType();
-		}
-
-		@Override
-		public E get() {
-			return theElements.isEmpty() ? null : theElements.iterator().next().get();
-		}
-
-		@Override
-		public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
-			return ObservableElement.flatten(theCurrentElement).subscribe(observer);
-		}
-
-		@Override
-		public boolean isSafe() {
-			return theSet.isSafe();
-		}
-
-		@Override
-		public ObservableValue<E> persistent() {
-			return theElements.isEmpty() ? ObservableValue.constant(theSet.getType(), null) : theElements.iterator().next().persistent();
-		}
-
-		protected ObservableElement<E> getCurrentElement() {
-			return theCurrentElement.get();
-		}
-
-		protected boolean addElement(ObservableElement<E> element, Object cause) {
-			theElements.add(element);
-			boolean newBest;
-			if (isAlwaysUsingFirst)
-				newBest = theElements.iterator().next() == element;
-			else
-				newBest = theCurrentElement.get() == null;
-			if (newBest)
-				return setCurrentElement(element, cause);
-			else
-				return false;
-		}
-
-		protected boolean removeElement(ObservableElement<E> element, Object cause) {
-			theElements.remove(element);
-			if (theCurrentElement.get() == element)
-				return setCurrentElement(theElements.isEmpty() ? null : theElements.iterator().next(), cause);
-			else
-				return false;
-		}
-
-		protected boolean changed(ObservableElement<E> element) {
-			return false;
-		}
-
-		protected void reset(Object cause) {
-			theCurrentElement.set(theElements.iterator().next(), cause);
-		}
-
-		protected boolean setCurrentElement(ObservableElement<E> element, Object cause) {
-			theCurrentElement.set(element, cause);
-			return false;
-		}
-
-		protected boolean isEmpty() {
-			return theElements.isEmpty();
+	class EquivalentFilterMapDef<E, I, T> extends FilterMapDef<E, I, T> {
+		public EquivalentFilterMapDef(TypeToken<E> sourceType, TypeToken<I> intermediateType, TypeToken<T> type,
+			EquivalentFilterMapDef<E, ?, I> parent, Function<? super I, String> filter, boolean filterNulls,
+			Function<? super I, ? extends T> map, boolean mapNulls, Function<? super T, ? extends I> reverse, boolean reverseNulls) {
+			super(sourceType, intermediateType, type, parent, filter, filterNulls, map, mapNulls, reverse, reverseNulls);
 		}
 	}
 }
