@@ -33,14 +33,18 @@ public interface Equivalence<E> {
 	 */
 	boolean elementEquals(E element, Object value);
 
-	/** @return A new, empty set whose exclusivity is governed by this equivalence */
-	Set<E> createSet();
+	/**
+	 * @param <E2> The type for the set
+	 * @return A new, empty set whose exclusivity is governed by this equivalence
+	 */
+	<E2 extends E> Set<E2> createSet();
 
 	/**
-	 * @param <V> The type of values for the map
+	 * @param <E2> The key type for the map
+	 * @param <V> The value type for the map
 	 * @return A new, empty map whose key exclusivity is governed by this equivalence
 	 */
-	<V> Map<E, V> createMap();
+	<E2 extends E, V> Map<E2, V> createMap();
 
 	/** The default {@link Object#equals(Object)} implementation of equivalence. Used by most java collections. */
 	Equivalence<Object> DEFAULT=new Equivalence<Object>() {
@@ -55,12 +59,12 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public Set<Object> createSet() {
+		public <E2> Set<E2> createSet() {
 			return new LinkedHashSet<>();
 		}
 
 		@Override
-		public <V> Map<Object, V> createMap() {
+		public <E2, V> Map<E2, V> createMap() {
 			return new LinkedHashMap<>();
 		}
 	};
@@ -78,12 +82,12 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public Set<Object> createSet() {
+		public <E2> Set<E2> createSet() {
 			return new IdentityHashSet<>();
 		}
 
 		@Override
-		public <V> Map<Object, V> createMap() {
+		public <E2, V> Map<E2, V> createMap() {
 			return new IdentityHashMap<>();
 		}
 	};
