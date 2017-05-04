@@ -32,6 +32,7 @@ import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.collect.ObservableCollection.FilterMapDef;
 import org.observe.collect.ObservableCollection.FilterMapResult;
+import org.observe.collect.ObservableCollection.ModFilterDef;
 import org.observe.collect.ObservableCollection.StdMsg;
 import org.observe.util.ObservableUtils;
 import org.qommons.Equalizer;
@@ -958,41 +959,26 @@ public final class ObservableCollectionImpl {
 	 * @param <T> The type of the value to combine the collection elements with
 	 * @param <V> The type of the combined collection
 	 */
-	public static class CombinedObservableCollection<E, T, V> implements ObservableCollection<V> {
+	public static class CombinedObservableCollection<E, V> implements ObservableCollection<V> {
 		private final ObservableCollection<E> theWrapped;
-
-		private final TypeToken<V> theType;
-		private final ObservableValue<T> theValue;
-		private final BiFunction<? super E, ? super T, V> theMap;
-		private final BiFunction<? super V, ? super T, E> theReverse;
+		private final CombinedCollectionDef<E, V> theDef;
 
 		private final SubCollectionTransactionManager theTransactionManager;
 
-		protected CombinedObservableCollection(ObservableCollection<E> wrap, TypeToken<V> type, ObservableValue<T> value,
-			BiFunction<? super E, ? super T, V> map, BiFunction<? super V, ? super T, E> reverse) {
+		protected CombinedObservableCollection(ObservableCollection<E> wrap, CombinedCollectionDef<E, V> def) {
 			theWrapped = wrap;
-			theType = type;
-			theValue = value;
-			theMap = map;
-			theReverse = reverse;
+			theDef = def;
 
-			theTransactionManager = new SubCollectionTransactionManager(theWrapped, value.noInit());
+			theTransactionManager = new SubCollectionTransactionManager(theWrapped,
+				Observable.or(def.getArgs().stream().map(arg -> arg.noInit()).collect(Collectors.toList()).toArray(new Observable[0])));
 		}
 
 		protected ObservableCollection<E> getWrapped() {
 			return theWrapped;
 		}
 
-		protected ObservableValue<T> getValue() {
-			return theValue;
-		}
-
-		protected BiFunction<? super E, ? super T, V> getMap() {
-			return theMap;
-		}
-
-		protected BiFunction<? super V, ? super T, E> getReverse() {
-			return theReverse;
+		protected CombinedCollectionDef<E, V> getDef() {
+			return theDef;
 		}
 
 		protected SubCollectionTransactionManager getManager() {
@@ -1016,7 +1002,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public TypeToken<V> getType() {
-			return theType;
+			return theDef.targetType;
 		}
 
 		@Override
@@ -1031,22 +1017,22 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean contains(Object o) {
-			if (!theType.getRawType().isInstance(o))
+			if (o!=null && !theDef.targetType.getRawType().isInstance(o))
 				return false;
-			if (theReverse != null)
-				return theWrapped.contains(theReverse.apply((V) o, theValue.get()));
+			if (theDef.getReverse() != null && (o != null || theDef.areNullsReversed()))
+				return theWrapped.contains(theDef.getReverse().apply(combineDynamic((V) o)));
 			else
 				return ObservableCollectionImpl.contains(this, o);
 		}
 
 		@Override
 		public boolean containsAll(Collection<?> c) {
-			if (theReverse == null || c.size() > size())
+			if (theDef.getReverse() == null || c.size() > size())
 				return ObservableCollectionImpl.containsAll(this, c);
 			else {
 				T value = theValue.get();
 				for (Object o : c)
-					if (!theType.getRawType().isInstance(o))
+					if (!theDef.targetType.getRawType().isInstance(o))
 						return false;
 				return theWrapped.containsAll(c.stream().map(o -> theReverse.apply((V) o, value)).collect(Collectors.toList()));
 			}
@@ -1054,12 +1040,12 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean containsAny(Collection<?> c) {
-			if (theReverse == null || c.size() > size())
+			if (theDef.getReverse() == null || c.size() > size())
 				return ObservableCollectionImpl.containsAny(this, c);
 			else {
 				T value = theValue.get();
 				for (Object o : c)
-					if (!theType.getRawType().isInstance(o))
+					if (!theDef.targetType.getRawType().isInstance(o))
 						return false;
 				return theWrapped.containsAny(c.stream().map(o -> theReverse.apply((V) o, value)).collect(Collectors.toList()));
 			}
@@ -1067,7 +1053,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public String canAdd(V value) {
-			if (theReverse != null)
+			if (theDef.getReverse() != null)
 				return theWrapped.canAdd(theReverse.apply(value, theValue.get()));
 			else
 				return StdMsg.UNSUPPORTED_OPERATION;
@@ -1075,7 +1061,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean add(V e) {
-			if (theReverse == null)
+			if (theDef.getReverse() == null)
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			else
 				return theWrapped.add(theReverse.apply(e, theValue.get()));
@@ -1083,7 +1069,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean addAll(Collection<? extends V> c) {
-			if (theReverse == null)
+			if (theDef.getReverse() == null)
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			else {
 				T combineValue = theValue.get();
@@ -1093,7 +1079,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public ObservableCollection<V> addValues(V... values) {
-			if (theReverse == null)
+			if (theDef.getReverse() == null)
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			else {
 				T combineValue = theValue.get();
@@ -1104,7 +1090,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public String canRemove(Object value) {
-			if (theReverse != null && (value == null || theType.getRawType().isInstance(value)))
+			if (theDef.getReverse() != null && (value == null || theDef.targetType.getRawType().isInstance(value)))
 				return theWrapped.canRemove(theReverse.apply((V) value, theValue.get()));
 			else
 				return StdMsg.UNSUPPORTED_OPERATION;
@@ -1112,7 +1098,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean remove(Object o) {
-			if (theReverse == null) {
+			if (theDef.getReverse() == null) {
 				try (Transaction t = lock(true, null)) {
 					T combineValue = theValue.get();
 					Iterator<E> iter = theWrapped.iterator();
@@ -1125,7 +1111,7 @@ public final class ObservableCollectionImpl {
 					}
 				}
 				return false;
-			} else if (theType.getRawType().isInstance(o)) {
+			} else if (theDef.targetType.getRawType().isInstance(o)) {
 				E reversed = theReverse.apply((V) o, theValue.get());
 				return getWrapped().remove(reversed);
 			} else
@@ -1134,7 +1120,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean removeAll(Collection<?> c) {
-			if (theReverse == null) {
+			if (theDef.getReverse() == null) {
 				boolean ret = false;
 				try (Transaction t = lock(true, null)) {
 					T combineValue = theValue.get();
@@ -1150,14 +1136,14 @@ public final class ObservableCollectionImpl {
 				return ret;
 			} else {
 				T combined = theValue.get();
-				return theWrapped.removeAll(c.stream().filter(o -> theType.getRawType().isInstance(o))
+				return theWrapped.removeAll(c.stream().filter(o -> theDef.targetType.getRawType().isInstance(o))
 					.map(o -> theReverse.apply((V) o, combined)).collect(Collectors.toList()));
 			}
 		}
 
 		@Override
 		public boolean retainAll(Collection<?> c) {
-			if (theReverse == null) {
+			if (theDef.getReverse() == null) {
 				boolean ret = false;
 				try (Transaction t = lock(true, null)) {
 					T combineValue = theValue.get();
@@ -1173,7 +1159,7 @@ public final class ObservableCollectionImpl {
 				return ret;
 			} else {
 				T combined = theValue.get();
-				return theWrapped.retainAll(c.stream().filter(o -> theType.getRawType().isInstance(o))
+				return theWrapped.retainAll(c.stream().filter(o -> theDef.targetType.getRawType().isInstance(o))
 					.map(o -> theReverse.apply((V) o, combined)).collect(Collectors.toList()));
 			}
 		}
@@ -1203,7 +1189,7 @@ public final class ObservableCollectionImpl {
 
 					@Override
 					public <V2 extends V> String isAcceptable(V2 value) {
-						if (theReverse == null)
+						if (theDef.getReverse() == null)
 							return StdMsg.UNSUPPORTED_OPERATION;
 						E reverse = theReverse.apply(value, theValue.get());
 						return ((CollectionElement<E>) getWrapped()).isAcceptable(reverse);
@@ -1211,7 +1197,7 @@ public final class ObservableCollectionImpl {
 
 					@Override
 					public <V2 extends V> V set(V2 value, Object cause) throws IllegalArgumentException {
-						if (theReverse == null)
+						if (theDef.getReverse() == null)
 							throw new IllegalArgumentException(StdMsg.UNSUPPORTED_OPERATION);
 						E reverse = theReverse.apply(value, theValue.get());
 						return theMap.apply(((CollectionElement<E>) getWrapped()).set(reverse, cause), theValue.get());
@@ -1240,6 +1226,30 @@ public final class ObservableCollectionImpl {
 		@Override
 		public String toString() {
 			return ObservableCollection.toString(this);
+		}
+
+		protected <T> CombinedValues<T> combineDynamic(T value) {
+			return new DynamicCombinedValues<>(value);
+		}
+
+		private class DynamicCombinedValues<T> implements CombinedValues<T> {
+			private final T theElement;
+
+			DynamicCombinedValues(T element) {
+				theElement = element;
+			}
+
+			@Override
+			public T getElement() {
+				return theElement;
+			}
+
+			@Override
+			public <T> T get(ObservableValue<T> arg) {
+				if (!theDef.getArgs().contains(arg))
+					throw new IllegalArgumentException("Unrecognized argument value: " + arg);
+				return arg.get();
+			}
 		}
 	}
 
@@ -1599,6 +1609,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public Equivalence<? super E> equivalence() {
+			return theWrapped.equivalence();
+		}
+
+		@Override
 		public int size() {
 			return theWrapped.size();
 		}
@@ -1730,6 +1745,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public Equivalence<? super E> equivalence() {
+			return theWrapped.equivalence();
+		}
+
+		@Override
 		public int size() {
 			return theWrapped.size();
 		}
@@ -1823,27 +1843,19 @@ public final class ObservableCollectionImpl {
 	 */
 	public static class ModFilteredCollection<E> implements ObservableCollection<E> {
 		private final ObservableCollection<E> theWrapped;
+		private final org.observe.collect.ObservableCollection.ModFilterDef<E> theDef;
 
-		private final Function<? super E, String> theRemoveFilter;
-		private final Function<? super E, String> theAddFilter;
-
-		public ModFilteredCollection(ObservableCollection<E> wrapped, Function<? super E, String> removeFilter,
-			Function<? super E, String> addFilter) {
+		public ModFilteredCollection(ObservableCollection<E> wrapped, ModFilterDef<E> def) {
 			theWrapped = wrapped;
-			theRemoveFilter = removeFilter;
-			theAddFilter = addFilter;
+			theDef = def;
 		}
 
 		protected ObservableCollection<E> getWrapped() {
 			return theWrapped;
 		}
 
-		protected Function<? super E, String> getRemoveFilter() {
-			return theRemoveFilter;
-		}
-
-		protected Function<? super E, String> getAddFilter() {
-			return theAddFilter;
+		protected ModFilterDef<E> getDef() {
+			return theDef;
 		}
 
 		@Override
@@ -1867,9 +1879,9 @@ public final class ObservableCollectionImpl {
 
 					@Override
 					public <V extends E> String isAcceptable(V value) {
-						String s = null;
-						if (theAddFilter != null)
-							s = theAddFilter.apply(value);
+						String s = theDef.attemptRemove(get());
+						if (s == null)
+							s = theDef.attemptAdd(value);
 						if (s == null)
 							s = ((CollectionElement<E>) getWrapped()).isAcceptable(value);
 						return s;
@@ -1877,19 +1889,17 @@ public final class ObservableCollectionImpl {
 
 					@Override
 					public <V extends E> E set(V value, Object cause) throws IllegalArgumentException {
-						if (theAddFilter != null) {
-							String s = theAddFilter.apply(value);
-							if (s != null)
-								throw new IllegalArgumentException(s);
-						}
+						String s = theDef.attemptRemove(get());
+						if (s == null)
+							s = theDef.attemptAdd(value);
+						if (s != null)
+							throw new IllegalArgumentException(s);
 						return ((CollectionElement<E>) getWrapped()).set(value, cause);
 					}
 
 					@Override
 					public String canRemove() {
-						String s = null;
-						if (theRemoveFilter != null)
-							s = theRemoveFilter.apply(get());
+						String s = theDef.attemptRemove(get());
 						if (s == null)
 							s = getWrapped().canRemove();
 						return s;
@@ -1897,11 +1907,9 @@ public final class ObservableCollectionImpl {
 
 					@Override
 					public void remove() {
-						if (theRemoveFilter != null) {
-							String s = theRemoveFilter.apply(get());
-							if (s != null)
-								throw new IllegalArgumentException(s);
-						}
+						String s = theDef.attemptRemove(get());
+						if (s != null)
+							throw new IllegalArgumentException(s);
 						getWrapped().remove();
 					}
 				};
@@ -1914,7 +1922,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
-			return theWrapped.onElement(element -> onElement.accept(new ModFilteredElement<>(element, theRemoveFilter, theAddFilter)));
+			return theWrapped.onElement(element -> onElement.accept(new ModFilteredElement<>(element, theDef)));
 		}
 
 		@Override
@@ -1930,6 +1938,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public Transaction lock(boolean write, Object cause) {
 			return theWrapped.lock(write, cause);
+		}
+
+		@Override
+		public Equivalence<? super E> equivalence() {
+			return theWrapped.equivalence();
 		}
 
 		@Override
@@ -1959,9 +1972,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public String canAdd(E value) {
-			String s = null;
-			if (theAddFilter != null)
-				s = theAddFilter.apply(value);
+			String s = theDef.attemptAdd(value);
 			if (s == null)
 				s = theWrapped.canAdd(value);
 			return s;
@@ -1969,7 +1980,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean add(E value) {
-			if (theAddFilter == null || theAddFilter.apply(value) == null)
+			if (theDef.attemptAdd(value) == null)
 				return theWrapped.add(value);
 			else
 				return false;
@@ -1977,16 +1988,16 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean addAll(Collection<? extends E> values) {
-			if (theAddFilter != null)
-				return theWrapped.addAll(values.stream().filter(v -> theAddFilter.apply(v) == null).collect(Collectors.toList()));
+			if (theDef.isAddFiltered())
+				return theWrapped.addAll(values.stream().filter(v -> theDef.attemptAdd(v) == null).collect(Collectors.toList()));
 			else
 				return theWrapped.addAll(values);
 		}
 
 		@Override
 		public ObservableCollection<E> addValues(E... values) {
-			if (theAddFilter != null)
-				theWrapped.addAll(Arrays.stream(values).filter(v -> theAddFilter.apply(v) == null).collect(Collectors.toList()));
+			if (theDef.isAddFiltered())
+				theWrapped.addAll(Arrays.stream(values).filter(v -> theDef.attemptAdd(v) == null).collect(Collectors.toList()));
 			else
 				theWrapped.addValues(values);
 			return this;
@@ -1994,13 +2005,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public String canRemove(Object value) {
-			String s = null;
-			if (theRemoveFilter != null) {
-				if (value != null && !theWrapped.getType().getRawType().isInstance(value))
-					s = StdMsg.BAD_TYPE;
-				if (s == null)
-					s = theRemoveFilter.apply((E) value);
-			}
+			String s = theDef.attemptRemove(value);
 			if (s == null)
 				s = theWrapped.canRemove(value);
 			return s;
@@ -2008,114 +2013,47 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean remove(Object value) {
-			if (theRemoveFilter == null)
+			if (theDef.attemptRemove(value) == null)
 				return theWrapped.remove(value);
-
-			try (Transaction t = lock(true, null)) {
-				Iterator<E> iter = theWrapped.iterator();
-				while (iter.hasNext()) {
-					E next = iter.next();
-					if (!Objects.equals(next, value))
-						continue;
-					if (theRemoveFilter.apply(next) == null) {
-						iter.remove();
-						return true;
-					} else
-						return false;
-				}
-			}
-			return false;
+			else
+				return false;
 		}
 
 		@Override
 		public boolean removeAll(Collection<?> values) {
-			if (theRemoveFilter == null)
+			if (theDef.isRemoveFiltered())
+				return theWrapped.removeAll(values.stream().filter(v -> theDef.attemptRemove(v) == null).collect(Collectors.toList()));
+			else
 				return theWrapped.removeAll(values);
-
-			BitSet remove = new BitSet();
-			int i = 0;
-			try (Transaction t = lock(true, null)) {
-				Iterator<E> iter = theWrapped.iterator();
-				while (iter.hasNext()) {
-					E next = iter.next();
-					if (!values.contains(next))
-						continue;
-					if (theRemoveFilter.apply(next) == null)
-						remove.set(i);
-					i++;
-				}
-
-				if (!remove.isEmpty()) {
-					i = 0;
-					iter = theWrapped.iterator();
-					while (iter.hasNext()) {
-						iter.next();
-						if (remove.get(i))
-							iter.remove();
-						i++;
-					}
-				}
-			}
-			return !remove.isEmpty();
 		}
 
 		@Override
 		public boolean retainAll(Collection<?> values) {
-			if (theRemoveFilter == null)
+			if (!theDef.isRemoveFiltered())
 				return theWrapped.retainAll(values);
 
-			BitSet remove = new BitSet();
-			int i = 0;
-			try (Transaction t = lock(true, null)) {
-				Iterator<E> iter = theWrapped.iterator();
-				while (iter.hasNext()) {
-					E next = iter.next();
-					if (values.contains(next))
-						continue;
-					if (theRemoveFilter.apply(next) == null)
-						remove.set(i);
-					i++;
+			boolean[] removed = new boolean[1];
+			theWrapped.spliterator().forEachElement(el -> {
+				E v = el.get();
+				if (!values.contains(v) && theDef.attemptRemove(v) == null) {
+					el.remove();
+					removed[0] = true;
 				}
-
-				if (!remove.isEmpty()) {
-					i = 0;
-					iter = theWrapped.iterator();
-					while (iter.hasNext()) {
-						iter.next();
-						if (remove.get(i))
-							iter.remove();
-						i++;
-					}
-				}
-			}
-			return !remove.isEmpty();
+			});
+			return removed[0];
 		}
 
 		@Override
 		public void clear() {
-			if (theRemoveFilter == null) {
+			if (!theDef.isRemoveFiltered()) {
 				theWrapped.clear();
 				return;
 			}
 
-			BitSet remove = new BitSet();
-			int i = 0;
-			Iterator<E> iter = theWrapped.iterator();
-			while (iter.hasNext()) {
-				E next = iter.next();
-				if (theRemoveFilter.apply(next) == null)
-					remove.set(i);
-				i++;
-			}
-
-			i = 0;
-			iter = theWrapped.iterator();
-			while (iter.hasNext()) {
-				iter.next();
-				if (remove.get(i))
-					iter.remove();
-				i++;
-			}
+			theWrapped.spliterator().forEachElement(el -> {
+				if (theDef.attemptRemove(el.get()) == null)
+					el.remove();
+			});
 		}
 
 		@Override
@@ -2126,14 +2064,11 @@ public final class ObservableCollectionImpl {
 
 	public static class ModFilteredElement<E> implements ObservableElement<E> {
 		private final ObservableElement<E> theWrapped;
-		private final Function<? super E, String> theRemoveFilter;
-		private final Function<? super E, String> theAddFilter;
+		private final ModFilterDef<E> theDef;
 
-		public ModFilteredElement(ObservableElement<E> wrapped, Function<? super E, String> removeFilter,
-			Function<? super E, String> addFilter) {
+		public ModFilteredElement(ObservableElement<E> wrapped, ModFilterDef<E> def) {
 			theWrapped = wrapped;
-			theRemoveFilter = removeFilter;
-			theAddFilter = addFilter;
+			theDef = def;
 		}
 
 		@Override
@@ -2158,9 +2093,9 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public <V extends E> String isAcceptable(V value) {
-			String s = null;
-			if (theAddFilter != null)
-				s = theAddFilter.apply(value);
+			String s = theDef.attemptRemove(get());
+			if (s == null)
+				s = theDef.attemptAdd(value);
 			if (s == null)
 				s = theWrapped.isAcceptable(value);
 			return s;
@@ -2168,19 +2103,17 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public <V extends E> E set(V value, Object cause) throws IllegalArgumentException {
-			if (theAddFilter != null) {
-				String s = theAddFilter.apply(value);
-				if (s != null)
-					throw new IllegalArgumentException(s);
-			}
+			String s = theDef.attemptRemove(get());
+			if (s == null)
+				s = theDef.attemptAdd(value);
+			if (s != null)
+				throw new IllegalArgumentException(s);
 			return theWrapped.set(value, cause);
 		}
 
 		@Override
 		public String canRemove() {
-			String s = null;
-			if (theRemoveFilter != null)
-				s = theRemoveFilter.apply(get());
+			String s = theDef.attemptRemove(get());
 			if (s == null)
 				s = theWrapped.canRemove();
 			return s;
@@ -2188,11 +2121,9 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public void remove() {
-			if (theRemoveFilter != null) {
-				String s = theRemoveFilter.apply(get());
-				if (s != null)
-					throw new IllegalArgumentException(s);
-			}
+			String s = theDef.attemptRemove(get());
+			if (s != null)
+				throw new IllegalArgumentException(s);
 			theWrapped.remove();
 		}
 
@@ -2236,6 +2167,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public TypeToken<E> getType() {
 			return theWrapped.getType();
+		}
+
+		@Override
+		public Equivalence<? super E> equivalence() {
+			return theWrapped.equivalence();
 		}
 
 		@Override
@@ -2656,6 +2592,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public Equivalence<? super E> equivalence() {
+			return Equivalence.DEFAULT;
+		}
+
+		@Override
 		public int size() {
 			return theCollection.size();
 		}
@@ -2934,6 +2875,12 @@ public final class ObservableCollectionImpl {
 		@Override
 		public ObservableValue<CollectionSession> getSession() {
 			return ObservableValue.flatten(theCollectionObservable.mapV(coll -> coll.getSession()));
+		}
+
+		@Override
+		public Equivalence<? super E> equivalence() {
+			ObservableCollection<? extends E> coll = theCollectionObservable.get();
+			return coll == null ? Equivalence.DEFAULT : (Equivalence<? super E>) coll.equivalence();
 		}
 
 		@Override

@@ -5,8 +5,11 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.Spliterator;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
@@ -22,7 +25,9 @@ import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
 import org.qommons.Equalizer;
+import org.qommons.Ternian;
 import org.qommons.Transaction;
+import org.qommons.TriFunction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.Qollection;
@@ -46,9 +51,8 @@ import com.google.common.reflect.TypeToken;
  * &nbsp;&nbsp;&nbsp;&nbsp; <code>coll.{@link #map(Function) map}(Function)</code><br />
  * instead of<br />
  * &nbsp;&nbsp;&nbsp;&nbsp;<code>coll.stream().map(Function).collect(Collectors.toList())</code>.</li>
- * <li><b>Modification Control</b> The {@link #filterAdd(Function)} and {@link #filterRemove(Function)} methods create collections that
- * forbid certain types of modifications to a collection. The {@link #immutable(String)} prevents any API modification at all. Modification
- * control can also be used to intercept and perform actions based on modifications to a collection.</li>
+ * <li><b>Modification Control</b> The {@link #filterModification()} method creates a collection that forbids certain types of modifications
+ * to it. Modification control can also be used to intercept and perform actions based on modifications to a collection.</li>
  * <li><b>ElementSpliterator</b> Qollections must implement {@link #spliterator()}, which returns a {@link ElementSpliterator}, which is an
  * enhanced {@link Spliterator}. This had potential for the improved performance associated with using {@link Spliterator} instead of
  * {@link Iterator} as well as the utility added by {@link ElementSpliterator}.</li>
@@ -622,6 +626,25 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	}
 
 	/**
+	 * @param arg The value to be combined
+	 * @param targetType The type of elements in the resulting collection
+	 * @return A builder to define a collection that is a combination of this collection's elements with the given observable value (and
+	 *         possibly others)
+	 */
+	default <T, V> CombinedCollectionBuilder2<E, T, V> combineWith(ObservableValue<T> arg, TypeToken<V> targetType) {
+		return new CombinedCollectionBuilder2<>(this, arg, targetType);
+	}
+
+	/**
+	 * @param combination The collection definition
+	 * @return The combined collection
+	 * @see #combineWith(ObservableValue, TypeToken)
+	 */
+	default <V> ObservableCollection<V> combine(CombinedCollectionDef<E, V> combination) {
+		return new ObservableCollectionImpl.CombinedObservableCollection<>(this, combination);
+	}
+
+	/**
 	 * @param <T> The type of the argument value
 	 * @param <V> The type of the new observable collection
 	 * @param arg The value to combine with each of this collection's elements
@@ -629,33 +652,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 * @return An observable collection containing this collection's elements combined with the given argument
 	 */
 	default <T, V> ObservableCollection<V> combine(ObservableValue<T> arg, BiFunction<? super E, ? super T, V> func) {
-		return combine(arg, (TypeToken<V>) TypeToken.of(func.getClass()).resolveType(BiFunction.class.getTypeParameters()[2]), func);
-	}
-
-	/**
-	 * @param <T> The type of the argument value
-	 * @param <V> The type of the new observable collection
-	 * @param arg The value to combine with each of this collection's elements
-	 * @param type The type for the new collection
-	 * @param func The combination function to apply to this collection's elements and the given value
-	 * @return An observable collection containing this collection's elements combined with the given argument
-	 */
-	default <T, V> ObservableCollection<V> combine(ObservableValue<T> arg, TypeToken<V> type, BiFunction<? super E, ? super T, V> func) {
-		return combine(arg, type, func, null);
-	}
-
-	/**
-	 * @param <T> The type of the argument value
-	 * @param <V> The type of the new observable collection
-	 * @param arg The value to combine with each of this collection's elements
-	 * @param type The type for the new collection
-	 * @param func The combination function to apply to this collection's elements and the given value
-	 * @param reverse The reverse function if addition support is desired for the combined collection
-	 * @return An observable collection containing this collection's elements combined with the given argument
-	 */
-	default <T, V> ObservableCollection<V> combine(ObservableValue<T> arg, TypeToken<V> type, BiFunction<? super E, ? super T, V> func,
-		BiFunction<? super V, ? super T, E> reverse) {
-		return new ObservableCollectionImpl.CombinedObservableCollection<>(this, type, arg, func, reverse);
+		return combineWith(arg, (TypeToken<V>) TypeToken.of(func.getClass()).resolveType(BiFunction.class.getTypeParameters()[2]))//
+			.build(func);
 	}
 
 	/**
@@ -943,68 +941,20 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	}
 
 	/**
-	 * @param modMsg The message to return when modification is requested
-	 * @return An observable collection that cannot be modified directly but reflects the value of this collection as it changes
+	 * Allows control over whether and how the collection may be modified
+	 *
+	 * @return A builder that can return a derived collection that can only be modified in certain ways
 	 */
-	default ObservableCollection<E> immutable(String modMsg) {
-		return filterModification(v -> modMsg, v -> modMsg);
+	default ModFilterBuilder<E> filterModification() {
+		return new ModFilterBuilder<>(this);
 	}
 
 	/**
-	 * Creates a wrapper collection for which removals are filtered
-	 *
-	 * @param filter The filter to check removals with
-	 * @return The removal-filtered collection
+	 * @param filter The modification filter definition
+	 * @return A collection with the same contents as this collection, but may only be modified as defined by the filter
 	 */
-	default ObservableCollection<E> filterRemove(Function<? super E, String> filter) {
-		return filterModification(filter, null);
-	}
-
-	/**
-	 * Creates a wrapper collection for which removals are rejected with an {@link IllegalStateException}
-	 *
-	 * @param removeMsg The message to return when removal is requested
-	 * @return The removal-disabled collection
-	 */
-	default ObservableCollection<E> noRemove(String removeMsg) {
-		return filterModification(value -> removeMsg, null);
-	}
-
-	/**
-	 * Creates a wrapper collection for which additions are filtered
-	 *
-	 * @param filter The filter to check additions with
-	 * @return The addition-filtered collection
-	 */
-	default ObservableCollection<E> filterAdd(Function<? super E, String> filter) {
-		return filterModification(null, filter);
-	}
-
-	/**
-	 * Creates a wrapper collection for which additions are rejected with an {@link IllegalStateException}
-	 *
-	 * @param addMsg The message to return when addition is requested
-	 * @return The addition-disabled collection
-	 */
-	default ObservableCollection<E> noAdd(String addMsg) {
-		return filterModification(null, value -> addMsg);
-	}
-
-	/**
-	 * Creates a wrapper around this collection that can filter items that are attempted to be added or removed from it. If the filter
-	 * returns true, the addition/removal is allowed. If it returns false, the addition/removal is silently rejected. The filter is also
-	 * allowed to throw an exception, in which case the operation as a whole will fail. In the case of batch operations like
-	 * {@link #addAll(Collection) addAll} or {@link #removeAll(Collection) removeAll}, if the filter throws an exception on any item, the
-	 * collection will not be changed. Note that for filters that can return false, silently failing to add or remove items may break the
-	 * contract for the collection type.
-	 *
-	 * @param removeFilter The filter to test items being removed from the collection. If null, removals will not be filtered and will all
-	 *            pass.
-	 * @param addFilter The filter to test items being added to the collection. If null, additions will not be filtered and will all pass
-	 * @return The controlled collection
-	 */
-	default ObservableCollection<E> filterModification(Function<? super E, String> removeFilter, Function<? super E, String> addFilter) {
-		return new ObservableCollectionImpl.ModFilteredCollection<>(this, removeFilter, addFilter);
+	default ObservableCollection<E> filterModification(ModFilterDef<E> filter) {
+		return new ObservableCollectionImpl.ModFilteredCollection<>(this, filter);
 	}
 
 	/**
@@ -1477,6 +1427,526 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 
 		public FilterMapResult(E src) {
 			source = src;
+		}
+	}
+
+	/**
+	 * A structure that may be used to define a collection whose elements are those of a single source collection combined with one or more
+	 * values
+	 *
+	 * @param <E> The type of elements in the source collection
+	 * @param <V> The type of elements in the resulting collection
+	 * @see ObservableCollection#combineWith(ObservableValue, TypeToken)
+	 * @see ObservableCollection.CombinedCollectionBuilder3#and(ObservableValue)
+	 */
+	interface CombinedCollectionBuilder<E, V> {
+		<T> CombinedCollectionBuilder<E, V> and(ObservableValue<T> arg);
+
+		<T> CombinedCollectionBuilder<E, V> and(ObservableValue<T> arg, boolean combineNulls);
+
+		CombinedCollectionBuilder<E, V> withReverse(Function<? super CombinedValues<? extends V>, ? extends E> reverse,
+			boolean reverseNulls);
+
+		ObservableCollection<V> build(Function<? super CombinedValues<? extends E>, ? extends V> combination);
+
+		CombinedCollectionDef<E, V> toDef(Function<? super CombinedValues<? extends E>, ? extends V> combination);
+	}
+
+	/**
+	 * A structure that is operated on to produce the elements of a combined collection
+	 *
+	 * @param <E> The type of the source element (or the value to be reversed)
+	 * @see ObservableCollection#combineWith(ObservableValue, TypeToken)
+	 */
+	interface CombinedValues<E> {
+		E getElement();
+
+		<T> T get(ObservableValue<T> arg);
+	}
+
+	/**
+	 * Defines a combination of a single source collection with one or more observable values
+	 *
+	 * @param <E> The type of elements in the source collection
+	 * @param <V> The type of elements in the resulting collection
+	 */
+	class CombinedCollectionDef<E, V> {
+		public final TypeToken<V> targetType;
+		private final Map<ObservableValue<?>, Boolean> theArgs;
+		private final Function<? super CombinedValues<? extends E>, ? extends V> theCombination;
+		private final boolean combineCollectionNulls;
+		private final Function<? super CombinedValues<? extends V>, ? extends E> theReverse;
+		private final boolean reverseNulls;
+
+		public CombinedCollectionDef(TypeToken<V> type, Map<ObservableValue<?>, Boolean> args,
+			Function<? super CombinedValues<? extends E>, ? extends V> combination, boolean combineCollectionNulls,
+			Function<? super CombinedValues<? extends V>, ? extends E> reverse, boolean reverseNulls, boolean copyArgs) {
+			targetType = type;
+			if (copyArgs) {
+				Map<ObservableValue<?>, Boolean> copy = new LinkedHashMap<>(args.size() * 2); // Pad for hashing
+				copy.putAll(args);
+				theArgs = Collections.unmodifiableMap(copy);
+			} else
+				theArgs = Collections.unmodifiableMap(args);
+			theCombination = combination;
+			this.combineCollectionNulls = combineCollectionNulls;
+			this.reverseNulls = reverseNulls;
+			theReverse = reverse;
+		}
+
+		public Set<ObservableValue<?>> getArgs() {
+			return theArgs.keySet();
+		}
+
+		public Function<? super CombinedValues<? extends E>, ? extends V> getCombination() {
+			return theCombination;
+		}
+
+		public boolean shouldCombine(CombinedValues<? extends E> values) {
+			if (!combineCollectionNulls && values.getElement() == null)
+				return false;
+			return shouldCombineArgs(values);
+		}
+
+		public Function<? super CombinedValues<? extends V>, ? extends E> getReverse() {
+			return theReverse;
+		}
+
+		public boolean areNullsReversed() {
+			return reverseNulls;
+		}
+
+		public boolean shouldCombineReverse(CombinedValues<? extends V> values) {
+			if (!reverseNulls && values.getElement() == null)
+				return false;
+			return shouldCombineArgs(values);
+		}
+
+		private boolean shouldCombineArgs(CombinedValues<?> values) {
+			for (Map.Entry<ObservableValue<?>, Boolean> arg : theArgs.entrySet()) {
+				if (!arg.getValue() && values.get(arg.getKey()) == null)
+					return false;
+			}
+			return true;
+		}
+	}
+
+	/**
+	 * A {@link ObservableCollection.CombinedCollectionBuilder} for the combination of a collection with a single value. Use
+	 * {@link #and(ObservableValue)} to combine with additional values.
+	 *
+	 * @param <E> The type of elements in the source collection
+	 * @param <T> The type of the combined value
+	 * @param <V> The type of elements in the resulting collection
+	 * @see ObservableCollection#combineWith(ObservableValue, TypeToken)
+	 */
+	class CombinedCollectionBuilder2<E, T, V> implements CombinedCollectionBuilder<E, V> {
+		private final ObservableCollection<E> theCollection;
+		private final TypeToken<V> theTargetType;
+		private final ObservableValue<T> theArg2;
+		private Function<? super CombinedValues<? extends V>, ? extends E> theReverse;
+		private boolean defaultCombineNulls = false;
+		private Ternian combineCollectionNulls = Ternian.NONE;
+		private Ternian combineArg2Nulls = Ternian.NONE;
+		private boolean isReverseNulls = false;
+
+		public CombinedCollectionBuilder2(ObservableCollection<E> collection, ObservableValue<T> arg2, TypeToken<V> targetType) {
+			theCollection = collection;
+			theArg2 = arg2;
+			theTargetType = targetType;
+		}
+
+		public ObservableCollection<E> getSource() {
+			return theCollection;
+		}
+
+		public ObservableValue<T> getArg2() {
+			return theArg2;
+		}
+
+		public TypeToken<V> getTargetType() {
+			return theTargetType;
+		}
+
+		public CombinedCollectionBuilder2<E, T, V> combineNulls(boolean combineNulls) {
+			defaultCombineNulls = combineNulls;
+			return this;
+		}
+
+		public CombinedCollectionBuilder2<E, T, V> combineCollectionNulls(boolean combineNulls) {
+			combineCollectionNulls = Ternian.of(combineNulls);
+			return this;
+		}
+
+		public CombinedCollectionBuilder2<E, T, V> combineNullArg2(boolean combineNulls) {
+			combineArg2Nulls = Ternian.of(combineNulls);
+			return this;
+		}
+
+		public boolean defaultNullsCombined() {
+			return defaultCombineNulls;
+		}
+
+		public boolean areCollectionNullsCombined() {
+			if (combineCollectionNulls.value != null)
+				return combineCollectionNulls.value;
+			return defaultCombineNulls;
+		}
+
+		public CombinedCollectionBuilder2<E, T, V> withReverse(BiFunction<? super V, ? super T, ? extends E> reverse,
+			boolean reverseNulls) {
+			return withReverse(cv -> reverse.apply(cv.getElement(), cv.get(theArg2)), reverseNulls);
+		}
+
+		@Override
+		public CombinedCollectionBuilder2<E, T, V> withReverse(Function<? super CombinedValues<? extends V>, ? extends E> reverse,
+			boolean reverseNulls) {
+			theReverse = reverse;
+			this.isReverseNulls = reverseNulls;
+			return this;
+		}
+
+		public Function<? super CombinedValues<? extends V>, ? extends E> getReverse() {
+			return theReverse;
+		}
+
+		public boolean areNullsReversed() {
+			return isReverseNulls;
+		}
+
+		public ObservableCollection<V> build(BiFunction<? super E, ? super T, ? extends V> combination) {
+			return build(cv -> combination.apply(cv.getElement(), cv.get(theArg2)));
+		}
+
+		@Override
+		public ObservableCollection<V> build(Function<? super CombinedValues<? extends E>, ? extends V> combination) {
+			return theCollection.combine(toDef(combination));
+		}
+
+		@Override
+		public <U> CombinedCollectionBuilder3<E, T, U, V> and(ObservableValue<U> arg3) {
+			if (theReverse != null)
+				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
+			return new CombinedCollectionBuilder3<>(this, arg3, Ternian.NONE);
+		}
+
+		@Override
+		public <U> CombinedCollectionBuilder3<E, T, U, V> and(ObservableValue<U> arg3, boolean combineNulls) {
+			if (theReverse != null)
+				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
+			return new CombinedCollectionBuilder3<>(this, arg3, Ternian.of(combineNulls));
+		}
+
+		public Map<ObservableValue<?>, Boolean> addArgs(Map<ObservableValue<?>, Boolean> map) {
+			map.put(theArg2, areArg2NullsCombined());
+			return map;
+		}
+
+		private boolean areArg2NullsCombined() {
+			if (combineArg2Nulls.value != null)
+				return combineArg2Nulls.value;
+			return defaultCombineNulls;
+		}
+
+		@Override
+		public CombinedCollectionDef<E, V> toDef(Function<? super CombinedValues<? extends E>, ? extends V> combination) {
+			return new CombinedCollectionDef<>(theTargetType, addArgs(new LinkedHashMap<>(2)), combination, areCollectionNullsCombined(),
+				theReverse, areNullsReversed(), false);
+		}
+	}
+
+	/**
+	 * A {@link ObservableCollection.CombinedCollectionBuilder} for the combination of a collection with 2 values. Use
+	 * {@link #and(ObservableValue)} to combine with additional values.
+	 *
+	 * @param <E> The type of elements in the source collection
+	 * @param <T> The type of the first combined value
+	 * @param <U> The type of the second combined value
+	 * @param <V> The type of elements in the resulting collection
+	 * @see ObservableCollection#combineWith(ObservableValue, TypeToken)
+	 * @see ObservableCollection.CombinedCollectionBuilder2#and(ObservableValue)
+	 */
+	class CombinedCollectionBuilder3<E, T, U, V> implements CombinedCollectionBuilder<E, V> {
+		private final CombinedCollectionBuilder2<E, T, V> theCombine2;
+		private final ObservableValue<U> theArg3;
+		private final Ternian combineArg3Nulls;
+
+		public CombinedCollectionBuilder3(CombinedCollectionBuilder2<E, T, V> combine2, ObservableValue<U> arg3, Ternian combineNulls) {
+			theCombine2 = combine2;
+			theArg3 = arg3;
+			combineArg3Nulls = combineNulls;
+		}
+
+		public ObservableCollection<E> getSource() {
+			return theCombine2.getSource();
+		}
+
+		public TypeToken<V> getTargetType() {
+			return theCombine2.getTargetType();
+		}
+
+		public boolean defaultNullsCombined() {
+			return theCombine2.defaultNullsCombined();
+		}
+
+		public boolean areCollectionNullsCombined() {
+			return theCombine2.areCollectionNullsCombined();
+		}
+
+		public CombinedCollectionBuilder3<E, T, U, V> withReverse(TriFunction<? super V, ? super T, ? super U, ? extends E> reverse,
+			boolean reverseNulls) {
+			return withReverse(cv -> reverse.apply(cv.getElement(), cv.get(theCombine2.getArg2()), cv.get(theArg3)), reverseNulls);
+		}
+
+		@Override
+		public CombinedCollectionBuilder3<E, T, U, V> withReverse(Function<? super CombinedValues<? extends V>, ? extends E> reverse,
+			boolean reverseNulls) {
+			theCombine2.withReverse(reverse, reverseNulls);
+			return this;
+		}
+
+		public Function<? super CombinedValues<? extends V>, ? extends E> getReverse() {
+			return theCombine2.getReverse();
+		}
+
+		public boolean areNullsReversed() {
+			return theCombine2.areNullsReversed();
+		}
+
+		public ObservableCollection<V> build(TriFunction<? super E, ? super T, ? super U, ? extends V> combination) {
+			return build(cv -> combination.apply(cv.getElement(), cv.get(theCombine2.getArg2()), cv.get(theArg3)));
+		}
+
+		@Override
+		public ObservableCollection<V> build(Function<? super CombinedValues<? extends E>, ? extends V> combination) {
+			return theCombine2.getSource().combine(toDef(combination));
+		}
+
+		@Override
+		public <T2> CombinedCollectionBuilderN<E, V> and(ObservableValue<T2> arg) {
+			if (theCombine2.getReverse() != null)
+				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
+			return new CombinedCollectionBuilderN<>(this).and(arg);
+		}
+
+		@Override
+		public <T2> CombinedCollectionBuilder<E, V> and(ObservableValue<T2> arg, boolean combineNulls) {
+			if (theCombine2.getReverse() != null)
+				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
+			return new CombinedCollectionBuilderN<>(this).and(arg, combineNulls);
+		}
+
+		private boolean areArg3NullsCombined() {
+			if (combineArg3Nulls.value != null)
+				return combineArg3Nulls.value;
+			return theCombine2.defaultNullsCombined();
+		}
+
+		public Map<ObservableValue<?>, Boolean> addArgs(Map<ObservableValue<?>, Boolean> map) {
+			theCombine2.addArgs(map);
+			map.put(theArg3, areArg3NullsCombined());
+			return map;
+		}
+
+		@Override
+		public CombinedCollectionDef<E, V> toDef(Function<? super CombinedValues<? extends E>, ? extends V> combination) {
+			return new CombinedCollectionDef<>(getTargetType(), addArgs(new LinkedHashMap<>(2)), combination, areCollectionNullsCombined(),
+				getReverse(), areNullsReversed(), false);
+		}
+	}
+
+	/**
+	 * A {@link ObservableCollection.CombinedCollectionBuilder} for the combination of a collection with one or more (typically at least 3)
+	 * values. Use {@link #and(ObservableValue)} to combine with additional values.
+	 *
+	 * @param <E> The type of elements in the source collection
+	 * @param <V> The type of elements in the resulting collection
+	 * @see ObservableCollection#combineWith(ObservableValue, TypeToken)
+	 * @see ObservableCollection.CombinedCollectionBuilder3#and(ObservableValue)
+	 */
+	class CombinedCollectionBuilderN<E, V> implements CombinedCollectionBuilder<E, V> {
+		private final CombinedCollectionBuilder3<E, ?, ?, V> theCombine3;
+		private final Map<ObservableValue<?>, Ternian> theOtherArgs;
+
+		public CombinedCollectionBuilderN(CombinedCollectionBuilder3<E, ?, ?, V> combine3) {
+			theCombine3 = combine3;
+			theOtherArgs = new LinkedHashMap<>();
+		}
+
+		public TypeToken<V> getTargetType() {
+			return theCombine3.getTargetType();
+		}
+
+		public boolean areCollectionNullsCombined() {
+			return theCombine3.areCollectionNullsCombined();
+		}
+
+		@Override
+		public CombinedCollectionBuilder<E, V> withReverse(Function<? super CombinedValues<? extends V>, ? extends E> reverse,
+			boolean reverseNulls) {
+			theCombine3.withReverse(reverse, reverseNulls);
+			return this;
+		}
+
+		public Function<? super CombinedValues<? extends V>, ? extends E> getReverse() {
+			return theCombine3.getReverse();
+		}
+
+		public boolean areNullsReversed() {
+			return theCombine3.areNullsReversed();
+		}
+
+		@Override
+		public <T> CombinedCollectionBuilderN<E, V> and(ObservableValue<T> arg) {
+			if (theCombine3.getReverse() != null)
+				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
+			theOtherArgs.put(arg, Ternian.NONE);
+			return this;
+		}
+
+		@Override
+		public <T> CombinedCollectionBuilderN<E, V> and(ObservableValue<T> arg, boolean combineNull) {
+			if (theCombine3.getReverse() != null)
+				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
+			theOtherArgs.put(arg, Ternian.of(combineNull));
+			return this;
+		}
+
+		public Map<ObservableValue<?>, Boolean> addArgs(Map<ObservableValue<?>, Boolean> map) {
+			theCombine3.addArgs(map);
+			for (Map.Entry<ObservableValue<?>, Ternian> arg : theOtherArgs.entrySet())
+				map.put(arg.getKey(), areNullsCombined(arg.getValue()));
+			return map;
+		}
+
+		private boolean areNullsCombined(Ternian combineNulls) {
+			if (combineNulls.value != null)
+				return combineNulls.value;
+			else
+				return theCombine3.defaultNullsCombined();
+		}
+
+		@Override
+		public ObservableCollection<V> build(Function<? super CombinedValues<? extends E>, ? extends V> combination) {
+			return theCombine3.getSource().combine(toDef(combination));
+		}
+
+		@Override
+		public CombinedCollectionDef<E, V> toDef(Function<? super CombinedValues<? extends E>, ? extends V> combination) {
+			return new CombinedCollectionDef<>(getTargetType(), addArgs(new LinkedHashMap<>(2)), combination, areCollectionNullsCombined(),
+				getReverse(), areNullsReversed(), false);
+		}
+	}
+
+	/**
+	 * Builds a modification filter that may prevent certain kinds of modification to the collection
+	 *
+	 * @param <E> The type of elements in the collection
+	 */
+	class ModFilterBuilder<E> {
+		private final ObservableCollection<E> theCollection;
+		private String theImmutableMsg;
+		private String theAddMsg;
+		private String theRemoveMsg;
+		private Function<? super E, String> theAddMsgFn;
+		private Function<? super E, String> theRemoveMsgFn;
+
+		public ModFilterBuilder(ObservableCollection<E> collection) {
+			theCollection = collection;
+		}
+
+		protected ObservableCollection<E> getSource() {
+			return theCollection;
+		}
+
+		public ModFilterBuilder<E> immutable(String modMsg) {
+			theImmutableMsg = modMsg;
+			return this;
+		}
+
+		public ModFilterBuilder<E> noAdd(String modMsg) {
+			theAddMsg = modMsg;
+			return this;
+		}
+
+		public ModFilterBuilder<E> noRemove(String modMsg) {
+			theRemoveMsg = modMsg;
+			return this;
+		}
+
+		public ModFilterBuilder<E> filterAdd(Function<? super E, String> messageFn) {
+			theAddMsgFn = messageFn;
+			return this;
+		}
+
+		public ModFilterBuilder<E> filterRemove(Function<? super E, String> messageFn) {
+			theRemoveMsgFn = messageFn;
+			return this;
+		}
+
+		public ModFilterDef<E> toDef() {
+			return new ModFilterDef<>(theCollection.getType(), theImmutableMsg, theAddMsg, theRemoveMsg, theAddMsgFn, theRemoveMsgFn);
+		}
+
+		public ObservableCollection<E> build() {
+			return theCollection.filterModification(toDef());
+		}
+	}
+
+	/**
+	 * The definition of a modification-filtered collection (minus the source)
+	 *
+	 * @param <E> The type of elements in the collection
+	 */
+	class ModFilterDef<E> {
+		private final TypeToken<E> theType;
+		private final String theImmutableMsg;
+		private final String theAddMsg;
+		private final String theRemoveMsg;
+		private final Function<? super E, String> theAddMsgFn;
+		private final Function<? super E, String> theRemoveMsgFn;
+
+		public ModFilterDef(TypeToken<E> type, String immutableMsg, String addMsg, String removeMsg, Function<? super E, String> addMsgFn,
+			Function<? super E, String> removeMsgFn) {
+			theType = type;
+			theImmutableMsg = immutableMsg;
+			theAddMsg = addMsg;
+			theRemoveMsg = removeMsg;
+			theAddMsgFn = addMsgFn;
+			theRemoveMsgFn = removeMsgFn;
+		}
+
+		public boolean isAddFiltered() {
+			return theImmutableMsg != null || theAddMsg != null || theAddMsgFn != null;
+		}
+
+		public String attemptAdd(E value) {
+			String msg = null;
+			if (theAddMsgFn != null)
+				msg = theAddMsgFn.apply(value);
+			if (msg == null && theAddMsg != null)
+				msg = theAddMsg;
+			if (msg == null && theImmutableMsg != null)
+				msg = theImmutableMsg;
+			return msg;
+		}
+
+		public boolean isRemoveFiltered() {
+			return theImmutableMsg != null || theRemoveMsg != null || theRemoveMsgFn != null;
+		}
+
+		public String attemptRemove(Object value) {
+			String msg = null;
+			if (theRemoveMsgFn != null) {
+				if (value != null && !theType.getRawType().isInstance(value))
+					msg = StdMsg.BAD_TYPE;
+				msg = theRemoveMsgFn.apply((E) value);
+			}
+			if (msg == null && theRemoveMsg != null)
+				msg = theRemoveMsg;
+			if (msg == null && theImmutableMsg != null)
+				msg = theImmutableMsg;
+			return msg;
 		}
 	}
 }
