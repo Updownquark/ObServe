@@ -1099,17 +1099,17 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 * @param o The object to test the collection against
 	 * @return Whether the two objects are equal
 	 */
-	public static boolean equals(ObservableCollection<?> coll, Object o) {
+	public static <E> boolean equals(ObservableCollection<E> coll, Object o) {
 		if (!(o instanceof Collection))
 			return false;
 		Collection<?> c = (Collection<?>) o;
 
-		Iterator<?> e1 = coll.iterator();
+		Iterator<E> e1 = coll.iterator();
 		Iterator<?> e2 = c.iterator();
 		while (e1.hasNext() && e2.hasNext()) {
-			Object o1 = e1.next();
+			E o1 = e1.next();
 			Object o2 = e2.next();
-			if (!Objects.equals(o1, o2))
+			if (!coll.equivalence().elementEquals(o1, o2))
 				return false;
 		}
 		return !(e1.hasNext() || e2.hasNext());

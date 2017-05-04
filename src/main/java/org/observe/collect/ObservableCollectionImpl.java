@@ -11,7 +11,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Spliterator;
+import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -37,6 +39,7 @@ import org.observe.collect.ObservableCollection.StdMsg;
 import org.observe.util.ObservableUtils;
 import org.qommons.Equalizer;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterCollection;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.MultiMap.MultiEntry;
@@ -2133,6 +2136,210 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
+	public static class CachedObservableCollection<E> implements ObservableCollection<E> {
+		private final ObservableCollection<E> theWrapped;
+		private final Observable<?> theUntil;
+		private final ReentrantReadWriteLock theLock;
+		private final Collection<E> theCache;
+
+		public CachedObservableCollection(ObservableCollection<E> wrapped, Observable<?> until) {
+			theWrapped = wrapped;
+			theUntil = until;
+			theLock = new ReentrantReadWriteLock();
+			theCache = createCache();
+		}
+
+		protected ObservableCollection<E> getWrapped() {
+			return theWrapped;
+		}
+
+		protected Observable<?> getUntil() {
+			return theUntil;
+		}
+
+		protected Collection<E> createCache() {
+			return new ArrayList<>();
+		}
+
+		protected Collection<E> getCache() {
+			return theCache;
+		}
+
+		protected void beginCache() {
+			int todo = todo;// TODO
+		}
+
+		@Override
+		public TypeToken<E> getType() {
+			return theWrapped.getType();
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return theWrapped.isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theWrapped.lock(write, cause);
+		}
+
+		@Override
+		public ObservableValue<CollectionSession> getSession() {
+			return theWrapped.getSession();
+		}
+
+		@Override
+		public Equivalence<? super E> equivalence() {
+			return theWrapped.equivalence();
+		}
+
+		@Override
+		public int size() {
+			return theCache.size();
+		}
+
+		@Override
+		public boolean isEmpty() {
+			return theCache.isEmpty();
+		}
+
+		@Override
+		public ElementSpliterator<E> spliterator() {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public boolean contains(Object o) {
+			Equivalence<? super E> equiv = equivalence();
+			if (equiv.equals(Equivalence.DEFAULT))
+				return theCache.contains(o);
+			Lock lock = theLock.readLock();
+			lock.lock();
+			try {
+				for (E v : theCache) {
+					if (equiv.elementEquals(v, o))
+						return true;
+				}
+				return false;
+			} finally {
+				lock.unlock();
+			}
+		}
+
+		@Override
+		public boolean containsAll(Collection<?> c) {
+			if (c.isEmpty())
+				return true;
+			Equivalence<? super E> equiv = equivalence();
+			if (equiv.equals(Equivalence.DEFAULT))
+				return theCache.containsAll(c);
+			Lock lock = theLock.readLock();
+			lock.lock();
+			try {
+				for (Object o : c) {
+					boolean found = false;
+					for (E v : theCache) {
+						if (equiv.elementEquals(v, o)) {
+							found = true;
+							break;
+						}
+					}
+					if (!found)
+						return false;
+				}
+				return true;
+			} finally {
+				lock.unlock();
+			}
+		}
+
+		@Override
+		public boolean containsAny(Collection<?> c) {
+			if (c.isEmpty())
+				return false;
+			Equivalence<? super E> equiv = equivalence();
+			if (theCache instanceof BetterCollection && equiv.equals(Equivalence.DEFAULT))
+				return ((BetterCollection<E>) theCache).containsAny(c);
+			Lock lock = theLock.readLock();
+			lock.lock();
+			try {
+				for (Object o : c) {
+					for (E v : theCache) {
+						if (equiv.elementEquals(v, o)) {
+							return true;
+						}
+					}
+				}
+				return false;
+			} finally {
+				lock.unlock();
+			}
+		}
+
+		@Override
+		public String canAdd(E value) {
+			return theWrapped.canAdd(value);
+		}
+
+		@Override
+		public boolean add(E e) {
+			return theWrapped.add(e);
+		}
+
+		@Override
+		public boolean addAll(Collection<? extends E> c) {
+			return theWrapped.addAll(c);
+		}
+
+		@Override
+		public String canRemove(Object value) {
+			return theWrapped.canRemove(value);
+		}
+
+		@Override
+		public boolean remove(Object o) {
+			return theWrapped.remove(o);
+		}
+
+		@Override
+		public boolean removeAll(Collection<?> c) {
+			return theWrapped.removeAll(c);
+		}
+
+		@Override
+		public boolean retainAll(Collection<?> c) {
+			return theWrapped.retainAll(c);
+		}
+
+		@Override
+		public void clear() {
+			theWrapped.clear();
+		}
+
+		@Override
+		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public int hashCode() {
+			return ObservableCollection.hashCode(this);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return ObservableCollection.equals(this, obj);
+		}
+
+		@Override
+		public String toString() {
+			return ObservableCollection.toString(this);
+		}
+	}
+
 	/**
 	 * Backs {@link ObservableCollection#takeUntil(Observable)}
 	 *
@@ -2286,7 +2493,7 @@ public final class ObservableCollectionImpl {
 	}
 
 	/**
-	 * An element in a {@link ObservableCollection.TakenUntilObservableCollection}
+	 * An element in a {@link TakenUntilObservableCollection}
 	 *
 	 * @param <E> The type of value in the element
 	 */
