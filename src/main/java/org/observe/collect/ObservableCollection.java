@@ -8,7 +8,6 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.Spliterator;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -24,7 +23,6 @@ import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
-import org.qommons.Equalizer;
 import org.qommons.Ternian;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
@@ -203,13 +201,13 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 
 	@Override
 	default E[] toArray() {
-		ArrayList<E> ret;
+		E[] array;
 		try (Transaction t = lock(false, null)) {
-			ret = new ArrayList<>(size());
-			spliterator().forEachRemaining(v -> ret.add(v));
+			array = (E[]) java.lang.reflect.Array.newInstance(getType().wrap().getRawType(), size());
+			int[] i = new int[1];
+			spliterator().forEachRemaining(v -> array[i[0]++] = v);
 		}
-
-		return ret.toArray((E[]) java.lang.reflect.Array.newInstance(getType().wrap().getRawType(), ret.size()));
+		return array;
 	}
 
 	@Override
@@ -351,62 +349,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 					collSub.unsubscribe();
 					transSub.unsubscribe();
 				};
-			}
-
-			@Override
-			public boolean isSafe() {
-				return true;
-			}
-		};
-	}
-
-	/** @return An observable that passes along only events for removal of elements from the collection */
-	default Observable<ObservableValueEvent<E>> removes() {
-		ObservableCollection<E> coll = this;
-		return new Observable<ObservableValueEvent<E>>() {
-			@Override
-			public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
-				return coll.onElement(element -> element.completed().act(value -> observer.onNext(value)));
-			}
-
-			@Override
-			public boolean isSafe() {
-				return true;
-			}
-
-			@Override
-			public String toString() {
-				return "removes(" + coll + ")";
-			}
-		};
-	}
-
-	/** @return This collection, as an observable value containing an immutable collection */
-	default ObservableValue<Collection<E>> asValue() {
-		// TODO This is inefficient. Keep an updated list
-		ObservableCollection<E> outer = this;
-		return new ObservableValue<Collection<E>>() {
-			final TypeToken<Collection<E>> theType = new TypeToken<Collection<E>>() {}.where(new TypeParameter<E>() {}, outer.getType());
-
-			@Override
-			public TypeToken<Collection<E>> getType() {
-				return theType;
-			}
-
-			@Override
-			public Collection<E> get() {
-				return Collections.unmodifiableCollection(new ArrayList<>(outer));
-			}
-
-			@Override
-			public Subscription subscribe(Observer<? super ObservableValueEvent<Collection<E>>> observer) {
-				Collection<E> [] value = new Collection[] {get()};
-				Observer.onNextAndFinish(observer, createInitialEvent(value[0], null));
-				return outer.simpleChanges().act(v -> {
-					Collection<E> old = value[0];
-					value[0] = get();
-					Observer.onNextAndFinish(observer, createChangeEvent(old, value[0], null));
-				});
 			}
 
 			@Override
@@ -645,18 +587,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	}
 
 	/**
-	 * @param <T> The type of the argument value
-	 * @param <V> The type of the new observable collection
-	 * @param arg The value to combine with each of this collection's elements
-	 * @param func The combination function to apply to this collection's elements and the given value
-	 * @return An observable collection containing this collection's elements combined with the given argument
-	 */
-	default <T, V> ObservableCollection<V> combine(ObservableValue<T> arg, BiFunction<? super E, ? super T, V> func) {
-		return combineWith(arg, (TypeToken<V>) TypeToken.of(func.getClass()).resolveType(BiFunction.class.getTypeParameters()[2]))//
-			.build(func);
-	}
-
-	/**
 	 * Equivalent to {@link #reduce(Object, BiFunction, BiFunction)} with null for the remove function
 	 *
 	 * @param <T> The type of the reduced value
@@ -845,83 +775,38 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 				return v1;
 			else
 				return v2;
-		} , null);
+		}, null);
 	}
 
 	/**
-	 * @param <K> The type of the key
-	 * @param keyMap The mapping function to group this collection's values by
-	 * @return A multi-map containing each of this collection's elements, each in the collection of the value mapped by the given function
-	 *         applied to the element
+	 * @param <K> The compile-time key type for the multi-map
+	 * @param keyType The run-time key type for the multi-map
+	 * @param keyMaker The mapping function to group this collection's values by
+	 * @return A builder to create a multi-map containing each of this collection's elements, each in the collection of the value mapped by
+	 *         the given function applied to the element
 	 */
-	default <K> ObservableMultiMap<K, E> groupBy(Function<E, K> keyMap) {
-		return groupBy(keyMap, (org.qommons.Equalizer)Objects::equals);
+	default <K> GroupingBuilder<E, K> groupBy(TypeToken<K> keyType, Function<? super E, ? extends K> keyMaker) {
+		return new GroupingBuilder<>(this, keyType, keyMaker);
 	}
 
 	/**
-	 * @param <K> The type of the key
-	 * @param keyMap The mapping function to group this collection's values by
-	 * @param equalizer The equalizer to use to group the keys
-	 * @return A multi-map containing each of this collection's elements, each in the collection of the value mapped by the given function
-	 *         applied to the element
+	 * @param grouping The grouping builder containing the information needed to create the map
+	 * @return A sorted multi-map whose keys are key-mapped elements of this collection and whose values are this collection's elements,
+	 *         grouped by their mapped keys
 	 */
-	default <K> ObservableMultiMap<K, E> groupBy(Function<E, K> keyMap, Equalizer equalizer) {
-		return groupBy(null, keyMap, equalizer);
-	}
-
-	/**
-	 * @param equalizer The equalizer to group the values by
-	 * @return A multi-map containing each of this collection's elements, each in the collection of one value that it matches according to
-	 *         the equalizer
-	 */
-	default ObservableMultiMap<E, E> groupBy(Equalizer equalizer) {
-		return groupBy(getType(), null, equalizer);
-	}
-
-	/**
-	 * @param <K> The type of the key
-	 * @param keyType The type of the key
-	 * @param keyMap The mapping function to group this collection's values by
-	 * @param equalizer The equalizer to use to group the keys
-	 * @return A multi-map containing each of this collection's elements, each in the collection of the value mapped by the given function
-	 *         applied to the element
-	 */
-	default <K> ObservableMultiMap<K, E> groupBy(TypeToken<K> keyType, Function<E, K> keyMap, Equalizer equalizer) {
-		return new ObservableCollectionImpl.GroupedMultiMap<>(this, keyMap, keyType, equalizer);
-	}
-
-	/**
-	 * @param <K> The type of the key
-	 * @param keyMap The mapping function to group this collection's values by
-	 * @param compare The comparator to use to sort the keys
-	 * @return A sorted multi-map containing each of this collection's elements, each in the collection of the value mapped by the given
-	 *         function applied to the element
-	 */
-	default <K> ObservableSortedMultiMap<K, E> groupBy(Function<E, K> keyMap, Comparator<? super K> compare) {
-		return groupBy(null, keyMap, compare);
-	}
-
-	/**
-	 * @param compare The comparator to use to group the value
-	 * @return A sorted multi-map containing each of this collection's elements, each in the collection of one value that it matches
-	 *         according to the comparator
-	 */
-	default ObservableSortedMultiMap<E, E> groupBy(Comparator<? super E> compare) {
-		return groupBy(getType(), null, compare);
+	default <K> ObservableMultiMap<K, E> groupBy(GroupingBuilder<E, K> grouping) {
+		return new ObservableCollectionImpl.GroupedMultiMap<>(this, grouping);
 	}
 
 	/**
 	 * TODO TEST ME!
 	 *
-	 * @param <K> The type of the key
-	 * @param keyType The type of the key
-	 * @param keyMap The mapping function to group this collection's values by
-	 * @param compare The comparator to use to sort the keys
-	 * @return A sorted multi-map containing each of this collection's elements, each in the collection of the value mapped by the given
-	 *         function applied to the element
+	 * @param grouping The grouping builder containing the information needed to create the map
+	 * @return A sorted multi-map whose keys are key-mapped elements of this collection and whose values are this collection's elements,
+	 *         grouped by their mapped keys
 	 */
-	default <K> ObservableSortedMultiMap<K, E> groupBy(TypeToken<K> keyType, Function<E, K> keyMap, Comparator<? super K> compare) {
-		return new ObservableCollectionImpl.GroupedSortedMultiMap<>(this, keyMap, keyType, compare);
+	default <K> ObservableSortedMultiMap<K, E> groupBy(SortedGroupingBuilder<E, K> grouping) {
+		return new ObservableCollectionImpl.GroupedSortedMultiMap<>(this, grouping);
 	}
 
 	/**
@@ -1947,6 +1832,88 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 			if (msg == null && theImmutableMsg != null)
 				msg = theImmutableMsg;
 			return msg;
+		}
+	}
+
+	class GroupingBuilder<E, K> {
+		private final ObservableCollection<E> theCollection;
+		private final TypeToken<K> theKeyType;
+		private final Function<? super E, ? extends K> theKeyMaker;
+		private Equivalence<? super K> theEquivalence = Equivalence.DEFAULT;
+		private boolean areNullsMapped;
+		private boolean areKeysDynamic;
+		private boolean isBuilt;
+
+		public GroupingBuilder(ObservableCollection<E> collection, TypeToken<K> keyType, Function<? super E, ? extends K> keyMaker) {
+			theCollection = collection;
+			theKeyType = keyType;
+			theKeyMaker = keyMaker;
+
+			areKeysDynamic = true;
+		}
+
+		public ObservableCollection<E> getCollection() {
+			return theCollection;
+		}
+
+		public TypeToken<K> getKeyType() {
+			return theKeyType;
+		}
+
+		public Function<? super E, ? extends K> getKeyMaker() {
+			return theKeyMaker;
+		}
+
+		public GroupingBuilder<E, K> withEquivalence(Equivalence<? super K> equivalence) {
+			if (isBuilt)
+				throw new IllegalStateException("Cannot change the grouping builder's properties after building");
+			theEquivalence = equivalence;
+			return this;
+		}
+
+		public Equivalence<? super K> getEquivalence() {
+			return theEquivalence;
+		}
+
+		public GroupingBuilder<E, K> withNullsMapped(boolean mapNulls) {
+			areNullsMapped = mapNulls;
+			return this;
+		}
+
+		public boolean areNullsMapped() {
+			return areNullsMapped;
+		}
+
+		public GroupingBuilder<E, K> dynamic(boolean dynamic) {
+			areKeysDynamic = dynamic;
+			return this;
+		}
+
+		public boolean areKeysDynamic() {
+			return areKeysDynamic;
+		}
+
+		public SortedGroupingBuilder<E, K> sorted(Comparator<? super K> compare) {
+			return new SortedGroupingBuilder<>(this, compare);
+		}
+
+		public ObservableMultiMap<K, E> build() {
+			isBuilt = true;
+			return theCollection.groupBy(this);
+		}
+	}
+
+	class SortedGroupingBuilder<E, K> {
+		private final GroupingBuilder<E, K> theBasicBuilder;
+		private final Comparator<? super K> theCompare;
+
+		public SortedGroupingBuilder(GroupingBuilder<E, K> basicBuilder, Comparator<? super K> compare) {
+			theBasicBuilder = basicBuilder;
+			theCompare = compare;
+		}
+
+		public ObservableSortedMultiMap<K, E> build() {
+			return theBasicBuilder.getCollection().groupBy(this);
 		}
 	}
 }

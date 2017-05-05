@@ -34,10 +34,10 @@ import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.collect.ObservableCollection.FilterMapDef;
 import org.observe.collect.ObservableCollection.FilterMapResult;
+import org.observe.collect.ObservableCollection.GroupingBuilder;
 import org.observe.collect.ObservableCollection.ModFilterDef;
 import org.observe.collect.ObservableCollection.StdMsg;
 import org.observe.util.ObservableUtils;
-import org.qommons.Equalizer;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.CollectionElement;
@@ -1264,38 +1264,30 @@ public final class ObservableCollectionImpl {
 	 */
 	public static class GroupedMultiMap<K, E> implements ObservableMultiMap<K, E> {
 		private final ObservableCollection<E> theWrapped;
-		private final Function<E, K> theKeyMap;
-		private final TypeToken<K> theKeyType;
-		private final Equalizer theEqualizer;
+		private final GroupingBuilder<E, K> theBuilder;
 
 		private final ObservableSet<K> theKeySet;
 
-		GroupedMultiMap(ObservableCollection<E> wrap, Function<E, K> keyMap, TypeToken<K> keyType, Equalizer equalizer) {
+		GroupedMultiMap(ObservableCollection<E> wrap, GroupingBuilder<E, K> builder) {
 			theWrapped = wrap;
-			theKeyMap = keyMap;
-			theKeyType = keyType != null ? keyType
-				: (TypeToken<K>) TypeToken.of(keyMap.getClass()).resolveType(Function.class.getTypeParameters()[1]);
-			theEqualizer = equalizer;
+			theBuilder = builder;
 
-			ObservableCollection<K> mapped;
-			if (theKeyMap != null)
-				mapped = theWrapped.map(theKeyMap);
-			else
-				mapped = (ObservableCollection<K>) theWrapped;
+			ObservableCollection<K> mapped = theWrapped.buildMap(theBuilder.getKeyType())
+				.map(theBuilder.getKeyMaker(), theBuilder.areNullsMapped()).build(theBuilder.areKeysDynamic());
 			theKeySet = unique(mapped);
 		}
 
-		protected Equalizer getEqualizer() {
-			return theEqualizer;
+		protected Equivalence<? super K> equivalence() {
+			return theBuilder.getEquivalence();
 		}
 
 		protected ObservableSet<K> unique(ObservableCollection<K> keyCollection) {
-			return ObservableSet.unique(keyCollection, theEqualizer);
+			return ObservableSet.unique(keyCollection, theBuilder.getEquivalence());
 		}
 
 		@Override
 		public TypeToken<K> getKeyType() {
-			return theKeyType;
+			return theBuilder.getKeyType();
 		}
 
 		@Override
@@ -1320,7 +1312,15 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public ObservableCollection<E> get(Object key) {
-			return theWrapped.filter(el -> theEqualizer.equals(theKeyMap.apply(el), key) ? null : StdMsg.WRONG_GROUP);
+			if (key != null && !theBuilder.getKeyType().getRawType().isInstance(key))
+				return ObservableCollection.constant(theWrapped.getType());
+			return theWrapped.buildMap(theWrapped.getType()).filter(v -> {
+				if (v != null || theBuilder.areNullsMapped())
+					return theBuilder.getEquivalence().elementEquals((K) key, theBuilder.getKeyMaker().apply(v)) ? null
+						: StdMsg.WRONG_GROUP;
+				else
+					return key == null ? null : StdMsg.WRONG_GROUP;
+			}, true).build(theBuilder.areKeysDynamic());
 		}
 
 		@Override
@@ -1335,24 +1335,20 @@ public final class ObservableCollectionImpl {
 	}
 
 	/**
-	 * An entry in a {@link ObservableCollection.GroupedMultiMap}
+	 * An entry in a {@link ObservableCollectionImpl.GroupedMultiMap}
 	 *
 	 * @param <K> The key type of the entry
 	 * @param <E> The value type of the entry
 	 */
 	public static class GroupedMultiEntry<K, E> implements ObservableMultiMap.ObservableMultiEntry<K, E> {
 		private final K theKey;
-
-		private final Function<E, K> theKeyMap;
+		private final GroupingBuilder<E, K> theBuilder;
 
 		private final ObservableCollection<E> theElements;
 
-		private final Equalizer theEqualizer;
-
-		GroupedMultiEntry(K key, ObservableCollection<E> wrap, Function<E, K> keyMap, Equalizer equalizer) {
+		GroupedMultiEntry(K key, ObservableCollection<E> wrap, GroupingBuilder<E, K> builder) {
 			theKey = key;
-			theKeyMap = keyMap;
-			theEqualizer = equalizer;
+			theBuilder = builder;
 			theElements = wrap.filter(el -> equalizer.equals(theKey, theKeyMap.apply(el)) ? null : StdMsg.WRONG_GROUP);
 		}
 
