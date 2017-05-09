@@ -18,6 +18,17 @@ public class ObservableCollectionEvent<E> extends AbstractCausable {
 		return theType;
 	}
 
+	public int getDiff() {
+		switch (theType) {
+		case add:
+			return 1;
+		case remove:
+			return -1;
+		default:
+			return 0;
+		}
+	}
+
 	public E getOldValue() {
 		return theOldValue;
 	}

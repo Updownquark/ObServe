@@ -120,6 +120,14 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		return ObservableValueEvent.createChangeEvent(this, oldVal, newVal, cause);
 	}
 
+	default ObservableValueEvent<T> fireInitialEvent(T value, Object cause, Consumer<? super ObservableValueEvent<T>> action) {
+		return ObservableValueEvent.doWith(createInitialEvent(value, cause), action);
+	}
+
+	default ObservableValueEvent<T> fireChangeEvent(T oldVal, T newVal, Object cause, Consumer<? super ObservableValueEvent<T>> action) {
+		return ObservableValueEvent.doWith(createChangeEvent(oldVal, newVal, cause), action);
+	}
+
 	/**
 	 * @param eventMap The mapping function that intercepts value events from this value and creates new, equivalent events
 	 * @return An observable value identical to this one but whose change events are mapped by the given function

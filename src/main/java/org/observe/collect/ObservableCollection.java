@@ -6,11 +6,9 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.Spliterator;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -18,18 +16,20 @@ import java.util.function.Predicate;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
-import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
+import org.qommons.Causable;
 import org.qommons.Ternian;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
 import org.qommons.collect.BetterCollection;
+import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.Qollection;
 import org.qommons.collect.TransactableCollection;
+import org.qommons.collect.TreeList;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -88,7 +88,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	// */
 	// Subscription onElement(Consumer<? super ObservableElement<E>> onElement);
 
-	Subscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer);
+	CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer);
 
 	// /**
 	// * <p>
@@ -177,6 +177,20 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 		return removed[0];
 	}
 
+	@Override
+	default CollectionElement<E> elementFor(Object value) {
+		try (Transaction t = lock(false, null)) {
+			ElementSpliterator<E> spliter = spliterator();
+			CollectionElement<E>[] foundEl = new CollectionElement[1];
+			while (foundEl[0] == null && spliter.tryAdvanceElement(el -> {
+				if (equivalence().elementEquals(el.get(), value))
+					foundEl[0] = el;
+			})) {
+			}
+			return foundEl[0];
+		}
+	}
+
 	/**
 	 * Optionally replaces each value in this collection with a mapped value. For every element, the map will be applied. If the result is
 	 * identically (==) different from the existing value, that element will be replaced with the mapped value.
@@ -239,56 +253,27 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 
 	/** @return An observable value for the size of this collection */
 	default ObservableValue<Integer> observeSize() {
-		return new ObservableValue<Integer>() {
-			private final TypeToken<Integer> intType = TypeToken.of(Integer.TYPE);
-
-			@Override
-			public TypeToken<Integer> getType() {
-				return intType;
-			}
-
+		return new ObservableCollectionImpl.ReducedValue<E, Integer, Integer>(this, TypeToken.of(Integer.TYPE)) {
 			@Override
 			public Integer get() {
 				return size();
 			}
 
 			@Override
-			public Subscription subscribe(Observer<? super ObservableValueEvent<Integer>> observer) {
-				ObservableValue<Integer> sizeObs = this;
-				boolean [] initialized = new boolean[1];
-				Subscription sub = onElement(new Consumer<ObservableElement<E>>() {
-					private AtomicInteger size = new AtomicInteger();
-
-					@Override
-					public void accept(ObservableElement<E> value) {
-						int newSize = size.incrementAndGet();
-						fire(newSize - 1, newSize, value);
-						value.subscribe(new Observer<ObservableValueEvent<E>>() {
-							@Override
-							public <V2 extends ObservableValueEvent<E>> void onNext(V2 value2) {
-							}
-
-							@Override
-							public <V2 extends ObservableValueEvent<E>> void onCompleted(V2 value2) {
-								int newSize2 = size.decrementAndGet();
-								fire(newSize2 + 1, newSize2, value2);
-							}
-						});
-					}
-
-					private void fire(int oldSize, int newSize, Object cause) {
-						if(initialized[0])
-							Observer.onNextAndFinish(observer, sizeObs.createChangeEvent(oldSize, newSize, cause));
-					}
-				});
-				initialized[0] = true;
-				Observer.onNextAndFinish(observer, sizeObs.createInitialEvent(size(), null));
-				return sub;
+			protected Integer init() {
+				return 0;
 			}
 
 			@Override
-			public boolean isSafe() {
-				return true;
+			protected Integer update(Integer oldValue, ObservableCollectionEvent<? extends E> change) {
+				if (change.getType() != CollectionChangeType.set)
+					oldValue = oldValue + change.getDiff();
+				return oldValue;
+			}
+
+			@Override
+			protected Integer getValue(Integer updated) {
+				return updated;
 			}
 
 			@Override
@@ -307,18 +292,18 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	}
 
 	/**
-	 * @return An observable that fires a value (the cause event of the change) whenever anything in this collection changes. Unlike
-	 *         {@link #changes()}, this observable will only fire 1 event per transaction.
+	 * @return An observable that fires a value (the {@link Causable#getRootCause() root cause} event of the change) whenever anything in
+	 *         this collection changes. Unlike {@link #changes()}, this observable will only fire 1 event per transaction.
 	 */
 	default Observable<Object> simpleChanges() {
 		return new Observable<Object>() {
 			@Override
 			public Subscription subscribe(Observer<Object> observer) {
-				Consumer<Object> action = root -> observer.onNext(root);
+				Object key = new Object();
 				boolean[] initialized = new boolean[1];
 				Subscription sub = ObservableCollection.this.subscribe(evt -> {
 					if (initialized[0])
-						evt.onRootFinish(action);
+						evt.getRootCausable().onFinish(key, (root, values) -> observer.onNext(root));
 				});
 				initialized[0] = true;
 				return sub;
@@ -361,6 +346,16 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 */
 	default <X> ObservableValue<Boolean> observeContainsAny(ObservableCollection<X> collection) {
 		return new ObservableCollectionImpl.ContainsAnyValue<>(this, collection);
+	}
+
+	/**
+	 * @param otherEquiv The equivalence to use
+	 * @return A collection that reflects this collection's contents, but uses the given equivalence for comparisons
+	 */
+	default ObservableCollection<E> withEquivalence(Equivalence<? super E> otherEquiv) {
+		if (equivalence().equals(otherEquiv))
+			return this;
+		return new ObservableCollectionImpl.EquivalenceSwitchedCollection<>(this, otherEquiv);
 	}
 
 	// Filter/mapping
@@ -423,8 +418,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 *        collection, but may cause incorrect results if the initial inclusion assumption is wrong.
 	 * @return The filter/mapped collection
 	 */
-	default <T> ObservableCollection<T> filterMap(FilterMapDef<E, ?, T> filterMap, boolean dynamic) {
-		return new ObservableCollectionImpl.FilterMappedObservableCollection<>(this, filterMap, dynamic);
+	default <T> ObservableCollection<T> filterMap(FilterMapDef<E, ?, T> filterMap) {
+		return new ObservableCollectionImpl.FilterMappedObservableCollection<>(this, filterMap);
 	}
 
 	/**
@@ -450,92 +445,36 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 
 	/** @return An observable value containing the only value in this collection while its size==1, otherwise null TODO TEST ME! */
 	default ObservableValue<E> only() {
-		return new ObservableValue<E>() {
-			private final TypeToken<E> type = ObservableCollection.this.getType().wrap();
-
-			@Override
-			public TypeToken<E> getType() {
-				return type;
-			}
-
+		return new ObservableCollectionImpl.ReducedValue<E, TreeList<E>, E>(this, getType().wrap()) {
 			@Override
 			public E get() {
 				return size() == 1 ? iterator().next() : null;
 			}
 
 			@Override
-			public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
-				boolean[] initialized = new boolean[1];
-				final Object key = new Object();
-				class OnlyElement implements Consumer<ObservableElement<E>> {
-					private Collection<ObservableElement<E>> theElements = new LinkedHashSet<>();
-					private E theValue;
-
-					@Override
-					public void accept(ObservableElement<E> element) {
-						theElements.add(element);
-						element.subscribe(new Observer<ObservableValueEvent<E>>() {
-							@Override
-							public <V3 extends ObservableValueEvent<E>> void onNext(V3 event) {
-								if (event.isInitial()) {
-									if (theElements.isEmpty())
-										newValue(event.getValue(), event);
-									else
-										newValue(null, event);
-								} else if (theElements.size() == 1)
-									newValue(event.getValue(), event);
-							}
-
-							@Override
-							public <V3 extends ObservableValueEvent<E>> void onCompleted(V3 event) {
-								theElements.remove(element);
-								if (theElements.isEmpty())
-									newValue(null, event);
-								else if (theElements.size() == 1)
-									newValue(theElements.iterator().next().get(), event);
-							}
-						});
-					}
-
-					private void newValue(E value, ObservableValueEvent<E> cause) {
-						E oldValue = theValue;
-						theValue = value;
-						if (initialized[0]) {
-							CollectionSession session = getSession().get();
-							if (session == null)
-								Observer.onNextAndFinish(observer, createChangeEvent(oldValue, theValue, null));
-							else {
-								session.putIfAbsent(key, "oldValue", oldValue);
-								session.put(key, "newValue", theValue);
-							}
-						}
-					}
-				}
-				OnlyElement collOnEl = new OnlyElement();
-				Subscription collSub = ObservableCollection.this.onElement(collOnEl);
-				Subscription transSub = getSession().subscribe(new Observer<ObservableValueEvent<CollectionSession>>() {
-					@Override
-					public <V2 extends ObservableValueEvent<CollectionSession>> void onNext(V2 value) {
-						CollectionSession completed = value.getOldValue();
-						if (completed == null)
-							return;
-						E oldBest = (E) completed.get(key, "oldValue");
-						E newBest = (E) completed.get(key, "newValue");
-						if (oldBest == null && newBest == null)
-							return;
-						Observer.onNextAndFinish(observer, createChangeEvent(oldBest, newBest, value));
-					}
-				});
-				Observer.onNextAndFinish(observer, createInitialEvent(collOnEl.theValue, null));
-				return () -> {
-					collSub.unsubscribe();
-					transSub.unsubscribe();
-				};
+			protected TreeList<E> init() {
+				return new TreeList<>();
 			}
 
 			@Override
-			public boolean isSafe() {
-				return true;
+			protected TreeList<E> update(TreeList<E> oldValue, ObservableCollectionEvent<? extends E> change) {
+				switch (change.getType()) {
+				case add:
+					oldValue.add(change.getNewValue());
+					break;
+				case remove:
+					oldValue.remove(change.getOldValue());
+					break;
+				case set:
+					oldValue.findAndReplace(v -> v == change.getOldValue(), v -> change.getNewValue());
+					break;
+				}
+				return oldValue;
+			}
+
+			@Override
+			protected E getValue(TreeList<E> updated) {
+				return updated.size() == 1 ? updated.get(0) : null;
 			}
 		};
 	}
@@ -600,11 +539,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 */
 	default <T> ObservableValue<T> reduce(TypeToken<T> type, T init, BiFunction<? super T, ? super E, T> add,
 		BiFunction<? super T, ? super E, T> remove) {
-		return new ObservableValue<T>() {
-			@Override
-			public TypeToken<T> getType() {
-				return type;
-			}
+		return new ObservableCollectionImpl.ReducedValue<E, T, T>(this, type) {
+			private final T RECALC = (T) new Object(); // Placeholder indicating that the value must be recalculated from scratch
 
 			@Override
 			public T get() {
@@ -615,99 +551,38 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 			}
 
 			@Override
-			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-				final boolean [] initElements = new boolean[1];
-				final Object key = new Object();
-				class THolder {
-					public T theValue = init;
-
-					public boolean recalc = false;
-				}
-				THolder holder = new THolder();
-				Subscription collSub = ObservableCollection.this.onElement(new Consumer<ObservableElement<E>>() {
-
-					@Override
-					public void accept(ObservableElement<E> element) {
-						initElements[0] = true;
-						element.subscribe(new Observer<ObservableValueEvent<E>>() {
-							@Override
-							public <V3 extends ObservableValueEvent<E>> void onNext(V3 value) {
-								T newValue = holder.theValue;
-								if(holder.recalc) {
-								} else if(value.isInitial()) {
-									newValue = add.apply(newValue, value.getValue());
-									newValue(newValue);
-								} else if(remove != null) {
-									newValue = remove.apply(newValue, value.getOldValue());
-									newValue = add.apply(newValue, value.getValue());
-									newValue(newValue);
-								} else
-									recalc();
-							}
-
-							@Override
-							public <V3 extends ObservableValueEvent<E>> void onCompleted(V3 value) {
-								if(holder.recalc) {
-								} else if(remove != null)
-									newValue(remove.apply(holder.theValue, value.getOldValue()));
-								else
-									recalc();
-							}
-						});
-					}
-
-					void newValue(T value) {
-						T oldValue = holder.theValue;
-						holder.theValue = value;
-						CollectionSession session = getSession().get();
-						if(session == null)
-							Observer.onNextAndFinish(observer, createChangeEvent(oldValue, holder.theValue, null));
-						else {
-							session.putIfAbsent(key, "oldValue", oldValue);
-							session.put(key, "newValue", holder.theValue);
-						}
-					}
-
-					private void recalc() {
-						CollectionSession session = getSession().get();
-						if(session == null)
-							newValue(get());
-						else {
-							holder.recalc = true;
-							session.putIfAbsent(key, "oldValue", holder.theValue);
-							session.put(key, "recalc", true);
-						}
-					}
-				});
-				Subscription transSub = getSession().subscribe(new Observer<ObservableValueEvent<CollectionSession>>() {
-					@Override
-					public <V2 extends ObservableValueEvent<CollectionSession>> void onNext(V2 value) {
-						CollectionSession completed = value.getOldValue();
-						if(completed == null)
-							return;
-						T oldValue = (T) completed.get(key, "oldValue");
-						T newValue;
-						if(completed.get(key, "recalc") != null) {
-							holder.theValue = newValue = get();
-							holder.recalc = false;
-						} else
-							newValue = (T) completed.get(key, "newValue");
-						if(oldValue == null && newValue == null)
-							return;
-						Observer.onNextAndFinish(observer, createChangeEvent(oldValue, newValue, value));
-					}
-				});
-				if(!initElements[0])
-					Observer.onNextAndFinish(observer, createInitialEvent(init, null));
-				return () -> {
-					collSub.unsubscribe();
-					transSub.unsubscribe();
-				};
+			protected T init() {
+				return init;
 			}
 
 			@Override
-			public boolean isSafe() {
-				return true;
+			protected T update(T oldValue, ObservableCollectionEvent<? extends E> change) {
+				switch (change.getType()) {
+				case add:
+					oldValue = add.apply(oldValue, change.getNewValue());
+					break;
+				case remove:
+					if (remove != null)
+						oldValue = remove.apply(oldValue, change.getOldValue());
+					else
+						oldValue = RECALC;
+					break;
+				case set:
+					if (remove != null) {
+						oldValue = remove.apply(oldValue, change.getOldValue());
+						oldValue = add.apply(oldValue, change.getNewValue());
+					} else
+						oldValue = RECALC;
+				}
+				return oldValue;
+			}
+
+			@Override
+			protected T getValue(T updated) {
+				if (updated == RECALC)
+					return get();
+				else
+					return updated;
 			}
 
 			@Override
@@ -911,18 +786,17 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 		return new Observable<T>() {
 			@Override
 			public Subscription subscribe(Observer<? super T> observer) {
-				Subscription ret = coll.onElement(element -> {
-					element.subscribe(new Observer<ObservableValueEvent<? extends Observable<T>>>() {
-						@Override
-						public <V2 extends ObservableValueEvent<? extends Observable<T>>> void onNext(V2 value) {
-							Observable<?> until = element.noInit().fireOnComplete();
-							if (!value.isInitial())
-								until = until.skip(1);
-							value.getValue().takeUntil(until).subscribe(observer);
-						}
-					});
-				});
-				return ret;
+				return coll.subscribe(new ObservableCollectionImpl.ElementActions<Observable<T>, Subscription>() {
+					@Override
+					Subscription onAdd(Observable<T> value) {
+						return value.subscribe(observer);
+					}
+
+					@Override
+					void onRemove(Observable<T> value, Subscription action) {
+						action.unsubscribe();
+					}
+				}).removeAll();
 			}
 
 			@Override

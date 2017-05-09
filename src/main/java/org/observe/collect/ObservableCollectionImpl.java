@@ -2,7 +2,6 @@ package org.observe.collect;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.BitSet;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -10,6 +9,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.Spliterator;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -32,12 +32,15 @@ import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
-import org.observe.collect.ObservableCollection.FilterMapDef;
-import org.observe.collect.ObservableCollection.FilterMapResult;
 import org.observe.collect.ObservableCollection.GroupingBuilder;
 import org.observe.collect.ObservableCollection.ModFilterDef;
 import org.observe.collect.ObservableCollection.StdMsg;
+import org.observe.collect.ObservableCollectionImpl.ModFilteredElement;
+import org.observe.collect.ObservableCollectionImpl.TakenUntilElement;
 import org.observe.util.ObservableUtils;
+import org.qommons.Causable;
+import org.qommons.IdentityKey;
+import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.CollectionElement;
@@ -52,12 +55,16 @@ import com.google.common.reflect.TypeToken;
 public final class ObservableCollectionImpl {
 	private ObservableCollectionImpl() {}
 
-	public static boolean contains(ObservableCollection<?> coll, Object value) {
+	public static <E> Set<E> toSet(Equivalence<? super E> equiv, Collection<?> c) {
+		return c.stream().filter(equiv::isElement).map(e -> (E) e).collect(Collectors.toCollection(equiv::createSet));
+	}
+
+	public static <E> boolean contains(ObservableCollection<E> coll, Object value) {
 		try (Transaction t = coll.lock(false, null)) {
-			ElementSpliterator<?> iter = coll.spliterator();
+			ElementSpliterator<E> iter = coll.spliterator();
 			boolean[] found = new boolean[1];
 			while (!found[0] && iter.tryAdvance(v -> {
-				if (Objects.equals(v, value))
+				if (coll.equivalence().elementEquals(v, value))
 					found[0] = true;
 			})) {
 			}
@@ -65,37 +72,50 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
-	public static boolean containsAny(ObservableCollection<?> coll, Collection<?> values) {
-		try (Transaction t = coll.lock(false, null)) {
-			for (Object o : values)
-				if (coll.contains(o))
-					return true;
+	public static <E> boolean containsAny(ObservableCollection<E> coll, Collection<?> c) {
+		if (c.isEmpty())
+			return true;
+		Set<? super E> cSet = coll.equivalence().createSet();
+		try (Transaction t = Transactable.lock(c, false, null)) {
+			for (Object o : c) {
+				if (!coll.equivalence().isElement(o))
+					return false;
+				cSet.add((E) o);
+			}
 		}
-		return false;
+		if (cSet.isEmpty())
+			return false;
+		try (Transaction t = coll.lock(false, null)) {
+			ElementSpliterator<E> iter = coll.spliterator();
+			boolean[] found = new boolean[1];
+			while (iter.tryAdvance(next -> {
+				found[0] = cSet.contains(next);
+			}) && !found[0]) {
+			}
+			return found[0];
+		}
 	}
 
-	public static boolean containsAll(ObservableCollection<?> coll, Collection<?> values) {
-		if (values.isEmpty())
+	public static <E> boolean containsAll(ObservableCollection<E> coll, Collection<?> c) {
+		if (c.isEmpty())
 			return true;
-		ArrayList<Object> copy = new ArrayList<>(values);
-		BitSet found = new BitSet(copy.size());
-		try (Transaction t = coll.lock(false, null)) {
-			ElementSpliterator<?> iter = coll.spliterator();
-			boolean[] foundOne = new boolean[1];
-			while (iter.tryAdvance(next -> {
-				int stop = found.previousClearBit(copy.size());
-				for (int i = found.nextClearBit(0); i < stop; i = found.nextClearBit(i + 1))
-					if (Objects.equals(next, copy.get(i))) {
-						found.set(i);
-						foundOne[0] = true;
-					}
-			})) {
-				if (foundOne[0] && found.cardinality() == copy.size()) {
-					break;
-				}
-				foundOne[0] = false;
+		Set<? super E> cSet = coll.equivalence().createSet();
+		try (Transaction t = Transactable.lock(c, false, null)) {
+			for (Object o : c) {
+				if (!coll.equivalence().isElement(o))
+					return false;
+				cSet.add((E) o);
 			}
-			return found.cardinality() == copy.size();
+		}
+		if (cSet.isEmpty())
+			return false;
+		try (Transaction t = coll.lock(false, null)) {
+			ElementSpliterator<E> iter = coll.spliterator();
+			while (iter.tryAdvance(next -> {
+				cSet.remove(next);
+			}) && !cSet.isEmpty()) {
+			}
+			return cSet.isEmpty();
 		}
 	}
 
@@ -108,38 +128,150 @@ public final class ObservableCollectionImpl {
 		return mod;
 	}
 
-	public static boolean removeAll(ObservableCollection<?> coll, Collection<?> values) {
-		if (values.isEmpty())
-			return false;
+	public static <E> boolean remove(ObservableCollection<E> coll, Object o) {
 		try (Transaction t = coll.lock(true, null)) {
-			boolean modified = false;
-			Iterator<?> it = coll.iterator();
-			while (it.hasNext()) {
-				if (values.contains(it.next())) {
-					it.remove();
-					modified = true;
+			ElementSpliterator<E> spliter = coll.spliterator();
+			boolean[] found = new boolean[1];
+			while (!found[0] && spliter.tryAdvanceElement(el -> {
+				if (coll.equivalence().elementEquals(el.get(), o)) {
+					el.remove();
+					found[0] = true;
 				}
+			})) {
 			}
-			return modified;
+			return found[0];
 		}
 	}
 
-	public static boolean retainAll(ObservableCollection<?> coll, Collection<?> values) {
-		if (values.isEmpty()) {
-			coll.clear();
-			return false;
-		}
-		try (Transaction t = coll.lock(true, null)) {
-			boolean modified = false;
-			Iterator<?> it = coll.iterator();
-			while (it.hasNext()) {
-				if (!values.contains(it.next())) {
-					it.remove();
-					modified = true;
-				}
+	public static <E> boolean removeAll(ObservableCollection<E> coll, Collection<?> c) {
+		if (c.isEmpty())
+			return true;
+		Set<? super E> cSet = coll.equivalence().createSet();
+		try (Transaction t = Transactable.lock(c, false, null)) {
+			for (Object o : c) {
+				if (!coll.equivalence().isElement(o))
+					return false;
+				cSet.add((E) o);
 			}
-			return modified;
 		}
+		if (cSet.isEmpty())
+			return false;
+		return coll.removeIf(cSet::contains);
+	}
+
+	public static <E> boolean retainAll(ObservableCollection<E> coll, Collection<?> c) {
+		if (c.isEmpty())
+			return false;
+		Set<? super E> cSet = coll.equivalence().createSet();
+		try (Transaction t = Transactable.lock(c, false, null)) {
+			c.stream().filter(coll.equivalence()::isElement).map(v -> (E) v).collect(Collectors.toCollection(() -> cSet));
+		}
+		if (cSet.isEmpty())
+			return false;
+		return coll.removeIf(v -> !cSet.contains(v));
+	}
+
+	public static abstract class ReducedValue<E, X, T> implements ObservableValue<T> {
+		private final ObservableCollection<E> theCollection;
+		private final TypeToken<T> theDerivedType;
+
+		public ReducedValue(ObservableCollection<E> collection, TypeToken<T> derivedType) {
+			theCollection = collection;
+			theDerivedType = derivedType;
+		}
+
+		protected ObservableCollection<E> getCollection() {
+			return theCollection;
+		}
+
+		@Override
+		public TypeToken<T> getType() {
+			return theDerivedType;
+		}
+
+		@Override
+		public boolean isSafe() {
+			return true;
+		}
+
+		@Override
+		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+			boolean[] initialized = new boolean[1];
+			Object key = new Object();
+			Object[] x = new Object[] { init() };
+			Object[] v = new Object[] { getValue((X) x[0]) };
+			Subscription sub = theCollection.subscribe(evt -> {
+				T oldV = (T) v[0];
+				X newX = update((X) x[0], evt);
+				x[0] = newX;
+				v[0] = getValue(newX);
+				if (initialized[0])
+					evt.getRootCausable()
+					.onFinish(key, (root, values) -> fireChangeEvent((T) values.get("oldValue"), (T) v[0], root, observer::onNext))
+					.computeIfAbsent("oldValue", k -> oldV);
+			});
+			initialized[0] = true;
+			fireInitialEvent((T) v[0], null, observer::onNext);
+			return sub;
+		}
+
+		protected abstract X init();
+
+		protected abstract X update(X oldValue, ObservableCollectionEvent<? extends E> change);
+
+		protected abstract T getValue(X updated);
+	}
+
+	public static abstract class ElementActions<E, A> implements Consumer<ObservableCollectionEvent<? extends E>> {
+		private final HashMap<IdentityKey<E>, List<A>> theSubscriptions;
+
+		public ElementActions() {
+			theSubscriptions = new HashMap<>();
+		}
+
+		@Override
+		public void accept(ObservableCollectionEvent<? extends E> change) {
+			switch (change.getType()) {
+			case add:
+				if (change.getNewValue() == null)
+					return;
+				add(change.getNewValue());
+				break;
+			case remove:
+				if (change.getOldValue() == null)
+					return;
+				remove(change.getOldValue());
+				break;
+			case set:
+				if (change.getOldValue() == change.getNewValue())
+					return;
+				remove(change.getOldValue());
+				add(change.getNewValue());
+				break;
+			}
+		}
+
+		private void add(E value) {
+			if (value == null)
+				return;
+			List<A> subs = theSubscriptions.computeIfAbsent(new IdentityKey<>(value), k -> new ArrayList<>(1));
+			subs.add(onAdd(value));
+		}
+
+		private void remove(E value) {
+			if (value == null)
+				return;
+			Object[] sub = new CollectionSubscription[0];
+			theSubscriptions.compute(new IdentityKey<>(value), (k, subList) -> {
+				sub[0] = subList.remove(subList.size() - 1);
+				return subList.isEmpty() ? null : subList;
+			});
+			onRemove(value, (A) sub[0]);
+		}
+
+		abstract A onAdd(E value);
+
+		abstract void onRemove(E value, A action);
 	}
 
 	private static class ValueCount<E> {
@@ -218,13 +350,21 @@ public final class ObservableCollectionImpl {
 		ObservableCollection<X> right) {
 		final ReentrantLock lock = new ReentrantLock();
 		boolean[] initialized = new boolean[1];
+		Object key = new Object();
 		abstract class ValueCountModifier {
-			final void doNotify(Object cause) {
-				if (initialized[0] && left.getSession().get() == null && right.getSession().get() == null)
-					counts.check(false, cause);
+			final void doNotify(Causable cause) {
+				if (initialized[0])
+					cause.getRootCausable().onFinish(key, (root, values) -> {
+						lock.lock();
+						try {
+							counts.check(false, root);
+						} finally {
+							lock.unlock();
+						}
+					});
 			}
 		}
-		class ValueCountElModifier extends ValueCountModifier implements Observer<ObservableValueEvent<?>> {
+		class ValueCountElModifier extends ValueCountModifier implements Consumer<ObservableCollectionEvent<?>> {
 			final boolean onLeft;
 
 			ValueCountElModifier(boolean lft) {
@@ -232,33 +372,30 @@ public final class ObservableCollectionImpl {
 			}
 
 			@Override
-			public <V extends ObservableValueEvent<?>> void onNext(V event) {
-				if (event.isInitial() || !Objects.equals(event.getOldValue(), event.getValue())) {
-					if (!initialized[0])
-						lock.lock();
-					try {
-						if (event.isInitial())
-							modify(event.getValue(), true);
-						else if (!Objects.equals(event.getOldValue(), event.getValue())) {
-							modify(event.getOldValue(), false);
-							modify(event.getValue(), true);
-						}
-						doNotify(event);
-					} finally {
-						if (!initialized[0])
-							lock.unlock();
-					}
-				}
-			}
-
-			@Override
-			public <V extends ObservableValueEvent<?>> void onCompleted(V event) {
-				lock.lock();
+			public void accept(ObservableCollectionEvent<?> evt) {
+				if (!initialized[0])
+					lock.lock();
 				try {
-					modify(event.getValue(), false);
-					doNotify(event);
+					switch (evt.getType()) {
+					case add:
+						modify(evt.getNewValue(), true);
+						doNotify(evt);
+						break;
+					case remove:
+						modify(evt.getOldValue(), false);
+						doNotify(evt);
+						break;
+					case set:
+						Equivalence<Object> equiv = (Equivalence<Object>) (onLeft ? left.equivalence() : right.equivalence());
+						if (!equiv.elementEquals(evt.getOldValue(), evt.getNewValue())) {
+							modify(evt.getOldValue(), false);
+							modify(evt.getNewValue(), true);
+							doNotify(evt);
+						}
+					}
 				} finally {
-					lock.unlock();
+					if (!initialized[0])
+						lock.unlock();
 				}
 			}
 
@@ -319,42 +456,19 @@ public final class ObservableCollectionImpl {
 				}
 			}
 		}
-		class ValueCountSessModifier extends ValueCountModifier implements Observer<ObservableValueEvent<? extends CollectionSession>> {
-			@Override
-			public <V extends ObservableValueEvent<? extends CollectionSession>> void onNext(V event) {
-				if (initialized[0] && event.getOldValue() != null) {
-					if (initialized[0])
-						lock.lock();
-					try {
-						doNotify(event);
-					} finally {
-						lock.unlock();
-					}
-				}
-			}
-		}
-		Subscription thisElSub;
-		Subscription collElSub;
-		Subscription thisSessSub;
-		Subscription collSessSub;
+		Subscription leftSub;
+		Subscription rightSub;
 		lock.lock();
 		try {
-			thisElSub = left.onElement(el -> {
-				el.subscribe(new ValueCountElModifier(true));
-			});
-			collElSub = right.onElement(el -> {
-				el.subscribe(new ValueCountElModifier(false));
-			});
-
-			thisSessSub = left.getSession().subscribe(new ValueCountSessModifier());
-			collSessSub = right.getSession().subscribe(new ValueCountSessModifier());
+			leftSub = left.subscribe(new ValueCountElModifier(true));
+			rightSub = right.subscribe(new ValueCountElModifier(false));
 
 			counts.check(true, null);
 		} finally {
 			initialized[0] = true;
 			lock.unlock();
 		}
-		return Subscription.forAll(thisElSub, collElSub, thisSessSub, collSessSub);
+		return Subscription.forAll(leftSub, rightSub);
 	}
 
 	public abstract static class IntersectionValue<E, X> implements ObservableValue<Boolean> {
@@ -398,9 +512,9 @@ public final class ObservableCollectionImpl {
 				void check(boolean initial, Object cause) {
 					boolean satisfied = theSatisfiedCheck.test(this);
 					if (initial)
-						Observer.onNextAndFinish(observer, createInitialEvent(satisfied, null));
+						fireInitialEvent(satisfied, null, observer::onNext);
 					else if (satisfied != isSatisfied)
-						Observer.onNextAndFinish(observer, createChangeEvent(isSatisfied, satisfied, cause));
+						fireChangeEvent(isSatisfied, satisfied, cause, observer::onNext);
 					isSatisfied = satisfied;
 				}
 			};
@@ -449,6 +563,111 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
+	public static class EquivalenceSwitchedCollection<E> implements ObservableCollection<E> {
+		private final ObservableCollection<E> theWrapped;
+		private final Equivalence<? super E> theEquivalence;
+
+		public EquivalenceSwitchedCollection(ObservableCollection<E> wrap, Equivalence<? super E> equivalence) {
+			theWrapped = wrap;
+			theEquivalence = equivalence;
+		}
+
+		@Override
+		public TypeToken<E> getType() {
+			return theWrapped.getType();
+		}
+
+		@Override
+		public Equivalence<? super E> equivalence() {
+			return theEquivalence;
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return theWrapped.isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theWrapped.lock(write, cause);
+		}
+
+		@Override
+		public int size() {
+			return theWrapped.size();
+		}
+
+		@Override
+		public boolean isEmpty() {
+			return theWrapped.isEmpty();
+		}
+
+		@Override
+		public ElementSpliterator<E> spliterator() {
+			return theWrapped.spliterator();
+		}
+
+		@Override
+		public boolean contains(Object o) {
+			return ObservableCollectionImpl.contains(this, o);
+		}
+
+		@Override
+		public boolean containsAll(Collection<?> c) {
+			return ObservableCollectionImpl.containsAll(this, c);
+		}
+
+		@Override
+		public boolean containsAny(Collection<?> c) {
+			return ObservableCollectionImpl.containsAny(this, c);
+		}
+
+		@Override
+		public String canAdd(E value) {
+			return theWrapped.canAdd(value);
+		}
+
+		@Override
+		public boolean add(E e) {
+			return theWrapped.add(e);
+		}
+
+		@Override
+		public boolean addAll(Collection<? extends E> c) {
+			return theWrapped.addAll(c);
+		}
+
+		@Override
+		public String canRemove(Object value) {
+			return theWrapped.canRemove(value);
+		}
+
+		@Override
+		public boolean remove(Object o) {
+			return ObservableCollectionImpl.remove(this, o);
+		}
+
+		@Override
+		public boolean removeAll(Collection<?> c) {
+			return ObservableCollectionImpl.removeAll(this, c);
+		}
+
+		@Override
+		public boolean retainAll(Collection<?> c) {
+			return ObservableCollectionImpl.retainAll(this, c);
+		}
+
+		@Override
+		public void clear() {
+			theWrapped.clear();
+		}
+
+		@Override
+		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
+			return theWrapped.subscribe(observer);
+		}
+	}
+
 	/**
 	 * Implements {@link ObservableCollection#filterMap(FilterMapDef, boolean)}
 	 *
@@ -458,12 +677,18 @@ public final class ObservableCollectionImpl {
 	public static class FilterMappedObservableCollection<E, T> implements ObservableCollection<T> {
 		private final ObservableCollection<E> theWrapped;
 		private final FilterMapDef<E, ?, T> theDef;
-		private final boolean isDynamic;
+		private final Equivalence<? super T> theEquivalence;
 
-		protected FilterMappedObservableCollection(ObservableCollection<E> wrap, FilterMapDef<E, ?, T> filterMapDef, boolean dynamic) {
+		protected FilterMappedObservableCollection(ObservableCollection<E> wrap, FilterMapDef<E, ?, T> filterMapDef) {
 			theWrapped = wrap;
 			theDef = filterMapDef;
-			isDynamic = dynamic;
+			if (filterMapDef.isReversible())
+				theEquivalence = theWrapped.equivalence().map(filterMapDef.destType.getRawType(), //
+					v -> filterMapDef.map(new FilterMapResult<>((E) v)).result, //
+					v -> filterMapDef.reverse(new FilterMapResult<>((T) v)).result, //
+					v -> filterMapDef.reverse(new FilterMapResult<>((T) v)).error == null);
+			else
+				theEquivalence = Equivalence.DEFAULT;
 		}
 
 		protected ObservableCollection<E> getWrapped() {
@@ -490,8 +715,8 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public ObservableValue<CollectionSession> getSession() {
-			return theWrapped.getSession();
+		public Equivalence<? super T> equivalence() {
+			return theEquivalence;
 		}
 
 		@Override
@@ -547,18 +772,12 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean containsAll(Collection<?> c) {
-			if (!theDef.isReversible() || size() < c.size()) // Try to map the fewest elements
-				return ObservableCollectionImpl.containsAll(this, c);
-
-			return theWrapped.containsAll(reverse(c));
+			return ObservableCollectionImpl.containsAll(this, c);
 		}
 
 		@Override
 		public boolean containsAny(Collection<?> c) {
-			if (!theDef.isReversible() || size() < c.size()) // Try to map the fewest elements
-				return ObservableCollectionImpl.containsAll(this, c);
-
-			return theWrapped.containsAny(reverse(c));
+			return ObservableCollectionImpl.containsAll(this, c);
 		}
 
 		protected List<E> reverse(Collection<?> input) {
@@ -625,64 +844,20 @@ public final class ObservableCollectionImpl {
 				FilterMapResult<T, E> reversed = theDef.reverse(new FilterMapResult<>((T) o));
 				if (reversed.error != null)
 					return false;
-				try (Transaction t = lock(true, null)) {
-					while (!found[0] && theWrapped.spliterator().tryAdvanceElement(el -> {
-						if (Objects.equals(el.get(), reversed.result)) {
-							found[0] = true;
-							el.remove();
-						}
-					})) {
-					}
-				}
+				return theWrapped.remove(reversed.result);
 			} else {
-				try (Transaction t = lock(true, null)) {
-					FilterMapResult<E, T> result = new FilterMapResult<>();
-					while (!found[0] && theWrapped.spliterator().tryAdvanceElement(el -> {
-						result.source = el.get();
-						theDef.map(result);
-						if (result.error == null && Objects.equals(result.result, o)) {
-							found[0] = true;
-							el.remove();
-						}
-					})) {
-					}
-				}
+				return ObservableCollectionImpl.remove(this, o);
 			}
-			return found[0];
 		}
 
 		@Override
 		public boolean removeAll(Collection<?> c) {
-			boolean[] removed = new boolean[1];
-			try (Transaction t = lock(true, null)) {
-				FilterMapResult<E, T> result = new FilterMapResult<>();
-				theWrapped.spliterator().forEachElement(el -> {
-					result.source = el.get();
-					theDef.map(result);
-					if (result.error == null && c.contains(result.result)) {
-						el.remove();
-						removed[0] = true;
-					}
-				});
-			}
-			return removed[0];
+			return ObservableCollectionImpl.removeAll(this, c);
 		}
 
 		@Override
 		public boolean retainAll(Collection<?> c) {
-			boolean[] removed = new boolean[1];
-			try (Transaction t = lock(true, null)) {
-				FilterMapResult<E, T> result = new FilterMapResult<>();
-				theWrapped.spliterator().forEachElement(el -> {
-					result.source = el.get();
-					theDef.map(result);
-					if (result.error == null && !c.contains(result.result)) {
-						el.remove();
-						removed[0] = true;
-					}
-				});
-			}
-			return removed[0];
+			return ObservableCollectionImpl.retainAll(this, c);
 		}
 
 		@Override
@@ -747,211 +922,42 @@ public final class ObservableCollectionImpl {
 			});
 		}
 
-		protected FilteredElement<E, T> filter(ObservableElement<E> element) {
-			if (isDynamic && theDef.isFiltered()) {
-				FilterMapResult<E, T> mapped = getDef().map(new FilterMapResult<>(element.get()));
-				return mapped.error == null ? new StaticFilteredElement<>(element, theDef) : null;
-			} else {
-				return new DynamicFilteredElement<>(element, theDef);
-			}
-		}
-
 		@Override
-		public Subscription onElement(Consumer<? super ObservableElement<T>> onElement) {
-			SimpleObservable<Void> unSubObs = new SimpleObservable<>();
-			Subscription elSub = getWrapped().onElement(element -> {
-				FilteredElement<E, T> filtered = filter(element);
-				if (filtered == null)
-					return;
-				filtered.isIncluded().value().unsubscribeOn(unSubObs).filter(included -> included)
-				.act(included -> onElement.accept(filtered));
+		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends T>> observer) {
+			return theWrapped.subscribe(evt -> {
+				switch (evt.getType()) {
+				case add:
+					FilterMapResult<E, T> res = getDef().map(new FilterMapResult<>(evt.getNewValue()));
+					if (res.error == null)
+						ObservableCollectionEvent.doWith(new ObservableCollectionEvent<>(evt.getType(), null, res.result, evt), observer);
+					break;
+				case remove:
+					res = getDef().map(new FilterMapResult<>(evt.getOldValue()));
+					if (res.error == null)
+						ObservableCollectionEvent.doWith(new ObservableCollectionEvent<>(evt.getType(), res.result, res.result, evt),
+							observer);
+					break;
+				case set:
+					res = getDef().map(new FilterMapResult<>(evt.getOldValue()));
+					FilterMapResult<E, T> newRes = getDef().map(new FilterMapResult<>(evt.getNewValue()));
+					if (res.error == null) {
+						if (newRes.error == null)
+							ObservableCollectionEvent.doWith(new ObservableCollectionEvent<>(evt.getType(), res.result, newRes.result, evt),
+								observer);
+						else
+							ObservableCollectionEvent.doWith(
+								new ObservableCollectionEvent<>(CollectionChangeType.remove, res.result, res.result, evt), observer);
+					} else if (newRes.error == null)
+						ObservableCollectionEvent
+						.doWith(new ObservableCollectionEvent<>(CollectionChangeType.add, null, newRes.result, evt), observer);
+					break;
+				}
 			});
-			return () -> {
-				unSubObs.onNext(null);
-				elSub.unsubscribe();
-			};
 		}
 
 		@Override
 		public String toString() {
 			return ObservableCollection.toString(this);
-		}
-	}
-
-	public static abstract class FilteredElement<E, T> implements ObservableElement<T> {
-		private final ObservableElement<E> theWrappedElement;
-		private final FilterMapDef<E, ?, T> theDef;
-
-		/**
-		 * @param wrapped The element to wrap
-		 * @param def The mapping definition to filter on
-		 */
-		protected FilteredElement(ObservableElement<E> wrapped, FilterMapDef<E, ?, T> def) {
-			theWrappedElement = wrapped;
-			theDef = def;
-		}
-
-		@Override
-		public TypeToken<T> getType() {
-			return theDef.destType;
-		}
-
-		@Override
-		public T get() {
-			return theDef.map(new FilterMapResult<>(theWrappedElement.get())).result;
-		}
-
-		/** @return The element that this filtered element wraps */
-		protected ObservableElement<E> getWrapped() {
-			return theWrappedElement;
-		}
-
-		/** @return The mapping definition used by this element */
-		protected FilterMapDef<E, ?, T> getDef() {
-			return theDef;
-		}
-
-		@Override
-		public String canRemove() {
-			return theWrappedElement.canRemove();
-		}
-
-		@Override
-		public void remove() throws IllegalArgumentException {
-			theWrappedElement.remove();
-		}
-
-		@Override
-		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
-			if (!theDef.isReversible())
-				throw new IllegalArgumentException(ObservableCollection.StdMsg.UNSUPPORTED_OPERATION);
-			FilterMapResult<T, E> reversed = getDef().reverse(new FilterMapResult<>(value));
-			if (reversed.error != null)
-				throw new IllegalArgumentException(reversed.error);
-			E old = getWrapped().set(reversed.result, cause);
-			FilterMapResult<E, T> oldRes = getDef().map(new FilterMapResult<>(old));
-			if (oldRes.error != null)
-				return null;
-			return oldRes.result;
-		}
-
-		@Override
-		public <V extends T> String isAcceptable(V value) {
-			if (!theDef.isReversible())
-				return ObservableCollection.StdMsg.UNSUPPORTED_OPERATION;
-			FilterMapResult<T, E> reversed = getDef().reverse(new FilterMapResult<>(value));
-			if (reversed.error != null)
-				return reversed.error;
-			return getWrapped().isAcceptable(reversed.result);
-		}
-
-		@Override
-		public ObservableValue<String> isEnabled() {
-			if (!theDef.isReversible())
-				return ObservableValue.constant(ObservableCollection.StdMsg.UNSUPPORTED_OPERATION);
-			return theWrappedElement.isEnabled().takeUntil(completed());
-		}
-
-		protected abstract ObservableValue<Boolean> isIncluded();
-
-		@Override
-		public String toString() {
-			return "filter(" + theWrappedElement + ")";
-		}
-
-		@Override
-		public boolean isSafe() {
-			return theWrappedElement.isSafe();
-		}
-	}
-
-	public static class StaticFilteredElement<E, T> extends FilteredElement<E, T> {
-		/**
-		 * @param wrapped The element to wrap
-		 * @param def The mapping definition to filter on
-		 */
-		protected StaticFilteredElement(ObservableElement<E> wrapped, FilterMapDef<E, ?, T> def) {
-			super(wrapped, def);
-		}
-
-		@Override
-		protected ObservableValue<Boolean> isIncluded() {
-			return ObservableValue.constant(true);
-		}
-
-		@Override
-		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-			return getWrapped().subscribe(new Observer<ObservableValueEvent<E>>() {
-				private T oldValue;
-
-				@Override
-				public <V2 extends ObservableValueEvent<E>> void onNext(V2 elEvent) {
-					FilterMapResult<E, T> res = getDef().map(new FilterMapResult<>(elEvent.getValue()));
-					if (elEvent.isInitial())
-						Observer.onNextAndFinish(observer, createInitialEvent(res.result, elEvent));
-					else
-						Observer.onNextAndFinish(observer, createChangeEvent(oldValue, res.result, elEvent));
-				}
-
-				@Override
-				public <V2 extends ObservableValueEvent<E>> void onCompleted(V2 elEvent) {
-					FilterMapResult<E, T> res = getDef().map(new FilterMapResult<>(elEvent.getValue()));
-					// Don't fire an event for a result that doesn't belong in the mapped collection
-					T value = res.error == null ? res.result : oldValue;
-					Observer.onCompletedAndFinish(observer, createChangeEvent(value, value, elEvent));
-				}
-			});
-		}
-	}
-
-	/**
-	 * The type of elements returned from {@link ObservableCollection#filterMap(Function)}
-	 *
-	 * @param <T> The type of this element
-	 * @param <E> The type of element being wrapped
-	 */
-	public static class DynamicFilteredElement<E, T> extends FilteredElement<E, T> {
-		/**
-		 * @param wrapped The element to wrap
-		 * @param def The mapping definition to filter on
-		 */
-		protected DynamicFilteredElement(ObservableElement<E> wrapped, FilterMapDef<E, ?, T> def) {
-			super(wrapped, def);
-		}
-
-		@Override
-		protected ObservableValue<Boolean> isIncluded() {
-			return getWrapped().mapV(v -> getDef().map(new FilterMapResult<>(v)).error == null, true);
-		}
-
-		@Override
-		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer2) {
-			return getWrapped().subscribe(new Observer<ObservableValueEvent<E>>() {
-				private T oldValue;
-
-				@Override
-				public <V2 extends ObservableValueEvent<E>> void onNext(V2 elEvent) {
-					FilterMapResult<E, T> res = getDef().map(new FilterMapResult<>(elEvent.getValue()));
-					if (res.error != null) { // No longer included
-						Observer.onCompletedAndFinish(observer2, createChangeEvent(oldValue, oldValue, elEvent));
-						oldValue = null;
-					} else{
-						if (elEvent.isInitial())
-							Observer.onNextAndFinish(observer2, createInitialEvent(res.result, elEvent));
-						else
-							Observer.onNextAndFinish(observer2, createChangeEvent(oldValue, res.result, elEvent));
-						oldValue = res.result;
-					}
-				}
-
-				@Override
-				public <V2 extends ObservableValueEvent<E>> void onCompleted(V2 elEvent) {
-					FilterMapResult<E, T> res = getDef().map(new FilterMapResult<>(elEvent.getValue()));
-					// Don't fire an event for a result that doesn't belong in the mapped collection
-					T value = res.error == null ? res.result : oldValue;
-					Observer.onCompletedAndFinish(observer2, createChangeEvent(value, value, elEvent));
-				}
-			});
 		}
 	}
 
@@ -965,15 +971,17 @@ public final class ObservableCollectionImpl {
 	public static class CombinedObservableCollection<E, V> implements ObservableCollection<V> {
 		private final ObservableCollection<E> theWrapped;
 		private final CombinedCollectionDef<E, V> theDef;
-
-		private final SubCollectionTransactionManager theTransactionManager;
+		private final Equivalence<? super V> theEquivalence;
 
 		protected CombinedObservableCollection(ObservableCollection<E> wrap, CombinedCollectionDef<E, V> def) {
 			theWrapped = wrap;
 			theDef = def;
-
-			theTransactionManager = new SubCollectionTransactionManager(theWrapped,
-				Observable.or(def.getArgs().stream().map(arg -> arg.noInit()).collect(Collectors.toList()).toArray(new Observable[0])));
+			if (def.getReverse() != null)
+				theEquivalence = theWrapped.equivalence().map(def.targetType.getRawType(),
+					v -> def.getCombination().apply(new DynamicCombinedValues<>((E) v)),
+					v -> def.getReverse().apply(new DynamicCombinedValues<>((V) v)), v -> v != null || def.areNullsReversed());
+			else
+				theEquivalence = Equivalence.DEFAULT;
 		}
 
 		protected ObservableCollection<E> getWrapped() {
@@ -984,8 +992,9 @@ public final class ObservableCollectionImpl {
 			return theDef;
 		}
 
-		protected SubCollectionTransactionManager getManager() {
-			return theTransactionManager;
+		@Override
+		public Equivalence<? super V> equivalence() {
+			return theEquivalence;
 		}
 
 		@Override
@@ -996,11 +1005,6 @@ public final class ObservableCollectionImpl {
 		@Override
 		public Transaction lock(boolean write, Object cause) {
 			return theWrapped.lock(write, cause);
-		}
-
-		@Override
-		public ObservableValue<CollectionSession> getSession() {
-			return theTransactionManager.getSession();
 		}
 
 		@Override
@@ -1030,73 +1034,77 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean containsAll(Collection<?> c) {
-			if (theDef.getReverse() == null || c.size() > size())
-				return ObservableCollectionImpl.containsAll(this, c);
-			else {
-				T value = theValue.get();
-				for (Object o : c)
-					if (!theDef.targetType.getRawType().isInstance(o))
-						return false;
-				return theWrapped.containsAll(c.stream().map(o -> theReverse.apply((V) o, value)).collect(Collectors.toList()));
-			}
+			return ObservableCollectionImpl.containsAll(this, c);
 		}
 
 		@Override
 		public boolean containsAny(Collection<?> c) {
-			if (theDef.getReverse() == null || c.size() > size())
-				return ObservableCollectionImpl.containsAny(this, c);
-			else {
-				T value = theValue.get();
-				for (Object o : c)
-					if (!theDef.targetType.getRawType().isInstance(o))
-						return false;
-				return theWrapped.containsAny(c.stream().map(o -> theReverse.apply((V) o, value)).collect(Collectors.toList()));
-			}
+			return ObservableCollectionImpl.containsAny(this, c);
 		}
 
 		@Override
 		public String canAdd(V value) {
-			if (theDef.getReverse() != null)
-				return theWrapped.canAdd(theReverse.apply(value, theValue.get()));
-			else
+			if (theDef.getReverse() == null)
 				return StdMsg.UNSUPPORTED_OPERATION;
+			else if (value == null && !theDef.areNullsReversed())
+				return StdMsg.NULL_DISALLOWED;
+			else
+				return theWrapped.canAdd(theDef.getReverse().apply(new DynamicCombinedValues<>(value)));
 		}
 
 		@Override
 		public boolean add(V e) {
 			if (theDef.getReverse() == null)
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			else if (e == null || !theDef.areNullsReversed())
+				throw new UnsupportedOperationException(StdMsg.NULL_DISALLOWED);
 			else
-				return theWrapped.add(theReverse.apply(e, theValue.get()));
+				return theWrapped.add(theDef.getReverse().apply(new DynamicCombinedValues<>(e)));
 		}
 
 		@Override
 		public boolean addAll(Collection<? extends V> c) {
 			if (theDef.getReverse() == null)
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			else {
-				T combineValue = theValue.get();
-				return theWrapped.addAll(c.stream().map(o -> theReverse.apply(o, combineValue)).collect(Collectors.toList()));
+			if (!theDef.areNullsReversed()) {
+				for (V v : c)
+					if (v == null)
+						throw new UnsupportedOperationException(StdMsg.NULL_DISALLOWED);
 			}
+			Map<ObservableValue<?>, Object> argValues = new HashMap<>(theDef.getArgs().size() * 4 / 3);
+			for (ObservableValue<?> arg : theDef.getArgs())
+				argValues.put(arg, arg.get());
+			StaticCombinedValues<V> combined = new StaticCombinedValues<>();
+			combined.argValues = argValues;
+			return theWrapped.addAll(c.stream().map(o -> {
+				combined.element = o;
+				return theDef.getReverse().apply(combined);
+			}).collect(Collectors.toList()));
 		}
 
 		@Override
 		public ObservableCollection<V> addValues(V... values) {
-			if (theDef.getReverse() == null)
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			else {
-				T combineValue = theValue.get();
-				theWrapped.addAll(Arrays.stream(values).map(o -> theReverse.apply(o, combineValue)).collect(Collectors.toList()));
-				return this;
-			}
+			addAll(Arrays.asList(values));
+			return this;
 		}
 
 		@Override
 		public String canRemove(Object value) {
-			if (theDef.getReverse() != null && (value == null || theDef.targetType.getRawType().isInstance(value)))
-				return theWrapped.canRemove(theReverse.apply((V) value, theValue.get()));
-			else
+			// TODO We can still do the check with iteration if reverse is unsupported
+			if (theDef.getReverse() == null)
 				return StdMsg.UNSUPPORTED_OPERATION;
+			else if (value == null && !theDef.areNullsReversed())
+				return StdMsg.NULL_DISALLOWED;
+			else if (value != null && theDef.targetType.getRawType().isInstance(value))
+				return StdMsg.BAD_TYPE;
+
+			Map<ObservableValue<?>, Object> argValues = new HashMap<>(theDef.getArgs().size() * 4 / 3);
+			for (ObservableValue<?> arg : theDef.getArgs())
+				argValues.put(arg, arg.get());
+			StaticCombinedValues<V> combined = new StaticCombinedValues<>();
+			combined.argValues = argValues;
+			combined.element = (V) value;
+			return theWrapped.canRemove(theDef.getReverse().apply(combined));
 		}
 
 		@Override
@@ -1215,15 +1223,128 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public Subscription onElement(Consumer<? super ObservableElement<V>> onElement) {
-			DefaultObservable<Void> unSubObs = new DefaultObservable<>();
-			Observer<Void> unSubControl = unSubObs.control(null);
-			Subscription collSub = theTransactionManager.onElement(theWrapped,
-				element -> onElement.accept(element.combineV(theMap, theValue).unsubscribeOn(unSubObs)), true);
-			return () -> {
-				unSubControl.onCompleted(null);
-				collSub.unsubscribe();
+		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends V>> observer) {
+			final Object NULL = new Object();
+			StaticCombinedValues<E> combined = new StaticCombinedValues<>();
+			boolean[] initialized = new boolean[1];
+			boolean[] complete = new boolean[1];
+			ReentrantLock lock = new ReentrantLock();
+			CollectionSubscription[] collSub = new CollectionSubscription[1];
+			Subscription[] argSubs = new Subscription[theDef.getArgs().size()];
+			CollectionSubscription sub = removeAll -> {
+				Transaction cLock = Transaction.NONE;
+				if (initialized[0]) {
+					lock.lock();
+					cLock = theWrapped.lock(false, null);
+				}
+				try {
+					if (collSub[0] != null) {
+						collSub[0].unsubscribe(removeAll);
+						collSub[0] = null;
+					}
+					int a = 0;
+					for (ObservableValue<?> arg : theDef.getArgs()) {
+						if (arg != null)
+							argSubs[a].unsubscribe();
+						argSubs[a++] = null;
+					}
+				} finally {
+					if (initialized[0]) {
+						lock.unlock();
+						cLock.close();
+					}
+				}
 			};
+			Map<ObservableValue<?>, Object> oldArgValues = new HashMap<>(theDef.getArgs().size() * 4 / 3);
+			Map<ObservableValue<?>, Object> argValues = new HashMap<>(theDef.getArgs().size() * 4 / 3);
+			int a = 0;
+			for (ObservableValue<?> arg : theDef.getArgs()) {
+				argSubs[a++] = arg.subscribe(new Observer<ObservableValueEvent<?>>() {
+					@Override
+					public <V2 extends ObservableValueEvent<?>> void onNext(V2 event) {
+						Transaction cLock = Transaction.NONE;
+						if (initialized[0]) {
+							lock.lock();
+							cLock = theWrapped.lock(false, null);
+						}
+						try {
+							argValues.put(event.getObservable(), StaticCombinedValues.valueFor(event.getValue()));
+							if (initialized[0]) {
+								for (E value : theWrapped) {
+									combined.element = value;
+									combined.argValues = oldArgValues;
+									V oldValue = theDef.getCombination().apply(combined);
+									combined.argValues = argValues;
+									V newValue = theDef.getCombination().apply(combined);
+									ObservableCollectionEvent.doWith(
+										new ObservableCollectionEvent<>(CollectionChangeType.set, oldValue, newValue, event), observer);
+								}
+							}
+						} finally {
+							if (initialized[0]) {
+								lock.unlock();
+								cLock.close();
+							}
+						}
+					}
+
+					@Override
+					public <V2 extends ObservableValueEvent<?>> void onCompleted(V2 event) {
+						Transaction cLock = Transaction.NONE;
+						if (initialized[0]) {
+							lock.lock();
+							cLock = theWrapped.lock(false, null);
+						}
+						try {
+							if (complete[0])
+								return;
+							complete[0] = true;
+							sub.unsubscribe(true);
+						} finally {
+							if (initialized[0]) {
+								lock.unlock();
+								cLock.close();
+							}
+						}
+					}
+				});
+				if (complete[0])
+					break;
+			}
+			if (complete[0]) {
+				return removeAll -> {
+				};
+			}
+			collSub[0] = theWrapped.subscribe(evt -> {
+				if (initialized[0])
+					lock.lock();
+				try {
+					combined.argValues = argValues;
+					V oldValue = null, newValue = null;
+					switch (evt.getType()) {
+					case add:
+						combined.element = evt.getNewValue();
+						newValue = theDef.getCombination().apply(combined);
+						break;
+					case remove:
+						combined.element = evt.getOldValue();
+						oldValue = theDef.getCombination().apply(combined);
+						break;
+					case set:
+						combined.element = evt.getOldValue();
+						oldValue = theDef.getCombination().apply(combined);
+						combined.element = evt.getNewValue();
+						newValue = theDef.getCombination().apply(combined);
+						break;
+					}
+					ObservableCollectionEvent.doWith(new ObservableCollectionEvent<>(CollectionChangeType.set, oldValue, newValue, evt),
+						observer);
+				} finally {
+					if (initialized[0])
+						lock.unlock();
+				}
+			});
+			return sub;
 		}
 
 		@Override
@@ -1252,6 +1373,30 @@ public final class ObservableCollectionImpl {
 				if (!theDef.getArgs().contains(arg))
 					throw new IllegalArgumentException("Unrecognized argument value: " + arg);
 				return arg.get();
+			}
+		}
+
+		private static class StaticCombinedValues<T> implements CombinedValues<T> {
+			static final Object NULL;
+
+			T element;
+			Map<ObservableValue<?>, Object> argValues;
+
+			@Override
+			public T getElement() {
+				return element;
+			}
+
+			static <T> T valueFor(T value) {
+				return value == null ? (T) NULL : value;
+			}
+
+			@Override
+			public <T> T get(ObservableValue<T> arg) {
+				Object value = argValues.get(arg);
+				if (value == null)
+					throw new IllegalArgumentException("Unrecognized value: " + arg);
+				return value == NULL ? null : (T) value;
 			}
 		}
 	}
