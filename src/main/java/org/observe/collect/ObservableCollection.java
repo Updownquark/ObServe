@@ -82,33 +82,37 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	@Override
 	abstract ElementSpliterator<E> spliterator();
 
-	/**
-	 * @param onElement The listener to be notified when new elements are added to the collection
-	 * @return The function to call when the calling code is no longer interested in this collection
-	 */
-	Subscription onElement(Consumer<? super ObservableElement<E>> onElement);
+	// /**
+	// * @param onElement The listener to be notified when new elements are added to the collection
+	// * @return The function to call when the calling code is no longer interested in this collection
+	// */
+	// Subscription onElement(Consumer<? super ObservableElement<E>> onElement);
 
-	/**
-	 * <p>
-	 * The session allows listeners to retain state for the duration of a unit of work (controlled by implementation-specific means),
-	 * batching events where possible. Not all events on a collection will have a session (the value may be null). In addition, the presence
-	 * or absence of a session need not imply anything about the threaded interactions with a session. A transaction may encompass events
-	 * fired and received on multiple threads. In short, the only thing guaranteed about sessions is that they will end. Therefore, if a
-	 * session is present, observers may assume that they can delay expensive results of collection events until the session completes.
-	 * </p>
-	 * <p>
-	 * In order to use the session for a listening operation, 2 observers must be installed: one for the collection, and one for the
-	 * session. If an event that the observer is interested in occurs in the collection, the session value must be checked. If there is
-	 * currently a session, then the session must be tagged with information that will allow later reconstruction of the interesting
-	 * particulars of the event. When a session event occurs, the observer should check to see if the
-	 * {@link ObservableValueEvent#getOldValue() old value} of the event is non null and whether that old session (the one that is now
-	 * ending) has any information installed by the collection observer. If it does, the interesting information should be reconstructed and
-	 * dealt with at that time.
-	 * </p>
-	 *
-	 * @return The observable value for the current session of this collection
-	 */
-	ObservableValue<CollectionSession> getSession();
+	Subscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer);
+
+	// /**
+	// * <p>
+	// * The session allows listeners to retain state for the duration of a unit of work (controlled by implementation-specific means),
+	// * batching events where possible. Not all events on a collection will have a session (the value may be null). In addition, the
+	// presence
+	// * or absence of a session need not imply anything about the threaded interactions with a session. A transaction may encompass events
+	// * fired and received on multiple threads. In short, the only thing guaranteed about sessions is that they will end. Therefore, if a
+	// * session is present, observers may assume that they can delay expensive results of collection events until the session completes.
+	// * </p>
+	// * <p>
+	// * In order to use the session for a listening operation, 2 observers must be installed: one for the collection, and one for the
+	// * session. If an event that the observer is interested in occurs in the collection, the session value must be checked. If there is
+	// * currently a session, then the session must be tagged with information that will allow later reconstruction of the interesting
+	// * particulars of the event. When a session event occurs, the observer should check to see if the
+	// * {@link ObservableValueEvent#getOldValue() old value} of the event is non null and whether that old session (the one that is now
+	// * ending) has any information installed by the collection observer. If it does, the interesting information should be reconstructed
+	// and
+	// * dealt with at that time.
+	// * </p>
+	// *
+	// * @return The observable value for the current session of this collection
+	// */
+	// ObservableValue<CollectionSession> getSession();
 
 	/**
 	 * Gets access to the equivalence scheme that this collection uses. {@link ObservableCollection}s are permitted to compare their
@@ -306,49 +310,18 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 * @return An observable that fires a value (the cause event of the change) whenever anything in this collection changes. Unlike
 	 *         {@link #changes()}, this observable will only fire 1 event per transaction.
 	 */
-	default Observable<ObservableValueEvent<?>> simpleChanges() {
-		return new Observable<ObservableValueEvent<?>>() {
+	default Observable<Object> simpleChanges() {
+		return new Observable<Object>() {
 			@Override
-			public Subscription subscribe(Observer<? super ObservableValueEvent<?>> observer) {
+			public Subscription subscribe(Observer<Object> observer) {
+				Consumer<Object> action = root -> observer.onNext(root);
 				boolean[] initialized = new boolean[1];
-				Object key = new Object();
-				Subscription collSub = onElement(element -> {
-					element.subscribe(new Observer<ObservableValueEvent<? extends E>>() {
-						@Override
-						public <V extends ObservableValueEvent<? extends E>> void onNext(V event) {
-							if (!initialized[0])
-								return;
-							CollectionSession session = getSession().get();
-							if (session == null)
-								observer.onNext(event);
-							else
-								session.put(key, "changed", true);
-						}
-
-						@Override
-						public <V extends ObservableValueEvent<? extends E>> void onCompleted(V event) {
-							if (!initialized[0])
-								return;
-							CollectionSession session = getSession().get();
-							if (session == null)
-								observer.onNext(event);
-							else
-								session.put(key, "changed", true);
-						}
-					});
-				});
-				Subscription transSub = getSession().act(event -> {
-					if (!initialized[0])
-						return;
-					if (event.getOldValue() != null && event.getOldValue().put(key, "changed", null) != null) {
-						observer.onNext(event);
-					}
+				Subscription sub = ObservableCollection.this.subscribe(evt -> {
+					if (initialized[0])
+						evt.onRootFinish(action);
 				});
 				initialized[0] = true;
-				return () -> {
-					collSub.unsubscribe();
-					transSub.unsubscribe();
-				};
+				return sub;
 			}
 
 			@Override

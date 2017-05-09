@@ -32,6 +32,36 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	@Override
 	T get();
 
+	default ObservableValue<T> onRootChange(){
+		ObservableValue<T> outer=this;
+		return new ObservableValue<T>(){
+			@Override
+			public TypeToken<T> getType() {
+				return outer.getType();
+			}
+
+			@Override
+			public boolean isSafe() {
+				return outer.isSafe();
+			}
+
+			@Override
+			public T get() {
+				return outer.get();
+			}
+
+
+			@Override
+			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+				Object [] oldValue=new Object[1];
+				boolean [] initialized=new boolean[1];
+				Consumer<Object> rootAction=root->observer.on
+					// TODO Auto-generated method stub
+					return null;
+			}
+		};
+	}
+
 	/** @return An observable that just reports this observable value's value in an observable without the event */
 	default Observable<T> value() {
 		return new Observable<T>() {
