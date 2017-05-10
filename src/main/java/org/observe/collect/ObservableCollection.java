@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -39,7 +40,7 @@ import com.google.common.reflect.TypeToken;
  *
  * The biggest differences between Qollection and Collection are:
  * <ul>
- * <li><b>Observability</b> The {@link #onElement(Consumer)} method provides {@link ObservableElement}s for each element in the collection
+ * <li><b>Observability</b> The {@link #subscribe(Consumer)} method provides {@link ObservableElement}s for each element in the collection
  * that allows subscribers to be notified of updates, additions, and deletions.</li>
  * <li><b>Dynamic Transformation</b> The stream api allows transforming of the content of one collection into another, but the
  * transformation is done once for all, creating a new collection independent of the source. Sometimes it is desirable to make a transformed
@@ -80,7 +81,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	TypeToken<E> getType();
 
 	@Override
-	abstract ElementSpliterator<E> spliterator();
+	abstract ObservableElementSpliterator<E> spliterator();
 
 	// /**
 	// * @param onElement The listener to be notified when new elements are added to the collection
@@ -88,6 +89,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	// */
 	// Subscription onElement(Consumer<? super ObservableElement<E>> onElement);
 
+	/**
+	 * @param observer The listener to be notified of each element change in the collection
+	 * @return The subscription to use to terminate listening
+	 */
 	CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer);
 
 	// /**
@@ -366,7 +371,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 * @return An observable collection of a new type backed by this collection and the mapping function
 	 */
 	default <T> ObservableCollection<T> map(Function<? super E, T> map) {
-		return buildMap(MappedCollectionBuilder.returnType(map)).map(map, false).build(true);
+		return buildMap(MappedCollectionBuilder.returnType(map)).map(map, false).build();
 	}
 
 	/**
@@ -374,7 +379,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 * @return A collection containing all non-null elements passing the given test
 	 */
 	default ObservableCollection<E> filter(Function<? super E, String> filter) {
-		return this.<E> buildMap(getType()).filter(filter, false).build(true);
+		return this.<E> buildMap(getType()).filter(filter, false).build();
 	}
 
 	/**
@@ -389,13 +394,13 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 				return null;
 			else
 				return StdMsg.BAD_TYPE;
-		}, true).build(false);
+		}, true).build();
 	}
 
 	/**
 	 * Creates a builder that can be used to create a highly customized and efficient chain of filter-mappings. The
-	 * {@link MappedCollectionBuilder#build(boolean) result} will be a collection backed by this collection's values but filtered/mapped
-	 * according to the methods called on the builder.
+	 * {@link MappedCollectionBuilder#build() result} will be a collection backed by this collection's values but filtered/mapped according
+	 * to the methods called on the builder.
 	 *
 	 * @param <T> The type of values to map to
 	 * @param type The run-time type of values to map to
@@ -440,7 +445,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 				collectionType = new TypeToken<ObservableCollection<? extends T>>() {};
 		} else
 			collectionType = new TypeToken<ObservableCollection<? extends T>>() {}.where(new TypeParameter<T>() {}, type);
-			return flatten(this.<ObservableCollection<? extends T>> buildMap(collectionType).map(map, false).build(true));
+			return flatten(this.<ObservableCollection<? extends T>> buildMap(collectionType).map(map, false).build());
 	}
 
 	/** @return An observable value containing the only value in this collection while its size==1, otherwise null TODO TEST ME! */
@@ -786,15 +791,21 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 		return new Observable<T>() {
 			@Override
 			public Subscription subscribe(Observer<? super T> observer) {
-				return coll.subscribe(new ObservableCollectionImpl.ElementActions<Observable<T>, Subscription>() {
-					@Override
-					Subscription onAdd(Observable<T> value) {
-						return value.subscribe(observer);
-					}
-
-					@Override
-					void onRemove(Observable<T> value, Subscription action) {
-						action.unsubscribe();
+				HashMap<Object, Subscription> subscriptions = new HashMap<>();
+				return coll.subscribe(evt -> {
+					switch (evt.getType()) {
+					case add:
+						subscriptions.put(evt.getElementId(), evt.getNewValue().subscribe(observer));
+						break;
+					case remove:
+						subscriptions.remove(evt.getElementId()).unsubscribe();
+						break;
+					case set:
+						if (evt.getOldValue() != evt.getNewValue()) {
+							subscriptions.remove(evt.getElementId()).unsubscribe();
+							subscriptions.put(evt.getElementId(), evt.getNewValue().subscribe(observer));
+						}
+						break;
 					}
 				}).removeAll();
 			}
@@ -958,10 +969,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 				areNullsMapped, theReverse, areNullsReversed);
 		}
 
-		public ObservableCollection<T> build(boolean dynamic) {
+		public ObservableCollection<T> build() {
 			if (theMap == null && !theWrapped.getType().equals(theType))
 				throw new IllegalStateException("Building a type-mapped collection with no map defined");
-			return theWrapped.filterMap(toDef(), dynamic);
+			return theWrapped.filterMap(toDef());
 		}
 
 		public <X> MappedCollectionBuilder<E, T, X> andThen(TypeToken<X> nextType) {
@@ -1682,21 +1693,26 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 		}
 	}
 
+	/**
+	 * Builds a grouping definition that can be used to create a collection-backed multi-map
+	 *
+	 * @param <E> The type of values in the collection, which will be the type of values in the multi-map
+	 * @param <K> The key type for the multi-map
+	 * @see ObservableCollection#groupBy(TypeToken, Function)
+	 * @see ObservableCollection#groupBy(GroupingBuilder)
+	 */
 	class GroupingBuilder<E, K> {
 		private final ObservableCollection<E> theCollection;
 		private final TypeToken<K> theKeyType;
 		private final Function<? super E, ? extends K> theKeyMaker;
 		private Equivalence<? super K> theEquivalence = Equivalence.DEFAULT;
 		private boolean areNullsMapped;
-		private boolean areKeysDynamic;
 		private boolean isBuilt;
 
 		public GroupingBuilder(ObservableCollection<E> collection, TypeToken<K> keyType, Function<? super E, ? extends K> keyMaker) {
 			theCollection = collection;
 			theKeyType = keyType;
 			theKeyMaker = keyMaker;
-
-			areKeysDynamic = true;
 		}
 
 		public ObservableCollection<E> getCollection() {
@@ -1731,15 +1747,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 			return areNullsMapped;
 		}
 
-		public GroupingBuilder<E, K> dynamic(boolean dynamic) {
-			areKeysDynamic = dynamic;
-			return this;
-		}
-
-		public boolean areKeysDynamic() {
-			return areKeysDynamic;
-		}
-
 		public SortedGroupingBuilder<E, K> sorted(Comparator<? super K> compare) {
 			return new SortedGroupingBuilder<>(this, compare);
 		}
@@ -1750,17 +1757,31 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 		}
 	}
 
-	class SortedGroupingBuilder<E, K> {
-		private final GroupingBuilder<E, K> theBasicBuilder;
+	/**
+	 * Builds a sorted grouping definition that can be used to create a collection-backed sorted multi-map
+	 *
+	 * @param <E> The type of values in the collection, which will be the type of values in the multi-map
+	 * @param <K> The key type for the multi-map
+	 * @see ObservableCollection#groupBy(TypeToken, Function)
+	 * @see ObservableCollection.GroupingBuilder#sorted(Comparator)
+	 * @see ObservableCollection#groupBy(SortedGroupingBuilder)
+	 */
+	class SortedGroupingBuilder<E, K> extends GroupingBuilder<E, K> {
 		private final Comparator<? super K> theCompare;
 
 		public SortedGroupingBuilder(GroupingBuilder<E, K> basicBuilder, Comparator<? super K> compare) {
-			theBasicBuilder = basicBuilder;
+			super(basicBuilder.getCollection(), basicBuilder.getKeyType(), basicBuilder.getKeyMaker());
+			withNullsMapped(basicBuilder.areNullsMapped());
 			theCompare = compare;
 		}
 
+		@Override
 		public ObservableSortedMultiMap<K, E> build() {
-			return theBasicBuilder.getCollection().groupBy(this);
+			return getCollection().groupBy(this);
+		}
+
+		public Comparator<? super K> getCompare() {
+			return theCompare;
 		}
 	}
 }

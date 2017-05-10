@@ -12,6 +12,7 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.SettableValue;
 import org.observe.Subscription;
+import org.observe.assoc.ObservableMap.ObservableEntry;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
@@ -139,18 +140,6 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 
 	/** @return The type of values this map stores */
 	TypeToken<V> getValueType();
-
-	/**
-	 * @return The observable value for the current session of this map. The session allows listeners to retain state for the duration of a
-	 *         unit of work (controlled by implementation-specific means), batching events where possible. Not all events on a map will have
-	 *         a session (the value may be null). In addition, the presence or absence of a session need not imply anything about the
-	 *         threaded interactions with a session. A transaction may encompass events fired and received on multiple threads. In short,
-	 *         the only thing guaranteed about sessions is that they will end. Therefore, if a session is present, observers may assume that
-	 *         they can delay expensive results of map events until the session completes. The {@link ObservableCollection#getSession()
-	 *         sessions} of the {@link #observeEntries() entries}, {@link #keySet() keys}, and {@link #values() values} collections should
-	 *         be the same as this one.
-	 */
-	ObservableValue<CollectionSession> getSession();
 
 	@Override
 	ObservableSet<K> keySet();

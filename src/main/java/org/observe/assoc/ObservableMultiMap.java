@@ -13,6 +13,7 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Subscription;
+import org.observe.assoc.ObservableMultiMap.ObservableMultiEntry;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableElement;
@@ -58,18 +59,6 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 
 	/** @return The type of values this map stores */
 	TypeToken<V> getValueType();
-
-	/**
-	 * @return The observable value for the current session of this map. The session allows listeners to retain state for the duration of a
-	 *         unit of work (controlled by implementation-specific means), batching events where possible. Not all events on a map will have
-	 *         a session (the value may be null). In addition, the presence or absence of a session need not imply anything about the
-	 *         threaded interactions with a session. A transaction may encompass events fired and received on multiple threads. In short,
-	 *         the only thing guaranteed about sessions is that they will end. Therefore, if a session is present, observers may assume that
-	 *         they can delay expensive results of map events until the session completes. The {@link ObservableCollection#getSession()
-	 *         sessions} of the {@link #entrySet() entries}, {@link #keySet() keys}, and {@link #entrySet() values} collections should be
-	 *         the same as this one.
-	 */
-	ObservableValue<CollectionSession> getSession();
 
 	/** @return The keys that have least one value in this map */
 	@Override
