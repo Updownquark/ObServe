@@ -38,11 +38,11 @@ import com.google.common.reflect.TypeToken;
 /**
  * An enhanced collection.
  *
- * The biggest differences between Qollection and Collection are:
+ * The biggest differences between ObservableCollection and Collection are:
  * <ul>
- * <li><b>Observability</b> The {@link #subscribe(Consumer)} method provides {@link ObservableElement}s for each element in the collection
- * that allows subscribers to be notified of updates, additions, and deletions.</li>
- * <li><b>Dynamic Transformation</b> The stream api allows transforming of the content of one collection into another, but the
+ * <li><b>Observability</b> The {@link #subscribe(Consumer)} method and the {@link #changes()} and {@link #simpleChanges()} observables
+ * allow subscribers to be notified of changes in the collection.</li>
+ * <li><b>Dynamic Transformation</b> The stream API allows transforming of the content of one collection into another, but the
  * transformation is done once for all, creating a new collection independent of the source. Sometimes it is desirable to make a transformed
  * collection that does its transformation dynamically, keeping the same data source, so that when the source is modified, the transformed
  * collection is also updated accordingly. #map(Function), #filter(Function), #groupBy(Function), and others allow this. In addition, the
@@ -52,14 +52,14 @@ import com.google.common.reflect.TypeToken;
  * &nbsp;&nbsp;&nbsp;&nbsp;<code>coll.stream().map(Function).collect(Collectors.toList())</code>.</li>
  * <li><b>Modification Control</b> The {@link #filterModification()} method creates a collection that forbids certain types of modifications
  * to it. Modification control can also be used to intercept and perform actions based on modifications to a collection.</li>
- * <li><b>ElementSpliterator</b> Qollections must implement {@link #spliterator()}, which returns a {@link ElementSpliterator}, which is an
- * enhanced {@link Spliterator}. This had potential for the improved performance associated with using {@link Spliterator} instead of
- * {@link Iterator} as well as the utility added by {@link ElementSpliterator}.</li>
- * <li><b>Transactionality</b> Qollections support the {@link org.qommons.Transactable} interface, allowing callers to reserve a collection
- * for write or to ensure that the collection is not written to during an operation (for implementations that support this. See
+ * <li><b>ElementSpliterator</b> ObservableCollections must implement {@link #spliterator()}, which returns a {@link ElementSpliterator},
+ * which is an enhanced {@link Spliterator}. This had potential for the improved performance associated with using {@link Spliterator}
+ * instead of {@link Iterator} as well as the utility added by {@link ElementSpliterator}.</li>
+ * <li><b>Transactionality</b> ObservableCollections support the {@link org.qommons.Transactable} interface, allowing callers to reserve a
+ * collection for write or to ensure that the collection is not written to during an operation (for implementations that support this. See
  * {@link org.qommons.Transactable#isLockSupported() isLockSupported()}).</li>
- * <li><b>Run-time type safety</b> Qollections have a {@link #getType() type} associated with them, allowing them to enforce type-safety at
- * run time. How strictly this type-safety is enforced is implementation-dependent.</li>
+ * <li><b>Run-time type safety</b> ObservableCollections have a {@link #getType() type} associated with them, allowing them to enforce
+ * type-safety at run time. How strictly this type-safety is enforced is implementation-dependent.</li>
  * </ul>
  *
  * @param <E> The type of element in the collection

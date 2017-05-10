@@ -49,12 +49,26 @@ import com.google.common.reflect.TypeToken;
 public final class ObservableCollectionImpl {
 	private ObservableCollectionImpl() {}
 
+	/**
+	 * @param <E> The type for the set
+	 * @param equiv The equivalence set to make a set of
+	 * @param c The collection whose values to add to the set
+	 * @return The set
+	 */
 	public static <E> Set<E> toSet(Equivalence<? super E> equiv, Collection<?> c) {
 		try (Transaction t = Transactable.lock(c, false, null)) {
 			return c.stream().filter(equiv::isElement).map(e -> (E) e).collect(Collectors.toCollection(equiv::createSet));
 		}
 	}
 
+	/**
+	 * A default implementation for {@link ObservableCollection#contains(Object)}
+	 * 
+	 * @param <E> The type of the collection
+	 * @param coll The collection to test
+	 * @param value The object to find
+	 * @return Whether the given collection contains the given object
+	 */
 	public static <E> boolean contains(ObservableCollection<E> coll, Object value) {
 		try (Transaction t = coll.lock(false, null)) {
 			ElementSpliterator<E> iter = coll.spliterator();
@@ -68,6 +82,14 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
+	/**
+	 * A default implementation for {@link ObservableCollection#containsAny(Collection)}
+	 * 
+	 * @param <E> The type of the collection
+	 * @param coll The collection to test
+	 * @param c The collection to test for containment
+	 * @return Whether the first collection contains any elements in the second collection
+	 */
 	public static <E> boolean containsAny(ObservableCollection<E> coll, Collection<?> c) {
 		if (c.isEmpty())
 			return true;
@@ -85,6 +107,14 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
+	/**
+	 * A default implementation for {@link ObservableCollection#containsAll(Collection)}
+	 * 
+	 * @param <E> The type of the collection
+	 * @param coll The collection to test
+	 * @param c The collection to test for containment
+	 * @return Whether the first collection contains all elements in the second collection
+	 */
 	public static <E> boolean containsAll(ObservableCollection<E> coll, Collection<?> c) {
 		if (c.isEmpty())
 			return true;
@@ -101,6 +131,13 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
+	/**
+	 * A default implementation for {@link ObservableCollection#addAll(Collection)}
+	 * 
+	 * @param coll The collection to add to
+	 * @param values The values to add
+	 * @return Whether the collection was changed as a result of the call
+	 */
 	public static <E> boolean addAll(ObservableCollection<E> coll, Collection<? extends E> values) {
 		boolean mod = false;
 		try (Transaction t = coll.lock(true, null)) {
@@ -110,10 +147,24 @@ public final class ObservableCollectionImpl {
 		return mod;
 	}
 
+	/**
+	 * A default implementation for {@link ObservableCollection#remove(Object)}
+	 * 
+	 * @param coll The collection to remove from
+	 * @param o The value to remove
+	 * @return Whether the value was found and removed
+	 */
 	public static <E> boolean remove(ObservableCollection<E> coll, Object o) {
 		return coll.find(v -> coll.equivalence().elementEquals(v, o), el -> el.remove());
 	}
 
+	/**
+	 * A default implementation for {@link ObservableCollection#removeAll(Collection)}
+	 * 
+	 * @param coll The collection to remove from
+	 * @param c The values to remove
+	 * @return Whether any values were found and removed
+	 */
 	public static <E> boolean removeAll(ObservableCollection<E> coll, Collection<?> c) {
 		if (c.isEmpty())
 			return true;
@@ -123,6 +174,13 @@ public final class ObservableCollectionImpl {
 		return coll.removeIf(cSet::contains);
 	}
 
+	/**
+	 * A default implementation for {@link ObservableCollection#retainAll(Collection)}
+	 * 
+	 * @param coll The collection to remove from
+	 * @param c The values to keep in the collection
+	 * @return Whether any values were removed
+	 */
 	public static <E> boolean retainAll(ObservableCollection<E> coll, Collection<?> c) {
 		if (c.isEmpty())
 			return false;
@@ -132,15 +190,27 @@ public final class ObservableCollectionImpl {
 		return coll.removeIf(v -> !cSet.contains(v));
 	}
 
+	/**
+	 * A value that is a combination of a collection's values
+	 * 
+	 * @param <E> The type of values in the collection
+	 * @param <X> The type of the intermediate result used for calculation
+	 * @param <T> The type of the produced value
+	 */
 	public static abstract class ReducedValue<E, X, T> implements ObservableValue<T> {
 		private final ObservableCollection<E> theCollection;
 		private final TypeToken<T> theDerivedType;
 
+		/**
+		 * @param collection The collection to reduce
+		 * @param derivedType The type of the produced value
+		 */
 		public ReducedValue(ObservableCollection<E> collection, TypeToken<T> derivedType) {
 			theCollection = collection;
 			theDerivedType = derivedType;
 		}
 
+		/** @return The reduced collection */
 		protected ObservableCollection<E> getCollection() {
 			return theCollection;
 		}
@@ -224,9 +294,14 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
+	/**
+	 * Used by {@link IntersectionValue}
+	 * 
+	 * @param <E> The type of values in the left collection
+	 * @param <X> The type of values in the right collection
+	 */
 	public static abstract class ValueCounts<E, X> {
 		final Equivalence<? super E> leftEquiv;
-		final Equivalence<? super X> rightEquiv;
 		final Map<E, ValueCount<E>> leftCounts;
 		final Map<X, ValueCount<X>> rightCounts;
 		int leftCount;
@@ -235,21 +310,23 @@ public final class ObservableCollectionImpl {
 
 		ValueCounts(Equivalence<? super E> leftEquiv, Equivalence<? super X> rightEquiv) {
 			this.leftEquiv = leftEquiv;
-			this.rightEquiv = rightEquiv;
 			leftCounts = leftEquiv.createMap();
 			rightCounts = rightEquiv == null ? null : rightEquiv.createMap();
 		}
 
 		abstract void check(boolean initial, Object cause);
 
+		/** @return The number of values in the left collection that do not exist in the right collection */
 		public int getLeftCount() {
 			return leftCount;
 		}
 
+		/** @return The number of values in the right collection that do not exist in the left collection */
 		public int getRightCount() {
 			return rightCount;
 		}
 
+		/** @return The number of values in the right collection that also exist in the left collection */
 		public int getCommonCount() {
 			return commonCount;
 		}
@@ -310,16 +387,13 @@ public final class ObservableCollectionImpl {
 
 			private <V> void modify(V value, boolean add) {
 				Map<V, ValueCount<V>> countMap;
-				boolean leftMap = true;
 				if (!onLeft) {
 					if (counts.leftEquiv.isElement(value))
 						countMap = (Map<V, ValueCount<V>>) (Map<?, ?>) counts.leftCounts;
 					else if (counts.rightCounts == null)
 						return;
-					else {
+					else
 						countMap = (Map<V, ValueCount<V>>) (Map<?, ?>) counts.rightCounts;
-						leftMap = false;
-					}
 				} else
 					countMap = (Map<V, ValueCount<V>>) (Map<?, ?>) counts.leftCounts;
 				ValueCount<V> count;
@@ -380,12 +454,25 @@ public final class ObservableCollectionImpl {
 		return Subscription.forAll(leftSub, rightSub);
 	}
 
+	/**
+	 * An observable value that reflects some quality of the intersection between two collections
+	 * 
+	 * @param <E> The type of the left collection
+	 * @param <X> The type of the right collection
+	 */
 	public abstract static class IntersectionValue<E, X> implements ObservableValue<Boolean> {
 		private final ObservableCollection<E> theLeft;
 		private final ObservableCollection<X> theRight;
 		private final boolean isTrackingRight;
 		private final Predicate<ValueCounts<E, X>> theSatisfiedCheck;
 
+		/**
+		 * @param left The left collection
+		 * @param right The right collection
+		 * @param trackRight Whether elements in the right collection that cannot possibly intersect with the left collection need to be
+		 *        tracked
+		 * @param satisfied The test to determine this value after any changes
+		 */
 		public IntersectionValue(ObservableCollection<E> left, ObservableCollection<X> right, boolean trackRight,
 			Predicate<ValueCounts<E, X>> satisfied) {
 			theLeft = left;
@@ -394,10 +481,12 @@ public final class ObservableCollectionImpl {
 			theSatisfiedCheck = satisfied;
 		}
 
+		/** @return The left collection */
 		protected ObservableCollection<E> getLeft() {
 			return theLeft;
 		}
 
+		/** @return The right collection */
 		protected ObservableCollection<X> getRight() {
 			return theRight;
 		}
@@ -431,9 +520,19 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
+	/**
+	 * A value that reflects whether a collection contains a given value
+	 * 
+	 * @param <E> The type of the collection
+	 * @param <X> The type of the value to find
+	 */
 	public static class ContainsValue<E, X> extends IntersectionValue<E, X> {
 		private final ObservableValue<X> theValue;
 
+		/**
+		 * @param collection The collection
+		 * @param value The value to find
+		 */
 		public ContainsValue(ObservableCollection<E> collection, ObservableValue<X> value) {
 			super(collection, toCollection(value), false, counts -> counts.getCommonCount() > 0);
 			theValue = value;
@@ -450,7 +549,17 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
+	/**
+	 * A value that reflects whether one collection contains any elements of another
+	 * 
+	 * @param <E> The type of the left collection
+	 * @param <X> The type of the right collection
+	 */
 	public static class ContainsAllValue<E, X> extends IntersectionValue<E, X> {
+		/**
+		 * @param left The left collection
+		 * @param right The right collection
+		 */
 		public ContainsAllValue(ObservableCollection<E> left, ObservableCollection<X> right) {
 			super(left, right, true, counts -> counts.getRightCount() == 0);
 		}
@@ -461,7 +570,17 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
+	/**
+	 * A value that reflects whether one collection contains all elements of another
+	 * 
+	 * @param <E> The type of the left collection
+	 * @param <X> The type of the right collection
+	 */
 	public static class ContainsAnyValue<E, X> extends IntersectionValue<E, X> {
+		/**
+		 * @param left The left collection
+		 * @param right The right collection
+		 */
 		public ContainsAnyValue(ObservableCollection<E> left, ObservableCollection<X> right) {
 			super(left, right, false, counts -> counts.getCommonCount() > 0);
 		}
@@ -2203,17 +2322,23 @@ public final class ObservableCollectionImpl {
 		private final ReentrantReadWriteLock theLock;
 		private final Collection<E> theCache;
 
-		public CachedObservableCollection(ObservableCollection<E> wrapped, Observable<?> until) {
+		/**
+		 * @param wrapped The collection whose values to reflect
+		 * @param until The observable to listen to to cease caching
+		 */
+		protected CachedObservableCollection(ObservableCollection<E> wrapped, Observable<?> until) {
 			theWrapped = wrapped;
 			theUntil = until;
 			theLock = new ReentrantReadWriteLock();
 			theCache = createCache();
 		}
 
+		/** @return The collection whose values this collection reflects */
 		protected ObservableCollection<E> getWrapped() {
 			return theWrapped;
 		}
 
+		/** @return The observable that, when it fires, will cause this collection to cease caching */
 		protected Observable<?> getUntil() {
 			return theUntil;
 		}
@@ -2928,6 +3053,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
+			ReentrantLock lock = new ReentrantLock();
 			class AddObserver implements Observer<ObservableValueEvent<? extends E>> {
 				private final Object theElementId;
 				private boolean isInitialized;
@@ -2943,15 +3069,27 @@ public final class ObservableCollectionImpl {
 				public <V extends ObservableValueEvent<? extends E>> void onNext(V event) {
 					E oldValue = value;
 					value = event.getValue();
-					ObservableCollectionEvent.doWith(new ObservableCollectionEvent<>(theElementId,
-						isInitialized ? CollectionChangeType.set : CollectionChangeType.add, oldValue, value, event), observer);
+					if (!event.isInitial())
+						lock.lock();
+					try {
+						ObservableCollectionEvent.doWith(new ObservableCollectionEvent<>(theElementId,
+							isInitialized ? CollectionChangeType.set : CollectionChangeType.add, oldValue, value, event), observer);
+					} finally {
+						if (event.isInitial())
+							lock.unlock();
+					}
 					isInitialized = true;
 				}
 
 				@Override
 				public <V extends ObservableValueEvent<? extends E>> void onCompleted(V event) {
-					valueSub.set(null);
-					fireRemove(event);
+					lock.lock();
+					try {
+						valueSub.set(null);
+						fireRemove(event);
+					} finally {
+						lock.unlock();
+					}
 				}
 
 				void remove(Object cause) {
@@ -2971,39 +3109,48 @@ public final class ObservableCollectionImpl {
 			}
 			HashMap<Object, AddObserver> elements = new HashMap<>();
 			CollectionSubscription collSub = theCollection.subscribe(evt -> {
-				switch (evt.getType()) {
-				case add:
-					AddObserver addObs = new AddObserver(evt.getElementId());
-					elements.put(evt.getElementId(), addObs);
-					ObservableValue<? extends E> obValue = evt.getNewValue();
-					if (obValue != null)
-						addObs.valueSub.set(obValue.safe().subscribe(addObs));
-					break;
-				case remove:
-					elements.remove(evt.getElementId()).remove(evt);
-					break;
-				case set:
-					addObs = elements.get(evt.getElementId());
-					Subscription valueSub = addObs.valueSub.getAndSet(null);
-					if (valueSub != null)
-						valueSub.unsubscribe();
-					obValue = evt.getNewValue();
-					if (obValue != null)
-						addObs.valueSub.set(obValue.safe().subscribe(addObs));
-					break;
-				}
-			});
-			return removeAll -> {
-				collSub.unsubscribe(removeAll);
-				// If removeAll is true, elements should be empty
-				try (Transaction t = theCollection.lock(false, null)) {
-					for (AddObserver addObs : elements.values()) {
+				lock.lock();
+				try {
+					switch (evt.getType()) {
+					case add:
+						AddObserver addObs = new AddObserver(evt.getElementId());
+						elements.put(evt.getElementId(), addObs);
+						ObservableValue<? extends E> obValue = evt.getNewValue();
+						if (obValue != null)
+							addObs.valueSub.set(obValue.safe().subscribe(addObs));
+						break;
+					case remove:
+						elements.remove(evt.getElementId()).remove(evt);
+						break;
+					case set:
+						addObs = elements.get(evt.getElementId());
 						Subscription valueSub = addObs.valueSub.getAndSet(null);
 						if (valueSub != null)
 							valueSub.unsubscribe();
+						obValue = evt.getNewValue();
+						if (obValue != null)
+							addObs.valueSub.set(obValue.safe().subscribe(addObs));
+						break;
 					}
+				} finally {
+					lock.unlock();
 				}
-				elements.clear();
+			});
+			return removeAll -> {
+				lock.lock();
+				try (Transaction t = theCollection.lock(false, null)) {
+					if (!removeAll) {
+						for (AddObserver addObs : elements.values()) {
+							Subscription valueSub = addObs.valueSub.getAndSet(null);
+							if (valueSub != null)
+								valueSub.unsubscribe();
+						}
+						elements.clear();
+					}
+					collSub.unsubscribe(removeAll);
+				} finally {
+					lock.unlock();
+				}
 			};
 		}
 
@@ -3477,8 +3624,68 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
+			ReentrantLock lock = new ReentrantLock();
+			class AddObserver implements Consumer<ObservableCollectionEvent<? extends E>> {
+				private final Object theOuterElementId;
+				final AtomicReference<CollectionSubscription> valueSub;
 
-			// TODO Auto-generated method stub
+				AddObserver(Object elementId) {
+					theOuterElementId = elementId;
+					valueSub = new AtomicReference<>();
+				}
+
+				@Override
+				public void accept(ObservableCollectionEvent<? extends E> event) {
+					ObservableCollectionEvent.doWith(new ObservableCollectionEvent<>(new BiTuple<>(theOuterElementId, event.getElementId()),
+						event.getType(), event.getOldValue(), event.getNewValue(), event), observer);
+				}
+
+				void remove(boolean removeAll) {
+					CollectionSubscription oldValueSub = valueSub.getAndSet(null);
+					if (oldValueSub != null)
+						oldValueSub.unsubscribe(removeAll);
+				}
+			}
+			HashMap<Object, AddObserver> elements = new HashMap<>();
+			CollectionSubscription collSub = theOuter.subscribe(evt -> {
+				switch (evt.getType()) {
+				case add:
+					AddObserver addObs = new AddObserver(evt.getElementId());
+					elements.put(evt.getElementId(), addObs);
+					ObservableCollection<? extends E> inner = evt.getNewValue();
+					if (inner != null)
+						addObs.valueSub.set(inner.subscribe(addObs));
+					break;
+				case remove:
+					elements.remove(evt.getElementId()).remove(true);
+					break;
+				case set:
+					addObs = elements.get(evt.getElementId());
+					Subscription valueSub = addObs.valueSub.getAndSet(null);
+					if (valueSub != null)
+						valueSub.unsubscribe();
+					inner = evt.getNewValue();
+					if (inner != null)
+						addObs.valueSub.set(inner.subscribe(addObs));
+					break;
+				}
+			});
+			return removeAll -> {
+				lock.lock();
+				try (Transaction t = theOuter.lock(false, null)) {
+					if (!removeAll) {
+						for (AddObserver addObs : elements.values()) {
+							CollectionSubscription valueSub = addObs.valueSub.getAndSet(null);
+							if (valueSub != null)
+								valueSub.unsubscribe(false);
+						}
+						elements.clear();
+					}
+					collSub.unsubscribe(removeAll);
+				} finally {
+					lock.unlock();
+				}
+			};
 		}
 
 		@Override
