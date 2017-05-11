@@ -23,6 +23,7 @@ import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
 import org.qommons.Causable;
 import org.qommons.Ternian;
+import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
 import org.qommons.collect.BetterCollection;
@@ -829,10 +830,12 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 * @return The hash code of the collection's contents
 	 */
 	public static int hashCode(ObservableCollection<?> coll) {
-		int hashCode = 1;
-		for (Object e : coll)
-			hashCode = 31 * hashCode + (e == null ? 0 : e.hashCode());
-		return hashCode;
+		try (Transaction t = coll.lock(false, null)) {
+			int hashCode = 1;
+			for (Object e : coll)
+				hashCode = 31 * hashCode + (e == null ? 0 : e.hashCode());
+			return hashCode;
+		}
 	}
 
 	/**
@@ -847,15 +850,17 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 			return false;
 		Collection<?> c = (Collection<?>) o;
 
-		Iterator<E> e1 = coll.iterator();
-		Iterator<?> e2 = c.iterator();
-		while (e1.hasNext() && e2.hasNext()) {
-			E o1 = e1.next();
-			Object o2 = e2.next();
-			if (!coll.equivalence().elementEquals(o1, o2))
-				return false;
+		try (Transaction t1 = coll.lock(false, null); Transaction t2 = Transactable.lock(c, false, null)) {
+			Iterator<E> e1 = coll.iterator();
+			Iterator<?> e2 = c.iterator();
+			while (e1.hasNext() && e2.hasNext()) {
+				E o1 = e1.next();
+				Object o2 = e2.next();
+				if (!coll.equivalence().elementEquals(o1, o2))
+					return false;
+			}
+			return !(e1.hasNext() || e2.hasNext());
 		}
-		return !(e1.hasNext() || e2.hasNext());
 	}
 
 	/**

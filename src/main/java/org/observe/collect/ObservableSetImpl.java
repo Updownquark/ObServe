@@ -6,7 +6,6 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -27,9 +26,6 @@ import org.observe.collect.ObservableCollectionImpl.FlattenedValueCollection;
 import org.observe.collect.ObservableCollectionImpl.ModFilteredCollection;
 import org.observe.collect.ObservableCollectionImpl.RefreshingCollection;
 import org.observe.collect.ObservableCollectionImpl.TakenUntilObservableCollection;
-import org.observe.collect.ObservableSet.CollectionWrappingSet.UniqueElementTracking;
-import org.observe.collect.ObservableSet.ImmutableObservableSet;
-import org.observe.collect.ObservableSetImpl.UniqueElement;
 import org.qommons.Equalizer;
 import org.qommons.Equalizer.EqualizerNode;
 import org.qommons.Transaction;
@@ -337,19 +333,19 @@ public class ObservableSetImpl {
 	 */
 	public static class ObservableSetEquivalentFinder<E> implements ObservableValue<E> {
 		private final ObservableSet<E> theSet;
-	
+
 		private final Object theKey;
-	
+
 		protected ObservableSetEquivalentFinder(ObservableSet<E> set, Object key) {
 			theSet = set;
 			theKey = key;
 		}
-	
+
 		@Override
 		public TypeToken<E> getType() {
 			return theSet.getType();
 		}
-	
+
 		@Override
 		public E get() {
 			for(E value : theSet) {
@@ -358,14 +354,14 @@ public class ObservableSetImpl {
 			}
 			return null;
 		}
-	
+
 		@Override
 		public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
 			boolean [] isMatch = new boolean[1];
 			boolean [] initialized = new boolean[1];
 			Subscription ret = theSet.onElement(new Consumer<ObservableElement<E>>() {
 				private E theCurrentMatch;
-	
+
 				@Override
 				public void accept(ObservableElement<E> element) {
 					element.subscribe(new Observer<ObservableValueEvent<E>>() {
@@ -386,7 +382,7 @@ public class ObservableSetImpl {
 								Observer.onNextAndFinish(observer, createChangeEvent(old, null, event));
 							}
 						}
-	
+
 						@Override
 						public <V extends ObservableValueEvent<E>> void onCompleted(V event) {
 							if(isMatch[0] && theCurrentMatch == event.getValue()) {
@@ -402,7 +398,7 @@ public class ObservableSetImpl {
 				Observer.onNextAndFinish(observer, createInitialEvent(null, null));
 			return ret;
 		}
-	
+
 		@Override
 		public boolean isSafe() {
 			return theSet.isSafe();
@@ -418,12 +414,12 @@ public class ObservableSetImpl {
 		protected RefreshingSet(ObservableSet<E> wrap, Observable<?> refresh) {
 			super(wrap, refresh);
 		}
-	
+
 		@Override
 		protected ObservableSet<E> getWrapped() {
 			return (ObservableSet<E>) super.getWrapped();
 		}
-	
+
 		@Override
 		public Equalizer getEqualizer() {
 			return getWrapped().getEqualizer();
@@ -439,12 +435,12 @@ public class ObservableSetImpl {
 		protected ElementRefreshingSet(ObservableSet<E> wrap, Function<? super E, Observable<?>> refresh) {
 			super(wrap, refresh);
 		}
-	
+
 		@Override
 		protected ObservableSet<E> getWrapped() {
 			return (ObservableSet<E>) super.getWrapped();
 		}
-	
+
 		@Override
 		public Equalizer getEqualizer() {
 			return getWrapped().getEqualizer();
@@ -460,17 +456,17 @@ public class ObservableSetImpl {
 		protected ImmutableObservableSet(ObservableSet<E> wrap) {
 			super(wrap);
 		}
-	
+
 		@Override
 		protected ObservableSet<E> getWrapped() {
 			return (ObservableSet<E>) super.getWrapped();
 		}
-	
+
 		@Override
 		public ImmutableObservableSet<E> immutable() {
 			return this;
 		}
-	
+
 		@Override
 		public Equalizer getEqualizer() {
 			return getWrapped().getEqualizer();
@@ -486,12 +482,12 @@ public class ObservableSetImpl {
 		public ModFilteredSet(ObservableSet<E> wrapped, Predicate<? super E> removeFilter, Predicate<? super E> addFilter) {
 			super(wrapped, removeFilter, addFilter);
 		}
-	
+
 		@Override
 		protected ObservableSet<E> getWrapped() {
 			return (ObservableSet<E>) super.getWrapped();
 		}
-	
+
 		@Override
 		public Equalizer getEqualizer() {
 			return getWrapped().getEqualizer();
@@ -507,12 +503,12 @@ public class ObservableSetImpl {
 		public TakenUntilObservableSet(ObservableSet<E> wrap, Observable<?> until, boolean terminate) {
 			super(wrap, until, terminate);
 		}
-	
+
 		@Override
 		protected ObservableSet<E> getWrapped() {
 			return (ObservableSet<E>) super.getWrapped();
 		}
-	
+
 		@Override
 		public Equalizer getEqualizer() {
 			return getWrapped().getEqualizer();
@@ -528,12 +524,12 @@ public class ObservableSetImpl {
 		public FlattenedValueSet(ObservableValue<? extends ObservableSet<E>> collectionObservable) {
 			super(collectionObservable);
 		}
-	
+
 		@Override
 		protected ObservableValue<? extends ObservableSet<E>> getWrapped() {
 			return (ObservableValue<? extends ObservableSet<E>>) super.getWrapped();
 		}
-	
+
 		@Override
 		public Equalizer getEqualizer() {
 			ObservableSet<? extends E> wrapped = getWrapped().get();
@@ -542,43 +538,43 @@ public class ObservableSetImpl {
 	}
 
 	/**
-	 * Implements {@link ObservableSet#unique(ObservableCollection)}
+	 * Implements {@link ObservableSet#unique(ObservableCollection, Equivalence)}
 	 *
 	 * @param <E> The type of elements in the set
 	 */
 	public static class CollectionWrappingSet<E> implements ObservableSet<E> {
 		private final ObservableCollection<E> theCollection;
-		private final Equalizer theEqualizer;
-	
-		public CollectionWrappingSet(ObservableCollection<E> collection) {
+		private final Equivalence<? super E> theEquivalence;
+
+		public CollectionWrappingSet(ObservableCollection<E> collection, Equivalence<? super E> equivalence) {
 			theCollection = collection;
-			theEqualizer = equalizer;
+			theEquivalence = equivalence;
 		}
-	
+
 		protected ObservableCollection<E> getWrapped() {
 			return theCollection;
 		}
-	
+
 		@Override
 		public TypeToken<E> getType() {
 			return theCollection.getType();
 		}
-	
+
 		@Override
-		public ObservableValue<CollectionSession> getSession() {
-			return theCollection.getSession();
+		public Equivalence<? super E> equivalence() {
+			return theEquivalence;
 		}
-	
+
 		@Override
 		public Transaction lock(boolean write, Object cause) {
 			return theCollection.lock(write, cause);
 		}
-	
+
 		@Override
 		public boolean isSafe() {
 			return theCollection.isSafe();
 		}
-	
+
 		@Override
 		public int size() {
 			HashSet<EqualizerNode<E>> set = new HashSet<>();
@@ -586,17 +582,17 @@ public class ObservableSetImpl {
 				set.add(new EqualizerNode<>(theEqualizer, value));
 			return set.size();
 		}
-	
+
 		@Override
 		public Iterator<E> iterator() {
 			return unique(theCollection.iterator());
 		}
-	
+
 		@Override
 		public boolean canRemove(Object value) {
 			return theCollection.canRemove(value);
 		}
-	
+
 		@Override
 		public boolean canAdd(E value) {
 			if (!theCollection.canAdd(value))
@@ -606,13 +602,13 @@ public class ObservableSetImpl {
 				set.add(new EqualizerNode<>(theEqualizer, v));
 			return !set.contains(new EqualizerNode<>(theEqualizer, value));
 		}
-	
+
 		protected Iterator<E> unique(Iterator<E> backing) {
 			return new Iterator<E>() {
 				private final HashSet<EqualizerNode<E>> set = new HashSet<>();
-	
+
 				private E nextVal;
-	
+
 				@Override
 				public boolean hasNext() {
 					while (nextVal == null && backing.hasNext()) {
@@ -622,7 +618,7 @@ public class ObservableSetImpl {
 					}
 					return nextVal != null;
 				}
-	
+
 				@Override
 				public E next() {
 					if (nextVal == null && !hasNext())
@@ -631,23 +627,23 @@ public class ObservableSetImpl {
 					nextVal = null;
 					return ret;
 				}
-	
+
 				@Override
 				public void remove() {
 					backing.remove();
 				}
 			};
 		}
-	
+
 		protected class UniqueElementTracking {
 			protected Map<EqualizerNode<E>, ObservableSetImpl.UniqueElement<E>> elements = new LinkedHashMap<>();
 		}
-	
+
 		@Override
 		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
 			return onElement(onElement, ObservableCollection::onElement);
 		}
-	
+
 		protected Subscription onElement(Consumer<? super ObservableElement<E>> onElement,
 			BiFunction<ObservableCollection<E>, Consumer<? super ObservableElement<E>>, Subscription> subscriber) {
 			final UniqueElementTracking tracking = createElementTracking();
@@ -681,7 +677,7 @@ public class ObservableSetImpl {
 							onElement.accept(newUnique);
 						}
 					}
-	
+
 					@Override
 					public <EV extends ObservableValueEvent<E>> void onCompleted(EV event) {
 						EqualizerNode<E> node = new EqualizerNode<>(theEqualizer, event.getValue());
@@ -689,7 +685,7 @@ public class ObservableSetImpl {
 						if (unique != null)
 							removeFromOld(unique, node, event);
 					}
-	
+
 					void removeFromOld(ObservableSetImpl.UniqueElement<E> unique, EqualizerNode<E> node, Object cause) {
 						boolean reAdd = unique.removeElement(element, cause);
 						if (unique.isEmpty())
@@ -702,17 +698,17 @@ public class ObservableSetImpl {
 				});
 			});
 		}
-	
+
 		protected UniqueElementTracking createElementTracking() {
 			return new UniqueElementTracking();
 		}
-	
+
 		protected ObservableSetImpl.UniqueElement<E> addUniqueElement(UniqueElementTracking tracking, EqualizerNode<E> node) {
 			ObservableSetImpl.UniqueElement<E> unique = new ObservableSetImpl.UniqueElement<>(this, false);
 			tracking.elements.put(node, unique);
 			return unique;
 		}
-	
+
 		@Override
 		public String toString() {
 			return ObservableSet.toString(this);
@@ -729,7 +725,7 @@ public class ObservableSetImpl {
 		private final boolean isAlwaysUsingFirst;
 		private final Collection<ObservableElement<E>> theElements;
 		private final SimpleSettableValue<ObservableElement<E>> theCurrentElement;
-	
+
 		UniqueElement(CollectionWrappingSet<E> set, boolean alwaysUseFirst) {
 			theSet = set;
 			isAlwaysUsingFirst = alwaysUseFirst;
@@ -737,40 +733,40 @@ public class ObservableSetImpl {
 			theCurrentElement = new SimpleSettableValue<>(
 				new TypeToken<ObservableElement<E>>() {}.where(new TypeParameter<E>() {}, theSet.getType()), true);
 		}
-	
+
 		protected Collection<ObservableElement<E>> createElements() {
 			return new ArrayDeque<>();
 		}
-	
+
 		@Override
 		public TypeToken<E> getType() {
 			return theSet.getType();
 		}
-	
+
 		@Override
 		public E get() {
 			return theElements.isEmpty() ? null : theElements.iterator().next().get();
 		}
-	
+
 		@Override
 		public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
 			return ObservableElement.flatten(theCurrentElement).subscribe(observer);
 		}
-	
+
 		@Override
 		public boolean isSafe() {
 			return theSet.isSafe();
 		}
-	
+
 		@Override
 		public ObservableValue<E> persistent() {
 			return theElements.isEmpty() ? ObservableValue.constant(theSet.getType(), null) : theElements.iterator().next().persistent();
 		}
-	
+
 		protected ObservableElement<E> getCurrentElement() {
 			return theCurrentElement.get();
 		}
-	
+
 		protected boolean addElement(ObservableElement<E> element, Object cause) {
 			theElements.add(element);
 			boolean newBest;
@@ -783,7 +779,7 @@ public class ObservableSetImpl {
 			else
 				return false;
 		}
-	
+
 		protected boolean removeElement(ObservableElement<E> element, Object cause) {
 			theElements.remove(element);
 			if (theCurrentElement.get() == element)
@@ -791,20 +787,20 @@ public class ObservableSetImpl {
 			else
 				return false;
 		}
-	
+
 		protected boolean changed(ObservableElement<E> element) {
 			return false;
 		}
-	
+
 		protected void reset(Object cause) {
 			theCurrentElement.set(theElements.iterator().next(), cause);
 		}
-	
+
 		protected boolean setCurrentElement(ObservableElement<E> element, Object cause) {
 			theCurrentElement.set(element, cause);
 			return false;
 		}
-	
+
 		protected boolean isEmpty() {
 			return theElements.isEmpty();
 		}

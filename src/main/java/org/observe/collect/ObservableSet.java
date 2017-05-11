@@ -312,10 +312,11 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	/**
 	 * @param <T> The type of the collection
 	 * @param coll The collection to turn into a set
+	 * @param equivalence The equivalence set to use for uniqueness checking
 	 * @return A set containing all unique elements of the given collection
 	 */
-	public static <T> ObservableSet<T> unique(ObservableCollection<T> coll) {
-		return new ObservableSetImpl.CollectionWrappingSet<>(coll);
+	public static <T> ObservableSet<T> unique(ObservableCollection<T> coll, Equivalence<? super T> equivalence) {
+		return new ObservableSetImpl.CollectionWrappingSet<>(coll, equivalence);
 	}
 
 	/**

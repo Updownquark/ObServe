@@ -5,6 +5,8 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -12,9 +14,7 @@ import java.util.Set;
 import java.util.Spliterator;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -27,12 +27,15 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.SettableValue;
+import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.collect.ObservableCollection.GroupingBuilder;
 import org.observe.collect.ObservableCollection.SortedGroupingBuilder;
 import org.observe.collect.ObservableCollection.StdMsg;
+import org.observe.collect.ObservableElementSpliterator.WrappingObservableElement;
+import org.observe.collect.ObservableElementSpliterator.WrappingObservableSpliterator;
 import org.qommons.BiTuple;
 import org.qommons.Causable;
 import org.qommons.Transactable;
@@ -63,7 +66,7 @@ public final class ObservableCollectionImpl {
 
 	/**
 	 * A default implementation for {@link ObservableCollection#contains(Object)}
-	 * 
+	 *
 	 * @param <E> The type of the collection
 	 * @param coll The collection to test
 	 * @param value The object to find
@@ -71,7 +74,7 @@ public final class ObservableCollectionImpl {
 	 */
 	public static <E> boolean contains(ObservableCollection<E> coll, Object value) {
 		try (Transaction t = coll.lock(false, null)) {
-			ElementSpliterator<E> iter = coll.spliterator();
+			Spliterator<E> iter = coll.spliterator();
 			boolean[] found = new boolean[1];
 			while (!found[0] && iter.tryAdvance(v -> {
 				if (coll.equivalence().elementEquals(v, value))
@@ -84,7 +87,7 @@ public final class ObservableCollectionImpl {
 
 	/**
 	 * A default implementation for {@link ObservableCollection#containsAny(Collection)}
-	 * 
+	 *
 	 * @param <E> The type of the collection
 	 * @param coll The collection to test
 	 * @param c The collection to test for containment
@@ -92,12 +95,12 @@ public final class ObservableCollectionImpl {
 	 */
 	public static <E> boolean containsAny(ObservableCollection<E> coll, Collection<?> c) {
 		if (c.isEmpty())
-			return true;
+			return false;
 		Set<E> cSet = toSet(coll.equivalence(), c);
 		if (cSet.isEmpty())
 			return false;
 		try (Transaction t = coll.lock(false, null)) {
-			ElementSpliterator<E> iter = coll.spliterator();
+			Spliterator<E> iter = coll.spliterator();
 			boolean[] found = new boolean[1];
 			while (iter.tryAdvance(next -> {
 				found[0] = cSet.contains(next);
@@ -109,7 +112,7 @@ public final class ObservableCollectionImpl {
 
 	/**
 	 * A default implementation for {@link ObservableCollection#containsAll(Collection)}
-	 * 
+	 *
 	 * @param <E> The type of the collection
 	 * @param coll The collection to test
 	 * @param c The collection to test for containment
@@ -122,7 +125,7 @@ public final class ObservableCollectionImpl {
 		if (cSet.isEmpty())
 			return false;
 		try (Transaction t = coll.lock(false, null)) {
-			ElementSpliterator<E> iter = coll.spliterator();
+			Spliterator<E> iter = coll.spliterator();
 			while (iter.tryAdvance(next -> {
 				cSet.remove(next);
 			}) && !cSet.isEmpty()) {
@@ -133,14 +136,14 @@ public final class ObservableCollectionImpl {
 
 	/**
 	 * A default implementation for {@link ObservableCollection#addAll(Collection)}
-	 * 
+	 *
 	 * @param coll The collection to add to
 	 * @param values The values to add
 	 * @return Whether the collection was changed as a result of the call
 	 */
 	public static <E> boolean addAll(ObservableCollection<E> coll, Collection<? extends E> values) {
 		boolean mod = false;
-		try (Transaction t = coll.lock(true, null)) {
+		try (Transaction t = coll.lock(true, null); Transaction t2 = Transactable.lock(values, false, null)) {
 			for (E o : values)
 				mod |= coll.add(o);
 		}
@@ -149,7 +152,7 @@ public final class ObservableCollectionImpl {
 
 	/**
 	 * A default implementation for {@link ObservableCollection#remove(Object)}
-	 * 
+	 *
 	 * @param coll The collection to remove from
 	 * @param o The value to remove
 	 * @return Whether the value was found and removed
@@ -160,7 +163,7 @@ public final class ObservableCollectionImpl {
 
 	/**
 	 * A default implementation for {@link ObservableCollection#removeAll(Collection)}
-	 * 
+	 *
 	 * @param coll The collection to remove from
 	 * @param c The values to remove
 	 * @return Whether any values were found and removed
@@ -176,7 +179,7 @@ public final class ObservableCollectionImpl {
 
 	/**
 	 * A default implementation for {@link ObservableCollection#retainAll(Collection)}
-	 * 
+	 *
 	 * @param coll The collection to remove from
 	 * @param c The values to keep in the collection
 	 * @return Whether any values were removed
@@ -192,7 +195,7 @@ public final class ObservableCollectionImpl {
 
 	/**
 	 * A value that is a combination of a collection's values
-	 * 
+	 *
 	 * @param <E> The type of values in the collection
 	 * @param <X> The type of the intermediate result used for calculation
 	 * @param <T> The type of the produced value
@@ -246,10 +249,22 @@ public final class ObservableCollectionImpl {
 			return sub;
 		}
 
+		/** @return The initial computation value */
 		protected abstract X init();
 
+		/**
+		 * Performs a reduction of a computation value with a collection element
+		 *
+		 * @param oldValue The value of the computation before the change
+		 * @param change The collection element change to reduce into the computation
+		 * @return The new value of the reduction
+		 */
 		protected abstract X update(X oldValue, ObservableCollectionEvent<? extends E> change);
 
+		/**
+		 * @param updated The computation value
+		 * @return The value for the result
+		 */
 		protected abstract T getValue(X updated);
 	}
 
@@ -296,7 +311,7 @@ public final class ObservableCollectionImpl {
 
 	/**
 	 * Used by {@link IntersectionValue}
-	 * 
+	 *
 	 * @param <E> The type of values in the left collection
 	 * @param <X> The type of values in the right collection
 	 */
@@ -456,7 +471,7 @@ public final class ObservableCollectionImpl {
 
 	/**
 	 * An observable value that reflects some quality of the intersection between two collections
-	 * 
+	 *
 	 * @param <E> The type of the left collection
 	 * @param <X> The type of the right collection
 	 */
@@ -522,7 +537,7 @@ public final class ObservableCollectionImpl {
 
 	/**
 	 * A value that reflects whether a collection contains a given value
-	 * 
+	 *
 	 * @param <E> The type of the collection
 	 * @param <X> The type of the value to find
 	 */
@@ -551,7 +566,7 @@ public final class ObservableCollectionImpl {
 
 	/**
 	 * A value that reflects whether one collection contains any elements of another
-	 * 
+	 *
 	 * @param <E> The type of the left collection
 	 * @param <X> The type of the right collection
 	 */
@@ -572,7 +587,7 @@ public final class ObservableCollectionImpl {
 
 	/**
 	 * A value that reflects whether one collection contains all elements of another
-	 * 
+	 *
 	 * @param <E> The type of the left collection
 	 * @param <X> The type of the right collection
 	 */
@@ -919,10 +934,10 @@ public final class ObservableCollectionImpl {
 		 * @return The corresponding spliterator for this collection
 		 */
 		protected ObservableElementSpliterator<T> map(ObservableElementSpliterator<E> iter) {
-			return new ObservableElementSpliterator.WrappingObservableSpliterator<>(iter, getType(), () -> {
+			return new WrappingObservableSpliterator<>(iter, getType(), () -> {
 				ObservableCollectionElement<? extends E>[] container = new ObservableCollectionElement[1];
 				FilterMapResult<E, T> mapped = new FilterMapResult<>();
-				ObservableElementSpliterator.WrappingObservableElement<E, T> wrapperEl = new ObservableElementSpliterator.WrappingObservableElement<E, T>(
+				WrappingObservableElement<E, T> wrapperEl = new WrappingObservableElement<E, T>(
 					getType(), container) {
 					@Override
 					public T get() {
@@ -1236,7 +1251,7 @@ public final class ObservableCollectionImpl {
 		protected ObservableElementSpliterator<V> combine(ObservableElementSpliterator<E> source) {
 			Supplier<Function<ObservableCollectionElement<? extends E>, ObservableCollectionElement<V>>> elementMap = () -> {
 				ObservableCollectionElement<? extends E>[] container = new ObservableCollectionElement[1];
-				ObservableElementSpliterator.WrappingObservableElement<E, V> wrapper = new ObservableElementSpliterator.WrappingObservableElement<E, V>(
+				WrappingObservableElement<E, V> wrapper = new WrappingObservableElement<E, V>(
 					getType(), container) {
 					@Override
 					public V get() {
@@ -1268,7 +1283,7 @@ public final class ObservableCollectionImpl {
 					return wrapper;
 				};
 			};
-			return new ObservableElementSpliterator.WrappingObservableSpliterator<>(source, getType(), elementMap);
+			return new WrappingObservableSpliterator<>(source, getType(), elementMap);
 		}
 
 		@Override
@@ -1495,10 +1510,6 @@ public final class ObservableCollectionImpl {
 		 */
 		protected ObservableSet<K> unique(ObservableCollection<K> keyCollection) {
 			return ObservableSet.unique(keyCollection, theBuilder.getEquivalence());
-		}
-
-		public Equivalence<? super K> equivalence() {
-			return theBuilder.getEquivalence();
 		}
 
 		@Override
@@ -2111,9 +2122,9 @@ public final class ObservableCollectionImpl {
 		 * @return A spliterator reflecting the given spliterator's content and order but disallowing appropriate modification
 		 */
 		protected ObservableElementSpliterator<E> modFilter(ObservableElementSpliterator<E> source) {
-			return new ObservableElementSpliterator.WrappingObservableSpliterator<>(source, getType(), () -> {
+			return new WrappingObservableSpliterator<>(source, getType(), () -> {
 				ObservableCollectionElement<E>[] container = new ObservableCollectionElement[1];
-				ObservableElementSpliterator.WrappingObservableElement<E, E> wrapperEl = new ObservableElementSpliterator.WrappingObservableElement<E, E>(
+				WrappingObservableElement<E, E> wrapperEl = new WrappingObservableElement<E, E>(
 					getType(), container) {
 					@Override
 					public E get() {
@@ -2319,8 +2330,11 @@ public final class ObservableCollectionImpl {
 	public static class CachedObservableCollection<E> implements ObservableCollection<E> {
 		private final ObservableCollection<E> theWrapped;
 		private final Observable<?> theUntil;
-		private final ReentrantReadWriteLock theLock;
+		private final Map<Object, E> theCacheMap;
+		private final Map<E, Object> theIdMap;
+		private final SimpleObservable<ObservableCollectionEvent<? extends E>> theChanges;
 		private final Collection<E> theCache;
+		private final AtomicBoolean isDone;
 
 		/**
 		 * @param wrapped The collection whose values to reflect
@@ -2329,8 +2343,12 @@ public final class ObservableCollectionImpl {
 		protected CachedObservableCollection(ObservableCollection<E> wrapped, Observable<?> until) {
 			theWrapped = wrapped;
 			theUntil = until;
-			theLock = new ReentrantReadWriteLock();
+			theChanges = new SimpleObservable<>();
+			theCacheMap = new HashMap<>();
+			theIdMap = new IdentityHashMap<>();
 			theCache = createCache();
+			isDone = new AtomicBoolean();
+			beginCache();
 		}
 
 		/** @return The collection whose values this collection reflects */
@@ -2343,16 +2361,92 @@ public final class ObservableCollectionImpl {
 			return theUntil;
 		}
 
+		/** @return The cache collection for this cache to use */
 		protected Collection<E> createCache() {
 			return new ArrayList<>();
 		}
 
+		/** @return This cache's collection */
 		protected Collection<E> getCache() {
 			return theCache;
 		}
 
+		/** Subscribes to the wrapped collection to update the cache until the observable fires */
 		protected void beginCache() {
-			int todo = todo;// TODO
+			CollectionSubscription collSub = theWrapped.subscribe(evt -> {
+				switch (evt.getType()) {
+				case add:
+					theCacheMap.put(evt.getElementId(), evt.getNewValue());
+					theIdMap.put(evt.getNewValue(), evt.getElementId());
+					break;
+				case set:
+					theIdMap.remove(theCacheMap.put(evt.getElementId(), evt.getNewValue()));
+					theIdMap.put(evt.getNewValue(), evt.getElementId());
+					break;
+				case remove:
+					theIdMap.remove(theCacheMap.remove(evt.getElementId()));
+					break;
+				}
+				updateCache(evt);
+				ObservableCollectionEvent.doWith(wrapEvent(evt), theChanges::onNext);
+			});
+			theUntil.take(1).act(u -> {
+				collSub.unsubscribe(true);
+				isDone.set(true);
+			});
+		}
+
+		/**
+		 * Updates the cache collection for the change
+		 *
+		 * @param change The change event from the source
+		 */
+		protected void updateCache(ObservableCollectionEvent<? extends E> change) {
+			switch (change.getType()) {
+			case add:
+				getCache().add(change.getNewValue());
+				break;
+			case remove:
+				getCache().remove(change.getOldValue());
+				break;
+			case set:
+				if (getCache() instanceof BetterCollection)
+					((BetterCollection<E>) getCache()).find(v -> equivalence().elementEquals(v, change.getOldValue()),
+						el -> ((CollectionElement<E>) el).set(change.getNewValue(), change));
+				else {
+					getCache().remove(change.getOldValue());
+					getCache().add(change.getNewValue());
+				}
+				break;
+			}
+		}
+
+		/**
+		 * @param change The change from the source collection
+		 * @return The change to fire to this cache collection's listeners
+		 */
+		protected ObservableCollectionEvent<? extends E> wrapEvent(ObservableCollectionEvent<? extends E> change) {
+			return new ObservableCollectionEvent<>(change.getElementId(), change.getType(), change.getOldValue(), change.getNewValue(),
+				change);
+		}
+
+		/**
+		 * @param value The value in the cache
+		 * @param elementId The element ID for the value
+		 * @return The event to fire to the listener that has just been added
+		 */
+		protected ObservableCollectionEvent<? extends E> initialEvent(E value, Object elementId) {
+			return new ObservableCollectionEvent<>(elementId, CollectionChangeType.add, null, value, null);
+		}
+
+		/**
+		 * @param value The value in the cache
+		 * @param elementId The element ID for the value
+		 * @return The event to fire to the listener that has just been removed (with the {@link CollectionSubscription#unsubscribe(boolean)
+		 *         removeAll} option)
+		 */
+		protected ObservableCollectionEvent<? extends E> removeEvent(E value, Object elementId) {
+			return new ObservableCollectionEvent<>(elementId, CollectionChangeType.remove, value, value, null);
 		}
 
 		@Override
@@ -2387,24 +2481,89 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public ObservableElementSpliterator<E> spliterator() {
-			// TODO Auto-generated method stub
+			if (isDone.get())
+				return ObservableElementSpliterator.empty(getType());
+			ObservableElementSpliterator<E> elSpliter = theWrapped.spliterator();
+			return new ObservableElementSpliterator<E>() {
+				@Override
+				public TypeToken<E> getType() {
+					return elSpliter.getType();
+				}
+
+				@Override
+				public long estimateSize() {
+					return theCache.size();
+				}
+
+				@Override
+				public int characteristics() {
+					return elSpliter.characteristics() | Spliterator.SIZED;
+				}
+
+				@Override
+				public boolean tryAdvanceObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
+					return elSpliter.tryAdvanceObservableElement(el -> {
+						action.accept(new ObservableCollectionElement<E>() {
+							@Override
+							public Object getElementId() {
+								return el.getElementId();
+							}
+
+							@Override
+							public TypeToken<E> getType() {
+								return el.getType();
+							}
+
+							@Override
+							public E get() {
+								Object elId = el.getElementId();
+								if (elId == null) // Element removed
+									return el.get();
+								else
+									return theCacheMap.get(el.getElementId());
+							}
+
+							@Override
+							public Value<String> isEnabled() {
+								return el.isEnabled();
+							}
+
+							@Override
+							public <V extends E> String isAcceptable(V value) {
+								return el.isAcceptable(value);
+							}
+
+							@Override
+							public <V extends E> E set(V value, Object cause) throws IllegalArgumentException {
+								return el.set(value, cause);
+							}
+
+							@Override
+							public String canRemove() {
+								return el.canRemove();
+							}
+
+							@Override
+							public void remove() throws IllegalArgumentException {
+								el.remove();
+							}
+						});
+					});
+				}
+
+				@Override
+				public ObservableElementSpliterator<E> trySplit() {
+					return null;
+				}
+			};
 		}
 
 		@Override
 		public boolean contains(Object o) {
-			Equivalence<? super E> equiv = equivalence();
-			if (equiv.equals(Equivalence.DEFAULT))
-				return theCache.contains(o);
-			Lock lock = theLock.readLock();
-			lock.lock();
-			try {
-				for (E v : theCache) {
-					if (equiv.elementEquals(v, o))
-						return true;
-				}
+			if (isDone.get())
 				return false;
-			} finally {
-				lock.unlock();
+			try (Transaction t = lock(false, null)) {
+				return theCache.contains(o);
 			}
 		}
 
@@ -2412,26 +2571,10 @@ public final class ObservableCollectionImpl {
 		public boolean containsAll(Collection<?> c) {
 			if (c.isEmpty())
 				return true;
-			Equivalence<? super E> equiv = equivalence();
-			if (equiv.equals(Equivalence.DEFAULT))
+			if (isDone.get())
+				return false;
+			try (Transaction t = lock(false, null)) {
 				return theCache.containsAll(c);
-			Lock lock = theLock.readLock();
-			lock.lock();
-			try {
-				for (Object o : c) {
-					boolean found = false;
-					for (E v : theCache) {
-						if (equiv.elementEquals(v, o)) {
-							found = true;
-							break;
-						}
-					}
-					if (!found)
-						return false;
-				}
-				return true;
-			} finally {
-				lock.unlock();
 			}
 		}
 
@@ -2439,83 +2582,152 @@ public final class ObservableCollectionImpl {
 		public boolean containsAny(Collection<?> c) {
 			if (c.isEmpty())
 				return false;
-			Equivalence<? super E> equiv = equivalence();
-			if (theCache instanceof BetterCollection && equiv.equals(Equivalence.DEFAULT))
-				return ((BetterCollection<E>) theCache).containsAny(c);
-			Lock lock = theLock.readLock();
-			lock.lock();
-			try {
-				for (Object o : c) {
-					for (E v : theCache) {
-						if (equiv.elementEquals(v, o)) {
-							return true;
-						}
-					}
-				}
+			if (isDone.get())
 				return false;
-			} finally {
-				lock.unlock();
+			Set<E> cSet = toSet(equivalence(), c);
+			if (cSet.isEmpty())
+				return false;
+			try (Transaction t = lock(false, null)) {
+				Spliterator<E> iter = spliterator();
+				boolean[] found = new boolean[1];
+				while (iter.tryAdvance(next -> {
+					found[0] = cSet.contains(next);
+				}) && !found[0]) {
+				}
+				return found[0];
 			}
 		}
 
 		@Override
 		public String canAdd(E value) {
+			if (isDone.get())
+				return StdMsg.UNSUPPORTED_OPERATION;
 			return theWrapped.canAdd(value);
 		}
 
 		@Override
 		public boolean add(E e) {
+			if (isDone.get())
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			return theWrapped.add(e);
 		}
 
 		@Override
 		public boolean addAll(Collection<? extends E> c) {
+			if (isDone.get())
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			return theWrapped.addAll(c);
 		}
 
 		@Override
 		public String canRemove(Object value) {
+			if (isDone.get())
+				return StdMsg.UNSUPPORTED_OPERATION;
 			return theWrapped.canRemove(value);
 		}
 
 		@Override
 		public boolean remove(Object o) {
+			if (isDone.get())
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			return theWrapped.remove(o);
 		}
 
 		@Override
 		public boolean removeAll(Collection<?> c) {
+			if (isDone.get())
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			return theWrapped.removeAll(c);
 		}
 
 		@Override
 		public boolean retainAll(Collection<?> c) {
+			if (isDone.get())
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			return theWrapped.retainAll(c);
 		}
 
 		@Override
 		public void clear() {
+			if (isDone.get())
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			theWrapped.clear();
 		}
 
 		@Override
 		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-			// TODO Auto-generated method stub
+			if (isDone.get())
+				return removeAll -> {
+				};
+				Subscription changeSub;
+				try (Transaction t = lock(false, null)) {
+					for (E value : theCache) {
+						Object elementId = theIdMap.get(value);
+						ObservableCollectionEvent.doWith(initialEvent(value, elementId), observer);
+					}
+					changeSub = theChanges.act(observer::accept);
+				}
+				return removeAll -> {
+					changeSub.unsubscribe();
+					if (removeAll) {
+						for (E value : theCache) {
+							Object elementId = theIdMap.get(value);
+							ObservableCollectionEvent.doWith(removeEvent(value, elementId), observer);
+						}
+					}
+				};
 		}
 
 		@Override
 		public int hashCode() {
-			return ObservableCollection.hashCode(this);
+			if (isDone.get())
+				return 1;
+			try (Transaction t = lock(false, null)) {
+				int hashCode = 1;
+				for (Object e : theCache)
+					hashCode = 31 * hashCode + (e == null ? 0 : e.hashCode());
+				return hashCode;
+			}
 		}
 
 		@Override
-		public boolean equals(Object obj) {
-			return ObservableCollection.equals(this, obj);
+		public boolean equals(Object o) {
+			if (!(o instanceof Collection))
+				return false;
+			Collection<?> c = (Collection<?>) o;
+			if (isDone.get())
+				return c.isEmpty();
+
+			try (Transaction t1 = lock(false, null); Transaction t2 = Transactable.lock(c, false, null)) {
+				Iterator<E> e1 = theCache.iterator();
+				Iterator<?> e2 = c.iterator();
+				while (e1.hasNext() && e2.hasNext()) {
+					E o1 = e1.next();
+					Object o2 = e2.next();
+					if (!equivalence().elementEquals(o1, o2))
+						return false;
+				}
+				return !(e1.hasNext() || e2.hasNext());
+			}
 		}
 
 		@Override
 		public String toString() {
-			return ObservableCollection.toString(this);
+			StringBuilder ret = new StringBuilder("(");
+			if (isDone.get())
+				return ret.append(')').toString();
+			boolean first = true;
+			try (Transaction t = lock(false, null)) {
+				for (Object value : theCache) {
+					if (!first) {
+						ret.append(", ");
+					} else
+						first = false;
+					ret.append(value);
+				}
+			}
+			ret.append(')');
+			return ret.toString();
 		}
 	}
 
@@ -2932,10 +3144,10 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public ObservableElementSpliterator<E> spliterator() {
-			return new ObservableElementSpliterator.WrappingObservableSpliterator<>(theCollection.spliterator(), theType, () -> {
+			return new WrappingObservableSpliterator<>(theCollection.spliterator(), theType, () -> {
 				ObservableCollectionElement<ObservableValue<? extends E>>[] container = new ObservableCollectionElement[1];
-				ObservableElementSpliterator.WrappingObservableElement<ObservableValue<? extends E>, E> wrapperEl;
-				wrapperEl = new ObservableElementSpliterator.WrappingObservableElement<ObservableValue<? extends E>, E>(getType(),
+				WrappingObservableElement<ObservableValue<? extends E>, E> wrapperEl;
+				wrapperEl = new WrappingObservableElement<ObservableValue<? extends E>, E>(getType(),
 					container) {
 					@Override
 					public E get() {
@@ -3418,14 +3630,9 @@ public final class ObservableCollectionImpl {
 			return true;
 		}
 
-		// TODO Redo all the containment for the composed (default) equivalence
-
 		@Override
 		public boolean contains(Object o) {
-			for (ObservableCollection<? extends E> subColl : theOuter)
-				if (subColl.contains(o))
-					return true;
-			return false;
+			return ObservableCollectionImpl.contains(this, o);
 		}
 
 		@Override
@@ -3435,10 +3642,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean containsAny(Collection<?> c) {
-			for (ObservableCollection<? extends E> subColl : theOuter)
-				if (subColl.containsAny(c))
-					return true;
-			return false;
+			return ObservableCollectionImpl.containsAny(this, c);
 		}
 
 		@Override
@@ -3472,12 +3676,25 @@ public final class ObservableCollectionImpl {
 		@Override
 		public String canRemove(Object value) {
 			String msg = null;
+			String[] collMsg = new String[1];
 			for (ObservableCollection<? extends E> coll : theOuter) {
-				String collMsg = ((ObservableCollection<E>) coll).canRemove(value);
-				if (collMsg == null)
+				collMsg[0] = null;
+				if (coll.equivalence().equals(equivalence())) {
+					collMsg[0] = ((ObservableCollection<E>) coll).canRemove(value);
+				} else {
+					boolean[] found = new boolean[1];
+					ElementSpliterator<? extends E> spliter = coll.spliterator();
+					while (!found[0] && spliter.tryAdvanceElement(el -> {
+						found[0] = equivalence().elementEquals(el.get(), value);
+						if (found[0])
+							collMsg[0] = el.canRemove();
+					})) {
+					}
+				}
+				if (collMsg[0] == null)
 					return null;
 				if (msg == null)
-					msg = collMsg;
+					msg = collMsg[0];
 			}
 			if (msg == null)
 				return StdMsg.NOT_FOUND;
@@ -3486,25 +3703,72 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean remove(Object o) {
-			for (ObservableCollection<? extends E> coll : theOuter)
-				if (coll.remove(o))
-					return true;
+			for (ObservableCollection<? extends E> coll : theOuter) {
+				if (coll.equivalence().equals(equivalence())) {
+					if (coll.remove(o))
+						return true;
+				} else {
+					boolean[] found = new boolean[1];
+					boolean[] removed = new boolean[1];
+					ElementSpliterator<? extends E> spliter = coll.spliterator();
+					while (!found[0] && spliter.tryAdvanceElement(el -> {
+						found[0] = equivalence().elementEquals(el.get(), o);
+						if (found[0] && el.canRemove() == null) {
+							el.remove();
+							removed[0] = true;
+						}
+					})) {
+					}
+					if (removed[0])
+						return true;
+				}
+			}
 			return false;
 		}
 
 		@Override
 		public boolean removeAll(Collection<?> c) {
+			if (c.isEmpty())
+				return false;
 			boolean removed = false;
-			for (ObservableCollection<? extends E> coll : theOuter)
-				removed |= coll.removeAll(c);
+			Set<E> set = ObservableCollectionImpl.toSet(equivalence(), c);
+			for (ObservableCollection<? extends E> coll : theOuter) {
+				if (coll.equivalence().equals(equivalence()))
+					removed |= coll.removeAll(set);
+				else {
+					boolean[] cRemoved = new boolean[1];
+					coll.spliterator().forEachElement(el -> {
+						if (set.contains(el.get()) && el.canRemove() == null) {
+							cRemoved[0] = true;
+							el.remove();
+						}
+					});
+					removed |= cRemoved[0];
+				}
+			}
 			return removed;
 		}
 
 		@Override
 		public boolean retainAll(Collection<?> c) {
+			if (c.isEmpty())
+				return false;
 			boolean removed = false;
-			for (ObservableCollection<? extends E> coll : theOuter)
-				removed |= coll.retainAll(c);
+			Set<E> set = ObservableCollectionImpl.toSet(equivalence(), c);
+			for (ObservableCollection<? extends E> coll : theOuter) {
+				if (coll.equivalence().equals(equivalence()))
+					removed |= coll.retainAll(set);
+				else {
+					boolean[] cRemoved = new boolean[1];
+					coll.spliterator().forEachElement(el -> {
+						if (!set.contains(el.get()) && el.canRemove() == null) {
+							cRemoved[0] = true;
+							el.remove();
+						}
+					});
+					removed |= cRemoved[0];
+				}
+			}
 			return removed;
 		}
 
