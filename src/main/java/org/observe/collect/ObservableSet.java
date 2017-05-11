@@ -1,20 +1,13 @@
 package org.observe.collect;
 
-import java.util.Iterator;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
-import org.observe.ObservableValueEvent;
-import org.observe.Observer;
-import org.observe.Subscription;
-import org.qommons.Equalizer;
 import org.qommons.Transaction;
 import org.qommons.collect.Betterator;
-import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.TransactableSet;
 
 import com.google.common.reflect.TypeToken;
@@ -31,7 +24,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	}
 
 	@Override
-	ElementSpliterator<E> spliterator();
+	ObservableElementSpliterator<E> spliterator();
 
 	/**
 	 * @param o The object to get the equivalent of
@@ -63,21 +56,15 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	}
 
 	/**
-	 * Similar to {@link #filterMap(FilterMapDef, boolean)}, but produces a set, as {@link EquivalentFilterMapDef} instances can only be
-	 * produced with the assertion that any map operations preserve the Set's uniqueness contract.
+	 * Similar to {@link #filterMap(FilterMapDef)}, but produces a set, as {@link EquivalentFilterMapDef} instances can only be produced
+	 * with the assertion that any map operations preserve the Set's uniqueness contract.
 	 *
 	 * @param <T> The type to map to
 	 * @param filterMap The filter-map definition
-	 * @param dynamic Whether the filtering on the set (if <code>filterMap</code> is {@link ObservableCollection.FilterMapDef#isFiltered()
-	 *        filtered}) should be done dynamically or statically. Dynamic filtering allows for the possibility that changes to individual
-	 *        elements in the collection may result in those elements passing or failing the filter. Static filtering uses the initial (on
-	 *        subscription) value of the element to determine whether that element is included in the collection and this inclusion does not
-	 *        change. Static filtering may offer potentially large performance improvements, particularly for filtering a small subset of a
-	 *        large collection, but may cause incorrect results if the initial inclusion assumption is wrong.
 	 * @return A set, filtered and mapped with the given definition
 	 */
-	default <T> ObservableSet<T> filterMap(EquivalentFilterMapDef<E, ?, T> filterMap, boolean dynamic) {
-		return new ObservableSetImpl.FilterMappedSet<>(this, filterMap, dynamic);
+	default <T> ObservableSet<T> filterMap(EquivalentFilterMapDef<E, ?, T> filterMap) {
+		return new ObservableSetImpl.FilterMappedSet<>(this, filterMap);
 	}
 
 	@Override
@@ -89,6 +76,8 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	default <T> ObservableSet<T> filter(Class<T> type) {
 		return (ObservableSet<T>) ObservableCollection.super.filter(type);
 	}
+
+	// TODO Provide combined set with uniqueness preservation?
 
 	/**
 	 * @param refresh The observable to re-fire events on
@@ -109,38 +98,13 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	}
 
 	@Override
-	default ObservableSet<E> immutable(String modMsg) {
-		return (ObservableSet<E>) ObservableCollection.super.immutable(modMsg);
-	}
-
-	@Override
-	default ObservableSet<E> filterRemove(Function<? super E, String> filter) {
-		return (ObservableSet<E>) ObservableCollection.super.filterRemove(filter);
-	}
-
-	@Override
-	default ObservableSet<E> noRemove(String removeMsg) {
-		return (ObservableSet<E>) ObservableCollection.super.noRemove(removeMsg);
-	}
-
-	@Override
-	default ObservableSet<E> filterAdd(Function<? super E, String> filter) {
-		return (ObservableSet<E>) ObservableCollection.super.filterAdd(filter);
-	}
-
-	@Override
-	default ObservableSet<E> noAdd(String addMsg) {
-		return (ObservableSet<E>) ObservableCollection.super.noAdd(addMsg);
-	}
-
-	@Override
-	default ObservableSet<E> filterModification(Function<? super E, String> removeFilter, Function<? super E, String> addFilter) {
-		return (ObservableSet<E>) ObservableCollection.super.filterModification(removeFilter, addFilter);
+	default ObservableSet<E> filterModification(ModFilterDef<E> filter) {
+		return new ObservableSetImpl.ModFilteredSet<>(this, filter);
 	}
 
 	@Override
 	default ObservableSet<E> cached(Observable<?> until) {
-		return new SafeCachedObservableSet<>(this, until);
+		return new ObservableSetImpl.SafeCachedObservableSet<>(this, until);
 	}
 
 	/**
@@ -220,83 +184,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	 * @return A collection containing the given elements that cannot be changed
 	 */
 	public static <T> ObservableSet<T> constant(TypeToken<T> type, java.util.Collection<T> coll) {
-		Set<T> modSet = new java.util.LinkedHashSet<>(coll);
-		Set<T> constSet = java.util.Collections.unmodifiableSet(modSet);
-		java.util.List<ObservableElement<T>> els = new java.util.ArrayList<>();
-		class ConstantObservableSet implements PartialSetImpl<T> {
-			@Override
-			public Equalizer getEqualizer() {
-				return Objects::equals;
-			}
-
-			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return ObservableValue.constant(TypeToken.of(CollectionSession.class), null);
-			}
-
-			@Override
-			public Transaction lock(boolean write, Object cause) {
-				return Transaction.NONE;
-			}
-
-			@Override
-			public boolean isSafe() {
-				return true;
-			}
-
-			@Override
-			public TypeToken<T> getType() {
-				return type;
-			}
-
-			@Override
-			public Subscription onElement(Consumer<? super ObservableElement<T>> observer) {
-				for(ObservableElement<T> el : els)
-					observer.accept(el);
-				return () -> {
-				};
-			}
-
-			@Override
-			public int size() {
-				return constSet.size();
-			}
-
-			@Override
-			public Iterator<T> iterator() {
-				return constSet.iterator();
-			}
-			@Override
-			public boolean canRemove(Object value) {
-				return false;
-			}
-
-			@Override
-			public boolean canAdd(T value) {
-				return false;
-			}
-		}
-		ConstantObservableSet ret = new ConstantObservableSet();
-		for(T value : constSet)
-			els.add(new ObservableElement<T>() {
-				@Override
-				public TypeToken<T> getType() {
-					return type;
-				}
-
-				@Override
-				public T get() {
-					return value;
-				}
-
-				@Override
-				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-					Observer.onNextAndFinish(observer, createInitialEvent(value, null));
-					return () -> {
-					};
-				}
-			});
-		return ret;
+		return new ObservableSetImpl.ConstantSet<>(type, coll);
 	}
 
 	/**
@@ -401,8 +289,8 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 		}
 
 		@Override
-		public ObservableSet<T> build(boolean dynamic) {
-			return getCollection().filterMap(toDef(), dynamic);
+		public ObservableSet<T> build() {
+			return getCollection().filterMap(toDef());
 		}
 	}
 

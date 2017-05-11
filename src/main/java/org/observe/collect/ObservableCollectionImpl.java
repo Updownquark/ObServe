@@ -5,7 +5,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +42,7 @@ import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementSpliterator;
+import org.qommons.collect.ReversibleSpliterator;
 import org.qommons.value.Value;
 
 import com.google.common.reflect.TypeParameter;
@@ -2331,7 +2331,6 @@ public final class ObservableCollectionImpl {
 		private final ObservableCollection<E> theWrapped;
 		private final Observable<?> theUntil;
 		private final Map<Object, E> theCacheMap;
-		private final Map<E, Object> theIdMap;
 		private final SimpleObservable<ObservableCollectionEvent<? extends E>> theChanges;
 		private final Collection<E> theCache;
 		private final AtomicBoolean isDone;
@@ -2345,7 +2344,6 @@ public final class ObservableCollectionImpl {
 			theUntil = until;
 			theChanges = new SimpleObservable<>();
 			theCacheMap = new HashMap<>();
-			theIdMap = new IdentityHashMap<>();
 			theCache = createCache();
 			isDone = new AtomicBoolean();
 			beginCache();
@@ -2376,15 +2374,11 @@ public final class ObservableCollectionImpl {
 			CollectionSubscription collSub = theWrapped.subscribe(evt -> {
 				switch (evt.getType()) {
 				case add:
-					theCacheMap.put(evt.getElementId(), evt.getNewValue());
-					theIdMap.put(evt.getNewValue(), evt.getElementId());
-					break;
 				case set:
-					theIdMap.remove(theCacheMap.put(evt.getElementId(), evt.getNewValue()));
-					theIdMap.put(evt.getNewValue(), evt.getElementId());
+					theCacheMap.put(evt.getElementId(), evt.getNewValue());
 					break;
 				case remove:
-					theIdMap.remove(theCacheMap.remove(evt.getElementId()));
+					theCacheMap.remove(evt.getElementId());
 					break;
 				}
 				updateCache(evt);
@@ -2661,18 +2655,20 @@ public final class ObservableCollectionImpl {
 				};
 				Subscription changeSub;
 				try (Transaction t = lock(false, null)) {
-					for (E value : theCache) {
-						Object elementId = theIdMap.get(value);
-						ObservableCollectionEvent.doWith(initialEvent(value, elementId), observer);
-					}
+				spliterator()
+					.forEachObservableElement(el -> ObservableCollectionEvent.doWith(initialEvent(el.get(), el.getElementId()), observer));
 					changeSub = theChanges.act(observer::accept);
 				}
 				return removeAll -> {
 					changeSub.unsubscribe();
 					if (removeAll) {
-						for (E value : theCache) {
-							Object elementId = theIdMap.get(value);
-							ObservableCollectionEvent.doWith(removeEvent(value, elementId), observer);
+					try (Transaction t = lock(false, null)) {
+						ObservableElementSpliterator<E> spliter = spliterator();
+						// Better to remove from the end if possible
+						if (spliter instanceof ReversibleSpliterator)
+							spliter = (ObservableElementSpliterator<E>) ((ReversibleSpliterator<E>) spliter).reverse();
+						spliter.forEachObservableElement(
+							el -> ObservableCollectionEvent.doWith(removeEvent(el.get(), el.getElementId()), observer));
 						}
 					}
 				};

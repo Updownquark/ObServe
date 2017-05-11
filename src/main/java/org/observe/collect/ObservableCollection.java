@@ -697,10 +697,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	}
 
 	/**
-	 * Creates a collection with the same elements as this collection, but cached, such that the
+	 * Creates a collection with the same elements as this collection, but with cached values. This may be beneficial for use of derived
+	 * collections for which the derivation of the values or their relationship is expensive.
 	 *
 	 * @param until The observable to destroy the cache with. The cache will be maintained dynamically until the given observable fires,
-	 *        after which all methods in the collection will throw {@link IllegalStateException}s.
+	 *        after which the collection will be empty.
 	 * @return The cached collection
 	 */
 	default ObservableCollection<E> cached(Observable<?> until) {

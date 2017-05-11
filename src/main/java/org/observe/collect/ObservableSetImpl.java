@@ -1,6 +1,5 @@
 package org.observe.collect;
 
-import java.util.ArrayDeque;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -12,13 +11,11 @@ import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Predicate;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
-import org.observe.SimpleSettableValue;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollectionImpl.ElementRefreshingCollection;
 import org.observe.collect.ObservableCollectionImpl.FilterMappedObservableCollection;
@@ -31,7 +28,6 @@ import org.qommons.Equalizer.EqualizerNode;
 import org.qommons.Transaction;
 import org.qommons.collect.ElementSpliterator;
 
-import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 public class ObservableSetImpl {
@@ -42,20 +38,27 @@ public class ObservableSetImpl {
 		// But they are runtime-safe because of the isElement tests
 		private final ObservableCollection<E> theLeft;
 		private final ObservableCollection<X> theRight;
-		private final CombinedCollectionSessionObservable theSession;
 		private final boolean sameEquivalence;
 
 		public IntersectedSet(ObservableSet<E> left, ObservableCollection<X> right) {
 			theLeft = left;
 			theRight = right;
-			theSession = new CombinedCollectionSessionObservable(
-				ObservableCollection.constant(new TypeToken<ObservableCollection<?>>() {}, theLeft, theRight));
 			sameEquivalence = left.equivalence().equals(right.equivalence());
 		}
 
 		@Override
 		public TypeToken<E> getType() {
 			return theLeft.getType();
+		}
+
+		@Override
+		public Equivalence<? super E> equivalence() {
+			return theLeft.equivalence();
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return theLeft.isLockSupported() || theRight.isLockSupported(); // Report whether locking will have any effect
 		}
 
 		@Override
@@ -68,20 +71,8 @@ public class ObservableSetImpl {
 			};
 		}
 
-		@Override
-		public ObservableValue<CollectionSession> getSession() {
-			return theSession;
-		}
-
 		protected Set<? super E> getRightSet() {
-			Equivalence<? super E> equiv = theLeft.equivalence();
-			Set<? super E> rightSet = equiv.createSet();
-			try (Transaction t = theRight.lock(false, null)) {
-				for (X v : theRight)
-					if (equiv.isElement(v))
-						rightSet.add((E) v);
-			}
-			return rightSet;
+			return ObservableCollectionImpl.toSet(theLeft.equivalence(), theRight);
 		}
 
 		@Override
@@ -185,7 +176,6 @@ public class ObservableSetImpl {
 
 		@Override
 		public boolean add(E e) {
-			String msg;
 			try (Transaction lt = theLeft.lock(true, null); Transaction rt = theRight.lock(true, null)) {
 				boolean addedLeft = false;
 				if (!theLeft.contains(e)) {
@@ -272,8 +262,9 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
+		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
 			// TODO Auto-generated method stub
+			return null;
 		}
 	}
 
@@ -284,8 +275,8 @@ public class ObservableSetImpl {
 	 * @param <T> The type of values in this set
 	 */
 	public static class FilterMappedSet<E, T> extends FilterMappedObservableCollection<E, T> implements ObservableSet<T> {
-		public FilterMappedSet(ObservableSet<E> wrap, EquivalentFilterMapDef<E, ?, T> filterMapDef, boolean dynamic) {
-			super(wrap, filterMapDef, dynamic);
+		public FilterMappedSet(ObservableSet<E> wrap, EquivalentFilterMapDef<E, ?, T> filterMapDef) {
+			super(wrap, filterMapDef);
 		}
 
 		@Override
@@ -419,11 +410,6 @@ public class ObservableSetImpl {
 		protected ObservableSet<E> getWrapped() {
 			return (ObservableSet<E>) super.getWrapped();
 		}
-
-		@Override
-		public Equalizer getEqualizer() {
-			return getWrapped().getEqualizer();
-		}
 	}
 
 	/**
@@ -440,57 +426,21 @@ public class ObservableSetImpl {
 		protected ObservableSet<E> getWrapped() {
 			return (ObservableSet<E>) super.getWrapped();
 		}
-
-		@Override
-		public Equalizer getEqualizer() {
-			return getWrapped().getEqualizer();
-		}
 	}
 
 	/**
-	 * An observable set that cannot be modified directly, but reflects the value of a wrapped set as it changes
-	 *
-	 * @param <E> The type of elements in the set
-	 */
-	public static class ImmutableObservableSet<E> extends ImmutableObservableCollection<E> implements ObservableSet<E> {
-		protected ImmutableObservableSet(ObservableSet<E> wrap) {
-			super(wrap);
-		}
-
-		@Override
-		protected ObservableSet<E> getWrapped() {
-			return (ObservableSet<E>) super.getWrapped();
-		}
-
-		@Override
-		public ImmutableObservableSet<E> immutable() {
-			return this;
-		}
-
-		@Override
-		public Equalizer getEqualizer() {
-			return getWrapped().getEqualizer();
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableSet#filterModification(Predicate, Predicate)}
+	 * Implements {@link ObservableSet#filterModification(ModFilterDef)}
 	 *
 	 * @param <E> The type of elements in the set
 	 */
 	public static class ModFilteredSet<E> extends ModFilteredCollection<E> implements ObservableSet<E> {
-		public ModFilteredSet(ObservableSet<E> wrapped, Predicate<? super E> removeFilter, Predicate<? super E> addFilter) {
-			super(wrapped, removeFilter, addFilter);
+		protected ModFilteredSet(ObservableSet<E> wrapped, ModFilterDef def) {
+			super(wrapped, def);
 		}
 
 		@Override
 		protected ObservableSet<E> getWrapped() {
 			return (ObservableSet<E>) super.getWrapped();
-		}
-
-		@Override
-		public Equalizer getEqualizer() {
-			return getWrapped().getEqualizer();
 		}
 	}
 
@@ -500,18 +450,13 @@ public class ObservableSetImpl {
 	 * @param <E> The type of elements in the set
 	 */
 	public static class TakenUntilObservableSet<E> extends TakenUntilObservableCollection<E> implements ObservableSet<E> {
-		public TakenUntilObservableSet(ObservableSet<E> wrap, Observable<?> until, boolean terminate) {
+		protected TakenUntilObservableSet(ObservableSet<E> wrap, Observable<?> until, boolean terminate) {
 			super(wrap, until, terminate);
 		}
 
 		@Override
 		protected ObservableSet<E> getWrapped() {
 			return (ObservableSet<E>) super.getWrapped();
-		}
-
-		@Override
-		public Equalizer getEqualizer() {
-			return getWrapped().getEqualizer();
 		}
 	}
 
@@ -521,19 +466,13 @@ public class ObservableSetImpl {
 	 * @param <E> The type of elements in the set
 	 */
 	public static class FlattenedValueSet<E> extends FlattenedValueCollection<E> implements ObservableSet<E> {
-		public FlattenedValueSet(ObservableValue<? extends ObservableSet<E>> collectionObservable) {
+		protected FlattenedValueSet(ObservableValue<? extends ObservableSet<E>> collectionObservable) {
 			super(collectionObservable);
 		}
 
 		@Override
 		protected ObservableValue<? extends ObservableSet<E>> getWrapped() {
 			return (ObservableValue<? extends ObservableSet<E>>) super.getWrapped();
-		}
-
-		@Override
-		public Equalizer getEqualizer() {
-			ObservableSet<? extends E> wrapped = getWrapped().get();
-			return wrapped == null ? Objects::equals : wrapped.getEqualizer();
 		}
 	}
 
@@ -568,11 +507,6 @@ public class ObservableSetImpl {
 		@Override
 		public Transaction lock(boolean write, Object cause) {
 			return theCollection.lock(write, cause);
-		}
-
-		@Override
-		public boolean isSafe() {
-			return theCollection.isSafe();
 		}
 
 		@Override
@@ -712,97 +646,6 @@ public class ObservableSetImpl {
 		@Override
 		public String toString() {
 			return ObservableSet.toString(this);
-		}
-	}
-
-	/**
-	 * Implements elements for {@link ObservableSet#unique(ObservableCollection, Equalizer)}
-	 *
-	 * @param <E> The type of value in the element
-	 */
-	public static class UniqueElement<E> implements ObservableElement<E>{
-		private final CollectionWrappingSet<E> theSet;
-		private final boolean isAlwaysUsingFirst;
-		private final Collection<ObservableElement<E>> theElements;
-		private final SimpleSettableValue<ObservableElement<E>> theCurrentElement;
-
-		UniqueElement(CollectionWrappingSet<E> set, boolean alwaysUseFirst) {
-			theSet = set;
-			isAlwaysUsingFirst = alwaysUseFirst;
-			theElements = createElements();
-			theCurrentElement = new SimpleSettableValue<>(
-				new TypeToken<ObservableElement<E>>() {}.where(new TypeParameter<E>() {}, theSet.getType()), true);
-		}
-
-		protected Collection<ObservableElement<E>> createElements() {
-			return new ArrayDeque<>();
-		}
-
-		@Override
-		public TypeToken<E> getType() {
-			return theSet.getType();
-		}
-
-		@Override
-		public E get() {
-			return theElements.isEmpty() ? null : theElements.iterator().next().get();
-		}
-
-		@Override
-		public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
-			return ObservableElement.flatten(theCurrentElement).subscribe(observer);
-		}
-
-		@Override
-		public boolean isSafe() {
-			return theSet.isSafe();
-		}
-
-		@Override
-		public ObservableValue<E> persistent() {
-			return theElements.isEmpty() ? ObservableValue.constant(theSet.getType(), null) : theElements.iterator().next().persistent();
-		}
-
-		protected ObservableElement<E> getCurrentElement() {
-			return theCurrentElement.get();
-		}
-
-		protected boolean addElement(ObservableElement<E> element, Object cause) {
-			theElements.add(element);
-			boolean newBest;
-			if (isAlwaysUsingFirst)
-				newBest = theElements.iterator().next() == element;
-			else
-				newBest = theCurrentElement.get() == null;
-			if (newBest)
-				return setCurrentElement(element, cause);
-			else
-				return false;
-		}
-
-		protected boolean removeElement(ObservableElement<E> element, Object cause) {
-			theElements.remove(element);
-			if (theCurrentElement.get() == element)
-				return setCurrentElement(theElements.isEmpty() ? null : theElements.iterator().next(), cause);
-			else
-				return false;
-		}
-
-		protected boolean changed(ObservableElement<E> element) {
-			return false;
-		}
-
-		protected void reset(Object cause) {
-			theCurrentElement.set(theElements.iterator().next(), cause);
-		}
-
-		protected boolean setCurrentElement(ObservableElement<E> element, Object cause) {
-			theCurrentElement.set(element, cause);
-			return false;
-		}
-
-		protected boolean isEmpty() {
-			return theElements.isEmpty();
 		}
 	}
 }
