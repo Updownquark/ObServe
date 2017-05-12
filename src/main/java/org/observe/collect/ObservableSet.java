@@ -26,14 +26,6 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	@Override
 	ObservableElementSpliterator<E> spliterator();
 
-	/**
-	 * @param o The object to get the equivalent of
-	 * @return The object in this set whose value is equivalent to the given value
-	 */
-	default ObservableValue<E> equivalent(Object o) {
-		return new ObservableSetImpl.ObservableSetEquivalentFinder<>(this, o);
-	}
-
 	@Override
 	default E [] toArray() {
 		return ObservableCollection.super.toArray();
@@ -44,6 +36,16 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 		return ObservableCollection.super.toArray(a);
 	}
 
+	@Override
+	default ObservableSet<E> unique() {
+		return this;
+	}
+
+	/**
+	 * @param <X> The type of the filtering collection
+	 * @param collection The collection to filter this set's elements by
+	 * @return A set containing all of this set's elements that are also present in the argument collection
+	 */
 	default <X> ObservableSet<E> intersect(ObservableCollection<X> collection){
 		return new ObservableSetImpl.IntersectedSet<>(this, collection);
 	}
@@ -104,7 +106,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 
 	@Override
 	default ObservableSet<E> cached(Observable<?> until) {
-		return new ObservableSetImpl.SafeCachedObservableSet<>(this, until);
+		return new ObservableSetImpl.CachedObservableSet<>(this, until);
 	}
 
 	/**
@@ -138,23 +140,6 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 		return new ObservableSetImpl.FlattenedValueSet<>(collectionObservable);
 	}
 
-	/*public static <E> ObservableSet<E> intersect(TypeToken<E> type, Collection<? extends ObservableSet<? extends E>> sets, Equalizer equalizer) {
-		TypeToken<ObservableSet<? extends E>> setType = new TypeToken<ObservableSet<? extends E>>() {}.where(new TypeParameter<E>() {},
-			type);
-		ObservableCollection<ObservableSet<? extends E>> obSets = ObservableCollection.constant(setType,
-			(Collection<ObservableSet<? extends E>>) sets);
-		return combine(obSets, equalizer, sets.size(), Integer.MAX_VALUE);
-	}
-
-	public static <E> ObservableSet<E> union(ObservableCollection<? extends ObservableSet<? extends E>> sets, Equalizer equalizer) {
-		return combine(sets, equalizer, 1, Integer.MAX_VALUE);
-	}
-
-	public static <E> ObservableSet<E> combine(ObservableCollection<? extends ObservableSet<? extends E>> sets, Equalizer equalizer,
-		int minCount, int maxCount) {
-		return new SetCombination<>(sets, equalizer, minCount, maxCount);
-	}*/
-
 	/**
 	 * A default toString() method for set implementations to use
 	 *
@@ -180,31 +165,23 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	/**
 	 * @param <T> The type of the collection
 	 * @param type The run-time type of the collection
+	 * @param equivalence The equivalence set for the set's uniqueness
 	 * @param coll The collection with elements to wrap
 	 * @return A collection containing the given elements that cannot be changed
 	 */
-	public static <T> ObservableSet<T> constant(TypeToken<T> type, java.util.Collection<T> coll) {
-		return new ObservableSetImpl.ConstantSet<>(type, coll);
+	public static <T> ObservableSet<T> constant(TypeToken<T> type, Equivalence<? super T> equivalence, java.util.Collection<T> coll) {
+		return new ObservableSetImpl.ConstantObservableSet<>(type, equivalence, coll);
 	}
 
 	/**
 	 * @param <T> The type of the collection
 	 * @param type The run-time type of the collection
+	 * @param equivalence The equivalence set for the set's uniqueness
 	 * @param values The array with elements to wrap
 	 * @return A collection containing the given elements that cannot be changed
 	 */
-	public static <T> ObservableSet<T> constant(TypeToken<T> type, T... values) {
-		return constant(type, java.util.Arrays.asList(values));
-	}
-
-	/**
-	 * @param <T> The type of the collection
-	 * @param coll The collection to turn into a set
-	 * @param equivalence The equivalence set to use for uniqueness checking
-	 * @return A set containing all unique elements of the given collection
-	 */
-	public static <T> ObservableSet<T> unique(ObservableCollection<T> coll, Equivalence<? super T> equivalence) {
-		return new ObservableSetImpl.CollectionWrappingSet<>(coll, equivalence);
+	public static <T> ObservableSet<T> constant(TypeToken<T> type, Equivalence<? super T> equivalence, T... values) {
+		return constant(type, equivalence, java.util.Arrays.asList(values));
 	}
 
 	/**

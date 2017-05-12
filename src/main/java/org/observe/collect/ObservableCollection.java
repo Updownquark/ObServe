@@ -14,6 +14,8 @@ import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -71,6 +73,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 		static String BAD_TYPE = "Object is the wrong type for this collection";
 		static String UNSUPPORTED_OPERATION = "Unsupported Operation";
 		static String NULL_DISALLOWED = "Null is not allowed";
+		static String ELEMENT_EXISTS = "Element already exists";
 		static String GROUP_EXISTS = "Group already exists";
 		static String WRONG_GROUP = "Item does not belong to this group";
 		static String NOT_FOUND = "No such item found";
@@ -95,6 +98,19 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 * @return The subscription to use to terminate listening
 	 */
 	CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer);
+
+	/**
+	 * Although not every ObservableCollection must be indexed, all ObservableCollections must have some notion of order. This method takes
+	 * the IDs of 2 elements in this collection and returns true if the element whose ID is the first argument should be presented before
+	 * the second, false if the second element should be presented first.
+	 *
+	 * This collection's iteration must follow this ordering scheme.
+	 *
+	 * @param elementId1 The ID of the first element to check
+	 * @param elementId2 The ID of the second element to check
+	 * @return Whether the element with the first argument as its ID should be presented first
+	 */
+	boolean order(Object elementId1, Object elementId2);
 
 	// /**
 	// * <p>
@@ -183,18 +199,37 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 		return removed[0];
 	}
 
+	/**
+	 * Overridden to return an {@link ObservableCollectionElement}. Also with the additional contract that this method must return the
+	 * <b>first</b> matching element.
+	 *
+	 * @see org.qommons.collect.BetterCollection#elementFor(Object)
+	 */
 	@Override
-	default CollectionElement<E> elementFor(Object value) {
-		try (Transaction t = lock(false, null)) {
-			ElementSpliterator<E> spliter = spliterator();
-			CollectionElement<E>[] foundEl = new CollectionElement[1];
-			while (foundEl[0] == null && spliter.tryAdvanceElement(el -> {
-				if (equivalence().elementEquals(el.get(), value))
-					foundEl[0] = el;
-			})) {
-			}
-			return foundEl[0];
-		}
+	default ObservableCollectionElement<E> elementFor(Object value) {
+		return (ObservableCollectionElement<E>) BetterCollection.super.elementFor(value);
+	}
+
+	/**
+	 * @param search The test to search for elements that pass
+	 * @param onElement The action to take on the first passing element in the collection
+	 * @return Whether an element was found that passed the test
+	 * @see #find(Predicate, Consumer)
+	 */
+	default boolean findObservableElement(Predicate<? super E> search,
+		Consumer<? super ObservableCollectionElement<? extends E>> onElement) {
+		return BetterCollection.super.find(search, (Consumer<? super CollectionElement<? extends E>>) onElement);
+	}
+
+	/**
+	 * @param search The test to search for elements that pass
+	 * @param onElement The action to take on all passing elements in the collection
+	 * @return The number of elements found that passed the test
+	 * @see #findAll(Predicate, Consumer)
+	 */
+	default int findAllObservableElements(Predicate<? super E> search,
+		Consumer<? super ObservableCollectionElement<? extends E>> onElement) {
+		return BetterCollection.super.findAll(search, (Consumer<? super CollectionElement<? extends E>>) onElement);
 	}
 
 	/**
@@ -207,7 +242,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 * @return Whether any elements were replaced
 	 * @throws IllegalArgumentException If a mapped value is not acceptable as a replacement
 	 */
-	default boolean replace(Function<? super E, ? extends E> map, boolean soft) {
+	default boolean replaceAll(Function<? super E, ? extends E> map, boolean soft) {
 		boolean[] replaced = new boolean[1];
 		ElementSpliterator<E> iter = spliterator();
 		iter.forEachElement(el -> {
@@ -219,6 +254,16 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 			}
 		});
 		return replaced[0];
+	}
+
+	/**
+	 * Replaces each value in this collection with a mapped value. For every element, the operation will be applied. If the result is
+	 * identically (==) different from the existing value, that element will be replaced with the mapped value.
+	 * 
+	 * @param op The operation to apply to each value in this collection
+	 */
+	default void replaceAll(UnaryOperator<E> op) {
+		replaceAll(v -> op.apply(v), false);
 	}
 
 	// Default implementations of redundant Collection methods
@@ -323,6 +368,16 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	}
 
 	// Observable containment
+
+	/**
+	 * @param test The test to find passing elements for
+	 * @param def Supplies a default value for the observable result when no elements in this collection pass the test
+	 * @param first true to always use the first element passing the test, false to always use the last element
+	 * @return An observable value containing a value in this collection passing the given test
+	 */
+	default ObservableValue<E> find(Predicate<? super E> test, Supplier<? extends E> def, boolean first) {
+		return new ObservableCollectionImpl.ObservableCollectionFinder<>(this, test, def, first);
+	}
 
 	/**
 	 * @param <X> The type of the value to test
@@ -664,6 +719,14 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	}
 
 	/**
+	 * @return An ObservableSet that contains this collection's values with no duplicates, according to this collections
+	 *         {@link #equivalence()} scheme
+	 */
+	default ObservableSet<E> unique() {
+		return new ObservableSetImpl.CollectionWrappingSet<>(this);
+	}
+
+	/**
 	 * @param refresh The observable to re-fire events on
 	 * @return A collection whose elements fire additional value events when the given observable fires
 	 */
@@ -834,7 +897,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 		try (Transaction t = coll.lock(false, null)) {
 			int hashCode = 1;
 			for (Object e : coll)
-				hashCode = 31 * hashCode + (e == null ? 0 : e.hashCode());
+				hashCode += e.hashCode();
 			return hashCode;
 		}
 	}

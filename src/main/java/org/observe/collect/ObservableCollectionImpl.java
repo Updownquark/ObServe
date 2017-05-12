@@ -37,12 +37,16 @@ import org.observe.collect.ObservableElementSpliterator.WrappingObservableElemen
 import org.observe.collect.ObservableElementSpliterator.WrappingObservableSpliterator;
 import org.qommons.BiTuple;
 import org.qommons.Causable;
+import org.qommons.Ternian;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.ReversibleSpliterator;
+import org.qommons.collect.TreeList;
+import org.qommons.tree.CountedRedBlackNode.DefaultNode;
+import org.qommons.tree.CountedRedBlackNode.DefaultTreeMap;
 import org.qommons.value.Value;
 
 import com.google.common.reflect.TypeParameter;
@@ -191,6 +195,154 @@ public final class ObservableCollectionImpl {
 		if (cSet.isEmpty())
 			return false;
 		return coll.removeIf(v -> !cSet.contains(v));
+	}
+
+	/**
+	 * Implements {@link ObservableCollection#find(Predicate, Supplier, boolean)}
+	 *
+	 * @param <E> The type of the value
+	 */
+	public static class ObservableCollectionFinder<E> implements ObservableValue<E> {
+		private final ObservableCollection<E> theCollection;
+		private final Predicate<? super E> theTest;
+		private final Supplier<? extends E> theDefaultValue;
+		private final boolean isFirst;
+
+		/**
+		 * @param collection The collection to find elements in
+		 * @param test The test to find elements that pass
+		 * @param defaultValue Provides default values when no elements of the collection pass the test
+		 * @param first Whether to get the first value in the collection that passes or the last value
+		 */
+		protected ObservableCollectionFinder(ObservableCollection<E> collection, Predicate<? super E> test,
+			Supplier<? extends E> defaultValue, boolean first) {
+			theCollection = collection;
+			theTest = test;
+			theDefaultValue = defaultValue;
+			isFirst = first;
+		}
+
+		@Override
+		public TypeToken<E> getType() {
+			return theCollection.getType();
+		}
+
+		@Override
+		public boolean isSafe() {
+			return true;
+		}
+
+		@Override
+		public E get() {
+			Object[] value = new Object[1];
+			boolean found;
+			if (isFirst) {
+				if (theCollection.find(theTest, el -> value[0] = el.get()))
+					return (E) value[0];
+				else
+					return theDefaultValue.get();
+			} else {
+				Object[] elId = new Object[1];
+				found = theCollection.findAllObservableElements(theTest, el -> {
+					if (elId[0] == null || theCollection.order(elId[0], el.getElementId())) {
+						elId[0] = el.getElementId();
+						value[0] = el.get();
+					}
+				}) > 0;
+			}
+			return found ? (E) value[0] : theDefaultValue.get();
+		}
+
+		@Override
+		public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
+			DefaultTreeMap<Object, E> matches = new DefaultTreeMap<>((id1, id2) -> {
+				if (id1.equals(id2))
+					return 0;
+				return theCollection.order(id1, id2) ? -1 : 1;
+			});
+			boolean[] initialized = new boolean[1];
+			return theCollection.subscribe(new Consumer<ObservableCollectionEvent<? extends E>>() {
+				private E theCurrentValue;
+
+				@Override
+				public void accept(ObservableCollectionEvent<? extends E> evt) {
+					switch (evt.getType()) {
+					case add:
+						if (!theTest.test(evt.getNewValue()))
+							return;
+						int index = matches.putGetNode(evt.getElementId(), evt.getNewValue()).getIndex();
+						if ((isFirst && index == 0) || (!isFirst && index == matches.size() - 1)) {
+							if (initialized[0])
+								fireChangeEvent(theCurrentValue, evt.getNewValue(), evt, observer::onNext);
+							theCurrentValue = evt.getNewValue();
+						}
+						break;
+					case remove:
+						if (!theTest.test(evt.getOldValue()))
+							return;
+						DefaultNode<Map.Entry<Object, E>> node = matches.getNode(evt.getElementId());
+						index = node.getIndex();
+						matches.removeNode(node);
+						if ((isFirst && index == 0) || (!isFirst && index == matches.size() - 1)) {
+							E newValue;
+							if (matches.isEmpty())
+								newValue = theDefaultValue.get();
+							else if (isFirst)
+								newValue = matches.firstEntry().getValue();
+							else
+								newValue = matches.lastEntry().getValue();
+							fireChangeEvent(theCurrentValue, newValue, evt, observer::onNext);
+							theCurrentValue = newValue;
+						}
+						break;
+					case set:
+						boolean oldPass = theTest.test(evt.getOldValue());
+						boolean newPass = evt.getOldValue() == evt.getNewValue() ? oldPass : theTest.test(evt.getNewValue());
+						if (oldPass == newPass) {
+							if (!oldPass)
+								return;
+							node = matches.putGetNode(evt.getElementId(), evt.getNewValue());
+							index = node.getIndex();
+							if ((isFirst && index == 0) || (!isFirst && index == matches.size() - 1)) {
+								fireChangeEvent(theCurrentValue, evt.getNewValue(), evt, observer::onNext);
+								theCurrentValue = evt.getNewValue();
+							}
+						} else if (oldPass) {
+							doRemove(evt);
+						} else {
+							doAdd(evt);
+						}
+						break;
+					}
+				}
+
+				private void doAdd(ObservableCollectionEvent<? extends E> evt) {
+					int index = matches.putGetNode(evt.getElementId(), evt.getNewValue()).getIndex();
+					if ((isFirst && index == 0) || (!isFirst && index == matches.size() - 1)) {
+						if (initialized[0])
+							fireChangeEvent(theCurrentValue, evt.getNewValue(), evt, observer::onNext);
+						theCurrentValue = evt.getNewValue();
+					}
+				}
+
+				private void doRemove(ObservableCollectionEvent<? extends E> evt) {
+					DefaultNode<Map.Entry<Object, E>> node = matches.getNode(evt.getElementId());
+					int index = node.getIndex();
+					matches.removeNode(node);
+					if ((isFirst && index == 0) || (!isFirst && index == matches.size() - 1)) {
+						E newValue;
+						if (matches.isEmpty())
+							newValue = theDefaultValue.get();
+						else if (isFirst)
+							newValue = matches.firstEntry().getValue();
+						else
+							newValue = matches.lastEntry().getValue();
+						fireChangeEvent(theCurrentValue, newValue, evt, observer::onNext);
+						theCurrentValue = newValue;
+					}
+				}
+			});
+		}
 	}
 
 	/**
@@ -660,6 +812,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public boolean order(Object elementId1, Object elementId2) {
+			return theWrapped.order(elementId1, elementId2);
+		}
+
+		@Override
 		public boolean contains(Object o) {
 			return ObservableCollectionImpl.contains(this, o);
 		}
@@ -814,6 +971,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public ObservableElementSpliterator<T> spliterator() {
 			return map(theWrapped.spliterator());
+		}
+
+		@Override
+		public boolean order(Object elementId1, Object elementId2) {
+			return theWrapped.order(elementId1, elementId2);
 		}
 
 		@Override
@@ -1017,6 +1179,16 @@ public final class ObservableCollectionImpl {
 					break;
 				}
 			});
+		}
+
+		@Override
+		public int hashCode() {
+			return ObservableCollection.hashCode(this);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return ObservableCollection.equals(this, obj);
 		}
 
 		@Override
@@ -1234,6 +1406,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public ObservableElementSpliterator<V> spliterator() {
 			return combine(theWrapped.spliterator());
+		}
+
+		@Override
+		public boolean order(Object elementId1, Object elementId2) {
+			return theWrapped.order(elementId1, elementId2);
 		}
 
 		/**
@@ -1509,7 +1686,7 @@ public final class ObservableCollectionImpl {
 		 * @return The key set for the map
 		 */
 		protected ObservableSet<K> unique(ObservableCollection<K> keyCollection) {
-			return ObservableSet.unique(keyCollection, theBuilder.getEquivalence());
+			return keyCollection.unique();
 		}
 
 		@Override
@@ -1635,6 +1812,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public ObservableElementSpliterator<E> spliterator() {
 			return theElements.spliterator();
+		}
+
+		@Override
+		public boolean order(Object elementId1, Object elementId2) {
+			return theElements.order(elementId1, elementId2);
 		}
 
 		@Override
@@ -1856,6 +2038,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public boolean order(Object elementId1, Object elementId2) {
+			return theWrapped.order(elementId1, elementId2);
+		}
+
+		@Override
 		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
 			CollectionSubscription collSub = theWrapped.subscribe(evt -> ObservableCollectionEvent.doWith(
 				new ObservableCollectionEvent<>(evt.getElementId(), evt.getType(), evt.getOldValue(), evt.getNewValue(), evt), observer));
@@ -2010,6 +2197,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public boolean order(Object elementId1, Object elementId2) {
+			return theWrapped.order(elementId1, elementId2);
+		}
+
+		@Override
 		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
 			class ElementRefreshValue{
 				E value;
@@ -2113,6 +2305,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public ObservableElementSpliterator<E> spliterator() {
 			return modFilter(theWrapped.spliterator());
+		}
+
+		@Override
+		public boolean order(Object elementId1, Object elementId2) {
+			return theWrapped.order(elementId1, elementId2);
 		}
 
 		/**
@@ -2332,7 +2529,7 @@ public final class ObservableCollectionImpl {
 		private final Observable<?> theUntil;
 		private final Map<Object, E> theCacheMap;
 		private final SimpleObservable<ObservableCollectionEvent<? extends E>> theChanges;
-		private final Collection<E> theCache;
+		private final BetterCollection<E> theCache;
 		private final AtomicBoolean isDone;
 
 		/**
@@ -2359,13 +2556,39 @@ public final class ObservableCollectionImpl {
 			return theUntil;
 		}
 
-		/** @return The cache collection for this cache to use */
-		protected Collection<E> createCache() {
-			return new ArrayList<>();
+		/**
+		 * Creates the collection to be the cache for this collection. The cache must use the same {@link #equivalence() equivalence} as the
+		 * wrapped collection. It need not be thread-safe.
+		 *
+		 * The default implementation of this method returns a List. This may be unnecessary in general, but it may be useful for many
+		 * specific implementations.
+		 *
+		 * @return The cache collection for this cache to use
+		 */
+		protected BetterCollection<E> createCache() {
+			return new TreeList<E>() {
+				@Override
+				public boolean contains(Object o) {
+					return find(v -> equivalence().elementEquals(v, o), el -> {
+					});
+				}
+
+				@Override
+				public int indexOf(Object o) {
+					DefaultNode<E> node = findNode(n -> equivalence().elementEquals(n.getValue(), o), Ternian.TRUE);
+					return node == null ? -1 : node.getIndex();
+				}
+
+				@Override
+				public int lastIndexOf(Object o) {
+					DefaultNode<E> node = findNode(n -> equivalence().elementEquals(n.getValue(), o), Ternian.FALSE);
+					return node == null ? -1 : node.getIndex();
+				}
+			};
 		}
 
 		/** @return This cache's collection */
-		protected Collection<E> getCache() {
+		protected BetterCollection<E> getCache() {
 			return theCache;
 		}
 
@@ -2404,13 +2627,8 @@ public final class ObservableCollectionImpl {
 				getCache().remove(change.getOldValue());
 				break;
 			case set:
-				if (getCache() instanceof BetterCollection)
-					((BetterCollection<E>) getCache()).find(v -> equivalence().elementEquals(v, change.getOldValue()),
-						el -> ((CollectionElement<E>) el).set(change.getNewValue(), change));
-				else {
-					getCache().remove(change.getOldValue());
-					getCache().add(change.getNewValue());
-				}
+				getCache().find(v -> equivalence().elementEquals(v, change.getOldValue()),
+					el -> ((CollectionElement<E>) el).set(change.getNewValue(), change));
 				break;
 			}
 		}
@@ -2553,6 +2771,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public boolean order(Object elementId1, Object elementId2) {
+			return theWrapped.order(elementId1, elementId2);
+		}
+
+		@Override
 		public boolean contains(Object o) {
 			if (isDone.get())
 				return false;
@@ -2655,20 +2878,20 @@ public final class ObservableCollectionImpl {
 				};
 				Subscription changeSub;
 				try (Transaction t = lock(false, null)) {
-				spliterator()
+					spliterator()
 					.forEachObservableElement(el -> ObservableCollectionEvent.doWith(initialEvent(el.get(), el.getElementId()), observer));
 					changeSub = theChanges.act(observer::accept);
 				}
 				return removeAll -> {
 					changeSub.unsubscribe();
 					if (removeAll) {
-					try (Transaction t = lock(false, null)) {
-						ObservableElementSpliterator<E> spliter = spliterator();
-						// Better to remove from the end if possible
-						if (spliter instanceof ReversibleSpliterator)
-							spliter = (ObservableElementSpliterator<E>) ((ReversibleSpliterator<E>) spliter).reverse();
-						spliter.forEachObservableElement(
-							el -> ObservableCollectionEvent.doWith(removeEvent(el.get(), el.getElementId()), observer));
+						try (Transaction t = lock(false, null)) {
+							ObservableElementSpliterator<E> spliter = spliterator();
+							// Better to remove from the end if possible
+							if (spliter instanceof ReversibleSpliterator)
+								spliter = (ObservableElementSpliterator<E>) ((ReversibleSpliterator<E>) spliter).reverse();
+							spliter.forEachObservableElement(
+								el -> ObservableCollectionEvent.doWith(removeEvent(el.get(), el.getElementId()), observer));
 						}
 					}
 				};
@@ -2786,6 +3009,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public ObservableElementSpliterator<E> spliterator() {
 			return theWrapped.spliterator();
+		}
+
+		@Override
+		public boolean order(Object elementId1, Object elementId2) {
+			return theWrapped.order(elementId1, elementId2);
 		}
 
 		@Override
@@ -2990,6 +3218,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public boolean order(Object elementId1, Object elementId2) {
+			return ((Integer) elementId1).intValue() < ((Integer) elementId2).intValue();
+		}
+
+		@Override
 		public boolean contains(Object o) {
 			return theCollection.contains(o);
 		}
@@ -3001,16 +3234,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean containsAny(Collection<?> c) {
-			if (theCollection.size() < c.size()) {
-				for (E v : theCollection)
-					if (c.contains(v))
-						return true;
-			} else {
-				for (Object o : c)
-					if (theCollection.contains(o))
-						return true;
-			}
-			return false;
+			return ObservableCollectionImpl.containsAny(this, c);
 		}
 
 		@Override
@@ -3176,6 +3400,11 @@ public final class ObservableCollectionImpl {
 					return wrapperEl;
 				};
 			});
+		}
+
+		@Override
+		public boolean order(Object elementId1, Object elementId2) {
+			return theCollection.order(elementId1, elementId2);
 		}
 
 		@Override
@@ -3434,6 +3663,14 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public boolean order(Object elementId1, Object elementId2) {
+			ObservableCollection<E> coll = theCollectionObservable.get();
+			if (coll == null)
+				throw new IllegalArgumentException("No collection present to compare elements");
+			return coll.order(elementId1, elementId2);
+		}
+
+		@Override
 		public boolean contains(Object o) {
 			ObservableCollection<E> coll = theCollectionObservable.get();
 			return coll == null ? false : coll.contains(o);
@@ -3593,6 +3830,12 @@ public final class ObservableCollectionImpl {
 		/** @return The flattened collection of collections */
 		protected ObservableCollection<? extends ObservableCollection<? extends E>> getOuter() {
 			return theOuter;
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			// Just a guess, since we can't be sure whether any inner collections will ever support locking
+			return theOuter.isLockSupported();
 		}
 
 		@Override
@@ -3777,6 +4020,27 @@ public final class ObservableCollectionImpl {
 		@Override
 		public ObservableElementSpliterator<E> spliterator() {
 			return flatten(theOuter.spliterator(), ObservableCollection::spliterator);
+		}
+
+		@Override
+		public boolean order(Object elementId1, Object elementId2) {
+			BiTuple<Object, Object> tuple1 = (BiTuple<Object, Object>) elementId1;
+			BiTuple<Object, Object> tuple2 = (BiTuple<Object, Object>) elementId2;
+			if (!tuple1.getValue1().equals(tuple2.getValue1()))
+				return theOuter.order(tuple1.getValue1(), tuple2.getValue1());
+			// Assuming we're already locked, since this should only happen from a spliterator or a subscription
+			ObservableElementSpliterator<? extends ObservableCollection<? extends E>> spliter = theOuter.spliterator();
+			boolean[] found = new boolean[1];
+			boolean[] order = new boolean[1];
+			while (!found[0] && spliter.tryAdvanceObservableElement(el -> {
+				found[0] = el.getElementId().equals(tuple1.getValue1());
+				if (found[0])
+					order[0] = el.get().order(tuple1.getValue2(), tuple2.getValue2());
+			})) {
+			}
+			if (!found[0])
+				throw new IllegalArgumentException("The given elements do not exist in this collection");
+			return order[0];
 		}
 
 		/**
