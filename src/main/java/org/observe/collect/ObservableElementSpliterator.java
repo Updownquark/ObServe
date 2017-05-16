@@ -164,7 +164,7 @@ public interface ObservableElementSpliterator<E> extends ElementSpliterator<E> {
 		}
 
 		@Override
-		public Object getElementId() {
+		public ElementId getElementId() {
 			return getWrapped().getElementId();
 		}
 	}

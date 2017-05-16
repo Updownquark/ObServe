@@ -3,6 +3,7 @@ package org.observe.collect;
 import java.util.AbstractMap;
 import java.util.AbstractSet;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -10,6 +11,8 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -100,9 +103,60 @@ public interface Equivalence<E> {
 		}
 	};
 
+	static <E> Equivalence<E> of(Class<E> type, boolean nullable, Comparator<? super E> compare) {
+		return new ComparatorEquivalence<>(type, nullable, compare);
+	}
+
 	default <T> Equivalence<T> map(Class<T> type, Function<? super E, ? extends T> map, Function<? super T, ? extends E> reverse,
 		Predicate<? super T> filter) {
 		return new MappedEquivalence<>(this, type, filter, map, reverse);
+	}
+
+	class ComparatorEquivalence<E> implements Equivalence<E> {
+		private final Class<E> type;
+		private final boolean nullable;
+		private final Comparator<? super E> compare;
+
+		public ComparatorEquivalence(Class<E> type, boolean nullable, Comparator<? super E> compare) {
+			this.type = type;
+			this.nullable = nullable;
+			this.compare = compare;
+		}
+
+		public Class<E> getType() {
+			return type;
+		}
+
+		public boolean isNullable() {
+			return nullable;
+		}
+
+		public Comparator<? super E> comparator() {
+			return compare;
+		}
+
+		@Override
+		public boolean isElement(Object v) {
+			if (v == null)
+				return nullable;
+			else
+				return type.isInstance(v);
+		}
+
+		@Override
+		public boolean elementEquals(E element, Object value) {
+			return isElement(value) && compare.compare(element, (E) value) == 0;
+		}
+
+		@Override
+		public <E2 extends E> Set<E2> createSet() {
+			return new TreeSet<>(compare);
+		}
+
+		@Override
+		public <E2 extends E, V> Map<E2, V> createMap() {
+			return new TreeMap<>(compare);
+		}
 	}
 
 	class MappedEquivalence<E, T> implements Equivalence<T> {
@@ -340,4 +394,5 @@ public interface Equivalence<E> {
 			};
 		}
 	}
+
 }

@@ -1,7 +1,5 @@
 package org.observe.collect;
 
-import static org.observe.ObservableDebug.d;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -9,7 +7,6 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
-import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -20,8 +17,16 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
+import org.observe.collect.ObservableCollectionImpl.ElementRefreshingCollection;
+import org.observe.collect.ObservableCollectionImpl.FlattenedObservableCollection;
+import org.observe.collect.ObservableCollectionImpl.FlattenedValueCollection;
+import org.observe.collect.ObservableCollectionImpl.FlattenedValuesCollection;
+import org.observe.collect.ObservableCollectionImpl.ModFilteredCollection;
+import org.observe.collect.ObservableCollectionImpl.RefreshingCollection;
+import org.observe.collect.ObservableCollectionImpl.TakenUntilObservableCollection;
+import org.observe.collect.ObservableOrderedCollection.TakenUntilOrderedElement;
+import org.observe.collect.ObservableOrderedCollectionImpl.PositionObservable;
 import org.observe.util.ObservableUtils;
-import org.qommons.Equalizer;
 import org.qommons.Transaction;
 import org.qommons.tree.CountedRedBlackNode;
 import org.qommons.tree.CountedRedBlackNode.DefaultNode;
@@ -43,11 +48,11 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @param onElement The listener to be notified when new elements are added to the collection
 	 * @return The function to call when the calling code is no longer interested in this collection
 	 */
-	Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement);
+	CollectionSubscription subscribeOrdered(Consumer<? super OrderedCollectionEvent<? extends E>> observer);
 
 	@Override
-	default Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
-		return onOrderedElement(onElement);
+	default CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
+		return subscribeOrdered(observer);
 	}
 
 	/**
@@ -57,38 +62,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 */
 	@Override
 	default Observable<? extends OrderedCollectionChangeEvent<E>> changes() {
-		return d().debug(new OrderedCollectionChangesObservable<>(this)).from("changes", this).get();
-	}
-
-	/**
-	 * @param filter The filter function
-	 * @return The first value in this collection passing the filter, or null if none of this collection's elements pass
-	 */
-	default ObservableValue<E> findFirst(Predicate<E> filter) {
-		return d().debug(new OrderedCollectionFinder<>(this, filter, true)).from("find", this).using("filter", filter).get();
-	}
-
-	/**
-	 * @param filter The filter function
-	 * @return The first value in this collection passing the filter, or null if none of this collection's elements pass
-	 */
-	default ObservableValue<E> findLast(Predicate<E> filter) {
-		return d().debug(new OrderedCollectionFinder<>(this, filter, false)).from("findLast", this).using("filter", filter).get();
-	}
-
-	/** @return The first value in this collection, or null if this collection is empty */
-	default ObservableValue<E> getFirst() {
-		return d().debug(new OrderedCollectionFinder<>(this, value -> true, true)).from("first", this).get();
-	}
-
-	/**
-	 * Finds the last value in this list. The get() method of this observable may have linear time unless this is an instance of
-	 * {@link ObservableRandomAccessList}
-	 *
-	 * @return The last value in this collection, or null if this collection is empty
-	 */
-	default ObservableValue<E> getLast() {
-		return d().debug(new OrderedCollectionFinder<>(this, value -> true, false)).from("last", this).get();
+		return new ObservableOrderedCollectionImpl.OrderedCollectionChangesObservable<>(this);
 	}
 
 	// Ordered collections need to know the indexes of their elements in a somewhat efficient way, so these index methods make sense here
@@ -165,47 +139,13 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	@Override
-	default ObservableOrderedCollection<E> safe() {
-		if (isSafe())
-			return this;
-		else
-			return d().debug(new SafeOrderedCollection<>(this)).from("safe", this).get();
+	default ObservableOrderedCollection<E> withEquivalence(Equivalence<? super E> otherEquiv) {
+		return new ObservableOrderedCollectionImpl.EquivalenceSwitchedOrderedCollection<>(this, otherEquiv);
 	}
 
 	@Override
-	default <T> ObservableOrderedCollection<T> map(Function<? super E, T> map) {
-		return (ObservableOrderedCollection<T>) ObservableCollection.super.map(map);
-	}
-
-	@Override
-	default <T> ObservableOrderedCollection<T> map(TypeToken<T> type, Function<? super E, T> map) {
-		return (ObservableOrderedCollection<T>) ObservableCollection.super.map(type, map);
-	}
-
-	@Override
-	default <T> ObservableOrderedCollection<T> map(TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse) {
-		return d().debug(new MappedOrderedCollection<>(this, type, map, reverse)).from("map", this).using("map", map)
-			.using("reverse", reverse).get();
-	}
-
-	@Override
-	default ObservableOrderedCollection<E> filter(Predicate<? super E> filter) {
+	default ObservableOrderedCollection<E> filter(Function<? super E, String> filter) {
 		return (ObservableOrderedCollection<E>) ObservableCollection.super.filter(filter);
-	}
-
-	@Override
-	default ObservableOrderedCollection<E> filter(Predicate<? super E> filter, boolean staticFilter) {
-		return (ObservableOrderedCollection<E>) ObservableCollection.super.filter(filter, staticFilter);
-	}
-
-	@Override
-	default ObservableOrderedCollection<E> filterDynamic(Predicate<? super E> filter) {
-		return (ObservableOrderedCollection<E>) ObservableCollection.super.filterDynamic(filter);
-	}
-
-	@Override
-	default ObservableOrderedCollection<E> filterStatic(Predicate<? super E> filter) {
-		return (ObservableOrderedCollection<E>) ObservableCollection.super.filterStatic(filter);
 	}
 
 	@Override
@@ -214,56 +154,45 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	@Override
-	default <T> ObservableOrderedCollection<T> filterMap(Function<? super E, T> filterMap) {
-		return (ObservableOrderedCollection<T>) ObservableCollection.super.filterMap(filterMap);
+	default <T> ObservableOrderedCollection<T> map(Function<? super E, T> map) {
+		return (ObservableOrderedCollection<T>) ObservableCollection.super.map(map);
 	}
 
 	@Override
-	default <T> ObservableOrderedCollection<T> filterMap(TypeToken<T> type, Function<? super E, T> map, boolean staticFilter) {
-		return (ObservableOrderedCollection<T>) ObservableCollection.super.filterMap(type, map, staticFilter);
+	default <T> MappedCollectionBuilder<E, E, T> buildMap(TypeToken<T> type) {
+		// TODO Auto-generated method stub
 	}
 
 	@Override
-	default <T> ObservableOrderedCollection<T> filterMap(TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse,
-		boolean staticFilter) {
-		return (ObservableOrderedCollection<T>) ObservableCollection.super.filterMap(type, map, reverse, staticFilter);
+	default <T> ObservableOrderedCollection<T> filterMap(FilterMapDef<E, ?, T> filterMap) {
+		// TODO Auto-generated method stub
 	}
 
 	@Override
-	default <T> ObservableOrderedCollection<T> filterMap2(TypeToken<T> type, Function<? super E, FilterMapResult<T>> map,
-		Function<? super T, E> reverse, boolean staticFilter) {
-		if(staticFilter)
-			return d().debug(new StaticFilteredOrderedCollection<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
-				.using("reverse", reverse).get();
-		else
-			return d().debug(new DynamicFilteredOrderedCollection<>(this, type, map, reverse)).from("filterMap", this).using("map", map)
-				.using("reverse", reverse).get();
+	default <T, V> CombinedCollectionBuilder2<E, T, V> combineWith(ObservableValue<T> arg, TypeToken<V> targetType) {
+		// TODO Auto-generated method stub
 	}
 
 	@Override
-	default <T, V> ObservableOrderedCollection<V> combine(ObservableValue<T> arg, BiFunction<? super E, ? super T, V> func) {
-		return (ObservableOrderedCollection<V>) ObservableCollection.super.combine(arg, func);
+	default <V> ObservableOrderedCollection<V> combine(CombinedCollectionDef<E, V> combination) {
+		// TODO Auto-generated method stub
 	}
 
 	@Override
-	default <T, V> ObservableOrderedCollection<V> combine(ObservableValue<T> arg, TypeToken<V> type,
-		BiFunction<? super E, ? super T, V> func) {
-		return (ObservableOrderedCollection<V>) ObservableCollection.super.combine(arg, type, func);
+	default ModFilterBuilder<E> filterModification() {
+		// TODO Auto-generated method stub
+		return ObservableCollection.super.filterModification();
 	}
 
 	@Override
-	default <T, V> ObservableOrderedCollection<V> combine(ObservableValue<T> arg, TypeToken<V> type,
-		BiFunction<? super E, ? super T, V> func,
-		BiFunction<? super V, ? super T, E> reverse) {
-		return d().debug(new CombinedOrderedCollection<>(this, arg, type, func, reverse)).from("combine", this).from("with", arg)
-			.using("combination", func).using("reverse", reverse).get();
+	default ObservableOrderedCollection<E> filterModification(ModFilterDef<E> filter) {
+		// TODO Auto-generated method stub
 	}
 
-	// @Override
-	// default <K> ObservableMultiMap<K, E> groupBy(TypeToken<K> keyType, Function<E, K> keyMap, Equalizer equalizer) {
-	// return d().debug(new GroupedOrderedMultiMap<>(this, keyMap, keyType, equalizer)).from("grouped", this).using("keyMap", keyMap)
-	// .using("equalizer", equalizer).get();
-	// }
+	@Override
+	default ObservableOrderedCollection<E> cached(Observable<?> until) {
+		// TODO Auto-generated method stub
+	}
 
 	/**
 	 * @param refresh The observable to re-fire events on
@@ -271,67 +200,22 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 */
 	@Override
 	default ObservableOrderedCollection<E> refresh(Observable<?> refresh) {
-		return d().debug(new RefreshingOrderedCollection<>(this, refresh)).from("refresh", this).from("on", refresh).get();
+		return new RefreshingOrderedCollection<>(this, refresh);
 	}
 
 	@Override
 	default ObservableOrderedCollection<E> refreshEach(Function<? super E, Observable<?>> refire) {
-		return d().debug(new ElementRefreshingOrderedCollection<>(this, refire)).from("refreshEach", this).using("on", refire).get();
-	}
-
-	/**
-	 * @param compare The comparator to use to sort this collection's elements
-	 * @return A new collection containing all the same elements as this collection, but ordered according to the given comparator
-	 */
-	default ObservableOrderedCollection<E> sorted(Comparator<? super E> compare) {
-		return d().debug(new SortedObservableCollection<>(this, compare)).from("sorted", this).using("compare", compare).get();
-	}
-
-	@Override
-	default ObservableOrderedCollection<E> immutable() {
-		return d().debug(new ImmutableOrderedCollection<>(this)).from("immutable", this).get();
-	}
-
-	@Override
-	default ObservableOrderedCollection<E> filterRemove(Predicate<? super E> filter) {
-		return (ObservableOrderedCollection<E>) ObservableCollection.super.filterRemove(filter);
-	}
-
-	@Override
-	default ObservableOrderedCollection<E> noRemove() {
-		return (ObservableOrderedCollection<E>) ObservableCollection.super.noRemove();
-	}
-
-	@Override
-	default ObservableOrderedCollection<E> filterAdd(Predicate<? super E> filter) {
-		return (ObservableOrderedCollection<E>) ObservableCollection.super.filterAdd(filter);
-	}
-
-	@Override
-	default ObservableOrderedCollection<E> noAdd() {
-		return (ObservableOrderedCollection<E>) ObservableCollection.super.noAdd();
-	}
-
-	@Override
-	default ObservableOrderedCollection<E> filterModification(Predicate<? super E> removeFilter, Predicate<? super E> addFilter) {
-		return new ModFilteredOrderedCollection<>(this, removeFilter, addFilter);
-	}
-
-	@Override
-	default ObservableOrderedCollection<E> cached() {
-		return d().debug(new SafeCachedOrderedCollection<>(this)).from("cached", this).get();
+		return new ElementRefreshingOrderedCollection<>(this, refire);
 	}
 
 	@Override
 	default ObservableOrderedCollection<E> takeUntil(Observable<?> until) {
-		return d().debug(new TakenUntilOrderedCollection<>(this, until, true)).from("taken", this).from("until", until)
-			.tag("terminate", true).get();
+		return new TakenUntilOrderedCollection<>(this, until, true);
 	}
 
 	@Override
 	default ObservableOrderedCollection<E> unsubscribeOn(Observable<?> until) {
-		return d().debug(new TakenUntilOrderedCollection<>(this, until, false)).from("taken", this).from("until", until)
-			.tag("terminate", false).get();
+		return new TakenUntilOrderedCollection<>(this, until, false);
 	}
 
 	/**
@@ -343,7 +227,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 */
 	public static <E> ObservableOrderedCollection<E> flattenValues(
 		ObservableOrderedCollection<? extends ObservableValue<? extends E>> collection) {
-		return d().debug(new FlattenedOrderedValuesCollection<E>(collection)).from("flatten", collection).get();
+		return new FlattenedOrderedValuesCollection<E>(collection);
 	}
 
 	/**
@@ -354,7 +238,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 */
 	public static <E> ObservableOrderedCollection<E> flattenValue(
 		ObservableValue<? extends ObservableOrderedCollection<E>> collectionObservable) {
-		return d().debug(new FlattenedOrderedValueCollection<>(collectionObservable)).from("flatten", collectionObservable).get();
+		return new FlattenedOrderedValueCollection<>(collectionObservable);
 	}
 
 	/**
@@ -365,636 +249,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @return A collection containing all elements of all collections in the outer collection
 	 */
 	public static <E> ObservableOrderedCollection<E> flatten(ObservableOrderedCollection<? extends ObservableOrderedCollection<E>> list) {
-		return d().debug(new FlattenedOrderedCollection<>(list)).from("flatten", list).get();
-	}
-
-	/**
-	 * Finds something in an {@link ObservableOrderedCollection}
-	 *
-	 * @param <E> The type of value to find
-	 */
-	class OrderedCollectionFinder<E> implements ObservableValue<E> {
-		private final ObservableOrderedCollection<E> theCollection;
-
-		private final TypeToken<E> theType;
-
-		private final Predicate<? super E> theFilter;
-
-		private final boolean isForward;
-
-		OrderedCollectionFinder(ObservableOrderedCollection<E> collection, Predicate<? super E> filter, boolean forward) {
-			theCollection = collection.safe();
-			theType = theCollection.getType().wrap();
-			theFilter = filter;
-			isForward = forward;
-		}
-
-		/** @return The collection that this finder searches */
-		public ObservableOrderedCollection<E> getCollection() {
-			return theCollection;
-		}
-
-		/** @return The function to test elements with */
-		public Predicate<? super E> getFilter() {
-			return theFilter;
-		}
-
-		/** @return Whether this finder searches forward or backward in the collection */
-		public boolean isForward() {
-			return isForward;
-		}
-
-		@Override
-		public TypeToken<E> getType() {
-			return theType;
-		}
-
-		@Override
-		public E get() {
-			if(isForward) {
-				for(E element : theCollection) {
-					if(theFilter.test(element))
-						return element;
-				}
-				return null;
-			} else {
-				E ret = null;
-				for(E element : theCollection) {
-					if(theFilter.test(element))
-						ret = element;
-				}
-				return ret;
-			}
-		}
-
-		@Override
-		public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
-			final Object key = new Object();
-			int [] index = new int[] {-1};
-			boolean[] firedInit = new boolean[1];
-			Subscription collSub = theCollection.onOrderedElement(new Consumer<ObservableOrderedElement<E>>() {
-				private List<ObservableOrderedElement<E>> theElements = new ArrayList<>();
-				private E theValue;
-
-				@Override
-				public void accept(ObservableOrderedElement<E> element) {
-					element.subscribe(new Observer<ObservableValueEvent<E>>() {
-						@Override
-						public <V3 extends ObservableValueEvent<E>> void onNext(V3 value) {
-							int listIndex = element.getIndex();
-							if (value.isInitial())
-								theElements.add(listIndex, element);
-							if(index[0] < 0 || isBetterIndex(listIndex, index[0])) {
-								if(theFilter.test(value.getValue()))
-									newBest(value.getValue(), listIndex);
-								else if(listIndex == index[0])
-									findNextBest(listIndex, false);
-							}
-						}
-
-						@Override
-						public <V3 extends ObservableValueEvent<E>> void onCompleted(V3 value) {
-							int listIndex = element.getIndex();
-							theElements.remove(listIndex);
-							if(listIndex == index[0]) {
-								findNextBest(listIndex, true);
-							} else if(listIndex < index[0])
-								index[0]--;
-						}
-
-						private boolean isBetterIndex(int test, int current) {
-							if(isForward)
-								return test <= current;
-							else
-								return test >= current;
-						}
-
-						private void findNextBest(int newIndex, boolean removed) {
-							boolean found = false;
-							if (isForward) {
-								if (!removed)
-									newIndex++;
-								for (int i = newIndex; i < theElements.size(); i++) {
-									E value = theElements.get(i).get();
-									if (theFilter.test(value)) {
-										found = true;
-										newBest(value, i);
-										break;
-									}
-								}
-							} else {
-								for (int i = newIndex - 1; i >= 0; i--) {
-									E value = theElements.get(i).get();
-									if (theFilter.test(value)) {
-										found = true;
-										newBest(value, i);
-										break;
-									}
-								}
-							}
-							if(!found)
-								newBest(null, -1);
-						}
-					});
-				}
-
-				void newBest(E value, int newIndex) {
-					E oldValue = theValue;
-					theValue = value;
-					index[0] = newIndex;
-					CollectionSession session = theCollection.getSession().get();
-					if (session != null) {
-						session.putIfAbsent(key, "oldBest", oldValue);
-						session.put(key, "newBest", theValue);
-					}
-					if (!firedInit[0]) {
-						firedInit[0] = true;
-						Observer.onNextAndFinish(observer, createInitialEvent(theValue, null));
-					} else if (session == null)
-						Observer.onNextAndFinish(observer, createChangeEvent(oldValue, theValue, null));
-				}
-			});
-			if (!firedInit[0]) {
-				firedInit[0] = true;
-				Observer.onNextAndFinish(observer, createInitialEvent(null, null));
-			}
-			Subscription transSub = theCollection.getSession().subscribe(new Observer<ObservableValueEvent<CollectionSession>>() {
-				@Override
-				public <V2 extends ObservableValueEvent<CollectionSession>> void onNext(V2 value) {
-					CollectionSession completed = value.getOldValue();
-					if(completed == null)
-						return;
-					E oldBest = (E) completed.get(key, "oldBest");
-					E newBest = (E) completed.get(key, "newBest");
-					if(oldBest == null && newBest == null)
-						return;
-					Observer.onNextAndFinish(observer, createChangeEvent(oldBest, newBest, value));
-				}
-			});
-			return () -> {
-				collSub.unsubscribe();
-				transSub.unsubscribe();
-			};
-		}
-
-		@Override
-		public boolean isSafe() {
-			return theCollection.isSafe();
-		}
-
-		@Override
-		public String toString() {
-			return "find in " + theCollection;
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableOrderedCollection#observeAt(int, Function)}
-	 *
-	 * @param <E> The type of the element
-	 */
-	class PositionObservable<E> implements ObservableValue<E> {
-		private final ObservableOrderedCollection<E> theCollection;
-		private final int theIndex;
-		private final Function<Integer, E> theDefaultValueGenerator;
-
-		protected PositionObservable(ObservableOrderedCollection<E> collection, int index, Function<Integer, E> defValueGen) {
-			theCollection = collection;
-			theIndex = index;
-			theDefaultValueGenerator = defValueGen;
-		}
-
-		protected ObservableOrderedCollection<E> getCollection() {
-			return theCollection;
-		}
-
-		protected int getIndex() {
-			return theIndex;
-		}
-
-		protected Function<Integer, E> getDefaultValueGenerator() {
-			return theDefaultValueGenerator;
-		}
-
-		@Override
-		public TypeToken<E> getType() {
-			return theCollection.getType();
-		}
-
-		@Override
-		public E get() {
-			if (theIndex < theCollection.size())
-				return theCollection.get(theIndex);
-			else if (theDefaultValueGenerator != null)
-				return theDefaultValueGenerator.apply(theCollection.size());
-			else
-				throw new IndexOutOfBoundsException(theIndex + " of " + theCollection.size());
-		}
-
-		@Override
-		public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
-			final boolean[] initialized = new boolean[1];
-			final Object sessionKey = new Object();
-			final boolean[] hasValue = new boolean[1];
-			class ElConsumer implements Consumer<ObservableOrderedElement<E>> {
-				class ElObserver implements Observer<ObservableValueEvent<E>> {
-					private final ObservableOrderedElement<E> element;
-
-					ElObserver(ObservableOrderedElement<E> el) {
-						element = el;
-					}
-
-					@Override
-					public <V extends ObservableValueEvent<E>> void onNext(V evt) {
-						if (element.getIndex() == theIndex) {
-							if (!initialized[0]) {
-								hasValue[0] = true;
-								currentValue = evt.getValue();
-								Observer.onNextAndFinish(observer, createInitialEvent(currentValue, evt));
-							} else
-								newValue(evt.getValue());
-						}
-					}
-
-					@Override
-					public <V extends ObservableValueEvent<E>> void onCompleted(V evt) {
-						elSubs.add(els.get(theIndex).subscribe(new ElObserver(els.get(theIndex))));
-					}
-				}
-
-				private final List<ObservableOrderedElement<E>> els;
-				private final List<Subscription> elSubs;
-				E currentValue;
-
-				{
-					if (theCollection.isSafe()) {
-						els = new ArrayList<>(theCollection.size());
-						elSubs = new ArrayList<>(theCollection.size());
-					} else {
-						els = Collections.synchronizedList(new ArrayList<>(theCollection.size()));
-						elSubs = Collections.synchronizedList(new ArrayList<>(theCollection.size()));
-					}
-				}
-
-				@Override
-				public void accept(ObservableOrderedElement<E> el) {
-					els.add(el.getIndex(), el);
-					if (el.getIndex() <= theIndex) {
-						elSubs.add(el.getIndex(), el.subscribe(new ElObserver(el)));
-						if (elSubs.size() > theIndex + 1)
-							elSubs.remove(theIndex + 1).unsubscribe();
-						if (initialized[0] && el.getIndex() != theIndex) {
-							newValue(els.get(theIndex).get());
-						}
-					}
-				}
-
-				private void newValue(E newValue) {
-					hasValue[0] = true;
-					E oldValue = currentValue;
-					currentValue = newValue;
-
-					CollectionSession session = theCollection.getSession().get();
-					if (session == null) {
-						Observer.onNextAndFinish(observer, createChangeEvent(oldValue, currentValue, null));
-					} else {
-						if (session.get(sessionKey, "changed") == null) {
-							session.put(sessionKey, "changed", true);
-							session.put(sessionKey, "oldValue", oldValue);
-						}
-						session.put(sessionKey, "newValue", currentValue);
-					}
-				}
-			}
-			ElConsumer consumer = new ElConsumer();
-			Subscription listSub = theCollection.onOrderedElement(consumer);
-			initialized[0] = true;
-			Subscription sessionSub = theCollection.getSession().act(evt -> {
-				if (evt.getOldValue() != null && evt.getOldValue().get(sessionKey, "changed") != null) {
-					Observer.onNextAndFinish(observer, createChangeEvent((E) evt.getOldValue().get(sessionKey, "oldValue"),
-						(E) evt.getOldValue().get(sessionKey, "newValue"), evt.getCause()));
-				}
-			});
-			if (!hasValue[0]) {
-				if (theDefaultValueGenerator != null) {
-					try {
-						consumer.currentValue = theDefaultValueGenerator.apply(theCollection.size());
-					} catch (RuntimeException e) {
-						// Just set a null value if the value generator throws an exception
-						consumer.currentValue = null;
-					}
-				}
-				hasValue[0] = true;
-				Observer.onNextAndFinish(observer, createInitialEvent(consumer.currentValue, null));
-			}
-			return () -> {
-				listSub.unsubscribe();
-				sessionSub.unsubscribe();
-			};
-		}
-
-		@Override
-		public boolean isSafe() {
-			return theCollection.isSafe();
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableOrderedCollection#safe()}
-	 *
-	 * @param <E> The type of elements in the collection
-	 */
-	class SafeOrderedCollection<E> extends SafeObservableCollection<E> implements ObservableOrderedCollection<E> {
-		public SafeOrderedCollection(ObservableOrderedCollection<E> wrap) {
-			super(wrap);
-		}
-
-		@Override
-		protected ObservableOrderedCollection<E> getWrapped() {
-			return (ObservableOrderedCollection<E>) super.getWrapped();
-		}
-
-		@Override
-		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
-			return onElement(element -> onElement.accept((ObservableOrderedElement<E>) element));
-		}
-
-		@Override
-		protected ObservableOrderedElement<E> wrapElement(ObservableElement<E> wrap) {
-			return new ObservableOrderedElement<E>() {
-				@Override
-				public TypeToken<E> getType() {
-					return wrap.getType();
-				}
-
-				@Override
-				public E get() {
-					return wrap.get();
-				}
-
-				@Override
-				public int getIndex() {
-					return ((ObservableOrderedElement<E>) wrap).getIndex();
-				}
-
-				@Override
-				public boolean isSafe() {
-					return true;
-				}
-
-				@Override
-				public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
-					ObservableOrderedElement<E> wrapper = this;
-					return wrap.subscribe(new Observer<ObservableValueEvent<E>>() {
-						@Override
-						public <V extends ObservableValueEvent<E>> void onNext(V event) {
-							getLock().lock();
-							try {
-								Observer.onNextAndFinish(observer, ObservableUtils.wrap(event, wrapper));
-							} finally {
-								getLock().unlock();
-							}
-						}
-
-						@Override
-						public <V extends ObservableValueEvent<E>> void onCompleted(V event) {
-							getLock().lock();
-							try {
-								Observer.onCompletedAndFinish(observer, ObservableUtils.wrap(event, wrapper));
-							} finally {
-								getLock().unlock();
-							}
-						}
-					});
-				}
-
-				@Override
-				public ObservableValue<E> persistent() {
-					return wrap.persistent();
-				}
-			};
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableOrderedCollection#map(Function)}
-	 *
-	 * @param <E> The type of the collection to map
-	 * @param <T> The type of the mapped collection
-	 */
-	class MappedOrderedCollection<E, T> extends MappedObservableCollection<E, T> implements ObservableOrderedCollection<T> {
-		protected MappedOrderedCollection(ObservableOrderedCollection<E> wrap, TypeToken<T> type, Function<? super E, T> map,
-			Function<? super T, E> reverse) {
-			super(wrap, type, map, reverse);
-		}
-
-		@Override
-		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<T>> onElement) {
-			return onElement(element -> onElement.accept((ObservableOrderedElement<T>) element));
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableOrderedCollection#filterMap(Function)}
-	 *
-	 * @param <E> The type of the collection to be filter-mapped
-	 * @param <T> The type of the mapped collection
-	 */
-	class StaticFilteredOrderedCollection<E, T> extends StaticFilteredCollection<E, T> implements ObservableOrderedCollection<T> {
-		StaticFilteredOrderedCollection(ObservableOrderedCollection<E> wrap, TypeToken<T> type, Function<? super E, FilterMapResult<T>> map,
-			Function<? super T, E> reverse) {
-			super(wrap.safe(), type, map, reverse);
-		}
-
-		@Override
-		protected ObservableOrderedCollection<E> getWrapped() {
-			return (ObservableOrderedCollection<E>) super.getWrapped();
-		}
-
-		@Override
-		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<T>> onElement) {
-			return onElement(element -> onElement.accept((ObservableOrderedElement<T>) element));
-		}
-
-		@Override
-		public Subscription onElement(Consumer<? super ObservableElement<T>> onElement) {
-			final List<StaticFilteredOrderedElement<T>> filteredElements = new java.util.ArrayList<>();
-			return super.onElement(element -> {
-				StaticFilteredOrderedElement<T> filteredEl = new StaticFilteredOrderedElement<>((ObservableOrderedElement<T>) element,
-					filteredElements);
-				int filteredIndex = Collections.binarySearch(filteredElements, filteredEl,
-					(fEl1, fEl2) -> fEl1.getWrapped().getIndex() - fEl2.getWrapped().getIndex());
-				if (filteredIndex >= 0)
-					throw new IllegalStateException(
-						"Index " + filteredEl.getWrapped().getIndex() + " already present in filtered elements");
-				filteredElements.add(-filteredIndex - 1, filteredEl);
-				onElement.accept(filteredEl);
-				filteredEl.getWrapped().completed().act(elValue -> filteredElements.remove(filteredEl.getIndex()));
-				// onElement.accept((ObservableOrderedElement<T>) element);
-			});
-		}
-	}
-
-	/**
-	 * The type of element in dynamically filtered ordered collections
-	 *
-	 * @param <E> The type of this element
-	 */
-	class StaticFilteredOrderedElement<E> implements ObservableOrderedElement<E> {
-		private final ObservableOrderedElement<E> theWrapped;
-		private final List<StaticFilteredOrderedElement<E>> theFilteredElements;
-
-		StaticFilteredOrderedElement(ObservableOrderedElement<E> wrapped, List<StaticFilteredOrderedElement<E>> filteredEls) {
-			theWrapped = wrapped;
-			theFilteredElements = filteredEls;
-		}
-
-		@Override
-		public ObservableValue<E> persistent() {
-			return theWrapped.persistent();
-		}
-
-		@Override
-		public TypeToken<E> getType() {
-			return theWrapped.getType();
-		}
-
-		@Override
-		public E get() {
-			return theWrapped.get();
-		}
-
-		@Override
-		public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
-			return ObservableUtils.wrap(theWrapped, this, observer);
-		}
-
-		@Override
-		public boolean isSafe() {
-			return theWrapped.isSafe();
-		}
-
-		protected ObservableOrderedElement<E> getWrapped() {
-			return theWrapped;
-		}
-
-		@Override
-		public int getIndex() {
-			return theFilteredElements.indexOf(this);
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableOrderedCollection#filterMap(Function)}
-	 *
-	 * @param <E> The type of the collection to be filter-mapped
-	 * @param <T> The type of the mapped collection
-	 */
-	class DynamicFilteredOrderedCollection<E, T> extends DynamicFilteredCollection<E, T> implements ObservableOrderedCollection<T> {
-		DynamicFilteredOrderedCollection(ObservableOrderedCollection<E> wrap, TypeToken<T> type,
-			Function<? super E, FilterMapResult<T>> map, Function<? super T, E> reverse) {
-			super(wrap.safe(), type, map, reverse);
-		}
-
-		@Override
-		protected ObservableOrderedCollection<E> getWrapped() {
-			return (ObservableOrderedCollection<E>) super.getWrapped();
-		}
-
-		@Override
-		protected DynamicFilteredOrderedElement<E, T> filter(ObservableElement<E> element, Object meta) {
-			List<DynamicFilteredOrderedElement<E, T>> filteredElements = (List<DynamicFilteredOrderedElement<E, T>>) meta;
-			ObservableOrderedElement<E> outerEl = (ObservableOrderedElement<E>) element;
-			DynamicFilteredOrderedElement<E, T> retElement = d()
-				.debug(new DynamicFilteredOrderedElement<>(outerEl, getMap(), getType(), filteredElements))
-				.from("element", this).tag("wrapped", element).get();
-			filteredElements.add(outerEl.getIndex(), retElement);
-			outerEl.completed().act(elValue -> filteredElements.remove(outerEl.getIndex()));
-			return retElement;
-		}
-
-		@Override
-		public Subscription onElement(Consumer<? super ObservableElement<T>> onElement) {
-			return onOrderedElement(onElement);
-		}
-
-		@Override
-		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<T>> onElement) {
-			return super.onElement(element -> onElement.accept((ObservableOrderedElement<T>) element), new ArrayList<>());
-		}
-	}
-
-	/**
-	 * The type of element in dynamically filtered ordered collections
-	 *
-	 * @param <T> The type of this element
-	 * @param <E> The type of element wrapped by this element
-	 */
-	class DynamicFilteredOrderedElement<E, T> extends DynamicFilteredElement<E, T> implements ObservableOrderedElement<T> {
-		private final List<DynamicFilteredOrderedElement<E, T>> theFilteredElements;
-
-		DynamicFilteredOrderedElement(ObservableOrderedElement<E> wrapped, Function<? super E, FilterMapResult<T>> map, TypeToken<T> type,
-			List<DynamicFilteredOrderedElement<E, T>> filteredElements) {
-			super(wrapped, map, type);
-			theFilteredElements = filteredElements;
-		}
-
-		@Override
-		protected ObservableOrderedElement<E> getWrapped() {
-			return (ObservableOrderedElement<E>) super.getWrapped();
-		}
-
-		@Override
-		public int getIndex() {
-			int ret = 0;
-			int outerIdx = getWrapped().getIndex();
-			for(int i = 0; i < outerIdx; i++)
-				if(theFilteredElements.get(i).isIncluded())
-					ret++;
-			return ret;
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableOrderedCollection#combine(ObservableValue, BiFunction)}
-	 *
-	 * @param <E> The type of the collection to be combined
-	 * @param <T> The type of the value to combine the collection elements with
-	 * @param <V> The type of the combined collection
-	 */
-	class CombinedOrderedCollection<E, T, V> extends CombinedObservableCollection<E, T, V> implements ObservableOrderedCollection<V> {
-		CombinedOrderedCollection(ObservableOrderedCollection<E> collection, ObservableValue<T> value, TypeToken<V> type,
-			BiFunction<? super E, ? super T, V> map, BiFunction<? super V, ? super T, E> reverse) {
-			super(collection, type, value, map, reverse);
-		}
-
-		@Override
-		protected ObservableOrderedCollection<E> getWrapped() {
-			return (ObservableOrderedCollection<E>) super.getWrapped();
-		}
-
-		@Override
-		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<V>> onElement) {
-			return onElement(element -> onElement.accept((ObservableOrderedElement<V>) element));
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableOrderedCollection#groupBy(Function, Equalizer)}
-	 *
-	 * @param <K> The key type of the map
-	 * @param <V> The value type of the map
-	 */
-	class GroupedOrderedMultiMap<K, V> extends GroupedMultiMap<K, V> {
-		public GroupedOrderedMultiMap(ObservableOrderedCollection<V> wrap, Function<V, K> keyMap, TypeToken<K> keyType,
-			Equalizer equalizer) {
-			super(wrap, keyMap, keyType, equalizer);
-		}
-
-		@Override
-		protected ObservableSet<K> unique(ObservableCollection<K> keyCollection) {
-			return ObservableOrderedSet.unique((ObservableOrderedCollection<K>) keyCollection, getEqualizer(), false);
-		}
+		return new FlattenedOrderedCollection<>(list);
 	}
 
 	/**
@@ -1013,8 +268,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		}
 
 		@Override
-		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
-			return onElement(element -> onElement.accept((ObservableOrderedElement<E>) element));
+		public CollectionSubscription subscribeOrdered(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
+			return subscribe(evt -> observer.accept((OrderedCollectionEvent<? extends E>) evt));
 		}
 	}
 
@@ -1034,8 +289,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		}
 
 		@Override
-		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
-			return onElement(element -> onElement.accept((ObservableOrderedElement<E>) element));
+		public CollectionSubscription subscribeOrdered(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
+			return subscribe(evt -> observer.accept((OrderedCollectionEvent<? extends E>) evt));
 		}
 	}
 
@@ -1110,7 +365,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 				private int theRemovedIndex;
 
 				SortedElement(ObservableOrderedElement<E> wrap, DefaultTreeSet<SortedElement> elements) {
-					theWrappedEl=wrap;
+					theWrappedEl = wrap;
 					theElements = elements;
 					theRemoveObservable = new SimpleObservable<>();
 				}

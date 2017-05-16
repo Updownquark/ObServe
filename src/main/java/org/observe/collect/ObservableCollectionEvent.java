@@ -3,20 +3,20 @@ package org.observe.collect;
 import org.qommons.AbstractCausable;
 
 public class ObservableCollectionEvent<E> extends AbstractCausable {
-	private final Object theElementId;
+	private final ElementId theElementId;
 	private final CollectionChangeType theType;
 	private final E theOldValue;
 	private final E theNewValue;
 
-	public ObservableCollectionEvent(Object elId, CollectionChangeType type, E oldValue, E newValue, Object cause) {
+	public ObservableCollectionEvent(ElementId elementId, CollectionChangeType type, E oldValue, E newValue, Object cause) {
 		super(cause);
-		theElementId = elId;
+		theElementId = elementId;
 		theType = type;
 		theOldValue = oldValue;
 		theNewValue = newValue;
 	}
 
-	public Object getElementId() {
+	public ElementId getElementId() {
 		return theElementId;
 	}
 

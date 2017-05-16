@@ -99,19 +99,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 */
 	CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer);
 
-	/**
-	 * Although not every ObservableCollection must be indexed, all ObservableCollections must have some notion of order. This method takes
-	 * the IDs of 2 elements in this collection and returns true if the element whose ID is the first argument should be presented before
-	 * the second, false if the second element should be presented first.
-	 *
-	 * This collection's iteration must follow this ordering scheme.
-	 *
-	 * @param elementId1 The ID of the first element to check
-	 * @param elementId2 The ID of the second element to check
-	 * @return Whether the element with the first argument as its ID should be presented first
-	 */
-	boolean order(Object elementId1, Object elementId2);
-
 	// /**
 	// * <p>
 	// * The session allows listeners to retain state for the duration of a unit of work (controlled by implementation-specific means),
@@ -259,7 +246,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	/**
 	 * Replaces each value in this collection with a mapped value. For every element, the operation will be applied. If the result is
 	 * identically (==) different from the existing value, that element will be replaced with the mapped value.
-	 * 
+	 *
 	 * @param op The operation to apply to each value in this collection
 	 */
 	default void replaceAll(UnaryOperator<E> op) {
@@ -339,7 +326,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 *         by transaction when possible.
 	 */
 	default Observable<? extends CollectionChangeEvent<E>> changes() {
-		return new CollectionChangesObservable<>(this);
+		return new ObservableCollectionImpl.CollectionChangesObservable<>(this);
 	}
 
 	/**
@@ -719,11 +706,30 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	}
 
 	/**
-	 * @return An ObservableSet that contains this collection's values with no duplicates, according to this collections
-	 *         {@link #equivalence()} scheme
+	 * @param compare The comparator to use to sort this collection's elements
+	 * @param nullable Whether null values may belong in the collection. If this is false and this collection contains null values,
+	 *        {@link NullPointerException}s may be thrown from methods of the resulting collection
+	 * @return A new collection containing all the same elements as this collection, but ordered according to the given comparator
+	 */
+	default ObservableOrderedCollection<E> sorted(Comparator<? super E> compare, boolean nullable, Observable<?> until) {}
+
+	/**
+	 * @return An ObservableSet that contains this collection's values with no duplicates, according to this collection's
+	 *         {@link #equivalence()} scheme. Values in this collection must maintain their equivalence properties. If a collection
+	 *         element's value's properties change such that the set of values it is equivalent to change, the resulting set may become
+	 *         corrupt.
 	 */
 	default ObservableSet<E> unique() {
 		return new ObservableSetImpl.CollectionWrappingSet<>(this);
+	}
+
+	/**
+	 * @return An ObservableSortedSet that contains this collection's values with no duplicates, according to the comparator. Values in this
+	 *         collection must maintain their equivalence properties. If a collection element's value's properties change such that the set
+	 *         of values it is equivalent to change, the resulting set may become corrupt.
+	 */
+	default ObservableSortedSet<E> unique(Comparator<? super E> compare, boolean nullable, Observable<?> until) {
+		return new ObservableSortedSetImpl.CollectionWrappingSortedSet<>(this, compare, nullable, until);
 	}
 
 	/**

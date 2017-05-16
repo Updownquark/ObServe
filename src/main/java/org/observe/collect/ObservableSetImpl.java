@@ -73,11 +73,6 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public boolean order(Object elementId1, Object elementId2) {
-			return theLeft.order(elementId1, elementId2);
-		}
-
-		@Override
 		public boolean isLockSupported() {
 			return theLeft.isLockSupported() || theRight.isLockSupported(); // Report whether locking will have any effect
 		}
@@ -520,11 +515,6 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public boolean order(Object elementId1, Object elementId2) {
-			return theCollection.order(elementId1, elementId2);
-		}
-
-		@Override
 		public Transaction lock(boolean write, Object cause) {
 			return theCollection.lock(write, cause);
 		}
@@ -567,7 +557,7 @@ public class ObservableSetImpl {
 		 * @return A spliterator backed by the collection's spliterator that eliminates duplicate elements
 		 */
 		protected ObservableElementSpliterator<E> unique(ObservableElementSpliterator<E> backing, boolean forwardFromStart) {
-			Map<E, Object> uniqueIds = equivalence().createMap();
+			Map<E, ElementId> uniqueIds = equivalence().createMap();
 			return new WrappingObservableSpliterator<>(backing, backing.getType(), () -> {
 				ObservableCollectionElement<E>[] container = new ObservableCollectionElement[1];
 				WrappingObservableElement<E, E> wrappingEl = new WrappingObservableElement<E, E>(getType(), container) {
@@ -587,7 +577,7 @@ public class ObservableSetImpl {
 					}
 				};
 				return el -> {
-					Object elId = uniqueIds.computeIfAbsent(el.get(), v -> {
+					ElementId elId = uniqueIds.computeIfAbsent(el.get(), v -> {
 						if (forwardFromStart)
 							return el.getElementId();
 						else
@@ -664,21 +654,21 @@ public class ObservableSetImpl {
 
 		// TODO This seems weird. Should work, but don't think it will actually support reversibility
 		protected CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer, boolean forward) {
-			Map<E, Object> elementIds = equivalence().createMap();
+			Map<E, ElementId> elementIds = equivalence().createMap();
 			boolean[] initialized = new boolean[1];
 			CollectionSubscription sub = theCollection.subscribe(evt -> {
-				Object elId = null;
+				ElementId elId = null;
 				switch (evt.getType()) {
 				case add:
 					elId = elementIds.computeIfAbsent(evt.getNewValue(), v -> {
 						if (forward || initialized[0])
 							return evt.getElementId();
 						else
-							return theCollection.elementFor(v);
+							return theCollection.elementFor(v).getElementId();
 					});
 					if (!elId.equals(evt.getElementId())) {
 						// This new value is equivalent to that of another element in the collection
-						if (!initialized[0] || theCollection.order(elId, evt.getElementId()))
+						if (!initialized[0] || elId.compareTo(evt.getElementId()) < 0)
 							return; // The element already reported has priority. Don't report this one.
 						else {
 							// The new element has priority. Remove the old one.
@@ -708,6 +698,10 @@ public class ObservableSetImpl {
 					}
 					break;
 				case set:
+					// TODO Often, an element will fire an event on an element whose content has changed *within*
+					// its value, i.e. the element refers to the same reference, but the data behind that reference has changed in a way
+					// that effects whether it is equivalent to other elements in the collection now.
+					// Perhaps this can be satisfied by re-checking equivalence with
 					if (!equivalence().elementEquals(evt.getOldValue(), evt.getNewValue())) {
 						// The two values are not equivalent. This is the most complex case.
 						// It could be handled simply by splitting the operation into a remove of the old value, then an add of the new
@@ -718,7 +712,7 @@ public class ObservableSetImpl {
 							elId = elementIds.get(evt.getNewValue());
 							if (elId != null) {
 								// The new value already exists in the collection
-								if (theCollection.order(elId, evt.getElementId())) {
+								if (elId.compareTo(evt.getElementId()) < 0) {
 									// The element already reported has priority. Report the removed old value and return.
 									ObservableCollectionEvent.doWith(createEvent(evt.getElementId(), CollectionChangeType.remove,
 										evt.getOldValue(), evt.getOldValue(), evt), observer);
@@ -738,7 +732,7 @@ public class ObservableSetImpl {
 							elId = elementIds.get(evt.getNewValue());
 							if (elId != null) {
 								// The new value already exists in the collection
-								if (theCollection.order(elId, evt.getElementId())) {
+								if (elId.compareTo(evt.getElementId()) < 0) {
 									// The element already reported has priority for the new value. Report the removed old value,
 									// the added (already present) old value, and return.
 									ObservableCollectionEvent.doWith(createEvent(evt.getElementId(), CollectionChangeType.remove,
@@ -790,7 +784,7 @@ public class ObservableSetImpl {
 		 * @param cause The cause of the change
 		 * @return The event to fire to the listener
 		 */
-		protected ObservableCollectionEvent<E> createEvent(Object elementId, CollectionChangeType type, E oldValue, E newValue,
+		protected ObservableCollectionEvent<E> createEvent(ElementId elementId, CollectionChangeType type, E oldValue, E newValue,
 			Object cause) {
 			return new ObservableCollectionEvent<>(elementId, type, oldValue, newValue, cause);
 		}

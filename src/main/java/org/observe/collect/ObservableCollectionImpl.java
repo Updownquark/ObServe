@@ -197,6 +197,79 @@ public final class ObservableCollectionImpl {
 		return coll.removeIf(v -> !cSet.contains(v));
 	}
 
+	public static class CollectionChangesObservable<E, CCE extends CollectionChangeEvent<E>> implements Observable<CCE> {
+		protected static class SessionChangeTracker<E> {
+			protected CollectionChangeType type;
+
+			protected final List<E> elements;
+			protected List<E> oldElements;
+
+			protected SessionChangeTracker(CollectionChangeType typ) {
+				type = typ;
+				elements = new ArrayList<>();
+				oldElements = type == CollectionChangeType.set ? new ArrayList<>() : null;
+			}
+
+			protected void clear(CollectionChangeType typ) {
+				elements.clear();
+				if (oldElements != null)
+					oldElements.clear();
+				type = typ;
+				if (type == CollectionChangeType.set && oldElements == null)
+					oldElements = new ArrayList<>();
+			}
+		}
+
+		protected static final String SESSION_TRACKER_PROPERTY = "change-tracker";
+
+		protected final ObservableCollection<E> collection;
+
+		protected CollectionChangesObservable(ObservableCollection<E> coll) {
+			collection = coll;
+		}
+
+		@Override
+		public Subscription subscribe(Observer<? super CCE> observer) {
+			Object key = new Object();
+			return collection.subscribe(evt -> {
+				SessionChangeTracker<E> tracker = (SessionChangeTracker<E>) evt.getRootCausable()
+					.onFinish(key, //
+						(cause, data) -> fireEventsFromSessionData((SessionChangeTracker<E>) data.get(SESSION_TRACKER_PROPERTY), //
+							cause, observer))//
+					.computeIfAbsent(SESSION_TRACKER_PROPERTY, p -> new SessionChangeTracker<>(evt.getType()));
+				accumulate(tracker, evt, observer);
+			});
+		}
+
+		protected void accumulate(SessionChangeTracker<E> tracker, ObservableCollectionEvent<? extends E> event,
+			Observer<? super CCE> observer) {
+			if (event.getType() != tracker.type) {
+				fireEventsFromSessionData(tracker, event, observer);
+				tracker.clear(event.getType());
+			}
+			tracker.elements.add(event.getNewValue());
+			if (tracker.type == CollectionChangeType.set)
+				tracker.oldElements.add(event.getOldValue());
+		}
+
+		protected void fireEventsFromSessionData(SessionChangeTracker<E> tracker, Object cause, Observer<? super CCE> observer) {
+			if (tracker.elements.isEmpty())
+				return;
+			CollectionChangeEvent.doWith(new CollectionChangeEvent<>(tracker.type, tracker.elements, tracker.oldElements, cause),
+				evt -> observer.onNext((CCE) evt));
+		}
+
+		@Override
+		public boolean isSafe() {
+			return true;
+		}
+
+		@Override
+		public String toString() {
+			return "changes(" + collection + ")";
+		}
+	}
+
 	/**
 	 * Implements {@link ObservableCollection#find(Predicate, Supplier, boolean)}
 	 *
@@ -242,9 +315,9 @@ public final class ObservableCollectionImpl {
 				else
 					return theDefaultValue.get();
 			} else {
-				Object[] elId = new Object[1];
+				ElementId[] elId = new ElementId[1];
 				found = theCollection.findAllObservableElements(theTest, el -> {
-					if (elId[0] == null || theCollection.order(elId[0], el.getElementId())) {
+					if (elId[0] == null || elId[0].compareTo(el.getElementId()) < 0) {
 						elId[0] = el.getElementId();
 						value[0] = el.get();
 					}
@@ -255,11 +328,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
-			DefaultTreeMap<Object, E> matches = new DefaultTreeMap<>((id1, id2) -> {
-				if (id1.equals(id2))
-					return 0;
-				return theCollection.order(id1, id2) ? -1 : 1;
-			});
+			DefaultTreeMap<ElementId, E> matches = new DefaultTreeMap<>(ElementId::compareTo);
 			boolean[] initialized = new boolean[1];
 			return theCollection.subscribe(new Consumer<ObservableCollectionEvent<? extends E>>() {
 				private E theCurrentValue;
@@ -280,7 +349,7 @@ public final class ObservableCollectionImpl {
 					case remove:
 						if (!theTest.test(evt.getOldValue()))
 							return;
-						DefaultNode<Map.Entry<Object, E>> node = matches.getNode(evt.getElementId());
+						DefaultNode<Map.Entry<ElementId, E>> node = matches.getNode(evt.getElementId());
 						index = node.getIndex();
 						matches.removeNode(node);
 						if ((isFirst && index == 0) || (!isFirst && index == matches.size() - 1)) {
@@ -326,7 +395,7 @@ public final class ObservableCollectionImpl {
 				}
 
 				private void doRemove(ObservableCollectionEvent<? extends E> evt) {
-					DefaultNode<Map.Entry<Object, E>> node = matches.getNode(evt.getElementId());
+					DefaultNode<Map.Entry<ElementId, E>> node = matches.getNode(evt.getElementId());
 					int index = node.getIndex();
 					matches.removeNode(node);
 					if ((isFirst && index == 0) || (!isFirst && index == matches.size() - 1)) {
@@ -812,11 +881,6 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean order(Object elementId1, Object elementId2) {
-			return theWrapped.order(elementId1, elementId2);
-		}
-
-		@Override
 		public boolean contains(Object o) {
 			return ObservableCollectionImpl.contains(this, o);
 		}
@@ -971,11 +1035,6 @@ public final class ObservableCollectionImpl {
 		@Override
 		public ObservableElementSpliterator<T> spliterator() {
 			return map(theWrapped.spliterator());
-		}
-
-		@Override
-		public boolean order(Object elementId1, Object elementId2) {
-			return theWrapped.order(elementId1, elementId2);
 		}
 
 		@Override
@@ -1408,11 +1467,6 @@ public final class ObservableCollectionImpl {
 			return combine(theWrapped.spliterator());
 		}
 
-		@Override
-		public boolean order(Object elementId1, Object elementId2) {
-			return theWrapped.order(elementId1, elementId2);
-		}
-
 		/**
 		 * @param value The value from the wrapped collection
 		 * @return The corresponding value in this collection
@@ -1815,11 +1869,6 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean order(Object elementId1, Object elementId2) {
-			return theElements.order(elementId1, elementId2);
-		}
-
-		@Override
 		public String canAdd(E value) {
 			return theElements.canAdd(value);
 		}
@@ -2038,11 +2087,6 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean order(Object elementId1, Object elementId2) {
-			return theWrapped.order(elementId1, elementId2);
-		}
-
-		@Override
 		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
 			CollectionSubscription collSub = theWrapped.subscribe(evt -> ObservableCollectionEvent.doWith(
 				new ObservableCollectionEvent<>(evt.getElementId(), evt.getType(), evt.getOldValue(), evt.getNewValue(), evt), observer));
@@ -2197,11 +2241,6 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean order(Object elementId1, Object elementId2) {
-			return theWrapped.order(elementId1, elementId2);
-		}
-
-		@Override
 		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
 			class ElementRefreshValue{
 				E value;
@@ -2305,11 +2344,6 @@ public final class ObservableCollectionImpl {
 		@Override
 		public ObservableElementSpliterator<E> spliterator() {
 			return modFilter(theWrapped.spliterator());
-		}
-
-		@Override
-		public boolean order(Object elementId1, Object elementId2) {
-			return theWrapped.order(elementId1, elementId2);
 		}
 
 		/**
@@ -2647,7 +2681,7 @@ public final class ObservableCollectionImpl {
 		 * @param elementId The element ID for the value
 		 * @return The event to fire to the listener that has just been added
 		 */
-		protected ObservableCollectionEvent<? extends E> initialEvent(E value, Object elementId) {
+		protected ObservableCollectionEvent<? extends E> initialEvent(E value, ElementId elementId) {
 			return new ObservableCollectionEvent<>(elementId, CollectionChangeType.add, null, value, null);
 		}
 
@@ -2657,7 +2691,7 @@ public final class ObservableCollectionImpl {
 		 * @return The event to fire to the listener that has just been removed (with the {@link CollectionSubscription#unsubscribe(boolean)
 		 *         removeAll} option)
 		 */
-		protected ObservableCollectionEvent<? extends E> removeEvent(E value, Object elementId) {
+		protected ObservableCollectionEvent<? extends E> removeEvent(E value, ElementId elementId) {
 			return new ObservableCollectionEvent<>(elementId, CollectionChangeType.remove, value, value, null);
 		}
 
@@ -2717,7 +2751,7 @@ public final class ObservableCollectionImpl {
 					return elSpliter.tryAdvanceObservableElement(el -> {
 						action.accept(new ObservableCollectionElement<E>() {
 							@Override
-							public Object getElementId() {
+							public ElementId getElementId() {
 								return el.getElementId();
 							}
 
@@ -2768,11 +2802,6 @@ public final class ObservableCollectionImpl {
 					return null;
 				}
 			};
-		}
-
-		@Override
-		public boolean order(Object elementId1, Object elementId2) {
-			return theWrapped.order(elementId1, elementId2);
 		}
 
 		@Override
@@ -3012,11 +3041,6 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean order(Object elementId1, Object elementId2) {
-			return theWrapped.order(elementId1, elementId2);
-		}
-
-		@Override
 		public boolean contains(Object o) {
 			return theWrapped.contains(o);
 		}
@@ -3129,16 +3153,16 @@ public final class ObservableCollectionImpl {
 	public static class ConstantObservableCollection<E> implements ObservableCollection<E> {
 		private class ConstantElement implements ObservableCollectionElement<E> {
 			private final E theValue;
-			private final Integer theIndex;
+			private final ElementId theId;
 
 			ConstantElement(E value, int index) {
 				theValue = value;
-				theIndex = index;
+				theId = ElementId.of(index);
 			}
 
 			@Override
-			public Object getElementId() {
-				return theIndex;
+			public ElementId getElementId() {
+				return theId;
 			}
 
 			@Override
@@ -3215,11 +3239,6 @@ public final class ObservableCollectionImpl {
 		@Override
 		public ObservableElementSpliterator<E> spliterator() {
 			return new ObservableElementSpliterator.SimpleObservableSpliterator<>(theElements.spliterator(), theType, () -> el -> el);
-		}
-
-		@Override
-		public boolean order(Object elementId1, Object elementId2) {
-			return ((Integer) elementId1).intValue() < ((Integer) elementId2).intValue();
 		}
 
 		@Override
@@ -3403,11 +3422,6 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean order(Object elementId1, Object elementId2) {
-			return theCollection.order(elementId1, elementId2);
-		}
-
-		@Override
 		public boolean contains(Object o) {
 			return theCollection.stream().map(v -> v == null ? null : v.get()).anyMatch(v -> Objects.equals(v, o));
 		}
@@ -3492,12 +3506,12 @@ public final class ObservableCollectionImpl {
 		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
 			ReentrantLock lock = new ReentrantLock();
 			class AddObserver implements Observer<ObservableValueEvent<? extends E>> {
-				private final Object theElementId;
+				private final ElementId theElementId;
 				private boolean isInitialized;
 				final AtomicReference<Subscription> valueSub;
 				private E value;
 
-				AddObserver(Object elementId) {
+				AddObserver(ElementId elementId) {
 					theElementId = elementId;
 					valueSub = new AtomicReference<>();
 				}
@@ -3660,14 +3674,6 @@ public final class ObservableCollectionImpl {
 		public ObservableElementSpliterator<E> spliterator() {
 			ObservableCollection<E> coll = theCollectionObservable.get();
 			return coll == null ? ObservableElementSpliterator.empty(theType) : coll.spliterator();
-		}
-
-		@Override
-		public boolean order(Object elementId1, Object elementId2) {
-			ObservableCollection<E> coll = theCollectionObservable.get();
-			if (coll == null)
-				throw new IllegalArgumentException("No collection present to compare elements");
-			return coll.order(elementId1, elementId2);
 		}
 
 		@Override
@@ -3840,7 +3846,25 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Transaction lock(boolean write, Object cause) {
-			return CombinedCollectionSessionObservable.lock(theOuter, write, cause);
+			Transaction outerLock = theOuter.lock(write, cause);
+			Transaction[] innerLocks = new Transaction[theOuter.size()];
+			int i = 0;
+			for (ObservableCollection<?> c : theOuter) {
+				innerLocks[i++] = c.lock(write, cause);
+			}
+			return new Transaction() {
+				private volatile boolean hasRun;
+
+				@Override
+				public void close() {
+					if (hasRun)
+						return;
+					hasRun = true;
+					for (int j = innerLocks.length - 1; j >= 0; j--)
+						innerLocks[j].close();
+					outerLock.close();
+				}
+			};
 		}
 
 		@Override
@@ -4022,27 +4046,6 @@ public final class ObservableCollectionImpl {
 			return flatten(theOuter.spliterator(), ObservableCollection::spliterator);
 		}
 
-		@Override
-		public boolean order(Object elementId1, Object elementId2) {
-			BiTuple<Object, Object> tuple1 = (BiTuple<Object, Object>) elementId1;
-			BiTuple<Object, Object> tuple2 = (BiTuple<Object, Object>) elementId2;
-			if (!tuple1.getValue1().equals(tuple2.getValue1()))
-				return theOuter.order(tuple1.getValue1(), tuple2.getValue1());
-			// Assuming we're already locked, since this should only happen from a spliterator or a subscription
-			ObservableElementSpliterator<? extends ObservableCollection<? extends E>> spliter = theOuter.spliterator();
-			boolean[] found = new boolean[1];
-			boolean[] order = new boolean[1];
-			while (!found[0] && spliter.tryAdvanceObservableElement(el -> {
-				found[0] = el.getElementId().equals(tuple1.getValue1());
-				if (found[0])
-					order[0] = el.get().order(tuple1.getValue2(), tuple2.getValue2());
-			})) {
-			}
-			if (!found[0])
-				throw new IllegalArgumentException("The given elements do not exist in this collection");
-			return order[0];
-		}
-
 		/**
 		 * @param outer A spliterator from the outer collection
 		 * @param innerSplit The function to produce spliterators for the inner collections
@@ -4060,11 +4063,11 @@ public final class ObservableCollectionImpl {
 					theElementMap = () -> {
 						ObservableCollectionElement<? extends E>[] container = new ObservableCollectionElement[1];
 						WrappingObservableElement<E, E> wrapper = new WrappingObservableElement<E, E>(getType(), container) {
-							private final BiTuple<Object, Object> theFlattenedElementId = new BiTuple<>(theOuterElement.getElementId(),
+							private final ElementId theFlattenedElementId = compoundId(theOuterElement.getElementId(),
 								getWrapped().getElementId());
 
 							@Override
-							public Object getElementId() {
+							public ElementId getElementId() {
 								return theFlattenedElementId;
 							}
 
@@ -4146,21 +4149,30 @@ public final class ObservableCollectionImpl {
 			};
 		}
 
+		static ElementId compoundId(ElementId outerId, ElementId innerId) {
+			return ElementId.of(new BiTuple<>(outerId, innerId), (tup1, tup2) -> {
+				int comp = tup1.getValue1().compareTo(tup2.getValue1());
+				if (comp == 0)
+					comp = tup1.getValue2().compareTo(tup2.getValue2());
+				return comp;
+			});
+		}
+
 		@Override
 		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
 			ReentrantLock lock = new ReentrantLock();
 			class AddObserver implements Consumer<ObservableCollectionEvent<? extends E>> {
-				private final Object theOuterElementId;
+				private final ElementId theOuterElementId;
 				final AtomicReference<CollectionSubscription> valueSub;
 
-				AddObserver(Object elementId) {
+				AddObserver(ElementId elementId) {
 					theOuterElementId = elementId;
 					valueSub = new AtomicReference<>();
 				}
 
 				@Override
 				public void accept(ObservableCollectionEvent<? extends E> event) {
-					ObservableCollectionEvent.doWith(new ObservableCollectionEvent<>(new BiTuple<>(theOuterElementId, event.getElementId()),
+					ObservableCollectionEvent.doWith(new ObservableCollectionEvent<>(compoundId(theOuterElementId, event.getElementId()),
 						event.getType(), event.getOldValue(), event.getNewValue(), event), observer);
 				}
 
