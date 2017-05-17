@@ -36,7 +36,8 @@ public interface Equivalence<E> {
 	boolean isElement(Object v);
 
 	/**
-	 * Tests whether an element governed by this equivalence is equivalent to another value according to this collection.
+	 * Tests whether an element governed by this equivalence is equivalent to another element according to this equivalence set. If the
+	 * second argument is not an element in this equivalence set, this method should return false.
 	 *
 	 * @param element The element to compare
 	 * @param value The value to compare the element to

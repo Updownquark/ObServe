@@ -197,19 +197,36 @@ public final class ObservableCollectionImpl {
 		return coll.removeIf(v -> !cSet.contains(v));
 	}
 
+	/**
+	 * Fires {@link CollectionChangeEvent}s in response to sets of changes on an {@link ObservableCollection}. CollectionChangeEvents
+	 * contain more information than the standard {@link ObservableCollectionEvent}, so listening to CollectionChangeEvents may result in
+	 * better application performance.
+	 *
+	 * @param <E> The type of values in the collection
+	 * @param <CCE> The sub-type of CollectionChangeEvents that this observable fires
+	 */
 	public static class CollectionChangesObservable<E, CCE extends CollectionChangeEvent<E>> implements Observable<CCE> {
+		/**
+		 * Tracks a set of changes corresponding to a set of {@link ObservableCollectionEvent}s, so those changes can be fired at once
+		 *
+		 * @param <E> The type of values in the collection
+		 */
 		protected static class SessionChangeTracker<E> {
+			/** The type of the change set that this tracker is currently accumulating. */
 			protected CollectionChangeType type;
-
+			/** The list of elements that have been added or removed, or the new values replaced in the collection */
 			protected final List<E> elements;
+			/** If this tracker's type is {@link CollectionChangeType#set}, the old values replaced in the collection */
 			protected List<E> oldElements;
 
+			/** @param typ The initial change type for this tracker's accumulation */
 			protected SessionChangeTracker(CollectionChangeType typ) {
 				type = typ;
 				elements = new ArrayList<>();
 				oldElements = type == CollectionChangeType.set ? new ArrayList<>() : null;
 			}
 
+			/** @param typ The new change type for this tracker's accumulation */
 			protected void clear(CollectionChangeType typ) {
 				elements.clear();
 				if (oldElements != null)
@@ -220,10 +237,16 @@ public final class ObservableCollectionImpl {
 			}
 		}
 
+		/**
+		 * The key used in the {@link Causable#onFinish(Object, org.qommons.Causable.TerminalAction) finish action map} that the change
+		 * tracker is stored under
+		 */
 		protected static final String SESSION_TRACKER_PROPERTY = "change-tracker";
 
+		/** The collection that this change observable watches */
 		protected final ObservableCollection<E> collection;
 
+		/** @param coll The collection for this change observable to watch */
 		protected CollectionChangesObservable(ObservableCollection<E> coll) {
 			collection = coll;
 		}
@@ -241,6 +264,13 @@ public final class ObservableCollectionImpl {
 			});
 		}
 
+		/**
+		 * Accumulates a new collection change into a session tracker. This method may result in events firing.
+		 *
+		 * @param tracker The change tracker accumulating events
+		 * @param event The new event to accumulate
+		 * @param observer The observer to fire events for, if necessary
+		 */
 		protected void accumulate(SessionChangeTracker<E> tracker, ObservableCollectionEvent<? extends E> event,
 			Observer<? super CCE> observer) {
 			if (event.getType() != tracker.type) {
@@ -252,6 +282,13 @@ public final class ObservableCollectionImpl {
 				tracker.oldElements.add(event.getOldValue());
 		}
 
+		/**
+		 * Fires a change event communicating all changes accumulated into a change tracker
+		 *
+		 * @param tracker The change tracker into which changes have been accumulated
+		 * @param cause The overall cause of the change event
+		 * @param observer The observer on which to fire the change event
+		 */
 		protected void fireEventsFromSessionData(SessionChangeTracker<E> tracker, Object cause, Observer<? super CCE> observer) {
 			if (tracker.elements.isEmpty())
 				return;
@@ -845,6 +882,11 @@ public final class ObservableCollectionImpl {
 			theEquivalence = equivalence;
 		}
 
+		/** @return The source collection */
+		protected ObservableCollection<E> getWrapped() {
+			return theWrapped;
+		}
+
 		@Override
 		public TypeToken<E> getType() {
 			return theWrapped.getType();
@@ -942,7 +984,7 @@ public final class ObservableCollectionImpl {
 	}
 
 	/**
-	 * Implements {@link ObservableCollection#filterMap(FilterMapDef)}
+	 * Implements {@link ObservableCollection#filterMap(ObservableCollection.FilterMapDef)}
 	 *
 	 * @param <E> The type of the collection to filter/map
 	 * @param <T> The type of the filter/mapped collection
@@ -1206,38 +1248,53 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends T>> observer) {
+			Object meta = createSubscriptionMetadata();
 			return theWrapped.subscribe(evt -> {
 				switch (evt.getType()) {
 				case add:
 					FilterMapResult<E, T> res = getDef().map(new FilterMapResult<>(evt.getNewValue()));
 					if (res.error == null)
-						ObservableCollectionEvent
-						.doWith(new ObservableCollectionEvent<>(evt.getElementId(), evt.getType(), null, res.result, evt), observer);
+						ObservableCollectionEvent.doWith(map(evt, evt.getType(), null, res.result, meta), observer);
 					break;
 				case remove:
 					res = getDef().map(new FilterMapResult<>(evt.getOldValue()));
 					if (res.error == null)
-						ObservableCollectionEvent.doWith(
-							new ObservableCollectionEvent<>(evt.getElementId(), evt.getType(), res.result, res.result, evt), observer);
+						ObservableCollectionEvent.doWith(map(evt, evt.getType(), res.result, res.result, meta), observer);
 					break;
 				case set:
 					res = getDef().map(new FilterMapResult<>(evt.getOldValue()));
 					FilterMapResult<E, T> newRes = getDef().map(new FilterMapResult<>(evt.getNewValue()));
 					if (res.error == null) {
 						if (newRes.error == null)
-							ObservableCollectionEvent.doWith(
-								new ObservableCollectionEvent<>(evt.getElementId(), evt.getType(), res.result, newRes.result, evt),
-								observer);
+							ObservableCollectionEvent.doWith(map(evt, evt.getType(), res.result, newRes.result, meta), observer);
 						else
-							ObservableCollectionEvent.doWith(new ObservableCollectionEvent<>(evt.getElementId(),
-								CollectionChangeType.remove, res.result, res.result, evt), observer);
+							ObservableCollectionEvent.doWith(map(evt, CollectionChangeType.remove, res.result, res.result, meta), observer);
 					} else if (newRes.error == null)
-						ObservableCollectionEvent.doWith(
-							new ObservableCollectionEvent<>(evt.getElementId(), CollectionChangeType.add, null, newRes.result, evt),
-							observer);
+						ObservableCollectionEvent.doWith(map(evt, CollectionChangeType.add, null, newRes.result, meta), observer);
 					break;
 				}
 			});
+		}
+
+		/**
+		 * @return Metadata that will be passed to {@link #map(ObservableCollectionEvent, CollectionChangeType, Object, Object, Object)} to
+		 *         keep track of changes for subclasses, if needed
+		 */
+		protected Object createSubscriptionMetadata() {
+			return null;
+		}
+
+		/**
+		 * @param cause The event from the source collection
+		 * @param type The type of the event to fire
+		 * @param oldValue The old value for the event
+		 * @param newValue The new value for the event
+		 * @param metadata The metadata for the subscription, created by {@link #createSubscriptionMetadata()}
+		 * @return The event to fire to a listener to this collection
+		 */
+		protected ObservableCollectionEvent<T> map(ObservableCollectionEvent<? extends E> cause, CollectionChangeType type, T oldValue,
+			T newValue, Object metadata) {
+			return new ObservableCollectionEvent<>(cause.getElementId(), type, oldValue, newValue, cause);
 		}
 
 		@Override
@@ -2088,21 +2145,32 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-			CollectionSubscription collSub = theWrapped.subscribe(evt -> ObservableCollectionEvent.doWith(
-				new ObservableCollectionEvent<>(evt.getElementId(), evt.getType(), evt.getOldValue(), evt.getNewValue(), evt), observer));
+			CollectionSubscription collSub = theWrapped.subscribe(observer);
 			Subscription refreshSub = theRefresh.act(v -> {
+				// There's a possibility that the refresh observable could fire on one thread while the collection fires on
+				// another, so need to make sure the collection isn't firing while this refresh event happens.
 				try (Transaction t = theWrapped.lock(false, v)) {
-					theWrapped.spliterator().forEachObservableElement(el -> {
-						ObservableCollectionEvent.doWith(
-							new ObservableCollectionEvent<>(el.getElementId(), CollectionChangeType.set, el.get(), el.get(), v),
-							observer::accept);
-					});
+					doRefresh(observer, v);
 				}
 			});
 			return removeAll -> {
 				refreshSub.unsubscribe();
 				collSub.unsubscribe(removeAll);
 			};
+		}
+
+		/**
+		 * Does the refresh when this collection's {@link #getRefresh() refresh} observable fires
+		 *
+		 * @param observer The observer to fire the events to
+		 * @param cause The object fired from the refresh observable
+		 */
+		protected void doRefresh(Consumer<? super ObservableCollectionEvent<? extends E>> observer, Object cause) {
+			theWrapped.spliterator().forEachObservableElement(el -> {
+				ObservableCollectionEvent.doWith(
+					new ObservableCollectionEvent<>(el.getElementId(), CollectionChangeType.set, el.get(), el.get(), cause),
+					observer::accept);
+			});
 		}
 
 		@Override
@@ -2246,20 +2314,18 @@ public final class ObservableCollectionImpl {
 				E value;
 				Subscription refreshSub;
 			}
-			HashMap<Object, ElementRefreshValue> elements = new HashMap<>();
+			Map<ElementId, ElementRefreshValue> elements = createElementMap();
 			CollectionSubscription collSub = theWrapped.subscribe(evt -> {
-				ObservableCollectionEvent.doWith(
-					new ObservableCollectionEvent<>(evt.getElementId(), evt.getType(), evt.getOldValue(), evt.getNewValue(), evt),
-					observer);
+				observer.accept(evt);
 				switch (evt.getType()) {
 				case add:
 					ElementRefreshValue erv=new ElementRefreshValue();
 					erv.value = evt.getNewValue();
 					erv.refreshSub = theRefresh.apply(erv.value).act(r -> {
+						// There's a possibility that the refresh observable could fire on one thread while the collection fires on
+						// another, so need to make sure the collection isn't firing while this refresh event happens.
 						try (Transaction t = theWrapped.lock(false, r)) {
-							ObservableCollectionEvent.doWith(
-								new ObservableCollectionEvent<>(evt.getElementId(), CollectionChangeType.set, erv.value, erv.value, r),
-								observer);
+							ObservableCollectionEvent.doWith(refresh(evt.getElementId(), erv.value, elements, r), observer);
 						}
 					});
 					elements.put(evt.getElementId(), erv);
@@ -2272,10 +2338,10 @@ public final class ObservableCollectionImpl {
 					erv.value = evt.getNewValue();
 					erv.refreshSub.unsubscribe();
 					erv.refreshSub = theRefresh.apply(erv.value).act(r -> {
+						// There's a possibility that the refresh observable could fire on one thread while the collection fires on
+						// another, so need to make sure the collection isn't firing while this refresh event happens.
 						try (Transaction t = theWrapped.lock(false, r)) {
-							ObservableCollectionEvent.doWith(
-								new ObservableCollectionEvent<>(evt.getElementId(), CollectionChangeType.set, erv.value, erv.value, r),
-								observer);
+							ObservableCollectionEvent.doWith(refresh(evt.getElementId(), erv.value, elements, r), observer);
 						}
 					});
 					break;
@@ -2290,6 +2356,27 @@ public final class ObservableCollectionImpl {
 				}
 				elements.clear();
 			};
+		}
+
+		/**
+		 * @return A map of elements to value-holding structures to use for keeping track of values and subscriptions in
+		 *         {@link #subscribe(Consumer)}
+		 */
+		protected <V> Map<ElementId, V> createElementMap() {
+			return new HashMap<>();
+		}
+
+		/**
+		 * Generates a refresh event on an element in response to a refresh event
+		 *
+		 * @param elementId The ID of the element that the refresh is for
+		 * @param value The value of the element
+		 * @param elements The element map created by {@link #createElementMap()}
+		 * @param cause The value fired from the refresh observable
+		 * @return The collection event to fire to this collection's listener
+		 */
+		protected ObservableCollectionEvent<E> refresh(ElementId elementId, E value, Map<ElementId, ?> elements, Object cause) {
+			return new ObservableCollectionEvent<>(elementId, CollectionChangeType.set, value, value, cause);
 		}
 
 		@Override
@@ -2702,11 +2789,15 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean isLockSupported() {
+			if (isDone.get())
+				throw new IllegalStateException("This cached collection's finisher has fired");
 			return theWrapped.isLockSupported();
 		}
 
 		@Override
 		public Transaction lock(boolean write, Object cause) {
+			if (isDone.get())
+				throw new IllegalStateException("This cached collection's finisher has fired");
 			return theWrapped.lock(write, cause);
 		}
 
@@ -2717,18 +2808,22 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public int size() {
+			if (isDone.get())
+				throw new IllegalStateException("This cached collection's finisher has fired");
 			return theCache.size();
 		}
 
 		@Override
 		public boolean isEmpty() {
+			if (isDone.get())
+				throw new IllegalStateException("This cached collection's finisher has fired");
 			return theCache.isEmpty();
 		}
 
 		@Override
 		public ObservableElementSpliterator<E> spliterator() {
 			if (isDone.get())
-				return ObservableElementSpliterator.empty(getType());
+				throw new IllegalStateException("This cached collection's finisher has fired");
 			ObservableElementSpliterator<E> elSpliter = theWrapped.spliterator();
 			return new ObservableElementSpliterator<E>() {
 				@Override
@@ -2807,7 +2902,7 @@ public final class ObservableCollectionImpl {
 		@Override
 		public boolean contains(Object o) {
 			if (isDone.get())
-				return false;
+				throw new IllegalStateException("This cached collection's finisher has fired");
 			try (Transaction t = lock(false, null)) {
 				return theCache.contains(o);
 			}
@@ -2815,10 +2910,10 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean containsAll(Collection<?> c) {
+			if (isDone.get())
+				throw new IllegalStateException("This cached collection's finisher has fired");
 			if (c.isEmpty())
 				return true;
-			if (isDone.get())
-				return false;
 			try (Transaction t = lock(false, null)) {
 				return theCache.containsAll(c);
 			}
@@ -2826,9 +2921,9 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean containsAny(Collection<?> c) {
-			if (c.isEmpty())
-				return false;
 			if (isDone.get())
+				throw new IllegalStateException("This cached collection's finisher has fired");
+			if (c.isEmpty())
 				return false;
 			Set<E> cSet = toSet(equivalence(), c);
 			if (cSet.isEmpty())
@@ -2847,89 +2942,88 @@ public final class ObservableCollectionImpl {
 		@Override
 		public String canAdd(E value) {
 			if (isDone.get())
-				return StdMsg.UNSUPPORTED_OPERATION;
+				throw new IllegalStateException("This cached collection's finisher has fired");
 			return theWrapped.canAdd(value);
 		}
 
 		@Override
 		public boolean add(E e) {
 			if (isDone.get())
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				throw new IllegalStateException("This cached collection's finisher has fired");
 			return theWrapped.add(e);
 		}
 
 		@Override
 		public boolean addAll(Collection<? extends E> c) {
 			if (isDone.get())
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				throw new IllegalStateException("This cached collection's finisher has fired");
 			return theWrapped.addAll(c);
 		}
 
 		@Override
 		public String canRemove(Object value) {
 			if (isDone.get())
-				return StdMsg.UNSUPPORTED_OPERATION;
+				throw new IllegalStateException("This cached collection's finisher has fired");
 			return theWrapped.canRemove(value);
 		}
 
 		@Override
 		public boolean remove(Object o) {
 			if (isDone.get())
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				throw new IllegalStateException("This cached collection's finisher has fired");
 			return theWrapped.remove(o);
 		}
 
 		@Override
 		public boolean removeAll(Collection<?> c) {
 			if (isDone.get())
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				throw new IllegalStateException("This cached collection's finisher has fired");
 			return theWrapped.removeAll(c);
 		}
 
 		@Override
 		public boolean retainAll(Collection<?> c) {
 			if (isDone.get())
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				throw new IllegalStateException("This cached collection's finisher has fired");
 			return theWrapped.retainAll(c);
 		}
 
 		@Override
 		public void clear() {
 			if (isDone.get())
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				throw new IllegalStateException("This cached collection's finisher has fired");
 			theWrapped.clear();
 		}
 
 		@Override
 		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
 			if (isDone.get())
-				return removeAll -> {
-				};
-				Subscription changeSub;
-				try (Transaction t = lock(false, null)) {
-					spliterator()
-					.forEachObservableElement(el -> ObservableCollectionEvent.doWith(initialEvent(el.get(), el.getElementId()), observer));
-					changeSub = theChanges.act(observer::accept);
-				}
-				return removeAll -> {
-					changeSub.unsubscribe();
-					if (removeAll) {
-						try (Transaction t = lock(false, null)) {
-							ObservableElementSpliterator<E> spliter = spliterator();
-							// Better to remove from the end if possible
-							if (spliter instanceof ReversibleSpliterator)
-								spliter = (ObservableElementSpliterator<E>) ((ReversibleSpliterator<E>) spliter).reverse();
-							spliter.forEachObservableElement(
-								el -> ObservableCollectionEvent.doWith(removeEvent(el.get(), el.getElementId()), observer));
-						}
+				throw new IllegalStateException("This cached collection's finisher has fired");
+			Subscription changeSub;
+			try (Transaction t = lock(false, null)) {
+				spliterator()
+				.forEachObservableElement(el -> ObservableCollectionEvent.doWith(initialEvent(el.get(), el.getElementId()), observer));
+				changeSub = theChanges.act(observer::accept);
+			}
+			return removeAll -> {
+				changeSub.unsubscribe();
+				if (removeAll) {
+					try (Transaction t = lock(false, null)) {
+						ObservableElementSpliterator<E> spliter = spliterator();
+						// Better to remove from the end if possible
+						if (spliter instanceof ReversibleSpliterator)
+							spliter = (ObservableElementSpliterator<E>) ((ReversibleSpliterator<E>) spliter).reverse();
+						spliter.forEachObservableElement(
+							el -> ObservableCollectionEvent.doWith(removeEvent(el.get(), el.getElementId()), observer));
 					}
-				};
+				}
+			};
 		}
 
 		@Override
 		public int hashCode() {
 			if (isDone.get())
-				return 1;
+				throw new IllegalStateException("This cached collection's finisher has fired");
 			try (Transaction t = lock(false, null)) {
 				int hashCode = 1;
 				for (Object e : theCache)
@@ -2940,11 +3034,11 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean equals(Object o) {
+			if (isDone.get())
+				throw new IllegalStateException("This cached collection's finisher has fired");
 			if (!(o instanceof Collection))
 				return false;
 			Collection<?> c = (Collection<?>) o;
-			if (isDone.get())
-				return c.isEmpty();
 
 			try (Transaction t1 = lock(false, null); Transaction t2 = Transactable.lock(c, false, null)) {
 				Iterator<E> e1 = theCache.iterator();
@@ -2961,9 +3055,9 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public String toString() {
-			StringBuilder ret = new StringBuilder("(");
 			if (isDone.get())
-				return ret.append(')').toString();
+				throw new IllegalStateException("This cached collection's finisher has fired");
+			StringBuilder ret = new StringBuilder("(");
 			boolean first = true;
 			try (Transaction t = lock(false, null)) {
 				for (Object value : theCache) {
@@ -3102,21 +3196,11 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-			CollectionSubscription collSub = theWrapped.subscribe(evt -> ObservableCollectionEvent.doWith(
-				new ObservableCollectionEvent<>(evt.getElementId(), evt.getType(), evt.getOldValue(), evt.getNewValue(), evt), observer));
+			CollectionSubscription collSub = theWrapped.subscribe(observer);
 			AtomicBoolean complete = new AtomicBoolean(false);
 			Subscription obsSub = theUntil.take(1).act(u -> {
-				if (!complete.getAndSet(true)) {
-					try (Transaction t = theWrapped.lock(false, null)) {
-						collSub.unsubscribe();
-						if (isTerminating) {
-							theWrapped.spliterator()
-							.forEachObservableElement(el -> ObservableCollectionEvent.doWith(
-								new ObservableCollectionEvent<>(el.getElementId(), CollectionChangeType.remove, el.get(), el.get(), u),
-								observer));
-						}
-					}
-				}
+				if (!complete.getAndSet(true))
+					collSub.unsubscribe(isTerminating);
 			});
 			return removeAll -> {
 				if (!complete.getAndSet(true)) {
@@ -3131,12 +3215,12 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public int hashCode() {
-			return ObservableCollection.hashCode(this);
+			return theWrapped.hashCode();
 		}
 
 		@Override
 		public boolean equals(Object obj) {
-			return ObservableCollection.equals(this, obj);
+			return theWrapped.equals(obj);
 		}
 
 		@Override

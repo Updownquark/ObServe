@@ -651,7 +651,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 *
 	 * @param <E> The type of the collection
 	 */
-	class RefreshingReversibleCollection<E> extends RefreshingOrderedCollection<E> implements ObservableReversibleCollection<E> {
+	class RefreshingReversibleCollection<E> extends ObservableOrderedCollectionImpl.RefreshingOrderedCollection<E> implements ObservableReversibleCollection<E> {
 		public RefreshingReversibleCollection(ObservableReversibleCollection<E> wrap, Observable<?> refresh) {
 			super(wrap, refresh);
 		}
@@ -678,7 +678,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 *
 	 * @param <E> The type of the collection
 	 */
-	class ElementRefreshingReversibleCollection<E> extends ElementRefreshingOrderedCollection<E> implements
+	class ElementRefreshingReversibleCollection<E> extends ObservableOrderedCollectionImpl.ElementRefreshingOrderedCollection<E> implements
 	ObservableReversibleCollection<E> {
 		public ElementRefreshingReversibleCollection(ObservableReversibleCollection<E> wrap, Function<? super E, Observable<?>> refresh) {
 			super(wrap, refresh);
@@ -872,7 +872,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	class TakenUntilReversibleCollection<E> extends TakenUntilOrderedCollection<E> implements ObservableReversibleCollection<E> {
+	class TakenUntilReversibleCollection<E> extends ObservableOrderedCollectionImpl.TakenUntilOrderedCollection<E> implements ObservableReversibleCollection<E> {
 		public TakenUntilReversibleCollection(ObservableReversibleCollection<E> wrap, Observable<?> until, boolean terminate) {
 			super(wrap, until, terminate);
 		}
@@ -917,7 +917,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	class FlattenedReversibleValuesCollection<E> extends FlattenedOrderedValuesCollection<E> implements ObservableReversibleCollection<E> {
+	class FlattenedReversibleValuesCollection<E> extends ObservableOrderedCollectionImpl.FlattenedOrderedValuesCollection<E> implements ObservableReversibleCollection<E> {
 		protected FlattenedReversibleValuesCollection(ObservableOrderedCollection<? extends ObservableValue<? extends E>> collection) {
 			super(collection);
 		}
@@ -943,7 +943,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	class FlattenedReversibleValueCollection<E> extends FlattenedOrderedValueCollection<E> implements ObservableReversibleCollection<E> {
+	class FlattenedReversibleValueCollection<E> extends ObservableOrderedCollectionImpl.FlattenedOrderedValueCollection<E> implements ObservableReversibleCollection<E> {
 		public FlattenedReversibleValueCollection(ObservableValue<? extends ObservableReversibleCollection<E>> collectionObservable) {
 			super(collectionObservable);
 		}
@@ -989,7 +989,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 *
 	 * @param <E> The type of the collection
 	 */
-	class FlattenedReversibleCollection<E> extends FlattenedOrderedCollection<E> implements ObservableReversibleCollection<E> {
+	class FlattenedReversibleCollection<E> extends ObservableOrderedCollectionImpl.FlattenedOrderedCollection<E> implements ObservableReversibleCollection<E> {
 		protected FlattenedReversibleCollection(
 			ObservableReversibleCollection<? extends ObservableReversibleCollection<? extends E>> outer) {
 			super(outer);

@@ -245,7 +245,7 @@ public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableOrd
 	 *
 	 * @param <E> The type of the set
 	 */
-	class RefreshingOrderedSet<E> extends RefreshingOrderedCollection<E> implements PartialSetImpl<E>, ObservableOrderedSet<E> {
+	class RefreshingOrderedSet<E> extends ObservableOrderedCollectionImpl.RefreshingOrderedCollection<E> implements PartialSetImpl<E>, ObservableOrderedSet<E> {
 		protected RefreshingOrderedSet(ObservableOrderedSet<E> wrap, Observable<?> refresh) {
 			super(wrap, refresh);
 		}
@@ -266,7 +266,7 @@ public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableOrd
 	 *
 	 * @param <E> The type of the set
 	 */
-	class ElementRefreshingOrderedSet<E> extends ElementRefreshingOrderedCollection<E>
+	class ElementRefreshingOrderedSet<E> extends ObservableOrderedCollectionImpl.ElementRefreshingOrderedCollection<E>
 	implements PartialSetImpl<E>, ObservableOrderedSet<E> {
 		protected ElementRefreshingOrderedSet(ObservableOrderedSet<E> wrap, Function<? super E, Observable<?>> refresh) {
 			super(wrap, refresh);
@@ -361,7 +361,7 @@ public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableOrd
 	 *
 	 * @param <E> The type of elements in the set
 	 */
-	class TakenUntilOrderedSet<E> extends TakenUntilOrderedCollection<E> implements PartialSetImpl<E>, ObservableOrderedSet<E> {
+	class TakenUntilOrderedSet<E> extends ObservableOrderedCollectionImpl.TakenUntilOrderedCollection<E> implements PartialSetImpl<E>, ObservableOrderedSet<E> {
 		public TakenUntilOrderedSet(ObservableOrderedSet<E> wrap, Observable<?> until, boolean terminate) {
 			super(wrap, until, terminate);
 		}
@@ -382,7 +382,7 @@ public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableOrd
 	 *
 	 * @param <E> The type of elements in the set
 	 */
-	class FlattenedValueOrderedSet<E> extends FlattenedOrderedValueCollection<E> implements PartialSetImpl<E>, ObservableOrderedSet<E> {
+	class FlattenedValueOrderedSet<E> extends ObservableOrderedCollectionImpl.FlattenedOrderedValueCollection<E> implements PartialSetImpl<E>, ObservableOrderedSet<E> {
 		public FlattenedValueOrderedSet(ObservableValue<? extends ObservableOrderedSet<E>> collectionObservable) {
 			super(collectionObservable);
 		}

@@ -709,9 +709,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 * @param compare The comparator to use to sort this collection's elements
 	 * @param nullable Whether null values may belong in the collection. If this is false and this collection contains null values,
 	 *        {@link NullPointerException}s may be thrown from methods of the resulting collection
+	 * @param until The observable to destroy the collection with. The collection's ordering will be maintained dynamically until the given
+	 *        observable fires, after which the collection's methods will throw {@link IllegalStateException}.
 	 * @return A new collection containing all the same elements as this collection, but ordered according to the given comparator
 	 */
-	default ObservableOrderedCollection<E> sorted(Comparator<? super E> compare, boolean nullable, Observable<?> until) {}
+	default ObservableCollection<E> sorted(Comparator<? super E> compare, boolean nullable, Observable<?> until) {}
 
 	/**
 	 * @return An ObservableSet that contains this collection's values with no duplicates, according to this collection's
@@ -724,6 +726,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	}
 
 	/**
+	 * @param compare The comparator to use to sort this collection's elements
+	 * @param nullable Whether null values may belong in the collection. If this is false and this collection contains null values,
+	 *        {@link NullPointerException}s may be thrown from methods of the resulting collection
+	 * @param until The observable to destroy the collection with. The collection's ordering will be maintained dynamically until the given
+	 *        observable fires, after which the collection's methods will throw {@link IllegalStateException}.
 	 * @return An ObservableSortedSet that contains this collection's values with no duplicates, according to the comparator. Values in this
 	 *         collection must maintain their equivalence properties. If a collection element's value's properties change such that the set
 	 *         of values it is equivalent to change, the resulting set may become corrupt.
@@ -770,7 +777,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 * collections for which the derivation of the values or their relationship is expensive.
 	 *
 	 * @param until The observable to destroy the cache with. The cache will be maintained dynamically until the given observable fires,
-	 *        after which the collection will be empty.
+	 *        after which the collection's methods will throw {@link IllegalStateException}.
 	 * @return The cached collection
 	 */
 	default ObservableCollection<E> cached(Observable<?> until) {
@@ -1495,6 +1502,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 			combineArg3Nulls = combineNulls;
 		}
 
+		protected CombinedCollectionBuilder2<E, T, V> getCombine2() {
+			return theCombine2;
+		}
+
 		public ObservableCollection<E> getSource() {
 			return theCombine2.getSource();
 		}
@@ -1589,6 +1600,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 		public CombinedCollectionBuilderN(CombinedCollectionBuilder3<E, ?, ?, V> combine3) {
 			theCombine3 = combine3;
 			theOtherArgs = new LinkedHashMap<>();
+		}
+
+		protected CombinedCollectionBuilder3<E, ?, ?, V> getCombine3() {
+			return theCombine3;
 		}
 
 		public TypeToken<V> getTargetType() {
