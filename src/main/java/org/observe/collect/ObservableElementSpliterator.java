@@ -10,9 +10,27 @@ import org.qommons.collect.ElementSpliterator;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * An {@link ElementSpliterator} that supplies {@link ObservableCollectionElement}s
+ * 
+ * @param <E> The type of values the spliterator provides
+ */
 public interface ObservableElementSpliterator<E> extends ElementSpliterator<E> {
+	/**
+	 * Iterates through each element covered by this ElementSpliterator
+	 *
+	 * @param action Accepts each element in sequence. Unless a sub-type of ElementSpliterator or a specific supplier of a
+	 *        ElementSpliterator advertises otherwise, the element object may only be treated as valid until the next element is returned
+	 *        and also should not be kept longer than the reference to the ElementSpliterator.
+	 * @return false if no remaining elements existed upon entry to this method, else true.
+	 */
 	boolean tryAdvanceObservableElement(Consumer<? super ObservableCollectionElement<E>> action);
 
+	/**
+	 * Operates on each element remaining in this ElementSpliterator
+	 *
+	 * @param action The action to perform on each element
+	 */
 	default void forEachObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
 		while (tryAdvanceObservableElement(action)) {
 		}

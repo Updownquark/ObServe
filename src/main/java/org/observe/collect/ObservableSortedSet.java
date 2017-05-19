@@ -554,7 +554,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 			@Override
 			public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<T>> onElement) {
 				for (int i = els.size() - 1; i >= 0; i--)
-					onElement.accept(els.get(i));
+					onElement.accept(els.unwrap(i));
 				return () -> {
 				};
 			}
@@ -1089,7 +1089,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	class ReversedSortedSet<E> extends ObservableReversedCollection<E> implements PartialSortedSetImpl<E> {
+	class ReversedSortedSet<E> extends ObservableReversibleCollectionImpl.ObservableReversedCollection<E> implements PartialSortedSetImpl<E> {
 		ReversedSortedSet(ObservableSortedSet<E> wrap) {
 			super(wrap);
 		}
@@ -1336,7 +1336,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 	 *
 	 * @param <E> The type of the set
 	 */
-	class RefreshingSortedSet<E> extends RefreshingReversibleCollection<E> implements PartialSortedSetImpl<E> {
+	class RefreshingSortedSet<E> extends ObservableReversibleCollectionImpl.RefreshingReversibleCollection<E> implements PartialSortedSetImpl<E> {
 		public RefreshingSortedSet(ObservableSortedSet<E> wrap, Observable<?> refresh) {
 			super(wrap, refresh);
 		}
@@ -1377,7 +1377,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 	 *
 	 * @param <E> The type of the set
 	 */
-	class ElementRefreshingSortedSet<E> extends ElementRefreshingReversibleCollection<E> implements PartialSortedSetImpl<E> {
+	class ElementRefreshingSortedSet<E> extends ObservableReversibleCollectionImpl.ElementRefreshingReversibleCollection<E> implements PartialSortedSetImpl<E> {
 		public ElementRefreshingSortedSet(ObservableSortedSet<E> wrap, Function<? super E, Observable<?>> refresh) {
 			super(wrap, refresh);
 		}
@@ -1540,7 +1540,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 	 *
 	 * @param <E> The type of elements in the set
 	 */
-	class TakenUntilSortedSet<E> extends TakenUntilReversibleCollection<E> implements PartialSortedSetImpl<E> {
+	class TakenUntilSortedSet<E> extends ObservableReversibleCollectionImpl.TakenUntilReversibleCollection<E> implements PartialSortedSetImpl<E> {
 		public TakenUntilSortedSet(ObservableSortedSet<E> wrap, Observable<?> until, boolean terminate) {
 			super(wrap, until, terminate);
 		}
@@ -1566,7 +1566,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 	 *
 	 * @param <E> The type of elements in the set
 	 */
-	class FlattenedValueSortedSet<E> extends FlattenedReversibleValueCollection<E> implements PartialSortedSetImpl<E> {
+	class FlattenedValueSortedSet<E> extends ObservableReversibleCollectionImpl.FlattenedReversibleValueCollection<E> implements PartialSortedSetImpl<E> {
 		public FlattenedValueSortedSet(ObservableValue<? extends ObservableSortedSet<E>> collectionObservable) {
 			super(collectionObservable);
 		}
@@ -1625,8 +1625,8 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 
 		@Override
 		public Iterable<E> descending() {
-			if (getWrapped() instanceof ObservableReversedCollection) {
-				return () -> unique(((ObservableReversedCollection<E>) getWrapped()).descending().iterator());
+			if (getWrapped() instanceof ObservableReversibleCollectionImpl.ObservableReversedCollection) {
+				return () -> unique(((ObservableReversibleCollectionImpl.ObservableReversedCollection<E>) getWrapped()).descending().iterator());
 			} else {
 				ArrayList<E> ret = new ArrayList<>(this);
 				java.util.Collections.reverse(ret);
@@ -1656,7 +1656,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 
 		@Override
 		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<E>> onElement) {
-			if (getWrapped() instanceof ObservableReversedCollection)
+			if (getWrapped() instanceof ObservableReversibleCollectionImpl.ObservableReversedCollection)
 				return onElement((Consumer<? super ObservableElement<E>>) onElement, (coll, onEl) -> {
 					return ((ObservableReversibleCollection<E>) coll).onElementReverse(onEl);
 				});

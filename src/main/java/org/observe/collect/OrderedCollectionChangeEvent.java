@@ -5,7 +5,7 @@ import java.util.List;
 import org.qommons.IntList;
 
 /**
- * A change event to an ordered collection
+ * An aggregated change event to an ordered collection
  *
  * @param <E> The type of elements in the collection
  */

@@ -147,7 +147,7 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 							if (evt.isInitial())
 								theSyncedCopy.add(el.getIndex(), evt.getValue());
 							else {
-								assertEquals(evt.getOldValue(), theSyncedCopy.get(el.getIndex()));
+								assertEquals(evt.getOldValue(), theSyncedCopy.unwrap(el.getIndex()));
 								theSyncedCopy.set(el.getIndex(), evt.getValue());
 							}
 						}

@@ -156,7 +156,7 @@ public class ObservableHashSet<E> implements ObservableSet.PartialSetImpl<E>, Ob
 			@Override
 			public E get() {
 				try (Transaction t = theInternals.lock(false, false, null)) {
-					InternalObservableElementImpl<E> element = theValues.get(o);
+					InternalObservableElementImpl<E> element = theValues.unwrap(o);
 					return element == null ? null : element.get();
 				}
 			}

@@ -11,6 +11,7 @@ import org.qommons.Ternian;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
 
+import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 /**
@@ -104,6 +105,44 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	@Override
+	default <T> ObservableOrderedCollection<T> flatMapValues(TypeToken<T> type,
+		Function<? super E, ? extends ObservableValue<? extends T>> map) {
+		TypeToken<ObservableValue<? extends T>> collectionType;
+		if (type == null) {
+			collectionType = (TypeToken<ObservableValue<? extends T>>) TypeToken.of(map.getClass())
+				.resolveType(Function.class.getTypeParameters()[1]);
+			if (!collectionType.isAssignableFrom(new TypeToken<ObservableOrderedCollection<T>>() {}))
+				collectionType = new TypeToken<ObservableValue<? extends T>>() {};
+		} else {
+			collectionType = new TypeToken<ObservableValue<? extends T>>() {}.where(new TypeParameter<T>() {}, type);
+		}
+		return flattenValues(this.<ObservableValue<? extends T>> buildMap(collectionType).map(map, false).build());
+	}
+
+	/**
+	 * Shorthand for {@link #flatten(ObservableOrderedCollection) flatten}({@link #map(Function) map}(Function))
+	 *
+	 * @param <T> The type of the values produced
+	 * @param type The type of the values produced
+	 * @param map The value producer
+	 * @return A collection whose values are the accumulation of all those produced by applying the given function to all of this
+	 *         collection's values
+	 */
+	default <T> ObservableOrderedCollection<T> flatMapOrdered(TypeToken<T> type,
+		Function<? super E, ? extends ObservableOrderedCollection<? extends T>> map) {
+		TypeToken<ObservableOrderedCollection<? extends T>> collectionType;
+		if (type == null) {
+			collectionType = (TypeToken<ObservableOrderedCollection<? extends T>>) TypeToken.of(map.getClass())
+				.resolveType(Function.class.getTypeParameters()[1]);
+			if (!collectionType.isAssignableFrom(new TypeToken<ObservableOrderedCollection<T>>() {}))
+				collectionType = new TypeToken<ObservableOrderedCollection<? extends T>>() {};
+		} else {
+			collectionType = new TypeToken<ObservableOrderedCollection<? extends T>>() {}.where(new TypeParameter<T>() {}, type);
+		}
+		return flatten(this.<ObservableOrderedCollection<? extends T>> buildMap(collectionType).map(map, false).build());
+	}
+
+	@Override
 	default <T, V> CombinedOrderedCollectionBuilder2<E, T, V> combineWith(ObservableValue<T> arg, TypeToken<V> targetType) {
 		return new CombinedOrderedCollectionBuilder2<>(this, arg, targetType);
 	}
@@ -120,7 +159,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 
 	@Override
 	default ObservableOrderedCollection<E> filterModification(ModFilterDef<E> filter) {
-		return new ObservableOrderedCollectionImpl.ModFilteredObservableCollection<>(this, filter);
+		return new ObservableOrderedCollectionImpl.ModFilteredOrderedCollection<>(this, filter);
 	}
 
 	@Override
@@ -171,7 +210,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @return A collection representing the contents of the value, or a zero-length collection when null
 	 */
 	public static <E> ObservableOrderedCollection<E> flattenValue(
-		ObservableValue<? extends ObservableOrderedCollection<E>> collectionObservable) {
+		ObservableValue<? extends ObservableOrderedCollection<? extends E>> collectionObservable) {
 		return new ObservableOrderedCollectionImpl.FlattenedOrderedValueCollection<>(collectionObservable);
 	}
 
@@ -182,7 +221,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @param list The collection to flatten
 	 * @return A collection containing all elements of all collections in the outer collection
 	 */
-	public static <E> ObservableOrderedCollection<E> flatten(ObservableOrderedCollection<? extends ObservableOrderedCollection<E>> list) {
+	public static <E> ObservableOrderedCollection<E> flatten(
+		ObservableOrderedCollection<? extends ObservableOrderedCollection<? extends E>> list) {
 		return new ObservableOrderedCollectionImpl.FlattenedOrderedCollection<>(list);
 	}
 

@@ -31,7 +31,6 @@ import org.qommons.TriFunction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementSpliterator;
-import org.qommons.collect.Qollection;
 import org.qommons.collect.TransactableCollection;
 import org.qommons.collect.TreeList;
 
@@ -471,6 +470,28 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	}
 
 	/**
+	 * Shorthand for {@link #flattenValues(ObservableCollection) flatten}({@link #map(Function) map}(Function))
+	 *
+	 * @param <T> The type of the values produced
+	 * @param type The type of the values produced
+	 * @param map The value producer
+	 * @return A collection whose values are the contents of values those produced by applying the given function to all of this
+	 *         collection's values
+	 */
+	default <T> ObservableCollection<T> flatMapValues(TypeToken<T> type, Function<? super E, ? extends ObservableValue<? extends T>> map) {
+		TypeToken<ObservableValue<? extends T>> collectionType;
+		if (type == null) {
+			collectionType = (TypeToken<ObservableValue<? extends T>>) TypeToken.of(map.getClass())
+				.resolveType(Function.class.getTypeParameters()[1]);
+			if (!collectionType.isAssignableFrom(new TypeToken<ObservableCollection<T>>() {}))
+				collectionType = new TypeToken<ObservableValue<? extends T>>() {};
+		} else {
+			collectionType = new TypeToken<ObservableValue<? extends T>>() {}.where(new TypeParameter<T>() {}, type);
+		}
+		return flattenValues(this.<ObservableValue<? extends T>> buildMap(collectionType).map(map, false).build());
+	}
+
+	/**
 	 * Shorthand for {@link #flatten(ObservableCollection) flatten}({@link #map(Function) map}(Function))
 	 *
 	 * @param <T> The type of the values produced
@@ -484,11 +505,12 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 		if (type == null) {
 			collectionType = (TypeToken<ObservableCollection<? extends T>>) TypeToken.of(map.getClass())
 				.resolveType(Function.class.getTypeParameters()[1]);
-			if (!collectionType.isAssignableFrom(new TypeToken<Qollection<T>>() {}))
+			if (!collectionType.isAssignableFrom(new TypeToken<ObservableCollection<T>>() {}))
 				collectionType = new TypeToken<ObservableCollection<? extends T>>() {};
-		} else
+		} else {
 			collectionType = new TypeToken<ObservableCollection<? extends T>>() {}.where(new TypeParameter<T>() {}, type);
-			return flatten(this.<ObservableCollection<? extends T>> buildMap(collectionType).map(map, false).build());
+		}
+		return flatten(this.<ObservableCollection<? extends T>> buildMap(collectionType).map(map, false).build());
 	}
 
 	/** @return An observable value containing the only value in this collection while its size==1, otherwise null TODO TEST ME! */
@@ -808,7 +830,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 * @param collection The collection
 	 * @return An immutable collection with the same values as those in the given collection
 	 */
-	public static <E> ObservableCollection<E> constant(TypeToken<E> type, Collection<E> collection){
+	public static <E> ObservableCollection<E> constant(TypeToken<E> type, Collection<? extends E> collection) {
 		return new ObservableCollectionImpl.ConstantObservableCollection<>(type, collection);
 	}
 
@@ -828,7 +850,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 * @param collection The collection to flatten
 	 * @return The flattened collection
 	 */
-	public static <T> ObservableCollection<T> flattenValues(ObservableCollection<? extends ObservableValue<T>> collection) {
+	public static <T> ObservableCollection<T> flattenValues(ObservableCollection<? extends ObservableValue<? extends T>> collection) {
 		return new ObservableCollectionImpl.FlattenedValuesCollection<>(collection);
 	}
 

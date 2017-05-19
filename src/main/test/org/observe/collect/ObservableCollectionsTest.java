@@ -357,7 +357,7 @@ public class ObservableCollectionsTest {
 						if(evt.isInitial())
 							synced.add(el.getIndex(), evt.getValue());
 						else {
-							assertEquals(evt.getOldValue(), synced.get(el.getIndex()));
+							assertEquals(evt.getOldValue(), synced.unwrap(el.getIndex()));
 							synced.set(el.getIndex(), evt.getValue());
 						}
 					}
@@ -410,10 +410,10 @@ public class ObservableCollectionsTest {
 			public <E extends ObservableValueEvent<K>> void onNext(E event) {
 				if(!event.isInitial())
 					return;
-				assertEquals(null, synced.get(event.getValue()));
+				assertEquals(null, synced.unwrap(event.getValue()));
 				C collect = collectCreator.get();
 				synced.put(event.getValue(), collect);
-				Subscription elSub = map.get(event.getValue()).onElement(el2 -> el2.subscribe(new Observer<ObservableValueEvent<V>>() {
+				Subscription elSub = map.unwrap(event.getValue()).onElement(el2 -> el2.subscribe(new Observer<ObservableValueEvent<V>>() {
 					@Override
 					public <E2 extends ObservableValueEvent<V>> void onNext(E2 event2) {
 						if(el2 instanceof ObservableOrderedElement && collect instanceof List) {
@@ -421,7 +421,7 @@ public class ObservableCollectionsTest {
 							if(event2.isInitial())
 								((List<V>) collect).add(orderedEl.getIndex(), event2.getValue());
 							else {
-								assertEquals(event2.getOldValue(), ((List<V>) collect).get(orderedEl.getIndex()));
+								assertEquals(event2.getOldValue(), ((List<V>) collect).unwrap(orderedEl.getIndex()));
 								((List<V>) collect).set(orderedEl.getIndex(), event2.getValue());
 							}
 						} else {

@@ -41,10 +41,10 @@ public class ObservableListSelectionModel<E> implements ListSelectionModel {
 			return true;
 		});
 		theSelectedValues = theSelectedIndexes.filter(index -> index < theValues.size())
-				.map(theValues.getType(), index -> theValues.get(index), value -> {
+				.map(theValues.getType(), index -> theValues.unwrap(index), value -> {
 					int index;
 					for (index = 0; index < theValues.size(); index++) {
-						if (value == theValues.get(index) && !theSelectedIndexes.contains(index))
+						if (value == theValues.unwrap(index) && !theSelectedIndexes.contains(index))
 							break;
 					}
 					if (index == theValues.size())
@@ -53,7 +53,7 @@ public class ObservableListSelectionModel<E> implements ListSelectionModel {
 				}).filterAdd(value -> {
 					int index;
 					for (index = 0; index < theValues.size(); index++) {
-						if (value == theValues.get(index) && !theSelectedIndexes.contains(index))
+						if (value == theValues.unwrap(index) && !theSelectedIndexes.contains(index))
 							break;
 					}
 					return index < theValues.size();
