@@ -341,7 +341,7 @@ public class ObservableOrderedCollectionImpl {
 				for (T v : this) {
 					if (i == index)
 						return v;
-					index++;
+					i++;
 				}
 				throw new IndexOutOfBoundsException(index + " of " + i);
 			}

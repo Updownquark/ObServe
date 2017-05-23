@@ -76,6 +76,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 		static String GROUP_EXISTS = "Group already exists";
 		static String WRONG_GROUP = "Item does not belong to this group";
 		static String NOT_FOUND = "No such item found";
+		static String ILLEGAL_ELEMENT = "Element is not allowed";
 	}
 
 	// Additional contract methods
@@ -1775,7 +1776,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 			return theImmutableMsg != null || theAddMsg != null || theAddMsgFn != null;
 		}
 
-		public String attemptAdd(E value) {
+		public String checkAdd(E value) {
 			String msg = null;
 			if (theAddMsgFn != null)
 				msg = theAddMsgFn.apply(value);
@@ -1786,11 +1787,24 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 			return msg;
 		}
 
+		public E tryAdd(E value) {
+			String msg = null;
+			if (theAddMsgFn != null)
+				msg = theAddMsgFn.apply(value);
+			if (msg != null)
+				throw new IllegalArgumentException(msg);
+			if (theAddMsg != null)
+				throw new UnsupportedOperationException(theAddMsg);
+			if (theImmutableMsg != null)
+				throw new UnsupportedOperationException(theImmutableMsg);
+			return value;
+		}
+
 		public boolean isRemoveFiltered() {
 			return theImmutableMsg != null || theRemoveMsg != null || theRemoveMsgFn != null;
 		}
 
-		public String attemptRemove(Object value) {
+		public String checkRemove(Object value) {
 			String msg = null;
 			if (theRemoveMsgFn != null) {
 				if (value != null && !theType.getRawType().isInstance(value))
@@ -1802,6 +1816,19 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 			if (msg == null && theImmutableMsg != null)
 				msg = theImmutableMsg;
 			return msg;
+		}
+
+		public E tryRemove(E value) {
+			String msg = null;
+			if (theRemoveMsgFn != null)
+				msg = theRemoveMsgFn.apply(value);
+			if (msg != null)
+				throw new IllegalArgumentException(msg);
+			if (theRemoveMsg != null)
+				throw new UnsupportedOperationException(theRemoveMsg);
+			if (theImmutableMsg != null)
+				throw new UnsupportedOperationException(theImmutableMsg);
+			return value;
 		}
 	}
 

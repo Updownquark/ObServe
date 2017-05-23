@@ -1102,7 +1102,11 @@ public final class ObservableCollectionImpl {
 			return ObservableCollectionImpl.containsAll(this, c);
 		}
 
-		private List<E> reverse(Collection<?> input) {
+		/**
+		 * @param input The collection to reverse
+		 * @return The collection, with its elements {@link ObservableCollection.FilterMapDef#reverse(FilterMapResult) reversed}
+		 */
+		protected List<E> reverse(Collection<?> input) {
 			FilterMapResult<T, E> reversed = new FilterMapResult<>();
 			return input.stream().<E> flatMap(v -> {
 				if (!theDef.checkDestType(v))
@@ -1750,7 +1754,13 @@ public final class ObservableCollectionImpl {
 			return new DynamicCombinedValues<>(value);
 		}
 
-		private class DynamicCombinedValues<T> implements CombinedValues<T> {
+		/**
+		 * Simple {@link ObservableCollection.CombinedValues} implementation that uses the current ({@link ObservableValue#get()}) values of
+		 * the observables in the combo definition
+		 *
+		 * @param <T> The type of the combined value
+		 */
+		protected class DynamicCombinedValues<T> implements CombinedValues<T> {
 			private final T theElement;
 
 			DynamicCombinedValues(T element) {
@@ -1770,11 +1780,17 @@ public final class ObservableCollectionImpl {
 			}
 		}
 
-		private static class StaticCombinedValues<T> implements CombinedValues<T> {
+		/**
+		 * Simple {@link ObservableCollection.CombinedValues} implementation that takes the values of the observables
+		 *
+		 * @param <T> The type of the combined value
+		 */
+		protected static class StaticCombinedValues<T> implements CombinedValues<T> {
 			static final Object NULL = new Object();
 
 			T element;
-			Map<ObservableValue<?>, Object> argValues;
+			/** The arg values for this value structure */
+			protected Map<ObservableValue<?>, Object> argValues;
 
 			@Override
 			public T getElement() {
@@ -2508,9 +2524,9 @@ public final class ObservableCollectionImpl {
 
 					@Override
 					public <V extends E> String isAcceptable(V value) {
-						String s = theDef.attemptRemove(get());
+						String s = theDef.checkRemove(get());
 						if (s == null)
-							s = theDef.attemptAdd(value);
+							s = theDef.checkAdd(value);
 						if (s == null)
 							s = ((CollectionElement<E>) getWrapped()).isAcceptable(value);
 						return s;
@@ -2518,9 +2534,9 @@ public final class ObservableCollectionImpl {
 
 					@Override
 					public <V extends E> E set(V value, Object cause) throws IllegalArgumentException {
-						String s = theDef.attemptRemove(get());
+						String s = theDef.checkRemove(get());
 						if (s == null)
-							s = theDef.attemptAdd(value);
+							s = theDef.checkAdd(value);
 						if (s != null)
 							throw new IllegalArgumentException(s);
 						return ((CollectionElement<E>) getWrapped()).set(value, cause);
@@ -2528,7 +2544,7 @@ public final class ObservableCollectionImpl {
 
 					@Override
 					public String canRemove() {
-						String s = theDef.attemptRemove(get());
+						String s = theDef.checkRemove(get());
 						if (s == null)
 							s = getWrapped().canRemove();
 						return s;
@@ -2536,7 +2552,7 @@ public final class ObservableCollectionImpl {
 
 					@Override
 					public void remove() {
-						String s = theDef.attemptRemove(get());
+						String s = theDef.checkRemove(get());
 						if (s != null)
 							throw new IllegalArgumentException(s);
 						getWrapped().remove();
@@ -2591,7 +2607,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public String canAdd(E value) {
-			String s = theDef.attemptAdd(value);
+			String s = theDef.checkAdd(value);
 			if (s == null)
 				s = theWrapped.canAdd(value);
 			return s;
@@ -2599,7 +2615,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean add(E value) {
-			if (theDef.attemptAdd(value) == null)
+			if (theDef.checkAdd(value) == null)
 				return theWrapped.add(value);
 			else
 				return false;
@@ -2608,7 +2624,7 @@ public final class ObservableCollectionImpl {
 		@Override
 		public boolean addAll(Collection<? extends E> values) {
 			if (theDef.isAddFiltered())
-				return theWrapped.addAll(values.stream().filter(v -> theDef.attemptAdd(v) == null).collect(Collectors.toList()));
+				return theWrapped.addAll(values.stream().filter(v -> theDef.checkAdd(v) == null).collect(Collectors.toList()));
 			else
 				return theWrapped.addAll(values);
 		}
@@ -2616,7 +2632,7 @@ public final class ObservableCollectionImpl {
 		@Override
 		public ObservableCollection<E> addValues(E... values) {
 			if (theDef.isAddFiltered())
-				theWrapped.addAll(Arrays.stream(values).filter(v -> theDef.attemptAdd(v) == null).collect(Collectors.toList()));
+				theWrapped.addAll(Arrays.stream(values).filter(v -> theDef.checkAdd(v) == null).collect(Collectors.toList()));
 			else
 				theWrapped.addValues(values);
 			return this;
@@ -2624,7 +2640,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public String canRemove(Object value) {
-			String s = theDef.attemptRemove(value);
+			String s = theDef.checkRemove(value);
 			if (s == null)
 				s = theWrapped.canRemove(value);
 			return s;
@@ -2632,7 +2648,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean remove(Object value) {
-			if (theDef.attemptRemove(value) == null)
+			if (theDef.checkRemove(value) == null)
 				return theWrapped.remove(value);
 			else
 				return false;
@@ -2641,7 +2657,7 @@ public final class ObservableCollectionImpl {
 		@Override
 		public boolean removeAll(Collection<?> values) {
 			if (theDef.isRemoveFiltered())
-				return theWrapped.removeAll(values.stream().filter(v -> theDef.attemptRemove(v) == null).collect(Collectors.toList()));
+				return theWrapped.removeAll(values.stream().filter(v -> theDef.checkRemove(v) == null).collect(Collectors.toList()));
 			else
 				return theWrapped.removeAll(values);
 		}
@@ -2654,7 +2670,7 @@ public final class ObservableCollectionImpl {
 			boolean[] removed = new boolean[1];
 			theWrapped.spliterator().forEachElement(el -> {
 				E v = el.get();
-				if (!values.contains(v) && theDef.attemptRemove(v) == null) {
+				if (!values.contains(v) && theDef.checkRemove(v) == null) {
 					el.remove();
 					removed[0] = true;
 				}
@@ -2670,7 +2686,7 @@ public final class ObservableCollectionImpl {
 			}
 
 			theWrapped.spliterator().forEachElement(el -> {
-				if (theDef.attemptRemove(el.get()) == null)
+				if (theDef.checkRemove(el.get()) == null)
 					el.remove();
 			});
 		}
@@ -2921,15 +2937,13 @@ public final class ObservableCollectionImpl {
 					}
 
 					@Override
-					public <V extends E> E set(V value, Object cause) throws IllegalArgumentException {
-						// TODO Auto-generated method stub
-						return null;
+					public <V extends E> String isAcceptable(V value) {
+						return ((ObservableCollectionElement<E>) getWrapped()).isAcceptable(value);
 					}
 
 					@Override
-					public <V extends E> String isAcceptable(V value) {
-						// TODO Auto-generated method stub
-						return null;
+					public <V extends E> E set(V value, Object cause) throws IllegalArgumentException {
+						return ((ObservableCollectionElement<E>) getWrapped()).set(value, cause);
 					}
 				};
 				return el -> {
@@ -3272,7 +3286,8 @@ public final class ObservableCollectionImpl {
 	 * @param <E> The type of elements in the collection
 	 */
 	public static class ConstantObservableCollection<E> implements ObservableCollection<E> {
-		private class ConstantElement implements ObservableCollectionElement<E> {
+		/** An element in a {@link ConstantObservableCollection} */
+		protected class ConstantElement implements ObservableCollectionElement<E> {
 			private final E theValue;
 			private final ElementId theId;
 
@@ -3335,6 +3350,16 @@ public final class ObservableCollectionImpl {
 			int[] index = new int[1];
 			theElements = collection.stream().map(v -> new ConstantElement(v, index[0]++))
 				.collect(Collectors.toCollection(() -> new ArrayList<>(collection.size())));
+		}
+
+		/** @return The list of collection elements in this collection */
+		protected List<ConstantElement> getElements() {
+			return theElements;
+		}
+
+		/** @return The collection of values */
+		protected Collection<? extends E> getCollection() {
+			return theCollection;
 		}
 
 		@Override

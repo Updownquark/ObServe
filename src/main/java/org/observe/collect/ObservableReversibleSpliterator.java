@@ -82,43 +82,6 @@ public interface ObservableReversibleSpliterator<E> extends ObservableElementSpl
 	}
 
 	/**
-	 * A ElementSpliterator whose elements are the result of some filter-map operation on a vanilla {@link Spliterator}'s elements
-	 *
-	 * @param <T> The type of elements in the wrapped Spliterator
-	 * @param <V> The type of this ElementSpliterator's elements
-	 */
-	class SimpleReversibleObservableSpliterator<T, V> extends SimpleObservableSpliterator<T, V>
-	implements ObservableReversibleSpliterator<V> {
-		public SimpleReversibleObservableSpliterator(ReversibleSpliterator<T> wrap, TypeToken<V> type,
-			Supplier<? extends Function<? super T, ? extends ObservableCollectionElement<V>>> map) {
-			super(wrap, type, map);
-		}
-
-		@Override
-		protected ReversibleSpliterator<T> getWrapped() {
-			return (ReversibleSpliterator<T>) super.getWrapped();
-		}
-
-		@Override
-		public boolean tryReverseObservableElement(Consumer<? super ObservableCollectionElement<V>> action) {
-			return tryReverseElement(el -> action.accept((ObservableCollectionElement<V>) el));
-		}
-
-		@Override
-		public void forEachReverseObservableElement(Consumer<? super ObservableCollectionElement<V>> action) {
-			forEachReverseElement(el -> action.accept((ObservableCollectionElement<V>) el));
-		}
-
-		@Override
-		public ObservableReversibleSpliterator<V> trySplit() {
-			ReversibleSpliterator<T> split = getWrapped().trySplit();
-			if (split == null)
-				return null;
-			return new SimpleReversibleObservableSpliterator<>(split, getType(), getMap());
-		}
-	}
-
-	/**
 	 * A ElementSpliterator whose elements are the result of some filter-map operation on another ElementSpliterator's elements
 	 *
 	 * @param <T> The type of elements in the wrapped ElementSpliterator

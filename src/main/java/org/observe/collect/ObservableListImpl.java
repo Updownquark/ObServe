@@ -2,11 +2,14 @@ package org.observe.collect;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.ConcurrentModificationException;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.Spliterator;
 import java.util.concurrent.locks.Lock;
@@ -585,12 +588,24 @@ public class ObservableListImpl {
 	// }
 	// }
 
+	/**
+	 * A simple {@link ObservableList#subList(int, int)} implementation for derived lists that are one-to-one mappings of their source lists
+	 *
+	 * @param <E> The type of values in the source list
+	 * @param <T> The type of values in this list
+	 */
 	public static abstract class SimpleMappedSubList<E, T> implements ReversibleList<T>, TransactableList<T> {
 		private final ReversibleList<? extends E> theWrapped;
 		private final TypeToken<T> theType;
 		private final Equivalence<? super T> theEquivalence;
 		private final Transactable theTransactable;
 
+		/**
+		 * @param wrapped The source sub-list
+		 * @param type The type of the derived list
+		 * @param equivalence The equivalence set of the derived list
+		 * @param transactable The transaction to use for the derived list
+		 */
 		public SimpleMappedSubList(ReversibleList<? extends E> wrapped, TypeToken<T> type, Equivalence<? super T> equivalence,
 			Transactable transactable) {
 			theWrapped = wrapped;
@@ -599,18 +614,64 @@ public class ObservableListImpl {
 			theTransactable = transactable;
 		}
 
+		/**
+		 * @param wrap The source value
+		 * @return The mapped value
+		 */
 		protected abstract T wrap(E wrap);
 
+		/** @return Whether removals in this list are restricted */
+		protected boolean isRemoveRestricted() {
+			return false;
+		}
+		/**
+		 * @param value The value to remove
+		 * @return null if the value can be removed, or a message saying why it can't
+		 */
+		protected String checkRemove(E value) {
+			return null;
+		}
+		/**
+		 * @param value The value to add
+		 * @return null if the value can be added, or a message saying why it can't
+		 */
+		protected abstract String checkAdd(T value);
+		/**
+		 * @param value The value to remove
+		 * @return The value
+		 * @throws RuntimeException If the value can't be removed
+		 */
+		protected E attemptedRemove(E value) {
+			return null;
+		}
+		/**
+		 * @param value The value to add
+		 * @return The value to add to the source collection
+		 */
 		protected abstract E attemptedAdd(T value);
 
+		/** @return Whether individual elements in this list may be set */
+		protected abstract boolean isElementSettable();
+		/**
+		 * @param container The source value
+		 * @param value The value to set
+		 * @return null If the given value can be set in the source value, or a message saying why it can't
+		 */
 		protected abstract String checkSet(E container, T value);
+		/**
+		 * @param container The source value
+		 * @param value The value to set
+		 * @param cause The cause of the operation
+		 * @return The value previously set in the container
+		 */
+		protected abstract T attemptSet(E container, T value, Object cause);
 
-		protected abstract Optional<T> attemptSet(E container, T value, Object cause);
-
+		/** @return The type of the derived collection */
 		public TypeToken<T> getType() {
 			return theType;
 		}
 
+		/** @return The equivalence of the derived collection */
 		public Equivalence<? super T> equivalence() {
 			return theEquivalence;
 		}
@@ -767,17 +828,37 @@ public class ObservableListImpl {
 					}
 
 					@Override
+					public String canRemove() {
+						String msg = checkRemove(getWrapped().get());
+						if (msg != null)
+							return msg;
+						return super.canRemove();
+					}
+
+					@Override
+					public void remove() {
+						attemptedRemove(getWrapped().get());
+						super.remove();
+					}
+
+					@Override
 					public <V extends T> String isAcceptable(V value) {
-						return checkSet(getWrapped().get(), value);
+						if (isElementSettable())
+							return checkSet(getWrapped().get(), value);
+						else {
+							String msg = checkAdd(value);
+							if (msg != null)
+								return msg;
+							return ((CollectionElement<E>) getWrapped()).isAcceptable(attemptedAdd(value));
+						}
 					}
 
 					@Override
 					public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
-						Optional<T> result = attemptSet(getWrapped().get(), value, cause);
-						if (!result.isPresent())
-							return wrap(((CollectionElement<E>) getWrapped()).set(attemptedAdd(value), cause));
+						if (isElementSettable())
+							return attemptSet(getWrapped().get(), value, cause);
 						else
-							return result.get();
+							return wrap(((CollectionElement<E>) getWrapped()).set(attemptedAdd(value), cause));
 					}
 				};
 				return el -> {
@@ -809,17 +890,32 @@ public class ObservableListImpl {
 
 		@Override
 		public boolean removeLast(Object value) {
-			return find(v -> equivalence().elementEquals(v, value), el -> el.remove(), false);
+			return theWrapped.find(v -> equivalence().elementEquals(wrap(v), value), el -> {
+				attemptedRemove(el.get());
+				el.remove();
+			}, false);
 		}
 
 		@Override
 		public void removeRange(int fromIndex, int toIndex) {
-			theWrapped.removeRange(fromIndex, toIndex);
+			if (!isRemoveRestricted())
+				theWrapped.removeRange(fromIndex, toIndex);
+			else {
+				try (Transaction t = lock(true, null)) {
+					int size = size();
+					for (int i = fromIndex; i < toIndex && i < size; i++)
+						attemptedRemove(theWrapped.get(i));
+					theWrapped.removeRange(fromIndex, toIndex);
+				}
+			}
 		}
 
 		@Override
 		public boolean remove(Object o) {
-			return find(v -> equivalence().elementEquals(v, o), el -> el.remove());
+			return theWrapped.find(v -> equivalence().elementEquals(wrap(v), o), el -> {
+				attemptedRemove(el.get());
+				el.remove();
+			});
 		}
 
 		@Override
@@ -829,7 +925,12 @@ public class ObservableListImpl {
 			Set<T> cSet = ObservableCollectionImpl.toSet(equivalence(), c);
 			if (cSet.isEmpty())
 				return false;
-			return removeIf(cSet::contains);
+			return theWrapped.removeIf(v -> {
+				boolean remove = cSet.contains(wrap(v));
+				if (remove)
+					attemptedRemove(v);
+				return remove;
+			});
 		}
 
 		@Override
@@ -839,25 +940,53 @@ public class ObservableListImpl {
 			Set<T> cSet = ObservableCollectionImpl.toSet(equivalence(), c);
 			if (cSet.isEmpty())
 				return false;
-			return removeIf(v -> !cSet.contains(v));
+			return theWrapped.removeIf(v -> {
+				boolean remove = !cSet.contains(wrap(v));
+				if (remove)
+					attemptedRemove(v);
+				return remove;
+			});
 		}
 
 		@Override
 		public void clear() {
-			theWrapped.clear();
+			if (!isRemoveRestricted())
+				theWrapped.clear();
+			else {
+				try (Transaction t = lock(true, null)) {
+					for (E v : theWrapped)
+						attemptedRemove(v);
+					theWrapped.clear();
+				}
+			}
 		}
 
 		@Override
 		public T remove(int index) {
-			return wrap(theWrapped.remove(index));
+			if (!isRemoveRestricted())
+				return wrap(theWrapped.remove(index));
+			else {
+				try (Transaction t = lock(true, null)) {
+					E value = theWrapped.get(index);
+					attemptedRemove(value);
+					return wrap(theWrapped.remove(index));
+				}
+			}
 		}
 
 		@Override
 		public T set(int index, T element) {
-			Optional<T> result = attemptSet(theWrapped.get(index), element, null);
-			if (result.isPresent())
-				return result.get();
-			return wrap(((ReversibleList<E>) theWrapped).set(index, attemptedAdd(element)));
+			if (isElementSettable())
+				return attemptSet(theWrapped.get(index), element, null);
+			else if (isRemoveRestricted())
+				return wrap(((ReversibleList<E>) theWrapped).set(index, attemptedAdd(element)));
+			else {
+				try (Transaction t = lock(true, null)) {
+					E value = theWrapped.get(index);
+					attemptedRemove(value);
+					return wrap(((ReversibleList<E>) theWrapped).set(index, attemptedAdd(element)));
+				}
+			}
 		}
 
 		@Override
@@ -869,12 +998,22 @@ public class ObservableListImpl {
 				}
 
 				@Override
+				protected void attemptRemove(E value) {
+					SimpleMappedSubList.this.attemptedRemove(value);
+				}
+
+				@Override
 				protected E attemptedAdd(T value) {
 					return SimpleMappedSubList.this.attemptedAdd(value);
 				}
 
 				@Override
-				protected Optional<T> attemptSet(E container, T value, Object cause) {
+				protected boolean isElementSettable() {
+					return SimpleMappedSubList.this.isElementSettable();
+				}
+
+				@Override
+				protected T attemptSet(E container, T value, Object cause) {
 					return SimpleMappedSubList.this.attemptSet(container, value, cause);
 				}
 			};
@@ -890,8 +1029,33 @@ public class ObservableListImpl {
 				}
 
 				@Override
+				protected boolean isRemoveRestricted() {
+					return outer.isRemoveRestricted();
+				}
+
+				@Override
+				protected String checkRemove(E value) {
+					return outer.checkRemove(value);
+				}
+
+				@Override
+				protected E attemptedRemove(E value) {
+					return outer.attemptedRemove(value);
+				}
+
+				@Override
+				protected String checkAdd(T value) {
+					return outer.checkAdd(value);
+				}
+
+				@Override
 				protected E attemptedAdd(T value) {
 					return outer.attemptedAdd(value);
+				}
+
+				@Override
+				protected boolean isElementSettable() {
+					return outer.isElementSettable();
 				}
 
 				@Override
@@ -900,7 +1064,7 @@ public class ObservableListImpl {
 				}
 
 				@Override
-				protected Optional<T> attemptSet(E container, T value, Object cause) {
+				protected T attemptSet(E container, T value, Object cause) {
 					return outer.attemptSet(container, value, cause);
 				}
 			};
@@ -953,18 +1117,47 @@ public class ObservableListImpl {
 		}
 	}
 
+	/**
+	 * An implementation of {@link ObservableList#listIterator(int)} for derived lists that are one-to-one mappings of their source lists
+	 *
+	 * @param <E> The type of values in the source list
+	 * @param <T> The type of values in the derived list
+	 */
 	public static abstract class SimpleMappedListIterator<E, T> implements ListIterator<T> {
 		private final ListIterator<? extends E> theWrapped;
 		private E lastValue;
 		private boolean isRemoved;
 
-		public SimpleMappedListIterator(ListIterator<? extends E> wrapp) {
-			theWrapped = wrapp;
+		/** @param wrap The list iterator from the source list to wrap */
+		public SimpleMappedListIterator(ListIterator<? extends E> wrap) {
+			theWrapped = wrap;
 		}
 
+		/**
+		 * @param e The source value
+		 * @return The mapped value
+		 */
 		protected abstract T wrap(E e);
+		/**
+		 * @param value The value to attempt to remove
+		 * @throw RuntimeException If the value may not be removed
+		 */
+		protected void attemptRemove(E value) {}
+		/**
+		 * @param value The value to attempt to add
+		 * @return The value to add to the source collection
+		 */
 		protected abstract E attemptedAdd(T value);
-		protected abstract Optional<T> attemptSet(E container, T value, Object cause);
+
+		/** @return Whether individual values in the source collection are settable */
+		protected abstract boolean isElementSettable();
+		/**
+		 * @param container The source value
+		 * @param value The value to set
+		 * @param cause The cause of the operation
+		 * @return The value previously contained in the container
+		 */
+		protected abstract T attemptSet(E container, T value, Object cause);
 
 		@Override
 		public boolean hasNext() {
@@ -1000,6 +1193,7 @@ public class ObservableListImpl {
 
 		@Override
 		public void remove() {
+			attemptRemove(lastValue);
 			theWrapped.remove();
 			lastValue = null;
 			isRemoved = true;
@@ -1009,10 +1203,12 @@ public class ObservableListImpl {
 		public void set(T e) {
 			if (isRemoved)
 				throw new IllegalStateException("Element has been removed");
-			Optional<T> result = attemptSet(lastValue, e, null);
-			if (result.isPresent())
-				return;
-			((ListIterator<E>) theWrapped).set(attemptedAdd(e));
+			if (isElementSettable())
+				attemptSet(lastValue, e, null);
+			else {
+				attemptRemove(lastValue);
+				((ListIterator<E>) theWrapped).set(attemptedAdd(e));
+			}
 		}
 
 		@Override
@@ -1028,6 +1224,7 @@ public class ObservableListImpl {
 	 */
 	public static class ReversedList<E> extends ObservableReversibleCollectionImpl.ObservableReversedCollection<E>
 	implements ObservableList<E> {
+		/** @param list The source list */
 		protected ReversedList(ObservableList<E> list) {
 			super(list);
 		}
@@ -1170,8 +1367,17 @@ public class ObservableListImpl {
 		}
 	}
 
+	/**
+	 * Implements {@link ObservableList#withEquivalence(Equivalence)}
+	 *
+	 * @param <E> The type of values in the list
+	 */
 	public static class EquivalenceSwitchedObservableList<E> extends EquivalenceSwitchedReversibleCollection<E>
 	implements ObservableList<E> {
+		/**
+		 * @param wrap The source list
+		 * @param equivalence The equivalence for this list
+		 */
 		protected EquivalenceSwitchedObservableList(ObservableList<E> wrap, Equivalence<? super E> equivalence) {
 			super(wrap, equivalence);
 		}
@@ -1231,24 +1437,44 @@ public class ObservableListImpl {
 				}
 
 				@Override
+				protected String checkAdd(E value) {
+					return canAdd(value);
+				}
+
+				@Override
 				protected E attemptedAdd(E value) {
 					return value;
 				}
 
 				@Override
-				protected String checkSet(E container, E value) {
-					return canAdd(value);
+				protected boolean isElementSettable() {
+					return false;
 				}
 
 				@Override
-				protected Optional<E> attemptSet(E container, E value, Object cause) {
-					return Optional.empty();
+				protected String checkSet(E container, E value) {
+					return null;
+				}
+
+				@Override
+				protected E attemptSet(E container, E value, Object cause) {
+					return null;
 				}
 			};
 		}
 	}
 
+	/**
+	 * Implements {@link ObservableList#filterMap(ObservableCollection.FilterMapDef)}
+	 *
+	 * @param <E> The type of values in the source collection
+	 * @param <T> The type of values in this collection
+	 */
 	public static class FilterMappedObservableList<E, T> extends FilterMappedReversibleCollection<E, T> implements ObservableList<T> {
+		/**
+		 * @param wrap The source collection
+		 * @param filterMapDef The definition of which values are filtered and how they are mapped
+		 */
 		protected FilterMappedObservableList(ObservableList<E> wrap, FilterMapDef<E, ?, T> filterMapDef) {
 			super(wrap, filterMapDef);
 		}
@@ -1257,9 +1483,221 @@ public class ObservableListImpl {
 		protected ObservableList<E> getWrapped() {
 			return (ObservableList<E>) super.getWrapped();
 		}
+
+		/**
+		 * @param index The index in this collection
+		 * @param includeTerminus Whether the terminal index (size()) is valid for the index
+		 * @return The corresponding index in the source collection
+		 */
+		protected int sourceIndex(int index, boolean includeTerminus) {
+			if (!getDef().isFiltered())
+				return index;
+			if (index < 0)
+				throw new IndexOutOfBoundsException("" + index);
+			int srcIndex = 0;
+			int mappedIndex = 0;
+			FilterMapResult<E, T> res = new FilterMapResult<>();
+			for (E v : getWrapped()) {
+				res.source = v;
+				if (getDef().map(res).error == null) {
+					if (mappedIndex == index)
+						return srcIndex;
+					mappedIndex++;
+				}
+				srcIndex++;
+			}
+			if (includeTerminus && mappedIndex == index)
+				return srcIndex;
+			throw new IndexOutOfBoundsException(index + " of " + mappedIndex);
+		}
+
+		@Override
+		public ObservableReversibleSpliterator<T> spliterator(int index) {
+			try (Transaction t = lock(false, null)) {
+				return new WrappingReversibleObservableSpliterator<>(getWrapped().spliterator(sourceIndex(index, true)), getType(), map());
+			}
+		}
+
+		@Override
+		public void add(int index, T element) {
+			if (!getDef().isReversible() || !getDef().checkDestType(element))
+				throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+			FilterMapResult<T, E> reversed = getDef().reverse(new FilterMapResult<>(element));
+			if (reversed.error != null)
+				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+			try (Transaction t = lock(true, null)) {
+				getWrapped().add(sourceIndex(index, true), reversed.result);
+			}
+		}
+
+		@Override
+		public boolean addAll(int index, Collection<? extends T> c) {
+			if (!getDef().isReversible())
+				return false;
+			try (Transaction t = lock(true, null)) {
+				return getWrapped().addAll(sourceIndex(index, true), reverse(c));
+			}
+		}
+
+		@Override
+		public T remove(int index) {
+			try (Transaction t = lock(true, null)) {
+				return getDef().map(new FilterMapResult<>(getWrapped().remove(sourceIndex(index, false)))).result;
+			}
+		}
+
+		@Override
+		public void removeRange(int fromIndex, int toIndex) {
+			try (Transaction t = lock(true, null)) {
+				getWrapped().removeRange(sourceIndex(fromIndex, true), sourceIndex(toIndex, true));
+			}
+		}
+
+		@Override
+		public T set(int index, T element) {
+			if (!getDef().isReversible() || !getDef().checkDestType(element))
+				throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+			FilterMapResult<T, E> reversed = getDef().reverse(new FilterMapResult<>(element));
+			if (reversed.error != null)
+				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+			try (Transaction t = lock(true, null)) {
+				return getDef().map(new FilterMapResult<>(getWrapped().set(sourceIndex(index, false), reversed.result))).result;
+			}
+		}
+
+		/**
+		 * @param e The source value
+		 * @return The mapped value
+		 */
+		protected T map(E e) {
+			return getDef().map(new FilterMapResult<>(e)).result;
+		}
+
+		/**
+		 * @param value The value to add to this collection
+		 * @return The value to add to the source collection
+		 */
+		protected E attemptedAdd(T value) {
+			if (!getDef().isReversible())
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			FilterMapResult<T, E> res = getDef().reverse(new FilterMapResult<>(value));
+			if (res.error != null)
+				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+			return res.result;
+		}
+
+		@Override
+		public ListIterator<T> listIterator(int index) {
+			if (!getDef().isFiltered()) {
+				return new SimpleMappedListIterator<E, T>(getWrapped().listIterator(index)) {
+					@Override
+					protected T wrap(E e) {
+						return FilterMappedObservableList.this.map(e);
+					}
+
+					@Override
+					protected E attemptedAdd(T value) {
+						return FilterMappedObservableList.this.attemptedAdd(value);
+					}
+
+					@Override
+					protected boolean isElementSettable() {
+						return false;
+					}
+
+					@Override
+					protected T attemptSet(E container, T value, Object cause) {
+						return null;
+					}
+				};
+			}
+
+			ObservableReversibleSpliterator<T> spliter = spliterator(index);
+			return new ReversibleSpliterator.PartialListIterator<T>(spliter) {
+				private int theNextIndex = index;
+
+				@Override
+				public T next() {
+					theNextIndex++;
+					return super.next();
+				}
+
+				@Override
+				public T previous() {
+					theNextIndex--;
+					return super.previous();
+				}
+
+				@Override
+				public int nextIndex() {
+					return theNextIndex;
+				}
+
+				@Override
+				public int previousIndex() {
+					return theNextIndex - 1;
+				}
+
+				@Override
+				public void add(T e) {
+					// The spliterator doesn't support addition. If I use the main list to add, the spliterator may become invalid.
+					// TODO There are potentially way to support this, but it's rather difficult.
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				}
+			};
+		}
+
+		@Override
+		public ReversibleList<T> subList(int fromIndex, int toIndex) {
+			if (!getDef().isFiltered()) {
+				ReversibleList<E> wrapSub = getWrapped().subList(fromIndex, toIndex);
+				return new SimpleMappedSubList<E, T>(wrapSub, getType(), equivalence(), this) {
+					@Override
+					protected T wrap(E wrap) {
+						return FilterMappedObservableList.this.map(wrap);
+					}
+
+					@Override
+					protected String checkAdd(T value) {
+						return canAdd(value);
+					}
+
+					@Override
+					protected E attemptedAdd(T value) {
+						return FilterMappedObservableList.this.attemptedAdd(value);
+					}
+
+					@Override
+					protected boolean isElementSettable() {
+						return false;
+					}
+
+					@Override
+					protected String checkSet(E container, T value) {
+						return null;
+					}
+
+					@Override
+					protected T attemptSet(E container, T value, Object cause) {
+						return null;
+					}
+				};
+			}
+			// TODO Auto-generated method stub
+		}
 	}
 
+	/**
+	 * Implements {@link ObservableList#combine(ObservableCollection.CombinedCollectionDef)}
+	 *
+	 * @param <E> The type of values in the source list
+	 * @param <V> The type of values in this list
+	 */
 	public static class CombinedObservableList<E, V> extends CombinedReversibleCollection<E, V> implements ObservableList<V> {
+		/**
+		 * @param wrap The source list
+		 * @param def The combination definition containing the observables to combine and the functions to use to combine the values
+		 */
 		protected CombinedObservableList(ObservableReversibleCollection<E> wrap, CombinedCollectionDef<E, V> def) {
 			super(wrap, def);
 		}
@@ -1268,9 +1706,145 @@ public class ObservableListImpl {
 		protected ObservableList<E> getWrapped() {
 			return (ObservableList<E>) super.getWrapped();
 		}
+
+		@Override
+		public void add(int index, V element) {
+			if (getDef().getReverse() == null)
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			else if (element == null || !getDef().areNullsReversed())
+				throw new UnsupportedOperationException(StdMsg.NULL_DISALLOWED);
+			else
+				getWrapped().add(index, getDef().getReverse().apply(new DynamicCombinedValues<>(element)));
+		}
+
+		@Override
+		public boolean addAll(int index, Collection<? extends V> c) {
+			if (getDef().getReverse() == null)
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			if (!getDef().areNullsReversed()) {
+				for (V v : c)
+					if (v == null)
+						throw new UnsupportedOperationException(StdMsg.NULL_DISALLOWED);
+			}
+			Map<ObservableValue<?>, Object> argValues = new HashMap<>(getDef().getArgs().size() * 4 / 3);
+			for (ObservableValue<?> arg : getDef().getArgs())
+				argValues.put(arg, arg.get());
+			StaticCombinedValues<V> combined = new StaticCombinedValues<>();
+			combined.argValues = argValues;
+			return getWrapped().addAll(index, c.stream().map(o -> {
+				combined.element = o;
+				return getDef().getReverse().apply(combined);
+			}).collect(Collectors.toList()));
+		}
+
+		@Override
+		public V set(int index, V element) {
+			if (getDef().getReverse() == null)
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			else if (element == null || !getDef().areNullsReversed())
+				throw new UnsupportedOperationException(StdMsg.NULL_DISALLOWED);
+			else
+				return combine(getWrapped().set(index, getDef().getReverse().apply(new DynamicCombinedValues<>(element))));
+		}
+
+		@Override
+		public V remove(int index) {
+			return combine(getWrapped().remove(index));
+		}
+
+		@Override
+		public void removeRange(int fromIndex, int toIndex) {
+			getWrapped().removeRange(fromIndex, toIndex);
+		}
+
+		@Override
+		public ObservableReversibleSpliterator<V> spliterator(int index) {
+			return new WrappingReversibleObservableSpliterator<>(getWrapped().spliterator(index), getType(), map());
+		}
+
+		@Override
+		public ListIterator<V> listIterator(int index) {
+			return new SimpleMappedListIterator<E, V>(getWrapped().listIterator(index)) {
+				@Override
+				protected V wrap(E e) {
+					return combine(e);
+				}
+
+				@Override
+				protected E attemptedAdd(V value) {
+					if (getDef().getReverse() == null)
+						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+					else if (value == null || !getDef().areNullsReversed())
+						throw new UnsupportedOperationException(StdMsg.NULL_DISALLOWED);
+					return getDef().getReverse().apply(new DynamicCombinedValues<>(value));
+				}
+
+				@Override
+				protected boolean isElementSettable() {
+					return false;
+				}
+
+				@Override
+				protected V attemptSet(E container, V value, Object cause) {
+					return null;
+				}
+			};
+		}
+
+		@Override
+		public ReversibleList<V> subList(int fromIndex, int toIndex) {
+			return new SimpleMappedSubList<E, V>(getWrapped().subList(fromIndex, toIndex), getType(), equivalence(), this) {
+				@Override
+				protected V wrap(E wrap) {
+					return combine(wrap);
+				}
+
+				@Override
+				protected String checkAdd(V value) {
+					if (getDef().getReverse() == null)
+						return StdMsg.UNSUPPORTED_OPERATION;
+					else if (value == null || !getDef().areNullsReversed())
+						return StdMsg.NULL_DISALLOWED;
+					return getWrapped().canAdd(getDef().getReverse().apply(new DynamicCombinedValues<>(value)));
+				}
+
+				@Override
+				protected E attemptedAdd(V value) {
+					if (getDef().getReverse() == null)
+						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+					else if (value == null || !getDef().areNullsReversed())
+						throw new UnsupportedOperationException(StdMsg.NULL_DISALLOWED);
+					return getDef().getReverse().apply(new DynamicCombinedValues<>(value));
+				}
+
+				@Override
+				protected boolean isElementSettable() {
+					return false;
+				}
+
+				@Override
+				protected String checkSet(E container, V value) {
+					return null;
+				}
+
+				@Override
+				protected V attemptSet(E container, V value, Object cause) {
+					return null;
+				}
+			};
+		}
 	}
 
+	/**
+	 * Implements {@link ObservableList#filterModification(ObservableCollection.ModFilterDef)}
+	 *
+	 * @param <E> The type of values in the list
+	 */
 	public static class ModFilteredObservableList<E> extends ModFilteredReversibleCollection<E> implements ObservableList<E> {
+		/**
+		 * @param wrapped The source list
+		 * @param def The definition for how the list may be modified
+		 */
 		protected ModFilteredObservableList(ObservableList<E> wrapped, ModFilterDef<E> def) {
 			super(wrapped, def);
 		}
@@ -1279,9 +1853,153 @@ public class ObservableListImpl {
 		protected ObservableList<E> getWrapped() {
 			return (ObservableList<E>) super.getWrapped();
 		}
+
+		@Override
+		public void add(int index, E element) {
+			getWrapped().add(index, getDef().tryAdd(element));
+		}
+
+		@Override
+		public boolean addAll(int index, Collection<? extends E> c) {
+			return getWrapped().addAll(index, c.stream().map(v -> {
+				if (!getType().getRawType().isInstance(v))
+					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+				return getDef().tryAdd(v);
+			}).collect(Collectors.toList()));
+		}
+
+		@Override
+		public E remove(int index) {
+			try (Transaction t = lock(true, null)) {
+				E val = getWrapped().get(index);
+				String msg = getDef().checkRemove(val);
+				if (msg != null)
+					throw new IllegalArgumentException(msg);
+				return getWrapped().remove(index);
+			}
+		}
+
+		@Override
+		public void removeRange(int fromIndex, int toIndex) {
+			try (Transaction t = lock(true, null)) {
+				for (int i = fromIndex; i < toIndex && i < size(); i++) {
+					E val = getWrapped().get(i);
+					String msg = getDef().checkRemove(val);
+					if (msg != null)
+						throw new IllegalArgumentException(msg);
+				}
+				getWrapped().removeRange(fromIndex, toIndex);
+			}
+		}
+
+		@Override
+		public E set(int index, E element) {
+			getDef().tryAdd(element);
+			try (Transaction t = lock(true, null)) {
+				E val = getWrapped().get(index);
+				String msg = getDef().checkRemove(val);
+				if (msg != null)
+					throw new IllegalArgumentException(msg);
+				return getWrapped().set(index, element);
+			}
+		}
+
+		@Override
+		public ObservableReversibleSpliterator<E> spliterator(int index) {
+			return new WrappingReversibleObservableSpliterator<>(getWrapped().spliterator(index), getType(), map());
+		}
+
+		@Override
+		public ListIterator<E> listIterator(int index) {
+			return new SimpleMappedListIterator<E, E>(getWrapped().listIterator(index)) {
+				@Override
+				protected E wrap(E e) {
+					return e;
+				}
+
+				@Override
+				protected void attemptRemove(E value) {
+					getDef().tryRemove(value);
+				}
+
+				@Override
+				protected E attemptedAdd(E value) {
+					return getDef().tryAdd(value);
+				}
+
+				@Override
+				protected boolean isElementSettable() {
+					return false;
+				}
+
+				@Override
+				protected E attemptSet(E container, E value, Object cause) {
+					return null;
+				}
+			};
+		}
+
+		@Override
+		public ReversibleList<E> subList(int fromIndex, int toIndex) {
+			return new SimpleMappedSubList<E, E>(getWrapped().subList(fromIndex, toIndex), getType(), equivalence(), this) {
+				@Override
+				protected E wrap(E wrap) {
+					return wrap;
+				}
+
+				@Override
+				protected boolean isRemoveRestricted() {
+					return getDef().isRemoveFiltered();
+				}
+
+				@Override
+				protected String checkRemove(E value) {
+					return getDef().checkRemove(value);
+				}
+
+				@Override
+				protected E attemptedRemove(E value) {
+					return getDef().tryRemove(value);
+				}
+
+				@Override
+				protected String checkAdd(E value) {
+					return getDef().checkAdd(value);
+				}
+
+				@Override
+				protected E attemptedAdd(E value) {
+					return getDef().tryAdd(value);
+				}
+
+				@Override
+				protected boolean isElementSettable() {
+					return false;
+				}
+
+				@Override
+				protected String checkSet(E container, E value) {
+					return null;
+				}
+
+				@Override
+				protected E attemptSet(E container, E value, Object cause) {
+					return null;
+				}
+			};
+		}
 	}
 
+	/**
+	 * Implements {@link ObservableList#cached(Observable)}
+	 *
+	 * @param <E> The type of values in the list
+	 */
 	public static class CachedObservableList<E> extends CachedReversibleCollection<E> implements ObservableList<E> {
+		/**
+		 * @param wrapped The source list
+		 * @param until The observable that destroys this list
+		 */
 		protected CachedObservableList(ObservableList<E> wrapped, Observable<?> until) {
 			super(wrapped, until);
 		}
@@ -1300,6 +2018,62 @@ public class ObservableListImpl {
 		protected ReversibleList<E> getCache() {
 			return (ReversibleList<E>) super.getCache();
 		}
+
+		@Override
+		public void add(int index, E element) {
+			if (isDone())
+				throw new IllegalStateException("This cached collection's finisher has fired");
+			getWrapped().add(index, element);
+		}
+
+		@Override
+		public boolean addAll(int index, Collection<? extends E> c) {
+			if (isDone())
+				throw new IllegalStateException("This cached collection's finisher has fired");
+			return getWrapped().addAll(index, c);
+		}
+
+		@Override
+		public E remove(int index) {
+			if (isDone())
+				throw new IllegalStateException("This cached collection's finisher has fired");
+			return getWrapped().remove(index);
+		}
+
+		@Override
+		public void removeRange(int fromIndex, int toIndex) {
+			if (isDone())
+				throw new IllegalStateException("This cached collection's finisher has fired");
+			getWrapped().removeRange(fromIndex, toIndex);
+		}
+
+		@Override
+		public E set(int index, E element) {
+			if (isDone())
+				throw new IllegalStateException("This cached collection's finisher has fired");
+			return getWrapped().set(index, element);
+		}
+
+		@Override
+		public ObservableReversibleSpliterator<E> spliterator(int index) {
+			if (isDone())
+				throw new IllegalStateException("This cached collection's finisher has fired");
+			return new WrappingReversibleObservableSpliterator<>(getWrapped().spliterator(index), getType(), map());
+		}
+
+		@Override
+		public ListIterator<E> listIterator(int index) {
+			if (isDone())
+				throw new IllegalStateException("This cached collection's finisher has fired");
+			// TODO Auto-generated method stub
+		}
+
+		@Override
+		public ReversibleList<E> subList(int fromIndex, int toIndex) {
+			if (isDone())
+				throw new IllegalStateException("This cached collection's finisher has fired");
+			// TODO Auto-generated method stub
+		}
 	}
 
 	/**
@@ -1308,6 +2082,10 @@ public class ObservableListImpl {
 	 * @param <E> The type of the collection to refresh
 	 */
 	public static class RefreshingList<E> extends RefreshingReversibleCollection<E> implements ObservableList<E> {
+		/**
+		 * @param wrap The source list
+		 * @param refresh The observable that refreshes this list's elements
+		 */
 		protected RefreshingList(ObservableList<E> wrap, Observable<?> refresh) {
 			super(wrap, refresh);
 		}
@@ -1375,6 +2153,10 @@ public class ObservableListImpl {
 	 */
 	public static class ElementRefreshingList<E> extends ObservableReversibleCollectionImpl.ElementRefreshingReversibleCollection<E>
 	implements ObservableList<E> {
+		/**
+		 * @param wrap The source list
+		 * @param refresh The function of observables that refresh this list's elements
+		 */
 		protected ElementRefreshingList(ObservableList<E> wrap, Function<? super E, Observable<?>> refresh) {
 			super(wrap, refresh);
 		}
@@ -1442,7 +2224,12 @@ public class ObservableListImpl {
 	 */
 	public static class TakenUntilObservableList<E> extends ObservableReversibleCollectionImpl.TakenUntilReversibleCollection<E>
 	implements ObservableList<E> {
-		public TakenUntilObservableList(ObservableList<E> wrap, Observable<?> until, boolean terminate) {
+		/**
+		 * @param wrap The source list
+		 * @param until The observable that terminates this list's observers
+		 * @param terminate Whether the until observable removes all elements from the observers as well
+		 */
+		protected TakenUntilObservableList(ObservableList<E> wrap, Observable<?> until, boolean terminate) {
 			super(wrap, until, terminate);
 		}
 
@@ -1509,6 +2296,7 @@ public class ObservableListImpl {
 	 */
 	public static class FlattenedObservableValuesList<E> extends FlattenedReversibleValuesCollection<E>
 	implements ObservableList<E> {
+		/** @param collection The list of values to flatten */
 		protected FlattenedObservableValuesList(ObservableList<? extends ObservableValue<? extends E>> collection) {
 			super(collection);
 		}
@@ -1575,11 +2363,11 @@ public class ObservableListImpl {
 				return StdMsg.UNSUPPORTED_OPERATION;
 		}
 
-		private Optional<E> attemptedSet(ObservableValue<? extends E> container, E value, Object cause) {
+		private E attemptedSet(ObservableValue<? extends E> container, E value, Object cause) {
 			if (container instanceof SettableValue) {
 				if (!container.getType().getRawType().isInstance(value))
 					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
-				return Optional.of(((SettableValue<E>) container).set(value, cause));
+				return ((SettableValue<E>) container).set(value, cause);
 			} else
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 		}
@@ -1598,7 +2386,12 @@ public class ObservableListImpl {
 				}
 
 				@Override
-				protected Optional<E> attemptSet(ObservableValue<? extends E> container, E value, Object cause) {
+				protected boolean isElementSettable() {
+					return true;
+				}
+
+				@Override
+				protected E attemptSet(ObservableValue<? extends E> container, E value, Object cause) {
 					return FlattenedObservableValuesList.this.attemptedSet(container, value, cause);
 				}
 			};
@@ -1614,8 +2407,18 @@ public class ObservableListImpl {
 				}
 
 				@Override
+				protected String checkAdd(E value) {
+					return FlattenedObservableValuesList.this.canAdd(value);
+				}
+
+				@Override
 				protected ObservableValue<? extends E> attemptedAdd(E value) {
 					return FlattenedObservableValuesList.this.attemptedAdd(value);
+				}
+
+				@Override
+				protected boolean isElementSettable() {
+					return true;
 				}
 
 				@Override
@@ -1624,7 +2427,7 @@ public class ObservableListImpl {
 				}
 
 				@Override
-				protected Optional<E> attemptSet(ObservableValue<? extends E> container, E value, Object cause) {
+				protected E attemptSet(ObservableValue<? extends E> container, E value, Object cause) {
 					return FlattenedObservableValuesList.this.attemptedSet(container, value, cause);
 				}
 			};
@@ -1638,7 +2441,8 @@ public class ObservableListImpl {
 	 */
 	public static class FlattenedObservableValueList<E> extends ObservableReversibleCollectionImpl.FlattenedReversibleValueCollection<E>
 	implements ObservableList<E> {
-		public FlattenedObservableValueList(ObservableValue<? extends ObservableList<E>> collectionObservable) {
+		/** @param collectionObservable The value of lists to flatten */
+		protected FlattenedObservableValueList(ObservableValue<? extends ObservableList<E>> collectionObservable) {
 			super(collectionObservable);
 		}
 
@@ -1654,6 +2458,341 @@ public class ObservableListImpl {
 				throw new IndexOutOfBoundsException(index + " of 0");
 			return list.get(index);
 		}
+
+		@Override
+		public void add(int index, E element) {
+			try (Transaction t = lock(true, null)) {
+				ObservableList<? extends E> list = getWrapped().get();
+				if (list == null)
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				if (!list.getType().getRawType().isInstance(element))
+					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+				((ObservableList<E>) list).add(index, element);
+			}
+		}
+
+		@Override
+		public boolean addAll(int index, Collection<? extends E> c) {
+			try (Transaction t = lock(true, null)) {
+				ObservableList<? extends E> list = getWrapped().get();
+				if (list == null)
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				for (E v : c) {
+					if (!list.getType().getRawType().isInstance(v))
+						throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+				}
+				return ((ObservableList<E>) list).addAll(index, c);
+			}
+		}
+
+		@Override
+		public E remove(int index) {
+			try (Transaction t = lock(true, null)) {
+				ObservableList<? extends E> list = getWrapped().get();
+				if (list == null)
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				return list.remove(index);
+			}
+		}
+
+		@Override
+		public void removeRange(int fromIndex, int toIndex) {
+			try (Transaction t = lock(true, null)) {
+				ObservableList<? extends E> list = getWrapped().get();
+				if (list == null)
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				list.removeRange(fromIndex, toIndex);
+			}
+		}
+
+		@Override
+		public E set(int index, E element) {
+			try (Transaction t = lock(true, null)) {
+				ObservableList<? extends E> list = getWrapped().get();
+				if (list == null)
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				if (!list.getType().getRawType().isInstance(element))
+					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+				return ((ObservableList<E>) list).set(index, element);
+			}
+		}
+
+		@Override
+		public ObservableReversibleSpliterator<E> spliterator(int index) {
+			ObservableList<? extends E> list = getWrapped().get();
+			if (list == null)
+				return ObservableReversibleSpliterator.empty(getType());
+			else
+				return new WrappingReversibleObservableSpliterator<>(list.spliterator(index), getType(), map());
+		}
+
+		@Override
+		public ListIterator<E> listIterator(int index) {
+			ObservableList<? extends E> list = getWrapped().get();
+			if (list == null)
+				return Collections.<E> emptyList().listIterator(index);
+			ListIterator<? extends E> iter = list.listIterator(index);
+			return new ListIterator<E>() {
+				@Override
+				public boolean hasNext() {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					return iter.hasNext();
+				}
+
+				@Override
+				public E next() {
+					return iter.next();
+				}
+
+				@Override
+				public boolean hasPrevious() {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					return iter.hasPrevious();
+				}
+
+				@Override
+				public E previous() {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					return iter.previous();
+				}
+
+				@Override
+				public int nextIndex() {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					return iter.nextIndex();
+				}
+
+				@Override
+				public int previousIndex() {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					return iter.previousIndex();
+				}
+
+				@Override
+				public void remove() {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					iter.remove();
+				}
+
+				@Override
+				public void set(E e) {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					if (!list.getType().getRawType().isInstance(e))
+						throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+					((ListIterator<E>) iter).set(e);
+				}
+
+				@Override
+				public void add(E e) {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					if (!list.getType().getRawType().isInstance(e))
+						throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+					((ListIterator<E>) iter).add(e);
+				}
+			};
+		}
+
+		@Override
+		public ReversibleList<E> subList(int fromIndex, int toIndex) {
+			ObservableList<? extends E> list = getWrapped().get();
+			if (list == null)
+				return ReversibleList.<E> empty().subList(fromIndex, toIndex);
+			class RefCheckRevList implements ReversibleList<E> {
+				private final ReversibleList<? extends E> subList;
+
+				RefCheckRevList(ReversibleList<? extends E> subList) {
+					this.subList = subList;
+				}
+
+				@Override
+				public boolean addAll(int index, Collection<? extends E> c) {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					// TODO Auto-generated method stub
+				}
+
+				@Override
+				public E get(int index) {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					return subList.get(index);
+				}
+
+				@Override
+				public E set(int index, E element) {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					// TODO Auto-generated method stub
+				}
+
+				@Override
+				public void add(int index, E element) {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					// TODO Auto-generated method stub
+				}
+
+				@Override
+				public E remove(int index) {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					return subList.remove(index);
+				}
+
+				@Override
+				public int indexOf(Object o) {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					if (!list.getType().getRawType().isInstance(o))
+						return -1;
+					return subList.indexOf(list);
+				}
+
+				@Override
+				public int lastIndexOf(Object o) {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					if (!list.getType().getRawType().isInstance(o))
+						return -1;
+					return subList.lastIndexOf(list);
+				}
+
+				@Override
+				public ListIterator<E> listIterator(int index) {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					// TODO Auto-generated method stub
+				}
+
+				@Override
+				public boolean removeLast(Object o) {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					if (!list.getType().getRawType().isInstance(o))
+						return false;
+					return subList.removeLast(list);
+				}
+
+				@Override
+				public ReversibleSpliterator<E> spliterator(boolean fromStart) {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					// TODO Auto-generated method stub
+				}
+
+				@Override
+				public boolean containsAny(Collection<?> c) {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					return subList.containsAny(c);
+				}
+
+				@Override
+				public int size() {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					return subList.size();
+				}
+
+				@Override
+				public boolean isEmpty() {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					return subList.isEmpty();
+				}
+
+				@Override
+				public boolean contains(Object o) {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					return subList.contains(o);
+				}
+
+				@Override
+				public Object[] toArray() {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					return subList.toArray();
+				}
+
+				@Override
+				public <T> T[] toArray(T[] a) {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					return subList.toArray(a);
+				}
+
+				@Override
+				public boolean add(E e) {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					// TODO Auto-generated method stub
+				}
+
+				@Override
+				public boolean remove(Object o) {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					return subList.remove(o);
+				}
+
+				@Override
+				public boolean containsAll(Collection<?> c) {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					return subList.containsAll(c);
+				}
+
+				@Override
+				public boolean addAll(Collection<? extends E> c) {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					// TODO Auto-generated method stub
+				}
+
+				@Override
+				public boolean removeAll(Collection<?> c) {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					return subList.removeAll(c);
+				}
+
+				@Override
+				public boolean retainAll(Collection<?> c) {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					return subList.retainAll(c);
+				}
+
+				@Override
+				public void clear() {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					subList.clear();
+				}
+
+				@Override
+				public ReversibleSpliterator<E> spliterator(int index) {
+					if (getWrapped().get() != list)
+						throw new ConcurrentModificationException();
+					// TODO Auto-generated method stub
+				}
+
+				@Override
+				public ReversibleList<E> subList(int fromIndex, int toIndex) {
+					return new RefCheckRevList(subList.subList(fromIndex, toIndex));
+				}
+			}
+			return new RefCheckRevList(list.subList(fromIndex, toIndex));
+		}
 	}
 
 	/**
@@ -1663,7 +2802,8 @@ public class ObservableListImpl {
 	 */
 	public static class FlattenedObservableList<E> extends ObservableReversibleCollectionImpl.FlattenedReversibleCollection<E>
 	implements ObservableList<E> {
-		public FlattenedObservableList(ObservableList<? extends ObservableList<? extends E>> outer) {
+		/** @param outer The list of lists to flatten */
+		protected FlattenedObservableList(ObservableList<? extends ObservableList<? extends E>> outer) {
 			super(outer);
 		}
 
@@ -1685,9 +2825,106 @@ public class ObservableListImpl {
 		}
 	}
 
+	/**
+	 * Implements {@link ObservableList#constant(TypeToken, List)}
+	 *
+	 * @param <E> The type of values in the list
+	 */
 	public static class ConstantObservableList<E> extends ConstantObservableCollection<E> implements ObservableList<E> {
+		/**
+		 * @param type The type of the list
+		 * @param collection The values in the list
+		 */
 		public ConstantObservableList(TypeToken<E> type, List<? extends E> collection) {
 			super(type, collection);
+		}
+
+		@Override
+		protected List<? extends E> getCollection() {
+			return (List<? extends E>) super.getCollection();
+		}
+
+		@Override
+		public E get(int index) {
+			return getCollection().get(index);
+		}
+
+		@Override
+		public int indexOf(Object value) {
+			return getCollection().indexOf(value);
+		}
+
+		@Override
+		public int lastIndexOf(Object value) {
+			return getCollection().lastIndexOf(value);
+		}
+
+		@Override
+		public void add(int index, E element) {
+			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public boolean addAll(int index, Collection<? extends E> c) {
+			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public boolean removeLast(Object o) {
+			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public E remove(int index) {
+			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public void removeRange(int fromIndex, int toIndex) {
+			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public E set(int index, E element) {
+			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public ObservableReversibleSpliterator<E> spliterator() {
+			return spliterator(true);
+		}
+
+		@Override
+		public ObservableReversibleSpliterator<E> spliterator(boolean fromStart) {
+		}
+
+		@Override
+		public ObservableReversibleSpliterator<E> spliterator(int index) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public ListIterator<E> listIterator(int index) {
+			return (ListIterator<E>) Collections.unmodifiableList(getCollection()).listIterator(index);
+		}
+
+		@Override
+		public ReversibleList<E> subList(int fromIndex, int toIndex) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public CollectionSubscription subscribeOrdered(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public CollectionSubscription subscribeReverse(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
+			// TODO Auto-generated method stub
+			return null;
 		}
 	}
 

@@ -1,6 +1,7 @@
 package org.observe.collect;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -39,6 +40,29 @@ import com.google.common.reflect.TypeToken;
 /** Holds default implementation methods and classes for {@link ObservableReversibleCollection} */
 public class ObservableReversibleCollectionImpl {
 	private ObservableReversibleCollectionImpl() {}
+
+	/**
+	 * Simple implementation of {@link ObservableReversibleCollection#removeLast(Object)}
+	 *
+	 * @param <E> The type of elements in the collection
+	 * @param coll The collection to remove the element from
+	 * @param o The value to remove from the collection
+	 * @return Whether the value was found and removed
+	 */
+	public static <E> boolean removeLast(ObservableReversibleCollection<E> coll, Object o) {
+		try (Transaction t = coll.lock(true, null)) {
+			ObservableReversibleSpliterator<E> spliter = coll.spliterator(false);
+			boolean[] found = new boolean[1];
+			while (!found[0] && spliter.tryReverseElement(el -> {
+				if (coll.equivalence().elementEquals(el.get(), o)) {
+					el.remove();
+					found[0] = true;
+				}
+			})) {
+			}
+			return found[0];
+		}
+	}
 
 	/**
 	 * Implements {@link ObservableReversibleCollection#find(Predicate, Supplier, boolean)}
@@ -170,6 +194,11 @@ public class ObservableReversibleCollectionImpl {
 		}
 
 		@Override
+		public boolean removeLast(Object o) {
+			return ObservableReversibleCollectionImpl.removeLast(this, o);
+		}
+
+		@Override
 		public ObservableReversibleSpliterator<E> spliterator() {
 			return spliterator(true);
 		}
@@ -205,6 +234,19 @@ public class ObservableReversibleCollectionImpl {
 		@Override
 		protected ObservableReversibleCollection<E> getWrapped() {
 			return (ObservableReversibleCollection<E>) super.getWrapped();
+		}
+
+		@Override
+		public boolean removeLast(Object o) {
+			if (o != null && !getDef().checkDestType(o))
+				return false;
+			if (getDef().isReversible()) {
+				FilterMapResult<T, E> reversed = getDef().reverse(new FilterMapResult<>((T) o));
+				if (reversed.error != null)
+					return false;
+				return getWrapped().removeLast(reversed.result);
+			} else
+				return ObservableReversibleCollectionImpl.removeLast(this, o);
 		}
 
 		@Override
@@ -245,6 +287,25 @@ public class ObservableReversibleCollectionImpl {
 		@Override
 		protected ObservableReversibleCollection<E> getWrapped() {
 			return (ObservableReversibleCollection<E>) super.getWrapped();
+		}
+
+		@Override
+		public boolean removeLast(Object value) {
+			if (getDef().getReverse() != null) {
+				if (value == null && !getDef().areNullsReversed())
+					return false;
+				else if (value != null && getDef().targetType.getRawType().isInstance(value))
+					return false;
+
+				Map<ObservableValue<?>, Object> argValues = new HashMap<>(getDef().getArgs().size() * 4 / 3);
+				for (ObservableValue<?> arg : getDef().getArgs())
+					argValues.put(arg, arg.get());
+				StaticCombinedValues<V> combined = new StaticCombinedValues<>();
+				combined.argValues = argValues;
+				combined.element = (V) value;
+				return getWrapped().removeLast(getDef().getReverse().apply(combined));
+			} else
+				return ObservableReversibleCollectionImpl.removeLast(this, value);
 		}
 
 		@Override
@@ -426,6 +487,11 @@ public class ObservableReversibleCollectionImpl {
 		}
 
 		@Override
+		public boolean removeLast(Object o) {
+			return getWrapped().removeLast(o);
+		}
+
+		@Override
 		public ObservableReversibleSpliterator<E> spliterator() {
 			return (ObservableReversibleSpliterator<E>) super.spliterator();
 		}
@@ -489,6 +555,11 @@ public class ObservableReversibleCollectionImpl {
 		}
 
 		@Override
+		public boolean removeLast(Object o) {
+			return getWrapped().removeLast(o);
+		}
+
+		@Override
 		public ObservableReversibleSpliterator<E> spliterator() {
 			return (ObservableReversibleSpliterator<E>) super.spliterator();
 		}
@@ -532,6 +603,14 @@ public class ObservableReversibleCollectionImpl {
 		@Override
 		protected ObservableReversibleCollection<E> getWrapped() {
 			return (ObservableReversibleCollection<E>) super.getWrapped();
+		}
+
+		@Override
+		public boolean removeLast(Object value) {
+			if (getDef().checkRemove(value) == null)
+				return getWrapped().removeLast(value);
+			else
+				return false;
 		}
 
 		@Override
@@ -593,6 +672,13 @@ public class ObservableReversibleCollectionImpl {
 		}
 
 		@Override
+		public boolean removeLast(Object o) {
+			if (isDone())
+				throw new IllegalStateException("This cached collection's finisher has fired");
+			return getWrapped().removeLast(o);
+		}
+
+		@Override
 		public ObservableReversibleSpliterator<E> spliterator() {
 			return spliterator(true);
 		}
@@ -649,6 +735,11 @@ public class ObservableReversibleCollectionImpl {
 		}
 
 		@Override
+		public boolean removeLast(Object o) {
+			return getWrapped().removeLast(o);
+		}
+
+		@Override
 		public ObservableReversibleSpliterator<E> spliterator() {
 			return (ObservableReversibleSpliterator<E>) super.spliterator();
 		}
@@ -696,6 +787,11 @@ public class ObservableReversibleCollectionImpl {
 		}
 
 		@Override
+		public boolean removeLast(Object o) {
+			return ObservableReversibleCollectionImpl.removeLast(this, o);
+		}
+
+		@Override
 		public ObservableReversibleSpliterator<E> spliterator() {
 			return spliterator(true);
 		}
@@ -736,6 +832,12 @@ public class ObservableReversibleCollectionImpl {
 		@Override
 		protected ObservableValue<? extends ObservableReversibleCollection<? extends E>> getWrapped() {
 			return (ObservableValue<? extends ObservableReversibleCollection<? extends E>>) super.getWrapped();
+		}
+
+		@Override
+		public boolean removeLast(Object o) {
+			ObservableReversibleCollection<? extends E> coll = getWrapped().get();
+			return coll == null ? false : coll.removeLast(o);
 		}
 
 		@Override
@@ -799,6 +901,31 @@ public class ObservableReversibleCollectionImpl {
 		@Override
 		protected ObservableReversibleCollection<? extends ObservableReversibleCollection<? extends E>> getOuter() {
 			return (ObservableReversibleCollection<? extends ObservableReversibleCollection<? extends E>>) super.getOuter();
+		}
+
+		@Override
+		public boolean removeLast(Object o) {
+			boolean [] removed=new boolean[1];
+			ObservableReversibleSpliterator<? extends ObservableReversibleCollection<? extends E>> outerSplit=getOuter().spliterator(false);
+			while(!removed[0] && outerSplit.tryReverseElement(el->{
+				ObservableReversibleCollection<? extends E> inner=el.get();
+				if(inner.equivalence().equals(equivalence()))
+					removed[0]=inner.removeLast(o);
+				else{
+					ObservableReversibleSpliterator<? extends E> innerSplit=inner.spliterator(false);
+					boolean [] found=new boolean[1];
+					while(!found[0] && innerSplit.tryReverseElement(innerEl->{
+						found[0]=equivalence().elementEquals(innerEl.get(), o);
+						if(found[0] && innerEl.canRemove()==null){
+							innerEl.remove();
+							removed[0]=true;
+						}
+					})){
+					}
+				}
+			})){
+			}
+			return removed[0];
 		}
 
 		@Override
