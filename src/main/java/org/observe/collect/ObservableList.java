@@ -264,6 +264,12 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Re
 	}
 
 	/**
+	 * Makes a list out of any type of ObservableCollection, emulating the indexing and other functionality by means of series of slower
+	 * operations.
+	 *
+	 * Note: In particular, if the source collection does not implement {@link ObservableReversibleCollection}, the reverse functionality on
+	 * this list will be extremely slow
+	 *
 	 * @param <T> The type of the collection
 	 * @param collection The collection to wrap as a list
 	 * @return A list containing all elements in the collection, ordered and accessible by index

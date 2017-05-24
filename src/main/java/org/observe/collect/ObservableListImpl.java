@@ -9,11 +9,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.Spliterator;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -22,18 +19,20 @@ import java.util.stream.Collectors;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.SettableValue;
-import org.observe.Subscription;
 import org.observe.collect.ObservableCollectionImpl.ConstantObservableCollection;
-import org.observe.collect.ObservableListImpl.CollectionWrappingList;
 import org.observe.collect.ObservableReversibleCollectionImpl.CachedReversibleCollection;
 import org.observe.collect.ObservableReversibleCollectionImpl.CombinedReversibleCollection;
+import org.observe.collect.ObservableReversibleCollectionImpl.ElementRefreshingReversibleCollection;
 import org.observe.collect.ObservableReversibleCollectionImpl.EquivalenceSwitchedReversibleCollection;
 import org.observe.collect.ObservableReversibleCollectionImpl.FilterMappedReversibleCollection;
+import org.observe.collect.ObservableReversibleCollectionImpl.FlattenedReversibleCollection;
+import org.observe.collect.ObservableReversibleCollectionImpl.FlattenedReversibleValueCollection;
 import org.observe.collect.ObservableReversibleCollectionImpl.FlattenedReversibleValuesCollection;
 import org.observe.collect.ObservableReversibleCollectionImpl.ModFilteredReversibleCollection;
+import org.observe.collect.ObservableReversibleCollectionImpl.ObservableReversedCollection;
 import org.observe.collect.ObservableReversibleCollectionImpl.RefreshingReversibleCollection;
+import org.observe.collect.ObservableReversibleCollectionImpl.TakenUntilReversibleCollection;
 import org.observe.collect.ObservableReversibleSpliterator.WrappingReversibleObservableSpliterator;
-import org.qommons.ListenerSet;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.Betterator;
@@ -43,6 +42,7 @@ import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.ReversibleList;
 import org.qommons.collect.ReversibleSpliterator;
 import org.qommons.collect.TransactableList;
+import org.qommons.value.Value;
 
 import com.google.common.reflect.TypeToken;
 
@@ -1222,8 +1222,7 @@ public class ObservableListImpl {
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	public static class ReversedList<E> extends ObservableReversibleCollectionImpl.ObservableReversedCollection<E>
-	implements ObservableList<E> {
+	public static class ReversedList<E> extends ObservableReversedCollection<E> implements ObservableList<E> {
 		/** @param list The source list */
 		protected ReversedList(ObservableList<E> list) {
 			super(list);
@@ -1641,7 +1640,7 @@ public class ObservableListImpl {
 				@Override
 				public void add(T e) {
 					// The spliterator doesn't support addition. If I use the main list to add, the spliterator may become invalid.
-					// TODO There are potentially way to support this, but it's rather difficult.
+					// TODO There are potentially ways to support this, but it's rather difficult.
 					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 				}
 			};
@@ -2151,8 +2150,7 @@ public class ObservableListImpl {
 	 *
 	 * @param <E> The type of the collection to refresh
 	 */
-	public static class ElementRefreshingList<E> extends ObservableReversibleCollectionImpl.ElementRefreshingReversibleCollection<E>
-	implements ObservableList<E> {
+	public static class ElementRefreshingList<E> extends ElementRefreshingReversibleCollection<E> implements ObservableList<E> {
 		/**
 		 * @param wrap The source list
 		 * @param refresh The function of observables that refresh this list's elements
@@ -2222,8 +2220,7 @@ public class ObservableListImpl {
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	public static class TakenUntilObservableList<E> extends ObservableReversibleCollectionImpl.TakenUntilReversibleCollection<E>
-	implements ObservableList<E> {
+	public static class TakenUntilObservableList<E> extends TakenUntilReversibleCollection<E> implements ObservableList<E> {
 		/**
 		 * @param wrap The source list
 		 * @param until The observable that terminates this list's observers
@@ -2294,8 +2291,7 @@ public class ObservableListImpl {
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	public static class FlattenedObservableValuesList<E> extends FlattenedReversibleValuesCollection<E>
-	implements ObservableList<E> {
+	public static class FlattenedObservableValuesList<E> extends FlattenedReversibleValuesCollection<E> implements ObservableList<E> {
 		/** @param collection The list of values to flatten */
 		protected FlattenedObservableValuesList(ObservableList<? extends ObservableValue<? extends E>> collection) {
 			super(collection);
@@ -2439,8 +2435,7 @@ public class ObservableListImpl {
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	public static class FlattenedObservableValueList<E> extends ObservableReversibleCollectionImpl.FlattenedReversibleValueCollection<E>
-	implements ObservableList<E> {
+	public static class FlattenedObservableValueList<E> extends FlattenedReversibleValueCollection<E> implements ObservableList<E> {
 		/** @param collectionObservable The value of lists to flatten */
 		protected FlattenedObservableValueList(ObservableValue<? extends ObservableList<E>> collectionObservable) {
 			super(collectionObservable);
@@ -2526,78 +2521,447 @@ public class ObservableListImpl {
 				return new WrappingReversibleObservableSpliterator<>(list.spliterator(index), getType(), map());
 		}
 
+		/** A ListIterator that performs an additional check for each operation to ensure that the underlying list value has not changed */
+		protected class ValueCheckingListIterator implements ListIterator<E> {
+			private final ObservableList<? extends E> theList;
+			private final ListIterator<? extends E> theIter;
+
+			/**
+			 * @param list The ObservableList that this spliterator was generated from
+			 * @param iter The backing iterator
+			 */
+			protected ValueCheckingListIterator(ObservableList<? extends E> list, ListIterator<? extends E> iter) {
+				theList = list;
+				theIter = iter;
+			}
+
+			/** Checks to make sure the underlying observable value hasn't changed */
+			protected void check() {
+				if (getWrapped().get() != theList)
+					throw new ConcurrentModificationException();
+			}
+
+			@Override
+			public boolean hasNext() {
+				check();
+				return theIter.hasNext();
+			}
+
+			@Override
+			public E next() {
+				check();
+				return theIter.next();
+			}
+
+			@Override
+			public boolean hasPrevious() {
+				check();
+				return theIter.hasPrevious();
+			}
+
+			@Override
+			public E previous() {
+				check();
+				return theIter.previous();
+			}
+
+			@Override
+			public int nextIndex() {
+				check();
+				return theIter.nextIndex();
+			}
+
+			@Override
+			public int previousIndex() {
+				check();
+				return theIter.previousIndex();
+			}
+
+			@Override
+			public void remove() {
+				check();
+				theIter.remove();
+			}
+
+			@Override
+			public void set(E e) {
+				check();
+				if (!theList.getType().getRawType().isInstance(e))
+					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+				((ListIterator<E>) theIter).set(e);
+			}
+
+			@Override
+			public void add(E e) {
+				check();
+				if (!theList.getType().getRawType().isInstance(e))
+					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+				((ListIterator<E>) theIter).add(e);
+			}
+		}
+
 		@Override
 		public ListIterator<E> listIterator(int index) {
 			ObservableList<? extends E> list = getWrapped().get();
 			if (list == null)
 				return Collections.<E> emptyList().listIterator(index);
-			ListIterator<? extends E> iter = list.listIterator(index);
-			return new ListIterator<E>() {
-				@Override
-				public boolean hasNext() {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					return iter.hasNext();
-				}
+			return new ValueCheckingListIterator(list, list.listIterator(index));
+		}
 
-				@Override
-				public E next() {
-					return iter.next();
-				}
+		/** A sub-list that performs an additional check for each operation to ensure that the underlying list value has not changed */
+		protected class ValueCheckingSubList implements ReversibleList<E> {
+			private final ObservableList<? extends E> theList;
+			private final ReversibleList<? extends E> theSubList;
 
-				@Override
-				public boolean hasPrevious() {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					return iter.hasPrevious();
-				}
+			/**
+			 * @param list The ObservableList that this spliterator was generated from
+			 * @param subList The backing list
+			 */
+			protected ValueCheckingSubList(ObservableList<? extends E> list, ReversibleList<? extends E> subList) {
+				theList = list;
+				theSubList = subList;
+			}
 
-				@Override
-				public E previous() {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					return iter.previous();
-				}
+			/** Checks to make sure the underlying observable value hasn't changed */
+			protected void check() {
+				if (getWrapped().get() != theList)
+					throw new ConcurrentModificationException();
+			}
 
-				@Override
-				public int nextIndex() {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					return iter.nextIndex();
-				}
+			@Override
+			public int size() {
+				check();
+				return theSubList.size();
+			}
 
-				@Override
-				public int previousIndex() {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					return iter.previousIndex();
-				}
+			@Override
+			public boolean isEmpty() {
+				check();
+				return theSubList.isEmpty();
+			}
 
-				@Override
-				public void remove() {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					iter.remove();
-				}
+			@Override
+			public boolean contains(Object o) {
+				check();
+				return theSubList.contains(o);
+			}
 
-				@Override
-				public void set(E e) {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					if (!list.getType().getRawType().isInstance(e))
+			@Override
+			public boolean containsAny(Collection<?> c) {
+				check();
+				return theSubList.containsAny(c);
+			}
+
+			@Override
+			public boolean containsAll(Collection<?> c) {
+				check();
+				return theSubList.containsAll(c);
+			}
+
+			@Override
+			public E get(int index) {
+				check();
+				return theSubList.get(index);
+			}
+
+			@Override
+			public int indexOf(Object o) {
+				check();
+				if (!theList.getType().getRawType().isInstance(o))
+					return -1;
+				return theSubList.indexOf(theList);
+			}
+
+			@Override
+			public int lastIndexOf(Object o) {
+				check();
+				if (!theList.getType().getRawType().isInstance(o))
+					return -1;
+				return theSubList.lastIndexOf(theList);
+			}
+
+			@Override
+			public Object[] toArray() {
+				check();
+				return theSubList.toArray();
+			}
+
+			@Override
+			public <T> T[] toArray(T[] a) {
+				check();
+				return theSubList.toArray(a);
+			}
+
+			@Override
+			public boolean add(E e) {
+				check();
+				if (e != null && !theList.getType().getRawType().isInstance(e))
+					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+				else
+					return ((ReversibleList<E>) theSubList).add(e);
+			}
+
+			@Override
+			public boolean addAll(Collection<? extends E> c) {
+				check();
+				for (E v : c)
+					if (v != null && !theList.getType().getRawType().isInstance(v))
 						throw new IllegalArgumentException(StdMsg.BAD_TYPE);
-					((ListIterator<E>) iter).set(e);
-				}
+				return ((ReversibleList<E>) theSubList).addAll(c);
+			}
 
-				@Override
-				public void add(E e) {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					if (!list.getType().getRawType().isInstance(e))
+			@Override
+			public void add(int index, E element) {
+				check();
+				if (element != null && !theList.getType().getRawType().isInstance(element))
+					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+				else
+					((ReversibleList<E>) theSubList).add(index, element);
+			}
+
+			@Override
+			public boolean addAll(int index, Collection<? extends E> c) {
+				check();
+				for (E v : c)
+					if (v != null && !theList.getType().getRawType().isInstance(v))
 						throw new IllegalArgumentException(StdMsg.BAD_TYPE);
-					((ListIterator<E>) iter).add(e);
-				}
-			};
+				return ((ReversibleList<E>) theSubList).addAll(index, c);
+			}
+
+			@Override
+			public boolean remove(Object o) {
+				check();
+				return theSubList.remove(o);
+			}
+
+			@Override
+			public boolean removeLast(Object o) {
+				check();
+				if (!theList.getType().getRawType().isInstance(o))
+					return false;
+				return theSubList.removeLast(theList);
+			}
+
+			@Override
+			public boolean removeAll(Collection<?> c) {
+				check();
+				return theSubList.removeAll(c);
+			}
+
+			@Override
+			public boolean retainAll(Collection<?> c) {
+				check();
+				return theSubList.retainAll(c);
+			}
+
+			@Override
+			public void clear() {
+				check();
+				theSubList.clear();
+			}
+
+			@Override
+			public E remove(int index) {
+				check();
+				return theSubList.remove(index);
+			}
+
+			@Override
+			public void removeRange(int fromIndex, int toIndex) {
+				check();
+				theSubList.removeRange(fromIndex, toIndex);
+			}
+
+			@Override
+			public E set(int index, E element) {
+				check();
+				if (element != null && !theList.getType().getRawType().isInstance(element))
+					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+				return ((ReversibleList<E>) theSubList).set(index, element);
+			}
+
+			@Override
+			public ReversibleSpliterator<E> spliterator(boolean fromStart) {
+				check();
+				return new ValueCheckingSpliterator(theList, theSubList.spliterator(fromStart));
+			}
+
+			@Override
+			public ReversibleSpliterator<E> spliterator(int index) {
+				check();
+				return new ValueCheckingSpliterator(theList, theSubList.spliterator(index));
+			}
+
+			@Override
+			public ListIterator<E> listIterator(int index) {
+				check();
+				return new ValueCheckingListIterator(theList, theSubList.listIterator(index));
+			}
+
+			@Override
+			public ReversibleList<E> subList(int fromIndex, int toIndex) {
+				check();
+				return new ValueCheckingSubList(theList, theSubList.subList(fromIndex, toIndex));
+			}
+		}
+
+		/** A Spliterator that performs an additional check for each operation to ensure that the underlying list value has not changed */
+		protected class ValueCheckingSpliterator implements ReversibleSpliterator<E> {
+			private final ObservableList<? extends E> theList;
+			private final ReversibleSpliterator<? extends E> theSpliterator;
+			private final CollectionElement<E> theElement;
+			private CollectionElement<? extends E> theWrappedElement;
+
+			/**
+			 * @param list The ObservableList that this spliterator was generated from
+			 * @param spliterator The backing spliterator
+			 */
+			protected ValueCheckingSpliterator(ObservableList<? extends E> list, ReversibleSpliterator<? extends E> spliterator) {
+				theList = list;
+				theSpliterator = spliterator;
+				theElement = new CollectionElement<E>() {
+					@Override
+					public TypeToken<E> getType() {
+						return FlattenedObservableValueList.this.getType();
+					}
+
+					@Override
+					public E get() {
+						check();
+						return theWrappedElement.get();
+					}
+
+					@Override
+					public Value<String> isEnabled() {
+						check();
+						return theWrappedElement.isEnabled();
+					}
+
+					@Override
+					public <V extends E> String isAcceptable(V value) {
+						check();
+						if (value != null && !theList.getType().getRawType().isInstance(value))
+							return StdMsg.BAD_TYPE;
+						else
+							return ((CollectionElement<E>) theWrappedElement).isAcceptable(value);
+					}
+
+					@Override
+					public <V extends E> E set(V value, Object cause) throws IllegalArgumentException {
+						check();
+						if (value != null && !theList.getType().getRawType().isInstance(value))
+							throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+						else
+							return ((CollectionElement<E>) theWrappedElement).set(value, cause);
+					}
+
+					@Override
+					public String canRemove() {
+						check();
+						return theWrappedElement.canRemove();
+					}
+
+					@Override
+					public void remove() throws IllegalArgumentException {
+						check();
+						theWrappedElement.remove();
+					}
+				};
+			}
+
+			/** Checks to make sure the underlying observable value hasn't changed */
+			protected void check() {
+				if (getWrapped().get() != theList)
+					throw new ConcurrentModificationException();
+			}
+
+			@Override
+			public TypeToken<E> getType() {
+				return FlattenedObservableValueList.this.getType();
+			}
+
+			@Override
+			public long estimateSize() {
+				check();
+				return theSpliterator.estimateSize();
+			}
+
+			@Override
+			public int characteristics() {
+				check();
+				return theSpliterator.characteristics();
+			}
+
+			@Override
+			public boolean tryAdvanceElement(Consumer<? super CollectionElement<E>> action) {
+				check();
+				return theSpliterator.tryAdvanceElement(el -> {
+					theWrappedElement = el;
+					action.accept(theElement);
+				});
+			}
+
+			@Override
+			public void forEachElement(Consumer<? super CollectionElement<E>> action) {
+				check();
+				theSpliterator.forEachElement(el -> {
+					theWrappedElement = el;
+					action.accept(theElement);
+				});
+			}
+
+			@Override
+			public boolean tryAdvance(Consumer<? super E> action) {
+				check();
+				return theSpliterator.tryAdvance(action);
+			}
+
+			@Override
+			public void forEachRemaining(Consumer<? super E> action) {
+				check();
+				theSpliterator.forEachRemaining(action);
+			}
+
+			@Override
+			public boolean tryReverseElement(Consumer<? super CollectionElement<E>> action) {
+				check();
+				return theSpliterator.tryReverseElement(el -> {
+					theWrappedElement = el;
+					action.accept(theElement);
+				});
+			}
+
+			@Override
+			public boolean tryReverse(Consumer<? super E> action) {
+				return theSpliterator.tryReverse(action);
+			}
+
+			@Override
+			public void forEachReverseElement(Consumer<? super CollectionElement<E>> action) {
+				theSpliterator.forEachReverseElement(el -> {
+					theWrappedElement = el;
+					action.accept(theElement);
+				});
+			}
+
+			@Override
+			public void forEachReverse(Consumer<? super E> action) {
+				theSpliterator.forEachReverse(action);
+			}
+
+			@Override
+			public ReversibleSpliterator<E> reverse() {
+				return new ValueCheckingSpliterator(theList, theSpliterator.reverse());
+			}
+
+			@Override
+			public ReversibleSpliterator<E> trySplit() {
+				check();
+				ReversibleSpliterator<? extends E> split = theSpliterator.trySplit();
+				if (split == null)
+					return null;
+				return new ValueCheckingSpliterator(theList, split);
+			}
 		}
 
 		@Override
@@ -2605,193 +2969,7 @@ public class ObservableListImpl {
 			ObservableList<? extends E> list = getWrapped().get();
 			if (list == null)
 				return ReversibleList.<E> empty().subList(fromIndex, toIndex);
-			class RefCheckRevList implements ReversibleList<E> {
-				private final ReversibleList<? extends E> subList;
-
-				RefCheckRevList(ReversibleList<? extends E> subList) {
-					this.subList = subList;
-				}
-
-				@Override
-				public boolean addAll(int index, Collection<? extends E> c) {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					// TODO Auto-generated method stub
-				}
-
-				@Override
-				public E get(int index) {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					return subList.get(index);
-				}
-
-				@Override
-				public E set(int index, E element) {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					// TODO Auto-generated method stub
-				}
-
-				@Override
-				public void add(int index, E element) {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					// TODO Auto-generated method stub
-				}
-
-				@Override
-				public E remove(int index) {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					return subList.remove(index);
-				}
-
-				@Override
-				public int indexOf(Object o) {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					if (!list.getType().getRawType().isInstance(o))
-						return -1;
-					return subList.indexOf(list);
-				}
-
-				@Override
-				public int lastIndexOf(Object o) {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					if (!list.getType().getRawType().isInstance(o))
-						return -1;
-					return subList.lastIndexOf(list);
-				}
-
-				@Override
-				public ListIterator<E> listIterator(int index) {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					// TODO Auto-generated method stub
-				}
-
-				@Override
-				public boolean removeLast(Object o) {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					if (!list.getType().getRawType().isInstance(o))
-						return false;
-					return subList.removeLast(list);
-				}
-
-				@Override
-				public ReversibleSpliterator<E> spliterator(boolean fromStart) {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					// TODO Auto-generated method stub
-				}
-
-				@Override
-				public boolean containsAny(Collection<?> c) {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					return subList.containsAny(c);
-				}
-
-				@Override
-				public int size() {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					return subList.size();
-				}
-
-				@Override
-				public boolean isEmpty() {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					return subList.isEmpty();
-				}
-
-				@Override
-				public boolean contains(Object o) {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					return subList.contains(o);
-				}
-
-				@Override
-				public Object[] toArray() {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					return subList.toArray();
-				}
-
-				@Override
-				public <T> T[] toArray(T[] a) {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					return subList.toArray(a);
-				}
-
-				@Override
-				public boolean add(E e) {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					// TODO Auto-generated method stub
-				}
-
-				@Override
-				public boolean remove(Object o) {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					return subList.remove(o);
-				}
-
-				@Override
-				public boolean containsAll(Collection<?> c) {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					return subList.containsAll(c);
-				}
-
-				@Override
-				public boolean addAll(Collection<? extends E> c) {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					// TODO Auto-generated method stub
-				}
-
-				@Override
-				public boolean removeAll(Collection<?> c) {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					return subList.removeAll(c);
-				}
-
-				@Override
-				public boolean retainAll(Collection<?> c) {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					return subList.retainAll(c);
-				}
-
-				@Override
-				public void clear() {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					subList.clear();
-				}
-
-				@Override
-				public ReversibleSpliterator<E> spliterator(int index) {
-					if (getWrapped().get() != list)
-						throw new ConcurrentModificationException();
-					// TODO Auto-generated method stub
-				}
-
-				@Override
-				public ReversibleList<E> subList(int fromIndex, int toIndex) {
-					return new RefCheckRevList(subList.subList(fromIndex, toIndex));
-				}
-			}
-			return new RefCheckRevList(list.subList(fromIndex, toIndex));
+			return new ValueCheckingSubList(list, list.subList(fromIndex, toIndex));
 		}
 	}
 
@@ -2800,8 +2978,7 @@ public class ObservableListImpl {
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	public static class FlattenedObservableList<E> extends ObservableReversibleCollectionImpl.FlattenedReversibleCollection<E>
-	implements ObservableList<E> {
+	public static class FlattenedObservableList<E> extends FlattenedReversibleCollection<E> implements ObservableList<E> {
 		/** @param outer The list of lists to flatten */
 		protected FlattenedObservableList(ObservableList<? extends ObservableList<? extends E>> outer) {
 			super(outer);
@@ -2813,15 +2990,90 @@ public class ObservableListImpl {
 		}
 
 		@Override
-		public E get(int index) {
-			int idx = index;
-			for (ObservableList<? extends E> subList : getOuter()) {
-				if (idx < subList.size())
-					return subList.get(idx);
-				else
-					idx -= subList.size();
+		public void add(int index, E element) {
+			doForIndex(index, true, true, (list, idx) -> {
+				if (!list.getType().getRawType().isInstance(element))
+					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+				((ObservableList<E>) list).add(idx, element);
+				return null;
+			});
+		}
+
+		@Override
+		public boolean addAll(int index, Collection<? extends E> c) {
+			return doForIndex(index, true, true, (list, idx) -> {
+				for (E v : c)
+					if (!list.getType().getRawType().isInstance(v))
+						throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+				return ((ObservableList<E>) list).addAll(idx, c);
+			});
+		}
+
+		@Override
+		public E remove(int index) {
+			return doForIndex(index, false, true, (list, idx) -> ((ObservableList<? extends E>) list).remove(idx));
+		}
+
+		@Override
+		public void removeRange(int fromIndex, int toIndex) {
+			if (fromIndex < 0)
+				throw new IndexOutOfBoundsException("" + fromIndex);
+			if (fromIndex > toIndex)
+				throw new IndexOutOfBoundsException(fromIndex + ">" + toIndex);
+			int passed = 0;
+			boolean inRange = fromIndex == 0;
+			try (Transaction t = getOuter().lock(true, null)) {
+				for (ObservableList<? extends E> subList : getOuter()) {
+					try (Transaction t2 = subList.lock(true, null)) {
+						int size = subList.size();
+						int start = -1;
+						if (inRange)
+							start = 0;
+						else if (fromIndex < passed + size) {
+							start = fromIndex - passed;
+							inRange = true;
+						}
+						if (inRange) {
+							int end = toIndex - passed;
+							boolean keepGoing = false;
+							if (end > 0) {
+								if (end > size) {
+									keepGoing = true;
+									end = size;
+								}
+								subList.removeRange(start, end);
+							}
+							if (!keepGoing)
+								break;
+						}
+						passed += size;
+					}
+				}
 			}
-			throw new IndexOutOfBoundsException(index + " out of " + size());
+		}
+
+		@Override
+		public E set(int index, E element) {
+			return doForIndex(index, false, true, (list, idx) -> {
+				if (!list.getType().getRawType().isInstance(element))
+					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+				return ((ObservableList<E>) list).set(idx, element);
+			});
+		}
+
+		@Override
+		public ObservableReversibleSpliterator<E> spliterator(int index) {
+			// TODO Auto-generated method stub
+		}
+
+		@Override
+		public ListIterator<E> listIterator(int index) {
+			// TODO Auto-generated method stub
+		}
+
+		@Override
+		public ReversibleList<E> subList(int fromIndex, int toIndex) {
+			// TODO Auto-generated method stub
 		}
 	}
 
@@ -2896,12 +3148,57 @@ public class ObservableListImpl {
 
 		@Override
 		public ObservableReversibleSpliterator<E> spliterator(boolean fromStart) {
+			return spliterator(size());
 		}
 
 		@Override
 		public ObservableReversibleSpliterator<E> spliterator(int index) {
-			// TODO Auto-generated method stub
-			return null;
+			if (index < 0)
+				throw new IndexOutOfBoundsException("" + index);
+			List<ConstantElement> elements = getElements();
+			if (index > elements.size())
+				throw new IndexOutOfBoundsException(index + " of " + elements.size());
+			return new ObservableReversibleSpliterator<E>() {
+				private int theIndex = index;
+
+				@Override
+				public TypeToken<E> getType() {
+					return ConstantObservableList.this.getType();
+				}
+
+				@Override
+				public long estimateSize() {
+					return size();
+				}
+
+				@Override
+				public int characteristics() {
+					return Spliterator.IMMUTABLE | Spliterator.SIZED;
+				}
+
+				@Override
+				public boolean tryAdvanceObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
+					if (theIndex == elements.size())
+						return false;
+					action.accept(elements.get(theIndex));
+					theIndex++;
+					return true;
+				}
+
+				@Override
+				public boolean tryReverseObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
+					if (theIndex == 0)
+						return false;
+					theIndex--;
+					action.accept(elements.get(theIndex));
+					return true;
+				}
+
+				@Override
+				public ObservableReversibleSpliterator<E> trySplit() {
+					return null;
+				}
+			};
 		}
 
 		@Override
@@ -2917,14 +3214,39 @@ public class ObservableListImpl {
 
 		@Override
 		public CollectionSubscription subscribeOrdered(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
-			// TODO Auto-generated method stub
-			return null;
+			int index = 0;
+			for (ConstantElement el : getElements())
+				OrderedCollectionEvent.doWith(
+					new OrderedCollectionEvent<>(el.getElementId(), index++, CollectionChangeType.add, null, el.get(), null), observer);
+			return removeAll -> {
+				if (removeAll) {
+					for (int i = getElements().size() - 1; i >= 0; i--) {
+						ConstantElement el = getElements().get(i);
+						OrderedCollectionEvent.doWith(
+							new OrderedCollectionEvent<>(el.getElementId(), i, CollectionChangeType.remove, el.get(), el.get(), null),
+							observer);
+					}
+				}
+			};
 		}
 
 		@Override
 		public CollectionSubscription subscribeReverse(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
-			// TODO Auto-generated method stub
-			return null;
+			for (int i = getElements().size() - 1; i >= 0; i--) {
+				ConstantElement el = getElements().get(i);
+				OrderedCollectionEvent
+				.doWith(new OrderedCollectionEvent<>(el.getElementId(), i, CollectionChangeType.add, null, el.get(), null), observer);
+			}
+			return removeAll -> {
+				if (removeAll) {
+					for (int i = 0; i < getElements().size(); i++) {
+						ConstantElement el = getElements().get(i);
+						OrderedCollectionEvent.doWith(
+							new OrderedCollectionEvent<>(el.getElementId(), i, CollectionChangeType.remove, el.get(), el.get(), null),
+							observer);
+					}
+				}
+			};
 		}
 	}
 
@@ -2936,73 +3258,9 @@ public class ObservableListImpl {
 	public static class CollectionWrappingList<T> implements ObservableList<T> {
 		private final ObservableCollection<T> theWrapped;
 
-		private final ListenerSet<Consumer<? super ObservableOrderedElement<T>>> theListeners;
-
-		private final ReentrantReadWriteLock theLock;
-
-		final List<WrappingListElement<T>> theElements;
-
-		CollectionWrappingList(ObservableCollection<T> wrap) {
+		/** @param wrap The source collection */
+		protected CollectionWrappingList(ObservableCollection<T> wrap) {
 			theWrapped = wrap;
-			theListeners = new ListenerSet<>();
-			theLock = new ReentrantReadWriteLock();
-			theElements = new ArrayList<>();
-			theListeners.setUsedListener(new Consumer<Boolean>() {
-				Subscription wrapSub;
-
-				@Override
-				public void accept(Boolean used) {
-					Lock lock = theLock.writeLock();
-					lock.lock();
-					try {
-						if(used) {
-							boolean [] initialization = new boolean[] {true};
-							wrapSub = theWrapped.onElement(element -> {
-								int index = theElements.size();
-								if(element instanceof ObservableOrderedElement)
-									index = ((ObservableOrderedElement<T>) element).getIndex();
-								WrappingListElement<T> listEl = new WrappingListElement<>(CollectionWrappingList.this, element);
-								theElements.add(index, listEl);
-								element.completed().act(event -> {
-									Lock lock2 = theLock.writeLock();
-									lock2.lock();
-									try {
-										int idx = listEl.getIndex();
-										if(idx >= 0) {
-											listEl.setRemovedIndex(idx);
-											theElements.remove(idx);
-										}
-									} finally {
-										lock2.unlock();
-									}
-								});
-								if(!initialization[0]) {
-									theListeners.forEach(listener -> {
-										listener.accept(listEl);
-									});
-								}
-							});
-							initialization[0] = false;
-						} else {
-							wrapSub.unsubscribe();
-							wrapSub = null;
-							theElements.clear();
-						}
-					} finally {
-						lock.unlock();
-					}
-				}
-			});
-			theListeners.setOnSubscribe(listener -> {
-				Lock lock = theLock.readLock();
-				lock.lock();
-				try {
-					for(WrappingListElement<T> el : theElements)
-						listener.accept(el);
-				} finally {
-					lock.unlock();
-				}
-			});
 		}
 
 		@Override
@@ -3011,32 +3269,8 @@ public class ObservableListImpl {
 		}
 
 		@Override
-		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<T>> onElement) {
-			theListeners.add(onElement);
-			return () -> {
-				theListeners.remove(onElement);
-			};
-		}
-
-		@Override
-		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<T>> onElement) {
-			boolean [] initialized = new boolean[1];
-			Consumer<ObservableOrderedElement<T>> listener = element -> {
-				if(initialized[0])
-					onElement.accept(element);
-			};
-			theListeners.add(listener);
-			initialized[0] = true;
-			for(int i = theElements.size() - 1; i >= 0; i--)
-				onElement.accept(theElements.unwrap(i));
-			return () -> {
-				theListeners.remove(listener);
-			};
-		}
-
-		@Override
-		public ObservableValue<CollectionSession> getSession() {
-			return theWrapped.getSession();
+		public boolean isLockSupported() {
+			return theWrapped.isLockSupported();
 		}
 
 		@Override
@@ -3045,104 +3279,8 @@ public class ObservableListImpl {
 		}
 
 		@Override
-		public boolean isSafe() {
-			return theWrapped.isSafe();
-		}
-
-		@Override
-		public boolean addAll(int index, Collection<? extends T> c) {
-			throw new UnsupportedOperationException();
-		}
-
-		@Override
-		public T get(int index) {
-			Lock lock = theLock.readLock();
-			lock.lock();
-			try {
-				if(theListeners.isUsed())
-					return theElements.unwrap(index).get();
-				else { // This is risky here. No guarantee that the collection preserves order between iterations
-					int i = 0;
-					for(T value : theWrapped) {
-						if(i == index)
-							return value;
-						i++;
-					}
-					throw new IndexOutOfBoundsException(index + " of " + size());
-				}
-			} finally {
-				lock.unlock();
-			}
-		}
-
-		@Override
-		public T set(int index, T element) {
-			throw new UnsupportedOperationException();
-		}
-
-		@Override
-		public void add(int index, T element) {
-			throw new UnsupportedOperationException();
-		}
-
-		@Override
-		public T remove(int index) {
-			T ret = get(index);
-			theWrapped.remove(ret);
-			return ret;
-		}
-
-		@Override
-		public int indexOf(Object o) {
-			Lock lock = theLock.readLock();
-			lock.lock();
-			try {
-				if(theListeners.isUsed()) {
-					int i = 0;
-					for(WrappingListElement<T> el : theElements) {
-						if(Objects.equals(el.get(), o))
-							return i;
-						i++;
-					}
-					return -1;
-				} else { // This is risky here. No guarantee that the collection preserves order between iterations
-					int i = 0;
-					for(T value : theWrapped) {
-						if(Objects.equals(value, o))
-							return i;
-						i++;
-					}
-					return -1;
-				}
-			} finally {
-				lock.unlock();
-			}
-		}
-
-		@Override
-		public int lastIndexOf(Object o) {
-			Lock lock = theLock.readLock();
-			lock.lock();
-			try {
-				if(theListeners.isUsed()) {
-					for(int i = theElements.size() - 1; i >= 0; i--) {
-						if (Objects.equals(theElements.unwrap(i).get(), o))
-							return i;
-					}
-					return -1;
-				} else { // This is risky here. No guarantee that the collection preserves order between iterations
-					int ret = -1;
-					int i = 0;
-					for(T value : theWrapped) {
-						if(Objects.equals(value, o))
-							ret = i;
-						i++;
-					}
-					return ret;
-				}
-			} finally {
-				lock.unlock();
-			}
+		public Equivalence<? super T> equivalence() {
+			return theWrapped.equivalence();
 		}
 
 		@Override
@@ -3161,64 +3299,8 @@ public class ObservableListImpl {
 		}
 
 		@Override
-		public Iterator<T> iterator() {
-			Lock lock = theLock.readLock();
-			lock.lock();
-			try {
-				if(theListeners.isUsed())
-					return new ArrayList<>(theElements.stream().map(el -> el.get()).collect(Collectors.toList())).iterator();
-				else
-					return theWrapped.iterator();
-			} finally {
-				lock.unlock();
-			}
-		}
-
-		@Override
-		public String canRemove(Object value) {
-			return theWrapped.canRemove(value);
-		}
-
-		@Override
-		public boolean canAdd(T value) {
-			return theWrapped.canAdd(value);
-		}
-
-		@Override
-		public T [] toArray() {
-			Lock lock = theLock.readLock();
-			lock.lock();
-			try {
-				return ObservableList.super.toArray();
-			} finally {
-				lock.unlock();
-			}
-		}
-
-		@Override
-		public <T2> T2 [] toArray(T2 [] a) {
-			Lock lock = theLock.readLock();
-			lock.lock();
-			try {
-				if(theListeners.isUsed())
-					return theElements.stream().map(el -> el.get()).collect(Collectors.toList()).toArray(a);
-				else
-					return theWrapped.toArray(a);
-			} finally {
-				lock.unlock();
-			}
-		}
-
-		@Override
-		public boolean add(T e) {
-			// Not supported because the contract of List says add must always return true, but the contract of the wrapped collection
-			// is unknown
-			throw new UnsupportedOperationException();
-		}
-
-		@Override
-		public boolean remove(Object o) {
-			return theWrapped.remove(o);
+		public boolean containsAny(Collection<?> c) {
+			return theWrapped.containsAny(c);
 		}
 
 		@Override
@@ -3227,10 +3309,99 @@ public class ObservableListImpl {
 		}
 
 		@Override
+		public T get(int index) {
+			if (index < 0)
+				throw new IndexOutOfBoundsException("" + index);
+			if (theWrapped instanceof ObservableOrderedCollection)
+				return ((ObservableOrderedCollection<T>) theWrapped).get(index);
+			try (Transaction t = theWrapped.lock(false, null)) {
+				Spliterator<T> spliter = wrappedSpliterator(index, false);
+				Object[] res = new Object[1];
+				spliter.tryAdvance(v -> res[0] = v);
+				return (T) res[0];
+			}
+		}
+
+		@Override
+		public int indexOf(Object o) {
+			if (theWrapped instanceof ObservableOrderedCollection)
+				return ((ObservableOrderedCollection<T>) theWrapped).indexOf(o);
+			try (Transaction t = theWrapped.lock(false, null)) {
+				ObservableElementSpliterator<T> spliter = theWrapped.spliterator();
+				int i;
+				boolean[] found = new boolean[1];
+				for (i = 0; !found[0] && spliter.tryAdvance(v -> {
+					found[0] = theWrapped.equivalence().elementEquals(v, o);
+				}); i++)
+					;
+				if (found[0])
+					return i;
+				else
+					return -1;
+			}
+		}
+
+		@Override
+		public int lastIndexOf(Object o) {
+			if (theWrapped instanceof ObservableOrderedCollection)
+				return ((ObservableOrderedCollection<T>) theWrapped).lastIndexOf(o);
+			try (Transaction t = theWrapped.lock(false, null)) {
+				ObservableElementSpliterator<T> spliter = theWrapped.spliterator();
+				int[] i = new int[1];
+				int[] found = new int[] { -1 };
+				for (i[0] = 0; spliter.tryAdvance(v -> {
+					if (theWrapped.equivalence().elementEquals(v, o))
+						found[0] = i[0];
+				}); i[0]++)
+					;
+				return found[0];
+			}
+		}
+
+		@Override
+		public String canAdd(T value) {
+			return theWrapped.canAdd(value);
+		}
+
+		@Override
+		public boolean add(T e) {
+			return theWrapped.add(e);
+		}
+
+		@Override
 		public boolean addAll(Collection<? extends T> c) {
-			// Not supported because the contract of List says add must always return true, but the contract of the wrapped collection
-			// is unknown
-			throw new UnsupportedOperationException();
+			return theWrapped.addAll(c);
+		}
+
+		@Override
+		public void add(int index, T element) {
+			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public boolean addAll(int index, Collection<? extends T> c) {
+			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public String canRemove(Object value) {
+			return theWrapped.canRemove(value);
+		}
+
+		@Override
+		public boolean remove(Object o) {
+			return theWrapped.remove(o);
+		}
+
+		@Override
+		public boolean removeLast(Object o) {
+			if (theWrapped instanceof ObservableReversibleCollection)
+				return ((ObservableReversibleCollection<T>) theWrapped).removeLast(o);
+			try (Transaction t = theWrapped.lock(true, null)) {
+				int index = lastIndexOf(o);
+				remove(index);
+				return index >= 0;
+			}
 		}
 
 		@Override
@@ -3246,6 +3417,401 @@ public class ObservableListImpl {
 		@Override
 		public void clear() {
 			theWrapped.clear();
+		}
+
+		@Override
+		public T remove(int index) {
+			if (index < 0)
+				throw new IndexOutOfBoundsException("" + index);
+			try (Transaction t = theWrapped.lock(true, null)) {
+				ObservableElementSpliterator<T> spliter = wrappedSpliterator(index, false);
+				Object[] res = new Object[1];
+				spliter.tryAdvanceElement(el -> {
+					res[0] = el.get();
+					el.remove();
+				});
+				return (T) res[0];
+			}
+		}
+
+		@Override
+		public void removeRange(int fromIndex, int toIndex) {
+			if (fromIndex < 0)
+				throw new IndexOutOfBoundsException("" + fromIndex);
+			else if (fromIndex > toIndex)
+				throw new IndexOutOfBoundsException(fromIndex + ">" + toIndex);
+			else if (fromIndex == toIndex)
+				return;
+			try (Transaction t = theWrapped.lock(true, null)) {
+				if (theWrapped instanceof ObservableReversibleCollection) {
+					ObservableReversibleSpliterator<T> spliter = (ObservableReversibleSpliterator<T>) wrappedSpliterator(toIndex, true);
+					for (int i = toIndex; i >= fromIndex; i--)
+						spliter.tryReverseElement(el -> el.remove());
+				} else {
+					ObservableElementSpliterator<T> spliter = wrappedSpliterator(fromIndex, true);
+					for (int i = fromIndex; i < toIndex; i++)
+						spliter.tryAdvanceElement(el -> el.remove());
+				}
+			}
+		}
+
+		@Override
+		public T set(int index, T element) {
+			if (index < 0)
+				throw new IndexOutOfBoundsException("" + index);
+			try (Transaction t = theWrapped.lock(true, null)) {
+				ObservableElementSpliterator<T> spliter = wrappedSpliterator(index, false);
+				Object[] res = new Object[1];
+				spliter.tryAdvanceElement(el -> res[0] = el.set(element, null));
+				return (T) res[0];
+			}
+		}
+
+		@Override
+		public ObservableReversibleSpliterator<T> spliterator() {
+			return spliterator(0);
+		}
+
+		@Override
+		public ObservableReversibleSpliterator<T> spliterator(boolean fromStart) {
+			if (theWrapped instanceof ObservableReversibleCollection)
+				return ((ObservableReversibleCollection<T>) theWrapped).spliterator(fromStart);
+			// TODO Auto-generated method stub
+		}
+
+		@Override
+		public ObservableReversibleSpliterator<T> spliterator(int index) {
+			// TODO Auto-generated method stub
+		}
+
+		protected ObservableElementSpliterator<T> wrappedSpliterator(int index, boolean includeTerminus) {
+			if (index < 0)
+				throw new IndexOutOfBoundsException("" + index);
+			int size = theWrapped.size();
+			if (index > size || (!includeTerminus && index == size))
+				throw new IndexOutOfBoundsException(index + " of " + size);
+			if (theWrapped instanceof ObservableReversibleCollection) {
+				ObservableReversibleSpliterator<T> spliter;
+				if (index >= size / 2) {
+					spliter = ((ObservableReversibleCollection<T>) theWrapped).spliterator(false);
+					for (int i = size; i >= index; i--) {
+						spliter.tryReverse(v -> {
+						});
+					}
+				} else {
+					spliter = ((ObservableReversibleCollection<T>) theWrapped).spliterator(true);
+					for (int i = 0; i < index; i++)
+						spliter.tryAdvance(v -> {
+						});
+				}
+				return spliter;
+			} else {
+				ObservableElementSpliterator<T> spliter = theWrapped.spliterator();
+				for (int i = 0; i < index; i++)
+					spliter.tryAdvance(v -> {
+					});
+				return spliter;
+			}
+		}
+
+		@Override
+		public ListIterator<T> listIterator(int index) {
+			return new ReversibleSpliterator.PartialListIterator<T>(spliterator(index)) {
+				private int theIndex = index;
+
+				@Override
+				public T next() {
+					T ret = super.next();
+					theIndex++;
+					return ret;
+				}
+
+				@Override
+				public T previous() {
+					T ret = super.previous();
+					theIndex--;
+					return ret;
+				}
+
+				@Override
+				public int nextIndex() {
+					return theIndex;
+				}
+
+				@Override
+				public int previousIndex() {
+					return theIndex - 1;
+				}
+
+				@Override
+				public void add(Object e) {
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				}
+			};
+		}
+
+		/** Implements {@link CollectionWrappingList#subList(int, int)} */
+		protected class WrappingSubList implements ReversibleList<T> {
+			private final int fromIndex;
+			private int toIndex;
+
+			/**
+			 * @param fromIndex The start index of this sub-list
+			 * @param toIndex The end index of this sub-list
+			 */
+			protected WrappingSubList(int fromIndex, int toIndex) {
+				if (fromIndex < 0)
+					throw new IndexOutOfBoundsException("" + fromIndex);
+				if (fromIndex > toIndex)
+					throw new IndexOutOfBoundsException(fromIndex + ">" + toIndex);
+				int size = CollectionWrappingList.this.size();
+				if (toIndex > size)
+					throw new IndexOutOfBoundsException(toIndex + " of " + size);
+				this.fromIndex = fromIndex;
+				this.toIndex = toIndex;
+			}
+
+			@Override
+			public int size() {
+				if (theWrapped.size() < toIndex)
+					throw new ConcurrentModificationException();
+				return toIndex - fromIndex;
+			}
+
+			@Override
+			public boolean isEmpty() {
+				if (theWrapped.size() < toIndex)
+					throw new ConcurrentModificationException();
+				return fromIndex == toIndex;
+			}
+
+			@Override
+			public boolean contains(Object o) {
+				// TODO Auto-generated method stub
+				return false;
+			}
+
+			@Override
+			public boolean containsAny(Collection<?> c) {
+				// TODO Auto-generated method stub
+				return false;
+			}
+
+			@Override
+			public boolean containsAll(Collection<?> c) {
+				// TODO Auto-generated method stub
+				return false;
+			}
+
+			@Override
+			public Object[] toArray() {
+				// TODO Auto-generated method stub
+				return null;
+			}
+
+			@Override
+			public <T2> T2[] toArray(T2[] a) {
+				// TODO Auto-generated method stub
+				return null;
+			}
+
+			protected void checkIndex(int index, boolean includeTerminus) {
+				if (index < 0)
+					throw new IndexOutOfBoundsException("" + index);
+				int size = size();
+				if (index > size || (!includeTerminus && index == size))
+					throw new IndexOutOfBoundsException(index + " of " + size);
+			}
+
+			@Override
+			public T get(int index) {
+				checkIndex(index, false);
+				return CollectionWrappingList.this.get(fromIndex + index);
+			}
+
+			@Override
+			public int indexOf(Object o) {
+				// TODO Auto-generated method stub
+				return 0;
+			}
+
+			@Override
+			public int lastIndexOf(Object o) {
+				// TODO Auto-generated method stub
+				return 0;
+			}
+
+			@Override
+			public boolean add(T e) {
+				// We have no way of knowing whether the collection would stick the element in this sub-list's range if inserted
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			}
+
+			@Override
+			public boolean addAll(Collection<? extends T> c) {
+				// We have no way of knowing whether the collection would stick the element in this sub-list's range if inserted
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			}
+
+			@Override
+			public void add(int index, T element) {
+				// We have no way of knowing whether the collection would stick the element in this sub-list's range if inserted
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			}
+
+			@Override
+			public boolean addAll(int index, Collection<? extends T> c) {
+				// We have no way of knowing whether the collection would stick the element in this sub-list's range if inserted
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			}
+
+			@Override
+			public boolean remove(Object o) {
+				// TODO Auto-generated method stub
+				return false;
+			}
+
+			@Override
+			public boolean removeLast(Object o) {
+				// TODO Auto-generated method stub
+				return false;
+			}
+
+			@Override
+			public boolean removeAll(Collection<?> c) {
+				// TODO Auto-generated method stub
+				return false;
+			}
+
+			@Override
+			public boolean retainAll(Collection<?> c) {
+				// TODO Auto-generated method stub
+				return false;
+			}
+
+			@Override
+			public T remove(int index) {
+				checkIndex(index, false);
+				return CollectionWrappingList.this.remove(fromIndex + index);
+			}
+
+			@Override
+			public void removeRange(int fromIndex2, int toIndex2) {
+				checkIndex(fromIndex2, true);
+				checkIndex(toIndex2, true);
+				CollectionWrappingList.this.removeRange(fromIndex + fromIndex2, fromIndex + toIndex2);
+			}
+
+			@Override
+			public void clear() {
+				CollectionWrappingList.this.removeRange(fromIndex, toIndex);
+			}
+
+			@Override
+			public T set(int index, T element) {
+				checkIndex(index, false);
+				return CollectionWrappingList.this.set(fromIndex + index, element);
+			}
+
+			@Override
+			public ReversibleSpliterator<T> spliterator(boolean fromStart) {
+				// TODO Auto-generated method stub
+				return null;
+			}
+
+			@Override
+			public ReversibleSpliterator<T> spliterator(int index) {
+				checkIndex(index, true);
+				// TODO Auto-generated method stub
+				return null;
+			}
+
+			@Override
+			public ListIterator<T> listIterator(int index) {
+				checkIndex(index, true);
+				ListIterator<T> wrap = CollectionWrappingList.this.listIterator(fromIndex + index);
+				return new ListIterator<T>() {
+					@Override
+					public boolean hasNext() {
+						// TODO Auto-generated method stub
+						return false;
+					}
+
+					@Override
+					public T next() {
+						// TODO Auto-generated method stub
+						return null;
+					}
+
+					@Override
+					public boolean hasPrevious() {
+						// TODO Auto-generated method stub
+						return false;
+					}
+
+					@Override
+					public T previous() {
+						// TODO Auto-generated method stub
+						return null;
+					}
+
+					@Override
+					public int nextIndex() {
+						// TODO Auto-generated method stub
+						return 0;
+					}
+
+					@Override
+					public int previousIndex() {
+						// TODO Auto-generated method stub
+						return 0;
+					}
+
+					@Override
+					public void remove() {
+						// TODO Auto-generated method stub
+
+					}
+
+					@Override
+					public void set(T e) {
+						// TODO Auto-generated method stub
+
+					}
+
+					@Override
+					public void add(T e) {
+						// TODO Auto-generated method stub
+
+					}
+				};
+			}
+
+			@Override
+			public ReversibleList<T> subList(int fromIndex2, int toIndex2) {
+				checkIndex(fromIndex2, true);
+				checkIndex(toIndex2, true);
+				return new WrappingSubList(this.fromIndex + fromIndex2, this.fromIndex + toIndex2);
+			}
+		}
+
+		@Override
+		public ReversibleList<T> subList(int fromIndex, int toIndex) {
+			return new WrappingSubList(fromIndex, toIndex);
+		}
+
+		@Override
+		public CollectionSubscription subscribeOrdered(Consumer<? super OrderedCollectionEvent<? extends T>> observer) {
+			if (theWrapped instanceof ObservableOrderedCollection)
+				((ObservableOrderedCollection<T>) theWrapped).subscribeOrdered(observer);
+			// TODO Auto-generated method stub
+		}
+
+		@Override
+		public CollectionSubscription subscribeReverse(Consumer<? super OrderedCollectionEvent<? extends T>> observer) {
+			if (theWrapped instanceof ObservableReversibleCollection)
+				((ObservableReversibleCollection<T>) theWrapped).subscribeOrdered(observer);
+			// TODO Auto-generated method stub
 		}
 	}
 }

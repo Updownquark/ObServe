@@ -904,16 +904,68 @@ public class ObservableOrderedCollectionImpl {
 			return (ObservableOrderedCollection<? extends ObservableOrderedCollection<? extends E>>) super.getOuter();
 		}
 
-		@Override
-		public E get(int index) {
+		/**
+		 * Used with {@link FlattenedOrderedCollection#doForIndex(int, boolean, boolean, IndexedAction)}
+		 *
+		 * @param <E> The type of the flattened collection
+		 * @param <V> The type of the result of the action
+		 */
+		protected interface IndexedAction<E, V> {
+			/**
+			 * Called by {@link FlattenedOrderedCollection#doForIndex(int, boolean, boolean, IndexedAction)}
+			 *
+			 * @param subColl The sub-collection at the given index
+			 * @param subIndex The index in the sub-collection corresponding to the index given for the flattened collection
+			 * @return The result of the action
+			 */
+			V apply(ObservableOrderedCollection<? extends E> subColl, int subIndex);
+		}
+
+		/**
+		 * @param <V> The type of the result
+		 * @param index The index in this collection to operate on
+		 * @param includeTerminus Whether {@link #size()} is a valid index (e.g. for add operations)
+		 * @param write Whether the action may perform a write operation
+		 * @param action The action to perform on the sub-collection
+		 * @return The result of the action
+		 * @throws IndexOutOfBoundsException If the index is not valid for this collection
+		 */
+		protected <V> V doForIndex(int index, boolean includeTerminus, boolean write, IndexedAction<E, V> action) {
+			if (index < 0)
+				throw new IndexOutOfBoundsException("" + index);
 			int passed = 0;
-			for (ObservableOrderedCollection<? extends E> inner : getOuter()) {
-				int size = inner.size();
-				if (index < passed + size)
-					return inner.get(index - passed);
-				passed += size;
+			ObservableOrderedCollection<? extends E> last = null;
+			int lastSize = -1;
+			Transaction innerTrans = null;
+			try (Transaction t = getOuter().lock(write, null)) {
+				for (ObservableOrderedCollection<? extends E> inner : getOuter()) {
+					if (innerTrans != null) {
+						innerTrans.close();
+						innerTrans = null;
+					}
+					innerTrans = inner.lock(write, null);
+					int size = inner.size();
+					if (index < passed + size)
+						return action.apply(inner, index - passed);
+					passed += size;
+					last = inner;
+					lastSize = size;
+				}
+				if (includeTerminus && passed == index) {
+					if (last == null) // Zero may be valid, but we can't go adding new inner collections, so this is unsupported
+						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+					return action.apply(last, lastSize);
+				}
+			} finally {
+				if (innerTrans != null)
+					innerTrans.close();
 			}
 			throw new IndexOutOfBoundsException(index + " of " + passed);
+		}
+
+		@Override
+		public E get(int index) {
+			return doForIndex(index, false, false, (coll, idx) -> coll.get(idx));
 		}
 
 		@Override
