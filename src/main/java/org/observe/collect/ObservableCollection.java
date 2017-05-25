@@ -85,6 +85,9 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	TypeToken<E> getType();
 
 	@Override
+	abstract boolean isLockSupported();
+
+	@Override
 	abstract ObservableElementSpliterator<E> spliterator();
 
 	// /**
@@ -760,6 +763,16 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 */
 	default ObservableSortedSet<E> unique(Comparator<? super E> compare, boolean nullable, Observable<?> until) {
 		return new ObservableSortedSetImpl.CollectionWrappingSortedSet<>(this, compare, nullable, until);
+	}
+
+	/**
+	 * Creates an indexed collection backed by this collection's content. Index operations (e.g.
+	 * {@link ObservableOrderedCollection#get(int)}) may be linear-time.
+	 * 
+	 * @return An indexed collection backed by this collection's content
+	 */
+	default ObservableOrderedCollection<E> indexify() {
+		return new ObservableOrderedCollectionImpl.IndexifiedCollection<>(this);
 	}
 
 	/**

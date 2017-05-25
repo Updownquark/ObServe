@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -935,18 +936,18 @@ public class ObservableReversibleCollectionImpl {
 
 		@Override
 		public ObservableReversibleSpliterator<E> spliterator(boolean fromStart) {
-			return flattenReversible(getOuter().spliterator(fromStart), coll -> coll.spliterator(fromStart));
+			return flattenReversible(getOuter().spliterator(fromStart), (coll, fs) -> coll.spliterator(fs));
 		}
 
 		/**
 		 * @param <C> The sub-type of reversible collection held by the outer collection
 		 * @param outer The outer spliterator
-		 * @param innerSplit The function to produce spliterators for the inner collections
+		 * @param innerSplit The function to produce spliterators (from the beginning or the end) for the inner collections
 		 * @return The flattened spliterator
 		 */
 		protected <C extends ObservableReversibleCollection<? extends E>> ObservableReversibleSpliterator<E> flattenReversible(
 			ObservableReversibleSpliterator<? extends C> outer,
-			Function<? super C, ? extends ObservableReversibleSpliterator<? extends E>> innerSplit) {
+			BiFunction<? super C, Boolean, ? extends ObservableReversibleSpliterator<? extends E>> innerSplit) {
 			return new ReversibleFlattenedSpliterator<>(outer, innerSplit);
 		}
 
@@ -957,13 +958,15 @@ public class ObservableReversibleCollectionImpl {
 		 */
 		protected class ReversibleFlattenedSpliterator<C extends ObservableReversibleCollection<? extends E>>
 		extends FlattenedSpliterator<C> implements ObservableReversibleSpliterator<E> {
+			private boolean isInnerFromStart;
+
 			/**
 			 * @param outerSpliterator A spliterator from the outer collection
-			 * @param innerSplit The function to produce spliterators for the inner collections
+			 * @param innerSplit The function to produce spliterators (from the beginning or the end) for the inner collections
 			 */
 			protected ReversibleFlattenedSpliterator(ObservableReversibleSpliterator<? extends C> outerSpliterator,
-				Function<? super C, ? extends ObservableReversibleSpliterator<? extends E>> innerSplit) {
-				super(outerSpliterator, innerSplit);
+				BiFunction<? super C, Boolean, ? extends ObservableReversibleSpliterator<? extends E>> innerSplit) {
+				super(outerSpliterator, coll -> coll.spliterator(isInnerFromStart));
 			}
 
 			@Override

@@ -3,6 +3,7 @@ package org.observe.collect;
 import static org.observe.collect.CollectionChangeType.remove;
 import static org.observe.collect.CollectionChangeType.set;
 
+import java.util.Collection;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -30,6 +31,8 @@ import org.qommons.collect.TreeList;
 import org.qommons.tree.CountedRedBlackNode.DefaultNode;
 import org.qommons.tree.CountedRedBlackNode.DefaultTreeMap;
 import org.qommons.tree.CountedRedBlackNode.DefaultTreeSet;
+
+import com.google.common.reflect.TypeToken;
 
 /** Contains implementation classes for {@link ObservableOrderedCollection} */
 public class ObservableOrderedCollectionImpl {
@@ -1064,6 +1067,185 @@ public class ObservableOrderedCollectionImpl {
 					thePresentIds.remove(compoundId);
 				return event;
 			}
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableCollection#indexify()}
+	 *
+	 * @param <E> The type of the collection
+	 */
+	public static class IndexifiedCollection<E> implements ObservableOrderedCollection<E> {
+		private final ObservableCollection<E> theCollection;
+
+		/** @param collection The source collection */
+		protected IndexifiedCollection(ObservableCollection<E> collection) {
+			theCollection = collection;
+		}
+
+		@Override
+		public TypeToken<E> getType() {
+			return theCollection.getType();
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return theCollection.isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theCollection.lock(write, cause);
+		}
+
+		@Override
+		public Equivalence<? super E> equivalence() {
+			return theCollection.equivalence();
+		}
+
+		@Override
+		public int size() {
+			return theCollection.size();
+		}
+
+		@Override
+		public boolean isEmpty() {
+			return theCollection.isEmpty();
+		}
+
+		@Override
+		public boolean contains(Object o) {
+			return theCollection.contains(o);
+		}
+
+		@Override
+		public boolean containsAny(Collection<?> c) {
+			return theCollection.containsAny(c);
+		}
+
+		@Override
+		public boolean containsAll(Collection<?> c) {
+			return theCollection.containsAll(c);
+		}
+
+		@Override
+		public E get(int index) {
+			if (index < 0)
+				throw new IndexOutOfBoundsException("" + index);
+			try (Transaction t = lock(false, null)) {
+				int size = theCollection.size();
+				if (index >= size)
+					throw new IndexOutOfBoundsException(index + " of " + size);
+				ObservableElementSpliterator<E> spliter = theCollection.spliterator();
+				for (int i = 0; i < index; i++) {
+					spliter.tryAdvance(v -> {
+					});
+				}
+				Object[] res = new Object[1];
+				spliter.tryAdvance(v -> res[0] = v);
+				return (E) res[0];
+			}
+		}
+
+		@Override
+		public int indexOf(Object value) {
+			if(!getType().getRawType().isInstance(value))
+				return -1;
+			try(Transaction t=lock(false, null)){
+				boolean [] found=new boolean[1];
+				ObservableElementSpliterator<E> spliter = theCollection.spliterator();
+				int i;
+				for(i=0;!found[0] && spliter.tryAdvance(v->found[0]=equivalence().elementEquals(v, value));i++){
+				}
+				if(found[0])
+					return i;
+				else
+					return-1;
+			}
+		}
+
+		@Override
+		public int lastIndexOf(Object value) {
+			if(!getType().getRawType().isInstance(value))
+				return -1;
+			try(Transaction t=lock(false, null)){
+				int [] found=new int[]{-1};
+				int [] i=new int[1];
+				theCollection.spliterator().forEachRemaining(v->{
+					if(equivalence().elementEquals(v, value))
+						found[0]=i[0];
+					i[0]++;
+				});
+				return found[0];
+			}
+		}
+
+		@Override
+		public String canAdd(E value) {
+			return theCollection.canAdd(value);
+		}
+
+		@Override
+		public String canRemove(Object value) {
+			return theCollection.canRemove(value);
+		}
+
+		@Override
+		public boolean add(E e) {
+			return theCollection.add(e);
+		}
+
+		@Override
+		public boolean remove(Object o) {
+			return theCollection.remove(o);
+		}
+
+		@Override
+		public boolean addAll(Collection<? extends E> c) {
+			return theCollection.addAll(c);
+		}
+
+		@Override
+		public boolean removeAll(Collection<?> c) {
+			return theCollection.removeAll(c);
+		}
+
+		@Override
+		public boolean retainAll(Collection<?> c) {
+			return theCollection.retainAll(c);
+		}
+
+		@Override
+		public void clear() {
+			theCollection.clear();
+		}
+
+		@Override
+		public ObservableElementSpliterator<E> spliterator() {
+			return theCollection.spliterator();
+		}
+
+		@Override
+		public CollectionSubscription subscribeOrdered(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
+			DefaultTreeSet<ElementId> ids = new DefaultTreeSet<>(Comparable::compareTo);
+			return theCollection.subscribe(evt -> {
+				int index = -1; // Compiler-required initialization--will always be changed
+				switch (evt.getType()) {
+				case add:
+					index = ids.addGetNode(evt.getElementId()).getIndex();
+					break;
+				case remove:
+					DefaultNode<ElementId> node = ids.getNode(evt.getElementId());
+					index = node.getIndex();
+					ids.removeNode(node);
+					break;
+				case set:
+					index = ids.indexOf(evt.getElementId());
+					break;
+				}
+				observer.accept(
+					new OrderedCollectionEvent<>(evt.getElementId(), index, evt.getType(), evt.getOldValue(), evt.getNewValue(), evt));
+			});
 		}
 	}
 }

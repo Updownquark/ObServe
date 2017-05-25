@@ -3171,6 +3171,16 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public boolean isLockSupported() {
+			return theWrapped.isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theWrapped.lock(write, cause);
+		}
+
+		@Override
 		public int size() {
 			return theWrapped.size();
 		}
@@ -3238,11 +3248,6 @@ public final class ObservableCollectionImpl {
 		@Override
 		public void clear() {
 			theWrapped.clear();
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theWrapped.lock(write, cause);
 		}
 
 		@Override
@@ -3373,6 +3378,17 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public boolean isLockSupported() {
+			// False implies that the locking can't be relied on for thread-safety, but we're immutable, so we're always thread-safe
+			return true;
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return Transaction.NONE;
+		}
+
+		@Override
 		public int size() {
 			return theCollection.size();
 		}
@@ -3400,11 +3416,6 @@ public final class ObservableCollectionImpl {
 		@Override
 		public boolean containsAny(Collection<?> c) {
 			return ObservableCollectionImpl.containsAny(this, c);
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return Transaction.NONE;
 		}
 
 		@Override
@@ -3508,13 +3519,18 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theCollection.lock(write, cause);
+		public Equivalence<? super E> equivalence() {
+			return Equivalence.DEFAULT;
 		}
 
 		@Override
-		public Equivalence<? super E> equivalence() {
-			return Equivalence.DEFAULT;
+		public boolean isLockSupported() {
+			return theCollection.isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theCollection.lock(write, cause);
 		}
 
 		/**
