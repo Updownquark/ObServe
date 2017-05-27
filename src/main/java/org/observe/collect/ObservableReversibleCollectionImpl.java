@@ -5,7 +5,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -936,19 +935,7 @@ public class ObservableReversibleCollectionImpl {
 
 		@Override
 		public ObservableReversibleSpliterator<E> spliterator(boolean fromStart) {
-			return flattenReversible(getOuter().spliterator(fromStart), (coll, fs) -> coll.spliterator(fs));
-		}
-
-		/**
-		 * @param <C> The sub-type of reversible collection held by the outer collection
-		 * @param outer The outer spliterator
-		 * @param innerSplit The function to produce spliterators (from the beginning or the end) for the inner collections
-		 * @return The flattened spliterator
-		 */
-		protected <C extends ObservableReversibleCollection<? extends E>> ObservableReversibleSpliterator<E> flattenReversible(
-			ObservableReversibleSpliterator<? extends C> outer,
-			BiFunction<? super C, Boolean, ? extends ObservableReversibleSpliterator<? extends E>> innerSplit) {
-			return new ReversibleFlattenedSpliterator<>(outer, innerSplit);
+			return new ReversibleFlattenedSpliterator<>(getOuter().spliterator(fromStart));
 		}
 
 		/**
@@ -958,25 +945,36 @@ public class ObservableReversibleCollectionImpl {
 		 */
 		protected class ReversibleFlattenedSpliterator<C extends ObservableReversibleCollection<? extends E>>
 		extends FlattenedSpliterator<C> implements ObservableReversibleSpliterator<E> {
-			private boolean isInnerFromStart;
+
+			/** @param outerSpliterator A spliterator from the outer collection */
+			protected ReversibleFlattenedSpliterator(ObservableReversibleSpliterator<? extends C> outerSpliterator) {
+				super(outerSpliterator);
+			}
 
 			/**
 			 * @param outerSpliterator A spliterator from the outer collection
-			 * @param innerSplit The function to produce spliterators (from the beginning or the end) for the inner collections
+			 * @param outerElement The initial element from the outer collection
+			 * @param innerSpliterator The initial inner spliterator
+			 * @param copied Whether this is from the
+			 *        {@link #copy(ObservableElementSpliterator, ObservableCollectionElement, ObservableElementSpliterator) copy} method
+			 *        (implying that <code>innerSpliterator</code> is already wrapped and need not be again
 			 */
 			protected ReversibleFlattenedSpliterator(ObservableReversibleSpliterator<? extends C> outerSpliterator,
-				BiFunction<? super C, Boolean, ? extends ObservableReversibleSpliterator<? extends E>> innerSplit) {
-				super(outerSpliterator, coll -> coll.spliterator(isInnerFromStart));
+				ObservableCollectionElement<? extends C> outerElement, ObservableReversibleSpliterator<? extends E> innerSpliterator,
+				boolean copied) {
+				super(outerSpliterator, outerElement, innerSpliterator, copied);
+			}
+
+			@Override
+			protected ReversibleFlattenedSpliterator<C> copy(ObservableElementSpliterator<? extends C> outerSpliterator,
+				ObservableCollectionElement<? extends C> outerElement, ObservableElementSpliterator<E> innerSpliterator) {
+				return new ReversibleFlattenedSpliterator<>((ObservableReversibleSpliterator<? extends C>) outerSpliterator, outerElement,
+					(ObservableReversibleSpliterator<E>) innerSpliterator, true);
 			}
 
 			@Override
 			protected ObservableReversibleSpliterator<? extends C> getOuterSpliterator() {
 				return (ObservableReversibleSpliterator<? extends C>) super.getOuterSpliterator();
-			}
-
-			@Override
-			protected ObservableReversibleSpliterator<? extends E> innerSplit(C coll) {
-				return (ObservableReversibleSpliterator<? extends E>) super.innerSplit(coll);
 			}
 
 			@Override
@@ -990,22 +988,40 @@ public class ObservableReversibleCollectionImpl {
 				return (ObservableReversibleSpliterator<E>) super.getInnerator();
 			}
 
+			/**
+			 * Gets the previous element in the outer spliterator
+			 *
+			 * @return Whether there was a previous outer element
+			 */
+			protected boolean reverseOuter() {
+				return getOuterSpliterator().tryAdvanceObservableElement(el -> newInner(el, el.get().spliterator(false)));
+			}
+
 			@Override
 			public boolean tryReverseObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
 				boolean[] found = new boolean[1];
 				while (!found[0]) {
-					if (getInnerator() == null && !getOuterSpliterator().tryReverseObservableElement(el -> {
-						setOuterElement(el);
-					}))
+					if (getInnerator() != null && getInnerator().tryReverseObservableElement(action))
+						found[0] = true;
+					else if (!reverseOuter())
 						return false;
-					found[0] = getInnerator().tryReverseObservableElement(action);
 				}
 				return found[0];
 			}
 
 			@Override
 			public ObservableReversibleSpliterator<E> trySplit() {
-				return (ObservableReversibleSpliterator<E>) super.trySplit();
+				// There is an issue with this implementation. It assumes that iteration with the spliterator will be one-way,
+				// especially that an outer element will not be returned to. This should nearly always be the case.
+				ObservableElementSpliterator<? extends C> outerSplit = getOuterSpliterator().trySplit();
+				if (outerSplit != null)
+					return copy(outerSplit, null, null);
+				if (getInnerator() == null && advanceOuter() && !reverseOuter()) {
+					ObservableElementSpliterator<E> innerSplit = getInnerator().trySplit();
+					if (innerSplit != null)
+						return copy(outerSplit, getOuterElement(), innerSplit);
+				}
+				return null;
 			}
 		}
 

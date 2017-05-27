@@ -4376,18 +4376,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public ObservableElementSpliterator<E> spliterator() {
-			return flatten(theOuter.spliterator(), ObservableCollection::spliterator);
-		}
-
-		/**
-		 * @param outer A spliterator from the outer collection
-		 * @param innerSplit The function to produce spliterators for the inner collections
-		 * @return The flattened spliterator
-		 */
-		protected <C extends ObservableCollection<? extends E>> ObservableElementSpliterator<E> flatten(
-			ObservableElementSpliterator<? extends C> outer,
-			Function<? super C, ? extends ObservableElementSpliterator<? extends E>> innerSplit) {
-			return new FlattenedSpliterator<>(outer, innerSplit);
+			return new FlattenedSpliterator<>(theOuter.spliterator());
 		}
 
 		/**
@@ -4397,22 +4386,14 @@ public final class ObservableCollectionImpl {
 		 */
 		protected class FlattenedSpliterator<C extends ObservableCollection<? extends E>> implements ObservableElementSpliterator<E> {
 			private final ObservableElementSpliterator<? extends C> theOuterSpliterator;
-			private final Function<? super C, ? extends ObservableElementSpliterator<? extends E>> theInnerSplit;
 
-			private ObservableCollectionElement<? extends ObservableCollection<? extends E>> theOuterElement;
+			private ObservableCollectionElement<? extends C> theOuterElement;
 			private ObservableElementSpliterator<E> theInnerator;
-			private Supplier<Function<ObservableCollectionElement<? extends E>, ObservableCollectionElement<E>>> theElementMap;
-			private boolean isSplit;
+			private final Supplier<Function<ObservableCollectionElement<? extends E>, ObservableCollectionElement<E>>> theElementMap;
 
-			/**
-			 * @param outerSpliterator A spliterator from the outer collection
-			 * @param innerSplit The function to produce spliterators for the inner collections
-			 */
-			protected FlattenedSpliterator(ObservableElementSpliterator<? extends C> outerSpliterator,
-				Function<? super C, ? extends ObservableElementSpliterator<? extends E>> innerSplit) {
+			/** @param outerSpliterator The spliterator for the outer collection */
+			protected FlattenedSpliterator(ObservableElementSpliterator<? extends C> outerSpliterator) {
 				theOuterSpliterator = outerSpliterator;
-				theInnerSplit = innerSplit;
-
 				theElementMap = () -> {
 					ObservableCollectionElement<? extends E>[] container = new ObservableCollectionElement[1];
 					WrappingObservableElement<E, E> wrapper = new WrappingObservableElement<E, E>(getType(), container) {
@@ -4450,9 +4431,45 @@ public final class ObservableCollectionImpl {
 				};
 			}
 
+			/**
+			 * @param outerSpliterator A spliterator from the outer collection
+			 * @param outerElement The initial element from the outer collection
+			 * @param innerSpliterator The initial inner spliterator
+			 * @param copied Whether this is from the
+			 *        {@link #copy(ObservableElementSpliterator, ObservableCollectionElement, ObservableElementSpliterator) copy} method
+			 *        (implying that <code>innerSpliterator</code> is already wrapped and need not be again
+			 */
+			protected FlattenedSpliterator(ObservableElementSpliterator<? extends C> outerSpliterator,
+				ObservableCollectionElement<? extends C> outerElement, ObservableElementSpliterator<? extends E> innerSpliterator,
+				boolean copied) {
+				this(outerSpliterator);
+
+				if (outerElement != null) {
+					theOuterElement = outerElement;
+					theInnerator = copied ? (ObservableElementSpliterator<E>) innerSpliterator : wrapInnerSplit(innerSpliterator);
+				}
+			}
+
+			/**
+			 * @param outerSpliterator A spliterator from the outer collection
+			 * @param outerElement The initial element from the outer collection
+			 * @param innerSpliterator The initial inner spliterator
+			 * @return The copy of this spliterator with the given state
+			 */
+			protected FlattenedSpliterator<C> copy(ObservableElementSpliterator<? extends C> outerSpliterator,
+				ObservableCollectionElement<? extends C> outerElement, ObservableElementSpliterator<E> innerSpliterator) {
+				return new FlattenedSpliterator<>(outerSpliterator, innerSpliterator == null ? null : theOuterElement, innerSpliterator,
+					true);
+			}
+
 			/** @return The outer spliterator backing this flattened spliterator */
 			protected ObservableElementSpliterator<? extends C> getOuterSpliterator() {
 				return theOuterSpliterator;
+			}
+
+			/** @return The outer element whose inner spliterator is currently being used */
+			protected ObservableCollectionElement<? extends C> getOuterElement() {
+				return theOuterElement;
 			}
 
 			/**
@@ -4461,14 +4478,6 @@ public final class ObservableCollectionImpl {
 			 */
 			protected Supplier<Function<ObservableCollectionElement<? extends E>, ObservableCollectionElement<E>>> getElementMap() {
 				return theElementMap;
-			}
-
-			/**
-			 * @param coll The inner collection to spliterate
-			 * @return The spliterator for the collection
-			 */
-			protected ObservableElementSpliterator<? extends E> innerSplit(C coll) {
-				return theInnerSplit.apply(coll);
 			}
 
 			/**
@@ -4499,30 +4508,48 @@ public final class ObservableCollectionImpl {
 				return Spliterator.SIZED;
 			}
 
+			/**
+			 * Advances the outer spliterator to get the next inner spliterator
+			 * 
+			 * @return Whether there was a next outer element
+			 */
+			protected boolean advanceOuter() {
+				return theOuterSpliterator.tryAdvanceObservableElement(el -> newInner(el, el.get().spliterator()));
+			}
+
+			/**
+			 * @param outerEl The outer element for the next inner spliterator
+			 * @param innerSpliter The next inner spliterator
+			 */
+			protected void newInner(ObservableCollectionElement<? extends C> outerEl,
+				ObservableElementSpliterator<? extends E> innerSpliter) {
+				theOuterElement = outerEl;
+				theInnerator = wrapInnerSplit(innerSpliter);
+			}
+
 			@Override
 			public boolean tryAdvanceObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
 				boolean[] found = new boolean[1];
 				while (!found[0]) {
-					if (theInnerator == null && !theOuterSpliterator.tryAdvanceObservableElement(el -> {
-						setOuterElement(el);
-					}))
+					if (theInnerator != null && theInnerator.tryAdvanceObservableElement(action))
+						found[0] = true;
+					else if (!advanceOuter())
 						return false;
-					found[0] = theInnerator.tryAdvanceObservableElement(action);
 				}
 				return found[0];
 			}
 
-			/** @param el The element in the outer spliterator at the cursor */
-			protected void setOuterElement(ObservableCollectionElement<? extends C> el) {
-				theOuterElement = el;
-				theInnerator = wrapInnerSplit(innerSplit(el.get()));
-			}
-
 			@Override
 			public ObservableElementSpliterator<E> trySplit() {
-				ObservableElementSpliterator<E>[] ret = new ObservableElementSpliterator[1];
-				isSplit |= theOuterSpliterator.tryAdvance(coll -> ret[0] = wrapInnerSplit(innerSplit(coll)));
-				return ret[0];
+				ObservableElementSpliterator<? extends C> outerSplit = theOuterSpliterator.trySplit();
+				if (outerSplit != null)
+					return copy(outerSplit, null, null);
+				if (theInnerator == null && advanceOuter()) {
+					ObservableElementSpliterator<E> innerSplit = theInnerator.trySplit();
+					if (innerSplit != null)
+						return copy(outerSplit, theOuterElement, innerSplit);
+				}
+				return null;
 			}
 		}
 

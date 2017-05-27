@@ -3063,13 +3063,21 @@ public class ObservableListImpl {
 
 		@Override
 		public ObservableReversibleSpliterator<E> spliterator(int index) {
+			return _spliterator(getOuter().spliterator(), index);
+		}
+
+		private <C extends ObservableList<? extends E>> ObservableReversibleSpliterator<E> _spliterator(
+			ObservableReversibleSpliterator<? extends C> spliter, int index) {
 			if (index < 0)
 				throw new IndexOutOfBoundsException("" + index);
-			ObservableReversibleSpliterator<? extends ObservableList<? extends E>> spliter = getOuter().spliterator();
+			ObservableCollectionElement<? extends C>[] outerEl = new ObservableCollectionElement[1];
 			int passed = 0;
 			int[] lastSize = new int[1];
 			boolean found = false;
-			while (!found && spliter.tryAdvance(list -> lastSize[0] = list.size())) {
+			while (!found && spliter.tryAdvanceObservableElement(el ->{
+				outerEl[0]=el;
+				lastSize[0] = el.get().size();
+			})) {
 				if (passed + lastSize[0] < index)
 					passed += lastSize[0];
 				else
@@ -3079,10 +3087,8 @@ public class ObservableListImpl {
 				found = true;
 			if (!found)
 				throw new IndexOutOfBoundsException(index + " of " + passed);
-			boolean[] firstSubSpliter = new boolean[] { true };
-			return new FlattenedSpliterator(spliter, list -> {
-			});
-			// TODO Auto-generated method stub
+			return new ReversibleFlattenedSpliterator<>(spliter, outerEl[0], outerEl[0].get().spliterator(index - passed + lastSize[0]),
+				false);
 		}
 
 		@Override
