@@ -124,20 +124,20 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 
 	@Override
 	public void checkValue(Collection<E> expected) {
-		boolean ordered = theCollection instanceof ObservableOrderedCollection;
+		boolean ordered = theCollection instanceof ObservableIndexedCollection;
 		assertThat(theExpected, QommonsTestUtils.collectionsEqual(theSyncedCopy, ordered));
 	}
 
 	@Override
 	public void checkSynced() {
-		boolean ordered = theCollection instanceof ObservableOrderedCollection;
+		boolean ordered = theCollection instanceof ObservableIndexedCollection;
 		assertThat(theSyncedCopy, QommonsTestUtils.collectionsEqual(theCollection, ordered));
 	}
 
 	@Override
 	protected Subscription sync() {
-		if (theCollection instanceof ObservableOrderedCollection)
-			return ((ObservableOrderedCollection<E>) theCollection).onOrderedElement(new Consumer<ObservableOrderedElement<E>>() {
+		if (theCollection instanceof ObservableIndexedCollection)
+			return ((ObservableIndexedCollection<E>) theCollection).onOrderedElement(new Consumer<ObservableOrderedElement<E>>() {
 				@Override
 				public void accept(ObservableOrderedElement<E> el) {
 					el.subscribe(new Observer<ObservableValueEvent<E>>() {

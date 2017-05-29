@@ -7,7 +7,7 @@ import org.observe.ObservableValue;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableList;
-import org.observe.collect.ObservableOrderedCollection;
+import org.observe.collect.ObservableIndexedCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedSet;
 import org.qommons.Transaction;
@@ -48,8 +48,8 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 			return new ObsSortedMultiEntryList<>(this, key, (ObservableList<V>) values, comparator());
 		else if (values instanceof ObservableSortedSet)
 			return new ObsSortedMultiEntrySortedSet<>(this, key, (ObservableSortedSet<V>) values, comparator());
-		else if (values instanceof ObservableOrderedCollection)
-			return new ObsSortedMultiEntryOrdered<>(this, key, (ObservableOrderedCollection<V>) values, comparator());
+		else if (values instanceof ObservableIndexedCollection)
+			return new ObsSortedMultiEntryOrdered<>(this, key, (ObservableIndexedCollection<V>) values, comparator());
 		else if (values instanceof ObservableSet)
 			return new ObsSortedMultiEntrySet<>(this, key, (ObservableSet<V>) values, comparator());
 		else
@@ -64,9 +64,9 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		} else if (values.getType().isAssignableFrom(ObservableSortedSet.class)) {
 			return new ObsSortedMultiEntrySortedSet<>(this, key, getValueType(), (ObservableValue<? extends ObservableSortedSet<V>>) values,
 				comparator());
-		} else if (values.getType().isAssignableFrom(ObservableOrderedCollection.class)) {
+		} else if (values.getType().isAssignableFrom(ObservableIndexedCollection.class)) {
 			return new ObsSortedMultiEntryOrdered<>(this, key, getValueType(),
-				(ObservableValue<? extends ObservableOrderedCollection<V>>) values, comparator());
+				(ObservableValue<? extends ObservableIndexedCollection<V>>) values, comparator());
 		} else if (values.getType().isAssignableFrom(ObservableSet.class)) {
 			return new ObsSortedMultiEntrySet<>(this, key, getValueType(), (ObservableValue<? extends ObservableSet<V>>) values,
 				comparator());
@@ -224,14 +224,14 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 	class ObsSortedMultiEntryOrdered<K, V> extends ObsMultiEntryOrdered<K, V> implements ObservableSortedMultiEntry<K, V> {
 		private final Comparator<? super K> theComparator;
 
-		public ObsSortedMultiEntryOrdered(ObservableMultiMap<K, V> map, K key, ObservableOrderedCollection<V> values,
+		public ObsSortedMultiEntryOrdered(ObservableMultiMap<K, V> map, K key, ObservableIndexedCollection<V> values,
 			Comparator<? super K> comparator) {
 			super(map, key, values);
 			theComparator = comparator;
 		}
 
 		public ObsSortedMultiEntryOrdered(ObservableMultiMap<K, V> map, K key, TypeToken<V> valueType,
-			ObservableValue<? extends ObservableOrderedCollection<V>> values, Comparator<? super K> comparator) {
+			ObservableValue<? extends ObservableIndexedCollection<V>> values, Comparator<? super K> comparator) {
 			super(map, key, valueType, values);
 			theComparator = comparator;
 		}

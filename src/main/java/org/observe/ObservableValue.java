@@ -12,7 +12,7 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import org.observe.collect.ObservableList;
-import org.observe.collect.ObservableOrderedCollection;
+import org.observe.collect.ObservableIndexedCollection;
 import org.qommons.BiTuple;
 import org.qommons.ListenerSet;
 import org.qommons.TriFunction;
@@ -400,7 +400,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 *
 	 * <code>
 	 * 	{@link ObservableList#constant(TypeToken, Object...) ObservableList.constant(type, values)}
-	 * {@link ObservableOrderedCollection#findFirst(Predicate) .findFirst(test)}{{@link #mapV(Function) .mapV(v->v!=null ? v : def.get()}
+	 * {@link ObservableIndexedCollection#findFirst(Predicate) .findFirst(test)}{{@link #mapV(Function) .mapV(v->v!=null ? v : def.get()}
 	 * </code>
 	 *
 	 * but this method only subscribes to the values in the sequence up to the one that has a passing value. This can be of great advantage

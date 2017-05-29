@@ -24,7 +24,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <E> The type of elements in the set
  */
-public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableOrderedCollection<E> {
+public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableIndexedCollection<E> {
 	@Override
 	default ObservableOrderedSet<E> safe() {
 		if (isSafe())
@@ -39,7 +39,7 @@ public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableOrd
 	 */
 	@Override
 	default ObservableOrderedSet<E> filter(Predicate<? super E> filter) {
-		return (ObservableOrderedSet<E>) ObservableOrderedCollection.super.filter(filter);
+		return (ObservableOrderedSet<E>) ObservableIndexedCollection.super.filter(filter);
 	}
 
 	@Override
@@ -92,22 +92,22 @@ public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableOrd
 
 	@Override
 	default ObservableOrderedSet<E> filterRemove(Predicate<? super E> filter) {
-		return (ObservableOrderedSet<E>) ObservableOrderedCollection.super.filterRemove(filter);
+		return (ObservableOrderedSet<E>) ObservableIndexedCollection.super.filterRemove(filter);
 	}
 
 	@Override
 	default ObservableOrderedSet<E> noRemove() {
-		return (ObservableOrderedSet<E>) ObservableOrderedCollection.super.noRemove();
+		return (ObservableOrderedSet<E>) ObservableIndexedCollection.super.noRemove();
 	}
 
 	@Override
 	default ObservableOrderedSet<E> filterAdd(Predicate<? super E> filter) {
-		return (ObservableOrderedSet<E>) ObservableOrderedCollection.super.filterAdd(filter);
+		return (ObservableOrderedSet<E>) ObservableIndexedCollection.super.filterAdd(filter);
 	}
 
 	@Override
 	default ObservableOrderedSet<E> noAdd() {
-		return (ObservableOrderedSet<E>) ObservableOrderedCollection.super.noAdd();
+		return (ObservableOrderedSet<E>) ObservableIndexedCollection.super.noAdd();
 	}
 
 	@Override
@@ -165,7 +165,7 @@ public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableOrd
 	 *        performant.
 	 * @return A set containing all unique elements of the given collection
 	 */
-	public static <T> ObservableOrderedSet<T> unique(ObservableOrderedCollection<T> coll, Equalizer equalizer, boolean alwaysUseFirst) {
+	public static <T> ObservableOrderedSet<T> unique(ObservableIndexedCollection<T> coll, Equalizer equalizer, boolean alwaysUseFirst) {
 		return d().debug(new CollectionWrappingOrderedSet<>(coll, equalizer, alwaysUseFirst)).from("unique", coll).get();
 	}
 
@@ -245,7 +245,7 @@ public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableOrd
 	 *
 	 * @param <E> The type of the set
 	 */
-	class RefreshingOrderedSet<E> extends ObservableOrderedCollectionImpl.RefreshingOrderedCollection<E> implements PartialSetImpl<E>, ObservableOrderedSet<E> {
+	class RefreshingOrderedSet<E> extends ObservableIndexedCollectionImpl.RefreshingOrderedCollection<E> implements PartialSetImpl<E>, ObservableOrderedSet<E> {
 		protected RefreshingOrderedSet(ObservableOrderedSet<E> wrap, Observable<?> refresh) {
 			super(wrap, refresh);
 		}
@@ -266,7 +266,7 @@ public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableOrd
 	 *
 	 * @param <E> The type of the set
 	 */
-	class ElementRefreshingOrderedSet<E> extends ObservableOrderedCollectionImpl.ElementRefreshingOrderedCollection<E>
+	class ElementRefreshingOrderedSet<E> extends ObservableIndexedCollectionImpl.ElementRefreshingOrderedCollection<E>
 	implements PartialSetImpl<E>, ObservableOrderedSet<E> {
 		protected ElementRefreshingOrderedSet(ObservableOrderedSet<E> wrap, Function<? super E, Observable<?>> refresh) {
 			super(wrap, refresh);
@@ -361,7 +361,7 @@ public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableOrd
 	 *
 	 * @param <E> The type of elements in the set
 	 */
-	class TakenUntilOrderedSet<E> extends ObservableOrderedCollectionImpl.TakenUntilOrderedCollection<E> implements PartialSetImpl<E>, ObservableOrderedSet<E> {
+	class TakenUntilOrderedSet<E> extends ObservableIndexedCollectionImpl.TakenUntilOrderedCollection<E> implements PartialSetImpl<E>, ObservableOrderedSet<E> {
 		public TakenUntilOrderedSet(ObservableOrderedSet<E> wrap, Observable<?> until, boolean terminate) {
 			super(wrap, until, terminate);
 		}
@@ -382,7 +382,7 @@ public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableOrd
 	 *
 	 * @param <E> The type of elements in the set
 	 */
-	class FlattenedValueOrderedSet<E> extends ObservableOrderedCollectionImpl.FlattenedOrderedValueCollection<E> implements PartialSetImpl<E>, ObservableOrderedSet<E> {
+	class FlattenedValueOrderedSet<E> extends ObservableIndexedCollectionImpl.FlattenedOrderedValueCollection<E> implements PartialSetImpl<E>, ObservableOrderedSet<E> {
 		public FlattenedValueOrderedSet(ObservableValue<? extends ObservableOrderedSet<E>> collectionObservable) {
 			super(collectionObservable);
 		}
@@ -400,21 +400,21 @@ public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableOrd
 	}
 
 	/**
-	 * Implements {@link ObservableOrderedSet#unique(ObservableOrderedCollection, Equalizer, boolean)}
+	 * Implements {@link ObservableOrderedSet#unique(ObservableIndexedCollection, Equalizer, boolean)}
 	 *
 	 * @param <E> The type of elements in the set
 	 */
 	class CollectionWrappingOrderedSet<E> extends ObservableSetImpl.CollectionWrappingSet<E> implements ObservableOrderedSet<E> {
 		private final boolean isAlwaysUsingFirst;
 
-		public CollectionWrappingOrderedSet(ObservableOrderedCollection<E> collection, Equalizer equalizer, boolean alwaysUseFirst) {
+		public CollectionWrappingOrderedSet(ObservableIndexedCollection<E> collection, Equalizer equalizer, boolean alwaysUseFirst) {
 			super(collection, equalizer);
 			isAlwaysUsingFirst = alwaysUseFirst;
 		}
 
 		@Override
-		protected ObservableOrderedCollection<E> getWrapped() {
-			return (ObservableOrderedCollection<E>) super.getWrapped();
+		protected ObservableIndexedCollection<E> getWrapped() {
+			return (ObservableIndexedCollection<E>) super.getWrapped();
 		}
 
 		protected class UniqueOrderedElementTracking extends UniqueElementTracking {
@@ -442,7 +442,7 @@ public interface ObservableOrderedSet<E> extends ObservableSet<E>, ObservableOrd
 	}
 
 	/**
-	 * Implements elements for {@link ObservableOrderedSet#unique(ObservableOrderedCollection, Equalizer, boolean)}
+	 * Implements elements for {@link ObservableOrderedSet#unique(ObservableIndexedCollection, Equalizer, boolean)}
 	 *
 	 * @param <E> The type of value in the element
 	 */

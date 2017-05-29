@@ -12,7 +12,7 @@ import javax.swing.tree.TreeModel;
 import javax.swing.tree.TreePath;
 
 import org.observe.Subscription;
-import org.observe.collect.ObservableOrderedCollection;
+import org.observe.collect.ObservableIndexedCollection;
 import org.qommons.ArrayUtils;
 
 /** A swing tree model well suited to visualizing observable structures */
@@ -74,7 +74,7 @@ public abstract class ObservableTreeModel implements TreeModel {
 	 *            The parent to get the children of
 	 * @return An observable collection representing the parent's children
 	 */
-	protected abstract ObservableOrderedCollection<?> getChildren(Object parent);
+	protected abstract ObservableIndexedCollection<?> getChildren(Object parent);
 
 	/** Releases this model's observers placed on child collections */
 	public void dispose() {
@@ -87,7 +87,7 @@ public abstract class ObservableTreeModel implements TreeModel {
 		private final TreeNode theParent;
 		private final Object theValue;
 		private final List<TreeNode> theChildNodes;
-		private ObservableOrderedCollection<?> theChildren;
+		private ObservableIndexedCollection<?> theChildren;
 		private Subscription theChildrenSub;
 		private boolean areChildrenInitialized;
 

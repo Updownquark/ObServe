@@ -16,16 +16,16 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollectionImpl.FlattenedObservableCollection;
-import org.observe.collect.ObservableOrderedCollectionImpl.CachedOrderedCollection;
-import org.observe.collect.ObservableOrderedCollectionImpl.CombinedOrderedCollection;
-import org.observe.collect.ObservableOrderedCollectionImpl.EquivalenceSwitchedOrderedCollection;
-import org.observe.collect.ObservableOrderedCollectionImpl.FilterMappedOrderedCollection;
-import org.observe.collect.ObservableOrderedCollectionImpl.FlattenedOrderedCollection;
-import org.observe.collect.ObservableOrderedCollectionImpl.FlattenedOrderedValueCollection;
-import org.observe.collect.ObservableOrderedCollectionImpl.FlattenedOrderedValuesCollection;
-import org.observe.collect.ObservableOrderedCollectionImpl.ModFilteredOrderedCollection;
-import org.observe.collect.ObservableOrderedCollectionImpl.RefreshingOrderedCollection;
-import org.observe.collect.ObservableOrderedCollectionImpl.TakenUntilOrderedCollection;
+import org.observe.collect.ObservableIndexedCollectionImpl.CachedOrderedCollection;
+import org.observe.collect.ObservableIndexedCollectionImpl.CombinedOrderedCollection;
+import org.observe.collect.ObservableIndexedCollectionImpl.EquivalenceSwitchedOrderedCollection;
+import org.observe.collect.ObservableIndexedCollectionImpl.FilterMappedOrderedCollection;
+import org.observe.collect.ObservableIndexedCollectionImpl.FlattenedOrderedCollection;
+import org.observe.collect.ObservableIndexedCollectionImpl.FlattenedOrderedValueCollection;
+import org.observe.collect.ObservableIndexedCollectionImpl.FlattenedOrderedValuesCollection;
+import org.observe.collect.ObservableIndexedCollectionImpl.ModFilteredOrderedCollection;
+import org.observe.collect.ObservableIndexedCollectionImpl.RefreshingOrderedCollection;
+import org.observe.collect.ObservableIndexedCollectionImpl.TakenUntilOrderedCollection;
 import org.observe.collect.ObservableReversibleSpliterator.WrappingReversibleObservableSpliterator;
 import org.qommons.Ternian;
 import org.qommons.Transaction;
@@ -111,12 +111,12 @@ public class ObservableReversibleCollectionImpl {
 		@Override
 		public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
 			boolean[] initialized = new boolean[1];
-			Consumer<OrderedCollectionEvent<? extends E>> collObs = new Consumer<OrderedCollectionEvent<? extends E>>() {
+			Consumer<IndexedCollectionEvent<? extends E>> collObs = new Consumer<IndexedCollectionEvent<? extends E>>() {
 				private ElementId theCurrentId;
 				private E theCurrentValue;
 
 				@Override
-				public void accept(OrderedCollectionEvent<? extends E> evt) {
+				public void accept(IndexedCollectionEvent<? extends E> evt) {
 					switch (evt.getType()) {
 					case add:
 						if (!theTest.test(evt.getNewValue()))
@@ -209,7 +209,7 @@ public class ObservableReversibleCollectionImpl {
 		}
 
 		@Override
-		public CollectionSubscription subscribeReverse(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
+		public CollectionSubscription subscribeReverse(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
 			return getWrapped().subscribeReverse(observer);
 		}
 	}
@@ -260,9 +260,9 @@ public class ObservableReversibleCollectionImpl {
 		}
 
 		@Override
-		public CollectionSubscription subscribeReverse(Consumer<? super OrderedCollectionEvent<? extends T>> observer) {
+		public CollectionSubscription subscribeReverse(Consumer<? super IndexedCollectionEvent<? extends T>> observer) {
 			return getWrapped()
-				.subscribeReverse(new FilterMappedObserver(evt -> observer.accept((OrderedCollectionEvent<? extends T>) evt)));
+				.subscribeReverse(new FilterMappedObserver(evt -> observer.accept((IndexedCollectionEvent<? extends T>) evt)));
 		}
 	}
 
@@ -319,8 +319,8 @@ public class ObservableReversibleCollectionImpl {
 		}
 
 		@Override
-		public CollectionSubscription subscribeReverse(Consumer<? super OrderedCollectionEvent<? extends V>> observer) {
-			CombinedObserver combinedObs = new CombinedObserver(evt -> observer.accept((OrderedCollectionEvent<? extends V>) evt));
+		public CollectionSubscription subscribeReverse(Consumer<? super IndexedCollectionEvent<? extends V>> observer) {
+			CombinedObserver combinedObs = new CombinedObserver(evt -> observer.accept((IndexedCollectionEvent<? extends V>) evt));
 			try (Transaction t = getWrapped().lock(false, null)) {
 				combinedObs.init(getWrapped().subscribeReverse(combinedObs));
 			}
@@ -422,31 +422,31 @@ public class ObservableReversibleCollectionImpl {
 		}
 
 		@Override
-		public CollectionSubscription subscribeOrdered(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
+		public CollectionSubscription subscribeOrdered(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
 			return getWrapped().subscribeReverse(new ReversedSubscriber<>(observer));
 		}
 
 		@Override
-		public CollectionSubscription subscribeReverse(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
+		public CollectionSubscription subscribeReverse(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
 			return getWrapped().subscribeOrdered(new ReversedSubscriber<>(observer));
 		}
 
-		private static class ReversedSubscriber<E> implements Consumer<OrderedCollectionEvent<? extends E>> {
-			private final Consumer<? super OrderedCollectionEvent<? extends E>> theObserver;
+		private static class ReversedSubscriber<E> implements Consumer<IndexedCollectionEvent<? extends E>> {
+			private final Consumer<? super IndexedCollectionEvent<? extends E>> theObserver;
 			private int theSize;
 
-			ReversedSubscriber(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
+			ReversedSubscriber(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
 				theObserver = observer;
 			}
 
 			@Override
-			public void accept(OrderedCollectionEvent<? extends E> evt) {
+			public void accept(IndexedCollectionEvent<? extends E> evt) {
 				if (evt.getType() == CollectionChangeType.add)
 					theSize++;
 				int index = theSize - evt.getIndex() - 1;
 				if (evt.getType() == CollectionChangeType.remove)
 					theSize++;
-				OrderedCollectionEvent.doWith(new OrderedCollectionEvent<>(new ReversedElementId(evt.getElementId()), index, evt.getType(),
+				IndexedCollectionEvent.doWith(new IndexedCollectionEvent<>(new ReversedElementId(evt.getElementId()), index, evt.getType(),
 					evt.getOldValue(), evt.getNewValue(), evt), theObserver);
 			}
 		}
@@ -502,7 +502,7 @@ public class ObservableReversibleCollectionImpl {
 		}
 
 		@Override
-		public CollectionSubscription subscribeReverse(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
+		public CollectionSubscription subscribeReverse(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
 			CollectionSubscription collSub = getWrapped().subscribeReverse(observer);
 			Subscription refreshSub = getRefresh().act(v -> {
 				// There's a possibility that the refresh observable could fire on one thread while the collection fires on
@@ -523,11 +523,11 @@ public class ObservableReversibleCollectionImpl {
 		 * @param observer The observer to fire the events to
 		 * @param cause The object fired from the refresh observable
 		 */
-		protected void doReverseRefresh(Consumer<? super OrderedCollectionEvent<? extends E>> observer, Object cause) {
+		protected void doReverseRefresh(Consumer<? super IndexedCollectionEvent<? extends E>> observer, Object cause) {
 			int[] index = new int[] { getWrapped().size() - 1 };
 			getWrapped().spliterator(false).forEachObservableElement(el -> {
-				OrderedCollectionEvent.doWith(
-					new OrderedCollectionEvent<>(el.getElementId(), index[0]--, CollectionChangeType.set, el.get(), el.get(), cause),
+				IndexedCollectionEvent.doWith(
+					new IndexedCollectionEvent<>(el.getElementId(), index[0]--, CollectionChangeType.set, el.get(), el.get(), cause),
 					observer::accept);
 			});
 		}
@@ -539,7 +539,7 @@ public class ObservableReversibleCollectionImpl {
 	 * @param <E> The type of the collection
 	 */
 	public static class ElementRefreshingReversibleCollection<E>
-	extends ObservableOrderedCollectionImpl.ElementRefreshingOrderedCollection<E> implements ObservableReversibleCollection<E> {
+	extends ObservableIndexedCollectionImpl.ElementRefreshingOrderedCollection<E> implements ObservableReversibleCollection<E> {
 		/**
 		 * @param wrap The source collection
 		 * @param refresh The function of observables to use to refresh each element
@@ -570,9 +570,9 @@ public class ObservableReversibleCollectionImpl {
 		}
 
 		@Override
-		public CollectionSubscription subscribeReverse(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
+		public CollectionSubscription subscribeReverse(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
 			ElementRefreshingObserver refreshing = new ElementRefreshingObserver(
-				evt -> observer.accept((OrderedCollectionEvent<? extends E>) evt));
+				evt -> observer.accept((IndexedCollectionEvent<? extends E>) evt));
 			CollectionSubscription collSub = getWrapped().subscribeReverse(refreshing);
 			return removeAll -> {
 				collSub.unsubscribe(removeAll);
@@ -624,7 +624,7 @@ public class ObservableReversibleCollectionImpl {
 		}
 
 		@Override
-		public CollectionSubscription subscribeReverse(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
+		public CollectionSubscription subscribeReverse(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
 			return getWrapped().subscribeReverse(observer);
 		}
 	}
@@ -691,7 +691,7 @@ public class ObservableReversibleCollectionImpl {
 		}
 
 		@Override
-		public CollectionSubscription subscribeReverse(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
+		public CollectionSubscription subscribeReverse(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
 			if (isDone())
 				throw new IllegalStateException("This cached collection's finisher has fired");
 			Subscription changeSub;
@@ -750,7 +750,7 @@ public class ObservableReversibleCollectionImpl {
 		}
 
 		@Override
-		public CollectionSubscription subscribeReverse(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
+		public CollectionSubscription subscribeReverse(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
 			CollectionSubscription collSub = getWrapped().subscribeReverse(observer);
 			AtomicBoolean complete = new AtomicBoolean(false);
 			Subscription obsSub = getUntil().take(1).act(u -> {
@@ -802,8 +802,8 @@ public class ObservableReversibleCollectionImpl {
 		}
 
 		@Override
-		public CollectionSubscription subscribeReverse(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
-			FlatteningObserver flattening = new FlatteningObserver(evt -> observer.accept((OrderedCollectionEvent<? extends E>) evt));
+		public CollectionSubscription subscribeReverse(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
+			FlatteningObserver flattening = new FlatteningObserver(evt -> observer.accept((IndexedCollectionEvent<? extends E>) evt));
 			CollectionSubscription collSub = getWrapped().subscribeReverse(flattening);
 			return removeAll -> {
 				try (Transaction t = getWrapped().lock(false, null)) {
@@ -853,9 +853,9 @@ public class ObservableReversibleCollectionImpl {
 		}
 
 		@Override
-		public CollectionSubscription subscribeReverse(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
+		public CollectionSubscription subscribeReverse(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
 			ReversibleFlattenedObserver flatObs = new ReversibleFlattenedObserver(
-				evt -> observer.accept((OrderedCollectionEvent<? extends E>) evt), true);
+				evt -> observer.accept((IndexedCollectionEvent<? extends E>) evt), true);
 			Subscription valueSub = getWrapped().safe().subscribe(flatObs);
 			return removeAll -> {
 				valueSub.unsubscribe();
@@ -1026,7 +1026,7 @@ public class ObservableReversibleCollectionImpl {
 		}
 
 		@Override
-		public CollectionSubscription subscribeReverse(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
+		public CollectionSubscription subscribeReverse(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
 			ReversibleOuterObserver outerObs = new ReversibleOuterObserver(observer, true);
 			CollectionSubscription collSub;
 			try (Transaction t = getOuter().lock(false, null)) {
@@ -1050,7 +1050,7 @@ public class ObservableReversibleCollectionImpl {
 			 * @param observer The observer for this collection
 			 * @param reversed Whether to subscribe to the inner collections in reverse
 			 */
-			protected ReversibleOuterObserver(Consumer<? super OrderedCollectionEvent<? extends E>> observer, boolean reversed) {
+			protected ReversibleOuterObserver(Consumer<? super IndexedCollectionEvent<? extends E>> observer, boolean reversed) {
 				super(observer);
 				isReversed = reversed;
 			}

@@ -313,8 +313,8 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Re
 	 *
 	 * @param <E> The type of elements in the source list
 	 * @param <V> The type of elements in the resulting list
-	 * @see ObservableOrderedCollection#combineWith(ObservableValue, TypeToken)
-	 * @see ObservableOrderedCollection.CombinedOrderedCollectionBuilder3#and(ObservableValue)
+	 * @see ObservableIndexedCollection#combineWith(ObservableValue, TypeToken)
+	 * @see ObservableIndexedCollection.CombinedOrderedCollectionBuilder3#and(ObservableValue)
 	 */
 	interface CombinedListBuilder<E, V> extends CombinedReversibleCollectionBuilder<E, V> {
 		@Override

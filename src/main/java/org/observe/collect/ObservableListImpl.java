@@ -3238,17 +3238,17 @@ public class ObservableListImpl {
 		}
 
 		@Override
-		public CollectionSubscription subscribeOrdered(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
+		public CollectionSubscription subscribeOrdered(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
 			int index = 0;
 			for (ConstantElement el : getElements())
-				OrderedCollectionEvent.doWith(
-					new OrderedCollectionEvent<>(el.getElementId(), index++, CollectionChangeType.add, null, el.get(), null), observer);
+				IndexedCollectionEvent.doWith(
+					new IndexedCollectionEvent<>(el.getElementId(), index++, CollectionChangeType.add, null, el.get(), null), observer);
 			return removeAll -> {
 				if (removeAll) {
 					for (int i = getElements().size() - 1; i >= 0; i--) {
 						ConstantElement el = getElements().get(i);
-						OrderedCollectionEvent.doWith(
-							new OrderedCollectionEvent<>(el.getElementId(), i, CollectionChangeType.remove, el.get(), el.get(), null),
+						IndexedCollectionEvent.doWith(
+							new IndexedCollectionEvent<>(el.getElementId(), i, CollectionChangeType.remove, el.get(), el.get(), null),
 							observer);
 					}
 				}
@@ -3256,18 +3256,18 @@ public class ObservableListImpl {
 		}
 
 		@Override
-		public CollectionSubscription subscribeReverse(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
+		public CollectionSubscription subscribeReverse(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
 			for (int i = getElements().size() - 1; i >= 0; i--) {
 				ConstantElement el = getElements().get(i);
-				OrderedCollectionEvent
-				.doWith(new OrderedCollectionEvent<>(el.getElementId(), i, CollectionChangeType.add, null, el.get(), null), observer);
+				IndexedCollectionEvent
+				.doWith(new IndexedCollectionEvent<>(el.getElementId(), i, CollectionChangeType.add, null, el.get(), null), observer);
 			}
 			return removeAll -> {
 				if (removeAll) {
 					for (int i = 0; i < getElements().size(); i++) {
 						ConstantElement el = getElements().get(i);
-						OrderedCollectionEvent.doWith(
-							new OrderedCollectionEvent<>(el.getElementId(), i, CollectionChangeType.remove, el.get(), el.get(), null),
+						IndexedCollectionEvent.doWith(
+							new IndexedCollectionEvent<>(el.getElementId(), i, CollectionChangeType.remove, el.get(), el.get(), null),
 							observer);
 					}
 				}

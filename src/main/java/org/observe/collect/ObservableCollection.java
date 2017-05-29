@@ -7,6 +7,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.Spliterator;
@@ -33,6 +34,8 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.TransactableCollection;
 import org.qommons.collect.TreeList;
+import org.qommons.tree.CountedRedBlackNode.DefaultNode;
+import org.qommons.tree.CountedRedBlackNode.DefaultTreeSet;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -96,11 +99,59 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	// */
 	// Subscription onElement(Consumer<? super ObservableElement<E>> onElement);
 
+	Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer);
+
 	/**
+	 * Like {@link #onChange(Consumer)}, but also fires initial {@link CollectionChangeType#add add} events for each element currently in
+	 * the collection, and optionally fires final {@link CollectionChangeType#remove remove} events for each element in the collection on
+	 * unsubscription.
+	 *
 	 * @param observer The listener to be notified of each element change in the collection
 	 * @return The subscription to use to terminate listening
 	 */
-	CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer);
+	default CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
+		Subscription changeSub;
+		try (Transaction t = lock(false, null)) {
+			// Initial events
+			spliterator().forEachObservableElement(
+				el -> observer.accept(new ObservableCollectionEvent<>(el.getElementId(), CollectionChangeType.add, null, el.get(), null)));
+			// Subscribe changes
+			changeSub = onChange(observer);
+		}
+		return removeAll -> {
+			try (Transaction t = lock(false, null)) {
+				// Unsubscribe changes
+				changeSub.unsubscribe();
+				if (removeAll) {
+					// Remove events
+					spliterator().forEachObservableElement(el -> observer
+						.accept(new ObservableCollectionEvent<>(el.getElementId(), CollectionChangeType.remove, null, el.get(), null)));
+				}
+			}
+		};
+	}
+
+	default CollectionSubscription subscribeIndexed(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
+		DefaultTreeSet<ElementId> ids = new DefaultTreeSet<>(Comparable::compareTo);
+		return subscribe(evt -> {
+			ElementId id = evt.getElementId();
+			int index = -1;
+			switch (evt.getType()) {
+			case add:
+				index = ids.addGetNode(id).getIndex();
+				break;
+			case remove:
+				DefaultNode<ElementId> node = ids.getNode(id);
+				index = node.getIndex();
+				ids.removeNode(node);
+				break;
+			case set:
+				index = ids.getNode(id).getIndex();
+				break;
+			}
+			observer.accept(new IndexedCollectionEvent<>(id, index, evt.getType(), evt.getOldValue(), evt.getNewValue(), evt));
+		});
+	}
 
 	// /**
 	// * <p>
@@ -767,12 +818,12 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 
 	/**
 	 * Creates an indexed collection backed by this collection's content. Index operations (e.g.
-	 * {@link ObservableOrderedCollection#get(int)}) may be linear-time.
-	 * 
+	 * {@link ObservableIndexedCollection#get(int)}) may be linear-time.
+	 *
 	 * @return An indexed collection backed by this collection's content
 	 */
-	default ObservableOrderedCollection<E> indexify() {
-		return new ObservableOrderedCollectionImpl.IndexifiedCollection<>(this);
+	default ObservableIndexedCollection<E> indexify() {
+		return new ObservableIndexedCollectionImpl.IndexifiedCollection<>(this);
 	}
 
 	/**
@@ -884,7 +935,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 * @return A collection containing all elements of all collections in the outer collection
 	 */
 	public static <E> ObservableCollection<E> flatten(ObservableCollection<? extends ObservableCollection<? extends E>> coll) {
-		return new ObservableCollectionImpl.FlattenedObservableCollection<>(coll);
+		return interleave(coll, list -> 0, false);
 	}
 
 	/**
@@ -894,6 +945,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 */
 	public static <T> ObservableCollection<T> flattenCollections(ObservableCollection<? extends T>... colls) {
 		return flatten(ObservableList.constant(new TypeToken<ObservableCollection<? extends T>>() {}, colls));
+	}
+
+	public static <T> ObservableCollection<T> interleave(ObservableCollection<? extends ObservableCollection<? extends T>> coll,
+		Function<? super List<? extends T>, Integer> discriminator, boolean withRemove) {
+		return new ObservableCollectionImpl.FlattenedObservableCollection<>(coll, discriminator, withRemove);
 	}
 
 	/**

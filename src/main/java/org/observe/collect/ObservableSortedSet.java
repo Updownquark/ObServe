@@ -69,7 +69,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 
 	@Override
 	default E last() {
-		// Can't throw NoSuchElementException to comply with ObservableOrderedCollection.last()
+		// Can't throw NoSuchElementException to comply with ObservableIndexedCollection.last()
 		return getLast().get();
 	}
 
@@ -225,7 +225,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 	 * @return The index of the given value in this collection, or, if the given value is not present in this set, <code>-dest-1</code>,
 	 *         where <code>dest</code> is the index of the position where the given element would appear if it were added to this set.
 	 * @throws ClassCastException If the given value is not null or an instance of this set's type.
-	 * @see org.observe.collect.ObservableOrderedCollection#indexOf(java.lang.Object)
+	 * @see org.observe.collect.ObservableIndexedCollection#indexOf(java.lang.Object)
 	 */
 	@Override
 	default int indexOf(Object o) {
@@ -239,7 +239,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 	 * @return The index of the given value in this collection, or, if the given value is not present in this set, <code>-dest-1</code>,
 	 *         where <code>dest</code> is the index of the position where the given element would appear if it were added to this set.
 	 * @throws ClassCastException If the given value is not null or an instance of this set's type.
-	 * @see org.observe.collect.ObservableOrderedCollection#indexOf(java.lang.Object)
+	 * @see org.observe.collect.ObservableIndexedCollection#indexOf(java.lang.Object)
 	 */
 	@Override
 	default int lastIndexOf(Object o) {
@@ -362,7 +362,7 @@ public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, Observa
 	 * @param compare The comparator to use to sort the elements
 	 * @return An observable sorted set containing all unique elements in any collection in the outer collection
 	 */
-	public static <E> ObservableSortedSet<E> flatten(ObservableOrderedCollection<? extends ObservableSortedSet<? extends E>> outer,
+	public static <E> ObservableSortedSet<E> flatten(ObservableIndexedCollection<? extends ObservableSortedSet<? extends E>> outer,
 		Comparator<? super E> compare) {
 		return ObservableSortedSet.unique(ObservableCollection.flatten(outer), compare);
 	}

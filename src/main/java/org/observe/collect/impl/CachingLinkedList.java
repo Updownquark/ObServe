@@ -8,23 +8,23 @@ import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableList;
-import org.observe.collect.ObservableOrderedCollection;
+import org.observe.collect.ObservableIndexedCollection;
 import org.observe.collect.ObservableOrderedElement;
 
 /**
- * Caches the contents of an {@link ObservableOrderedCollection}
+ * Caches the contents of an {@link ObservableIndexedCollection}
  *
  * @param <E> The type of elements in the list
  */
-public class CachingLinkedList<E> extends CachingObservableCollection<E> implements ObservableOrderedCollection<E> {
+public class CachingLinkedList<E> extends CachingObservableCollection<E> implements ObservableIndexedCollection<E> {
 	/** @param wrap The list to cache */
-	public CachingLinkedList(ObservableOrderedCollection<E> wrap) {
+	public CachingLinkedList(ObservableIndexedCollection<E> wrap) {
 		super(wrap);
 	}
 
 	@Override
-	protected ObservableOrderedCollection<E> getWrapped() {
-		return (ObservableOrderedCollection<E>) super.getWrapped();
+	protected ObservableIndexedCollection<E> getWrapped() {
+		return (ObservableIndexedCollection<E>) super.getWrapped();
 	}
 
 	@Override

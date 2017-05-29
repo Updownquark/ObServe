@@ -3,7 +3,7 @@ package org.observe.assoc;
 import java.util.function.Function;
 
 import org.observe.ObservableValue;
-import org.observe.collect.ObservableOrderedCollection;
+import org.observe.collect.ObservableIndexedCollection;
 
 import com.google.common.reflect.TypeToken;
 
@@ -15,7 +15,7 @@ import com.google.common.reflect.TypeToken;
  */
 public interface ObservableOrderedTree<N, V> extends ObservableTree<N, V> {
 	@Override
-	ObservableOrderedCollection<? extends N> getChildren(N node);
+	ObservableIndexedCollection<? extends N> getChildren(N node);
 
 	/**
 	 * Builds a tree from components
@@ -28,7 +28,7 @@ public interface ObservableOrderedTree<N, V> extends ObservableTree<N, V> {
 	 */
 	public static <N, V> ObservableTree<N, V> of(ObservableValue<N> root, TypeToken<V> valueType,
 		Function<? super N, ? extends ObservableValue<? extends V>> getValue,
-			Function<? super N, ? extends ObservableOrderedCollection<? extends N>> getChildren) {
+			Function<? super N, ? extends ObservableIndexedCollection<? extends N>> getChildren) {
 		return new ComposedOrderedTree<>(root, valueType, getValue, getChildren);
 	}
 
@@ -47,13 +47,13 @@ public interface ObservableOrderedTree<N, V> extends ObservableTree<N, V> {
 		 */
 		public ComposedOrderedTree(ObservableValue<N> root, TypeToken<V> valueType,
 			Function<? super N, ? extends ObservableValue<? extends V>> valueGetter,
-				Function<? super N, ? extends ObservableOrderedCollection<? extends N>> childrenGetter) {
+				Function<? super N, ? extends ObservableIndexedCollection<? extends N>> childrenGetter) {
 			super(root, valueType, valueGetter, childrenGetter);
 		}
 
 		@Override
-		public ObservableOrderedCollection<? extends N> getChildren(N node) {
-			return (ObservableOrderedCollection<? extends N>) super.getChildren(node);
+		public ObservableIndexedCollection<? extends N> getChildren(N node) {
+			return (ObservableIndexedCollection<? extends N>) super.getChildren(node);
 		}
 	}
 }

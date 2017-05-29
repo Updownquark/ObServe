@@ -20,7 +20,7 @@ import javax.swing.tree.TreePath;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableList;
-import org.observe.collect.ObservableOrderedCollection;
+import org.observe.collect.ObservableIndexedCollection;
 import org.observe.collect.impl.ObservableArrayList;
 import org.observe.util.swing.ObservableComboBoxModel;
 import org.observe.util.swing.ObservableListModel;
@@ -123,7 +123,7 @@ public class ObservableDemoGui extends JPanel {
 			}
 
 			@Override
-			protected ObservableOrderedCollection<?> getChildren(Object parent) {
+			protected ObservableIndexedCollection<?> getChildren(Object parent) {
 				if (parent instanceof String)
 					return theCategories;
 				else if (parent instanceof ValueCategory)
@@ -151,11 +151,11 @@ public class ObservableDemoGui extends JPanel {
 			public void valueForPathChanged(TreePath path, Object newValue) {}
 
 			@Override
-			protected ObservableOrderedCollection<?> getChildren(Object parent) {
+			protected ObservableIndexedCollection<?> getChildren(Object parent) {
 				if (parent instanceof String)
 					return ObservableList.asList(theMap.keySet());
 				else if (parent instanceof Long)
-					return (ObservableOrderedCollection<Integer>) theMap.get(parent);
+					return (ObservableIndexedCollection<Integer>) theMap.get(parent);
 				else
 					return ObservableList.constant(new TypeToken<Void>() {});
 			}

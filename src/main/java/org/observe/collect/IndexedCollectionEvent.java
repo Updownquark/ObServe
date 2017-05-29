@@ -1,11 +1,11 @@
 package org.observe.collect;
 
 /**
- * A {@link ObservableCollectionEvent} for a {@link ObservableOrderedCollection} that additionally provides an {@link #getIndex() index}
+ * A {@link ObservableCollectionEvent} for a {@link ObservableIndexedCollection} that additionally provides an {@link #getIndex() index}
  * 
  * @param <E> The type of values in the collection
  */
-public class OrderedCollectionEvent<E> extends ObservableCollectionEvent<E> {
+public class IndexedCollectionEvent<E> extends ObservableCollectionEvent<E> {
 	private final int theIndex;
 
 	/**
@@ -16,7 +16,7 @@ public class OrderedCollectionEvent<E> extends ObservableCollectionEvent<E> {
 	 * @param newValue The new value for the element
 	 * @param cause The cause of the change
 	 */
-	public OrderedCollectionEvent(ElementId elementId, int index, CollectionChangeType type, E oldValue, E newValue, Object cause) {
+	public IndexedCollectionEvent(ElementId elementId, int index, CollectionChangeType type, E oldValue, E newValue, Object cause) {
 		super(elementId, type, oldValue, newValue, cause);
 		theIndex = index;
 	}

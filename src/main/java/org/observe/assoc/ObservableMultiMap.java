@@ -18,7 +18,7 @@ import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableElement;
 import org.observe.collect.ObservableList;
-import org.observe.collect.ObservableOrderedCollection;
+import org.observe.collect.ObservableIndexedCollection;
 import org.observe.collect.ObservableOrderedElement;
 import org.observe.collect.ObservableReversibleCollection;
 import org.observe.collect.ObservableSet;
@@ -164,8 +164,8 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			return new ObsMultiEntryList<>(this, key, (ObservableList<V>) values);
 		else if(values instanceof ObservableSortedSet)
 			return new ObsMultiEntrySortedSet<>(this, key, (ObservableSortedSet<V>) values);
-		else if(values instanceof ObservableOrderedCollection)
-			return new ObsMultiEntryOrdered<>(this, key, (ObservableOrderedCollection<V>) values);
+		else if(values instanceof ObservableIndexedCollection)
+			return new ObsMultiEntryOrdered<>(this, key, (ObservableIndexedCollection<V>) values);
 		else if(values instanceof ObservableSet)
 			return new ObsMultiEntrySet<>(this, key, (ObservableSet<V>) values);
 		else
@@ -184,9 +184,9 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			return new ObsMultiEntryList<>(this, key, getValueType(), (ObservableValue<? extends ObservableList<V>>) values);
 		} else if (TypeToken.of(ObservableSortedSet.class).isAssignableFrom(values.getType())) {
 			return new ObsMultiEntrySortedSet<>(this, key, getValueType(), (ObservableValue<? extends ObservableSortedSet<V>>) values);
-		} else if (TypeToken.of(ObservableOrderedCollection.class).isAssignableFrom(values.getType())) {
+		} else if (TypeToken.of(ObservableIndexedCollection.class).isAssignableFrom(values.getType())) {
 			return new ObsMultiEntryOrdered<>(this, key, getValueType(),
-				(ObservableValue<? extends ObservableOrderedCollection<V>>) values);
+				(ObservableValue<? extends ObservableIndexedCollection<V>>) values);
 		} else if (TypeToken.of(ObservableSet.class).isAssignableFrom(values.getType())) {
 			return new ObsMultiEntrySet<>(this, key, getValueType(), (ObservableValue<? extends ObservableSet<V>>) values);
 		} else {
@@ -821,29 +821,29 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	 * @param <K> The key type for this entry
 	 * @param <V> The value type for this entry
 	 */
-	class ObsMultiEntryOrdered<K, V> extends ObsMultiEntryImpl<K, V> implements ObservableOrderedCollection<V> {
-		public ObsMultiEntryOrdered(ObservableMultiMap<K, V> map, K key, ObservableOrderedCollection<V> values) {
+	class ObsMultiEntryOrdered<K, V> extends ObsMultiEntryImpl<K, V> implements ObservableIndexedCollection<V> {
+		public ObsMultiEntryOrdered(ObservableMultiMap<K, V> map, K key, ObservableIndexedCollection<V> values) {
 			super(map, key, values);
 		}
 
 		public ObsMultiEntryOrdered(ObservableMultiMap<K, V> map, K key, TypeToken<V> valueType,
-			ObservableValue<? extends ObservableOrderedCollection<V>> values) {
+			ObservableValue<? extends ObservableIndexedCollection<V>> values) {
 			super(map, key, valueType, values);
 		}
 
 		@Override
-		protected ObservableOrderedCollection<V> getWrapped() {
-			return (ObservableOrderedCollection<V>) super.getWrapped();
+		protected ObservableIndexedCollection<V> getWrapped() {
+			return (ObservableIndexedCollection<V>) super.getWrapped();
 		}
 
 		@Override
-		protected ObservableValue<? extends ObservableOrderedCollection<V>> getWrappedObservable() {
-			return (ObservableValue<? extends ObservableOrderedCollection<V>>) super.getWrappedObservable();
+		protected ObservableValue<? extends ObservableIndexedCollection<V>> getWrappedObservable() {
+			return (ObservableValue<? extends ObservableIndexedCollection<V>>) super.getWrappedObservable();
 		}
 
 		@Override
 		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<V>> onElement) {
-			return ObservableOrderedCollection.flattenValue(getWrappedObservable()).onOrderedElement(onElement);
+			return ObservableIndexedCollection.flattenValue(getWrappedObservable()).onOrderedElement(onElement);
 		}
 	}
 

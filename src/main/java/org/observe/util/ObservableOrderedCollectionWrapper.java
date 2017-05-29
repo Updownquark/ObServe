@@ -1,7 +1,7 @@
 package org.observe.util;
 
 import org.observe.Subscription;
-import org.observe.collect.ObservableOrderedCollection;
+import org.observe.collect.ObservableIndexedCollection;
 import org.observe.collect.ObservableOrderedElement;
 
 /**
@@ -9,9 +9,9 @@ import org.observe.collect.ObservableOrderedElement;
  *
  * @param <E> The type of the ordered collection
  */
-public class ObservableOrderedCollectionWrapper<E> extends ObservableCollectionWrapper<E> implements ObservableOrderedCollection<E> {
+public class ObservableOrderedCollectionWrapper<E> extends ObservableCollectionWrapper<E> implements ObservableIndexedCollection<E> {
 	/** @param wrap The collection to wrap */
-	public ObservableOrderedCollectionWrapper(ObservableOrderedCollection<E> wrap) {
+	public ObservableOrderedCollectionWrapper(ObservableIndexedCollection<E> wrap) {
 		super(wrap, true);
 	}
 
@@ -20,13 +20,13 @@ public class ObservableOrderedCollectionWrapper<E> extends ObservableCollectionW
 	 * @param modifiable Whether this collection can propagate modifications to the wrapped collection. If false, this collection will be
 	 *            immutable.
 	 */
-	public ObservableOrderedCollectionWrapper(ObservableOrderedCollection<E> wrap, boolean modifiable) {
+	public ObservableOrderedCollectionWrapper(ObservableIndexedCollection<E> wrap, boolean modifiable) {
 		super(wrap, modifiable);
 	}
 
 	@Override
-	protected ObservableOrderedCollection<E> getWrapped() {
-		return (ObservableOrderedCollection<E>) super.getWrapped();
+	protected ObservableIndexedCollection<E> getWrapped() {
+		return (ObservableIndexedCollection<E>) super.getWrapped();
 	}
 
 	@Override

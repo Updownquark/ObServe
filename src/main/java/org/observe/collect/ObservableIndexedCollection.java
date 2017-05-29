@@ -16,35 +16,14 @@ import com.google.common.reflect.TypeToken;
 
 /**
  * An indexed collection whose content can be observed. All {@link ObservableCollectionEvent}s fired by this collection will be instances of
- * {@link OrderedCollectionEvent}. In addition, it is guaranteed that the {@link OrderedCollectionEvent#getIndex() index} of an element
+ * {@link IndexedCollectionEvent}. In addition, it is guaranteed that the {@link IndexedCollectionEvent#getIndex() index} of an element
  * given to the observer passed to {@link #subscribe(Consumer)} will be less than or equal to the number of uncompleted elements previously
  * passed to the observer. This means that, for example, the first element passed to an observer will always be index 0. The second may be 0
  * or 1. If one of these is then completed, the next element may be 0 or 1 as well.
  *
  * @param <E> The type of element in the collection
  */
-public interface ObservableOrderedCollection<E> extends ObservableCollection<E> {
-	/**
-	 * @param observer The listener to be notified of changes to the collection
-	 * @return The subscription to call when the calling code is no longer interested in this collection
-	 */
-	CollectionSubscription subscribeOrdered(Consumer<? super OrderedCollectionEvent<? extends E>> observer);
-
-	@Override
-	default CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-		return subscribeOrdered(observer);
-	}
-
-	/**
-	 * @return An observable that returns null whenever any elements in this collection are added, removed or changed. The order of events
-	 *         as reported by this observable may not be the same as their occurrence in the collection. Any discrepancy will be resolved
-	 *         when the transaction ends.
-	 */
-	@Override
-	default Observable<? extends OrderedCollectionChangeEvent<E>> changes() {
-		return new ObservableOrderedCollectionImpl.OrderedCollectionChangesObservable<>(this);
-	}
-
+public interface ObservableIndexedCollection<E> extends ObservableCollection<E> {
 	// Ordered collections need to know the indexes of their elements in a somewhat efficient way, so these index methods make sense here
 
 	/**
@@ -75,23 +54,23 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	@Override
-	default ObservableOrderedCollection<E> withEquivalence(Equivalence<? super E> otherEquiv) {
-		return new ObservableOrderedCollectionImpl.EquivalenceSwitchedOrderedCollection<>(this, otherEquiv);
+	default ObservableIndexedCollection<E> withEquivalence(Equivalence<? super E> otherEquiv) {
+		return new ObservableIndexedCollectionImpl.EquivalenceSwitchedOrderedCollection<>(this, otherEquiv);
 	}
 
 	@Override
-	default ObservableOrderedCollection<E> filter(Function<? super E, String> filter) {
-		return (ObservableOrderedCollection<E>) ObservableCollection.super.filter(filter);
+	default ObservableIndexedCollection<E> filter(Function<? super E, String> filter) {
+		return (ObservableIndexedCollection<E>) ObservableCollection.super.filter(filter);
 	}
 
 	@Override
-	default <T> ObservableOrderedCollection<T> filter(Class<T> type) {
-		return (ObservableOrderedCollection<T>) ObservableCollection.super.filter(type);
+	default <T> ObservableIndexedCollection<T> filter(Class<T> type) {
+		return (ObservableIndexedCollection<T>) ObservableCollection.super.filter(type);
 	}
 
 	@Override
-	default <T> ObservableOrderedCollection<T> map(Function<? super E, T> map) {
-		return (ObservableOrderedCollection<T>) ObservableCollection.super.map(map);
+	default <T> ObservableIndexedCollection<T> map(Function<? super E, T> map) {
+		return (ObservableIndexedCollection<T>) ObservableCollection.super.map(map);
 	}
 
 	@Override
@@ -100,18 +79,18 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	@Override
-	default <T> ObservableOrderedCollection<T> filterMap(FilterMapDef<E, ?, T> filterMap) {
-		return new ObservableOrderedCollectionImpl.FilterMappedOrderedCollection<>(this, filterMap);
+	default <T> ObservableIndexedCollection<T> filterMap(FilterMapDef<E, ?, T> filterMap) {
+		return new ObservableIndexedCollectionImpl.FilterMappedOrderedCollection<>(this, filterMap);
 	}
 
 	@Override
-	default <T> ObservableOrderedCollection<T> flatMapValues(TypeToken<T> type,
+	default <T> ObservableIndexedCollection<T> flatMapValues(TypeToken<T> type,
 		Function<? super E, ? extends ObservableValue<? extends T>> map) {
 		TypeToken<ObservableValue<? extends T>> collectionType;
 		if (type == null) {
 			collectionType = (TypeToken<ObservableValue<? extends T>>) TypeToken.of(map.getClass())
 				.resolveType(Function.class.getTypeParameters()[1]);
-			if (!collectionType.isAssignableFrom(new TypeToken<ObservableOrderedCollection<T>>() {}))
+			if (!collectionType.isAssignableFrom(new TypeToken<ObservableIndexedCollection<T>>() {}))
 				collectionType = new TypeToken<ObservableValue<? extends T>>() {};
 		} else {
 			collectionType = new TypeToken<ObservableValue<? extends T>>() {}.where(new TypeParameter<T>() {}, type);
@@ -120,7 +99,7 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	/**
-	 * Shorthand for {@link #flatten(ObservableOrderedCollection) flatten}({@link #map(Function) map}(Function))
+	 * Shorthand for {@link #flatten(ObservableIndexedCollection) flatten}({@link #map(Function) map}(Function))
 	 *
 	 * @param <T> The type of the values produced
 	 * @param type The type of the values produced
@@ -128,18 +107,18 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @return A collection whose values are the accumulation of all those produced by applying the given function to all of this
 	 *         collection's values
 	 */
-	default <T> ObservableOrderedCollection<T> flatMapOrdered(TypeToken<T> type,
-		Function<? super E, ? extends ObservableOrderedCollection<? extends T>> map) {
-		TypeToken<ObservableOrderedCollection<? extends T>> collectionType;
+	default <T> ObservableIndexedCollection<T> flatMapOrdered(TypeToken<T> type,
+		Function<? super E, ? extends ObservableIndexedCollection<? extends T>> map) {
+		TypeToken<ObservableIndexedCollection<? extends T>> collectionType;
 		if (type == null) {
-			collectionType = (TypeToken<ObservableOrderedCollection<? extends T>>) TypeToken.of(map.getClass())
+			collectionType = (TypeToken<ObservableIndexedCollection<? extends T>>) TypeToken.of(map.getClass())
 				.resolveType(Function.class.getTypeParameters()[1]);
-			if (!collectionType.isAssignableFrom(new TypeToken<ObservableOrderedCollection<T>>() {}))
-				collectionType = new TypeToken<ObservableOrderedCollection<? extends T>>() {};
+			if (!collectionType.isAssignableFrom(new TypeToken<ObservableIndexedCollection<T>>() {}))
+				collectionType = new TypeToken<ObservableIndexedCollection<? extends T>>() {};
 		} else {
-			collectionType = new TypeToken<ObservableOrderedCollection<? extends T>>() {}.where(new TypeParameter<T>() {}, type);
+			collectionType = new TypeToken<ObservableIndexedCollection<? extends T>>() {}.where(new TypeParameter<T>() {}, type);
 		}
-		return flatten(this.<ObservableOrderedCollection<? extends T>> buildMap(collectionType).map(map, false).build());
+		return flatten(this.<ObservableIndexedCollection<? extends T>> buildMap(collectionType).map(map, false).build());
 	}
 
 	@Override
@@ -148,8 +127,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	@Override
-	default <V> ObservableOrderedCollection<V> combine(CombinedCollectionDef<E, V> combination) {
-		return new ObservableOrderedCollectionImpl.CombinedOrderedCollection<>(this, combination);
+	default <V> ObservableIndexedCollection<V> combine(CombinedCollectionDef<E, V> combination) {
+		return new ObservableIndexedCollectionImpl.CombinedOrderedCollection<>(this, combination);
 	}
 
 	@Override
@@ -158,13 +137,13 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	@Override
-	default ObservableOrderedCollection<E> filterModification(ModFilterDef<E> filter) {
-		return new ObservableOrderedCollectionImpl.ModFilteredOrderedCollection<>(this, filter);
+	default ObservableIndexedCollection<E> filterModification(ModFilterDef<E> filter) {
+		return new ObservableIndexedCollectionImpl.ModFilteredOrderedCollection<>(this, filter);
 	}
 
 	@Override
-	default ObservableOrderedCollection<E> cached(Observable<?> until) {
-		return new ObservableOrderedCollectionImpl.CachedOrderedCollection<>(this, until);
+	default ObservableIndexedCollection<E> cached(Observable<?> until) {
+		return new ObservableIndexedCollectionImpl.CachedOrderedCollection<>(this, until);
 	}
 
 	/**
@@ -172,23 +151,23 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @return A collection whose elements fire additional value events when the given observable fires
 	 */
 	@Override
-	default ObservableOrderedCollection<E> refresh(Observable<?> refresh) {
-		return new ObservableOrderedCollectionImpl.RefreshingOrderedCollection<>(this, refresh);
+	default ObservableIndexedCollection<E> refresh(Observable<?> refresh) {
+		return new ObservableIndexedCollectionImpl.RefreshingOrderedCollection<>(this, refresh);
 	}
 
 	@Override
-	default ObservableOrderedCollection<E> refreshEach(Function<? super E, Observable<?>> refire) {
-		return new ObservableOrderedCollectionImpl.ElementRefreshingOrderedCollection<>(this, refire);
+	default ObservableIndexedCollection<E> refreshEach(Function<? super E, Observable<?>> refire) {
+		return new ObservableIndexedCollectionImpl.ElementRefreshingOrderedCollection<>(this, refire);
 	}
 
 	@Override
-	default ObservableOrderedCollection<E> takeUntil(Observable<?> until) {
-		return new ObservableOrderedCollectionImpl.TakenUntilOrderedCollection<>(this, until, true);
+	default ObservableIndexedCollection<E> takeUntil(Observable<?> until) {
+		return new ObservableIndexedCollectionImpl.TakenUntilOrderedCollection<>(this, until, true);
 	}
 
 	@Override
-	default ObservableOrderedCollection<E> unsubscribeOn(Observable<?> until) {
-		return new ObservableOrderedCollectionImpl.TakenUntilOrderedCollection<>(this, until, false);
+	default ObservableIndexedCollection<E> unsubscribeOn(Observable<?> until) {
+		return new ObservableIndexedCollectionImpl.TakenUntilOrderedCollection<>(this, until, false);
 	}
 
 	/**
@@ -198,9 +177,9 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @param collection The collection to flatten
 	 * @return The flattened collection
 	 */
-	public static <E> ObservableOrderedCollection<E> flattenValues(
-		ObservableOrderedCollection<? extends ObservableValue<? extends E>> collection) {
-		return new ObservableOrderedCollectionImpl.FlattenedOrderedValuesCollection<>(collection);
+	public static <E> ObservableIndexedCollection<E> flattenValues(
+		ObservableIndexedCollection<? extends ObservableValue<? extends E>> collection) {
+		return new ObservableIndexedCollectionImpl.FlattenedOrderedValuesCollection<>(collection);
 	}
 
 	/**
@@ -209,9 +188,9 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @param collectionObservable The observable value
 	 * @return A collection representing the contents of the value, or a zero-length collection when null
 	 */
-	public static <E> ObservableOrderedCollection<E> flattenValue(
-		ObservableValue<? extends ObservableOrderedCollection<? extends E>> collectionObservable) {
-		return new ObservableOrderedCollectionImpl.FlattenedOrderedValueCollection<>(collectionObservable);
+	public static <E> ObservableIndexedCollection<E> flattenValue(
+		ObservableValue<? extends ObservableIndexedCollection<? extends E>> collectionObservable) {
+		return new ObservableIndexedCollectionImpl.FlattenedOrderedValueCollection<>(collectionObservable);
 	}
 
 	/**
@@ -221,27 +200,27 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @param list The collection to flatten
 	 * @return A collection containing all elements of all collections in the outer collection
 	 */
-	public static <E> ObservableOrderedCollection<E> flatten(
-		ObservableOrderedCollection<? extends ObservableOrderedCollection<? extends E>> list) {
-		return new ObservableOrderedCollectionImpl.FlattenedOrderedCollection<>(list);
+	public static <E> ObservableIndexedCollection<E> flatten(
+		ObservableIndexedCollection<? extends ObservableIndexedCollection<? extends E>> list) {
+		return new ObservableIndexedCollectionImpl.FlattenedOrderedCollection<>(list);
 	}
 
 	/**
-	 * A {@link ObservableCollection.MappedCollectionBuilder} that builds an {@link ObservableOrderedCollection}
+	 * A {@link ObservableCollection.MappedCollectionBuilder} that builds an {@link ObservableIndexedCollection}
 	 *
 	 * @param <E> The type of values in the source collection
 	 * @param <I> Intermediate type
 	 * @param <T> The type of values in the mapped collection
 	 */
 	class MappedOrderedCollectionBuilder<E, I, T> extends MappedCollectionBuilder<E, I, T> {
-		protected MappedOrderedCollectionBuilder(ObservableOrderedCollection<E> wrapped, MappedOrderedCollectionBuilder<E, ?, I> parent,
+		protected MappedOrderedCollectionBuilder(ObservableIndexedCollection<E> wrapped, MappedOrderedCollectionBuilder<E, ?, I> parent,
 			TypeToken<T> type) {
 			super(wrapped, parent, type);
 		}
 
 		@Override
-		protected ObservableOrderedCollection<E> getCollection() {
-			return (ObservableOrderedCollection<E>) super.getCollection();
+		protected ObservableIndexedCollection<E> getCollection() {
+			return (ObservableIndexedCollection<E>) super.getCollection();
 		}
 
 		@Override
@@ -260,8 +239,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		}
 
 		@Override
-		public ObservableOrderedCollection<T> build() {
-			return (ObservableOrderedCollection<T>) super.build();
+		public ObservableIndexedCollection<T> build() {
+			return (ObservableIndexedCollection<T>) super.build();
 		}
 
 		@Override
@@ -273,12 +252,12 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	/**
-	 * A {@link ObservableCollection.CombinedCollectionBuilder} that builds an {@link ObservableOrderedCollection}
+	 * A {@link ObservableCollection.CombinedCollectionBuilder} that builds an {@link ObservableIndexedCollection}
 	 *
 	 * @param <E> The type of elements in the source collection
 	 * @param <V> The type of elements in the resulting collection
-	 * @see ObservableOrderedCollection#combineWith(ObservableValue, TypeToken)
-	 * @see ObservableOrderedCollection.CombinedOrderedCollectionBuilder3#and(ObservableValue)
+	 * @see ObservableIndexedCollection#combineWith(ObservableValue, TypeToken)
+	 * @see ObservableIndexedCollection.CombinedOrderedCollectionBuilder3#and(ObservableValue)
 	 */
 	interface CombinedOrderedCollectionBuilder<E, V> extends CombinedCollectionBuilder<E, V> {
 		@Override
@@ -292,31 +271,31 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 			boolean reverseNulls);
 
 		@Override
-		ObservableOrderedCollection<V> build(Function<? super CombinedValues<? extends E>, ? extends V> combination);
+		ObservableIndexedCollection<V> build(Function<? super CombinedValues<? extends E>, ? extends V> combination);
 
 		@Override
 		CombinedCollectionDef<E, V> toDef(Function<? super CombinedValues<? extends E>, ? extends V> combination);
 	}
 
 	/**
-	 * A {@link ObservableOrderedCollection.CombinedOrderedCollectionBuilder} for the combination of a collection with a single value. Use
+	 * A {@link ObservableIndexedCollection.CombinedOrderedCollectionBuilder} for the combination of a collection with a single value. Use
 	 * {@link #and(ObservableValue)} to combine with additional values.
 	 *
 	 * @param <E> The type of elements in the source collection
 	 * @param <T> The type of the combined value
 	 * @param <V> The type of elements in the resulting collection
-	 * @see ObservableOrderedCollection#combineWith(ObservableValue, TypeToken)
+	 * @see ObservableIndexedCollection#combineWith(ObservableValue, TypeToken)
 	 */
 	class CombinedOrderedCollectionBuilder2<E, T, V> extends CombinedCollectionBuilder2<E, T, V>
 	implements CombinedOrderedCollectionBuilder<E, V> {
-		public CombinedOrderedCollectionBuilder2(ObservableOrderedCollection<E> collection, ObservableValue<T> arg2,
+		public CombinedOrderedCollectionBuilder2(ObservableIndexedCollection<E> collection, ObservableValue<T> arg2,
 			TypeToken<V> targetType) {
 			super(collection, arg2, targetType);
 		}
 
 		@Override
-		public ObservableOrderedCollection<E> getSource() {
-			return (ObservableOrderedCollection<E>) super.getSource();
+		public ObservableIndexedCollection<E> getSource() {
+			return (ObservableIndexedCollection<E>) super.getSource();
 		}
 
 		@Override
@@ -347,13 +326,13 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		}
 
 		@Override
-		public ObservableOrderedCollection<V> build(BiFunction<? super E, ? super T, ? extends V> combination) {
-			return (ObservableOrderedCollection<V>) super.build(combination);
+		public ObservableIndexedCollection<V> build(BiFunction<? super E, ? super T, ? extends V> combination) {
+			return (ObservableIndexedCollection<V>) super.build(combination);
 		}
 
 		@Override
-		public ObservableOrderedCollection<V> build(Function<? super CombinedValues<? extends E>, ? extends V> combination) {
-			return (ObservableOrderedCollection<V>) super.build(combination);
+		public ObservableIndexedCollection<V> build(Function<? super CombinedValues<? extends E>, ? extends V> combination) {
+			return (ObservableIndexedCollection<V>) super.build(combination);
 		}
 
 		@Override
@@ -372,15 +351,15 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	/**
-	 * A {@link ObservableOrderedCollection.CombinedOrderedCollectionBuilder} for the combination of a collection with 2 values. Use
+	 * A {@link ObservableIndexedCollection.CombinedOrderedCollectionBuilder} for the combination of a collection with 2 values. Use
 	 * {@link #and(ObservableValue)} to combine with additional values.
 	 *
 	 * @param <E> The type of elements in the source collection
 	 * @param <T> The type of the first combined value
 	 * @param <U> The type of the second combined value
 	 * @param <V> The type of elements in the resulting collection
-	 * @see ObservableOrderedCollection#combineWith(ObservableValue, TypeToken)
-	 * @see ObservableOrderedCollection.CombinedOrderedCollectionBuilder2#and(ObservableValue)
+	 * @see ObservableIndexedCollection#combineWith(ObservableValue, TypeToken)
+	 * @see ObservableIndexedCollection.CombinedOrderedCollectionBuilder2#and(ObservableValue)
 	 */
 	class CombinedOrderedCollectionBuilder3<E, T, U, V> extends CombinedCollectionBuilder3<E, T, U, V>
 	implements CombinedOrderedCollectionBuilder<E, V> {
@@ -390,8 +369,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		}
 
 		@Override
-		public ObservableOrderedCollection<E> getSource() {
-			return (ObservableOrderedCollection<E>) getCombine2().getSource();
+		public ObservableIndexedCollection<E> getSource() {
+			return (ObservableIndexedCollection<E>) getCombine2().getSource();
 		}
 
 		@Override
@@ -407,13 +386,13 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		}
 
 		@Override
-		public ObservableOrderedCollection<V> build(TriFunction<? super E, ? super T, ? super U, ? extends V> combination) {
-			return (ObservableOrderedCollection<V>) super.build(combination);
+		public ObservableIndexedCollection<V> build(TriFunction<? super E, ? super T, ? super U, ? extends V> combination) {
+			return (ObservableIndexedCollection<V>) super.build(combination);
 		}
 
 		@Override
-		public ObservableOrderedCollection<V> build(Function<? super CombinedValues<? extends E>, ? extends V> combination) {
-			return (ObservableOrderedCollection<V>) super.build(combination);
+		public ObservableIndexedCollection<V> build(Function<? super CombinedValues<? extends E>, ? extends V> combination) {
+			return (ObservableIndexedCollection<V>) super.build(combination);
 		}
 
 		@Override
@@ -432,13 +411,13 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	}
 
 	/**
-	 * A {@link ObservableOrderedCollection.CombinedOrderedCollectionBuilder} for the combination of a collection with one or more
+	 * A {@link ObservableIndexedCollection.CombinedOrderedCollectionBuilder} for the combination of a collection with one or more
 	 * (typically at least 3) values. Use {@link #and(ObservableValue)} to combine with additional values.
 	 *
 	 * @param <E> The type of elements in the source collection
 	 * @param <V> The type of elements in the resulting collection
-	 * @see ObservableOrderedCollection#combineWith(ObservableValue, TypeToken)
-	 * @see ObservableOrderedCollection.CombinedOrderedCollectionBuilder3#and(ObservableValue)
+	 * @see ObservableIndexedCollection#combineWith(ObservableValue, TypeToken)
+	 * @see ObservableIndexedCollection.CombinedOrderedCollectionBuilder3#and(ObservableValue)
 	 */
 	class CombinedOrderedCollectionBuilderN<E, V> extends CombinedCollectionBuilderN<E, V>
 	implements CombinedOrderedCollectionBuilder<E, V> {
@@ -463,8 +442,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		}
 
 		@Override
-		public ObservableOrderedCollection<V> build(Function<? super CombinedValues<? extends E>, ? extends V> combination) {
-			return (ObservableOrderedCollection<V>) super.build(combination);
+		public ObservableIndexedCollection<V> build(Function<? super CombinedValues<? extends E>, ? extends V> combination) {
+			return (ObservableIndexedCollection<V>) super.build(combination);
 		}
 
 		@Override
@@ -480,13 +459,13 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 	 * @param <E> The type of elements in the collection
 	 */
 	class OrderedModFilterBuilder<E> extends ModFilterBuilder<E> {
-		public OrderedModFilterBuilder(ObservableOrderedCollection<E> collection) {
+		public OrderedModFilterBuilder(ObservableIndexedCollection<E> collection) {
 			super(collection);
 		}
 
 		@Override
-		protected ObservableOrderedCollection<E> getSource() {
-			return (ObservableOrderedCollection<E>) super.getSource();
+		protected ObservableIndexedCollection<E> getSource() {
+			return (ObservableIndexedCollection<E>) super.getSource();
 		}
 
 		@Override
@@ -515,8 +494,8 @@ public interface ObservableOrderedCollection<E> extends ObservableCollection<E> 
 		}
 
 		@Override
-		public ObservableOrderedCollection<E> build() {
-			return (ObservableOrderedCollection<E>) super.build();
+		public ObservableIndexedCollection<E> build() {
+			return (ObservableIndexedCollection<E>) super.build();
 		}
 	}
 }

@@ -34,19 +34,19 @@ import org.qommons.tree.CountedRedBlackNode.DefaultTreeSet;
 
 import com.google.common.reflect.TypeToken;
 
-/** Contains implementation classes for {@link ObservableOrderedCollection} */
-public class ObservableOrderedCollectionImpl {
-	private ObservableOrderedCollectionImpl() {}
+/** Contains implementation classes for {@link ObservableIndexedCollection} */
+public class ObservableIndexedCollectionImpl {
+	private ObservableIndexedCollectionImpl() {}
 
 	/**
-	 * A simple, linear time, default implementation for {@link ObservableOrderedCollection#indexOf(Object)}
+	 * A simple, linear time, default implementation for {@link ObservableIndexedCollection#indexOf(Object)}
 	 *
 	 * @param coll The collection to search
 	 * @param value The value to search for
 	 * @return The index of the first element in the collection that is {@link ObservableCollection#equivalence() equivalent} to the given
 	 *         object
 	 */
-	public static <E> int indexOf(ObservableOrderedCollection<E> coll, Object value) {
+	public static <E> int indexOf(ObservableIndexedCollection<E> coll, Object value) {
 		if (!coll.equivalence().isElement(value))
 			return -1;
 		try (Transaction t = coll.lock(false, null)) {
@@ -61,14 +61,14 @@ public class ObservableOrderedCollectionImpl {
 	}
 
 	/**
-	 * A simple, linear time, default implementation for {@link ObservableOrderedCollection#lastIndexOf(Object)}
+	 * A simple, linear time, default implementation for {@link ObservableIndexedCollection#lastIndexOf(Object)}
 	 *
 	 * @param coll The collection to search
 	 * @param value The value to search for
 	 * @return The index of the last element in the collection that is {@link ObservableCollection#equivalence() equivalent} to the given
 	 *         object
 	 */
-	public static <E> int lastIndexOf(ObservableOrderedCollection<E> coll, Object value) {
+	public static <E> int lastIndexOf(ObservableIndexedCollection<E> coll, Object value) {
 		if (!coll.equivalence().isElement(value))
 			return -1;
 		try (Transaction t = coll.lock(false, null)) {
@@ -84,8 +84,8 @@ public class ObservableOrderedCollectionImpl {
 	}
 
 	/**
-	 * Fires {@link OrderedCollectionChangeEvent}s in response to sets of changes on an {@link ObservableOrderedCollection}.
-	 * CollectionChangeEvents contain more information than the standard {@link OrderedCollectionEvent}, so listening to
+	 * Fires {@link OrderedCollectionChangeEvent}s in response to sets of changes on an {@link ObservableIndexedCollection}.
+	 * CollectionChangeEvents contain more information than the standard {@link IndexedCollectionEvent}, so listening to
 	 * CollectionChangeEvents may result in better application performance.
 	 *
 	 * @param <E> The type of values in the collection
@@ -116,7 +116,7 @@ public class ObservableOrderedCollectionImpl {
 		}
 
 		/** @param coll The collection to observe */
-		protected OrderedCollectionChangesObservable(ObservableOrderedCollection<E> coll) {
+		protected OrderedCollectionChangesObservable(ObservableIndexedCollection<E> coll) {
 			super(coll);
 		}
 
@@ -124,14 +124,14 @@ public class ObservableOrderedCollectionImpl {
 		protected void accumulate(SessionChangeTracker<E> tracker, ObservableCollectionEvent<? extends E> event,
 			Observer<? super OCCE> observer) {
 			OrderedSessionChangeTracker<E> orderedTracker = (OrderedSessionChangeTracker<E>) tracker;
-			int[] index = new int[] { ((OrderedCollectionEvent<E>) event).getIndex() };
-			adjustTrackerForChange(orderedTracker, index, (OrderedCollectionEvent<? extends E>) event, observer);
+			int[] index = new int[] { ((IndexedCollectionEvent<E>) event).getIndex() };
+			adjustTrackerForChange(orderedTracker, index, (IndexedCollectionEvent<? extends E>) event, observer);
 			super.accumulate(tracker, event, observer);
-			orderedTracker.indexes.add(((OrderedCollectionEvent<? extends E>) event).getIndex());
+			orderedTracker.indexes.add(((IndexedCollectionEvent<? extends E>) event).getIndex());
 		}
 
 		private OrderedSessionChangeTracker<E> adjustTrackerForChange(OrderedSessionChangeTracker<E> tracker, int[] index,
-			OrderedCollectionEvent<? extends E> event, Observer<? super OCCE> observer) {
+			IndexedCollectionEvent<? extends E> event, Observer<? super OCCE> observer) {
 			if (tracker.type != event.getType()) {
 				fireEventsUpTo(tracker, index, event, observer);
 				if (adjustEventsPast(tracker, index, event, observer))
@@ -152,7 +152,7 @@ public class ObservableOrderedCollectionImpl {
 			}
 		}
 
-		private void fireEventsUpTo(OrderedSessionChangeTracker<E> tracker, int[] index, OrderedCollectionEvent<? extends E> event,
+		private void fireEventsUpTo(OrderedSessionChangeTracker<E> tracker, int[] index, IndexedCollectionEvent<? extends E> event,
 			Observer<? super OCCE> observer) {
 			// Fire events for indexes before the new change index, since otherwise those changes would affect the index
 			if (tracker.indexes.size() < 25) {
@@ -182,7 +182,7 @@ public class ObservableOrderedCollectionImpl {
 			fireEventsFromSessionData(subTracker, event, observer);
 		}
 
-		private boolean adjustEventsPast(OrderedSessionChangeTracker<E> tracker, int[] index, OrderedCollectionEvent<? extends E> event,
+		private boolean adjustEventsPast(OrderedSessionChangeTracker<E> tracker, int[] index, IndexedCollectionEvent<? extends E> event,
 			Observer<? super OCCE> observer) {
 
 			// Adjust all indexes strictly past the change index first
@@ -270,23 +270,23 @@ public class ObservableOrderedCollectionImpl {
 	}
 
 	/**
-	 * Implements {@link ObservableOrderedCollection#withEquivalence(Equivalence)}
+	 * Implements {@link ObservableIndexedCollection#withEquivalence(Equivalence)}
 	 *
 	 * @param <E> The type of values in the collection
 	 */
 	public static class EquivalenceSwitchedOrderedCollection<E> extends EquivalenceSwitchedCollection<E>
-	implements ObservableOrderedCollection<E> {
+	implements ObservableIndexedCollection<E> {
 		/**
 		 * @param wrap The source collection
 		 * @param equivalence The equivalence set to use for equivalence operations
 		 */
-		protected EquivalenceSwitchedOrderedCollection(ObservableOrderedCollection<E> wrap, Equivalence<? super E> equivalence) {
+		protected EquivalenceSwitchedOrderedCollection(ObservableIndexedCollection<E> wrap, Equivalence<? super E> equivalence) {
 			super(wrap, equivalence);
 		}
 
 		@Override
-		protected ObservableOrderedCollection<E> getWrapped() {
-			return (ObservableOrderedCollection<E>) super.getWrapped();
+		protected ObservableIndexedCollection<E> getWrapped() {
+			return (ObservableIndexedCollection<E>) super.getWrapped();
 		}
 
 		@Override
@@ -296,41 +296,41 @@ public class ObservableOrderedCollectionImpl {
 
 		@Override
 		public int indexOf(Object value) {
-			return ObservableOrderedCollectionImpl.indexOf(this, value);
+			return ObservableIndexedCollectionImpl.indexOf(this, value);
 		}
 
 		@Override
 		public int lastIndexOf(Object value) {
-			return ObservableOrderedCollectionImpl.lastIndexOf(this, value);
+			return ObservableIndexedCollectionImpl.lastIndexOf(this, value);
 		}
 
 		@Override
-		public CollectionSubscription subscribeOrdered(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
-			return super.subscribe(evt -> observer.accept((OrderedCollectionEvent<? extends E>) evt));
+		public CollectionSubscription subscribeOrdered(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
+			return super.subscribe(evt -> observer.accept((IndexedCollectionEvent<? extends E>) evt));
 		}
 	}
 
 	/**
-	 * Implements {@link ObservableOrderedCollection#filterMap(ObservableCollection.FilterMapDef)}
+	 * Implements {@link ObservableIndexedCollection#filterMap(ObservableCollection.FilterMapDef)}
 	 *
 	 * @param <E> The type of the collection to filter/map
 	 * @param <T> The type of the filter/mapped collection
 	 */
 	public static class FilterMappedOrderedCollection<E, T> extends FilterMappedObservableCollection<E, T>
-	implements ObservableOrderedCollection<T> {
+	implements ObservableIndexedCollection<T> {
 		/**
 		 * @param wrap The source collection
 		 * @param filterMapDef The filter-mapping definition defining which elements are filtered from the collection and how they are
 		 *        mapped
 		 */
-		protected FilterMappedOrderedCollection(ObservableOrderedCollection<E> wrap,
+		protected FilterMappedOrderedCollection(ObservableIndexedCollection<E> wrap,
 			ObservableCollection.FilterMapDef<E, ?, T> filterMapDef) {
 			super(wrap, filterMapDef);
 		}
 
 		@Override
-		protected ObservableOrderedCollection<E> getWrapped() {
-			return (ObservableOrderedCollection<E>) super.getWrapped();
+		protected ObservableIndexedCollection<E> getWrapped() {
+			return (ObservableIndexedCollection<E>) super.getWrapped();
 		}
 
 		@Override
@@ -355,7 +355,7 @@ public class ObservableOrderedCollectionImpl {
 			if (!getDef().checkDestType(value))
 				return -1;
 			if (!getDef().isReversible())
-				return ObservableOrderedCollectionImpl.indexOf(this, value);
+				return ObservableIndexedCollectionImpl.indexOf(this, value);
 			FilterMapResult<T, E> reversed = getDef().reverse(new FilterMapResult<>((T) value));
 			if (reversed.error != null)
 				return -1;
@@ -367,7 +367,7 @@ public class ObservableOrderedCollectionImpl {
 			if (!getDef().checkDestType(value))
 				return -1;
 			if (!getDef().isReversible())
-				return ObservableOrderedCollectionImpl.lastIndexOf(this, value);
+				return ObservableIndexedCollectionImpl.lastIndexOf(this, value);
 			FilterMapResult<T, E> reversed = getDef().reverse(new FilterMapResult<>((T) value));
 			if (reversed.error != null)
 				return -1;
@@ -375,8 +375,8 @@ public class ObservableOrderedCollectionImpl {
 		}
 
 		@Override
-		public CollectionSubscription subscribeOrdered(Consumer<? super OrderedCollectionEvent<? extends T>> observer) {
-			return super.subscribe(evt -> observer.accept((OrderedCollectionEvent<? extends T>) evt));
+		public CollectionSubscription subscribeOrdered(Consumer<? super IndexedCollectionEvent<? extends T>> observer) {
+			return super.subscribe(evt -> observer.accept((IndexedCollectionEvent<? extends T>) evt));
 		}
 
 		@Override
@@ -387,12 +387,12 @@ public class ObservableOrderedCollectionImpl {
 		}
 
 		@Override
-		protected OrderedCollectionEvent<T> map(ObservableCollectionEvent<? extends E> cause, CollectionChangeType type, T oldValue,
+		protected IndexedCollectionEvent<T> map(ObservableCollectionEvent<? extends E> cause, CollectionChangeType type, T oldValue,
 			T newValue, Object metadata) {
 			DefaultTreeSet<ElementId> elements = (DefaultTreeSet<ElementId>) metadata;
 			int index;
 			if (!getDef().isFiltered())
-				index = ((OrderedCollectionEvent<? extends E>) cause).getIndex();
+				index = ((IndexedCollectionEvent<? extends E>) cause).getIndex();
 			else {
 				if (type == CollectionChangeType.add)
 					index = elements.addGetNode(cause.getElementId()).getIndex();
@@ -403,30 +403,30 @@ public class ObservableOrderedCollectionImpl {
 				} else
 					index = elements.indexOf(cause.getElementId());
 			}
-			return new OrderedCollectionEvent<>(cause.getElementId(), index, type, oldValue, newValue, cause);
+			return new IndexedCollectionEvent<>(cause.getElementId(), index, type, oldValue, newValue, cause);
 		}
 	}
 
 	/**
-	 * Implements {@link ObservableOrderedCollection#combine(ObservableCollection.CombinedCollectionDef)}
+	 * Implements {@link ObservableIndexedCollection#combine(ObservableCollection.CombinedCollectionDef)}
 	 *
 	 * @param <E> The type of values in the source collection
 	 * @param <V> The type of values in this collection
 	 */
 	public static class CombinedOrderedCollection<E, V> extends CombinedObservableCollection<E, V>
-	implements ObservableOrderedCollection<V> {
+	implements ObservableIndexedCollection<V> {
 		/**
 		 * @param wrap The source collection
 		 * @param def The combination definition containing the observable values to combine the source collection's elements with and how
 		 *        to combine them
 		 */
-		protected CombinedOrderedCollection(ObservableOrderedCollection<E> wrap, CombinedCollectionDef<E, V> def) {
+		protected CombinedOrderedCollection(ObservableIndexedCollection<E> wrap, CombinedCollectionDef<E, V> def) {
 			super(wrap, def);
 		}
 
 		@Override
-		protected ObservableOrderedCollection<E> getWrapped() {
-			return (ObservableOrderedCollection<E>) super.getWrapped();
+		protected ObservableIndexedCollection<E> getWrapped() {
+			return (ObservableIndexedCollection<E>) super.getWrapped();
 		}
 
 		@Override
@@ -436,12 +436,12 @@ public class ObservableOrderedCollectionImpl {
 
 		@Override
 		public int indexOf(Object value) {
-			return ObservableOrderedCollectionImpl.indexOf(this, value);
+			return ObservableIndexedCollectionImpl.indexOf(this, value);
 		}
 
 		@Override
 		public int lastIndexOf(Object value) {
-			return ObservableOrderedCollectionImpl.lastIndexOf(this, value);
+			return ObservableIndexedCollectionImpl.lastIndexOf(this, value);
 		}
 
 		@Override
@@ -458,35 +458,35 @@ public class ObservableOrderedCollectionImpl {
 				node = presentIds.addGetNode(elementId);
 			else
 				node = presentIds.getNode(elementId);
-			OrderedCollectionEvent<V> event = new OrderedCollectionEvent<>(elementId, node.getIndex(), type, oldValue, newValue, cause);
+			IndexedCollectionEvent<V> event = new IndexedCollectionEvent<>(elementId, node.getIndex(), type, oldValue, newValue, cause);
 			if (type == CollectionChangeType.remove)
 				presentIds.remove(elementId);
 			return event;
 		}
 
 		@Override
-		public CollectionSubscription subscribeOrdered(Consumer<? super OrderedCollectionEvent<? extends V>> observer) {
-			return subscribe(evt -> observer.accept((OrderedCollectionEvent<? extends V>) evt));
+		public CollectionSubscription subscribeOrdered(Consumer<? super IndexedCollectionEvent<? extends V>> observer) {
+			return subscribe(evt -> observer.accept((IndexedCollectionEvent<? extends V>) evt));
 		}
 	}
 
 	/**
-	 * Implements {@link ObservableOrderedCollection#refresh(Observable)}
+	 * Implements {@link ObservableIndexedCollection#refresh(Observable)}
 	 *
 	 * @param <E> The type of the collection to refresh
 	 */
-	public static class RefreshingOrderedCollection<E> extends RefreshingCollection<E> implements ObservableOrderedCollection<E> {
+	public static class RefreshingOrderedCollection<E> extends RefreshingCollection<E> implements ObservableIndexedCollection<E> {
 		/**
 		 * @param wrap The source collection
 		 * @param refresh The observable to use to refresh the collection's elements
 		 */
-		protected RefreshingOrderedCollection(ObservableOrderedCollection<E> wrap, Observable<?> refresh) {
+		protected RefreshingOrderedCollection(ObservableIndexedCollection<E> wrap, Observable<?> refresh) {
 			super(wrap, refresh);
 		}
 
 		@Override
-		protected ObservableOrderedCollection<E> getWrapped() {
-			return (ObservableOrderedCollection<E>) super.getWrapped();
+		protected ObservableIndexedCollection<E> getWrapped() {
+			return (ObservableIndexedCollection<E>) super.getWrapped();
 		}
 
 		@Override
@@ -505,38 +505,38 @@ public class ObservableOrderedCollectionImpl {
 		}
 
 		@Override
-		public CollectionSubscription subscribeOrdered(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
-			return subscribe(evt -> observer.accept((OrderedCollectionEvent<? extends E>) evt));
+		public CollectionSubscription subscribeOrdered(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
+			return subscribe(evt -> observer.accept((IndexedCollectionEvent<? extends E>) evt));
 		}
 
 		@Override
 		protected void doRefresh(Consumer<? super ObservableCollectionEvent<? extends E>> observer, Object cause) {
 			int[] index = new int[1];
 			getWrapped().spliterator().forEachObservableElement(el -> {
-				OrderedCollectionEvent.doWith(
-					new OrderedCollectionEvent<>(el.getElementId(), index[0]++, CollectionChangeType.set, el.get(), el.get(), cause),
+				IndexedCollectionEvent.doWith(
+					new IndexedCollectionEvent<>(el.getElementId(), index[0]++, CollectionChangeType.set, el.get(), el.get(), cause),
 					observer::accept);
 			});
 		}
 	}
 
 	/**
-	 * Implements {@link ObservableOrderedCollection#refreshEach(Function)}
+	 * Implements {@link ObservableIndexedCollection#refreshEach(Function)}
 	 *
 	 * @param <E> The type of the collection to refresh
 	 */
-	public static class ElementRefreshingOrderedCollection<E> extends ElementRefreshingCollection<E> implements ObservableOrderedCollection<E> {
+	public static class ElementRefreshingOrderedCollection<E> extends ElementRefreshingCollection<E> implements ObservableIndexedCollection<E> {
 		/**
 		 * @param wrap The source collection
 		 * @param refresh The function of observables to use to refresh each element
 		 */
-		protected ElementRefreshingOrderedCollection(ObservableOrderedCollection<E> wrap, Function<? super E, Observable<?>> refresh) {
+		protected ElementRefreshingOrderedCollection(ObservableIndexedCollection<E> wrap, Function<? super E, Observable<?>> refresh) {
 			super(wrap, refresh);
 		}
 
 		@Override
-		protected ObservableOrderedCollection<E> getWrapped() {
-			return (ObservableOrderedCollection<E>) super.getWrapped();
+		protected ObservableIndexedCollection<E> getWrapped() {
+			return (ObservableIndexedCollection<E>) super.getWrapped();
 		}
 
 		@Override
@@ -555,8 +555,8 @@ public class ObservableOrderedCollectionImpl {
 		}
 
 		@Override
-		public CollectionSubscription subscribeOrdered(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
-			return subscribe(evt -> observer.accept((OrderedCollectionEvent<? extends E>) evt));
+		public CollectionSubscription subscribeOrdered(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
+			return subscribe(evt -> observer.accept((IndexedCollectionEvent<? extends E>) evt));
 		}
 
 		@Override
@@ -565,31 +565,31 @@ public class ObservableOrderedCollectionImpl {
 		}
 
 		@Override
-		protected OrderedCollectionEvent<E> refresh(ElementId elementId, E value, Map<ElementId, ?> elements, Object cause) {
+		protected IndexedCollectionEvent<E> refresh(ElementId elementId, E value, Map<ElementId, ?> elements, Object cause) {
 			int index = ((DefaultTreeMap<ElementId, ?>) elements).getNode(elementId).getIndex();
-			return new OrderedCollectionEvent<>(elementId, index, CollectionChangeType.set, value, value, cause);
+			return new IndexedCollectionEvent<>(elementId, index, CollectionChangeType.set, value, value, cause);
 		}
 	}
 
 	/**
-	 * Backs {@link ObservableOrderedCollection#takeUntil(Observable)}
+	 * Backs {@link ObservableIndexedCollection#takeUntil(Observable)}
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	public static class TakenUntilOrderedCollection<E> extends TakenUntilObservableCollection<E> implements ObservableOrderedCollection<E> {
+	public static class TakenUntilOrderedCollection<E> extends TakenUntilObservableCollection<E> implements ObservableIndexedCollection<E> {
 		/**
 		 * @param wrap The source collection
 		 * @param until The observable that will terminate all this collection's listeners whenever it fires a value
 		 * @param terminate Whether the until observable will also cause this collection's listeners to get remove events, a la
 		 *        {@link CollectionSubscription#unsubscribe(boolean) CollectionSubscription.unsubscribe(true)}
 		 */
-		protected TakenUntilOrderedCollection(ObservableOrderedCollection<E> wrap, Observable<?> until, boolean terminate) {
+		protected TakenUntilOrderedCollection(ObservableIndexedCollection<E> wrap, Observable<?> until, boolean terminate) {
 			super(wrap, until, terminate);
 		}
 
 		@Override
-		protected ObservableOrderedCollection<E> getWrapped() {
-			return (ObservableOrderedCollection<E>) super.getWrapped();
+		protected ObservableIndexedCollection<E> getWrapped() {
+			return (ObservableIndexedCollection<E>) super.getWrapped();
 		}
 
 		@Override
@@ -608,28 +608,28 @@ public class ObservableOrderedCollectionImpl {
 		}
 
 		@Override
-		public CollectionSubscription subscribeOrdered(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
-			return super.subscribe(evt -> observer.accept((OrderedCollectionEvent<? extends E>) evt));
+		public CollectionSubscription subscribeOrdered(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
+			return super.subscribe(evt -> observer.accept((IndexedCollectionEvent<? extends E>) evt));
 		}
 	}
 
 	/**
-	 * Implements {@link ObservableOrderedCollection#filterModification(ModFilterDef)}
+	 * Implements {@link ObservableIndexedCollection#filterModification(ModFilterDef)}
 	 *
 	 * @param <E> The type of values in the collection
 	 */
-	public static class ModFilteredOrderedCollection<E> extends ModFilteredCollection<E> implements ObservableOrderedCollection<E> {
+	public static class ModFilteredOrderedCollection<E> extends ModFilteredCollection<E> implements ObservableIndexedCollection<E> {
 		/**
 		 * @param wrapped The source collection
 		 * @param def The definition to define which modifications are permitted on the collection
 		 */
-		protected ModFilteredOrderedCollection(ObservableOrderedCollection<E> wrapped, ModFilterDef<E> def) {
+		protected ModFilteredOrderedCollection(ObservableIndexedCollection<E> wrapped, ModFilterDef<E> def) {
 			super(wrapped, def);
 		}
 
 		@Override
-		protected ObservableOrderedCollection<E> getWrapped() {
-			return (ObservableOrderedCollection<E>) super.getWrapped();
+		protected ObservableIndexedCollection<E> getWrapped() {
+			return (ObservableIndexedCollection<E>) super.getWrapped();
 		}
 
 		@Override
@@ -648,33 +648,33 @@ public class ObservableOrderedCollectionImpl {
 		}
 
 		@Override
-		public CollectionSubscription subscribeOrdered(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
-			return subscribe(evt -> observer.accept((OrderedCollectionEvent<? extends E>) evt));
+		public CollectionSubscription subscribeOrdered(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
+			return subscribe(evt -> observer.accept((IndexedCollectionEvent<? extends E>) evt));
 		}
 	}
 
 	/**
-	 * Implements {@link ObservableOrderedCollection#cached(Observable)}
+	 * Implements {@link ObservableIndexedCollection#cached(Observable)}
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	public static class CachedOrderedCollection<E> extends CachedObservableCollection<E> implements ObservableOrderedCollection<E> {
+	public static class CachedOrderedCollection<E> extends CachedObservableCollection<E> implements ObservableIndexedCollection<E> {
 		/**
 		 * @param wrapped The collection whose values to reflect
 		 * @param until The observable to listen to to cease caching
 		 */
-		protected CachedOrderedCollection(ObservableOrderedCollection<E> wrapped, Observable<?> until) {
+		protected CachedOrderedCollection(ObservableIndexedCollection<E> wrapped, Observable<?> until) {
 			super(wrapped, until);
 		}
 
 		@Override
-		protected ObservableOrderedCollection<E> getWrapped() {
-			return (ObservableOrderedCollection<E>) super.getWrapped();
+		protected ObservableIndexedCollection<E> getWrapped() {
+			return (ObservableIndexedCollection<E>) super.getWrapped();
 		}
 
 		@Override
-		protected Observable<? extends OrderedCollectionEvent<? extends E>> getChanges() {
-			return (Observable<? extends OrderedCollectionEvent<? extends E>>) super.getChanges();
+		protected Observable<? extends IndexedCollectionEvent<? extends E>> getChanges() {
+			return (Observable<? extends IndexedCollectionEvent<? extends E>>) super.getChanges();
 		}
 
 		@Override
@@ -713,7 +713,7 @@ public class ObservableOrderedCollectionImpl {
 		@Override
 		protected void updateCache(ObservableCollectionEvent<? extends E> change) {
 			TreeList<E> cache = (TreeList<E>) getCache();
-			OrderedCollectionEvent<? extends E> orderedChange = (OrderedCollectionEvent<? extends E>) change;
+			IndexedCollectionEvent<? extends E> orderedChange = (IndexedCollectionEvent<? extends E>) change;
 			switch (change.getType()) {
 			case add:
 				cache.add(orderedChange.getIndex(), orderedChange.getNewValue());
@@ -728,20 +728,20 @@ public class ObservableOrderedCollectionImpl {
 		}
 
 		@Override
-		protected OrderedCollectionEvent<? extends E> initialEvent(E value, ElementId elementId) {
-			return new OrderedCollectionEvent<>(elementId, getCacheMap().indexOfKey(elementId), CollectionChangeType.add, null, value,
+		protected IndexedCollectionEvent<? extends E> initialEvent(E value, ElementId elementId) {
+			return new IndexedCollectionEvent<>(elementId, getCacheMap().indexOfKey(elementId), CollectionChangeType.add, null, value,
 				null);
 		}
 
 		@Override
-		protected OrderedCollectionEvent<? extends E> wrapEvent(ObservableCollectionEvent<? extends E> change) {
-			return new OrderedCollectionEvent<>(change.getElementId(), ((OrderedCollectionEvent<? extends E>) change).getIndex(),
+		protected IndexedCollectionEvent<? extends E> wrapEvent(ObservableCollectionEvent<? extends E> change) {
+			return new IndexedCollectionEvent<>(change.getElementId(), ((IndexedCollectionEvent<? extends E>) change).getIndex(),
 				change.getType(), change.getOldValue(), change.getNewValue(), change);
 		}
 
 		@Override
-		protected OrderedCollectionEvent<? extends E> removeEvent(E value, ElementId elementId) {
-			return new OrderedCollectionEvent<>(elementId, getCacheMap().indexOfKey(elementId), CollectionChangeType.remove, value, value,
+		protected IndexedCollectionEvent<? extends E> removeEvent(E value, ElementId elementId) {
+			return new IndexedCollectionEvent<>(elementId, getCacheMap().indexOfKey(elementId), CollectionChangeType.remove, value, value,
 				null);
 		}
 
@@ -761,25 +761,25 @@ public class ObservableOrderedCollectionImpl {
 		}
 
 		@Override
-		public CollectionSubscription subscribeOrdered(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
-			return subscribe(evt -> observer.accept((OrderedCollectionEvent<? extends E>) evt));
+		public CollectionSubscription subscribeOrdered(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
+			return subscribe(evt -> observer.accept((IndexedCollectionEvent<? extends E>) evt));
 		}
 	}
 
 	/**
-	 * Implements {@link ObservableOrderedCollection#flattenValues(ObservableOrderedCollection)}
+	 * Implements {@link ObservableIndexedCollection#flattenValues(ObservableIndexedCollection)}
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	public static class FlattenedOrderedValuesCollection<E> extends FlattenedValuesCollection<E> implements ObservableOrderedCollection<E> {
+	public static class FlattenedOrderedValuesCollection<E> extends FlattenedValuesCollection<E> implements ObservableIndexedCollection<E> {
 		/** @param collection The collection of values to flatten */
-		protected FlattenedOrderedValuesCollection(ObservableOrderedCollection<? extends ObservableValue<? extends E>> collection) {
+		protected FlattenedOrderedValuesCollection(ObservableIndexedCollection<? extends ObservableValue<? extends E>> collection) {
 			super(collection);
 		}
 
 		@Override
-		protected ObservableOrderedCollection<? extends ObservableValue<? extends E>> getWrapped() {
-			return (ObservableOrderedCollection<? extends ObservableValue<? extends E>>) super.getWrapped();
+		protected ObservableIndexedCollection<? extends ObservableValue<? extends E>> getWrapped() {
+			return (ObservableIndexedCollection<? extends ObservableValue<? extends E>>) super.getWrapped();
 		}
 
 		@Override
@@ -789,12 +789,12 @@ public class ObservableOrderedCollectionImpl {
 
 		@Override
 		public int indexOf(Object value) {
-			return ObservableOrderedCollectionImpl.indexOf(this, value);
+			return ObservableIndexedCollectionImpl.indexOf(this, value);
 		}
 
 		@Override
 		public int lastIndexOf(Object value) {
-			return ObservableOrderedCollectionImpl.lastIndexOf(this, value);
+			return ObservableIndexedCollectionImpl.lastIndexOf(this, value);
 		}
 
 		/** An observer for the ObservableValue inside one element of this collection */
@@ -813,13 +813,13 @@ public class ObservableOrderedCollectionImpl {
 			}
 
 			@Override
-			protected OrderedCollectionEvent<E> createEvent(CollectionChangeType type, E oldValue, E newValue, Object cause) {
+			protected IndexedCollectionEvent<E> createEvent(CollectionChangeType type, E oldValue, E newValue, Object cause) {
 				DefaultNode<ElementId> node;
 				if (type == CollectionChangeType.add)
 					node = thePresentIds.addGetNode(getElementId());
 				else
 					node = thePresentIds.getNode(getElementId());
-				OrderedCollectionEvent<E> event = new OrderedCollectionEvent<>(getElementId(), node.getIndex(), type, oldValue, newValue,
+				IndexedCollectionEvent<E> event = new IndexedCollectionEvent<>(getElementId(), node.getIndex(), type, oldValue, newValue,
 					cause);
 				if (type == CollectionChangeType.remove)
 					thePresentIds.remove(getElementId());
@@ -828,8 +828,8 @@ public class ObservableOrderedCollectionImpl {
 		}
 
 		@Override
-		public CollectionSubscription subscribeOrdered(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
-			return subscribe(evt -> observer.accept((OrderedCollectionEvent<? extends E>) evt));
+		public CollectionSubscription subscribeOrdered(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
+			return subscribe(evt -> observer.accept((IndexedCollectionEvent<? extends E>) evt));
 		}
 
 		@Override
@@ -845,25 +845,25 @@ public class ObservableOrderedCollectionImpl {
 	}
 
 	/**
-	 * Implements {@link ObservableOrderedCollection#flattenValue(ObservableValue)}
+	 * Implements {@link ObservableIndexedCollection#flattenValue(ObservableValue)}
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	public static class FlattenedOrderedValueCollection<E> extends FlattenedValueCollection<E> implements ObservableOrderedCollection<E> {
+	public static class FlattenedOrderedValueCollection<E> extends FlattenedValueCollection<E> implements ObservableIndexedCollection<E> {
 		/** @param collectionObservable The value containing the collection to flatten */
 		protected FlattenedOrderedValueCollection(
-			ObservableValue<? extends ObservableOrderedCollection<? extends E>> collectionObservable) {
+			ObservableValue<? extends ObservableIndexedCollection<? extends E>> collectionObservable) {
 			super(collectionObservable);
 		}
 
 		@Override
-		protected ObservableValue<? extends ObservableOrderedCollection<? extends E>> getWrapped() {
-			return (ObservableValue<? extends ObservableOrderedCollection<? extends E>>) super.getWrapped();
+		protected ObservableValue<? extends ObservableIndexedCollection<? extends E>> getWrapped() {
+			return (ObservableValue<? extends ObservableIndexedCollection<? extends E>>) super.getWrapped();
 		}
 
 		@Override
 		public E get(int index) {
-			ObservableOrderedCollection<? extends E> coll = getWrapped().get();
+			ObservableIndexedCollection<? extends E> coll = getWrapped().get();
 			if (coll == null)
 				throw new IndexOutOfBoundsException(index + " of 0");
 			return coll.get(index);
@@ -871,7 +871,7 @@ public class ObservableOrderedCollectionImpl {
 
 		@Override
 		public int indexOf(Object value) {
-			ObservableOrderedCollection<? extends E> coll = getWrapped().get();
+			ObservableIndexedCollection<? extends E> coll = getWrapped().get();
 			if (coll == null)
 				return -1;
 			return coll.indexOf(value);
@@ -879,32 +879,32 @@ public class ObservableOrderedCollectionImpl {
 
 		@Override
 		public int lastIndexOf(Object value) {
-			ObservableOrderedCollection<? extends E> coll = getWrapped().get();
+			ObservableIndexedCollection<? extends E> coll = getWrapped().get();
 			if (coll == null)
 				return -1;
 			return coll.lastIndexOf(value);
 		}
 
 		@Override
-		public CollectionSubscription subscribeOrdered(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
-			return subscribe(evt -> observer.accept((OrderedCollectionEvent<? extends E>) evt));
+		public CollectionSubscription subscribeOrdered(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
+			return subscribe(evt -> observer.accept((IndexedCollectionEvent<? extends E>) evt));
 		}
 	}
 
 	/**
-	 * Implements {@link ObservableOrderedCollection#flatten(ObservableOrderedCollection)}
+	 * Implements {@link ObservableIndexedCollection#flatten(ObservableIndexedCollection)}
 	 *
 	 * @param <E> The type of the collection
 	 */
-	public static class FlattenedOrderedCollection<E> extends FlattenedObservableCollection<E> implements ObservableOrderedCollection<E> {
+	public static class FlattenedOrderedCollection<E> extends FlattenedObservableCollection<E> implements ObservableIndexedCollection<E> {
 		/** @param outer The collection of collections to flatten */
-		protected FlattenedOrderedCollection(ObservableOrderedCollection<? extends ObservableOrderedCollection<? extends E>> outer) {
+		protected FlattenedOrderedCollection(ObservableIndexedCollection<? extends ObservableIndexedCollection<? extends E>> outer) {
 			super(outer);
 		}
 
 		@Override
-		protected ObservableOrderedCollection<? extends ObservableOrderedCollection<? extends E>> getOuter() {
-			return (ObservableOrderedCollection<? extends ObservableOrderedCollection<? extends E>>) super.getOuter();
+		protected ObservableIndexedCollection<? extends ObservableIndexedCollection<? extends E>> getOuter() {
+			return (ObservableIndexedCollection<? extends ObservableIndexedCollection<? extends E>>) super.getOuter();
 		}
 
 		/**
@@ -921,7 +921,7 @@ public class ObservableOrderedCollectionImpl {
 			 * @param subIndex The index in the sub-collection corresponding to the index given for the flattened collection
 			 * @return The result of the action
 			 */
-			V apply(ObservableOrderedCollection<? extends E> subColl, int subIndex);
+			V apply(ObservableIndexedCollection<? extends E> subColl, int subIndex);
 		}
 
 		/**
@@ -937,11 +937,11 @@ public class ObservableOrderedCollectionImpl {
 			if (index < 0)
 				throw new IndexOutOfBoundsException("" + index);
 			int passed = 0;
-			ObservableOrderedCollection<? extends E> last = null;
+			ObservableIndexedCollection<? extends E> last = null;
 			int lastSize = -1;
 			Transaction innerTrans = null;
 			try (Transaction t = getOuter().lock(write, null)) {
-				for (ObservableOrderedCollection<? extends E> inner : getOuter()) {
+				for (ObservableIndexedCollection<? extends E> inner : getOuter()) {
 					if (innerTrans != null) {
 						innerTrans.close();
 						innerTrans = null;
@@ -974,7 +974,7 @@ public class ObservableOrderedCollectionImpl {
 		@Override
 		public int indexOf(Object value) {
 			int passed = 0;
-			for (ObservableOrderedCollection<? extends E> inner : getOuter()) {
+			for (ObservableIndexedCollection<? extends E> inner : getOuter()) {
 				int index = inner.indexOf(value);
 				if (index >= 0)
 					return passed + index;
@@ -988,7 +988,7 @@ public class ObservableOrderedCollectionImpl {
 		public int lastIndexOf(Object value) {
 			int passed = 0;
 			int lastFound = -1;
-			for (ObservableOrderedCollection<? extends E> inner : getOuter()) {
+			for (ObservableIndexedCollection<? extends E> inner : getOuter()) {
 				int index = inner.indexOf(value);
 				if (index >= 0)
 					lastFound = passed + index;
@@ -1008,7 +1008,7 @@ public class ObservableOrderedCollectionImpl {
 		}
 
 		@Override
-		public CollectionSubscription subscribeOrdered(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
+		public CollectionSubscription subscribeOrdered(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
 			OrderedOuterObserver outerObs = new OrderedOuterObserver(observer);
 			CollectionSubscription collSub;
 			try (Transaction t = getOuter().lock(false, null)) {
@@ -1027,8 +1027,8 @@ public class ObservableOrderedCollectionImpl {
 		/** An observer for the outer collection that creates {@link OrderedAddObserver}s to fire ordered events */
 		protected class OrderedOuterObserver extends OuterObserver {
 			/** @param observer The observer for this collection */
-			protected OrderedOuterObserver(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
-				super(evt -> observer.accept((OrderedCollectionEvent<? extends E>) evt));
+			protected OrderedOuterObserver(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
+				super(evt -> observer.accept((IndexedCollectionEvent<? extends E>) evt));
 			}
 
 			@Override
@@ -1061,7 +1061,7 @@ public class ObservableOrderedCollectionImpl {
 					node = thePresentIds.addGetNode(compoundId);
 				else
 					node = thePresentIds.getNode(compoundId);
-				OrderedCollectionEvent<E> event = new OrderedCollectionEvent<>(compoundId, node.getIndex(), innerEvent.getType(),
+				IndexedCollectionEvent<E> event = new IndexedCollectionEvent<>(compoundId, node.getIndex(), innerEvent.getType(),
 					innerEvent.getOldValue(), innerEvent.getNewValue(), innerEvent);
 				if (innerEvent.getType() == CollectionChangeType.remove)
 					thePresentIds.remove(compoundId);
@@ -1075,7 +1075,7 @@ public class ObservableOrderedCollectionImpl {
 	 *
 	 * @param <E> The type of the collection
 	 */
-	public static class IndexifiedCollection<E> implements ObservableOrderedCollection<E> {
+	public static class IndexifiedCollection<E> implements ObservableIndexedCollection<E> {
 		private final ObservableCollection<E> theCollection;
 
 		/** @param collection The source collection */
@@ -1226,7 +1226,7 @@ public class ObservableOrderedCollectionImpl {
 		}
 
 		@Override
-		public CollectionSubscription subscribeOrdered(Consumer<? super OrderedCollectionEvent<? extends E>> observer) {
+		public CollectionSubscription subscribeOrdered(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
 			DefaultTreeSet<ElementId> ids = new DefaultTreeSet<>(Comparable::compareTo);
 			return theCollection.subscribe(evt -> {
 				int index = -1; // Compiler-required initialization--will always be changed
@@ -1244,7 +1244,7 @@ public class ObservableOrderedCollectionImpl {
 					break;
 				}
 				observer.accept(
-					new OrderedCollectionEvent<>(evt.getElementId(), index, evt.getType(), evt.getOldValue(), evt.getNewValue(), evt));
+					new IndexedCollectionEvent<>(evt.getElementId(), index, evt.getType(), evt.getOldValue(), evt.getNewValue(), evt));
 			});
 		}
 	}

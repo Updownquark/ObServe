@@ -18,7 +18,7 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableElement;
-import org.observe.collect.ObservableOrderedCollection;
+import org.observe.collect.ObservableIndexedCollection;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 
@@ -326,9 +326,9 @@ public interface ObservableTree<N, V> extends Transactable {
 				return false;
 			// We'll assume the node creator creates nodes of the right sub-type for the collection
 			if (reallyAdd)
-				return ((ObservableOrderedCollection<N>) children).add(newNode);
+				return ((ObservableIndexedCollection<N>) children).add(newNode);
 			else
-				return ((ObservableOrderedCollection<N>) children).canAdd(newNode);
+				return ((ObservableIndexedCollection<N>) children).canAdd(newNode);
 		}
 
 		@Override

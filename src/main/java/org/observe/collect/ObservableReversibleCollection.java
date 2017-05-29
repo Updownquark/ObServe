@@ -24,7 +24,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <E> The type of elements in the collection
  */
-public interface ObservableReversibleCollection<E> extends ObservableOrderedCollection<E>, ReversibleCollection<E> {
+public interface ObservableReversibleCollection<E> extends ObservableIndexedCollection<E>, ReversibleCollection<E> {
 	/**
 	 * Same as {@link #subscribeOrdered(Consumer)}, except that the elements currently present in this collection are given to the observer
 	 * in reverse order
@@ -32,7 +32,7 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 * @param observer The listener to be notified of changes to the collection
 	 * @return The subscription to call when the calling code is no longer interested in this collection
 	 */
-	CollectionSubscription subscribeReverse(Consumer<? super OrderedCollectionEvent<? extends E>> observer);
+	CollectionSubscription subscribeReverse(Consumer<? super IndexedCollectionEvent<? extends E>> observer);
 
 	@Override
 	default ObservableReversibleSpliterator<E> spliterator() {
@@ -110,17 +110,17 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 
 	@Override
 	default ObservableReversibleCollection<E> filter(Function<? super E, String> filter) {
-		return (ObservableReversibleCollection<E>) ObservableOrderedCollection.super.filter(filter);
+		return (ObservableReversibleCollection<E>) ObservableIndexedCollection.super.filter(filter);
 	}
 
 	@Override
 	default <T> ObservableReversibleCollection<T> filter(Class<T> type) {
-		return (ObservableReversibleCollection<T>) ObservableOrderedCollection.super.filter(type);
+		return (ObservableReversibleCollection<T>) ObservableIndexedCollection.super.filter(type);
 	}
 
 	@Override
 	default <T> ObservableReversibleCollection<T> map(Function<? super E, T> map) {
-		return (ObservableReversibleCollection<T>) ObservableOrderedCollection.super.map(map);
+		return (ObservableReversibleCollection<T>) ObservableIndexedCollection.super.map(map);
 	}
 
 	@Override
@@ -306,8 +306,8 @@ public interface ObservableReversibleCollection<E> extends ObservableOrderedColl
 	 *
 	 * @param <E> The type of elements in the source collection
 	 * @param <V> The type of elements in the resulting collection
-	 * @see ObservableOrderedCollection#combineWith(ObservableValue, TypeToken)
-	 * @see ObservableOrderedCollection.CombinedOrderedCollectionBuilder3#and(ObservableValue)
+	 * @see ObservableIndexedCollection#combineWith(ObservableValue, TypeToken)
+	 * @see ObservableIndexedCollection.CombinedOrderedCollectionBuilder3#and(ObservableValue)
 	 */
 	interface CombinedReversibleCollectionBuilder<E, V> extends CombinedOrderedCollectionBuilder<E, V> {
 		@Override
