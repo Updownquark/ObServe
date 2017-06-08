@@ -8,7 +8,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-import org.qommons.Causable;
+import org.qommons.AbstractCausable;
 import org.qommons.ListenerSet;
 
 /**
@@ -34,45 +34,17 @@ public interface Observable<T> {
 	 * @param action The action to perform for each new value
 	 * @return The subscription for the action
 	 */
-	default Subscription act(Action<? super T> action) {
+	default Subscription act(Consumer<? super T> action) {
 		return subscribe(new Observer<T>() {
 			@Override
 			public <V extends T> void onNext(V value) {
-				action.act(value);
+				action.accept(value);
+			}
+
+			@Override
+			public <V extends T> void onCompleted(V value) {
 			}
 		});
-	}
-
-	/** @return An observable for this observable's errors */
-	default Observable<Throwable> error() {
-		Observable<T> outer = this;
-		class ErrorObserver implements Observer<Object> {
-			private final Observer<? super Throwable> wrapped;
-
-			ErrorObserver(Observer<? super Throwable> wrap) {
-				wrapped = wrap;
-			}
-
-			@Override
-			public <V> void onNext(V value) {
-			}
-
-			@Override
-			public void onError(Throwable e) {
-				wrapped.onNext(e);
-			}
-		}
-		return new Observable<Throwable>() {
-			@Override
-			public Subscription subscribe(Observer<? super Throwable> observer) {
-				return outer.subscribe(new ErrorObserver(observer));
-			}
-
-			@Override
-			public boolean isSafe() {
-				return outer.isSafe();
-			}
-		};
 	}
 
 	/** @return An observable that will fire once when this observable completes (the value will be null) */
@@ -393,8 +365,13 @@ public interface Observable<T> {
 		 */
 		public DefaultChainingObservable(Observable<T> wrap, Observable<Void> completion, Observer<Void> controller) {
 			theWrapped = wrap;
-			theCompletion = completion == null ? new DefaultObservable<>() : completion;
-			theCompletionController = completion == null ? ((DefaultObservable<Void>) theCompletion).control(null) : controller;
+			if (completion != null) {
+				theCompletion = completion;
+				theCompletionController = controller;
+			} else {
+				theCompletion = new SimpleObservable<>();
+				theCompletionController = (Observer<Void>) theCompletion;
+			}
 		}
 
 		@Override
@@ -414,14 +391,9 @@ public interface Observable<T> {
 		}
 
 		@Override
-		public ChainingObservable<T> act(Action<? super T> action) {
+		public ChainingObservable<T> act(Consumer<? super T> action) {
 			theWrapped.takeUntil(theCompletion).act(action);
 			return this;
-		}
-
-		@Override
-		public ChainingObservable<Throwable> error() {
-			return new DefaultChainingObservable<>(theWrapped.error(), theCompletion, theCompletionController);
 		}
 
 		@Override
@@ -515,11 +487,6 @@ public interface Observable<T> {
 				public <V extends T> void onCompleted(V value) {
 					observer.onCompleted(value);
 				}
-
-				@Override
-				public void onError(Throwable e) {
-					observer.onError(e);
-				}
 			});
 			initialized[0] = true;
 			return ret;
@@ -577,11 +544,6 @@ public interface Observable<T> {
 						observer.onNext(mapped);
 					else
 						observer.onCompleted(null); // Gotta pass along the completion even if it doesn't include a value
-				}
-
-				@Override
-				public void onError(Throwable e) {
-					observer.onError(e);
 				}
 			});
 		}
@@ -646,11 +608,6 @@ public interface Observable<T> {
 										fireCompleted((T) next);
 								}
 
-								@Override
-								public void onError(Throwable error) {
-									fireError(error);
-								}
-
 								private Object getNext() {
 									Object [] args = values.clone();
 									for(Object value : args)
@@ -665,10 +622,6 @@ public interface Observable<T> {
 
 								private void fireCompleted(T next) {
 									theObservers.forEach(listener -> listener.onCompleted(next));
-								}
-
-								private void fireError(Throwable error) {
-									theObservers.forEach(listener -> listener.onError(error));
 								}
 							});
 						}
@@ -752,9 +705,10 @@ public interface Observable<T> {
 					outerSub.unsubscribe();
 					if (isTerminating) {
 						T defValue = getDefaultValue();
-						observer.onCompleted(defValue);
-						if (defValue instanceof Causable)
-							((Causable) defValue).finish();
+						if (defValue instanceof AbstractCausable)
+							AbstractCausable.doWith((AbstractCausable) defValue, v -> observer.onCompleted((T) v));
+						else
+							observer.onCompleted(defValue);
 					}
 				}
 			});
@@ -826,12 +780,6 @@ public interface Observable<T> {
 					if(theCounter.get() < theTimes)
 						observer.onCompleted(value);
 				}
-
-				@Override
-				public void onError(Throwable e) {
-					if(theCounter.get() < theTimes)
-						observer.onError(e);
-				}
 			});
 			if (completed[0])
 				wrapSub[0].unsubscribe();
@@ -892,12 +840,6 @@ public interface Observable<T> {
 				public <V extends T> void onCompleted(V value) {
 					observer.onCompleted(value);
 				}
-
-				@Override
-				public void onError(Throwable e) {
-					if(counter.get() <= 0)
-						observer.onError(e);
-				}
 			});
 		}
 
@@ -956,16 +898,6 @@ public interface Observable<T> {
 						theLock.unlock();
 					}
 				}
-
-				@Override
-				public void onError(Throwable e) {
-					theLock.lock();
-					try {
-						observer.onError(e);
-					} finally {
-						theLock.unlock();
-					}
-				}
 			});
 		}
 
@@ -1009,6 +941,11 @@ public interface Observable<T> {
 							public <V extends T> void onNext(V value) {
 								theLastValue = value;
 								observer.onNext(value);
+							}
+
+							@Override
+							public <V extends T> void onCompleted(V value) {
+								// Do nothing. The outer observable may get another value.
 							}
 						});
 					} else {
