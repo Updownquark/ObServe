@@ -54,6 +54,11 @@ public interface ObservableIndexedCollection<E> extends ObservableCollection<E> 
 	}
 
 	@Override
+	default ObservableIndexedCollection<E> indexify() {
+		return this;
+	}
+
+	@Override
 	default ObservableIndexedCollection<E> withEquivalence(Equivalence<? super E> otherEquiv) {
 		return new ObservableIndexedCollectionImpl.EquivalenceSwitchedOrderedCollection<>(this, otherEquiv);
 	}

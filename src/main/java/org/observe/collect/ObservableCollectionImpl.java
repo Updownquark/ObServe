@@ -48,6 +48,7 @@ import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.TreeList;
 import org.qommons.tree.CountedRedBlackNode.DefaultNode;
 import org.qommons.tree.CountedRedBlackNode.DefaultTreeMap;
+import org.qommons.tree.CountedRedBlackNode.DefaultTreeSet;
 import org.qommons.value.Value;
 
 import com.google.common.reflect.TypeParameter;
@@ -196,6 +197,29 @@ public final class ObservableCollectionImpl {
 		if (cSet.isEmpty())
 			return false;
 		return coll.removeIf(v -> !cSet.contains(v));
+	}
+
+	/**
+	 * A default version of {@link ObservableCollection#onChange(Consumer)} for collections whose changes may depend on the elements that
+	 * already existed in the collection when the change subscription was made. Such collections must override
+	 * {@link ObservableCollection#subscribe(Consumer)}
+	 *
+	 * @param coll The collection to subscribe to changes for
+	 * @param observer The observer to be notified of changes (but not initial elements)
+	 * @return the subscription to unsubscribe to the changes
+	 */
+	public static <E> Subscription defaultOnChange(ObservableCollection<E> coll,
+		Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
+		boolean[] initialized = new boolean[1];
+		CollectionSubscription sub;
+		try (Transaction t = coll.lock(false, null)) {
+			sub = coll.subscribe(evt -> {
+				if (initialized[0])
+					observer.accept(evt);
+			});
+			initialized[0] = true;
+		}
+		return sub;
 	}
 
 	/**
@@ -979,8 +1003,8 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-			return theWrapped.subscribe(observer);
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
+			return theWrapped.onChange(observer);
 		}
 	}
 
@@ -1252,8 +1276,42 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends T>> observer) {
+			DefaultTreeSet<ElementId> elements = new DefaultTreeSet<>(Comparable::compareTo);
+			try (Transaction t = lock(false, null)) {
+				initListening(elements, null);
+				return onChange(elements, observer);
+			}
+		}
+
+		@Override
 		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends T>> observer) {
-			return theWrapped.subscribe(new FilterMappedObserver(observer));
+			DefaultTreeSet<ElementId> elements = new DefaultTreeSet<>(Comparable::compareTo);
+			Subscription changeSub;
+			try (Transaction t = lock(false, null)) {
+				initListening(elements, observer);
+				changeSub = onChange(elements, observer);
+			}
+			return removeAll -> {
+				try (Transaction t = lock(false, null)) {
+					changeSub.unsubscribe();
+					spliterator().forEachObservableElement(el -> observer
+						.accept(new ObservableCollectionEvent<>(el.getElementId(), CollectionChangeType.remove, el.get(), el.get(), null)));
+				}
+			};
+		}
+
+		private void initListening(DefaultTreeSet<ElementId> elements, Consumer<? super ObservableCollectionEvent<? extends T>> observer) {
+			spliterator().forEachObservableElement(el -> {
+				elements.add(el.getElementId());
+				if (observer != null)
+					observer.accept(new ObservableCollectionEvent<>(el.getElementId(), CollectionChangeType.add, null, el.get(), null));
+			});
+		}
+
+		private Subscription onChange(DefaultTreeSet<ElementId> elements,
+			Consumer<? super ObservableCollectionEvent<? extends T>> observer) {
+			return theWrapped.onChange(new FilterMappedObserver(observer));
 		}
 
 		/** An observer on the wrapped collection that pipes filter-mapped events to an observer on this collection */
@@ -1591,6 +1649,14 @@ public final class ObservableCollectionImpl {
 					return wrapper;
 				};
 			};
+		}
+
+		// The combined collection does things a little backward. The default implementation of subscribe uses onChange, but for combined,
+		// the combined observables might terminate, resulting in removal of all elements, even for just the change listener.
+		// So the subscribe method is first class and the onChange just re-uses it.
+		@Override
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends V>> observer) {
+			return defaultOnChange(this, observer);
 		}
 
 		@Override
@@ -2020,6 +2086,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
+			return theElements.onChange(observer);
+		}
+
+		@Override
 		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
 			return theElements.subscribe(observer);
 		}
@@ -2198,6 +2269,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
+			return defaultOnChange(theWrapped, observer);
+		}
+
+		@Override
 		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
 			CollectionSubscription collSub = theWrapped.subscribe(observer);
 			Subscription refreshSub = theRefresh.act(v -> {
@@ -2360,6 +2436,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public ObservableElementSpliterator<E> spliterator() {
 			return theWrapped.spliterator();
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
+			return ObservableCollectionImpl.defaultOnChange(this, observer);
 		}
 
 		@Override
@@ -2689,6 +2770,11 @@ public final class ObservableCollectionImpl {
 				if (theDef.checkRemove(el.get()) == null)
 					el.remove();
 			});
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
+			return theWrapped.onChange(observer);
 		}
 
 		@Override
@@ -3050,7 +3136,16 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
+			if (isDone.get())
+				throw new IllegalStateException("This cached collection's finisher has fired");
+			return theChanges.act(observer);
+		}
+
+		@Override
 		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
+			// Overridden because the default impl uses spliterator, which requires spliterating over the wrapped collection.
+			// Since the iteration is read-only here, we can do better
 			if (isDone.get())
 				throw new IllegalStateException("This cached collection's finisher has fired");
 			Subscription changeSub;
@@ -3248,6 +3343,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public void clear() {
 			theWrapped.clear();
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
+			return ObservableCollectionImpl.defaultOnChange(this, observer);
 		}
 
 		@Override
@@ -3455,6 +3555,12 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public void clear() {
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
+			return () -> {
+			};
 		}
 
 		@Override
@@ -3688,6 +3794,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public void clear() {
 			theCollection.clear();
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
+			return ObservableCollectionImpl.defaultOnChange(this, observer);
 		}
 
 		/** An observer for the ObservableValue inside one element of this collection */
@@ -4055,6 +4166,11 @@ public final class ObservableCollectionImpl {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			if (coll != null)
 				coll.clear();
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
+			return ObservableCollectionImpl.defaultOnChange(this, observer);
 		}
 
 		@Override
@@ -4510,7 +4626,7 @@ public final class ObservableCollectionImpl {
 
 			/**
 			 * Advances the outer spliterator to get the next inner spliterator
-			 * 
+			 *
 			 * @return Whether there was a next outer element
 			 */
 			protected boolean advanceOuter() {
@@ -4567,6 +4683,11 @@ public final class ObservableCollectionImpl {
 					comp = tup1.getValue2().compareTo(tup2.getValue2());
 				return comp;
 			});
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
+			return ObservableCollectionImpl.defaultOnChange(this, observer);
 		}
 
 		@Override
