@@ -40,10 +40,7 @@ class OrderedCollectionChangesObservable<E, OCCE extends OrderedCollectionChange
 				session.put(key, SESSION_TRACKER_PROPERTY, tracker);
 			} else {
 				tracker = adjustTrackerForChange(tracker, type, index, evt);
-				if(tracker != null)
-					session.put(key, SESSION_TRACKER_PROPERTY, tracker.indexes.isEmpty() ? null : tracker);
-				else
-					return; // Already taken care of
+				session.put(key, SESSION_TRACKER_PROPERTY, tracker);
 			}
 
 			tracker.elements.add(evt.getValue());
@@ -61,52 +58,14 @@ class OrderedCollectionChangesObservable<E, OCCE extends OrderedCollectionChange
 	private OrderedSessionChangeTracker<E> adjustTrackerForChange(OrderedSessionChangeTracker<E> tracker, CollectionChangeType type,
 		int [] index, ObservableValueEvent<E> evt) {
 		if(tracker.type != type) {
-			fireEventsUpTo(tracker, type, index, evt);
-			if(adjustEventsPast(tracker, type, index, evt))
-				return null;
 			OrderedSessionChangeTracker<E> newTracker = new OrderedSessionChangeTracker<>(type);
-			newTracker.indexes.add(index[0]);
-			newTracker.elements.add(evt.getValue());
-			if(newTracker.oldElements != null)
-				newTracker.oldElements.add(evt.getOldValue());
-			fireEventsFromSessionData(newTracker, evt);
 			fireEventsFromSessionData(tracker, evt);
-			tracker.clear();
-			return tracker;
+			return newTracker;
 		} else {
 			if(adjustEventsPast(tracker, type, index, evt))
 				return null;
 			return tracker;
 		}
-	}
-
-	private void fireEventsUpTo(OrderedSessionChangeTracker<E> tracker, CollectionChangeType type, int[] index, Object cause) {
-		// Fire events for indexes before the new change index, since otherwise those changes would affect the index
-		if(tracker.indexes.size() < 25) {
-			// If it's not too expensive, let's see if we need to do anything before constructing the lists needlessly
-			boolean hasIndexesBefore = false;
-			for(int i = 0; i < tracker.indexes.size(); i++)
-				if(tracker.indexes.get(i) < index[0] || (type == remove && tracker.indexes.get(i) == index[0])) {
-					hasIndexesBefore = true;
-					break;
-				}
-			if(!hasIndexesBefore)
-				return;
-		}
-
-		// Compile an event with the changes recorded in the tracker whose indexes were at or before the new change's index.
-		// Remove those changes from the tracker and fire the event for them separately
-		OrderedSessionChangeTracker<E> subTracker = new OrderedSessionChangeTracker<>(tracker.type);
-		for(int i = 0; i < tracker.indexes.size(); i++) {
-			if(tracker.indexes.get(i) < index[0] || (type == remove && tracker.indexes.get(i) == index[0])) {
-				subTracker.indexes.add(tracker.indexes.remove(i));
-				subTracker.elements.add(tracker.elements.remove(i));
-				if(tracker.oldElements != null)
-					subTracker.oldElements.add(tracker.oldElements.remove(i));
-				i--;
-			}
-		}
-		fireEventsFromSessionData(subTracker, cause);
 	}
 
 	private boolean adjustEventsPast(OrderedSessionChangeTracker<E> tracker, CollectionChangeType type, int [] index,
