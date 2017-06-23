@@ -7,15 +7,19 @@ import java.util.function.Supplier;
 
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementSpliterator;
+import org.qommons.collect.ImmutableSpliterator;
 
 import com.google.common.reflect.TypeToken;
 
 /**
  * An {@link ElementSpliterator} that supplies {@link ObservableCollectionElement}s
- * 
+ *
  * @param <E> The type of values the spliterator provides
  */
-public interface ObservableElementSpliterator<E> extends ElementSpliterator<E> {
+public interface ObservableElementSpliterator<E> extends ImmutableSpliterator<E> {
+	@Override
+	MutableObservableSpliterator<E> mutable();
+
 	/**
 	 * Iterates through each element covered by this ElementSpliterator
 	 *
@@ -37,13 +41,13 @@ public interface ObservableElementSpliterator<E> extends ElementSpliterator<E> {
 	}
 
 	@Override
-	default boolean tryAdvanceElement(Consumer<? super CollectionElement<E>> action) {
-		return tryAdvanceObservableElement(action);
+	default boolean tryAdvance(Consumer<? super E> action) {
+		return tryAdvanceObservableElement(el -> action.accept(el.get()));
 	}
 
 	@Override
-	default void forEachElement(Consumer<? super CollectionElement<E>> action) {
-		forEachObservableElement(action);
+	default void forEachRemaining(Consumer<? super E> action) {
+		forEachObservableElement(el -> action.accept(el.get()));
 	}
 
 	@Override
@@ -54,7 +58,7 @@ public interface ObservableElementSpliterator<E> extends ElementSpliterator<E> {
 	 * @param type The type for the ElementSpliterator
 	 * @return An empty ElementSpliterator of the given type
 	 */
-	static <E> ObservableElementSpliterator<E> empty(TypeToken<E> type) {
+	static <E> ObservableElementSpliterator<E> empty() {
 		return new ObservableElementSpliterator<E>() {
 			@Override
 			public long estimateSize() {
@@ -64,11 +68,6 @@ public interface ObservableElementSpliterator<E> extends ElementSpliterator<E> {
 			@Override
 			public int characteristics() {
 				return Spliterator.IMMUTABLE | Spliterator.SIZED;
-			}
-
-			@Override
-			public TypeToken<E> getType() {
-				return type;
 			}
 
 			@Override
