@@ -1,13 +1,10 @@
 package org.observe.collect;
 
+import java.util.Comparator;
 import java.util.Spliterator;
 import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.Supplier;
 
-import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementSpliterator;
-import org.qommons.collect.ImmutableSpliterator;
 
 import com.google.common.reflect.TypeToken;
 
@@ -16,9 +13,9 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <E> The type of values the spliterator provides
  */
-public interface ObservableElementSpliterator<E> extends ImmutableSpliterator<E> {
-	@Override
-	MutableObservableSpliterator<E> mutable();
+public interface ObservableElementSpliterator<E> extends Spliterator<E> {
+	/** @return The type of values in this spliterator */
+	TypeToken<E> getType();
 
 	/**
 	 * Iterates through each element covered by this ElementSpliterator
@@ -53,15 +50,58 @@ public interface ObservableElementSpliterator<E> extends ImmutableSpliterator<E>
 	@Override
 	ObservableElementSpliterator<E> trySplit();
 
+	interface ObservableElementSpliteratorMap<E, T> {
+		TypeToken<T> getType();
+
+		T map(E value);
+
+		default boolean canTestValues() {
+			return true;
+		}
+
+		boolean test(E srcValue);
+
+		default boolean test(ObservableCollectionElement<E> el) {
+			return test(el.get());
+		}
+
+		default long filterEstimatedSize(long srcSize) {
+			return srcSize;
+		}
+		default int filterExactSize(long srcSize) {
+			return -1;
+		}
+		default int modifyCharacteristics(int srcChars) {
+			return srcChars;
+		}
+		default Comparator<? super T> mapComparator(Comparator<? super E> srcCompare) {
+			return null;
+		}
+	}
+
+	default <T> ObservableElementSpliterator<T> map(ObservableElementSpliteratorMap<E, T> map) {
+		return new MappedObservableElementSpliterator<>(this, map);
+	}
+
 	/**
 	 * @param <E> The compile-time type for the spliterator
 	 * @param type The type for the ElementSpliterator
 	 * @return An empty ElementSpliterator of the given type
 	 */
-	static <E> ObservableElementSpliterator<E> empty() {
+	static <E> ObservableElementSpliterator<E> empty(TypeToken<E> type) {
 		return new ObservableElementSpliterator<E>() {
 			@Override
+			public TypeToken<E> getType() {
+				return type;
+			}
+
+			@Override
 			public long estimateSize() {
+				return 0;
+			}
+
+			@Override
+			public long getExactSizeIfKnown() {
 				return 0;
 			}
 
@@ -82,107 +122,133 @@ public interface ObservableElementSpliterator<E> extends ImmutableSpliterator<E>
 		};
 	}
 
-	/**
-	 * A ElementSpliterator whose elements are the result of some filter-map operation on a vanilla {@link Spliterator}'s elements
-	 *
-	 * @param <T> The type of elements in the wrapped Spliterator
-	 * @param <V> The type of this ElementSpliterator's elements
-	 */
-	class SimpleObservableSpliterator<T, V> extends SimpleSpliterator<T, V> implements ObservableElementSpliterator<V> {
-		public SimpleObservableSpliterator(Spliterator<T> wrap, TypeToken<V> type,
-			Supplier<? extends Function<? super T, ? extends ObservableCollectionElement<V>>> map) {
-			super(wrap, type, map);
+	class MappedObservableElementSpliterator<E, T> implements ObservableElementSpliterator<T> {
+		private final ObservableElementSpliterator<E> theSource;
+		private final ObservableElementSpliteratorMap<E, T> theMap;
+
+		private TypeToken<T> theType;
+		private final MappedElement theElement;
+
+		public MappedObservableElementSpliterator(ObservableElementSpliterator<E> source, ObservableElementSpliteratorMap<E, T> map) {
+			theSource = source;
+			theMap = map;
+
+			theElement = new MappedElement();
 		}
 
 		@Override
-		protected Supplier<? extends Function<? super T, ? extends ObservableCollectionElement<V>>> getMap() {
-			return (Supplier<? extends Function<? super T, ? extends ObservableCollectionElement<V>>>) super.getMap();
+		public TypeToken<T> getType() {
+			if (theType == null)
+				theType = theMap.getType();
+			return theType;
 		}
 
 		@Override
-		public boolean tryAdvanceObservableElement(Consumer<? super ObservableCollectionElement<V>> action) {
-			return tryAdvanceElement(el -> action.accept((ObservableCollectionElement<V>) el));
+		public long estimateSize() {
+			return theMap.filterEstimatedSize(theSource.estimateSize());
 		}
 
 		@Override
-		public void forEachObservableElement(Consumer<? super ObservableCollectionElement<V>> action) {
-			forEachElement(el -> action.accept((ObservableCollectionElement<V>) el));
+		public long getExactSizeIfKnown() {
+			return theMap.filterExactSize(theSource.getExactSizeIfKnown());
 		}
 
 		@Override
-		public ObservableElementSpliterator<V> trySplit() {
-			Spliterator<T> split = getWrapped().trySplit();
-			if (split == null)
-				return null;
-			return new SimpleObservableSpliterator<>(split, getType(), getMap());
-		}
-	}
-
-	/**
-	 * A ElementSpliterator whose elements are the result of some filter-map operation on another ElementSpliterator's elements
-	 *
-	 * @param <T> The type of elements in the wrapped ElementSpliterator
-	 * @param <V> The type of this ElementSpliterator's elements
-	 */
-	class WrappingObservableSpliterator<T, V> extends WrappingSpliterator<T, V> implements ObservableElementSpliterator<V> {
-		public WrappingObservableSpliterator(ObservableElementSpliterator<? extends T> wrap, TypeToken<V> type,
-			Supplier<? extends Function<? super ObservableCollectionElement<? extends T>, ? extends ObservableCollectionElement<V>>> map) {
-			super(wrap, type, (Supplier<? extends Function<? super CollectionElement<? extends T>, ? extends CollectionElement<V>>>) map);
+		public int characteristics() {
+			return theMap.modifyCharacteristics(theSource.characteristics());
 		}
 
 		@Override
-		protected ObservableElementSpliterator<? extends T> getWrapped() {
-			return (ObservableElementSpliterator<? extends T>) super.getWrapped();
+		public Comparator<? super T> getComparator() {
+			return theMap.mapComparator(theSource.getComparator());
 		}
 
 		@Override
-		protected Supplier<? extends Function<? super CollectionElement<? extends T>, ? extends ObservableCollectionElement<V>>> getMap() {
-			return (Supplier<? extends Function<? super CollectionElement<? extends T>, ? extends ObservableCollectionElement<V>>>) super.getMap();
+		public boolean tryAdvanceObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
+			while (theSource.tryAdvanceObservableElement(el -> {
+				theElement.setSource(el);
+				if (theElement.isAccepted())
+					action.accept(theElement);
+			})) {
+				if (theElement.isAccepted())
+					return true;
+			}
+			return false;
 		}
 
 		@Override
-		protected Function<? super CollectionElement<? extends T>, ? extends ObservableCollectionElement<V>> getInstanceMap() {
-			return (Function<? super CollectionElement<? extends T>, ? extends ObservableCollectionElement<V>>) super.getInstanceMap();
+		public void forEachObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
+			theSource.forEachObservableElement(el -> {
+				theElement.setSource(el);
+				if (theElement.isAccepted())
+					action.accept(theElement);
+			});
 		}
 
 		@Override
-		public boolean tryAdvanceObservableElement(Consumer<? super ObservableCollectionElement<V>> action) {
-			return tryAdvanceElement(el -> action.accept((ObservableCollectionElement<V>) el));
+		public boolean tryAdvance(Consumer<? super T> action) {
+			if (theMap.canTestValues()) {
+				boolean[] accepted = new boolean[1];
+				while (!accepted[0] && theSource.tryAdvance(v -> {
+					accepted[0] = theMap.test(v);
+					if (accepted[0])
+						action.accept(theMap.map(v));
+				})) {
+				}
+				return accepted[0];
+			} else
+				return ObservableElementSpliterator.super.tryAdvance(action);
 		}
 
 		@Override
-		public void forEachObservableElement(Consumer<? super ObservableCollectionElement<V>> action) {
-			forEachElement(el -> action.accept((ObservableCollectionElement<V>) el));
+		public void forEachRemaining(Consumer<? super T> action) {
+			if (theMap.canTestValues()) {
+				theSource.forEachRemaining(v -> {
+					if (theMap.test(v))
+						action.accept(theMap.map(v));
+				});
+			} else
+				ObservableElementSpliterator.super.forEachRemaining(action);
 		}
 
 		@Override
-		public ObservableElementSpliterator<V> trySplit() {
-			ObservableElementSpliterator<? extends T> wrapSplit = getWrapped().trySplit();
-			if (wrapSplit == null)
-				return null;
-			return new WrappingObservableSpliterator<>(wrapSplit, getType(), getMap());
-		}
-	}
-
-	/**
-	 * An element returned from {@link ObservableElementSpliterator.WrappingObservableSpliterator}
-	 *
-	 * @param <T> The type of value in the element wrapped by this element
-	 * @param <V> The type of this element
-	 */
-	abstract class WrappingObservableElement<T, V> extends WrappingElement<T, V> implements ObservableCollectionElement<V> {
-		public WrappingObservableElement(TypeToken<V> type, ObservableCollectionElement<? extends T>[] wrapped) {
-			super(type, wrapped);
+		public ObservableElementSpliterator<T> trySplit() {
+			ObservableElementSpliterator<E> split = theSource.trySplit();
+			return split == null ? null : split.map(theMap);
 		}
 
-		@Override
-		protected ObservableCollectionElement<? extends T> getWrapped() {
-			return (ObservableCollectionElement<? extends T>) super.getWrapped();
-		}
+		class MappedElement implements ObservableCollectionElement<T> {
+			private ObservableCollectionElement<E> theSourceEl;
+			private boolean isAccepted;
 
-		@Override
-		public ElementId getElementId() {
-			return getWrapped().getElementId();
+			void setSource(ObservableCollectionElement<E> sourceEl) {
+				isAccepted = theMap.test(sourceEl);
+				theSourceEl = isAccepted ? sourceEl : null;
+			}
+
+			boolean isAccepted() {
+				return isAccepted;
+			}
+
+			@Override
+			public TypeToken<T> getType() {
+				return MappedObservableElementSpliterator.this.getType();
+			}
+
+			@Override
+			public ElementId getElementId() {
+				return theSourceEl.getElementId();
+			}
+
+			@Override
+			public T get() {
+				return theMap.map(theSourceEl.get());
+			}
+
+			@Override
+			public String toString() {
+				return String.valueOf(get());
+			}
 		}
 	}
 }

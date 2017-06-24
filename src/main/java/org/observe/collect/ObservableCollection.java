@@ -30,7 +30,6 @@ import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
 import org.qommons.collect.BetterCollection;
-import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.TransactableCollection;
 import org.qommons.collect.TreeList;
@@ -91,7 +90,12 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	abstract boolean isLockSupported();
 
 	@Override
-	abstract ObservableElementSpliterator<E> spliterator();
+	default ObservableElementSpliterator<E> spliterator() {
+		return mutableSpliterator().immutable();
+	}
+
+	@Override
+	MutableObservableSpliterator<E> mutableSpliterator();
 
 	// /**
 	// * @param onElement The listener to be notified when new elements are added to the collection
@@ -230,7 +234,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	@Override
 	default boolean removeIf(Predicate<? super E> filter) {
 		boolean[] removed = new boolean[1];
-		ElementSpliterator<E> iter = spliterator();
+		MutableObservableSpliterator<E> iter = mutableSpliterator();
 		iter.forEachElement(el -> {
 			if (filter.test(el.get())) {
 				el.remove();
@@ -247,8 +251,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 * @see org.qommons.collect.BetterCollection#elementFor(Object)
 	 */
 	@Override
-	default ObservableCollectionElement<E> elementFor(Object value) {
-		return (ObservableCollectionElement<E>) BetterCollection.super.elementFor(value);
+	default MutableObservableElement<E> elementFor(Object value) {
+		return (MutableObservableElement<E>) BetterCollection.super.elementFor(value);
 	}
 
 	/**
@@ -258,8 +262,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 * @see #find(Predicate, Consumer)
 	 */
 	default boolean findObservableElement(Predicate<? super E> search,
-		Consumer<? super ObservableCollectionElement<? extends E>> onElement) {
-		return BetterCollection.super.find(search, (Consumer<? super CollectionElement<? extends E>>) onElement);
+		Consumer<? super MutableObservableElement<? extends E>> onElement) {
+		return BetterCollection.super.find(search, el -> onElement.accept((MutableObservableElement<E>) el));
 	}
 
 	/**
@@ -269,8 +273,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 * @see #findAll(Predicate, Consumer)
 	 */
 	default int findAllObservableElements(Predicate<? super E> search,
-		Consumer<? super ObservableCollectionElement<? extends E>> onElement) {
-		return BetterCollection.super.findAll(search, (Consumer<? super CollectionElement<? extends E>>) onElement);
+		Consumer<? super MutableObservableElement<? extends E>> onElement) {
+		return BetterCollection.super.findAll(search, el -> onElement.accept((MutableObservableElement<E>) el));
 	}
 
 	/**
@@ -285,7 +289,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 */
 	default boolean replaceAll(Function<? super E, ? extends E> map, boolean soft) {
 		boolean[] replaced = new boolean[1];
-		ElementSpliterator<E> iter = spliterator();
+		MutableObservableSpliterator<E> iter = mutableSpliterator();
 		iter.forEachElement(el -> {
 			E value = el.get();
 			E newValue = map.apply(value);

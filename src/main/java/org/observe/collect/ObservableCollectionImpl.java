@@ -32,6 +32,7 @@ import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
+import org.observe.collect.MutableObservableSpliterator.MutableObservableSpliteratorMap;
 import org.observe.collect.ObservableCollection.GroupingBuilder;
 import org.observe.collect.ObservableCollection.SortedGroupingBuilder;
 import org.observe.collect.ObservableCollection.StdMsg;
@@ -948,6 +949,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public MutableObservableSpliterator<E> mutableSpliterator() {
+			return theWrapped.mutableSpliterator();
+		}
+
+		@Override
 		public boolean contains(Object o) {
 			return ObservableCollectionImpl.contains(this, o);
 		}
@@ -1099,9 +1105,54 @@ public final class ObservableCollectionImpl {
 			return !contained[0];
 		}
 
+		protected MutableObservableSpliteratorMap<E, T> map() {
+			return new MutableObservableSpliteratorMap<E, T>() {
+				@Override
+				public TypeToken<T> getType() {
+					return FilterMappedObservableCollection.this.getType();
+				}
+
+				@Override
+				public boolean test(E srcValue) {
+					if (!theDef.isFiltered())
+						return true;
+					return theDef.map(new FilterMapResult<>(srcValue)).error == null;
+				}
+
+				@Override
+				public T map(E value) {
+					return theDef.map(new FilterMapResult<>(value)).result;
+				}
+
+				@Override
+				public E reverse(T value) {
+					if (!theDef.isReversible())
+						throw new UnsupportedOperationException("This collection does not support replacement");
+					return theDef.reverse(new FilterMapResult<>(value)).result;
+				}
+
+				@Override
+				public String filterEnabled(CollectionElement<E> el) {
+					if (!theDef.isReversible())
+						return "This collection does not support replacement";
+					return null;
+				}
+
+				@Override
+				public String filterRemove(CollectionElement<E> sourceEl) {
+					return null;
+				}
+			};
+		}
+
 		@Override
 		public ObservableElementSpliterator<T> spliterator() {
-			return new WrappingObservableSpliterator<>(theWrapped.spliterator(), getType(), map());
+			return theWrapped.spliterator().map(map());
+		}
+
+		@Override
+		public MutableObservableSpliterator<T> mutableSpliterator() {
+			return theWrapped.mutableSpliterator().map(map());
 		}
 
 		@Override
@@ -1212,67 +1263,13 @@ public final class ObservableCollectionImpl {
 		public void clear() {
 			try (Transaction t = lock(true, null)) {
 				FilterMapResult<E, T> result = new FilterMapResult<>();
-				theWrapped.spliterator().forEachElement(el -> {
+				theWrapped.mutableSpliterator().forEachMutableElement(el -> {
 					result.source = el.get();
 					theDef.checkSourceValue(result);
 					if (result.error == null)
 						el.remove();
 				});
 			}
-		}
-
-		/**
-		 * @return An element mapping function for
-		 *         {@link WrappingObservableSpliterator#WrappingObservableSpliterator(ObservableElementSpliterator, TypeToken, Supplier)}
-		 */
-		protected Supplier<Function<ObservableCollectionElement<? extends E>, ObservableCollectionElement<T>>> map() {
-			return () -> {
-				ObservableCollectionElement<? extends E>[] container = new ObservableCollectionElement[1];
-				FilterMapResult<E, T> mapped = new FilterMapResult<>();
-				WrappingObservableElement<E, T> wrapperEl = new WrappingObservableElement<E, T>(
-					getType(), container) {
-					@Override
-					public T get() {
-						return mapped.result;
-					}
-
-					@Override
-					public <V extends T> String isAcceptable(V value) {
-						if (!theDef.isReversible())
-							return StdMsg.UNSUPPORTED_OPERATION;
-						else if (!theDef.checkDestType(value))
-							return StdMsg.BAD_TYPE;
-						FilterMapResult<T, E> reversed = theDef.reverse(new FilterMapResult<>(value));
-						if (reversed.error != null)
-							return reversed.error;
-						return ((CollectionElement<E>) getWrapped()).isAcceptable(reversed.result);
-					}
-
-					@Override
-					public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
-						if (!theDef.isReversible())
-							throw new IllegalArgumentException(StdMsg.UNSUPPORTED_OPERATION);
-						else if (!theDef.checkDestType(value))
-							throw new IllegalArgumentException(StdMsg.BAD_TYPE);
-						FilterMapResult<T, E> reversed = theDef.reverse(new FilterMapResult<>(value));
-						if (reversed.error != null)
-							throw new IllegalArgumentException(reversed.error);
-						((CollectionElement<E>) getWrapped()).set(reversed.result, cause);
-						T old = mapped.result;
-						mapped.source = reversed.result;
-						mapped.result = value;
-						return old;
-					}
-				};
-				return el -> {
-					mapped.source = el.get();
-					theDef.map(mapped);
-					if (mapped.error != null)
-						return null;
-					container[0] = el;
-					return wrapperEl;
-				};
-			};
 		}
 
 		@Override
