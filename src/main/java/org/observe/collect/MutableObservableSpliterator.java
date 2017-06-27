@@ -113,11 +113,46 @@ public interface MutableObservableSpliterator<E> extends ObservableElementSplite
 		};
 	}
 
+	static <E> MutableObservableSpliterator<E> empty(TypeToken<E> type) {
+		return new MutableObservableSpliterator<E>() {
+			@Override
+			public TypeToken<E> getType() {
+				return type;
+			}
+
+			@Override
+			public long estimateSize() {
+				return 0;
+			}
+
+			@Override
+			public long getExactSizeIfKnown() {
+				return 0;
+			}
+
+			@Override
+			public int characteristics() {
+				return IMMUTABLE | ORDERED | SIZED;
+			}
+
+			@Override
+			public boolean tryAdvanceMutableElement(Consumer<? super MutableObservableElement<E>> action) {
+				return false;
+			}
+		};
+	}
+
 	interface MutableObservableSpliteratorMap<E, T> extends ObservableElementSpliteratorMap<E, T>, ElementSpliteratorMap<E, T> {
+		@Override
+		default boolean canFilterValues() {
+			return true;
+		}
+
 		@Override
 		default boolean test(CollectionElement<E> el) {
 			return test((ObservableCollectionElement<E>) el);
 		}
+
 		@Override
 		default boolean test(ObservableCollectionElement<E> el) {
 			return test(el.get());
@@ -129,7 +164,7 @@ public interface MutableObservableSpliterator<E> extends ObservableElementSplite
 		}
 
 		@Override
-		default int filterExactSize(long srcSize) {
+		default long filterExactSize(long srcSize) {
 			return ElementSpliteratorMap.super.filterExactSize(srcSize);
 		}
 

@@ -55,7 +55,7 @@ public interface ObservableElementSpliterator<E> extends Spliterator<E> {
 
 		T map(E value);
 
-		default boolean canTestValues() {
+		default boolean canFilterValues() {
 			return true;
 		}
 
@@ -68,7 +68,8 @@ public interface ObservableElementSpliterator<E> extends Spliterator<E> {
 		default long filterEstimatedSize(long srcSize) {
 			return srcSize;
 		}
-		default int filterExactSize(long srcSize) {
+
+		default long filterExactSize(long srcSize) {
 			return -1;
 		}
 		default int modifyCharacteristics(int srcChars) {
@@ -187,7 +188,7 @@ public interface ObservableElementSpliterator<E> extends Spliterator<E> {
 
 		@Override
 		public boolean tryAdvance(Consumer<? super T> action) {
-			if (theMap.canTestValues()) {
+			if (theMap.canFilterValues()) {
 				boolean[] accepted = new boolean[1];
 				while (!accepted[0] && theSource.tryAdvance(v -> {
 					accepted[0] = theMap.test(v);
@@ -202,7 +203,7 @@ public interface ObservableElementSpliterator<E> extends Spliterator<E> {
 
 		@Override
 		public void forEachRemaining(Consumer<? super T> action) {
-			if (theMap.canTestValues()) {
+			if (theMap.canFilterValues()) {
 				theSource.forEachRemaining(v -> {
 					if (theMap.test(v))
 						action.accept(theMap.map(v));
