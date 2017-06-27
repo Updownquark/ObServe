@@ -2986,44 +2986,193 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public MutableObservableSpliterator<E> mutableSpliterator() {
+			if (isDone.get())
+				throw new IllegalStateException("This cached collection's finisher has fired");
+			class MutableCachedSpliterator implements MutableObservableSpliterator<E> {
+				private final MutableObservableSpliterator<E> theWrappedSpliter;
+				private final MutableObservableElement<E> theElement;
+				private MutableObservableElement<E> theCurrentElement;
+				private ElementId theCurrentId;
+				private E theCurrentValue;
+
+				MutableCachedSpliterator(MutableObservableSpliterator<E> wrap) {
+					theWrappedSpliter = wrap;
+					theElement = new MutableObservableElement<E>() {
+						@Override
+						public ElementId getElementId() {
+							return theCurrentId;
+						}
+
+						@Override
+						public TypeToken<E> getType() {
+							return theCurrentElement.getType();
+						}
+
+						@Override
+						public E get() {
+							return theCurrentValue;
+						}
+
+						@Override
+						public String canRemove() {
+							return theCurrentElement.canRemove();
+						}
+
+						@Override
+						public void remove() throws UnsupportedOperationException {
+							theCurrentElement.remove();
+						}
+
+						@Override
+						public <V extends E> E set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+							return theCurrentElement.set(value, cause);
+						}
+
+						@Override
+						public <V extends E> String isAcceptable(V value) {
+							return theCurrentElement.isAcceptable(value);
+						}
+
+						@Override
+						public Value<String> isEnabled() {
+							return theCurrentElement.isEnabled();
+						}
+					};
+				}
+
+				@Override
+				public TypeToken<E> getType() {
+					return theWrappedSpliter.getType();
+				}
+
+				@Override
+				public long estimateSize() {
+					return theWrappedSpliter.estimateSize();
+				}
+
+				@Override
+				public long getExactSizeIfKnown() {
+					return theWrappedSpliter.getExactSizeIfKnown();
+				}
+
+				@Override
+				public int characteristics() {
+					return theWrappedSpliter.characteristics();
+				}
+
+				@Override
+				public Comparator<? super E> getComparator() {
+					return theWrappedSpliter.getComparator();
+				}
+
+				@Override
+				public MutableObservableSpliterator<E> trySplit() {
+					MutableObservableSpliterator<E> split = theWrappedSpliter.trySplit();
+					return split == null ? null : new MutableCachedSpliterator(split);
+				}
+
+				@Override
+				public boolean tryAdvanceMutableElement(Consumer<? super MutableObservableElement<E>> action) {
+					return theWrappedSpliter.tryAdvanceMutableElement(el -> {
+						theCurrentElement = el;
+						theCurrentId = el.getElementId();
+						theCurrentValue = theCacheMap.get(theCurrentId);
+						action.accept(theElement);
+					});
+				}
+
+				@Override
+				public void forEachMutableElement(Consumer<? super MutableObservableElement<E>> action) {
+					try (Transaction t = lock(true, null)) {
+						MutableObservableSpliterator.super.forEachMutableElement(action);
+					}
+				}
+			}
+			return new MutableCachedSpliterator(theWrapped.mutableSpliterator());
+		}
+
+		@Override
 		public ObservableElementSpliterator<E> spliterator() {
 			if (isDone.get())
 				throw new IllegalStateException("This cached collection's finisher has fired");
-			return new WrappingObservableSpliterator<>(theWrapped.spliterator(), getType(), map());
-		}
+			class CachedSpliterator implements ObservableElementSpliterator<E> {
+				private final Spliterator<ElementId> theIdSpliterator;
+				private final ObservableCollectionElement<E> theElement;
+				ElementId theCurrentId;
+				E theCurrentValue;
 
-		/**
-		 * @return An element-mapping function for
-		 *         {@link WrappingObservableSpliterator#WrappingObservableSpliterator(ObservableElementSpliterator, TypeToken, Supplier)}
-		 */
-		protected Supplier<Function<ObservableCollectionElement<? extends E>, ObservableCollectionElement<E>>> map() {
-			return () -> {
-				ObservableCollectionElement<? extends E>[] container = new ObservableCollectionElement[1];
-				WrappingObservableElement<E, E> wrapping = new WrappingObservableElement<E, E>(getType(), container) {
-					@Override
-					public E get() {
-						Object elId = getWrapped().getElementId();
-						if (elId == null) // Element removed
-							return getWrapped().get();
-						else
-							return theCacheMap.get(getWrapped().getElementId());
-					}
+				CachedSpliterator(Spliterator<ElementId> idSpliterator) {
+					theIdSpliterator = idSpliterator;
+					theElement = new ObservableCollectionElement<E>() {
+						@Override
+						public TypeToken<E> getType() {
+							return theWrapped.getType();
+						}
 
-					@Override
-					public <V extends E> String isAcceptable(V value) {
-						return ((ObservableCollectionElement<E>) getWrapped()).isAcceptable(value);
-					}
+						@Override
+						public E get() {
+							return theCurrentValue;
+						}
 
-					@Override
-					public <V extends E> E set(V value, Object cause) throws IllegalArgumentException {
-						return ((ObservableCollectionElement<E>) getWrapped()).set(value, cause);
+						@Override
+						public ElementId getElementId() {
+							return theCurrentId;
+						}
+					};
+				}
+
+				@Override
+				public long estimateSize() {
+					if (isDone.get())
+						throw new IllegalStateException("This cached collection's finisher has fired");
+					return theIdSpliterator.estimateSize();
+				}
+
+				@Override
+				public long getExactSizeIfKnown() {
+					if (isDone.get())
+						throw new IllegalStateException("This cached collection's finisher has fired");
+					return theIdSpliterator.getExactSizeIfKnown();
+				}
+
+				@Override
+				public int characteristics() {
+					return theIdSpliterator.characteristics();
+				}
+
+				@Override
+				public TypeToken<E> getType() {
+					return theWrapped.getType();
+				}
+
+				@Override
+				public boolean tryAdvanceObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
+					if (isDone.get())
+						throw new IllegalStateException("This cached collection's finisher has fired");
+					return theIdSpliterator.tryAdvance(id -> {
+						theCurrentId = id;
+						theCurrentValue = theCacheMap.get(id);
+						action.accept(theElement);
+					});
+				}
+
+				@Override
+				public void forEachObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
+					if (isDone.get())
+						throw new IllegalStateException("This cached collection's finisher has fired");
+					try (Transaction t = lock(false, null)) {
+						ObservableElementSpliterator.super.forEachObservableElement(action);
 					}
-				};
-				return el -> {
-					container[0] = el;
-					return wrapping;
-				};
-			};
+				}
+
+				@Override
+				public ObservableElementSpliterator<E> trySplit() {
+					Spliterator<ElementId> split = theIdSpliterator.trySplit();
+					return split == null ? null : new CachedSpliterator(split);
+				}
+			}
+			return new CachedSpliterator(theCacheMap.keySet().spliterator());
 		}
 
 		@Override
