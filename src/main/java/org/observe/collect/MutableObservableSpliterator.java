@@ -177,6 +177,10 @@ public interface MutableObservableSpliterator<E> extends ObservableElementSplite
 		default Comparator<? super T> mapComparator(Comparator<? super E> srcCompare) {
 			return null;
 		}
+
+		default ElementId mapId(ElementId id) {
+			return id;
+		}
 	}
 
 	default <T> MutableObservableSpliterator<T> map(MutableObservableSpliteratorMap<E, T> map) {
@@ -203,7 +207,7 @@ public interface MutableObservableSpliterator<E> extends ObservableElementSplite
 
 		@Override
 		protected MappedObservableElement<E, T> getElement() {
-			return (MappedObservableElement<E, T>) super.createElement();
+			return (MappedObservableElement<E, T>) super.getElement();
 		}
 
 		@Override

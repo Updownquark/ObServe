@@ -4588,7 +4588,7 @@ public final class ObservableCollectionImpl {
 					removed |= coll.removeAll(set);
 				else {
 					boolean[] cRemoved = new boolean[1];
-					coll.spliterator().mutableSpliterator(el -> {
+					coll.mutableSpliterator().forEachMutableElement(el -> {
 						if (set.contains(el.get()) && el.canRemove() == null) {
 							cRemoved[0] = true;
 							el.remove();
@@ -4630,8 +4630,8 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public ObservableElementSpliterator<E> spliterator() {
-			return new FlattenedSpliterator<>(theOuter.spliterator());
+		public MutableObservableSpliterator<E> mutableSpliterator() {
+			return new FlattenedSpliterator<>(theOuter.mutableSpliterator());
 		}
 
 		/**
@@ -4644,45 +4644,58 @@ public final class ObservableCollectionImpl {
 
 			private MutableObservableElement<? extends C> theOuterElement;
 			private MutableObservableSpliterator<E> theInnerator;
-			private final Supplier<Function<ObservableCollectionElement<? extends E>, ObservableCollectionElement<E>>> theElementMap;
+			private final MutableObservableSpliteratorMap<? extends E, E> theElementMap;
 
 			/** @param outerSpliterator The spliterator for the outer collection */
 			protected FlattenedSpliterator(MutableObservableSpliterator<? extends C> outerSpliterator) {
 				theOuterSpliterator = outerSpliterator;
-				theElementMap = () -> {
-					ObservableCollectionElement<? extends E>[] container = new ObservableCollectionElement[1];
-					WrappingObservableElement<E, E> wrapper = new WrappingObservableElement<E, E>(getType(), container) {
-						private final ElementId theFlattenedElementId = compoundId(theOuterElement.getElementId(),
-							getWrapped().getElementId());
+				theElementMap = new MutableObservableSpliteratorMap<E, E>() {
+					@Override
+					public TypeToken<E> getType() {
+						return theType;
+					}
 
-						@Override
-						public ElementId getElementId() {
-							return theFlattenedElementId;
-						}
+					@Override
+					public E map(E value) {
+						return value;
+					}
 
-						@Override
-						public E get() {
-							return getWrapped().get();
-						}
+					@Override
+					public boolean test(E srcValue) {
+						return true;
+					}
 
-						@Override
-						public <V extends E> E set(V value, Object cause) throws IllegalArgumentException {
-							if (!getWrapped().getType().getRawType().isInstance(value))
-								throw new IllegalArgumentException(StdMsg.BAD_TYPE);
-							return ((CollectionElement<E>) getWrapped()).set(value, cause);
-						}
+					@Override
+					public E reverse(E value) {
+						return value;
+					}
 
-						@Override
-						public <V extends E> String isAcceptable(V value) {
-							if (!getWrapped().getType().getRawType().isInstance(value))
-								return StdMsg.BAD_TYPE;
-							return ((CollectionElement<E>) getWrapped()).isAcceptable(value);
-						}
-					};
-					return el -> {
-						container[0] = el;
-						return wrapper;
-					};
+					@Override
+					public String filterEnabled(CollectionElement<E> el) {
+						return null;
+					}
+
+					@Override
+					public String filterAccept(E value) {
+						if (!theInnerator.getType().getRawType().isInstance(value))
+							return StdMsg.BAD_TYPE;
+						return null;
+					}
+
+					@Override
+					public String filterRemove(CollectionElement<E> sourceEl) {
+						return null;
+					}
+
+					@Override
+					public long filterExactSize(long srcSize) {
+						return srcSize;
+					}
+
+					@Override
+					public ElementId mapId(ElementId id) {
+						return compoundId(theOuterElement.getElementId(), id);
+					}
 				};
 			}
 
@@ -4728,11 +4741,10 @@ public final class ObservableCollectionImpl {
 			}
 
 			/**
-			 * @return The element map for
-			 *         {@link WrappingObservableSpliterator#WrappingObservableSpliterator(ObservableElementSpliterator, TypeToken, Supplier)}
+			 * @return The element map for {@link MutableObservableSpliterator#map(MutableObservableSpliteratorMap)}
 			 */
-			protected Supplier<Function<ObservableCollectionElement<? extends E>, ObservableCollectionElement<E>>> getElementMap() {
-				return theElementMap;
+			protected <E2 extends E> MutableObservableSpliteratorMap<E2, E> getElementMap() {
+				return (MutableObservableSpliteratorMap<E2, E>) theElementMap;
 			}
 
 			/**
@@ -4740,7 +4752,7 @@ public final class ObservableCollectionImpl {
 			 * @return A spliterator giving collection elements to be passed to this spliterator's actions
 			 */
 			protected MutableObservableSpliterator<E> wrapInnerSplit(MutableObservableSpliterator<? extends E> toWrap) {
-				return new WrappingObservableSpliterator<>(toWrap, theType, theElementMap);
+				return toWrap.map(getElementMap());
 			}
 
 			/** @return The spliterator for the inner collection at the current cursor */
