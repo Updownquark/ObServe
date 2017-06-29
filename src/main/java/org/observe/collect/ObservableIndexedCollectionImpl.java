@@ -303,11 +303,6 @@ public class ObservableIndexedCollectionImpl {
 		public int lastIndexOf(Object value) {
 			return ObservableIndexedCollectionImpl.lastIndexOf(this, value);
 		}
-
-		@Override
-		public CollectionSubscription subscribeOrdered(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
-			return super.subscribe(evt -> observer.accept((IndexedCollectionEvent<? extends E>) evt));
-		}
 	}
 
 	/**
@@ -372,11 +367,6 @@ public class ObservableIndexedCollectionImpl {
 			if (reversed.error != null)
 				return -1;
 			return getWrapped().lastIndexOf(reversed.result);
-		}
-
-		@Override
-		public CollectionSubscription subscribeOrdered(Consumer<? super IndexedCollectionEvent<? extends T>> observer) {
-			return super.subscribe(evt -> observer.accept((IndexedCollectionEvent<? extends T>) evt));
 		}
 
 		@Override
@@ -462,11 +452,6 @@ public class ObservableIndexedCollectionImpl {
 			if (type == CollectionChangeType.remove)
 				presentIds.remove(elementId);
 			return event;
-		}
-
-		@Override
-		public CollectionSubscription subscribeOrdered(Consumer<? super IndexedCollectionEvent<? extends V>> observer) {
-			return subscribe(evt -> observer.accept((IndexedCollectionEvent<? extends V>) evt));
 		}
 	}
 

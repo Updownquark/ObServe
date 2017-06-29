@@ -90,11 +90,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	abstract boolean isLockSupported();
 
 	@Override
-	default ObservableElementSpliterator<E> spliterator() {
-		return mutableSpliterator().immutable();
-	}
-
-	@Override
 	MutableObservableSpliterator<E> mutableSpliterator();
 
 	// /**
@@ -104,6 +99,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	// Subscription onElement(Consumer<? super ObservableElement<E>> onElement);
 
 	Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer);
+
+	@Override
+	default ObservableElementSpliterator<E> spliterator() {
+		return mutableSpliterator().immutable();
+	}
 
 	/**
 	 * Like {@link #onChange(Consumer)}, but also fires initial {@link CollectionChangeType#add add} events for each element currently in
