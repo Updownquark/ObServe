@@ -1,8 +1,6 @@
 package org.observe.collect;
 
 import static java.util.Arrays.asList;
-import static org.observe.collect.CollectionChangeType.remove;
-import static org.observe.collect.CollectionChangeType.set;
 
 import org.observe.ObservableValueEvent;
 import org.qommons.IntList;
@@ -13,7 +11,7 @@ class OrderedCollectionChangesObservable<E, OCCE extends OrderedCollectionChange
 
 		protected OrderedSessionChangeTracker(CollectionChangeType typ) {
 			super(typ);
-			indexes = new IntList();
+			indexes = new IntList(true, true);
 		}
 
 		@Override
@@ -30,9 +28,10 @@ class OrderedCollectionChangesObservable<E, OCCE extends OrderedCollectionChange
 	@Override
 	protected void newEvent(CollectionChangeType type, ObservableValueEvent<E> evt) {
 		CollectionSession session = collection.getSession().get();
-		int [] index = new int[] {((ObservableOrderedElement<E>) evt.getObservable()).getIndex()};
-		if(index[0] < 0)
+		int removeIndex = ((ObservableOrderedElement<E>) evt.getObservable()).getIndex();
+		if (removeIndex < 0)
 			throw new IllegalStateException("Negative index!");
+		int[] index = new int[] { removeIndex };
 		if(session != null) {
 			OrderedSessionChangeTracker<E> tracker = (OrderedSessionChangeTracker<E>) session.get(key, SESSION_TRACKER_PROPERTY);
 			if(tracker == null) {
@@ -43,13 +42,14 @@ class OrderedCollectionChangesObservable<E, OCCE extends OrderedCollectionChange
 				session.put(key, SESSION_TRACKER_PROPERTY, tracker);
 			}
 
-			tracker.elements.add(evt.getValue());
+			int chIdx = tracker.indexes.add(index[0]);
+			tracker.elements.add(chIdx, evt.getValue());
 			if(tracker.oldElements != null)
-				tracker.oldElements.add(evt.getOldValue());
-			tracker.indexes.add(index[0]);
+				tracker.oldElements.add(chIdx, evt.getOldValue());
 		} else {
 			OrderedCollectionChangeEvent<E> toFire = new OrderedCollectionChangeEvent<>(type, asList(evt.getValue()),
-				type == CollectionChangeType.set ? asList(evt.getOldValue()) : null, new IntList(index), evt);
+				type == CollectionChangeType.set ? asList(evt.getOldValue()) : null, new IntList(index).setSorted(true).setUnique(true),
+					evt);
 			fireEvent((OCCE) toFire);
 			toFire.finish();
 		}
@@ -62,86 +62,42 @@ class OrderedCollectionChangesObservable<E, OCCE extends OrderedCollectionChange
 			fireEventsFromSessionData(tracker, evt);
 			return newTracker;
 		} else {
-			if(adjustEventsPast(tracker, type, index, evt))
-				return null;
+			adjustEventsPast(tracker, index, evt);
 			return tracker;
 		}
 	}
 
-	private boolean adjustEventsPast(OrderedSessionChangeTracker<E> tracker, CollectionChangeType type, int [] index,
-		ObservableValueEvent<E> evt) {
-
-		// Adjust all indexes strictly past the change index first
-		if(type != set && (tracker.type != remove || type != remove)) {
-			for(int i = 0; i < tracker.indexes.size(); i++) {
-				int changeIdx = tracker.indexes.get(i);
-				if(changeIdx > index[0]) {
-					if(type == remove)
-						changeIdx--;
-					else
-						changeIdx++;
-					tracker.indexes.set(i, changeIdx);
-				}
+	private void adjustEventsPast(OrderedSessionChangeTracker<E> tracker, int[] index, ObservableValueEvent<E> evt) {
+		if (tracker.type == CollectionChangeType.set) {
+			int i = tracker.indexes.indexOf(index[0]);
+			if (i >= 0) {
+				// Remove the old value so the new one can trump it
+				tracker.indexes.remove(i);
+				tracker.elements.remove(i);
+				tracker.oldElements.remove(i);
 			}
+			return;
 		}
 
-		// Now handle the case where the indexes are the same
-		int i = tracker.indexes.indexOf(index[0]);
-		if(i >= 0) {
-			switch (tracker.type) {
-			case add:
-				switch (type) {
-				case add:
-					tracker.indexes.set(i, index[0] + 1);
-					break;
-				case remove:
-					tracker.indexes.remove(i);
-					tracker.elements.remove(i);
-					// oldElements will be null since tracker.type==add
-					return true;
-				case set:
-					tracker.elements.set(i, evt.getValue());
-					return true;
+		int newIdx = tracker.indexes.indexFor(index[0]);
+		switch (tracker.type) {
+		case add:
+			for (int i = tracker.indexes.size() - 1; i >= newIdx; i--)
+				tracker.indexes.set(i, tracker.indexes.get(i) + 1);
+			break;
+		case remove:
+			index[0] += newIdx;
+			newIdx = tracker.indexes.indexOf(index[0]);
+			if (newIdx >= 0) {
+				while (newIdx < tracker.indexes.size() && tracker.indexes.get(newIdx) == index[0]) {
+					index[0]++;
+					newIdx++;
 				}
-				break;
-			case remove:
-				switch (type) {
-				case add:
-					tracker.indexes.set(i, index[0] + 1);
-					break;
-				case remove:
-					break;
-				case set:
-					break;
-				}
-				break;
-			case set:
-				switch (type) {
-				case add:
-					tracker.indexes.set(i, index[0] + 1);
-					break;
-				case remove:
-					tracker.indexes.remove(i);
-					tracker.elements.remove(i);
-					tracker.oldElements.remove(i);
-					break;
-				case set:
-					tracker.elements.set(i, evt.getValue());
-					return true;
-				}
-				break;
 			}
+			break;
+		case set:
+			break;
 		}
-
-		if(tracker.type == remove && type == remove) {
-			int indexAdd = 0;
-			for(i = 0; i < tracker.indexes.size(); i++) {
-				if(tracker.indexes.get(i) <= index[0])
-					indexAdd++;
-			}
-			index[0] += indexAdd;
-		}
-		return false;
 	}
 
 	@Override

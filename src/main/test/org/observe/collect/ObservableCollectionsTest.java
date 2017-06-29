@@ -1719,6 +1719,38 @@ public class ObservableCollectionsTest {
 		assertEquals(Integer.valueOf(9), received[0]);
 	}
 
+	/** Tests {@link ObservableList#flattenValue(ObservableValue)} */
+	@Test
+	public void flattenListValue() {
+		SimpleSettableValue<ObservableList<Integer>> listVal = new SimpleSettableValue<>(new TypeToken<ObservableList<Integer>>() {}, true);
+		ObservableArrayList<Integer> firstList = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
+		ObservableArrayList<Integer> secondList = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
+		listVal.set(firstList, null);
+
+		firstList.addValues(10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
+		secondList.addValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(ObservableList.flattenValue(listVal));
+		tester.check(firstList);
+		firstList.addValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+		tester.check(firstList);
+		listVal.set(null, null);
+		tester.check(ObservableList.constant(TypeToken.of(Integer.TYPE)));
+		listVal.set(firstList, null);
+		tester.check(firstList);
+		listVal.set(secondList, null);
+		tester.check(secondList);
+		try (Transaction t = firstList.lock(true, null)) {
+			for (int i = firstList.size() - 1; i > 10; i++)
+				firstList.remove(i);
+		}
+		tester.check(secondList, 0);
+		listVal.set(firstList, null);
+		tester.check(firstList);
+		secondList.clear();
+		tester.check(firstList, 0);
+	}
+
 	/** Tests {@link ObservableOrderedCollection#sorted(java.util.Comparator)} */
 	@Test
 	public void sortedObservableList() {
@@ -2019,18 +2051,19 @@ public class ObservableCollectionsTest {
 		int [] changeCount = new int[1];
 		Subscription sub = observable.changes().act(event -> {
 			changeCount[0]++;
-			for(int i = 0; i < event.indexes.size(); i++) {
-				switch (event.type) {
-				case add:
+			switch (event.type) {
+			case add:
+				for (int i = 0; i < event.indexes.size(); i++)
 					compare.add(event.indexes.get(i), event.values.get(i));
-					break;
-				case remove:
+				break;
+			case remove:
+				for (int i = event.indexes.size() - 1; i >= 0; i--)
 					assertEquals(compare.remove(event.indexes.get(i)), event.values.get(i));
-					break;
-				case set:
+				break;
+			case set:
+				for (int i = 0; i < event.indexes.size(); i++)
 					assertEquals(compare.set(event.indexes.get(i), event.values.get(i)), event.oldValues.get(i));
-					break;
-				}
+				break;
 			}
 		});
 		assertEquals(0, changeCount[0]);

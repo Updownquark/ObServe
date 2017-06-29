@@ -1,7 +1,9 @@
 package org.observe.util.swing;
 
+import java.awt.EventQueue;
 import java.awt.event.ItemEvent;
 import java.awt.event.ItemListener;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 import javax.swing.ComboBoxModel;
@@ -67,12 +69,27 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		comboBox.addItemListener(itemListener);
 		Subscription valueSub = selected.act(evt -> {
 			if (!callbackLock[0]) {
-				callbackLock[0] = true;
-				try {
-					comboBox.setSelectedItem(evt.getValue());
-				} finally {
-					callbackLock[0] = false;
-				}
+				// Because ObservableListModel is cached, it is possible that the list model may not have been updated to include the value
+				// that is now selected in the underlying model. If that is the case, a simple invokeLater should allow the model to be
+				// updated, and then we can set the selected item. TODO Use evt.onRootFinish()?
+				boolean existsYet = false;
+				for (int i = 0; i < comboModel.getSize(); i++)
+					if (Objects.equals(comboModel.getElementAt(i), evt.getValue())) {
+						existsYet = true;
+						break;
+					}
+				Runnable doSetSelected = () -> {
+					callbackLock[0] = true;
+					try {
+						comboBox.setSelectedItem(evt.getValue());
+					} finally {
+						callbackLock[0] = false;
+					}
+				};
+				if (existsYet)
+					doSetSelected.run();
+				else
+					EventQueue.invokeLater(doSetSelected);
 			}
 			checkEnabled.accept(selected.isEnabled().get());
 		});

@@ -22,6 +22,7 @@ public class DefaultObservable<T> implements Observable<T> {
 	private OnSubscribe<T> theOnSubscribe;
 	private AtomicBoolean isAlive = new AtomicBoolean(true);
 	private AtomicBoolean hasIssuedController = new AtomicBoolean(false);
+	private AtomicBoolean isFiringEvent = new AtomicBoolean(false);
 	private Queue<Observer<? super T>> theListeners;
 
 	/** Creates the observable */
@@ -87,26 +88,42 @@ public class DefaultObservable<T> implements Observable<T> {
 	private void fireNext(T value) {
 		if(!isAlive.get())
 			throw new IllegalStateException("Firing a value on a completed observable");
-		// This allows listeners to be added by listeners. Those new listeners will be fired last.
-		for(Observer<? super T> observer : theListeners) {
-			try {
-				observer.onNext(value);
-			} catch(Throwable e) {
-				observer.onError(e);
+		boolean preFiring = isFiringEvent.getAndSet(true);
+		try {
+			if (preFiring)
+				throw new IllegalStateException(
+					"A new value cannot be fired when not all listeners have been notified of the current value");
+			// This allows listeners to be added by listeners. Those new listeners will be fired last.
+			for (Observer<? super T> observer : theListeners) {
+				try {
+					observer.onNext(value);
+				} catch (Throwable e) {
+					observer.onError(e);
+				}
 			}
+		} finally {
+			isFiringEvent.set(false);
 		}
 	}
 
 	private void fireCompleted(T value) {
 		if(isAlive.getAndSet(false)) {
-			Observer<? super T> [] observers = theListeners.toArray(new Observer[theListeners.size()]);
-			theListeners.clear();
-			for(Observer<? super T> observer : observers) {
-				try {
-					observer.onCompleted(value);
-				} catch(Throwable e) {
-					observer.onError(e);
+			boolean preFiring = isFiringEvent.getAndSet(true);
+			try {
+				if (preFiring)
+					throw new IllegalStateException(
+						"A value cannot be completed when not all listeners have been notified of the current value");
+				Observer<? super T>[] observers = theListeners.toArray(new Observer[theListeners.size()]);
+				theListeners.clear();
+				for (Observer<? super T> observer : observers) {
+					try {
+						observer.onCompleted(value);
+					} catch (Throwable e) {
+						observer.onError(e);
+					}
 				}
+			} finally {
+				isFiringEvent.set(false);
 			}
 		}
 	}

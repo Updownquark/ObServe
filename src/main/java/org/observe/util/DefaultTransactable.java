@@ -58,13 +58,7 @@ public class DefaultTransactable implements Transactable {
 		lock.lock();
 		boolean success = false;
 		try {
-			if(write) {
-				int depth = theDepth.getAndIncrement();
-				if(depth != 0) {
-					success = true;
-					return new EndTransaction(lock, true);
-				}
-
+			if (write && theDepth.getAndIncrement() == 0) {
 				theInternalSessionValue = createSession(cause);
 				Observer.onNextAndFinish(theSessionController,
 					theObservableSession.createChangeEvent(null, theInternalSessionValue, cause));
@@ -87,11 +81,7 @@ public class DefaultTransactable implements Transactable {
 
 	private void endTransaction(Lock lock, boolean write) {
 		try {
-			if(write) {
-				int depth = theDepth.decrementAndGet();
-				if(depth != 0)
-					return;
-
+			if (write && theDepth.decrementAndGet() == 0) {
 				CollectionSession old = theInternalSessionValue;
 				theInternalSessionValue = null;
 				Observer.onNextAndFinish(theSessionController, theObservableSession.createChangeEvent(old, null, old.getCause()));

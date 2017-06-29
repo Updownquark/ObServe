@@ -53,7 +53,16 @@ public class ObservableSortedArrayList<E> extends ObservableArrayList<E> {
 	@Override
 	public boolean add(E e) {
 		try (Transaction t = lock(true, null)) {
-			int idx = Collections.binarySearch(this, e, theCompare);
+			int idx;
+			// Add some optimizations for adding values in the right order
+			if (isEmpty())
+				idx = 0;
+			else if (theCompare.compare(get(size() - 1), e) <= 0)
+				idx = size();
+			else if (theCompare.compare(get(0), e) > 0)
+				idx = 0;
+			else
+				idx = Collections.binarySearch(this, e, theCompare);
 			if (idx < 0)
 				super.add(-(idx + 1), e);
 			else {
