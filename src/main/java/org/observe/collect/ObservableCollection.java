@@ -7,6 +7,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -804,22 +805,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	}
 
 	/**
-	 * @param refresh The observable to re-fire events on
-	 * @return A collection whose elements fire additional value events when the given observable fires
-	 */
-	default ObservableCollection<E> refresh(Observable<?> refresh) {
-		return new ObservableCollectionImpl.RefreshingCollection<>(this, refresh);
-	}
-
-	/**
-	 * @param refire A function that supplies a refresh observable as a function of element value
-	 * @return A collection whose values individually refresh when the observable returned by the given function fires
-	 */
-	default ObservableCollection<E> refreshEach(Function<? super E, Observable<?>> refire) {
-		return new ObservableCollectionImpl.ElementRefreshingCollection<>(this, refire);
-	}
-
-	/**
 	 * Allows control over whether and how the collection may be modified
 	 *
 	 * @return A builder that can return a derived collection that can only be modified in certain ways
@@ -1031,6 +1016,35 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 		return ret.toString();
 	}
 
+	interface DerivedCollectionBuilder<E, I, T>{
+		ObservableCollection<T>
+	}
+
+	abstract class DerivedCollectionDef<E, I, T> {
+		private final DerivedCollectionDef<E, ?, I> theParent;
+		private final TypeToken<T> theTargetType;
+
+
+		public DerivedCollectionDef(DerivedCollectionDef<E, ?, I> parent, TypeToken<T> target) {
+			theParent = parent;
+			theTargetType = target;
+		}
+
+		CollectionManager<E, T> manageCollection();
+	}
+
+	interface CollectionManager<E, T> {
+		Transaction begin();
+
+		CollectionElementManager<E, T> createElement(E init, boolean cache);
+	}
+
+	interface CollectionElementManager<E, T> {
+		void remove();
+		boolean isPresent();
+		T get();
+	}
+
 	/**
 	 * Builds a filtered and/or mapped collection
 	 *
@@ -1048,6 +1062,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 		private boolean areNullsMapped;
 		private Function<? super T, ? extends I> theReverse;
 		private boolean areNullsReversed;
+		private List<Observable<?>> theCollectionRefreshers;
+		private List<Function<? super I, ? extends Observable<?>>> theElementRefreshers;
 
 		protected MappedCollectionBuilder(ObservableCollection<E> wrapped, MappedCollectionBuilder<E, ?, I> parent, TypeToken<T> type) {
 			theWrapped = wrapped;
@@ -1107,10 +1123,38 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 			return this;
 		}
 
+		public <V> CombinedCollectionBuilder2<E, I, V, T> combine(ObservableValue<T> value) {}
+
 		public MappedCollectionBuilder<E, I, T> withReverse(Function<? super T, ? extends I> reverse, boolean reverseNulls) {
 			theReverse = reverse;
 			areNullsReversed = reverseNulls;
 			return this;
+		}
+
+		public MappedCollectionBuilder<E, I, T> refresh(Observable<?> refresher) {
+			if (theCollectionRefreshers == null)
+				theCollectionRefreshers = new LinkedList<>();
+			theCollectionRefreshers.add(refresher);
+			return this;
+		}
+
+		public MappedCollectionBuilder<E, I, T> refreshEach(Function<? super I, ? extends Observable<?>> refresher) {
+			if (theElementRefreshers == null)
+				theElementRefreshers = new LinkedList<>();
+			theElementRefreshers.add(refresher);
+			return this;
+		}
+
+		public <X> MappedCollectionBuilder<E, T, X> andThen(TypeToken<X> nextType) {
+			if (theMap == null && !theWrapped.getType().equals(theType))
+				throw new IllegalStateException("Type-mapped collection builder with no map defined");
+			return new MappedCollectionBuilder<>(theWrapped, this, nextType);
+		}
+
+		public <V, R> CombinedCollectionBuilder<E, T, R> combineWith(ObservableValue<V> value, TypeToken<R> combinedType) {
+			if (theMap == null && !theWrapped.getType().equals(theType))
+				throw new IllegalStateException("Type-mapped collection builder with no map defined");
+			return new CombinedCollectionBuilder2<>(this, value, combinedType);
 		}
 
 		public FilterMapDef<E, I, T> toDef() {
@@ -1124,12 +1168,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 			if (theMap == null && !theWrapped.getType().equals(theType))
 				throw new IllegalStateException("Building a type-mapped collection with no map defined");
 			return theWrapped.filterMap(toDef());
-		}
-
-		public <X> MappedCollectionBuilder<E, T, X> andThen(TypeToken<X> nextType) {
-			if (theMap == null && !theWrapped.getType().equals(theType))
-				throw new IllegalStateException("Type-mapped collection builder with no map defined");
-			return new MappedCollectionBuilder<>(theWrapped, this, nextType);
 		}
 	}
 
@@ -1329,21 +1367,22 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 * values
 	 *
 	 * @param <E> The type of elements in the source collection
-	 * @param <V> The type of elements in the resulting collection
-	 * @see ObservableCollection#combineWith(ObservableValue, TypeToken)
+	 * @param <I> Intermediate type
+	 * @param <R> The type of elements in the resulting collection
+	 * @see ObservableCollection.MappedCollectionBuilder#combineWith(ObservableValue, TypeToken)
 	 * @see ObservableCollection.CombinedCollectionBuilder3#and(ObservableValue)
 	 */
-	interface CombinedCollectionBuilder<E, V> {
-		<T> CombinedCollectionBuilder<E, V> and(ObservableValue<T> arg);
+	interface CombinedCollectionBuilder<E, I, R> {
+		<T> CombinedCollectionBuilder<E, I, R> and(ObservableValue<T> arg);
 
-		<T> CombinedCollectionBuilder<E, V> and(ObservableValue<T> arg, boolean combineNulls);
+		<T> CombinedCollectionBuilder<E, I, R> and(ObservableValue<T> arg, boolean combineNulls);
 
-		CombinedCollectionBuilder<E, V> withReverse(Function<? super CombinedValues<? extends V>, ? extends E> reverse,
+		CombinedCollectionBuilder<E, I, R> withReverse(Function<? super CombinedValues<? extends R>, ? extends E> reverse,
 			boolean reverseNulls);
 
-		ObservableCollection<V> build(Function<? super CombinedValues<? extends E>, ? extends V> combination);
+		MappedCollectionBuilder<E, I, R> build(Function<? super CombinedValues<? extends E>, ? extends R> combination);
 
-		CombinedCollectionDef<E, V> toDef(Function<? super CombinedValues<? extends E>, ? extends V> combination);
+		CombinedCollectionDef<E, I, R> toDef(Function<? super CombinedValues<? extends E>, ? extends R> combination);
 	}
 
 	/**
@@ -1362,20 +1401,23 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 * Defines a combination of a single source collection with one or more observable values
 	 *
 	 * @param <E> The type of elements in the source collection
-	 * @param <V> The type of elements in the resulting collection
+	 * @param <I> Intermediate type
+	 * @param <R> The type of elements in the resulting collection
 	 */
-	class CombinedCollectionDef<E, V> {
-		public final TypeToken<V> targetType;
+	class CombinedCollectionDef<E, I, R> {
+		public final TypeToken<R> targetType;
+		private final FilterMapDef<E, ?, I> theParent;
 		private final Map<ObservableValue<?>, Boolean> theArgs;
-		private final Function<? super CombinedValues<? extends E>, ? extends V> theCombination;
+		private final Function<? super CombinedValues<? extends E>, ? extends R> theCombination;
 		private final boolean combineCollectionNulls;
-		private final Function<? super CombinedValues<? extends V>, ? extends E> theReverse;
+		private final Function<? super CombinedValues<? extends R>, ? extends E> theReverse;
 		private final boolean reverseNulls;
 
-		public CombinedCollectionDef(TypeToken<V> type, Map<ObservableValue<?>, Boolean> args,
-			Function<? super CombinedValues<? extends E>, ? extends V> combination, boolean combineCollectionNulls,
-			Function<? super CombinedValues<? extends V>, ? extends E> reverse, boolean reverseNulls, boolean copyArgs) {
+		public CombinedCollectionDef(TypeToken<R> type, FilterMapDef<E, ?, I> parent, Map<ObservableValue<?>, Boolean> args,
+			Function<? super CombinedValues<? extends E>, ? extends R> combination, boolean combineCollectionNulls,
+			Function<? super CombinedValues<? extends R>, ? extends E> reverse, boolean reverseNulls, boolean copyArgs) {
 			targetType = type;
+			theParent = parent;
 			if (copyArgs) {
 				Map<ObservableValue<?>, Boolean> copy = new LinkedHashMap<>(args.size() * 2); // Pad for hashing
 				copy.putAll(args);
@@ -1392,7 +1434,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 			return theArgs.keySet();
 		}
 
-		public Function<? super CombinedValues<? extends E>, ? extends V> getCombination() {
+		public Function<? super CombinedValues<? extends E>, ? extends R> getCombination() {
 			return theCombination;
 		}
 
@@ -1402,7 +1444,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 			return shouldCombineArgs(values);
 		}
 
-		public Function<? super CombinedValues<? extends V>, ? extends E> getReverse() {
+		public Function<? super CombinedValues<? extends R>, ? extends E> getReverse() {
 			return theReverse;
 		}
 
@@ -1410,7 +1452,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 			return reverseNulls;
 		}
 
-		public boolean shouldCombineReverse(CombinedValues<? extends V> values) {
+		public boolean shouldCombineReverse(CombinedValues<? extends R> values) {
 			if (!reverseNulls && values.getElement() == null)
 				return false;
 			return shouldCombineArgs(values);
@@ -1430,49 +1472,50 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 * {@link #and(ObservableValue)} to combine with additional values.
 	 *
 	 * @param <E> The type of elements in the source collection
+	 * @param <I> Intermediate type
 	 * @param <T> The type of the combined value
-	 * @param <V> The type of elements in the resulting collection
-	 * @see ObservableCollection#combineWith(ObservableValue, TypeToken)
+	 * @param <R> The type of elements in the resulting collection
+	 * @see ObservableCollection.MappedCollectionBuilder#combineWith(ObservableValue, TypeToken)
 	 */
-	class CombinedCollectionBuilder2<E, T, V> implements CombinedCollectionBuilder<E, V> {
-		private final ObservableCollection<E> theCollection;
-		private final TypeToken<V> theTargetType;
+	class CombinedCollectionBuilder2<E, I, T, R> implements CombinedCollectionBuilder<E, I, R> {
+		private final MappedCollectionBuilder<E, ?, I> theParent;
+		private final TypeToken<R> theTargetType;
 		private final ObservableValue<T> theArg2;
-		private Function<? super CombinedValues<? extends V>, ? extends E> theReverse;
+		private Function<? super CombinedValues<? extends R>, ? extends E> theReverse;
 		private boolean defaultCombineNulls = false;
 		private Ternian combineCollectionNulls = Ternian.NONE;
 		private Ternian combineArg2Nulls = Ternian.NONE;
 		private boolean isReverseNulls = false;
 
-		public CombinedCollectionBuilder2(ObservableCollection<E> collection, ObservableValue<T> arg2, TypeToken<V> targetType) {
-			theCollection = collection;
+		public CombinedCollectionBuilder2(MappedCollectionBuilder<E, ?, I> parent, ObservableValue<T> arg2, TypeToken<R> targetType) {
+			theParent = parent;
 			theArg2 = arg2;
 			theTargetType = targetType;
 		}
 
-		public ObservableCollection<E> getSource() {
-			return theCollection;
+		public MappedCollectionBuilder<E, ?, I> getParent() {
+			return theParent;
 		}
 
 		public ObservableValue<T> getArg2() {
 			return theArg2;
 		}
 
-		public TypeToken<V> getTargetType() {
+		public TypeToken<R> getTargetType() {
 			return theTargetType;
 		}
 
-		public CombinedCollectionBuilder2<E, T, V> combineNulls(boolean combineNulls) {
+		public CombinedCollectionBuilder2<E, I, T, R> combineNulls(boolean combineNulls) {
 			defaultCombineNulls = combineNulls;
 			return this;
 		}
 
-		public CombinedCollectionBuilder2<E, T, V> combineCollectionNulls(boolean combineNulls) {
+		public CombinedCollectionBuilder2<E, I, T, R> combineCollectionNulls(boolean combineNulls) {
 			combineCollectionNulls = Ternian.of(combineNulls);
 			return this;
 		}
 
-		public CombinedCollectionBuilder2<E, T, V> combineNullArg2(boolean combineNulls) {
+		public CombinedCollectionBuilder2<E, I, T, R> combineNullArg2(boolean combineNulls) {
 			combineArg2Nulls = Ternian.of(combineNulls);
 			return this;
 		}
@@ -1487,20 +1530,20 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 			return defaultCombineNulls;
 		}
 
-		public CombinedCollectionBuilder2<E, T, V> withReverse(BiFunction<? super V, ? super T, ? extends E> reverse,
+		public CombinedCollectionBuilder2<E, I, T, R> withReverse(BiFunction<? super R, ? super T, ? extends E> reverse,
 			boolean reverseNulls) {
 			return withReverse(cv -> reverse.apply(cv.getElement(), cv.get(theArg2)), reverseNulls);
 		}
 
 		@Override
-		public CombinedCollectionBuilder2<E, T, V> withReverse(Function<? super CombinedValues<? extends V>, ? extends E> reverse,
+		public CombinedCollectionBuilder2<E, I, T, R> withReverse(Function<? super CombinedValues<? extends R>, ? extends E> reverse,
 			boolean reverseNulls) {
 			theReverse = reverse;
 			this.isReverseNulls = reverseNulls;
 			return this;
 		}
 
-		public Function<? super CombinedValues<? extends V>, ? extends E> getReverse() {
+		public Function<? super CombinedValues<? extends R>, ? extends E> getReverse() {
 			return theReverse;
 		}
 
@@ -1508,24 +1551,19 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 			return isReverseNulls;
 		}
 
-		public ObservableCollection<V> build(BiFunction<? super E, ? super T, ? extends V> combination) {
+		public ObservableCollection<R> build(BiFunction<? super E, ? super T, ? extends R> combination) {
 			return build(cv -> combination.apply(cv.getElement(), cv.get(theArg2)));
 		}
 
 		@Override
-		public ObservableCollection<V> build(Function<? super CombinedValues<? extends E>, ? extends V> combination) {
-			return theCollection.combine(toDef(combination));
-		}
-
-		@Override
-		public <U> CombinedCollectionBuilder3<E, T, U, V> and(ObservableValue<U> arg3) {
+		public <U> CombinedCollectionBuilder3<E, I, T, U, R> and(ObservableValue<U> arg3) {
 			if (theReverse != null)
 				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
 			return new CombinedCollectionBuilder3<>(this, arg3, Ternian.NONE);
 		}
 
 		@Override
-		public <U> CombinedCollectionBuilder3<E, T, U, V> and(ObservableValue<U> arg3, boolean combineNulls) {
+		public <U> CombinedCollectionBuilder3<E, I, T, U, R> and(ObservableValue<U> arg3, boolean combineNulls) {
 			if (theReverse != null)
 				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
 			return new CombinedCollectionBuilder3<>(this, arg3, Ternian.of(combineNulls));
@@ -1543,9 +1581,14 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 		}
 
 		@Override
-		public CombinedCollectionDef<E, V> toDef(Function<? super CombinedValues<? extends E>, ? extends V> combination) {
-			return new CombinedCollectionDef<>(theTargetType, addArgs(new LinkedHashMap<>(2)), combination, areCollectionNullsCombined(),
-				theReverse, areNullsReversed(), false);
+		public CombinedCollectionDef<E, I, R> toDef(Function<? super CombinedValues<? extends E>, ? extends R> combination) {
+			return new CombinedCollectionDef<E, I, R>(theTargetType, theParent, addArgs(new LinkedHashMap<>(2)), combination,
+				areCollectionNullsCombined(), theReverse, areNullsReversed(), false);
+		}
+
+		@Override
+		public MappedCollectionBuilder<ER> build(Function<? super CombinedValues<? extends E>, ? extends R> combination) {
+			return theCollection.combine(toDef(combination));
 		}
 	}
 
@@ -1554,29 +1597,30 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 * {@link #and(ObservableValue)} to combine with additional values.
 	 *
 	 * @param <E> The type of elements in the source collection
+	 * @param <I> Intermediate type
 	 * @param <T> The type of the first combined value
 	 * @param <U> The type of the second combined value
 	 * @param <V> The type of elements in the resulting collection
-	 * @see ObservableCollection#combineWith(ObservableValue, TypeToken)
+	 * @see ObservableCollection.MappedCollectionBuilder#combineWith(ObservableValue, TypeToken)
 	 * @see ObservableCollection.CombinedCollectionBuilder2#and(ObservableValue)
 	 */
-	class CombinedCollectionBuilder3<E, T, U, V> implements CombinedCollectionBuilder<E, V> {
-		private final CombinedCollectionBuilder2<E, T, V> theCombine2;
+	class CombinedCollectionBuilder3<E, I, T, U, V> implements CombinedCollectionBuilder<E, I, V> {
+		private final CombinedCollectionBuilder2<E, I, T, V> theCombine2;
 		private final ObservableValue<U> theArg3;
 		private final Ternian combineArg3Nulls;
 
-		public CombinedCollectionBuilder3(CombinedCollectionBuilder2<E, T, V> combine2, ObservableValue<U> arg3, Ternian combineNulls) {
+		public CombinedCollectionBuilder3(CombinedCollectionBuilder2<E, I, T, V> combine2, ObservableValue<U> arg3, Ternian combineNulls) {
 			theCombine2 = combine2;
 			theArg3 = arg3;
 			combineArg3Nulls = combineNulls;
 		}
 
-		protected CombinedCollectionBuilder2<E, T, V> getCombine2() {
+		protected CombinedCollectionBuilder2<E, I, T, V> getCombine2() {
 			return theCombine2;
 		}
 
-		public ObservableCollection<E> getSource() {
-			return theCombine2.getSource();
+		public MappedCollectionBuilder<E, ?, I> getParent() {
+			return theCombine2.getParent();
 		}
 
 		public TypeToken<V> getTargetType() {
@@ -1591,13 +1635,13 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 			return theCombine2.areCollectionNullsCombined();
 		}
 
-		public CombinedCollectionBuilder3<E, T, U, V> withReverse(TriFunction<? super V, ? super T, ? super U, ? extends E> reverse,
+		public CombinedCollectionBuilder3<E, I, T, U, V> withReverse(TriFunction<? super V, ? super T, ? super U, ? extends E> reverse,
 			boolean reverseNulls) {
 			return withReverse(cv -> reverse.apply(cv.getElement(), cv.get(theCombine2.getArg2()), cv.get(theArg3)), reverseNulls);
 		}
 
 		@Override
-		public CombinedCollectionBuilder3<E, T, U, V> withReverse(Function<? super CombinedValues<? extends V>, ? extends E> reverse,
+		public CombinedCollectionBuilder3<E, I, T, U, V> withReverse(Function<? super CombinedValues<? extends V>, ? extends E> reverse,
 			boolean reverseNulls) {
 			theCombine2.withReverse(reverse, reverseNulls);
 			return this;
@@ -1621,14 +1665,14 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 		}
 
 		@Override
-		public <T2> CombinedCollectionBuilderN<E, V> and(ObservableValue<T2> arg) {
+		public <T2> CombinedCollectionBuilderN<E, I, V> and(ObservableValue<T2> arg) {
 			if (theCombine2.getReverse() != null)
 				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
 			return new CombinedCollectionBuilderN<>(this).and(arg);
 		}
 
 		@Override
-		public <T2> CombinedCollectionBuilder<E, V> and(ObservableValue<T2> arg, boolean combineNulls) {
+		public <T2> CombinedCollectionBuilder<E, I, V> and(ObservableValue<T2> arg, boolean combineNulls) {
 			if (theCombine2.getReverse() != null)
 				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
 			return new CombinedCollectionBuilderN<>(this).and(arg, combineNulls);
@@ -1647,8 +1691,9 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 		}
 
 		@Override
-		public CombinedCollectionDef<E, V> toDef(Function<? super CombinedValues<? extends E>, ? extends V> combination) {
-			return new CombinedCollectionDef<>(getTargetType(), addArgs(new LinkedHashMap<>(2)), combination, areCollectionNullsCombined(),
+		public CombinedCollectionDef<E, I, V> toDef(Function<? super CombinedValues<? extends E>, ? extends V> combination) {
+			return new CombinedCollectionDef<>(getTargetType(), getParent(), addArgs(new LinkedHashMap<>(2)), combination,
+				areCollectionNullsCombined(),
 				getReverse(), areNullsReversed(), false);
 		}
 	}
@@ -1658,20 +1703,21 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 * values. Use {@link #and(ObservableValue)} to combine with additional values.
 	 *
 	 * @param <E> The type of elements in the source collection
+	 * @param <I> Intermediate type
 	 * @param <V> The type of elements in the resulting collection
-	 * @see ObservableCollection#combineWith(ObservableValue, TypeToken)
+	 * @see ObservableCollection.MappedCollectionBuilder#combineWith(ObservableValue, TypeToken)
 	 * @see ObservableCollection.CombinedCollectionBuilder3#and(ObservableValue)
 	 */
-	class CombinedCollectionBuilderN<E, V> implements CombinedCollectionBuilder<E, V> {
-		private final CombinedCollectionBuilder3<E, ?, ?, V> theCombine3;
+	class CombinedCollectionBuilderN<E, I, V> implements CombinedCollectionBuilder<E, I, V> {
+		private final CombinedCollectionBuilder3<E, I, ?, ?, V> theCombine3;
 		private final Map<ObservableValue<?>, Ternian> theOtherArgs;
 
-		public CombinedCollectionBuilderN(CombinedCollectionBuilder3<E, ?, ?, V> combine3) {
+		public CombinedCollectionBuilderN(CombinedCollectionBuilder3<E, I, ?, ?, V> combine3) {
 			theCombine3 = combine3;
 			theOtherArgs = new LinkedHashMap<>();
 		}
 
-		protected CombinedCollectionBuilder3<E, ?, ?, V> getCombine3() {
+		protected CombinedCollectionBuilder3<E, I, ?, ?, V> getCombine3() {
 			return theCombine3;
 		}
 
@@ -1684,7 +1730,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 		}
 
 		@Override
-		public CombinedCollectionBuilder<E, V> withReverse(Function<? super CombinedValues<? extends V>, ? extends E> reverse,
+		public CombinedCollectionBuilder<E, I, V> withReverse(Function<? super CombinedValues<? extends V>, ? extends E> reverse,
 			boolean reverseNulls) {
 			theCombine3.withReverse(reverse, reverseNulls);
 			return this;
@@ -1699,7 +1745,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 		}
 
 		@Override
-		public <T> CombinedCollectionBuilderN<E, V> and(ObservableValue<T> arg) {
+		public <T> CombinedCollectionBuilderN<E, I, V> and(ObservableValue<T> arg) {
 			if (theCombine3.getReverse() != null)
 				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
 			theOtherArgs.put(arg, Ternian.NONE);
@@ -1707,7 +1753,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 		}
 
 		@Override
-		public <T> CombinedCollectionBuilderN<E, V> and(ObservableValue<T> arg, boolean combineNull) {
+		public <T> CombinedCollectionBuilderN<E, I, V> and(ObservableValue<T> arg, boolean combineNull) {
 			if (theCombine3.getReverse() != null)
 				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
 			theOtherArgs.put(arg, Ternian.of(combineNull));
@@ -1730,13 +1776,13 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 
 		@Override
 		public ObservableCollection<V> build(Function<? super CombinedValues<? extends E>, ? extends V> combination) {
-			return theCombine3.getSource().combine(toDef(combination));
+			return theCombine3.getParent().combine(toDef(combination));
 		}
 
 		@Override
-		public CombinedCollectionDef<E, V> toDef(Function<? super CombinedValues<? extends E>, ? extends V> combination) {
-			return new CombinedCollectionDef<>(getTargetType(), addArgs(new LinkedHashMap<>(2)), combination, areCollectionNullsCombined(),
-				getReverse(), areNullsReversed(), false);
+		public CombinedCollectionDef<E, I, V> toDef(Function<? super CombinedValues<? extends E>, ? extends V> combination) {
+			return new CombinedCollectionDef<>(getTargetType(), theCombine3.getParent(), addArgs(new LinkedHashMap<>(2)), combination,
+				areCollectionNullsCombined(), getReverse(), areNullsReversed(), false);
 		}
 	}
 
