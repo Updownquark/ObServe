@@ -349,34 +349,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 
 	/** @return An observable value for the size of this collection */
 	default ObservableValue<Integer> observeSize() {
-		return new ObservableCollectionImpl.ReducedValue<E, Integer, Integer>(this, TypeToken.of(Integer.TYPE)) {
-			@Override
-			public Integer get() {
-				return size();
-			}
-
-			@Override
-			protected Integer init() {
-				return 0;
-			}
-
-			@Override
-			protected Integer update(Integer oldValue, ObservableCollectionEvent<? extends E> change) {
-				if (change.getType() != CollectionChangeType.set)
-					oldValue = oldValue + change.getDiff();
-				return oldValue;
-			}
-
-			@Override
-			protected Integer getValue(Integer updated) {
-				return updated;
-			}
-
-			@Override
-			public String toString() {
-				return ObservableCollection.this + ".size()";
-			}
-		};
+		return reduce(TypeToken.of(Integer.TYPE), 0, (s, v) -> s + 1, (s, v) -> s - 1);
 	}
 
 	/**
