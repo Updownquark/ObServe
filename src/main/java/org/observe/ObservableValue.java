@@ -559,11 +559,9 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 										return;
 									T oldValue = theValue;
 									theValue = combine(composedValues);
-									if (theValue != oldValue) {
-										ObservableValueEvent<T> toFire = ComposedObservableValue.this.createChangeEvent(oldValue, theValue,
-											event);
-										fireNext(toFire);
-									}
+									ObservableValueEvent<T> toFire = ComposedObservableValue.this.createChangeEvent(oldValue, theValue,
+										event);
+									fireNext(toFire);
 								}
 
 								private boolean isInitialized() {
