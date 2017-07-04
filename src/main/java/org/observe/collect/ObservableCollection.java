@@ -25,6 +25,7 @@ import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.collect.ObservableCollection.AbstractCombinedCollectionBuilder;
+import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.CombinedValues;
 import org.observe.collect.ObservableCollection.StdMsg;
 import org.qommons.AbstractCausable;
@@ -435,18 +436,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 		return new ObservableCollectionImpl.ContainsAnyValue<>(this, collection);
 	}
 
-	/**
-	 * @param otherEquiv The equivalence to use
-	 * @return A collection that reflects this collection's contents, but uses the given equivalence for comparisons
-	 */
-	default ObservableCollection<E> withEquivalence(Equivalence<? super E> otherEquiv) {
-		if (equivalence().equals(otherEquiv))
-			return this;
-		return new ObservableCollectionImpl.EquivalenceSwitchedCollection<>(this, otherEquiv);
-	}
-
-	// Filter/mapping
-
 	/** @return A builder that facilitates filtering, mapping, and other operations against this collection */
 	default <T> CollectionDataFlow<E, E, E> flow() {
 		return new DefaultCollectionDataFlow<>(this);
@@ -691,40 +680,9 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 		return new ObservableIndexedCollectionImpl.IndexifiedCollection<>(this);
 	}
 
-	/**
-	 * Allows control over whether and how the collection may be modified
-	 *
-	 * @return A builder that can return a derived collection that can only be modified in certain ways
-	 */
-	default ModFilterBuilder<E> filterModification() {
-		return new ModFilterBuilder<>(this);
-	}
-
-	/**
-	 * @param filter The modification filter definition
-	 * @return A collection with the same contents as this collection, but may only be modified as defined by the filter
-	 */
-	default ObservableCollection<E> filterModification(ModFilterDef<E> filter) {
-		return new ObservableCollectionImpl.ModFilteredCollection<>(this, filter);
-	}
-
-	/**
-	 * @param until The observable to end the collection on
-	 * @return A collection that mirrors this collection's values until the given observable fires a value, upon which the returned
-	 *         collection's elements will be removed and collection subscriptions unsubscribed
-	 */
-	default ObservableCollection<E> takeUntil(Observable<?> until) {
-		return new ObservableCollectionImpl.TakenUntilObservableCollection<>(this, until, true);
-	}
-
-	/**
-	 * @param until The observable to unsubscribe the collection on
-	 * @return A collection that mirrors this collection's values until the given observable fires a value, upon which the returned
-	 *         collection's subscriptions will be removed. Unlike {@link #takeUntil(Observable)} however, the returned collection's elements
-	 *         will not be removed when the observable fires.
-	 */
-	default ObservableCollection<E> unsubscribeOn(Observable<?> until) {
-		return new ObservableCollectionImpl.TakenUntilObservableCollection<>(this, until, false);
+	/** @return A builder that allows creation of a view backed by this collection's data but with different capabilities */
+	default ViewBuilder<E> view() {
+		return new ViewBuilder<>(this);
 	}
 
 	/**
@@ -743,17 +701,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 */
 	public static <E> ObservableCollection<E> constant(TypeToken<E> type, E... values) {
 		return constant(type, java.util.Arrays.asList(values));
-	}
-
-	/**
-	 * Turns a collection of observable values into a collection composed of those holders' values
-	 *
-	 * @param <T> The type of elements held in the values
-	 * @param collection The collection to flatten
-	 * @return The flattened collection
-	 */
-	public static <T> ObservableCollection<T> flattenValues(ObservableCollection<? extends ObservableValue<? extends T>> collection) {
-		return new ObservableCollectionImpl.FlattenedValuesCollection<>(collection);
 	}
 
 	/**
@@ -1044,7 +991,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 		// Build method
 
 		public ObservableCollection<T> build() {
-			return new ObservableCollectionImpl.DerivedObservableCollection<>(theCollection, this);
+			return new ObservableCollectionImpl.DerivedCollection<>(theCollection, manageCollection());
 		}
 	}
 
@@ -1055,7 +1002,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 
 		@Override
 		public CollectionManager<E, E> manageCollection() {
-			return new ObservableCollectionImpl.DefaultCollectionManager<>();
+			return new ObservableCollectionImpl.DefaultCollectionManager<>(getCollection().getType(), getCollection().isLockSupported());
 		}
 
 		@Override
@@ -1181,179 +1128,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	}
 
 	/**
-	 * A definition for a filter/mapped collection
-	 *
-	 * @param <E> The type of values in the source collection
-	 * @param <I> Intermediate type, not exposed
-	 * @param <T> The type of values for the mapped collection
-	 */
-	class FilterMapDef<E, I, T> {
-		public final TypeToken<E> sourceType;
-		private final TypeToken<I> intermediateType;
-		public final TypeToken<T> destType;
-		private final FilterMapDef<E, ?, I> parent;
-		private final Function<? super I, String> filter;
-		private final boolean filterNulls;
-		private final Function<? super I, ? extends T> map;
-		private final boolean mapNulls;
-		private final Function<? super T, ? extends I> reverse;
-		private final boolean reverseNulls;
-
-		public FilterMapDef(TypeToken<E> sourceType, TypeToken<I> intermediateType, TypeToken<T> type, FilterMapDef<E, ?, I> parent,
-			Function<? super I, String> filter, boolean filterNulls, Function<? super I, ? extends T> map, boolean mapNulls,
-			Function<? super T, ? extends I> reverse, boolean reverseNulls) {
-			this.sourceType = sourceType;
-			this.intermediateType = intermediateType;
-			this.destType = type;
-			this.parent = parent;
-			this.filter = filter;
-			this.filterNulls = filterNulls;
-			this.map = map;
-			this.mapNulls = mapNulls;
-			this.reverse = reverse;
-			this.reverseNulls = reverseNulls;
-
-			if (parent == null && !sourceType.equals(intermediateType))
-				throw new IllegalArgumentException("A " + getClass().getName()
-					+ " with no parent must have identical source and intermediate types: " + sourceType + ", " + intermediateType);
-		}
-
-		public boolean checkSourceType(Object value) {
-			return value == null || sourceType.getRawType().isInstance(value);
-		}
-
-		private boolean checkIntermediateType(I value) {
-			return value == null || intermediateType.getRawType().isInstance(value);
-		}
-
-		public boolean checkDestType(Object value) {
-			return value == null || destType.getRawType().isInstance(value);
-		}
-
-		public FilterMapResult<E, ?> checkSourceValue(FilterMapResult<E, ?> result) {
-			return internalCheckSourceValue((FilterMapResult<E, I>) result);
-		}
-
-		private FilterMapResult<E, I> internalCheckSourceValue(FilterMapResult<E, I> result) {
-			result.error = null;
-
-			// Get the starting point for this def
-			I interm;
-			if (parent != null) {
-				interm = parent.map(result).result;
-				result.result = null;
-				if (result.error != null)
-					return result;
-				if (!checkIntermediateType(interm))
-					throw new IllegalStateException(
-						"Implementation error: intermediate value " + interm + " is not an instance of " + intermediateType);
-			} else {
-				interm = (I) result.source;
-				if (!checkIntermediateType(interm))
-					throw new IllegalStateException("Source value " + interm + " is not an instance of " + intermediateType);
-			}
-			if (result.error != null) {
-				return result;
-			}
-
-			// Filter
-			if (filter != null) {
-				if (!filterNulls && interm == null)
-					result.error = StdMsg.NULL_DISALLOWED;
-				else
-					result.error = filter.apply(interm);
-			}
-
-			return result;
-		}
-
-		public boolean isFiltered() {
-			FilterMapDef<?, ?, ?> def = this;
-			while (def != null) {
-				if (def.filter != null)
-					return true;
-				def = def.parent;
-			}
-			return false;
-		}
-
-		public boolean isMapped() {
-			FilterMapDef<?, ?, ?> def = this;
-			while (def != null) {
-				if (def.map != null)
-					return true;
-				def = def.parent;
-			}
-			return false;
-		}
-
-		public boolean isReversible() {
-			FilterMapDef<?, ?, ?> def = this;
-			while (def != null) {
-				if (def.map != null && def.reverse == null)
-					return false;
-				def = def.parent;
-			}
-			return true;
-		}
-
-		public FilterMapResult<E, T> map(FilterMapResult<E, T> result) {
-			internalCheckSourceValue((FilterMapResult<E, I>) result);
-			I interm = ((FilterMapResult<E, I>) result).result;
-
-			// Map
-			if (map == null)
-				result.result = (T) interm;
-			else if (interm == null && !mapNulls)
-				result.result = null;
-			else
-				result.result = map.apply(interm);
-
-			if (result.result != null && !destType.getRawType().isInstance(result.result))
-				throw new IllegalStateException("Result value " + result.result + " is not an instance of " + destType);
-
-			return result;
-		}
-
-		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> result) {
-			if (!isReversible())
-				throw new IllegalStateException("This filter map is not reversible");
-
-			result.error = null;
-
-			if (!checkDestType(result.source))
-				throw new IllegalStateException("Value to reverse " + result.source + " is not an instance of " + destType);
-			// reverse map
-			I interm;
-			if (map == null)
-				interm = (I) result.source;
-			else if (result.source != null || reverseNulls)
-				interm = reverse.apply(result.source);
-			else
-				interm = null;
-			if (!checkIntermediateType(interm))
-				throw new IllegalStateException("Reversed value " + interm + " is not an instance of " + intermediateType);
-
-			// Filter
-			if (filter != null) {
-				if (!filterNulls && interm == null)
-					result.error = StdMsg.NULL_DISALLOWED;
-				else
-					result.error = filter.apply(interm);
-			}
-			if (result.error != null)
-				return result;
-
-			if (parent != null) {
-				((FilterMapResult<I, E>) result).source = interm;
-				parent.reverse((FilterMapResult<I, E>) result);
-			} else
-				result.result = (E) interm;
-			return result;
-		}
-	}
-
-	/**
 	 * A structure that may be used to define a collection whose elements are those of a single source collection combined with one or more
 	 * values
 	 *
@@ -1371,7 +1145,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 		CombinedCollectionBuilder<E, I, R> withReverse(Function<? super CombinedValues<? extends R>, ? extends I> reverse,
 			boolean reverseNulls);
 
-		CollectionDataFlow<E, I, R> build(Function<? super CombinedValues<? extends I>, ? extends R> combination);
+		default CollectionDataFlow<E, I, R> build(Function<? super CombinedValues<? extends I>, ? extends R> combination) {
+			return build(combination, false);
+		}
+
+		CollectionDataFlow<E, I, R> build(Function<? super CombinedValues<? extends I>, ? extends R> combination, boolean combineNulls);
 	}
 
 	/**
@@ -1396,23 +1174,26 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	class CombinedCollectionDef<E, I, T> extends CollectionDataFlow<E, I, T> {
 		private final Map<ObservableValue<?>, Boolean> theArgs;
 		private final Function<? super CombinedValues<? extends I>, ? extends T> theCombination;
+		private final boolean combineNulls;
 		private final Function<? super CombinedValues<? extends T>, ? extends I> theReverse;
 		private final boolean reverseNulls;
 
 		protected CombinedCollectionDef(ObservableCollection<E> collection, DerivedCollectionDef<E, ?, I> parent, TypeToken<T> target,
 			Map<ObservableValue<?>, Boolean> args, Function<? super CombinedValues<? extends I>, ? extends T> combination,
+			boolean combineNulls,
 			Function<? super CombinedValues<? extends T>, ? extends I> reverse, boolean reverseNulls) {
 			super(collection, parent, target);
 			theArgs = Collections.unmodifiableMap(args);
 			theCombination = combination;
-			this.reverseNulls = reverseNulls;
+			this.combineNulls = combineNulls;
 			theReverse = reverse;
+			this.reverseNulls = reverseNulls;
 		}
 
 		@Override
 		public CollectionManager<E, T> manageCollection() {
 			return new ObservableCollectionImpl.CombinedCollectionManager<>(getParent().manageCollection(), getTargetType(), theArgs,
-				theCombination, theReverse, reverseNulls);
+				theCombination, combineNulls, theReverse, reverseNulls);
 		}
 	}
 
@@ -1481,9 +1262,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 		}
 
 		@Override
-		public CollectionDataFlow<E, I, R> build(Function<? super CombinedValues<? extends I>, ? extends R> combination) {
-			return new CombinedCollectionDef<>(theCollection, theParent, theTargetType, getResultArgs(), combination, theReverse,
-				isReverseNulls);
+		public CollectionDataFlow<E, I, R> build(Function<? super CombinedValues<? extends I>, ? extends R> combination,
+			boolean combineNulls) {
+			return new CombinedCollectionDef<>(theCollection, theParent, theTargetType, getResultArgs(), combination, combineNulls,
+				theReverse, isReverseNulls);
 		}
 
 		private Map<ObservableValue<?>, Boolean> getResultArgs() {
@@ -1662,67 +1444,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 		}
 	}
 
-	/**
-	 * Builds a modification filter that may prevent certain kinds of modification to the collection
-	 *
-	 * @param <E> The type of elements in the collection
-	 */
-	class ModFilterBuilder<E> {
-		private final ObservableCollection<E> theCollection;
-		private String theImmutableMsg;
-		private String theAddMsg;
-		private String theRemoveMsg;
-		private Function<? super E, String> theAddMsgFn;
-		private Function<? super E, String> theRemoveMsgFn;
-
-		public ModFilterBuilder(ObservableCollection<E> collection) {
-			theCollection = collection;
-		}
-
-		protected ObservableCollection<E> getSource() {
-			return theCollection;
-		}
-
-		public ModFilterBuilder<E> immutable(String modMsg) {
-			theImmutableMsg = modMsg;
-			return this;
-		}
-
-		public ModFilterBuilder<E> noAdd(String modMsg) {
-			theAddMsg = modMsg;
-			return this;
-		}
-
-		public ModFilterBuilder<E> noRemove(String modMsg) {
-			theRemoveMsg = modMsg;
-			return this;
-		}
-
-		public ModFilterBuilder<E> filterAdd(Function<? super E, String> messageFn) {
-			theAddMsgFn = messageFn;
-			return this;
-		}
-
-		public ModFilterBuilder<E> filterRemove(Function<? super E, String> messageFn) {
-			theRemoveMsgFn = messageFn;
-			return this;
-		}
-
-		public ModFilterDef<E> toDef() {
-			return new ModFilterDef<>(theCollection.getType(), theImmutableMsg, theAddMsg, theRemoveMsg, theAddMsgFn, theRemoveMsgFn);
-		}
-
-		public ObservableCollection<E> build() {
-			return theCollection.filterModification(toDef());
-		}
-	}
-
-	/**
-	 * The definition of a modification-filtered collection (minus the source)
-	 *
-	 * @param <E> The type of elements in the collection
-	 */
-	class ModFilterDef<E> {
+	class ViewDef<E> {
 		private final TypeToken<E> theType;
 		private final String theImmutableMsg;
 		private final String theAddMsg;
@@ -1730,14 +1452,24 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 		private final Function<? super E, String> theAddMsgFn;
 		private final Function<? super E, String> theRemoveMsgFn;
 
-		public ModFilterDef(TypeToken<E> type, String immutableMsg, String addMsg, String removeMsg, Function<? super E, String> addMsgFn,
-			Function<? super E, String> removeMsgFn) {
+		private final Equivalence<? super E> theEquivalence;
+
+		private final Observable<?> theUntil;
+		private final boolean untilRemoves;
+
+		public ViewDef(TypeToken<E> type, String immutableMsg, String addMsg, String removeMsg, Function<? super E, String> addMsgFn,
+			Function<? super E, String> removeMsgFn, Equivalence<? super E> equivalence, Observable<?> until, boolean untilRemoves) {
 			theType = type;
 			theImmutableMsg = immutableMsg;
 			theAddMsg = addMsg;
 			theRemoveMsg = removeMsg;
 			theAddMsgFn = addMsgFn;
 			theRemoveMsgFn = removeMsgFn;
+
+			theEquivalence = equivalence;
+
+			theUntil = until;
+			this.untilRemoves = untilRemoves;
 		}
 
 		public boolean isAddFiltered() {
@@ -1797,6 +1529,94 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 			if (theImmutableMsg != null)
 				throw new UnsupportedOperationException(theImmutableMsg);
 			return value;
+		}
+
+		public Equivalence<? super E> getEquivalence() {
+			return theEquivalence;
+		}
+
+		public Observable<?> getUntil() {
+			return theUntil;
+		}
+
+		public boolean isUntilRemoves() {
+			return untilRemoves;
+		}
+	}
+
+	class ViewBuilder<E> {
+		private final ObservableCollection<E> theCollection;
+		private String theImmutableMsg;
+		private String theAddMsg;
+		private String theRemoveMsg;
+		private Function<? super E, String> theAddMsgFn;
+		private Function<? super E, String> theRemoveMsgFn;
+
+		private Equivalence<? super E> theEquivalence;
+
+		private Observable<?> theUntil;
+		private boolean untilRemoves;
+
+		public ViewBuilder(ObservableCollection<E> collection) {
+			theCollection = collection;
+		}
+
+		protected ObservableCollection<E> getSource() {
+			return theCollection;
+		}
+
+		public ViewBuilder<E> immutable(String modMsg) {
+			theImmutableMsg = modMsg;
+			return this;
+		}
+
+		public ViewBuilder<E> noAdd(String modMsg) {
+			theAddMsg = modMsg;
+			return this;
+		}
+
+		public ViewBuilder<E> noRemove(String modMsg) {
+			theRemoveMsg = modMsg;
+			return this;
+		}
+
+		public ViewBuilder<E> filterAdd(Function<? super E, String> messageFn) {
+			theAddMsgFn = messageFn;
+			return this;
+		}
+
+		public ViewBuilder<E> filterRemove(Function<? super E, String> messageFn) {
+			theRemoveMsgFn = messageFn;
+			return this;
+		}
+
+		public ViewBuilder<E> withEquivalence(Equivalence<? super E> equivalence) {
+			theEquivalence = equivalence;
+			return this;
+		}
+
+		public ViewBuilder<E> takeUntil(Observable<?> until) {
+			if (theUntil != null)
+				throw new IllegalStateException("takeUntil already called");
+			theUntil = until;
+			return this;
+		}
+
+		public ViewBuilder<E> unsubscribeOn(Observable<?> until) {
+			if (theUntil != null)
+				throw new IllegalStateException("takeUntil already called");
+			theUntil = until;
+			untilRemoves = true;
+			return this;
+		}
+
+		public ViewDef<E> toDef() {
+			return new ViewDef<>(theCollection.getType(), theImmutableMsg, theAddMsg, theRemoveMsg, theAddMsgFn, theRemoveMsgFn,
+				theEquivalence, theUntil, untilRemoves);
+		}
+
+		public ObservableCollection<E> build() {
+			return new ObservableCollectionImpl.CollectionView<>(theCollection, toDef());
 		}
 	}
 
