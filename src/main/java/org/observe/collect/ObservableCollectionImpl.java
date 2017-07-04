@@ -29,7 +29,6 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
-import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
@@ -46,13 +45,10 @@ import org.observe.collect.ObservableCollectionImpl.CombinedObservableCollection
 import org.qommons.BiTuple;
 import org.qommons.Causable;
 import org.qommons.LinkedQueue;
-import org.qommons.Ternian;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
-import org.qommons.collect.BetterCollection;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementSpliterator;
-import org.qommons.collect.TreeList;
 import org.qommons.tree.CountedRedBlackNode.DefaultNode;
 import org.qommons.tree.CountedRedBlackNode.DefaultTreeMap;
 import org.qommons.tree.CountedRedBlackNode.DefaultTreeSet;
@@ -1043,7 +1039,8 @@ public final class ObservableCollectionImpl {
 						}
 					}
 				});
-				WeakCollectionAction.subscribeWeakly(theSource, theSourceAction);
+				WeakConsumer<ObservableCollectionEvent<? extends E>> weak = new WeakConsumer<>(theSourceAction);
+				weak.withSubscription(theSource.subscribe(weak));
 			}
 		}
 
@@ -1555,10 +1552,24 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
+	public static class AbstractCollectionUpdate<E, I, T> {
+		private final AbstractCollectionManager<E, I, T> theCollection;
+
+		public AbstractCollectionUpdate(AbstractCollectionManager<E, I, T> collection) {
+			theCollection = collection;
+		}
+
+		public AbstractCollectionManager<E, I, T> getCollection() {
+			return theCollection;
+		}
+	}
+
 	public static abstract class AbstractCollectionElementManager<E, I, T> implements CollectionElementManager<E, T> {
+		private final AbstractCollectionManager<E, I, T> theCollection;
 		private final CollectionElementManager<E, I> theParent;
 
-		protected AbstractCollectionElementManager(CollectionElementManager<E, I> parent) {
+		protected AbstractCollectionElementManager(AbstractCollectionManager<E, I, T> collection, CollectionElementManager<E, I> parent) {
+			theCollection = collection;
 			theParent = parent;
 		}
 
@@ -1576,10 +1587,36 @@ public final class ObservableCollectionImpl {
 			// Most elements don't filter
 			return true;
 		}
+
+		@Override
+		public void set(E value) {
+			getParent().set(value);
+			refresh(getParent().get());
+		}
+
+		@Override
+		public boolean update(CollectionUpdate update) {
+			if (update instanceof AbstractCollectionUpdate
+				&& ((AbstractCollectionUpdate<?, ?, ?>) update).getCollection() == theCollection) {
+				refresh(getParent().get());
+				return true;
+			} else if (getParent() != null && getParent().update(update)) {
+				refresh(getParent().get());
+				return true;
+			} else
+				return false;
+		}
+
+		protected abstract void refresh(I source);
 	}
 
 	public static class CombinedCollectionManager<E, I, T> extends AbstractCollectionManager<E, I, T> {
-		private final Map<ObservableValue<?>, Boolean> theArgs;
+		private static class ArgHolder {
+			final Observable<?> arg;
+			final boolean combineNull;
+			final Consumer<ObservableValueEvent<?>> action;
+		}
+		private final Map<ObservableValue<?>, ArgHolder> theArgs;
 		private final Function<? super CombinedValues<? extends I>, ? extends T> theCombination;
 		private final boolean combineNulls;
 		private final Function<? super CombinedValues<? extends T>, ? extends I> theReverse;
@@ -1593,7 +1630,10 @@ public final class ObservableCollectionImpl {
 			Function<? super CombinedValues<? extends I>, ? extends T> combination, boolean combineNulls,
 			Function<? super CombinedValues<? extends T>, ? extends I> reverse, boolean reverseNulls) {
 			super(parent, targetType);
-			theArgs = args;
+			theArgs = new HashMap<>();
+			for(Map.Entry<ObservableValue<?>, Boolean> arg : args.entrySet()){
+				theArgs.put(arg, new ArgHolder)
+			}
 			theCombination = combination;
 			this.combineNulls = combineNulls;
 			theReverse = reverse;
@@ -1672,29 +1712,50 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public CollectionElementManager<E, T> createElement(E init) {
-			return new AbstractCollectionElementManager<E, I, T>(getParent() == null ? null : getParent().createElement(init)) {
+			class CombinedCollectionElement extends AbstractCollectionElementManager<E, I, T> implements CombinedValues<I> {
+				private T theValue;
+				private I theSource;
+
+				protected CombinedCollectionElement() {
+					super(CombinedCollectionManager.this, CombinedCollectionManager.this.getParent().createElement(init));
+				}
+
 				@Override
 				public T get() {
-					// TODO Auto-generated method stub
+					return theValue;
 				}
 
 				@Override
-				public void set(E value) {
-					// TODO Auto-generated method stub
-
+				protected void refresh(I source) {
+					if (!isCombining || (source == null && !combineNulls))
+						theValue = null;
+					else {
+						theSource = source;
+						theValue = theCombination.apply(this);
+						theSource = null;
+					}
 				}
 
 				@Override
-				public boolean update(CollectionUpdate update) {
-					// TODO Auto-generated method stub
+				public I getElement() {
+					return theSource;
 				}
-			};
+
+				@Override
+				public <V> V get(ObservableValue<V> arg) {
+					V value = (V) theArgValues.get(arg);
+					if (value == null && !theArgs.containsKey(arg))
+						throw new IllegalArgumentException("Unrecognized value: " + arg);
+					return value;
+				}
+			}
+			return new CombinedCollectionElement();
 		}
 
 		@Override
-		public Transaction begin(Consumer<CollectionUpdate> onUpdate) {
+		public void begin(Consumer<CollectionUpdate> onUpdate) {
+
 			// TODO Auto-generated method stub
-			return null;
 		}
 	}
 
@@ -3593,576 +3654,6 @@ public final class ObservableCollectionImpl {
 		@Override
 		public String toString() {
 			return theWrapped.toString();
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableCollection#cached(Observable)}
-	 *
-	 * @param <E> The type of elements in the collection
-	 */
-	public static class CachedObservableCollection<E> implements ObservableCollection<E> {
-		private final ObservableCollection<E> theWrapped;
-		private final Observable<?> theUntil;
-		private final NavigableMap<ElementId, E> theCacheMap;
-		private final SimpleObservable<ObservableCollectionEvent<? extends E>> theChanges;
-		private final BetterCollection<E> theCache;
-		private final AtomicBoolean isDone;
-
-		/**
-		 * @param wrapped The collection whose values to reflect
-		 * @param until The observable to listen to to cease caching
-		 */
-		protected CachedObservableCollection(ObservableCollection<E> wrapped, Observable<?> until) {
-			theWrapped = wrapped;
-			theUntil = until;
-			theChanges = new SimpleObservable<>();
-			theCacheMap = createCacheMap();
-			theCache = createCache();
-			isDone = new AtomicBoolean();
-			beginCache();
-		}
-
-		/** @return The collection whose values this collection reflects */
-		protected ObservableCollection<E> getWrapped() {
-			return theWrapped;
-		}
-
-		/** @return The observable that, when it fires, will cause this collection to cease caching */
-		protected Observable<?> getUntil() {
-			return theUntil;
-		}
-
-		/** @return Whether this cache's {@link #getUntil() finisher} has fired */
-		protected boolean isDone() {
-			return isDone.get();
-		}
-
-		/**
-		 * Creates the collection to be the cache for this collection. The cache must use the same {@link #equivalence() equivalence} as the
-		 * wrapped collection. It need not be thread-safe.
-		 *
-		 * The default implementation of this method returns a List. This may be unnecessary in general, but it may be useful for many
-		 * specific implementations.
-		 *
-		 * @return The cache collection for this cache to use
-		 */
-		protected BetterCollection<E> createCache() {
-			return new TreeList<E>() {
-				@Override
-				public boolean contains(Object o) {
-					return find(v -> equivalence().elementEquals(v, o), el -> {
-					});
-				}
-
-				@Override
-				public int indexOf(Object o) {
-					DefaultNode<E> node = findNode(n -> equivalence().elementEquals(n.getValue(), o), Ternian.TRUE);
-					return node == null ? -1 : node.getIndex();
-				}
-
-				@Override
-				public int lastIndexOf(Object o) {
-					DefaultNode<E> node = findNode(n -> equivalence().elementEquals(n.getValue(), o), Ternian.FALSE);
-					return node == null ? -1 : node.getIndex();
-				}
-			};
-		}
-
-		/** @return The map of values by element ID for this cache */
-		protected NavigableMap<ElementId, E> createCacheMap() {
-			return new TreeMap<>();
-		}
-
-		/** @return This cache's collection */
-		protected BetterCollection<E> getCache() {
-			return theCache;
-		}
-
-		/** @return The map of values by element ID for this cache */
-		protected Map<ElementId, E> getCacheMap() {
-			return theCacheMap;
-		}
-
-		/** @return The observable firing changes to this collection's content */
-		protected Observable<? extends ObservableCollectionEvent<? extends E>> getChanges() {
-			return theChanges;
-		}
-
-		/** Subscribes to the wrapped collection to update the cache until the observable fires */
-		protected void beginCache() {
-			CollectionSubscription collSub = theWrapped.subscribe(evt -> {
-				switch (evt.getType()) {
-				case add:
-				case set:
-					theCacheMap.put(evt.getElementId(), evt.getNewValue());
-					break;
-				case remove:
-					theCacheMap.remove(evt.getElementId());
-					break;
-				}
-				updateCache(evt);
-				ObservableCollectionEvent.doWith(wrapEvent(evt), theChanges::onNext);
-			});
-			theUntil.take(1).act(u -> {
-				collSub.unsubscribe(true);
-				isDone.set(true);
-			});
-		}
-
-		/**
-		 * Updates the cache collection for the change
-		 *
-		 * @param change The change event from the source
-		 */
-		protected void updateCache(ObservableCollectionEvent<? extends E> change) {
-			switch (change.getType()) {
-			case add:
-				getCache().add(change.getNewValue());
-				break;
-			case remove:
-				getCache().remove(change.getOldValue());
-				break;
-			case set:
-				getCache().find(v -> equivalence().elementEquals(v, change.getOldValue()),
-					el -> ((CollectionElement<E>) el).set(change.getNewValue(), change));
-				break;
-			}
-		}
-
-		/**
-		 * @param change The change from the source collection
-		 * @return The change to fire to this cache collection's listeners
-		 */
-		protected ObservableCollectionEvent<? extends E> wrapEvent(ObservableCollectionEvent<? extends E> change) {
-			return new ObservableCollectionEvent<>(change.getElementId(), change.getType(), change.getOldValue(), change.getNewValue(),
-				change);
-		}
-
-		/**
-		 * @param value The value in the cache
-		 * @param elementId The element ID for the value
-		 * @return The event to fire to the listener that has just been added
-		 */
-		protected ObservableCollectionEvent<? extends E> initialEvent(E value, ElementId elementId) {
-			return new ObservableCollectionEvent<>(elementId, CollectionChangeType.add, null, value, null);
-		}
-
-		/**
-		 * @param value The value in the cache
-		 * @param elementId The element ID for the value
-		 * @return The event to fire to the listener that has just been removed (with the {@link CollectionSubscription#unsubscribe(boolean)
-		 *         removeAll} option)
-		 */
-		protected ObservableCollectionEvent<? extends E> removeEvent(E value, ElementId elementId) {
-			return new ObservableCollectionEvent<>(elementId, CollectionChangeType.remove, value, value, null);
-		}
-
-		@Override
-		public TypeToken<E> getType() {
-			return theWrapped.getType();
-		}
-
-		@Override
-		public boolean isLockSupported() {
-			if (isDone.get())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			return theWrapped.isLockSupported();
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			if (isDone.get())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			return theWrapped.lock(write, cause);
-		}
-
-		@Override
-		public Equivalence<? super E> equivalence() {
-			return theWrapped.equivalence();
-		}
-
-		@Override
-		public int size() {
-			if (isDone.get())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			return theCache.size();
-		}
-
-		@Override
-		public boolean isEmpty() {
-			if (isDone.get())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			return theCache.isEmpty();
-		}
-
-		@Override
-		public MutableObservableSpliterator<E> mutableSpliterator() {
-			if (isDone.get())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			class MutableCachedSpliterator implements MutableObservableSpliterator<E> {
-				private final MutableObservableSpliterator<E> theWrappedSpliter;
-				private final MutableObservableElement<E> theElement;
-				private MutableObservableElement<E> theCurrentElement;
-				private ElementId theCurrentId;
-				private E theCurrentValue;
-
-				MutableCachedSpliterator(MutableObservableSpliterator<E> wrap) {
-					theWrappedSpliter = wrap;
-					theElement = new MutableObservableElement<E>() {
-						@Override
-						public ElementId getElementId() {
-							return theCurrentId;
-						}
-
-						@Override
-						public TypeToken<E> getType() {
-							return theCurrentElement.getType();
-						}
-
-						@Override
-						public E get() {
-							return theCurrentValue;
-						}
-
-						@Override
-						public String canRemove() {
-							return theCurrentElement.canRemove();
-						}
-
-						@Override
-						public void remove() throws UnsupportedOperationException {
-							theCurrentElement.remove();
-						}
-
-						@Override
-						public <V extends E> E set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
-							return theCurrentElement.set(value, cause);
-						}
-
-						@Override
-						public <V extends E> String isAcceptable(V value) {
-							return theCurrentElement.isAcceptable(value);
-						}
-
-						@Override
-						public Value<String> isEnabled() {
-							return theCurrentElement.isEnabled();
-						}
-					};
-				}
-
-				@Override
-				public TypeToken<E> getType() {
-					return theWrappedSpliter.getType();
-				}
-
-				@Override
-				public long estimateSize() {
-					return theWrappedSpliter.estimateSize();
-				}
-
-				@Override
-				public long getExactSizeIfKnown() {
-					return theWrappedSpliter.getExactSizeIfKnown();
-				}
-
-				@Override
-				public int characteristics() {
-					return theWrappedSpliter.characteristics();
-				}
-
-				@Override
-				public Comparator<? super E> getComparator() {
-					return theWrappedSpliter.getComparator();
-				}
-
-				@Override
-				public MutableObservableSpliterator<E> trySplit() {
-					MutableObservableSpliterator<E> split = theWrappedSpliter.trySplit();
-					return split == null ? null : new MutableCachedSpliterator(split);
-				}
-
-				@Override
-				public boolean tryAdvanceMutableElement(Consumer<? super MutableObservableElement<E>> action) {
-					return theWrappedSpliter.tryAdvanceMutableElement(el -> {
-						theCurrentElement = el;
-						theCurrentId = el.getElementId();
-						theCurrentValue = theCacheMap.get(theCurrentId);
-						action.accept(theElement);
-					});
-				}
-
-				@Override
-				public void forEachMutableElement(Consumer<? super MutableObservableElement<E>> action) {
-					try (Transaction t = lock(true, null)) {
-						MutableObservableSpliterator.super.forEachMutableElement(action);
-					}
-				}
-			}
-			return new MutableCachedSpliterator(theWrapped.mutableSpliterator());
-		}
-
-		@Override
-		public ObservableElementSpliterator<E> spliterator() {
-			if (isDone.get())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			class CachedSpliterator implements ObservableElementSpliterator<E> {
-				private final Spliterator<ElementId> theIdSpliterator;
-				private final ObservableCollectionElement<E> theElement;
-				ElementId theCurrentId;
-				E theCurrentValue;
-
-				CachedSpliterator(Spliterator<ElementId> idSpliterator) {
-					theIdSpliterator = idSpliterator;
-					theElement = new ObservableCollectionElement<E>() {
-						@Override
-						public TypeToken<E> getType() {
-							return theWrapped.getType();
-						}
-
-						@Override
-						public E get() {
-							return theCurrentValue;
-						}
-
-						@Override
-						public ElementId getElementId() {
-							return theCurrentId;
-						}
-					};
-				}
-
-				@Override
-				public long estimateSize() {
-					if (isDone.get())
-						throw new IllegalStateException("This cached collection's finisher has fired");
-					return theIdSpliterator.estimateSize();
-				}
-
-				@Override
-				public long getExactSizeIfKnown() {
-					if (isDone.get())
-						throw new IllegalStateException("This cached collection's finisher has fired");
-					return theIdSpliterator.getExactSizeIfKnown();
-				}
-
-				@Override
-				public int characteristics() {
-					return theIdSpliterator.characteristics();
-				}
-
-				@Override
-				public TypeToken<E> getType() {
-					return theWrapped.getType();
-				}
-
-				@Override
-				public boolean tryAdvanceObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
-					if (isDone.get())
-						throw new IllegalStateException("This cached collection's finisher has fired");
-					return theIdSpliterator.tryAdvance(id -> {
-						theCurrentId = id;
-						theCurrentValue = theCacheMap.get(id);
-						action.accept(theElement);
-					});
-				}
-
-				@Override
-				public void forEachObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
-					if (isDone.get())
-						throw new IllegalStateException("This cached collection's finisher has fired");
-					try (Transaction t = lock(false, null)) {
-						ObservableElementSpliterator.super.forEachObservableElement(action);
-					}
-				}
-
-				@Override
-				public ObservableElementSpliterator<E> trySplit() {
-					Spliterator<ElementId> split = theIdSpliterator.trySplit();
-					return split == null ? null : new CachedSpliterator(split);
-				}
-			}
-			return new CachedSpliterator(theCacheMap.keySet().spliterator());
-		}
-
-		@Override
-		public boolean contains(Object o) {
-			if (isDone.get())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			try (Transaction t = lock(false, null)) {
-				return theCache.contains(o);
-			}
-		}
-
-		@Override
-		public boolean containsAll(Collection<?> c) {
-			if (isDone.get())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			if (c.isEmpty())
-				return true;
-			try (Transaction t = lock(false, null)) {
-				return theCache.containsAll(c);
-			}
-		}
-
-		@Override
-		public boolean containsAny(Collection<?> c) {
-			if (isDone.get())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			if (c.isEmpty())
-				return false;
-			Set<E> cSet = toSet(equivalence(), c);
-			if (cSet.isEmpty())
-				return false;
-			try (Transaction t = lock(false, null)) {
-				Spliterator<E> iter = spliterator();
-				boolean[] found = new boolean[1];
-				while (iter.tryAdvance(next -> {
-					found[0] = cSet.contains(next);
-				}) && !found[0]) {
-				}
-				return found[0];
-			}
-		}
-
-		@Override
-		public String canAdd(E value) {
-			if (isDone.get())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			return theWrapped.canAdd(value);
-		}
-
-		@Override
-		public boolean add(E e) {
-			if (isDone.get())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			return theWrapped.add(e);
-		}
-
-		@Override
-		public boolean addAll(Collection<? extends E> c) {
-			if (isDone.get())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			return theWrapped.addAll(c);
-		}
-
-		@Override
-		public String canRemove(Object value) {
-			if (isDone.get())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			return theWrapped.canRemove(value);
-		}
-
-		@Override
-		public boolean remove(Object o) {
-			if (isDone.get())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			return theWrapped.remove(o);
-		}
-
-		@Override
-		public boolean removeAll(Collection<?> c) {
-			if (isDone.get())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			return theWrapped.removeAll(c);
-		}
-
-		@Override
-		public boolean retainAll(Collection<?> c) {
-			if (isDone.get())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			return theWrapped.retainAll(c);
-		}
-
-		@Override
-		public void clear() {
-			if (isDone.get())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			theWrapped.clear();
-		}
-
-		@Override
-		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-			if (isDone.get())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			return theChanges.act(observer);
-		}
-
-		@Override
-		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-			// Overridden because the default impl uses spliterator, which requires spliterating over the wrapped collection.
-			// Since the iteration is read-only here, we can do better
-			if (isDone.get())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			Subscription changeSub;
-			try (Transaction t = lock(false, null)) {
-				for (Map.Entry<ElementId, E> entry : theCacheMap.entrySet())
-					ObservableCollectionEvent.doWith(initialEvent(entry.getValue(), entry.getKey()), observer);
-				changeSub = theChanges.act(observer::accept);
-			}
-			return removeAll -> {
-				changeSub.unsubscribe();
-				if (removeAll) {
-					try (Transaction t = lock(false, null)) {
-						// Remove from the end
-						for (Map.Entry<ElementId, E> entry : theCacheMap.descendingMap().entrySet())
-							ObservableCollectionEvent.doWith(removeEvent(entry.getValue(), entry.getKey()), observer);
-					}
-				}
-			};
-		}
-
-		@Override
-		public int hashCode() {
-			if (isDone.get())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			try (Transaction t = lock(false, null)) {
-				int hashCode = 1;
-				for (Object e : theCache)
-					hashCode += Objects.hashCode(e);
-				return hashCode;
-			}
-		}
-
-		@Override
-		public boolean equals(Object o) {
-			if (isDone.get())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			if (!(o instanceof Collection))
-				return false;
-			Collection<?> c = (Collection<?>) o;
-
-			try (Transaction t1 = lock(false, null); Transaction t2 = Transactable.lock(c, false, null)) {
-				Iterator<E> e1 = theCache.iterator();
-				Iterator<?> e2 = c.iterator();
-				while (e1.hasNext() && e2.hasNext()) {
-					E o1 = e1.next();
-					Object o2 = e2.next();
-					if (!equivalence().elementEquals(o1, o2))
-						return false;
-				}
-				return !(e1.hasNext() || e2.hasNext());
-			}
-		}
-
-		@Override
-		public String toString() {
-			if (isDone.get())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			StringBuilder ret = new StringBuilder("(");
-			boolean first = true;
-			try (Transaction t = lock(false, null)) {
-				for (Object value : theCache) {
-					if (!first) {
-						ret.append(", ");
-					} else
-						first = false;
-					ret.append(value);
-				}
-			}
-			ret.append(')');
-			return ret.toString();
 		}
 	}
 

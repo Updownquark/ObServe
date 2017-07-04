@@ -919,7 +919,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 
 		boolean isReversible();
 
-		Transaction begin(Consumer<CollectionUpdate> onUpdate);
+		void begin(Consumer<CollectionUpdate> onUpdate);
 
 		FilterMapResult<E, T> map(FilterMapResult<E, T> source);
 		default FilterMapResult<E, T> map(E source) {
