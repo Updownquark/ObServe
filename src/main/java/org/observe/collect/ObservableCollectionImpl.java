@@ -3,10 +3,12 @@ package org.observe.collect;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
@@ -33,22 +35,28 @@ import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.collect.MutableObservableSpliterator.MutableObservableSpliteratorMap;
-import org.observe.collect.ObservableCollection.CollectionElementManager;
-import org.observe.collect.ObservableCollection.CollectionManager;
-import org.observe.collect.ObservableCollection.CollectionUpdate;
+import org.observe.collect.ObservableCollection.CollectionDataFlow;
+import org.observe.collect.ObservableCollection.CombinedCollectionBuilder;
 import org.observe.collect.ObservableCollection.CombinedValues;
-import org.observe.collect.ObservableCollection.FilterMapResult;
 import org.observe.collect.ObservableCollection.GroupingBuilder;
+import org.observe.collect.ObservableCollection.MappedCollectionBuilder;
+import org.observe.collect.ObservableCollection.MappedCollectionBuilder.ElementSetter;
 import org.observe.collect.ObservableCollection.SortedGroupingBuilder;
 import org.observe.collect.ObservableCollection.StdMsg;
+import org.observe.collect.ObservableCollection.UniqueDataFlow;
+import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
+import org.observe.collect.ObservableCollectionImpl.FilterMapResult;
 import org.qommons.BiTuple;
 import org.qommons.Causable;
 import org.qommons.LinkedQueue;
+import org.qommons.Ternian;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.ReversibleCollection;
+import org.qommons.collect.ReversibleElementSpliterator;
+import org.qommons.collect.ReversibleIterable;
 import org.qommons.collect.ReversibleSpliterator;
 import org.qommons.tree.CountedRedBlackNode.DefaultNode;
 import org.qommons.tree.CountedRedBlackNode.DefaultTreeMap;
@@ -1044,10 +1052,1509 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
+	interface CollectionManager<E, T> extends Transactable {
+		TypeToken<T> getTargetType();
+
+		Equivalence<? super T> equivalence();
+
+		boolean isDynamicallyFiltered();
+
+		boolean isStaticallyFiltered();
+
+		boolean isMapped();
+
+		boolean isReversible();
+
+		void begin(Consumer<CollectionUpdate> onUpdate);
+
+		FilterMapResult<E, T> map(FilterMapResult<E, T> source);
+
+		default FilterMapResult<E, T> map(E source) {
+			return map(new FilterMapResult<>(source));
+		}
+
+		FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest);
+
+		default FilterMapResult<T, E> reverse(T dest) {
+			return reverse(new FilterMapResult<>(dest));
+		}
+
+		CollectionElementManager<E, T> createElement(E init);
+	}
+
+	/**
+	 * Used in mapping/filtering collection data
+	 *
+	 * @param <E> The source type
+	 * @param <T> The destination type
+	 */
+	public static class FilterMapResult<E, T> {
+		public E source;
+		public T result;
+		public String error;
+
+		public FilterMapResult() {}
+
+		public FilterMapResult(E src) {
+			source = src;
+		}
+	}
+
+	interface CollectionElementManager<E, T> {
+		boolean isPresent();
+
+		T get();
+
+		void set(E value);
+
+		boolean isElementSettable();
+
+		String setElement(T newValue, boolean doSet, Object cause);
+
+		boolean update(CollectionUpdate update);
+
+		void remove();
+	}
+
+	interface CollectionUpdate {
+		Object getCause();
+	}
+
+	public static abstract class AbstractDataFlow<E, I, T> implements CollectionDataFlow<E, I, T> {
+		private final AbstractDataFlow<E, ?, I> theParent;
+		private final TypeToken<T> theTargetType;
+
+		protected AbstractDataFlow(AbstractDataFlow<E, ?, I> parent, TypeToken<T> targetType) {
+			theParent = parent;
+			theTargetType = targetType;
+		}
+
+		protected ObservableCollection<E> getSource() {
+			return theParent.getSource();
+		}
+
+		protected AbstractDataFlow<E, ?, I> getParent() {
+			return theParent;
+		}
+
+		@Override
+		public TypeToken<T> getTargetType() {
+			return theTargetType;
+		}
+
+		@Override
+		public CollectionDataFlow<E, T, T> filter(Function<? super T, String> filter, boolean filterNulls) {
+			return new FilterOp<>(this, filter, filterNulls);
+		}
+
+		@Override
+		public CollectionDataFlow<E, T, T> filterStatic(Function<? super T, String> filter, boolean filterNulls) {
+			return new StaticFilterOp<>(this, filter, filterNulls);
+		}
+
+		@Override
+		public CollectionDataFlow<E, T, T> withEquivalence(Equivalence<? super T> equivalence) {
+			return new EquivalenceSwitchOp<>(this, equivalence);
+		}
+
+		@Override
+		public CollectionDataFlow<E, T, T> refresh(Observable<?> refresh) {
+			return new RefreshOp<>(this, refresh);
+		}
+
+		@Override
+		public CollectionDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
+			return new ElementRefreshOp<>(this, refresh);
+		}
+
+		@Override
+		public <X> MappedCollectionBuilder<E, T, X> map(TypeToken<X> target) {
+			return new MappedCollectionBuilder<>(this, target);
+		}
+
+		@Override
+		public <V, X> ObservableCollection.CombinedCollectionBuilder2<E, T, V, X> combineWith(ObservableValue<V> value,
+			boolean combineNulls, TypeToken<X> target) {
+			return new ObservableCollection.CombinedCollectionBuilder2<>(this, target, value, Ternian.of(combineNulls));
+		}
+
+		@Override
+		public CollectionDataFlow<E, T, T> sorted(Comparator<? super T> compare) {
+			return new SortedDataFlow<>(this, compare);
+		}
+
+		@Override
+		public UniqueDataFlow<E, T> unique(Equivalence<? super T> equivalence) {
+			return new UniqueDataFlowImpl<>(this, equivalence);
+		}
+
+		@Override
+		public UniqueSortedDataFlow<E, T> uniqueSorted(Comparator<? super T> compare) {
+			return new UniqueSortedDataFlowImpl<>(this, compare);
+		}
+
+		@Override
+		public abstract AbstractCollectionManager<E, ?, T> manageCollection();
+
+		@Override
+		public ObservableCollection<T> build() {
+			return new ObservableCollectionImpl.DerivedCollection<>(getSource(), manageCollection());
+		}
+
+		@Override
+		public ReversibleIterable<T> iterable() {
+			return new ObservableCollectionImpl.DerivedIterable<>(getSource(), manageCollection());
+		}
+	}
+
+	public static class UniqueDataFlowImpl<E, T> extends AbstractDataFlow<E, T, T> implements UniqueDataFlow<E, T> {
+		private final Equivalence<? super T> theEquivalence;
+
+		protected UniqueDataFlowImpl(AbstractDataFlow<E, ?, T> parent, Equivalence<? super T> equivalence) {
+			super(parent, parent.getTargetType());
+			theEquivalence = equivalence;
+		}
+
+		@Override
+		public UniqueDataFlow<E, T> filter(Function<? super T, String> filter) {
+			return (UniqueDataFlow<E, T>) super.filter(filter);
+		}
+
+		@Override
+		public UniqueDataFlow<E, T> filter(Function<? super T, String> filter, boolean filterNulls) {
+			return new UniqueDataFlowImpl<>((AbstractDataFlow<E, ?, T>) getParent().filter(filter, filterNulls), theEquivalence);
+		}
+
+		@Override
+		public UniqueDataFlow<E, T> filterStatic(Function<? super T, String> filter) {
+			return (UniqueDataFlow<E, T>) super.filterStatic(filter);
+		}
+
+		@Override
+		public UniqueDataFlow<E, T> filterStatic(Function<? super T, String> filter, boolean filterNulls) {
+			return new UniqueDataFlowImpl<>((AbstractDataFlow<E, ?, T>) getParent().filterStatic(filter, filterNulls), theEquivalence);
+		}
+
+		@Override
+		public UniqueDataFlow<E, T> refresh(Observable<?> refresh) {
+			return new UniqueDataFlowImpl<>((AbstractDataFlow<E, ?, T>) getParent().refresh(refresh), theEquivalence);
+		}
+
+		@Override
+		public UniqueDataFlow<E, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
+			return new UniqueDataFlowImpl<>((AbstractDataFlow<E, ?, T>) getParent().refreshEach(refresh), theEquivalence);
+		}
+
+		@Override
+		public AbstractCollectionManager<E, ?, T> manageCollection() {
+			return getParent().manageCollection();
+		}
+
+		@Override
+		public ObservableSet<T> build() {
+			return new ObservableSetImpl.DerivedSet<>(theCollection, manageCollection(), theEquivalence);
+		}
+	}
+
+	public static class SortedDataFlow<E, T> extends AbstractDataFlow<E, T, T> {
+		private final Comparator<? super T> theCompare;
+
+		protected SortedDataFlow(AbstractDataFlow<E, ?, T> parent, Comparator<? super T> compare) {
+			super(parent, parent.getTargetType());
+			theCompare = compare;
+		}
+
+		protected Comparator<? super T> getCompare() {
+			return theCompare;
+		}
+
+		@Override
+		public CollectionDataFlow<E, T, T> filter(Function<? super T, String> filter) {
+			return super.filter(filter);
+		}
+
+		@Override
+		public CollectionDataFlow<E, T, T> filter(Function<? super T, String> filter, boolean filterNulls) {
+			return new SortedDataFlow<>((AbstractDataFlow<E, ?, T>) getParent().filter(filter, filterNulls), theCompare);
+		}
+
+		@Override
+		public CollectionDataFlow<E, T, T> filterStatic(Function<? super T, String> filter) {
+			return super.filterStatic(filter);
+		}
+
+		@Override
+		public CollectionDataFlow<E, T, T> filterStatic(Function<? super T, String> filter, boolean filterNulls) {
+			return new SortedDataFlow<>((AbstractDataFlow<E, ?, T>) getParent().filterStatic(filter, filterNulls), theCompare);
+		}
+
+		@Override
+		public CollectionDataFlow<E, T, T> withEquivalence(Equivalence<? super T> equivalence) {
+			return new SortedDataFlow<>((AbstractDataFlow<E, ?, T>) getParent().withEquivalence(equivalence), theCompare);
+		}
+
+		@Override
+		public CollectionDataFlow<E, T, T> refresh(Observable<?> refresh) {
+			return new SortedDataFlow<>((AbstractDataFlow<E, ?, T>) getParent().refresh(refresh), theCompare);
+		}
+
+		@Override
+		public CollectionDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
+			return new SortedDataFlow<>((AbstractDataFlow<E, ?, T>) getParent().refreshEach(refresh), theCompare);
+		}
+
+		@Override
+		public AbstractCollectionManager<E, ?, T> manageCollection() {
+			return getParent().manageCollection();
+		}
+
+		@Override
+		public ObservableCollection<T> build() {
+			return new SortedDerivedCollection<>(getSource(), manageCollection(), getCompare());
+		}
+	}
+
+	public static class UniqueSortedDataFlowImpl<E, T> extends SortedDataFlow<E, T> implements UniqueSortedDataFlow<E, T> {
+		protected UniqueSortedDataFlowImpl(AbstractDataFlow<E, ?, T> parent, Comparator<? super T> compare) {
+			super(parent, compare);
+		}
+
+		@Override
+		public UniqueSortedDataFlow<E, T> filter(Function<? super T, String> filter) {
+			return (UniqueSortedDataFlow<E, T>) super.filter(filter);
+		}
+
+		@Override
+		public UniqueSortedDataFlow<E, T> filter(Function<? super T, String> filter, boolean filterNulls) {
+			return new UniqueSortedDataFlowImpl<>((AbstractDataFlow<E, ?, T>) getParent().filter(filter, filterNulls), getCompare());
+		}
+
+		@Override
+		public UniqueSortedDataFlow<E, T> filterStatic(Function<? super T, String> filter) {
+			return (UniqueSortedDataFlow<E, T>) super.filterStatic(filter);
+		}
+
+		@Override
+		public UniqueSortedDataFlow<E, T> filterStatic(Function<? super T, String> filter, boolean filterNulls) {
+			return new UniqueSortedDataFlowImpl<>((AbstractDataFlow<E, ?, T>) getParent().filterStatic(filter, filterNulls), getCompare());
+		}
+
+		@Override
+		public UniqueSortedDataFlow<E, T> withEquivalence(Equivalence<? super T> equivalence) {
+			return new UniqueSortedDataFlowImpl<>((AbstractDataFlow<E, ?, T>) getParent().withEquivalence(equivalence), getCompare());
+		}
+
+		@Override
+		public UniqueSortedDataFlow<E, T> refresh(Observable<?> refresh) {
+			return new UniqueSortedDataFlowImpl<>((AbstractDataFlow<E, ?, T>) getParent().refresh(refresh), getCompare());
+		}
+
+		@Override
+		public UniqueSortedDataFlow<E, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
+			return new UniqueSortedDataFlowImpl<>((AbstractDataFlow<E, ?, T>) getParent().refreshEach(refresh), getCompare());
+		}
+
+		@Override
+		public AbstractCollectionManager<E, ?, T> manageCollection() {
+			return getParent().manageCollection();
+		}
+
+		@Override
+		public ObservableSortedSet<T> build() {
+			return new ObservableSortedSetImpl.DerivedSortedSet<>(theCollection, manageCollection(), getCompare());
+		}
+	}
+
+	public static class BaseCollectionDataFlow<E> extends AbstractDataFlow<E, E, E> {
+		private final ObservableCollection<E> theSource;
+
+		protected BaseCollectionDataFlow(ObservableCollection<E> source) {
+			super(null, source.getType());
+			theSource = source;
+		}
+
+		@Override
+		protected ObservableCollection<E> getSource() {
+			return theSource;
+		}
+
+		@Override
+		public AbstractCollectionManager<E, ?, E> manageCollection() {
+			return new BaseCollectionManager<>(theSource.getType(), theSource.equivalence(), theSource.isLockSupported());
+		}
+
+		@Override
+		public ObservableCollection<E> build() {
+			return theSource;
+		}
+	}
+
+	public static class FilterOp<E, T> extends AbstractDataFlow<E, T, T> {
+		private final Function<? super T, String> theFilter;
+		private final boolean areNullsFiltered;
+
+		protected FilterOp(AbstractDataFlow<E, ?, T> parent, Function<? super T, String> filter, boolean filterNulls) {
+			super(parent, parent.getTargetType());
+			theFilter = filter;
+			areNullsFiltered = filterNulls;
+		}
+
+		@Override
+		public AbstractCollectionManager<E, ?, T> manageCollection() {
+			return new ObservableCollectionImpl.FilteredCollectionManager<>(getParent().manageCollection(), theFilter, areNullsFiltered);
+		}
+	}
+
+	public static class StaticFilterOp<E, T> extends AbstractDataFlow<E, T, T> {
+		private final Function<? super T, String> theFilter;
+		private final boolean areNullsFiltered;
+
+		protected StaticFilterOp(AbstractDataFlow<E, ?, T> parent, Function<? super T, String> filter, boolean filterNulls) {
+			super(parent, parent.getTargetType());
+			theFilter = filter;
+			areNullsFiltered = filterNulls;
+		}
+
+		@Override
+		public AbstractCollectionManager<E, ?, T> manageCollection() {
+			return new ObservableCollectionImpl.StaticFilteredCollectionManager<>(getParent().manageCollection(), theFilter,
+				areNullsFiltered);
+		}
+	}
+
+	public static class EquivalenceSwitchOp<E, T> extends AbstractDataFlow<E, T, T> {
+		private final Equivalence<? super T> theEquivalence;
+
+		protected EquivalenceSwitchOp(AbstractDataFlow<E, ?, T> parent, Equivalence<? super T> equivalence) {
+			super(parent, parent.getTargetType());
+			theEquivalence = equivalence;
+		}
+
+		@Override
+		public AbstractCollectionManager<E, ?, T> manageCollection() {
+			class EquivalenceSwitchedCollectionManager extends AbstractCollectionManager<E, T, T> {
+				EquivalenceSwitchedCollectionManager() {
+					super(EquivalenceSwitchOp.this.getParent().manageCollection(), EquivalenceSwitchOp.this.getTargetType());
+				}
+
+				@Override
+				public FilterMapResult<E, T> map(FilterMapResult<E, T> source) {
+					return getParent().map(source);
+				}
+
+				@Override
+				public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest) {
+					return getParent().reverse(dest);
+				}
+
+				@Override
+				public CollectionElementManager<E, T> createElement(E init) {
+					return getParent().createElement(init);
+				}
+
+				@Override
+				protected void begin() {}
+			}
+			return new EquivalenceSwitchedCollectionManager();
+		}
+	}
+
+	public static class MapOp<E, I, T> extends AbstractDataFlow<E, I, T> {
+		private final Function<? super I, ? extends T> theMap;
+		private final boolean areNullsMapped;
+		private final Function<? super T, ? extends I> theReverse;
+		private final ElementSetter<? super I, ? super T> theElementReverse;
+		private final boolean areNullsReversed;
+
+		protected MapOp(AbstractDataFlow<E, ?, I> parent, TypeToken<T> target, Function<? super I, ? extends T> map, boolean mapNulls,
+			Function<? super T, ? extends I> reverse, ElementSetter<? super I, ? super T> elementReverse, boolean reverseNulls) {
+			super(parent, target);
+			theMap = map;
+			areNullsMapped = mapNulls;
+			theReverse = reverse;
+			theElementReverse = elementReverse;
+			areNullsReversed = reverseNulls;
+		}
+
+		@Override
+		public AbstractCollectionManager<E, ?, T> manageCollection() {
+			return new ObservableCollectionImpl.MappedCollectionManager<>(getParent().manageCollection(), getTargetType(), theMap,
+				areNullsMapped, theReverse, theElementReverse, areNullsReversed);
+		}
+	}
+
+	/**
+	 * Defines a combination of a single source collection with one or more observable values
+	 *
+	 * @param <E> The type of elements in the source collection
+	 * @param <I> Intermediate type
+	 * @param <T> The type of elements in the resulting collection
+	 */
+	public static class CombinedCollectionDef<E, I, T> extends AbstractDataFlow<E, I, T> {
+		private final Map<ObservableValue<?>, Boolean> theArgs;
+		private final Function<? super CombinedValues<? extends I>, ? extends T> theCombination;
+		private final boolean combineNulls;
+		private final Function<? super CombinedValues<? extends T>, ? extends I> theReverse;
+		private final boolean reverseNulls;
+
+		protected CombinedCollectionDef(AbstractDataFlow<E, ?, I> parent, TypeToken<T> target, Map<ObservableValue<?>, Boolean> args,
+			Function<? super CombinedValues<? extends I>, ? extends T> combination, boolean combineNulls,
+			Function<? super CombinedValues<? extends T>, ? extends I> reverse, boolean reverseNulls) {
+			super(parent, target);
+			theArgs = Collections.unmodifiableMap(args);
+			theCombination = combination;
+			this.combineNulls = combineNulls;
+			theReverse = reverse;
+			this.reverseNulls = reverseNulls;
+		}
+
+		@Override
+		public AbstractCollectionManager<E, ?, T> manageCollection() {
+			return new ObservableCollectionImpl.CombinedCollectionManager<>(getParent().manageCollection(), getTargetType(), theArgs,
+				theCombination, combineNulls, theReverse, reverseNulls);
+		}
+	}
+
+	public static abstract class AbstractCombinedCollectionBuilder<E, I, R> implements CombinedCollectionBuilder<E, I, R> {
+		private final AbstractDataFlow<E, ?, I> theParent;
+		private final TypeToken<R> theTargetType;
+		private final LinkedHashMap<ObservableValue<?>, Ternian> theArgs;
+		private Function<? super CombinedValues<? extends R>, ? extends I> theReverse;
+		private boolean defaultCombineNulls = false;
+		private boolean isReverseNulls = false;
+
+		protected AbstractCombinedCollectionBuilder(AbstractDataFlow<E, ?, I> parent, TypeToken<R> targetType) {
+			theParent = parent;
+			theTargetType = targetType;
+			theArgs = new LinkedHashMap<>();
+		}
+
+		protected void addArg(ObservableValue<?> arg, Ternian combineNulls) {
+			if (theArgs.containsKey(arg))
+				throw new IllegalArgumentException("Argument " + arg + " is already combined");
+			theArgs.put(arg, combineNulls);
+		}
+
+		protected Ternian combineNulls(ObservableValue<?> arg) {
+			return theArgs.get(arg);
+		}
+
+		protected AbstractDataFlow<E, ?, I> getParent() {
+			return theParent;
+		}
+
+		protected TypeToken<R> getTargetType() {
+			return theTargetType;
+		}
+
+		protected Function<? super CombinedValues<? extends R>, ? extends I> getReverse() {
+			return theReverse;
+		}
+
+		protected boolean isDefaultCombineNulls() {
+			return defaultCombineNulls;
+		}
+
+		protected boolean isReverseNulls() {
+			return isReverseNulls;
+		}
+
+		public AbstractCombinedCollectionBuilder<E, I, R> combineNullsByDefault() {
+			defaultCombineNulls = true;
+			return this;
+		}
+
+		@Override
+		public AbstractCombinedCollectionBuilder<E, I, R> withReverse(Function<? super CombinedValues<? extends R>, ? extends I> reverse,
+			boolean reverseNulls) {
+			theReverse = reverse;
+			this.isReverseNulls = reverseNulls;
+			return this;
+		}
+
+		@Override
+		public CollectionDataFlow<E, I, R> build(Function<? super CombinedValues<? extends I>, ? extends R> combination,
+			boolean combineNulls) {
+			return new CombinedCollectionDef<>(theParent, theTargetType, getResultArgs(), combination, combineNulls, theReverse,
+				isReverseNulls);
+		}
+
+		private Map<ObservableValue<?>, Boolean> getResultArgs() {
+			Map<ObservableValue<?>, Boolean> result = new LinkedHashMap<>(theArgs.size() * 3 / 2);
+			for (Map.Entry<ObservableValue<?>, Ternian> arg : theArgs.entrySet())
+				result.put(arg.getKey(), arg.getValue().withDefault(defaultCombineNulls));
+			return result;
+		}
+	}
+
+	public static class RefreshOp<E, T> extends AbstractDataFlow<E, T, T> {
+		private final Observable<?> theRefresh;
+
+		protected RefreshOp(AbstractDataFlow<E, ?, T> parent, Observable<?> refresh) {
+			super(parent, parent.getTargetType());
+			theRefresh = refresh;
+		}
+
+		@Override
+		public AbstractCollectionManager<E, ?, T> manageCollection() {
+			return new ObservableCollectionImpl.RefreshingCollectionManager<>(getParent().manageCollection(), theRefresh);
+		}
+	}
+
+	public static class ElementRefreshOp<E, T> extends AbstractDataFlow<E, T, T> {
+		private final Function<? super T, ? extends Observable<?>> theElementRefresh;
+
+		protected ElementRefreshOp(AbstractDataFlow<E, ?, T> parent, Function<? super T, ? extends Observable<?>> elementRefresh) {
+			super(parent, parent.getTargetType());
+			theElementRefresh = elementRefresh;
+		}
+
+		@Override
+		public AbstractCollectionManager<E, ?, T> manageCollection() {
+			return new ObservableCollectionImpl.ElementRefreshingCollectionManager<>(getParent().manageCollection(), theElementRefresh);
+		}
+	}
+
+	public static abstract class AbstractCollectionManager<E, I, T> implements CollectionManager<E, T> {
+		private final AbstractCollectionManager<E, ?, I> theParent;
+		private final TypeToken<T> theTargetType;
+		private ReentrantReadWriteLock theLock;
+		private Consumer<CollectionUpdate> theUpdateListener;
+
+		protected AbstractCollectionManager(AbstractCollectionManager<E, ?, I> parent, TypeToken<T> targetType) {
+			theParent = parent;
+			theTargetType = targetType;
+			theLock = theParent != null ? null : new ReentrantReadWriteLock();
+		}
+
+		private BaseCollectionManager<E> getBase() {
+			if (this instanceof BaseCollectionManager)
+				return (BaseCollectionManager<E>) this;
+			else
+				return theParent.getBase();
+		}
+
+		protected AbstractCollectionManager<E, ?, I> getParent() {
+			return theParent;
+		}
+
+		protected Consumer<CollectionUpdate> getUpdateListener() {
+			return theUpdateListener;
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			if (theParent != null)
+				return theParent.lock(write, cause);
+			Lock lock = write ? theLock.writeLock() : theLock.readLock();
+			lock.lock();
+			return () -> lock.unlock();
+		}
+
+		@Override
+		public TypeToken<T> getTargetType() {
+			return theTargetType;
+		}
+
+		@Override
+		public Equivalence<? super T> equivalence() {
+			Equivalence<? super E> baseEquiv = getBase().equivalence();
+			if (!isMapped())
+				return (Equivalence<? super T>) baseEquiv;
+			else if (isReversible())
+				return baseEquiv.map(getTargetType().getRawType(), //
+					v -> map(new FilterMapResult<>((E) v)).result, //
+					v -> reverse(new FilterMapResult<>((T) v)).result, //
+					v -> reverse(new FilterMapResult<>((T) v)).error == null);
+			else
+				return Equivalence.DEFAULT;
+		}
+
+		@Override
+		public boolean isDynamicallyFiltered() {
+			return theParent == null ? false : theParent.isDynamicallyFiltered();
+		}
+
+		@Override
+		public boolean isStaticallyFiltered() {
+			return theParent == null ? false : theParent.isStaticallyFiltered();
+		}
+
+		@Override
+		public boolean isMapped() {
+			return theParent == null ? false : theParent.isMapped();
+		}
+
+		@Override
+		public boolean isReversible() {
+			return theParent == null ? true : theParent.isReversible();
+		}
+
+		protected abstract void begin();
+
+		@Override
+		public void begin(Consumer<CollectionUpdate> onUpdate) {
+			if (theUpdateListener != null)
+				throw new IllegalStateException("Cannot begin twice");
+			theUpdateListener = onUpdate;
+			begin();
+			if (theParent != null)
+				theParent.begin(onUpdate);
+		}
+	}
+
+	public static class SimpleCollectionUpdate<E, I, T> implements CollectionUpdate {
+		private final AbstractCollectionManager<E, I, T> theCollection;
+		private final Object theCause;
+
+		public SimpleCollectionUpdate(AbstractCollectionManager<E, I, T> collection, Object cause) {
+			theCollection = collection;
+			theCause = cause;
+		}
+
+		public AbstractCollectionManager<E, I, T> getCollection() {
+			return theCollection;
+		}
+
+		@Override
+		public Object getCause() {
+			return theCause;
+		}
+	}
+
+	public static abstract class AbstractCollectionElementManager<E, I, T> implements CollectionElementManager<E, T> {
+		private final AbstractCollectionManager<E, I, T> theCollection;
+		private final CollectionElementManager<E, I> theParent;
+
+		protected AbstractCollectionElementManager(AbstractCollectionManager<E, I, T> collection, CollectionElementManager<E, I> parent) {
+			theCollection = collection;
+			theParent = parent;
+		}
+
+		protected CollectionElementManager<E, I> getParent() {
+			return theParent;
+		}
+
+		@Override
+		public boolean isPresent() {
+			// Most elements don't filter
+			return theParent.isPresent();
+		}
+
+		@Override
+		public void set(E value) {
+			getParent().set(value);
+			refresh(getParent().get());
+		}
+
+		@Override
+		public boolean isElementSettable() {
+			return theParent.isElementSettable();
+		}
+
+		@Override
+		public String setElement(T newValue, boolean doSet, Object cause) {
+			return StdMsg.UNSUPPORTED_OPERATION;
+		}
+
+		protected boolean applies(CollectionUpdate update) {
+			return update instanceof SimpleCollectionUpdate && ((SimpleCollectionUpdate<?, ?, ?>) update).getCollection() == theCollection;
+		}
+
+		@Override
+		public boolean update(CollectionUpdate update) {
+			if (applies(update)) {
+				refresh(getParent().get());
+				return true;
+			} else if (getParent().update(update)) {
+				refresh(getParent().get());
+				return true;
+			} else
+				return false;
+		}
+
+		protected abstract void refresh(I source);
+		@Override
+		public void remove() {
+			// Most elements don't need to do anything when they're removed
+		}
+	}
+
+	public static class BaseCollectionManager<E> extends AbstractCollectionManager<E, E, E> {
+		private final Equivalence<? super E> theEquivalence;
+		private final ReentrantReadWriteLock theLock;
+
+		public BaseCollectionManager(TypeToken<E> targetType, Equivalence<? super E> equivalence, boolean threadSafe) {
+			super(null, targetType);
+			theEquivalence = equivalence;
+			theLock = threadSafe ? new ReentrantReadWriteLock() : null;
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			if (theLock == null)
+				return Transaction.NONE;
+			Lock lock = write ? theLock.writeLock() : theLock.readLock();
+			lock.lock();
+			return () -> lock.unlock();
+		}
+
+		@Override
+		public Equivalence<? super E> equivalence() {
+			return theEquivalence;
+		}
+
+		@Override
+		public FilterMapResult<E, E> map(FilterMapResult<E, E> source) {
+			source.result = source.source;
+			return source;
+		}
+
+		@Override
+		public FilterMapResult<E, E> reverse(FilterMapResult<E, E> dest) {
+			dest.result = dest.source;
+			return dest;
+		}
+
+		@Override
+		public CollectionElementManager<E, E> createElement(E init) {
+			class DefaultElement extends AbstractCollectionElementManager<E, E, E> {
+				private E theValue;
+
+				protected DefaultElement() {
+					super(BaseCollectionManager.this, null);
+				}
+
+				@Override
+				public E get() {
+					return theValue;
+				}
+
+				@Override
+				public void set(E value) {
+					theValue = value;
+				}
+
+				@Override
+				public boolean update(CollectionUpdate update) {
+					return false;
+				}
+
+				@Override
+				protected void refresh(E source) {
+					// Never called
+				}
+			}
+			return new DefaultElement();
+		}
+
+		@Override
+		public void begin() {}
+	}
+
+	public static class CombinedCollectionManager<E, I, T> extends AbstractCollectionManager<E, I, T> {
+		private static class ArgHolder<T> {
+			final boolean combineNull;
+			Consumer<ObservableValueEvent<?>> action;
+			T value;
+
+			ArgHolder(boolean combineNull) {
+				this.combineNull = combineNull;
+			}
+		}
+		private final Map<ObservableValue<?>, ArgHolder<?>> theArgs;
+		private final Function<? super CombinedValues<? extends I>, ? extends T> theCombination;
+		private final boolean combineNulls;
+		private final Function<? super CombinedValues<? extends T>, ? extends I> theReverse;
+		private final boolean reverseNulls;
+
+		/** The number of combined values which must be non-null to be passed to the combination function but are null */
+		private int isCombining;
+
+		protected CombinedCollectionManager(AbstractCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
+			Map<ObservableValue<?>, Boolean> args, Function<? super CombinedValues<? extends I>, ? extends T> combination,
+			boolean combineNulls, Function<? super CombinedValues<? extends T>, ? extends I> reverse, boolean reverseNulls) {
+			super(parent, targetType);
+			theArgs = new HashMap<>();
+			for (Map.Entry<ObservableValue<?>, Boolean> arg : args.entrySet())
+				theArgs.put(arg.getKey(), new ArgHolder<>(arg.getValue()));
+			theCombination = combination;
+			this.combineNulls = combineNulls;
+			theReverse = reverse;
+			this.reverseNulls = reverseNulls;
+		}
+
+		@Override
+		public boolean isMapped() {
+			return true;
+		}
+
+		@Override
+		public boolean isReversible() {
+			return theReverse != null && super.isReversible();
+		}
+
+		@Override
+		public FilterMapResult<E, T> map(FilterMapResult<E, T> source) {
+			if (getParent() != null)
+				getParent().map((FilterMapResult<E, I>) source);
+			if (source.error != null)
+				return source;
+			if (isCombining > 0 || (source.source == null && !combineNulls)) {
+				source.result = null;
+				return source;
+			}
+
+			source.result = theCombination.apply(new CombinedValues<I>() {
+				@Override
+				public I getElement() {
+					return (I) source.result;
+				}
+
+				@Override
+				public <V> V get(ObservableValue<V> arg) {
+					ArgHolder<V> holder = (ArgHolder<V>) theArgs.get(arg);
+					if (holder == null)
+						throw new IllegalArgumentException("Unrecognized value: " + arg);
+					return holder.value;
+				}
+			});
+			return source;
+		}
+
+		@Override
+		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest) {
+			if (theReverse == null)
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+
+			if (isCombining > 0 || (dest.source == null && !reverseNulls)) {
+				if (!combineNulls)
+					dest.error = StdMsg.NULL_DISALLOWED;
+				else
+					dest.result = null;
+				return dest;
+			}
+
+			FilterMapResult<I, E> intermediate = (FilterMapResult<I, E>) dest;
+			intermediate.source = theReverse.apply(new CombinedValues<T>() {
+				@Override
+				public T getElement() {
+					return dest.source;
+				}
+
+				@Override
+				public <V> V get(ObservableValue<V> arg) {
+					ArgHolder<V> holder = (ArgHolder<V>) theArgs.get(arg);
+					if (holder == null)
+						throw new IllegalArgumentException("Unrecognized value: " + arg);
+					return holder.value;
+				}
+			});
+			if (getParent() != null)
+				getParent().reverse(intermediate);
+			return dest;
+		}
+
+		@Override
+		public CollectionElementManager<E, T> createElement(E init) {
+			class CombinedCollectionElement extends AbstractCollectionElementManager<E, I, T> implements CombinedValues<I> {
+				private T theValue;
+				private I theSource;
+
+				CombinedCollectionElement() {
+					super(CombinedCollectionManager.this, CombinedCollectionManager.this.getParent().createElement(init));
+				}
+
+				@Override
+				public T get() {
+					return theValue;
+				}
+
+				@Override
+				public boolean isElementSettable() {
+					return theReverse != null && super.isElementSettable();
+				}
+
+				@Override
+				public String setElement(T newValue, boolean doSet, Object cause) {
+					if (theReverse == null || !isElementSettable())
+						return super.setElement(newValue, doSet, cause);
+					else if (isCombining > 0 || (newValue == null && !reverseNulls)) {
+						if (!combineNulls)
+							return StdMsg.NULL_DISALLOWED;
+						else
+							return getParent().setElement(null, doSet, cause);
+					} else
+						return getParent().setElement(theReverse.apply(new CombinedValues<T>() {
+							@Override
+							public T getElement() {
+								return newValue;
+							}
+
+							@Override
+							public <V> V get(ObservableValue<V> arg) {
+								ArgHolder<V> holder = (ArgHolder<V>) theArgs.get(arg);
+								if (holder == null)
+									throw new IllegalArgumentException("Unrecognized value: " + arg);
+								return holder.value;
+							}
+						}), doSet, cause);
+				}
+
+				@Override
+				protected void refresh(I source) {
+					if (isCombining > 0 || (source == null && !combineNulls))
+						theValue = null;
+					else {
+						theSource = source;
+						theValue = theCombination.apply(this);
+						theSource = null;
+					}
+				}
+
+				@Override
+				public I getElement() {
+					return theSource;
+				}
+
+				@Override
+				public <V> V get(ObservableValue<V> arg) {
+					ArgHolder<V> holder = (ArgHolder<V>) theArgs.get(arg);
+					if (holder == null)
+						throw new IllegalArgumentException("Unrecognized value: " + arg);
+					return holder.value;
+				}
+			}
+			return new CombinedCollectionElement();
+		}
+
+		@Override
+		public void begin() {
+			for (Map.Entry<ObservableValue<?>, ArgHolder<?>> arg : theArgs.entrySet()) {
+				ArgHolder<?> holder = arg.getValue();
+				holder.action = evt -> {
+					try (Transaction t = lock(true, null)) {
+						if (!holder.combineNull && holder.value == null)
+							isCombining--;
+						((ArgHolder<Object>) holder).value = evt.getValue();
+						if (!holder.combineNull && holder.value == null)
+							isCombining++;
+						getUpdateListener().accept(new SimpleCollectionUpdate<>(this, evt));
+					}
+				};
+				WeakConsumer<ObservableValueEvent<?>> weak = new WeakConsumer<>(holder.action);
+				weak.withSubscription(arg.getKey().act(weak));
+			}
+		}
+	}
+
+	public static class FilteredCollectionManager<E, T> extends AbstractCollectionManager<E, T, T> {
+		private final Function<? super T, String> theFilter;
+		private final boolean filterNulls;
+
+		protected FilteredCollectionManager(AbstractCollectionManager<E, ?, T> parent, Function<? super T, String> filter,
+			boolean filterNulls) {
+			super(parent, parent.getTargetType());
+			theFilter = filter;
+			this.filterNulls = filterNulls;
+		}
+
+		@Override
+		public boolean isDynamicallyFiltered() {
+			return true;
+		}
+
+		@Override
+		public FilterMapResult<E, T> map(FilterMapResult<E, T> source) {
+			getParent().map(source);
+			String error;
+			if (!filterNulls && source.result == null)
+				error = StdMsg.NULL_DISALLOWED;
+			else
+				error = theFilter.apply(source.result);
+			if (error != null) {
+				source.result = null;
+				source.error = error;
+			}
+			return source;
+		}
+
+		@Override
+		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest) {
+			String error;
+			if (!filterNulls && dest.source == null)
+				error = StdMsg.NULL_DISALLOWED;
+			else
+				error = theFilter.apply(dest.source);
+			if (error != null)
+				dest.error = error;
+			else
+				getParent().reverse(dest);
+			return dest;
+		}
+
+		@Override
+		public void begin() {}
+
+		@Override
+		public CollectionElementManager<E, T> createElement(E init) {
+			class FilteredElement extends AbstractCollectionElementManager<E, T, T> {
+				private boolean isPresent;
+
+				protected FilteredElement() {
+					super(FilteredCollectionManager.this, FilteredCollectionManager.this.getParent().createElement(init));
+				}
+
+				@Override
+				public boolean isPresent() {
+					return isPresent && super.isPresent();
+				}
+
+				@Override
+				public T get() {
+					return getParent().get();
+				}
+
+				@Override
+				public String setElement(T newValue, boolean doSet, Object cause) {
+					return getParent().setElement(newValue, doSet, cause);
+				}
+
+				@Override
+				protected void refresh(T source) {
+					if (source == null && !filterNulls)
+						isPresent = false;
+					else
+						isPresent = theFilter.apply(source) == null;
+				}
+			}
+			return new FilteredElement();
+		}
+	}
+
+	public static class StaticFilteredCollectionManager<E, T> extends AbstractCollectionManager<E, T, T> {
+		private final Function<? super T, String> theFilter;
+		private final boolean filterNulls;
+
+		protected StaticFilteredCollectionManager(AbstractCollectionManager<E, ?, T> parent, Function<? super T, String> filter,
+			boolean filterNulls) {
+			super(parent, parent.getTargetType());
+			theFilter = filter;
+			this.filterNulls = filterNulls;
+		}
+
+		@Override
+		public boolean isStaticallyFiltered() {
+			return true;
+		}
+
+		@Override
+		public FilterMapResult<E, T> map(FilterMapResult<E, T> source) {
+			getParent().map(source);
+			String error;
+			if (!filterNulls && source.result == null)
+				error = StdMsg.NULL_DISALLOWED;
+			else
+				error = theFilter.apply(source.result);
+			if (error != null) {
+				source.result = null;
+				source.error = error;
+			}
+			return source;
+		}
+
+		@Override
+		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest) {
+			String error;
+			if (!filterNulls && dest.source == null)
+				error = StdMsg.NULL_DISALLOWED;
+			else
+				error = theFilter.apply(dest.source);
+			if (error != null)
+				dest.error = error;
+			else
+				getParent().reverse(dest);
+			return dest;
+		}
+
+		@Override
+		public void begin() {}
+
+		@Override
+		public CollectionElementManager<E, T> createElement(E init) {
+			CollectionElementManager<E, T> parentElement = getParent().createElement(init);
+			T value = parentElement.get();
+			if (value == null && !filterNulls)
+				return null;
+			else if (theFilter.apply(value) != null)
+				return null;
+			else
+				return parentElement;
+		}
+	}
+
+	public static class MappedCollectionManager<E, I, T> extends AbstractCollectionManager<E, I, T> {
+		private final Function<? super I, ? extends T> theMap;
+		private final boolean areNullsMapped;
+		private final Function<? super T, ? extends I> theReverse;
+		private final ElementSetter<? super I, ? super T> theElementReverse;
+		private final boolean areNullsReversed;
+
+		protected MappedCollectionManager(AbstractCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
+			Function<? super I, ? extends T> map, boolean areNullsMapped, Function<? super T, ? extends I> reverse,
+			ElementSetter<? super I, ? super T> elementReverse, boolean areNullsReversed) {
+			super(parent, targetType);
+			theMap = map;
+			this.areNullsMapped = areNullsMapped;
+			theReverse = reverse;
+			theElementReverse = elementReverse;
+			this.areNullsReversed = areNullsReversed;
+		}
+
+		@Override
+		public boolean isMapped() {
+			return true;
+		}
+
+		@Override
+		public boolean isReversible() {
+			return theReverse != null && getParent().isReversible();
+		}
+
+		@Override
+		public FilterMapResult<E, T> map(FilterMapResult<E, T> source) {
+			FilterMapResult<E, I> intermediate = (FilterMapResult<E, I>) source;
+			getParent().map(intermediate);
+			if (intermediate.result == null && !areNullsMapped)
+				source.result = null;
+			else
+				source.result = theMap.apply(intermediate.result);
+			return source;
+		}
+
+		@Override
+		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest) {
+			if (!isReversible())
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			FilterMapResult<I, E> intermediate = (FilterMapResult<I, E>) dest;
+			if (dest.source == null && !areNullsReversed)
+				intermediate.source = null;
+			else
+				intermediate.source = theReverse.apply(dest.source);
+
+			if (intermediate.source == null && !areNullsMapped)
+				dest.error = StdMsg.ILLEGAL_ELEMENT;
+			else
+				getParent().reverse(intermediate);
+			return dest;
+		}
+
+		@Override
+		public CollectionElementManager<E, T> createElement(E init) {
+			class MappedElement extends AbstractCollectionElementManager<E, I, T> {
+				private T theValue;
+
+				MappedElement() {
+					super(MappedCollectionManager.this, MappedCollectionManager.this.getParent().createElement(init));
+				}
+
+				@Override
+				public T get() {
+					return theValue;
+				}
+
+				@Override
+				public boolean isElementSettable() {
+					return theElementReverse != null || (theReverse != null && getParent().isElementSettable());
+				}
+
+				@Override
+				public String setElement(T newValue, boolean doSet, Object cause) {
+					String msg = null;
+					if (theElementReverse != null) {
+						msg = theElementReverse.setElement(getParent().get(), newValue, doSet, cause);
+						if (msg == null)
+							return null;
+					}
+					if (theReverse != null) {
+						I intermediate;
+						if (newValue == null && !areNullsReversed)
+							msg = getParent().setElement(null, doSet, cause);
+						else
+							msg = getParent().setElement(theReverse.apply(newValue), doSet, cause);
+					} else
+						msg = StdMsg.UNSUPPORTED_OPERATION;
+					return msg;
+				}
+
+				@Override
+				protected void refresh(I source) {
+					if (source == null && !areNullsMapped)
+						theValue = null;
+					else
+						theValue = theMap.apply(source);
+				}
+			}
+			return new MappedElement();
+		}
+
+		@Override
+		protected void begin() {}
+	}
+
+	public static class RefreshingCollectionManager<E, T> extends AbstractCollectionManager<E, T, T> {
+		private final Observable<?> theRefresh;
+		private Consumer<Object> theAction;
+
+		protected RefreshingCollectionManager(AbstractCollectionManager<E, ?, T> parent, Observable<?> refresh) {
+			super(parent, parent.getTargetType());
+			theRefresh = refresh;
+		}
+
+		@Override
+		public FilterMapResult<E, T> map(FilterMapResult<E, T> source) {
+			return getParent().map(source);
+		}
+
+		@Override
+		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest) {
+			return getParent().reverse(dest);
+		}
+
+		@Override
+		public void begin() {
+			theAction = v -> getUpdateListener().accept(new SimpleCollectionUpdate<>(this, v));
+			WeakConsumer<Object> weak = new WeakConsumer<>(theAction);
+			weak.withSubscription(theRefresh.act(weak));
+		}
+
+		@Override
+		public CollectionElementManager<E, T> createElement(E init) {
+			class RefreshingElement extends AbstractCollectionElementManager<E, T, T> {
+				public RefreshingElement() {
+					super(RefreshingCollectionManager.this, RefreshingCollectionManager.this.getParent().createElement(init));
+				}
+
+				@Override
+				public T get() {
+					return getParent().get();
+				}
+
+				@Override
+				public String setElement(T newValue, boolean doSet, Object cause) {
+					return getParent().setElement(newValue, doSet, cause);
+				}
+
+				@Override
+				protected void refresh(T source) {}
+			}
+			return new RefreshingElement();
+		}
+	}
+
+	public static class ElementRefreshingCollectionManager<E, T> extends AbstractCollectionManager<E, T, T> {
+		private static class RefreshHolder {
+			final Observable<?> theRefresh;
+			Consumer<Object> theAction;
+			Subscription theSub;
+			int theElementCount;
+
+			RefreshHolder(Observable<?> refresh, Consumer<Object> action, Subscription sub) {
+				theRefresh = refresh;
+				theAction = action;
+				theSub = sub;
+			}
+		}
+
+		private final Function<? super T, ? extends Observable<?>> theRefresh;
+		private final Map<Observable<?>, RefreshHolder> theRefreshObservables;
+
+		protected ElementRefreshingCollectionManager(AbstractCollectionManager<E, ?, T> parent,
+			Function<? super T, ? extends Observable<?>> refresh) {
+			super(parent, parent.getTargetType());
+			theRefresh = refresh;
+			theRefreshObservables = new IdentityHashMap<>();
+		}
+
+		@Override
+		public FilterMapResult<E, T> map(FilterMapResult<E, T> source) {
+			return getParent().map(source);
+		}
+
+		@Override
+		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest) {
+			return getParent().reverse(dest);
+		}
+
+		@Override
+		public CollectionElementManager<E, T> createElement(E init) {
+			class ElementRefreshElement extends AbstractCollectionElementManager<E, T, T> {
+				private Observable<?> theRefreshObservable;
+
+				protected ElementRefreshElement() {
+					super(ElementRefreshingCollectionManager.this, ElementRefreshingCollectionManager.this.getParent().createElement(init));
+				}
+
+				@Override
+				public T get() {
+					return getParent().get();
+				}
+
+				@Override
+				public String setElement(T newValue, boolean doSet, Object cause) {
+					return getParent().setElement(newValue, doSet, cause);
+				}
+
+				@Override
+				public void remove() {
+					if (theRefreshObservable != null)
+						removeRefreshObs(theRefreshObservable);
+					super.remove();
+				}
+
+				@Override
+				protected boolean applies(CollectionUpdate update) {
+					return super.applies(update) && ((ElementRefreshUpdate) update).getRefreshObs() == theRefreshObservable;
+				}
+
+				@Override
+				public boolean update(CollectionUpdate update) {
+					if (applies(update)) {
+						refresh(getParent().get());
+						return true;
+					} else if (getParent().update(update)) {
+						T value = getParent().get();
+						Observable<?> refreshObs = theRefresh.apply(value);
+						if (theRefreshObservable != refreshObs) {
+							removeRefreshObs(theRefreshObservable);
+							newRefreshObs(refreshObs);
+						}
+						refresh(value);
+						return true;
+					} else
+						return false;
+				}
+
+				@Override
+				protected void refresh(T source) {}
+
+				private void removeRefreshObs(Observable<?> refreshObs) {
+					if (refreshObs != null) {
+						RefreshHolder holder = theRefreshObservables.get(refreshObs);
+						holder.theElementCount--;
+						if (holder.theElementCount == 0) {
+							theRefreshObservables.remove(refreshObs);
+							holder.theSub.unsubscribe();
+						}
+					}
+				}
+
+				private void newRefreshObs(Observable<?> refreshObs) {
+					if (refreshObs != null)
+						theRefreshObservables.computeIfAbsent(refreshObs, this::createHolder).theElementCount++;
+					theRefreshObservable = refreshObs;
+				}
+
+				private RefreshHolder createHolder(Observable<?> refreshObs) {
+					Consumer<Object> action = v -> ElementRefreshingCollectionManager.this.update(refreshObs, v);
+					WeakConsumer<Object> weak = new WeakConsumer<>(action);
+					Subscription sub = refreshObs.act(weak);
+					weak.withSubscription(sub);
+					return new RefreshHolder(refreshObs, action, sub);
+				}
+			}
+			return new ElementRefreshElement();
+		}
+
+		private void update(Observable<?> refreshObs, Object cause) {
+			getUpdateListener().accept(new ElementRefreshUpdate(refreshObs, cause));
+		}
+
+		@Override
+		public void begin() {}
+
+		private class ElementRefreshUpdate extends SimpleCollectionUpdate<E, T, T> {
+			private final Observable<?> theRefreshObs;
+
+			ElementRefreshUpdate(Observable<?> refreshObs, Object cause) {
+				super(ElementRefreshingCollectionManager.this, cause);
+				theRefreshObs = refreshObs;
+			}
+
+			Observable<?> getRefreshObs() {
+				return theRefreshObs;
+			}
+		}
+	}
+
+	public static class DerivedIterable<E, T> implements ReversibleIterable<T> {
+		private final ObservableCollection<E> theSource;
+		private final CollectionManager<E, T> theManager;
+
+		public DerivedIterable(ObservableCollection<E> source, CollectionManager<E, T> manager) {
+			theSource = source;
+			theManager = manager;
+		}
+
+		private MutableObservableSpliteratorMap<E, T> map() {
+			return new MutableObservableSpliteratorMap<E, T>() {
+				@Override
+				public TypeToken<T> getType() {
+					return theManager.getTargetType();
+				}
+
+				@Override
+				public T map(E value) {
+					FilterMapResult<E, T> res = theManager.map(value);
+					if (res.error != null)
+						throw new IllegalArgumentException(res.error);
+					return res.result;
+				}
+
+				@Override
+				public boolean test(E srcValue) {
+					return theManager.map(srcValue).error == null;
+				}
+
+				@Override
+				public E reverse(T value) {
+					FilterMapResult<T, E> res = theManager.reverse(value);
+					if (res.error != null)
+						throw new IllegalArgumentException(res.error);
+					return res.result;
+				}
+
+				@Override
+				public String filterEnabled(CollectionElement<E> el) {
+					if (!theManager.isReversible())
+						return StdMsg.UNSUPPORTED_OPERATION;
+					return null;
+				}
+
+				@Override
+				public String filterAccept(T value) {
+					FilterMapResult<T, E> res = theManager.reverse(value);
+					return res.error;
+				}
+
+				@Override
+				public String filterRemove(CollectionElement<E> sourceEl) {
+					return null;
+				}
+			};
+		}
+
+		@Override
+		public ReversibleElementSpliterator<T> mutableSpliterator(boolean fromStart) {
+			return theSource.mutableSpliterator(fromStart).map(map());
+		}
+	}
+
 	public static class DerivedCollection<E, T> implements ObservableCollection<T> {
 		private final ObservableCollection<E> theSource;
 		private final CollectionManager<E, T> theFlow;
 		private final DefaultTreeMap<ElementId, CollectionElementManager<E, T>> theElements;
+		private final DefaultTreeMap<ElementId, CollectionElementManager<E, T>> thePresentElements;
 		private final boolean isFiltered;
 		private final Consumer<ObservableCollectionEvent<? extends E>> theSourceAction;
 		private final LinkedQueue<Consumer<? super ObservableCollectionEvent<? extends T>>> theListeners;
@@ -1058,26 +2565,21 @@ public final class ObservableCollectionImpl {
 		public DerivedCollection(ObservableCollection<E> source, CollectionManager<E, T> flow) {
 			theSource = source;
 			theFlow = flow;
-			theElements = new DefaultTreeMap<>(ElementId::compareTo);
 			isFiltered = theFlow.isDynamicallyFiltered();
+			theElements = new DefaultTreeMap<>(ElementId::compareTo);
+			thePresentElements = isFiltered ? new DefaultTreeMap<>(ElementId::compareTo) : null;
 			theListeners = new LinkedQueue<>();
-			if (!flow.isMapped())
-				theEquivalence = (Equivalence<? super T>) theSource.equivalence();
-			else if (flow.isReversible())
-				theEquivalence = theSource.equivalence().map(flow.getTargetType().getRawType(), //
-					v -> flow.map(new FilterMapResult<>((E) v)).result, //
-					v -> flow.reverse(new FilterMapResult<>((T) v)).result, //
-					v -> flow.reverse(new FilterMapResult<>((T) v)).error == null);
-			else
-				theEquivalence = Equivalence.DEFAULT;
+			theEquivalence = flow.equivalence();
 
 			Consumer<ObservableCollectionEvent<? extends T>> fireListeners = f -> {
 				switch (f.getType()) {
 				case add:
 					theSize++;
+					thePresentElements.put(f.getElementId(), theElements.get(f.getElementId()));
 					break;
 				case remove:
 					theSize--;
+					thePresentElements.remove(f.getElementId());
 					break;
 				default:
 				}
@@ -1208,6 +2710,14 @@ public final class ObservableCollectionImpl {
 			return isFiltered;
 		}
 
+		protected DefaultTreeMap<ElementId, CollectionElementManager<E, T>> getElements() {
+			return theElements;
+		}
+
+		protected DefaultTreeMap<ElementId, CollectionElementManager<E, T>> getPresentElements() {
+			return isFiltered ? thePresentElements : theElements;
+		}
+
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends T>> observer) {
 			theListeners.add(observer);
@@ -1284,10 +2794,12 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public T get(int index) {
-			return theElements.entrySet().get(index).getValue().get();
+			try (Transaction t = lock(false, null)) {
+				return (isFiltered ? thePresentElements : theElements).entrySet().get(index).getValue().get();
+			}
 		}
 
-		private boolean checkDestType(Object o) {
+		protected boolean checkDestType(Object o) {
 			return o == null || theFlow.getTargetType().getRawType().isInstance(o);
 		}
 
@@ -1438,7 +2950,7 @@ public final class ObservableCollectionImpl {
 					return split == null ? null : new CachedSpliterator(split);
 				}
 			}
-			return new CachedSpliterator(theElements.entrySet().spliterator(fromStart));
+			return new CachedSpliterator((isFiltered ? thePresentElements : theElements).entrySet().spliterator(fromStart));
 		}
 
 		@Override
@@ -1457,12 +2969,14 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean add(T e) {
-			if (!theFlow.isReversible() || !checkDestType(e))
-				return false;
+			if (!theFlow.isReversible())
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			if (!checkDestType(e))
+				throw new IllegalArgumentException(StdMsg.BAD_TYPE);
 			try (Transaction t = lock(true, null)) {
 				FilterMapResult<T, E> reversed = theFlow.reverse(new FilterMapResult<>(e));
 				if (reversed.error != null)
-					return false;
+					throw new IllegalArgumentException(reversed.error);
 				return theSource.add(reversed.result);
 			}
 		}
@@ -1471,15 +2985,21 @@ public final class ObservableCollectionImpl {
 		 * @param input The collection to reverse
 		 * @return The collection, with its elements {@link ObservableCollection.CollectionManager#reverse(FilterMapResult) reversed}
 		 */
-		protected List<E> reverse(Collection<?> input) {
+		protected List<E> reverse(Collection<?> input, boolean checkInput) {
 			FilterMapResult<T, E> reversed = new FilterMapResult<>();
 			return input.stream().<E> flatMap(v -> {
-				if (!checkDestType(v))
-					return Stream.empty();
+				if (!checkDestType(v)) {
+					if (checkInput)
+						throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+					else
+						return Stream.empty();
+				}
 				reversed.source = (T) v;
 				theFlow.reverse(reversed);
 				if (reversed.error == null)
 					return Stream.of(reversed.result);
+				else if (checkInput)
+					throw new IllegalArgumentException(reversed.error);
 				else
 					return Stream.empty();
 			}).collect(Collectors.toList());
@@ -1487,10 +3007,12 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean addAll(Collection<? extends T> c) {
-			if (!theFlow.isReversible())
+			if (c.isEmpty())
 				return false;
+			if (!theFlow.isReversible())
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			try (Transaction t = lock(true, null)) {
-				return theSource.addAll(reverse(c));
+				return theSource.addAll(reverse(c, true));
 			}
 		}
 
@@ -1569,7 +3091,7 @@ public final class ObservableCollectionImpl {
 				private final MutableObservableElement<T> theElement;
 				private MutableObservableElement<E> theCurrentElement;
 				private ElementId theCurrentId;
-				private T theCurrentValue;
+				private CollectionElementManager<E, T> theCurrentElementMgr;
 
 				MutableCachedSpliterator(MutableObservableSpliterator<E> wrap) {
 					theWrappedSpliter = wrap;
@@ -1586,7 +3108,7 @@ public final class ObservableCollectionImpl {
 
 						@Override
 						public T get() {
-							return theCurrentValue;
+							return theCurrentElementMgr.get();
 						}
 
 						@Override
@@ -1601,8 +3123,9 @@ public final class ObservableCollectionImpl {
 
 						@Override
 						public <V extends T> String isAcceptable(V value) {
-							if (!getFlow().isReversible())
-								throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+							String msg = theCurrentElementMgr.setElement(value, false, null);
+							if (msg == null)
+								return null;
 							FilterMapResult<T, E> result = theFlow.reverse(new FilterMapResult<>(value));
 							if (result.error != null)
 								return result.error;
@@ -1611,16 +3134,15 @@ public final class ObservableCollectionImpl {
 
 						@Override
 						public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
-							if (!getFlow().isReversible())
-								throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+							T oldValue = theCurrentElementMgr.get();
+							String msg = theCurrentElementMgr.setElement(value, false, cause);
+							if (msg == null)
+								return null;
 							FilterMapResult<T, E> result = theFlow.reverse(new FilterMapResult<>(value));
 							if (result.error != null)
 								throw new IllegalArgumentException(result.error);
-							E oldSrc = theCurrentElement.set(result.result, cause);
-							// Re-use result to avoid creating a new object
-							FilterMapResult<E, T> newRes = (FilterMapResult<E, T>) result;
-							newRes.source = oldSrc;
-							return theFlow.map(newRes).result;
+							theCurrentElement.set(result.result, cause);
+							return oldValue;
 						}
 
 						@Override
@@ -1633,10 +3155,11 @@ public final class ObservableCollectionImpl {
 
 								@Override
 								public String get() {
-									String msg = theCurrentElement.isEnabled().get();
-									if (msg == null && !getFlow().isReversible())
-										msg = StdMsg.UNSUPPORTED_OPERATION;
-									return msg;
+									if (theCurrentElementMgr.isElementSettable())
+										return null;
+									else if (!theFlow.isReversible())
+										return StdMsg.UNSUPPORTED_OPERATION;
+									return theCurrentElement.isEnabled().get();
 								}
 							};
 						}
@@ -1686,13 +3209,12 @@ public final class ObservableCollectionImpl {
 					boolean[] success = new boolean[1];
 					try (Transaction t = lock(true, null)) {
 						while (!success[0] && theWrappedSpliter.tryAdvanceMutableElement(el -> {
-							CollectionElementManager<E, T> elMgr = theElements.get(theCurrentId);
-							if (!elMgr.isPresent())
+							theCurrentElementMgr = theElements.get(theCurrentId);
+							if (theCurrentElementMgr == null || !theCurrentElementMgr.isPresent())
 								return;
 							success[0] = true;
 							theCurrentElement = el;
 							theCurrentId = el.getElementId();
-							theCurrentValue = elMgr.get();
 							action.accept(theElement);
 						})) {
 						}
@@ -1706,13 +3228,12 @@ public final class ObservableCollectionImpl {
 					boolean[] success = new boolean[1];
 					try (Transaction t = lock(true, null)) {
 						while (!success[0] && theWrappedSpliter.tryReverseMutableElement(el -> {
-							CollectionElementManager<E, T> elMgr = theElements.get(theCurrentId);
-							if (!elMgr.isPresent())
+							theCurrentElementMgr = theElements.get(theCurrentId);
+							if (theCurrentElementMgr == null || !theCurrentElementMgr.isPresent())
 								return;
 							success[0] = true;
 							theCurrentElement = el;
 							theCurrentId = el.getElementId();
-							theCurrentValue = elMgr.get();
 							action.accept(theElement);
 						})) {
 						}
@@ -1725,12 +3246,11 @@ public final class ObservableCollectionImpl {
 				public void forEachMutableElement(Consumer<? super MutableObservableElement<T>> action) {
 					try (Transaction t = lock(true, null)) {
 						theWrappedSpliter.forEachMutableElement(el -> {
-							CollectionElementManager<E, T> elMgr = theElements.get(theCurrentId);
-							if (elMgr == null || !elMgr.isPresent())
+							theCurrentElementMgr = theElements.get(theCurrentId);
+							if (theCurrentElementMgr == null || !theCurrentElementMgr.isPresent())
 								return;
 							theCurrentElement = el;
 							theCurrentId = el.getElementId();
-							theCurrentValue = elMgr.get();
 							action.accept(theElement);
 						});
 						MutableObservableSpliterator.super.forEachMutableElement(action);
@@ -1741,12 +3261,11 @@ public final class ObservableCollectionImpl {
 				public void forEachReverseMutableElement(Consumer<? super MutableObservableElement<T>> action) {
 					try (Transaction t = lock(true, null)) {
 						theWrappedSpliter.forEachReverseMutableElement(el -> {
-							CollectionElementManager<E, T> elMgr = theElements.get(theCurrentId);
-							if (elMgr == null || !elMgr.isPresent())
+							theCurrentElementMgr = theElements.get(theCurrentId);
+							if (theCurrentElementMgr == null || !theCurrentElementMgr.isPresent())
 								return;
 							theCurrentElement = el;
 							theCurrentId = el.getElementId();
-							theCurrentValue = elMgr.get();
 							action.accept(theElement);
 						});
 						MutableObservableSpliterator.super.forEachMutableElement(action);
@@ -1772,463 +3291,15 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
-	public static abstract class AbstractCollectionManager<E, I, T> implements CollectionManager<E, T> {
-		private final CollectionManager<E, I> theParent;
-		private final TypeToken<T> theTargetType;
-		private ReentrantReadWriteLock theLock;
-
-		protected AbstractCollectionManager(CollectionManager<E, I> parent, TypeToken<T> targetType) {
-			theParent = parent;
-			theTargetType = targetType;
-			theLock = theParent != null ? null : new ReentrantReadWriteLock();
-		}
-
-		protected CollectionManager<E, I> getParent() {
-			return theParent;
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			if (theParent != null)
-				return theParent.lock(write, cause);
-			Lock lock = write ? theLock.writeLock() : theLock.readLock();
-			lock.lock();
-			return () -> lock.unlock();
-		}
-
-		@Override
-		public TypeToken<T> getTargetType() {
-			return theTargetType;
-		}
-
-		@Override
-		public boolean isDynamicallyFiltered() {
-			return theParent == null ? false : theParent.isDynamicallyFiltered();
-		}
-
-		@Override
-		public boolean isMapped() {
-			return theParent == null ? false : theParent.isMapped();
-		}
-
-		@Override
-		public boolean isReversible() {
-			return theParent == null ? true : theParent.isReversible();
-		}
-	}
-
-	public static class SimpleCollectionUpdate<E, I, T> implements CollectionUpdate {
-		private final AbstractCollectionManager<E, I, T> theCollection;
-		private final Object theCause;
-
-		public SimpleCollectionUpdate(AbstractCollectionManager<E, I, T> collection, Object cause) {
-			theCollection = collection;
-			theCause = cause;
-		}
-
-		public AbstractCollectionManager<E, I, T> getCollection() {
-			return theCollection;
-		}
-
-		@Override
-		public Object getCause() {
-			return theCause;
-		}
-	}
-
-	public static abstract class AbstractCollectionElementManager<E, I, T> implements CollectionElementManager<E, T> {
-		private final AbstractCollectionManager<E, I, T> theCollection;
-		private final CollectionElementManager<E, I> theParent;
-
-		protected AbstractCollectionElementManager(AbstractCollectionManager<E, I, T> collection, CollectionElementManager<E, I> parent) {
-			theCollection = collection;
-			theParent = parent;
-		}
-
-		protected CollectionElementManager<E, I> getParent() {
-			return theParent;
-		}
-
-		@Override
-		public void remove() {
-			// Most elements don't need to do anything when they're removed
-		}
-
-		@Override
-		public boolean isPresent() {
-			// Most elements don't filter
-			return true;
-		}
-
-		@Override
-		public void set(E value) {
-			getParent().set(value);
-			refresh(getParent().get());
-		}
-
-		protected boolean applies(CollectionUpdate update) {
-			return update instanceof SimpleCollectionUpdate && ((SimpleCollectionUpdate<?, ?, ?>) update).getCollection() == theCollection;
-		}
-
-		@Override
-		public boolean update(CollectionUpdate update) {
-			if (applies(update)) {
-				refresh(getParent().get());
-				return true;
-			} else if (getParent().update(update)) {
-				refresh(getParent().get());
-				return true;
-			} else
-				return false;
-		}
-
-		protected abstract void refresh(I source);
-	}
-
-	public static class DefaultCollectionManager<T> extends AbstractCollectionManager<T, T, T> {
-		private final ReentrantReadWriteLock theLock;
-
-		public DefaultCollectionManager(TypeToken<T> targetType, boolean threadSafe) {
-			super(null, targetType);
-			theLock = threadSafe ? new ReentrantReadWriteLock() : null;
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			if (theLock == null)
-				return Transaction.NONE;
-			Lock lock = write ? theLock.writeLock() : theLock.readLock();
-			lock.lock();
-			return () -> lock.unlock();
-		}
-
-		@Override
-		public FilterMapResult<T, T> map(FilterMapResult<T, T> source) {
-			source.result = source.source;
-			return source;
-		}
-
-		@Override
-		public FilterMapResult<T, T> reverse(FilterMapResult<T, T> dest) {
-			dest.result = dest.source;
-			return dest;
-		}
-
-		@Override
-		public CollectionElementManager<T, T> createElement(T init) {
-			class DefaultElement extends AbstractCollectionElementManager<T, T, T> {
-				private T theValue;
-
-				protected DefaultElement() {
-					super(DefaultCollectionManager.this, null);
-				}
-
-				@Override
-				public T get() {
-					return theValue;
-				}
-
-				@Override
-				public void set(T value) {
-					theValue = value;
-				}
-
-				@Override
-				public boolean update(CollectionUpdate update) {
-					return false;
-				}
-
-				@Override
-				protected void refresh(T source) {
-					// Never called
-				}
-			}
-			return new DefaultElement();
-		}
-
-		@Override
-		public void begin(Consumer<CollectionUpdate> onUpdate) {}
-	}
-
-	public static class CombinedCollectionManager<E, I, T> extends AbstractCollectionManager<E, I, T> {
-		private static class ArgHolder<T> {
-			final boolean combineNull;
-			Consumer<ObservableValueEvent<?>> action;
-			T value;
-
-			ArgHolder(boolean combineNull) {
-				this.combineNull = combineNull;
-			}
-		}
-		private final Map<ObservableValue<?>, ArgHolder<?>> theArgs;
-		private final Function<? super CombinedValues<? extends I>, ? extends T> theCombination;
-		private final boolean combineNulls;
-		private final Function<? super CombinedValues<? extends T>, ? extends I> theReverse;
-		private final boolean reverseNulls;
-
-		/** The number of combined values which must be non-null to be passed to the combination function but are null */
-		private int isCombining;
-
-		public CombinedCollectionManager(CollectionManager<E, I> parent, TypeToken<T> targetType, Map<ObservableValue<?>, Boolean> args,
-			Function<? super CombinedValues<? extends I>, ? extends T> combination, boolean combineNulls,
-			Function<? super CombinedValues<? extends T>, ? extends I> reverse, boolean reverseNulls) {
-			super(parent, targetType);
-			theArgs = new HashMap<>();
-			for (Map.Entry<ObservableValue<?>, Boolean> arg : args.entrySet())
-				theArgs.put(arg.getKey(), new ArgHolder<>(arg.getValue()));
-			theCombination = combination;
-			this.combineNulls = combineNulls;
-			theReverse = reverse;
-			this.reverseNulls = reverseNulls;
-		}
-
-		@Override
-		public boolean isMapped() {
-			return true;
-		}
-
-		@Override
-		public boolean isReversible() {
-			return theReverse != null && super.isReversible();
-		}
-
-		@Override
-		public FilterMapResult<E, T> map(FilterMapResult<E, T> source) {
-			if (getParent() != null)
-				getParent().map((FilterMapResult<E, I>) source);
-			if(source.error!=null)
-				return source;
-			if (isCombining > 0 || (source.source == null && !combineNulls)) {
-				source.result = null;
-				return source;
-			}
-
-			source.result = theCombination.apply(new CombinedValues<I>() {
-				@Override
-				public I getElement() {
-					return (I) source.result;
-				}
-
-				@Override
-				public <V> V get(ObservableValue<V> arg) {
-					ArgHolder<V> holder = (ArgHolder<V>) theArgs.get(arg);
-					if (holder == null)
-						throw new IllegalArgumentException("Unrecognized value: "+arg);
-					return holder.value;
-				}
-			});
-			return source;
-		}
-
-		@Override
-		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest) {
-			if (theReverse == null)
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-
-			if (isCombining > 0 || (dest.source == null && !reverseNulls)) {
-				dest.result = null;
-				return dest;
-			}
-
-			FilterMapResult<I, E> intermediate = (FilterMapResult<I, E>) dest;
-			intermediate.source = theReverse.apply(new CombinedValues<T>() {
-				@Override
-				public T getElement() {
-					return dest.source;
-				}
-
-				@Override
-				public <V> V get(ObservableValue<V> arg) {
-					ArgHolder<V> holder = (ArgHolder<V>) theArgs.get(arg);
-					if (holder == null)
-						throw new IllegalArgumentException("Unrecognized value: " + arg);
-					return holder.value;
-				}
-			});
-			if (getParent() != null)
-				getParent().reverse(intermediate);
-			return dest;
-		}
-
-		@Override
-		public CollectionElementManager<E, T> createElement(E init) {
-			class CombinedCollectionElement extends AbstractCollectionElementManager<E, I, T> implements CombinedValues<I> {
-				private T theValue;
-				private I theSource;
-
-				protected CombinedCollectionElement() {
-					super(CombinedCollectionManager.this, CombinedCollectionManager.this.getParent().createElement(init));
-				}
-
-				@Override
-				public T get() {
-					return theValue;
-				}
-
-				@Override
-				protected void refresh(I source) {
-					if (isCombining > 0 || (source == null && !combineNulls))
-						theValue = null;
-					else {
-						theSource = source;
-						theValue = theCombination.apply(this);
-						theSource = null;
-					}
-				}
-
-				@Override
-				public I getElement() {
-					return theSource;
-				}
-
-				@Override
-				public <V> V get(ObservableValue<V> arg) {
-					ArgHolder<V> holder = (ArgHolder<V>) theArgs.get(arg);
-					if (holder == null)
-						throw new IllegalArgumentException("Unrecognized value: " + arg);
-					return holder.value;
-				}
-			}
-			return new CombinedCollectionElement();
-		}
-
-		@Override
-		public void begin(Consumer<CollectionUpdate> onUpdate) {
-			for (Map.Entry<ObservableValue<?>, ArgHolder<?>> arg : theArgs.entrySet()) {
-				ArgHolder<?> holder = arg.getValue();
-				holder.action = evt -> {
-					try (Transaction t = lock(true, null)) {
-						if (!holder.combineNull && holder.value == null)
-							isCombining--;
-						((ArgHolder<Object>) holder).value = evt.getValue();
-						if (!holder.combineNull && holder.value == null)
-							isCombining++;
-						onUpdate.accept(new SimpleCollectionUpdate<>(this, evt));
-					}
-				};
-				WeakConsumer<ObservableValueEvent<?>> weak = new WeakConsumer<>(holder.action);
-				weak.withSubscription(arg.getKey().act(weak));
-			}
-		}
-	}
-
-	public static class ElementRefreshingCollectionManager<E, T> extends AbstractCollectionManager<E, T, T> {
-		private static class RefreshHolder {
-			final Observable<?> theRefresh;
-			Consumer<Object> theAction;
-			Subscription theSub;
-			int theElementCount;
-
-			RefreshHolder(Observable<?> refresh, Consumer<Object> action, Subscription sub) {
-				theRefresh = refresh;
-				theAction = action;
-				theSub = sub;
-			}
-		}
-
-		private final Function<? super T, ? extends Observable<?>> theRefresh;
-		private final Map<Observable<?>, RefreshHolder> theRefreshObservables;
-
-		public ElementRefreshingCollectionManager(CollectionManager<E, T> parent,
-			Function<? super T, ? extends Observable<?>> refresh) {
-			super(parent, parent.getTargetType());
-			theRefresh = refresh;
-			theRefreshObservables = new IdentityHashMap<>();
-		}
-
-		@Override
-		public FilterMapResult<E, T> map(FilterMapResult<E, T> source) {
-			return getParent().map(source);
-		}
-
-		@Override
-		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest) {
-			return getParent().reverse(dest);
-		}
-
-		@Override
-		public CollectionElementManager<E, T> createElement(E init) {
-			class ElementRefreshElement extends AbstractCollectionElementManager<E, T, T> {
-				private Observable<?> theRefreshObservable;
-
-				protected ElementRefreshElement() {
-					super(ElementRefreshingCollectionManager.this, ElementRefreshingCollectionManager.this.getParent().createElement(init));
-				}
-
-				@Override
-				public T get() {
-					return getParent().get();
-				}
-
-				@Override
-				public void remove() {
-					if (theRefreshObservable != null)
-						removeRefreshObs(theRefreshObservable);
-					super.remove();
-				}
-
-				@Override
-				protected boolean applies(CollectionUpdate update) {
-					return super.applies(update) && ((ElementRefreshUpdate) update).getRefreshObs() == theRefreshObservable;
-				}
-
-				@Override
-				protected void refresh(T source) {
-					// TODO This code should be in update--don't need to re-evaluate the refresh observable when the refresh itself fires
-					Observable<?> refreshObs = theRefresh.apply(source);
-					if (theRefreshObservable != refreshObs) {
-						removeRefreshObs(theRefreshObservable);
-						newRefreshObs(refreshObs);
-					}
-				}
-
-				private void removeRefreshObs(Observable<?> refreshObs) {
-					if (refreshObs != null) {
-						RefreshHolder holder = theRefreshObservables.get(refreshObs);
-						holder.theElementCount--;
-						if (holder.theElementCount == 0) {
-							theRefreshObservables.remove(refreshObs);
-							holder.theSub.unsubscribe();
-						}
-					}
-				}
-
-				private void newRefreshObs(Observable<?> refreshObs) {
-					if (refreshObs != null)
-						theRefreshObservables.computeIfAbsent(refreshObs, this::createHolder).theElementCount++;
-					theRefreshObservable = refreshObs;
-				}
-
-				private RefreshHolder createHolder(Observable<?> refreshObs) {
-					Consumer<Object> action = v -> ElementRefreshingCollectionManager.this.update(refreshObs, v);
-					WeakConsumer<Object> weak = new WeakConsumer<>(action);
-					Subscription sub = refreshObs.act(weak);
-					weak.withSubscription(sub);
-					return new RefreshHolder(refreshObs, action, sub);
-				}
-			}
-			return new ElementRefreshElement();
-		}
-
-		private void update(Observable<?> refreshObs, Object cause) {
-		}
-
-		@Override
-		public void begin(Consumer<CollectionUpdate> onUpdate) {
-			// TODO Auto-generated method stub
-		}
-
-		private class ElementRefreshUpdate extends SimpleCollectionUpdate<E, T, T> {
-			private final Observable<?> theRefreshObs;
-
-			ElementRefreshUpdate(Observable<?> refreshObs, Object cause) {
-				super(ElementRefreshingCollectionManager.this, cause);
-				theRefreshObs = refreshObs;
-			}
-
-			Observable<?> getRefreshObs() {
-				return theRefreshObs;
-			}
+	public static class SortedDerivedCollection<E, T> implements ObservableCollection<T> {
+		private final ObservableCollection<E> theSource;
+		private final CollectionManager<E, T> theManager;
+		private final Comparator<? super T> theCompare;
+
+		public SortedDerivedCollection(ObservableCollection<E> source, CollectionManager<E, T> manager, Comparator<? super T> compare) {
+			theSource = source;
+			theManager = manager;
+			theCompare = compare;
 		}
 	}
 
@@ -2254,11 +3325,13 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public TypeToken<E> getType() {
+			return theCollection.getType();
+		}
+
+		@Override
 		public Equivalence<? super E> equivalence() {
-			if (theDef.getEquivalence() != null)
-				return theDef.getEquivalence();
-			else
-				return theCollection.equivalence();
+			return theCollection.equivalence();
 		}
 
 		@Override
@@ -2282,81 +3355,38 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public E get(int index) {
+			return theCollection.get(index);
+		}
+
+		@Override
 		public ObservableElementSpliterator<E> spliterator() {
 			return theCollection.spliterator();
 		}
 
 		@Override
 		public boolean contains(Object o) {
-			if (theDef.getEquivalence() != null)
-				return ObservableCollectionImpl.contains(this, o);
-			else
-				return theCollection.contains(o);
+			return theCollection.contains(o);
 		}
 
 		@Override
 		public boolean containsAll(Collection<?> c) {
-			if (theDef.getEquivalence() != null)
-				return ObservableCollectionImpl.containsAll(this, c);
-			else
-				return theCollection.containsAll(c);
+			return theCollection.containsAll(c);
 		}
 
 		@Override
 		public boolean containsAny(Collection<?> c) {
-			if (theDef.getEquivalence() != null)
-				return ObservableCollectionImpl.containsAny(this, c);
-			else
-				return theCollection.containsAny(c);
-		}
-
-		protected MutableObservableSpliteratorMap<E, E> map() {
-			return new MutableObservableSpliteratorMap<E, E>() {
-				@Override
-				public TypeToken<E> getType() {
-					return CollectionView.this.getType();
-				}
-
-				@Override
-				public E map(E value) {
-					return value;
-				}
-
-				@Override
-				public boolean test(E srcValue) {
-					return true;
-				}
-
-				@Override
-				public E reverse(E value) {
-					return value;
-				}
-
-				@Override
-				public String filterEnabled(CollectionElement<E> el) {
-					return theDef.checkRemove(el.get());
-				}
-
-				@Override
-				public String filterRemove(CollectionElement<E> sourceEl) {
-					return theDef.checkRemove(sourceEl.get());
-				}
-
-				@Override
-				public String filterAccept(E value) {
-					return theDef.checkAdd(value);
-				}
-
-				@Override
-				public long filterExactSize(long srcSize) {
-					return srcSize;
-				}
-			};
+			return theCollection.containsAny(c);
 		}
 
 		@Override
 		public MutableObservableSpliterator<E> mutableSpliterator() {
-			return theCollection.mutableSpliterator().map(map());
+			return mutableSpliterator(true);
+		}
+
+		@Override
+		public MutableObservableSpliterator<E> mutableSpliterator(boolean fromStart) {
+			return theCollection.mutableSpliterator(fromStart).map(theDef.mapSpliterator());
 		}
 
 		@Override
@@ -2404,10 +3434,16 @@ public final class ObservableCollectionImpl {
 		public boolean remove(Object value) {
 			if (theDef.checkRemove(value) != null)
 				return false;
-			else if (theDef.getEquivalence() != null)
-				return ObservableCollectionImpl.remove(this, value);
 			else
 				return theCollection.remove(value);
+		}
+
+		@Override
+		public boolean removeLast(Object value) {
+			if (theDef.checkRemove(value) != null)
+				return false;
+			else
+				return theCollection.removeLast(value);
 		}
 
 		@Override
@@ -2417,15 +3453,12 @@ public final class ObservableCollectionImpl {
 				toRemove = values.stream().filter(v -> theDef.checkRemove(v) == null).collect(Collectors.toList());
 			else
 				toRemove = values;
-			if (theDef.getEquivalence() != null)
-				return ObservableCollectionImpl.removeAll(this, toRemove);
-			else
-				return theCollection.removeAll(values);
+			return theCollection.removeAll(values);
 		}
 
 		@Override
 		public boolean retainAll(Collection<?> values) {
-			if (!theDef.isRemoveFiltered() && theDef.getEquivalence() == null)
+			if (!theDef.isRemoveFiltered())
 				return theCollection.retainAll(values);
 
 			if (values.isEmpty())
@@ -2983,8 +4016,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public void clear() {
-		}
+		public void clear() {}
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {

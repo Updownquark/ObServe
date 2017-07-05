@@ -4,43 +4,48 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.ConcurrentModificationException;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
-import java.util.Map;
 import java.util.Set;
 import java.util.Spliterator;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
-import org.observe.SettableValue;
+import org.observe.collect.ObservableCollection.MappedCollectionBuilder.ElementSetter;
+import org.observe.collect.ObservableCollection.StdMsg;
+import org.observe.collect.ObservableCollectionImpl.AbstractDataFlow;
+import org.observe.collect.ObservableCollectionImpl.BaseCollectionDataFlow;
+import org.observe.collect.ObservableCollectionImpl.CollectionElementManager;
+import org.observe.collect.ObservableCollectionImpl.CollectionManager;
+import org.observe.collect.ObservableCollectionImpl.CollectionView;
 import org.observe.collect.ObservableCollectionImpl.ConstantObservableCollection;
-import org.observe.collect.ObservableReversibleCollectionImpl.CachedReversibleCollection;
-import org.observe.collect.ObservableReversibleCollectionImpl.CombinedReversibleCollection;
-import org.observe.collect.ObservableReversibleCollectionImpl.ElementRefreshingReversibleCollection;
-import org.observe.collect.ObservableReversibleCollectionImpl.EquivalenceSwitchedReversibleCollection;
-import org.observe.collect.ObservableReversibleCollectionImpl.FilterMappedReversibleCollection;
-import org.observe.collect.ObservableReversibleCollectionImpl.FlattenedReversibleCollection;
-import org.observe.collect.ObservableReversibleCollectionImpl.FlattenedReversibleValueCollection;
-import org.observe.collect.ObservableReversibleCollectionImpl.FlattenedReversibleValuesCollection;
-import org.observe.collect.ObservableReversibleCollectionImpl.ModFilteredReversibleCollection;
-import org.observe.collect.ObservableReversibleCollectionImpl.ObservableReversedCollection;
-import org.observe.collect.ObservableReversibleCollectionImpl.RefreshingReversibleCollection;
-import org.observe.collect.ObservableReversibleCollectionImpl.TakenUntilReversibleCollection;
+import org.observe.collect.ObservableCollectionImpl.DerivedCollection;
+import org.observe.collect.ObservableCollectionImpl.ElementRefreshOp;
+import org.observe.collect.ObservableCollectionImpl.EquivalenceSwitchOp;
+import org.observe.collect.ObservableCollectionImpl.FilterMapResult;
+import org.observe.collect.ObservableCollectionImpl.FlattenedObservableCollection;
+import org.observe.collect.ObservableCollectionImpl.FlattenedValueCollection;
+import org.observe.collect.ObservableCollectionImpl.MapOp;
+import org.observe.collect.ObservableCollectionImpl.RefreshOp;
+import org.observe.collect.ObservableCollectionImpl.ReversedObservableCollection;
+import org.observe.collect.ObservableList.CombinedListBuilder2;
+import org.observe.collect.ObservableList.ListDataFlow;
+import org.observe.collect.ObservableList.MappedListBuilder;
+import org.observe.collect.ObservableReversibleCollectionImpl.FlattenedReversibleCollection.ReversibleFlattenedSpliterator;
 import org.observe.collect.ObservableReversibleSpliterator.WrappingReversibleObservableSpliterator;
+import org.qommons.Ternian;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
-import org.qommons.collect.Betterator;
-import org.qommons.collect.CircularArrayList;
 import org.qommons.collect.CollectionElement;
-import org.qommons.collect.ElementSpliterator;
-import org.qommons.collect.ReversibleList;
+import org.qommons.collect.ElementSpliterator.ElementSpliteratorMap;
+import org.qommons.collect.ImmutableIterator;
 import org.qommons.collect.ReversibleElementSpliterator;
+import org.qommons.collect.ReversibleList;
+import org.qommons.collect.ReversibleSpliterator;
 import org.qommons.collect.TransactableList;
 import org.qommons.value.Value;
 
@@ -594,77 +599,28 @@ public class ObservableListImpl {
 	 * @param <E> The type of values in the source list
 	 * @param <T> The type of values in this list
 	 */
-	public static abstract class SimpleMappedSubList<E, T> implements ReversibleList<T>, TransactableList<T> {
+	public static class SimpleMappedSubList<E, T> implements ReversibleList<T>, TransactableList<T> {
 		private final ReversibleList<? extends E> theWrapped;
 		private final TypeToken<T> theType;
 		private final Equivalence<? super T> theEquivalence;
 		private final Transactable theTransactable;
+		private final ElementSpliteratorMap<E, T> theMap;
 
 		/**
 		 * @param wrapped The source sub-list
 		 * @param type The type of the derived list
 		 * @param equivalence The equivalence set of the derived list
 		 * @param transactable The transaction to use for the derived list
+		 * @param map
 		 */
 		public SimpleMappedSubList(ReversibleList<? extends E> wrapped, TypeToken<T> type, Equivalence<? super T> equivalence,
-			Transactable transactable) {
+			Transactable transactable, ElementSpliteratorMap<E, T> map) {
 			theWrapped = wrapped;
 			theType = type;
 			theEquivalence = equivalence;
 			theTransactable = transactable;
+			theMap = map;
 		}
-
-		/**
-		 * @param wrap The source value
-		 * @return The mapped value
-		 */
-		protected abstract T wrap(E wrap);
-
-		/** @return Whether removals in this list are restricted */
-		protected boolean isRemoveRestricted() {
-			return false;
-		}
-		/**
-		 * @param value The value to remove
-		 * @return null if the value can be removed, or a message saying why it can't
-		 */
-		protected String checkRemove(E value) {
-			return null;
-		}
-		/**
-		 * @param value The value to add
-		 * @return null if the value can be added, or a message saying why it can't
-		 */
-		protected abstract String checkAdd(T value);
-		/**
-		 * @param value The value to remove
-		 * @return The value
-		 * @throws RuntimeException If the value can't be removed
-		 */
-		protected E attemptedRemove(E value) {
-			return null;
-		}
-		/**
-		 * @param value The value to add
-		 * @return The value to add to the source collection
-		 */
-		protected abstract E attemptedAdd(T value);
-
-		/** @return Whether individual elements in this list may be set */
-		protected abstract boolean isElementSettable();
-		/**
-		 * @param container The source value
-		 * @param value The value to set
-		 * @return null If the given value can be set in the source value, or a message saying why it can't
-		 */
-		protected abstract String checkSet(E container, T value);
-		/**
-		 * @param container The source value
-		 * @param value The value to set
-		 * @param cause The cause of the operation
-		 * @return The value previously set in the container
-		 */
-		protected abstract T attemptSet(E container, T value, Object cause);
 
 		/** @return The type of the derived collection */
 		public TypeToken<T> getType() {
@@ -687,7 +643,7 @@ public class ObservableListImpl {
 		}
 
 		@Override
-		public Betterator<T> iterator() {
+		public ImmutableIterator<T> iterator() {
 			return ReversibleList.super.iterator();
 		}
 
@@ -752,7 +708,7 @@ public class ObservableListImpl {
 
 		@Override
 		public T get(int index) {
-			return wrap(theWrapped.get(index));
+			return theMap.map(theWrapped.get(index));
 		}
 
 		@Override
@@ -808,64 +764,25 @@ public class ObservableListImpl {
 		}
 
 		@Override
-		public ReversibleElementSpliterator<T> spliterator(boolean fromStart) {
-			return new ReversibleElementSpliterator.WrappingReversibleSpliterator<>(theWrapped.spliterator(fromStart), getType(), map());
+		public ReversibleSpliterator<T> spliterator(boolean fromStart) {
+			return new ReversibleElementSpliterator.MappedReversibleSpliterator<E, T>(
+				(ReversibleSpliterator<E>) theWrapped.spliterator(fromStart), theMap);
 		}
 
 		@Override
-		public ReversibleElementSpliterator<T> spliterator(int index) {
-			return new ReversibleElementSpliterator.WrappingReversibleSpliterator<>(theWrapped.spliterator(index), getType(), map());
+		public ReversibleSpliterator<T> spliterator(int index) {
+			return new ReversibleElementSpliterator.MappedReversibleSpliterator<E, T>(
+				(ReversibleSpliterator<E>) theWrapped.spliterator(index), theMap);
 		}
 
-		private Supplier<Function<CollectionElement<? extends E>, CollectionElement<T>>> map() {
-			return () -> {
-				CollectionElement<? extends E>[] container = new CollectionElement[1];
-				ElementSpliterator.WrappingElement<E, T> wrapping;
-				wrapping = new ElementSpliterator.WrappingElement<E, T>(getType(), container) {
-					@Override
-					public T get() {
-						return wrap(getWrapped().get());
-					}
+		@Override
+		public ReversibleElementSpliterator<T> mutableSpliterator(boolean fromStart) {
+			return ((ReversibleElementSpliterator<E>) theWrapped.mutableSpliterator(fromStart)).map(theMap);
+		}
 
-					@Override
-					public String canRemove() {
-						String msg = checkRemove(getWrapped().get());
-						if (msg != null)
-							return msg;
-						return super.canRemove();
-					}
-
-					@Override
-					public void remove() {
-						attemptedRemove(getWrapped().get());
-						super.remove();
-					}
-
-					@Override
-					public <V extends T> String isAcceptable(V value) {
-						if (isElementSettable())
-							return checkSet(getWrapped().get(), value);
-						else {
-							String msg = checkAdd(value);
-							if (msg != null)
-								return msg;
-							return ((CollectionElement<E>) getWrapped()).isAcceptable(attemptedAdd(value));
-						}
-					}
-
-					@Override
-					public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
-						if (isElementSettable())
-							return attemptSet(getWrapped().get(), value, cause);
-						else
-							return wrap(((CollectionElement<E>) getWrapped()).set(attemptedAdd(value), cause));
-					}
-				};
-				return el -> {
-					container[0] = el;
-					return wrapping;
-				};
-			};
+		@Override
+		public ReversibleElementSpliterator<T> mutableSpliterator(int index) {
+			return ((ReversibleElementSpliterator<E>) theWrapped.mutableSpliterator(index)).map(theMap);
 		}
 
 		@Override
@@ -1222,7 +1139,7 @@ public class ObservableListImpl {
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	public static class ReversedList<E> extends ObservableReversedCollection<E> implements ObservableList<E> {
+	public static class ReversedList<E> extends ReversedObservableCollection<E> implements ObservableList<E> {
 		/** @param list The source list */
 		protected ReversedList(ObservableList<E> list) {
 			super(list);
@@ -1239,9 +1156,16 @@ public class ObservableListImpl {
 		}
 
 		@Override
-		public ObservableReversibleSpliterator<E> spliterator(int index) {
+		public ObservableElementSpliterator<E> spliterator(int index) {
 			try (Transaction t = lock(false, null)) {
-				return getWrapped().spliterator(reflect(index, true));
+				return getWrapped().spliterator(reflect(index, true)).reverse();
+			}
+		}
+
+		@Override
+		public MutableObservableSpliterator<E> mutableSpliterator(int index) {
+			try (Transaction t = lock(false, null)) {
+				return getWrapped().mutableSpliterator(reflect(index, true)).reverse();
 			}
 		}
 
@@ -1366,471 +1290,372 @@ public class ObservableListImpl {
 		}
 	}
 
-	/**
-	 * Implements {@link ObservableList#withEquivalence(Equivalence)}
-	 *
-	 * @param <E> The type of values in the list
-	 */
-	public static class EquivalenceSwitchedObservableList<E> extends EquivalenceSwitchedReversibleCollection<E>
-	implements ObservableList<E> {
-		/**
-		 * @param wrap The source list
-		 * @param equivalence The equivalence for this list
-		 */
-		protected EquivalenceSwitchedObservableList(ObservableList<E> wrap, Equivalence<? super E> equivalence) {
-			super(wrap, equivalence);
+	public static class BaseListDataFlow<E> extends BaseCollectionDataFlow<E> implements ListDataFlow<E, E, E> {
+		public BaseListDataFlow(ObservableList<E> source) {
+			super(source);
 		}
 
 		@Override
-		protected ObservableList<E> getWrapped() {
-			return (ObservableList<E>) super.getWrapped();
+		protected ObservableList<E> getSource() {
+			return (ObservableList<E>) super.getSource();
 		}
 
 		@Override
-		public void add(int index, E element) {
-			getWrapped().add(index, element);
+		public ListDataFlow<E, E, E> withEquivalence(Equivalence<? super E> equivalence) {
+			return new EquivalenceSwitchListOp<>(this, equivalence);
 		}
 
 		@Override
-		public boolean addAll(int index, Collection<? extends E> c) {
-			return getWrapped().addAll(index, c);
+		public ListDataFlow<E, E, E> refresh(Observable<?> refresh) {
+			return new RefreshListOp<>(this, refresh);
 		}
 
 		@Override
-		public boolean removeLast(Object o) {
-			remove(o);
-			return find(v -> equivalence().elementEquals(v, o), el -> el.remove(), false);
+		public ListDataFlow<E, E, E> refreshEach(Function<? super E, ? extends Observable<?>> refresh) {
+			return new ElementRefreshListOp<>(this, refresh);
 		}
 
 		@Override
-		public E remove(int index) {
-			return getWrapped().remove(index);
+		public <X> MappedListBuilder<E, E, X> map(TypeToken<X> target) {
+			return new MappedListBuilder<>(this, target);
 		}
 
 		@Override
-		public void removeRange(int fromIndex, int toIndex) {
-			getWrapped().removeRange(fromIndex, toIndex);
+		public <X> ListDataFlow<E, ?, X> flatMap(TypeToken<X> target, Function<? super E, ? extends ObservableValue<? extends X>> map) {
+			return (ListDataFlow<E, ?, X>) super.flatMap(target, map);
 		}
 
 		@Override
-		public E set(int index, E element) {
-			return getWrapped().set(index, element);
+		public <V, X> CombinedListBuilder2<E, E, V, X> combineWith(ObservableValue<V> value, TypeToken<X> target) {
+			return new CombinedListBuilder2<>(this, target, value, Ternian.NONE);
 		}
 
 		@Override
-		public ObservableReversibleSpliterator<E> spliterator(int index) {
-			return getWrapped().spliterator(index);
+		public <V, X> CombinedListBuilder2<E, E, V, X> combineWith(ObservableValue<V> value, boolean combineNulls, TypeToken<X> target) {
+			return new CombinedListBuilder2<>(this, target, value, Ternian.of(combineNulls));
 		}
 
 		@Override
-		public ListIterator<E> listIterator(int index) {
-			return getWrapped().listIterator(index);
-		}
-
-		@Override
-		public ReversibleList<E> subList(int fromIndex, int toIndex) {
-			return new SimpleMappedSubList<E, E>(getWrapped().subList(fromIndex, toIndex), getType(), equivalence(), this) {
-				@Override
-				protected E wrap(E wrap) {
-					return wrap;
-				}
-
-				@Override
-				protected String checkAdd(E value) {
-					return canAdd(value);
-				}
-
-				@Override
-				protected E attemptedAdd(E value) {
-					return value;
-				}
-
-				@Override
-				protected boolean isElementSettable() {
-					return false;
-				}
-
-				@Override
-				protected String checkSet(E container, E value) {
-					return null;
-				}
-
-				@Override
-				protected E attemptSet(E container, E value, Object cause) {
-					return null;
-				}
-			};
+		public ObservableList<E> build() {
+			return getSource();
 		}
 	}
 
-	/**
-	 * Implements {@link ObservableList#filterMap(ObservableCollection.FilterMapDef)}
-	 *
-	 * @param <E> The type of values in the source collection
-	 * @param <T> The type of values in this collection
-	 */
-	public static class FilterMappedObservableList<E, T> extends FilterMappedReversibleCollection<E, T> implements ObservableList<T> {
-		/**
-		 * @param wrap The source collection
-		 * @param filterMapDef The definition of which values are filtered and how they are mapped
-		 */
-		protected FilterMappedObservableList(ObservableList<E> wrap, FilterMapDef<E, ?, T> filterMapDef) {
-			super(wrap, filterMapDef);
+	public static class EquivalenceSwitchListOp<E, T> extends EquivalenceSwitchOp<E, T> implements ListDataFlow<E, T, T> {
+		protected EquivalenceSwitchListOp(AbstractDataFlow<E, ?, T> parent, Equivalence<? super T> equivalence) {
+			super(parent, equivalence);
 		}
 
 		@Override
-		protected ObservableList<E> getWrapped() {
-			return (ObservableList<E>) super.getWrapped();
+		protected ObservableList<E> getSource() {
+			return (ObservableList<E>) super.getSource();
 		}
 
-		/**
-		 * @param index The index in this collection
-		 * @param includeTerminus Whether the terminal index (size()) is valid for the index
-		 * @return The corresponding index in the source collection
-		 */
-		protected int sourceIndex(int index, boolean includeTerminus) {
-			if (!getDef().isFiltered())
+		@Override
+		public ListDataFlow<E, T, T> withEquivalence(Equivalence<? super T> equivalence) {
+			return new EquivalenceSwitchListOp<>(this, equivalence);
+		}
+
+		@Override
+		public ListDataFlow<E, T, T> refresh(Observable<?> refresh) {
+			return new RefreshListOp<>(this, refresh);
+		}
+
+		@Override
+		public ListDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
+			return new ElementRefreshListOp<>(this, refresh);
+		}
+
+		@Override
+		public <X> MappedListBuilder<E, T, X> map(TypeToken<X> target) {
+			return new MappedListBuilder<>(this, target);
+		}
+
+		@Override
+		public <X> ListDataFlow<E, ?, X> flatMap(TypeToken<X> target, Function<? super T, ? extends ObservableValue<? extends X>> map) {
+			return (ListDataFlow<E, ?, X>) super.flatMap(target, map);
+		}
+
+		@Override
+		public <V, X> CombinedListBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, TypeToken<X> target) {
+			return new CombinedListBuilder2<>(this, target, value, Ternian.NONE);
+		}
+
+		@Override
+		public <V, X> CombinedListBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, boolean combineNulls, TypeToken<X> target) {
+			return new CombinedListBuilder2<>(this, target, value, Ternian.of(combineNulls));
+		}
+
+		@Override
+		public ObservableList<T> build() {
+			return new DerivedList<E, T>(getSource(), manageCollection());
+		}
+	}
+
+	public static class MapListOp<E, I, T> extends MapOp<E, I, T> implements ListDataFlow<E, I, T> {
+		protected MapListOp(AbstractDataFlow<E, ?, I> parent, TypeToken<T> target, Function<? super I, ? extends T> map, boolean mapNulls,
+			Function<? super T, ? extends I> reverse, ElementSetter<? super I, ? super T> elementReverse, boolean reverseNulls) {
+			super(parent, target, map, mapNulls, reverse, elementReverse, reverseNulls);
+		}
+
+		@Override
+		protected ObservableList<E> getSource() {
+			return (ObservableList<E>) super.getSource();
+		}
+
+		@Override
+		public ListDataFlow<E, T, T> withEquivalence(Equivalence<? super T> equivalence) {
+			return new EquivalenceSwitchListOp<>(this, equivalence);
+		}
+
+		@Override
+		public ListDataFlow<E, T, T> refresh(Observable<?> refresh) {
+			return new RefreshListOp<>(this, refresh);
+		}
+
+		@Override
+		public ListDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
+			return new ElementRefreshListOp<>(this, refresh);
+		}
+
+		@Override
+		public <X> MappedListBuilder<E, T, X> map(TypeToken<X> target) {
+			return new MappedListBuilder<>(this, target);
+		}
+
+		@Override
+		public <X> ListDataFlow<E, ?, X> flatMap(TypeToken<X> target, Function<? super T, ? extends ObservableValue<? extends X>> map) {
+			return (ListDataFlow<E, ?, X>) super.flatMap(target, map);
+		}
+
+		@Override
+		public <V, X> CombinedListBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, TypeToken<X> target) {
+			return new CombinedListBuilder2<>(this, target, value, Ternian.NONE);
+		}
+
+		@Override
+		public <V, X> CombinedListBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, boolean combineNulls, TypeToken<X> target) {
+			return new CombinedListBuilder2<>(this, target, value, Ternian.of(combineNulls));
+		}
+
+		@Override
+		public ObservableList<T> build() {
+			return new DerivedList<E, T>(getSource(), manageCollection());
+		}
+	}
+
+	public static class RefreshListOp<E, T> extends RefreshOp<E, T> implements ListDataFlow<E, T, T> {
+		protected RefreshListOp(AbstractDataFlow<E, ?, T> parent, Observable<?> refresh) {
+			super(parent, refresh);
+		}
+
+		@Override
+		protected ObservableList<E> getSource() {
+			return (ObservableList<E>) super.getSource();
+		}
+
+		@Override
+		public ListDataFlow<E, T, T> withEquivalence(Equivalence<? super T> equivalence) {
+			return new EquivalenceSwitchListOp<>(this, equivalence);
+		}
+
+		@Override
+		public ListDataFlow<E, T, T> refresh(Observable<?> refresh) {
+			return new RefreshListOp<>(this, refresh);
+		}
+
+		@Override
+		public ListDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
+			return new ElementRefreshListOp<>(this, refresh);
+		}
+
+		@Override
+		public <X> MappedListBuilder<E, T, X> map(TypeToken<X> target) {
+			return new MappedListBuilder<>(this, target);
+		}
+
+		@Override
+		public <X> ListDataFlow<E, ?, X> flatMap(TypeToken<X> target, Function<? super T, ? extends ObservableValue<? extends X>> map) {
+			return (ListDataFlow<E, ?, X>) super.flatMap(target, map);
+		}
+
+		@Override
+		public <V, X> CombinedListBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, TypeToken<X> target) {
+			return new CombinedListBuilder2<>(this, target, value, Ternian.NONE);
+		}
+
+		@Override
+		public <V, X> CombinedListBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, boolean combineNulls, TypeToken<X> target) {
+			return new CombinedListBuilder2<>(this, target, value, Ternian.of(combineNulls));
+		}
+
+		@Override
+		public ObservableList<T> build() {
+			return new DerivedList<E, T>(getSource(), manageCollection());
+		}
+	}
+
+	public static class ElementRefreshListOp<E, T> extends ElementRefreshOp<E, T> implements ListDataFlow<E, T, T> {
+		protected ElementRefreshListOp(AbstractDataFlow<E, ?, T> parent, Function<? super T, ? extends Observable<?>> elementRefresh) {
+			super(parent, elementRefresh);
+		}
+
+		@Override
+		protected ObservableList<E> getSource() {
+			return (ObservableList<E>) super.getSource();
+		}
+
+		@Override
+		public ListDataFlow<E, T, T> withEquivalence(Equivalence<? super T> equivalence) {
+			return new EquivalenceSwitchListOp<>(this, equivalence);
+		}
+
+		@Override
+		public ListDataFlow<E, T, T> refresh(Observable<?> refresh) {
+			return new RefreshListOp<>(this, refresh);
+		}
+
+		@Override
+		public ListDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
+			return new ElementRefreshListOp<>(this, refresh);
+		}
+
+		@Override
+		public <X> MappedListBuilder<E, T, X> map(TypeToken<X> target) {
+			return new MappedListBuilder<>(this, target);
+		}
+
+		@Override
+		public <X> ListDataFlow<E, ?, X> flatMap(TypeToken<X> target, Function<? super T, ? extends ObservableValue<? extends X>> map) {
+			return (ListDataFlow<E, ?, X>) super.flatMap(target, map);
+		}
+
+		@Override
+		public <V, X> CombinedListBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, TypeToken<X> target) {
+			return new CombinedListBuilder2<>(this, target, value, Ternian.NONE);
+		}
+
+		@Override
+		public <V, X> CombinedListBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, boolean combineNulls, TypeToken<X> target) {
+			return new CombinedListBuilder2<>(this, target, value, Ternian.of(combineNulls));
+		}
+
+		@Override
+		public ObservableList<T> build() {
+			return new DerivedList<E, T>(getSource(), manageCollection());
+		}
+	}
+
+	public static class DerivedList<E, T> extends DerivedCollection<E, T> implements ObservableList<T> {
+		public DerivedList(ObservableList<E> source, CollectionManager<E, T> flow) {
+			super(source, flow);
+		}
+
+		@Override
+		protected ObservableList<E> getSource() {
+			return (ObservableList<E>) super.getSource();
+		}
+
+		@Override
+		public void add(int index, T e) {
+			if (!getFlow().isReversible())
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			if (!checkDestType(e))
+				throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+			try (Transaction t = lock(true, null)) {
+				if (index > size())
+					throw new IndexOutOfBoundsException(index + " of " + size());
+				FilterMapResult<T, E> reversed = getFlow().reverse(new FilterMapResult<>(e));
+				if (reversed.error != null)
+					throw new IllegalArgumentException(reversed.error);
+				getSource().add(mapToSourceIndex(index), reversed.result);
+			}
+		}
+
+		protected int mapToSourceIndex(int index) {
+			if (!isFiltered())
 				return index;
-			if (index < 0)
-				throw new IndexOutOfBoundsException("" + index);
+			int presentIndex = 0;
 			int srcIndex = 0;
-			int mappedIndex = 0;
-			FilterMapResult<E, T> res = new FilterMapResult<>();
-			for (E v : getWrapped()) {
-				res.source = v;
-				if (getDef().map(res).error == null) {
-					if (mappedIndex == index)
-						return srcIndex;
-					mappedIndex++;
+			for (CollectionElementManager<E, T> elMgr : getElements().values()) {
+				if (elMgr.isPresent()) {
+					if (index == presentIndex)
+						break;
+					presentIndex++;
 				}
 				srcIndex++;
 			}
-			if (includeTerminus && mappedIndex == index)
-				return srcIndex;
-			throw new IndexOutOfBoundsException(index + " of " + mappedIndex);
-		}
-
-		@Override
-		public ObservableReversibleSpliterator<T> spliterator(int index) {
-			try (Transaction t = lock(false, null)) {
-				return new WrappingReversibleObservableSpliterator<>(getWrapped().spliterator(sourceIndex(index, true)), getType(), map());
-			}
-		}
-
-		@Override
-		public void add(int index, T element) {
-			if (!getDef().isReversible() || !getDef().checkDestType(element))
-				throw new IllegalArgumentException(StdMsg.BAD_TYPE);
-			FilterMapResult<T, E> reversed = getDef().reverse(new FilterMapResult<>(element));
-			if (reversed.error != null)
-				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
-			try (Transaction t = lock(true, null)) {
-				getWrapped().add(sourceIndex(index, true), reversed.result);
-			}
+			if (presentIndex < index)
+				throw new IndexOutOfBoundsException(index + " of " + presentIndex);
+			return srcIndex;
 		}
 
 		@Override
 		public boolean addAll(int index, Collection<? extends T> c) {
-			if (!getDef().isReversible())
+			if (c.isEmpty())
 				return false;
+			if (!getFlow().isReversible())
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			try (Transaction t = lock(true, null)) {
-				return getWrapped().addAll(sourceIndex(index, true), reverse(c));
+				return getSource().addAll(mapToSourceIndex(index), reverse(c, true));
 			}
 		}
 
 		@Override
 		public T remove(int index) {
 			try (Transaction t = lock(true, null)) {
-				return getDef().map(new FilterMapResult<>(getWrapped().remove(sourceIndex(index, false)))).result;
+				CollectionElementManager<E, T> elMgr = getPresentElements().entrySet().get(index).getValue();
+				T old = elMgr.get();
+				getSource().remove(mapToSourceIndex(index));
+				return old;
 			}
 		}
 
 		@Override
 		public void removeRange(int fromIndex, int toIndex) {
 			try (Transaction t = lock(true, null)) {
-				getWrapped().removeRange(sourceIndex(fromIndex, true), sourceIndex(toIndex, true));
+				getSource().removeRange(mapToSourceIndex(fromIndex), mapToSourceIndex(toIndex));
 			}
 		}
 
 		@Override
 		public T set(int index, T element) {
-			if (!getDef().isReversible() || !getDef().checkDestType(element))
-				throw new IllegalArgumentException(StdMsg.BAD_TYPE);
-			FilterMapResult<T, E> reversed = getDef().reverse(new FilterMapResult<>(element));
-			if (reversed.error != null)
-				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 			try (Transaction t = lock(true, null)) {
-				return getDef().map(new FilterMapResult<>(getWrapped().set(sourceIndex(index, false), reversed.result))).result;
+				CollectionElementManager<E, T> elMgr = getPresentElements().entrySet().get(index).getValue();
+				T old = elMgr.get();
+				String msg = elMgr.setElement(element, true, null);
+				if (msg == null)
+					return old;
+				if (getFlow().isReversible()) {
+					FilterMapResult<T, E> res = getFlow().reverse(element);
+					if (res.error != null)
+						throw new IllegalArgumentException(res.error);
+					getSource().set(mapToSourceIndex(index), res.result);
+					return old;
+				} else
+					throw new IllegalArgumentException(msg);
 			}
-		}
-
-		/**
-		 * @param e The source value
-		 * @return The mapped value
-		 */
-		protected T map(E e) {
-			return getDef().map(new FilterMapResult<>(e)).result;
-		}
-
-		/**
-		 * @param value The value to add to this collection
-		 * @return The value to add to the source collection
-		 */
-		protected E attemptedAdd(T value) {
-			if (!getDef().isReversible())
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			FilterMapResult<T, E> res = getDef().reverse(new FilterMapResult<>(value));
-			if (res.error != null)
-				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
-			return res.result;
 		}
 
 		@Override
 		public ListIterator<T> listIterator(int index) {
-			if (!getDef().isFiltered()) {
-				return new SimpleMappedListIterator<E, T>(getWrapped().listIterator(index)) {
-					@Override
-					protected T wrap(E e) {
-						return FilterMappedObservableList.this.map(e);
-					}
-
-					@Override
-					protected E attemptedAdd(T value) {
-						return FilterMappedObservableList.this.attemptedAdd(value);
-					}
-
-					@Override
-					protected boolean isElementSettable() {
-						return false;
-					}
-
-					@Override
-					protected T attemptSet(E container, T value, Object cause) {
-						return null;
-					}
-				};
-			}
-
-			ObservableReversibleSpliterator<T> spliter = spliterator(index);
-			return new ReversibleElementSpliterator.PartialListIterator<T>(spliter) {
-				private int theNextIndex = index;
-
-				@Override
-				public T next() {
-					theNextIndex++;
-					return super.next();
-				}
-
-				@Override
-				public T previous() {
-					theNextIndex--;
-					return super.previous();
-				}
-
-				@Override
-				public int nextIndex() {
-					return theNextIndex;
-				}
-
-				@Override
-				public int previousIndex() {
-					return theNextIndex - 1;
-				}
-
-				@Override
-				public void add(T e) {
-					// The spliterator doesn't support addition. If I use the main list to add, the spliterator may become invalid.
-					// TODO There are potentially ways to support this, but it's rather difficult.
-					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-				}
-			};
+			// TODO Auto-generated method stub
+			return null;
 		}
+
+		@Override
+		public ObservableElementSpliterator<T> spliterator(int index) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public MutableObservableSpliterator<T> mutableSpliterator(int index) {}
 
 		@Override
 		public ReversibleList<T> subList(int fromIndex, int toIndex) {
-			if (!getDef().isFiltered()) {
-				ReversibleList<E> wrapSub = getWrapped().subList(fromIndex, toIndex);
-				return new SimpleMappedSubList<E, T>(wrapSub, getType(), equivalence(), this) {
-					@Override
-					protected T wrap(E wrap) {
-						return FilterMappedObservableList.this.map(wrap);
-					}
-
-					@Override
-					protected String checkAdd(T value) {
-						return canAdd(value);
-					}
-
-					@Override
-					protected E attemptedAdd(T value) {
-						return FilterMappedObservableList.this.attemptedAdd(value);
-					}
-
-					@Override
-					protected boolean isElementSettable() {
-						return false;
-					}
-
-					@Override
-					protected String checkSet(E container, T value) {
-						return null;
-					}
-
-					@Override
-					protected T attemptSet(E container, T value, Object cause) {
-						return null;
-					}
-				};
-			}
-			// TODO Auto-generated method stub
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableList#combine(ObservableCollection.CombinedCollectionDef)}
-	 *
-	 * @param <E> The type of values in the source list
-	 * @param <V> The type of values in this list
-	 */
-	public static class CombinedObservableList<E, V> extends CombinedReversibleCollection<E, V> implements ObservableList<V> {
-		/**
-		 * @param wrap The source list
-		 * @param def The combination definition containing the observables to combine and the functions to use to combine the values
-		 */
-		protected CombinedObservableList(ObservableReversibleCollection<E> wrap, CombinedCollectionDef<E, V> def) {
-			super(wrap, def);
-		}
-
-		@Override
-		protected ObservableList<E> getWrapped() {
-			return (ObservableList<E>) super.getWrapped();
-		}
-
-		@Override
-		public void add(int index, V element) {
-			if (getDef().getReverse() == null)
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			else if (element == null || !getDef().areNullsReversed())
-				throw new UnsupportedOperationException(StdMsg.NULL_DISALLOWED);
-			else
-				getWrapped().add(index, getDef().getReverse().apply(new DynamicCombinedValues<>(element)));
-		}
-
-		@Override
-		public boolean addAll(int index, Collection<? extends V> c) {
-			if (getDef().getReverse() == null)
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			if (!getDef().areNullsReversed()) {
-				for (V v : c)
-					if (v == null)
-						throw new UnsupportedOperationException(StdMsg.NULL_DISALLOWED);
-			}
-			Map<ObservableValue<?>, Object> argValues = new HashMap<>(getDef().getArgs().size() * 4 / 3);
-			for (ObservableValue<?> arg : getDef().getArgs())
-				argValues.put(arg, arg.get());
-			StaticCombinedValues<V> combined = new StaticCombinedValues<>();
-			combined.argValues = argValues;
-			return getWrapped().addAll(index, c.stream().map(o -> {
-				combined.element = o;
-				return getDef().getReverse().apply(combined);
-			}).collect(Collectors.toList()));
-		}
-
-		@Override
-		public V set(int index, V element) {
-			if (getDef().getReverse() == null)
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			else if (element == null || !getDef().areNullsReversed())
-				throw new UnsupportedOperationException(StdMsg.NULL_DISALLOWED);
-			else
-				return combine(getWrapped().set(index, getDef().getReverse().apply(new DynamicCombinedValues<>(element))));
-		}
-
-		@Override
-		public V remove(int index) {
-			return combine(getWrapped().remove(index));
-		}
-
-		@Override
-		public void removeRange(int fromIndex, int toIndex) {
-			getWrapped().removeRange(fromIndex, toIndex);
-		}
-
-		@Override
-		public ObservableReversibleSpliterator<V> spliterator(int index) {
-			return new WrappingReversibleObservableSpliterator<>(getWrapped().spliterator(index), getType(), map());
-		}
-
-		@Override
-		public ListIterator<V> listIterator(int index) {
-			return new SimpleMappedListIterator<E, V>(getWrapped().listIterator(index)) {
-				@Override
-				protected V wrap(E e) {
-					return combine(e);
-				}
-
-				@Override
-				protected E attemptedAdd(V value) {
-					if (getDef().getReverse() == null)
-						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-					else if (value == null || !getDef().areNullsReversed())
-						throw new UnsupportedOperationException(StdMsg.NULL_DISALLOWED);
-					return getDef().getReverse().apply(new DynamicCombinedValues<>(value));
-				}
-
-				@Override
-				protected boolean isElementSettable() {
-					return false;
-				}
-
-				@Override
-				protected V attemptSet(E container, V value, Object cause) {
-					return null;
-				}
-			};
-		}
-
-		@Override
-		public ReversibleList<V> subList(int fromIndex, int toIndex) {
-			return new SimpleMappedSubList<E, V>(getWrapped().subList(fromIndex, toIndex), getType(), equivalence(), this) {
-				@Override
-				protected V wrap(E wrap) {
-					return combine(wrap);
-				}
-
-				@Override
-				protected String checkAdd(V value) {
-					if (getDef().getReverse() == null)
-						return StdMsg.UNSUPPORTED_OPERATION;
-					else if (value == null || !getDef().areNullsReversed())
-						return StdMsg.NULL_DISALLOWED;
-					return getWrapped().canAdd(getDef().getReverse().apply(new DynamicCombinedValues<>(value)));
-				}
-
-				@Override
-				protected E attemptedAdd(V value) {
-					if (getDef().getReverse() == null)
-						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-					else if (value == null || !getDef().areNullsReversed())
-						throw new UnsupportedOperationException(StdMsg.NULL_DISALLOWED);
-					return getDef().getReverse().apply(new DynamicCombinedValues<>(value));
-				}
-
-				@Override
-				protected boolean isElementSettable() {
-					return false;
-				}
-
-				@Override
-				protected String checkSet(E container, V value) {
-					return null;
-				}
-
-				@Override
-				protected V attemptSet(E container, V value, Object cause) {
-					return null;
-				}
-			};
+			if (!isFiltered())
+				return new SimpleMappedSubList<>(getSource().subList(fromIndex, toIndex), getType(), equivalence(), this, map());
 		}
 	}
 
@@ -1839,28 +1664,28 @@ public class ObservableListImpl {
 	 *
 	 * @param <E> The type of values in the list
 	 */
-	public static class ModFilteredObservableList<E> extends ModFilteredReversibleCollection<E> implements ObservableList<E> {
+	public static class ListView<E> extends CollectionView<E> implements ObservableList<E> {
 		/**
 		 * @param wrapped The source list
 		 * @param def The definition for how the list may be modified
 		 */
-		protected ModFilteredObservableList(ObservableList<E> wrapped, ModFilterDef<E> def) {
+		protected ListView(ObservableList<E> wrapped, ViewDef<E> def) {
 			super(wrapped, def);
 		}
 
 		@Override
-		protected ObservableList<E> getWrapped() {
-			return (ObservableList<E>) super.getWrapped();
+		protected ObservableList<E> getCollection() {
+			return (ObservableList<E>) super.getCollection();
 		}
 
 		@Override
 		public void add(int index, E element) {
-			getWrapped().add(index, getDef().tryAdd(element));
+			getCollection().add(index, getDef().tryAdd(element));
 		}
 
 		@Override
 		public boolean addAll(int index, Collection<? extends E> c) {
-			return getWrapped().addAll(index, c.stream().map(v -> {
+			return getCollection().addAll(index, c.stream().map(v -> {
 				if (!getType().getRawType().isInstance(v))
 					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
 				return getDef().tryAdd(v);
@@ -1870,11 +1695,11 @@ public class ObservableListImpl {
 		@Override
 		public E remove(int index) {
 			try (Transaction t = lock(true, null)) {
-				E val = getWrapped().get(index);
+				E val = getCollection().get(index);
 				String msg = getDef().checkRemove(val);
 				if (msg != null)
 					throw new IllegalArgumentException(msg);
-				return getWrapped().remove(index);
+				return getCollection().remove(index);
 			}
 		}
 
@@ -1882,12 +1707,12 @@ public class ObservableListImpl {
 		public void removeRange(int fromIndex, int toIndex) {
 			try (Transaction t = lock(true, null)) {
 				for (int i = fromIndex; i < toIndex && i < size(); i++) {
-					E val = getWrapped().get(i);
+					E val = getCollection().get(i);
 					String msg = getDef().checkRemove(val);
 					if (msg != null)
 						throw new IllegalArgumentException(msg);
 				}
-				getWrapped().removeRange(fromIndex, toIndex);
+				getCollection().removeRange(fromIndex, toIndex);
 			}
 		}
 
@@ -1895,22 +1720,27 @@ public class ObservableListImpl {
 		public E set(int index, E element) {
 			getDef().tryAdd(element);
 			try (Transaction t = lock(true, null)) {
-				E val = getWrapped().get(index);
+				E val = getCollection().get(index);
 				String msg = getDef().checkRemove(val);
 				if (msg != null)
 					throw new IllegalArgumentException(msg);
-				return getWrapped().set(index, element);
+				return getCollection().set(index, element);
 			}
 		}
 
 		@Override
-		public ObservableReversibleSpliterator<E> spliterator(int index) {
-			return new WrappingReversibleObservableSpliterator<>(getWrapped().spliterator(index), getType(), map());
+		public ObservableElementSpliterator<E> spliterator(int index) {
+			return getCollection().spliterator(index).map(getDef().mapSpliterator());
+		}
+
+		@Override
+		public MutableObservableSpliterator<E> mutableSpliterator(int index) {
+			return getCollection().mutableSpliterator(index).map(getDef().mapSpliterator());
 		}
 
 		@Override
 		public ListIterator<E> listIterator(int index) {
-			return new SimpleMappedListIterator<E, E>(getWrapped().listIterator(index)) {
+			return new SimpleMappedListIterator<E, E>(getCollection().listIterator(index)) {
 				@Override
 				protected E wrap(E e) {
 					return e;
@@ -1940,493 +1770,8 @@ public class ObservableListImpl {
 
 		@Override
 		public ReversibleList<E> subList(int fromIndex, int toIndex) {
-			return new SimpleMappedSubList<E, E>(getWrapped().subList(fromIndex, toIndex), getType(), equivalence(), this) {
-				@Override
-				protected E wrap(E wrap) {
-					return wrap;
-				}
-
-				@Override
-				protected boolean isRemoveRestricted() {
-					return getDef().isRemoveFiltered();
-				}
-
-				@Override
-				protected String checkRemove(E value) {
-					return getDef().checkRemove(value);
-				}
-
-				@Override
-				protected E attemptedRemove(E value) {
-					return getDef().tryRemove(value);
-				}
-
-				@Override
-				protected String checkAdd(E value) {
-					return getDef().checkAdd(value);
-				}
-
-				@Override
-				protected E attemptedAdd(E value) {
-					return getDef().tryAdd(value);
-				}
-
-				@Override
-				protected boolean isElementSettable() {
-					return false;
-				}
-
-				@Override
-				protected String checkSet(E container, E value) {
-					return null;
-				}
-
-				@Override
-				protected E attemptSet(E container, E value, Object cause) {
-					return null;
-				}
-			};
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableList#cached(Observable)}
-	 *
-	 * @param <E> The type of values in the list
-	 */
-	public static class CachedObservableList<E> extends CachedReversibleCollection<E> implements ObservableList<E> {
-		/**
-		 * @param wrapped The source list
-		 * @param until The observable that destroys this list
-		 */
-		protected CachedObservableList(ObservableList<E> wrapped, Observable<?> until) {
-			super(wrapped, until);
-		}
-
-		@Override
-		protected ObservableList<E> getWrapped() {
-			return (ObservableList<E>) super.getWrapped();
-		}
-
-		@Override
-		protected ReversibleList<E> createCache() {
-			return CircularArrayList.build().unsafe().build();
-		}
-
-		@Override
-		protected ReversibleList<E> getCache() {
-			return (ReversibleList<E>) super.getCache();
-		}
-
-		@Override
-		public void add(int index, E element) {
-			if (isDone())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			getWrapped().add(index, element);
-		}
-
-		@Override
-		public boolean addAll(int index, Collection<? extends E> c) {
-			if (isDone())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			return getWrapped().addAll(index, c);
-		}
-
-		@Override
-		public E remove(int index) {
-			if (isDone())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			return getWrapped().remove(index);
-		}
-
-		@Override
-		public void removeRange(int fromIndex, int toIndex) {
-			if (isDone())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			getWrapped().removeRange(fromIndex, toIndex);
-		}
-
-		@Override
-		public E set(int index, E element) {
-			if (isDone())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			return getWrapped().set(index, element);
-		}
-
-		@Override
-		public ObservableReversibleSpliterator<E> spliterator(int index) {
-			if (isDone())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			return new WrappingReversibleObservableSpliterator<>(getWrapped().spliterator(index), getType(), map());
-		}
-
-		@Override
-		public ListIterator<E> listIterator(int index) {
-			if (isDone())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			// TODO Auto-generated method stub
-		}
-
-		@Override
-		public ReversibleList<E> subList(int fromIndex, int toIndex) {
-			if (isDone())
-				throw new IllegalStateException("This cached collection's finisher has fired");
-			// TODO Auto-generated method stub
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableList#refresh(Observable)}
-	 *
-	 * @param <E> The type of the collection to refresh
-	 */
-	public static class RefreshingList<E> extends RefreshingReversibleCollection<E> implements ObservableList<E> {
-		/**
-		 * @param wrap The source list
-		 * @param refresh The observable that refreshes this list's elements
-		 */
-		protected RefreshingList(ObservableList<E> wrap, Observable<?> refresh) {
-			super(wrap, refresh);
-		}
-
-		@Override
-		protected ObservableList<E> getWrapped() {
-			return (ObservableList<E>) super.getWrapped();
-		}
-
-		@Override
-		public E get(int index) {
-			return getWrapped().get(index);
-		}
-
-		@Override
-		public ObservableReversibleSpliterator<E> spliterator(int index) {
-			return getWrapped().spliterator(index);
-		}
-
-		@Override
-		public void add(int index, E element) {
-			getWrapped().add(index, element);
-		}
-
-		@Override
-		public boolean addAll(int index, Collection<? extends E> c) {
-			return getWrapped().addAll(index, c);
-		}
-
-		@Override
-		public E set(int index, E element) {
-			return getWrapped().set(index, element);
-		}
-
-		@Override
-		public E remove(int index) {
-			return getWrapped().remove(index);
-		}
-
-		@Override
-		public void removeRange(int fromIndex, int toIndex) {
-			getWrapped().removeRange(fromIndex, toIndex);
-		}
-
-		@Override
-		public boolean removeLast(Object o) {
-			return getWrapped().removeLast(o);
-		}
-
-		@Override
-		public ListIterator<E> listIterator(int index) {
-			return getWrapped().listIterator(index);
-		}
-
-		@Override
-		public ReversibleList<E> subList(int fromIndex, int toIndex) {
-			return getWrapped().subList(fromIndex, toIndex);
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableList#refreshEach(Function)}
-	 *
-	 * @param <E> The type of the collection to refresh
-	 */
-	public static class ElementRefreshingList<E> extends ElementRefreshingReversibleCollection<E> implements ObservableList<E> {
-		/**
-		 * @param wrap The source list
-		 * @param refresh The function of observables that refresh this list's elements
-		 */
-		protected ElementRefreshingList(ObservableList<E> wrap, Function<? super E, Observable<?>> refresh) {
-			super(wrap, refresh);
-		}
-
-		@Override
-		protected ObservableList<E> getWrapped() {
-			return (ObservableList<E>) super.getWrapped();
-		}
-
-		@Override
-		public E get(int index) {
-			return getWrapped().get(index);
-		}
-
-		@Override
-		public ObservableReversibleSpliterator<E> spliterator(int index) {
-			return getWrapped().spliterator(index);
-		}
-
-		@Override
-		public void add(int index, E element) {
-			getWrapped().add(index, element);
-		}
-
-		@Override
-		public boolean addAll(int index, Collection<? extends E> c) {
-			return getWrapped().addAll(index, c);
-		}
-
-		@Override
-		public E set(int index, E element) {
-			return getWrapped().set(index, element);
-		}
-
-		@Override
-		public E remove(int index) {
-			return getWrapped().remove(index);
-		}
-
-		@Override
-		public void removeRange(int fromIndex, int toIndex) {
-			getWrapped().removeRange(fromIndex, toIndex);
-		}
-
-		@Override
-		public boolean removeLast(Object o) {
-			return getWrapped().removeLast(o);
-		}
-
-		@Override
-		public ListIterator<E> listIterator(int index) {
-			return getWrapped().listIterator(index);
-		}
-
-		@Override
-		public ReversibleList<E> subList(int fromIndex, int toIndex) {
-			return getWrapped().subList(fromIndex, toIndex);
-		}
-	}
-
-	/**
-	 * Backs {@link ObservableList#takeUntil(Observable)}
-	 *
-	 * @param <E> The type of elements in the collection
-	 */
-	public static class TakenUntilObservableList<E> extends TakenUntilReversibleCollection<E> implements ObservableList<E> {
-		/**
-		 * @param wrap The source list
-		 * @param until The observable that terminates this list's observers
-		 * @param terminate Whether the until observable removes all elements from the observers as well
-		 */
-		protected TakenUntilObservableList(ObservableList<E> wrap, Observable<?> until, boolean terminate) {
-			super(wrap, until, terminate);
-		}
-
-		@Override
-		public ObservableList<E> getWrapped() {
-			return (ObservableList<E>) super.getWrapped();
-		}
-
-		@Override
-		public E get(int index) {
-			return getWrapped().get(index);
-		}
-
-		@Override
-		public ObservableReversibleSpliterator<E> spliterator(int index) {
-			return getWrapped().spliterator(index);
-		}
-
-		@Override
-		public void add(int index, E element) {
-			getWrapped().add(index, element);
-		}
-
-		@Override
-		public boolean addAll(int index, Collection<? extends E> c) {
-			return getWrapped().addAll(index, c);
-		}
-
-		@Override
-		public E set(int index, E element) {
-			return getWrapped().set(index, element);
-		}
-
-		@Override
-		public E remove(int index) {
-			return getWrapped().remove(index);
-		}
-
-		@Override
-		public void removeRange(int fromIndex, int toIndex) {
-			getWrapped().removeRange(fromIndex, toIndex);
-		}
-
-		@Override
-		public boolean removeLast(Object o) {
-			return getWrapped().removeLast(o);
-		}
-
-		@Override
-		public ListIterator<E> listIterator(int index) {
-			return getWrapped().listIterator(index);
-		}
-
-		@Override
-		public ReversibleList<E> subList(int fromIndex, int toIndex) {
-			return getWrapped().subList(fromIndex, toIndex);
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableList#flattenValues(ObservableList)}
-	 *
-	 * @param <E> The type of elements in the collection
-	 */
-	public static class FlattenedObservableValuesList<E> extends FlattenedReversibleValuesCollection<E> implements ObservableList<E> {
-		/** @param collection The list of values to flatten */
-		protected FlattenedObservableValuesList(ObservableList<? extends ObservableValue<? extends E>> collection) {
-			super(collection);
-		}
-
-		@Override
-		protected ObservableList<? extends ObservableValue<? extends E>> getWrapped() {
-			return (ObservableList<? extends ObservableValue<? extends E>>) super.getWrapped();
-		}
-
-		@Override
-		public E get(int index) {
-			ObservableValue<? extends E> v = getWrapped().get(index);
-			return v == null ? null : v.get();
-		}
-
-		@Override
-		public ObservableReversibleSpliterator<E> spliterator(int index) {
-			return new WrappingReversibleObservableSpliterator<>(getWrapped().spliterator(index), getType(), map());
-		}
-
-		@Override
-		public void add(int index, E element) {
-			((ObservableList<ObservableValue<E>>) getWrapped()).add(index, attemptedAdd(element));
-		}
-
-		@Override
-		public boolean addAll(int index, Collection<? extends E> c) {
-			return ((ObservableList<ObservableValue<E>>) getWrapped()).addAll(index,
-				c.stream().map(this::attemptedAdd).collect(Collectors.toList()));
-		}
-
-		@Override
-		public E set(int index, E element) {
-			ObservableValue<? extends E> ov = getWrapped().get(index);
-			if (ov instanceof SettableValue) {
-				if (!ov.getType().getRawType().isInstance(element))
-					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
-				return ((SettableValue<E>) ov).set(element, null);
-			} else
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-		}
-
-		@Override
-		public E remove(int index) {
-			return unwrap(getWrapped().remove(index));
-		}
-
-		@Override
-		public void removeRange(int fromIndex, int toIndex) {
-			getWrapped().removeRange(fromIndex, toIndex);
-		}
-
-		@Override
-		public boolean removeLast(Object o) {
-			return getWrapped().removeLast(o);
-		}
-
-		private String checkSet(ObservableValue<? extends E> container, E value) {
-			if (container instanceof SettableValue) {
-				if (!container.getType().getRawType().isInstance(value))
-					return StdMsg.BAD_TYPE;
-				return ((SettableValue<E>) container).isAcceptable(value);
-			} else
-				return StdMsg.UNSUPPORTED_OPERATION;
-		}
-
-		private E attemptedSet(ObservableValue<? extends E> container, E value, Object cause) {
-			if (container instanceof SettableValue) {
-				if (!container.getType().getRawType().isInstance(value))
-					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
-				return ((SettableValue<E>) container).set(value, cause);
-			} else
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-		}
-
-		@Override
-		public ListIterator<E> listIterator(int index) {
-			return new SimpleMappedListIterator<ObservableValue<? extends E>, E>(getWrapped().listIterator(index)) {
-				@Override
-				protected E wrap(ObservableValue<? extends E> e) {
-					return FlattenedObservableValuesList.this.unwrap(e);
-				}
-
-				@Override
-				protected ObservableValue<? extends E> attemptedAdd(E value) {
-					return FlattenedObservableValuesList.this.attemptedAdd(value);
-				}
-
-				@Override
-				protected boolean isElementSettable() {
-					return true;
-				}
-
-				@Override
-				protected E attemptSet(ObservableValue<? extends E> container, E value, Object cause) {
-					return FlattenedObservableValuesList.this.attemptedSet(container, value, cause);
-				}
-			};
-		}
-
-		@Override
-		public ReversibleList<E> subList(int fromIndex, int toIndex) {
-			return new SimpleMappedSubList<ObservableValue<? extends E>, E>(getWrapped().subList(fromIndex, toIndex), getType(),
-				equivalence(), this) {
-				@Override
-				protected E wrap(ObservableValue<? extends E> wrap) {
-					return FlattenedObservableValuesList.this.unwrap(wrap);
-				}
-
-				@Override
-				protected String checkAdd(E value) {
-					return FlattenedObservableValuesList.this.canAdd(value);
-				}
-
-				@Override
-				protected ObservableValue<? extends E> attemptedAdd(E value) {
-					return FlattenedObservableValuesList.this.attemptedAdd(value);
-				}
-
-				@Override
-				protected boolean isElementSettable() {
-					return true;
-				}
-
-				@Override
-				protected String checkSet(ObservableValue<? extends E> container, E value) {
-					return FlattenedObservableValuesList.this.checkSet(container, value);
-				}
-
-				@Override
-				protected E attemptSet(ObservableValue<? extends E> container, E value, Object cause) {
-					return FlattenedObservableValuesList.this.attemptedSet(container, value, cause);
-				}
-			};
+			return new SimpleMappedSubList<>(getCollection().subList(fromIndex, toIndex), getType(), equivalence(), this,
+				getDef().mapSpliterator());
 		}
 	}
 
@@ -2435,7 +1780,7 @@ public class ObservableListImpl {
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	public static class FlattenedObservableValueList<E> extends FlattenedReversibleValueCollection<E> implements ObservableList<E> {
+	public static class FlattenedObservableValueList<E> extends FlattenedValueCollection<E> implements ObservableList<E> {
 		/** @param collectionObservable The value of lists to flatten */
 		protected FlattenedObservableValueList(ObservableValue<? extends ObservableList<E>> collectionObservable) {
 			super(collectionObservable);
@@ -2978,7 +2323,7 @@ public class ObservableListImpl {
 	 *
 	 * @param <E> The type of elements in the collection
 	 */
-	public static class FlattenedObservableList<E> extends FlattenedReversibleCollection<E> implements ObservableList<E> {
+	public static class FlattenedObservableList<E> extends FlattenedObservableCollection<E> implements ObservableList<E> {
 		/** @param outer The list of lists to flatten */
 		protected FlattenedObservableList(ObservableList<? extends ObservableList<? extends E>> outer) {
 			super(outer);

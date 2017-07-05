@@ -2,14 +2,10 @@ package org.observe.collect;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import java.util.Spliterator;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -21,22 +17,24 @@ import java.util.function.UnaryOperator;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.Observer;
+import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
-import org.observe.collect.ObservableCollection.AbstractCombinedCollectionBuilder;
-import org.observe.collect.ObservableCollection.CollectionDataFlow;
-import org.observe.collect.ObservableCollection.CombinedValues;
-import org.observe.collect.ObservableCollection.StdMsg;
+import org.observe.collect.MutableObservableSpliterator.MutableObservableSpliteratorMap;
+import org.observe.collect.ObservableCollectionImpl.AbstractCombinedCollectionBuilder;
+import org.observe.collect.ObservableCollectionImpl.AbstractDataFlow;
+import org.observe.collect.ObservableCollectionImpl.CollectionManager;
 import org.qommons.AbstractCausable;
 import org.qommons.Causable;
 import org.qommons.Ternian;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
-import org.qommons.collect.BetterCollection;
+import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.ReversibleCollection;
+import org.qommons.collect.ReversibleIterable;
 import org.qommons.collect.TransactableCollection;
 import org.qommons.collect.TreeList;
 import org.qommons.tree.CountedRedBlackNode.DefaultNode;
@@ -55,13 +53,9 @@ import com.google.common.reflect.TypeToken;
  * <li><b>Dynamic Transformation</b> The stream API allows transforming of the content of one collection into another, but the
  * transformation is done once for all, creating a new collection independent of the source. Sometimes it is desirable to make a transformed
  * collection that does its transformation dynamically, keeping the same data source, so that when the source is modified, the transformed
- * collection is also updated accordingly. #map(Function), #filter(Function), #groupBy(Function), and others allow this. In addition, the
- * syntax of creating these dynamic transformations is much simpler and cleaner: e.g.<br />
- * &nbsp;&nbsp;&nbsp;&nbsp; <code>coll.{@link #map(Function) map}(Function)</code><br />
- * instead of<br />
- * &nbsp;&nbsp;&nbsp;&nbsp;<code>coll.stream().map(Function).collect(Collectors.toList())</code>.</li>
- * <li><b>Modification Control</b> The {@link #filterModification()} method creates a collection that forbids certain types of modifications
- * to it. Modification control can also be used to intercept and perform actions based on modifications to a collection.</li>
+ * collection is also updated accordingly. #map(Function), #filter(Function), #groupBy(Function), and others allow this.</li>
+ * <li><b>Modification Control</b> The {@link #view()} method creates a collection that forbids certain types of modifications to it.
+ * Modification control can also be used to intercept and perform actions based on modifications to a collection.</li>
  * <li><b>ElementSpliterator</b> ObservableCollections must implement {@link #spliterator()}, which returns a {@link ElementSpliterator},
  * which is an enhanced {@link Spliterator}. This had potential for the improved performance associated with using {@link Spliterator}
  * instead of {@link Iterator} as well as the utility added by {@link ElementSpliterator}.</li>
@@ -87,7 +81,12 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		static String ILLEGAL_ELEMENT = "Element is not allowed";
 	}
 
+	/**
+	 * The {@link ObservableCollectionEvent#getCause() cause} for events fired for extant elements in the collection upon
+	 * {@link #subscribe(Consumer) subscription}
+	 */
 	public static class SubscriptionCause extends AbstractCausable {
+		/** Creates the cause */
 		public SubscriptionCause() {
 			super(null);
 		}
@@ -109,12 +108,12 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	@Override
 	MutableObservableSpliterator<E> mutableSpliterator(boolean fromStart);
 
-	// /**
-	// * @param onElement The listener to be notified when new elements are added to the collection
-	// * @return The function to call when the calling code is no longer interested in this collection
-	// */
-	// Subscription onElement(Consumer<? super ObservableElement<E>> onElement);
-
+	/**
+	 * Registers a listener for changes to this collection
+	 *
+	 * @param observer The listener to be notified of each element change in the collection
+	 * @return The subscription to use to terminate listening
+	 */
 	Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer);
 
 	@Override
@@ -208,6 +207,12 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		};
 	}
 
+	/**
+	 * Same as {@link #subscribe(Consumer)}, but the events are indexed by their position in the collection
+	 *
+	 * @param observer The listener to be notified of each element change in the collection
+	 * @return The subscription to use to terminate listening
+	 */
 	default CollectionSubscription subscribeIndexed(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
 		DefaultTreeSet<ElementId> ids = new DefaultTreeSet<>(Comparable::compareTo);
 		return subscribe(evt -> {
@@ -259,6 +264,13 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		};
 	}
 
+	/**
+	 * Same as {@link #subscribeIndexed(Consumer)}, except that the elements currently present in this collection are given to the observer
+	 * in reverse order
+	 *
+	 * @param observer The listener to be notified of changes to the collection
+	 * @return The subscription to call when the calling code is no longer interested in this collection
+	 */
 	default CollectionSubscription subscribeReverseIndexed(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
 		DefaultTreeSet<ElementId> ids = new DefaultTreeSet<>(Comparable::compareTo);
 		return subscribeReverse(evt -> {
@@ -557,7 +569,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 
 	/** @return A builder that facilitates filtering, mapping, and other operations against this collection */
 	default <T> CollectionDataFlow<E, E, E> flow() {
-		return new DefaultCollectionDataFlow<>(this);
+		return new ObservableCollectionImpl.BaseCollectionDataFlow<>(this);
 	}
 
 	/** @return An observable value containing the only value in this collection while its size==1, otherwise null TODO TEST ME! */
@@ -755,50 +767,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		return new ObservableCollectionImpl.GroupedSortedMultiMap<>(this, grouping);
 	}
 
-	/**
-	 * @param compare The comparator to use to sort this collection's elements
-	 * @param nullable Whether null values may belong in the collection. If this is false and this collection contains null values,
-	 *        {@link NullPointerException}s may be thrown from methods of the resulting collection
-	 * @param until The observable to destroy the collection with. The collection's ordering will be maintained dynamically until the given
-	 *        observable fires, after which the collection's methods will throw {@link IllegalStateException}.
-	 * @return A new collection containing all the same elements as this collection, but ordered according to the given comparator
-	 */
-	default ObservableCollection<E> sorted(Comparator<? super E> compare, boolean nullable, Observable<?> until) {}
-
-	/**
-	 * @return An ObservableSet that contains this collection's values with no duplicates, according to this collection's
-	 *         {@link #equivalence()} scheme. Values in this collection must maintain their equivalence properties. If a collection
-	 *         element's value's properties change such that the set of values it is equivalent to change, the resulting set may become
-	 *         corrupt.
-	 */
-	default ObservableSet<E> unique() {
-		return new ObservableSetImpl.CollectionWrappingSet<>(this);
-	}
-
-	/**
-	 * @param compare The comparator to use to sort this collection's elements
-	 * @param nullable Whether null values may belong in the collection. If this is false and this collection contains null values,
-	 *        {@link NullPointerException}s may be thrown from methods of the resulting collection
-	 * @param until The observable to destroy the collection with. The collection's ordering will be maintained dynamically until the given
-	 *        observable fires, after which the collection's methods will throw {@link IllegalStateException}.
-	 * @return An ObservableSortedSet that contains this collection's values with no duplicates, according to the comparator. Values in this
-	 *         collection must maintain their equivalence properties. If a collection element's value's properties change such that the set
-	 *         of values it is equivalent to change, the resulting set may become corrupt.
-	 */
-	default ObservableSortedSet<E> unique(Comparator<? super E> compare, boolean nullable, Observable<?> until) {
-		return new ObservableSortedSetImpl.CollectionWrappingSortedSet<>(this, compare, nullable, until);
-	}
-
-	/**
-	 * Creates an indexed collection backed by this collection's content. Index operations (e.g.
-	 * {@link ObservableIndexedCollection#get(int)}) may be linear-time.
-	 *
-	 * @return An indexed collection backed by this collection's content
-	 */
-	default ObservableIndexedCollection<E> indexify() {
-		return new ObservableIndexedCollectionImpl.IndexifiedCollection<>(this);
-	}
-
 	/** @return A builder that allows creation of a view backed by this collection's data but with different capabilities */
 	default ViewBuilder<E> view() {
 		return new ViewBuilder<>(this);
@@ -957,112 +925,30 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		return ret.toString();
 	}
 
-	abstract class DerivedCollectionDef<E, I, T> {
-		private final DerivedCollectionDef<E, ?, I> theParent;
-		private final TypeToken<T> theTargetType;
-
-		public DerivedCollectionDef(DerivedCollectionDef<E, ?, I> parent, TypeToken<T> target) {
-			theParent = parent;
-			theTargetType = target;
-		}
-
-		protected DerivedCollectionDef<E, ?, I> getParent() {
-			return theParent;
-		}
-
-		protected TypeToken<T> getTargetType() {
-			return theTargetType;
-		}
-
-		public abstract CollectionManager<E, T> manageCollection();
-	}
-
-	interface CollectionManager<E, T> extends Transactable {
-		TypeToken<T> getTargetType();
-
-		boolean isDynamicallyFiltered();
-		boolean isMapped();
-
-		boolean isReversible();
-
-		void begin(Consumer<CollectionUpdate> onUpdate);
-
-		FilterMapResult<E, T> map(FilterMapResult<E, T> source);
-		default FilterMapResult<E, T> map(E source) {
-			return map(new FilterMapResult<>(source));
-		}
-
-		FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest);
-		default FilterMapResult<T, E> reverse(T dest) {
-			return reverse(new FilterMapResult<>(dest));
-		}
-
-		CollectionElementManager<E, T> createElement(E init);
-	}
-
 	/**
-	 * Implements {@link ObservableCollection#flattenValues(ObservableCollection)}
+	 * Allows creation of a collection that uses a collection's data as its source, but filters, maps, or otherwise transforms the data
 	 *
-	 * @param <E> The source type
-	 * @param <T> The destination type
+	 * @param <E> The type of the source collection
+	 * @param <I> An intermediate type
+	 * @param <T> The type of collection this flow may build
 	 */
-	class FilterMapResult<E, T> {
-		public E source;
-		public T result;
-		public String error;
-
-		public FilterMapResult() {}
-
-		public FilterMapResult(E src) {
-			source = src;
-		}
-	}
-
-	interface CollectionElementManager<E, T> {
-		void remove();
-
-		boolean isPresent();
-
-		T get();
-
-		void set(E value);
-
-		boolean update(CollectionUpdate update);
-	}
-
-	interface CollectionUpdate {
-		Object getCause();
-	}
-
-	abstract class CollectionDataFlow<E, I, T> extends DerivedCollectionDef<E, I, T> {
-		private final ObservableCollection<E> theCollection;
-
-		protected CollectionDataFlow(ObservableCollection<E> collection, DerivedCollectionDef<E, ?, I> parent, TypeToken<T> target) {
-			super(parent, target);
-			theCollection = collection;
-		}
-
-		protected ObservableCollection<E> getCollection() {
-			return theCollection;
-		}
+	interface CollectionDataFlow<E, I, T> {
+		/** @return The type of collection this flow may build */
+		TypeToken<T> getTargetType();
 
 		// Flow operations
 
-		public CollectionDataFlow<E, T, T> filter(Function<? super T, String> filter) {
+		default CollectionDataFlow<E, T, T> filter(Function<? super T, String> filter) {
 			return filter(filter, false);
 		}
 
-		public CollectionDataFlow<E, T, T> filter(Function<? super T, String> filter, boolean filterNulls) {
-			return new FilterOp<>(theCollection, this, filter, filterNulls);
-		}
+		CollectionDataFlow<E, T, T> filter(Function<? super T, String> filter, boolean filterNulls);
 
-		public CollectionDataFlow<E, T, T> filterStatic(Function<? super T, String> filter) {
+		default CollectionDataFlow<E, T, T> filterStatic(Function<? super T, String> filter) {
 			return filterStatic(filter, false);
 		}
 
-		public CollectionDataFlow<E, T, T> filterStatic(Function<? super T, String> filter, boolean filterNulls) {
-			return new StaticFilterOp<>(theCollection, this, filter, filterNulls);
-		}
+		CollectionDataFlow<E, T, T> filterStatic(Function<? super T, String> filter, boolean filterNulls);
 
 		/**
 		 * @param <X> The type for the new collection
@@ -1070,7 +956,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		 * @return A collection backed by this collection, consisting only of elements in this collection whose values are instances of the
 		 *         given class
 		 */
-		public <X> CollectionDataFlow<E, T, X> filter(Class<X> type) {
+		default <X> CollectionDataFlow<E, T, X> filter(Class<X> type) {
 			return filterStatic(value -> {
 				if (type == null || type.isInstance(value))
 					return null;
@@ -1079,118 +965,119 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 			}, true).map(TypeToken.of(type)).map(v -> (X) v, true);
 		}
 
-		public CollectionDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new RefreshOp<>(theCollection, this, refresh);
-		}
+		CollectionDataFlow<E, T, T> withEquivalence(Equivalence<? super T> equivalence);
 
-		public CollectionDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new ElementRefreshOp<>(theCollection, this, refresh);
-		}
+		CollectionDataFlow<E, T, T> refresh(Observable<?> refresh);
 
-		public <X> MappedCollectionBuilder<E, T, X> map(TypeToken<X> target) {
-			return new MappedCollectionBuilder<>(theCollection, this, target);
-		}
+		CollectionDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh);
 
-		public <X> CollectionDataFlow<E, ?, X> flatMap(TypeToken<X> target,
+		<X> MappedCollectionBuilder<E, T, X> map(TypeToken<X> target);
+
+		default <X> CollectionDataFlow<E, ?, X> flatMap(TypeToken<X> target,
 			Function<? super T, ? extends ObservableValue<? extends X>> map) {
 			TypeToken<ObservableValue<? extends X>> valueType = new TypeToken<ObservableValue<? extends X>>() {}
 			.where(new TypeParameter<X>() {}, target);
-			return map(valueType).map(map, false).refreshEach(v -> v.noInit()).map(target).map(ObservableValue::get, false);
+			return map(valueType).map(map, false).refreshEach(v -> v.noInit()).map(target)
+				.withElementSetting((ov, newValue, doSet, cause) -> {
+					// Allow setting elements via the wrapped settable value
+					if (!(ov instanceof SettableValue))
+						return StdMsg.UNSUPPORTED_OPERATION;
+					else if (newValue != null && !ov.getType().getRawType().isInstance(newValue))
+						return StdMsg.BAD_TYPE;
+					String msg = ((SettableValue<X>) ov).isAcceptable(newValue);
+					if (msg != null)
+						return msg;
+					if (doSet)
+						((SettableValue<X>) ov).set(newValue, cause);
+					return null;
+				}, false)
+				.map(ObservableValue::get, false);
 		}
 
-		public <V, X> CombinedCollectionBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, TypeToken<X> target) {
-			return new CombinedCollectionBuilder2<>(theCollection, this, target, value, Ternian.NONE);
+		default <V, X> CombinedCollectionBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, TypeToken<X> target) {
+			return combineWith(value, false, target);
 		}
 
-		public <V, X> CombinedCollectionBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, boolean combineNulls,
-			TypeToken<X> target) {
-			return new CombinedCollectionBuilder2<>(theCollection, this, target, value, Ternian.of(combineNulls));
+		<V, X> CombinedCollectionBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, boolean combineNulls, TypeToken<X> target);
+
+		CollectionDataFlow<E, T, T> sorted(Comparator<? super T> compare);
+
+		default UniqueDataFlow<E, T> unique() {
+			return unique(Equivalence.DEFAULT);
 		}
 
-		// Build method
+		UniqueDataFlow<E, T> unique(Equivalence<? super T> equivalence);
 
-		public ObservableCollection<T> build() {
-			return new ObservableCollectionImpl.DerivedCollection<>(theCollection, manageCollection());
-		}
+		UniqueSortedDataFlow<E, T> uniqueSorted(Comparator<? super T> compare);
+
+		// Terminal operations
+
+		CollectionManager<E, T> manageCollection();
+
+		ObservableCollection<T> build();
+
+		ReversibleIterable<T> iterable();
 	}
 
-	class DefaultCollectionDataFlow<E> extends CollectionDataFlow<E, E, E> {
-		protected DefaultCollectionDataFlow(ObservableCollection<E> collection) {
-			super(collection, null, collection.getType());
-		}
+	/**
+	 * A data flow that produces a set
+	 *
+	 * @param <E> The type of the source collection
+	 * @param <T> The type of collection this flow may build
+	 */
+	interface UniqueDataFlow<E, T> extends CollectionDataFlow<E, T, T> {
+		@Override
+		UniqueDataFlow<E, T> filter(Function<? super T, String> filter);
 
 		@Override
-		public CollectionManager<E, E> manageCollection() {
-			return new ObservableCollectionImpl.DefaultCollectionManager<>(getCollection().getType(), getCollection().isLockSupported());
-		}
+		UniqueDataFlow<E, T> filter(Function<? super T, String> filter, boolean filterNulls);
 
 		@Override
-		public ObservableCollection<E> build() {
-			return getCollection();
-		}
+		UniqueDataFlow<E, T> filterStatic(Function<? super T, String> filter);
+
+		@Override
+		UniqueDataFlow<E, T> filterStatic(Function<? super T, String> filter, boolean filterNulls);
+
+		@Override
+		UniqueDataFlow<E, T> refresh(Observable<?> refresh);
+
+		@Override
+		UniqueDataFlow<E, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh);
+
+		@Override
+		ObservableSet<T> build();
 	}
 
-	class FilterOp<E, T> extends CollectionDataFlow<E, T, T> {
-		private final Function<? super T, String> theFilter;
-		private final boolean areNullsFiltered;
-
-		protected FilterOp(ObservableCollection<E> collection, DerivedCollectionDef<E, ?, T> parent, Function<? super T, String> filter,
-			boolean filterNulls) {
-			super(collection, parent, parent.getTargetType());
-			theFilter = filter;
-			areNullsFiltered = filterNulls;
-		}
+	/**
+	 * A data flow that produces a sorted set
+	 *
+	 * @param <E> The type of the source collection
+	 * @param <T> The type of collection this flow may build
+	 */
+	interface UniqueSortedDataFlow<E, T> extends UniqueDataFlow<E, T> {
+		@Override
+		UniqueSortedDataFlow<E, T> filter(Function<? super T, String> filter);
 
 		@Override
-		public CollectionManager<E, T> manageCollection() {
-			return ObservableCollectionImpl.FilteredCollectionManager<>(getParent().manageCollection(), theFilter, areNullsFiltered);
-		}
-	}
-
-	class StaticFilterOp<E, T> extends CollectionDataFlow<E, T, T> {
-		private final Function<? super T, String> theFilter;
-		private final boolean areNullsFiltered;
-
-		protected StaticFilterOp(ObservableCollection<E> collection, DerivedCollectionDef<E, ?, T> parent,
-			Function<? super T, String> filter, boolean filterNulls) {
-			super(collection, parent, parent.getTargetType());
-			theFilter = filter;
-			areNullsFiltered = filterNulls;
-		}
+		UniqueSortedDataFlow<E, T> filter(Function<? super T, String> filter, boolean filterNulls);
 
 		@Override
-		public CollectionManager<E, T> manageCollection() {
-			return ObservableCollectionImpl.StaticFilteredCollectionManager<>(getParent().manageCollection(), theFilter, areNullsFiltered);
-		}
-	}
-
-	class RefreshOp<E, T> extends CollectionDataFlow<E, T, T> {
-		private final Observable<?> theRefresh;
-
-		protected RefreshOp(ObservableCollection<E> collection, DerivedCollectionDef<E, ?, T> parent, Observable<?> refresh) {
-			super(collection, parent, parent.getTargetType());
-			theRefresh = refresh;
-		}
+		UniqueSortedDataFlow<E, T> filterStatic(Function<? super T, String> filter);
 
 		@Override
-		public CollectionManager<E, T> manageCollection() {
-			return new ObservableCollectionImpl.RefreshingCollectionManager<>(getParent().manageCollection(), theRefresh);
-		}
-	}
-
-	class ElementRefreshOp<E, T> extends CollectionDataFlow<E, T, T> {
-		private final Function<? super T, ? extends Observable<?>> theElementRefresh;
-
-		protected ElementRefreshOp(ObservableCollection<E> collection, DerivedCollectionDef<E, ?, T> parent,
-			Function<? super T, ? extends Observable<?>> elementRefresh) {
-			super(collection, parent, parent.getTargetType());
-			theElementRefresh = elementRefresh;
-		}
+		UniqueSortedDataFlow<E, T> filterStatic(Function<? super T, String> filter, boolean filterNulls);
 
 		@Override
-		public CollectionManager<E, T> manageCollection() {
-			return new ObservableCollectionImpl.ElementRefreshingCollectionManager<>(getParent().manageCollection(), theElementRefresh);
-		}
+		UniqueSortedDataFlow<E, T> withEquivalence(Equivalence<? super T> equivalence);
+
+		@Override
+		UniqueSortedDataFlow<E, T> refresh(Observable<?> refresh);
+
+		@Override
+		UniqueSortedDataFlow<E, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh);
+
+		@Override
+		ObservableSortedSet<T> build();
 	}
 
 	/**
@@ -1201,16 +1088,38 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 * @param <T> The type of values in the mapped collection
 	 */
 	class MappedCollectionBuilder<E, I, T> {
-		private final ObservableCollection<E> theCollection;
-		private final CollectionDataFlow<E, ?, I> theParent;
+		interface ElementSetter<I, T> {
+			String setElement(I element, T newValue, boolean replace, Object cause);
+		}
+		private final AbstractDataFlow<E, ?, I> theParent;
 		private final TypeToken<T> theTargetType;
 		private Function<? super T, ? extends I> theReverse;
+		private ElementSetter<? super I, ? super T> theElementReverse;
 		private boolean areNullsReversed;
 
-		protected MappedCollectionBuilder(ObservableCollection<E> collection, CollectionDataFlow<E, ?, I> parent, TypeToken<T> type) {
-			theCollection = collection;
+		protected MappedCollectionBuilder(AbstractDataFlow<E, ?, I> parent, TypeToken<T> type) {
 			theParent = parent;
 			theTargetType = type;
+		}
+
+		protected AbstractDataFlow<E, ?, I> getParent() {
+			return theParent;
+		}
+
+		protected TypeToken<T> getTargetType() {
+			return theTargetType;
+		}
+
+		protected Function<? super T, ? extends I> getReverse() {
+			return theReverse;
+		}
+
+		protected ElementSetter<? super I, ? super T> getElementReverse() {
+			return theElementReverse;
+		}
+
+		protected boolean areNullsReversed() {
+			return areNullsReversed;
 		}
 
 		public MappedCollectionBuilder<E, I, T> withReverse(Function<? super T, ? extends I> reverse, boolean reverseNulls) {
@@ -1219,30 +1128,16 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 			return this;
 		}
 
-		public CollectionDataFlow<E, I, T> map(Function<? super I, ? extends T> map, boolean mapNulls) {
-			return new MapOp<>(theCollection, theParent, theTargetType, map, mapNulls, theReverse, areNullsReversed);
-		}
-	}
-
-	class MapOp<E, I, T> extends CollectionDataFlow<E, I, T> {
-		private final Function<? super I, ? extends T> theMap;
-		private final boolean areNullsMapped;
-		private final Function<? super T, ? extends I> theReverse;
-		private final boolean areNullsReversed;
-
-		protected MapOp(ObservableCollection<E> collection, DerivedCollectionDef<E, ?, I> parent, TypeToken<T> target,
-			Function<? super I, ? extends T> map, boolean mapNulls, Function<? super T, ? extends I> reverse, boolean reverseNulls) {
-			super(collection, parent, target);
-			theMap = map;
-			areNullsMapped = mapNulls;
-			theReverse = reverse;
+		public MappedCollectionBuilder<E, I, T> withElementSetting(ElementSetter<? super I, ? super T> reverse,
+			boolean reverseNulls) {
+			theElementReverse = reverse;
 			areNullsReversed = reverseNulls;
+			return this;
 		}
 
-		@Override
-		public CollectionManager<E, T> manageCollection() {
-			return new ObservableCollectionImpl.MappedCollectionManager<>(getParent().manageCollection(), theMap, areNullsMapped,
-				theReverse, areNullsReversed);
+		public CollectionDataFlow<E, I, T> map(Function<? super I, ? extends T> map, boolean mapNulls) {
+			return new ObservableCollectionImpl.MapOp<>(theParent, theTargetType, map, mapNulls, theReverse, theElementReverse,
+				areNullsReversed);
 		}
 	}
 
@@ -1254,7 +1149,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 * @param <I> Intermediate type
 	 * @param <R> The type of elements in the resulting collection
 	 * @see ObservableCollection.CollectionDataFlow#combineWith(ObservableValue, TypeToken)
-	 * @see ObservableCollection.CombinedCollectionBuilder3#and(ObservableValue)
 	 */
 	interface CombinedCollectionBuilder<E, I, R> {
 		<T> CombinedCollectionBuilder<E, I, R> and(ObservableValue<T> arg);
@@ -1272,130 +1166,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	}
 
 	/**
-	 * A structure that is operated on to produce the elements of a combined collection
-	 *
-	 * @param <E> The type of the source element (or the value to be reversed)
-	 * @see ObservableCollection.CollectionDataFlow#combineWith(ObservableValue, TypeToken)
-	 */
-	interface CombinedValues<E> {
-		E getElement();
-
-		<T> T get(ObservableValue<T> arg);
-	}
-
-	/**
-	 * Defines a combination of a single source collection with one or more observable values
-	 *
-	 * @param <E> The type of elements in the source collection
-	 * @param <I> Intermediate type
-	 * @param <T> The type of elements in the resulting collection
-	 */
-	class CombinedCollectionDef<E, I, T> extends CollectionDataFlow<E, I, T> {
-		private final Map<ObservableValue<?>, Boolean> theArgs;
-		private final Function<? super CombinedValues<? extends I>, ? extends T> theCombination;
-		private final boolean combineNulls;
-		private final Function<? super CombinedValues<? extends T>, ? extends I> theReverse;
-		private final boolean reverseNulls;
-
-		protected CombinedCollectionDef(ObservableCollection<E> collection, DerivedCollectionDef<E, ?, I> parent, TypeToken<T> target,
-			Map<ObservableValue<?>, Boolean> args, Function<? super CombinedValues<? extends I>, ? extends T> combination,
-			boolean combineNulls,
-			Function<? super CombinedValues<? extends T>, ? extends I> reverse, boolean reverseNulls) {
-			super(collection, parent, target);
-			theArgs = Collections.unmodifiableMap(args);
-			theCombination = combination;
-			this.combineNulls = combineNulls;
-			theReverse = reverse;
-			this.reverseNulls = reverseNulls;
-		}
-
-		@Override
-		public CollectionManager<E, T> manageCollection() {
-			return new ObservableCollectionImpl.CombinedCollectionManager<>(getParent().manageCollection(), getTargetType(), theArgs,
-				theCombination, combineNulls, theReverse, reverseNulls);
-		}
-	}
-
-	abstract class AbstractCombinedCollectionBuilder<E, I, R> implements CombinedCollectionBuilder<E, I, R> {
-		private final ObservableCollection<E> theCollection;
-		private final CollectionDataFlow<E, ?, I> theParent;
-		private final TypeToken<R> theTargetType;
-		private final LinkedHashMap<ObservableValue<?>, Ternian> theArgs;
-		private Function<? super CombinedValues<? extends R>, ? extends I> theReverse;
-		private boolean defaultCombineNulls = false;
-		private boolean isReverseNulls = false;
-
-		protected AbstractCombinedCollectionBuilder(ObservableCollection<E> collection, CollectionDataFlow<E, ?, I> parent,
-			TypeToken<R> targetType) {
-			theCollection = collection;
-			theParent = parent;
-			theTargetType = targetType;
-			theArgs = new LinkedHashMap<>();
-		}
-
-		protected void addArg(ObservableValue<?> arg, Ternian combineNulls) {
-			if (theArgs.containsKey(arg))
-				throw new IllegalArgumentException("Argument " + arg + " is already combined");
-			theArgs.put(arg, combineNulls);
-		}
-
-		protected Ternian combineNulls(ObservableValue<?> arg) {
-			return theArgs.get(arg);
-		}
-
-		protected ObservableCollection<E> getCollection() {
-			return theCollection;
-		}
-
-		protected CollectionDataFlow<E, ?, I> getParent() {
-			return theParent;
-		}
-
-		protected TypeToken<R> getTargetType() {
-			return theTargetType;
-		}
-
-		protected Function<? super CombinedValues<? extends R>, ? extends I> getReverse() {
-			return theReverse;
-		}
-
-		protected boolean isDefaultCombineNulls() {
-			return defaultCombineNulls;
-		}
-
-		protected boolean isReverseNulls() {
-			return isReverseNulls;
-		}
-
-		public AbstractCombinedCollectionBuilder<E, I, R> combineNullsByDefault() {
-			defaultCombineNulls = true;
-			return this;
-		}
-
-		@Override
-		public AbstractCombinedCollectionBuilder<E, I, R> withReverse(Function<? super CombinedValues<? extends R>, ? extends I> reverse,
-			boolean reverseNulls) {
-			theReverse = reverse;
-			this.isReverseNulls = reverseNulls;
-			return this;
-		}
-
-		@Override
-		public CollectionDataFlow<E, I, R> build(Function<? super CombinedValues<? extends I>, ? extends R> combination,
-			boolean combineNulls) {
-			return new CombinedCollectionDef<>(theCollection, theParent, theTargetType, getResultArgs(), combination, combineNulls,
-				theReverse, isReverseNulls);
-		}
-
-		private Map<ObservableValue<?>, Boolean> getResultArgs() {
-			Map<ObservableValue<?>, Boolean> result = new LinkedHashMap<>(theArgs.size() * 3 / 2);
-			for (Map.Entry<ObservableValue<?>, Ternian> arg : theArgs.entrySet())
-				result.put(arg.getKey(), arg.getValue().withDefault(defaultCombineNulls));
-			return result;
-		}
-	}
-
-	/**
 	 * A {@link ObservableCollection.CombinedCollectionBuilder} for the combination of a collection with a single value. Use
 	 * {@link #and(ObservableValue)} to combine with additional values.
 	 *
@@ -1403,16 +1173,20 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 * @param <I> Intermediate type
 	 * @param <V> The type of the combined value
 	 * @param <R> The type of elements in the resulting collection
-	 * @see ObservableCollection.CollectionDataFlow#combineWith(ObservableValue, TypeToken)
+	 * @see ObservableCollection.CollectionDataFlow#combineWith(ObservableValue, boolean, TypeToken)
 	 */
 	class CombinedCollectionBuilder2<E, I, V, R> extends AbstractCombinedCollectionBuilder<E, I, R> {
 		private final ObservableValue<V> theArg2;
 
-		protected CombinedCollectionBuilder2(ObservableCollection<E> collection, CollectionDataFlow<E, ?, I> parent,
-			TypeToken<R> targetType, ObservableValue<V> arg2, Ternian combineArg2Nulls) {
-			super(collection, parent, targetType);
+		protected CombinedCollectionBuilder2(ObservableCollectionImpl.AbstractDataFlow<E, ?, I> parent, TypeToken<R> targetType,
+			ObservableValue<V> arg2, Ternian combineArg2Nulls) {
+			super(parent, targetType);
 			theArg2 = arg2;
 			addArg(arg2, combineArg2Nulls);
+		}
+
+		protected ObservableValue<V> getArg2() {
+			return theArg2;
 		}
 
 		@Override
@@ -1439,15 +1213,14 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		public <U> CombinedCollectionBuilder3<E, I, V, U, R> and(ObservableValue<U> arg3) {
 			if (getReverse() != null)
 				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
-			return new CombinedCollectionBuilder3<>(getCollection(), getParent(), getTargetType(), theArg2, combineNulls(theArg2), arg3,
-				Ternian.NONE);
+			return new CombinedCollectionBuilder3<>(getParent(), getTargetType(), theArg2, combineNulls(theArg2), arg3, Ternian.NONE);
 		}
 
 		@Override
 		public <U> CombinedCollectionBuilder3<E, I, V, U, R> and(ObservableValue<U> arg3, boolean combineNulls) {
 			if (getReverse() != null)
 				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
-			return new CombinedCollectionBuilder3<>(getCollection(), getParent(), getTargetType(), theArg2, combineNulls(theArg2), arg3,
+			return new CombinedCollectionBuilder3<>(getParent(), getTargetType(), theArg2, combineNulls(theArg2), arg3,
 				Ternian.of(combineNulls));
 		}
 	}
@@ -1468,14 +1241,21 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		private final ObservableValue<V1> theArg2;
 		private final ObservableValue<V2> theArg3;
 
-		protected CombinedCollectionBuilder3(ObservableCollection<E> collection, CollectionDataFlow<E, ?, I> parent,
-			TypeToken<R> targetType, ObservableValue<V1> arg2, Ternian combineArg2Nulls, ObservableValue<V2> arg3,
-			Ternian combineArg3Nulls) {
-			super(collection, parent, targetType);
+		protected CombinedCollectionBuilder3(ObservableCollectionImpl.AbstractDataFlow<E, ?, I> parent, TypeToken<R> targetType,
+			ObservableValue<V1> arg2, Ternian combineArg2Nulls, ObservableValue<V2> arg3, Ternian combineArg3Nulls) {
+			super(parent, targetType);
 			theArg2 = arg2;
 			theArg3 = arg3;
 			addArg(arg2, combineArg2Nulls);
 			addArg(arg3, combineArg3Nulls);
+		}
+
+		protected ObservableValue<V1> getArg2() {
+			return theArg2;
+		}
+
+		protected ObservableValue<V2> getArg3() {
+			return theArg3;
 		}
 
 		@Override
@@ -1502,7 +1282,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		public <T2> CombinedCollectionBuilderN<E, I, R> and(ObservableValue<T2> arg) {
 			if (getReverse() != null)
 				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
-			return new CombinedCollectionBuilderN<>(getCollection(), getParent(), getTargetType(), theArg2, combineNulls(theArg2), theArg3,
+			return new CombinedCollectionBuilderN<>(getParent(), getTargetType(), theArg2, combineNulls(theArg2), theArg3,
 				combineNulls(theArg3), arg, Ternian.NONE);
 		}
 
@@ -1510,7 +1290,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		public <T2> CombinedCollectionBuilderN<E, I, R> and(ObservableValue<T2> arg, boolean combineNulls) {
 			if (getReverse() != null)
 				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
-			return new CombinedCollectionBuilderN<>(getCollection(), getParent(), getTargetType(), theArg2, combineNulls(theArg2), theArg3,
+			return new CombinedCollectionBuilderN<>(getParent(), getTargetType(), theArg2, combineNulls(theArg2), theArg3,
 				combineNulls(theArg3), arg, Ternian.of(combineNulls));
 		}
 	}
@@ -1526,10 +1306,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 * @see ObservableCollection.CombinedCollectionBuilder3#and(ObservableValue)
 	 */
 	class CombinedCollectionBuilderN<E, I, R> extends AbstractCombinedCollectionBuilder<E, I, R> {
-		protected CombinedCollectionBuilderN(ObservableCollection<E> collection, CollectionDataFlow<E, ?, I> parent,
-			TypeToken<R> targetType, ObservableValue<?> arg2, Ternian combineArg2Nulls, ObservableValue<?> arg3, Ternian combineArg3Nulls,
-			ObservableValue<?> arg4, Ternian combineArg4Nulls) {
-			super(collection, parent, targetType);
+		protected CombinedCollectionBuilderN(AbstractDataFlow<E, ?, I> parent, TypeToken<R> targetType, ObservableValue<?> arg2,
+			Ternian combineArg2Nulls, ObservableValue<?> arg3, Ternian combineArg3Nulls, ObservableValue<?> arg4,
+			Ternian combineArg4Nulls) {
+			super(parent, targetType);
 			addArg(arg2, combineArg2Nulls);
 			addArg(arg3, combineArg3Nulls);
 			addArg(arg4, combineArg4Nulls);
@@ -1563,6 +1343,23 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		}
 	}
 
+	/**
+	 * A structure that is operated on to produce the elements of a combined collection
+	 *
+	 * @param <E> The type of the source element (or the value to be reversed)
+	 * @see ObservableCollection.CollectionDataFlow#combineWith(ObservableValue, TypeToken)
+	 */
+	interface CombinedValues<E> {
+		E getElement();
+
+		<T> T get(ObservableValue<T> arg);
+	}
+
+	/**
+	 * The result of a {@link ViewBuilder view-build}
+	 * 
+	 * @param <E> The type of values that this view def knows how to front
+	 */
 	class ViewDef<E> {
 		private final TypeToken<E> theType;
 		private final String theImmutableMsg;
@@ -1571,13 +1368,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		private final Function<? super E, String> theAddMsgFn;
 		private final Function<? super E, String> theRemoveMsgFn;
 
-		private final Equivalence<? super E> theEquivalence;
-
 		private final Observable<?> theUntil;
 		private final boolean untilRemoves;
 
 		public ViewDef(TypeToken<E> type, String immutableMsg, String addMsg, String removeMsg, Function<? super E, String> addMsgFn,
-			Function<? super E, String> removeMsgFn, Equivalence<? super E> equivalence, Observable<?> until, boolean untilRemoves) {
+			Function<? super E, String> removeMsgFn, Observable<?> until, boolean untilRemoves) {
 			theType = type;
 			theImmutableMsg = immutableMsg;
 			theAddMsg = addMsg;
@@ -1585,10 +1380,57 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 			theAddMsgFn = addMsgFn;
 			theRemoveMsgFn = removeMsgFn;
 
-			theEquivalence = equivalence;
-
 			theUntil = until;
 			this.untilRemoves = untilRemoves;
+		}
+
+		public MutableObservableSpliteratorMap<E, E> mapSpliterator() {
+			return new MutableObservableSpliteratorMap<E, E>() {
+				@Override
+				public TypeToken<E> getType() {
+					return theType;
+				}
+
+				@Override
+				public long filterExactSize(long srcSize) {
+					return srcSize;
+				}
+
+				@Override
+				public boolean test(E srcValue) {
+					return true;
+				}
+
+				@Override
+				public E map(E value) {
+					return value;
+				}
+
+				@Override
+				public E reverse(E value) {
+					return value;
+				}
+
+				@Override
+				public String filterEnabled(CollectionElement<E> el) {
+					String msg = checkRemove(el.get());
+					if (msg != null)
+						return msg;
+					if (theAddMsg != null)
+						return theAddMsg;
+					return null;
+				}
+
+				@Override
+				public String filterAccept(E value) {
+					return checkAdd(value);
+				}
+
+				@Override
+				public String filterRemove(CollectionElement<E> sourceEl) {
+					return checkRemove(sourceEl.get());
+				}
+			};
 		}
 
 		public boolean isAddFiltered() {
@@ -1650,10 +1492,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 			return value;
 		}
 
-		public Equivalence<? super E> getEquivalence() {
-			return theEquivalence;
-		}
-
 		public Observable<?> getUntil() {
 			return theUntil;
 		}
@@ -1663,6 +1501,12 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		}
 	}
 
+	/**
+	 * Allows creation of a collection that reflects a collection's data, but may limit the operations the user can perform on the data or
+	 * when the user can observe the data
+	 *
+	 * @param <E> The type of the collection
+	 */
 	class ViewBuilder<E> {
 		private final ObservableCollection<E> theCollection;
 		private String theImmutableMsg;
@@ -1670,8 +1514,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		private String theRemoveMsg;
 		private Function<? super E, String> theAddMsgFn;
 		private Function<? super E, String> theRemoveMsgFn;
-
-		private Equivalence<? super E> theEquivalence;
 
 		private Observable<?> theUntil;
 		private boolean untilRemoves;
@@ -1709,11 +1551,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 			return this;
 		}
 
-		public ViewBuilder<E> withEquivalence(Equivalence<? super E> equivalence) {
-			theEquivalence = equivalence;
-			return this;
-		}
-
 		public ViewBuilder<E> takeUntil(Observable<?> until) {
 			if (theUntil != null)
 				throw new IllegalStateException("takeUntil already called");
@@ -1730,8 +1567,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		}
 
 		public ViewDef<E> toDef() {
-			return new ViewDef<>(theCollection.getType(), theImmutableMsg, theAddMsg, theRemoveMsg, theAddMsgFn, theRemoveMsgFn,
-				theEquivalence, theUntil, untilRemoves);
+			return new ViewDef<>(theCollection.getType(), theImmutableMsg, theAddMsg, theRemoveMsg, theAddMsgFn, theRemoveMsgFn, theUntil,
+				untilRemoves);
 		}
 
 		public ObservableCollection<E> build() {

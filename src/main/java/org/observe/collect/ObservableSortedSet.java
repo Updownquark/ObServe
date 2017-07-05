@@ -21,12 +21,14 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
+import org.observe.collect.ObservableCollectionImpl.FilterMapResult;
+import org.observe.collect.ObservableReversibleCollectionImpl.ModFilteredReversibleCollection;
 import org.observe.util.ObservableUtils;
 import org.qommons.Equalizer;
 import org.qommons.Equalizer.EqualizerNode;
-import org.qommons.collect.TransactableSortedSet;
 import org.qommons.IterableUtils;
 import org.qommons.Transaction;
+import org.qommons.collect.TransactableSortedSet;
 import org.qommons.tree.CountedRedBlackNode.DefaultNode;
 import org.qommons.tree.CountedRedBlackNode.DefaultTreeSet;
 
@@ -39,7 +41,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <E> The type of element in the set
  */
-public interface ObservableSortedSet<E> extends ObservableOrderedSet<E>, ObservableReversibleCollection<E>, TransactableSortedSet<E> {
+public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSortedSet<E> {
 	@Override
 	default Equalizer getEqualizer() {
 		return (o1, o2) -> comparator().compare((E) o1, (E) o1) == 0;

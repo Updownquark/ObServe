@@ -1,7 +1,5 @@
 package org.observe.collect;
 
-import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.function.BiFunction;
@@ -10,9 +8,9 @@ import java.util.function.UnaryOperator;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
+import org.observe.collect.ObservableCollectionImpl.AbstractDataFlow;
 import org.qommons.Ternian;
 import org.qommons.TriFunction;
-import org.qommons.collect.Betterator;
 import org.qommons.collect.ReversibleList;
 import org.qommons.collect.TransactableList;
 
@@ -24,57 +22,50 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <E> The type of element in the list
  */
-public interface ObservableList<E> extends ObservableReversibleCollection<E>, ReversibleList<E>, TransactableList<E> {
+public interface ObservableList<E> extends ObservableCollection<E>, ReversibleList<E>, TransactableList<E> {
 	@Override
-	default Betterator<E> iterator() {
-		return ReversibleList.super.iterator();
+	default ObservableElementSpliterator<E> spliterator() {
+		return ObservableCollection.super.spliterator();
 	}
 
 	@Override
-	abstract ObservableReversibleSpliterator<E> spliterator();
+	default int indexOf(Object o) {
+		return ObservableCollection.super.indexOf(o);
+	}
 
 	@Override
-	default void replaceAll(UnaryOperator<E> op) {
-		ObservableReversibleCollection.super.replaceAll(op);
+	default int lastIndexOf(Object o) {
+		return ObservableCollection.super.lastIndexOf(o);
 	}
 
 	@Override
 	default E[] toArray() {
-		return ObservableReversibleCollection.super.toArray();
+		return ObservableCollection.super.toArray();
 	}
 
 	@Override
 	default <T> T[] toArray(T[] a) {
-		return ObservableReversibleCollection.super.toArray(a);
+		return ObservableCollection.super.toArray(a);
+	}
+
+	@Override
+	default void replaceAll(UnaryOperator<E> op) {
+		ObservableCollection.super.replaceAll(op);
 	}
 
 	@Override
 	abstract void removeRange(int fromIndex, int toIndex);
 
 	@Override
-	abstract ObservableReversibleSpliterator<E> spliterator(int index);
+	abstract ObservableElementSpliterator<E> spliterator(int index);
+
+	@Override
+	abstract MutableObservableSpliterator<E> mutableSpliterator(int index);
 
 	@Override
 	default ListIterator<E> listIterator() {
 		return listIterator(0);
 	}
-
-	// @Override
-	// default ListIterator<E> listIterator(int index) {
-	// return new ObservableListImpl.SimpleListIterator<>(this, index);
-	// }
-
-	// /**
-	// * A sub-list of this list. The returned list is backed by this list and updated along with it. The index arguments may be any
-	// * non-negative value. If this list's size is {@code <=fromIndex}, the list will be empty. If {@code toIndex>} this list's size, the
-	// * returned list's size may be less than {@code toIndex-fromIndex}.
-	// *
-	// * @see java.util.List#subList(int, int)
-	// */
-	// @Override
-	// default ReversibleList<E> subList(int fromIndex, int toIndex) {
-	// return new ObservableListImpl.SubListImpl<>(this, this, fromIndex, toIndex);
-	// }
 
 	@Override
 	default ObservableList<E> reverse() {
@@ -82,47 +73,13 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Re
 	}
 
 	@Override
-	default ObservableReversibleCollection<E> withEquivalence(Equivalence<? super E> otherEquiv) {
-		return new ObservableListImpl.EquivalenceSwitchedObservableList<>(this, otherEquiv);
+	default ListDataFlow<E, E, E> flow() {
+		return new ObservableListImpl.BaseListDataFlow<>(this);
 	}
 
 	@Override
-	default ObservableList<E> filter(Function<? super E, String> filter) {
-		return (ObservableList<E>) ObservableReversibleCollection.super.filter(filter);
-	}
-
-	@Override
-	default <T> ObservableList<T> filter(Class<T> type) {
-		return (ObservableList<T>) ObservableReversibleCollection.super.filter(type);
-	}
-
-	@Override
-	default <T> ObservableList<T> map(Function<? super E, T> map) {
-		return (ObservableList<T>) ObservableReversibleCollection.super.map(map);
-	}
-
-	@Override
-	default <T> MappedListBuilder<E, E, T> buildMap(TypeToken<T> type) {
-		return new MappedListBuilder<>(this, null, type);
-	}
-
-	@Override
-	default <T> ObservableList<T> filterMap(FilterMapDef<E, ?, T> filterMap) {
-		return new ObservableListImpl.FilterMappedObservableList<>(this, filterMap);
-	}
-
-	@Override
-	default <T> ObservableList<T> flatMapValues(TypeToken<T> type, Function<? super E, ? extends ObservableValue<? extends T>> map) {
-		TypeToken<ObservableValue<? extends T>> collectionType;
-		if (type == null) {
-			collectionType = (TypeToken<ObservableValue<? extends T>>) TypeToken.of(map.getClass())
-				.resolveType(Function.class.getTypeParameters()[1]);
-			if (!collectionType.isAssignableFrom(new TypeToken<ObservableList<T>>() {}))
-				collectionType = new TypeToken<ObservableValue<? extends T>>() {};
-		} else {
-			collectionType = new TypeToken<ObservableValue<? extends T>>() {}.where(new TypeParameter<T>() {}, type);
-		}
-		return flattenValues(this.<ObservableValue<? extends T>> buildMap(collectionType).map(map, false).build());
+	default ListViewBuilder<E> view() {
+		return new ListViewBuilder<>(this);
 	}
 
 	/**
@@ -146,56 +103,6 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Re
 		return flatten(this.<ObservableList<? extends T>> buildMap(collectionType).map(map, false).build());
 	}
 
-	@Override
-	default <T, V> CombinedListBuilder2<E, T, V> combineWith(ObservableValue<T> arg, TypeToken<V> targetType) {
-		return new CombinedListBuilder2<>(this, arg, targetType);
-	}
-
-	@Override
-	default <V> ObservableList<V> combine(CombinedCollectionDef<E, V> combination) {
-		return new ObservableListImpl.CombinedObservableList<>(this, combination);
-	}
-
-	@Override
-	default ListModFilterBuilder<E> filterModification() {
-		return new ListModFilterBuilder<>(this);
-	}
-
-	@Override
-	default ObservableList<E> filterModification(ModFilterDef<E> filter) {
-		return new ObservableListImpl.ModFilteredObservableList<>(this, filter);
-	}
-
-	@Override
-	default ObservableList<E> cached(Observable<?> until) {
-		return new ObservableListImpl.CachedObservableList<>(this, until);
-	}
-
-	@Override
-	default ObservableList<E> sorted(Comparator<? super E> compare) {
-		return new SortedObservableList<>(this, compare);
-	}
-
-	@Override
-	default ObservableList<E> refresh(Observable<?> refresh) {
-		return new ObservableListImpl.RefreshingList<>(this, refresh);
-	}
-
-	@Override
-	default ObservableList<E> refreshEach(Function<? super E, Observable<?>> refire) {
-		return new ObservableListImpl.ElementRefreshingList<>(this, refire);
-	}
-
-	@Override
-	default ObservableList<E> takeUntil(Observable<?> until) {
-		return new ObservableListImpl.TakenUntilObservableList<>(this, until, true);
-	}
-
-	@Override
-	default ObservableList<E> unsubscribeOn(Observable<?> until) {
-		return new ObservableListImpl.TakenUntilObservableList<>(this, until, false);
-	}
-
 	/**
 	 * @param <T> The type of the value to wrap
 	 * @param type The type of the elements in the list
@@ -214,17 +121,6 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Re
 	 */
 	public static <T> ObservableList<T> constant(TypeToken<T> type, T... list) {
 		return constant(type, java.util.Arrays.asList(list));
-	}
-
-	/**
-	 * Turns a list of observable values into a list composed of those holders' values
-	 *
-	 * @param <E> The type of elements held in the values
-	 * @param list The list to flatten
-	 * @return The flattened list
-	 */
-	public static <E> ObservableList<E> flattenValues(ObservableList<? extends ObservableValue<? extends E>> list) {
-		return new ObservableListImpl.FlattenedObservableValuesList<>(list);
 	}
 
 	/**
@@ -263,6 +159,34 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Re
 		return flatten(wrapper);
 	}
 
+	interface ListDataFlow<E, I, T> extends CollectionDataFlow<E, I, T> {
+		@Override
+		ListDataFlow<E, T, T> withEquivalence(Equivalence<? super T> equivalence);
+
+		@Override
+		ListDataFlow<E, T, T> refresh(Observable<?> refresh);
+
+		@Override
+		ListDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh);
+
+		@Override
+		<X> MappedListBuilder<E, T, X> map(TypeToken<X> target);
+
+		@Override
+		default <X> ListDataFlow<E, ?, X> flatMap(TypeToken<X> target, Function<? super T, ? extends ObservableValue<? extends X>> map) {
+			return (ListDataFlow<E, ?, X>) CollectionDataFlow.super.flatMap(target, map);
+		}
+
+		@Override
+		<V, X> CombinedListBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, TypeToken<X> target);
+
+		@Override
+		<V, X> CombinedListBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, boolean combineNulls, TypeToken<X> target);
+
+		@Override
+		ObservableList<T> build();
+	}
+
 	/**
 	 * A {@link ObservableCollection.MappedCollectionBuilder} that builds an {@link ObservableList}
 	 *
@@ -270,24 +194,9 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Re
 	 * @param <I> Intermediate type
 	 * @param <T> The type of values in the mapped list
 	 */
-	class MappedListBuilder<E, I, T> extends MappedReversibleCollectionBuilder<E, I, T> {
-		protected MappedListBuilder(ObservableList<E> wrapped, MappedListBuilder<E, ?, I> parent, TypeToken<T> type) {
-			super(wrapped, parent, type);
-		}
-
-		@Override
-		protected ObservableList<E> getCollection() {
-			return (ObservableList<E>) super.getCollection();
-		}
-
-		@Override
-		public MappedListBuilder<E, I, T> filter(Function<? super I, String> filter, boolean filterNulls) {
-			return (MappedListBuilder<E, I, T>) super.filter(filter, filterNulls);
-		}
-
-		@Override
-		public MappedListBuilder<E, I, T> map(Function<? super I, ? extends T> map, boolean mapNulls) {
-			return (MappedListBuilder<E, I, T>) super.map(map, mapNulls);
+	class MappedListBuilder<E, I, T> extends MappedCollectionBuilder<E, I, T> {
+		protected MappedListBuilder(AbstractDataFlow<E, ?, I> parent, TypeToken<T> type) {
+			super(parent, type);
 		}
 
 		@Override
@@ -296,15 +205,14 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Re
 		}
 
 		@Override
-		public ObservableList<T> build() {
-			return (ObservableList<T>) super.build();
+		public MappedListBuilder<E, I, T> withElementSetting(ElementSetter<? super I, ? super T> reverse, boolean reverseNulls) {
+			return (MappedListBuilder<E, I, T>) super.withElementSetting(reverse, reverseNulls);
 		}
 
 		@Override
-		public <X> MappedListBuilder<E, T, X> andThen(TypeToken<X> nextType) {
-			if (getMap() == null && !getCollection().getType().equals(getType()))
-				throw new IllegalStateException("Type-mapped collection builder with no map defined");
-			return new MappedListBuilder<>(getCollection(), this, nextType);
+		public ListDataFlow<E, I, T> map(Function<? super I, ? extends T> map, boolean mapNulls) {
+			return new ObservableListImpl.MapListOp<E, I, T>(getParent(), getTargetType(), map, mapNulls, getReverse(), getElementReverse(),
+				areNullsReversed());
 		}
 	}
 
@@ -312,25 +220,21 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Re
 	 * A {@link ObservableCollection.CombinedCollectionBuilder} that builds an {@link ObservableReversibleCollection}
 	 *
 	 * @param <E> The type of elements in the source list
+	 * @param <I> An intermediate type
 	 * @param <V> The type of elements in the resulting list
-	 * @see ObservableIndexedCollection#combineWith(ObservableValue, TypeToken)
-	 * @see ObservableIndexedCollection.CombinedOrderedCollectionBuilder3#and(ObservableValue)
 	 */
-	interface CombinedListBuilder<E, V> extends CombinedReversibleCollectionBuilder<E, V> {
+	interface CombinedListBuilder<E, I, V> extends CombinedCollectionBuilder<E, I, V> {
 		@Override
-		<T> CombinedListBuilder<E, V> and(ObservableValue<T> arg);
+		<T> CombinedListBuilder<E, I, V> and(ObservableValue<T> arg);
 
 		@Override
-		<T> CombinedListBuilder<E, V> and(ObservableValue<T> arg, boolean combineNulls);
+		<T> CombinedListBuilder<E, I, V> and(ObservableValue<T> arg, boolean combineNulls);
 
 		@Override
-		CombinedListBuilder<E, V> withReverse(Function<? super CombinedValues<? extends V>, ? extends E> reverse, boolean reverseNulls);
+		CombinedListBuilder<E, I, V> withReverse(Function<? super CombinedValues<? extends V>, ? extends I> reverse, boolean reverseNulls);
 
 		@Override
-		ObservableList<V> build(Function<? super CombinedValues<? extends E>, ? extends V> combination);
-
-		@Override
-		CombinedCollectionDef<E, V> toDef(Function<? super CombinedValues<? extends E>, ? extends V> combination);
+		ListDataFlow<E, I, V> build(Function<? super CombinedValues<? extends I>, ? extends V> combination);
 	}
 
 	/**
@@ -338,68 +242,55 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Re
 	 * combine with additional values.
 	 *
 	 * @param <E> The type of elements in the source list
+	 * @param <I> An intermediate type
 	 * @param <T> The type of the combined value
 	 * @param <V> The type of elements in the resulting list
-	 * @see ObservableList#combineWith(ObservableValue, TypeToken)
 	 */
-	class CombinedListBuilder2<E, T, V> extends CombinedReversibleCollectionBuilder2<E, T, V> implements CombinedListBuilder<E, V> {
-		public CombinedListBuilder2(ObservableList<E> list, ObservableValue<T> arg2, TypeToken<V> targetType) {
-			super(list, arg2, targetType);
+	class CombinedListBuilder2<E, I, T, V> extends CombinedCollectionBuilder2<E, I, T, V> implements CombinedListBuilder<E, I, V> {
+		protected CombinedListBuilder2(AbstractDataFlow<E, ?, I> parent, TypeToken<V> targetType, ObservableValue<T> arg2,
+			Ternian combineNull) {
+			super(parent, targetType, arg2, combineNull);
 		}
 
 		@Override
-		public ObservableList<E> getSource() {
-			return (ObservableList<E>) super.getSource();
+		public CombinedListBuilder2<E, I, T, V> combineNullsByDefault() {
+			return (CombinedListBuilder2<E, I, T, V>) super.combineNullsByDefault();
 		}
 
 		@Override
-		public CombinedListBuilder2<E, T, V> combineNulls(boolean combineNulls) {
-			return (CombinedListBuilder2<E, T, V>) super.combineNulls(combineNulls);
+		public CombinedListBuilder2<E, I, T, V> withReverse(BiFunction<? super V, ? super T, ? extends I> reverse, boolean reverseNulls) {
+			return (CombinedListBuilder2<E, I, T, V>) super.withReverse(reverse, reverseNulls);
 		}
 
 		@Override
-		public CombinedListBuilder2<E, T, V> combineCollectionNulls(boolean combineNulls) {
-			return (CombinedListBuilder2<E, T, V>) super.combineCollectionNulls(combineNulls);
-		}
-
-		@Override
-		public CombinedListBuilder2<E, T, V> combineNullArg2(boolean combineNulls) {
-			return (CombinedListBuilder2<E, T, V>) super.combineNullArg2(combineNulls);
-		}
-
-		@Override
-		public CombinedListBuilder2<E, T, V> withReverse(BiFunction<? super V, ? super T, ? extends E> reverse, boolean reverseNulls) {
-			return (CombinedListBuilder2<E, T, V>) super.withReverse(reverse, reverseNulls);
-		}
-
-		@Override
-		public CombinedListBuilder2<E, T, V> withReverse(Function<? super CombinedValues<? extends V>, ? extends E> reverse,
+		public CombinedListBuilder2<E, I, T, V> withReverse(Function<? super CombinedValues<? extends V>, ? extends I> reverse,
 			boolean reverseNulls) {
-			return (CombinedListBuilder2<E, T, V>) super.withReverse(reverse, reverseNulls);
+			return (CombinedListBuilder2<E, I, T, V>) super.withReverse(reverse, reverseNulls);
 		}
 
 		@Override
-		public ObservableList<V> build(BiFunction<? super E, ? super T, ? extends V> combination) {
-			return (ObservableList<V>) super.build(combination);
+		public ListDataFlow<E, I, V> build(BiFunction<? super I, ? super T, ? extends V> combination) {
+			return (ListDataFlow<E, I, V>) super.build(combination);
 		}
 
 		@Override
-		public ObservableList<V> build(Function<? super CombinedValues<? extends E>, ? extends V> combination) {
-			return (ObservableList<V>) super.build(combination);
+		public ListDataFlow<E, I, V> build(Function<? super CombinedValues<? extends I>, ? extends V> combination) {
+			return (ListDataFlow<E, I, V>) super.build(combination);
 		}
 
 		@Override
-		public <U> CombinedListBuilder3<E, T, U, V> and(ObservableValue<U> arg3) {
+		public <U> CombinedListBuilder3<E, I, T, U, V> and(ObservableValue<U> arg3) {
 			if (getReverse() != null)
 				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
-			return new CombinedListBuilder3<>(this, arg3, Ternian.NONE);
+			return new CombinedListBuilder3<>(getParent(), getTargetType(), getArg2(), combineNulls(getArg2()), arg3, Ternian.NONE);
 		}
 
 		@Override
-		public <U> CombinedListBuilder3<E, T, U, V> and(ObservableValue<U> arg3, boolean combineNulls) {
+		public <U> CombinedListBuilder3<E, I, T, U, V> and(ObservableValue<U> arg3, boolean combineNulls) {
 			if (getReverse() != null)
 				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
-			return new CombinedListBuilder3<>(this, arg3, Ternian.of(combineNulls));
+			return new CombinedListBuilder3<>(getParent(), getTargetType(), getArg2(), combineNulls(getArg2()), arg3,
+				Ternian.of(combineNulls));
 		}
 	}
 
@@ -408,56 +299,55 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Re
 	 * combine with additional values.
 	 *
 	 * @param <E> The type of elements in the source list
+	 * @param <I> An intermediate type
 	 * @param <T> The type of the first combined value
 	 * @param <U> The type of the second combined value
 	 * @param <V> The type of elements in the resulting list
-	 * @see ObservableList#combineWith(ObservableValue, TypeToken)
+	 * @see ObservableList.ListDataFlow#combineWith(ObservableValue, TypeToken)
 	 * @see ObservableList.CombinedListBuilder2#and(ObservableValue)
 	 */
-	class CombinedListBuilder3<E, T, U, V> extends CombinedReversibleCollectionBuilder3<E, T, U, V> implements CombinedListBuilder<E, V> {
-		public CombinedListBuilder3(CombinedListBuilder2<E, T, V> combine2, ObservableValue<U> arg3, Ternian combineNulls) {
-			super(combine2, arg3, combineNulls);
+	class CombinedListBuilder3<E, I, T, U, V> extends CombinedCollectionBuilder3<E, I, T, U, V> implements CombinedListBuilder<E, I, V> {
+		protected CombinedListBuilder3(AbstractDataFlow<E, ?, I> parent, TypeToken<V> targetType, ObservableValue<T> arg2,
+			Ternian combineArg2Nulls, ObservableValue<U> arg3, Ternian combineArg3Nulls) {
+			super(parent, targetType, arg2, combineArg2Nulls, arg3, combineArg3Nulls);
 		}
 
 		@Override
-		public ObservableList<E> getSource() {
-			return (ObservableList<E>) getCombine2().getSource();
-		}
-
-		@Override
-		public CombinedListBuilder3<E, T, U, V> withReverse(TriFunction<? super V, ? super T, ? super U, ? extends E> reverse,
+		public CombinedListBuilder3<E, I, T, U, V> withReverse(TriFunction<? super V, ? super T, ? super U, ? extends I> reverse,
 			boolean reverseNulls) {
-			return (CombinedListBuilder3<E, T, U, V>) super.withReverse(reverse, reverseNulls);
+			return (CombinedListBuilder3<E, I, T, U, V>) super.withReverse(reverse, reverseNulls);
 		}
 
 		@Override
-		public CombinedListBuilder3<E, T, U, V> withReverse(Function<? super CombinedValues<? extends V>, ? extends E> reverse,
+		public CombinedListBuilder3<E, I, T, U, V> withReverse(Function<? super CombinedValues<? extends V>, ? extends I> reverse,
 			boolean reverseNulls) {
-			return (CombinedListBuilder3<E, T, U, V>) super.withReverse(reverse, reverseNulls);
+			return (CombinedListBuilder3<E, I, T, U, V>) super.withReverse(reverse, reverseNulls);
 		}
 
 		@Override
-		public ObservableList<V> build(TriFunction<? super E, ? super T, ? super U, ? extends V> combination) {
-			return (ObservableList<V>) super.build(combination);
+		public ListDataFlow<E, I, V> build(TriFunction<? super I, ? super T, ? super U, ? extends V> combination) {
+			return (ListDataFlow<E, I, V>) super.build(combination);
 		}
 
 		@Override
-		public ObservableList<V> build(Function<? super CombinedValues<? extends E>, ? extends V> combination) {
-			return (ObservableList<V>) super.build(combination);
+		public ListDataFlow<E, I, V> build(Function<? super CombinedValues<? extends I>, ? extends V> combination) {
+			return (ListDataFlow<E, I, V>) super.build(combination);
 		}
 
 		@Override
-		public <T2> CombinedListBuilderN<E, V> and(ObservableValue<T2> arg) {
-			if (getCombine2().getReverse() != null)
+		public <T2> CombinedListBuilderN<E, I, V> and(ObservableValue<T2> arg) {
+			if (getReverse() != null)
 				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
-			return new CombinedListBuilderN<>(this).and(arg);
+			return new CombinedListBuilderN<>(getParent(), getTargetType(), getArg2(), combineNulls(getArg2()), getArg3(),
+				combineNulls(getArg3()), arg, Ternian.NONE);
 		}
 
 		@Override
-		public <T2> CombinedListBuilderN<E, V> and(ObservableValue<T2> arg, boolean combineNulls) {
-			if (getCombine2().getReverse() != null)
+		public <T2> CombinedListBuilderN<E, I, V> and(ObservableValue<T2> arg, boolean combineNulls) {
+			if (getReverse() != null)
 				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
-			return new CombinedListBuilderN<>(this).and(arg, combineNulls);
+			return new CombinedListBuilderN<>(getParent(), getTargetType(), getArg2(), combineNulls(getArg2()), getArg3(),
+				combineNulls(getArg3()), arg, Ternian.of(combineNulls));
 		}
 	}
 
@@ -466,51 +356,43 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Re
 	 * (typically at least 3) values. Use {@link #and(ObservableValue)} to combine with additional values.
 	 *
 	 * @param <E> The type of elements in the source list
+	 * @param <I> An intermediate type
 	 * @param <V> The type of elements in the resulting list
 	 * @see ObservableReversibleCollection#combineWith(ObservableValue, TypeToken)
 	 * @see ObservableReversibleCollection.CombinedReversibleCollectionBuilder3#and(ObservableValue)
 	 */
-	class CombinedListBuilderN<E, V> extends CombinedReversibleCollectionBuilderN<E, V> implements CombinedListBuilder<E, V> {
-		public CombinedListBuilderN(CombinedReversibleCollectionBuilder3<E, ?, ?, V> combine3) {
-			super(combine3);
+	class CombinedListBuilderN<E, I, V> extends CombinedCollectionBuilderN<E, I, V> implements CombinedListBuilder<E, I, V> {
+		protected CombinedListBuilderN(AbstractDataFlow<E, ?, I> parent, TypeToken<V> targetType, ObservableValue<?> arg2,
+			Ternian combineArg2Nulls, ObservableValue<?> arg3, Ternian combineArg3Nulls, ObservableValue<?> arg4,
+			Ternian combineArg4Nulls) {
+			super(parent, targetType, arg2, combineArg2Nulls, arg3, combineArg3Nulls, arg4, combineArg4Nulls);
 		}
 
 		@Override
-		public CombinedListBuilderN<E, V> withReverse(Function<? super CombinedValues<? extends V>, ? extends E> reverse,
+		public CombinedListBuilderN<E, I, V> withReverse(Function<? super CombinedValues<? extends V>, ? extends I> reverse,
 			boolean reverseNulls) {
-			return (CombinedListBuilderN<E, V>) super.withReverse(reverse, reverseNulls);
+			return (CombinedListBuilderN<E, I, V>) super.withReverse(reverse, reverseNulls);
 		}
 
 		@Override
-		public <T> CombinedListBuilderN<E, V> and(ObservableValue<T> arg) {
-			return (CombinedListBuilderN<E, V>) super.and(arg);
+		public <T> CombinedListBuilderN<E, I, V> and(ObservableValue<T> arg) {
+			return (CombinedListBuilderN<E, I, V>) super.and(arg);
 		}
 
 		@Override
-		public <T> CombinedListBuilderN<E, V> and(ObservableValue<T> arg, boolean combineNull) {
-			return (CombinedListBuilderN<E, V>) super.and(arg, combineNull);
+		public <T> CombinedListBuilderN<E, I, V> and(ObservableValue<T> arg, boolean combineNull) {
+			return (CombinedListBuilderN<E, I, V>) super.and(arg, combineNull);
 		}
 
 		@Override
-		public ObservableList<V> build(Function<? super CombinedValues<? extends E>, ? extends V> combination) {
-			return (ObservableList<V>) super.build(combination);
-		}
-
-		@Override
-		public CombinedCollectionDef<E, V> toDef(Function<? super CombinedValues<? extends E>, ? extends V> combination) {
-			return new CombinedCollectionDef<>(getTargetType(), addArgs(new LinkedHashMap<>(2)), combination, areCollectionNullsCombined(),
-				getReverse(), areNullsReversed(), false);
+		public ListDataFlow<E, I, V> build(Function<? super CombinedValues<? extends I>, ? extends V> combination) {
+			return (ListDataFlow<E, I, V>) super.build(combination);
 		}
 	}
 
-	/**
-	 * Builds a modification filter that may prevent certain kinds of modification to the list
-	 *
-	 * @param <E> The type of elements in the list
-	 */
-	class ListModFilterBuilder<E> extends ReversibleModFilterBuilder<E> {
-		public ListModFilterBuilder(ObservableList<E> list) {
-			super(list);
+	class ListViewBuilder<E> extends ViewBuilder<E> {
+		public ListViewBuilder(ObservableList<E> collection) {
+			super(collection);
 		}
 
 		@Override
@@ -519,33 +401,8 @@ public interface ObservableList<E> extends ObservableReversibleCollection<E>, Re
 		}
 
 		@Override
-		public ListModFilterBuilder<E> immutable(String modMsg) {
-			return (ListModFilterBuilder<E>) super.immutable(modMsg);
-		}
-
-		@Override
-		public ListModFilterBuilder<E> noAdd(String modMsg) {
-			return (ListModFilterBuilder<E>) super.noAdd(modMsg);
-		}
-
-		@Override
-		public ListModFilterBuilder<E> noRemove(String modMsg) {
-			return (ListModFilterBuilder<E>) super.noRemove(modMsg);
-		}
-
-		@Override
-		public ListModFilterBuilder<E> filterAdd(Function<? super E, String> messageFn) {
-			return (ListModFilterBuilder<E>) super.filterAdd(messageFn);
-		}
-
-		@Override
-		public ListModFilterBuilder<E> filterRemove(Function<? super E, String> messageFn) {
-			return (ListModFilterBuilder<E>) super.filterRemove(messageFn);
-		}
-
-		@Override
 		public ObservableList<E> build() {
-			return (ObservableList<E>) super.build();
+			return new ObservableListImpl.ListView<>(getSource(), toDef());
 		}
 	}
 }
