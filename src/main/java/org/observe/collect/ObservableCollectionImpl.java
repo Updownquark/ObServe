@@ -5,11 +5,11 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
-import java.util.Objects;
 import java.util.Set;
 import java.util.Spliterator;
 import java.util.TreeMap;
@@ -48,11 +48,12 @@ import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementSpliterator;
+import org.qommons.collect.ReversibleCollection;
+import org.qommons.collect.ReversibleSpliterator;
 import org.qommons.tree.CountedRedBlackNode.DefaultNode;
 import org.qommons.tree.CountedRedBlackNode.DefaultTreeMap;
 import org.qommons.value.Value;
 
-import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 /** Holds default implementation methods and classes for {@link ObservableCollection} */
@@ -166,6 +167,17 @@ public final class ObservableCollectionImpl {
 	 */
 	public static <E> boolean remove(ObservableCollection<E> coll, Object o) {
 		return coll.find(v -> coll.equivalence().elementEquals(v, o), el -> el.remove());
+	}
+
+	/**
+	 * A default implementation for {@link ObservableCollection#remove(Object)}
+	 *
+	 * @param coll The collection to remove from
+	 * @param o The value to remove
+	 * @return Whether the value was found and removed
+	 */
+	public static <E> boolean removeLast(ObservableCollection<E> coll, Object o) {
+		return coll.find(v -> coll.equivalence().elementEquals(v, o), el -> el.remove(), false);
 	}
 
 	/**
@@ -890,6 +902,148 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
+	public static class ReversedObservableCollection<E> extends ReversibleCollection.ReversedCollection<E>
+	implements ObservableCollection<E> {
+		public ReversedObservableCollection(ObservableCollection<E> wrapped) {
+			super(wrapped);
+		}
+
+		@Override
+		protected ObservableCollection<E> getWrapped() {
+			return (ObservableCollection<E>) super.getWrapped();
+		}
+
+		@Override
+		public TypeToken<E> getType() {
+			return getWrapped().getType();
+		}
+
+		@Override
+		public Equivalence<? super E> equivalence() {
+			return getWrapped().equivalence();
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return getWrapped().isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return getWrapped().lock(write, cause);
+		}
+
+		@Override
+		public ObservableElementSpliterator<E> spliterator() {
+			return spliterator(true);
+		}
+
+		@Override
+		public ObservableElementSpliterator<E> spliterator(boolean fromStart) {
+			return (ObservableElementSpliterator<E>) super.spliterator(!fromStart).reverse();
+		}
+
+		@Override
+		public MutableObservableSpliterator<E> mutableSpliterator(boolean fromStart) {
+			return getWrapped().mutableSpliterator(!fromStart).reverse();
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
+			return ObservableCollectionImpl.defaultOnChange(this, observer);
+		}
+
+		@Override
+		public ObservableCollection<E> reverse() {
+			return getWrapped();
+		}
+
+		@Override
+		public E get(int index) {
+			try (Transaction t = getWrapped().lock(false, null)) {
+				return getWrapped().get(getWrapped().size() - index - 1);
+			}
+		}
+
+		@Override
+		public int indexOf(Object value) {
+			try (Transaction t = getWrapped().lock(false, null)) {
+				return getWrapped().size() - getWrapped().lastIndexOf(value) - 1;
+			}
+		}
+
+		@Override
+		public int lastIndexOf(Object value) {
+			try (Transaction t = getWrapped().lock(false, null)) {
+				return getWrapped().size() - getWrapped().indexOf(value) - 1;
+			}
+		}
+
+		@Override
+		public E[] toArray() {
+			return ObservableCollection.super.toArray();
+		}
+
+		@Override
+		public <T> T[] toArray(T[] a) {
+			return ObservableCollection.super.toArray(a);
+		}
+
+		@Override
+		public String canRemove(Object value) {
+			return getWrapped().canRemove(value);
+		}
+
+		@Override
+		public String canAdd(E value) {
+			return getWrapped().canAdd(value);
+		}
+
+		@Override
+		public CollectionSubscription subscribeIndexed(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
+			return getWrapped().subscribeReverseIndexed(new ReversedSubscriber<>(observer));
+		}
+
+		@Override
+		public CollectionSubscription subscribeReverseIndexed(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
+			return getWrapped().subscribeIndexed(new ReversedSubscriber<>(observer));
+		}
+
+		private static class ReversedSubscriber<E> implements Consumer<IndexedCollectionEvent<? extends E>> {
+			private final Consumer<? super IndexedCollectionEvent<? extends E>> theObserver;
+			private int theSize;
+
+			ReversedSubscriber(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
+				theObserver = observer;
+			}
+
+			@Override
+			public void accept(IndexedCollectionEvent<? extends E> evt) {
+				if (evt.getType() == CollectionChangeType.add)
+					theSize++;
+				int index = theSize - evt.getIndex() - 1;
+				if (evt.getType() == CollectionChangeType.remove)
+					theSize++;
+				IndexedCollectionEvent.doWith(new IndexedCollectionEvent<>(new ReversedElementId(evt.getElementId()), index, evt.getType(),
+					evt.getOldValue(), evt.getNewValue(), evt), theObserver);
+			}
+		}
+
+		private static class ReversedElementId implements ElementId {
+			private final ElementId theSource;
+
+			ReversedElementId(ElementId source) {
+				super();
+				theSource = source;
+			}
+
+			@Override
+			public int compareTo(ElementId o) {
+				return -theSource.compareTo(((ReversedElementId) o).theSource);
+			}
+		}
+	}
+
 	public static class DerivedCollection<E, T> implements ObservableCollection<T> {
 		private final ObservableCollection<E> theSource;
 		private final CollectionManager<E, T> theFlow;
@@ -1128,6 +1282,11 @@ public final class ObservableCollectionImpl {
 			return theSize == 0;
 		}
 
+		@Override
+		public T get(int index) {
+			return theElements.entrySet().get(index).getValue().get();
+		}
+
 		private boolean checkDestType(Object o) {
 			return o == null || theFlow.getTargetType().getRawType().isInstance(o);
 		}
@@ -1158,13 +1317,18 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public ObservableElementSpliterator<T> spliterator() {
+			return spliterator(true);
+		}
+
+		@Override
+		public ObservableElementSpliterator<T> spliterator(boolean fromStart) {
 			class CachedSpliterator implements ObservableElementSpliterator<T> {
-				private final Spliterator<Map.Entry<ElementId, CollectionElementManager<E, T>>> theIdSpliterator;
+				private final ReversibleSpliterator<Map.Entry<ElementId, CollectionElementManager<E, T>>> theIdSpliterator;
 				private final ObservableCollectionElement<T> theElement;
 				ElementId theCurrentId;
 				T theCurrentValue;
 
-				CachedSpliterator(Spliterator<Map.Entry<ElementId, CollectionElementManager<E, T>>> idSpliterator) {
+				CachedSpliterator(ReversibleSpliterator<Map.Entry<ElementId, CollectionElementManager<E, T>>> idSpliterator) {
 					theIdSpliterator = idSpliterator;
 					theElement = new ObservableCollectionElement<T>() {
 						@Override
@@ -1223,6 +1387,24 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
+				public boolean tryReverseObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
+					boolean[] success = new boolean[1];
+					try (Transaction t = lock(false, null)) {
+						while (!success[0] && theIdSpliterator.tryReverse(entry -> {
+							CollectionElementManager<E, T> elMgr = entry.getValue();
+							if (!elMgr.isPresent())
+								return;
+							success[0] = true;
+							theCurrentId = entry.getKey();
+							theCurrentValue = elMgr.get();
+							action.accept(theElement);
+						})) {
+						}
+					}
+					return success[0];
+				}
+
+				@Override
 				public void forEachObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
 					try (Transaction t = lock(false, null)) {
 						theIdSpliterator.forEachRemaining(entry -> {
@@ -1237,12 +1419,26 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
+				public void forEachReverseObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
+					try (Transaction t = lock(false, null)) {
+						theIdSpliterator.forEachReverse(entry -> {
+							CollectionElementManager<E, T> elMgr = entry.getValue();
+							if (!elMgr.isPresent())
+								return;
+							theCurrentId = entry.getKey();
+							theCurrentValue = elMgr.get();
+							action.accept(theElement);
+						});
+					}
+				}
+
+				@Override
 				public ObservableElementSpliterator<T> trySplit() {
-					Spliterator<Map.Entry<ElementId, CollectionElementManager<E, T>>> split = theIdSpliterator.trySplit();
+					ReversibleSpliterator<Map.Entry<ElementId, CollectionElementManager<E, T>>> split = theIdSpliterator.trySplit();
 					return split == null ? null : new CachedSpliterator(split);
 				}
 			}
-			return new CachedSpliterator(theElements.entrySet().spliterator());
+			return new CachedSpliterator(theElements.entrySet().spliterator(fromStart));
 		}
 
 		@Override
@@ -1273,7 +1469,7 @@ public final class ObservableCollectionImpl {
 
 		/**
 		 * @param input The collection to reverse
-		 * @return The collection, with its elements {@link ObservableCollection.FilterMapDef#reverse(FilterMapResult) reversed}
+		 * @return The collection, with its elements {@link ObservableCollection.CollectionManager#reverse(FilterMapResult) reversed}
 		 */
 		protected List<E> reverse(Collection<?> input) {
 			FilterMapResult<T, E> reversed = new FilterMapResult<>();
@@ -1328,6 +1524,21 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public boolean removeLast(Object o) {
+			if (o != null && !checkDestType(o))
+				return false;
+			if (theFlow.isReversible()) {
+				try (Transaction t = lock(false, null)) {
+					FilterMapResult<T, E> reversed = theFlow.reverse(new FilterMapResult<>((T) o));
+					if (reversed.error != null)
+						return false;
+					return theSource.removeLast(reversed.result);
+				}
+			} else
+				return ObservableCollectionImpl.removeLast(this, o);
+		}
+
+		@Override
 		public boolean removeAll(Collection<?> c) {
 			return ObservableCollectionImpl.removeAll(this, c);
 		}
@@ -1348,6 +1559,11 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public MutableObservableSpliterator<T> mutableSpliterator() {
+			return mutableSpliterator(true);
+		}
+
+		@Override
+		public MutableObservableSpliterator<T> mutableSpliterator(boolean fromStart) {
 			class MutableCachedSpliterator implements MutableObservableSpliterator<T> {
 				private final MutableObservableSpliterator<E> theWrappedSpliter;
 				private final MutableObservableElement<T> theElement;
@@ -1486,6 +1702,26 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
+				public boolean tryReverseMutableElement(Consumer<? super MutableObservableElement<T>> action) {
+					boolean[] success = new boolean[1];
+					try (Transaction t = lock(true, null)) {
+						while (!success[0] && theWrappedSpliter.tryReverseMutableElement(el -> {
+							CollectionElementManager<E, T> elMgr = theElements.get(theCurrentId);
+							if (!elMgr.isPresent())
+								return;
+							success[0] = true;
+							theCurrentElement = el;
+							theCurrentId = el.getElementId();
+							theCurrentValue = elMgr.get();
+							action.accept(theElement);
+						})) {
+						}
+						;
+					}
+					return success[0];
+				}
+
+				@Override
 				public void forEachMutableElement(Consumer<? super MutableObservableElement<T>> action) {
 					try (Transaction t = lock(true, null)) {
 						theWrappedSpliter.forEachMutableElement(el -> {
@@ -1500,8 +1736,24 @@ public final class ObservableCollectionImpl {
 						MutableObservableSpliterator.super.forEachMutableElement(action);
 					}
 				}
+
+				@Override
+				public void forEachReverseMutableElement(Consumer<? super MutableObservableElement<T>> action) {
+					try (Transaction t = lock(true, null)) {
+						theWrappedSpliter.forEachReverseMutableElement(el -> {
+							CollectionElementManager<E, T> elMgr = theElements.get(theCurrentId);
+							if (elMgr == null || !elMgr.isPresent())
+								return;
+							theCurrentElement = el;
+							theCurrentId = el.getElementId();
+							theCurrentValue = elMgr.get();
+							action.accept(theElement);
+						});
+						MutableObservableSpliterator.super.forEachMutableElement(action);
+					}
+				}
 			}
-			return new MutableCachedSpliterator(theSource.mutableSpliterator());
+			return new MutableCachedSpliterator(theSource.mutableSpliterator(fromStart));
 		}
 
 		@Override
@@ -1614,9 +1866,13 @@ public final class ObservableCollectionImpl {
 			refresh(getParent().get());
 		}
 
+		protected boolean applies(CollectionUpdate update) {
+			return update instanceof SimpleCollectionUpdate && ((SimpleCollectionUpdate<?, ?, ?>) update).getCollection() == theCollection;
+		}
+
 		@Override
 		public boolean update(CollectionUpdate update) {
-			if (update instanceof SimpleCollectionUpdate && ((SimpleCollectionUpdate<?, ?, ?>) update).getCollection() == theCollection) {
+			if (applies(update)) {
 				refresh(getParent().get());
 				return true;
 			} else if (getParent().update(update)) {
@@ -1860,25 +2116,24 @@ public final class ObservableCollectionImpl {
 		private static class RefreshHolder {
 			final Observable<?> theRefresh;
 			Consumer<Object> theAction;
-			WeakConsumer<Object> theWeakAction;
+			Subscription theSub;
 			int theElementCount;
 
-			RefreshHolder(Observable<?> refresh, Consumer<Object> action, WeakConsumer<Object> weakAction, int elementCount) {
+			RefreshHolder(Observable<?> refresh, Consumer<Object> action, Subscription sub) {
 				theRefresh = refresh;
 				theAction = action;
-				theWeakAction = weakAction;
-				theElementCount = elementCount;
+				theSub = sub;
 			}
 		}
 
 		private final Function<? super T, ? extends Observable<?>> theRefresh;
-		private final Map<T, RefreshHolder> theRefreshObservables;
+		private final Map<Observable<?>, RefreshHolder> theRefreshObservables;
 
 		public ElementRefreshingCollectionManager(CollectionManager<E, T> parent,
 			Function<? super T, ? extends Observable<?>> refresh) {
 			super(parent, parent.getTargetType());
 			theRefresh = refresh;
-			theRefreshObservables = new HashMap<>();
+			theRefreshObservables = new IdentityHashMap<>();
 		}
 
 		@Override
@@ -1893,12 +2148,87 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public CollectionElementManager<E, T> createElement(E init) {
-			// TODO Auto-generated method stub
+			class ElementRefreshElement extends AbstractCollectionElementManager<E, T, T> {
+				private Observable<?> theRefreshObservable;
+
+				protected ElementRefreshElement() {
+					super(ElementRefreshingCollectionManager.this, ElementRefreshingCollectionManager.this.getParent().createElement(init));
+				}
+
+				@Override
+				public T get() {
+					return getParent().get();
+				}
+
+				@Override
+				public void remove() {
+					if (theRefreshObservable != null)
+						removeRefreshObs(theRefreshObservable);
+					super.remove();
+				}
+
+				@Override
+				protected boolean applies(CollectionUpdate update) {
+					return super.applies(update) && ((ElementRefreshUpdate) update).getRefreshObs() == theRefreshObservable;
+				}
+
+				@Override
+				protected void refresh(T source) {
+					// TODO This code should be in update--don't need to re-evaluate the refresh observable when the refresh itself fires
+					Observable<?> refreshObs = theRefresh.apply(source);
+					if (theRefreshObservable != refreshObs) {
+						removeRefreshObs(theRefreshObservable);
+						newRefreshObs(refreshObs);
+					}
+				}
+
+				private void removeRefreshObs(Observable<?> refreshObs) {
+					if (refreshObs != null) {
+						RefreshHolder holder = theRefreshObservables.get(refreshObs);
+						holder.theElementCount--;
+						if (holder.theElementCount == 0) {
+							theRefreshObservables.remove(refreshObs);
+							holder.theSub.unsubscribe();
+						}
+					}
+				}
+
+				private void newRefreshObs(Observable<?> refreshObs) {
+					if (refreshObs != null)
+						theRefreshObservables.computeIfAbsent(refreshObs, this::createHolder).theElementCount++;
+					theRefreshObservable = refreshObs;
+				}
+
+				private RefreshHolder createHolder(Observable<?> refreshObs) {
+					Consumer<Object> action = v -> ElementRefreshingCollectionManager.this.update(refreshObs, v);
+					WeakConsumer<Object> weak = new WeakConsumer<>(action);
+					Subscription sub = refreshObs.act(weak);
+					weak.withSubscription(sub);
+					return new RefreshHolder(refreshObs, action, sub);
+				}
+			}
+			return new ElementRefreshElement();
+		}
+
+		private void update(Observable<?> refreshObs, Object cause) {
 		}
 
 		@Override
 		public void begin(Consumer<CollectionUpdate> onUpdate) {
 			// TODO Auto-generated method stub
+		}
+
+		private class ElementRefreshUpdate extends SimpleCollectionUpdate<E, T, T> {
+			private final Observable<?> theRefreshObs;
+
+			ElementRefreshUpdate(Observable<?> refreshObs, Object cause) {
+				super(ElementRefreshingCollectionManager.this, cause);
+				theRefreshObs = refreshObs;
+			}
+
+			Observable<?> getRefreshObs() {
+				return theRefreshObs;
+			}
 		}
 	}
 

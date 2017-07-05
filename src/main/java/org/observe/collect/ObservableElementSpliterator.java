@@ -5,6 +5,7 @@ import java.util.Spliterator;
 import java.util.function.Consumer;
 
 import org.qommons.collect.ElementSpliterator;
+import org.qommons.collect.ReversibleSpliterator;
 
 import com.google.common.reflect.TypeToken;
 
@@ -13,7 +14,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <E> The type of values the spliterator provides
  */
-public interface ObservableElementSpliterator<E> extends Spliterator<E> {
+public interface ObservableElementSpliterator<E> extends ReversibleSpliterator<E> {
 	/** @return The type of values in this spliterator */
 	TypeToken<E> getType();
 
@@ -28,6 +29,14 @@ public interface ObservableElementSpliterator<E> extends Spliterator<E> {
 	boolean tryAdvanceObservableElement(Consumer<? super ObservableCollectionElement<E>> action);
 
 	/**
+	 * Gets the previous element in the spliterator, if available
+	 *
+	 * @param action The action to perform on the element
+	 * @return Whether there was a previous element in the spliterator
+	 */
+	boolean tryReverseObservableElement(Consumer<? super ObservableCollectionElement<E>> action);
+
+	/**
 	 * Operates on each element remaining in this ElementSpliterator
 	 *
 	 * @param action The action to perform on each element
@@ -37,9 +46,20 @@ public interface ObservableElementSpliterator<E> extends Spliterator<E> {
 		}
 	}
 
+	/** @param action The action to perform on all the previous elements in the spliterator */
+	default void forEachReverseObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
+		while (tryReverseObservableElement(action)) {
+		}
+	}
+
 	@Override
 	default boolean tryAdvance(Consumer<? super E> action) {
 		return tryAdvanceObservableElement(el -> action.accept(el.get()));
+	}
+
+	@Override
+	default boolean tryReverse(Consumer<? super E> action) {
+		return tryReverseObservableElement(el -> action.accept(el.get()));
 	}
 
 	@Override
@@ -49,6 +69,11 @@ public interface ObservableElementSpliterator<E> extends Spliterator<E> {
 
 	@Override
 	ObservableElementSpliterator<E> trySplit();
+
+	@Override
+	default ObservableElementSpliterator<E> reverse() {
+		return new ReversedObservableElementSpliterator<>(this);
+	}
 
 	interface ObservableElementSpliteratorMap<E, T> {
 		TypeToken<T> getType();
@@ -117,10 +142,52 @@ public interface ObservableElementSpliterator<E> extends Spliterator<E> {
 			}
 
 			@Override
+			public boolean tryReverseObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
+				return false;
+			}
+
+			@Override
 			public ObservableElementSpliterator<E> trySplit() {
 				return null;
 			}
 		};
+	}
+
+	class ReversedObservableElementSpliterator<E> extends ReversedSpliterator<E> implements ObservableElementSpliterator<E> {
+		public ReversedObservableElementSpliterator(ObservableElementSpliterator<E> wrap) {
+			super(wrap);
+		}
+
+		@Override
+		protected ObservableElementSpliterator<E> getWrapped() {
+			return (ObservableElementSpliterator<E>) super.getWrapped();
+		}
+
+		@Override
+		public TypeToken<E> getType() {
+			return getWrapped().getType();
+		}
+
+		@Override
+		public boolean tryAdvanceObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
+			return getWrapped().tryReverseObservableElement(action);
+		}
+
+		@Override
+		public boolean tryReverseObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
+			return getWrapped().tryAdvanceObservableElement(action);
+		}
+
+		@Override
+		public ObservableElementSpliterator<E> reverse() {
+			return getWrapped();
+		}
+
+		@Override
+		public ObservableElementSpliterator<E> trySplit() {
+			ObservableElementSpliterator<E> split = getWrapped().trySplit();
+			return split == null ? null : split.reverse();
+		}
 	}
 
 	class MappedObservableElementSpliterator<E, T> implements ObservableElementSpliterator<T> {
@@ -178,8 +245,30 @@ public interface ObservableElementSpliterator<E> extends Spliterator<E> {
 		}
 
 		@Override
+		public boolean tryReverseObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
+			while (theSource.tryReverseObservableElement(el -> {
+				theElement.setSource(el);
+				if (theElement.isAccepted())
+					action.accept(theElement);
+			})) {
+				if (theElement.isAccepted())
+					return true;
+			}
+			return false;
+		}
+
+		@Override
 		public void forEachObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
 			theSource.forEachObservableElement(el -> {
+				theElement.setSource(el);
+				if (theElement.isAccepted())
+					action.accept(theElement);
+			});
+		}
+
+		@Override
+		public void forEachReverseObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
+			theSource.forEachReverseObservableElement(el -> {
 				theElement.setSource(el);
 				if (theElement.isAccepted())
 					action.accept(theElement);

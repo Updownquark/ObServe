@@ -5,11 +5,11 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import org.qommons.collect.CollectionElement;
-import org.qommons.collect.ElementSpliterator;
+import org.qommons.collect.ReversibleElementSpliterator;
 
 import com.google.common.reflect.TypeToken;
 
-public interface MutableObservableSpliterator<E> extends ObservableElementSpliterator<E>, ElementSpliterator<E> {
+public interface MutableObservableSpliterator<E> extends ObservableElementSpliterator<E>, ReversibleElementSpliterator<E> {
 	@Override
 	default MutableObservableSpliterator<E> trySplit() {
 		return null;
@@ -17,14 +17,31 @@ public interface MutableObservableSpliterator<E> extends ObservableElementSplite
 
 	boolean tryAdvanceMutableElement(Consumer<? super MutableObservableElement<E>> action);
 
+	boolean tryReverseMutableElement(Consumer<? super MutableObservableElement<E>> action);
+
 	default void forEachMutableElement(Consumer<? super MutableObservableElement<E>> action) {
 		while (tryAdvanceMutableElement(action)) {
+		}
+	}
+
+	default void forEachReverseMutableElement(Consumer<? super MutableObservableElement<E>> action) {
+		while (tryReverseMutableElement(action)) {
 		}
 	}
 
 	@Override
 	default boolean tryAdvanceElement(Consumer<? super CollectionElement<E>> action) {
 		return tryAdvanceMutableElement(action);
+	}
+
+	@Override
+	default boolean tryReverseElement(Consumer<? super CollectionElement<E>> action) {
+		return tryReverseMutableElement(el -> action.accept(el));
+	}
+
+	@Override
+	default boolean tryReverseObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
+		return tryReverseMutableElement(el -> action.accept(el.immutable()));
 	}
 
 	@Override
@@ -48,8 +65,23 @@ public interface MutableObservableSpliterator<E> extends ObservableElementSplite
 	}
 
 	@Override
+	default boolean tryReverse(Consumer<? super E> action) {
+		return ObservableElementSpliterator.super.tryReverse(action);
+	}
+
+	@Override
 	default void forEachRemaining(Consumer<? super E> action) {
 		forEachObservableElement(el -> action.accept(el.get()));
+	}
+
+	@Override
+	default void forEachReverse(Consumer<? super E> action) {
+		forEachReverseObservableElement(el -> action.accept(el.get()));
+	}
+
+	@Override
+	default MutableObservableSpliterator<E> reverse() {
+		return new ReversedMutableObservableSpliterator<>(this);
 	}
 
 	@Override
@@ -86,8 +118,18 @@ public interface MutableObservableSpliterator<E> extends ObservableElementSplite
 			}
 
 			@Override
+			public boolean tryReverseObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
+				return MutableObservableSpliterator.this.tryAdvanceObservableElement(action);
+			}
+
+			@Override
 			public void forEachObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
 				MutableObservableSpliterator.this.forEachObservableElement(action);
+			}
+
+			@Override
+			public void forEachReverseObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
+				MutableObservableSpliterator.this.forEachReverseObservableElement(action);
 			}
 
 			@Override
@@ -96,8 +138,18 @@ public interface MutableObservableSpliterator<E> extends ObservableElementSplite
 			}
 
 			@Override
+			public boolean tryReverse(Consumer<? super E> action) {
+				return MutableObservableSpliterator.this.tryReverse(action);
+			}
+
+			@Override
 			public void forEachRemaining(Consumer<? super E> action) {
 				MutableObservableSpliterator.this.forEachRemaining(action);
+			}
+
+			@Override
+			public void forEachReverse(Consumer<? super E> action) {
+				MutableObservableSpliterator.this.forEachReverse(action);
 			}
 
 			@Override
@@ -137,6 +189,11 @@ public interface MutableObservableSpliterator<E> extends ObservableElementSplite
 
 			@Override
 			public boolean tryAdvanceMutableElement(Consumer<? super MutableObservableElement<E>> action) {
+				return false;
+			}
+
+			@Override
+			public boolean tryReverseMutableElement(Consumer<? super MutableObservableElement<E>> action) {
 				return false;
 			}
 		};
@@ -185,6 +242,48 @@ public interface MutableObservableSpliterator<E> extends ObservableElementSplite
 
 	default <T> MutableObservableSpliterator<T> map(MutableObservableSpliteratorMap<E, T> map) {
 		return new MappedMutableObservableSpliterator<>(this, map);
+	}
+
+	class ReversedMutableObservableSpliterator<E> extends ReversedElementSpliterator<E> implements MutableObservableSpliterator<E> {
+		public ReversedMutableObservableSpliterator(MutableObservableSpliterator<E> wrap) {
+			super(wrap);
+		}
+
+		@Override
+		protected MutableObservableSpliterator<E> getWrapped() {
+			return (MutableObservableSpliterator<E>) super.getWrapped();
+		}
+
+		@Override
+		public boolean tryAdvanceMutableElement(Consumer<? super MutableObservableElement<E>> action) {
+			return getWrapped().tryReverseMutableElement(action);
+		}
+
+		@Override
+		public boolean tryReverseMutableElement(Consumer<? super MutableObservableElement<E>> action) {
+			return getWrapped().tryAdvanceMutableElement(action);
+		}
+
+		@Override
+		public boolean tryAdvanceObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
+			return getWrapped().tryReverseObservableElement(action);
+		}
+
+		@Override
+		public boolean tryReverseObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
+			return getWrapped().tryAdvanceObservableElement(action);
+		}
+
+		@Override
+		public MutableObservableSpliterator<E> reverse() {
+			return getWrapped();
+		}
+
+		@Override
+		public MutableObservableSpliterator<E> trySplit() {
+			MutableObservableSpliterator<E> split = getWrapped().trySplit();
+			return split == null ? null : split.reverse();
+		}
 	}
 
 	class MappedMutableObservableSpliterator<E, T> extends MappedElementSpliterator<E, T> implements MutableObservableSpliterator<T> {
@@ -237,8 +336,30 @@ public interface MutableObservableSpliterator<E> extends ObservableElementSplite
 		}
 
 		@Override
+		public boolean tryReverseMutableElement(Consumer<? super MutableObservableElement<T>> action) {
+			while (getSource().tryReverseMutableElement(el -> {
+				getElement().setSource(el);
+				if (getElement().isAccepted())
+					action.accept(getElement());
+			})) {
+				if (getElement().isAccepted())
+					return true;
+			}
+			return false;
+		}
+
+		@Override
 		public void forEachMutableElement(Consumer<? super MutableObservableElement<T>> action) {
 			getSource().forEachMutableElement(el -> {
+				getElement().setSource(el);
+				if (getElement().isAccepted())
+					action.accept(getElement());
+			});
+		}
+
+		@Override
+		public void forEachReverseMutableElement(Consumer<? super MutableObservableElement<T>> action) {
+			getSource().forEachReverseMutableElement(el -> {
 				getElement().setSource(el);
 				if (getElement().isAccepted())
 					action.accept(getElement());
@@ -259,8 +380,30 @@ public interface MutableObservableSpliterator<E> extends ObservableElementSplite
 		}
 
 		@Override
+		public boolean tryReverseObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
+			while (getSource().tryReverseObservableElement(el -> {
+				theImmutableElement.setSource(el);
+				if (theImmutableElement.isAccepted())
+					action.accept(theImmutableElement);
+			})) {
+				if (theImmutableElement.isAccepted())
+					return true;
+			}
+			return false;
+		}
+
+		@Override
 		public void forEachObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
 			getSource().forEachObservableElement(el -> {
+				theImmutableElement.setSource(el);
+				if (theImmutableElement.isAccepted())
+					action.accept(theImmutableElement);
+			});
+		}
+
+		@Override
+		public void forEachReverseObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
+			getSource().forEachReverseObservableElement(el -> {
 				theImmutableElement.setSource(el);
 				if (theImmutableElement.isAccepted())
 					action.accept(theImmutableElement);

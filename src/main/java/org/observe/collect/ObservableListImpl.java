@@ -40,7 +40,7 @@ import org.qommons.collect.CircularArrayList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.ReversibleList;
-import org.qommons.collect.ReversibleSpliterator;
+import org.qommons.collect.ReversibleElementSpliterator;
 import org.qommons.collect.TransactableList;
 import org.qommons.value.Value;
 
@@ -808,13 +808,13 @@ public class ObservableListImpl {
 		}
 
 		@Override
-		public ReversibleSpliterator<T> spliterator(boolean fromStart) {
-			return new ReversibleSpliterator.WrappingReversibleSpliterator<>(theWrapped.spliterator(fromStart), getType(), map());
+		public ReversibleElementSpliterator<T> spliterator(boolean fromStart) {
+			return new ReversibleElementSpliterator.WrappingReversibleSpliterator<>(theWrapped.spliterator(fromStart), getType(), map());
 		}
 
 		@Override
-		public ReversibleSpliterator<T> spliterator(int index) {
-			return new ReversibleSpliterator.WrappingReversibleSpliterator<>(theWrapped.spliterator(index), getType(), map());
+		public ReversibleElementSpliterator<T> spliterator(int index) {
+			return new ReversibleElementSpliterator.WrappingReversibleSpliterator<>(theWrapped.spliterator(index), getType(), map());
 		}
 
 		private Supplier<Function<CollectionElement<? extends E>, CollectionElement<T>>> map() {
@@ -1612,7 +1612,7 @@ public class ObservableListImpl {
 			}
 
 			ObservableReversibleSpliterator<T> spliter = spliterator(index);
-			return new ReversibleSpliterator.PartialListIterator<T>(spliter) {
+			return new ReversibleElementSpliterator.PartialListIterator<T>(spliter) {
 				private int theNextIndex = index;
 
 				@Override
@@ -2781,13 +2781,13 @@ public class ObservableListImpl {
 			}
 
 			@Override
-			public ReversibleSpliterator<E> spliterator(boolean fromStart) {
+			public ReversibleElementSpliterator<E> spliterator(boolean fromStart) {
 				check();
 				return new ValueCheckingSpliterator(theList, theSubList.spliterator(fromStart));
 			}
 
 			@Override
-			public ReversibleSpliterator<E> spliterator(int index) {
+			public ReversibleElementSpliterator<E> spliterator(int index) {
 				check();
 				return new ValueCheckingSpliterator(theList, theSubList.spliterator(index));
 			}
@@ -2806,9 +2806,9 @@ public class ObservableListImpl {
 		}
 
 		/** A Spliterator that performs an additional check for each operation to ensure that the underlying list value has not changed */
-		protected class ValueCheckingSpliterator implements ReversibleSpliterator<E> {
+		protected class ValueCheckingSpliterator implements ReversibleElementSpliterator<E> {
 			private final ObservableList<? extends E> theList;
-			private final ReversibleSpliterator<? extends E> theSpliterator;
+			private final ReversibleElementSpliterator<? extends E> theSpliterator;
 			private final CollectionElement<E> theElement;
 			private CollectionElement<? extends E> theWrappedElement;
 
@@ -2816,7 +2816,7 @@ public class ObservableListImpl {
 			 * @param list The ObservableList that this spliterator was generated from
 			 * @param spliterator The backing spliterator
 			 */
-			protected ValueCheckingSpliterator(ObservableList<? extends E> list, ReversibleSpliterator<? extends E> spliterator) {
+			protected ValueCheckingSpliterator(ObservableList<? extends E> list, ReversibleElementSpliterator<? extends E> spliterator) {
 				theList = list;
 				theSpliterator = spliterator;
 				theElement = new CollectionElement<E>() {
@@ -2950,14 +2950,14 @@ public class ObservableListImpl {
 			}
 
 			@Override
-			public ReversibleSpliterator<E> reverse() {
+			public ReversibleElementSpliterator<E> reverse() {
 				return new ValueCheckingSpliterator(theList, theSpliterator.reverse());
 			}
 
 			@Override
-			public ReversibleSpliterator<E> trySplit() {
+			public ReversibleElementSpliterator<E> trySplit() {
 				check();
-				ReversibleSpliterator<? extends E> split = theSpliterator.trySplit();
+				ReversibleElementSpliterator<? extends E> split = theSpliterator.trySplit();
 				if (split == null)
 					return null;
 				return new ValueCheckingSpliterator(theList, split);

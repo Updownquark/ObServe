@@ -36,6 +36,7 @@ import org.qommons.Transaction;
 import org.qommons.TriFunction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.ElementSpliterator;
+import org.qommons.collect.ReversibleCollection;
 import org.qommons.collect.TransactableCollection;
 import org.qommons.collect.TreeList;
 import org.qommons.tree.CountedRedBlackNode.DefaultNode;
@@ -73,7 +74,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <E> The type of element in the collection
  */
-public interface ObservableCollection<E> extends TransactableCollection<E>, BetterCollection<E> {
+public interface ObservableCollection<E> extends TransactableCollection<E>, ReversibleCollection<E> {
 	/** Standard messages returned by this class */
 	interface StdMsg {
 		static String BAD_TYPE = "Object is the wrong type for this collection";
@@ -101,7 +102,12 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	abstract boolean isLockSupported();
 
 	@Override
-	MutableObservableSpliterator<E> mutableSpliterator();
+	default MutableObservableSpliterator<E> mutableSpliterator() {
+		return mutableSpliterator(true);
+	}
+
+	@Override
+	MutableObservableSpliterator<E> mutableSpliterator(boolean fromStart);
 
 	// /**
 	// * @param onElement The listener to be notified when new elements are added to the collection
@@ -113,7 +119,63 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 
 	@Override
 	default ObservableElementSpliterator<E> spliterator() {
-		return mutableSpliterator().immutable();
+		return spliterator(true);
+	}
+
+	@Override
+	default ObservableElementSpliterator<E> spliterator(boolean fromStart) {
+		return mutableSpliterator(fromStart).immutable();
+	}
+
+	/**
+	 * @param index The index of the element to get
+	 * @return The element of this collection at the given index
+	 */
+	E get(int index);
+
+	/**
+	 * @param value The value to get the index of in this collection
+	 * @return The index of the first position in this collection occupied by the given value, or &lt; 0 if the element does not exist in
+	 *         this collection
+	 */
+	default int indexOf(Object value) {
+		try (Transaction t = lock(false, null)) {
+			int[] index = new int[1];
+			boolean[] found = new boolean[1];
+			while (!found[0] && spliterator().tryAdvance(v -> {
+				if (equivalence().elementEquals(v, value))
+					found[0] = true;
+				index[0]++;
+			})) {
+			}
+			return found[0] ? index[0] : -1;
+		}
+	}
+
+	/**
+	 * @param value The value to get the index of in this collection
+	 * @return The index of the last position in this collection occupied by the given value, or &lt; 0 if the element does not exist in
+	 *         this collection
+	 */
+	default int lastIndexOf(Object value) {
+		try (Transaction t = lock(false, null)) {
+			int[] index = new int[] { size() - 1 };
+			boolean[] found = new boolean[1];
+			while (!found[0] && spliterator(false).tryReverse(v -> {
+				if (equivalence().elementEquals(v, value))
+					found[0] = true;
+				index[0]--;
+			})) {
+			}
+			return index[0];
+		}
+	}
+
+	/** @return The last value in this collection, or null if the collection is empty */
+	default E last() {
+		try (Transaction t = lock(false, null)) {
+			return get(size() - 1);
+		}
 	}
 
 	/**
@@ -166,6 +228,63 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 			}
 			observer.accept(new IndexedCollectionEvent<>(id, index, evt.getType(), evt.getOldValue(), evt.getNewValue(), evt));
 		});
+	}
+
+	/**
+	 * Same as {@link #subscribe(Consumer)}, except that the elements currently present in this collection are given to the observer in
+	 * reverse order
+	 *
+	 * @param observer The listener to be notified of changes to the collection
+	 * @return The subscription to call when the calling code is no longer interested in this collection
+	 */
+	default CollectionSubscription subscribeReverse(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
+		Subscription changeSub;
+		try (Transaction t = lock(false, null)) {
+			// Initial events
+			SubscriptionCause.doWith(new SubscriptionCause(), c -> spliterator().reverse().forEachObservableElement(
+				el -> observer.accept(new ObservableCollectionEvent<>(el.getElementId(), CollectionChangeType.add, null, el.get(), c))));
+			// Subscribe changes
+			changeSub = onChange(observer);
+		}
+		return removeAll -> {
+			try (Transaction t = lock(false, null)) {
+				// Unsubscribe changes
+				changeSub.unsubscribe();
+				if (removeAll) {
+					// Remove events
+					SubscriptionCause.doWith(new SubscriptionCause(), c -> spliterator().reverse().forEachObservableElement(el -> observer
+						.accept(new ObservableCollectionEvent<>(el.getElementId(), CollectionChangeType.remove, null, el.get(), c))));
+				}
+			}
+		};
+	}
+
+	default CollectionSubscription subscribeReverseIndexed(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
+		DefaultTreeSet<ElementId> ids = new DefaultTreeSet<>(Comparable::compareTo);
+		return subscribeReverse(evt -> {
+			ElementId id = evt.getElementId();
+			int index = -1;
+			switch (evt.getType()) {
+			case add:
+				index = ids.addGetNode(id).getIndex();
+				break;
+			case remove:
+				DefaultNode<ElementId> node = ids.getNode(id);
+				index = node.getIndex();
+				ids.removeNode(node);
+				break;
+			case set:
+				index = ids.getNode(id).getIndex();
+				break;
+			}
+			observer.accept(new IndexedCollectionEvent<>(id, index, evt.getType(), evt.getOldValue(), evt.getNewValue(), evt));
+		});
+	}
+
+	/** @return A collection that is identical to this one, but with its elements reversed */
+	@Override
+	default ObservableCollection<E> reverse() {
+		return new ObservableCollectionImpl.ReversedObservableCollection<>(this);
 	}
 
 	// /**
@@ -263,7 +382,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 */
 	@Override
 	default MutableObservableElement<E> elementFor(Object value) {
-		return (MutableObservableElement<E>) BetterCollection.super.elementFor(value);
+		return (MutableObservableElement<E>) ReversibleCollection.super.elementFor(value);
 	}
 
 	/**
@@ -273,7 +392,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 * @see #find(Predicate, Consumer)
 	 */
 	default boolean findObservableElement(Predicate<? super E> search, Consumer<? super MutableObservableElement<? extends E>> onElement) {
-		return BetterCollection.super.find(search, el -> onElement.accept((MutableObservableElement<E>) el));
+		return ReversibleCollection.super.find(search, el -> onElement.accept((MutableObservableElement<E>) el));
 	}
 
 	/**
@@ -283,7 +402,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Bett
 	 * @see #findAll(Predicate, Consumer)
 	 */
 	default int findAllObservableElements(Predicate<? super E> search, Consumer<? super MutableObservableElement<? extends E>> onElement) {
-		return BetterCollection.super.findAll(search, el -> onElement.accept((MutableObservableElement<E>) el));
+		return ReversibleCollection.super.findAll(search, el -> onElement.accept((MutableObservableElement<E>) el));
 	}
 
 	/**
