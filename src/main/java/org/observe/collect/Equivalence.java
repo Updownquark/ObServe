@@ -108,6 +108,10 @@ public interface Equivalence<E> {
 		return new ComparatorEquivalence<>(type, nullable, compare);
 	}
 
+	static <E> Equivalence<E> of(Class<E> type, Comparator<? super E> compare, boolean nullable) {
+		return new ComparatorEquivalence<>(type, nullable, compare);
+	}
+
 	default <T> Equivalence<T> map(Class<T> type, Function<? super E, ? extends T> map, Function<? super T, ? extends E> reverse,
 		Predicate<? super T> filter) {
 		return new MappedEquivalence<>(this, type, filter, map, reverse);

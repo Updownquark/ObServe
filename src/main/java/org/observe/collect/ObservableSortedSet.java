@@ -1,36 +1,24 @@
 package org.observe.collect;
 
-import static org.observe.ObservableDebug.d;
-
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NavigableSet;
-import java.util.Objects;
 import java.util.TreeSet;
 import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
-import org.observe.collect.ObservableCollectionImpl.FilterMapResult;
-import org.observe.collect.ObservableReversibleCollectionImpl.ModFilteredReversibleCollection;
 import org.observe.util.ObservableUtils;
 import org.qommons.Equalizer;
-import org.qommons.Equalizer.EqualizerNode;
-import org.qommons.IterableUtils;
 import org.qommons.Transaction;
+import org.qommons.collect.ImmutableIterator;
 import org.qommons.collect.TransactableSortedSet;
-import org.qommons.tree.CountedRedBlackNode.DefaultNode;
-import org.qommons.tree.CountedRedBlackNode.DefaultTreeSet;
 
 import com.google.common.reflect.TypeToken;
 
@@ -43,8 +31,13 @@ import com.google.common.reflect.TypeToken;
  */
 public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSortedSet<E> {
 	@Override
-	default Equalizer getEqualizer() {
-		return (o1, o2) -> comparator().compare((E) o1, (E) o1) == 0;
+	default ImmutableIterator<E> iterator() {
+		return ObservableSet.super.iterator();
+	}
+
+	@Override
+	default ObservableElementSpliterator<E> spliterator() {
+		return ObservableSet.super.spliterator();
 	}
 
 	/**
@@ -107,7 +100,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 
 	@Override
 	default Iterator<E> descendingIterator() {
-		return descending().iterator();
+		return reverse().iterator();
 	}
 
 	/**
@@ -227,12 +220,10 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 	 * @return The index of the given value in this collection, or, if the given value is not present in this set, <code>-dest-1</code>,
 	 *         where <code>dest</code> is the index of the position where the given element would appear if it were added to this set.
 	 * @throws ClassCastException If the given value is not null or an instance of this set's type.
-	 * @see org.observe.collect.ObservableIndexedCollection#indexOf(java.lang.Object)
+	 * @see org.observe.collect.ObservableCollection#indexOf(java.lang.Object)
 	 */
 	@Override
-	default int indexOf(Object o) {
-		return ObservableReversibleCollection.super.indexOf(o);
-	}
+	int indexOf(Object o);
 
 	/**
 	 * Same as {@link #indexOf(Object)} for sorted sets
@@ -241,121 +232,19 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 	 * @return The index of the given value in this collection, or, if the given value is not present in this set, <code>-dest-1</code>,
 	 *         where <code>dest</code> is the index of the position where the given element would appear if it were added to this set.
 	 * @throws ClassCastException If the given value is not null or an instance of this set's type.
-	 * @see org.observe.collect.ObservableIndexedCollection#indexOf(java.lang.Object)
+	 * @see org.observe.collect.ObservableIndObservableCollectionexedCollection#indexOf(java.lang.Object)
 	 */
 	@Override
-	default int lastIndexOf(Object o) {
-		return indexOf(o);
+	int lastIndexOf(Object o);
+
+	@Override
+	default <T> UniqueSortedDataFlow<E, E, E> flow() {
+		return new ObservableSortedSetImpl.UniqueSortedBaseFlow<>(this);
 	}
 
 	@Override
-	default ObservableSortedSet<E> safe() {
-		if (isSafe())
-			return this;
-		else
-			return d().debug(new SafeSortedSet<>(this)).from("safe", this).get();
-	}
-
-	/**
-	 * @param filter The filter function
-	 * @return A set containing all elements passing the given test
-	 */
-	@Override
-	default ObservableSortedSet<E> filter(Predicate<? super E> filter) {
-		return (ObservableSortedSet<E>) ObservableReversibleCollection.super.filter(filter);
-	}
-
-	@Override
-	default ObservableSortedSet<E> filter(Predicate<? super E> filter, boolean staticFilter) {
-		return (ObservableSortedSet<E>) ObservableOrderedSet.super.filter(filter, staticFilter);
-	}
-
-	@Override
-	default ObservableSortedSet<E> filterDynamic(Predicate<? super E> filter){
-		return d().debug(new DynamicFilteredSortedSet<>(this, getType(), filter)).from("filter", this).using("filter", filter).get();
-	}
-
-	@Override
-	default ObservableSortedSet<E> filterStatic(Predicate<? super E> filter){
-		return d().debug(new StaticFilteredSortedSet<>(this, getType(), filter)).from("filter", this).using("filter", filter).get();
-	}
-
-	@Override
-	default <T> ObservableSortedSet<T> filter(Class<T> type) {
-		Predicate<E> filter = value -> type.isInstance(value);
-		return d().debug(new StaticFilteredSortedSet<>(this, TypeToken.of(type), filter)).from("filter", this).using("filter", filter)
-			.tag("filterType", type).get();
-	}
-
-	@Override
-	default <T> ObservableSortedSet<T> mapEquivalent(TypeToken<T> type, Function<? super E, T> map, Function<? super T, E> reverse) {
-		return d().debug(new MappedObservableSortedSet<>(this, type, map, reverse)).from("map", this).using("map", map)
-			.using("reverse", reverse).get();
-	}
-
-	/**
-	 * @param refresh The observable to re-fire events on
-	 * @return A set whose elements fire additional value events when the given observable fires
-	 */
-	@Override
-	default ObservableSortedSet<E> refresh(Observable<?> refresh) {
-		return d().debug(new RefreshingSortedSet<>(this, refresh)).from("refresh", this).from("on", refresh).get();
-	}
-
-	/**
-	 * @param refresh A function that supplies a refresh observable as a function of element value
-	 * @return A collection whose values individually refresh when the observable returned by the given function fires
-	 */
-	@Override
-	default ObservableSortedSet<E> refreshEach(Function<? super E, Observable<?>> refresh) {
-		return d().debug(new ElementRefreshingSortedSet<>(this, refresh)).from("refreshEach", this).using("on", refresh).get();
-	}
-
-	@Override
-	default ObservableSortedSet<E> immutable() {
-		return d().debug(new ImmutableObservableSortedSet<>(this)).from("immutable", this).get();
-	}
-
-	@Override
-	default ObservableSortedSet<E> filterRemove(Predicate<? super E> filter) {
-		return (ObservableSortedSet<E>) ObservableReversibleCollection.super.filterRemove(filter);
-	}
-
-	@Override
-	default ObservableSortedSet<E> noRemove() {
-		return (ObservableSortedSet<E>) ObservableReversibleCollection.super.noRemove();
-	}
-
-	@Override
-	default ObservableSortedSet<E> filterAdd(Predicate<? super E> filter) {
-		return (ObservableSortedSet<E>) ObservableReversibleCollection.super.filterAdd(filter);
-	}
-
-	@Override
-	default ObservableSortedSet<E> noAdd() {
-		return (ObservableSortedSet<E>) ObservableReversibleCollection.super.noAdd();
-	}
-
-	@Override
-	default ObservableSortedSet<E> filterModification(Predicate<? super E> removeFilter, Predicate<? super E> addFilter) {
-		return new ModFilteredSortedSet<>(this, removeFilter, addFilter);
-	}
-
-	@Override
-	default ObservableSortedSet<E> cached() {
-		return d().debug(new SafeCachedObservableSortedSet<>(this)).from("cached", this).get();
-	}
-
-	@Override
-	default ObservableSortedSet<E> takeUntil(Observable<?> until) {
-		return d().debug(new TakenUntilSortedSet<>(this, until, true)).from("taken", this).from("until", until).tag("terminate", true)
-			.get();
-	}
-
-	@Override
-	default ObservableSortedSet<E> unsubscribeOn(Observable<?> until) {
-		return d().debug(new TakenUntilSortedSet<>(this, until, false)).from("taken", this).from("until", until).tag("terminate", false)
-			.get();
+	default SortedSetViewBuilder<E> view() {
+		return new SortedSetViewBuilder<>(this);
 	}
 
 	/**
@@ -364,7 +253,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 	 * @param compare The comparator to use to sort the elements
 	 * @return An observable sorted set containing all unique elements in any collection in the outer collection
 	 */
-	public static <E> ObservableSortedSet<E> flatten(ObservableIndexedCollection<? extends ObservableSortedSet<? extends E>> outer,
+	public static <E> ObservableSortedSet<E> flatten(ObservableCollection<? extends ObservableSortedSet<? extends E>> outer,
 		Comparator<? super E> compare) {
 		return ObservableSortedSet.unique(ObservableCollection.flatten(outer), compare);
 	}
@@ -376,114 +265,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 	 * @return A sorted set representing the contents of the value, or a zero-length set when null
 	 */
 	public static <E> ObservableSortedSet<E> flattenValue(ObservableValue<? extends ObservableSortedSet<E>> collectionObservable) {
-		return d().debug(new FlattenedValueSortedSet<>(collectionObservable)).from("flatten", collectionObservable).get();
-	}
-
-	/**
-	 * @param <T> The type of the collection
-	 * @param coll The collection to turn into a set
-	 * @param compare The comparator to determine ordering of elements
-	 * @return A sorted set containing all unique elements of the given collection
-	 */
-	public static <T> ObservableSortedSet<T> unique(ObservableCollection<T> coll, Comparator<? super T> compare) {
-		return d().debug(new CollectionWrappingSortedSet<>(coll, compare)).from("unique", coll).using("compare", compare).get();
-	}
-
-	/**
-	 * @param <T> The type for the collection
-	 * @param type The run-time type for the collection
-	 * @return An empty sorted set with the given type
-	 */
-	public static <T> ObservableSortedSet<T> empty(TypeToken<T> type) {
-		class EmptySortedSet implements PartialSortedSetImpl<T> {
-			@Override
-			public Equalizer getEqualizer() {
-				return Objects::equals;
-			}
-
-			@Override
-			public TypeToken<T> getType() {
-				return type;
-			}
-
-			@Override
-			public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<T>> onElement) {
-				return () -> {
-				};
-			}
-
-			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return ObservableValue.constant(TypeToken.of(CollectionSession.class), null);
-			}
-
-			@Override
-			public boolean isSafe() {
-				return true;
-			}
-
-			@Override
-			public boolean canRemove(Object value) {
-				return false;
-			}
-
-			@Override
-			public boolean canAdd(T value) {
-				return false;
-			}
-
-			@Override
-			public int size() {
-				return 0;
-			}
-
-			@Override
-			public boolean isEmpty() {
-				return true;
-			}
-
-			@Override
-			public boolean contains(Object o) {
-				return false;
-			}
-
-			@Override
-			public Iterator<T> iterator() {
-				return Collections.<T> emptyList().iterator();
-			}
-
-			@Override
-			public void clear() {
-			}
-
-			@Override
-			public Transaction lock(boolean write, Object cause) {
-				return () -> {
-				};
-			}
-
-			@Override
-			public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<T>> onElement) {
-				return () -> {
-				};
-			}
-
-			@Override
-			public Iterable<T> descending() {
-				return Collections.emptyList();
-			}
-
-			@Override
-			public Comparator<? super T> comparator() {
-				return (o1, o2) -> 0;
-			}
-
-			@Override
-			public Iterable<T> iterateFrom(T element, boolean included, boolean reversed) {
-				return Collections.emptyList();
-			}
-		}
-		return new EmptySortedSet();
+		return new ObservableSortedSetImpl.FlattenedValueSortedSet<>(collectionObservable);
 	}
 
 	/**
@@ -624,46 +406,19 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 		return ret;
 	}
 
-	/**
-	 * An extension of ObservableSortedSet that implements some of the redundant methods and throws UnsupportedOperationExceptions for
-	 * modifications.
-	 *
-	 * @param <E> The type of element in the set
-	 */
-	interface PartialSortedSetImpl<E> extends PartialSetImpl<E>, ObservableSortedSet<E> {
-		@Override
-		default Subscription onElement(Consumer<? super ObservableElement<E>> onElement) {
-			return onOrderedElement(onElement);
+	class SortedSetViewBuilder<E> extends SetViewBuilder<E> {
+		public SortedSetViewBuilder(ObservableSortedSet<E> collection) {
+			super(collection);
 		}
 
 		@Override
-		default ObservableValue<E> relative(E value, boolean up, boolean withValue) {
-			if(up)
-				return tailSet(value, withValue).getFirst();
-			else
-				return headSet(value, withValue).getFirst();
+		protected ObservableSortedSet<E> getSource() {
+			return (ObservableSortedSet<E>) super.getSource();
 		}
 
 		@Override
-		default E pollFirst() {
-			Iterator<E> iter = iterator();
-			if(iter.hasNext()) {
-				E ret = iter.next();
-				iter.remove();
-				return ret;
-			}
-			return null;
-		}
-
-		@Override
-		default E pollLast() {
-			Iterator<E> iter = descendingIterator();
-			if(iter.hasNext()) {
-				E ret = iter.next();
-				iter.remove();
-				return ret;
-			}
-			return null;
+		public ObservableSet<E> build() {
+			return new ObservableSortedSetImpl.SortedSetView<>(this);
 		}
 	}
 
@@ -672,7 +427,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 	 *
 	 * @param <E> The type of elements in the set
 	 */
-	class ObservableSubSet<E> implements PartialSortedSetImpl<E> {
+	class ObservableSubSet<E> implements ObservableSortedSet<E> {
 		private final ObservableSortedSet<E> theWrapped;
 
 		private final E theMin;
@@ -1083,631 +838,6 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 		@Override
 		public String toString() {
 			return ObservableSet.toString(this);
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableSortedSet#reverse()}
-	 *
-	 * @param <E> The type of elements in the collection
-	 */
-	class ReversedSortedSet<E> extends ObservableReversibleCollectionImpl.ObservableReversedCollection<E> implements PartialSortedSetImpl<E> {
-		ReversedSortedSet(ObservableSortedSet<E> wrap) {
-			super(wrap);
-		}
-
-		@Override
-		protected ObservableSortedSet<E> getWrapped() {
-			return (ObservableSortedSet<E>) super.getWrapped();
-		}
-
-		@Override
-		public ObservableValue<E> relative(E value, boolean up, boolean withValue) {
-			return getWrapped().relative(value, !up, withValue);
-		}
-
-		@Override
-		public ObservableSortedSet<E> subSet(E fromElement, boolean fromInclusive, E toElement, boolean toInclusive) {
-			return getWrapped().subSet(toElement, toInclusive, fromElement, fromInclusive);
-		}
-
-		@Override
-		public ObservableSortedSet<E> headSet(E toElement, boolean inclusive) {
-			return getWrapped().tailSet(toElement, inclusive);
-		}
-
-		@Override
-		public ObservableSortedSet<E> tailSet(E fromElement, boolean inclusive) {
-			return getWrapped().headSet(fromElement, inclusive);
-		}
-
-		@Override
-		public E pollFirst() {
-			return getWrapped().pollLast();
-		}
-
-		@Override
-		public E pollLast() {
-			return getWrapped().pollFirst();
-		}
-
-		@Override
-		public Comparator<? super E> comparator() {
-			return getWrapped().comparator().reversed();
-		}
-
-		@Override
-		public Iterable<E> iterateFrom(E element, boolean included, boolean reversed) {
-			return getWrapped().iterateFrom(element, included, !reversed);
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableSortedSet#safe()}
-	 *
-	 * @param <E> The type of elements in the set
-	 */
-	class SafeSortedSet<E> extends SafeReversibleCollection<E> implements PartialSortedSetImpl<E> {
-		public SafeSortedSet(ObservableSortedSet<E> wrap) {
-			super(wrap);
-		}
-
-		@Override
-		protected ObservableSortedSet<E> getWrapped() {
-			return (ObservableSortedSet<E>) super.getWrapped();
-		}
-
-		@Override
-		public Comparator<? super E> comparator() {
-			return getWrapped().comparator();
-		}
-
-		@Override
-		public Iterable<E> iterateFrom(E element, boolean included, boolean reversed) {
-			return getWrapped().iterateFrom(element, included, reversed);
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableSortedSet#filter(Predicate)} and {@link ObservableSortedSet#filter(Class)}
-	 *
-	 * @param <E> The type of the set to filter
-	 * @param <T> the type of the mapped set
-	 */
-	class StaticFilteredSortedSet<E, T> extends StaticFilteredReversibleCollection<E, T> implements PartialSortedSetImpl<T> {
-		/* Note that everywhere we cast a T-typed value to E is safe because this sorted set is only called from filter, not map */
-
-		protected StaticFilteredSortedSet(ObservableSortedSet<E> wrap, TypeToken<T> type, Predicate<? super E> filter) {
-			super(wrap, type, value -> {
-				boolean pass = filter.test(value);
-				return new FilterMapResult<>(pass ? (T) value : null, pass);
-			} , value -> (E) value);
-		}
-
-		private StaticFilteredSortedSet(ObservableSortedSet<E> wrap, TypeToken<T> type, Function<? super E, FilterMapResult<T>> map) {
-			super(wrap, type, map, value -> (E) value);
-		}
-
-		@Override
-		protected ObservableSortedSet<E> getWrapped() {
-			return (ObservableSortedSet<E>) super.getWrapped();
-		}
-
-		@Override
-		public ObservableSortedSet<T> subSet(T fromElement, boolean fromInclusive, T toElement, boolean toInclusive) {
-			return new StaticFilteredSortedSet<>(getWrapped().subSet((E) fromElement, fromInclusive, (E) toElement, toInclusive),
-				getType(), getMap());
-		}
-
-		@Override
-		public ObservableSortedSet<T> headSet(T toElement, boolean inclusive) {
-			return new StaticFilteredSortedSet<>(getWrapped().headSet((E) toElement, inclusive), getType(), getMap());
-		}
-
-		@Override
-		public ObservableSortedSet<T> tailSet(T fromElement, boolean inclusive) {
-			return new StaticFilteredSortedSet<>(getWrapped().tailSet((E) fromElement, inclusive), getType(), getMap());
-		}
-
-		@Override
-		public Comparator<? super T> comparator() {
-			return (o1, o2) -> {
-				return getWrapped().comparator().compare((E) o1, (E) o2);
-			};
-		}
-
-		@Override
-		public Iterable<T> iterateFrom(T element, boolean included, boolean reversed) {
-			if (getReverse() != null) {
-				Iterable<E> iter = getWrapped().iterateFrom(getReverse().apply(element), included, reversed);
-				Iterable<FilterMapResult<T>> fm = IterableUtils.map(iter, getMap());
-				Iterable<FilterMapResult<T>> filtered = IterableUtils.filter(fm, res -> res.passed);
-				Iterable<T> mapped = IterableUtils.map(filtered, (FilterMapResult<T> res) -> res.mapped);
-				return mapped;
-			} else
-				return ObservableSortedSet.<T> defaultIterateFrom(this, element, included, reversed);
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableSortedSet#filter(Predicate)} and {@link ObservableSortedSet#filter(Class)}
-	 *
-	 * @param <E> The type of the set to filter
-	 * @param <T> the type of the mapped set
-	 */
-	class DynamicFilteredSortedSet<E, T> extends DynamicFilteredReversibleCollection<E, T> implements PartialSortedSetImpl<T> {
-		/* Note that everywhere we cast a T-typed value to E is safe because this sorted set is only called from filter, not map */
-
-		protected DynamicFilteredSortedSet(ObservableSortedSet<E> wrap, TypeToken<T> type, Predicate<? super E> filter) {
-			super(wrap, type, value -> {
-				boolean pass = filter.test(value);
-				return new FilterMapResult<>(pass ? (T) value : null, pass);
-			} , value -> (E) value);
-		}
-
-		private DynamicFilteredSortedSet(ObservableSortedSet<E> wrap, TypeToken<T> type, Function<? super E, FilterMapResult<T>> map) {
-			super(wrap, type, map, value -> (E) value);
-		}
-
-		@Override
-		protected ObservableSortedSet<E> getWrapped() {
-			return (ObservableSortedSet<E>) super.getWrapped();
-		}
-
-		@Override
-		public ObservableSortedSet<T> subSet(T fromElement, boolean fromInclusive, T toElement, boolean toInclusive) {
-			return new DynamicFilteredSortedSet<>(getWrapped().subSet((E) fromElement, fromInclusive, (E) toElement, toInclusive), getType(),
-				getMap());
-		}
-
-		@Override
-		public ObservableSortedSet<T> headSet(T toElement, boolean inclusive) {
-			return new DynamicFilteredSortedSet<>(getWrapped().headSet((E) toElement, inclusive), getType(), getMap());
-		}
-
-		@Override
-		public ObservableSortedSet<T> tailSet(T fromElement, boolean inclusive) {
-			return new DynamicFilteredSortedSet<>(getWrapped().tailSet((E) fromElement, inclusive), getType(), getMap());
-		}
-
-		@Override
-		public Comparator<? super T> comparator() {
-			return (o1, o2) -> {
-				return getWrapped().comparator().compare((E) o1, (E) o2);
-			};
-		}
-
-		@Override
-		public Iterable<T> iterateFrom(T element, boolean included, boolean reversed) {
-			if (getReverse() != null) {
-				Iterable<E> iter = getWrapped().iterateFrom(getReverse().apply(element), included, reversed);
-				Iterable<FilterMapResult<T>> fm = IterableUtils.map(iter, getMap());
-				Iterable<FilterMapResult<T>> filtered = IterableUtils.filter(fm, res -> res.passed);
-				Iterable<T> mapped = IterableUtils.map(filtered, (FilterMapResult<T> res) -> res.mapped);
-				return mapped;
-			} else
-				return ObservableSortedSet.<T> defaultIterateFrom(this, element, included, reversed);
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableSortedSet#mapEquivalent(TypeToken, Function, Function)}
-	 *
-	 * @param <E> The type of the collection to map
-	 * @param <T> The type of the mapped collection
-	 */
-	class MappedObservableSortedSet<E, T> extends MappedObservableSet<E, T> implements PartialSortedSetImpl<T> {
-		protected MappedObservableSortedSet(ObservableSortedSet<E> wrap, TypeToken<T> type, Function<? super E, T> map,
-			Function<? super T, E> reverse) {
-			super(wrap, type, map, reverse);
-		}
-
-		@Override
-		protected ObservableSortedSet<E> getWrapped() {
-			return (ObservableSortedSet<E>) super.getWrapped();
-		}
-
-		@Override
-		public Iterable<T> iterateFrom(T element, boolean included, boolean reversed) {
-			return () -> map(getWrapped().iterateFrom(getReverse().apply(element), included, reversed).iterator());
-		}
-
-		@Override
-		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<T>> onElement) {
-			return getWrapped().onElementReverse(el -> onElement.accept(el.mapV(getMap())));
-		}
-
-		@Override
-		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<T>> onElement) {
-			return getWrapped().onOrderedElement(el -> onElement.accept(el.mapV(getMap())));
-		}
-
-		@Override
-		public Iterable<T> descending() {
-			return () -> map(getWrapped().descending().iterator());
-		}
-
-		@Override
-		public Comparator<? super T> comparator() {
-			return (t1, t2) -> getWrapped().comparator().compare(getReverse().apply(t1), getReverse().apply(t2));
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableSortedSet#refresh(Observable)}
-	 *
-	 * @param <E> The type of the set
-	 */
-	class RefreshingSortedSet<E> extends ObservableReversibleCollectionImpl.RefreshingReversibleCollection<E> implements PartialSortedSetImpl<E> {
-		public RefreshingSortedSet(ObservableSortedSet<E> wrap, Observable<?> refresh) {
-			super(wrap, refresh);
-		}
-
-		@Override
-		protected ObservableSortedSet<E> getWrapped() {
-			return (ObservableSortedSet<E>) super.getWrapped();
-		}
-
-		@Override
-		public ObservableSortedSet<E> subSet(E fromElement, boolean fromInclusive, E toElement, boolean toInclusive) {
-			return new RefreshingSortedSet<>(getWrapped().subSet(fromElement, fromInclusive, toElement, toInclusive), getRefresh());
-		}
-
-		@Override
-		public ObservableSortedSet<E> headSet(E toElement, boolean inclusive) {
-			return new RefreshingSortedSet<>(getWrapped().headSet(toElement, inclusive), getRefresh());
-		}
-
-		@Override
-		public ObservableSortedSet<E> tailSet(E fromElement, boolean inclusive) {
-			return new RefreshingSortedSet<>(getWrapped().tailSet(fromElement, inclusive), getRefresh());
-		}
-
-		@Override
-		public Comparator<? super E> comparator() {
-			return getWrapped().comparator();
-		}
-
-		@Override
-		public Iterable<E> iterateFrom(E element, boolean included, boolean reversed) {
-			return getWrapped().iterateFrom(element, included, reversed);
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableSortedSet#refreshEach(Function)}
-	 *
-	 * @param <E> The type of the set
-	 */
-	class ElementRefreshingSortedSet<E> extends ObservableReversibleCollectionImpl.ElementRefreshingReversibleCollection<E> implements PartialSortedSetImpl<E> {
-		public ElementRefreshingSortedSet(ObservableSortedSet<E> wrap, Function<? super E, Observable<?>> refresh) {
-			super(wrap, refresh);
-		}
-
-		@Override
-		protected ObservableSortedSet<E> getWrapped() {
-			return (ObservableSortedSet<E>) super.getWrapped();
-		}
-
-		@Override
-		public ObservableSortedSet<E> subSet(E fromElement, boolean fromInclusive, E toElement, boolean toInclusive) {
-			return new ElementRefreshingSortedSet<>(getWrapped().subSet(fromElement, fromInclusive, toElement, toInclusive), getRefresh());
-		}
-
-		@Override
-		public ObservableSortedSet<E> headSet(E toElement, boolean inclusive) {
-			return new ElementRefreshingSortedSet<>(getWrapped().headSet(toElement, inclusive), getRefresh());
-		}
-
-		@Override
-		public ObservableSortedSet<E> tailSet(E fromElement, boolean inclusive) {
-			return new ElementRefreshingSortedSet<>(getWrapped().tailSet(fromElement, inclusive), getRefresh());
-		}
-
-		@Override
-		public Comparator<? super E> comparator() {
-			return getWrapped().comparator();
-		}
-
-		@Override
-		public Iterable<E> iterateFrom(E element, boolean included, boolean reversed) {
-			return getWrapped().iterateFrom(element, included, reversed);
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableSortedSet#immutable()}
-	 *
-	 * @param <E> The type of the set
-	 */
-	class ImmutableObservableSortedSet<E> extends ImmutableReversibleCollection<E> implements PartialSortedSetImpl<E> {
-		public ImmutableObservableSortedSet(ObservableSortedSet<E> wrap) {
-			super(wrap);
-		}
-
-		@Override
-		protected ObservableSortedSet<E> getWrapped() {
-			return (ObservableSortedSet<E>) super.getWrapped();
-		}
-
-		@Override
-		public ObservableSortedSet<E> subSet(E fromElement, boolean fromInclusive, E toElement, boolean toInclusive) {
-			return new ImmutableObservableSortedSet<>(getWrapped().subSet(fromElement, fromInclusive, toElement, toInclusive));
-		}
-
-		@Override
-		public ObservableSortedSet<E> headSet(E toElement, boolean inclusive) {
-			return new ImmutableObservableSortedSet<>(getWrapped().headSet(toElement, inclusive));
-		}
-
-		@Override
-		public ObservableSortedSet<E> tailSet(E fromElement, boolean inclusive) {
-			return new ImmutableObservableSortedSet<>(getWrapped().tailSet(fromElement, inclusive));
-		}
-
-		@Override
-		public Comparator<? super E> comparator() {
-			return getWrapped().comparator();
-		}
-
-		@Override
-		public ImmutableObservableSortedSet<E> immutable() {
-			return this;
-		}
-
-		@Override
-		public Iterable<E> iterateFrom(E element, boolean included, boolean reversed) {
-			return IterableUtils.immutableIterable(getWrapped().iterateFrom(element, included, reversed));
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableSortedSet#filterModification(Predicate, Predicate)}
-	 *
-	 * @param <E> The type of elements in the set
-	 */
-	class ModFilteredSortedSet<E> extends ModFilteredReversibleCollection<E> implements PartialSortedSetImpl<E> {
-		public ModFilteredSortedSet(ObservableSortedSet<E> wrapped, Predicate<? super E> removeFilter, Predicate<? super E> addFilter) {
-			super(wrapped, removeFilter, addFilter);
-		}
-
-		@Override
-		protected ObservableSortedSet<E> getWrapped() {
-			return (ObservableSortedSet<E>) super.getWrapped();
-		}
-
-		@Override
-		public Comparator<? super E> comparator() {
-			return getWrapped().comparator();
-		}
-
-		@Override
-		public Iterable<E> iterateFrom(E element, boolean included, boolean reversed) {
-			return () -> new Iterator<E>() {
-				private final Iterator<E> backing = getWrapped().iterateFrom(element, included, reversed).iterator();
-				private E theLast;
-
-				@Override
-				public boolean hasNext() {
-					return backing.hasNext();
-				}
-
-				@Override
-				public E next() {
-					return theLast = backing.next();
-				}
-
-				@Override
-				public void remove() {
-					if (getRemoveFilter() == null || getRemoveFilter().test(theLast))
-						backing.remove();
-				}
-			};
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableSortedSet#cached()}
-	 *
-	 * @param <E> The type of the set
-	 */
-	class SafeCachedObservableSortedSet<E> extends SafeCachedReversibleCollection<E> implements PartialSortedSetImpl<E> {
-		public SafeCachedObservableSortedSet(ObservableSortedSet<E> wrap) {
-			super(wrap);
-		}
-
-		@Override
-		protected ObservableSortedSet<E> getWrapped() {
-			return (ObservableSortedSet<E>) super.getWrapped();
-		}
-
-		@Override
-		public Comparator<? super E> comparator() {
-			return getWrapped().comparator();
-		}
-
-		@Override
-		public ObservableSortedSet<E> cached() {
-			return this;
-		}
-
-		@Override
-		public Iterable<E> iterateFrom(E element, boolean included, boolean reversed) {
-			return getWrapped().iterateFrom(element, included, reversed);
-		}
-	}
-
-	/**
-	 * Backs {@link ObservableSortedSet#takeUntil(Observable)}
-	 *
-	 * @param <E> The type of elements in the set
-	 */
-	class TakenUntilSortedSet<E> extends ObservableReversibleCollectionImpl.TakenUntilReversibleCollection<E> implements PartialSortedSetImpl<E> {
-		public TakenUntilSortedSet(ObservableSortedSet<E> wrap, Observable<?> until, boolean terminate) {
-			super(wrap, until, terminate);
-		}
-
-		@Override
-		protected ObservableSortedSet<E> getWrapped() {
-			return (ObservableSortedSet<E>) super.getWrapped();
-		}
-
-		@Override
-		public Comparator<? super E> comparator() {
-			return getWrapped().comparator();
-		}
-
-		@Override
-		public Iterable<E> iterateFrom(E element, boolean included, boolean reversed) {
-			return getWrapped().iterateFrom(element, included, reversed);
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableSortedSet#flattenValue(ObservableValue)}
-	 *
-	 * @param <E> The type of elements in the set
-	 */
-	class FlattenedValueSortedSet<E> extends ObservableReversibleCollectionImpl.FlattenedReversibleValueCollection<E> implements PartialSortedSetImpl<E> {
-		public FlattenedValueSortedSet(ObservableValue<? extends ObservableSortedSet<E>> collectionObservable) {
-			super(collectionObservable);
-		}
-
-		@Override
-		protected ObservableValue<? extends ObservableSortedSet<E>> getWrapped() {
-			return (ObservableValue<? extends ObservableSortedSet<E>>) super.getWrapped();
-		}
-
-		@Override
-		public Comparator<? super E> comparator() {
-			ObservableSortedSet<E> set = getWrapped().get();
-			return set == null ? (o1, o2) -> -1 : (Comparator<? super E>) set.comparator();
-		}
-
-		@Override
-		public Iterable<E> iterateFrom(E element, boolean included, boolean reversed) {
-			ObservableSortedSet<E> set = getWrapped().get();
-			return set == null ? java.util.Collections.EMPTY_LIST : set.iterateFrom(element, included, reversed);
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableSortedSet#unique(ObservableCollection, Comparator)}
-	 *
-	 * @param <E> The type of elements in the set
-	 */
-	class CollectionWrappingSortedSet<E> extends ObservableSetImpl.CollectionWrappingSet<E> implements PartialSortedSetImpl<E> {
-		private final Comparator<? super E> theCompare;
-
-		public CollectionWrappingSortedSet(ObservableCollection<E> collection, Comparator<? super E> compare) {
-			super(collection, (o1, o2) -> compare.compare((E) o1, (E) o2) == 0);
-			theCompare = compare;
-		}
-
-		@Override
-		public Comparator<? super E> comparator() {
-			return theCompare;
-		}
-
-		protected class UniqueSortedElementTracking extends UniqueElementTracking {
-			DefaultTreeSet<UniqueSortedElement<E>> sortedElements = new DefaultTreeSet<>((el1, el2) -> {
-				return theCompare.compare(el1.get(), el2.get());
-			});
-		}
-
-		@Override
-		protected ObservableSetImpl.CollectionWrappingSet<E>.UniqueElementTracking createElementTracking() {
-			return new UniqueSortedElementTracking();
-		}
-
-		@Override
-		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
-			return onElement(element -> onElement.accept((ObservableOrderedElement<E>) element));
-		}
-
-		@Override
-		public Iterable<E> descending() {
-			if (getWrapped() instanceof ObservableReversibleCollectionImpl.ObservableReversedCollection) {
-				return () -> unique(((ObservableReversibleCollectionImpl.ObservableReversedCollection<E>) getWrapped()).descending().iterator());
-			} else {
-				ArrayList<E> ret = new ArrayList<>(this);
-				java.util.Collections.reverse(ret);
-				return ret;
-			}
-		}
-
-		@Override
-		public Iterable<E> iterateFrom(E element, boolean included, boolean reversed) {
-			return ObservableSortedSet.defaultIterateFrom(this, element, included, reversed);
-		}
-
-		@Override
-		public int size() {
-			TreeSet<E> set = new TreeSet<>(theCompare);
-			for (E value : getWrapped())
-				set.add(value);
-			return set.size();
-		}
-
-		@Override
-		public Iterator<E> iterator() {
-			TreeSet<E> sorted = new TreeSet<>(theCompare);
-			sorted.addAll(getWrapped());
-			return sorted.iterator();
-		}
-
-		@Override
-		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<E>> onElement) {
-			if (getWrapped() instanceof ObservableReversibleCollectionImpl.ObservableReversedCollection)
-				return onElement((Consumer<? super ObservableElement<E>>) onElement, (coll, onEl) -> {
-					return ((ObservableReversibleCollection<E>) coll).onElementReverse(onEl);
-				});
-			else
-				return ObservableReversibleCollection.defaultOnElementReverse(this, onElement);
-		}
-
-		@Override
-		protected ObservableSetImpl.UniqueElement<E> addUniqueElement(UniqueElementTracking tracking, EqualizerNode<E> node) {
-			UniqueSortedElement<E> unique = new UniqueSortedElement<>(this, ((UniqueSortedElementTracking) tracking).sortedElements);
-			tracking.elements.put(node, unique);
-			return unique;
-		}
-
-		@Override
-		public String toString() {
-			return ObservableSet.toString(this);
-		}
-	}
-
-	/**
-	 * Implements elements for {@link ObservableSortedSet#unique(ObservableCollection, Comparator)}
-	 *
-	 * @param <E> The type of value in the element
-	 */
-	class UniqueSortedElement<E> extends ObservableSetImpl.UniqueElement<E> implements ObservableOrderedElement<E> {
-		private final DefaultTreeSet<UniqueSortedElement<E>> sortedElements;
-		private DefaultNode<UniqueSortedElement<E>> node;
-
-		public UniqueSortedElement(CollectionWrappingSortedSet<E> set, DefaultTreeSet<UniqueSortedElement<E>> orderedEls) {
-			super(set, false);
-			sortedElements = orderedEls;
-		}
-
-		@Override
-		public int getIndex() {
-			return node.getIndex();
-		}
-
-		@Override
-		protected boolean setCurrentElement(ObservableElement<E> element, Object cause) {
-			super.setCurrentElement(element, cause);
-			if (node == null && element != null)
-				node = sortedElements.addGetNode(this);
-			else if (element == null && node != null) {
-				sortedElements.setRoot((DefaultNode<UniqueSortedElement<E>>) node.delete());
-				node = null;
-			}
-			return false;
 		}
 	}
 }

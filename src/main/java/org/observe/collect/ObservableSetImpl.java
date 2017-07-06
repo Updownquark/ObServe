@@ -1,33 +1,46 @@
 package org.observe.collect;
 
-import java.util.Arrays;
 import java.util.Collection;
-import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
-import org.observe.collect.ObservableCollectionImpl.CachedObservableCollection;
+import org.observe.collect.ObservableCollection.UniqueDataFlow;
+import org.observe.collect.ObservableCollection.UniqueMappedCollectionBuilder;
+import org.observe.collect.ObservableCollectionImpl.AbstractDataFlow;
+import org.observe.collect.ObservableCollectionImpl.BaseCollectionDataFlow;
+import org.observe.collect.ObservableCollectionImpl.CollectionManager;
+import org.observe.collect.ObservableCollectionImpl.CollectionView;
 import org.observe.collect.ObservableCollectionImpl.ConstantObservableCollection;
-import org.observe.collect.ObservableCollectionImpl.ElementRefreshingCollection;
-import org.observe.collect.ObservableCollectionImpl.FilterMappedObservableCollection;
+import org.observe.collect.ObservableCollectionImpl.DerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.FlattenedValueCollection;
-import org.observe.collect.ObservableCollectionImpl.ModFilteredCollection;
-import org.observe.collect.ObservableCollectionImpl.RefreshingCollection;
-import org.observe.collect.ObservableCollectionImpl.TakenUntilObservableCollection;
-import org.observe.collect.ObservableElementSpliterator.WrappingObservableElement;
-import org.observe.collect.ObservableElementSpliterator.WrappingObservableSpliterator;
+import org.observe.collect.ObservableCollectionImpl.ReversedObservableCollection;
+import org.observe.collect.ObservableCollectionImpl.UniqueDataFlowWrapper;
 import org.qommons.Transaction;
-import org.qommons.collect.BetterCollection;
-import org.qommons.collect.BetterHashSet;
 
 import com.google.common.reflect.TypeToken;
 
 /** Holds default implementation methods and classes for {@link ObservableSet} methods */
 public class ObservableSetImpl {
 	private ObservableSetImpl() {}
+
+	public static class ReversedSet<E> extends ReversedObservableCollection<E> implements ObservableSet<E> {
+		public ReversedSet(ObservableSet<E> wrapped) {
+			super(wrapped);
+		}
+
+		@Override
+		protected ObservableSet<E> getWrapped() {
+			return (ObservableSet<E>) super.getWrapped();
+		}
+
+		@Override
+		public ObservableSet<E> reverse() {
+			return getWrapped();
+		}
+	}
 
 	/**
 	 * Implements {@link ObservableSet#intersect(ObservableCollection)}
@@ -308,135 +321,81 @@ public class ObservableSetImpl {
 		}
 	}
 
-	/**
-	 * A set that is a result of a filter-map operation applied to another set
-	 *
-	 * @param <E> The type of values in the source set
-	 * @param <T> The type of values in this set
-	 */
-	public static class FilterMappedSet<E, T> extends FilterMappedObservableCollection<E, T> implements ObservableSet<T> {
-		/**
-		 * @param wrap The set whose elements to reflect
-		 * @param filterMapDef The filter-mapping definition defining which elements are included and how they are mapped
-		 */
-		protected FilterMappedSet(ObservableSet<E> wrap, EquivalentFilterMapDef<E, ?, T> filterMapDef) {
-			super(wrap, filterMapDef);
+	public static class UniqueBaseFlow<E> extends BaseCollectionDataFlow<E> implements UniqueDataFlow<E, E, E> {
+		protected UniqueBaseFlow(ObservableSet<E> source) {
+			super(source);
 		}
 
 		@Override
-		protected ObservableSet<E> getWrapped() {
-			return (ObservableSet<E>) super.getWrapped();
+		protected ObservableSet<E> getSource() {
+			return (ObservableSet<E>) super.getSource();
 		}
 
 		@Override
-		protected EquivalentFilterMapDef<E, ?, T> getDef() {
-			return (EquivalentFilterMapDef<E, ?, T>) super.getDef();
+		public UniqueDataFlow<E, E, E> filter(Function<? super E, String> filter) {
+			return (UniqueDataFlow<E, E, E>) super.filter(filter);
+		}
+
+		@Override
+		public UniqueDataFlow<E, E, E> filter(Function<? super E, String> filter, boolean filterNulls) {
+			return new UniqueDataFlowWrapper<>((AbstractDataFlow<E, ?, E>) super.filter(filter, filterNulls));
+		}
+
+		@Override
+		public UniqueDataFlow<E, E, E> filterStatic(Function<? super E, String> filter) {
+			return (UniqueDataFlow<E, E, E>) super.filterStatic(filter);
+		}
+
+		@Override
+		public UniqueDataFlow<E, E, E> filterStatic(Function<? super E, String> filter, boolean filterNulls) {
+			return new UniqueDataFlowWrapper<>((AbstractDataFlow<E, ?, E>) super.filterStatic(filter, filterNulls));
+		}
+
+		@Override
+		public <X> UniqueMappedCollectionBuilder<E, E, X> mapEquivalent(TypeToken<X> target) {
+			return new UniqueMappedCollectionBuilder<>(this, target);
+		}
+
+		@Override
+		public UniqueDataFlow<E, E, E> refresh(Observable<?> refresh) {
+			return new UniqueDataFlowWrapper<>((AbstractDataFlow<E, ?, E>) super.refresh(refresh));
+		}
+
+		@Override
+		public UniqueDataFlow<E, E, E> refreshEach(Function<? super E, ? extends Observable<?>> refresh) {
+			return new UniqueDataFlowWrapper<>((AbstractDataFlow<E, ?, E>) super.refreshEach(refresh));
+		}
+
+		@Override
+		public ObservableSet<E> build() {
+			return getSource();
 		}
 	}
 
-	/**
-	 * Implements {@link ObservableSet#refresh(Observable)}
-	 *
-	 * @param <E> The type of the set
-	 */
-	public static class RefreshingSet<E> extends RefreshingCollection<E> implements ObservableSet<E> {
-		/**
-		 * @param wrap The set whose values to reflect
-		 * @param refresh The observable to refresh this set's elements with
-		 */
-		protected RefreshingSet(ObservableSet<E> wrap, Observable<?> refresh) {
-			super(wrap, refresh);
+	public static class DerivedSet<E, T> extends DerivedCollection<E, T> implements ObservableSet<T> {
+		public DerivedSet(ObservableSet<E> source, CollectionManager<E, T> flow) {
+			super(source, flow);
 		}
 
 		@Override
-		protected ObservableSet<E> getWrapped() {
-			return (ObservableSet<E>) super.getWrapped();
+		protected ObservableSet<E> getSource() {
+			return (ObservableSet<E>) super.getSource();
 		}
 	}
 
-	/**
-	 * Implements {@link ObservableSet#refreshEach(Function)}
-	 *
-	 * @param <E> The type of the set
-	 */
-	public static class ElementRefreshingSet<E> extends ElementRefreshingCollection<E> implements ObservableSet<E> {
-		/**
-		 * @param wrap The set whose values to reflect
-		 * @param refresh The function providing observables to refresh individual elements with
-		 */
-		protected ElementRefreshingSet(ObservableSet<E> wrap, Function<? super E, Observable<?>> refresh) {
-			super(wrap, refresh);
+	public static class SetView<E> extends CollectionView<E> implements ObservableSet<E> {
+		public SetView(ObservableSet<E> collection, org.observe.collect.ObservableCollection.ViewDef<E> def) {
+			super(collection, def);
 		}
 
 		@Override
-		protected ObservableSet<E> getWrapped() {
-			return (ObservableSet<E>) super.getWrapped();
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableSet#filterModification(ModFilterDef)}
-	 *
-	 * @param <E> The type of elements in the set
-	 */
-	public static class ModFilteredSet<E> extends ModFilteredCollection<E> implements ObservableSet<E> {
-		/**
-		 * @param wrapped The set whose values to reflect
-		 * @param def The modification-filter definition to use to restrict modification to this set
-		 */
-		protected ModFilteredSet(ObservableSet<E> wrapped, ModFilterDef<E> def) {
-			super(wrapped, def);
+		protected ObservableSet<E> getCollection() {
+			return (ObservableSet<E>) super.getCollection();
 		}
 
 		@Override
-		protected ObservableSet<E> getWrapped() {
-			return (ObservableSet<E>) super.getWrapped();
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableSet#cached(Observable)}
-	 *
-	 * @param <E> The type of elements in the set
-	 */
-	public static class CachedObservableSet<E> extends CachedObservableCollection<E> implements ObservableSet<E> {
-		/**
-		 * @param wrapped The set whose values to reflect
-		 * @param until The observable that will deactivate this set when fired
-		 */
-		protected CachedObservableSet(ObservableSet<E> wrapped, Observable<?> until) {
-			super(wrapped, until);
-		}
-
-		@Override
-		protected ObservableSet<E> getWrapped() {
-			return (ObservableSet<E>) super.getWrapped();
-		}
-
-		@Override
-		protected BetterCollection<E> createCache() {
-			return new BetterHashSet<>();
-		}
-	}
-
-	/**
-	 * Backs {@link ObservableSet#takeUntil(Observable)}
-	 *
-	 * @param <E> The type of elements in the set
-	 */
-	public static class TakenUntilObservableSet<E> extends TakenUntilObservableCollection<E> implements ObservableSet<E> {
-		/**
-		 * @param wrap The set whose values to reflect
-		 * @param until The observable to listen to to terminate listeners to this set
-		 * @param terminate Whether the observable's firing will also remove all elements from listeners to the set
-		 */
-		protected TakenUntilObservableSet(ObservableSet<E> wrap, Observable<?> until, boolean terminate) {
-			super(wrap, until, terminate);
-		}
-
-		@Override
-		protected ObservableSet<E> getWrapped() {
-			return (ObservableSet<E>) super.getWrapped();
+		public ObservableSet<E> reverse() {
+			return new SetView<>(getCollection().reverse(), getDef());
 		}
 	}
 
@@ -478,330 +437,6 @@ public class ObservableSetImpl {
 		@Override
 		protected ObservableValue<? extends ObservableSet<E>> getWrapped() {
 			return (ObservableValue<? extends ObservableSet<E>>) super.getWrapped();
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableCollection#unique()}.
-	 *
-	 * While most of this set's methods have similar performance to the underlying collection, the {@link #size()} method must re-check the
-	 * entire collection's uniqueness for every operation, resulting in O(n) performance or worse, depending on the performance of the
-	 * {@link Equivalence#createSet() equivalence set}. Iteration also will have slower performance. The {@link #cached(Observable)} method
-	 * may be used to mitigate this.
-	 *
-	 * @param <E> The type of elements in the set
-	 */
-	public static class CollectionWrappingSet<E> implements ObservableSet<E> {
-		private final ObservableCollection<E> theCollection;
-
-		/** @param collection The collection whose values to reflect */
-		protected CollectionWrappingSet(ObservableCollection<E> collection) {
-			theCollection = collection;
-		}
-
-		/** @return The collection whose values this set reflects */
-		protected ObservableCollection<E> getWrapped() {
-			return theCollection;
-		}
-
-		@Override
-		public TypeToken<E> getType() {
-			return theCollection.getType();
-		}
-
-		@Override
-		public Equivalence<? super E> equivalence() {
-			return theCollection.equivalence();
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theCollection.lock(write, cause);
-		}
-
-		@Override
-		public int size() {
-			return ObservableCollectionImpl.toSet(equivalence(), theCollection).size();
-		}
-
-		@Override
-		public boolean isEmpty() {
-			return theCollection.isEmpty();
-		}
-
-		@Override
-		public boolean contains(Object o) {
-			return theCollection.contains(o);
-		}
-
-		@Override
-		public boolean containsAny(Collection<?> c) {
-			return theCollection.containsAny(c);
-		}
-
-		@Override
-		public boolean containsAll(Collection<?> c) {
-			return theCollection.containsAll(c);
-		}
-
-		@Override
-		public ObservableElementSpliterator<E> spliterator() {
-			return unique(theCollection.spliterator(), true);
-		}
-
-		/**
-		 * @param backing The spliterator from the collection to
-		 * @param forwardFromStart Whether the spliterator's position is at the beginning of the collection, moving forward. If this is not
-		 *        the case, additional operations will need to be done for each element to ensure that only the first element in the
-		 *        collection with a particular value is returned.
-		 * @return A spliterator backed by the collection's spliterator that eliminates duplicate elements
-		 */
-		protected ObservableElementSpliterator<E> unique(ObservableElementSpliterator<E> backing, boolean forwardFromStart) {
-			Map<E, ElementId> uniqueIds = equivalence().createMap();
-			return new WrappingObservableSpliterator<>(backing, backing.getType(), () -> {
-				ObservableCollectionElement<E>[] container = new ObservableCollectionElement[1];
-				WrappingObservableElement<E, E> wrappingEl = new WrappingObservableElement<E, E>(getType(), container) {
-					@Override
-					public E get() {
-						return getWrapped().get();
-					}
-
-					@Override
-					public <V extends E> String isAcceptable(V value) {
-						return ((ObservableCollectionElement<E>) getWrapped()).isAcceptable(value);
-					}
-
-					@Override
-					public <V extends E> E set(V value, Object cause) throws IllegalArgumentException {
-						return ((ObservableCollectionElement<E>) getWrapped()).set(value, cause);
-					}
-				};
-				return el -> {
-					ElementId elId = uniqueIds.computeIfAbsent(el.get(), v -> {
-						if (forwardFromStart)
-							return el.getElementId();
-						else
-							return theCollection.elementFor(el.get()).getElementId();
-					});
-					if (!elId.equals(el.getElementId()))
-						return null;
-					container[0] = (ObservableCollectionElement<E>) el;
-					return wrappingEl;
-				};
-			});
-		}
-
-		@Override
-		public String canAdd(E value) {
-			String msg = theCollection.canAdd(value);
-			if (msg != null)
-				return msg;
-			if (theCollection.contains(value))
-				return StdMsg.ELEMENT_EXISTS;
-			return null;
-		}
-
-		@Override
-		public boolean add(E e) {
-			if (theCollection.contains(e))
-				return false;
-			return theCollection.add(e);
-		}
-
-		@Override
-		public boolean addAll(Collection<? extends E> c) {
-			Equivalence<? super E> equiv = equivalence();
-			Set<E> set = equiv.createSet();
-			for (Object o : c) {
-				if (!equiv.isElement(o))
-					continue;
-				if (theCollection.contains(o))
-					continue;
-				set.add((E) o);
-			}
-			return theCollection.addAll(set);
-		}
-
-		@Override
-		public String canRemove(Object value) {
-			return theCollection.canRemove(value);
-		}
-
-		@Override
-		public boolean remove(Object o) {
-			return theCollection.removeAll(Arrays.asList(o));
-		}
-
-		@Override
-		public boolean removeAll(Collection<?> c) {
-			return theCollection.removeAll(c);
-		}
-
-		@Override
-		public boolean retainAll(Collection<?> c) {
-			return theCollection.retainAll(c);
-		}
-
-		@Override
-		public void clear() {
-			theCollection.clear();
-		}
-
-		@Override
-		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-			return subscribe(observer, true);
-		}
-
-		// TODO This seems weird. Should work, but don't think it will actually support reversibility
-		protected CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer, boolean forward) {
-			Map<E, ElementId> elementIds = equivalence().createMap();
-			boolean[] initialized = new boolean[1];
-			CollectionSubscription sub = theCollection.subscribe(evt -> {
-				ElementId elId = null;
-				switch (evt.getType()) {
-				case add:
-					elId = elementIds.computeIfAbsent(evt.getNewValue(), v -> {
-						if (forward || initialized[0])
-							return evt.getElementId();
-						else
-							return theCollection.elementFor(v).getElementId();
-					});
-					if (!elId.equals(evt.getElementId())) {
-						// This new value is equivalent to that of another element in the collection
-						if (!initialized[0] || elId.compareTo(evt.getElementId()) < 0)
-							return; // The element already reported has priority. Don't report this one.
-						else {
-							// The new element has priority. Remove the old one.
-							ObservableCollectionEvent.doWith(
-								createEvent(elId, CollectionChangeType.remove, evt.getNewValue(), evt.getNewValue(), evt), observer);
-							elementIds.put(evt.getNewValue(), evt.getElementId());
-						}
-					} else
-						elementIds.put(evt.getNewValue(), evt.getElementId());
-					break;
-				case remove:
-					// This element has been removed, but it's possible there's another element in the collection with the same value.
-					// Search for it.
-					ObservableCollectionElement<E> el = theCollection.elementFor(evt.getOldValue());
-					if (el != null) {
-						// Need to remove this element before adding the other
-						ObservableCollectionEvent.doWith(
-							createEvent(evt.getElementId(), CollectionChangeType.remove, evt.getOldValue(), evt.getOldValue(), evt),
-							observer);
-						ObservableCollectionEvent.doWith(createEvent(el.getElementId(), CollectionChangeType.add, null, el.get(), evt),
-							observer);
-						elementIds.put(el.get(), el.getElementId());
-						return; // Already did all the needed operations
-					} else {
-						elementIds.remove(evt.getOldValue());
-						// If there is no other element with the same value, just remove like default
-					}
-					break;
-				case set:
-					// TODO Often, an element will fire an event on an element whose content has changed *within*
-					// its value, i.e. the element refers to the same reference, but the data behind that reference has changed in a way
-					// that effects whether it is equivalent to other elements in the collection now.
-					// Perhaps this can be satisfied by re-checking equivalence with
-					if (!equivalence().elementEquals(evt.getOldValue(), evt.getNewValue())) {
-						// The two values are not equivalent. This is the most complex case.
-						// It could be handled simply by splitting the operation into a remove of the old value, then an add of the new
-						// value, but there may be efficiency in firing a simple change event if possible.
-						el = theCollection.elementFor(evt.getOldValue());
-						if (el == null) {
-							// The old value is no longer present
-							elId = elementIds.get(evt.getNewValue());
-							if (elId != null) {
-								// The new value already exists in the collection
-								if (elId.compareTo(evt.getElementId()) < 0) {
-									// The element already reported has priority. Report the removed old value and return.
-									ObservableCollectionEvent.doWith(createEvent(evt.getElementId(), CollectionChangeType.remove,
-										evt.getOldValue(), evt.getOldValue(), evt), observer);
-									return;
-								} else {
-									// The new element has priority.
-									// Remove the old element with the new value before reporting the change event.
-									ObservableCollectionEvent.doWith(
-										createEvent(elId, CollectionChangeType.remove, evt.getNewValue(), evt.getNewValue(), evt),
-										observer);
-									elementIds.put(evt.getNewValue(), evt.getElementId());
-								}
-							}
-							// else The new value is unique in the collection, so we can just report the change event
-						} else {
-							// The old value is present in another element in the collection
-							elId = elementIds.get(evt.getNewValue());
-							if (elId != null) {
-								// The new value already exists in the collection
-								if (elId.compareTo(evt.getElementId()) < 0) {
-									// The element already reported has priority for the new value. Report the removed old value,
-									// the added (already present) old value, and return.
-									ObservableCollectionEvent.doWith(createEvent(evt.getElementId(), CollectionChangeType.remove,
-										evt.getOldValue(), evt.getOldValue(), evt), observer);
-									ObservableCollectionEvent
-									.doWith(createEvent(elId, CollectionChangeType.add, null, evt.getNewValue(), evt), observer);
-									return;
-								} else {
-									// The new element has priority.
-									// Remove the old element with the new value before reporting the change event.
-									ObservableCollectionEvent.doWith(
-										createEvent(elId, CollectionChangeType.remove, evt.getNewValue(), evt.getNewValue(), evt),
-										observer);
-									elementIds.put(evt.getNewValue(), evt.getElementId());
-								}
-							} else {
-								// The new value is unique in the collection
-							}
-						}
-						ObservableCollectionEvent
-						.doWith(createEvent(evt.getElementId(), evt.getType(), evt.getOldValue(), evt.getNewValue(), evt), observer);
-						// If we need to add a different element that already contained the old value, do it now.
-						if (el != null) {
-							ObservableCollectionEvent.doWith(
-								createEvent(el.getElementId(), CollectionChangeType.add, evt.getOldValue(), evt.getOldValue(), evt),
-								observer);
-							elementIds.put(evt.getOldValue(), el.getElementId());
-						} else
-							elementIds.remove(evt.getOldValue());
-						return;
-					}
-					// else If the old and new values are equivalent, then just propagate the change.
-					break;
-				}
-				ObservableCollectionEvent.doWith(createEvent(evt.getElementId(), evt.getType(), evt.getOldValue(), evt.getNewValue(), evt),
-					observer);
-			});
-			initialized[0] = true;
-			return sub;
-		}
-
-		/**
-		 * Creates a change event for this collection's listeners
-		 *
-		 * @param elementId The ID of the element that the change occurred on
-		 * @param type The type of the change
-		 * @param oldValue The old value
-		 * @param newValue The new value
-		 * @param cause The cause of the change
-		 * @return The event to fire to the listener
-		 */
-		protected ObservableCollectionEvent<E> createEvent(ElementId elementId, CollectionChangeType type, E oldValue, E newValue,
-			Object cause) {
-			return new ObservableCollectionEvent<>(elementId, type, oldValue, newValue, cause);
-		}
-
-		@Override
-		public int hashCode() {
-			return ObservableCollection.hashCode(this);
-		}
-
-		@Override
-		public boolean equals(Object obj) {
-			return ObservableCollection.equals(this, obj);
-		}
-
-		@Override
-		public String toString() {
-			return ObservableSet.toString(this);
 		}
 	}
 }

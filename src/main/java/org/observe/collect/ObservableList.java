@@ -211,7 +211,7 @@ public interface ObservableList<E> extends ObservableCollection<E>, ReversibleLi
 
 		@Override
 		public ListDataFlow<E, I, T> map(Function<? super I, ? extends T> map, boolean mapNulls) {
-			return new ObservableListImpl.MapListOp<E, I, T>(getParent(), getTargetType(), map, mapNulls, getReverse(), getElementReverse(),
+			return new ObservableListImpl.MapListOp<>(getParent(), getTargetType(), map, mapNulls, getReverse(), getElementReverse(),
 				areNullsReversed());
 		}
 	}

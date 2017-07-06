@@ -740,11 +740,12 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 * @param <K> The compile-time key type for the multi-map
 	 * @param keyType The run-time key type for the multi-map
 	 * @param keyMaker The mapping function to group this collection's values by
+	 * @param isStatic Whether the key function is to be evaluated statically, that is, once per value and not again as it may change
 	 * @return A builder to create a multi-map containing each of this collection's elements, each in the collection of the value mapped by
 	 *         the given function applied to the element
 	 */
-	default <K> GroupingBuilder<E, K> groupBy(TypeToken<K> keyType, Function<? super E, ? extends K> keyMaker) {
-		return new GroupingBuilder<>(this, keyType, keyMaker);
+	default <K> GroupingBuilder<E, K> groupBy(TypeToken<K> keyType, Function<? super E, ? extends K> keyMaker, boolean isStatic) {
+		return new GroupingBuilder<>(this, keyType, keyMaker, isStatic);
 	}
 
 	/**
@@ -832,7 +833,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		return new Observable<T>() {
 			@Override
 			public Subscription subscribe(Observer<? super T> observer) {
-				HashMap<Object, Subscription> subscriptions = new HashMap<>();
+				HashMap<ElementId, Subscription> subscriptions = new HashMap<>();
 				return coll.subscribe(evt -> {
 					switch (evt.getType()) {
 					case add:
@@ -956,7 +957,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		 * @return A collection backed by this collection, consisting only of elements in this collection whose values are instances of the
 		 *         given class
 		 */
-		default <X> CollectionDataFlow<E, T, X> filter(Class<X> type) {
+		default <X> CollectionDataFlow<E, ?, X> filter(Class<X> type) {
 			return filterStatic(value -> {
 				if (type == null || type.isInstance(value))
 					return null;
@@ -1002,13 +1003,13 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 
 		CollectionDataFlow<E, T, T> sorted(Comparator<? super T> compare);
 
-		default UniqueDataFlow<E, T> unique() {
+		default UniqueDataFlow<E, T, T> unique() {
 			return unique(Equivalence.DEFAULT);
 		}
 
-		UniqueDataFlow<E, T> unique(Equivalence<? super T> equivalence);
+		UniqueDataFlow<E, T, T> unique(Equivalence<? super T> equivalence);
 
-		UniqueSortedDataFlow<E, T> uniqueSorted(Comparator<? super T> compare);
+		UniqueSortedDataFlow<E, T, T> uniqueSorted(Comparator<? super T> compare);
 
 		// Terminal operations
 
@@ -1023,26 +1024,56 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 * A data flow that produces a set
 	 *
 	 * @param <E> The type of the source collection
+	 * @param <I> Intermediate type
 	 * @param <T> The type of collection this flow may build
 	 */
-	interface UniqueDataFlow<E, T> extends CollectionDataFlow<E, T, T> {
+	interface UniqueDataFlow<E, I, T> extends CollectionDataFlow<E, I, T> {
 		@Override
-		UniqueDataFlow<E, T> filter(Function<? super T, String> filter);
+		UniqueDataFlow<E, T, T> filter(Function<? super T, String> filter);
 
 		@Override
-		UniqueDataFlow<E, T> filter(Function<? super T, String> filter, boolean filterNulls);
+		UniqueDataFlow<E, T, T> filter(Function<? super T, String> filter, boolean filterNulls);
 
 		@Override
-		UniqueDataFlow<E, T> filterStatic(Function<? super T, String> filter);
+		UniqueDataFlow<E, T, T> filterStatic(Function<? super T, String> filter);
 
 		@Override
-		UniqueDataFlow<E, T> filterStatic(Function<? super T, String> filter, boolean filterNulls);
+		UniqueDataFlow<E, T, T> filterStatic(Function<? super T, String> filter, boolean filterNulls);
 
 		@Override
-		UniqueDataFlow<E, T> refresh(Observable<?> refresh);
+		default <X> UniqueDataFlow<E, T, X> filter(Class<X> type) {
+			return filterStatic(value -> {
+				if (type == null || type.isInstance(value))
+					return null;
+				else
+					return StdMsg.BAD_TYPE;
+			}, true).mapEquivalent(TypeToken.of(type)).map(v -> (X) v, true);
+		}
 
 		@Override
-		UniqueDataFlow<E, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh);
+		UniqueDataFlow<E, T, T> refresh(Observable<?> refresh);
+
+		@Override
+		UniqueDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh);
+
+		/**
+		 * <p>
+		 * Same as {@link #map(TypeToken)}, but with the additional assertion that the produced mapped data will be one-to-one with the
+		 * source data, such that the produced collection is unique in a similar way, without a need for an additional {@link #unique()
+		 * uniqueness} check.
+		 * </p>
+		 * <p>
+		 * This assertion cannot be checked (at compile time or run time), and if the assertion is incorrect such that multiple source
+		 * values map to equivalent target values, <b>the resulting set will not be unique and data errors, including internal
+		 * ObservableCollection errors, are possible</b>. Therefore caution should be used when considering whether to invoke this method.
+		 * When in doubt, use {@link #map(TypeToken)} and {@link #unique()}.
+		 * </p>
+		 *
+		 * @param <X> The type of the mapped values
+		 * @param target The type of the mapped values
+		 * @return A builder to create a set of values which are this set's values mapped by a function
+		 */
+		<X> UniqueMappedCollectionBuilder<E, T, X> mapEquivalent(TypeToken<X> target);
 
 		@Override
 		ObservableSet<T> build();
@@ -1052,29 +1083,27 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 * A data flow that produces a sorted set
 	 *
 	 * @param <E> The type of the source collection
+	 * @param <I> Intermediate type
 	 * @param <T> The type of collection this flow may build
 	 */
-	interface UniqueSortedDataFlow<E, T> extends UniqueDataFlow<E, T> {
+	interface UniqueSortedDataFlow<E, I, T> extends UniqueDataFlow<E, I, T> {
 		@Override
-		UniqueSortedDataFlow<E, T> filter(Function<? super T, String> filter);
+		UniqueSortedDataFlow<E, T, T> filter(Function<? super T, String> filter);
 
 		@Override
-		UniqueSortedDataFlow<E, T> filter(Function<? super T, String> filter, boolean filterNulls);
+		UniqueSortedDataFlow<E, T, T> filter(Function<? super T, String> filter, boolean filterNulls);
 
 		@Override
-		UniqueSortedDataFlow<E, T> filterStatic(Function<? super T, String> filter);
+		UniqueSortedDataFlow<E, T, T> filterStatic(Function<? super T, String> filter);
 
 		@Override
-		UniqueSortedDataFlow<E, T> filterStatic(Function<? super T, String> filter, boolean filterNulls);
+		UniqueSortedDataFlow<E, T, T> filterStatic(Function<? super T, String> filter, boolean filterNulls);
 
 		@Override
-		UniqueSortedDataFlow<E, T> withEquivalence(Equivalence<? super T> equivalence);
+		UniqueSortedDataFlow<E, T, T> refresh(Observable<?> refresh);
 
 		@Override
-		UniqueSortedDataFlow<E, T> refresh(Observable<?> refresh);
-
-		@Override
-		UniqueSortedDataFlow<E, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh);
+		UniqueSortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh);
 
 		@Override
 		ObservableSortedSet<T> build();
@@ -1138,6 +1167,25 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		public CollectionDataFlow<E, I, T> map(Function<? super I, ? extends T> map, boolean mapNulls) {
 			return new ObservableCollectionImpl.MapOp<>(theParent, theTargetType, map, mapNulls, theReverse, theElementReverse,
 				areNullsReversed);
+		}
+	}
+
+	/**
+	 * Builds a filtered and/or mapped set, asserted to be similarly unique as the derived set
+	 *
+	 * @param <E> The type of values in the source set
+	 * @param <I> Intermediate type
+	 * @param <T> The type of values in the mapped set
+	 */
+	class UniqueMappedCollectionBuilder<E, I, T> extends MappedCollectionBuilder<E, I, T> {
+		protected UniqueMappedCollectionBuilder(AbstractDataFlow<E, ?, I> parent, TypeToken<T> type) {
+			super(parent, type);
+		}
+
+		@Override
+		public UniqueDataFlow<E, I, T> map(Function<? super I, ? extends T> map, boolean mapNulls) {
+			return new ObservableCollectionImpl.UniqueMapOp<>(getParent(), getTargetType(), map, mapNulls, getReverse(),
+				getElementReverse(), areNullsReversed());
 		}
 	}
 
@@ -1356,8 +1404,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	}
 
 	/**
-	 * The result of a {@link ViewBuilder view-build}
-	 * 
+	 * The result of a {@link ObservableCollection.ViewBuilder view-build}
+	 *
 	 * @param <E> The type of values that this view def knows how to front
 	 */
 	class ViewDef<E> {
@@ -1581,21 +1629,24 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 *
 	 * @param <E> The type of values in the collection, which will be the type of values in the multi-map
 	 * @param <K> The key type for the multi-map
-	 * @see ObservableCollection#groupBy(TypeToken, Function)
+	 * @see ObservableCollection#groupBy(TypeToken, Function, boolean)
 	 * @see ObservableCollection#groupBy(GroupingBuilder)
 	 */
 	class GroupingBuilder<E, K> {
 		private final ObservableCollection<E> theCollection;
 		private final TypeToken<K> theKeyType;
 		private final Function<? super E, ? extends K> theKeyMaker;
+		private final boolean isStatic;
 		private Equivalence<? super K> theEquivalence = Equivalence.DEFAULT;
 		private boolean areNullsMapped;
 		private boolean isBuilt;
 
-		public GroupingBuilder(ObservableCollection<E> collection, TypeToken<K> keyType, Function<? super E, ? extends K> keyMaker) {
+		public GroupingBuilder(ObservableCollection<E> collection, TypeToken<K> keyType, Function<? super E, ? extends K> keyMaker,
+			boolean isStatic) {
 			theCollection = collection;
 			theKeyType = keyType;
 			theKeyMaker = keyMaker;
+			this.isStatic = isStatic;
 		}
 
 		public ObservableCollection<E> getCollection() {
@@ -1608,6 +1659,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 
 		public Function<? super E, ? extends K> getKeyMaker() {
 			return theKeyMaker;
+		}
+
+		public boolean isStatic() {
+			return isStatic;
 		}
 
 		public GroupingBuilder<E, K> withEquivalence(Equivalence<? super K> equivalence) {
@@ -1645,7 +1700,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 *
 	 * @param <E> The type of values in the collection, which will be the type of values in the multi-map
 	 * @param <K> The key type for the multi-map
-	 * @see ObservableCollection#groupBy(TypeToken, Function)
+	 * @see ObservableCollection#groupBy(TypeToken, Function, boolean)
 	 * @see ObservableCollection.GroupingBuilder#sorted(Comparator)
 	 * @see ObservableCollection#groupBy(SortedGroupingBuilder)
 	 */
@@ -1653,7 +1708,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		private final Comparator<? super K> theCompare;
 
 		public SortedGroupingBuilder(GroupingBuilder<E, K> basicBuilder, Comparator<? super K> compare) {
-			super(basicBuilder.getCollection(), basicBuilder.getKeyType(), basicBuilder.getKeyMaker());
+			super(basicBuilder.getCollection(), basicBuilder.getKeyType(), basicBuilder.getKeyMaker(), basicBuilder.isStatic());
 			withNullsMapped(basicBuilder.areNullsMapped());
 			theCompare = compare;
 		}
