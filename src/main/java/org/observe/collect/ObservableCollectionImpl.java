@@ -1942,6 +1942,10 @@ public final class ObservableCollectionImpl {
 
 		protected UniqueManager(AbstractCollectionManager<E, ?, T> parent, Equivalence<? super T> equivalence) {
 			super(parent);
+			/* TODO
+			 * Need the abiilty to remove/update an element in the unique set even in the case that the value has changed as pertains its
+			 * findability in the set.  At the moment, Equivalence cannot do this.
+			 */
 			theEquivalence = equivalence;
 		}
 	}

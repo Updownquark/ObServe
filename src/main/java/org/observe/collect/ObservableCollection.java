@@ -386,16 +386,18 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		return removed[0];
 	}
 
-	/**
-	 * Overridden to return an {@link ObservableCollectionElement}. Also with the additional contract that this method must return the
-	 * <b>first</b> matching element.
-	 *
-	 * @see org.qommons.collect.BetterCollection#elementFor(Object)
-	 */
 	@Override
-	default MutableObservableElement<E> elementFor(Object value) {
-		return (MutableObservableElement<E>) ReversibleCollection.super.elementFor(value);
+	default boolean forElement(E value, Consumer<? super CollectionElement<? extends E>> onElement) {
+		return forMutableElement(value, onElement);
 	}
+
+	boolean forObservableElement(E value, Consumer<? super ObservableCollectionElement<? extends E>> onElement);
+
+	boolean forMutableElement(E value, Consumer<? super MutableObservableElement<? extends E>> onElement);
+
+	boolean forElementAt(ElementId elementId, Consumer<? super ObservableCollectionElement<? extends E>> onElement);
+
+	boolean forMutableElementAt(ElementId elementId, Consumer<? super MutableObservableElement<? extends E>> onElement);
 
 	/**
 	 * @param search The test to search for elements that pass
@@ -1125,10 +1127,12 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		private Function<? super T, ? extends I> theReverse;
 		private ElementSetter<? super I, ? super T> theElementReverse;
 		private boolean areNullsReversed;
+		private boolean isCached;
 
 		protected MappedCollectionBuilder(AbstractDataFlow<E, ?, I> parent, TypeToken<T> type) {
 			theParent = parent;
 			theTargetType = type;
+			isCached = true;
 		}
 
 		protected AbstractDataFlow<E, ?, I> getParent() {
@@ -1161,6 +1165,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 			boolean reverseNulls) {
 			theElementReverse = reverse;
 			areNullsReversed = reverseNulls;
+			return this;
+		}
+
+		public MappedCollectionBuilder<E, I, T> noCache() {
+			isCached = false;
 			return this;
 		}
 
