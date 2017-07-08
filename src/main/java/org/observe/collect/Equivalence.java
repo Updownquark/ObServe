@@ -4,10 +4,7 @@ import java.util.AbstractMap;
 import java.util.AbstractSet;
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.IdentityHashMap;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -19,6 +16,11 @@ import java.util.stream.Collectors;
 
 import org.qommons.IterableUtils;
 import org.qommons.collect.IdentityHashSet;
+import org.qommons.collect.UpdatableHashMap;
+import org.qommons.collect.UpdatableHashSet;
+import org.qommons.collect.UpdatableIdentityHashMap;
+import org.qommons.collect.UpdatableMap;
+import org.qommons.collect.UpdatableSet;
 
 /**
  * Defines an equality scheme for comparing values for equivalence
@@ -49,14 +51,14 @@ public interface Equivalence<E> {
 	 * @param <E2> The type for the set
 	 * @return A new, empty set whose exclusivity is governed by this equivalence
 	 */
-	<E2 extends E> Set<E2> createSet();
+	<E2 extends E> UpdatableSet<E2> createSet();
 
 	/**
 	 * @param <E2> The key type for the map
 	 * @param <V> The value type for the map
 	 * @return A new, empty map whose key exclusivity is governed by this equivalence
 	 */
-	<E2 extends E, V> Map<E2, V> createMap();
+	<E2 extends E, V> UpdatableMap<E2, V> createMap();
 
 	/** The default {@link Object#equals(Object)} implementation of equivalence. Used by most java collections. */
 	Equivalence<Object> DEFAULT=new Equivalence<Object>() {
@@ -71,13 +73,13 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public <E2> Set<E2> createSet() {
-			return new LinkedHashSet<>();
+		public <E2> UpdatableSet<E2> createSet() {
+			return new UpdatableHashSet<>();
 		}
 
 		@Override
-		public <E2, V> Map<E2, V> createMap() {
-			return new LinkedHashMap<>();
+		public <E2, V> UpdatableMap<E2, V> createMap() {
+			return new UpdatableHashMap<>();
 		}
 	};
 
@@ -94,13 +96,13 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public <E2> Set<E2> createSet() {
+		public <E2> UpdatableSet<E2> createSet() {
 			return new IdentityHashSet<>();
 		}
 
 		@Override
-		public <E2, V> Map<E2, V> createMap() {
-			return new IdentityHashMap<>();
+		public <E2, V> UpdatableMap<E2, V> createMap() {
+			return new UpdatableIdentityHashMap<>();
 		}
 	};
 
