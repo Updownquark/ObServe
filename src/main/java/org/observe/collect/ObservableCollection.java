@@ -24,7 +24,6 @@ import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.collect.MutableObservableSpliterator.MutableObservableSpliteratorMap;
 import org.observe.collect.ObservableCollectionImpl.AbstractCombinedCollectionBuilder;
 import org.observe.collect.ObservableCollectionImpl.AbstractDataFlow;
-import org.observe.collect.ObservableCollectionImpl.CollectionManager;
 import org.qommons.AbstractCausable;
 import org.qommons.Causable;
 import org.qommons.Ternian;
@@ -1014,8 +1013,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		UniqueSortedDataFlow<E, T, T> uniqueSorted(Comparator<? super T> compare);
 
 		// Terminal operations
-
-		CollectionManager<E, T> manageCollection();
 
 		ObservableCollection<T> build();
 
