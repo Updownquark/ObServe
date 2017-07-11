@@ -104,7 +104,7 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 	/**
 	 * Checks this observable's value against its synced internal state and against the expected values in {@link #getExpected()} and checks
 	 * for the given number of operations
-	 * 
+	 *
 	 * @param ops The number of operations expected to have occurred since the last check
 	 */
 	public void check(int ops) {
@@ -114,7 +114,7 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 	/**
 	 * Checks this observable's value against its synced internal state and against the expected values in {@link #getExpected()} and checks
 	 * for the given number of operations
-	 * 
+	 *
 	 * @param minOps The minimum number of operations expected to have occurred since the last check
 	 * @param maxOps The minimum number of operations expected to have occurred since the last check
 	 */
@@ -125,7 +125,7 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 	@Override
 	public void checkValue(Collection<E> expected) {
 		boolean ordered = theCollection instanceof ObservableOrderedCollection;
-		assertThat(theExpected, QommonsTestUtils.collectionsEqual(theSyncedCopy, ordered));
+		assertThat(expected, QommonsTestUtils.collectionsEqual(theSyncedCopy, ordered));
 	}
 
 	@Override
