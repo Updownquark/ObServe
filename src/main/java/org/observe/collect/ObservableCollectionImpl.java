@@ -1140,13 +1140,13 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public UniqueDataFlow<E, T, T> unique(Equivalence<? super T> equivalence) {
-			return new UniqueOp<>(this, equivalence);
+		public UniqueDataFlow<E, T, T> unique(Equivalence<? super T> equivalence, boolean alwaysUseFirst) {
+			return new UniqueOp<>(this, equivalence, alwaysUseFirst);
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, T, T> uniqueSorted(Comparator<? super T> compare) {
-			return new UniqueSortedDataFlowImpl<>(this, compare);
+		public UniqueSortedDataFlow<E, T, T> uniqueSorted(Comparator<? super T> compare, boolean alwaysUseFirst) {
+			return new UniqueSortedDataFlowImpl<>(this, compare, alwaysUseFirst);
 		}
 
 		public abstract CollectionManager<E, ?, T> manageCollection();
@@ -1215,15 +1215,17 @@ public final class ObservableCollectionImpl {
 
 	public static class UniqueOp<E, T> extends UniqueDataFlowWrapper<E, T> {
 		private final Equivalence<? super T> theEquivalence;
+		private final boolean isAlwaysUsingFirst;
 
-		protected UniqueOp(AbstractDataFlow<E, ?, T> parent, Equivalence<? super T> equivalence) {
+		protected UniqueOp(AbstractDataFlow<E, ?, T> parent, Equivalence<? super T> equivalence, boolean alwaysUseFirst) {
 			super(parent);
 			theEquivalence = equivalence;
+			isAlwaysUsingFirst = alwaysUseFirst;
 		}
 
 		@Override
 		public CollectionManager<E, ?, T> manageCollection() {
-			return new UniqueManager<>(getParent().manageCollection(), theEquivalence);
+			return new UniqueManager<>(getParent().manageCollection(), theEquivalence, isAlwaysUsingFirst);
 		}
 	}
 
@@ -1299,14 +1301,17 @@ public final class ObservableCollectionImpl {
 	}
 
 	public static class UniqueSortedDataFlowImpl<E, T> extends UniqueSortedDataFlowWrapper<E, T> {
-		protected UniqueSortedDataFlowImpl(AbstractDataFlow<E, ?, T> parent, Comparator<? super T> compare) {
+		private final boolean isAlwaysUsingFirst;
+
+		protected UniqueSortedDataFlowImpl(AbstractDataFlow<E, ?, T> parent, Comparator<? super T> compare, boolean alwaysUseFirst) {
 			super(parent, compare);
+			isAlwaysUsingFirst = alwaysUseFirst;
 		}
 
 		@Override
 		public CollectionManager<E, ?, T> manageCollection() {
 			return new SortedManager<>(new UniqueManager<>(getParent().manageCollection(),
-				Equivalence.of((Class<T>) getTargetType().getRawType(), getCompare(), true)), getCompare());
+				Equivalence.of((Class<T>) getTargetType().getRawType(), getCompare(), true), isAlwaysUsingFirst), getCompare());
 		}
 	}
 
@@ -1393,8 +1398,8 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
-				public CollectionElementManager<E, ?, T> createElement(E init) {
-					return getParent().createElement(init);
+				public CollectionElementManager<E, ?, T> createElement(ElementId id, E init, Object cause) {
+					return getParent().createElement(id, init, cause);
 				}
 
 				@Override
@@ -1410,28 +1415,36 @@ public final class ObservableCollectionImpl {
 		private final Function<? super T, ? extends I> theReverse;
 		private final ElementSetter<? super I, ? super T> theElementReverse;
 		private final boolean areNullsReversed;
+		private final boolean reEvalOnUpdate;
+		private final boolean fireIfUnchanged;
+		private final boolean isCached;
 
 		protected MapOp(AbstractDataFlow<E, ?, I> parent, TypeToken<T> target, Function<? super I, ? extends T> map, boolean mapNulls,
-			Function<? super T, ? extends I> reverse, ElementSetter<? super I, ? super T> elementReverse, boolean reverseNulls) {
+			Function<? super T, ? extends I> reverse, ElementSetter<? super I, ? super T> elementReverse, boolean reverseNulls,
+			boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean cached) {
 			super(parent, target);
 			theMap = map;
 			areNullsMapped = mapNulls;
 			theReverse = reverse;
 			theElementReverse = elementReverse;
 			areNullsReversed = reverseNulls;
+			this.reEvalOnUpdate = reEvalOnUpdate;
+			this.fireIfUnchanged = fireIfUnchanged;
+			isCached = cached;
 		}
 
 		@Override
 		public CollectionManager<E, ?, T> manageCollection() {
 			return new ObservableCollectionImpl.MappedCollectionManager<>(getParent().manageCollection(), getTargetType(), theMap,
-				areNullsMapped, theReverse, theElementReverse, areNullsReversed);
+				areNullsMapped, theReverse, theElementReverse, areNullsReversed, reEvalOnUpdate, fireIfUnchanged, isCached);
 		}
 	}
 
 	public static class UniqueMapOp<E, I, T> extends MapOp<E, I, T> implements UniqueDataFlow<E, I, T> {
 		protected UniqueMapOp(AbstractDataFlow<E, ?, I> parent, TypeToken<T> target, Function<? super I, ? extends T> map, boolean mapNulls,
-			Function<? super T, ? extends I> reverse, ElementSetter<? super I, ? super T> elementReverse, boolean reverseNulls) {
-			super(parent, target, map, mapNulls, reverse, elementReverse, reverseNulls);
+			Function<? super T, ? extends I> reverse, ElementSetter<? super I, ? super T> elementReverse, boolean reverseNulls,
+			boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean isCached) {
+			super(parent, target, map, mapNulls, reverse, elementReverse, reverseNulls, reEvalOnUpdate, fireIfUnchanged, isCached);
 		}
 
 		@Override
@@ -1760,7 +1773,7 @@ public final class ObservableCollectionImpl {
 		@Override
 		public int compareTo(CollectionElementManager<E, ?, T> other) {
 			if (getParent() == null)
-				return 0;
+				return theId.compareTo(other.theId);
 			return getParent().compareTo(((CollectionElementManager<E, I, T>) other).getParent());
 		}
 
@@ -1771,9 +1784,10 @@ public final class ObservableCollectionImpl {
 
 		public abstract T get();
 
-		public void set(E value, Object cause) {
-			getParent().set(value, cause);
-			refresh(getParent().get(), cause);
+		public boolean set(E value, Object cause) {
+			if (!getParent().set(value, cause))
+				return false;
+			return refresh(getParent().get(), cause);
 		}
 
 		public boolean isElementSettable() {
@@ -1791,16 +1805,14 @@ public final class ObservableCollectionImpl {
 
 		public boolean update(CollectionUpdate update) {
 			if (applies(update)) {
-				refresh(getParent().get(), update.getCause());
-				return true;
+				return refresh(getParent().get(), update.getCause());
 			} else if (getParent().update(update)) {
-				refresh(getParent().get(), update.getCause());
-				return true;
+				return refresh(getParent().get(), update.getCause());
 			} else
 				return false;
 		}
 
-		protected abstract void refresh(I source, Object cause);
+		protected abstract boolean refresh(I source, Object cause);
 
 		public void remove(Object cause) {
 			// Most elements don't need to do anything when they're removed
@@ -1886,8 +1898,9 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
-				public void set(E value, Object cause) {
+				public boolean set(E value, Object cause) {
 					theValue = value;
+					return true;
 				}
 
 				@Override
@@ -1896,8 +1909,9 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
-				protected void refresh(E source, Object cause) {
+				protected boolean refresh(E source, Object cause) {
 					// Never called
+					return true;
 				}
 			}
 			return new DefaultElement();
@@ -1961,12 +1975,13 @@ public final class ObservableCollectionImpl {
 			}
 
 			@Override
-			protected void refresh(T source, Object cause) {
+			protected boolean refresh(T source, Object cause) {
 				if (theElementsByValue.get(source) != theValueElements) {
 					removeFromSet(cause);
 					theValue = source;
 					addToSet(cause);
 				}
+				return true;
 			}
 
 			@Override
@@ -2025,6 +2040,36 @@ public final class ObservableCollectionImpl {
 			theCompare = compare;
 		}
 
+		@Override
+		protected void begin() {}
+
+		@Override
+		public CollectionElementManager<E, ?, T> createElement(ElementId id, E init, Object cause) {
+			class SortedElement extends NonMappingCollectionElement<E, T> {
+				SortedElement() {
+					super(SortedManager.this, SortedManager.this.getParent().createElement(id, init, cause), id);
+				}
+
+				@Override
+				public T get() {
+					return getParent().get();
+				}
+
+				@Override
+				protected boolean refresh(T source, Object cause) {
+					return true;
+				}
+
+				@Override
+				public int compareTo(CollectionElementManager<E, ?, T> other) {
+					int compare = theCompare.compare(get(), other.get());
+					if (compare != 0)
+						return compare;
+					return super.compareTo(other);
+				}
+			}
+			return new SortedElement();
+		}
 	}
 
 	public static class FilteredCollectionManager<E, T> extends NonMappingCollectionManager<E, T> {
@@ -2099,11 +2144,12 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
-				protected void refresh(T source, Object cause) {
+				protected boolean refresh(T source, Object cause) {
 					if (source == null && !filterNulls)
 						isPresent = false;
 					else
 						isPresent = theFilter.apply(source) == null;
+					return true;
 				}
 			}
 			return new FilteredElement();
@@ -2179,10 +2225,11 @@ public final class ObservableCollectionImpl {
 		private final boolean areNullsReversed;
 		private final boolean reEvalOnUpdate;
 		private final boolean fireIfUnchanged;
+		private final boolean isCached;
 
 		protected MappedCollectionManager(CollectionManager<E, ?, I> parent, TypeToken<T> targetType, Function<? super I, ? extends T> map,
 			boolean areNullsMapped, Function<? super T, ? extends I> reverse, ElementSetter<? super I, ? super T> elementReverse,
-			boolean areNullsReversed, boolean reEvalOnUpdate, boolean fireIfUnchanged) {
+			boolean areNullsReversed, boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean cached) {
 			super(parent, targetType);
 			theMap = map;
 			this.areNullsMapped = areNullsMapped;
@@ -2191,7 +2238,7 @@ public final class ObservableCollectionImpl {
 			this.areNullsReversed = areNullsReversed;
 			this.reEvalOnUpdate = reEvalOnUpdate;
 			this.fireIfUnchanged = fireIfUnchanged;
-			int todo = todo;// TODO Implement !fireIfUnchanged
+			isCached = cached;
 		}
 
 		@Override
@@ -2235,8 +2282,9 @@ public final class ObservableCollectionImpl {
 		@Override
 		public CollectionElementManager<E, I, T> createElement(ElementId id, E init, Object cause) {
 			class MappedElement extends CollectionElementManager<E, I, T> {
-				private E theSource;
+				private I theSource;
 				private T theValue;
+				private boolean isInitial;
 
 				MappedElement() {
 					super(MappedCollectionManager.this, MappedCollectionManager.this.getParent().createElement(id, init, cause), id);
@@ -2244,7 +2292,10 @@ public final class ObservableCollectionImpl {
 
 				@Override
 				public T get() {
-					return theValue;
+					if (isCached)
+						return theValue;
+					else
+						return theMap.apply(getParent().get());
 				}
 
 				@Override
@@ -2272,13 +2323,25 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
-				protected void refresh(I source, Object cause) {
-					if (!reEvalOnUpdate && source == theSource)
-						return;
+				protected boolean refresh(I source, Object cause) {
+					if (!isCached)
+						return true;
+					if (!reEvalOnUpdate && source == theSource) {
+						if (isInitial)
+							isInitial = false;
+						else
+							return fireIfUnchanged;
+					}
+					theSource = source;
+					T newValue;
 					if (source == null && !areNullsMapped)
-						theValue = null;
+						newValue = null;
 					else
-						theValue = theMap.apply(source);
+						newValue = theMap.apply(source);
+					if (!fireIfUnchanged && newValue == theValue)
+						return false;
+					theValue = newValue;
+					return true;
 				}
 			}
 			return new MappedElement();
@@ -2438,7 +2501,7 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
-				protected void refresh(I source, Object cause) {
+				protected boolean refresh(I source, Object cause) {
 					if (isCombining > 0 || (source == null && !combineNulls))
 						theValue = null;
 					else {
@@ -2446,6 +2509,7 @@ public final class ObservableCollectionImpl {
 						theValue = theCombination.apply(this);
 						theSource = null;
 					}
+					return true;
 				}
 
 				@Override
@@ -2524,7 +2588,9 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
-				protected void refresh(T source, Object cause) {}
+				protected boolean refresh(T source, Object cause) {
+					return true;
+				}
 			}
 			return new RefreshingElement();
 		}
@@ -2610,7 +2676,9 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
-				protected void refresh(T source, Object cause) {}
+				protected boolean refresh(T source, Object cause) {
+					return true;
+				}
 
 				private void removeRefreshObs(Observable<?> refreshObs) {
 					if (refreshObs != null) {
@@ -2651,7 +2719,7 @@ public final class ObservableCollectionImpl {
 			private final Observable<?> theRefreshObs;
 
 			ElementRefreshUpdate(Observable<?> refreshObs, Object cause) {
-				super(ElementRefreshingCollectionManager.this, cause);
+				super(ElementRefreshingCollectionManager.this, null, cause);
 				theRefreshObs = refreshObs;
 			}
 
@@ -2727,6 +2795,11 @@ public final class ObservableCollectionImpl {
 
 	public static class DerivedCollection<E, T> implements ObservableCollection<T> {
 		int todo = todo;// TODO!!! Need to handle sorting
+		// Change thePresentElements to a sorted set of elements.
+		// Change theElements to have a structure for values holding the element manager and a link to
+		// the node in thePresentElements
+		// Whenever a value is updated, check to make sure the element's node is greater than its predecessor, less than its successor.
+		// If it's not remove it and re-add it, with accompanying events
 		private final ObservableCollection<E> theSource;
 		private final CollectionManager<E, ?, T> theFlow;
 		private final DefaultTreeMap<ElementId, CollectionElementManager<E, ?, T>> theElements;
@@ -3135,6 +3208,52 @@ public final class ObservableCollectionImpl {
 				}
 			}
 			return new CachedSpliterator((isFiltered ? thePresentElements : theElements).entrySet().spliterator(fromStart));
+		}
+
+		@Override
+		public boolean forObservableElement(T value, Consumer<? super ObservableCollectionElement<? extends T>> onElement) {
+			for (CollectionElementManager<E, ?, T> el : thePresentElements.values())
+				if (equivalence().elementEquals(el.get(), value)) {
+					onElement.accept(observableElementFor(el));
+					return true;
+				}
+			return false;
+		}
+
+		@Override
+		public boolean forElementAt(ElementId elementId, Consumer<? super ObservableCollectionElement<? extends T>> onElement) {
+			CollectionElementManager<E, ?, T> el = theElements.get(elementId);
+			if (el == null)
+				return false;
+			onElement.accept(observableElementFor(el));
+			return true;
+		}
+
+		protected ObservableCollectionElement<T> observableElementFor(CollectionElementManager<E, ?, T> el) {
+			// TODO Auto-generated method stub
+		}
+
+		@Override
+		public boolean forMutableElement(T value, Consumer<? super MutableObservableElement<? extends T>> onElement) {
+			for (CollectionElementManager<E, ?, T> el : thePresentElements.values())
+				if (equivalence().elementEquals(el.get(), value)) {
+					onElement.accept(mutableElementFor(el));
+					return true;
+				}
+			return false;
+		}
+
+		@Override
+		public boolean forMutableElementAt(ElementId elementId, Consumer<? super MutableObservableElement<? extends T>> onElement) {
+			CollectionElementManager<E, ?, T> el = theElements.get(elementId);
+			if (el == null)
+				return false;
+			onElement.accept(mutableElementFor(el));
+			return true;
+		}
+
+		protected MutableObservableElement<T> mutableElementFor(CollectionElementManager<E, ?, T> el) {
+			// TODO Auto-generated method stub
 		}
 
 		@Override
@@ -3780,7 +3899,7 @@ public final class ObservableCollectionImpl {
 		 * @return The key set for the map
 		 */
 		protected UniqueDataFlow<E, ?, K> unique(CollectionDataFlow<E, ?, K> keyFlow) {
-			return keyFlow.unique(getBuilder().getEquivalence());
+			return keyFlow.unique(getBuilder().getEquivalence(), theBuilder.isAlwaysUsingFirst());
 		}
 
 		@Override
@@ -3861,7 +3980,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		protected UniqueSortedDataFlow<E, ?, K> unique(CollectionDataFlow<E, ?, K> keyFlow) {
-			return keyFlow.uniqueSorted(getBuilder().getCompare());
+			return keyFlow.uniqueSorted(getBuilder().getCompare(), getBuilder().isAlwaysUsingFirst());
 		}
 
 		@Override

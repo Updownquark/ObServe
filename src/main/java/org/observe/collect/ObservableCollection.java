@@ -1005,12 +1005,12 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		CollectionDataFlow<E, T, T> sorted(Comparator<? super T> compare);
 
 		default UniqueDataFlow<E, T, T> unique() {
-			return unique(Equivalence.DEFAULT);
+			return unique(Equivalence.DEFAULT, false);
 		}
 
-		UniqueDataFlow<E, T, T> unique(Equivalence<? super T> equivalence);
+		UniqueDataFlow<E, T, T> unique(Equivalence<? super T> equivalence, boolean alwaysUseFirst);
 
-		UniqueSortedDataFlow<E, T, T> uniqueSorted(Comparator<? super T> compare);
+		UniqueSortedDataFlow<E, T, T> uniqueSorted(Comparator<? super T> compare, boolean alwaysUseFirst);
 
 		// Terminal operations
 
@@ -1124,11 +1124,15 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		private Function<? super T, ? extends I> theReverse;
 		private ElementSetter<? super I, ? super T> theElementReverse;
 		private boolean areNullsReversed;
+		private boolean reEvalOnUpdate;
+		private boolean fireIfUnchanged;
 		private boolean isCached;
 
 		protected MappedCollectionBuilder(AbstractDataFlow<E, ?, I> parent, TypeToken<T> type) {
 			theParent = parent;
 			theTargetType = type;
+			reEvalOnUpdate = true;
+			fireIfUnchanged = true;
 			isCached = true;
 		}
 
@@ -1152,6 +1156,18 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 			return areNullsReversed;
 		}
 
+		protected boolean isReEvalOnUpdate() {
+			return reEvalOnUpdate;
+		}
+
+		protected boolean isFireIfUnchanged() {
+			return fireIfUnchanged;
+		}
+
+		protected boolean isCached() {
+			return isCached;
+		}
+
 		public MappedCollectionBuilder<E, I, T> withReverse(Function<? super T, ? extends I> reverse, boolean reverseNulls) {
 			theReverse = reverse;
 			areNullsReversed = reverseNulls;
@@ -1165,14 +1181,30 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 			return this;
 		}
 
+		public MappedCollectionBuilder<E, I, T> reEvalOnUpdate(boolean reEval) {
+			reEvalOnUpdate = reEval;
+			return this;
+		}
+
+		public MappedCollectionBuilder<E, I, T> fireIfUnchanged(boolean fire) {
+			fireIfUnchanged = fire;
+			return this;
+		}
+
 		public MappedCollectionBuilder<E, I, T> noCache() {
+			if (!fireIfUnchanged)
+				throw new IllegalStateException(
+					"noCache and fireIfUnchanged=false contradict. Can't know if the value is unchanged if it's not cached");
+			if (!reEvalOnUpdate)
+				throw new IllegalStateException(
+					"noCache and reEvalOnUpdate=false contradict. If the value isn't cached, then re-evaluation is done on access.");
 			isCached = false;
 			return this;
 		}
 
 		public CollectionDataFlow<E, I, T> map(Function<? super I, ? extends T> map, boolean mapNulls) {
 			return new ObservableCollectionImpl.MapOp<>(theParent, theTargetType, map, mapNulls, theReverse, theElementReverse,
-				areNullsReversed);
+				areNullsReversed, reEvalOnUpdate, fireIfUnchanged, isCached);
 		}
 	}
 
@@ -1189,9 +1221,35 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		}
 
 		@Override
+		public UniqueMappedCollectionBuilder<E, I, T> withReverse(Function<? super T, ? extends I> reverse, boolean reverseNulls) {
+			return (UniqueMappedCollectionBuilder<E, I, T>) super.withReverse(reverse, reverseNulls);
+		}
+
+		@Override
+		public UniqueMappedCollectionBuilder<E, I, T> withElementSetting(ElementSetter<? super I, ? super T> reverse,
+			boolean reverseNulls) {
+			return (UniqueMappedCollectionBuilder<E, I, T>) super.withElementSetting(reverse, reverseNulls);
+		}
+
+		@Override
+		public UniqueMappedCollectionBuilder<E, I, T> reEvalOnUpdate(boolean reEval) {
+			return (UniqueMappedCollectionBuilder<E, I, T>) super.reEvalOnUpdate(reEval);
+		}
+
+		@Override
+		public UniqueMappedCollectionBuilder<E, I, T> fireIfUnchanged(boolean fire) {
+			return (UniqueMappedCollectionBuilder<E, I, T>) super.fireIfUnchanged(fire);
+		}
+
+		@Override
+		public UniqueMappedCollectionBuilder<E, I, T> noCache() {
+			return (UniqueMappedCollectionBuilder<E, I, T>) super.noCache();
+		}
+
+		@Override
 		public UniqueDataFlow<E, I, T> map(Function<? super I, ? extends T> map, boolean mapNulls) {
 			return new ObservableCollectionImpl.UniqueMapOp<>(getParent(), getTargetType(), map, mapNulls, getReverse(),
-				getElementReverse(), areNullsReversed());
+				getElementReverse(), areNullsReversed(), isReEvalOnUpdate(), isFireIfUnchanged(), isCached());
 		}
 	}
 
@@ -1645,6 +1703,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		private final boolean isStatic;
 		private Equivalence<? super K> theEquivalence = Equivalence.DEFAULT;
 		private boolean areNullsMapped;
+		private boolean isAlwaysUsingFirst;
 		private boolean isBuilt;
 
 		public GroupingBuilder(ObservableCollection<E> collection, TypeToken<K> keyType, Function<? super E, ? extends K> keyMaker,
@@ -1683,12 +1742,25 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		}
 
 		public GroupingBuilder<E, K> withNullsMapped(boolean mapNulls) {
+			if (isBuilt)
+				throw new IllegalStateException("Cannot change the grouping builder's properties after building");
 			areNullsMapped = mapNulls;
+			return this;
+		}
+
+		public GroupingBuilder<E, K> alwaysUseFirst() {
+			if (isBuilt)
+				throw new IllegalStateException("Cannot change the grouping builder's properties after building");
+			isAlwaysUsingFirst = true;
 			return this;
 		}
 
 		public boolean areNullsMapped() {
 			return areNullsMapped;
+		}
+
+		public boolean isAlwaysUsingFirst() {
+			return isAlwaysUsingFirst;
 		}
 
 		public SortedGroupingBuilder<E, K> sorted(Comparator<? super K> compare) {
@@ -1717,6 +1789,16 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 			super(basicBuilder.getCollection(), basicBuilder.getKeyType(), basicBuilder.getKeyMaker(), basicBuilder.isStatic());
 			withNullsMapped(basicBuilder.areNullsMapped());
 			theCompare = compare;
+		}
+
+		@Override
+		public SortedGroupingBuilder<E, K> withNullsMapped(boolean mapNulls) {
+			return (SortedGroupingBuilder<E, K>) super.withNullsMapped(mapNulls);
+		}
+
+		@Override
+		public SortedGroupingBuilder<E, K> alwaysUseFirst() {
+			return (SortedGroupingBuilder<E, K>) super.alwaysUseFirst();
 		}
 
 		@Override
