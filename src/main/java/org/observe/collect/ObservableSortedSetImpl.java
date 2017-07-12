@@ -6,11 +6,10 @@ import java.util.function.Function;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
-import org.observe.collect.ObservableCollectionImpl.AbstractDataFlow;
-import org.observe.collect.ObservableCollectionImpl.CollectionManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractDataFlow;
+import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueSortedDataFlowWrapper;
 import org.observe.collect.ObservableCollectionImpl.DerivedCollection;
-import org.observe.collect.ObservableCollectionImpl.UniqueSortedDataFlowWrapper;
-import org.observe.collect.ObservableSetImpl.SetView;
 import org.observe.collect.ObservableSetImpl.UniqueBaseFlow;
 
 public class ObservableSortedSetImpl {
@@ -115,43 +114,21 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public ObservableSortedSet<E> build() {
-			return getSource();
+		public ObservableSortedSet<E> collect(Observable<?> until) {
+			if (until == Observable.empty)
+				return getSource();
+			else
+				return new DerivedSortedSet<>(getSource(), manageCollection(), getSource().comparator(), until);
 		}
 	}
 
 	public static class DerivedSortedSet<E, T> extends DerivedCollection<E, T> implements ObservableSortedSet<T> {
 		private final Comparator<? super T> theCompare;
 
-		public DerivedSortedSet(ObservableSortedSet<E> source, CollectionManager<E, T> flow, Comparator<? super T> compare) {
-			super(source, flow);
+		public DerivedSortedSet(ObservableCollection<E> source, CollectionManager<E, ?, T> flow, Comparator<? super T> compare,
+			Observable<?> until) {
+			super(source, flow, until);
 			theCompare = compare;
-		}
-
-		@Override
-		protected ObservableSortedSet<E> getSource() {
-			return (ObservableSortedSet<E>) super.getSource();
-		}
-	}
-
-	public class SortedSetView<E> extends SetView<E> implements ObservableSortedSet<E> {
-		public SortedSetView(ObservableSortedSet<E> collection, ViewDef<E> def) {
-			super(collection, def);
-		}
-
-		@Override
-		protected ObservableSortedSet<E> getCollection() {
-			return (ObservableSortedSet<E>) super.getCollection();
-		}
-
-		@Override
-		public Comparator<? super E> comparator() {
-			return getCollection().comparator();
-		}
-
-		@Override
-		public ObservableSortedSet<E> reverse() {
-			return new SortedSetView<>(getCollection().reverse(), getDef());
 		}
 	}
 

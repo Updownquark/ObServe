@@ -9,15 +9,14 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableCollection.UniqueMappedCollectionBuilder;
-import org.observe.collect.ObservableCollectionImpl.AbstractDataFlow;
-import org.observe.collect.ObservableCollectionImpl.BaseCollectionDataFlow;
-import org.observe.collect.ObservableCollectionImpl.CollectionManager;
-import org.observe.collect.ObservableCollectionImpl.CollectionView;
+import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractDataFlow;
+import org.observe.collect.ObservableCollectionDataFlowImpl.BaseCollectionDataFlow;
+import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueDataFlowWrapper;
 import org.observe.collect.ObservableCollectionImpl.ConstantObservableCollection;
 import org.observe.collect.ObservableCollectionImpl.DerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.FlattenedValueCollection;
 import org.observe.collect.ObservableCollectionImpl.ReversedObservableCollection;
-import org.observe.collect.ObservableCollectionImpl.UniqueDataFlowWrapper;
 import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeToken;
@@ -367,35 +366,17 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public ObservableSet<E> build() {
-			return getSource();
+		public ObservableSet<E> collect(Observable<?> until) {
+			if (until == Observable.empty)
+				return getSource();
+			else
+				return new DerivedSet<>(getSource(), manageCollection(), until);
 		}
 	}
 
 	public static class DerivedSet<E, T> extends DerivedCollection<E, T> implements ObservableSet<T> {
-		public DerivedSet(ObservableSet<E> source, CollectionManager<E, T> flow) {
-			super(source, flow);
-		}
-
-		@Override
-		protected ObservableSet<E> getSource() {
-			return (ObservableSet<E>) super.getSource();
-		}
-	}
-
-	public static class SetView<E> extends CollectionView<E> implements ObservableSet<E> {
-		public SetView(ObservableSet<E> collection, org.observe.collect.ObservableCollection.ViewDef<E> def) {
-			super(collection, def);
-		}
-
-		@Override
-		protected ObservableSet<E> getCollection() {
-			return (ObservableSet<E>) super.getCollection();
-		}
-
-		@Override
-		public ObservableSet<E> reverse() {
-			return new SetView<>(getCollection().reverse(), getDef());
+		public DerivedSet(ObservableCollection<E> source, CollectionManager<E, ?, T> flow, Observable<?> until) {
+			super(source, flow, until);
 		}
 	}
 

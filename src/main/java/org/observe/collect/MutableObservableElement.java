@@ -1,6 +1,7 @@
 package org.observe.collect;
 
 import org.qommons.collect.CollectionElement;
+import org.qommons.collect.ReversibleElementSpliterator;
 
 import com.google.common.reflect.TypeToken;
 
@@ -33,5 +34,27 @@ public interface MutableObservableElement<E> extends ObservableCollectionElement
 				return MutableObservableElement.this.toString();
 			}
 		};
+	}
+
+	@Override
+	default MutableObservableElement<E> reverse() {
+		return new ReversedMutableElement<>(this);
+	}
+
+	class ReversedMutableElement<E> extends ReversibleElementSpliterator.ReversedCollectionElement<E>
+		implements MutableObservableElement<E> {
+		public ReversedMutableElement(MutableObservableElement<E> wrapped) {
+			super(wrapped);
+		}
+
+		@Override
+		protected MutableObservableElement<E> getWrapped() {
+			return (MutableObservableElement<E>) super.getWrapped();
+		}
+
+		@Override
+		public ElementId getElementId() {
+			return getWrapped().getElementId().reverse();
+		}
 	}
 }

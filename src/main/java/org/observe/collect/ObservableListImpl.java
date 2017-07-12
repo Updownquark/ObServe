@@ -893,7 +893,7 @@ public class ObservableListImpl {
 
 		@Override
 		public T set(int index, T element) {
-			if (isElementSettable())
+			if (canModifyElementValue())
 				return attemptSet(theWrapped.get(index), element, null);
 			else if (isRemoveRestricted())
 				return wrap(((ReversibleList<E>) theWrapped).set(index, attemptedAdd(element)));
@@ -926,7 +926,7 @@ public class ObservableListImpl {
 
 				@Override
 				protected boolean isElementSettable() {
-					return SimpleMappedSubList.this.isElementSettable();
+					return SimpleMappedSubList.this.canModifyElementValue();
 				}
 
 				@Override
@@ -972,7 +972,7 @@ public class ObservableListImpl {
 
 				@Override
 				protected boolean isElementSettable() {
-					return outer.isElementSettable();
+					return outer.canModifyElementValue();
 				}
 
 				@Override
@@ -1623,7 +1623,7 @@ public class ObservableListImpl {
 			try (Transaction t = lock(true, null)) {
 				CollectionElementManager<E, T> elMgr = getPresentElements().entrySet().get(index).getValue();
 				T old = elMgr.get();
-				String msg = elMgr.setElement(element, true, null);
+				String msg = elMgr.modifyElementValue(element, true, null);
 				if (msg == null)
 					return old;
 				if (getFlow().isReversible()) {

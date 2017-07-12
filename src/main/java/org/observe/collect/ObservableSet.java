@@ -105,31 +105,4 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	default <T> UniqueDataFlow<E, E, E> flow() {
 		return new ObservableSetImpl.UniqueBaseFlow<>(this);
 	}
-
-	@Override
-	default SetViewBuilder<E> view() {
-		return new SetViewBuilder<>(this);
-	}
-
-	/**
-	 * Allows creation of a set that reflects a set data, but may limit the operations the user can perform on the data or when the user can
-	 * observe the data
-	 *
-	 * @param <E> The type of the set
-	 */
-	class SetViewBuilder<E> extends ViewBuilder<E> {
-		public SetViewBuilder(ObservableSet<E> collection) {
-			super(collection);
-		}
-
-		@Override
-		protected ObservableSet<E> getSource() {
-			return (ObservableSet<E>) super.getSource();
-		}
-
-		@Override
-		public ObservableSet<E> build() {
-			return new ObservableSetImpl.SetView<>(getSource(), toDef());
-		}
-	}
 }

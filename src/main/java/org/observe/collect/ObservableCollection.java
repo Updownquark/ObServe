@@ -22,9 +22,8 @@ import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.collect.MutableObservableSpliterator.MutableObservableSpliteratorMap;
-import org.observe.collect.ObservableCollectionImpl.AbstractCombinedCollectionBuilder;
-import org.observe.collect.ObservableCollectionImpl.AbstractDataFlow;
-import org.qommons.AbstractCausable;
+import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractCombinedCollectionBuilder;
+import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractDataFlow;
 import org.qommons.Causable;
 import org.qommons.Ternian;
 import org.qommons.Transactable;
@@ -33,7 +32,7 @@ import org.qommons.TriFunction;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.ReversibleCollection;
-import org.qommons.collect.ReversibleIterable;
+import org.qommons.collect.SimpleCause;
 import org.qommons.collect.TransactableCollection;
 import org.qommons.collect.TreeList;
 import org.qommons.tree.CountedRedBlackNode.DefaultNode;
@@ -84,11 +83,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 * The {@link ObservableCollectionEvent#getCause() cause} for events fired for extant elements in the collection upon
 	 * {@link #subscribe(Consumer) subscription}
 	 */
-	public static class SubscriptionCause extends AbstractCausable {
-		/** Creates the cause */
-		public SubscriptionCause() {
-			super(null);
-		}
+	public static class SubscriptionCause extends SimpleCause {
 	}
 
 	// Additional contract methods
@@ -376,46 +371,51 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	default boolean removeIf(Predicate<? super E> filter) {
 		boolean[] removed = new boolean[1];
 		MutableObservableSpliterator<E> iter = mutableSpliterator();
-		iter.forEachElement(el -> {
+		SimpleCause cause = new SimpleCause();
+		SimpleCause.doWith(cause, c -> iter.forEachElement(el -> {
 			if (filter.test(el.get())) {
-				el.remove();
+				el.remove(cause);
 				removed[0] = true;
 			}
-		});
+		}));
 		return removed[0];
 	}
 
 	@Override
-	default boolean forElement(E value, Consumer<? super CollectionElement<? extends E>> onElement) {
-		return forMutableElement(value, onElement);
+	default boolean forElement(E value, Consumer<? super CollectionElement<? extends E>> onElement, boolean first) {
+		return forMutableElement(value, onElement, first);
 	}
 
-	boolean forObservableElement(E value, Consumer<? super ObservableCollectionElement<? extends E>> onElement);
+	boolean forObservableElement(E value, Consumer<? super ObservableCollectionElement<? extends E>> onElement, boolean first);
 
-	boolean forMutableElement(E value, Consumer<? super MutableObservableElement<? extends E>> onElement);
+	boolean forMutableElement(E value, Consumer<? super MutableObservableElement<? extends E>> onElement, boolean first);
 
-	boolean forElementAt(ElementId elementId, Consumer<? super ObservableCollectionElement<? extends E>> onElement);
+	void forElementAt(ElementId elementId, Consumer<? super ObservableCollectionElement<? extends E>> onElement);
 
-	boolean forMutableElementAt(ElementId elementId, Consumer<? super MutableObservableElement<? extends E>> onElement);
+	void forMutableElementAt(ElementId elementId, Consumer<? super MutableObservableElement<? extends E>> onElement);
 
 	/**
 	 * @param search The test to search for elements that pass
 	 * @param onElement The action to take on the first passing element in the collection
+	 * @param first Whether to find the first or last element
 	 * @return Whether an element was found that passed the test
-	 * @see #find(Predicate, Consumer)
+	 * @see #find(Predicate, Consumer, boolean)
 	 */
-	default boolean findObservableElement(Predicate<? super E> search, Consumer<? super MutableObservableElement<? extends E>> onElement) {
-		return ReversibleCollection.super.find(search, el -> onElement.accept((MutableObservableElement<E>) el));
+	default boolean findObservableElement(Predicate<? super E> search, Consumer<? super MutableObservableElement<? extends E>> onElement,
+		boolean first) {
+		return ReversibleCollection.super.find(search, el -> onElement.accept((MutableObservableElement<E>) el), first);
 	}
 
 	/**
 	 * @param search The test to search for elements that pass
 	 * @param onElement The action to take on all passing elements in the collection
+	 * @param fromStart Whether to iterate from the beginning or end of the collection
 	 * @return The number of elements found that passed the test
-	 * @see #findAll(Predicate, Consumer)
+	 * @see #findAll(Predicate, Consumer, boolean)
 	 */
-	default int findAllObservableElements(Predicate<? super E> search, Consumer<? super MutableObservableElement<? extends E>> onElement) {
-		return ReversibleCollection.super.findAll(search, el -> onElement.accept((MutableObservableElement<E>) el));
+	default int findAllObservableElements(Predicate<? super E> search, Consumer<? super MutableObservableElement<? extends E>> onElement,
+		boolean fromStart) {
+		return ReversibleCollection.super.findAll(search, el -> onElement.accept((MutableObservableElement<E>) el), fromStart);
 	}
 
 	/**
@@ -570,7 +570,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 
 	/** @return A builder that facilitates filtering, mapping, and other operations against this collection */
 	default <T> CollectionDataFlow<E, E, E> flow() {
-		return new ObservableCollectionImpl.BaseCollectionDataFlow<>(this);
+		return new ObservableCollectionDataFlowImpl.BaseCollectionDataFlow<>(this);
 	}
 
 	/** @return An observable value containing the only value in this collection while its size==1, otherwise null TODO TEST ME! */
@@ -767,11 +767,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 */
 	default <K> ObservableSortedMultiMap<K, E> groupBy(SortedGroupingBuilder<E, K> grouping) {
 		return new ObservableCollectionImpl.GroupedSortedMultiMap<>(this, grouping);
-	}
-
-	/** @return A builder that allows creation of a view backed by this collection's data but with different capabilities */
-	default ViewBuilder<E> view() {
-		return new ViewBuilder<>(this);
 	}
 
 	/**
@@ -1012,11 +1007,17 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 
 		UniqueSortedDataFlow<E, T, T> uniqueSorted(Comparator<? super T> compare, boolean alwaysUseFirst);
 
+		default ModFilterBuilder<E, T> filterModification() {
+			return new ModFilterBuilder<>(this);
+		}
+
 		// Terminal operations
 
-		ObservableCollection<T> build();
+		default ObservableCollection<T> collect() {
+			return collect(Observable.empty);
+		}
 
-		ReversibleIterable<T> iterable();
+		ObservableCollection<T> collect(Observable<?> until);
 	}
 
 	/**
@@ -1075,7 +1076,17 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		<X> UniqueMappedCollectionBuilder<E, T, X> mapEquivalent(TypeToken<X> target);
 
 		@Override
-		ObservableSet<T> build();
+		default UniqueModFilterBuilder<E, T> filterModification() {
+			return new UniqueModFilterBuilder<>(this);
+		}
+
+		@Override
+		default ObservableSet<T> collect() {
+			return (ObservableSet<T>) CollectionDataFlow.super.collect();
+		}
+
+		@Override
+		ObservableSet<T> collect(Observable<?> until);
 	}
 
 	/**
@@ -1086,6 +1097,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 * @param <T> The type of collection this flow may build
 	 */
 	interface UniqueSortedDataFlow<E, I, T> extends UniqueDataFlow<E, I, T> {
+		Comparator<? super T> comparator();
+
 		@Override
 		UniqueSortedDataFlow<E, T, T> filter(Function<? super T, String> filter);
 
@@ -1105,7 +1118,17 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		UniqueSortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh);
 
 		@Override
-		ObservableSortedSet<T> build();
+		default UniqueSortedModFilterBuilder<E, T> filterModification() {
+			return new UniqueSortedModFilterBuilder<>(this);
+		}
+
+		@Override
+		default ObservableSortedSet<T> collect() {
+			return (ObservableSortedSet<T>) UniqueDataFlow.super.collect();
+		}
+
+		@Override
+		ObservableSortedSet<T> collect(Observable<?> until);
 	}
 
 	/**
@@ -1203,7 +1226,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		}
 
 		public CollectionDataFlow<E, I, T> map(Function<? super I, ? extends T> map, boolean mapNulls) {
-			return new ObservableCollectionImpl.MapOp<>(theParent, theTargetType, map, mapNulls, theReverse, theElementReverse,
+			return new ObservableCollectionDataFlowImpl.MapOp<>(theParent, theTargetType, map, mapNulls, theReverse, theElementReverse,
 				areNullsReversed, reEvalOnUpdate, fireIfUnchanged, isCached);
 		}
 	}
@@ -1248,7 +1271,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 
 		@Override
 		public UniqueDataFlow<E, I, T> map(Function<? super I, ? extends T> map, boolean mapNulls) {
-			return new ObservableCollectionImpl.UniqueMapOp<>(getParent(), getTargetType(), map, mapNulls, getReverse(),
+			return new ObservableCollectionDataFlowImpl.UniqueMapOp<>(getParent(), getTargetType(), map, mapNulls, getReverse(),
 				getElementReverse(), areNullsReversed(), isReEvalOnUpdate(), isFireIfUnchanged(), isCached());
 		}
 	}
@@ -1290,7 +1313,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	class CombinedCollectionBuilder2<E, I, V, R> extends AbstractCombinedCollectionBuilder<E, I, R> {
 		private final ObservableValue<V> theArg2;
 
-		protected CombinedCollectionBuilder2(ObservableCollectionImpl.AbstractDataFlow<E, ?, I> parent, TypeToken<R> targetType,
+		protected CombinedCollectionBuilder2(AbstractDataFlow<E, ?, I> parent, TypeToken<R> targetType,
 			ObservableValue<V> arg2, Ternian combineArg2Nulls) {
 			super(parent, targetType);
 			theArg2 = arg2;
@@ -1353,7 +1376,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		private final ObservableValue<V1> theArg2;
 		private final ObservableValue<V2> theArg3;
 
-		protected CombinedCollectionBuilder3(ObservableCollectionImpl.AbstractDataFlow<E, ?, I> parent, TypeToken<R> targetType,
+		protected CombinedCollectionBuilder3(AbstractDataFlow<E, ?, I> parent, TypeToken<R> targetType,
 			ObservableValue<V1> arg2, Ternian combineArg2Nulls, ObservableValue<V2> arg3, Ternian combineArg3Nulls) {
 			super(parent, targetType);
 			theArg2 = arg2;
@@ -1468,7 +1491,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	}
 
 	/**
-	 * The result of a {@link ObservableCollection.ViewBuilder view-build}
+	 * The result of a {@link ObservableCollection.ModFilterBuilder view-build}
 	 *
 	 * @param <E> The type of values that this view def knows how to front
 	 */
@@ -1617,74 +1640,153 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 * Allows creation of a collection that reflects a collection's data, but may limit the operations the user can perform on the data or
 	 * when the user can observe the data
 	 *
-	 * @param <E> The type of the collection
+	 * @param <E> The type of the source collection
+	 * @param <T> The type of the collection to builder modification on
 	 */
-	class ViewBuilder<E> {
-		private final ObservableCollection<E> theCollection;
+	class ModFilterBuilder<E, T> {
+		private final CollectionDataFlow<E, ?, T> theParent;
 		private String theImmutableMsg;
+		private boolean allowUpdates;
 		private String theAddMsg;
 		private String theRemoveMsg;
-		private Function<? super E, String> theAddMsgFn;
-		private Function<? super E, String> theRemoveMsgFn;
+		private Function<? super T, String> theAddMsgFn;
+		private Function<? super T, String> theRemoveMsgFn;
 
-		private Observable<?> theUntil;
-		private boolean untilRemoves;
-
-		public ViewBuilder(ObservableCollection<E> collection) {
-			theCollection = collection;
+		public ModFilterBuilder(CollectionDataFlow<E, ?, T> parent) {
+			theParent = parent;
 		}
 
-		protected ObservableCollection<E> getSource() {
-			return theCollection;
+		protected CollectionDataFlow<E, ?, T> getParent() {
+			return theParent;
 		}
 
-		public ViewBuilder<E> immutable(String modMsg) {
+		protected String getImmutableMsg() {
+			return theImmutableMsg;
+		}
+
+		protected boolean areUpdatesAllowed() {
+			return allowUpdates;
+		}
+
+		protected String getAddMsg() {
+			return theAddMsg;
+		}
+
+		protected String getRemoveMsg() {
+			return theRemoveMsg;
+		}
+
+		protected Function<? super T, String> getAddMsgFn() {
+			return theAddMsgFn;
+		}
+
+		protected Function<? super T, String> getRemoveMsgFn() {
+			return theRemoveMsgFn;
+		}
+
+		public ModFilterBuilder<E, T> immutable(String modMsg, boolean allowUpdates) {
 			theImmutableMsg = modMsg;
+			this.allowUpdates = allowUpdates;
 			return this;
 		}
 
-		public ViewBuilder<E> noAdd(String modMsg) {
+		public ModFilterBuilder<E, T> noAdd(String modMsg) {
 			theAddMsg = modMsg;
 			return this;
 		}
 
-		public ViewBuilder<E> noRemove(String modMsg) {
+		public ModFilterBuilder<E, T> noRemove(String modMsg) {
 			theRemoveMsg = modMsg;
 			return this;
 		}
 
-		public ViewBuilder<E> filterAdd(Function<? super E, String> messageFn) {
+		public ModFilterBuilder<E, T> filterAdd(Function<? super T, String> messageFn) {
 			theAddMsgFn = messageFn;
 			return this;
 		}
 
-		public ViewBuilder<E> filterRemove(Function<? super E, String> messageFn) {
+		public ModFilterBuilder<E, T> filterRemove(Function<? super T, String> messageFn) {
 			theRemoveMsgFn = messageFn;
 			return this;
 		}
 
-		public ViewBuilder<E> takeUntil(Observable<?> until) {
-			if (theUntil != null)
-				throw new IllegalStateException("takeUntil already called");
-			theUntil = until;
-			return this;
+		public CollectionDataFlow<E, T, T> build() {
+			return new ObservableCollectionDataFlowImpl.ModFilteredOp<>((AbstractDataFlow<E, ?, T>) theParent, theImmutableMsg,
+				allowUpdates, theAddMsg, theRemoveMsg, theAddMsgFn, theRemoveMsgFn);
+		}
+	}
+
+	class UniqueModFilterBuilder<E, T> extends ModFilterBuilder<E, T> {
+		public UniqueModFilterBuilder(UniqueDataFlow<E, ?, T> parent) {
+			super(parent);
 		}
 
-		public ViewBuilder<E> unsubscribeOn(Observable<?> until) {
-			if (theUntil != null)
-				throw new IllegalStateException("takeUntil already called");
-			theUntil = until;
-			untilRemoves = true;
-			return this;
+		@Override
+		public UniqueModFilterBuilder<E, T> immutable(String modMsg, boolean allowUpdates) {
+			return (UniqueModFilterBuilder<E, T>) super.immutable(modMsg, allowUpdates);
 		}
 
-		public ViewDef<E> toDef() {
-			return new ViewDef<>(theCollection.getType(), theImmutableMsg, theAddMsg, theRemoveMsg, theAddMsgFn, theRemoveMsgFn, theUntil,
-				untilRemoves);
+		@Override
+		public UniqueModFilterBuilder<E, T> noAdd(String modMsg) {
+			return (UniqueModFilterBuilder<E, T>) super.noAdd(modMsg);
 		}
 
-		public ObservableCollection<E> build() {
-			return new ObservableCollectionImpl.CollectionView<>(theCollection, toDef());
+		@Override
+		public UniqueModFilterBuilder<E, T> noRemove(String modMsg) {
+			return (UniqueModFilterBuilder<E, T>) super.noRemove(modMsg);
+		}
+
+		@Override
+		public UniqueModFilterBuilder<E, T> filterAdd(Function<? super T, String> messageFn) {
+			return (UniqueModFilterBuilder<E, T>) super.filterAdd(messageFn);
+		}
+
+		@Override
+		public UniqueModFilterBuilder<E, T> filterRemove(Function<? super T, String> messageFn) {
+			return (UniqueModFilterBuilder<E, T>) super.filterRemove(messageFn);
+		}
+
+		@Override
+		public UniqueDataFlow<E, T, T> build() {
+			return new ObservableCollectionDataFlowImpl.UniqueModFilteredOp<>((AbstractDataFlow<E, ?, T>) theParent, theImmutableMsg,
+				allowUpdates, theAddMsg, theRemoveMsg, theAddMsgFn, theRemoveMsgFn);
+		}
+	}
+
+	class UniqueSortedModFilterBuilder<E, T> extends UniqueModFilterBuilder<E, T> {
+		public UniqueSortedModFilterBuilder(UniqueSortedDataFlow<E, ?, T> parent) {
+			super(parent);
+		}
+
+		@Override
+		public UniqueSortedModFilterBuilder<E, T> immutable(String modMsg, boolean allowUpdates) {
+			return (UniqueSortedModFilterBuilder<E, T>) super.immutable(modMsg, allowUpdates);
+		}
+
+		@Override
+		public UniqueSortedModFilterBuilder<E, T> noAdd(String modMsg) {
+			return (UniqueSortedModFilterBuilder<E, T>) super.noAdd(modMsg);
+		}
+
+		@Override
+		public UniqueSortedModFilterBuilder<E, T> noRemove(String modMsg) {
+			return (UniqueSortedModFilterBuilder<E, T>) super.noRemove(modMsg);
+		}
+
+		@Override
+		public UniqueSortedModFilterBuilder<E, T> filterAdd(Function<? super T, String> messageFn) {
+			return (UniqueSortedModFilterBuilder<E, T>) super.filterAdd(messageFn);
+		}
+
+		@Override
+		public UniqueSortedModFilterBuilder<E, T> filterRemove(Function<? super T, String> messageFn) {
+			return (UniqueSortedModFilterBuilder<E, T>) super.filterRemove(messageFn);
+		}
+
+		@Override
+		public UniqueSortedDataFlow<E, T, T> build() {
+			return new ObservableCollectionDataFlowImpl.UniqueSortedModFilteredOp<>((AbstractDataFlow<E, ?, T>) gtheParent, theImmutableMsg,
+				allowUpdates, theAddMsg, theRemoveMsg, theAddMsgFn, theRemoveMsgFn);
 		}
 	}
 

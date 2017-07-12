@@ -18,37 +18,51 @@ import java.util.Objects;
  * @see ObservableCollectionEvent#getElementId()
  */
 public interface ElementId extends Comparable<ElementId> {
+	/** @return An element ID that behaves like this one, but orders in reverse */
+	default ElementId reverse() {
+		class ReversedElementId implements ElementId {
+			private final ElementId theWrapped;
+
+			ReversedElementId(ElementId wrap) {
+				theWrapped = wrap;
+			}
+
+			@Override
+			public int compareTo(ElementId o) {
+				return -theWrapped.compareTo(((ReversedElementId) o).theWrapped);
+			}
+
+			@Override
+			public ElementId reverse() {
+				return theWrapped;
+			}
+
+			@Override
+			public int hashCode() {
+				return theWrapped.hashCode();
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				return obj instanceof ReversedElementId && theWrapped.equals(((ReversedElementId) obj).theWrapped);
+			}
+
+			@Override
+			public String toString() {
+				return theWrapped.toString();
+			}
+		}
+		return new ReversedElementId(this);
+	}
+
 	/**
 	 * Creates an ElementId from a comparable value
 	 *
 	 * @param value The comparable value to back the element ID
 	 * @return An ElementId backed by the comparable value
 	 */
-	static <T> ElementId of(Comparable<T> value) {
-		class ComparableElementId implements ElementId {
-			private final Comparable<T> theValue = value;
-
-			@Override
-			public int compareTo(ElementId o) {
-				return theValue.compareTo((T) ((ComparableElementId) o).theValue);
-			}
-
-			@Override
-			public int hashCode() {
-				return Objects.hashCode(theValue);
-			}
-
-			@Override
-			public boolean equals(Object obj) {
-				return obj instanceof ComparableElementId && Objects.equals(theValue, ((ComparableElementId) obj).theValue);
-			}
-
-			@Override
-			public String toString() {
-				return String.valueOf(theValue);
-			}
-		}
-		return new ComparableElementId();
+	static <T extends Comparable<T>> ElementId of(T value) {
+		return new ComparableElementId<>(value);
 	}
 
 	/**
@@ -59,29 +73,68 @@ public interface ElementId extends Comparable<ElementId> {
 	 * @return An ElementId backed by the value and compared by the comparator
 	 */
 	static <T> ElementId of(T value, Comparator<? super T> compare) {
-		class ComparatorElementId implements ElementId {
-			private final T theValue = value;
+		return new ComparatorElementId(value, compare);
+	}
 
-			@Override
-			public int compareTo(ElementId o) {
-				return compare.compare(theValue, ((ComparatorElementId) o).theValue);
-			}
+	class ComparableElementId<T extends Comparable<T>> implements ElementId {
+		private final T theValue;
 
-			@Override
-			public int hashCode() {
-				return Objects.hashCode(theValue);
-			}
-
-			@Override
-			public boolean equals(Object obj) {
-				return obj instanceof ComparatorElementId && Objects.equals(theValue, ((ComparatorElementId) obj).theValue);
-			}
-
-			@Override
-			public String toString() {
-				return String.valueOf(theValue);
-			}
+		public ComparableElementId(T value) {
+			theValue = value;
 		}
-		return new ComparatorElementId();
+
+		public T getValue() {
+			return theValue;
+		}
+
+		@Override
+		public int compareTo(ElementId o) {
+			return theValue.compareTo(((ComparableElementId<T>) o).theValue);
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hashCode(theValue);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return obj instanceof ComparableElementId && Objects.equals(theValue, ((ComparableElementId<T>) obj).theValue);
+		}
+
+		@Override
+		public String toString() {
+			return String.valueOf(theValue);
+		}
+	}
+
+	class ComparatorElementId<T> implements ElementId {
+		private final T theValue;
+		private final Comparator<? super T> theCompare;
+
+		public ComparatorElementId(T value, Comparator<? super T> compare) {
+			theValue = value;
+			theCompare = compare;
+		}
+
+		@Override
+		public int compareTo(ElementId o) {
+			return theCompare.compare(theValue, ((ComparatorElementId<T>) o).theValue);
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hashCode(theValue);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return obj instanceof ComparatorElementId && Objects.equals(theValue, ((ComparatorElementId<T>) obj).theValue);
+		}
+
+		@Override
+		public String toString() {
+			return String.valueOf(theValue);
+		}
 	}
 }

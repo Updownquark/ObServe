@@ -256,22 +256,22 @@ public interface MutableObservableSpliterator<E> extends ObservableElementSplite
 
 		@Override
 		public boolean tryAdvanceMutableElement(Consumer<? super MutableObservableElement<E>> action) {
-			return getWrapped().tryReverseMutableElement(action);
+			return getWrapped().tryReverseMutableElement(el -> action.accept(el.reverse()));
 		}
 
 		@Override
 		public boolean tryReverseMutableElement(Consumer<? super MutableObservableElement<E>> action) {
-			return getWrapped().tryAdvanceMutableElement(action);
+			return getWrapped().tryAdvanceMutableElement(el -> action.accept(el.reverse()));
 		}
 
 		@Override
 		public boolean tryAdvanceObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
-			return getWrapped().tryReverseObservableElement(action);
+			return getWrapped().tryReverseObservableElement(el -> action.accept(el.reverse()));
 		}
 
 		@Override
 		public boolean tryReverseObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
-			return getWrapped().tryAdvanceObservableElement(action);
+			return getWrapped().tryAdvanceObservableElement(el -> action.accept(el.reverse()));
 		}
 
 		@Override
