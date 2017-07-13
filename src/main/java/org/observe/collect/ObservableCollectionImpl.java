@@ -1208,7 +1208,7 @@ public final class ObservableCollectionImpl {
 				listener.accept(event);
 		}
 
-		private void applyUpdate(DerivedCollectionElement element, CollectionUpdate<E, ?, T> update) {
+		private void applyUpdate(DerivedCollectionElement element, CollectionUpdate update) {
 			boolean prePresent = element.manager.isPresent();
 			T oldValue = prePresent ? element.manager.get() : null;
 			ElementUpdateResult fireUpdate = element.manager.update(update,

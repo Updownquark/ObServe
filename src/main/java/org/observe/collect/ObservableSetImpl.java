@@ -11,7 +11,7 @@ import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableCollection.UniqueMappedCollectionBuilder;
 import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.BaseCollectionDataFlow;
-import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueDataFlowWrapper;
 import org.observe.collect.ObservableCollectionImpl.ConstantObservableCollection;
 import org.observe.collect.ObservableCollectionImpl.DerivedCollection;
@@ -375,7 +375,7 @@ public class ObservableSetImpl {
 	}
 
 	public static class DerivedSet<E, T> extends DerivedCollection<E, T> implements ObservableSet<T> {
-		public DerivedSet(ObservableCollection<E> source, CollectionManager<E, ?, T> flow, Observable<?> until) {
+		public DerivedSet(ObservableCollection<E> source, UniqueCollectionManager<E, ?, T> flow, Observable<?> until) {
 			super(source, flow, until);
 		}
 	}

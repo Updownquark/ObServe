@@ -7,9 +7,8 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractDataFlow;
-import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueSortedDataFlowWrapper;
-import org.observe.collect.ObservableCollectionImpl.DerivedCollection;
 import org.observe.collect.ObservableSetImpl.UniqueBaseFlow;
 
 public class ObservableSortedSetImpl {
@@ -122,10 +121,10 @@ public class ObservableSortedSetImpl {
 		}
 	}
 
-	public static class DerivedSortedSet<E, T> extends DerivedCollection<E, T> implements ObservableSortedSet<T> {
+	public static class DerivedSortedSet<E, T> extends ObservableSetImpl.DerivedSet<E, T> implements ObservableSortedSet<T> {
 		private final Comparator<? super T> theCompare;
 
-		public DerivedSortedSet(ObservableCollection<E> source, CollectionManager<E, ?, T> flow, Comparator<? super T> compare,
+		public DerivedSortedSet(ObservableCollection<E> source, UniqueCollectionManager<E, ?, T> flow, Comparator<? super T> compare,
 			Observable<?> until) {
 			super(source, flow, until);
 			theCompare = compare;

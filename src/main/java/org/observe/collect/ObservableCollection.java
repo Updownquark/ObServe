@@ -1047,7 +1047,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 					return null;
 				else
 					return StdMsg.BAD_TYPE;
-			}, true).mapEquivalent(TypeToken.of(type)).map(v -> (X) v, true);
+			}, true).mapEquivalent(TypeToken.of(type)).map(v -> (X) v, true, v -> (T) v, true);
 		}
 
 		@Override
@@ -1111,6 +1111,26 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		@Override
 		UniqueSortedDataFlow<E, T, T> filterStatic(Function<? super T, String> filter, boolean filterNulls);
 
+		/**
+		 * <p>
+		 * Same as {@link #map(TypeToken)}, but with the additional assertion that the produced mapped data will be one-to-one with the
+		 * source data, such that the produced collection is unique in a similar way, without a need for an additional {@link #unique()
+		 * uniqueness} check.
+		 * </p>
+		 * <p>
+		 * This assertion cannot be checked (at compile time or run time), and if the assertion is incorrect such that multiple source
+		 * values map to equivalent target values, <b>the resulting set will not be unique and data errors, including internal
+		 * ObservableCollection errors, are possible</b>. Therefore caution should be used when considering whether to invoke this method.
+		 * When in doubt, use {@link #map(TypeToken)} and {@link #unique()}.
+		 * </p>
+		 *
+		 * @param <X> The type of the mapped values
+		 * @param target The type of the mapped values
+		 * @return A builder to create a set of values which are this set's values mapped by a function
+		 */
+		@Override
+		<X> UniqueSortedMappedCollectionBuilder<E, T, X> mapEquivalent(TypeToken<X> target);
+
 		@Override
 		UniqueSortedDataFlow<E, T, T> refresh(Observable<?> refresh);
 
@@ -1139,9 +1159,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 * @param <T> The type of values in the mapped collection
 	 */
 	class MappedCollectionBuilder<E, I, T> {
-		interface ElementSetter<I, T> {
-			String setElement(I element, T newValue, boolean replace, Object cause);
-		}
 		private final AbstractDataFlow<E, ?, I> theParent;
 		private final TypeToken<T> theTargetType;
 		private Function<? super T, ? extends I> theReverse;
@@ -1231,6 +1248,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		}
 	}
 
+	@FunctionalInterface
+	interface ElementSetter<I, T> {
+		String setElement(I element, T newValue, boolean replace, Object cause);
+	}
 	/**
 	 * Builds a filtered and/or mapped set, asserted to be similarly unique as the derived set
 	 *
@@ -1241,6 +1262,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	class UniqueMappedCollectionBuilder<E, I, T> extends MappedCollectionBuilder<E, I, T> {
 		protected UniqueMappedCollectionBuilder(AbstractDataFlow<E, ?, I> parent, TypeToken<T> type) {
 			super(parent, type);
+			if (!(parent instanceof UniqueDataFlow))
+				throw new IllegalArgumentException("The parent of a unique map builder must be unique");
 		}
 
 		@Override
@@ -1270,8 +1293,72 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		}
 
 		@Override
-		public UniqueDataFlow<E, I, T> map(Function<? super I, ? extends T> map, boolean mapNulls) {
+		public CollectionDataFlow<E, I, T> map(Function<? super I, ? extends T> map, boolean mapNulls) {
+			if (getReverse() != null)
+				return map(map, mapNulls, getReverse(), areNullsReversed());
+			else
+				return super.map(map, mapNulls);
+		}
+
+		public UniqueDataFlow<E, I, T> map(Function<? super I, ? extends T> map, boolean mapNulls, Function<? super T, ? extends I> reverse,
+			boolean reverseNulls) {
+			if (reverse == null)
+				throw new IllegalArgumentException("Reverse must be specified to maintain uniqueness");
 			return new ObservableCollectionDataFlowImpl.UniqueMapOp<>(getParent(), getTargetType(), map, mapNulls, getReverse(),
+				getElementReverse(), areNullsReversed(), isReEvalOnUpdate(), isFireIfUnchanged(), isCached());
+		}
+	}
+
+	class UniqueSortedMappedCollectionBuilder<E, I, T> extends UniqueMappedCollectionBuilder<E, I, T> {
+		protected UniqueSortedMappedCollectionBuilder(AbstractDataFlow<E, ?, I> parent, TypeToken<T> type) {
+			super(parent, type);
+			if (!(parent instanceof UniqueSortedDataFlow))
+				throw new IllegalArgumentException("The parent of a unique-sorted map builder must be unique-sorted");
+		}
+
+		@Override
+		public UniqueSortedMappedCollectionBuilder<E, I, T> withReverse(Function<? super T, ? extends I> reverse, boolean reverseNulls) {
+			return (UniqueSortedMappedCollectionBuilder<E, I, T>) super.withReverse(reverse, reverseNulls);
+		}
+
+		@Override
+		public UniqueSortedMappedCollectionBuilder<E, I, T> withElementSetting(ElementSetter<? super I, ? super T> reverse,
+			boolean reverseNulls) {
+			return (UniqueSortedMappedCollectionBuilder<E, I, T>) super.withElementSetting(reverse, reverseNulls);
+		}
+
+		@Override
+		public UniqueSortedMappedCollectionBuilder<E, I, T> reEvalOnUpdate(boolean reEval) {
+			return (UniqueSortedMappedCollectionBuilder<E, I, T>) super.reEvalOnUpdate(reEval);
+		}
+
+		@Override
+		public UniqueSortedMappedCollectionBuilder<E, I, T> fireIfUnchanged(boolean fire) {
+			return (UniqueSortedMappedCollectionBuilder<E, I, T>) super.fireIfUnchanged(fire);
+		}
+
+		@Override
+		public UniqueSortedMappedCollectionBuilder<E, I, T> noCache() {
+			return (UniqueSortedMappedCollectionBuilder<E, I, T>) super.noCache();
+		}
+
+		@Override
+		public UniqueSortedDataFlow<E, I, T> map(Function<? super I, ? extends T> map, boolean mapNulls,
+			Function<? super T, ? extends I> reverse, boolean reverseNulls) {
+			if (reverse == null)
+				throw new IllegalArgumentException("Reverse must be specified to maintain uniqueness");
+			withReverse(reverse, reverseNulls);
+			return map(map, mapNulls, (t1, t2) -> {
+				I i1 = (t1 == null && !reverseNulls) ? null : reverse.apply(t1);
+				I i2 = (t2 == null && !reverseNulls) ? null : reverse.apply(t2);
+				return ((UniqueSortedDataFlow<E, ?, I>) getParent()).comparator().compare(i1, i2);
+			});
+		}
+
+		public UniqueSortedDataFlow<E, I, T> map(Function<? super I, ? extends T> map, boolean mapNulls, Comparator<? super T> compare) {
+			if (compare == null)
+				throw new IllegalArgumentException("Comparator must be specified to maintain uniqueness");
+			return new ObservableCollectionDataFlowImpl.UniqueMapSortedOp<>(getParent(), getTargetType(), map, mapNulls, getReverse(),
 				getElementReverse(), areNullsReversed(), isReEvalOnUpdate(), isFireIfUnchanged(), isCached());
 		}
 	}
@@ -1748,8 +1835,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 
 		@Override
 		public UniqueDataFlow<E, T, T> build() {
-			return new ObservableCollectionDataFlowImpl.UniqueModFilteredOp<>((AbstractDataFlow<E, ?, T>) theParent, theImmutableMsg,
-				allowUpdates, theAddMsg, theRemoveMsg, theAddMsgFn, theRemoveMsgFn);
+			return new ObservableCollectionDataFlowImpl.UniqueModFilteredOp<>((AbstractDataFlow<E, ?, T>) getParent(), getImmutableMsg(),
+				areUpdatesAllowed(), getAddMsg(), getRemoveMsg(), getAddMsgFn(), getRemoveMsgFn());
 		}
 	}
 
@@ -1785,8 +1872,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> build() {
-			return new ObservableCollectionDataFlowImpl.UniqueSortedModFilteredOp<>((AbstractDataFlow<E, ?, T>) gtheParent, theImmutableMsg,
-				allowUpdates, theAddMsg, theRemoveMsg, theAddMsgFn, theRemoveMsgFn);
+			return new ObservableCollectionDataFlowImpl.UniqueSortedModFilteredOp<>((AbstractDataFlow<E, ?, T>) getParent(),
+				getImmutableMsg(), areUpdatesAllowed(), getAddMsg(), getRemoveMsg(), getAddMsgFn(), getRemoveMsgFn());
 		}
 	}
 
