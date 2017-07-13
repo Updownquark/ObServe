@@ -1,8 +1,17 @@
 package org.observe.collect;
 
+import java.util.AbstractMap;
+import java.util.AbstractSet;
+import java.util.Collection;
 import java.util.Comparator;
+import java.util.Iterator;
 import java.util.Objects;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
+import org.qommons.IterableUtils;
 import org.qommons.collect.IdentityHashSet;
 import org.qommons.collect.UpdatableHashMap;
 import org.qommons.collect.UpdatableHashSet;
@@ -95,10 +104,6 @@ public interface Equivalence<E> {
 		}
 	};
 
-	static <E> Equivalence<E> of(Class<E> type, boolean nullable, Comparator<? super E> compare) {
-		return new ComparatorEquivalence<>(type, nullable, compare);
-	}
-
 	static <E> Equivalence<E> of(Class<E> type, Comparator<? super E> compare, boolean nullable) {
 		return new ComparatorEquivalence<>(type, nullable, compare);
 	}
@@ -147,6 +152,261 @@ public interface Equivalence<E> {
 		@Override
 		public <E2 extends E, V> UpdatableMap<E2, V> createMap() {
 			return new CountedRedBlackNode.DefaultTreeMap<>(compare);
+		}
+	}
+
+	default <T> Equivalence<T> map(Class<T> type, Function<? super E, ? extends T> map, Function<? super T, ? extends E> reverse) {
+		return new MappedEquivalence<>(this, type, null, map, reverse);
+	}
+
+	class MappedEquivalence<E, T> implements Equivalence<T> {
+		private final Equivalence<E> theWrapped;
+		private final Class<T> theType;
+		private final Predicate<? super T> theFilter;
+		private final Function<? super E, ? extends T> theMap;
+		private final Function<? super T, ? extends E> theReverse;
+
+		public MappedEquivalence(Equivalence<E> wrapped, Class<T> type, Predicate<? super T> filter, Function<? super E, ? extends T> map,
+			Function<? super T, ? extends E> reverse) {
+			theWrapped = wrapped;
+			theType = type;
+			theFilter = filter;
+			theMap = map;
+			theReverse = reverse;
+		}
+
+		@Override
+		public boolean isElement(Object v) {
+			if (v != null && !theType.isInstance(v))
+				return false;
+			if (theFilter != null && !theFilter.test((T) v))
+				return false;
+			return theWrapped.isElement(theReverse.apply((T) v));
+		}
+
+		@Override
+		public boolean elementEquals(T element, Object value) {
+			if (value != null && !theType.isInstance(value))
+				return false;
+			if (theFilter != null && !theFilter.test((T) value))
+				return false;
+			return theWrapped.elementEquals(theReverse.apply(element), theReverse.apply((T) value));
+		}
+
+		@Override
+		public <E2 extends T> UpdatableSet<E2> createSet() {
+			return new MappedSet<>(this, theWrapped.createSet(), theMap, theReverse);
+		}
+
+		@Override
+		public <E2 extends T, V> UpdatableMap<E2, V> createMap() {
+			return new MappedMap<>(this, theWrapped.createMap(), theMap, theReverse);
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (!(o instanceof MappedEquivalence))
+				return false;
+			MappedEquivalence<?, ?> equiv = (MappedEquivalence<?, ?>) o;
+			return equiv.theWrapped.equals(theWrapped) && equiv.theType.equals(theType) && Objects.equals(equiv.theFilter, theFilter)
+				&& equiv.theReverse.equals(theReverse);
+		}
+	}
+
+	class MappedSet<E, T, T2 extends T> extends AbstractSet<T2> implements UpdatableSet<T2> {
+		private final MappedEquivalence<E, T> theEquivalence;
+		private final UpdatableSet<E> theWrapped;
+		private final Function<? super E, ? extends T> theMap;
+		private final Function<? super T, ? extends E> theReverse;
+
+		public MappedSet(MappedEquivalence<E, T> equiv, UpdatableSet<E> wrapped, Function<? super E, ? extends T> map,
+			Function<? super T, ? extends E> reverse) {
+			theEquivalence = equiv;
+			theWrapped = wrapped;
+			theMap = map;
+			theReverse = reverse;
+		}
+
+		@Override
+		public int size() {
+			return theWrapped.size();
+		}
+
+		@Override
+		public boolean isEmpty() {
+			return theWrapped.isEmpty();
+		}
+
+		@Override
+		public boolean contains(Object o) {
+			return theEquivalence.isElement(o) && theWrapped.contains(theReverse.apply((T) o));
+		}
+
+		@Override
+		public UpdatableSet.ElementUpdateResult update(T2 value) {
+			return theWrapped.update(theReverse.apply(value));
+		}
+
+		@Override
+		public boolean containsAll(Collection<?> c) {
+			return theWrapped
+				.containsAll(c.stream().filter(theEquivalence::isElement).map(o -> theReverse.apply((T) o)).collect(Collectors.toList()));
+		}
+
+		@Override
+		public Iterator<T2> iterator() {
+			return IterableUtils.map(theWrapped, v -> (T2) theMap.apply(v)).iterator();
+		}
+
+		@Override
+		public boolean add(T2 e) {
+			if (!theEquivalence.isElement(e))
+				throw new IllegalArgumentException("Illegal value");
+			return theWrapped.add(theReverse.apply(e));
+		}
+
+		@Override
+		public boolean addAll(Collection<? extends T2> c) {
+			for (Object o : c)
+				if (!theEquivalence.isElement(o))
+					throw new IllegalArgumentException("Illegal value");
+			return theWrapped.addAll(c.stream().map(theReverse).collect(Collectors.toList()));
+		}
+
+		@Override
+		public boolean remove(Object o) {
+			if (!theEquivalence.isElement(o))
+				return false;
+			return theWrapped.remove(theReverse.apply((T) o));
+		}
+
+		@Override
+		public boolean retainAll(Collection<?> c) {
+			return theWrapped
+				.retainAll(c.stream().filter(theEquivalence::isElement).map(v -> theReverse.apply((T) v)).collect(Collectors.toList()));
+		}
+
+		@Override
+		public boolean removeAll(Collection<?> c) {
+			return theWrapped
+				.removeAll(c.stream().filter(theEquivalence::isElement).map(v -> theReverse.apply((T) v)).collect(Collectors.toList()));
+		}
+
+		@Override
+		public void clear() {
+			theWrapped.clear();
+		}
+	}
+
+	class MappedMap<E, T, T2 extends T, V> extends AbstractMap<T2, V> implements UpdatableMap<T2, V> {
+		private final MappedEquivalence<E, T> theEquivalence;
+		private final UpdatableMap<E, V> theWrapped;
+		private final Function<? super E, ? extends T> theMap;
+		private final Function<? super T, ? extends E> theReverse;
+
+		public MappedMap(MappedEquivalence<E, T> equiv, UpdatableMap<E, V> wrapped, Function<? super E, ? extends T> map,
+			Function<? super T, ? extends E> reverse) {
+			theEquivalence = equiv;
+			theWrapped = wrapped;
+			theMap = map;
+			theReverse = reverse;
+		}
+
+		@Override
+		public int size() {
+			return theWrapped.size();
+		}
+
+		@Override
+		public boolean isEmpty() {
+			return theWrapped.isEmpty();
+		}
+
+		@Override
+		public boolean containsValue(Object value) {
+			return theWrapped.containsValue(value);
+		}
+
+		@Override
+		public boolean containsKey(Object key) {
+			return theEquivalence.isElement(key) && theWrapped.containsKey(theReverse.apply((T) key));
+		}
+
+		@Override
+		public UpdatableSet.ElementUpdateResult update(T2 key) {
+			return theWrapped.update(theReverse.apply(key));
+		}
+
+		@Override
+		public V get(Object key) {
+			if (!theEquivalence.isElement(key))
+				return null;
+			return theWrapped.get(theReverse.apply((T) key));
+		}
+
+		@Override
+		public V put(T2 key, V value) {
+			if (!theEquivalence.isElement(key))
+				throw new IllegalArgumentException("Invalid key");
+			return theWrapped.put(theReverse.apply(key), value);
+		}
+
+		@Override
+		public V remove(Object key) {
+			if (!theEquivalence.isElement(key))
+				return null;
+			return theWrapped.remove(theReverse.apply((T) key));
+		}
+
+		@Override
+		public void clear() {
+			theWrapped.clear();
+		}
+
+		@Override
+		public Collection<V> values() {
+			return theWrapped.values();
+		}
+
+		@Override
+		public Set<Entry<T2, V>> entrySet() {
+			return new AbstractSet<Entry<T2, V>>() {
+				@Override
+				public Iterator<java.util.Map.Entry<T2, V>> iterator() {
+					Function<Entry<E, V>, Entry<T2, V>> map = entry -> new Entry<T2, V>() {
+						@Override
+						public T2 getKey() {
+							return (T2) theMap.apply(entry.getKey());
+						}
+
+						@Override
+						public V getValue() {
+							return entry.getValue();
+						}
+
+						@Override
+						public V setValue(V value) {
+							return entry.setValue(value);
+						}
+					};
+					return IterableUtils.map(theWrapped.entrySet(), map).iterator();
+				}
+
+				@Override
+				public int size() {
+					return theWrapped.size();
+				}
+
+				@Override
+				public void clear() {
+					theWrapped.clear();
+				}
+			};
+		}
+
+		@Override
+		public UpdatableSet<T2> keySet() {
+			return super.keySet();
 		}
 	}
 }

@@ -999,11 +999,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 
 		CollectionDataFlow<E, T, T> sorted(Comparator<? super T> compare);
 
-		default UniqueDataFlow<E, T, T> unique() {
-			return unique(Equivalence.DEFAULT, false);
-		}
-
-		UniqueDataFlow<E, T, T> unique(Equivalence<? super T> equivalence, boolean alwaysUseFirst);
+		UniqueDataFlow<E, T, T> unique(boolean alwaysUseFirst);
 
 		UniqueSortedDataFlow<E, T, T> uniqueSorted(Comparator<? super T> compare, boolean alwaysUseFirst);
 

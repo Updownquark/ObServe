@@ -123,8 +123,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public UniqueDataFlow<E, T, T> unique(Equivalence<? super T> equivalence, boolean alwaysUseFirst) {
-			return new UniqueOp<>(this, equivalence, alwaysUseFirst);
+		public UniqueDataFlow<E, T, T> unique(boolean alwaysUseFirst) {
+			return new UniqueOp<>(this, alwaysUseFirst);
 		}
 
 		@Override
@@ -192,18 +192,16 @@ public class ObservableCollectionDataFlowImpl {
 	}
 
 	public static class UniqueOp<E, T> extends UniqueDataFlowWrapper<E, T> {
-		private final Equivalence<? super T> theEquivalence;
 		private final boolean isAlwaysUsingFirst;
 
-		protected UniqueOp(AbstractDataFlow<E, ?, T> parent, Equivalence<? super T> equivalence, boolean alwaysUseFirst) {
+		protected UniqueOp(AbstractDataFlow<E, ?, T> parent, boolean alwaysUseFirst) {
 			super(parent);
-			theEquivalence = equivalence;
 			isAlwaysUsingFirst = alwaysUseFirst;
 		}
 
 		@Override
 		public AbstractCollectionManager<E, ?, T> manageCollection() {
-			return new UniqueManager<>(getParent().manageCollection(), theEquivalence, isAlwaysUsingFirst);
+			return new UniqueManager<>(getParent().manageCollection(), isAlwaysUsingFirst);
 		}
 	}
 
@@ -856,14 +854,6 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public Equivalence<? super T> equivalence() {
-			if (!isMapped())
-				return (Equivalence<? super T>) getBase().equivalence();
-			else
-				return Equivalence.DEFAULT;
-		}
-
-		@Override
 		public boolean isDynamicallyFiltered() {
 			return theParent == null ? false : theParent.isDynamicallyFiltered();
 		}
@@ -1228,18 +1218,27 @@ public class ObservableCollectionDataFlowImpl {
 	}
 
 	public static class MappedUniqueCollectionManager<E, I, T> extends AbstractCollectionManager<E, I, T>
-		implements UniqueCollectionManager<E, I, T> {
+	implements UniqueCollectionManager<E, I, T> {
+		private final Function<? super I, ? extends T> theMap;
 		private final Function<? super T, ? extends I> theReverse;
+		private final Equivalence<? super T> theEquivalence;
 
 		public MappedUniqueCollectionManager(UniqueCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
-			Function<? super T, ? extends I> reverse) {
+			Function<? super I, ? extends T> map, Function<? super T, ? extends I> reverse) {
 			super((AbstractCollectionManager<E, ?, I>) parent, targetType);
+			theMap = map;
 			theReverse = reverse;
+			theEquivalence = getParent().equivalence().map((Class<T>) getTargetType().getRawType(), theMap, theReverse);
 		}
 
 		@Override
 		public ElementId getId(T value) {
 			return ((UniqueCollectionManager<E, ?, I>) getParent()).getId(theReverse.apply(value));
+		}
+
+		@Override
+		public Equivalence<? super T> equivalence() {
+			return theEquivalence;
 		}
 
 		@Override
@@ -1363,21 +1362,33 @@ public class ObservableCollectionDataFlowImpl {
 		public void begin() {}
 	}
 
-	public static class UniqueManager<E, T> extends AbstractCollectionManager<E, T, T> {
-		private final Equivalence<? super T> theEquivalence;
+	public static class UniqueManager<E, T> extends AbstractCollectionManager<E, T, T> implements UniqueCollectionManager<E, T, T> {
 		private final UpdatableMap<T, DefaultTreeSet<UniqueElement>> theElementsByValue;
 		private final boolean isAlwaysUsingFirst;
 
-		protected UniqueManager(AbstractCollectionManager<E, ?, T> parent, Equivalence<? super T> equivalence, boolean alwaysUseFirst) {
+		protected UniqueManager(AbstractCollectionManager<E, ?, T> parent, boolean alwaysUseFirst) {
 			super(parent, parent.getTargetType());
-			theEquivalence = equivalence;
-			theElementsByValue = theEquivalence.createMap();
+			theElementsByValue = parent.equivalence().createMap();
 			isAlwaysUsingFirst = alwaysUseFirst;
 		}
 
 		@Override
+		public ElementId getId(T value) {
+			DefaultTreeSet<UniqueElement> valueElements = theElementsByValue.get(value);
+			if (valueElements == null)
+				return null;
+			for (UniqueElement el : valueElements)
+				if (el.isPresent)
+					return el.getElementId();
+			// Although this state is incorrect, since one value should be present, this state is reachable temporarily during
+			// modifications. It represents a state where the present element for the value has been removed or deactivated
+			// and the new one has not yet been installed. So according to what the derived collection knows, the element doesn't exist.
+			return null;
+		}
+
+		@Override
 		public Equivalence<? super T> equivalence() {
-			return theEquivalence;
+			return getParent().equivalence();
 		}
 
 		@Override
@@ -1409,7 +1420,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		void update(UniqueElement element, Object cause) {
-			getUpdateListener().accept(new CollectionUpdate<>(this, element.getElementId(), cause));
+			getUpdateListener().accept(new CollectionUpdate(this, element.getElementId(), cause));
 		}
 
 		class UniqueElement extends CollectionElementManager<E, T, T> {
@@ -1504,7 +1515,7 @@ public class ObservableCollectionDataFlowImpl {
 					for (UniqueElement other : elements) {
 						if (other == this)
 							continue;
-						getUpdateListener().accept(new RemoveElementUpdate<>(UniqueManager.this, other.getElementId(), cause));
+						getUpdateListener().accept(new RemoveElementUpdate(UniqueManager.this, other.getElementId(), cause));
 					}
 				}
 				return msg;
@@ -1533,10 +1544,17 @@ public class ObservableCollectionDataFlowImpl {
 
 	public static class SortedManager<E, T> extends NonMappingCollectionManager<E, T> {
 		private final Comparator<? super T> theCompare;
+		private final Equivalence<? super T> theEquivalence;
 
 		protected SortedManager(AbstractCollectionManager<E, ?, T> parent, Comparator<? super T> compare) {
 			super(parent);
 			theCompare = compare;
+			theEquivalence = Equivalence.of((Class<T>) parent.getTargetType().getRawType(), theCompare, true);
+		}
+
+		@Override
+		public Equivalence<? super T> equivalence() {
+			return theEquivalence;
 		}
 
 		@Override
@@ -1613,6 +1631,11 @@ public class ObservableCollectionDataFlowImpl {
 			super(parent);
 			theFilter = filter;
 			this.filterNulls = filterNulls;
+		}
+
+		@Override
+		public Equivalence<? super T> equivalence() {
+			return getParent().equivalence();
 		}
 
 		@Override
@@ -1696,6 +1719,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public Equivalence<? super T> equivalence() {
+			return getParent().equivalence();
+		}
+
+		@Override
 		public boolean isStaticallyFiltered() {
 			return true;
 		}
@@ -1768,6 +1796,11 @@ public class ObservableCollectionDataFlowImpl {
 			this.reEvalOnUpdate = reEvalOnUpdate;
 			this.fireIfUnchanged = fireIfUnchanged;
 			isCached = cached;
+		}
+
+		@Override
+		public Equivalence<? super T> equivalence() {
+			return Equivalence.DEFAULT;
 		}
 
 		@Override
@@ -1916,6 +1949,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public Equivalence<? super T> equivalence() {
+			return Equivalence.DEFAULT;
+		}
+
+		@Override
 		public boolean isReversible() {
 			return theReverse != null && super.isReversible();
 		}
@@ -2032,7 +2070,7 @@ public class ObservableCollectionDataFlowImpl {
 						((ArgHolder<Object>) holder).value = evt.getValue();
 						if (!holder.combineNull && holder.value == null)
 							badCombineValues++;
-						getUpdateListener().accept(new CollectionUpdate<>(this, null, evt));
+						getUpdateListener().accept(new CollectionUpdate(this, null, evt));
 					}
 				};
 				WeakConsumer<ObservableValueEvent<?>> weak = new WeakConsumer<>(holder.action);
@@ -2051,18 +2089,13 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public FilterMapResult<E, T> map(FilterMapResult<E, T> source) {
-			return getParent().map(source);
-		}
-
-		@Override
-		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest) {
-			return getParent().reverse(dest);
+		public Equivalence<? super T> equivalence() {
+			return getParent().equivalence();
 		}
 
 		@Override
 		public void begin() {
-			theAction = v -> getUpdateListener().accept(new CollectionUpdate<>(this, null, v));
+			theAction = v -> getUpdateListener().accept(new CollectionUpdate(this, null, v));
 			WeakConsumer<Object> weak = new WeakConsumer<>(theAction);
 			weak.withSubscription(theRefresh.act(weak));
 		}
@@ -2114,13 +2147,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public FilterMapResult<E, T> map(FilterMapResult<E, T> source) {
-			return getParent().map(source);
-		}
-
-		@Override
-		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest) {
-			return getParent().reverse(dest);
+		public Equivalence<? super T> equivalence() {
+			return getParent().equivalence();
 		}
 
 		@Override
@@ -2216,7 +2244,7 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public void begin() {}
 
-		private class ElementRefreshUpdate extends CollectionUpdate<E, T, T> {
+		private class ElementRefreshUpdate extends CollectionUpdate {
 			private final Observable<?> theRefreshObs;
 
 			ElementRefreshUpdate(Observable<?> refreshObs, Object cause) {
@@ -2248,6 +2276,11 @@ public class ObservableCollectionDataFlowImpl {
 			theRemoveMessage = removeMessage;
 			theAddFilter = addFilter;
 			theRemoveFilter = removeFilter;
+		}
+
+		@Override
+		public Equivalence<? super T> equivalence() {
+			return getParent().equivalence();
 		}
 
 		@Override
