@@ -701,16 +701,6 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 		}
 
 		@Override
-		public boolean removeAll(Collection<?> values) {
-			return ObservableCollectionImpl.removeAll(this, values);
-		}
-
-		@Override
-		public boolean retainAll(Collection<?> values) {
-			return ObservableCollectionImpl.retainAll(this, values);
-		}
-
-		@Override
 		public void clear() {
 			try (Transaction t = lock(true, null)) {
 				SimpleCause.doWith(new SimpleCause(), c -> mutableSpliterator().forEachMutableElement(el -> el.remove(c)));
