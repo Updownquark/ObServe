@@ -22,17 +22,21 @@ import org.observe.collect.ObservableCollection.CombinedCollectionBuilder;
 import org.observe.collect.ObservableCollection.CombinedValues;
 import org.observe.collect.ObservableCollection.ElementSetter;
 import org.observe.collect.ObservableCollection.MappedCollectionBuilder;
+import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollection.StdMsg;
 import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableCollection.UniqueMappedCollectionBuilder;
+import org.observe.collect.ObservableCollection.UniqueModFilterBuilder;
 import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
 import org.observe.collect.ObservableCollection.UniqueSortedMappedCollectionBuilder;
+import org.observe.collect.ObservableCollection.UniqueSortedModFilterBuilder;
 import org.observe.collect.ObservableCollectionImpl.DerivedCollection;
 import org.qommons.Ternian;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.UpdatableMap;
 import org.qommons.tree.CountedRedBlackNode.DefaultNode;
+import org.qommons.tree.CountedRedBlackNode.DefaultTreeMap;
 import org.qommons.tree.CountedRedBlackNode.DefaultTreeSet;
 import org.qommons.value.Value;
 
@@ -60,19 +64,21 @@ public class ObservableCollectionDataFlowImpl {
 	}
 
 	public static abstract class AbstractDataFlow<E, I, T> implements CollectionDataFlow<E, I, T> {
-		private final AbstractDataFlow<E, ?, I> theParent;
+		private final ObservableCollection<E> theSource;
+		private final CollectionDataFlow<E, ?, I> theParent;
 		private final TypeToken<T> theTargetType;
 
-		protected AbstractDataFlow(AbstractDataFlow<E, ?, I> parent, TypeToken<T> targetType) {
+		protected AbstractDataFlow(ObservableCollection<E> source, CollectionDataFlow<E, ?, I> parent, TypeToken<T> targetType) {
+			theSource = source;
 			theParent = parent;
 			theTargetType = targetType;
 		}
 
 		protected ObservableCollection<E> getSource() {
-			return theParent.getSource();
+			return theSource;
 		}
 
-		protected AbstractDataFlow<E, ?, I> getParent() {
+		protected CollectionDataFlow<E, ?, I> getParent() {
 			return theParent;
 		}
 
@@ -83,56 +89,59 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public CollectionDataFlow<E, T, T> filter(Function<? super T, String> filter, boolean filterNulls) {
-			return new FilterOp<>(this, filter, filterNulls);
+			return new FilterOp<>(theSource, this, filter, filterNulls);
 		}
 
 		@Override
 		public CollectionDataFlow<E, T, T> filterStatic(Function<? super T, String> filter, boolean filterNulls) {
-			return new StaticFilterOp<>(this, filter, filterNulls);
+			return new StaticFilterOp<>(theSource, this, filter, filterNulls);
 		}
 
 		@Override
 		public CollectionDataFlow<E, T, T> withEquivalence(Equivalence<? super T> equivalence) {
-			return new EquivalenceSwitchOp<>(this, equivalence);
+			return new EquivalenceSwitchOp<>(theSource, this, equivalence);
 		}
 
 		@Override
 		public CollectionDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new RefreshOp<>(this, refresh);
+			return new RefreshOp<>(theSource, this, refresh);
 		}
 
 		@Override
 		public CollectionDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new ElementRefreshOp<>(this, refresh);
+			return new ElementRefreshOp<>(theSource, this, refresh);
 		}
 
 		@Override
 		public <X> MappedCollectionBuilder<E, T, X> map(TypeToken<X> target) {
-			return new MappedCollectionBuilder<>(this, target);
+			return new MappedCollectionBuilder<>(theSource, this, target);
 		}
 
 		@Override
 		public <V, X> ObservableCollection.CombinedCollectionBuilder2<E, T, V, X> combineWith(ObservableValue<V> value,
 			boolean combineNulls, TypeToken<X> target) {
-			return new ObservableCollection.CombinedCollectionBuilder2<>(this, target, value, Ternian.of(combineNulls));
+			return new ObservableCollection.CombinedCollectionBuilder2<>(theSource, this, target, value, Ternian.of(combineNulls));
+		}
+
+		@Override
+		public ModFilterBuilder<E, T> filterModification() {
+			return new ModFilterBuilder<>(theSource, this);
 		}
 
 		@Override
 		public CollectionDataFlow<E, T, T> sorted(Comparator<? super T> compare) {
-			return new SortedDataFlow<>(this, compare);
+			return new SortedDataFlow<>(theSource, this, compare);
 		}
 
 		@Override
 		public UniqueDataFlow<E, T, T> unique(boolean alwaysUseFirst) {
-			return new UniqueOp<>(this, alwaysUseFirst);
+			return new UniqueOp<>(theSource, this, alwaysUseFirst);
 		}
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> uniqueSorted(Comparator<? super T> compare, boolean alwaysUseFirst) {
-			return new UniqueSortedDataFlowImpl<>(this, compare, alwaysUseFirst);
+			return new UniqueSortedDataFlowImpl<>(theSource, this, compare, alwaysUseFirst);
 		}
-
-		public abstract AbstractCollectionManager<E, ?, T> manageCollection();
 
 		@Override
 		public ObservableCollection<T> collect(Observable<?> until) {
@@ -140,9 +149,31 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
+	public interface UniqueElementFinder<T> {
+		ElementId getId(T value);
+	}
+
+	public static interface UniqueSortedElementFinder<T> extends UniqueElementFinder<T> {
+		Comparator<? super T> comparator();
+
+		default ElementId relativeId(T value, boolean up, boolean includeValue) {
+			return relativeId(other -> comparator().compare(value, other), up, includeValue);
+		}
+
+		ElementId relativeId(Comparable<? super T> compare, boolean up, boolean includeValue);
+	}
+
 	public static class UniqueDataFlowWrapper<E, T> extends AbstractDataFlow<E, T, T> implements UniqueDataFlow<E, T, T> {
-		protected UniqueDataFlowWrapper(AbstractDataFlow<E, ?, T> parent) {
-			super(parent, parent.getTargetType());
+		private final UniqueElementFinder<T> theElementFinder;
+
+		protected UniqueDataFlowWrapper(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent,
+			UniqueElementFinder<T> elementFinder) {
+			super(source, parent, parent.getTargetType());
+			theElementFinder = elementFinder;
+		}
+
+		protected UniqueElementFinder<T> getElementFinder() {
+			return theElementFinder;
 		}
 
 		@Override
@@ -152,7 +183,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public UniqueDataFlow<E, T, T> filter(Function<? super T, String> filter, boolean filterNulls) {
-			return new UniqueDataFlowWrapper<>((AbstractDataFlow<E, ?, T>) getParent().filter(filter, filterNulls));
+			return new UniqueDataFlowWrapper<>(getSource(), getParent().filter(filter, filterNulls), theElementFinder);
 		}
 
 		@Override
@@ -162,45 +193,50 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public UniqueDataFlow<E, T, T> filterStatic(Function<? super T, String> filter, boolean filterNulls) {
-			return new UniqueDataFlowWrapper<>((AbstractDataFlow<E, ?, T>) getParent().filterStatic(filter, filterNulls));
+			return new UniqueDataFlowWrapper<>(getSource(), getParent().filterStatic(filter, filterNulls), theElementFinder);
 		}
 
 		@Override
 		public <X> UniqueMappedCollectionBuilder<E, T, X> mapEquivalent(TypeToken<X> target) {
-			return new UniqueMappedCollectionBuilder<>(this, target);
+			return new UniqueMappedCollectionBuilder<>(getSource(), this, theElementFinder, target);
 		}
 
 		@Override
 		public UniqueDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueDataFlowWrapper<>((AbstractDataFlow<E, ?, T>) getParent().refresh(refresh));
+			return new UniqueDataFlowWrapper<>(getSource(), getParent().refresh(refresh), theElementFinder);
 		}
 
 		@Override
 		public UniqueDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueDataFlowWrapper<>((AbstractDataFlow<E, ?, T>) getParent().refreshEach(refresh));
+			return new UniqueDataFlowWrapper<>(getSource(), getParent().refreshEach(refresh), theElementFinder);
 		}
 
 		@Override
-		public AbstractCollectionManager<E, ?, T> manageCollection() {
+		public UniqueModFilterBuilder<E, T> filterModification() {
+			return new UniqueModFilterBuilder<>(getSource(), this, theElementFinder);
+		}
+
+		@Override
+		public CollectionManager<E, ?, T> manageCollection() {
 			return getParent().manageCollection();
 		}
 
 		@Override
 		public ObservableSet<T> collect(Observable<?> until) {
-			return new ObservableSetImpl.DerivedSet<>(getSource(), manageCollection(), until);
+			return new ObservableSetImpl.DerivedSet<>(getSource(), manageCollection(), theElementFinder, until);
 		}
 	}
 
 	public static class UniqueOp<E, T> extends UniqueDataFlowWrapper<E, T> {
 		private final boolean isAlwaysUsingFirst;
 
-		protected UniqueOp(AbstractDataFlow<E, ?, T> parent, boolean alwaysUseFirst) {
-			super(parent);
+		protected UniqueOp(ObservableCollection<E> source, AbstractDataFlow<E, ?, T> parent, boolean alwaysUseFirst) {
+			super(source, parent, elementFinder);
 			isAlwaysUsingFirst = alwaysUseFirst;
 		}
 
 		@Override
-		public AbstractCollectionManager<E, ?, T> manageCollection() {
+		public UniqueCollectionManager<E, ?, T> manageCollection() {
 			return new UniqueManager<>(getParent().manageCollection(), isAlwaysUsingFirst);
 		}
 	}
@@ -208,8 +244,8 @@ public class ObservableCollectionDataFlowImpl {
 	public static class SortedDataFlow<E, T> extends AbstractDataFlow<E, T, T> {
 		private final Comparator<? super T> theCompare;
 
-		protected SortedDataFlow(AbstractDataFlow<E, ?, T> parent, Comparator<? super T> compare) {
-			super(parent, parent.getTargetType());
+		protected SortedDataFlow(ObservableCollection<E> source, AbstractDataFlow<E, ?, T> parent, Comparator<? super T> compare) {
+			super(source, parent, parent.getTargetType());
 			theCompare = compare;
 		}
 
@@ -218,7 +254,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public AbstractCollectionManager<E, ?, T> manageCollection() {
+		public CollectionManager<E, ?, T> manageCollection() {
 			return new SortedManager<>(getParent().manageCollection(), theCompare);
 		}
 
@@ -231,9 +267,15 @@ public class ObservableCollectionDataFlowImpl {
 	public static class UniqueSortedDataFlowWrapper<E, T> extends UniqueDataFlowWrapper<E, T> implements UniqueSortedDataFlow<E, T, T> {
 		private final Comparator<? super T> theCompare;
 
-		protected UniqueSortedDataFlowWrapper(AbstractDataFlow<E, ?, T> parent, Comparator<? super T> compare) {
-			super(parent);
+		protected UniqueSortedDataFlowWrapper(ObservableCollection<E> source, AbstractDataFlow<E, ?, T> parent,
+			UniqueSortedElementFinder<T> elementFinder, Comparator<? super T> compare) {
+			super(source, parent, elementFinder);
 			theCompare = compare;
+		}
+
+		@Override
+		protected UniqueSortedElementFinder<T> getElementFinder() {
+			return (UniqueSortedElementFinder<T>) super.getElementFinder();
 		}
 
 		@Override
@@ -248,7 +290,8 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> filter(Function<? super T, String> filter, boolean filterNulls) {
-			return new UniqueSortedDataFlowWrapper<>((AbstractDataFlow<E, ?, T>) getParent().filter(filter, filterNulls), theCompare);
+			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, T>) getParent().filter(filter, filterNulls),
+				getElementFinder(), theCompare);
 		}
 
 		@Override
@@ -258,70 +301,80 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> filterStatic(Function<? super T, String> filter, boolean filterNulls) {
-			return new UniqueSortedDataFlowWrapper<>((AbstractDataFlow<E, ?, T>) getParent().filterStatic(filter, filterNulls), theCompare);
+			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, T>) getParent().filterStatic(filter, filterNulls),
+				getElementFinder(), theCompare);
 		}
 
 		@Override
 		public <X> UniqueSortedMappedCollectionBuilder<E, T, X> mapEquivalent(TypeToken<X> target) {
-			return new UniqueSortedMappedCollectionBuilder<>(this, target);
+			return new UniqueSortedMappedCollectionBuilder<>(getSource(), this, getElementFinder(), target);
 		}
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueSortedDataFlowWrapper<>((AbstractDataFlow<E, ?, T>) getParent().refresh(refresh), theCompare);
+			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, T>) getParent().refresh(refresh),
+				getElementFinder(), theCompare);
 		}
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueSortedDataFlowWrapper<>((AbstractDataFlow<E, ?, T>) getParent().refreshEach(refresh), theCompare);
+			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, T>) getParent().refreshEach(refresh),
+				getElementFinder(), theCompare);
+		}
+
+		@Override
+		public UniqueSortedModFilterBuilder<E, T> filterModification() {
+			return new UniqueSortedModFilterBuilder<>(getSource(), this, getElementFinder());
+		}
+
+		@Override
+		public CollectionManager<E, ?, T> manageCollection() {
+			return getParent().manageCollection();
 		}
 
 		@Override
 		public ObservableSortedSet<T> collect(Observable<?> until) {
-			return new ObservableSortedSetImpl.DerivedSortedSet<>(getSource(), manageCollection(), theCompare,
-				until);
+			return new ObservableSortedSetImpl.DerivedSortedSet<>(getSource(), manageCollection(), getElementFinder(), theCompare, until);
 		}
 	}
 
 	public static class UniqueSortedDataFlowImpl<E, T> extends UniqueSortedDataFlowWrapper<E, T> {
 		private final boolean isAlwaysUsingFirst;
 
-		protected UniqueSortedDataFlowImpl(AbstractDataFlow<E, ?, T> parent, Comparator<? super T> compare, boolean alwaysUseFirst) {
-			super(parent, compare);
+		protected UniqueSortedDataFlowImpl(ObservableCollection<E> source, AbstractDataFlow<E, ?, T> parent, Comparator<? super T> compare,
+			boolean alwaysUseFirst) {
+			super(source, parent, elementFinder, compare);
 			isAlwaysUsingFirst = alwaysUseFirst;
 		}
 
 		@Override
-		public AbstractCollectionManager<E, ?, T> manageCollection() {
-			return new SortedManager<>(new UniqueManager<>(getParent().manageCollection(),
-				Equivalence.of((Class<T>) getTargetType().getRawType(), comparator(), true), isAlwaysUsingFirst), comparator());
+		public UniqueSortedCollectionManager<E, ?, T> manageCollection() {
+			return new UniqueSortedManager<>(getParent().manageCollection(), isAlwaysUsingFirst, comparator());
 		}
 	}
 
 	public static class BaseCollectionDataFlow<E> extends AbstractDataFlow<E, E, E> {
-		private final ObservableCollection<E> theSource;
 
 		protected BaseCollectionDataFlow(ObservableCollection<E> source) {
-			super(null, source.getType());
-			theSource = source;
+			super(source, null, source.getType());
 		}
 
 		@Override
 		protected ObservableCollection<E> getSource() {
-			return theSource;
+			return getSource();
 		}
 
 		@Override
 		public AbstractCollectionManager<E, ?, E> manageCollection() {
-			return new BaseCollectionManager<>(theSource.getType(), theSource.equivalence(), theSource.isLockSupported());
+			return new BaseCollectionManager<>(getSource().getType(), getSource().equivalence(), getSource().isLockSupported());
 		}
 
 		@Override
 		public ObservableCollection<E> collect(Observable<?> until) {
 			if (until == Observable.empty)
-				return theSource;
+				return getSource();
 			else
-				return new DerivedCollection<>(theSource, manageCollection(), until);
+				return new DerivedCollection<>(getSource(), manageCollection(), until);
 		}
 	}
 
@@ -329,8 +382,9 @@ public class ObservableCollectionDataFlowImpl {
 		private final Function<? super T, String> theFilter;
 		private final boolean areNullsFiltered;
 
-		protected FilterOp(AbstractDataFlow<E, ?, T> parent, Function<? super T, String> filter, boolean filterNulls) {
-			super(parent, parent.getTargetType());
+		protected FilterOp(ObservableCollection<E> source, AbstractDataFlow<E, ?, T> parent, Function<? super T, String> filter,
+			boolean filterNulls) {
+			super(source, parent, parent.getTargetType());
 			theFilter = filter;
 			areNullsFiltered = filterNulls;
 		}
@@ -345,24 +399,25 @@ public class ObservableCollectionDataFlowImpl {
 		private final Function<? super T, String> theFilter;
 		private final boolean areNullsFiltered;
 
-		protected StaticFilterOp(AbstractDataFlow<E, ?, T> parent, Function<? super T, String> filter, boolean filterNulls) {
-			super(parent, parent.getTargetType());
+		protected StaticFilterOp(ObservableCollection<E> source, AbstractDataFlow<E, ?, T> parent, Function<? super T, String> filter,
+			boolean filterNulls) {
+			super(source, parent, parent.getTargetType());
 			theFilter = filter;
 			areNullsFiltered = filterNulls;
 		}
 
 		@Override
 		public AbstractCollectionManager<E, ?, T> manageCollection() {
-			return new StaticFilteredCollectionManager<>(getParent().manageCollection(), theFilter,
-				areNullsFiltered);
+			return new StaticFilteredCollectionManager<>(getParent().manageCollection(), theFilter, areNullsFiltered);
 		}
 	}
 
 	public static class EquivalenceSwitchOp<E, T> extends AbstractDataFlow<E, T, T> {
 		private final Equivalence<? super T> theEquivalence;
 
-		protected EquivalenceSwitchOp(AbstractDataFlow<E, ?, T> parent, Equivalence<? super T> equivalence) {
-			super(parent, parent.getTargetType());
+		protected EquivalenceSwitchOp(ObservableCollection<E> source, AbstractDataFlow<E, ?, T> parent,
+			Equivalence<? super T> equivalence) {
+			super(source, parent, parent.getTargetType());
 			theEquivalence = equivalence;
 		}
 
@@ -380,6 +435,11 @@ public class ObservableCollectionDataFlowImpl {
 
 				@Override
 				protected void begin() {}
+
+				@Override
+				public Equivalence<? super T> equivalence() {
+					return theEquivalence;
+				}
 			}
 			return new EquivalenceSwitchedCollectionManager();
 		}
@@ -395,10 +455,11 @@ public class ObservableCollectionDataFlowImpl {
 		private final boolean fireIfUnchanged;
 		private final boolean isCached;
 
-		protected MapOp(AbstractDataFlow<E, ?, I> parent, TypeToken<T> target, Function<? super I, ? extends T> map, boolean mapNulls,
-			Function<? super T, ? extends I> reverse, ElementSetter<? super I, ? super T> elementReverse, boolean reverseNulls,
-			boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean cached) {
-			super(parent, target);
+		protected MapOp(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent, TypeToken<T> target,
+			Function<? super I, ? extends T> map, boolean mapNulls, Function<? super T, ? extends I> reverse,
+			ElementSetter<? super I, ? super T> elementReverse, boolean reverseNulls, boolean reEvalOnUpdate, boolean fireIfUnchanged,
+			boolean cached) {
+			super(source, parent, target);
 			theMap = map;
 			areNullsMapped = mapNulls;
 			theReverse = reverse;
@@ -410,17 +471,25 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public AbstractCollectionManager<E, ?, T> manageCollection() {
-			return new MappedCollectionManager<>(getParent().manageCollection(), getTargetType(), theMap,
-				areNullsMapped, theReverse, theElementReverse, areNullsReversed, reEvalOnUpdate, fireIfUnchanged, isCached);
+		public CollectionManager<E, ?, T> manageCollection() {
+			return new MappedCollectionManager<>(getParent().manageCollection(), getTargetType(), theMap, areNullsMapped, theReverse,
+				theElementReverse, areNullsReversed, reEvalOnUpdate, fireIfUnchanged, isCached);
 		}
 	}
 
 	public static class UniqueMapOp<E, I, T> extends MapOp<E, I, T> implements UniqueDataFlow<E, I, T> {
-		protected UniqueMapOp(AbstractDataFlow<E, ?, I> parent, TypeToken<T> target, Function<? super I, ? extends T> map, boolean mapNulls,
-			Function<? super T, ? extends I> reverse, ElementSetter<? super I, ? super T> elementReverse, boolean reverseNulls,
-			boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean isCached) {
-			super(parent, target, map, mapNulls, reverse, elementReverse, reverseNulls, reEvalOnUpdate, fireIfUnchanged, isCached);
+		private final UniqueElementFinder<T> theElementFinder;
+
+		protected UniqueMapOp(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent, UniqueElementFinder<I> elementFinder,
+			TypeToken<T> target, Function<? super I, ? extends T> map, boolean mapNulls, Function<? super T, ? extends I> reverse,
+			ElementSetter<? super I, ? super T> elementReverse, boolean reverseNulls, boolean reEvalOnUpdate, boolean fireIfUnchanged,
+			boolean isCached) {
+			super(source, parent, target, map, mapNulls, reverse, elementReverse, reverseNulls, reEvalOnUpdate, fireIfUnchanged, isCached);
+			theElementFinder = new MappedElementFinder<>(elementFinder, map, mapNulls, reverse, reverseNulls);
+		}
+
+		protected UniqueElementFinder<T> getElementFinder() {
+			return theElementFinder;
 		}
 
 		@Override
@@ -430,7 +499,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public UniqueDataFlow<E, T, T> filter(Function<? super T, String> filter, boolean filterNulls) {
-			return new UniqueDataFlowWrapper<>((AbstractDataFlow<E, ?, T>) super.filter(filter, filterNulls));
+			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter, filterNulls), theElementFinder);
 		}
 
 		@Override
@@ -440,38 +509,52 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public UniqueDataFlow<E, T, T> filterStatic(Function<? super T, String> filter, boolean filterNulls) {
-			return new UniqueDataFlowWrapper<>((AbstractDataFlow<E, ?, T>) super.filterStatic(filter, filterNulls));
+			return new UniqueDataFlowWrapper<>(getSource(), super.filterStatic(filter, filterNulls), theElementFinder);
 		}
 
 		@Override
 		public <X> UniqueMappedCollectionBuilder<E, T, X> mapEquivalent(TypeToken<X> target) {
-			return new UniqueMappedCollectionBuilder<>(this, target);
+			return new UniqueMappedCollectionBuilder<>(getSource(), this, theElementFinder, target);
 		}
 
 		@Override
 		public UniqueDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueDataFlowWrapper<>((AbstractDataFlow<E, ?, T>) super.refresh(refresh));
+			return new UniqueDataFlowWrapper<>(getSource(), super.refresh(refresh), theElementFinder);
 		}
 
 		@Override
 		public UniqueDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueDataFlowWrapper<>((AbstractDataFlow<E, ?, T>) super.refreshEach(refresh));
+			return new UniqueDataFlowWrapper<>(getSource(), super.refreshEach(refresh), theElementFinder);
+		}
+
+		@Override
+		public UniqueModFilterBuilder<E, T> filterModification() {
+			return new UniqueModFilterBuilder<>(getSource(), this, theElementFinder);
 		}
 
 		@Override
 		public ObservableSet<T> collect(Observable<?> until) {
-			return new ObservableSetImpl.DerivedSet<>(getSource(), manageCollection(), until);
+			return new ObservableSetImpl.DerivedSet<>(getSource(), manageCollection(), theElementFinder, until);
 		}
 	}
 
 	public static class UniqueSortedMapOp<E, I, T> extends UniqueMapOp<E, I, T> implements UniqueSortedDataFlow<E, I, T> {
 		private final Comparator<? super T> theCompare;
+		private final UniqueSortedElementFinder<T> theElementFinder;
 
-		protected UniqueSortedMapOp(AbstractDataFlow<E, ?, I> parent, TypeToken<T> target, Function<? super I, ? extends T> map,
-			boolean mapNulls, Function<? super T, ? extends I> reverse, ElementSetter<? super I, ? super T> elementReverse,
-			boolean reverseNulls, boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean isCached, Comparator<? super T> compare) {
-			super(parent, target, map, mapNulls, reverse, elementReverse, reverseNulls, reEvalOnUpdate, fireIfUnchanged, isCached);
+		protected UniqueSortedMapOp(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent,
+			UniqueSortedElementFinder<I> elementFinder, TypeToken<T> target, Function<? super I, ? extends T> map, boolean mapNulls,
+			Function<? super T, ? extends I> reverse, ElementSetter<? super I, ? super T> elementReverse, boolean reverseNulls,
+			boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean isCached, Comparator<? super T> compare) {
+			super(source, parent, elementFinder, target, map, mapNulls, reverse, elementReverse, reverseNulls, reEvalOnUpdate,
+				fireIfUnchanged, isCached);
 			theCompare = compare;
+			theElementFinder = new MappedSortedElementFinder<>(elementFinder, map, mapNulls, reverse, reverseNulls, compare);
+		}
+
+		@Override
+		protected UniqueSortedElementFinder<T> getElementFinder() {
+			return theElementFinder;
 		}
 
 		@Override
@@ -486,7 +569,8 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> filter(Function<? super T, String> filter, boolean filterNulls) {
-			return new UniqueSortedDataFlowWrapper<>((AbstractDataFlow<E, ?, T>) super.filter(filter, filterNulls), comparator());
+			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, T>) super.filter(filter, filterNulls),
+				getElementFinder(), comparator());
 		}
 
 		@Override
@@ -496,33 +580,35 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> filterStatic(Function<? super T, String> filter, boolean filterNulls) {
-			return new UniqueSortedDataFlowWrapper<>((AbstractDataFlow<E, ?, T>) super.filterStatic(filter, filterNulls), comparator());
+			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, T>) super.filterStatic(filter, filterNulls),
+				getElementFinder(), comparator());
 		}
 
 		@Override
 		public <X> UniqueSortedMappedCollectionBuilder<E, T, X> mapEquivalent(TypeToken<X> target) {
-			return new UniqueSortedMappedCollectionBuilder<>(this, target);
+			return new UniqueSortedMappedCollectionBuilder<>(getSource(), this, getElementFinder(), target);
 		}
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueSortedDataFlowWrapper<>((AbstractDataFlow<E, ?, T>) super.refresh(refresh), comparator());
+			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, T>) super.refresh(refresh), getElementFinder(),
+				comparator());
 		}
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueSortedDataFlowWrapper<>((AbstractDataFlow<E, ?, T>) super.refreshEach(refresh), comparator());
+			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, T>) super.refreshEach(refresh),
+				getElementFinder(), comparator());
 		}
 
 		@Override
-		public AbstractCollectionManager<E, ?, T> manageCollection() {
-			// TODO Auto-generated method stub
-			return super.manageCollection();
+		public UniqueSortedModFilterBuilder<E, T> filterModification() {
+			return new UniqueSortedModFilterBuilder<>(getSource(), this, theElementFinder);
 		}
 
 		@Override
 		public ObservableSortedSet<T> collect(Observable<?> until) {
-			return new ObservableSortedSetImpl.DerivedSortedSet<>(getSource(), manageCollection(), until, comparator());
+			return new ObservableSortedSetImpl.DerivedSortedSet<>(getSource(), manageCollection(), getElementFinder(), comparator(), until);
 		}
 	}
 
@@ -540,10 +626,10 @@ public class ObservableCollectionDataFlowImpl {
 		private final Function<? super CombinedValues<? extends T>, ? extends I> theReverse;
 		private final boolean reverseNulls;
 
-		protected CombinedCollectionDef(AbstractDataFlow<E, ?, I> parent, TypeToken<T> target, Map<ObservableValue<?>, Boolean> args,
-			Function<? super CombinedValues<? extends I>, ? extends T> combination, boolean combineNulls,
-			Function<? super CombinedValues<? extends T>, ? extends I> reverse, boolean reverseNulls) {
-			super(parent, target);
+		protected CombinedCollectionDef(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent, TypeToken<T> target,
+			Map<ObservableValue<?>, Boolean> args, Function<? super CombinedValues<? extends I>, ? extends T> combination,
+			boolean combineNulls, Function<? super CombinedValues<? extends T>, ? extends I> reverse, boolean reverseNulls) {
+			super(source, parent, target);
 			theArgs = Collections.unmodifiableMap(args);
 			theCombination = combination;
 			this.combineNulls = combineNulls;
@@ -553,12 +639,13 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public AbstractCollectionManager<E, ?, T> manageCollection() {
-			return new CombinedCollectionManager<>(getParent().manageCollection(), getTargetType(), theArgs,
-				theCombination, combineNulls, theReverse, reverseNulls);
+			return new CombinedCollectionManager<>(getParent().manageCollection(), getTargetType(), theArgs, theCombination, combineNulls,
+				theReverse, reverseNulls);
 		}
 	}
 
 	public static abstract class AbstractCombinedCollectionBuilder<E, I, R> implements CombinedCollectionBuilder<E, I, R> {
+		private final ObservableCollection<E> theSource;
 		private final AbstractDataFlow<E, ?, I> theParent;
 		private final TypeToken<R> theTargetType;
 		private final LinkedHashMap<ObservableValue<?>, Ternian> theArgs;
@@ -566,10 +653,16 @@ public class ObservableCollectionDataFlowImpl {
 		private boolean defaultCombineNulls = false;
 		private boolean isReverseNulls = false;
 
-		protected AbstractCombinedCollectionBuilder(AbstractDataFlow<E, ?, I> parent, TypeToken<R> targetType) {
+		protected AbstractCombinedCollectionBuilder(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent,
+			TypeToken<R> targetType) {
+			theSource = source;
 			theParent = parent;
 			theTargetType = targetType;
 			theArgs = new LinkedHashMap<>();
+		}
+
+		protected ObservableCollection<E> getSource() {
+			return theSource;
 		}
 
 		protected void addArg(ObservableValue<?> arg, Ternian combineNulls) {
@@ -618,7 +711,7 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public CollectionDataFlow<E, I, R> build(Function<? super CombinedValues<? extends I>, ? extends R> combination,
 			boolean combineNulls) {
-			return new CombinedCollectionDef<>(theParent, theTargetType, getResultArgs(), combination, combineNulls, theReverse,
+			return new CombinedCollectionDef<>(theSource, theParent, theTargetType, getResultArgs(), combination, combineNulls, theReverse,
 				isReverseNulls);
 		}
 
@@ -633,8 +726,8 @@ public class ObservableCollectionDataFlowImpl {
 	public static class RefreshOp<E, T> extends AbstractDataFlow<E, T, T> {
 		private final Observable<?> theRefresh;
 
-		protected RefreshOp(AbstractDataFlow<E, ?, T> parent, Observable<?> refresh) {
-			super(parent, parent.getTargetType());
+		protected RefreshOp(ObservableCollection<E> source, AbstractDataFlow<E, ?, T> parent, Observable<?> refresh) {
+			super(source, parent, parent.getTargetType());
 			theRefresh = refresh;
 		}
 
@@ -647,8 +740,9 @@ public class ObservableCollectionDataFlowImpl {
 	public static class ElementRefreshOp<E, T> extends AbstractDataFlow<E, T, T> {
 		private final Function<? super T, ? extends Observable<?>> theElementRefresh;
 
-		protected ElementRefreshOp(AbstractDataFlow<E, ?, T> parent, Function<? super T, ? extends Observable<?>> elementRefresh) {
-			super(parent, parent.getTargetType());
+		protected ElementRefreshOp(ObservableCollection<E> source, AbstractDataFlow<E, ?, T> parent,
+			Function<? super T, ? extends Observable<?>> elementRefresh) {
+			super(source, parent, parent.getTargetType());
 			theElementRefresh = elementRefresh;
 		}
 
@@ -666,9 +760,9 @@ public class ObservableCollectionDataFlowImpl {
 		private final Function<? super T, String> theAddFilter;
 		private final Function<? super T, String> theRemoveFilter;
 
-		public ModFilteredOp(AbstractDataFlow<E, ?, T> parent, String immutableMsg, boolean allowUpdates, String addMsg, String removeMsg,
-			Function<? super T, String> addMsgFn, Function<? super T, String> removeMsgFn) {
-			super(parent, parent.getTargetType());
+		public ModFilteredOp(ObservableCollection<E> source, AbstractDataFlow<E, ?, T> parent, String immutableMsg, boolean allowUpdates,
+			String addMsg, String removeMsg, Function<? super T, String> addMsgFn, Function<? super T, String> removeMsgFn) {
+			super(source, parent, parent.getTargetType());
 			theImmutableMessage = immutableMsg;
 			areUpdatesAllowed = allowUpdates;
 			theAddMessage = addMsg;
@@ -678,16 +772,24 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public AbstractCollectionManager<E, ?, T> manageCollection() {
+		public CollectionManager<E, ?, T> manageCollection() {
 			return new ModFilteredCollectionManager<>(getParent().manageCollection(), theImmutableMessage, areUpdatesAllowed, theAddMessage,
 				theRemoveMessage, theAddFilter, theRemoveFilter);
 		}
 	}
 
 	public static class UniqueModFilteredOp<E, T> extends ModFilteredOp<E, T> implements UniqueDataFlow<E, T, T> {
-		public UniqueModFilteredOp(AbstractDataFlow<E, ?, T> parent, String immutableMsg, boolean allowUpdates, String addMsg,
-			String removeMsg, Function<? super T, String> addMsgFn, Function<? super T, String> removeMsgFn) {
-			super(parent, immutableMsg, allowUpdates, addMsg, removeMsg, addMsgFn, removeMsgFn);
+		private final UniqueElementFinder<T> theElementFinder;
+
+		public UniqueModFilteredOp(ObservableCollection<E> source, AbstractDataFlow<E, ?, T> parent, UniqueElementFinder<T> elementFinder,
+			String immutableMsg, boolean allowUpdates, String addMsg, String removeMsg, Function<? super T, String> addMsgFn,
+			Function<? super T, String> removeMsgFn) {
+			super(source, parent, immutableMsg, allowUpdates, addMsg, removeMsg, addMsgFn, removeMsgFn);
+			theElementFinder = elementFinder;
+		}
+
+		protected UniqueElementFinder<T> getElementFinder() {
+			return theElementFinder;
 		}
 
 		@Override
@@ -697,7 +799,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public UniqueDataFlow<E, T, T> filter(Function<? super T, String> filter, boolean filterNulls) {
-			return new UniqueDataFlowWrapper<>((AbstractDataFlow<E, ?, T>) super.filter(filter, filterNulls));
+			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter, filterNulls), theElementFinder);
 		}
 
 		@Override
@@ -707,34 +809,45 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public UniqueDataFlow<E, T, T> filterStatic(Function<? super T, String> filter, boolean filterNulls) {
-			return new UniqueDataFlowWrapper<>((AbstractDataFlow<E, ?, T>) super.filterStatic(filter, filterNulls));
+			return new UniqueDataFlowWrapper<>(getSource(), super.filterStatic(filter, filterNulls), theElementFinder);
 		}
 
 		@Override
 		public <X> UniqueMappedCollectionBuilder<E, T, X> mapEquivalent(TypeToken<X> target) {
-			return new UniqueMappedCollectionBuilder<>(this, target);
+			return new UniqueMappedCollectionBuilder<>(getSource(), this, theElementFinder, target);
 		}
 
 		@Override
 		public UniqueDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueDataFlowWrapper<>((AbstractDataFlow<E, ?, T>) super.refresh(refresh));
+			return new UniqueDataFlowWrapper<>(getSource(), super.refresh(refresh), theElementFinder);
 		}
 
 		@Override
 		public UniqueDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueDataFlowWrapper<>((AbstractDataFlow<E, ?, T>) super.refreshEach(refresh));
+			return new UniqueDataFlowWrapper<>(getSource(), super.refreshEach(refresh), theElementFinder);
+		}
+
+		@Override
+		public UniqueModFilterBuilder<E, T> filterModification() {
+			return new UniqueModFilterBuilder<>(getSource(), this, theElementFinder);
 		}
 
 		@Override
 		public ObservableSet<T> collect(Observable<?> until) {
-			return new ObservableSetImpl.DerivedSet<>(getSource(), manageCollection(), until);
+			return new ObservableSetImpl.DerivedSet<>(getSource(), manageCollection(), theElementFinder, until);
 		}
 	}
 
 	public static class UniqueSortedModFilteredOp<E, T> extends UniqueModFilteredOp<E, T> implements UniqueSortedDataFlow<E, T, T> {
-		public UniqueSortedModFilteredOp(AbstractDataFlow<E, ?, T> parent, String immutableMsg, boolean allowUpdates, String addMsg,
-			String removeMsg, Function<? super T, String> addMsgFn, Function<? super T, String> removeMsgFn) {
-			super(parent, immutableMsg, allowUpdates, addMsg, removeMsg, addMsgFn, removeMsgFn);
+		public UniqueSortedModFilteredOp(ObservableCollection<E> source, AbstractDataFlow<E, ?, T> parent,
+			UniqueSortedElementFinder<T> elementFinder, String immutableMsg, boolean allowUpdates, String addMsg, String removeMsg,
+			Function<? super T, String> addMsgFn, Function<? super T, String> removeMsgFn) {
+			super(source, parent, elementFinder, immutableMsg, allowUpdates, addMsg, removeMsg, addMsgFn, removeMsgFn);
+		}
+
+		@Override
+		protected UniqueSortedElementFinder<T> getElementFinder() {
+			return (UniqueSortedElementFinder<T>) super.getElementFinder();
 		}
 
 		@Override
@@ -749,7 +862,8 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> filter(Function<? super T, String> filter, boolean filterNulls) {
-			return new UniqueSortedDataFlowWrapper<>((AbstractDataFlow<E, ?, T>) getParent().filter(filter, filterNulls), comparator());
+			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, T>) getParent().filter(filter, filterNulls),
+				getElementFinder(), comparator());
 		}
 
 		@Override
@@ -759,34 +873,35 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> filterStatic(Function<? super T, String> filter, boolean filterNulls) {
-			return new UniqueSortedDataFlowWrapper<>((AbstractDataFlow<E, ?, T>) getParent().filterStatic(filter, filterNulls),
-				comparator());
+			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, T>) getParent().filterStatic(filter, filterNulls),
+				getElementFinder(), comparator());
 		}
 
 		@Override
 		public <X> UniqueSortedMappedCollectionBuilder<E, T, X> mapEquivalent(TypeToken<X> target) {
-			return new UniqueSortedMappedCollectionBuilder<>(this, target);
+			return new UniqueSortedMappedCollectionBuilder<>(getSource(), this, getElementFinder(), target);
 		}
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueSortedDataFlowWrapper<>((AbstractDataFlow<E, ?, T>) getParent().refresh(refresh), comparator());
+			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, T>) getParent().refresh(refresh),
+				getElementFinder(), comparator());
 		}
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueSortedDataFlowWrapper<>((AbstractDataFlow<E, ?, T>) getParent().refreshEach(refresh), comparator());
+			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, T>) getParent().refreshEach(refresh),
+				getElementFinder(), comparator());
 		}
 
 		@Override
-		public UniqueCollectionManagerWrapper<E, ?, T> manageCollection() {
-			return new MappedCollectionManagerWrapper<>(super.manageCollection(), getTargetType(), v -> v);
+		public UniqueSortedModFilterBuilder<E, T> filterModification() {
+			return new UniqueSortedModFilterBuilder<>(getSource(), this, getElementFinder());
 		}
 
 		@Override
 		public ObservableSortedSet<T> collect(Observable<?> until) {
-			return new ObservableSortedSetImpl.DerivedSortedSet<>(getSource(), manageCollection(),
-				comparator(), until);
+			return new ObservableSortedSetImpl.DerivedSortedSet<>(getSource(), manageCollection(), getElementFinder(), comparator(), until);
 		}
 	}
 
@@ -803,6 +918,20 @@ public class ObservableCollectionDataFlowImpl {
 
 		boolean isReversible();
 
+		FilterMapResult<E, T> map(FilterMapResult<E, T> source);
+
+		default FilterMapResult<E, T> map(E source) {
+			return map(new FilterMapResult<>(source));
+		}
+
+		FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest);
+
+		default FilterMapResult<T, E> reverse(T dest) {
+			return reverse(new FilterMapResult<>(dest));
+		}
+
+		FilterMapResult<T, E> canAdd(FilterMapResult<T, E> toAdd);
+
 		void begin(Consumer<CollectionUpdate> onUpdate, Observable<?> until);
 
 		CollectionElementManager<E, ?, T> createElement(ElementId id, E init, Object cause);
@@ -810,28 +939,35 @@ public class ObservableCollectionDataFlowImpl {
 		void postChange();
 	}
 
+	public static interface UniqueCollectionManager<E, I, T> extends CollectionManager<E, I, T> {
+		ElementId getId(T value);
+	}
+
+	public static interface UniqueSortedCollectionManager<E, I, T> extends UniqueCollectionManager<E, I, T> {
+		Comparator<? super T> comparator();
+
+		default ElementId relativeId(T value, boolean up, boolean includeValue) {
+			return relativeId(other -> comparator().compare(value, other), up, includeValue);
+		}
+
+		ElementId relativeId(Comparable<? super T> compare, boolean up, boolean includeValue);
+	}
+
 	public static abstract class AbstractCollectionManager<E, I, T> implements CollectionManager<E, I, T> {
-		private final AbstractCollectionManager<E, ?, I> theParent;
+		private final CollectionManager<E, ?, I> theParent;
 		private final TypeToken<T> theTargetType;
 		private ReentrantReadWriteLock theLock;
 		private Consumer<CollectionUpdate> theUpdateListener;
 		private final List<Runnable> thePostChanges;
 
-		protected AbstractCollectionManager(AbstractCollectionManager<E, ?, I> parent, TypeToken<T> targetType) {
+		protected AbstractCollectionManager(CollectionManager<E, ?, I> parent, TypeToken<T> targetType) {
 			theParent = parent;
 			theTargetType = targetType;
 			theLock = theParent != null ? null : new ReentrantReadWriteLock();
 			thePostChanges = new LinkedList<>();
 		}
 
-		private BaseCollectionManager<E> getBase() {
-			if (this instanceof BaseCollectionManager)
-				return (BaseCollectionManager<E>) this;
-			else
-				return theParent.getBase();
-		}
-
-		protected AbstractCollectionManager<E, ?, I> getParent() {
+		protected CollectionManager<E, ?, I> getParent() {
 			return theParent;
 		}
 
@@ -873,8 +1009,9 @@ public class ObservableCollectionDataFlowImpl {
 			return theParent == null ? true : theParent.isReversible();
 		}
 
-		public abstract FilterMapResult<I, T> mapTop(FilterMapResult<I, T> source);
+		protected abstract FilterMapResult<I, T> mapTop(FilterMapResult<I, T> source);
 
+		@Override
 		public FilterMapResult<E, T> map(FilterMapResult<E, T> source) {
 			FilterMapResult<I, T> intermediate = (FilterMapResult<I, T>) source;
 			if (getParent() != null) {
@@ -887,12 +1024,14 @@ public class ObservableCollectionDataFlowImpl {
 			return source;
 		}
 
+		@Override
 		public FilterMapResult<E, T> map(E source) {
 			return map(new FilterMapResult<>(source));
 		}
 
-		public abstract FilterMapResult<T, I> reverseTop(FilterMapResult<T, I> dest);
+		protected abstract FilterMapResult<T, I> reverseTop(FilterMapResult<T, I> dest);
 
+		@Override
 		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest) {
 			FilterMapResult<T, I> top = (FilterMapResult<T, I>) dest;
 			reverseTop(top);
@@ -904,8 +1043,25 @@ public class ObservableCollectionDataFlowImpl {
 			return dest;
 		}
 
+		@Override
 		public FilterMapResult<T, E> reverse(T dest) {
 			return reverse(new FilterMapResult<>(dest));
+		}
+
+		protected FilterMapResult<T, I> canAddTop(FilterMapResult<T, I> dest) {
+			return reverseTop(dest);
+		}
+
+		@Override
+		public FilterMapResult<T, E> canAdd(FilterMapResult<T, E> toAdd) {
+			FilterMapResult<T, I> top = (FilterMapResult<T, I>) toAdd;
+			canAddTop(top);
+			if (toAdd.error == null && getParent() != null) {
+				FilterMapResult<I, E> intermediate = (FilterMapResult<I, E>) toAdd;
+				intermediate.source = top.result;
+				getParent().canAdd(intermediate);
+			}
+			return toAdd;
 		}
 
 		@Override
@@ -1213,57 +1369,8 @@ public class ObservableCollectionDataFlowImpl {
 		DoesNotApply, FireUpdate, AppliedNoUpdate;
 	}
 
-	public static interface UniqueCollectionManager<E, I, T> extends CollectionManager<E, I, T> {
-		ElementId getId(T value);
-	}
-
-	public static class MappedUniqueCollectionManager<E, I, T> extends AbstractCollectionManager<E, I, T>
-	implements UniqueCollectionManager<E, I, T> {
-		private final Function<? super I, ? extends T> theMap;
-		private final Function<? super T, ? extends I> theReverse;
-		private final Equivalence<? super T> theEquivalence;
-
-		public MappedUniqueCollectionManager(UniqueCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
-			Function<? super I, ? extends T> map, Function<? super T, ? extends I> reverse) {
-			super((AbstractCollectionManager<E, ?, I>) parent, targetType);
-			theMap = map;
-			theReverse = reverse;
-			theEquivalence = getParent().equivalence().map((Class<T>) getTargetType().getRawType(), theMap, theReverse);
-		}
-
-		@Override
-		public ElementId getId(T value) {
-			return ((UniqueCollectionManager<E, ?, I>) getParent()).getId(theReverse.apply(value));
-		}
-
-		@Override
-		public Equivalence<? super T> equivalence() {
-			return theEquivalence;
-		}
-
-		@Override
-		public FilterMapResult<I, T> mapTop(FilterMapResult<I, T> source) {
-			return
-		}
-
-		@Override
-		public FilterMapResult<T, I> reverseTop(FilterMapResult<T, I> dest) {
-			dest.result = theReverse.apply(dest.source);
-			return dest;
-		}
-
-		@Override
-		protected void begin() {}
-
-		@Override
-		public CollectionElementManager<E, ?, T> createElement(ElementId id, E init, Object cause) {
-			class MappedUniqueElement<E, I, T> extends CollectionElementManager<E, I, T> {}
-			return new MappedUniqueElement();
-		}
-	}
-
 	public static abstract class NonMappingCollectionManager<E, T> extends AbstractCollectionManager<E, T, T> {
-		protected NonMappingCollectionManager(AbstractCollectionManager<E, ?, T> parent) {
+		protected NonMappingCollectionManager(CollectionManager<E, ?, T> parent) {
 			super(parent, parent.getTargetType());
 		}
 
@@ -1362,14 +1469,99 @@ public class ObservableCollectionDataFlowImpl {
 		public void begin() {}
 	}
 
+	public static class NonMappingUniqueCollectionManager<E, T> extends NonMappingCollectionManager<E, T>
+	implements UniqueCollectionManager<E, T, T> {
+		private final UniqueCollectionManager<E, ?, T> theUniqueManager;
+
+		protected NonMappingUniqueCollectionManager(CollectionManager<E, ?, T> parent, UniqueCollectionManager<E, ?, T> uniqueAncestor) {
+			super(parent);
+			theUniqueManager = uniqueAncestor;
+		}
+
+		protected UniqueCollectionManager<E, ?, T> getUniqueManager() {
+			return theUniqueManager;
+		}
+
+		@Override
+		public Equivalence<? super T> equivalence() {
+			return theUniqueManager.equivalence();
+		}
+
+		@Override
+		public ElementId getId(T value) {
+			return theUniqueManager.getId(value);
+		}
+
+		@Override
+		protected void begin() {}
+
+		@Override
+		public CollectionElementManager<E, ?, T> createElement(ElementId id, E init, Object cause) {
+			return getParent().createElement(id, init, cause);
+		}
+	}
+
+	public static class MappedUniqueCollectionManager<E, I, T> extends NonMappingCollectionManager<E, T>
+	implements UniqueCollectionManager<E, T, T> {
+		private final UniqueCollectionManager<E, ?, I> theUniqueManager;
+		private final Function<? super I, ? extends T> theMap;
+		private final Function<? super T, ? extends I> theReverse;
+		private final Equivalence<? super T> theEquivalence;
+
+		protected MappedUniqueCollectionManager(CollectionManager<E, ?, T> parent, UniqueCollectionManager<E, ?, I> uniqueAncestor,
+			Function<? super I, ? extends T> map, Function<? super T, ? extends I> reverse) {
+			super(parent);
+			theUniqueManager = uniqueAncestor;
+			theMap = map;
+			theReverse = reverse;
+			Function<Object, T> equivMap = o -> theMap.apply((I) o);
+			theEquivalence = theUniqueManager.equivalence().map((Class<T>) getTargetType().getRawType(),
+				o -> o == null || getTargetType().getRawType().isInstance(o), equivMap, theReverse);
+		}
+
+		protected UniqueCollectionManager<E, ?, I> getUniqueManager() {
+			return theUniqueManager;
+		}
+
+		protected Function<? super I, ? extends T> getMap() {
+			return theMap;
+		}
+
+		protected Function<? super T, ? extends I> getReverse() {
+			return theReverse;
+		}
+
+		@Override
+		public ElementId getId(T value) {
+			return ((UniqueCollectionManager<E, ?, I>) getParent()).getId(theReverse.apply(value));
+		}
+
+		@Override
+		public Equivalence<? super T> equivalence() {
+			return theEquivalence;
+		}
+
+		@Override
+		protected void begin() {}
+
+		@Override
+		public CollectionElementManager<E, ?, T> createElement(ElementId id, E init, Object cause) {
+			return getParent().createElement(id, init, cause);
+		}
+	}
+
 	public static class UniqueManager<E, T> extends AbstractCollectionManager<E, T, T> implements UniqueCollectionManager<E, T, T> {
 		private final UpdatableMap<T, DefaultTreeSet<UniqueElement>> theElementsByValue;
 		private final boolean isAlwaysUsingFirst;
 
-		protected UniqueManager(AbstractCollectionManager<E, ?, T> parent, boolean alwaysUseFirst) {
+		protected UniqueManager(CollectionManager<E, ?, T> parent, boolean alwaysUseFirst) {
 			super(parent, parent.getTargetType());
 			theElementsByValue = parent.equivalence().createMap();
 			isAlwaysUsingFirst = alwaysUseFirst;
+		}
+
+		protected Map<T, ? extends DefaultTreeSet<? extends CollectionElementManager<E, T, T>>> getElements() {
+			return theElementsByValue;
 		}
 
 		@Override
@@ -1404,11 +1596,17 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public FilterMapResult<T, T> reverseTop(FilterMapResult<T, T> dest) {
-			if (theElementsByValue.containsKey(dest.source))
-				dest.error = StdMsg.ELEMENT_EXISTS;
-			else
-				dest.result = dest.source;
+			dest.result = dest.source;
 			return dest;
+		}
+
+		@Override
+		public FilterMapResult<T, T> canAddTop(FilterMapResult<T, T> toAdd) {
+			if (theElementsByValue.containsKey(toAdd.source))
+				toAdd.error = StdMsg.ELEMENT_EXISTS;
+			else
+				toAdd.result = toAdd.source;
+			return toAdd;
 		}
 
 		@Override
@@ -1546,7 +1744,7 @@ public class ObservableCollectionDataFlowImpl {
 		private final Comparator<? super T> theCompare;
 		private final Equivalence<? super T> theEquivalence;
 
-		protected SortedManager(AbstractCollectionManager<E, ?, T> parent, Comparator<? super T> compare) {
+		protected SortedManager(CollectionManager<E, ?, T> parent, Comparator<? super T> compare) {
 			super(parent);
 			theCompare = compare;
 			theEquivalence = Equivalence.of((Class<T>) parent.getTargetType().getRawType(), theCompare, true);
@@ -1622,12 +1820,124 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
+	public static class NonMappingUniqueSortedCollectionManager<E, T> extends NonMappingUniqueCollectionManager<E, T>
+	implements UniqueSortedCollectionManager<E, T, T> {
+		protected NonMappingUniqueSortedCollectionManager(CollectionManager<E, ?, T> parent,
+			UniqueSortedCollectionManager<E, ?, T> uniqueAncestor) {
+			super(parent, uniqueAncestor);
+		}
+
+		@Override
+		protected UniqueSortedCollectionManager<E, ?, T> getUniqueManager() {
+			return (UniqueSortedCollectionManager<E, ?, T>) super.getUniqueManager();
+		}
+
+		@Override
+		public Comparator<? super T> comparator() {
+			return getUniqueManager().comparator();
+		}
+
+		@Override
+		public ElementId relativeId(Comparable<? super T> value, boolean up, boolean includeValue) {
+			return getUniqueManager().relativeId(value, up, includeValue);
+		}
+	}
+
+	public static class MappedUniqueSortedCollectionManager<E, I, T> extends MappedUniqueCollectionManager<E, I, T>
+	implements UniqueSortedCollectionManager<E, T, T> {
+		private final Comparator<? super T> theCompare;
+
+		protected MappedUniqueSortedCollectionManager(CollectionManager<E, ?, T> parent,
+			UniqueSortedCollectionManager<E, ?, I> uniqueAncestor, Function<? super I, ? extends T> map,
+			Function<? super T, ? extends I> reverse, Comparator<? super T> compare) {
+			super(parent, uniqueAncestor, map, reverse);
+			theCompare = compare;
+		}
+
+		@Override
+		public Comparator<? super T> comparator() {
+			return theCompare;
+		}
+
+		@Override
+		protected UniqueSortedCollectionManager<E, ?, I> getUniqueManager() {
+			return (UniqueSortedCollectionManager<E, ?, I>) super.getUniqueManager();
+		}
+
+		@Override
+		public ElementId relativeId(T value, boolean up, boolean includeValue) {
+			if (getReverse() != null)
+				return getUniqueManager().relativeId(getReverse().apply(value), up, includeValue);
+			else
+				return UniqueSortedCollectionManager.super.relativeId(value, up, includeValue);
+		}
+
+		@Override
+		public ElementId relativeId(Comparable<? super T> compare, boolean up, boolean includeValue) {
+			return getUniqueManager().relativeId(other -> compare.compareTo(getMap().apply(other)), up, includeValue);
+		}
+	}
+
+	public static class UniqueSortedManager<E, T> extends UniqueManager<E, T> implements UniqueSortedCollectionManager<E, T, T> {
+		private final Comparator<? super T> theCompare;
+
+		protected UniqueSortedManager(CollectionManager<E, ?, T> parent, boolean alwaysUseFirst, Comparator<? super T> compare) {
+			super(parent, alwaysUseFirst);
+			theCompare = compare;
+		}
+
+		@Override
+		protected DefaultTreeMap<T, ? extends DefaultTreeSet<? extends CollectionElementManager<E, T, T>>> getElements() {
+			// Relying on an implementation detail of Equivalence, i.e. that Equivalence.of(Comparator)'s createMap() function returns
+			// this type of map. Java's NavigableMap does not have the ability to navigate by comparable, as we require below
+			return (DefaultTreeMap<T, ? extends DefaultTreeSet<? extends CollectionElementManager<E, T, T>>>) super.getElements();
+		}
+
+		@Override
+		public Comparator<? super T> comparator() {
+			return theCompare;
+		}
+
+		@Override
+		public ElementId relativeId(T value, boolean up, boolean includeValue) {
+			Map.Entry<T, ? extends DefaultTreeSet<? extends CollectionElementManager<E, T, T>>> valueElements;
+			if (up) {
+				if (includeValue)
+					valueElements = getElements().ceilingEntry(value);
+				else
+					valueElements = getElements().higherEntry(value);
+			} else {
+				if (includeValue)
+					valueElements = getElements().floorEntry(value);
+				else
+					valueElements = getElements().lowerEntry(value);
+			}
+			if (valueElements == null)
+				return null;
+			for (CollectionElementManager<E, T, T> element : valueElements.getValue())
+				if (element.isPresent())
+					return element.getElementId();
+			return null;
+		}
+
+		@Override
+		public ElementId relativeId(Comparable<? super T> compare, boolean up, boolean includeValue) {
+			Map.Entry<T, ? extends DefaultTreeSet<? extends CollectionElementManager<E, T, T>>> valueElements;
+			valueElements = getElements().getClosestEntry(compare, !up, includeValue);
+			if (valueElements == null)
+				return null;
+			for (CollectionElementManager<E, T, T> element : valueElements.getValue())
+				if (element.isPresent())
+					return element.getElementId();
+			return null;
+		}
+	}
+
 	public static class FilteredCollectionManager<E, T> extends NonMappingCollectionManager<E, T> {
 		private final Function<? super T, String> theFilter;
 		private final boolean filterNulls;
 
-		protected FilteredCollectionManager(AbstractCollectionManager<E, ?, T> parent, Function<? super T, String> filter,
-			boolean filterNulls) {
+		protected FilteredCollectionManager(CollectionManager<E, ?, T> parent, Function<? super T, String> filter, boolean filterNulls) {
 			super(parent);
 			theFilter = filter;
 			this.filterNulls = filterNulls;
@@ -1711,7 +2021,7 @@ public class ObservableCollectionDataFlowImpl {
 		private final Function<? super T, String> theFilter;
 		private final boolean filterNulls;
 
-		protected StaticFilteredCollectionManager(AbstractCollectionManager<E, ?, T> parent, Function<? super T, String> filter,
+		protected StaticFilteredCollectionManager(CollectionManager<E, ?, T> parent, Function<? super T, String> filter,
 			boolean filterNulls) {
 			super(parent);
 			theFilter = filter;
@@ -1783,8 +2093,7 @@ public class ObservableCollectionDataFlowImpl {
 		private final boolean fireIfUnchanged;
 		private final boolean isCached;
 
-		protected MappedCollectionManager(AbstractCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
-			Function<? super I, ? extends T> map,
+		protected MappedCollectionManager(CollectionManager<E, ?, I> parent, TypeToken<T> targetType, Function<? super I, ? extends T> map,
 			boolean areNullsMapped, Function<? super T, ? extends I> reverse, ElementSetter<? super I, ? super T> elementReverse,
 			boolean areNullsReversed, boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean cached) {
 			super(parent, targetType);
@@ -1930,7 +2239,7 @@ public class ObservableCollectionDataFlowImpl {
 		/** The number of combined values which must be non-null to be passed to the combination function but are, in fact, null */
 		private int badCombineValues;
 
-		protected CombinedCollectionManager(AbstractCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
+		protected CombinedCollectionManager(CollectionManager<E, ?, I> parent, TypeToken<T> targetType,
 			Map<ObservableValue<?>, Boolean> args, Function<? super CombinedValues<? extends I>, ? extends T> combination,
 			boolean combineNulls, Function<? super CombinedValues<? extends T>, ? extends I> reverse, boolean reverseNulls) {
 			super(parent, targetType);
@@ -2083,7 +2392,7 @@ public class ObservableCollectionDataFlowImpl {
 		private final Observable<?> theRefresh;
 		private Consumer<Object> theAction;
 
-		protected RefreshingCollectionManager(AbstractCollectionManager<E, ?, T> parent, Observable<?> refresh) {
+		protected RefreshingCollectionManager(CollectionManager<E, ?, T> parent, Observable<?> refresh) {
 			super(parent);
 			theRefresh = refresh;
 		}
@@ -2139,7 +2448,7 @@ public class ObservableCollectionDataFlowImpl {
 		private final Function<? super T, ? extends Observable<?>> theRefresh;
 		private final Map<Observable<?>, RefreshHolder> theRefreshObservables;
 
-		protected ElementRefreshingCollectionManager(AbstractCollectionManager<E, ?, T> parent,
+		protected ElementRefreshingCollectionManager(CollectionManager<E, ?, T> parent,
 			Function<? super T, ? extends Observable<?>> refresh) {
 			super(parent);
 			theRefresh = refresh;
@@ -2266,7 +2575,7 @@ public class ObservableCollectionDataFlowImpl {
 		private final Function<? super T, String> theAddFilter;
 		private final Function<? super T, String> theRemoveFilter;
 
-		public ModFilteredCollectionManager(AbstractCollectionManager<E, ?, T> parent, String immutableMessage, boolean allowUpdates,
+		public ModFilteredCollectionManager(CollectionManager<E, ?, T> parent, String immutableMessage, boolean allowUpdates,
 			String addMessage, String removeMessage, Function<? super T, String> addFilter, Function<? super T, String> removeFilter) {
 			super(parent);
 

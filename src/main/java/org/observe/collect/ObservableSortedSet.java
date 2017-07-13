@@ -4,28 +4,26 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
-import java.util.List;
 import java.util.NavigableSet;
+import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
-import org.observe.util.ObservableUtils;
 import org.qommons.Equalizer;
 import org.qommons.Transaction;
 import org.qommons.collect.ImmutableIterator;
+import org.qommons.collect.SimpleCause;
 import org.qommons.collect.TransactableSortedSet;
+import org.qommons.value.Value;
 
 import com.google.common.reflect.TypeToken;
 
 /**
- * A sorted set whose content can be observed. This set is immutable in that none of its methods, including {@link java.util.Set} methods,
- * can modify its content (Set modification methods will throw {@link UnsupportedOperationException}). All {@link ObservableElement}s
- * returned by this observable will be instances of {@link ObservableOrderedElement}.
+ * A sorted set whose content can be observed
  *
  * @param <E> The type of element in the set
  */
@@ -48,24 +46,54 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 	 * @param withValue Whether to return the given value if it exists in the map
 	 * @return An observable value with the result of the operation
 	 */
-	default ObservableValue<E> relative(E value, boolean up, boolean withValue) {
-		if(up)
-			return tailSet(value, withValue).getFirst();
-		else
-			return headSet(value, withValue).getLast();
+	ObservableValue<E> relative(E value, boolean up, boolean withValue);
+
+	boolean forElement(E value, boolean up, boolean withValue, Consumer<? super ObservableCollectionElement<? extends E>> onElement);
+
+	boolean forMutableElement(E value, boolean up, boolean withValue, Consumer<? super MutableObservableElement<? extends E>> onElement);
+
+	@Override
+	default boolean forObservableElement(E value, Consumer<? super ObservableCollectionElement<? extends E>> onElement, boolean first) {
+		boolean[] found = new boolean[1];
+		forElement(value, first, true, el -> {
+			if (equivalence().elementEquals(el.get(), value)) {
+				found[0] = true;
+				onElement.accept(el);
+			}
+		});
+		return found[0];
+	}
+
+	@Override
+	default boolean forMutableElement(E value, Consumer<? super MutableObservableElement<? extends E>> onElement, boolean first) {
+		boolean[] found = new boolean[1];
+		forMutableElement(value, first, true, el -> {
+			if (equivalence().elementEquals(el.get(), value)) {
+				found[0] = true;
+				onElement.accept(el);
+			}
+		});
+		return found[0];
 	}
 
 	@Override
 	default E first() {
-		if(isEmpty())
-			throw new java.util.NoSuchElementException();
-		return getFirst().get();
+		return getFirst();
 	}
 
 	@Override
 	default E last() {
-		// Can't throw NoSuchElementException to comply with ObservableIndexedCollection.last()
-		return getLast().get();
+		return getLast();
+	}
+
+	@Override
+	default E pollLast() {
+		return ObservableSet.super.pollLast();
+	}
+
+	@Override
+	default E pollFirst() {
+		return ObservableSet.super.pollFirst();
 	}
 
 	@Override
@@ -95,7 +123,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 
 	@Override
 	default ObservableSortedSet<E> descendingSet() {
-		return subSet(null, true, null, true, true);
+		return reverse();
 	}
 
 	@Override
@@ -103,73 +131,11 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 		return reverse().iterator();
 	}
 
-	/**
-	 * <p>
-	 * Starts iteration in either direction from a starting point.
-	 * </p>
-	 *
-	 * <p>
-	 * This method is used by the default implementation of {@link #subSet(Object, boolean, Object, boolean, boolean)}, so implementations
-	 * and sub-interfaces should <b>NOT</b> call any of the sub-set methods from this method unless the subSet method itself is overridden.
-	 * </p>
-	 *
-	 * @param element The element to start iteration at
-	 * @param included Whether to include the given element in the iteration
-	 * @param reversed Whether to iterate backward or forward from the given element
-	 * @return An iterable that starts iteration from the given element
-	 */
-	Iterable<E> iterateFrom(E element, boolean included, boolean reversed);
-
-	/**
-	 * <p>
-	 * Starts iteration in either direction from a starting point.
-	 * </p>
-	 *
-	 * <p>
-	 * This default implementation of the {@link #iterateFrom(Object, boolean, boolean)} method just takes a default iterator and skips over
-	 * elements until the given starting point is passed. This method should be only be used when no other better performance is possible.
-	 * </p>
-	 *
-	 * @param set The set to iterate on
-	 * @param element The element to start iteration at
-	 * @param included Whether to include the given element in the iteration
-	 * @param reversed Whether to iterate backward or forward from the given element
-	 * @return An iterable that starts iteration from the given element
-	 */
-	public static <E> Iterable<E> defaultIterateFrom(ObservableSortedSet<E> set, E element, boolean included, boolean reversed) {
-		return () -> new Iterator<E>() {
-			private final Iterator<E> backing = reversed ? set.descendingIterator() : set.iterator();
-
-			private E theFirst;
-
-			{
-				if (element != null) {
-					Comparator<? super E> compare = set.comparator();
-					while (backing.hasNext()) {
-						theFirst = backing.next();
-						int comp = compare.compare(theFirst, element);
-						if (comp > 0 || (included && comp == 0))
-							break;
-					}
-				}
-			}
-
-			@Override
-			public boolean hasNext() {
-				return backing.hasNext();
-			}
-
-			@Override
-			public E next() {
-				return backing.next();
-			}
-
-			@Override
-			public void remove() {
-				backing.remove();
-			}
-		};
+	default ObservableElementSpliterator<E> spliterator(E value, boolean up, boolean withValue) {
+		return mutableSpliterator(value, up, withValue).immutable();
 	}
+
+	MutableObservableSpliterator<E> mutableSpliterator(E value, boolean up, boolean withValue);
 
 	/**
 	 * A sub-set of this set. Like {@link #subSet(Object, boolean, Object, boolean)}, but may be reversed.
@@ -178,16 +144,11 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 	 * @param fromInclusive Whether the minimum bound will be included in the sub set (if present in this set)
 	 * @param toElement The maximum bounding element for the sub set
 	 * @param toInclusive Whether the maximum bound will be included in the sub set (if present in this set)
-	 * @param reversed Whether the returned sub set will be in the opposite order as this set
 	 * @return The sub set
 	 */
-	default ObservableSortedSet<E> subSet(E fromElement, boolean fromInclusive, E toElement, boolean toInclusive, boolean reversed) {
-		return new ObservableSubSet<>(this, fromElement, fromInclusive, toElement, toInclusive, reversed);
-	}
-
 	@Override
 	default ObservableSortedSet<E> subSet(E fromElement, boolean fromInclusive, E toElement, boolean toInclusive) {
-		return subSet(fromElement, fromInclusive, toElement, toInclusive, false);
+		return new ObservableSubSet<>(this, fromElement, fromInclusive, toElement, toInclusive);
 	}
 
 	@Override
@@ -215,36 +176,9 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 		return tailSet(fromElement, true);
 	}
 
-	/**
-	 * @param o The value to get the index of
-	 * @return The index of the given value in this collection, or, if the given value is not present in this set, <code>-dest-1</code>,
-	 *         where <code>dest</code> is the index of the position where the given element would appear if it were added to this set.
-	 * @throws ClassCastException If the given value is not null or an instance of this set's type.
-	 * @see org.observe.collect.ObservableCollection#indexOf(java.lang.Object)
-	 */
-	@Override
-	int indexOf(Object o);
-
-	/**
-	 * Same as {@link #indexOf(Object)} for sorted sets
-	 *
-	 * @param o The value to get the index of
-	 * @return The index of the given value in this collection, or, if the given value is not present in this set, <code>-dest-1</code>,
-	 *         where <code>dest</code> is the index of the position where the given element would appear if it were added to this set.
-	 * @throws ClassCastException If the given value is not null or an instance of this set's type.
-	 * @see org.observe.collect.ObservableIndObservableCollectionexedCollection#indexOf(java.lang.Object)
-	 */
-	@Override
-	int lastIndexOf(Object o);
-
 	@Override
 	default <T> UniqueSortedDataFlow<E, E, E> flow() {
 		return new ObservableSortedSetImpl.UniqueSortedBaseFlow<>(this);
-	}
-
-	@Override
-	default SortedSetViewBuilder<E> view() {
-		return new SortedSetViewBuilder<>(this);
 	}
 
 	/**
@@ -364,7 +298,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 				return ObservableSet.toString(this);
 			}
 		}
-		ConstantObservableSet ret = d().debug(new ConstantObservableSet()).tag("constant", coll).tag("type", type).get();
+		ConstantObservableSet ret = new ConstantObservableSet();
 		int i = 0;
 		for (T value : constSet) {
 			int index = i;
@@ -406,28 +340,21 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 		return ret;
 	}
 
-	class SortedSetViewBuilder<E> extends SetViewBuilder<E> {
-		public SortedSetViewBuilder(ObservableSortedSet<E> collection) {
-			super(collection);
-		}
-
-		@Override
-		protected ObservableSortedSet<E> getSource() {
-			return (ObservableSortedSet<E>) super.getSource();
-		}
-
-		@Override
-		public ObservableSet<E> build() {
-			return new ObservableSortedSetImpl.SortedSetView<>(this);
-		}
-	}
-
 	/**
 	 * Implements {@link ObservableSortedSet#subSet(Object, boolean, Object, boolean, boolean)}
 	 *
 	 * @param <E> The type of elements in the set
 	 */
 	class ObservableSubSet<E> implements ObservableSortedSet<E> {
+		protected static class BoundedValue<E> {
+			final E value;
+			final boolean included;
+
+			BoundedValue(E value, boolean included) {
+				this.value = value;
+				this.included = included;
+			}
+		}
 		private final ObservableSortedSet<E> theWrapped;
 
 		private final E theMin;
@@ -435,16 +362,12 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 		private final E theMax;
 		private final boolean isMaxIncluded;
 
-		private final boolean isReversed;
-
-		public ObservableSubSet(ObservableSortedSet<E> set, E min, boolean includeMin, E max, boolean includeMax, boolean reversed) {
-			super();
+		public ObservableSubSet(ObservableSortedSet<E> set, E min, boolean includeMin, E max, boolean includeMax) {
 			theWrapped = set;
 			theMin = min;
 			isMinIncluded = includeMin;
 			theMax = max;
 			isMaxIncluded = includeMax;
-			isReversed = reversed;
 		}
 
 		public ObservableSortedSet<E> getWrapped() {
@@ -467,45 +390,58 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 			return isMaxIncluded;
 		}
 
-		public boolean isReversed() {
-			return isReversed;
-		}
-
-		public boolean isInRange(E value) {
+		public int isInRange(E value) {
 			Comparator<? super E> compare = theWrapped.comparator();
-			if(theMin != null) {
+			if (theMin != null) {
 				int comp = compare.compare(value, theMin);
-				if(comp < 0 || (!isMinIncluded && comp == 0))
-					return false;
+				if (comp < 0 || (!isMinIncluded && comp == 0))
+					return -1;
 			}
-			if(theMax != null) {
+			if (theMax != null) {
 				int comp = compare.compare(value, theMax);
-				if(comp > 0 || (!isMaxIncluded && comp == 0))
-					return false;
+				if (comp > 0 || (!isMaxIncluded && comp == 0))
+					return 1;
 			}
-			return true;
+			return 0;
 		}
 
-		@Override
-		public TypeToken<E> getType() {
-			return theWrapped.getType();
-		}
-
-		@Override
-		public ObservableValue<CollectionSession> getSession() {
-			return theWrapped.getSession();
+		protected BoundedValue<E> bound(E value, boolean up, boolean included) {
+			E internal;
+			boolean include;
+			int inRange = isInRange(value);
+			if (up) {
+				if (inRange < 0) {
+					internal = theMin;
+					include = isMinIncluded;
+				} else if (inRange == 0) {
+					internal = value;
+					include = included;
+				} else
+					return null;
+			} else {
+				if (inRange < 0)
+					return null;
+				else if (inRange == 0) {
+					internal = value;
+					include = included;
+				} else {
+					internal = theMax;
+					include = isMaxIncluded;
+				}
+			}
+			return new BoundedValue<>(internal, include);
 		}
 
 		/** @return The first index in the wrapped sorted set that is included in this set */
 		protected int getMinIndex() {
 			int minIndex;
-			if(theMin == null)
+			if (theMin == null)
 				minIndex = 0;
 			else {
 				minIndex = theWrapped.indexOf(theMin);
-				if(minIndex < 0)
+				if (minIndex < 0)
 					minIndex = -minIndex - 1; // Include the element at the insertion index
-				else if(!isMinIncluded)
+				else if (!isMinIncluded)
 					minIndex++;
 			}
 			return minIndex;
@@ -514,17 +450,42 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 		/** @return The last index in the wrapped */
 		protected int getMaxIndex() {
 			int maxIndex;
-			if(theMax == null)
+			if (theMax == null)
 				maxIndex = theWrapped.size() - 1;
 			else {
 				maxIndex = theWrapped.indexOf(theMax);
-				if(maxIndex < 0) {
+				if (maxIndex < 0) {
 					maxIndex = -maxIndex - 1;
 					maxIndex--; // Don't include the element at the insertion index
-				} else if(!isMaxIncluded)
+				} else if (!isMaxIncluded)
 					maxIndex--;
 			}
 			return maxIndex;
+		}
+
+		@Override
+		public TypeToken<E> getType() {
+			return theWrapped.getType();
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return theWrapped.isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theWrapped.lock(write, cause);
+		}
+
+		@Override
+		public Equivalence<? super E> equivalence() {
+			return theWrapped.equivalence();
+		}
+
+		@Override
+		public Comparator<? super E> comparator() {
+			return theWrapped.comparator();
 		}
 
 		@Override
@@ -535,309 +496,618 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 		}
 
 		@Override
-		public Iterator<E> iterator() {
-			return iterateFrom(null, true, false).iterator();
-		}
-
-		@Override
-		public Iterable<E> descending() {
-			return iterateFrom(null, true, true);
-		}
-
-		@Override
-		public boolean canRemove(Object value) {
-			if (value != null || !theWrapped.getType().getRawType().isInstance(value))
-				return false;
-			if (!isInRange((E) value))
-				return false;
-			return theWrapped.canRemove(value);
-		}
-
-		@Override
-		public boolean canAdd(E value) {
-			if (!isInRange(value))
-				return false;
-			return theWrapped.canAdd(value);
-		}
-
-		@Override
-		public Iterable<E> iterateFrom(E start, boolean included, boolean reversed) {
-			E stop;
-			boolean includeStop;
-			Comparator<? super E> compare = comparator();
-			if(isReversed)
-				reversed = !reversed;
-			if(reversed) {
-				if(start == null || (theMax != null && compare.compare(start, theMax) > 0)) {
-					start = theMax;
-					included &= isMaxIncluded;
-				}
-				stop = theMin;
-				includeStop = isMinIncluded;
-			} else {
-				if(start == null || (theMin != null && compare.compare(start, theMin) < 0)) {
-					start = theMin;
-					included &= isMinIncluded;
-				}
-				stop = theMax;
-				includeStop = isMaxIncluded;
-			}
-			Iterable<E> backingIterable = theWrapped.iterateFrom(start, !reversed, included);
-			return () -> new Iterator<E>() {
-				private final Iterator<E> backing = backingIterable.iterator();
-
-				private boolean calledHasNext;
-				private E theNext;
-
-				private boolean isEnded;
-
-				@Override
-				public boolean hasNext() {
-					if(calledHasNext)
-						return !isEnded;
-					calledHasNext = true;
-					if(!backing.hasNext()) {
-						isEnded = true;
-						return false;
-					}
-					theNext = backing.next();
-					if(stop != null) {
-						int comp = compare.compare(theNext, stop);
-						if(comp > 0 || (comp == 0 && !includeStop))
-							isEnded = true;
-					}
-					return !isEnded;
-				}
-
-				@Override
-				public E next() {
-					if(!hasNext())
-						throw new java.util.NoSuchElementException();
-					calledHasNext = false;
-					return theNext;
-				}
-
-				@Override
-				public void remove() {
-					if(calledHasNext)
-						throw new IllegalStateException("remove() must be called after next() and before hasNext()");
-					backing.remove();
-				}
-			};
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theWrapped.lock(write, cause);
-		}
-
-		@Override
-		public boolean isSafe() {
-			return theWrapped.isSafe();
-		}
-
-		@Override
-		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<E>> onElement) {
-			return theWrapped.onOrderedElement(element -> {
-				if(isInRange(element.get()))
-					onElement.accept(new ObservableOrderedElement<E>() {
-						@Override
-						public ObservableValue<E> persistent() {
-							return element.persistent();
-						}
-
-						@Override
-						public TypeToken<E> getType() {
-							return element.getType();
-						}
-
-						@Override
-						public E get() {
-							return element.get();
-						}
-
-						@Override
-						public int getIndex() {
-							int elIndex = element.getIndex();
-							int minIndex = getMinIndex();
-							return elIndex - minIndex;
-						}
-
-						@Override
-						public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
-							return ObservableUtils.wrap(element, this, observer);
-						}
-
-						@Override
-						public boolean isSafe() {
-							return element.isSafe();
-						}
-					});
-			});
-		}
-
-		@Override
-		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<E>> onElement) {
-			return theWrapped.onElementReverse(element -> {
-				if(isInRange(element.get()))
-					onElement.accept(element);
-			});
-		}
-
-		@Override
-		public Comparator<? super E> comparator() {
-			Comparator<? super E> compare = theWrapped.comparator();
-			if(isReversed)
-				compare = compare.reversed();
-			return compare;
-		}
-
-		@Override
-		public ObservableValue<E> relative(E value, boolean up, boolean withValue) {
-			if(isReversed)
-				up = !up;
-			Comparator<? super E> compare = theWrapped.comparator();
-			if(!up && theMin != null) {
-				int comp = compare.compare(value, theMin);
-				if(comp < 0 || (!withValue && comp == 0))
-					return ObservableValue.constant(getType(), null);
-			}
-			if(up && theMax != null) {
-				int comp = compare.compare(value, theMax);
-				if(comp > 0 || (!withValue && comp == 0))
-					return ObservableValue.constant(getType(), null);
-			}
-			return theWrapped.relative(value, up, withValue).mapV(v -> isInRange(v) ? v : null);
-		}
-
-		@Override
-		public ObservableSortedSet<E> subSet(E min, boolean includeMin, E max, boolean includeMax, boolean reverse) {
-			if(isReversed) {
-				E temp = min;
-				min = max;
-				max = temp;
-				boolean tempB = includeMin;
-				includeMin = includeMax;
-				includeMax = tempB;
-			}
-			if(min == null)
-				min = theMin;
-			else if(theMin != null && theWrapped.comparator().compare(min, theMin) <= 0) {
-				min = theMin;
-				includeMin = isMinIncluded;
-			}
-			if(max == null)
-				max = theMax;
-			else if(theMax != null && theWrapped.comparator().compare(max, theMax) >= 0) {
-				max = theMax;
-				includeMax = isMaxIncluded;
-			}
-			return new ObservableSubSet<>(theWrapped, min, includeMin, max, includeMax, reverse ^ isReversed);
-		}
-
-		@Override
-		public E get(int index) {
-			int minIndex;
-			if(theMin == null)
-				minIndex = 0;
-			else {
-				minIndex = theWrapped.indexOf(theMin);
-				if(minIndex < 0)
-					minIndex = -minIndex - 1;
-				else if(!isMinIncluded)
-					minIndex++;
-			}
-			int maxIndex;
-			if(theMax == null)
-				maxIndex = theWrapped.size();
-			else {
-				maxIndex = theWrapped.indexOf(theMax);
-				if(maxIndex < 0)
-					maxIndex = -maxIndex - 1;
-				else if(!isMaxIncluded)
-					maxIndex--;
-			}
-			int size = maxIndex - minIndex;
-			if(size < 0)
-				size = 0;
-			if(index < 0 || index >= size)
-				throw new IndexOutOfBoundsException(index + " of " + size);
-			return theWrapped.get(index + minIndex);
-		}
-
-		@Override
-		public int indexOf(Object value) {
-			Comparator<? super E> compare = theWrapped.comparator();
-			// If it's not in range, we'll return the bound index, even though actually adding it would generate an error
-			if(theMin != null) {
-				int comp = compare.compare((E) value, theMin);
-				if(comp < 0 || (!isMinIncluded && comp == 0))
-					return isReversed ? -size() - 1 : -1;
-			}
-			if(theMax != null) {
-				int comp = compare.compare((E) value, theMax);
-				if(comp < 0 || (!isMaxIncluded && comp == 0))
-					return isReversed ? -1 : -size() - 1;
-			}
-			return PartialSortedSetImpl.super.indexOf(value);
+		public boolean isEmpty() {
+			return getMinIndex() > getMaxIndex(); // Both minIndex and maxIndex are included here
 		}
 
 		@Override
 		public boolean contains(Object o) {
-			if(!isInRange((E) o))
+			if (!equivalence().isElement(o) || isInRange((E) o) != 0)
 				return false;
 			return theWrapped.contains(o);
 		}
 
 		@Override
+		public boolean containsAny(Collection<?> c) {
+			Set<Object> unique = (Set<Object>) equivalence().createSet();
+			for (Object o : c)
+				if (equivalence().isElement(o) && isInRange((E) o) == 0)
+					unique.add(o);
+			return theWrapped.containsAny(unique);
+		}
+
+		@Override
 		public boolean containsAll(Collection<?> values) {
-			for(Object o : values)
-				if(!isInRange((E) o))
+			for (Object o : values)
+				if (!equivalence().isElement(o) || isInRange((E) o) != 0)
 					return false;
 			return theWrapped.containsAll(values);
 		}
 
 		@Override
+		public E get(int index) {
+			int minIndex;
+			if (theMin == null)
+				minIndex = 0;
+			else {
+				minIndex = theWrapped.indexOf(theMin);
+				if (minIndex < 0)
+					minIndex = -minIndex - 1;
+				else if (!isMinIncluded)
+					minIndex++;
+			}
+			int maxIndex;
+			if (theMax == null)
+				maxIndex = theWrapped.size();
+			else {
+				maxIndex = theWrapped.indexOf(theMax);
+				if (maxIndex < 0)
+					maxIndex = -maxIndex - 1;
+				else if (!isMaxIncluded)
+					maxIndex--;
+			}
+			int size = maxIndex - minIndex;
+			if (size < 0)
+				size = 0;
+			if (index < 0 || index >= size)
+				throw new IndexOutOfBoundsException(index + " of " + size);
+			return theWrapped.get(index + minIndex);
+		}
+
+		@Override
+		public ObservableValue<E> relative(E value, boolean up, boolean withValue) {
+			BoundedValue<E> bounded = bound(value, up, withValue);
+			if (bounded == null)
+				return ObservableValue.constant(getType(), null);
+			return theWrapped.relative(bounded.value, up, bounded.included).mapV(v -> isInRange(v) == 0 ? v : null, true);
+		}
+
+		@Override
+		public ObservableSortedSet<E> subSet(E min, boolean includeMin, E max, boolean includeMax) {
+			BoundedValue<E> lowerBound = bound(min, true, includeMin);
+			if (lowerBound == null)
+				return ObservableSortedSet.constant(getType(), Collections.emptyList(), comparator());
+			BoundedValue<E> upperBound = bound(max, false, includeMax);
+			if (upperBound == null)
+				return ObservableSortedSet.constant(getType(), Collections.emptyList(), comparator());
+			return new ObservableSubSet<>(theWrapped, lowerBound.value, lowerBound.included, upperBound.value, upperBound.included);
+		}
+
+		@Override
+		public boolean forElement(E value, boolean up, boolean withValue,
+			Consumer<? super ObservableCollectionElement<? extends E>> onElement) {
+			BoundedValue<E> bounded = bound(value, up, withValue);
+			if (bounded == null)
+				return false;
+			boolean[] success = new boolean[1];
+			theWrapped.forElement(bounded.value, up, bounded.included, el -> {
+				if (isInRange(el.get()) == 0) {
+					success[0] = true;
+					onElement.accept(el);
+				}
+			});
+			return success[0];
+		}
+
+		@Override
+		public boolean forMutableElement(E value, boolean up, boolean withValue,
+			Consumer<? super MutableObservableElement<? extends E>> onElement) {
+			BoundedValue<E> bounded = bound(value, up, withValue);
+			if (bounded == null)
+				return false;
+			boolean[] success = new boolean[1];
+			theWrapped.forMutableElement(bounded.value, up, bounded.included, el -> {
+				if (isInRange(el.get()) == 0) {
+					success[0] = true;
+					onElement.accept(el);
+				}
+			});
+			return success[0];
+		}
+
+		@Override
+		public void forElementAt(ElementId elementId, Consumer<? super ObservableCollectionElement<? extends E>> onElement) {
+			theWrapped.forElementAt(elementId, el -> {
+				if (isInRange(el.get()) == 0)
+					onElement.accept(el);
+				else
+					throw new IllegalArgumentException(StdMsg.NOT_FOUND);
+			});
+		}
+
+		@Override
+		public void forMutableElementAt(ElementId elementId, Consumer<? super MutableObservableElement<? extends E>> onElement) {
+			theWrapped.forMutableElementAt(elementId, el -> {
+				if (isInRange(el.get()) == 0)
+					onElement.accept(new BoundedMutableElement<>(el));
+				else
+					throw new IllegalArgumentException(StdMsg.NOT_FOUND);
+			});
+		}
+
+		@Override
+		public ObservableElementSpliterator<E> spliterator(boolean fromStart) {
+			E start = fromStart ? theMin : theMax;
+			boolean startIncluded = fromStart ? isMinIncluded : isMaxIncluded;
+			return new BoundedSpliterator(theWrapped.spliterator(start, fromStart, startIncluded));
+		}
+
+		@Override
+		public MutableObservableSpliterator<E> mutableSpliterator(boolean fromStart) {
+			E start = fromStart ? theMin : theMax;
+			boolean startIncluded = fromStart ? isMinIncluded : isMaxIncluded;
+			return new BoundedMutableSpliterator(theWrapped.mutableSpliterator(start, fromStart, startIncluded));
+		}
+
+		@Override
+		public ObservableElementSpliterator<E> spliterator(E value, boolean up, boolean withValue) {
+			BoundedValue<E> bounded = bound(value, up, withValue);
+			if (bounded == null)
+				return ObservableElementSpliterator.empty(getType());
+			return new BoundedSpliterator(theWrapped.spliterator(bounded.value, up, bounded.included));
+		}
+
+		@Override
+		public MutableObservableSpliterator<E> mutableSpliterator(E value, boolean up, boolean withValue) {
+			BoundedValue<E> bounded = bound(value, up, withValue);
+			if (bounded == null)
+				return MutableObservableSpliterator.empty(getType());
+			return new BoundedMutableSpliterator(theWrapped.mutableSpliterator(bounded.value, up, bounded.included));
+		}
+
+		@Override
+		public String canAdd(E value) {
+			if (isInRange(value) != 0)
+				return StdMsg.ILLEGAL_ELEMENT;
+			return theWrapped.canAdd(value);
+		}
+
+		@Override
 		public boolean add(E value) {
-			if(!isInRange(value))
-				throw new IllegalArgumentException(value + " is not in the range of this sub-set");
+			if (isInRange(value) != 0)
+				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 			return theWrapped.add(value);
 		}
 
 		@Override
 		public boolean addAll(Collection<? extends E> values) {
-			for(E value : values)
-				if(!isInRange(value))
-					throw new IllegalArgumentException(value + " is not in the range of this sub-set");
+			for (E value : values)
+				if (isInRange(value) != 0)
+					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 			return theWrapped.addAll(values);
 		}
 
 		@Override
+		public String canRemove(Object value) {
+			if (value != null || !theWrapped.getType().getRawType().isInstance(value))
+				return StdMsg.BAD_TYPE;
+			if (isInRange((E) value) != 0)
+				return StdMsg.ILLEGAL_ELEMENT;
+			return theWrapped.canRemove(value);
+		}
+
+		@Override
 		public boolean remove(Object value) {
-			if(!isInRange((E) value))
+			if (isInRange((E) value) != 0)
 				return false;
 			return theWrapped.remove(value);
 		}
 
 		@Override
+		public boolean removeLast(Object o) {
+			if (!theWrapped.equivalence().isElement(o) || isInRange((E) o) != 0)
+				return false;
+			return theWrapped.removeLast(o);
+		}
+
+		@Override
 		public boolean removeAll(Collection<?> values) {
-			List<?> toRemove = values.stream().filter(v -> isInRange((E) v)).collect(Collectors.toList());
-			return theWrapped.removeAll(toRemove);
+			return ObservableCollectionImpl.removeAll(this, values);
 		}
 
 		@Override
 		public boolean retainAll(Collection<?> values) {
-			return PartialSortedSetImpl.super.retainAll(values);
+			return ObservableCollectionImpl.retainAll(this, values);
 		}
 
 		@Override
 		public void clear() {
-			PartialSortedSetImpl.super.clear();
+			try (Transaction t = lock(true, null)) {
+				SimpleCause.doWith(new SimpleCause(), c -> mutableSpliterator().forEachMutableElement(el -> el.remove(c)));
+			}
+		}
+
+		@Override
+		public boolean isEventIndexed() {
+			return theWrapped.isEventIndexed();
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
+			return theWrapped.onChange(new Consumer<ObservableCollectionEvent<? extends E>>() {
+				private int startIndex;
+
+				@Override
+				public void accept(ObservableCollectionEvent<? extends E> evt) {
+					int inRange = isInRange(evt.getNewValue());
+					int oldInRange = evt.getType() == CollectionChangeType.set ? isInRange(evt.getOldValue()) : 0;
+					if (inRange < 0) {
+						switch (evt.getType()) {
+						case add:
+							startIndex++;
+							break;
+						case remove:
+							startIndex--;
+							break;
+						case set:
+							if (oldInRange > 0)
+								startIndex++;
+							else if (oldInRange == 0)
+								fire(evt, CollectionChangeType.remove, evt.getOldValue(), evt.getOldValue());
+						}
+					} else if (inRange > 0) {
+						switch (evt.getType()) {
+						case set:
+							if (oldInRange < 0)
+								startIndex--;
+							else if (oldInRange == 0)
+								fire(evt, CollectionChangeType.remove, evt.getOldValue(), evt.getOldValue());
+							break;
+						default:
+						}
+					} else {
+						switch (evt.getType()) {
+						case add:
+							fire(evt, evt.getType(), null, evt.getNewValue());
+							break;
+						case remove:
+							fire(evt, evt.getType(), evt.getOldValue(), evt.getNewValue());
+							break;
+						case set:
+							if (oldInRange < 0) {
+								startIndex--;
+								fire(evt, CollectionChangeType.add, null, evt.getNewValue());
+							} else if (oldInRange == 0)
+								fire(evt, CollectionChangeType.set, evt.getOldValue(), evt.getNewValue());
+							else
+								fire(evt, CollectionChangeType.add, null, evt.getNewValue());
+						}
+					}
+				}
+
+				void fire(ObservableCollectionEvent<? extends E> evt, CollectionChangeType type, E oldValue, E newValue) {
+					if (evt instanceof IndexedCollectionEvent)
+						observer.accept(
+							new IndexedCollectionEvent<>(evt.getElementId(), ((IndexedCollectionEvent<E>) evt).getIndex() - startIndex,
+								evt.getType(), evt.getOldValue(), evt.getNewValue(), evt));
+					else
+						observer.accept(
+							new ObservableCollectionEvent<>(evt.getElementId(), evt.getType(), evt.getOldValue(), evt.getNewValue(), evt));
+				}
+			});
 		}
 
 		@Override
 		public String toString() {
 			return ObservableSet.toString(this);
+		}
+
+		private class BoundedSpliterator implements ObservableElementSpliterator<E> {
+			private final ObservableElementSpliterator<E> theWrappedSpliter;
+
+			BoundedSpliterator(ObservableElementSpliterator<E> wrappedSpliter) {
+				theWrappedSpliter = wrappedSpliter;
+			}
+
+			protected ObservableElementSpliterator<E> getWrappedSpliter() {
+				return theWrappedSpliter;
+			}
+
+			@Override
+			public long estimateSize() {
+				return theWrappedSpliter.estimateSize();
+			}
+
+			@Override
+			public int characteristics() {
+				return DISTINCT | ORDERED | SORTED;
+			}
+
+			@Override
+			public Comparator<? super E> getComparator() {
+				return theWrappedSpliter.getComparator();
+			}
+
+			@Override
+			public TypeToken<E> getType() {
+				return ObservableSubSet.this.getType();
+			}
+
+			@Override
+			public boolean tryAdvanceObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
+				boolean[] success = new boolean[1];
+				if (theWrappedSpliter.tryAdvanceObservableElement(el -> {
+					if (isInRange(el.get()) == 0) {
+						success[0] = true;
+						action.accept(el);
+					}
+				}) && !success[0]) {
+					// If there was a super-set element that was not in range, need to back up back to the last in-range element
+					theWrappedSpliter.tryReverse(v -> {
+					});
+				}
+				return success[0];
+			}
+
+			@Override
+			public boolean tryReverseObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
+				boolean[] success = new boolean[1];
+				if (theWrappedSpliter.tryReverseObservableElement(el -> {
+					if (isInRange(el.get()) == 0) {
+						success[0] = true;
+						action.accept(el);
+					}
+				}) && !success[0]) {
+					// If there was a super-set element that was not in range, need to back up back to the last in-range element
+					theWrappedSpliter.tryAdvance(v -> {
+					});
+				}
+				return success[0];
+			}
+
+			@Override
+			public void forEachObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
+				boolean[] lastOutOfRange = new boolean[1];
+				theWrappedSpliter.forEachObservableElement(el -> {
+					if (isInRange(el.get()) == 0)
+						action.accept(el);
+					else
+						lastOutOfRange[0] = true;
+				});
+				if (lastOutOfRange[0]) {
+					// Need to back up back to the last in-range element
+					theWrappedSpliter.tryReverse(v -> {
+					});
+				}
+			}
+
+			@Override
+			public void forEachReverseObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
+				boolean[] lastOutOfRange = new boolean[1];
+				theWrappedSpliter.forEachReverseObservableElement(el -> {
+					if (isInRange(el.get()) == 0)
+						action.accept(el);
+					else
+						lastOutOfRange[0] = true;
+				});
+				if (lastOutOfRange[0]) {
+					// Need to back up back to the last in-range element
+					theWrappedSpliter.tryAdvance(v -> {
+					});
+				}
+			}
+
+			@Override
+			public boolean tryAdvance(Consumer<? super E> action) {
+				boolean[] success = new boolean[1];
+				if (theWrappedSpliter.tryAdvance(v -> {
+					if (isInRange(v) == 0) {
+						success[0] = true;
+						action.accept(v);
+					}
+				}) && !success[0]) {
+					// If there was a super-set element that was not in range, need to back up back to the last in-range element
+					theWrappedSpliter.tryReverse(v -> {
+					});
+				}
+				return success[0];
+			}
+
+			@Override
+			public boolean tryReverse(Consumer<? super E> action) {
+				boolean[] success = new boolean[1];
+				if (theWrappedSpliter.tryReverse(v -> {
+					if (isInRange(v) == 0) {
+						success[0] = true;
+						action.accept(v);
+					}
+				}) && !success[0]) {
+					// If there was a super-set element that was not in range, need to back up back to the last in-range element
+					theWrappedSpliter.tryAdvance(v -> {
+					});
+				}
+				return success[0];
+			}
+
+			@Override
+			public void forEachRemaining(Consumer<? super E> action) {
+				boolean[] lastOutOfRange = new boolean[1];
+				theWrappedSpliter.forEachRemaining(v -> {
+					if (isInRange(v) == 0)
+						action.accept(v);
+					else
+						lastOutOfRange[0] = true;
+				});
+				if (lastOutOfRange[0]) {
+					// Need to back up back to the last in-range element
+					theWrappedSpliter.tryReverse(v -> {
+					});
+				}
+			}
+
+			@Override
+			public void forEachReverse(Consumer<? super E> action) {
+				boolean[] lastOutOfRange = new boolean[1];
+				theWrappedSpliter.forEachReverse(v -> {
+					if (isInRange(v) == 0)
+						action.accept(v);
+					else
+						lastOutOfRange[0] = true;
+				});
+				if (lastOutOfRange[0]) {
+					// Need to back up back to the last in-range element
+					theWrappedSpliter.tryAdvance(v -> {
+					});
+				}
+			}
+
+			@Override
+			public ObservableElementSpliterator<E> trySplit() {
+				ObservableElementSpliterator<E> wrapSplit = theWrappedSpliter.trySplit();
+				return wrapSplit == null ? null : new BoundedSpliterator(wrapSplit);
+			}
+		}
+
+		private class BoundedMutableSpliterator extends BoundedSpliterator implements MutableObservableSpliterator<E> {
+			BoundedMutableSpliterator(MutableObservableSpliterator<E> wrappedSpliter) {
+				super(wrappedSpliter);
+			}
+
+			@Override
+			protected MutableObservableSpliterator<E> getWrappedSpliter() {
+				return (MutableObservableSpliterator<E>) super.getWrappedSpliter();
+			}
+
+			@Override
+			public boolean tryAdvanceMutableElement(Consumer<? super MutableObservableElement<E>> action) {
+				boolean[] success = new boolean[1];
+				if (getWrappedSpliter().tryAdvanceMutableElement(el -> {
+					if (isInRange(el.get()) == 0) {
+						success[0] = true;
+						action.accept(new BoundedMutableElement<>(el));
+					}
+				}) && !success[0]) {
+					// If there was a super-set element that was not in range, need to back up back to the last in-range element
+					getWrappedSpliter().tryReverse(v -> {
+					});
+				}
+				return success[0];
+			}
+
+			@Override
+			public boolean tryReverseMutableElement(Consumer<? super MutableObservableElement<E>> action) {
+				boolean[] success = new boolean[1];
+				if (getWrappedSpliter().tryReverseMutableElement(el -> {
+					if (isInRange(el.get()) == 0) {
+						success[0] = true;
+						action.accept(new BoundedMutableElement<>(el));
+					}
+				}) && !success[0]) {
+					// If there was a super-set element that was not in range, need to back up back to the last in-range element
+					getWrappedSpliter().tryAdvance(v -> {
+					});
+				}
+				return success[0];
+			}
+
+			@Override
+			public void forEachMutableElement(Consumer<? super MutableObservableElement<E>> action) {
+				boolean[] lastOutOfRange = new boolean[1];
+				getWrappedSpliter().forEachMutableElement(el -> {
+					if (isInRange(el.get()) == 0)
+						action.accept(new BoundedMutableElement<>(el));
+					else
+						lastOutOfRange[0] = true;
+				});
+				if (lastOutOfRange[0]) {
+					// Need to back up back to the last in-range element
+					getWrappedSpliter().tryReverse(v -> {
+					});
+				}
+			}
+
+			@Override
+			public void forEachReverseMutableElement(Consumer<? super MutableObservableElement<E>> action) {
+				boolean[] lastOutOfRange = new boolean[1];
+				getWrappedSpliter().forEachReverseMutableElement(el -> {
+					if (isInRange(el.get()) == 0)
+						action.accept(new BoundedMutableElement<>(el));
+					else
+						lastOutOfRange[0] = true;
+				});
+				if (lastOutOfRange[0]) {
+					// Need to back up back to the last in-range element
+					getWrappedSpliter().tryAdvance(v -> {
+					});
+				}
+			}
+
+			@Override
+			public MutableObservableSpliterator<E> trySplit() {
+				MutableObservableSpliterator<E> wrapSplit = getWrappedSpliter().trySplit();
+				return wrapSplit == null ? null : new BoundedMutableSpliterator(wrapSplit);
+			}
+		}
+
+		class BoundedMutableElement<T extends E> implements MutableObservableElement<T> {
+			private final MutableObservableElement<T> theWrappedEl;
+
+			BoundedMutableElement(MutableObservableElement<T> wrappedEl) {
+				theWrappedEl = wrappedEl;
+			}
+
+			@Override
+			public ElementId getElementId() {
+				return theWrappedEl.getElementId();
+			}
+
+			@Override
+			public TypeToken<T> getType() {
+				return theWrappedEl.getType();
+			}
+
+			@Override
+			public T get() {
+				return theWrappedEl.get();
+			}
+
+			@Override
+			public Value<String> isEnabled() {
+				return theWrappedEl.isEnabled();
+			}
+
+			@Override
+			public <V extends T> String isAcceptable(V value) {
+				if (isInRange(value) != 0)
+					return StdMsg.ILLEGAL_ELEMENT;
+				return theWrappedEl.isAcceptable(value);
+			}
+
+			@Override
+			public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+				if (isInRange(value) != 0)
+					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+				return theWrappedEl.set(value, cause);
+			}
+
+			@Override
+			public String canRemove() {
+				return theWrappedEl.canRemove();
+			}
+
+			@Override
+			public void remove(Object cause) throws UnsupportedOperationException {
+				theWrappedEl.remove(cause);
+			}
+
+			@Override
+			public String canAdd(T value, boolean before) {
+				if (isInRange(value) != 0)
+					return StdMsg.ILLEGAL_ELEMENT;
+				return theWrappedEl.canAdd(value, before);
+			}
+
+			@Override
+			public void add(T value, boolean before, Object cause) throws UnsupportedOperationException, IllegalArgumentException {
+				if (isInRange(value) != 0)
+					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+				theWrappedEl.add(value, before, cause);
+			}
+
+			@Override
+			public String toString() {
+				return theWrappedEl.toString();
+			}
 		}
 	}
 }

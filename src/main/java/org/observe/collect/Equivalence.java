@@ -155,8 +155,9 @@ public interface Equivalence<E> {
 		}
 	}
 
-	default <T> Equivalence<T> map(Class<T> type, Function<? super E, ? extends T> map, Function<? super T, ? extends E> reverse) {
-		return new MappedEquivalence<>(this, type, null, map, reverse);
+	default <T> Equivalence<T> map(Class<T> type, Predicate<? super T> filter, Function<? super E, ? extends T> map,
+		Function<? super T, ? extends E> reverse) {
+		return new MappedEquivalence<>(this, type, filter, map, reverse);
 	}
 
 	class MappedEquivalence<E, T> implements Equivalence<T> {

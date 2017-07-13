@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
@@ -18,7 +19,6 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -47,7 +47,6 @@ import org.qommons.collect.CircularArrayList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.ReversibleCollection;
-import org.qommons.collect.ReversibleElementSpliterator;
 import org.qommons.collect.ReversibleList;
 import org.qommons.collect.ReversibleSpliterator;
 import org.qommons.collect.SimpleCause;
@@ -73,146 +72,6 @@ public final class ObservableCollectionImpl {
 		try (Transaction t = Transactable.lock(c, false, null)) {
 			return c.stream().filter(equiv::isElement).map(e -> (E) e).collect(Collectors.toCollection(equiv::createSet));
 		}
-	}
-
-	/**
-	 * A default implementation for {@link ObservableCollection#contains(Object)}
-	 *
-	 * @param <E> The type of the collection
-	 * @param coll The collection to test
-	 * @param value The object to find
-	 * @return Whether the given collection contains the given object
-	 */
-	public static <E> boolean contains(ObservableCollection<E> coll, Object value) {
-		try (Transaction t = coll.lock(false, null)) {
-			Spliterator<E> iter = coll.spliterator();
-			boolean[] found = new boolean[1];
-			while (!found[0] && iter.tryAdvance(v -> {
-				if (coll.equivalence().elementEquals(v, value))
-					found[0] = true;
-			})) {
-			}
-			return found[0];
-		}
-	}
-
-	/**
-	 * A default implementation for {@link ObservableCollection#containsAny(Collection)}
-	 *
-	 * @param <E> The type of the collection
-	 * @param coll The collection to test
-	 * @param c The collection to test for containment
-	 * @return Whether the first collection contains any elements in the second collection
-	 */
-	public static <E> boolean containsAny(ObservableCollection<E> coll, Collection<?> c) {
-		if (c.isEmpty())
-			return false;
-		Set<E> cSet = toSet(coll.equivalence(), c);
-		if (cSet.isEmpty())
-			return false;
-		try (Transaction t = coll.lock(false, null)) {
-			Spliterator<E> iter = coll.spliterator();
-			boolean[] found = new boolean[1];
-			while (iter.tryAdvance(next -> {
-				found[0] = cSet.contains(next);
-			}) && !found[0]) {
-			}
-			return found[0];
-		}
-	}
-
-	/**
-	 * A default implementation for {@link ObservableCollection#containsAll(Collection)}
-	 *
-	 * @param <E> The type of the collection
-	 * @param coll The collection to test
-	 * @param c The collection to test for containment
-	 * @return Whether the first collection contains all elements in the second collection
-	 */
-	public static <E> boolean containsAll(ObservableCollection<E> coll, Collection<?> c) {
-		if (c.isEmpty())
-			return true;
-		Set<E> cSet = toSet(coll.equivalence(), c);
-		if (cSet.isEmpty())
-			return false;
-		try (Transaction t = coll.lock(false, null)) {
-			Spliterator<E> iter = coll.spliterator();
-			while (iter.tryAdvance(next -> {
-				cSet.remove(next);
-			}) && !cSet.isEmpty()) {
-			}
-			return cSet.isEmpty();
-		}
-	}
-
-	/**
-	 * A default implementation for {@link ObservableCollection#addAll(Collection)}
-	 *
-	 * @param coll The collection to add to
-	 * @param values The values to add
-	 * @return Whether the collection was changed as a result of the call
-	 */
-	public static <E> boolean addAll(ObservableCollection<E> coll, Collection<? extends E> values) {
-		boolean mod = false;
-		try (Transaction t = coll.lock(true, null); Transaction t2 = Transactable.lock(values, false, null)) {
-			for (E o : values)
-				mod |= coll.add(o);
-		}
-		return mod;
-	}
-
-	/**
-	 * A default implementation for {@link ObservableCollection#remove(Object)}
-	 *
-	 * @param coll The collection to remove from
-	 * @param o The value to remove
-	 * @return Whether the value was found and removed
-	 */
-	public static <E> boolean remove(ObservableCollection<E> coll, Object o, Object cause) {
-		return coll.find(v -> coll.equivalence().elementEquals(v, o), el -> el.remove(cause));
-	}
-
-	/**
-	 * A default implementation for {@link ObservableCollection#remove(Object)}
-	 *
-	 * @param coll The collection to remove from
-	 * @param o The value to remove
-	 * @return Whether the value was found and removed
-	 */
-	public static <E> boolean removeLast(ObservableCollection<E> coll, Object o, Object cause) {
-		return coll.find(v -> coll.equivalence().elementEquals(v, o), el -> el.remove(cause), false);
-	}
-
-	/**
-	 * A default implementation for {@link ObservableCollection#removeAll(Collection)}
-	 *
-	 * @param coll The collection to remove from
-	 * @param c The values to remove
-	 * @return Whether any values were found and removed
-	 */
-	public static <E> boolean removeAll(ObservableCollection<E> coll, Collection<?> c) {
-		if (c.isEmpty())
-			return true;
-		Set<E> cSet = toSet(coll.equivalence(), c);
-		if (cSet.isEmpty())
-			return false;
-		return coll.removeIf(cSet::contains);
-	}
-
-	/**
-	 * A default implementation for {@link ObservableCollection#retainAll(Collection)}
-	 *
-	 * @param coll The collection to remove from
-	 * @param c The values to keep in the collection
-	 * @return Whether any values were removed
-	 */
-	public static <E> boolean retainAll(ObservableCollection<E> coll, Collection<?> c) {
-		if (c.isEmpty())
-			return false;
-		Set<E> cSet = toSet(coll.equivalence(), c);
-		if (cSet.isEmpty())
-			return false;
-		return coll.removeIf(v -> !cSet.contains(v));
 	}
 
 	/**
@@ -1011,6 +870,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public boolean isEventIndexed() {
+			return getWrapped().isEventIndexed();
+		}
+
+		@Override
 		public CollectionSubscription subscribeIndexed(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
 			return getWrapped().subscribeReverseIndexed(new ReversedSubscriber<>(observer));
 		}
@@ -1225,6 +1089,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public boolean isEventIndexed() {
+			return true;
+		}
+
+		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends T>> observer) {
 			theListeners.add(observer);
 			return () -> theListeners.remove(observer);
@@ -1299,32 +1168,8 @@ public final class ObservableCollectionImpl {
 			}
 		}
 
-		protected boolean checkDestType(Object o) {
-			return o == null || theFlow.getTargetType().getRawType().isInstance(o);
-		}
-
-		@Override
-		public boolean contains(Object o) {
-			if (!checkDestType(o))
-				return false;
-			if (!theFlow.isReversible())
-				return ObservableCollectionImpl.contains(this, o);
-			try (Transaction t = lock(false, null)) {
-				FilterMapResult<T, E> reversed = theFlow.reverse(new FilterMapResult<>((T) o));
-				if (reversed.error != null)
-					return false;
-				return theSource.contains(reversed.result);
-			}
-		}
-
-		@Override
-		public boolean containsAny(Collection<?> c) {
-			return ObservableCollectionImpl.containsAny(this, c);
-		}
-
-		@Override
-		public boolean containsAll(Collection<?> c) {
-			return ObservableCollectionImpl.containsAll(this, c);
+		protected boolean checkValue(Object o) {
+			return equivalence().isElement(o) && (o == null || getType().getRawType().isInstance(o));
 		}
 
 		@Override
@@ -1382,101 +1227,173 @@ public final class ObservableCollectionImpl {
 			theSource.forMutableElementAt(el.manager.getElementId(), srcEl -> onElement.accept(el.manager.map(srcEl, el)));
 		}
 
+		protected void forWrappedElementAt(ElementId wrappedElementId,
+			Consumer<? super ObservableCollectionElement<? extends T>> onElement) {
+			DerivedCollectionElement element = theElements.get(wrappedElementId);
+			if (element == null)
+				throw new IllegalArgumentException(StdMsg.NOT_FOUND);
+			onElement.accept(observableElementFor(element));
+		}
+
+		protected void forWrappedMutableElementAt(ElementId wrappedElementId,
+			Consumer<? super MutableObservableElement<? extends T>> onElement) {
+			DerivedCollectionElement element = theElements.get(wrappedElementId);
+			if (element == null)
+				throw new IllegalArgumentException(StdMsg.NOT_FOUND);
+			theSource.forMutableElementAt(wrappedElementId, srcEl -> onElement.accept(element.manager.map(srcEl, element)));
+		}
+
 		@Override
 		public MutableObservableSpliterator<T> mutableSpliterator(boolean fromStart) {
-			class MutableDerivedSpliterator implements MutableObservableSpliterator<T> {
-				private final ReversibleElementSpliterator<DerivedCollectionElement> theElementSpliter;
+			return new MutableDerivedSpliterator(thePresentElements.spliterator(fromStart));
+		}
 
-				MutableDerivedSpliterator(ReversibleElementSpliterator<DerivedCollectionElement> elementSpliter) {
-					theElementSpliter = elementSpliter;
-				}
+		@Override
+		public String canAdd(T value) {
+			if (!theFlow.isReversible())
+				return StdMsg.UNSUPPORTED_OPERATION;
+			else if (!checkValue(value))
+				return StdMsg.BAD_TYPE;
+			try (Transaction t = lock(false, null)) {
+				FilterMapResult<T, E> reversed = theFlow.canAdd(new FilterMapResult<>(value));
+				if (reversed.error != null)
+					return reversed.error;
+				return theSource.canAdd(reversed.result);
+			}
+		}
 
-				@Override
-				public long estimateSize() {
-					return theElementSpliter.estimateSize();
-				}
+		@Override
+		public boolean add(T e) {
+			if (!theFlow.isReversible())
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			else if (!checkValue(e))
+				throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+			try (Transaction t = lock(false, null)) {
+				FilterMapResult<T, E> reversed = theFlow.canAdd(new FilterMapResult<>(e));
+				if (reversed.error != null)
+					throw new IllegalArgumentException(reversed.error);
+				return theSource.add(reversed.result);
+			}
+		}
 
-				@Override
-				public long getExactSizeIfKnown() {
-					return theElementSpliter.getExactSizeIfKnown();
-				}
+		@Override
+		public void clear() {
+			try (Transaction t = lock(true, null)) {
+				if (!theFlow.isStaticallyFiltered() && !theFlow.isDynamicallyFiltered())
+					theSource.clear();
+				else
+					SimpleCause.doWith(new SimpleCause(), c -> mutableSpliterator().forEachElement(el -> el.remove(c)));
+			}
+		}
 
-				@Override
-				public int characteristics() {
-					return theElementSpliter.characteristics();
-				}
+		@Override
+		public int hashCode() {
+			return ObservableCollection.hashCode(this);
+		}
 
-				@Override
-				public TypeToken<T> getType() {
-					return DerivedCollection.this.getType();
-				}
+		@Override
+		public boolean equals(Object obj) {
+			return ObservableCollection.equals(this, obj);
+		}
 
-				@Override
-				public boolean tryAdvanceObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
-					try (Transaction t = lock(false, null)) {
-						return theElementSpliter.tryAdvance(element -> action.accept(observableElementFor(element)));
-					}
-				}
+		@Override
+		public String toString() {
+			return ObservableCollection.toString(this);
+		}
 
-				@Override
-				public boolean tryReverseObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
-					try (Transaction t = lock(false, null)) {
-						return theElementSpliter.tryReverse(element -> action.accept(observableElementFor(element)));
-					}
-				}
+		protected class MutableDerivedSpliterator implements MutableObservableSpliterator<T> {
+			private final ReversibleSpliterator<DerivedCollectionElement> theElementSpliter;
 
-				@Override
-				public void forEachObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
-					try (Transaction t = lock(false, null)) {
-						theElementSpliter.forEachRemaining(element -> action.accept(observableElementFor(element)));
-					}
-				}
+			MutableDerivedSpliterator(ReversibleSpliterator<DerivedCollectionElement> elementSpliter) {
+				theElementSpliter = elementSpliter;
+			}
 
-				@Override
-				public void forEachReverseObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
-					try (Transaction t = lock(false, null)) {
-						theElementSpliter.forEachReverse(element -> action.accept(observableElementFor(element)));
-					}
-				}
+			@Override
+			public long estimateSize() {
+				return theElementSpliter.estimateSize();
+			}
 
-				@Override
-				public boolean tryAdvanceMutableElement(Consumer<? super MutableObservableElement<T>> action) {
-					try (Transaction t = lock(true, null)) {
-						return theElementSpliter.tryAdvance(element -> theSource.forMutableElementAt(element.manager.getElementId(),
-							sourceEl -> action.accept(element.manager.map(sourceEl, element))));
-					}
-				}
+			@Override
+			public long getExactSizeIfKnown() {
+				return theElementSpliter.getExactSizeIfKnown();
+			}
 
-				@Override
-				public boolean tryReverseMutableElement(Consumer<? super MutableObservableElement<T>> action) {
-					try (Transaction t = lock(true, null)) {
-						return theElementSpliter.tryReverse(element -> theSource.forMutableElementAt(element.manager.getElementId(),
-							sourceEl -> action.accept(element.manager.map(sourceEl, element))));
-					}
-				}
+			@Override
+			public int characteristics() {
+				return theElementSpliter.characteristics();
+			}
 
-				@Override
-				public void forEachMutableElement(Consumer<? super MutableObservableElement<T>> action) {
-					try (Transaction t = lock(true, null)) {
-						theElementSpliter.forEachRemaining(element -> theSource.forMutableElementAt(element.manager.getElementId(),
-							sourceEl -> action.accept(element.manager.map(sourceEl, element))));
-					}
-				}
+			@Override
+			public TypeToken<T> getType() {
+				return DerivedCollection.this.getType();
+			}
 
-				@Override
-				public void forEachReverseMutableElement(Consumer<? super MutableObservableElement<T>> action) {
-					try (Transaction t = lock(true, null)) {
-						theElementSpliter.forEachReverse(element -> theSource.forMutableElementAt(element.manager.getElementId(),
-							sourceEl -> action.accept(element.manager.map(sourceEl, element))));
-					}
-				}
-
-				@Override
-				public MutableObservableSpliterator<T> trySplit() {
-					ReversibleElementSpliterator<DerivedCollectionElement> split = theElementSpliter.trySplit();
-					return split == null ? null : new MutableDerivedSpliterator(split);
+			@Override
+			public boolean tryAdvanceObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
+				try (Transaction t = lock(false, null)) {
+					return theElementSpliter.tryAdvance(element -> action.accept(observableElementFor(element)));
 				}
 			}
+
+			@Override
+			public boolean tryReverseObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
+				try (Transaction t = lock(false, null)) {
+					return theElementSpliter.tryReverse(element -> action.accept(observableElementFor(element)));
+				}
+			}
+
+			@Override
+			public void forEachObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
+				try (Transaction t = lock(false, null)) {
+					theElementSpliter.forEachRemaining(element -> action.accept(observableElementFor(element)));
+				}
+			}
+
+			@Override
+			public void forEachReverseObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
+				try (Transaction t = lock(false, null)) {
+					theElementSpliter.forEachReverse(element -> action.accept(observableElementFor(element)));
+				}
+			}
+
+			@Override
+			public boolean tryAdvanceMutableElement(Consumer<? super MutableObservableElement<T>> action) {
+				try (Transaction t = lock(true, null)) {
+					return theElementSpliter.tryAdvance(element -> theSource.forMutableElementAt(element.manager.getElementId(),
+						sourceEl -> action.accept(element.manager.map(sourceEl, element))));
+				}
+			}
+
+			@Override
+			public boolean tryReverseMutableElement(Consumer<? super MutableObservableElement<T>> action) {
+				try (Transaction t = lock(true, null)) {
+					return theElementSpliter.tryReverse(element -> theSource.forMutableElementAt(element.manager.getElementId(),
+						sourceEl -> action.accept(element.manager.map(sourceEl, element))));
+				}
+			}
+
+			@Override
+			public void forEachMutableElement(Consumer<? super MutableObservableElement<T>> action) {
+				try (Transaction t = lock(true, null)) {
+					theElementSpliter.forEachRemaining(element -> theSource.forMutableElementAt(element.manager.getElementId(),
+						sourceEl -> action.accept(element.manager.map(sourceEl, element))));
+				}
+			}
+
+			@Override
+			public void forEachReverseMutableElement(Consumer<? super MutableObservableElement<T>> action) {
+				try (Transaction t = lock(true, null)) {
+					theElementSpliter.forEachReverse(element -> theSource.forMutableElementAt(element.manager.getElementId(),
+						sourceEl -> action.accept(element.manager.map(sourceEl, element))));
+				}
+			}
+
+			@Override
+			public MutableObservableSpliterator<T> trySplit() {
+				ReversibleSpliterator<DerivedCollectionElement> split = theElementSpliter.trySplit();
+				return split == null ? null : new MutableDerivedSpliterator(split);
+			}
+
 			class MutableSpliteratorElement implements MutableObservableElement<T> {
 				private final MutableObservableElement<T> theObservableElement;
 				private final CollectionElement<DerivedCollectionElement> thePresentElement;
@@ -1545,149 +1462,6 @@ public final class ObservableCollectionImpl {
 					theObservableElement.add(value, before, cause);
 				}
 			}
-			return new MutableDerivedSpliterator(thePresentElements.mutableSpliterator(fromStart));
-		}
-
-		@Override
-		public String canAdd(T value) {
-			if (!theFlow.isReversible())
-				return StdMsg.UNSUPPORTED_OPERATION;
-			else if (!checkDestType(value))
-				return StdMsg.BAD_TYPE;
-			try (Transaction t = lock(false, null)) {
-				FilterMapResult<T, E> reversed = theFlow.reverse(new FilterMapResult<>(value));
-				if (reversed.error != null)
-					return reversed.error;
-				return theSource.canAdd(reversed.result);
-			}
-		}
-
-		@Override
-		public boolean add(T e) {
-			if (!theFlow.isReversible())
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			if (!checkDestType(e))
-				throw new IllegalArgumentException(StdMsg.BAD_TYPE);
-			try (Transaction t = lock(true, null)) {
-				FilterMapResult<T, E> reversed = theFlow.reverse(new FilterMapResult<>(e));
-				if (reversed.error != null)
-					throw new IllegalArgumentException(reversed.error);
-				return theSource.add(reversed.result);
-			}
-		}
-
-		/**
-		 * @param input The collection to reverse
-		 * @return The collection, with its elements {@link ObservableCollection.CollectionManager#reverse(FilterMapResult) reversed}
-		 */
-		protected List<E> reverse(Collection<?> input, boolean checkInput) {
-			FilterMapResult<T, E> reversed = new FilterMapResult<>();
-			return input.stream().<E> flatMap(v -> {
-				if (!checkDestType(v)) {
-					if (checkInput)
-						throw new IllegalArgumentException(StdMsg.BAD_TYPE);
-					else
-						return Stream.empty();
-				}
-				reversed.source = (T) v;
-				theFlow.reverse(reversed);
-				if (reversed.error == null)
-					return Stream.of(reversed.result);
-				else if (checkInput)
-					throw new IllegalArgumentException(reversed.error);
-				else
-					return Stream.empty();
-			}).collect(Collectors.toList());
-		}
-
-		@Override
-		public boolean addAll(Collection<? extends T> c) {
-			if (c.isEmpty())
-				return false;
-			if (!theFlow.isReversible())
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			try (Transaction t = lock(true, null)) {
-				return theSource.addAll(reverse(c, true));
-			}
-		}
-
-		@Override
-		public String canRemove(Object value) {
-			if (!theFlow.isReversible())
-				return StdMsg.UNSUPPORTED_OPERATION;
-			else if (!checkDestType(value))
-				return StdMsg.BAD_TYPE;
-			try (Transaction t = lock(false, null)) {
-				FilterMapResult<T, E> reversed = theFlow.reverse(new FilterMapResult<>((T) value));
-				if (reversed.error != null)
-					return reversed.error;
-				return theSource.canRemove(reversed.result);
-			}
-		}
-
-		@Override
-		public boolean remove(Object o) {
-			if (o != null && !checkDestType(o))
-				return false;
-			if (theFlow.isReversible()) {
-				try (Transaction t = lock(false, null)) {
-					FilterMapResult<T, E> reversed = theFlow.reverse(new FilterMapResult<>((T) o));
-					if (reversed.error != null)
-						return false;
-					return theSource.remove(reversed.result);
-				}
-			} else
-				return SimpleCause.doWithF(new SimpleCause(), c -> ObservableCollectionImpl.remove(this, o, c));
-		}
-
-		@Override
-		public boolean removeLast(Object o) {
-			if (o != null && !checkDestType(o))
-				return false;
-			if (theFlow.isReversible()) {
-				try (Transaction t = lock(false, null)) {
-					FilterMapResult<T, E> reversed = theFlow.reverse(new FilterMapResult<>((T) o));
-					if (reversed.error != null)
-						return false;
-					return theSource.removeLast(reversed.result);
-				}
-			} else
-				return SimpleCause.doWithF(new SimpleCause(), c -> ObservableCollectionImpl.removeLast(this, o, c));
-		}
-
-		@Override
-		public boolean removeAll(Collection<?> c) {
-			return ObservableCollectionImpl.removeAll(this, c);
-		}
-
-		@Override
-		public boolean retainAll(Collection<?> c) {
-			return ObservableCollectionImpl.retainAll(this, c);
-		}
-
-		@Override
-		public void clear() {
-			try (Transaction t = lock(true, null)) {
-				if (!theFlow.isStaticallyFiltered() && !theFlow.isDynamicallyFiltered())
-					theSource.clear();
-				else
-					SimpleCause.doWith(new SimpleCause(), c -> mutableSpliterator().forEachElement(el -> el.remove(c)));
-			}
-		}
-
-		@Override
-		public int hashCode() {
-			return ObservableCollection.hashCode(this);
-		}
-
-		@Override
-		public boolean equals(Object obj) {
-			return ObservableCollection.equals(this, obj);
-		}
-
-		@Override
-		public String toString() {
-			return ObservableCollection.toString(this);
 		}
 	}
 
@@ -1711,8 +1485,8 @@ public final class ObservableCollectionImpl {
 			theWrapped = wrap;
 			theBuilder = builder;
 
-			theKeySet = unique(wrap.flow().map(theBuilder.getKeyType()).map(theBuilder.getKeyMaker(), theBuilder.areNullsMapped()))
-				.collect();
+			theKeySet = unique(wrap.flow().map(theBuilder.getKeyType()).map(theBuilder.getKeyMaker(), theBuilder.areNullsMapped())
+				.withEquivalence(theBuilder.getEquivalence())).collect();
 		}
 
 		/** @return The collection whose content is reflected by this multi-map */
@@ -1726,11 +1500,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		/**
-		 * @param keyCollection The key collection to group
+		 * @param keyFlow The flow to assign uniqueness to
 		 * @return The key set for the map
 		 */
 		protected UniqueDataFlow<E, ?, K> unique(CollectionDataFlow<E, ?, K> keyFlow) {
-			return keyFlow.unique(getBuilder().getEquivalence(), theBuilder.isAlwaysUsingFirst());
+			return keyFlow.unique(theBuilder.isAlwaysUsingFirst());
 		}
 
 		@Override
@@ -1893,7 +1667,7 @@ public final class ObservableCollectionImpl {
 		}
 		private final TypeToken<E> theType;
 		private final ReversibleList<ConstantElement> theElements;
-		private final HashMap<E, ConstantElement> theMap;
+		private final HashMap<E, List<ConstantElement>> theMap;
 
 		/**
 		 * @param type The type of the values
@@ -1907,7 +1681,7 @@ public final class ObservableCollectionImpl {
 			collection.stream().forEach(v -> {
 				ConstantElement element = new ConstantElement(v, index[0]++);
 				theElements.add(element);
-				theMap.put(v, element);
+				theMap.computeIfAbsent(v, k -> new LinkedList<>()).add(element);
 			});
 		}
 
@@ -1959,6 +1733,9 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean forMutableElement(E value, Consumer<? super MutableObservableElement<? extends E>> onElement, boolean first) {
+			List<ConstantElement> elements = theMap.get(value);
+			if (elements == null)
+				return false;
 			for (ConstantElement element : (first ? theElements : theElements.reverse()))
 				if (Objects.equals(element.theValue, value)) {
 					onElement.accept(element);
@@ -2036,11 +1813,6 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean containsAny(Collection<?> c) {
-			return ObservableCollectionImpl.containsAny(this, c);
-		}
-
-		@Override
 		public String canAdd(E value) {
 			return StdMsg.UNSUPPORTED_OPERATION;
 		}
@@ -2051,42 +1823,33 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean addAll(Collection<? extends E> c) {
-			if (!c.isEmpty())
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			return false;
-		}
-
-		@Override
 		public String canRemove(Object value) {
 			return StdMsg.UNSUPPORTED_OPERATION;
 		}
 
 		@Override
-		public boolean remove(Object o) {
-			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-		}
-
-		@Override
-		public boolean removeLast(Object o) {
-			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-		}
-
-		@Override
 		public boolean removeAll(Collection<?> c) {
-			if (!c.isEmpty())
+			if (!c.isEmpty() && !isEmpty())
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			return false;
 		}
 
 		@Override
 		public boolean retainAll(Collection<?> c) {
+			if (isEmpty())
+				return false;
 			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 		}
 
 		@Override
 		public void clear() {
-			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			if (!isEmpty())
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public boolean isEventIndexed() {
+			return true; // No changes. Might as well make the initial events indexed.
 		}
 
 		@Override

@@ -1,14 +1,17 @@
 package org.observe.collect;
 
 import java.util.Comparator;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractDataFlow;
-import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueCollectionManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueSortedCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueSortedDataFlowWrapper;
+import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueSortedElementFinder;
 import org.observe.collect.ObservableSetImpl.UniqueBaseFlow;
 
 public class ObservableSortedSetImpl {
@@ -30,8 +33,30 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
+		public Comparator<? super E> comparator() {
+			return getWrapped().comparator().reversed();
+		}
+
+		@Override
 		public ObservableValue<E> relative(E value, boolean up, boolean withValue) {
 			return getWrapped().relative(value, !up, withValue);
+		}
+
+		@Override
+		public boolean forElement(E value, boolean up, boolean withValue,
+			Consumer<? super ObservableCollectionElement<? extends E>> onElement) {
+			return getWrapped().forElement(value, !up, withValue, onElement);
+		}
+
+		@Override
+		public boolean forMutableElement(E value, boolean up, boolean withValue,
+			Consumer<? super MutableObservableElement<? extends E>> onElement) {
+			return getWrapped().forMutableElement(value, !up, withValue, onElement);
+		}
+
+		@Override
+		public MutableObservableSpliterator<E> mutableSpliterator(E value, boolean up, boolean withValue) {
+			return getWrapped().mutableSpliterator(value, !up, withValue);
 		}
 
 		@Override
@@ -50,23 +75,8 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public E pollFirst() {
-			return getWrapped().pollLast();
-		}
-
-		@Override
-		public E pollLast() {
-			return getWrapped().pollFirst();
-		}
-
-		@Override
-		public Comparator<? super E> comparator() {
-			return getWrapped().comparator().reversed();
-		}
-
-		@Override
-		public Iterable<E> iterateFrom(E element, boolean included, boolean reversed) {
-			return getWrapped().iterateFrom(element, included, !reversed);
+		public ObservableSortedSet<E> reverse() {
+			return (ObservableSortedSet<E>) super.reverse();
 		}
 	}
 
@@ -87,7 +97,7 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public UniqueSortedDataFlow<E, E, E> filter(Function<? super E, String> filter, boolean filterNulls) {
-			return new UniqueSortedDataFlowWrapper<>((AbstractDataFlow<E, ?, E>) super.filter(filter, filterNulls),
+			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, E>) super.filter(filter, filterNulls),
 				getSource().comparator());
 		}
 
@@ -98,18 +108,20 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public UniqueSortedDataFlow<E, E, E> filterStatic(Function<? super E, String> filter, boolean filterNulls) {
-			return new UniqueSortedDataFlowWrapper<>((AbstractDataFlow<E, ?, E>) super.filterStatic(filter, filterNulls),
+			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, E>) super.filterStatic(filter, filterNulls),
 				getSource().comparator());
 		}
 
 		@Override
 		public UniqueSortedDataFlow<E, E, E> refresh(Observable<?> refresh) {
-			return new UniqueSortedDataFlowWrapper<>((AbstractDataFlow<E, ?, E>) super.refresh(refresh), getSource().comparator());
+			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, E>) super.refresh(refresh),
+				getSource().comparator());
 		}
 
 		@Override
 		public UniqueSortedDataFlow<E, E, E> refreshEach(Function<? super E, ? extends Observable<?>> refresh) {
-			return new UniqueSortedDataFlowWrapper<>((AbstractDataFlow<E, ?, E>) super.refreshEach(refresh), getSource().comparator());
+			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, E>) super.refreshEach(refresh),
+				getSource().comparator());
 		}
 
 		@Override
@@ -124,10 +136,56 @@ public class ObservableSortedSetImpl {
 	public static class DerivedSortedSet<E, T> extends ObservableSetImpl.DerivedSet<E, T> implements ObservableSortedSet<T> {
 		private final Comparator<? super T> theCompare;
 
-		public DerivedSortedSet(ObservableCollection<E> source, UniqueCollectionManager<E, ?, T> flow, Comparator<? super T> compare,
-			Observable<?> until) {
-			super(source, flow, until);
+		public DerivedSortedSet(ObservableCollection<E> source, CollectionManager<E, ?, T> flow, UniqueSortedElementFinder<T> elementFinder,
+			Comparator<? super T> compare, Observable<?> until) {
+			super(source, flow, elementFinder, until);
 			theCompare = compare;
+		}
+
+		@Override
+		public Comparator<? super T> comparator() {
+			return theCompare;
+		}
+
+		@Override
+		protected UniqueSortedCollectionManager<E, ?, T> getFlow() {
+			return (UniqueSortedCollectionManager<E, ?, T>) super.getFlow();
+		}
+
+		@Override
+		public ObservableValue<T> relative(T value, boolean up, boolean withValue) {
+			if (up)
+				return tailSet(value, withValue).find(v -> true, () -> null, true);
+			else
+				return headSet(value, withValue).find(v -> true, () -> null, false);
+		}
+
+		@Override
+		public boolean forElement(T value, boolean up, boolean withValue,
+			Consumer<? super ObservableCollectionElement<? extends T>> onElement) {
+			ElementId id = getFlow().relativeId(value, up, withValue);
+			if (id == null)
+				return false;
+			forWrappedElementAt(id, onElement);
+			return true;
+		}
+
+		@Override
+		public boolean forMutableElement(T value, boolean up, boolean withValue,
+			Consumer<? super MutableObservableElement<? extends T>> onElement) {
+			ElementId id = getFlow().relativeId(value, up, withValue);
+			if (id == null)
+				return false;
+			forWrappedMutableElementAt(id, onElement);
+			return true;
+		}
+
+		@Override
+		public MutableObservableSpliterator<T> mutableSpliterator(T value, boolean up, boolean withValue) {
+			ElementId id = getFlow().relativeId(value, up, withValue);
+			if (id == null)
+				return MutableObservableSpliterator.empty(getType());
+			return new MutableDerivedSpliterator(getPresentElements().spliteratorFrom(id));
 		}
 	}
 

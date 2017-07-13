@@ -6,6 +6,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 import java.util.Spliterator;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -21,9 +22,11 @@ import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
-import org.observe.collect.MutableObservableSpliterator.MutableObservableSpliteratorMap;
 import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractCombinedCollectionBuilder;
 import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractDataFlow;
+import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueElementFinder;
+import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueSortedElementFinder;
 import org.qommons.Causable;
 import org.qommons.Ternian;
 import org.qommons.Transactable;
@@ -83,13 +86,16 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 * The {@link ObservableCollectionEvent#getCause() cause} for events fired for extant elements in the collection upon
 	 * {@link #subscribe(Consumer) subscription}
 	 */
-	public static class SubscriptionCause extends SimpleCause {
-	}
+	public static class SubscriptionCause extends SimpleCause {}
 
 	// Additional contract methods
 
 	/** @return The type of elements in this collection */
 	TypeToken<E> getType();
+
+	default boolean belongs(Object value) {
+		return equivalence().isElement(value) && getType().getRawType().isInstance(value);
+	}
 
 	@Override
 	abstract boolean isLockSupported();
@@ -164,12 +170,323 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		}
 	}
 
-	/** @return The last value in this collection, or null if the collection is empty */
-	default E last() {
-		try (Transaction t = lock(false, null)) {
-			return get(size() - 1);
+	@Override
+	default boolean contains(Object o) {
+		if (!belongs(o))
+			return false;
+		return forObservableElement((E) o, el -> {
+		}, true);
+	}
+
+	@Override
+	default boolean containsAny(Collection<?> c) {
+		try (Transaction ct = Transactable.lock(c, false, null)) {
+			if (c.isEmpty())
+				return true;
+			try (Transaction t = lock(false, null)) {
+				if (c.size() < size()) {
+					for (Object o : c)
+						if (contains(o))
+							return true;
+					return false;
+				} else {
+					if (c.isEmpty())
+						return false;
+					Set<E> cSet = ObservableCollectionImpl.toSet(equivalence(), c);
+					Spliterator<E> iter = spliterator();
+					boolean[] found = new boolean[1];
+					while (iter.tryAdvance(next -> {
+						found[0] = cSet.contains(next);
+					}) && !found[0]) {
+					}
+					return found[0];
+				}
+			}
 		}
 	}
+
+	@Override
+	default boolean containsAll(Collection<?> c) {
+		try (Transaction ct = Transactable.lock(c, false, null)) {
+			if (c.isEmpty())
+				return true;
+			try (Transaction t = lock(false, null)) {
+				if (c.size() < size()) {
+					for (Object o : c)
+						if (!contains(o))
+							return false;
+					return true;
+				} else {
+					if (c.isEmpty())
+						return false;
+					Set<E> cSet = ObservableCollectionImpl.toSet(equivalence(), c);
+					cSet.removeAll(this);
+					return cSet.isEmpty();
+				}
+			}
+		}
+	}
+
+	/**
+	 * Tests the compatibility of an object with this collection. This method exposes a "best guess" on whether an element could be added to
+	 * the collection , but does not provide any guarantee. This method should return null for any object for which {@link #add(Object)} is
+	 * successful, but the fact that an object passes this test does not guarantee that it would be removed successfully. E.g. the position
+	 * of the element in the collection may be a factor, but is tested for here.
+	 *
+	 * @param value The value to test compatibility for
+	 * @return Null if given value could possibly be added to this collection, or a message why it can't
+	 */
+	String canAdd(E value);
+
+	/**
+	 * Tests the removability of an element from this collection. This method exposes a "best guess" on whether an element in the collection
+	 * could be removed, but does not provide any guarantee. This method should return null for any object for which {@link #remove(Object)}
+	 * is successful, but the fact that an object passes this test does not guarantee that it would be removed successfully. E.g. the
+	 * position of the element in the collection may be a factor, but may not be tested for here.
+	 *
+	 * @param value The value to test removability for
+	 * @return Null if given value could possibly be removed from this collection, or a message why it can't
+	 */
+	default String canRemove(Object value) {
+		if (!belongs(value))
+			return StdMsg.NOT_FOUND;
+		String[] msg = new String[1];
+		if (!forElement((E) value, el -> msg[0] = el.canRemove(), true))
+			return StdMsg.NOT_FOUND;
+		return msg[0];
+	}
+
+	@Override
+	default boolean remove(Object o) {
+		return removeFirstOccurrence(o);
+	}
+
+	@Override
+	default boolean removeAll(Collection<?> c) {
+		return SimpleCause.doWithF(new SimpleCause(), cause -> {
+			try (Transaction ct = Transactable.lock(c, false, null)) {
+				if (isEmpty() || c.isEmpty())
+					return false;
+				return findAll(v -> c.contains(v), el -> el.remove(cause), true) > 0;
+			}
+		});
+	}
+
+	@Override
+	default boolean retainAll(Collection<?> c) {
+		return SimpleCause.doWithF(new SimpleCause(), cause -> {
+			try (Transaction t = lock(true, cause); Transaction ct = Transactable.lock(c, false, null)) {
+				if (isEmpty())
+					return false;
+				if (c.isEmpty()) {
+					clear();
+					return true;
+				}
+				return findAll(v -> !c.contains(v), el -> el.remove(cause), true) > 0;
+			}
+		});
+	}
+
+	@Override
+	default boolean removeLast(Object o) {
+		return removeLastOccurrence(o);
+	}
+
+	@Override
+	default boolean removeIf(Predicate<? super E> filter) {
+		boolean[] removed = new boolean[1];
+		try (Transaction t = lock(true, null)) {
+			MutableObservableSpliterator<E> iter = mutableSpliterator();
+			SimpleCause cause = new SimpleCause();
+			SimpleCause.doWith(cause, c -> iter.forEachElement(el -> {
+				if (filter.test(el.get())) {
+					el.remove(cause);
+					removed[0] = true;
+				}
+			}));
+			return removed[0];
+		}
+	}
+
+	@Override
+	default boolean addAll(Collection<? extends E> c) {
+		return SimpleCause.doWithF(new SimpleCause(), cause -> {
+			boolean mod = false;
+			try (Transaction t = lock(true, cause); Transaction t2 = Transactable.lock(c, false, cause)) {
+				for (E o : c)
+					mod |= add(o);
+			}
+			return mod;
+		});
+	}
+
+	@Override
+	default E getFirst() {
+		try (Transaction t = lock(false, null)) {
+			return ReversibleCollection.super.getFirst();
+		}
+	}
+
+	@Override
+	default E getLast() {
+		try (Transaction t = lock(false, null)) {
+			return ReversibleCollection.super.getLast();
+		}
+	}
+
+	@Override
+	default E peekFirst() {
+		try (Transaction t = lock(false, null)) {
+			Object[] value = new Object[1];
+			if (spliterator(true).tryAdvance(v -> value[0] = v))
+				return (E) value[0];
+			else
+				return null;
+		}
+	}
+
+	@Override
+	default E peekLast() {
+		try (Transaction t = lock(false, null)) {
+			Object[] value = new Object[1];
+			if (spliterator(false).tryReverse(v -> value[0] = v))
+				return (E) value[0];
+			else
+				return null;
+		}
+	}
+
+	@Override
+	default E element() {
+		try (Transaction t = lock(false, null)) {
+			return ReversibleCollection.super.element();
+		}
+	}
+
+	@Override
+	default E peek() {
+		try (Transaction t = lock(false, null)) {
+			return ReversibleCollection.super.peek();
+		}
+	}
+
+	@Override
+	default void addFirst(E e) {
+		try (Transaction t = lock(true, null)) {
+			String msg = canAdd(e);
+			if (msg == null)
+				throw new IllegalStateException(msg);
+			ReversibleCollection.super.addFirst(e);
+		}
+	}
+
+	@Override
+	default void addLast(E e) {
+		try (Transaction t = lock(true, null)) {
+			String msg = canAdd(e);
+			if (msg == null)
+				throw new IllegalStateException(msg);
+			ReversibleCollection.super.addLast(e);
+		}
+	}
+
+	@Override
+	default boolean offerFirst(E e) {
+		try (Transaction t = lock(true, null)) {
+			return ReversibleCollection.super.offerFirst(e);
+		}
+	}
+
+	@Override
+	default boolean offerLast(E e) {
+		try (Transaction t = lock(true, null)) {
+			return ReversibleCollection.super.offerLast(e);
+		}
+	}
+
+	@Override
+	default E removeFirst() {
+		try (Transaction t = lock(true, null)) {
+			return ReversibleCollection.super.removeFirst();
+		}
+	}
+
+	@Override
+	default E removeLast() {
+		try (Transaction t = lock(true, null)) {
+			return ReversibleCollection.super.removeLast();
+		}
+	}
+
+	@Override
+	default E pollFirst() {
+		try (Transaction t = lock(true, null)) {
+			return ReversibleCollection.super.pollFirst();
+		}
+	}
+
+	@Override
+	default E pollLast() {
+		try (Transaction t = lock(true, null)) {
+			return ReversibleCollection.super.pollLast();
+		}
+	}
+
+	@Override
+	default boolean removeFirstOccurrence(Object o) {
+		if (!belongs(o))
+			return false;
+		try (Transaction t = lock(true, null)) {
+			return ReversibleCollection.super.removeFirstOccurrence(o);
+		}
+	}
+
+	@Override
+	default boolean removeLastOccurrence(Object o) {
+		if (!belongs(o))
+			return false;
+		try (Transaction t = lock(true, null)) {
+			return ReversibleCollection.super.removeLastOccurrence(o);
+		}
+	}
+
+	@Override
+	default boolean offer(E e) {
+		try (Transaction t = lock(true, null)) {
+			return ReversibleCollection.super.offer(e);
+		}
+	}
+
+	@Override
+	default E remove() {
+		try (Transaction t = lock(true, null)) {
+			return ReversibleCollection.super.remove();
+		}
+	}
+
+	@Override
+	default E poll() {
+		try (Transaction t = lock(true, null)) {
+			return ReversibleCollection.super.poll();
+		}
+	}
+
+	@Override
+	default void push(E e) {
+		try (Transaction t = lock(true, null)) {
+			ReversibleCollection.super.push(e);
+		}
+	}
+
+	@Override
+	default E pop() {
+		try (Transaction t = lock(true, null)) {
+			return ReversibleCollection.super.pop();
+		}
+	}
+
+	/** @return Whether events given to the {@link #onChange(Consumer)} listener are always {@link IndexedCollectionEvent indexed} */
+	boolean isEventIndexed();
 
 	/**
 	 * Like {@link #onChange(Consumer)}, but also fires initial {@link CollectionChangeType#add add} events for each element currently in
@@ -181,10 +498,18 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 */
 	default CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
 		Subscription changeSub;
+		boolean indexed = isEventIndexed();
 		try (Transaction t = lock(false, null)) {
 			// Initial events
-			SubscriptionCause.doWith(new SubscriptionCause(), c -> spliterator().forEachObservableElement(
-				el -> observer.accept(new ObservableCollectionEvent<>(el.getElementId(), CollectionChangeType.add, null, el.get(), c))));
+			int[] index = new int[1];
+			SubscriptionCause.doWith(new SubscriptionCause(), c -> spliterator().forEachObservableElement(el -> {
+				ObservableCollectionEvent<E> event;
+				if (indexed)
+					event = new IndexedCollectionEvent<>(el.getElementId(), index[0]++, CollectionChangeType.add, null, el.get(), c);
+				else
+					event = new ObservableCollectionEvent<>(el.getElementId(), CollectionChangeType.add, null, el.get(), c);
+				observer.accept(event);
+			}));
 			// Subscribe changes
 			changeSub = onChange(observer);
 		}
@@ -194,8 +519,16 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 				changeSub.unsubscribe();
 				if (removeAll) {
 					// Remove events
-					SubscriptionCause.doWith(new SubscriptionCause(), c -> spliterator().forEachObservableElement(el -> observer
-						.accept(new ObservableCollectionEvent<>(el.getElementId(), CollectionChangeType.remove, null, el.get(), c))));
+					int[] index = new int[1];
+					SubscriptionCause.doWith(new SubscriptionCause(), c -> spliterator().forEachObservableElement(el -> {
+						ObservableCollectionEvent<E> event;
+						if (indexed)
+							event = new IndexedCollectionEvent<>(el.getElementId(), index[0]++, CollectionChangeType.add, null, el.get(),
+								c);
+						else
+							event = new ObservableCollectionEvent<>(el.getElementId(), CollectionChangeType.add, null, el.get(), c);
+						observer.accept(event);
+					}));
 				}
 			}
 		};
@@ -208,6 +541,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 * @return The subscription to use to terminate listening
 	 */
 	default CollectionSubscription subscribeIndexed(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
+		if (isEventIndexed())
+			return subscribe(evt -> observer.accept((IndexedCollectionEvent<E>) evt));
 		DefaultTreeSet<ElementId> ids = new DefaultTreeSet<>(Comparable::compareTo);
 		return subscribe(evt -> {
 			ElementId id = evt.getElementId();
@@ -336,50 +671,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 * @return The equivalence that governs this collection
 	 */
 	Equivalence<? super E> equivalence();
-
-	/**
-	 * Tests the compatibility of an object with this collection. This method exposes a "best guess" on whether an element could be added to
-	 * the collection , but does not provide any guarantee. This method should return null for any object for which {@link #add(Object)} is
-	 * successful, but the fact that an object passes this test does not guarantee that it would be removed successfully. E.g. the position
-	 * of the element in the collection may be a factor, but is tested for here.
-	 *
-	 * @param value The value to test compatibility for
-	 * @return Null if given value could possibly be added to this collection, or a message why it can't
-	 */
-	String canAdd(E value);
-
-	/**
-	 * Tests the removability of an element from this collection. This method exposes a "best guess" on whether an element in the collection
-	 * could be removed, but does not provide any guarantee. This method should return null for any object for which {@link #remove(Object)}
-	 * is successful, but the fact that an object passes this test does not guarantee that it would be removed successfully. E.g. the
-	 * position of the element in the collection may be a factor, but may not be tested for here.
-	 *
-	 * @param value The value to test removability for
-	 * @return Null if given value could possibly be removed from this collection, or a message why it can't
-	 */
-	String canRemove(Object value);
-
-	/**
-	 * @param c collection to be checked for containment in this collection
-	 * @return Whether this collection contains at least one of the elements in the specified collection
-	 * @see #containsAll(Collection)
-	 */
-	@Override
-	boolean containsAny(Collection<?> c);
-
-	@Override
-	default boolean removeIf(Predicate<? super E> filter) {
-		boolean[] removed = new boolean[1];
-		MutableObservableSpliterator<E> iter = mutableSpliterator();
-		SimpleCause cause = new SimpleCause();
-		SimpleCause.doWith(cause, c -> iter.forEachElement(el -> {
-			if (filter.test(el.get())) {
-				el.remove(cause);
-				removed[0] = true;
-			}
-		}));
-		return removed[0];
-	}
 
 	@Override
 	default boolean forElement(E value, Consumer<? super CollectionElement<? extends E>> onElement, boolean first) {
@@ -987,8 +1278,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 					if (doSet)
 						((SettableValue<X>) ov).set(newValue, cause);
 					return null;
-				}, false)
-				.map(ObservableValue::get, false);
+				}, false).map(ObservableValue::get, false);
 		}
 
 		default <V, X> CombinedCollectionBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, TypeToken<X> target) {
@@ -1003,11 +1293,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 
 		UniqueSortedDataFlow<E, T, T> uniqueSorted(Comparator<? super T> compare, boolean alwaysUseFirst);
 
-		default ModFilterBuilder<E, T> filterModification() {
-			return new ModFilterBuilder<>(this);
-		}
+		ModFilterBuilder<E, T> filterModification();
 
 		// Terminal operations
+
+		CollectionManager<E, ?, T> manageCollection();
 
 		default ObservableCollection<T> collect() {
 			return collect(Observable.empty);
@@ -1055,14 +1345,14 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		/**
 		 * <p>
 		 * Same as {@link #map(TypeToken)}, but with the additional assertion that the produced mapped data will be one-to-one with the
-		 * source data, such that the produced collection is unique in a similar way, without a need for an additional {@link #unique()
-		 * uniqueness} check.
+		 * source data, such that the produced collection is unique in a similar way, without a need for an additional
+		 * {@link #unique(boolean) uniqueness} check.
 		 * </p>
 		 * <p>
 		 * This assertion cannot be checked (at compile time or run time), and if the assertion is incorrect such that multiple source
 		 * values map to equivalent target values, <b>the resulting set will not be unique and data errors, including internal
 		 * ObservableCollection errors, are possible</b>. Therefore caution should be used when considering whether to invoke this method.
-		 * When in doubt, use {@link #map(TypeToken)} and {@link #unique()}.
+		 * When in doubt, use {@link #map(TypeToken)} and {@link #unique(boolean)}.
 		 * </p>
 		 *
 		 * @param <X> The type of the mapped values
@@ -1072,9 +1362,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		<X> UniqueMappedCollectionBuilder<E, T, X> mapEquivalent(TypeToken<X> target);
 
 		@Override
-		default UniqueModFilterBuilder<E, T> filterModification() {
-			return new UniqueModFilterBuilder<>(this);
-		}
+		UniqueModFilterBuilder<E, T> filterModification();
 
 		@Override
 		default ObservableSet<T> collect() {
@@ -1110,14 +1398,14 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		/**
 		 * <p>
 		 * Same as {@link #map(TypeToken)}, but with the additional assertion that the produced mapped data will be one-to-one with the
-		 * source data, such that the produced collection is unique in a similar way, without a need for an additional {@link #unique()
-		 * uniqueness} check.
+		 * source data, such that the produced collection is unique in a similar way, without a need for an additional
+		 * {@link #uniqueSorted(Comparator, boolean) uniqueness} check.
 		 * </p>
 		 * <p>
 		 * This assertion cannot be checked (at compile time or run time), and if the assertion is incorrect such that multiple source
 		 * values map to equivalent target values, <b>the resulting set will not be unique and data errors, including internal
 		 * ObservableCollection errors, are possible</b>. Therefore caution should be used when considering whether to invoke this method.
-		 * When in doubt, use {@link #map(TypeToken)} and {@link #unique()}.
+		 * When in doubt, use {@link #map(TypeToken)} and {@link #uniqueSorted(Comparator, boolean)}.
 		 * </p>
 		 *
 		 * @param <X> The type of the mapped values
@@ -1134,9 +1422,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		UniqueSortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh);
 
 		@Override
-		default UniqueSortedModFilterBuilder<E, T> filterModification() {
-			return new UniqueSortedModFilterBuilder<>(this);
-		}
+		UniqueSortedModFilterBuilder<E, T> filterModification();
 
 		@Override
 		default ObservableSortedSet<T> collect() {
@@ -1155,6 +1441,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 * @param <T> The type of values in the mapped collection
 	 */
 	class MappedCollectionBuilder<E, I, T> {
+		private final ObservableCollection<E> theSource;
 		private final AbstractDataFlow<E, ?, I> theParent;
 		private final TypeToken<T> theTargetType;
 		private Function<? super T, ? extends I> theReverse;
@@ -1164,12 +1451,17 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		private boolean fireIfUnchanged;
 		private boolean isCached;
 
-		protected MappedCollectionBuilder(AbstractDataFlow<E, ?, I> parent, TypeToken<T> type) {
+		protected MappedCollectionBuilder(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent, TypeToken<T> type) {
+			theSource = source;
 			theParent = parent;
 			theTargetType = type;
 			reEvalOnUpdate = true;
 			fireIfUnchanged = true;
 			isCached = true;
+		}
+
+		protected ObservableCollection<E> getSource() {
+			return theSource;
 		}
 
 		protected AbstractDataFlow<E, ?, I> getParent() {
@@ -1210,8 +1502,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 			return this;
 		}
 
-		public MappedCollectionBuilder<E, I, T> withElementSetting(ElementSetter<? super I, ? super T> reverse,
-			boolean reverseNulls) {
+		public MappedCollectionBuilder<E, I, T> withElementSetting(ElementSetter<? super I, ? super T> reverse, boolean reverseNulls) {
 			theElementReverse = reverse;
 			areNullsReversed = reverseNulls;
 			return this;
@@ -1239,8 +1530,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		}
 
 		public CollectionDataFlow<E, I, T> map(Function<? super I, ? extends T> map, boolean mapNulls) {
-			return new ObservableCollectionDataFlowImpl.MapOp<>(theParent, theTargetType, map, mapNulls, theReverse, theElementReverse,
-				areNullsReversed, reEvalOnUpdate, fireIfUnchanged, isCached);
+			return new ObservableCollectionDataFlowImpl.MapOp<>(theSource, theParent, theTargetType, map, mapNulls, theReverse,
+				theElementReverse, areNullsReversed, reEvalOnUpdate, fireIfUnchanged, isCached);
 		}
 	}
 
@@ -1248,6 +1539,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	interface ElementSetter<I, T> {
 		String setElement(I element, T newValue, boolean replace, Object cause);
 	}
+
 	/**
 	 * Builds a filtered and/or mapped set, asserted to be similarly unique as the derived set
 	 *
@@ -1256,10 +1548,16 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 * @param <T> The type of values in the mapped set
 	 */
 	class UniqueMappedCollectionBuilder<E, I, T> extends MappedCollectionBuilder<E, I, T> {
-		protected UniqueMappedCollectionBuilder(AbstractDataFlow<E, ?, I> parent, TypeToken<T> type) {
-			super(parent, type);
-			if (!(parent instanceof UniqueDataFlow))
-				throw new IllegalArgumentException("The parent of a unique map builder must be unique");
+		private final UniqueElementFinder<I> theElementFinder;
+
+		protected UniqueMappedCollectionBuilder(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent,
+			UniqueElementFinder<I> elementFinder, TypeToken<T> type) {
+			super(source, parent, type);
+			theElementFinder = elementFinder;
+		}
+
+		protected UniqueElementFinder<I> getElementFinder() {
+			return theElementFinder;
 		}
 
 		@Override
@@ -1300,16 +1598,22 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 			boolean reverseNulls) {
 			if (reverse == null)
 				throw new IllegalArgumentException("Reverse must be specified to maintain uniqueness");
-			return new ObservableCollectionDataFlowImpl.UniqueMapOp<>(getParent(), getTargetType(), map, mapNulls, getReverse(),
-				getElementReverse(), areNullsReversed(), isReEvalOnUpdate(), isFireIfUnchanged(), isCached());
+			return new ObservableCollectionDataFlowImpl.UniqueMapOp<>(getSource(), getParent(), theElementFinder, getTargetType(), map,
+				mapNulls, getReverse(), getElementReverse(), areNullsReversed(), isReEvalOnUpdate(), isFireIfUnchanged(), isCached());
 		}
 	}
 
 	class UniqueSortedMappedCollectionBuilder<E, I, T> extends UniqueMappedCollectionBuilder<E, I, T> {
-		protected UniqueSortedMappedCollectionBuilder(AbstractDataFlow<E, ?, I> parent, TypeToken<T> type) {
-			super(parent, type);
+		protected UniqueSortedMappedCollectionBuilder(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent,
+			UniqueSortedElementFinder<I> elementFinder, TypeToken<T> type) {
+			super(source, parent, elementFinder, type);
 			if (!(parent instanceof UniqueSortedDataFlow))
 				throw new IllegalArgumentException("The parent of a unique-sorted map builder must be unique-sorted");
+		}
+
+		@Override
+		protected UniqueSortedElementFinder<I> getElementFinder() {
+			return (UniqueSortedElementFinder<I>) super.getElementFinder();
 		}
 
 		@Override
@@ -1354,8 +1658,9 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		public UniqueSortedDataFlow<E, I, T> map(Function<? super I, ? extends T> map, boolean mapNulls, Comparator<? super T> compare) {
 			if (compare == null)
 				throw new IllegalArgumentException("Comparator must be specified to maintain uniqueness");
-			return new ObservableCollectionDataFlowImpl.UniqueMapSortedOp<>(getParent(), getTargetType(), map, mapNulls, getReverse(),
-				getElementReverse(), areNullsReversed(), isReEvalOnUpdate(), isFireIfUnchanged(), isCached());
+			return new ObservableCollectionDataFlowImpl.UniqueSortedMapOp<>(getSource(), getParent(), getElementFinder(), getTargetType(),
+				map, mapNulls, getReverse(), getElementReverse(), areNullsReversed(), isReEvalOnUpdate(), isFireIfUnchanged(), isCached(),
+				compare);
 		}
 	}
 
@@ -1396,9 +1701,9 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	class CombinedCollectionBuilder2<E, I, V, R> extends AbstractCombinedCollectionBuilder<E, I, R> {
 		private final ObservableValue<V> theArg2;
 
-		protected CombinedCollectionBuilder2(AbstractDataFlow<E, ?, I> parent, TypeToken<R> targetType,
+		protected CombinedCollectionBuilder2(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent, TypeToken<R> targetType,
 			ObservableValue<V> arg2, Ternian combineArg2Nulls) {
-			super(parent, targetType);
+			super(source, parent, targetType);
 			theArg2 = arg2;
 			addArg(arg2, combineArg2Nulls);
 		}
@@ -1431,14 +1736,15 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		public <U> CombinedCollectionBuilder3<E, I, V, U, R> and(ObservableValue<U> arg3) {
 			if (getReverse() != null)
 				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
-			return new CombinedCollectionBuilder3<>(getParent(), getTargetType(), theArg2, combineNulls(theArg2), arg3, Ternian.NONE);
+			return new CombinedCollectionBuilder3<>(getSource(), getParent(), getTargetType(), theArg2, combineNulls(theArg2), arg3,
+				Ternian.NONE);
 		}
 
 		@Override
 		public <U> CombinedCollectionBuilder3<E, I, V, U, R> and(ObservableValue<U> arg3, boolean combineNulls) {
 			if (getReverse() != null)
 				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
-			return new CombinedCollectionBuilder3<>(getParent(), getTargetType(), theArg2, combineNulls(theArg2), arg3,
+			return new CombinedCollectionBuilder3<>(getSource(), getParent(), getTargetType(), theArg2, combineNulls(theArg2), arg3,
 				Ternian.of(combineNulls));
 		}
 	}
@@ -1459,9 +1765,9 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		private final ObservableValue<V1> theArg2;
 		private final ObservableValue<V2> theArg3;
 
-		protected CombinedCollectionBuilder3(AbstractDataFlow<E, ?, I> parent, TypeToken<R> targetType,
+		protected CombinedCollectionBuilder3(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent, TypeToken<R> targetType,
 			ObservableValue<V1> arg2, Ternian combineArg2Nulls, ObservableValue<V2> arg3, Ternian combineArg3Nulls) {
-			super(parent, targetType);
+			super(source, parent, targetType);
 			theArg2 = arg2;
 			theArg3 = arg3;
 			addArg(arg2, combineArg2Nulls);
@@ -1500,7 +1806,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		public <T2> CombinedCollectionBuilderN<E, I, R> and(ObservableValue<T2> arg) {
 			if (getReverse() != null)
 				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
-			return new CombinedCollectionBuilderN<>(getParent(), getTargetType(), theArg2, combineNulls(theArg2), theArg3,
+			return new CombinedCollectionBuilderN<>(getSource(), getParent(), getTargetType(), theArg2, combineNulls(theArg2), theArg3,
 				combineNulls(theArg3), arg, Ternian.NONE);
 		}
 
@@ -1508,7 +1814,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		public <T2> CombinedCollectionBuilderN<E, I, R> and(ObservableValue<T2> arg, boolean combineNulls) {
 			if (getReverse() != null)
 				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
-			return new CombinedCollectionBuilderN<>(getParent(), getTargetType(), theArg2, combineNulls(theArg2), theArg3,
+			return new CombinedCollectionBuilderN<>(getSource(), getParent(), getTargetType(), theArg2, combineNulls(theArg2), theArg3,
 				combineNulls(theArg3), arg, Ternian.of(combineNulls));
 		}
 	}
@@ -1524,10 +1830,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 * @see ObservableCollection.CombinedCollectionBuilder3#and(ObservableValue)
 	 */
 	class CombinedCollectionBuilderN<E, I, R> extends AbstractCombinedCollectionBuilder<E, I, R> {
-		protected CombinedCollectionBuilderN(AbstractDataFlow<E, ?, I> parent, TypeToken<R> targetType, ObservableValue<?> arg2,
-			Ternian combineArg2Nulls, ObservableValue<?> arg3, Ternian combineArg3Nulls, ObservableValue<?> arg4,
+		protected CombinedCollectionBuilderN(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent, TypeToken<R> targetType,
+			ObservableValue<?> arg2, Ternian combineArg2Nulls, ObservableValue<?> arg3, Ternian combineArg3Nulls, ObservableValue<?> arg4,
 			Ternian combineArg4Nulls) {
-			super(parent, targetType);
+			super(source, parent, targetType);
 			addArg(arg2, combineArg2Nulls);
 			addArg(arg3, combineArg3Nulls);
 			addArg(arg4, combineArg4Nulls);
@@ -1574,152 +1880,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	}
 
 	/**
-	 * The result of a {@link ObservableCollection.ModFilterBuilder view-build}
-	 *
-	 * @param <E> The type of values that this view def knows how to front
-	 */
-	class ViewDef<E> {
-		private final TypeToken<E> theType;
-		private final String theImmutableMsg;
-		private final String theAddMsg;
-		private final String theRemoveMsg;
-		private final Function<? super E, String> theAddMsgFn;
-		private final Function<? super E, String> theRemoveMsgFn;
-
-		private final Observable<?> theUntil;
-		private final boolean untilRemoves;
-
-		public ViewDef(TypeToken<E> type, String immutableMsg, String addMsg, String removeMsg, Function<? super E, String> addMsgFn,
-			Function<? super E, String> removeMsgFn, Observable<?> until, boolean untilRemoves) {
-			theType = type;
-			theImmutableMsg = immutableMsg;
-			theAddMsg = addMsg;
-			theRemoveMsg = removeMsg;
-			theAddMsgFn = addMsgFn;
-			theRemoveMsgFn = removeMsgFn;
-
-			theUntil = until;
-			this.untilRemoves = untilRemoves;
-		}
-
-		public MutableObservableSpliteratorMap<E, E> mapSpliterator() {
-			return new MutableObservableSpliteratorMap<E, E>() {
-				@Override
-				public TypeToken<E> getType() {
-					return theType;
-				}
-
-				@Override
-				public long filterExactSize(long srcSize) {
-					return srcSize;
-				}
-
-				@Override
-				public boolean test(E srcValue) {
-					return true;
-				}
-
-				@Override
-				public E map(E value) {
-					return value;
-				}
-
-				@Override
-				public E reverse(E value) {
-					return value;
-				}
-
-				@Override
-				public String filterEnabled(CollectionElement<E> el) {
-					String msg = checkRemove(el.get());
-					if (msg != null)
-						return msg;
-					if (theAddMsg != null)
-						return theAddMsg;
-					return null;
-				}
-
-				@Override
-				public String filterAccept(E value) {
-					return checkAdd(value);
-				}
-
-				@Override
-				public String filterRemove(CollectionElement<E> sourceEl) {
-					return checkRemove(sourceEl.get());
-				}
-			};
-		}
-
-		public boolean isAddFiltered() {
-			return theImmutableMsg != null || theAddMsg != null || theAddMsgFn != null;
-		}
-
-		public String checkAdd(E value) {
-			String msg = null;
-			if (theAddMsgFn != null)
-				msg = theAddMsgFn.apply(value);
-			if (msg == null && theAddMsg != null)
-				msg = theAddMsg;
-			if (msg == null && theImmutableMsg != null)
-				msg = theImmutableMsg;
-			return msg;
-		}
-
-		public E tryAdd(E value) {
-			String msg = null;
-			if (theAddMsgFn != null)
-				msg = theAddMsgFn.apply(value);
-			if (msg != null)
-				throw new IllegalArgumentException(msg);
-			if (theAddMsg != null)
-				throw new UnsupportedOperationException(theAddMsg);
-			if (theImmutableMsg != null)
-				throw new UnsupportedOperationException(theImmutableMsg);
-			return value;
-		}
-
-		public boolean isRemoveFiltered() {
-			return theImmutableMsg != null || theRemoveMsg != null || theRemoveMsgFn != null;
-		}
-
-		public String checkRemove(Object value) {
-			String msg = null;
-			if (theRemoveMsgFn != null) {
-				if (value != null && !theType.getRawType().isInstance(value))
-					msg = StdMsg.BAD_TYPE;
-				msg = theRemoveMsgFn.apply((E) value);
-			}
-			if (msg == null && theRemoveMsg != null)
-				msg = theRemoveMsg;
-			if (msg == null && theImmutableMsg != null)
-				msg = theImmutableMsg;
-			return msg;
-		}
-
-		public E tryRemove(E value) {
-			String msg = null;
-			if (theRemoveMsgFn != null)
-				msg = theRemoveMsgFn.apply(value);
-			if (msg != null)
-				throw new IllegalArgumentException(msg);
-			if (theRemoveMsg != null)
-				throw new UnsupportedOperationException(theRemoveMsg);
-			if (theImmutableMsg != null)
-				throw new UnsupportedOperationException(theImmutableMsg);
-			return value;
-		}
-
-		public Observable<?> getUntil() {
-			return theUntil;
-		}
-
-		public boolean isUntilRemoves() {
-			return untilRemoves;
-		}
-	}
-
-	/**
 	 * Allows creation of a collection that reflects a collection's data, but may limit the operations the user can perform on the data or
 	 * when the user can observe the data
 	 *
@@ -1727,6 +1887,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 * @param <T> The type of the collection to builder modification on
 	 */
 	class ModFilterBuilder<E, T> {
+		private final ObservableCollection<E> theSource;
 		private final CollectionDataFlow<E, ?, T> theParent;
 		private String theImmutableMsg;
 		private boolean allowUpdates;
@@ -1735,8 +1896,13 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		private Function<? super T, String> theAddMsgFn;
 		private Function<? super T, String> theRemoveMsgFn;
 
-		public ModFilterBuilder(CollectionDataFlow<E, ?, T> parent) {
+		public ModFilterBuilder(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent) {
+			theSource = source;
 			theParent = parent;
+		}
+
+		protected ObservableCollection<E> getSource() {
+			return theSource;
 		}
 
 		protected CollectionDataFlow<E, ?, T> getParent() {
@@ -1794,14 +1960,22 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		}
 
 		public CollectionDataFlow<E, T, T> build() {
-			return new ObservableCollectionDataFlowImpl.ModFilteredOp<>((AbstractDataFlow<E, ?, T>) theParent, theImmutableMsg,
+			return new ObservableCollectionDataFlowImpl.ModFilteredOp<>(theSource, (AbstractDataFlow<E, ?, T>) theParent, theImmutableMsg,
 				allowUpdates, theAddMsg, theRemoveMsg, theAddMsgFn, theRemoveMsgFn);
 		}
 	}
 
 	class UniqueModFilterBuilder<E, T> extends ModFilterBuilder<E, T> {
-		public UniqueModFilterBuilder(UniqueDataFlow<E, ?, T> parent) {
-			super(parent);
+		private final UniqueElementFinder<T> theElementFinder;
+
+		public UniqueModFilterBuilder(ObservableCollection<E> source, UniqueDataFlow<E, ?, T> parent,
+			UniqueElementFinder<T> elementFinder) {
+			super(source, parent);
+			theElementFinder = elementFinder;
+		}
+
+		protected UniqueElementFinder<T> getElementFinder() {
+			return theElementFinder;
 		}
 
 		@Override
@@ -1831,14 +2005,20 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 
 		@Override
 		public UniqueDataFlow<E, T, T> build() {
-			return new ObservableCollectionDataFlowImpl.UniqueModFilteredOp<>((AbstractDataFlow<E, ?, T>) getParent(), getImmutableMsg(),
-				areUpdatesAllowed(), getAddMsg(), getRemoveMsg(), getAddMsgFn(), getRemoveMsgFn());
+			return new ObservableCollectionDataFlowImpl.UniqueModFilteredOp<>(getSource(), (AbstractDataFlow<E, ?, T>) getParent(),
+				theElementFinder, getImmutableMsg(), areUpdatesAllowed(), getAddMsg(), getRemoveMsg(), getAddMsgFn(), getRemoveMsgFn());
 		}
 	}
 
 	class UniqueSortedModFilterBuilder<E, T> extends UniqueModFilterBuilder<E, T> {
-		public UniqueSortedModFilterBuilder(UniqueSortedDataFlow<E, ?, T> parent) {
-			super(parent);
+		public UniqueSortedModFilterBuilder(ObservableCollection<E> source, UniqueSortedDataFlow<E, ?, T> parent,
+			UniqueSortedElementFinder<T> elementFinder) {
+			super(source, parent, elementFinder);
+		}
+
+		@Override
+		protected UniqueSortedElementFinder<T> getElementFinder() {
+			return (UniqueSortedElementFinder<T>) super.getElementFinder();
 		}
 
 		@Override
@@ -1868,8 +2048,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> build() {
-			return new ObservableCollectionDataFlowImpl.UniqueSortedModFilteredOp<>((AbstractDataFlow<E, ?, T>) getParent(),
-				getImmutableMsg(), areUpdatesAllowed(), getAddMsg(), getRemoveMsg(), getAddMsgFn(), getRemoveMsgFn());
+			return new ObservableCollectionDataFlowImpl.UniqueSortedModFilteredOp<>(getSource(), (AbstractDataFlow<E, ?, T>) getParent(),
+				getElementFinder(), getImmutableMsg(), areUpdatesAllowed(), getAddMsg(), getRemoveMsg(), getAddMsgFn(), getRemoveMsgFn());
 		}
 	}
 

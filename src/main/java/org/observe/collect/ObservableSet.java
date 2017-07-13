@@ -1,5 +1,7 @@
 package org.observe.collect;
 
+import java.util.Collection;
+
 import org.observe.ObservableValue;
 import org.qommons.Transaction;
 import org.qommons.collect.ImmutableIterator;
@@ -36,6 +38,31 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	@Override
 	default <T> T[] toArray(T[] a) {
 		return ObservableCollection.super.toArray(a);
+	}
+
+	@Override
+	default boolean contains(Object o) {
+		return ObservableCollection.super.contains(o);
+	}
+
+	@Override
+	default boolean containsAll(Collection<?> c) {
+		return ObservableCollection.super.containsAll(c);
+	}
+
+	@Override
+	default boolean remove(Object o) {
+		return ObservableCollection.super.remove(o);
+	}
+
+	@Override
+	default boolean removeAll(Collection<?> c) {
+		return ObservableCollection.super.removeAll(c);
+	}
+
+	@Override
+	default boolean retainAll(Collection<?> c) {
+		return ObservableCollection.super.retainAll(c);
 	}
 
 	/**

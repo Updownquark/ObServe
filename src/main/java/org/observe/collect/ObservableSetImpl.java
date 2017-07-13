@@ -11,8 +11,9 @@ import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableCollection.UniqueMappedCollectionBuilder;
 import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.BaseCollectionDataFlow;
-import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueCollectionManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueDataFlowWrapper;
+import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueElementFinder;
 import org.observe.collect.ObservableCollectionImpl.ConstantObservableCollection;
 import org.observe.collect.ObservableCollectionImpl.DerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.FlattenedValueCollection;
@@ -366,6 +367,12 @@ public class ObservableSetImpl {
 		}
 
 		@Override
+		public CollectionManager<E, ?, E> manageCollection() {
+			// TODO Auto-generated method stub
+			return super.manageCollection();
+		}
+
+		@Override
 		public ObservableSet<E> collect(Observable<?> until) {
 			if (until == Observable.empty)
 				return getSource();
@@ -375,8 +382,34 @@ public class ObservableSetImpl {
 	}
 
 	public static class DerivedSet<E, T> extends DerivedCollection<E, T> implements ObservableSet<T> {
-		public DerivedSet(ObservableCollection<E> source, UniqueCollectionManager<E, ?, T> flow, Observable<?> until) {
+		private final UniqueElementFinder<T> theElementFinder;
+
+		public DerivedSet(ObservableCollection<E> source, CollectionManager<E, ?, T> flow, UniqueElementFinder<T> elementFinder,
+			Observable<?> until) {
 			super(source, flow, until);
+			theElementFinder = elementFinder;
+		}
+
+		protected UniqueElementFinder<T> getElementFinder() {
+			return theElementFinder;
+		}
+
+		@Override
+		public boolean forObservableElement(T value, Consumer<? super ObservableCollectionElement<? extends T>> onElement, boolean first) {
+			ElementId id = getElementFinder().getId(value);
+			if (id == null)
+				return false;
+			forWrappedElementAt(id, onElement);
+			return true;
+		}
+
+		@Override
+		public boolean forMutableElement(T value, Consumer<? super MutableObservableElement<? extends T>> onElement, boolean first) {
+			ElementId id = getElementFinder().getId(value);
+			if (id == null)
+				return false;
+			forWrappedMutableElementAt(id, onElement);
+			return true;
 		}
 	}
 
