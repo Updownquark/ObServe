@@ -1,8 +1,6 @@
 package org.observe.collect;
 
 import java.util.Arrays;
-import java.util.Comparator;
-import java.util.Objects;
 
 import org.qommons.collect.TreeList;
 import org.qommons.tree.CountedRedBlackNode.DefaultNode;
@@ -22,6 +20,12 @@ import org.qommons.tree.CountedRedBlackNode.DefaultNode;
  * @see ObservableCollectionEvent#getElementId()
  */
 public interface ElementId extends Comparable<ElementId> {
+	/** @return The number of elements in the collection prior to this element. May be used as the element's index. */
+	int getElementsBefore();
+
+	/** @return The number of elements in the collection after this element */
+	int getElementsAfter();
+
 	/** @return An element ID that behaves like this one, but orders in reverse */
 	default ElementId reverse() {
 		class ReversedElementId implements ElementId {
@@ -29,6 +33,16 @@ public interface ElementId extends Comparable<ElementId> {
 
 			ReversedElementId(ElementId wrap) {
 				theWrapped = wrap;
+			}
+
+			@Override
+			public int getElementsBefore() {
+				return theWrapped.getElementsAfter();
+			}
+
+			@Override
+			public int getElementsAfter() {
+				return theWrapped.getElementsBefore();
 			}
 
 			@Override
@@ -59,91 +73,8 @@ public interface ElementId extends Comparable<ElementId> {
 		return new ReversedElementId(this);
 	}
 
-	/**
-	 * Creates an ElementId from a comparable value
-	 *
-	 * @param value The comparable value to back the element ID
-	 * @return An ElementId backed by the comparable value
-	 */
-	static <T extends Comparable<T>> ElementId of(T value) {
-		return new ComparableElementId<>(value);
-	}
-
-	/**
-	 * Creates an ElementId from a value and a comparator
-	 *
-	 * @param value The value to back the element ID
-	 * @param compare The comparator to compare element IDs
-	 * @return An ElementId backed by the value and compared by the comparator
-	 */
-	static <T> ElementId of(T value, Comparator<? super T> compare) {
-		return new ComparatorElementId(value, compare);
-	}
-
 	static SimpleElementIdGenerator createSimpleIdGenerator() {
 		return new SimpleElementIdGenerator();
-	}
-
-	class ComparableElementId<T extends Comparable<T>> implements ElementId {
-		private final T theValue;
-
-		public ComparableElementId(T value) {
-			theValue = value;
-		}
-
-		public T getValue() {
-			return theValue;
-		}
-
-		@Override
-		public int compareTo(ElementId o) {
-			return theValue.compareTo(((ComparableElementId<T>) o).theValue);
-		}
-
-		@Override
-		public int hashCode() {
-			return Objects.hashCode(theValue);
-		}
-
-		@Override
-		public boolean equals(Object obj) {
-			return obj instanceof ComparableElementId && Objects.equals(theValue, ((ComparableElementId<T>) obj).theValue);
-		}
-
-		@Override
-		public String toString() {
-			return String.valueOf(theValue);
-		}
-	}
-
-	class ComparatorElementId<T> implements ElementId {
-		private final T theValue;
-		private final Comparator<? super T> theCompare;
-
-		public ComparatorElementId(T value, Comparator<? super T> compare) {
-			theValue = value;
-			theCompare = compare;
-		}
-
-		@Override
-		public int compareTo(ElementId o) {
-			return theCompare.compare(theValue, ((ComparatorElementId<T>) o).theValue);
-		}
-
-		@Override
-		public int hashCode() {
-			return Objects.hashCode(theValue);
-		}
-
-		@Override
-		public boolean equals(Object obj) {
-			return obj instanceof ComparatorElementId && Objects.equals(theValue, ((ComparatorElementId<T>) obj).theValue);
-		}
-
-		@Override
-		public String toString() {
-			return String.valueOf(theValue);
-		}
 	}
 
 	class SimpleElementIdGenerator {
@@ -163,6 +94,10 @@ public interface ElementId extends Comparable<ElementId> {
 
 		public void remove(ElementId id) {
 			((SimpleGeneratedId) id).remove();
+		}
+
+		public ElementId get(int index) {
+			return new SimpleGeneratedId(theIds.getNodeAt(index));
 		}
 
 		private static int[] increment(int[] id) {
@@ -185,6 +120,23 @@ public interface ElementId extends Comparable<ElementId> {
 				theNode = node;
 			}
 
+			@Override
+			public int getElementsBefore() {
+				return theNode.getIndex();
+			}
+
+			@Override
+			public int getElementsAfter() {
+				return theNode.getElementsGreater();
+			}
+
+			@Override
+			public int compareTo(ElementId o) {
+				if (theNode == ((SimpleGeneratedId) o).theNode)
+					return 0;
+				return theNode.getIndex() - ((SimpleGeneratedId) o).theNode.getIndex();
+			}
+
 			SimpleGeneratedId nextTo(boolean left) {
 				return new SimpleGeneratedId(left ? theIds.addBefore(null, theNode) : theIds.addAfter(null, theNode));
 			}
@@ -194,10 +146,13 @@ public interface ElementId extends Comparable<ElementId> {
 			}
 
 			@Override
-			public int compareTo(ElementId o) {
-				if (this == o)
-					return 0;
-				return theNode.getIndex() - ((SimpleGeneratedId) o).theNode.getIndex();
+			public int hashCode() {
+				return theNode.hashCode();
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				return obj instanceof SimpleGeneratedId && theNode.equals(((SimpleGeneratedId) obj).theNode);
 			}
 
 			@Override

@@ -680,9 +680,23 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 
 	boolean forMutableElement(E value, Consumer<? super MutableObservableElement<? extends E>> onElement, boolean first);
 
-	void forElementAt(ElementId elementId, Consumer<? super ObservableCollectionElement<? extends E>> onElement);
+	default void forElementAt(ElementId elementId, Consumer<? super ObservableCollectionElement<? extends E>> onElement) {
+		ofElementAt(elementId, el -> {
+			onElement.accept(el);
+			return null;
+		});
+	}
 
-	void forMutableElementAt(ElementId elementId, Consumer<? super MutableObservableElement<? extends E>> onElement);
+	default void forMutableElementAt(ElementId elementId, Consumer<? super MutableObservableElement<? extends E>> onElement) {
+		ofMutableElementAt(elementId, el -> {
+			onElement.accept(el);
+			return null;
+		});
+	}
+
+	<T> T ofElementAt(ElementId elementId, Function<? super ObservableCollectionElement<? extends E>, T> onElement);
+
+	<T> T ofMutableElementAt(ElementId elementId, Function<? super MutableObservableElement<? extends E>, T> onElement);
 
 	/**
 	 * @param search The test to search for elements that pass
@@ -1113,7 +1127,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 * @return A collection containing all elements of the given collections
 	 */
 	public static <T> ObservableCollection<T> flattenCollections(ObservableCollection<? extends T>... colls) {
-		return flatten(ObservableList.constant(new TypeToken<ObservableCollection<? extends T>>() {}, colls));
+		return flatten(ObservableList.constant(new TypeToken<ObservableCollection<? extends T>>() {}, colls).collect());
 	}
 
 	public static <T> ObservableCollection<T> interleave(ObservableCollection<? extends ObservableCollection<? extends T>> coll,

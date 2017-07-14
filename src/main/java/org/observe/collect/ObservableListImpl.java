@@ -7,6 +7,7 @@ import java.util.ConcurrentModificationException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.Map;
 import java.util.Set;
 import java.util.Spliterator;
 import java.util.function.Consumer;
@@ -15,25 +16,25 @@ import java.util.stream.Collectors;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
-import org.observe.collect.ObservableCollection.MappedCollectionBuilder.ElementSetter;
+import org.observe.collect.ObservableCollection.CombinedValues;
+import org.observe.collect.ObservableCollection.ElementSetter;
 import org.observe.collect.ObservableCollection.StdMsg;
-import org.observe.collect.ObservableCollectionImpl.AbstractDataFlow;
-import org.observe.collect.ObservableCollectionImpl.BaseCollectionDataFlow;
-import org.observe.collect.ObservableCollectionImpl.CollectionElementManager;
-import org.observe.collect.ObservableCollectionImpl.CollectionManager;
-import org.observe.collect.ObservableCollectionImpl.CollectionView;
-import org.observe.collect.ObservableCollectionImpl.ConstantObservableCollection;
+import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractDataFlow;
+import org.observe.collect.ObservableCollectionDataFlowImpl.BaseCollectionDataFlow;
+import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.CombinedCollectionDef;
+import org.observe.collect.ObservableCollectionDataFlowImpl.ElementRefreshOp;
+import org.observe.collect.ObservableCollectionDataFlowImpl.EquivalenceSwitchOp;
+import org.observe.collect.ObservableCollectionDataFlowImpl.InitialElementsDataFlow;
+import org.observe.collect.ObservableCollectionDataFlowImpl.MapOp;
+import org.observe.collect.ObservableCollectionDataFlowImpl.RefreshOp;
 import org.observe.collect.ObservableCollectionImpl.DerivedCollection;
-import org.observe.collect.ObservableCollectionImpl.ElementRefreshOp;
-import org.observe.collect.ObservableCollectionImpl.EquivalenceSwitchOp;
-import org.observe.collect.ObservableCollectionImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionImpl.FlattenedObservableCollection;
 import org.observe.collect.ObservableCollectionImpl.FlattenedValueCollection;
-import org.observe.collect.ObservableCollectionImpl.MapOp;
-import org.observe.collect.ObservableCollectionImpl.RefreshOp;
 import org.observe.collect.ObservableCollectionImpl.ReversedObservableCollection;
 import org.observe.collect.ObservableList.CombinedListBuilder2;
 import org.observe.collect.ObservableList.ListDataFlow;
+import org.observe.collect.ObservableList.ListModFilterBuilder;
 import org.observe.collect.ObservableList.MappedListBuilder;
 import org.observe.collect.ObservableReversibleCollectionImpl.FlattenedReversibleCollection.ReversibleFlattenedSpliterator;
 import org.observe.collect.ObservableReversibleSpliterator.WrappingReversibleObservableSpliterator;
@@ -1035,106 +1036,6 @@ public class ObservableListImpl {
 	}
 
 	/**
-	 * An implementation of {@link ObservableList#listIterator(int)} for derived lists that are one-to-one mappings of their source lists
-	 *
-	 * @param <E> The type of values in the source list
-	 * @param <T> The type of values in the derived list
-	 */
-	public static abstract class SimpleMappedListIterator<E, T> implements ListIterator<T> {
-		private final ListIterator<? extends E> theWrapped;
-		private E lastValue;
-		private boolean isRemoved;
-
-		/** @param wrap The list iterator from the source list to wrap */
-		public SimpleMappedListIterator(ListIterator<? extends E> wrap) {
-			theWrapped = wrap;
-		}
-
-		/**
-		 * @param e The source value
-		 * @return The mapped value
-		 */
-		protected abstract T wrap(E e);
-		/**
-		 * @param value The value to attempt to remove
-		 * @throw RuntimeException If the value may not be removed
-		 */
-		protected void attemptRemove(E value) {}
-		/**
-		 * @param value The value to attempt to add
-		 * @return The value to add to the source collection
-		 */
-		protected abstract E attemptedAdd(T value);
-
-		/** @return Whether individual values in the source collection are settable */
-		protected abstract boolean isElementSettable();
-		/**
-		 * @param container The source value
-		 * @param value The value to set
-		 * @param cause The cause of the operation
-		 * @return The value previously contained in the container
-		 */
-		protected abstract T attemptSet(E container, T value, Object cause);
-
-		@Override
-		public boolean hasNext() {
-			return theWrapped.hasNext();
-		}
-
-		@Override
-		public T next() {
-			isRemoved = false;
-			return wrap(lastValue = theWrapped.next());
-		}
-
-		@Override
-		public boolean hasPrevious() {
-			return theWrapped.hasPrevious();
-		}
-
-		@Override
-		public T previous() {
-			isRemoved = false;
-			return wrap(lastValue = theWrapped.previous());
-		}
-
-		@Override
-		public int nextIndex() {
-			return theWrapped.nextIndex();
-		}
-
-		@Override
-		public int previousIndex() {
-			return theWrapped.previousIndex();
-		}
-
-		@Override
-		public void remove() {
-			attemptRemove(lastValue);
-			theWrapped.remove();
-			lastValue = null;
-			isRemoved = true;
-		}
-
-		@Override
-		public void set(T e) {
-			if (isRemoved)
-				throw new IllegalStateException("Element has been removed");
-			if (isElementSettable())
-				attemptSet(lastValue, e, null);
-			else {
-				attemptRemove(lastValue);
-				((ListIterator<E>) theWrapped).set(attemptedAdd(e));
-			}
-		}
-
-		@Override
-		public void add(T e) {
-			((ListIterator<E>) theWrapped).add(attemptedAdd(e));
-		}
-	}
-
-	/**
 	 * Implements {@link ObservableList#reverse()}
 	 *
 	 * @param <E> The type of elements in the collection
@@ -1156,6 +1057,20 @@ public class ObservableListImpl {
 		}
 
 		@Override
+		public <T> T ofElementAt(int index, Function<? super ObservableCollectionElement<? extends E>, T> onElement) {
+			try (Transaction t = lock(false, null)) {
+				return getWrapped().ofElementAt(reflect(index, false), onElement);
+			}
+		}
+
+		@Override
+		public <T> T ofMutableElementAt(int index, Function<? super MutableObservableElement<? extends E>, T> onElement) {
+			try (Transaction t = lock(true, null)) {
+				return getWrapped().ofMutableElementAt(reflect(index, false), onElement);
+			}
+		}
+
+		@Override
 		public ObservableElementSpliterator<E> spliterator(int index) {
 			try (Transaction t = lock(false, null)) {
 				return getWrapped().spliterator(reflect(index, true)).reverse();
@@ -1167,12 +1082,6 @@ public class ObservableListImpl {
 			try (Transaction t = lock(false, null)) {
 				return getWrapped().mutableSpliterator(reflect(index, true)).reverse();
 			}
-		}
-
-		@Override
-		public boolean add(E e) {
-			getWrapped().add(0, e);
-			return true;
 		}
 
 		@Override
@@ -1191,6 +1100,8 @@ public class ObservableListImpl {
 		}
 
 		private static <T> Collection<T> reverse(Collection<T> coll) {
+			if (coll instanceof ReversedCollection)
+				return ((ReversedCollection<T>) coll).reverse();
 			List<T> copy = new ArrayList<>(coll);
 			java.util.Collections.reverse(copy);
 			return copy;
@@ -1291,7 +1202,7 @@ public class ObservableListImpl {
 	}
 
 	public static class BaseListDataFlow<E> extends BaseCollectionDataFlow<E> implements ListDataFlow<E, E, E> {
-		public BaseListDataFlow(ObservableList<E> source) {
+		protected BaseListDataFlow(ObservableList<E> source) {
 			super(source);
 		}
 
@@ -1302,22 +1213,22 @@ public class ObservableListImpl {
 
 		@Override
 		public ListDataFlow<E, E, E> withEquivalence(Equivalence<? super E> equivalence) {
-			return new EquivalenceSwitchListOp<>(this, equivalence);
+			return new EquivalenceSwitchListOp<>(getSource(), this, equivalence);
 		}
 
 		@Override
 		public ListDataFlow<E, E, E> refresh(Observable<?> refresh) {
-			return new RefreshListOp<>(this, refresh);
+			return new RefreshListOp<>(getSource(), this, refresh);
 		}
 
 		@Override
 		public ListDataFlow<E, E, E> refreshEach(Function<? super E, ? extends Observable<?>> refresh) {
-			return new ElementRefreshListOp<>(this, refresh);
+			return new ElementRefreshListOp<>(getSource(), this, refresh);
 		}
 
 		@Override
 		public <X> MappedListBuilder<E, E, X> map(TypeToken<X> target) {
-			return new MappedListBuilder<>(this, target);
+			return new MappedListBuilder<>(getSource(), this, target);
 		}
 
 		@Override
@@ -1327,23 +1238,85 @@ public class ObservableListImpl {
 
 		@Override
 		public <V, X> CombinedListBuilder2<E, E, V, X> combineWith(ObservableValue<V> value, TypeToken<X> target) {
-			return new CombinedListBuilder2<>(this, target, value, Ternian.NONE);
+			return new CombinedListBuilder2<>(getSource(), this, target, value, Ternian.NONE);
 		}
 
 		@Override
 		public <V, X> CombinedListBuilder2<E, E, V, X> combineWith(ObservableValue<V> value, boolean combineNulls, TypeToken<X> target) {
-			return new CombinedListBuilder2<>(this, target, value, Ternian.of(combineNulls));
+			return new CombinedListBuilder2<>(getSource(), this, target, value, Ternian.of(combineNulls));
 		}
 
 		@Override
-		public ObservableList<E> build() {
-			return getSource();
+		public ListModFilterBuilder<E, E> filterModification() {
+			return new ListModFilterBuilder<>(getSource(), this);
+		}
+
+		@Override
+		public ObservableList<E> collect(Observable<?> until) {
+			if (until == Observable.empty)
+				return getSource();
+			else
+				return new DerivedList<>(getSource(), manageCollection(), until);
+		}
+	}
+
+	public static class InitialElementsListFlow<E> extends InitialElementsDataFlow<E> implements ListDataFlow<E, E, E> {
+		protected InitialElementsListFlow(ObservableList<E> source, ListDataFlow<E, ?, E> parent, TypeToken<E> targetType,
+			Collection<? extends E> initialValues) {
+			super(source, parent, targetType, initialValues);
+		}
+
+		@Override
+		protected ObservableList<E> getSource() {
+			return (ObservableList<E>) super.getSource();
+		}
+
+		@Override
+		public ListDataFlow<E, E, E> withEquivalence(Equivalence<? super E> equivalence) {
+			return new EquivalenceSwitchListOp<>(getSource(), this, equivalence);
+		}
+
+		@Override
+		public ListDataFlow<E, E, E> refresh(Observable<?> refresh) {
+			return new RefreshListOp<>(getSource(), this, refresh);
+		}
+
+		@Override
+		public ListDataFlow<E, E, E> refreshEach(Function<? super E, ? extends Observable<?>> refresh) {
+			return new ElementRefreshListOp<>(getSource(), this, refresh);
+		}
+
+		@Override
+		public <X> MappedListBuilder<E, E, X> map(TypeToken<X> target) {
+			return new MappedListBuilder<>(getSource(), this, target);
+		}
+
+		@Override
+		public <V, X> CombinedListBuilder2<E, E, V, X> combineWith(ObservableValue<V> value, TypeToken<X> target) {
+			return new CombinedListBuilder2<>(getSource(), this, target, value, Ternian.NONE);
+		}
+
+		@Override
+		public <V, X> CombinedListBuilder2<E, E, V, X> combineWith(ObservableValue<V> value, boolean combineNulls, TypeToken<X> target) {
+			return new CombinedListBuilder2<>(getSource(), this, target, value, Ternian.of(combineNulls));
+		}
+
+		@Override
+		public ListModFilterBuilder<E, E> filterModification() {
+			return new ListModFilterBuilder<>(getSource(), this);
+		}
+
+		@Override
+		public ObservableList<E> collect(Observable<?> until) {
+			DerivedList<E, E> collected = new DerivedList<>(getSource(), manageCollection(), until);
+			getSource().addAll(getInitialValues());
+			return collected;
 		}
 	}
 
 	public static class EquivalenceSwitchListOp<E, T> extends EquivalenceSwitchOp<E, T> implements ListDataFlow<E, T, T> {
-		protected EquivalenceSwitchListOp(AbstractDataFlow<E, ?, T> parent, Equivalence<? super T> equivalence) {
-			super(parent, equivalence);
+		protected EquivalenceSwitchListOp(ObservableList<E> source, AbstractDataFlow<E, ?, T> parent, Equivalence<? super T> equivalence) {
+			super(source, parent, equivalence);
 		}
 
 		@Override
@@ -1353,22 +1326,22 @@ public class ObservableListImpl {
 
 		@Override
 		public ListDataFlow<E, T, T> withEquivalence(Equivalence<? super T> equivalence) {
-			return new EquivalenceSwitchListOp<>(this, equivalence);
+			return new EquivalenceSwitchListOp<>(getSource(), this, equivalence);
 		}
 
 		@Override
 		public ListDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new RefreshListOp<>(this, refresh);
+			return new RefreshListOp<>(getSource(), this, refresh);
 		}
 
 		@Override
 		public ListDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new ElementRefreshListOp<>(this, refresh);
+			return new ElementRefreshListOp<>(getSource(), this, refresh);
 		}
 
 		@Override
 		public <X> MappedListBuilder<E, T, X> map(TypeToken<X> target) {
-			return new MappedListBuilder<>(this, target);
+			return new MappedListBuilder<>(getSource(), this, target);
 		}
 
 		@Override
@@ -1378,24 +1351,31 @@ public class ObservableListImpl {
 
 		@Override
 		public <V, X> CombinedListBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, TypeToken<X> target) {
-			return new CombinedListBuilder2<>(this, target, value, Ternian.NONE);
+			return new CombinedListBuilder2<>(getSource(), this, target, value, Ternian.NONE);
 		}
 
 		@Override
 		public <V, X> CombinedListBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, boolean combineNulls, TypeToken<X> target) {
-			return new CombinedListBuilder2<>(this, target, value, Ternian.of(combineNulls));
+			return new CombinedListBuilder2<>(getSource(), this, target, value, Ternian.of(combineNulls));
 		}
 
 		@Override
-		public ObservableList<T> build() {
-			return new DerivedList<E, T>(getSource(), manageCollection());
+		public ListModFilterBuilder<E, T> filterModification() {
+			return new ListModFilterBuilder<>(getSource(), this);
+		}
+
+		@Override
+		public ObservableList<T> collect(Observable<?> until) {
+			return new DerivedList<E, T>(getSource(), manageCollection(), until);
 		}
 	}
 
 	public static class MapListOp<E, I, T> extends MapOp<E, I, T> implements ListDataFlow<E, I, T> {
-		protected MapListOp(AbstractDataFlow<E, ?, I> parent, TypeToken<T> target, Function<? super I, ? extends T> map, boolean mapNulls,
-			Function<? super T, ? extends I> reverse, ElementSetter<? super I, ? super T> elementReverse, boolean reverseNulls) {
-			super(parent, target, map, mapNulls, reverse, elementReverse, reverseNulls);
+		protected MapListOp(ObservableList<E> source, AbstractDataFlow<E, ?, I> parent, TypeToken<T> target,
+			Function<? super I, ? extends T> map, boolean mapNulls, Function<? super T, ? extends I> reverse,
+			ElementSetter<? super I, ? super T> elementReverse, boolean reverseNulls, boolean reEvalOnUpdate, boolean fireIfUnchanged,
+			boolean cached) {
+			super(source, parent, target, map, mapNulls, reverse, elementReverse, reverseNulls, reEvalOnUpdate, fireIfUnchanged, cached);
 		}
 
 		@Override
@@ -1405,48 +1385,101 @@ public class ObservableListImpl {
 
 		@Override
 		public ListDataFlow<E, T, T> withEquivalence(Equivalence<? super T> equivalence) {
-			return new EquivalenceSwitchListOp<>(this, equivalence);
+			return new EquivalenceSwitchListOp<>(getSource(), this, equivalence);
 		}
 
 		@Override
 		public ListDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new RefreshListOp<>(this, refresh);
+			return new RefreshListOp<>(getSource(), this, refresh);
 		}
 
 		@Override
 		public ListDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new ElementRefreshListOp<>(this, refresh);
+			return new ElementRefreshListOp<>(getSource(), this, refresh);
 		}
 
 		@Override
 		public <X> MappedListBuilder<E, T, X> map(TypeToken<X> target) {
-			return new MappedListBuilder<>(this, target);
-		}
-
-		@Override
-		public <X> ListDataFlow<E, ?, X> flatMap(TypeToken<X> target, Function<? super T, ? extends ObservableValue<? extends X>> map) {
-			return (ListDataFlow<E, ?, X>) super.flatMap(target, map);
+			return new MappedListBuilder<>(getSource(), this, target);
 		}
 
 		@Override
 		public <V, X> CombinedListBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, TypeToken<X> target) {
-			return new CombinedListBuilder2<>(this, target, value, Ternian.NONE);
+			return new CombinedListBuilder2<>(getSource(), this, target, value, Ternian.NONE);
 		}
 
 		@Override
 		public <V, X> CombinedListBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, boolean combineNulls, TypeToken<X> target) {
-			return new CombinedListBuilder2<>(this, target, value, Ternian.of(combineNulls));
+			return new CombinedListBuilder2<>(getSource(), this, target, value, Ternian.of(combineNulls));
 		}
 
 		@Override
-		public ObservableList<T> build() {
-			return new DerivedList<E, T>(getSource(), manageCollection());
+		public ListModFilterBuilder<E, T> filterModification() {
+			return new ListModFilterBuilder<>(getSource(), this);
+		}
+
+		@Override
+		public ObservableList<T> collect(Observable<?> until) {
+			return new DerivedList<E, T>(getSource(), manageCollection(), until);
+		}
+	}
+
+	public static class CombinedListOp<E, I, T> extends CombinedCollectionDef<E, I, T> implements ListDataFlow<E, I, T> {
+		protected CombinedListOp(ObservableList<E> source, AbstractDataFlow<E, ?, I> parent, TypeToken<T> target,
+			Map<ObservableValue<?>, Boolean> args, Function<? super CombinedValues<? extends I>, ? extends T> combination,
+			boolean combineNulls, Function<? super CombinedValues<? extends T>, ? extends I> reverse, boolean reverseNulls) {
+			super(source, parent, target, args, combination, combineNulls, reverse, reverseNulls);
+		}
+
+		@Override
+		protected ObservableList<E> getSource() {
+			return (ObservableList<E>) super.getSource();
+		}
+
+		@Override
+		public ListDataFlow<E, T, T> withEquivalence(Equivalence<? super T> equivalence) {
+			return new EquivalenceSwitchListOp<>(getSource(), this, equivalence);
+		}
+
+		@Override
+		public ListDataFlow<E, T, T> refresh(Observable<?> refresh) {
+			return new RefreshListOp<>(getSource(), this, refresh);
+		}
+
+		@Override
+		public ListDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
+			return new ElementRefreshListOp<>(getSource(), this, refresh);
+		}
+
+		@Override
+		public <X> MappedListBuilder<E, T, X> map(TypeToken<X> target) {
+			return new MappedListBuilder<>(getSource(), this, target);
+		}
+
+		@Override
+		public <V, X> CombinedListBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, TypeToken<X> target) {
+			return new CombinedListBuilder2<>(getSource(), this, target, value, Ternian.NONE);
+		}
+
+		@Override
+		public <V, X> CombinedListBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, boolean combineNulls, TypeToken<X> target) {
+			return new CombinedListBuilder2<>(getSource(), this, target, value, Ternian.of(combineNulls));
+		}
+
+		@Override
+		public ListModFilterBuilder<E, T> filterModification() {
+			return new ListModFilterBuilder<>(getSource(), this);
+		}
+
+		@Override
+		public ObservableList<T> collect(Observable<?> until) {
+			return new DerivedList<E, T>(getSource(), manageCollection(), until);
 		}
 	}
 
 	public static class RefreshListOp<E, T> extends RefreshOp<E, T> implements ListDataFlow<E, T, T> {
-		protected RefreshListOp(AbstractDataFlow<E, ?, T> parent, Observable<?> refresh) {
-			super(parent, refresh);
+		protected RefreshListOp(ObservableList<E> source, AbstractDataFlow<E, ?, T> parent, Observable<?> refresh) {
+			super(source, parent, refresh);
 		}
 
 		@Override
@@ -1456,48 +1489,49 @@ public class ObservableListImpl {
 
 		@Override
 		public ListDataFlow<E, T, T> withEquivalence(Equivalence<? super T> equivalence) {
-			return new EquivalenceSwitchListOp<>(this, equivalence);
+			return new EquivalenceSwitchListOp<>(getSource(), this, equivalence);
 		}
 
 		@Override
 		public ListDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new RefreshListOp<>(this, refresh);
+			return new RefreshListOp<>(getSource(), this, refresh);
 		}
 
 		@Override
 		public ListDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new ElementRefreshListOp<>(this, refresh);
+			return new ElementRefreshListOp<>(getSource(), this, refresh);
 		}
 
 		@Override
 		public <X> MappedListBuilder<E, T, X> map(TypeToken<X> target) {
-			return new MappedListBuilder<>(this, target);
-		}
-
-		@Override
-		public <X> ListDataFlow<E, ?, X> flatMap(TypeToken<X> target, Function<? super T, ? extends ObservableValue<? extends X>> map) {
-			return (ListDataFlow<E, ?, X>) super.flatMap(target, map);
+			return new MappedListBuilder<>(getSource(), this, target);
 		}
 
 		@Override
 		public <V, X> CombinedListBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, TypeToken<X> target) {
-			return new CombinedListBuilder2<>(this, target, value, Ternian.NONE);
+			return new CombinedListBuilder2<>(getSource(), this, target, value, Ternian.NONE);
 		}
 
 		@Override
 		public <V, X> CombinedListBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, boolean combineNulls, TypeToken<X> target) {
-			return new CombinedListBuilder2<>(this, target, value, Ternian.of(combineNulls));
+			return new CombinedListBuilder2<>(getSource(), this, target, value, Ternian.of(combineNulls));
 		}
 
 		@Override
-		public ObservableList<T> build() {
-			return new DerivedList<E, T>(getSource(), manageCollection());
+		public ListModFilterBuilder<E, T> filterModification() {
+			return new ListModFilterBuilder<>(getSource(), this);
+		}
+
+		@Override
+		public ObservableList<T> collect(Observable<?> until) {
+			return new DerivedList<E, T>(getSource(), manageCollection(), until);
 		}
 	}
 
 	public static class ElementRefreshListOp<E, T> extends ElementRefreshOp<E, T> implements ListDataFlow<E, T, T> {
-		protected ElementRefreshListOp(AbstractDataFlow<E, ?, T> parent, Function<? super T, ? extends Observable<?>> elementRefresh) {
-			super(parent, elementRefresh);
+		protected ElementRefreshListOp(ObservableList<E> source, AbstractDataFlow<E, ?, T> parent,
+			Function<? super T, ? extends Observable<?>> elementRefresh) {
+			super(source, parent, elementRefresh);
 		}
 
 		@Override
@@ -1507,48 +1541,50 @@ public class ObservableListImpl {
 
 		@Override
 		public ListDataFlow<E, T, T> withEquivalence(Equivalence<? super T> equivalence) {
-			return new EquivalenceSwitchListOp<>(this, equivalence);
+			return new EquivalenceSwitchListOp<>(getSource(), this, equivalence);
 		}
 
 		@Override
 		public ListDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new RefreshListOp<>(this, refresh);
+			return new RefreshListOp<>(getSource(), this, refresh);
 		}
 
 		@Override
 		public ListDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new ElementRefreshListOp<>(this, refresh);
+			return new ElementRefreshListOp<>(getSource(), this, refresh);
 		}
 
 		@Override
 		public <X> MappedListBuilder<E, T, X> map(TypeToken<X> target) {
-			return new MappedListBuilder<>(this, target);
-		}
-
-		@Override
-		public <X> ListDataFlow<E, ?, X> flatMap(TypeToken<X> target, Function<? super T, ? extends ObservableValue<? extends X>> map) {
-			return (ListDataFlow<E, ?, X>) super.flatMap(target, map);
+			return new MappedListBuilder<>(getSource(), this, target);
 		}
 
 		@Override
 		public <V, X> CombinedListBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, TypeToken<X> target) {
-			return new CombinedListBuilder2<>(this, target, value, Ternian.NONE);
+			return new CombinedListBuilder2<>(getSource(), this, target, value, Ternian.NONE);
 		}
 
 		@Override
 		public <V, X> CombinedListBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, boolean combineNulls, TypeToken<X> target) {
-			return new CombinedListBuilder2<>(this, target, value, Ternian.of(combineNulls));
+			return new CombinedListBuilder2<>(getSource(), this, target, value, Ternian.of(combineNulls));
 		}
 
 		@Override
-		public ObservableList<T> build() {
-			return new DerivedList<E, T>(getSource(), manageCollection());
+		public ListModFilterBuilder<E, T> filterModification() {
+			return new ListModFilterBuilder<>(getSource(), this);
+		}
+
+		@Override
+		public ObservableList<T> collect(Observable<?> until) {
+			return new DerivedList<E, T>(getSource(), manageCollection(), until);
 		}
 	}
 
-	public static class DerivedList<E, T> extends DerivedCollection<E, T> implements ObservableList<T> {
-		public DerivedList(ObservableList<E> source, CollectionManager<E, T> flow) {
-			super(source, flow);
+	public static class ListModFilteredOp<E, T> extends ObservableCollectionDataFlowImpl.ModFilteredOp<E, T>
+		implements ListDataFlow<E, T, T> {
+		protected ListModFilteredOp(ObservableList<E> source, AbstractDataFlow<E, ?, T> parent, String immutableMsg, boolean allowUpdates,
+			String addMsg, String removeMsg, Function<? super T, String> addMsgFn, Function<? super T, String> removeMsgFn) {
+			super(source, parent, immutableMsg, allowUpdates, addMsg, removeMsg, addMsgFn, removeMsgFn);
 		}
 
 		@Override
@@ -1557,221 +1593,73 @@ public class ObservableListImpl {
 		}
 
 		@Override
-		public void add(int index, T e) {
-			if (!getFlow().isReversible())
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			if (!checkDestType(e))
-				throw new IllegalArgumentException(StdMsg.BAD_TYPE);
-			try (Transaction t = lock(true, null)) {
-				if (index > size())
-					throw new IndexOutOfBoundsException(index + " of " + size());
-				FilterMapResult<T, E> reversed = getFlow().reverse(new FilterMapResult<>(e));
-				if (reversed.error != null)
-					throw new IllegalArgumentException(reversed.error);
-				getSource().add(mapToSourceIndex(index), reversed.result);
-			}
-		}
-
-		protected int mapToSourceIndex(int index) {
-			if (!isFiltered())
-				return index;
-			int presentIndex = 0;
-			int srcIndex = 0;
-			for (CollectionElementManager<E, T> elMgr : getElements().values()) {
-				if (elMgr.isPresent()) {
-					if (index == presentIndex)
-						break;
-					presentIndex++;
-				}
-				srcIndex++;
-			}
-			if (presentIndex < index)
-				throw new IndexOutOfBoundsException(index + " of " + presentIndex);
-			return srcIndex;
+		public ListDataFlow<E, T, T> withEquivalence(Equivalence<? super T> equivalence) {
+			return new EquivalenceSwitchListOp<>(getSource(), this, equivalence);
 		}
 
 		@Override
-		public boolean addAll(int index, Collection<? extends T> c) {
-			if (c.isEmpty())
-				return false;
-			if (!getFlow().isReversible())
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			try (Transaction t = lock(true, null)) {
-				return getSource().addAll(mapToSourceIndex(index), reverse(c, true));
-			}
+		public ListDataFlow<E, T, T> refresh(Observable<?> refresh) {
+			return new RefreshListOp<>(getSource(), this, refresh);
 		}
 
 		@Override
-		public T remove(int index) {
-			try (Transaction t = lock(true, null)) {
-				CollectionElementManager<E, T> elMgr = getPresentElements().entrySet().get(index).getValue();
-				T old = elMgr.get();
-				getSource().remove(mapToSourceIndex(index));
-				return old;
-			}
+		public ListDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
+			return new ElementRefreshListOp<>(getSource(), this, refresh);
 		}
 
 		@Override
-		public void removeRange(int fromIndex, int toIndex) {
-			try (Transaction t = lock(true, null)) {
-				getSource().removeRange(mapToSourceIndex(fromIndex), mapToSourceIndex(toIndex));
-			}
+		public <X> MappedListBuilder<E, T, X> map(TypeToken<X> target) {
+			return new MappedListBuilder<>(getSource(), this, target);
 		}
 
 		@Override
-		public T set(int index, T element) {
-			try (Transaction t = lock(true, null)) {
-				CollectionElementManager<E, T> elMgr = getPresentElements().entrySet().get(index).getValue();
-				T old = elMgr.get();
-				String msg = elMgr.modifyElementValue(element, true, null);
-				if (msg == null)
-					return old;
-				if (getFlow().isReversible()) {
-					FilterMapResult<T, E> res = getFlow().reverse(element);
-					if (res.error != null)
-						throw new IllegalArgumentException(res.error);
-					getSource().set(mapToSourceIndex(index), res.result);
-					return old;
-				} else
-					throw new IllegalArgumentException(msg);
-			}
+		public <V, X> CombinedListBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, TypeToken<X> target) {
+			return new CombinedListBuilder2<>(getSource(), this, target, value, Ternian.NONE);
 		}
 
 		@Override
-		public ListIterator<T> listIterator(int index) {
-			// TODO Auto-generated method stub
-			return null;
+		public <V, X> CombinedListBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, boolean combineNulls, TypeToken<X> target) {
+			return new CombinedListBuilder2<>(getSource(), this, target, value, Ternian.of(combineNulls));
 		}
 
 		@Override
-		public ObservableElementSpliterator<T> spliterator(int index) {
-			// TODO Auto-generated method stub
-			return null;
+		public ListModFilterBuilder<E, T> filterModification() {
+			return new ListModFilterBuilder<>(getSource(), this);
 		}
 
 		@Override
-		public MutableObservableSpliterator<T> mutableSpliterator(int index) {}
-
-		@Override
-		public ReversibleList<T> subList(int fromIndex, int toIndex) {
-			if (!isFiltered())
-				return new SimpleMappedSubList<>(getSource().subList(fromIndex, toIndex), getType(), equivalence(), this, map());
+		public ObservableList<T> collect(Observable<?> until) {
+			return new DerivedList<E, T>(getSource(), manageCollection(), until);
 		}
 	}
 
-	/**
-	 * Implements {@link ObservableList#filterModification(ObservableCollection.ModFilterDef)}
-	 *
-	 * @param <E> The type of values in the list
-	 */
-	public static class ListView<E> extends CollectionView<E> implements ObservableList<E> {
-		/**
-		 * @param wrapped The source list
-		 * @param def The definition for how the list may be modified
-		 */
-		protected ListView(ObservableList<E> wrapped, ViewDef<E> def) {
-			super(wrapped, def);
+	public static class DerivedList<E, T> extends DerivedCollection<E, T> implements ObservableList<T> {
+		protected DerivedList(ObservableList<E> source, CollectionManager<E, ?, T> flow, Observable<?> until) {
+			super(source, flow, until);
 		}
 
 		@Override
-		protected ObservableList<E> getCollection() {
-			return (ObservableList<E>) super.getCollection();
+		protected ObservableList<E> getSource() {
+			return (ObservableList<E>) super.getSource();
 		}
 
 		@Override
-		public void add(int index, E element) {
-			getCollection().add(index, getDef().tryAdd(element));
+		public <X> X ofElementAt(int index, Function<? super ObservableCollectionElement<? extends T>, X> onElement) {
+			return ofElementAt(getIdAt(index), onElement);
 		}
 
 		@Override
-		public boolean addAll(int index, Collection<? extends E> c) {
-			return getCollection().addAll(index, c.stream().map(v -> {
-				if (!getType().getRawType().isInstance(v))
-					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
-				return getDef().tryAdd(v);
-			}).collect(Collectors.toList()));
+		public <X> X ofMutableElementAt(int index, Function<? super MutableObservableElement<? extends T>, X> onElement) {
+			return ofMutableElementAt(getIdAt(index), onElement);
+		}
+
+		protected ElementId getIdAt(int index) {
+			return getPresentElements().get(index);
 		}
 
 		@Override
-		public E remove(int index) {
-			try (Transaction t = lock(true, null)) {
-				E val = getCollection().get(index);
-				String msg = getDef().checkRemove(val);
-				if (msg != null)
-					throw new IllegalArgumentException(msg);
-				return getCollection().remove(index);
-			}
-		}
-
-		@Override
-		public void removeRange(int fromIndex, int toIndex) {
-			try (Transaction t = lock(true, null)) {
-				for (int i = fromIndex; i < toIndex && i < size(); i++) {
-					E val = getCollection().get(i);
-					String msg = getDef().checkRemove(val);
-					if (msg != null)
-						throw new IllegalArgumentException(msg);
-				}
-				getCollection().removeRange(fromIndex, toIndex);
-			}
-		}
-
-		@Override
-		public E set(int index, E element) {
-			getDef().tryAdd(element);
-			try (Transaction t = lock(true, null)) {
-				E val = getCollection().get(index);
-				String msg = getDef().checkRemove(val);
-				if (msg != null)
-					throw new IllegalArgumentException(msg);
-				return getCollection().set(index, element);
-			}
-		}
-
-		@Override
-		public ObservableElementSpliterator<E> spliterator(int index) {
-			return getCollection().spliterator(index).map(getDef().mapSpliterator());
-		}
-
-		@Override
-		public MutableObservableSpliterator<E> mutableSpliterator(int index) {
-			return getCollection().mutableSpliterator(index).map(getDef().mapSpliterator());
-		}
-
-		@Override
-		public ListIterator<E> listIterator(int index) {
-			return new SimpleMappedListIterator<E, E>(getCollection().listIterator(index)) {
-				@Override
-				protected E wrap(E e) {
-					return e;
-				}
-
-				@Override
-				protected void attemptRemove(E value) {
-					getDef().tryRemove(value);
-				}
-
-				@Override
-				protected E attemptedAdd(E value) {
-					return getDef().tryAdd(value);
-				}
-
-				@Override
-				protected boolean isElementSettable() {
-					return false;
-				}
-
-				@Override
-				protected E attemptSet(E container, E value, Object cause) {
-					return null;
-				}
-			};
-		}
-
-		@Override
-		public ReversibleList<E> subList(int fromIndex, int toIndex) {
-			return new SimpleMappedSubList<>(getCollection().subList(fromIndex, toIndex), getType(), equivalence(), this,
-				getDef().mapSpliterator());
+		public MutableObservableSpliterator<T> mutableSpliterator(int index) {
+			return new MutableDerivedSpliterator(getPresentElements().spliteratorFrom(index));
 		}
 	}
 
@@ -2444,179 +2332,6 @@ public class ObservableListImpl {
 		@Override
 		public ReversibleList<E> subList(int fromIndex, int toIndex) {
 			// TODO Auto-generated method stub
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableList#constant(TypeToken, List)}
-	 *
-	 * @param <E> The type of values in the list
-	 */
-	public static class ConstantObservableList<E> extends ConstantObservableCollection<E> implements ObservableList<E> {
-		/**
-		 * @param type The type of the list
-		 * @param collection The values in the list
-		 */
-		public ConstantObservableList(TypeToken<E> type, List<? extends E> collection) {
-			super(type, collection);
-		}
-
-		@Override
-		protected List<? extends E> getCollection() {
-			return (List<? extends E>) super.getCollection();
-		}
-
-		@Override
-		public E get(int index) {
-			return getCollection().get(index);
-		}
-
-		@Override
-		public int indexOf(Object value) {
-			return getCollection().indexOf(value);
-		}
-
-		@Override
-		public int lastIndexOf(Object value) {
-			return getCollection().lastIndexOf(value);
-		}
-
-		@Override
-		public void add(int index, E element) {
-			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-		}
-
-		@Override
-		public boolean addAll(int index, Collection<? extends E> c) {
-			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-		}
-
-		@Override
-		public boolean removeLast(Object o) {
-			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-		}
-
-		@Override
-		public E remove(int index) {
-			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-		}
-
-		@Override
-		public void removeRange(int fromIndex, int toIndex) {
-			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-		}
-
-		@Override
-		public E set(int index, E element) {
-			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-		}
-
-		@Override
-		public ObservableReversibleSpliterator<E> spliterator() {
-			return spliterator(true);
-		}
-
-		@Override
-		public ObservableReversibleSpliterator<E> spliterator(boolean fromStart) {
-			return spliterator(size());
-		}
-
-		@Override
-		public ObservableReversibleSpliterator<E> spliterator(int index) {
-			if (index < 0)
-				throw new IndexOutOfBoundsException("" + index);
-			List<ConstantElement> elements = getElements();
-			if (index > elements.size())
-				throw new IndexOutOfBoundsException(index + " of " + elements.size());
-			return new ObservableReversibleSpliterator<E>() {
-				private int theIndex = index;
-
-				@Override
-				public TypeToken<E> getType() {
-					return ConstantObservableList.this.getType();
-				}
-
-				@Override
-				public long estimateSize() {
-					return size();
-				}
-
-				@Override
-				public int characteristics() {
-					return Spliterator.IMMUTABLE | Spliterator.SIZED;
-				}
-
-				@Override
-				public boolean tryAdvanceObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
-					if (theIndex == elements.size())
-						return false;
-					action.accept(elements.get(theIndex));
-					theIndex++;
-					return true;
-				}
-
-				@Override
-				public boolean tryReverseObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
-					if (theIndex == 0)
-						return false;
-					theIndex--;
-					action.accept(elements.get(theIndex));
-					return true;
-				}
-
-				@Override
-				public ObservableReversibleSpliterator<E> trySplit() {
-					return null;
-				}
-			};
-		}
-
-		@Override
-		public ListIterator<E> listIterator(int index) {
-			return (ListIterator<E>) Collections.unmodifiableList(getCollection()).listIterator(index);
-		}
-
-		@Override
-		public ReversibleList<E> subList(int fromIndex, int toIndex) {
-			// TODO Auto-generated method stub
-			return null;
-		}
-
-		@Override
-		public CollectionSubscription subscribeOrdered(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
-			int index = 0;
-			for (ConstantElement el : getElements())
-				IndexedCollectionEvent.doWith(
-					new IndexedCollectionEvent<>(el.getElementId(), index++, CollectionChangeType.add, null, el.get(), null), observer);
-			return removeAll -> {
-				if (removeAll) {
-					for (int i = getElements().size() - 1; i >= 0; i--) {
-						ConstantElement el = getElements().get(i);
-						IndexedCollectionEvent.doWith(
-							new IndexedCollectionEvent<>(el.getElementId(), i, CollectionChangeType.remove, el.get(), el.get(), null),
-							observer);
-					}
-				}
-			};
-		}
-
-		@Override
-		public CollectionSubscription subscribeReverse(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
-			for (int i = getElements().size() - 1; i >= 0; i--) {
-				ConstantElement el = getElements().get(i);
-				IndexedCollectionEvent
-				.doWith(new IndexedCollectionEvent<>(el.getElementId(), i, CollectionChangeType.add, null, el.get(), null), observer);
-			}
-			return removeAll -> {
-				if (removeAll) {
-					for (int i = 0; i < getElements().size(); i++) {
-						ConstantElement el = getElements().get(i);
-						IndexedCollectionEvent.doWith(
-							new IndexedCollectionEvent<>(el.getElementId(), i, CollectionChangeType.remove, el.get(), el.get(), null),
-							observer);
-					}
-				}
-			};
 		}
 	}
 }

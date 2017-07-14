@@ -228,6 +228,10 @@ public class ObservableCollectionDataFlowImpl {
 			theInitialValues = initialValues;
 		}
 
+		protected Collection<? extends E> getInitialValues() {
+			return theInitialValues;
+		}
+
 		@Override
 		public CollectionManager<E, ?, E> manageCollection() {
 			return getParent().manageCollection();
@@ -695,7 +699,7 @@ public class ObservableCollectionDataFlowImpl {
 				isReverseNulls);
 		}
 
-		private Map<ObservableValue<?>, Boolean> getResultArgs() {
+		protected Map<ObservableValue<?>, Boolean> getResultArgs() {
 			Map<ObservableValue<?>, Boolean> result = new LinkedHashMap<>(theArgs.size() * 3 / 2);
 			for (Map.Entry<ObservableValue<?>, Ternian> arg : theArgs.entrySet())
 				result.put(arg.getKey(), arg.getValue().withDefault(defaultCombineNulls));

@@ -43,6 +43,9 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionUpdate;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ElementUpdateResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueElementFinder;
+import org.observe.collect.ObservableList.ListDataFlow;
+import org.observe.collect.ObservableListImpl.BaseListDataFlow;
+import org.observe.collect.ObservableListImpl.DerivedList;
 import org.qommons.BiTuple;
 import org.qommons.Causable;
 import org.qommons.LinkedQueue;
@@ -799,13 +802,13 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public void forElementAt(ElementId elementId, Consumer<? super ObservableCollectionElement<? extends E>> onElement) {
-			getWrapped().forElementAt(elementId, el -> onElement.accept(el.reverse()));
+		public <T> T ofElementAt(ElementId elementId, Function<? super ObservableCollectionElement<? extends E>, T> onElement) {
+			return getWrapped().ofElementAt(elementId, el -> onElement.apply(el.reverse()));
 		}
 
 		@Override
-		public void forMutableElementAt(ElementId elementId, Consumer<? super MutableObservableElement<? extends E>> onElement) {
-			getWrapped().forMutableElementAt(elementId, el -> onElement.accept(el.reverse()));
+		public <T> T ofMutableElementAt(ElementId elementId, Function<? super MutableObservableElement<? extends E>, T> onElement) {
+			return getWrapped().ofMutableElementAt(elementId, el -> onElement.apply(el.reverse()));
 		}
 
 		@Override
@@ -904,22 +907,8 @@ public final class ObservableCollectionImpl {
 				int index = theSize - evt.getIndex() - 1;
 				if (evt.getType() == CollectionChangeType.remove)
 					theSize++;
-				IndexedCollectionEvent.doWith(new IndexedCollectionEvent<>(new ReversedElementId(evt.getElementId()), index, evt.getType(),
+				IndexedCollectionEvent.doWith(new IndexedCollectionEvent<>(evt.getElementId().reverse(), index, evt.getType(),
 					evt.getOldValue(), evt.getNewValue(), evt), theObserver);
-			}
-		}
-
-		private static class ReversedElementId implements ElementId {
-			private final ElementId theSource;
-
-			ReversedElementId(ElementId source) {
-				super();
-				theSource = source;
-			}
-
-			@Override
-			public int compareTo(ElementId o) {
-				return -theSource.compareTo(((ReversedElementId) o).theSource);
 			}
 		}
 	}
@@ -931,6 +920,20 @@ public final class ObservableCollectionImpl {
 
 			DerivedCollectionElement(CollectionElementManager<E, ?, T> manager) {
 				this.manager = manager;
+			}
+
+			@Override
+			public int getElementsBefore() {
+				if (presentNode == null)
+					throw new IllegalStateException("This node is not currentl present in the collection");
+				return presentNode.getIndex();
+			}
+
+			@Override
+			public int getElementsAfter() {
+				if (presentNode == null)
+					throw new IllegalStateException("This node is not currentl present in the collection");
+				return presentNode.getElementsGreater();
 			}
 
 			@Override
@@ -1188,7 +1191,7 @@ public final class ObservableCollectionImpl {
 					DerivedCollectionElement element = theElements.get(id);
 					if (element == null)
 						throw new IllegalArgumentException(StdMsg.NOT_FOUND);
-					if (!element.manager.isPresent())
+					if (element.presentNode == null)
 						return false;
 					onElement.accept(observableElementFor(element));
 					return true;
@@ -1203,8 +1206,8 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public void forElementAt(ElementId elementId, Consumer<? super ObservableCollectionElement<? extends T>> onElement) {
-			onElement.accept(observableElementFor((DerivedCollectionElement) elementId));
+		public <X> X ofElementAt(ElementId elementId, Function<? super ObservableCollectionElement<? extends T>, X> onElement) {
+			return onElement.apply(observableElementFor((DerivedCollectionElement) elementId));
 		}
 
 		protected ObservableCollectionElement<T> observableElementFor(DerivedCollectionElement el) {
@@ -1237,7 +1240,7 @@ public final class ObservableCollectionImpl {
 					DerivedCollectionElement element = theElements.get(id);
 					if (element == null)
 						throw new IllegalArgumentException(StdMsg.NOT_FOUND);
-					if (!element.manager.isPresent())
+					if (element.presentNode == null)
 						return false;
 					theSource.forMutableElementAt(id, srcEl -> onElement.accept(element.manager.map(srcEl, element)));
 					return true;
@@ -1252,9 +1255,9 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public void forMutableElementAt(ElementId elementId, Consumer<? super MutableObservableElement<? extends T>> onElement) {
+		public <X> X ofMutableElementAt(ElementId elementId, Function<? super MutableObservableElement<? extends T>, X> onElement) {
 			DerivedCollectionElement el = (DerivedCollectionElement) elementId;
-			theSource.forMutableElementAt(el.manager.getElementId(), srcEl -> onElement.accept(el.manager.map(srcEl, el)));
+			return theSource.ofMutableElementAt(el.manager.getElementId(), srcEl -> onElement.apply(el.manager.map(srcEl, el)));
 		}
 
 		@Override
@@ -1550,12 +1553,12 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public void forElementAt(ElementId elementId, Consumer<? super ObservableCollectionElement<? extends E>> onElement) {
+		public <T> T ofElementAt(ElementId elementId, Function<? super ObservableCollectionElement<? extends E>, T> onElement) {
 			throw new UnsupportedOperationException("This method is not implemented for the default observable collection");
 		}
 
 		@Override
-		public void forMutableElementAt(ElementId elementId, Consumer<? super MutableObservableElement<? extends E>> onElement) {
+		public <T> T ofMutableElementAt(ElementId elementId, Function<? super MutableObservableElement<? extends E>, T> onElement) {
 			class DefaultMutableElement implements MutableObservableElement<E> {
 				private boolean isRemoved;
 
@@ -1639,7 +1642,7 @@ public final class ObservableCollectionImpl {
 					return Value.constant(STRING_TYPE, null);
 				}
 			}
-			onElement.accept(new DefaultMutableElement());
+			return onElement.apply(new DefaultMutableElement());
 		}
 
 		@Override
@@ -1666,6 +1669,73 @@ public final class ObservableCollectionImpl {
 
 		private static class DefaultCollectionManager<E> extends BaseCollectionManager<E> {
 			public DefaultCollectionManager(TypeToken<E> targetType, Equivalence<? super E> equivalence, boolean threadSafe) {
+				super(targetType, equivalence, threadSafe);
+			}
+
+			@Override
+			public boolean isStaticallyFiltered() {
+				return true; // This flag prevents DerivedCollection from calling the clear() method
+			}
+		}
+	}
+
+	public static <E> ListDataFlow<E, E, E> createList(TypeToken<E> type, Collection<? extends E> initialValues) {
+		DefaultObservableList<E> collection = new DefaultObservableList<>(type);
+		ListDataFlow<E, E, E> flow = collection.flow();
+		if (!initialValues.isEmpty())
+			flow = new ObservableListImpl.InitialElementsListFlow<>(collection, flow, type, initialValues);
+		return flow;
+	}
+
+	/**
+	 * The {@link ObservableList} version of {@link DefaultObservableCollection}. It's only here because I want to keep
+	 * {@link DefaultObservableCollection} private.
+	 *
+	 * @param <E> The type of elements in the list
+	 */
+	private static class DefaultObservableList<E> extends DefaultObservableCollection<E> implements ObservableList<E> {
+		DefaultObservableList(TypeToken<E> type) {
+			super(type);
+		}
+
+		@Override
+		public <T> T ofElementAt(int index, Function<? super ObservableCollectionElement<? extends E>, T> onElement) {
+			throw new UnsupportedOperationException("This method is not implemented for the default observable list");
+		}
+
+		@Override
+		public <T> T ofMutableElementAt(int index, Function<? super MutableObservableElement<? extends E>, T> onElement) {
+			throw new UnsupportedOperationException("This method is not implemented for the default observable list");
+		}
+
+		@Override
+		public MutableObservableSpliterator<E> mutableSpliterator(int index) {
+			throw new UnsupportedOperationException("This method is not implemented for the default observable list");
+		}
+
+		@Override
+		public ListDataFlow<E, E, E> flow() {
+			return new DefaultListFlow<>(this);
+		}
+
+		private static class DefaultListFlow<E> extends BaseListDataFlow<E> {
+			DefaultListFlow(ObservableList<E> source) {
+				super(source);
+			}
+
+			@Override
+			public AbstractCollectionManager<E, ?, E> manageCollection() {
+				return new DefaultListManager<>(getTargetType(), getSource().equivalence(), getSource().isLockSupported());
+			}
+
+			@Override
+			public ObservableList<E> collect(Observable<?> until) {
+				return new DerivedList<>(getSource(), manageCollection(), until);
+			}
+		}
+
+		private static class DefaultListManager<E> extends BaseCollectionManager<E> {
+			public DefaultListManager(TypeToken<E> targetType, Equivalence<? super E> equivalence, boolean threadSafe) {
 				super(targetType, equivalence, threadSafe);
 			}
 
