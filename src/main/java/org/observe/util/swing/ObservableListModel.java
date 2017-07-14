@@ -9,7 +9,7 @@ import javax.swing.event.ListDataListener;
 
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
-import org.observe.collect.ObservableIndexedCollection;
+import org.observe.collect.ObservableCollection;
 import org.observe.collect.OrderedCollectionChangeEvent;
 
 /**
@@ -19,21 +19,21 @@ import org.observe.collect.OrderedCollectionChangeEvent;
  *            The type of data in the list
  */
 public class ObservableListModel<E> implements ListModel<E> {
-	private final ObservableIndexedCollection<E> theWrapped;
+	private final ObservableCollection<E> theWrapped;
 	private final IdentityHashMap<ListDataListener, Subscription> theListenerSubscribes;
 
 	/**
 	 * @param wrap
 	 *            The observable list to back this model
 	 */
-	public ObservableListModel(ObservableIndexedCollection<E> wrap) {
+	public ObservableListModel(ObservableCollection<E> wrap) {
 		super();
 		theWrapped = wrap;
 		theListenerSubscribes = new IdentityHashMap<>();
 	}
 
 	/** @return The observable list that this model wraps */
-	public ObservableIndexedCollection<E> getWrapped() {
+	public ObservableCollection<E> getWrapped() {
 		return theWrapped;
 	}
 

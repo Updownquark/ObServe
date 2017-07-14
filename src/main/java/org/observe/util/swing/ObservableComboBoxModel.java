@@ -9,8 +9,8 @@ import javax.swing.JComboBox;
 
 import org.observe.SettableValue;
 import org.observe.Subscription;
+import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableList;
-import org.observe.collect.ObservableIndexedCollection;
 
 /**
  * A combo box model backed by an {@link ObservableList}
@@ -25,7 +25,7 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 	 * @param values
 	 *            The observable list to back this model
 	 */
-	public ObservableComboBoxModel(ObservableIndexedCollection<E> values) {
+	public ObservableComboBoxModel(ObservableCollection<E> values) {
 		super(values);
 	}
 
@@ -39,7 +39,7 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		return theSelectedValue;
 	}
 
-	public static <T> Subscription comboFor(JComboBox<T> comboBox, String descrip, ObservableIndexedCollection<T> availableValues,
+	public static <T> Subscription comboFor(JComboBox<T> comboBox, String descrip, ObservableCollection<T> availableValues,
 		SettableValue<? super T> selected) {
 		ObservableComboBoxModel<T> comboModel = new ObservableComboBoxModel<>(availableValues);
 		comboBox.setModel(comboModel);

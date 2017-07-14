@@ -6,7 +6,6 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Set;
 import java.util.Spliterator;
 import java.util.function.BiFunction;
@@ -838,7 +837,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 * @param first true to always use the first element passing the test, false to always use the last element
 	 * @return An observable value containing a value in this collection passing the given test
 	 */
-	default ObservableValue<E> find(Predicate<? super E> test, Supplier<? extends E> def, boolean first) {
+	default ObservableValue<E> observeFind(Predicate<? super E> test, Supplier<? extends E> def, boolean first) {
 		return new ObservableCollectionImpl.ObservableCollectionFinder<>(this, test, def, first);
 	}
 
@@ -1118,7 +1117,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 * @return A collection containing all elements of all collections in the outer collection
 	 */
 	public static <E> ObservableCollection<E> flatten(ObservableCollection<? extends ObservableCollection<? extends E>> coll) {
-		return interleave(coll, list -> 0, false);
+		return new ObservableCollectionImpl.FlattenedObservableCollection<>(coll);
 	}
 
 	/**
@@ -1128,11 +1127,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 */
 	public static <T> ObservableCollection<T> flattenCollections(ObservableCollection<? extends T>... colls) {
 		return flatten(ObservableList.constant(new TypeToken<ObservableCollection<? extends T>>() {}, colls).collect());
-	}
-
-	public static <T> ObservableCollection<T> interleave(ObservableCollection<? extends ObservableCollection<? extends T>> coll,
-		Function<? super List<? extends T>, Integer> discriminator, boolean withRemove) {
-		return new ObservableCollectionImpl.FlattenedObservableCollection<>(coll, discriminator, withRemove);
 	}
 
 	/**

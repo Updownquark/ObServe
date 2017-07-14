@@ -934,9 +934,9 @@ public class ObservableSortedSetImpl {
 		@Override
 		public ObservableValue<T> relative(T value, boolean up, boolean withValue) {
 			if (up)
-				return tailSet(value, withValue).find(v -> true, () -> null, true);
+				return tailSet(value, withValue).observeFind(v -> true, () -> null, true);
 			else
-				return headSet(value, withValue).find(v -> true, () -> null, false);
+				return headSet(value, withValue).observeFind(v -> true, () -> null, false);
 		}
 
 		@Override
