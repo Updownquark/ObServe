@@ -27,6 +27,7 @@ import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
+import org.observe.collect.ElementId.SimpleElementIdGenerator;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.GroupingBuilder;
 import org.observe.collect.ObservableCollection.SortedGroupingBuilder;
@@ -1243,8 +1244,7 @@ public final class ObservableCollectionImpl {
 				}
 				for (DerivedCollectionElement el : thePresentElements)
 					if (equivalence().elementEquals(el.manager.get(), value)) {
-						theSource.forMutableElementAt(el.manager.getElementId(),
-							srcEl -> onElement.accept(el.manager.map(srcEl, el)));
+						theSource.forMutableElementAt(el.manager.getElementId(), srcEl -> onElement.accept(el.manager.map(srcEl, el)));
 						return true;
 					}
 				return false;
@@ -1424,7 +1424,7 @@ public final class ObservableCollectionImpl {
 	 * </p>
 	 *
 	 * <p>
-	 * This collection is a gimped collection that does not even keep track of its elements, but relies on {@link DerivedCollection} for
+	 * This collection is a gimped collection that does not even keep track of its values, but relies on {@link DerivedCollection} for
 	 * almost all its functionality. As such, this collection should never be used, except as a source for DerivedCollection.
 	 * </p>
 	 *
@@ -1434,7 +1434,7 @@ public final class ObservableCollectionImpl {
 		private final TypeToken<E> theType;
 		private final ReentrantReadWriteLock theLock;
 		private final LinkedList<Causable> theTransactionCauses;
-		private final Supplier<ElementId> theElementIdGen;
+		private final SimpleElementIdGenerator theElementIdGen;
 		private Consumer<? super ObservableCollectionEvent<? extends E>> theObserver;
 
 		DefaultObservableCollection(TypeToken<E> type) {
@@ -1499,8 +1499,10 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean add(E e) {
-			theObserver.accept(
-				new ObservableCollectionEvent<>(theElementIdGen.get(), CollectionChangeType.add, null, e, theTransactionCauses.peekLast()));
+			try (Transaction t = lock(true, null)) {
+				theObserver.accept(new ObservableCollectionEvent<>(theElementIdGen.newId(), CollectionChangeType.add, null, e,
+					theTransactionCauses.peekLast()));
+			}
 			return true;
 		}
 
@@ -1588,6 +1590,7 @@ public final class ObservableCollectionImpl {
 						// The DerivedCollection keeps track of its own values and does not pay attention to the values in the event
 						theObserver.accept(new ObservableCollectionEvent<>(elementId, CollectionChangeType.remove, null, null,
 							theTransactionCauses.getLast()));
+						theElementIdGen.remove(elementId);
 						isRemoved = true;
 					}
 				}
@@ -1596,14 +1599,18 @@ public final class ObservableCollectionImpl {
 				public String canAdd(E value, boolean before) {
 					if (isRemoved)
 						throw new IllegalStateException(StdMsg.NOT_FOUND);
-					return StdMsg.UNSUPPORTED_OPERATION;
+					return null;
 				}
 
 				@Override
 				public void add(E value, boolean before, Object cause) throws UnsupportedOperationException, IllegalArgumentException {
 					if (isRemoved)
 						throw new IllegalStateException(StdMsg.NOT_FOUND);
-					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+					try (Transaction t = lock(true, cause)) {
+						ElementId newId = theElementIdGen.newId(elementId, before);
+						theObserver.accept(
+							new ObservableCollectionEvent<>(newId, CollectionChangeType.add, null, value, theTransactionCauses.peekLast()));
+					}
 				}
 
 				@Override

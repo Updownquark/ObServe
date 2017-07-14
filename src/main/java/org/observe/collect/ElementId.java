@@ -3,8 +3,9 @@ package org.observe.collect;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Supplier;
+
+import org.qommons.collect.TreeList;
+import org.qommons.tree.CountedRedBlackNode.DefaultNode;
 
 /**
  * Although not every ObservableCollection must be indexed, all ObservableCollections must have some notion of order. All change events and
@@ -79,8 +80,8 @@ public interface ElementId extends Comparable<ElementId> {
 		return new ComparatorElementId(value, compare);
 	}
 
-	static Supplier<ElementId> createSimpleIdGenerator() {
-		return new SimpleIdGenerator();
+	static SimpleElementIdGenerator createSimpleIdGenerator() {
+		return new SimpleElementIdGenerator();
 	}
 
 	class ComparableElementId<T extends Comparable<T>> implements ElementId {
@@ -145,20 +146,26 @@ public interface ElementId extends Comparable<ElementId> {
 		}
 	}
 
-	class SimpleIdGenerator implements Supplier<ElementId> {
-		private final AtomicReference<int[]> theNextId;
+	class SimpleElementIdGenerator {
+		private final TreeList<Void> theIds;
 
-		public SimpleIdGenerator() {
-			theNextId = new AtomicReference<>(new int[1]);
+		public SimpleElementIdGenerator() {
+			theIds = new TreeList<>();
 		}
 
-		@Override
-		public ElementId get() {
-			int[] value = theNextId.getAndUpdate(id -> increment(id));
-			return new SimpleGeneratedId(value);
+		public ElementId newId() {
+			return new SimpleGeneratedId(theIds.addGetNode(null));
 		}
 
-		private int[] increment(int[] id) {
+		public ElementId newId(ElementId relative, boolean left) {
+			return ((SimpleGeneratedId) relative).nextTo(left);
+		}
+
+		public void remove(ElementId id) {
+			((SimpleGeneratedId) id).remove();
+		}
+
+		private static int[] increment(int[] id) {
 			int last = id[id.length - 1];
 			last++;
 			int[] nextId;
@@ -171,38 +178,31 @@ public interface ElementId extends Comparable<ElementId> {
 			return nextId;
 		}
 
-		private static class SimpleGeneratedId implements ElementId {
-			private final int[] theValue;
+		private class SimpleGeneratedId implements ElementId {
+			private final DefaultNode<Void> theNode;
 
-			SimpleGeneratedId(int[] value) {
-				theValue = value;
+			SimpleGeneratedId(DefaultNode<Void> node) {
+				theNode = node;
+			}
+
+			SimpleGeneratedId nextTo(boolean left) {
+				return new SimpleGeneratedId(left ? theIds.addBefore(null, theNode) : theIds.addAfter(null, theNode));
+			}
+
+			void remove() {
+				theIds.delete(theNode);
 			}
 
 			@Override
 			public int compareTo(ElementId o) {
 				if (this == o)
 					return 0;
-				int[] value = theValue;
-				int[] otherValue = ((SimpleGeneratedId) o).theValue;
-				int comp = value.length - otherValue.length;
-				for (int i = 0; comp == 0 && i < value.length; i++)
-					comp = value[i] - theValue[i];
-				return comp;
-			}
-
-			@Override
-			public int hashCode() {
-				return Arrays.hashCode(theValue);
-			}
-
-			@Override
-			public boolean equals(Object obj) {
-				return obj instanceof SimpleGeneratedId && Arrays.equals(theValue, ((SimpleGeneratedId) obj).theValue);
+				return theNode.getIndex() - ((SimpleGeneratedId) o).theNode.getIndex();
 			}
 
 			@Override
 			public String toString() {
-				return Arrays.toString(theValue);
+				return "[" + theNode.getIndex() + "]";
 			}
 		}
 	}
