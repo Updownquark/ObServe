@@ -7,8 +7,6 @@ import org.qommons.Transaction;
 import org.qommons.collect.ImmutableIterator;
 import org.qommons.collect.TransactableSet;
 
-import com.google.common.reflect.TypeToken;
-
 /**
  * A set whose content can be observed
  *
@@ -74,6 +72,11 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 		return new ObservableSetImpl.IntersectedSet<>(this, collection);
 	}
 
+	@Override
+	default <T> UniqueDataFlow<E, E, E> flow() {
+		return new ObservableSetImpl.UniqueBaseFlow<>(this);
+	}
+
 	/**
 	 * Turns an observable value containing an observable collection into the contents of the value
 	 *
@@ -104,32 +107,5 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 		}
 		ret.append('}');
 		return ret.toString();
-	}
-
-	/**
-	 * @param <T> The type of the collection
-	 * @param type The run-time type of the collection
-	 * @param equivalence The equivalence set for the set's uniqueness
-	 * @param coll The collection with elements to wrap
-	 * @return A collection containing the given elements that cannot be changed
-	 */
-	public static <T> ObservableSet<T> constant(TypeToken<T> type, Equivalence<? super T> equivalence, java.util.Collection<T> coll) {
-		return new ObservableSetImpl.ConstantObservableSet<>(type, equivalence, coll);
-	}
-
-	/**
-	 * @param <T> The type of the collection
-	 * @param type The run-time type of the collection
-	 * @param equivalence The equivalence set for the set's uniqueness
-	 * @param values The array with elements to wrap
-	 * @return A collection containing the given elements that cannot be changed
-	 */
-	public static <T> ObservableSet<T> constant(TypeToken<T> type, Equivalence<? super T> equivalence, T... values) {
-		return constant(type, equivalence, java.util.Arrays.asList(values));
-	}
-
-	@Override
-	default <T> UniqueDataFlow<E, E, E> flow() {
-		return new ObservableSetImpl.UniqueBaseFlow<>(this);
 	}
 }

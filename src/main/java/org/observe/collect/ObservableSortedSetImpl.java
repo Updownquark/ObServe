@@ -291,20 +291,20 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public void forElementAt(ElementId elementId, Consumer<? super ObservableCollectionElement<? extends E>> onElement) {
-			theWrapped.forElementAt(elementId, el -> {
+		public <T> T ofElementAt(ElementId elementId, Function<? super ObservableCollectionElement<? extends E>, T> onElement) {
+			return theWrapped.ofElementAt(elementId, el -> {
 				if (isInRange(el.get()) == 0)
-					onElement.accept(el);
+					return onElement.apply(el);
 				else
 					throw new IllegalArgumentException(StdMsg.NOT_FOUND);
 			});
 		}
 
 		@Override
-		public void forMutableElementAt(ElementId elementId, Consumer<? super MutableObservableElement<? extends E>> onElement) {
-			theWrapped.forMutableElementAt(elementId, el -> {
+		public <T> T ofMutableElementAt(ElementId elementId, Function<? super MutableObservableElement<? extends E>, T> onElement) {
+			return theWrapped.ofMutableElementAt(elementId, el -> {
 				if (isInRange(el.get()) == 0)
-					onElement.accept(new BoundedMutableElement<>(el));
+					return onElement.apply(new BoundedMutableElement<>(el));
 				else
 					throw new IllegalArgumentException(StdMsg.NOT_FOUND);
 			});
