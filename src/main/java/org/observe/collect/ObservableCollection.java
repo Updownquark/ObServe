@@ -1,6 +1,7 @@
 package org.observe.collect;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -1059,21 +1060,32 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	}
 
 	/**
-	 * @param type The type of the collection
-	 * @param collection The collection
-	 * @return An immutable collection with the same values as those in the given collection
+	 * @param <E> The type for the root collection
+	 * @param type The type for the root collection
+	 * @param initialValues The values for the collection to contain initially
+	 * @return A {@link CollectionDataFlow} that can be used to create a collection with any characteristics supported by the flow API. The
+	 *         collection will be mutable unless prevented via the flow API.
 	 */
-	public static <E> ObservableCollection<E> constant(TypeToken<E> type, Collection<? extends E> collection) {
-		return new ObservableCollectionImpl.ConstantObservableCollection<>(type, collection);
+	static <E> CollectionDataFlow<E, E, E> create(TypeToken<E> type, E... initialValues) {
+		return create(type, Arrays.asList(initialValues));
+	}
+
+	static <E> CollectionDataFlow<E, E, E> create(TypeToken<E> type, Collection<? extends E> initialValues) {
+		return ObservableCollectionImpl.create(type, initialValues);
 	}
 
 	/**
-	 * @param type The type of the collection
-	 * @param values The values for the new collection
-	 * @return An immutable collection with the same values as those in the given collection
+	 * @param <E> The type for the root collection
+	 * @param type The type for the root collection
+	 * @return A {@link CollectionDataFlow} that can be used to create an immutable collection with the given values and any characteristics
+	 *         supported by the flow API.
 	 */
-	public static <E> ObservableCollection<E> constant(TypeToken<E> type, E... values) {
-		return constant(type, java.util.Arrays.asList(values));
+	static <E> CollectionDataFlow<E, E, E> constant(TypeToken<E> type, E... initialValues) {
+		return constant(type, Arrays.asList(initialValues));
+	}
+
+	static <E> CollectionDataFlow<E, E, E> constant(TypeToken<E> type, Collection<? extends E> initialValues) {
+		return create(type, initialValues).filterModification().immutable(StdMsg.UNSUPPORTED_OPERATION, false).build();
 	}
 
 	/**

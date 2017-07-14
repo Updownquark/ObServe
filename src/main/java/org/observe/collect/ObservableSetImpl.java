@@ -9,10 +9,10 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableCollection.UniqueMappedCollectionBuilder;
+import org.observe.collect.ObservableCollection.UniqueModFilterBuilder;
 import org.observe.collect.ObservableCollectionDataFlowImpl.BaseCollectionDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueDataFlowWrapper;
-import org.observe.collect.ObservableCollectionImpl.ConstantObservableCollection;
 import org.observe.collect.ObservableCollectionImpl.DerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.FlattenedValueCollection;
 import org.observe.collect.ObservableCollectionImpl.ReversedObservableCollection;
@@ -365,9 +365,8 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public CollectionManager<E, ?, E> manageCollection() {
-			// TODO Auto-generated method stub
-			return super.manageCollection();
+		public UniqueModFilterBuilder<E, E> filterModification() {
+			return new UniqueModFilterBuilder<>(getSource(), this);
 		}
 
 		@Override
@@ -382,30 +381,6 @@ public class ObservableSetImpl {
 	public static class DerivedSet<E, T> extends DerivedCollection<E, T> implements ObservableSet<T> {
 		public DerivedSet(ObservableCollection<E> source, CollectionManager<E, ?, T> flow, Observable<?> until) {
 			super(source, flow, until);
-		}
-	}
-
-	/**
-	 * Implements {@link ObservableSet#constant(TypeToken, Equivalence, Collection)}
-	 *
-	 * @param <E> The type of elements in the set
-	 */
-	public static class ConstantObservableSet<E> extends ConstantObservableCollection<E> implements ObservableSet<E> {
-		private final Equivalence<? super E> theEquivalence;
-
-		/**
-		 * @param type The type of the set
-		 * @param equivalence The equivalence set for the set's uniqueness
-		 * @param collection The values for the set
-		 */
-		public ConstantObservableSet(TypeToken<E> type, Equivalence<? super E> equivalence, Collection<E> collection) {
-			super(type, ObservableCollectionImpl.toSet(equivalence, collection));
-			theEquivalence = equivalence;
-		}
-
-		@Override
-		public Equivalence<? super E> equivalence() {
-			return theEquivalence;
 		}
 	}
 

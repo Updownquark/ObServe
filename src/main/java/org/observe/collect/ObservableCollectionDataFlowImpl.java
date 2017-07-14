@@ -1,5 +1,6 @@
 package org.observe.collect;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -215,6 +216,28 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public CollectionManager<E, ?, T> manageCollection() {
 			return new UniqueManager<>(getParent().manageCollection(), isAlwaysUsingFirst);
+		}
+	}
+
+	public static class InitialElementsDataFlow<E> extends AbstractDataFlow<E, E, E> {
+		private final Collection<? extends E> theInitialValues;
+
+		public InitialElementsDataFlow(ObservableCollection<E> source, CollectionDataFlow<E, ?, E> parent, TypeToken<E> targetType,
+			Collection<? extends E> initialValues) {
+			super(source, parent, targetType);
+			theInitialValues = initialValues;
+		}
+
+		@Override
+		public CollectionManager<E, ?, E> manageCollection() {
+			return getParent().manageCollection();
+		}
+
+		@Override
+		public ObservableCollection<E> collect(Observable<?> until) {
+			ObservableCollection<E> collected = super.collect(until);
+			getSource().addAll(theInitialValues);
+			return collected;
 		}
 	}
 
@@ -1073,7 +1096,7 @@ public class ObservableCollectionDataFlowImpl {
 			return refresh(getParent().get(), cause);
 		}
 
-		public MutableObservableElement<T> map(MutableObservableElement<? extends E> element, ElementId id) {
+		public final MutableObservableElement<T> map(MutableObservableElement<? extends E> element, ElementId id) {
 			class MutableManagedElement implements MutableObservableElement<T> {
 				private final MutableObservableElement<? extends E> theWrapped;
 
@@ -1139,9 +1162,9 @@ public class ObservableCollectionDataFlowImpl {
 						throw new IllegalArgumentException(result.error);
 					if (result.result != null && !theWrapped.getType().getRawType().isInstance(result.result))
 						throw new IllegalArgumentException(StdMsg.BAD_TYPE);
-					FilterMapResult<E, T> map = (FilterMapResult<E, T>) result;
-					map.source = ((MutableObservableElement<E>) theWrapped).set(result.result, cause);
-					return theCollection.map(map).result; // Better not filter out, since it had the opportunity to reject it earlier
+					T old = get();
+					((MutableObservableElement<E>) theWrapped).set(result.result, cause);
+					return old;
 				}
 
 				@Override
