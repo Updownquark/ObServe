@@ -9,11 +9,9 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableCollection.UniqueMappedCollectionBuilder;
-import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.BaseCollectionDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueDataFlowWrapper;
-import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueElementFinder;
 import org.observe.collect.ObservableCollectionImpl.ConstantObservableCollection;
 import org.observe.collect.ObservableCollectionImpl.DerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.FlattenedValueCollection;
@@ -338,7 +336,7 @@ public class ObservableSetImpl {
 
 		@Override
 		public UniqueDataFlow<E, E, E> filter(Function<? super E, String> filter, boolean filterNulls) {
-			return new UniqueDataFlowWrapper<>((AbstractDataFlow<E, ?, E>) super.filter(filter, filterNulls));
+			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter, filterNulls));
 		}
 
 		@Override
@@ -348,22 +346,22 @@ public class ObservableSetImpl {
 
 		@Override
 		public UniqueDataFlow<E, E, E> filterStatic(Function<? super E, String> filter, boolean filterNulls) {
-			return new UniqueDataFlowWrapper<>((AbstractDataFlow<E, ?, E>) super.filterStatic(filter, filterNulls));
+			return new UniqueDataFlowWrapper<>(getSource(), super.filterStatic(filter, filterNulls));
 		}
 
 		@Override
 		public <X> UniqueMappedCollectionBuilder<E, E, X> mapEquivalent(TypeToken<X> target) {
-			return new UniqueMappedCollectionBuilder<>(this, target);
+			return new UniqueMappedCollectionBuilder<>(getSource(), this, target);
 		}
 
 		@Override
 		public UniqueDataFlow<E, E, E> refresh(Observable<?> refresh) {
-			return new UniqueDataFlowWrapper<>((AbstractDataFlow<E, ?, E>) super.refresh(refresh));
+			return new UniqueDataFlowWrapper<>(getSource(), super.refresh(refresh));
 		}
 
 		@Override
 		public UniqueDataFlow<E, E, E> refreshEach(Function<? super E, ? extends Observable<?>> refresh) {
-			return new UniqueDataFlowWrapper<>((AbstractDataFlow<E, ?, E>) super.refreshEach(refresh));
+			return new UniqueDataFlowWrapper<>(getSource(), super.refreshEach(refresh));
 		}
 
 		@Override
@@ -382,34 +380,8 @@ public class ObservableSetImpl {
 	}
 
 	public static class DerivedSet<E, T> extends DerivedCollection<E, T> implements ObservableSet<T> {
-		private final UniqueElementFinder<T> theElementFinder;
-
-		public DerivedSet(ObservableCollection<E> source, CollectionManager<E, ?, T> flow, UniqueElementFinder<T> elementFinder,
-			Observable<?> until) {
+		public DerivedSet(ObservableCollection<E> source, CollectionManager<E, ?, T> flow, Observable<?> until) {
 			super(source, flow, until);
-			theElementFinder = elementFinder;
-		}
-
-		protected UniqueElementFinder<T> getElementFinder() {
-			return theElementFinder;
-		}
-
-		@Override
-		public boolean forObservableElement(T value, Consumer<? super ObservableCollectionElement<? extends T>> onElement, boolean first) {
-			ElementId id = getElementFinder().getId(value);
-			if (id == null)
-				return false;
-			forWrappedElementAt(id, onElement);
-			return true;
-		}
-
-		@Override
-		public boolean forMutableElement(T value, Consumer<? super MutableObservableElement<? extends T>> onElement, boolean first) {
-			ElementId id = getElementFinder().getId(value);
-			if (id == null)
-				return false;
-			forWrappedMutableElementAt(id, onElement);
-			return true;
 		}
 	}
 

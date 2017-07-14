@@ -25,8 +25,6 @@ import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractCombinedCollectionBuilder;
 import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
-import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueElementFinder;
-import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueSortedElementFinder;
 import org.qommons.Causable;
 import org.qommons.Ternian;
 import org.qommons.Transactable;
@@ -1548,16 +1546,9 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 * @param <T> The type of values in the mapped set
 	 */
 	class UniqueMappedCollectionBuilder<E, I, T> extends MappedCollectionBuilder<E, I, T> {
-		private final UniqueElementFinder<I> theElementFinder;
 
-		protected UniqueMappedCollectionBuilder(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent,
-			UniqueElementFinder<I> elementFinder, TypeToken<T> type) {
+		protected UniqueMappedCollectionBuilder(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent, TypeToken<T> type) {
 			super(source, parent, type);
-			theElementFinder = elementFinder;
-		}
-
-		protected UniqueElementFinder<I> getElementFinder() {
-			return theElementFinder;
 		}
 
 		@Override
@@ -1598,22 +1589,16 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 			boolean reverseNulls) {
 			if (reverse == null)
 				throw new IllegalArgumentException("Reverse must be specified to maintain uniqueness");
-			return new ObservableCollectionDataFlowImpl.UniqueMapOp<>(getSource(), getParent(), theElementFinder, getTargetType(), map,
+			return new ObservableCollectionDataFlowImpl.UniqueMapOp<>(getSource(), getParent(), getTargetType(), map,
 				mapNulls, getReverse(), getElementReverse(), areNullsReversed(), isReEvalOnUpdate(), isFireIfUnchanged(), isCached());
 		}
 	}
 
 	class UniqueSortedMappedCollectionBuilder<E, I, T> extends UniqueMappedCollectionBuilder<E, I, T> {
-		protected UniqueSortedMappedCollectionBuilder(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent,
-			UniqueSortedElementFinder<I> elementFinder, TypeToken<T> type) {
-			super(source, parent, elementFinder, type);
+		protected UniqueSortedMappedCollectionBuilder(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent, TypeToken<T> type) {
+			super(source, parent, type);
 			if (!(parent instanceof UniqueSortedDataFlow))
 				throw new IllegalArgumentException("The parent of a unique-sorted map builder must be unique-sorted");
-		}
-
-		@Override
-		protected UniqueSortedElementFinder<I> getElementFinder() {
-			return (UniqueSortedElementFinder<I>) super.getElementFinder();
 		}
 
 		@Override
@@ -1658,7 +1643,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		public UniqueSortedDataFlow<E, I, T> map(Function<? super I, ? extends T> map, boolean mapNulls, Comparator<? super T> compare) {
 			if (compare == null)
 				throw new IllegalArgumentException("Comparator must be specified to maintain uniqueness");
-			return new ObservableCollectionDataFlowImpl.UniqueSortedMapOp<>(getSource(), getParent(), getElementFinder(), getTargetType(),
+			return new ObservableCollectionDataFlowImpl.UniqueSortedMapOp<>(getSource(), getParent(), getTargetType(),
 				map, mapNulls, getReverse(), getElementReverse(), areNullsReversed(), isReEvalOnUpdate(), isFireIfUnchanged(), isCached(),
 				compare);
 		}
@@ -1966,16 +1951,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	}
 
 	class UniqueModFilterBuilder<E, T> extends ModFilterBuilder<E, T> {
-		private final UniqueElementFinder<T> theElementFinder;
-
-		public UniqueModFilterBuilder(ObservableCollection<E> source, UniqueDataFlow<E, ?, T> parent,
-			UniqueElementFinder<T> elementFinder) {
+		public UniqueModFilterBuilder(ObservableCollection<E> source, UniqueDataFlow<E, ?, T> parent) {
 			super(source, parent);
-			theElementFinder = elementFinder;
-		}
-
-		protected UniqueElementFinder<T> getElementFinder() {
-			return theElementFinder;
 		}
 
 		@Override
@@ -2006,19 +1983,13 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		@Override
 		public UniqueDataFlow<E, T, T> build() {
 			return new ObservableCollectionDataFlowImpl.UniqueModFilteredOp<>(getSource(), (AbstractDataFlow<E, ?, T>) getParent(),
-				theElementFinder, getImmutableMsg(), areUpdatesAllowed(), getAddMsg(), getRemoveMsg(), getAddMsgFn(), getRemoveMsgFn());
+				getImmutableMsg(), areUpdatesAllowed(), getAddMsg(), getRemoveMsg(), getAddMsgFn(), getRemoveMsgFn());
 		}
 	}
 
 	class UniqueSortedModFilterBuilder<E, T> extends UniqueModFilterBuilder<E, T> {
-		public UniqueSortedModFilterBuilder(ObservableCollection<E> source, UniqueSortedDataFlow<E, ?, T> parent,
-			UniqueSortedElementFinder<T> elementFinder) {
-			super(source, parent, elementFinder);
-		}
-
-		@Override
-		protected UniqueSortedElementFinder<T> getElementFinder() {
-			return (UniqueSortedElementFinder<T>) super.getElementFinder();
+		public UniqueSortedModFilterBuilder(ObservableCollection<E> source, UniqueSortedDataFlow<E, ?, T> parent) {
+			super(source, parent);
 		}
 
 		@Override
@@ -2049,7 +2020,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		@Override
 		public UniqueSortedDataFlow<E, T, T> build() {
 			return new ObservableCollectionDataFlowImpl.UniqueSortedModFilteredOp<>(getSource(), (AbstractDataFlow<E, ?, T>) getParent(),
-				getElementFinder(), getImmutableMsg(), areUpdatesAllowed(), getAddMsg(), getRemoveMsg(), getAddMsgFn(), getRemoveMsgFn());
+				getImmutableMsg(), areUpdatesAllowed(), getAddMsg(), getRemoveMsg(), getAddMsgFn(), getRemoveMsgFn());
 		}
 	}
 

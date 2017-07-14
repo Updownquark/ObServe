@@ -38,6 +38,7 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionUpdate;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ElementUpdateResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
+import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueElementFinder;
 import org.qommons.BiTuple;
 import org.qommons.Causable;
 import org.qommons.LinkedQueue;
@@ -1175,6 +1176,19 @@ public final class ObservableCollectionImpl {
 		@Override
 		public boolean forObservableElement(T value, Consumer<? super ObservableCollectionElement<? extends T>> onElement, boolean first) {
 			try (Transaction t = lock(false, null)) {
+				UniqueElementFinder<T> finder = getFlow().getElementFinder();
+				if (finder != null) {
+					ElementId id = finder.getUniqueElement(value);
+					if (id == null)
+						return false;
+					DerivedCollectionElement element = theElements.get(id);
+					if (element == null)
+						throw new IllegalArgumentException(StdMsg.NOT_FOUND);
+					if (!element.manager.isPresent())
+						return false;
+					onElement.accept(observableElementFor(element));
+					return true;
+				}
 				for (DerivedCollectionElement el : (first ? thePresentElements : thePresentElements.reverse()))
 					if (equivalence().elementEquals(el.manager.get(), value)) {
 						onElement.accept(observableElementFor(el));
@@ -1211,6 +1225,19 @@ public final class ObservableCollectionImpl {
 		@Override
 		public boolean forMutableElement(T value, Consumer<? super MutableObservableElement<? extends T>> onElement, boolean first) {
 			try (Transaction t = lock(true, null)) {
+				UniqueElementFinder<T> finder = getFlow().getElementFinder();
+				if (finder != null) {
+					ElementId id = finder.getUniqueElement(value);
+					if (id == null)
+						return false;
+					DerivedCollectionElement element = theElements.get(id);
+					if (element == null)
+						throw new IllegalArgumentException(StdMsg.NOT_FOUND);
+					if (!element.manager.isPresent())
+						return false;
+					theSource.forMutableElementAt(id, srcEl -> onElement.accept(element.manager.map(srcEl, element)));
+					return true;
+				}
 				for (DerivedCollectionElement el : thePresentElements)
 					if (equivalence().elementEquals(el.manager.get(), value)) {
 						theSource.forMutableElementAt(el.manager.getElementId(),
@@ -1225,22 +1252,6 @@ public final class ObservableCollectionImpl {
 		public void forMutableElementAt(ElementId elementId, Consumer<? super MutableObservableElement<? extends T>> onElement) {
 			DerivedCollectionElement el = (DerivedCollectionElement) elementId;
 			theSource.forMutableElementAt(el.manager.getElementId(), srcEl -> onElement.accept(el.manager.map(srcEl, el)));
-		}
-
-		protected void forWrappedElementAt(ElementId wrappedElementId,
-			Consumer<? super ObservableCollectionElement<? extends T>> onElement) {
-			DerivedCollectionElement element = theElements.get(wrappedElementId);
-			if (element == null)
-				throw new IllegalArgumentException(StdMsg.NOT_FOUND);
-			onElement.accept(observableElementFor(element));
-		}
-
-		protected void forWrappedMutableElementAt(ElementId wrappedElementId,
-			Consumer<? super MutableObservableElement<? extends T>> onElement) {
-			DerivedCollectionElement element = theElements.get(wrappedElementId);
-			if (element == null)
-				throw new IllegalArgumentException(StdMsg.NOT_FOUND);
-			theSource.forMutableElementAt(wrappedElementId, srcEl -> onElement.accept(element.manager.map(srcEl, element)));
 		}
 
 		@Override

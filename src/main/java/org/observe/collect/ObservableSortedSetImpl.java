@@ -7,12 +7,14 @@ import java.util.function.Function;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
+import org.observe.collect.ObservableCollection.UniqueSortedMappedCollectionBuilder;
+import org.observe.collect.ObservableCollection.UniqueSortedModFilterBuilder;
 import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
-import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueSortedCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueSortedDataFlowWrapper;
-import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueSortedElementFinder;
 import org.observe.collect.ObservableSetImpl.UniqueBaseFlow;
+
+import com.google.common.reflect.TypeToken;
 
 public class ObservableSortedSetImpl {
 	private ObservableSortedSetImpl() {}
@@ -91,6 +93,11 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
+		public Comparator<? super E> comparator() {
+			return getSource().comparator();
+		}
+
+		@Override
 		public UniqueSortedDataFlow<E, E, E> filter(Function<? super E, String> filter) {
 			return (UniqueSortedDataFlow<E, E, E>) super.filter(filter);
 		}
@@ -113,6 +120,11 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
+		public <X> UniqueSortedMappedCollectionBuilder<E, E, X> mapEquivalent(TypeToken<X> target) {
+			return new UniqueSortedMappedCollectionBuilder<>(getSource(), this, target);
+		}
+
+		@Override
 		public UniqueSortedDataFlow<E, E, E> refresh(Observable<?> refresh) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, E>) super.refresh(refresh),
 				getSource().comparator());
@@ -122,6 +134,11 @@ public class ObservableSortedSetImpl {
 		public UniqueSortedDataFlow<E, E, E> refreshEach(Function<? super E, ? extends Observable<?>> refresh) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, E>) super.refreshEach(refresh),
 				getSource().comparator());
+		}
+
+		@Override
+		public UniqueSortedModFilterBuilder<E, E> filterModification() {
+			return new UniqueSortedModFilterBuilder<>(getSource(), this);
 		}
 
 		@Override
@@ -136,20 +153,15 @@ public class ObservableSortedSetImpl {
 	public static class DerivedSortedSet<E, T> extends ObservableSetImpl.DerivedSet<E, T> implements ObservableSortedSet<T> {
 		private final Comparator<? super T> theCompare;
 
-		public DerivedSortedSet(ObservableCollection<E> source, CollectionManager<E, ?, T> flow, UniqueSortedElementFinder<T> elementFinder,
-			Comparator<? super T> compare, Observable<?> until) {
-			super(source, flow, elementFinder, until);
+		public DerivedSortedSet(ObservableCollection<E> source, CollectionManager<E, ?, T> flow, Comparator<? super T> compare,
+			Observable<?> until) {
+			super(source, flow, until);
 			theCompare = compare;
 		}
 
 		@Override
 		public Comparator<? super T> comparator() {
 			return theCompare;
-		}
-
-		@Override
-		protected UniqueSortedCollectionManager<E, ?, T> getFlow() {
-			return (UniqueSortedCollectionManager<E, ?, T>) super.getFlow();
 		}
 
 		@Override
@@ -163,6 +175,7 @@ public class ObservableSortedSetImpl {
 		@Override
 		public boolean forElement(T value, boolean up, boolean withValue,
 			Consumer<? super ObservableCollectionElement<? extends T>> onElement) {
+			// Use the flow's comparator with the tree set of present elements
 			ElementId id = getFlow().relativeId(value, up, withValue);
 			if (id == null)
 				return false;
@@ -173,6 +186,7 @@ public class ObservableSortedSetImpl {
 		@Override
 		public boolean forMutableElement(T value, boolean up, boolean withValue,
 			Consumer<? super MutableObservableElement<? extends T>> onElement) {
+			// Use the flow's comparator with the tree set of present elements
 			ElementId id = getFlow().relativeId(value, up, withValue);
 			if (id == null)
 				return false;
@@ -182,6 +196,7 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public MutableObservableSpliterator<T> mutableSpliterator(T value, boolean up, boolean withValue) {
+			// Use the flow's comparator with the tree set of present elements
 			ElementId id = getFlow().relativeId(value, up, withValue);
 			if (id == null)
 				return MutableObservableSpliterator.empty(getType());
