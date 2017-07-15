@@ -114,8 +114,10 @@ public interface ObservableList<E> extends ObservableCollection<E>, ReversibleLi
 		});
 	}
 
+	@Override
 	<T> T ofElementAt(int index, Function<? super ObservableCollectionElement<? extends E>, T> onElement);
 
+	@Override
 	<T> T ofMutableElementAt(int index, Function<? super MutableObservableElement<? extends E>, T> onElement);
 
 	@Override
@@ -125,7 +127,7 @@ public interface ObservableList<E> extends ObservableCollection<E>, ReversibleLi
 
 	@Override
 	default ObservableElementSpliterator<E> spliterator(int index) {
-		return mutableSpliterator(index).immutable();
+		return ObservableCollection.super.spliterator(index);
 	}
 
 	@Override

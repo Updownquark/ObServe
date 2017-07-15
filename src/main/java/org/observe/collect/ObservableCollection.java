@@ -106,6 +106,8 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	@Override
 	MutableObservableSpliterator<E> mutableSpliterator(boolean fromStart);
 
+	MutableObservableSpliterator<E> mutableSpliterator(int index);
+
 	/**
 	 * Registers a listener for changes to this collection
 	 *
@@ -122,6 +124,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	@Override
 	default ObservableElementSpliterator<E> spliterator(boolean fromStart) {
 		return mutableSpliterator(fromStart).immutable();
+	}
+
+	default ObservableElementSpliterator<E> spliterator(int index) {
+		return mutableSpliterator(index).immutable();
 	}
 
 	/**
@@ -696,6 +702,10 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	<T> T ofElementAt(ElementId elementId, Function<? super ObservableCollectionElement<? extends E>, T> onElement);
 
 	<T> T ofMutableElementAt(ElementId elementId, Function<? super MutableObservableElement<? extends E>, T> onElement);
+
+	<T> T ofElementAt(int index, Function<? super ObservableCollectionElement<? extends E>, T> onElement);
+
+	<T> T ofMutableElementAt(int index, Function<? super MutableObservableElement<? extends E>, T> onElement);
 
 	/**
 	 * @param search The test to search for elements that pass

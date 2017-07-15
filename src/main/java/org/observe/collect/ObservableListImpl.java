@@ -32,7 +32,6 @@ import org.observe.collect.ObservableList.CombinedListBuilder2;
 import org.observe.collect.ObservableList.ListDataFlow;
 import org.observe.collect.ObservableList.ListModFilterBuilder;
 import org.observe.collect.ObservableList.MappedListBuilder;
-import org.observe.collect.ObservableReversibleCollectionImpl.FlattenedReversibleCollection.ReversibleFlattenedSpliterator;
 import org.qommons.Ternian;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
@@ -1097,25 +1096,6 @@ public class ObservableListImpl {
 		protected ObservableList<E> getSource() {
 			return (ObservableList<E>) super.getSource();
 		}
-
-		@Override
-		public <X> X ofElementAt(int index, Function<? super ObservableCollectionElement<? extends T>, X> onElement) {
-			return ofElementAt(getIdAt(index), onElement);
-		}
-
-		@Override
-		public <X> X ofMutableElementAt(int index, Function<? super MutableObservableElement<? extends T>, X> onElement) {
-			return ofMutableElementAt(getIdAt(index), onElement);
-		}
-
-		protected ElementId getIdAt(int index) {
-			return getPresentElements().get(index);
-		}
-
-		@Override
-		public MutableObservableSpliterator<T> mutableSpliterator(int index) {
-			return new MutableDerivedSpliterator(getPresentElements().spliteratorFrom(index));
-		}
 	}
 
 	/**
@@ -1189,54 +1169,6 @@ public class ObservableListImpl {
 		@Override
 		protected ObservableList<? extends ObservableList<? extends E>> getOuter() {
 			return (ObservableList<? extends ObservableList<? extends E>>) super.getOuter();
-		}
-
-		@Override
-		public <T> T ofElementAt(int index, Function<? super ObservableCollectionElement<? extends E>, T> onElement) {
-			// TODO Auto-generated method stub
-			return null;
-		}
-
-		@Override
-		public <T> T ofMutableElementAt(int index, Function<? super MutableObservableElement<? extends E>, T> onElement) {
-			// TODO Auto-generated method stub
-			return null;
-		}
-
-		@Override
-		public MutableObservableSpliterator<E> mutableSpliterator(int index) {
-			// TODO Auto-generated method stub
-			return null;
-		}
-
-		@Override
-		public ObservableReversibleSpliterator<E> spliterator(int index) {
-			return _spliterator(getOuter().spliterator(), index);
-		}
-
-		private <C extends ObservableList<? extends E>> ObservableReversibleSpliterator<E> _spliterator(
-			ObservableReversibleSpliterator<? extends C> spliter, int index) {
-			if (index < 0)
-				throw new IndexOutOfBoundsException("" + index);
-			ObservableCollectionElement<? extends C>[] outerEl = new ObservableCollectionElement[1];
-			int passed = 0;
-			int[] lastSize = new int[1];
-			boolean found = false;
-			while (!found && spliter.tryAdvanceObservableElement(el ->{
-				outerEl[0]=el;
-				lastSize[0] = el.get().size();
-			})) {
-				if (passed + lastSize[0] < index)
-					passed += lastSize[0];
-				else
-					found = true;
-			}
-			if (passed + lastSize[0] == index)
-				found = true;
-			if (!found)
-				throw new IndexOutOfBoundsException(index + " of " + passed);
-			return new ReversibleFlattenedSpliterator<>(spliter, outerEl[0], outerEl[0].get().spliterator(index - passed + lastSize[0]),
-				false);
 		}
 	}
 }

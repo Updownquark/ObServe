@@ -1,7 +1,5 @@
 package org.observe.collect;
 
-import java.util.Arrays;
-
 import org.qommons.collect.TreeList;
 import org.qommons.tree.CountedRedBlackNode.DefaultNode;
 
@@ -100,17 +98,12 @@ public interface ElementId extends Comparable<ElementId> {
 			return new SimpleGeneratedId(theIds.getNodeAt(index));
 		}
 
-		private static int[] increment(int[] id) {
-			int last = id[id.length - 1];
-			last++;
-			int[] nextId;
-			if (last == 0)
-				nextId = new int[id.length + 1];
-			else {
-				nextId = Arrays.copyOf(id, id.length);
-				nextId[id.length - 1] = last;
-			}
-			return nextId;
+		public int size() {
+			return theIds.size();
+		}
+
+		public boolean isEmpty() {
+			return theIds.isEmpty();
 		}
 
 		private class SimpleGeneratedId implements ElementId {

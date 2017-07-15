@@ -798,12 +798,22 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public <T> T ofElementAt(ElementId elementId, Function<? super ObservableCollectionElement<? extends E>, T> onElement) {
-			return getWrapped().ofElementAt(elementId, el -> onElement.apply(el.reverse()));
+			return getWrapped().ofElementAt(elementId.reverse(), el -> onElement.apply(el.reverse()));
 		}
 
 		@Override
 		public <T> T ofMutableElementAt(ElementId elementId, Function<? super MutableObservableElement<? extends E>, T> onElement) {
-			return getWrapped().ofMutableElementAt(elementId, el -> onElement.apply(el.reverse()));
+			return getWrapped().ofMutableElementAt(elementId.reverse(), el -> onElement.apply(el.reverse()));
+		}
+
+		@Override
+		public <T> T ofElementAt(int index, Function<? super ObservableCollectionElement<? extends E>, T> onElement) {
+			return getWrapped().ofElementAt(reflect(index, false), el -> onElement.apply(el.reverse()));
+		}
+
+		@Override
+		public <T> T ofMutableElementAt(int index, Function<? super MutableObservableElement<? extends E>, T> onElement) {
+			return getWrapped().ofMutableElementAt(reflect(index, false), el -> onElement.apply(el.reverse()));
 		}
 
 		@Override
@@ -822,6 +832,13 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public MutableObservableSpliterator<E> mutableSpliterator(int index) {
+			try (Transaction t = lock(true, null)) {
+				return getWrapped().mutableSpliterator(reflect(index, true)).reverse();
+			}
+		}
+
+		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
 			return ObservableCollectionImpl.defaultOnChange(this, observer);
 		}
@@ -831,24 +848,42 @@ public final class ObservableCollectionImpl {
 			return getWrapped();
 		}
 
+		private int reflect(int index, boolean terminalInclusive) {
+			int size = getWrapped().size();
+			if (index < 0)
+				throw new IndexOutOfBoundsException("" + index);
+			if (index > size || (!terminalInclusive && index == size))
+				throw new IndexOutOfBoundsException(index + " of " + size);
+			int reflected = size - index;
+			if (!terminalInclusive)
+				reflected--;
+			return reflected;
+		}
+
 		@Override
 		public E get(int index) {
 			try (Transaction t = getWrapped().lock(false, null)) {
-				return getWrapped().get(getWrapped().size() - index - 1);
+				return getWrapped().get(reflect(index, false));
 			}
 		}
 
 		@Override
 		public int indexOf(Object value) {
 			try (Transaction t = getWrapped().lock(false, null)) {
-				return getWrapped().size() - getWrapped().lastIndexOf(value) - 1;
+				int idx = getWrapped().lastIndexOf(value);
+				if (idx >= 0)
+					idx = reflect(idx, false);
+				return idx;
 			}
 		}
 
 		@Override
 		public int lastIndexOf(Object value) {
 			try (Transaction t = getWrapped().lock(false, null)) {
-				return getWrapped().size() - getWrapped().indexOf(value) - 1;
+				int idx = getWrapped().indexOf(value);
+				if (idx >= 0)
+					idx = reflect(idx, false);
+				return idx;
 			}
 		}
 
@@ -1256,8 +1291,23 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public <X> X ofElementAt(int index, Function<? super ObservableCollectionElement<? extends T>, X> onElement) {
+			return ofElementAt(thePresentElements.get(index), onElement);
+		}
+
+		@Override
+		public <X> X ofMutableElementAt(int index, Function<? super MutableObservableElement<? extends T>, X> onElement) {
+			return ofMutableElementAt(thePresentElements.get(index), onElement);
+		}
+
+		@Override
 		public MutableObservableSpliterator<T> mutableSpliterator(boolean fromStart) {
 			return new MutableDerivedSpliterator(thePresentElements.spliterator(fromStart));
+		}
+
+		@Override
+		public MutableObservableSpliterator<T> mutableSpliterator(int index) {
+			return new MutableDerivedSpliterator(getPresentElements().spliteratorFrom(index));
 		}
 
 		@Override
@@ -1511,6 +1561,14 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public MutableObservableSpliterator<E> mutableSpliterator(boolean fromStart) {
+			if (!theElementIdGen.isEmpty())
+				throw new UnsupportedOperationException(
+					"This method is not implemented for the default observable collection" + " (when non-empty)");
+			return MutableObservableSpliterator.empty(theType);
+		}
+
+		@Override
+		public MutableObservableSpliterator<E> mutableSpliterator(int index) {
 			throw new UnsupportedOperationException("This method is not implemented for the default observable collection");
 		}
 
@@ -1638,6 +1696,16 @@ public final class ObservableCollectionImpl {
 				}
 			}
 			return onElement.apply(new DefaultMutableElement());
+		}
+
+		@Override
+		public <T> T ofElementAt(int index, Function<? super ObservableCollectionElement<? extends E>, T> onElement) {
+			throw new UnsupportedOperationException("This method is not implemented for the default observable collection");
+		}
+
+		@Override
+		public <T> T ofMutableElementAt(int index, Function<? super MutableObservableElement<? extends E>, T> onElement) {
+			throw new UnsupportedOperationException("This method is not implemented for the default observable collection");
 		}
 
 		@Override
@@ -2005,6 +2073,22 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public <T> T ofElementAt(int index, Function<? super ObservableCollectionElement<? extends E>, T> onElement) {
+			ObservableCollection<? extends E> coll = theCollectionObservable.get();
+			if (coll == null)
+				throw new NoSuchElementException();
+			return ((ObservableCollection<E>) coll).ofElementAt(index, onElement);
+		}
+
+		@Override
+		public <T> T ofMutableElementAt(int index, Function<? super MutableObservableElement<? extends E>, T> onElement) {
+			ObservableCollection<? extends E> coll = theCollectionObservable.get();
+			if (coll == null)
+				throw new NoSuchElementException();
+			return ((ObservableCollection<E>) coll).ofMutableElementAt(index, onElement);
+		}
+
+		@Override
 		public MutableObservableSpliterator<E> mutableSpliterator(boolean fromStart) {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			if (coll == null)
@@ -2190,9 +2274,46 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public <T> T ofElementAt(int index, Function<? super ObservableCollectionElement<? extends E>, T> onElement) {
+			int soFar = 0;
+			try (Transaction t = theOuter.lock(false, null)) {
+				for (ObservableCollection<? extends E> coll : theOuter) {
+					try (Transaction innerT = coll.lock(false, null)) {
+						int size = coll.size();
+						if (index < soFar + size)
+							return coll.ofElementAt(index - soFar, onElement);
+						soFar += size;
+					}
+				}
+			}
+			throw new IndexOutOfBoundsException(index + " of " + soFar);
+		}
+
+		@Override
+		public <T> T ofMutableElementAt(int index, Function<? super MutableObservableElement<? extends E>, T> onElement) {
+			int soFar = 0;
+			try (Transaction t = theOuter.lock(false, null)) {
+				for (ObservableCollection<? extends E> coll : theOuter) {
+					try (Transaction innerT = coll.lock(true, null)) {
+						int size = coll.size();
+						if (index < soFar + size)
+							return coll.ofMutableElementAt(index - soFar, onElement);
+						soFar += size;
+					}
+				}
+			}
+			throw new IndexOutOfBoundsException(index + " of " + soFar);
+		}
+
+		@Override
 		public MutableObservableSpliterator<E> mutableSpliterator(boolean fromStart) {
 			class FlattenedSpliterator implements MutableObservableSpliterator<E> {}
 			return new FlattenedSpliterator();
+		}
+
+		@Override
+		public MutableObservableSpliterator<E> mutableSpliterator(int index) {
+			// TODO Auto-generated method stub
 		}
 
 		@Override
