@@ -3,9 +3,11 @@ package org.observe.collect;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -1880,13 +1882,13 @@ public final class ObservableCollectionImpl {
 	 */
 	public static class FlattenedValueCollection<E> implements ObservableCollection<E> {
 		private final ObservableValue<? extends ObservableCollection<? extends E>> theCollectionObservable;
-		private final ReentrantLock theLock;
+		private final ReentrantReadWriteLock theLock;
 		private final TypeToken<E> theType;
 
 		/** @param collectionObservable The value to present as a static collection */
 		protected FlattenedValueCollection(ObservableValue<? extends ObservableCollection<? extends E>> collectionObservable) {
 			theCollectionObservable = collectionObservable;
-			theLock = new ReentrantLock();
+			theLock = new ReentrantReadWriteLock();
 			theType = (TypeToken<E>) theCollectionObservable.getType().resolveType(ObservableCollection.class.getTypeParameters()[0]);
 		}
 
@@ -1907,12 +1909,13 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Transaction lock(boolean write, Object cause) {
-			theLock.lock();
+			Lock lock = write ? theLock.writeLock() : theLock.readLock();
+			lock.lock();
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			Transaction t = coll == null ? Transaction.NONE : coll.lock(write, cause);
 			return () -> {
 				t.close();
-				theLock.unlock();
+				lock.unlock();
 			};
 		}
 
@@ -1935,32 +1938,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public MutableObservableSpliterator<E> mutableSpliterator() {
+		public E get(int index) {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
-			return coll == null ? MutableObservableSpliterator.empty(theType)
-				: ((MutableObservableSpliterator<E>) coll.mutableSpliterator());
-		}
-
-		@Override
-		public boolean contains(Object o) {
-			ObservableCollection<? extends E> coll = theCollectionObservable.get();
-			return coll == null ? false : coll.contains(o);
-		}
-
-		@Override
-		public boolean containsAll(Collection<?> c) {
-			if (c.isEmpty())
-				return true;
-			ObservableCollection<? extends E> coll = theCollectionObservable.get();
-			return coll == null ? false : coll.containsAll(c);
-		}
-
-		@Override
-		public boolean containsAny(Collection<?> c) {
-			if (c.isEmpty())
-				return false;
-			ObservableCollection<? extends E> coll = theCollectionObservable.get();
-			return coll == null ? false : coll.containsAny(c);
+			if (coll == null)
+				throw new IndexOutOfBoundsException(index + " of 0");
+			return coll.get(index);
 		}
 
 		@Override
@@ -1984,38 +1966,6 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean addAll(Collection<? extends E> c) {
-			ObservableCollection<? extends E> coll = theCollectionObservable.get();
-			return ((ObservableCollection<E>) coll).addAll(c);
-		}
-
-		@Override
-		public String canRemove(Object value) {
-			ObservableCollection<? extends E> current = theCollectionObservable.get();
-			if (current == null)
-				return StdMsg.UNSUPPORTED_OPERATION;
-			return current.canRemove(value);
-		}
-
-		@Override
-		public boolean remove(Object o) {
-			ObservableCollection<? extends E> coll = theCollectionObservable.get();
-			return coll == null ? false : coll.remove(o);
-		}
-
-		@Override
-		public boolean removeAll(Collection<?> c) {
-			ObservableCollection<? extends E> coll = theCollectionObservable.get();
-			return coll == null ? false : coll.removeAll(c);
-		}
-
-		@Override
-		public boolean retainAll(Collection<?> c) {
-			ObservableCollection<? extends E> coll = theCollectionObservable.get();
-			return coll == null ? false : coll.retainAll(c);
-		}
-
-		@Override
 		public void clear() {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			if (coll != null)
@@ -2023,87 +1973,53 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-			return ObservableCollectionImpl.defaultOnChange(this, observer);
+		public boolean forObservableElement(E value, Consumer<? super ObservableCollectionElement<? extends E>> onElement, boolean first) {
+			ObservableCollection<? extends E> coll = theCollectionObservable.get();
+			if (coll == null || !coll.belongs(value))
+				return false;
+			return ((ObservableCollection<E>) coll).forObservableElement(value, onElement, first);
 		}
 
 		@Override
-		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-			FlattenedObserver flatObs = new FlattenedObserver(observer);
-			Subscription valueSub = theCollectionObservable.safe().subscribe(flatObs);
-			return removeAll -> {
-				valueSub.unsubscribe();
-				flatObs.unsubscribe(removeAll);
-			};
+		public boolean forMutableElement(E value, Consumer<? super MutableObservableElement<? extends E>> onElement, boolean first) {
+			ObservableCollection<? extends E> coll = theCollectionObservable.get();
+			if (coll == null || !coll.belongs(value))
+				return false;
+			return ((ObservableCollection<E>) coll).forMutableElement(value, onElement, first);
 		}
 
-		/**
-		 * An observable for this collection's value that propagates the change events from the content collections to an observer on this
-		 * collection
-		 */
-		protected class FlattenedObserver implements Observer<ObservableValueEvent<? extends ObservableCollection<? extends E>>> {
-			private final Consumer<? super ObservableCollectionEvent<? extends E>> theObserver;
-			private CollectionSubscription theInnerSub;
+		@Override
+		public <T> T ofElementAt(ElementId elementId, Function<? super ObservableCollectionElement<? extends E>, T> onElement) {
+			ObservableCollection<? extends E> coll = theCollectionObservable.get();
+			if (coll == null)
+				throw new NoSuchElementException();
+			return ((ObservableCollection<E>) coll).ofElementAt(elementId, onElement);
+		}
 
-			/** @param observer The observer on this collection */
-			protected FlattenedObserver(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-				theObserver = observer;
-			}
+		@Override
+		public <T> T ofMutableElementAt(ElementId elementId, Function<? super MutableObservableElement<? extends E>, T> onElement) {
+			ObservableCollection<? extends E> coll = theCollectionObservable.get();
+			if (coll == null)
+				throw new NoSuchElementException();
+			return ((ObservableCollection<E>) coll).ofMutableElementAt(elementId, onElement);
+		}
 
-			/**
-			 * @param coll The content collection to subscribe to
-			 * @param observer The observer to subscribe to the collection
-			 * @return The collection subscription
-			 */
-			protected CollectionSubscription subscribe(ObservableCollection<? extends E> coll,
-				Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-				return coll.subscribe(observer);
-			}
+		@Override
+		public MutableObservableSpliterator<E> mutableSpliterator(boolean fromStart) {
+			ObservableCollection<? extends E> coll = theCollectionObservable.get();
+			if (coll == null)
+				return MutableObservableSpliterator.empty(theType);
+			return ((ObservableCollection<E>) coll).mutableSpliterator(fromStart);
+		}
 
-			@Override
-			public <V extends ObservableValueEvent<? extends ObservableCollection<? extends E>>> void onNext(V value) {
-				theLock.lock();
-				try {
-					if (theInnerSub != null)
-						theInnerSub.unsubscribe(true);
-					ObservableCollection<? extends E> coll = value.getValue();
-					if (coll != null) {
-						boolean[] initialized = new boolean[1];
-						theInnerSub = coll.subscribe(evt -> {
-							if (initialized[0])
-								theLock.lock();
-							try {
-								theObserver.accept(evt);
-							} finally {
-								if (!initialized[0])
-									theLock.unlock();
-							}
-						});
-						initialized[0] = true;
-					} else
-						theInnerSub = null;
-				} finally {
-					theLock.unlock();
-				}
-			}
+		@Override
+		public boolean isEventIndexed() {
+			return false;
+		}
 
-			@Override
-			public <V extends ObservableValueEvent<? extends ObservableCollection<? extends E>>> void onCompleted(V value) {
-				unsubscribe(true);
-			}
-
-			/** @param removeAll Whether to remove all the elements from the observer */
-			protected void unsubscribe(boolean removeAll) {
-				theLock.lock();
-				try {
-					if (theInnerSub != null) {
-						theInnerSub.unsubscribe(removeAll);
-						theInnerSub = null;
-					}
-				} finally {
-					theLock.unlock();
-				}
-			}
+		@Override
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
+			return ObservableCollectionImpl.defaultOnChange(this, observer);
 		}
 
 		@Override
@@ -2193,8 +2109,18 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public E get(int index) {
-			// TODO Auto-generated method stub
-			return null;
+			int soFar = 0;
+			try (Transaction t = theOuter.lock(false, null)) {
+				for (ObservableCollection<? extends E> coll : theOuter) {
+					try (Transaction innerT = coll.lock(false, null)) {
+						int size = coll.size();
+						if (index < soFar + size)
+							return coll.get(index - soFar);
+						soFar += size;
+					}
+				}
+			}
+			throw new IndexOutOfBoundsException(index + " of " + soFar);
 		}
 
 		@Override
@@ -2265,7 +2191,8 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public MutableObservableSpliterator<E> mutableSpliterator(boolean fromStart) {
-			// TODO Auto-generated method stub
+			class FlattenedSpliterator implements MutableObservableSpliterator<E> {}
+			return new FlattenedSpliterator();
 		}
 
 		@Override
@@ -2277,7 +2204,44 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-			// TODO Auto-generated method stub
+			Map<ElementId, CollectionSubscription> subscriptions = new HashMap<>();
+			Subscription outerSub = theOuter
+				.onChange(new Consumer<ObservableCollectionEvent<? extends ObservableCollection<? extends E>>>() {
+					@Override
+					public void accept(ObservableCollectionEvent<? extends ObservableCollection<? extends E>> outerEvt) {
+						switch (outerEvt.getType()) {
+						case add:
+							subscriptions.put(outerEvt.getElementId(), subscribeInner(outerEvt.getElementId(), outerEvt.getNewValue()));
+							break;
+						case remove:
+							subscriptions.remove(outerEvt.getElementId()).unsubscribe(true);
+							break;
+						case set:
+							if (outerEvt.getOldValue() != outerEvt.getNewValue()) {
+								subscriptions.remove(outerEvt.getOldValue()).unsubscribe(true);
+								subscriptions.put(outerEvt.getElementId(), subscribeInner(outerEvt.getElementId(), outerEvt.getNewValue()));
+							}
+							break;
+						}
+					}
+
+					private CollectionSubscription subscribeInner(ElementId outerId, ObservableCollection<? extends E> innerColl) {
+						if (innerColl == null)
+							return removeAll -> {
+							};
+							else
+								return innerColl.subscribe(innerEvt -> {
+									observer.accept(new ObservableCollectionEvent<>(new CompoundId(outerId, innerEvt.getElementId()),
+										innerEvt.getType(), innerEvt.getOldValue(), innerEvt.getNewValue(), innerEvt));
+								});
+					}
+				});
+			return () -> {
+				outerSub.unsubscribe();
+				for (Subscription sub : subscriptions.values())
+					sub.unsubscribe();
+				subscriptions.clear();
+			};
 		}
 
 		int getInnerElementsBefore(int outerIndex) {
