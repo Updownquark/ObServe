@@ -43,6 +43,7 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueElementFinder;
 import org.qommons.Causable;
 import org.qommons.LinkedQueue;
+import org.qommons.ListenerSet;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.ReversibleCollection;
@@ -996,6 +997,120 @@ public final class ObservableCollectionImpl {
 			theFlow = flow;
 			theEquivalence = flow.equivalence();
 		}
+
+		@Override
+		public TypeToken<T> getType() {
+			return theFlow.getTargetType();
+		}
+
+		@Override
+		public Equivalence<? super T> equivalence() {
+			return theEquivalence;
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return theSource.isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theSource.lock(write, cause);
+		}
+
+		@Override
+		public int size() {
+			return theSource.size();
+		}
+
+		@Override
+		public boolean isEmpty() {
+			return theSource.isEmpty();
+		}
+
+		@Override
+		public String canAdd(T value) {
+			FilterMapResult<T, E> reversed = theFlow.reverse(value);
+			if (reversed.error != null)
+				return reversed.error;
+			return theSource.canAdd(reversed.result);
+		}
+
+		@Override
+		public boolean add(T e) {
+			FilterMapResult<T, E> reversed = theFlow.reverse(e);
+			if (reversed.error != null)
+				throw new IllegalArgumentException(reversed.error);
+			return theSource.add(reversed.result);
+		}
+
+		@Override
+		public void clear() {
+			theSource.clear();
+		}
+
+		@Override
+		public int getElementsBefore(ElementId id) {
+			return theSource.getElementsBefore(id);
+		}
+
+		@Override
+		public int getElementsAfter(ElementId id) {
+			return theSource.getElementsAfter(id);
+		}
+
+		@Override
+		public boolean forObservableElement(T value, Consumer<? super ObservableCollectionElement<? extends T>> onElement, boolean first) {
+			// TODO Auto-generated method stub
+		}
+
+		@Override
+		public boolean forMutableElement(T value, Consumer<? super MutableObservableElement<? extends T>> onElement, boolean first) {
+			FilterMapResult<T, E> reversed = theFlow.reverse(value);
+			if (reversed.error != null)
+				return false;
+			// TODO Auto-generated method stub
+		}
+
+		@Override
+		public <X> X ofElementAt(ElementId elementId, Function<? super ObservableCollectionElement<? extends T>, X> onElement) {
+			// TODO Auto-generated method stub
+		}
+
+		@Override
+		public <X> X ofMutableElementAt(ElementId elementId, Function<? super MutableObservableElement<? extends T>, X> onElement) {
+			// TODO Auto-generated method stub
+		}
+
+		@Override
+		public <X> X ofElementAt(int index, Function<? super ObservableCollectionElement<? extends T>, X> onElement) {
+			// TODO Auto-generated method stub
+		}
+
+		@Override
+		public <X> X ofMutableElementAt(int index, Function<? super MutableObservableElement<? extends T>, X> onElement) {
+			// TODO Auto-generated method stub
+		}
+
+		@Override
+		public MutableObservableSpliterator<T> mutableSpliterator(boolean fromStart) {
+			// TODO Auto-generated method stub
+		}
+
+		@Override
+		public MutableObservableSpliterator<T> mutableSpliterator(int index) {
+			// TODO Auto-generated method stub
+		}
+
+		@Override
+		public boolean isEventIndexed() {
+			return theSource.isEventIndexed();
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends T>> observer) {
+			// TODO Auto-generated method stub
+		}
 	}
 
 	public static class DerivedCollection<E, T> implements ObservableCollection<T> {
@@ -1103,8 +1218,8 @@ public final class ObservableCollectionImpl {
 				});
 				CollectionSubscription sub = theSource.subscribe(weak);
 				weak.withSubscription(sub);
-				Subscription takeSub=until.take(1).act(v -> sub.unsubscribe(true));
-				weak.onUnsubscribe(()->takeSub.unsubscribe());
+				Subscription takeSub = until.take(1).act(v -> sub.unsubscribe(true));
+				weak.onUnsubscribe(() -> takeSub.unsubscribe());
 			}
 		}
 
@@ -1281,7 +1396,7 @@ public final class ObservableCollectionImpl {
 						return false;
 					DerivedCollectionElement element = theElements.get(id);
 					if (element == null)
-						throw new IllegalArgumentException(StdMsg.NOT_FOUND);
+						throw new IllegalStateException(StdMsg.NOT_FOUND);
 					if (element.presentNode == null)
 						return false;
 					onElement.accept(observableElementFor(element));
@@ -1330,7 +1445,7 @@ public final class ObservableCollectionImpl {
 						return false;
 					DerivedCollectionElement element = theElements.get(id);
 					if (element == null)
-						throw new IllegalArgumentException(StdMsg.NOT_FOUND);
+						throw new IllegalStateException(StdMsg.NOT_FOUND);
 					if (element.presentNode == null)
 						return false;
 					theSource.forMutableElementAt(id, srcEl -> onElement.accept(element.manager.map(srcEl, element)));
@@ -1544,13 +1659,16 @@ public final class ObservableCollectionImpl {
 		private final ReentrantReadWriteLock theLock;
 		private final LinkedList<Causable> theTransactionCauses;
 		private final SimpleElementIdGenerator theElementIdGen;
-		private Consumer<? super ObservableCollectionEvent<? extends E>> theObserver;
+		private final DefaultTreeMap<ElementId, E> theValues;
+		private ListenerSet<Consumer<? super ObservableCollectionEvent<? extends E>>> theObservers;
 
 		DefaultObservableCollection(TypeToken<E> type) {
 			theType = type;
 			theLock = new ReentrantReadWriteLock();
 			theTransactionCauses = new LinkedList<>();
 			theElementIdGen = ElementId.createSimpleIdGenerator();
+			theValues = new DefaultTreeMap<>(ElementId::compareTo);
+			theObservers = new ListenerSet<>();
 		}
 
 		@Override
@@ -1598,12 +1716,12 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public int size() {
-			throw new UnsupportedOperationException("This method is not implemented for the default observable collection");
+			return theValues.size();
 		}
 
 		@Override
 		public boolean isEmpty() {
-			throw new UnsupportedOperationException("This method is not implemented for the default observable collection");
+			return theValues.isEmpty();
 		}
 
 		@Override
@@ -1619,7 +1737,9 @@ public final class ObservableCollectionImpl {
 		@Override
 		public boolean add(E e) {
 			try (Transaction t = lock(true, null)) {
-				theObserver.accept(new ObservableCollectionEvent<>(theElementIdGen.newId(), CollectionChangeType.add, null, e,
+				ElementId id = theElementIdGen.newId();
+				DefaultNode<?> node = theValues.putGetNode(id, e);
+				fireChange(new IndexedCollectionEvent<>(id, node.getIndex(), CollectionChangeType.add, null, e,
 					theTransactionCauses.peekLast()));
 			}
 			return true;
@@ -1627,33 +1747,32 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public void clear() {
-			throw new UnsupportedOperationException("This method is not implemented for the default observable collection");
+			try (Transaction t = lock(true, null)) {
+				mutableSpliterator().forEachElement(el -> el.remove(null));
+			}
 		}
 
 		@Override
 		public MutableObservableSpliterator<E> mutableSpliterator(boolean fromStart) {
-			if (!theElementIdGen.isEmpty())
-				throw new UnsupportedOperationException(
-					"This method is not implemented for the default observable collection" + " (when non-empty)");
-			return MutableObservableSpliterator.empty(theType);
 		}
 
 		@Override
 		public MutableObservableSpliterator<E> mutableSpliterator(int index) {
-			throw new UnsupportedOperationException("This method is not implemented for the default observable collection");
 		}
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-			if (theObserver != null)
-				throw new UnsupportedOperationException("Multiple observers are not supported for the default observable collection");
-			theObserver = observer;
-			return () -> theObserver = null;
+			theObservers.add(observer);
+			return () -> theObservers.remove(observer);
+		}
+
+		private void fireChange(IndexedCollectionEvent<E> evt) {
+			theObservers.forEach(l -> l.accept(evt));
 		}
 
 		@Override
 		public E get(int index) {
-			throw new UnsupportedOperationException("This method is not implemented for the default observable collection");
+			return theValues.entrySet().get(index).getValue();
 		}
 
 		@Override
@@ -1663,22 +1782,19 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean isEventIndexed() {
-			return false;
+			return true;
 		}
 
 		@Override
 		public boolean forObservableElement(E value, Consumer<? super ObservableCollectionElement<? extends E>> onElement, boolean first) {
-			throw new UnsupportedOperationException("This method is not implemented for the default observable collection");
 		}
 
 		@Override
 		public boolean forMutableElement(E value, Consumer<? super MutableObservableElement<? extends E>> onElement, boolean first) {
-			throw new UnsupportedOperationException("This method is not implemented for the default observable collection");
 		}
 
 		@Override
 		public <T> T ofElementAt(ElementId elementId, Function<? super ObservableCollectionElement<? extends E>, T> onElement) {
-			throw new UnsupportedOperationException("This method is not implemented for the default observable collection");
 		}
 
 		@Override
@@ -1715,7 +1831,7 @@ public final class ObservableCollectionImpl {
 						throw new IllegalStateException(StdMsg.NOT_FOUND);
 					try (Transaction t = lock(true, cause)) {
 						// The DerivedCollection keeps track of its own values and does not pay attention to the values in the event
-						theObserver.accept(new ObservableCollectionEvent<>(elementId, CollectionChangeType.remove, null, null,
+						fireChange(new ObservableCollectionEvent<>(elementId, CollectionChangeType.remove, null, null,
 							theTransactionCauses.getLast()));
 						theElementIdGen.remove(elementId);
 						isRemoved = true;
@@ -1735,7 +1851,7 @@ public final class ObservableCollectionImpl {
 						throw new IllegalStateException(StdMsg.NOT_FOUND);
 					try (Transaction t = lock(true, cause)) {
 						ElementId newId = theElementIdGen.newId(elementId, before);
-						theObserver.accept(
+						fireChange(
 							new ObservableCollectionEvent<>(newId, CollectionChangeType.add, null, value, theTransactionCauses.peekLast()));
 					}
 				}
@@ -1746,7 +1862,7 @@ public final class ObservableCollectionImpl {
 						throw new IllegalStateException(StdMsg.NOT_FOUND);
 					try (Transaction t = lock(true, cause)) {
 						// The DerivedCollection keeps track of its own values and does not pay attention to the values in the event
-						theObserver.accept(new ObservableCollectionEvent<>(elementId, CollectionChangeType.remove, null, value,
+						fireChange(new ObservableCollectionEvent<>(elementId, CollectionChangeType.remove, null, value,
 							theTransactionCauses.getLast()));
 						return null; // The collection manager keeps track of its own value and ignores this
 					}
@@ -1771,45 +1887,10 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public <T> T ofElementAt(int index, Function<? super ObservableCollectionElement<? extends E>, T> onElement) {
-			throw new UnsupportedOperationException("This method is not implemented for the default observable collection");
 		}
 
 		@Override
 		public <T> T ofMutableElementAt(int index, Function<? super MutableObservableElement<? extends E>, T> onElement) {
-			throw new UnsupportedOperationException("This method is not implemented for the default observable collection");
-		}
-
-		@Override
-		public <T> CollectionDataFlow<E, E, E> flow() {
-			// Overridden because by default, ObservableCollection.flow().collect() just returns the collection
-			return new DefaultCollectionFlow<>(this);
-		}
-
-		private static class DefaultCollectionFlow<E> extends BaseCollectionDataFlow<E> {
-			DefaultCollectionFlow(ObservableCollection<E> source) {
-				super(source);
-			}
-
-			@Override
-			public AbstractCollectionManager<E, ?, E> manageCollection() {
-				return new DefaultCollectionManager<>(getTargetType(), getSource().equivalence(), getSource().isLockSupported());
-			}
-
-			@Override
-			public ObservableCollection<E> collect(Observable<?> until) {
-				return new DerivedCollection<>(getSource(), manageCollection(), until);
-			}
-		}
-
-		private static class DefaultCollectionManager<E> extends BaseCollectionManager<E> {
-			public DefaultCollectionManager(TypeToken<E> targetType, Equivalence<? super E> equivalence, boolean threadSafe) {
-				super(targetType, equivalence, threadSafe);
-			}
-
-			@Override
-			public boolean isStaticallyFiltered() {
-				return true; // This flag prevents DerivedCollection from calling the clear() method
-			}
 		}
 	}
 
@@ -1833,8 +1914,9 @@ public final class ObservableCollectionImpl {
 			theWrapped = wrap;
 			theBuilder = builder;
 
-			theKeySet = unique(wrap.flow().map(theBuilder.getKeyType()).map(theBuilder.getKeyMaker(), theBuilder.areNullsMapped())
-				.withEquivalence(theBuilder.getEquivalence())).collect();
+			theKeySet = unique(
+				wrap.flow().map(theBuilder.getKeyType()).map(theBuilder.getKeyMaker()).withEquivalence(theBuilder.getEquivalence()))
+				.collect();
 		}
 
 		/** @return The collection whose content is reflected by this multi-map */
@@ -1885,17 +1967,12 @@ public final class ObservableCollectionImpl {
 			if (key != null && !theBuilder.getKeyType().getRawType().isInstance(key))
 				return ObservableCollection.constant(theWrapped.getType()).collect();
 			CollectionDataFlow<E, E, E> flow = theWrapped.flow();
-			Function<E, String> filter = v -> {
-				if (v != null || theBuilder.areNullsMapped())
-					return theBuilder.getEquivalence().elementEquals((K) key, theBuilder.getKeyMaker().apply(v)) ? null
-						: StdMsg.WRONG_GROUP;
-				else
-					return key == null ? null : StdMsg.WRONG_GROUP;
-			};
+			Function<E, String> filter = v -> theBuilder.getEquivalence().elementEquals((K) key, theBuilder.getKeyMaker().apply(v)) ? null
+				: StdMsg.WRONG_GROUP;
 			if (theBuilder.isStatic())
-				flow = flow.filterStatic(filter, true);
+				flow = flow.filterStatic(filter);
 			else
-				flow = flow.filter(filter, true);
+				flow = flow.filter(filter);
 			return flow.collect();
 		}
 
@@ -2397,6 +2474,17 @@ public final class ObservableCollectionImpl {
 			};
 		}
 
+		@Override
+		public int getElementsBefore(ElementId id) {
+			CompoundId cId=(CompoundId) id;
+			return getInnerElementsBefore(theOuter.getElementsBefore(cId.getOuter()) + cId.getInner().getElementsBefore();
+		}
+
+		@Override
+		public int getElementsAfter(ElementId id) {
+			return getInnerElementsAfter(theOuter.getElementsAfter()) + theInner.getElementsAfter();
+		}
+
 		int getInnerElementsBefore(int outerIndex) {
 			if (outerIndex == 0)
 				return 0;
@@ -2446,16 +2534,6 @@ public final class ObservableCollectionImpl {
 				if (comp == 0)
 					comp = theInner.compareTo(((CompoundId) o).theInner);
 				return comp;
-			}
-
-			@Override
-			public int getElementsBefore() {
-				return getInnerElementsBefore(theOuter.getElementsBefore()) + theInner.getElementsBefore();
-			}
-
-			@Override
-			public int getElementsAfter() {
-				return getInnerElementsAfter(theOuter.getElementsAfter()) + theInner.getElementsAfter();
 			}
 
 			@Override

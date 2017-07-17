@@ -558,6 +558,9 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 		});
 	}
 
+	@Override
+	void clear();
+
 	/** @return Whether events given to the {@link #onChange(Consumer)} listener are always {@link IndexedCollectionEvent indexed} */
 	boolean isEventIndexed();
 
@@ -2098,7 +2101,6 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 		private final Function<? super E, ? extends K> theKeyMaker;
 		private final boolean isStatic;
 		private Equivalence<? super K> theEquivalence = Equivalence.DEFAULT;
-		private boolean areNullsMapped;
 		private boolean isAlwaysUsingFirst;
 		private boolean isBuilt;
 
@@ -2137,22 +2139,11 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 			return theEquivalence;
 		}
 
-		public GroupingBuilder<E, K> withNullsMapped(boolean mapNulls) {
-			if (isBuilt)
-				throw new IllegalStateException("Cannot change the grouping builder's properties after building");
-			areNullsMapped = mapNulls;
-			return this;
-		}
-
 		public GroupingBuilder<E, K> alwaysUseFirst() {
 			if (isBuilt)
 				throw new IllegalStateException("Cannot change the grouping builder's properties after building");
 			isAlwaysUsingFirst = true;
 			return this;
-		}
-
-		public boolean areNullsMapped() {
-			return areNullsMapped;
 		}
 
 		public boolean isAlwaysUsingFirst() {
@@ -2183,13 +2174,7 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 
 		public SortedGroupingBuilder(GroupingBuilder<E, K> basicBuilder, Comparator<? super K> compare) {
 			super(basicBuilder.getCollection(), basicBuilder.getKeyType(), basicBuilder.getKeyMaker(), basicBuilder.isStatic());
-			withNullsMapped(basicBuilder.areNullsMapped());
 			theCompare = compare;
-		}
-
-		@Override
-		public SortedGroupingBuilder<E, K> withNullsMapped(boolean mapNulls) {
-			return (SortedGroupingBuilder<E, K>) super.withNullsMapped(mapNulls);
 		}
 
 		@Override

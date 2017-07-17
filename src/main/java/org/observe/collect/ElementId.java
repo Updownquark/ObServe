@@ -100,16 +100,25 @@ public interface ElementId extends Comparable<ElementId> {
 
 		private class SimpleGeneratedId implements ElementId {
 			private final DefaultNode<Void> theNode;
+			private int theRemovedIndex; // Keeps state after this node has been removed (while remove event is firing)
 
 			SimpleGeneratedId(DefaultNode<Void> node) {
 				theNode = node;
+				theRemovedIndex = -1;
 			}
 
 			@Override
 			public int compareTo(ElementId o) {
 				if (theNode == ((SimpleGeneratedId) o).theNode)
 					return 0;
-				return theNode.getIndex() - ((SimpleGeneratedId) o).theNode.getIndex();
+				int otherIndex = ((SimpleGeneratedId) o).theNode.getIndex();
+				if (theRemovedIndex < 0)
+					return theNode.getIndex() - otherIndex;
+				else if (theRemovedIndex != otherIndex)
+					return theRemovedIndex - otherIndex;
+				else
+					return -1; // We were before the node that replaced us at this index
+
 			}
 
 			SimpleGeneratedId nextTo(boolean left) {
@@ -117,6 +126,7 @@ public interface ElementId extends Comparable<ElementId> {
 			}
 
 			void remove() {
+				theRemovedIndex = theNode.getIndex();
 				theIds.delete(theNode);
 			}
 
