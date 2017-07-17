@@ -18,12 +18,6 @@ import org.qommons.tree.CountedRedBlackNode.DefaultNode;
  * @see ObservableCollectionEvent#getElementId()
  */
 public interface ElementId extends Comparable<ElementId> {
-	/** @return The number of elements in the collection prior to this element. May be used as the element's index. */
-	int getElementsBefore();
-
-	/** @return The number of elements in the collection after this element */
-	int getElementsAfter();
-
 	/** @return An element ID that behaves like this one, but orders in reverse */
 	default ElementId reverse() {
 		class ReversedElementId implements ElementId {
@@ -31,16 +25,6 @@ public interface ElementId extends Comparable<ElementId> {
 
 			ReversedElementId(ElementId wrap) {
 				theWrapped = wrap;
-			}
-
-			@Override
-			public int getElementsBefore() {
-				return theWrapped.getElementsAfter();
-			}
-
-			@Override
-			public int getElementsAfter() {
-				return theWrapped.getElementsBefore();
 			}
 
 			@Override
@@ -98,6 +82,14 @@ public interface ElementId extends Comparable<ElementId> {
 			return new SimpleGeneratedId(theIds.getNodeAt(index));
 		}
 
+		public int getElementsBefore(ElementId id) {
+			return ((SimpleGeneratedId) id).theNode.getIndex();
+		}
+
+		public int getElementsAfter(ElementId id) {
+			return ((SimpleGeneratedId) id).theNode.getElementsGreater();
+		}
+
 		public int size() {
 			return theIds.size();
 		}
@@ -111,16 +103,6 @@ public interface ElementId extends Comparable<ElementId> {
 
 			SimpleGeneratedId(DefaultNode<Void> node) {
 				theNode = node;
-			}
-
-			@Override
-			public int getElementsBefore() {
-				return theNode.getIndex();
-			}
-
-			@Override
-			public int getElementsAfter() {
-				return theNode.getElementsGreater();
 			}
 
 			@Override

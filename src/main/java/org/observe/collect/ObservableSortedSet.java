@@ -1,6 +1,5 @@
 package org.observe.collect;
 
-import java.util.Comparator;
 import java.util.Iterator;
 import java.util.function.Consumer;
 
@@ -165,17 +164,6 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 	@Override
 	default <T> UniqueSortedDataFlow<E, E, E> flow() {
 		return new ObservableSortedSetImpl.UniqueSortedBaseFlow<>(this);
-	}
-
-	/**
-	 * @param <E> The type of elements in the collection
-	 * @param outer The collection of collections
-	 * @param compare The comparator to use to sort the elements
-	 * @return An observable sorted set containing all unique elements in any collection in the outer collection
-	 */
-	public static <E> ObservableSortedSet<E> flatten(ObservableCollection<? extends ObservableSortedSet<? extends E>> outer,
-		Comparator<? super E> compare) {
-		return ObservableSortedSet.unique(ObservableCollection.flatten(outer), compare);
 	}
 
 	/**

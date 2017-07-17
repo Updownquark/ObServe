@@ -4,7 +4,6 @@ import java.lang.reflect.Array;
 
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionImpl;
-import org.observe.collect.ObservableList;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -153,7 +152,7 @@ public interface ObservableAction<T> {
 	}
 
 	/**
-	 * Implements {@link ObservableAction#and(ObservableList)}
+	 * Implements {@link ObservableAction#and(ObservableCollection)}
 	 *
 	 * @param <T> The type of the actions
 	 */
@@ -164,7 +163,7 @@ public interface ObservableAction<T> {
 		protected AndObservableAction(ObservableCollection<? extends ObservableAction<? extends T>> actions) {
 			theActions = actions;
 			theArrayType = new TypeToken<T[]>() {}.where(new TypeParameter<T>() {}, (TypeToken<T>) actions.getType()
-				.resolveType(ObservableList.class.getTypeParameters()[0]).resolveType(ObservableAction.class.getTypeParameters()[0]));
+				.resolveType(ObservableCollection.class.getTypeParameters()[0]).resolveType(ObservableAction.class.getTypeParameters()[0]));
 		}
 
 		@Override

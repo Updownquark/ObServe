@@ -917,6 +917,16 @@ public class ObservableSortedSetImpl {
 		}
 	}
 
+	public static class DerivedLWSortedSet<E, T> extends ObservableSetImpl.DerivedLWSet<E, T> implements ObservableSortedSet<T> {
+		private final Comparator<? super T> theCompare;
+
+		public DerivedLWSortedSet(ObservableCollection<E> source, CollectionManager<E, ?, T> flow, Comparator<? super T> compare,
+			Observable<?> until) {
+			super(source, flow, until);
+			theCompare = compare;
+		}
+	}
+
 	public static class DerivedSortedSet<E, T> extends ObservableSetImpl.DerivedSet<E, T> implements ObservableSortedSet<T> {
 		private final Comparator<? super T> theCompare;
 

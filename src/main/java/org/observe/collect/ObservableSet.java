@@ -63,6 +63,11 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 		return ObservableCollection.super.retainAll(c);
 	}
 
+	@Override
+	default void clear() {
+		ObservableCollection.super.clear();
+	}
+
 	/**
 	 * @param <X> The type of the filtering collection
 	 * @param collection The collection to filter this set's elements by

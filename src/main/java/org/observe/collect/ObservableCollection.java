@@ -3,9 +3,11 @@ package org.observe.collect;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.ListIterator;
 import java.util.Set;
 import java.util.Spliterator;
 import java.util.function.BiFunction;
@@ -26,15 +28,14 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractCombinedColl
 import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
 import org.qommons.Causable;
-import org.qommons.Ternian;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementSpliterator;
-import org.qommons.collect.ReversibleCollection;
+import org.qommons.collect.ReversibleList;
 import org.qommons.collect.SimpleCause;
-import org.qommons.collect.TransactableCollection;
+import org.qommons.collect.TransactableList;
 import org.qommons.collect.TreeList;
 import org.qommons.tree.CountedRedBlackNode.DefaultNode;
 import org.qommons.tree.CountedRedBlackNode.DefaultTreeSet;
@@ -67,7 +68,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <E> The type of element in the collection
  */
-public interface ObservableCollection<E> extends TransactableCollection<E>, ReversibleCollection<E> {
+public interface ObservableCollection<E> extends ReversibleList<E>, TransactableList<E> {
 	/** Standard messages returned by this class */
 	interface StdMsg {
 		static String BAD_TYPE = "Object is the wrong type for this collection";
@@ -106,6 +107,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	@Override
 	MutableObservableSpliterator<E> mutableSpliterator(boolean fromStart);
 
+	@Override
 	MutableObservableSpliterator<E> mutableSpliterator(int index);
 
 	/**
@@ -126,32 +128,53 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		return mutableSpliterator(fromStart).immutable();
 	}
 
+	@Override
 	default ObservableElementSpliterator<E> spliterator(int index) {
 		return mutableSpliterator(index).immutable();
+	}
+
+	@Override
+	default ListIterator<E> listIterator() {
+		return listIterator(0);
+	}
+
+	@Override
+	default ListIterator<E> listIterator(int index) {
+		return new ObservableCollectionImpl.ObservableListIterator<>(this, mutableSpliterator(index));
+	}
+
+	@Override
+	default ReversibleList<E> subList(int fromIndex, int toIndex) {
+		return new ObservableCollectionImpl.SubList<>(this, fromIndex, toIndex);
 	}
 
 	/**
 	 * @param index The index of the element to get
 	 * @return The element of this collection at the given index
 	 */
-	E get(int index);
+	@Override
+	default E get(int index) {
+		return ofElementAt(index, el -> el.get());
+	}
+
+	int getElementsBefore(ElementId id);
+
+	int getElementsAfter(ElementId id);
 
 	/**
 	 * @param value The value to get the index of in this collection
 	 * @return The index of the first position in this collection occupied by the given value, or &lt; 0 if the element does not exist in
 	 *         this collection
 	 */
+	@Override
 	default int indexOf(Object value) {
+		if (!belongs(value))
+			return -1;
 		try (Transaction t = lock(false, null)) {
 			int[] index = new int[1];
-			boolean[] found = new boolean[1];
-			while (!found[0] && spliterator().tryAdvance(v -> {
-				if (equivalence().elementEquals(v, value))
-					found[0] = true;
-				index[0]++;
-			})) {
-			}
-			return found[0] ? index[0] : -1;
+			if (!forObservableElement((E) value, el -> index[0] = getElementsBefore(el.getElementId()), true))
+				return -1;
+			return index[0];
 		}
 	}
 
@@ -160,16 +183,14 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 * @return The index of the last position in this collection occupied by the given value, or &lt; 0 if the element does not exist in
 	 *         this collection
 	 */
+	@Override
 	default int lastIndexOf(Object value) {
+		if (!belongs(value))
+			return -1;
 		try (Transaction t = lock(false, null)) {
-			int[] index = new int[] { size() - 1 };
-			boolean[] found = new boolean[1];
-			while (!found[0] && spliterator(false).tryReverse(v -> {
-				if (equivalence().elementEquals(v, value))
-					found[0] = true;
-				index[0]--;
-			})) {
-			}
+			int[] index = new int[1];
+			if (!forObservableElement((E) value, el -> index[0] = getElementsBefore(el.getElementId()), false))
+				return -1;
 			return index[0];
 		}
 	}
@@ -327,14 +348,14 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	@Override
 	default E getFirst() {
 		try (Transaction t = lock(false, null)) {
-			return ReversibleCollection.super.getFirst();
+			return ReversibleList.super.getFirst();
 		}
 	}
 
 	@Override
 	default E getLast() {
 		try (Transaction t = lock(false, null)) {
-			return ReversibleCollection.super.getLast();
+			return ReversibleList.super.getLast();
 		}
 	}
 
@@ -363,14 +384,14 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	@Override
 	default E element() {
 		try (Transaction t = lock(false, null)) {
-			return ReversibleCollection.super.element();
+			return ReversibleList.super.element();
 		}
 	}
 
 	@Override
 	default E peek() {
 		try (Transaction t = lock(false, null)) {
-			return ReversibleCollection.super.peek();
+			return ReversibleList.super.peek();
 		}
 	}
 
@@ -380,7 +401,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 			String msg = canAdd(e);
 			if (msg == null)
 				throw new IllegalStateException(msg);
-			ReversibleCollection.super.addFirst(e);
+			ReversibleList.super.addFirst(e);
 		}
 	}
 
@@ -390,49 +411,49 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 			String msg = canAdd(e);
 			if (msg == null)
 				throw new IllegalStateException(msg);
-			ReversibleCollection.super.addLast(e);
+			ReversibleList.super.addLast(e);
 		}
 	}
 
 	@Override
 	default boolean offerFirst(E e) {
 		try (Transaction t = lock(true, null)) {
-			return ReversibleCollection.super.offerFirst(e);
+			return ReversibleList.super.offerFirst(e);
 		}
 	}
 
 	@Override
 	default boolean offerLast(E e) {
 		try (Transaction t = lock(true, null)) {
-			return ReversibleCollection.super.offerLast(e);
+			return ReversibleList.super.offerLast(e);
 		}
 	}
 
 	@Override
 	default E removeFirst() {
 		try (Transaction t = lock(true, null)) {
-			return ReversibleCollection.super.removeFirst();
+			return ReversibleList.super.removeFirst();
 		}
 	}
 
 	@Override
 	default E removeLast() {
 		try (Transaction t = lock(true, null)) {
-			return ReversibleCollection.super.removeLast();
+			return ReversibleList.super.removeLast();
 		}
 	}
 
 	@Override
 	default E pollFirst() {
 		try (Transaction t = lock(true, null)) {
-			return ReversibleCollection.super.pollFirst();
+			return ReversibleList.super.pollFirst();
 		}
 	}
 
 	@Override
 	default E pollLast() {
 		try (Transaction t = lock(true, null)) {
-			return ReversibleCollection.super.pollLast();
+			return ReversibleList.super.pollLast();
 		}
 	}
 
@@ -441,7 +462,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		if (!belongs(o))
 			return false;
 		try (Transaction t = lock(true, null)) {
-			return ReversibleCollection.super.removeFirstOccurrence(o);
+			return ReversibleList.super.removeFirstOccurrence(o);
 		}
 	}
 
@@ -450,43 +471,91 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		if (!belongs(o))
 			return false;
 		try (Transaction t = lock(true, null)) {
-			return ReversibleCollection.super.removeLastOccurrence(o);
+			return ReversibleList.super.removeLastOccurrence(o);
 		}
 	}
 
 	@Override
 	default boolean offer(E e) {
 		try (Transaction t = lock(true, null)) {
-			return ReversibleCollection.super.offer(e);
+			return ReversibleList.super.offer(e);
 		}
 	}
 
 	@Override
 	default E remove() {
 		try (Transaction t = lock(true, null)) {
-			return ReversibleCollection.super.remove();
+			return ReversibleList.super.remove();
 		}
 	}
 
 	@Override
 	default E poll() {
 		try (Transaction t = lock(true, null)) {
-			return ReversibleCollection.super.poll();
+			return ReversibleList.super.poll();
 		}
 	}
 
 	@Override
 	default void push(E e) {
 		try (Transaction t = lock(true, null)) {
-			ReversibleCollection.super.push(e);
+			ReversibleList.super.push(e);
 		}
 	}
 
 	@Override
 	default E pop() {
 		try (Transaction t = lock(true, null)) {
-			return ReversibleCollection.super.pop();
+			return ReversibleList.super.pop();
 		}
+	}
+
+	@Override
+	default void removeRange(int fromIndex, int toIndex) {
+		try (Transaction t = lock(true, null)) {
+			MutableObservableSpliterator<E> spliter = mutableSpliterator(fromIndex);
+			for (int i = fromIndex; i < toIndex; i++)
+				spliter.tryAdvanceElement(el -> el.remove(null));
+		}
+	}
+
+	@Override
+	default boolean addAll(int index, Collection<? extends E> c) {
+		if (c.isEmpty())
+			return false;
+		forMutableElementAt(index, el -> {
+			try (Transaction t = Transactable.lock(c, false, null)) {
+				Spliterator<? extends E> spliter;
+				if (c instanceof ReversedCollection)
+					spliter = ((ReversedCollection<? extends E>) c).spliterator(false).reverse();
+				else {
+					ArrayList<E> list = new ArrayList<>(c);
+					Collections.reverse(list);
+					spliter = list.spliterator();
+				}
+				spliter.forEachRemaining(v -> ((MutableObservableElement<E>) el).add(v, true, null));
+			}
+		});
+		return true;
+	}
+
+	@Override
+	default E set(int index, E element) {
+		return ofMutableElementAt(index, el -> ((MutableObservableElement<E>) el).set(element, null));
+	}
+
+	@Override
+	default void add(int index, E element) {
+		forMutableElementAt(index, el -> ((MutableObservableElement<E>) el).add(element, true, null));
+	}
+
+	@Override
+	default E remove(int index) {
+		return ofMutableElementAt(index, el -> {
+			E old = el.get();
+			el.remove(null);
+			return old;
+		});
 	}
 
 	/** @return Whether events given to the {@link #onChange(Consumer)} listener are always {@link IndexedCollectionEvent indexed} */
@@ -703,6 +772,20 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 
 	<T> T ofMutableElementAt(ElementId elementId, Function<? super MutableObservableElement<? extends E>, T> onElement);
 
+	default void forElementAt(int index, Consumer<? super ObservableCollectionElement<? extends E>> onElement) {
+		ofElementAt(index, el -> {
+			onElement.accept(el);
+			return null;
+		});
+	}
+
+	default void forMutableElementAt(int index, Consumer<? super MutableObservableElement<? extends E>> onElement) {
+		ofMutableElementAt(index, el -> {
+			onElement.accept(el);
+			return null;
+		});
+	}
+
 	<T> T ofElementAt(int index, Function<? super ObservableCollectionElement<? extends E>, T> onElement);
 
 	<T> T ofMutableElementAt(int index, Function<? super MutableObservableElement<? extends E>, T> onElement);
@@ -716,7 +799,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 */
 	default boolean findObservableElement(Predicate<? super E> search, Consumer<? super MutableObservableElement<? extends E>> onElement,
 		boolean first) {
-		return ReversibleCollection.super.find(search, el -> onElement.accept((MutableObservableElement<E>) el), first);
+		return ReversibleList.super.find(search, el -> onElement.accept((MutableObservableElement<E>) el), first);
 	}
 
 	/**
@@ -728,7 +811,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 */
 	default int findAllObservableElements(Predicate<? super E> search, Consumer<? super MutableObservableElement<? extends E>> onElement,
 		boolean fromStart) {
-		return ReversibleCollection.super.findAll(search, el -> onElement.accept((MutableObservableElement<E>) el), fromStart);
+		return ReversibleList.super.findAll(search, el -> onElement.accept((MutableObservableElement<E>) el), fromStart);
 	}
 
 	/**
@@ -761,6 +844,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 *
 	 * @param op The operation to apply to each value in this collection
 	 */
+	@Override
 	default void replaceAll(UnaryOperator<E> op) {
 		replaceAll(v -> op.apply(v), false);
 	}
@@ -1136,7 +1220,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 * @return A collection containing all elements of the given collections
 	 */
 	public static <T> ObservableCollection<T> flattenCollections(ObservableCollection<? extends T>... colls) {
-		return flatten(ObservableList.constant(new TypeToken<ObservableCollection<? extends T>>() {}, colls).collect());
+		return flatten(constant(new TypeToken<ObservableCollection<? extends T>>() {}, colls).collect());
 	}
 
 	/**
@@ -1254,17 +1338,9 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 
 		// Flow operations
 
-		default CollectionDataFlow<E, T, T> filter(Function<? super T, String> filter) {
-			return filter(filter, false);
-		}
+		CollectionDataFlow<E, T, T> filter(Function<? super T, String> filter);
 
-		CollectionDataFlow<E, T, T> filter(Function<? super T, String> filter, boolean filterNulls);
-
-		default CollectionDataFlow<E, T, T> filterStatic(Function<? super T, String> filter) {
-			return filterStatic(filter, false);
-		}
-
-		CollectionDataFlow<E, T, T> filterStatic(Function<? super T, String> filter, boolean filterNulls);
+		CollectionDataFlow<E, T, T> filterStatic(Function<? super T, String> filter);
 
 		/**
 		 * @param <X> The type for the new collection
@@ -1278,7 +1354,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 					return null;
 				else
 					return StdMsg.BAD_TYPE;
-			}, true).map(TypeToken.of(type)).map(v -> (X) v, true);
+			}).map(TypeToken.of(type)).map(v -> (X) v);
 		}
 
 		CollectionDataFlow<E, T, T> withEquivalence(Equivalence<? super T> equivalence);
@@ -1293,27 +1369,22 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 			Function<? super T, ? extends ObservableValue<? extends X>> map) {
 			TypeToken<ObservableValue<? extends X>> valueType = new TypeToken<ObservableValue<? extends X>>() {}
 			.where(new TypeParameter<X>() {}, target);
-			return map(valueType).map(map, false).refreshEach(v -> v.noInit()).map(target)
-				.withElementSetting((ov, newValue, doSet, cause) -> {
-					// Allow setting elements via the wrapped settable value
-					if (!(ov instanceof SettableValue))
-						return StdMsg.UNSUPPORTED_OPERATION;
-					else if (newValue != null && !ov.getType().getRawType().isInstance(newValue))
-						return StdMsg.BAD_TYPE;
-					String msg = ((SettableValue<X>) ov).isAcceptable(newValue);
-					if (msg != null)
-						return msg;
-					if (doSet)
-						((SettableValue<X>) ov).set(newValue, cause);
-					return null;
-				}, false).map(ObservableValue::get, false);
+			return map(valueType).map(map).refreshEach(v -> v.noInit()).map(target).withElementSetting((ov, newValue, doSet, cause) -> {
+				// Allow setting elements via the wrapped settable value
+				if (!(ov instanceof SettableValue))
+					return StdMsg.UNSUPPORTED_OPERATION;
+				else if (newValue != null && !ov.getType().getRawType().isInstance(newValue))
+					return StdMsg.BAD_TYPE;
+				String msg = ((SettableValue<X>) ov).isAcceptable(newValue);
+				if (msg != null)
+					return msg;
+				if (doSet)
+					((SettableValue<X>) ov).set(newValue, cause);
+				return null;
+			}).map(obs -> obs == null ? null : obs.get());
 		}
 
-		default <V, X> CombinedCollectionBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, TypeToken<X> target) {
-			return combineWith(value, false, target);
-		}
-
-		<V, X> CombinedCollectionBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, boolean combineNulls, TypeToken<X> target);
+		<V, X> CombinedCollectionBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, TypeToken<X> target);
 
 		CollectionDataFlow<E, T, T> sorted(Comparator<? super T> compare);
 
@@ -1324,6 +1395,25 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		ModFilterBuilder<E, T> filterModification();
 
 		// Terminal operations
+
+		/**
+		 * @return Whether this data flow is light weight. A light weight data flow will return a {@link #collect() collection} that does
+		 *         not need to keep track of its own data, but rather performs light-weight per-access and per-operation transformations
+		 *         that delegate to the base collection.
+		 */
+		boolean isLightWeight();
+
+		/**
+		 * Does not modify the data flow or create a derived one, but asserts that this data flow is {@link #isLightWeight() light weight}.
+		 *
+		 * @return This data flow
+		 * @throws IllegalStateException If this data flow is not light weight
+		 */
+		default CollectionDataFlow<E, I, T> lightWeight() throws IllegalStateException {
+			if (!isLightWeight())
+				throw new IllegalStateException("This data flow is not light weight");
+			return this;
+		}
 
 		CollectionManager<E, ?, T> manageCollection();
 
@@ -1346,13 +1436,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		UniqueDataFlow<E, T, T> filter(Function<? super T, String> filter);
 
 		@Override
-		UniqueDataFlow<E, T, T> filter(Function<? super T, String> filter, boolean filterNulls);
-
-		@Override
 		UniqueDataFlow<E, T, T> filterStatic(Function<? super T, String> filter);
-
-		@Override
-		UniqueDataFlow<E, T, T> filterStatic(Function<? super T, String> filter, boolean filterNulls);
 
 		@Override
 		default <X> UniqueDataFlow<E, T, X> filter(Class<X> type) {
@@ -1361,7 +1445,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 					return null;
 				else
 					return StdMsg.BAD_TYPE;
-			}, true).mapEquivalent(TypeToken.of(type)).map(v -> (X) v, true, v -> (T) v, true);
+			}).mapEquivalent(TypeToken.of(type)).map(v -> (X) v, v -> (T) v);
 		}
 
 		@Override
@@ -1415,13 +1499,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		UniqueSortedDataFlow<E, T, T> filter(Function<? super T, String> filter);
 
 		@Override
-		UniqueSortedDataFlow<E, T, T> filter(Function<? super T, String> filter, boolean filterNulls);
-
-		@Override
 		UniqueSortedDataFlow<E, T, T> filterStatic(Function<? super T, String> filter);
-
-		@Override
-		UniqueSortedDataFlow<E, T, T> filterStatic(Function<? super T, String> filter, boolean filterNulls);
 
 		/**
 		 * <p>
@@ -1474,7 +1552,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		private final TypeToken<T> theTargetType;
 		private Function<? super T, ? extends I> theReverse;
 		private ElementSetter<? super I, ? super T> theElementReverse;
-		private boolean areNullsReversed;
 		private boolean reEvalOnUpdate;
 		private boolean fireIfUnchanged;
 		private boolean isCached;
@@ -1508,10 +1585,6 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 			return theElementReverse;
 		}
 
-		protected boolean areNullsReversed() {
-			return areNullsReversed;
-		}
-
 		protected boolean isReEvalOnUpdate() {
 			return reEvalOnUpdate;
 		}
@@ -1524,15 +1597,13 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 			return isCached;
 		}
 
-		public MappedCollectionBuilder<E, I, T> withReverse(Function<? super T, ? extends I> reverse, boolean reverseNulls) {
+		public MappedCollectionBuilder<E, I, T> withReverse(Function<? super T, ? extends I> reverse) {
 			theReverse = reverse;
-			areNullsReversed = reverseNulls;
 			return this;
 		}
 
-		public MappedCollectionBuilder<E, I, T> withElementSetting(ElementSetter<? super I, ? super T> reverse, boolean reverseNulls) {
+		public MappedCollectionBuilder<E, I, T> withElementSetting(ElementSetter<? super I, ? super T> reverse) {
 			theElementReverse = reverse;
-			areNullsReversed = reverseNulls;
 			return this;
 		}
 
@@ -1557,9 +1628,9 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 			return this;
 		}
 
-		public CollectionDataFlow<E, I, T> map(Function<? super I, ? extends T> map, boolean mapNulls) {
-			return new ObservableCollectionDataFlowImpl.MapOp<>(theSource, theParent, theTargetType, map, mapNulls, theReverse,
-				theElementReverse, areNullsReversed, reEvalOnUpdate, fireIfUnchanged, isCached);
+		public CollectionDataFlow<E, I, T> map(Function<? super I, ? extends T> map) {
+			return new ObservableCollectionDataFlowImpl.MapOp<>(theSource, theParent, theTargetType, map, theReverse, theElementReverse,
+				reEvalOnUpdate, fireIfUnchanged, isCached);
 		}
 	}
 
@@ -1582,14 +1653,13 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		}
 
 		@Override
-		public UniqueMappedCollectionBuilder<E, I, T> withReverse(Function<? super T, ? extends I> reverse, boolean reverseNulls) {
-			return (UniqueMappedCollectionBuilder<E, I, T>) super.withReverse(reverse, reverseNulls);
+		public UniqueMappedCollectionBuilder<E, I, T> withReverse(Function<? super T, ? extends I> reverse) {
+			return (UniqueMappedCollectionBuilder<E, I, T>) super.withReverse(reverse);
 		}
 
 		@Override
-		public UniqueMappedCollectionBuilder<E, I, T> withElementSetting(ElementSetter<? super I, ? super T> reverse,
-			boolean reverseNulls) {
-			return (UniqueMappedCollectionBuilder<E, I, T>) super.withElementSetting(reverse, reverseNulls);
+		public UniqueMappedCollectionBuilder<E, I, T> withElementSetting(ElementSetter<? super I, ? super T> reverse) {
+			return (UniqueMappedCollectionBuilder<E, I, T>) super.withElementSetting(reverse);
 		}
 
 		@Override
@@ -1608,19 +1678,18 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		}
 
 		@Override
-		public CollectionDataFlow<E, I, T> map(Function<? super I, ? extends T> map, boolean mapNulls) {
+		public CollectionDataFlow<E, I, T> map(Function<? super I, ? extends T> map) {
 			if (getReverse() != null)
-				return map(map, mapNulls, getReverse(), areNullsReversed());
+				return map(map, getReverse());
 			else
-				return super.map(map, mapNulls);
+				return super.map(map);
 		}
 
-		public UniqueDataFlow<E, I, T> map(Function<? super I, ? extends T> map, boolean mapNulls, Function<? super T, ? extends I> reverse,
-			boolean reverseNulls) {
+		public UniqueDataFlow<E, I, T> map(Function<? super I, ? extends T> map, Function<? super T, ? extends I> reverse) {
 			if (reverse == null)
 				throw new IllegalArgumentException("Reverse must be specified to maintain uniqueness");
-			return new ObservableCollectionDataFlowImpl.UniqueMapOp<>(getSource(), getParent(), getTargetType(), map,
-				mapNulls, getReverse(), getElementReverse(), areNullsReversed(), isReEvalOnUpdate(), isFireIfUnchanged(), isCached());
+			return new ObservableCollectionDataFlowImpl.UniqueMapOp<>(getSource(), getParent(), getTargetType(), map, getReverse(),
+				getElementReverse(), isReEvalOnUpdate(), isFireIfUnchanged(), isCached());
 		}
 	}
 
@@ -1632,14 +1701,13 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		}
 
 		@Override
-		public UniqueSortedMappedCollectionBuilder<E, I, T> withReverse(Function<? super T, ? extends I> reverse, boolean reverseNulls) {
-			return (UniqueSortedMappedCollectionBuilder<E, I, T>) super.withReverse(reverse, reverseNulls);
+		public UniqueSortedMappedCollectionBuilder<E, I, T> withReverse(Function<? super T, ? extends I> reverse) {
+			return (UniqueSortedMappedCollectionBuilder<E, I, T>) super.withReverse(reverse);
 		}
 
 		@Override
-		public UniqueSortedMappedCollectionBuilder<E, I, T> withElementSetting(ElementSetter<? super I, ? super T> reverse,
-			boolean reverseNulls) {
-			return (UniqueSortedMappedCollectionBuilder<E, I, T>) super.withElementSetting(reverse, reverseNulls);
+		public UniqueSortedMappedCollectionBuilder<E, I, T> withElementSetting(ElementSetter<? super I, ? super T> reverse) {
+			return (UniqueSortedMappedCollectionBuilder<E, I, T>) super.withElementSetting(reverse);
 		}
 
 		@Override
@@ -1658,24 +1726,22 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, I, T> map(Function<? super I, ? extends T> map, boolean mapNulls,
-			Function<? super T, ? extends I> reverse, boolean reverseNulls) {
+		public UniqueSortedDataFlow<E, I, T> map(Function<? super I, ? extends T> map, Function<? super T, ? extends I> reverse) {
 			if (reverse == null)
 				throw new IllegalArgumentException("Reverse must be specified to maintain uniqueness");
-			withReverse(reverse, reverseNulls);
-			return map(map, mapNulls, (t1, t2) -> {
-				I i1 = (t1 == null && !reverseNulls) ? null : reverse.apply(t1);
-				I i2 = (t2 == null && !reverseNulls) ? null : reverse.apply(t2);
+			withReverse(reverse);
+			return map(map, (t1, t2) -> {
+				I i1 = reverse.apply(t1);
+				I i2 = reverse.apply(t2);
 				return ((UniqueSortedDataFlow<E, ?, I>) getParent()).comparator().compare(i1, i2);
 			});
 		}
 
-		public UniqueSortedDataFlow<E, I, T> map(Function<? super I, ? extends T> map, boolean mapNulls, Comparator<? super T> compare) {
+		public UniqueSortedDataFlow<E, I, T> map(Function<? super I, ? extends T> map, Comparator<? super T> compare) {
 			if (compare == null)
 				throw new IllegalArgumentException("Comparator must be specified to maintain uniqueness");
-			return new ObservableCollectionDataFlowImpl.UniqueSortedMapOp<>(getSource(), getParent(), getTargetType(),
-				map, mapNulls, getReverse(), getElementReverse(), areNullsReversed(), isReEvalOnUpdate(), isFireIfUnchanged(), isCached(),
-				compare);
+			return new ObservableCollectionDataFlowImpl.UniqueSortedMapOp<>(getSource(), getParent(), getTargetType(), map, getReverse(),
+				getElementReverse(), isReEvalOnUpdate(), isFireIfUnchanged(), isCached(), compare);
 		}
 	}
 
@@ -1691,16 +1757,11 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	interface CombinedCollectionBuilder<E, I, R> {
 		<T> CombinedCollectionBuilder<E, I, R> and(ObservableValue<T> arg);
 
-		<T> CombinedCollectionBuilder<E, I, R> and(ObservableValue<T> arg, boolean combineNulls);
+		CombinedCollectionBuilder<E, I, R> withReverse(Function<? super CombinedValues<? extends R>, ? extends I> reverse);
 
-		CombinedCollectionBuilder<E, I, R> withReverse(Function<? super CombinedValues<? extends R>, ? extends I> reverse,
-			boolean reverseNulls);
+		CombinedCollectionBuilder<E, I, R> noCache();
 
-		default CollectionDataFlow<E, I, R> build(Function<? super CombinedValues<? extends I>, ? extends R> combination) {
-			return build(combination, false);
-		}
-
-		CollectionDataFlow<E, I, R> build(Function<? super CombinedValues<? extends I>, ? extends R> combination, boolean combineNulls);
+		CollectionDataFlow<E, I, R> build(Function<? super CombinedValues<? extends I>, ? extends R> combination);
 	}
 
 	/**
@@ -1711,36 +1772,34 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 * @param <I> Intermediate type
 	 * @param <V> The type of the combined value
 	 * @param <R> The type of elements in the resulting collection
-	 * @see ObservableCollection.CollectionDataFlow#combineWith(ObservableValue, boolean, TypeToken)
+	 * @see ObservableCollection.CollectionDataFlow#combineWith(ObservableValue, TypeToken)
 	 */
 	class CombinedCollectionBuilder2<E, I, V, R> extends AbstractCombinedCollectionBuilder<E, I, R> {
 		private final ObservableValue<V> theArg2;
 
 		protected CombinedCollectionBuilder2(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent, TypeToken<R> targetType,
-			ObservableValue<V> arg2, Ternian combineArg2Nulls) {
+			ObservableValue<V> arg2) {
 			super(source, parent, targetType);
 			theArg2 = arg2;
-			addArg(arg2, combineArg2Nulls);
+			addArg(arg2);
 		}
 
 		protected ObservableValue<V> getArg2() {
 			return theArg2;
 		}
 
-		@Override
-		public CombinedCollectionBuilder2<E, I, V, R> combineNullsByDefault() {
-			return (CombinedCollectionBuilder2<E, I, V, R>) super.combineNullsByDefault();
-		}
-
-		public CombinedCollectionBuilder2<E, I, V, R> withReverse(BiFunction<? super R, ? super V, ? extends I> reverse,
-			boolean reverseNulls) {
-			return withReverse(cv -> reverse.apply(cv.getElement(), cv.get(theArg2)), reverseNulls);
+		public CombinedCollectionBuilder2<E, I, V, R> withReverse(BiFunction<? super R, ? super V, ? extends I> reverse) {
+			return withReverse(cv -> reverse.apply(cv.getElement(), cv.get(theArg2)));
 		}
 
 		@Override
-		public CombinedCollectionBuilder2<E, I, V, R> withReverse(Function<? super CombinedValues<? extends R>, ? extends I> reverse,
-			boolean reverseNulls) {
-			return (CombinedCollectionBuilder2<E, I, V, R>) super.withReverse(reverse, reverseNulls);
+		public CombinedCollectionBuilder2<E, I, V, R> withReverse(Function<? super CombinedValues<? extends R>, ? extends I> reverse) {
+			return (CombinedCollectionBuilder2<E, I, V, R>) super.withReverse(reverse);
+		}
+
+		@Override
+		public CombinedCollectionBuilder2<E, I, V, R> noCache() {
+			return (CombinedCollectionBuilder2<E, I, V, R>) super.noCache();
 		}
 
 		public CollectionDataFlow<E, I, R> build(BiFunction<? super I, ? super V, ? extends R> combination) {
@@ -1751,16 +1810,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		public <U> CombinedCollectionBuilder3<E, I, V, U, R> and(ObservableValue<U> arg3) {
 			if (getReverse() != null)
 				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
-			return new CombinedCollectionBuilder3<>(getSource(), getParent(), getTargetType(), theArg2, combineNulls(theArg2), arg3,
-				Ternian.NONE);
-		}
-
-		@Override
-		public <U> CombinedCollectionBuilder3<E, I, V, U, R> and(ObservableValue<U> arg3, boolean combineNulls) {
-			if (getReverse() != null)
-				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
-			return new CombinedCollectionBuilder3<>(getSource(), getParent(), getTargetType(), theArg2, combineNulls(theArg2), arg3,
-				Ternian.of(combineNulls));
+			return new CombinedCollectionBuilder3<>(getSource(), getParent(), getTargetType(), theArg2, arg3);
 		}
 	}
 
@@ -1781,12 +1831,12 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		private final ObservableValue<V2> theArg3;
 
 		protected CombinedCollectionBuilder3(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent, TypeToken<R> targetType,
-			ObservableValue<V1> arg2, Ternian combineArg2Nulls, ObservableValue<V2> arg3, Ternian combineArg3Nulls) {
+			ObservableValue<V1> arg2, ObservableValue<V2> arg3) {
 			super(source, parent, targetType);
 			theArg2 = arg2;
 			theArg3 = arg3;
-			addArg(arg2, combineArg2Nulls);
-			addArg(arg3, combineArg3Nulls);
+			addArg(arg2);
+			addArg(arg3);
 		}
 
 		protected ObservableValue<V1> getArg2() {
@@ -1797,20 +1847,19 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 			return theArg3;
 		}
 
-		@Override
-		public CombinedCollectionBuilder3<E, I, V1, V2, R> combineNullsByDefault() {
-			return (CombinedCollectionBuilder3<E, I, V1, V2, R>) super.combineNullsByDefault();
-		}
-
-		public CombinedCollectionBuilder3<E, I, V1, V2, R> withReverse(TriFunction<? super R, ? super V1, ? super V2, ? extends I> reverse,
-			boolean reverseNulls) {
-			return withReverse(cv -> reverse.apply(cv.getElement(), cv.get(theArg2), cv.get(theArg3)), reverseNulls);
+		public CombinedCollectionBuilder3<E, I, V1, V2, R> withReverse(
+			TriFunction<? super R, ? super V1, ? super V2, ? extends I> reverse) {
+			return withReverse(cv -> reverse.apply(cv.getElement(), cv.get(theArg2), cv.get(theArg3)));
 		}
 
 		@Override
-		public CombinedCollectionBuilder3<E, I, V1, V2, R> withReverse(Function<? super CombinedValues<? extends R>, ? extends I> reverse,
-			boolean reverseNulls) {
-			return (CombinedCollectionBuilder3<E, I, V1, V2, R>) super.withReverse(reverse, reverseNulls);
+		public CombinedCollectionBuilder3<E, I, V1, V2, R> withReverse(Function<? super CombinedValues<? extends R>, ? extends I> reverse) {
+			return (CombinedCollectionBuilder3<E, I, V1, V2, R>) super.withReverse(reverse);
+		}
+
+		@Override
+		public CombinedCollectionBuilder3<E, I, V1, V2, R> noCache() {
+			return (CombinedCollectionBuilder3<E, I, V1, V2, R>) super.noCache();
 		}
 
 		public CollectionDataFlow<E, I, R> build(TriFunction<? super I, ? super V1, ? super V2, ? extends R> combination) {
@@ -1821,16 +1870,7 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 		public <T2> CombinedCollectionBuilderN<E, I, R> and(ObservableValue<T2> arg) {
 			if (getReverse() != null)
 				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
-			return new CombinedCollectionBuilderN<>(getSource(), getParent(), getTargetType(), theArg2, combineNulls(theArg2), theArg3,
-				combineNulls(theArg3), arg, Ternian.NONE);
-		}
-
-		@Override
-		public <T2> CombinedCollectionBuilderN<E, I, R> and(ObservableValue<T2> arg, boolean combineNulls) {
-			if (getReverse() != null)
-				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
-			return new CombinedCollectionBuilderN<>(getSource(), getParent(), getTargetType(), theArg2, combineNulls(theArg2), theArg3,
-				combineNulls(theArg3), arg, Ternian.of(combineNulls));
+			return new CombinedCollectionBuilderN<>(getSource(), getParent(), getTargetType(), theArg2, theArg3, arg);
 		}
 	}
 
@@ -1846,38 +1886,28 @@ public interface ObservableCollection<E> extends TransactableCollection<E>, Reve
 	 */
 	class CombinedCollectionBuilderN<E, I, R> extends AbstractCombinedCollectionBuilder<E, I, R> {
 		protected CombinedCollectionBuilderN(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent, TypeToken<R> targetType,
-			ObservableValue<?> arg2, Ternian combineArg2Nulls, ObservableValue<?> arg3, Ternian combineArg3Nulls, ObservableValue<?> arg4,
-			Ternian combineArg4Nulls) {
+			ObservableValue<?> arg2, ObservableValue<?> arg3, ObservableValue<?> arg4) {
 			super(source, parent, targetType);
-			addArg(arg2, combineArg2Nulls);
-			addArg(arg3, combineArg3Nulls);
-			addArg(arg4, combineArg4Nulls);
+			addArg(arg2);
+			addArg(arg3);
+			addArg(arg4);
 		}
 
 		@Override
-		public CombinedCollectionBuilderN<E, I, R> combineNullsByDefault() {
-			return (CombinedCollectionBuilderN<E, I, R>) super.combineNullsByDefault();
+		public CombinedCollectionBuilderN<E, I, R> withReverse(Function<? super CombinedValues<? extends R>, ? extends I> reverse) {
+			return (CombinedCollectionBuilderN<E, I, R>) super.withReverse(reverse);
 		}
 
 		@Override
-		public CombinedCollectionBuilderN<E, I, R> withReverse(Function<? super CombinedValues<? extends R>, ? extends I> reverse,
-			boolean reverseNulls) {
-			return (CombinedCollectionBuilderN<E, I, R>) super.withReverse(reverse, reverseNulls);
+		public CombinedCollectionBuilderN<E, I, R> noCache() {
+			return (CombinedCollectionBuilderN<E, I, R>) super.noCache();
 		}
 
 		@Override
 		public <T> CombinedCollectionBuilderN<E, I, R> and(ObservableValue<T> arg) {
 			if (getReverse() != null)
 				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
-			addArg(arg, Ternian.NONE);
-			return this;
-		}
-
-		@Override
-		public <T> CombinedCollectionBuilderN<E, I, R> and(ObservableValue<T> arg, boolean combineNull) {
-			if (getReverse() != null)
-				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
-			addArg(arg, Ternian.of(combineNull));
+			addArg(arg);
 			return this;
 		}
 	}

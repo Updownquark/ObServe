@@ -14,6 +14,7 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.BaseCollectionDataFl
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueDataFlowWrapper;
 import org.observe.collect.ObservableCollectionImpl.DerivedCollection;
+import org.observe.collect.ObservableCollectionImpl.DerivedLWCollection;
 import org.observe.collect.ObservableCollectionImpl.FlattenedValueCollection;
 import org.observe.collect.ObservableCollectionImpl.ReversedObservableCollection;
 import org.qommons.Transaction;
@@ -375,6 +376,12 @@ public class ObservableSetImpl {
 				return getSource();
 			else
 				return new DerivedSet<>(getSource(), manageCollection(), until);
+		}
+	}
+
+	public static class DerivedLWSet<E, T> extends DerivedLWCollection<E, T> implements ObservableSet<T> {
+		public DerivedLWSet(ObservableCollection<E> source, CollectionManager<E, ?, T> flow, Observable<?> until) {
+			super(source, flow, until);
 		}
 	}
 

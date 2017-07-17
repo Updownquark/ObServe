@@ -41,9 +41,6 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionUpdate;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ElementUpdateResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueElementFinder;
-import org.observe.collect.ObservableList.ListDataFlow;
-import org.observe.collect.ObservableListImpl.BaseListDataFlow;
-import org.observe.collect.ObservableListImpl.DerivedList;
 import org.qommons.Causable;
 import org.qommons.LinkedQueue;
 import org.qommons.Transactable;
@@ -787,6 +784,16 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public int getElementsBefore(ElementId id) {
+			return getWrapped().getElementsAfter(id);
+		}
+
+		@Override
+		public int getElementsAfter(ElementId id) {
+			return getWrapped().getElementsBefore(id);
+		}
+
+		@Override
 		public boolean forObservableElement(E value, Consumer<? super ObservableCollectionElement<? extends E>> onElement, boolean first) {
 			return getWrapped().forObservableElement(value, el -> onElement.accept(el.reverse()), !first);
 		}
@@ -943,6 +950,54 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
+	public static class ObservableListIterator<E> extends org.qommons.collect.ReversibleElementSpliterator.SpliteratorListIterator<E> {
+		private final ObservableCollection<E> theCollection;
+
+		public ObservableListIterator(ObservableCollection<E> collection, MutableObservableSpliterator<E> backing) {
+			super(backing);
+			theCollection = collection;
+		}
+
+		@Override
+		protected MutableObservableElement<E> getCurrentElement() {
+			return (MutableObservableElement<E>) super.getCurrentElement();
+		}
+
+		@Override
+		public int nextIndex() {
+			return theCollection.getElementsBefore(getCurrentElement().getElementId()) + getSpliteratorCursorOffset();
+		}
+
+		@Override
+		public int previousIndex() {
+			return theCollection.getElementsBefore(getCurrentElement().getElementId()) + getSpliteratorCursorOffset() - 1;
+		}
+	}
+
+	public static class SubList<E> implements ObservableCollection<E> {
+		private final ObservableCollection<E> theWrapped;
+		private int theStart;
+		private int theEnd;
+
+		public SubList(ObservableCollection<E> wrapped, int start, int end) {
+			theWrapped = wrapped;
+			theStart = start;
+			theEnd = end;
+		}
+	}
+
+	public static class DerivedLWCollection<E, T> implements ObservableCollection<T> {
+		private final ObservableCollection<E> theSource;
+		private final CollectionManager<E, ?, T> theFlow;
+		private final Equivalence<? super T> theEquivalence;
+
+		public DerivedLWCollection(ObservableCollection<E> source, CollectionManager<E, ?, T> flow, Observable<?> until) {
+			theSource = source;
+			theFlow = flow;
+			theEquivalence = flow.equivalence();
+		}
+	}
+
 	public static class DerivedCollection<E, T> implements ObservableCollection<T> {
 		protected class DerivedCollectionElement implements ElementId {
 			final CollectionElementManager<E, ?, T> manager;
@@ -950,20 +1005,6 @@ public final class ObservableCollectionImpl {
 
 			DerivedCollectionElement(CollectionElementManager<E, ?, T> manager) {
 				this.manager = manager;
-			}
-
-			@Override
-			public int getElementsBefore() {
-				if (presentNode == null)
-					throw new IllegalStateException("This node is not currentl present in the collection");
-				return presentNode.getIndex();
-			}
-
-			@Override
-			public int getElementsAfter() {
-				if (presentNode == null)
-					throw new IllegalStateException("This node is not currentl present in the collection");
-				return presentNode.getElementsGreater();
 			}
 
 			@Override
@@ -1062,7 +1103,8 @@ public final class ObservableCollectionImpl {
 				});
 				CollectionSubscription sub = theSource.subscribe(weak);
 				weak.withSubscription(sub);
-				until.take(1).act(v -> sub.unsubscribe(true));
+				Subscription takeSub=until.take(1).act(v -> sub.unsubscribe(true));
+				weak.onUnsubscribe(()->takeSub.unsubscribe());
 			}
 		}
 
@@ -1100,9 +1142,12 @@ public final class ObservableCollectionImpl {
 				// Need to fire the remove event while the node is in the old position.
 				removeFromPresent(element, oldValue, cause);
 				addToPresent(element, cause);
-			} else if (fireUpdate)
+			} else if (oldValue != element.manager.get())
 				fireListeners(new IndexedCollectionEvent<>(element, element.presentNode.getIndex(), CollectionChangeType.set, oldValue,
 					element.manager.get(), cause));
+			else if (fireUpdate)
+				fireListeners(new IndexedCollectionEvent<>(element, element.presentNode.getIndex(), CollectionChangeType.set, oldValue,
+					oldValue, cause));
 		}
 
 		private void fireListeners(IndexedCollectionEvent<T> event) {
@@ -1124,6 +1169,22 @@ public final class ObservableCollectionImpl {
 					addToPresent(element, update.getCause());
 			} else if (prePresent)
 				removeFromPresent(element, oldValue, update.getCause());
+		}
+
+		@Override
+		public int getElementsBefore(ElementId id) {
+			DefaultNode<?> node = ((DerivedCollectionElement) id).presentNode;
+			if (node == null)
+				throw new IllegalArgumentException("This element is not present in the collection");
+			return node.getIndex();
+		}
+
+		@Override
+		public int getElementsAfter(ElementId id) {
+			DefaultNode<?> node = ((DerivedCollectionElement) id).presentNode;
+			if (node == null)
+				throw new IllegalArgumentException("This element is not present in the collection");
+			return node.getElementsGreater();
 		}
 
 		@Override
@@ -1546,6 +1607,16 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public int getElementsBefore(ElementId id) {
+			return theElementIdGen.getElementsBefore(id);
+		}
+
+		@Override
+		public int getElementsAfter(ElementId id) {
+			return theElementIdGen.getElementsAfter(id);
+		}
+
+		@Override
 		public boolean add(E e) {
 			try (Transaction t = lock(true, null)) {
 				theObserver.accept(new ObservableCollectionEvent<>(theElementIdGen.newId(), CollectionChangeType.add, null, e,
@@ -1742,73 +1813,6 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
-	public static <E> ListDataFlow<E, E, E> createList(TypeToken<E> type, Collection<? extends E> initialValues) {
-		DefaultObservableList<E> collection = new DefaultObservableList<>(type);
-		ListDataFlow<E, E, E> flow = collection.flow();
-		if (!initialValues.isEmpty())
-			flow = new ObservableListImpl.InitialElementsListFlow<>(collection, flow, type, initialValues);
-		return flow;
-	}
-
-	/**
-	 * The {@link ObservableList} version of {@link DefaultObservableCollection}. It's only here because I want to keep
-	 * {@link DefaultObservableCollection} private.
-	 *
-	 * @param <E> The type of elements in the list
-	 */
-	private static class DefaultObservableList<E> extends DefaultObservableCollection<E> implements ObservableList<E> {
-		DefaultObservableList(TypeToken<E> type) {
-			super(type);
-		}
-
-		@Override
-		public <T> T ofElementAt(int index, Function<? super ObservableCollectionElement<? extends E>, T> onElement) {
-			throw new UnsupportedOperationException("This method is not implemented for the default observable list");
-		}
-
-		@Override
-		public <T> T ofMutableElementAt(int index, Function<? super MutableObservableElement<? extends E>, T> onElement) {
-			throw new UnsupportedOperationException("This method is not implemented for the default observable list");
-		}
-
-		@Override
-		public MutableObservableSpliterator<E> mutableSpliterator(int index) {
-			throw new UnsupportedOperationException("This method is not implemented for the default observable list");
-		}
-
-		@Override
-		public ListDataFlow<E, E, E> flow() {
-			return new DefaultListFlow<>(this);
-		}
-
-		private static class DefaultListFlow<E> extends BaseListDataFlow<E> {
-			DefaultListFlow(ObservableList<E> source) {
-				super(source);
-			}
-
-			@Override
-			public AbstractCollectionManager<E, ?, E> manageCollection() {
-				return new DefaultListManager<>(getTargetType(), getSource().equivalence(), getSource().isLockSupported());
-			}
-
-			@Override
-			public ObservableList<E> collect(Observable<?> until) {
-				return new DerivedList<>(getSource(), manageCollection(), until);
-			}
-		}
-
-		private static class DefaultListManager<E> extends BaseCollectionManager<E> {
-			public DefaultListManager(TypeToken<E> targetType, Equivalence<? super E> equivalence, boolean threadSafe) {
-				super(targetType, equivalence, threadSafe);
-			}
-
-			@Override
-			public boolean isStaticallyFiltered() {
-				return true; // This flag prevents DerivedCollection from calling the clear() method
-			}
-		}
-	}
-
 	/**
 	 * Implements {@link ObservableCollection#groupBy(ObservableCollection.GroupingBuilder)}
 	 *
@@ -1994,6 +1998,22 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public int getElementsBefore(ElementId id) {
+			ObservableCollection<? extends E> coll = theCollectionObservable.get();
+			if (coll == null)
+				throw new IllegalArgumentException("This element is not present in this collection");
+			return coll.getElementsBefore(id);
+		}
+
+		@Override
+		public int getElementsAfter(ElementId id) {
+			ObservableCollection<? extends E> coll = theCollectionObservable.get();
+			if (coll == null)
+				throw new IllegalArgumentException("This element is not present in this collection");
+			return coll.getElementsAfter(id);
+		}
+
+		@Override
 		public int size() {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			return coll == null ? 0 : coll.size();
@@ -2094,6 +2114,18 @@ public final class ObservableCollectionImpl {
 			if (coll == null)
 				return MutableObservableSpliterator.empty(theType);
 			return ((ObservableCollection<E>) coll).mutableSpliterator(fromStart);
+		}
+
+		@Override
+		public MutableObservableSpliterator<E> mutableSpliterator(int index) {
+			ObservableCollection<? extends E> coll = theCollectionObservable.get();
+			if (coll == null) {
+				if (index == 0)
+					return MutableObservableSpliterator.empty(theType);
+				else
+					throw new IndexOutOfBoundsException(index + " of 0");
+			}
+			return ((ObservableCollection<E>) coll).mutableSpliterator(index);
 		}
 
 		@Override
