@@ -332,22 +332,12 @@ public class ObservableSetImpl {
 
 		@Override
 		public UniqueDataFlow<E, E, E> filter(Function<? super E, String> filter) {
-			return (UniqueDataFlow<E, E, E>) super.filter(filter);
-		}
-
-		@Override
-		public UniqueDataFlow<E, E, E> filter(Function<? super E, String> filter, boolean filterNulls) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter, filterNulls));
+			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter));
 		}
 
 		@Override
 		public UniqueDataFlow<E, E, E> filterStatic(Function<? super E, String> filter) {
-			return (UniqueDataFlow<E, E, E>) super.filterStatic(filter);
-		}
-
-		@Override
-		public UniqueDataFlow<E, E, E> filterStatic(Function<? super E, String> filter, boolean filterNulls) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.filterStatic(filter, filterNulls));
+			return new UniqueDataFlowWrapper<>(getSource(), super.filterStatic(filter));
 		}
 
 		@Override
@@ -371,6 +361,11 @@ public class ObservableSetImpl {
 		}
 
 		@Override
+		public ObservableSet<E> collect() {
+			return getSource();
+		}
+
+		@Override
 		public ObservableSet<E> collect(Observable<?> until) {
 			if (until == Observable.empty)
 				return getSource();
@@ -380,8 +375,8 @@ public class ObservableSetImpl {
 	}
 
 	public static class DerivedLWSet<E, T> extends DerivedLWCollection<E, T> implements ObservableSet<T> {
-		public DerivedLWSet(ObservableCollection<E> source, CollectionManager<E, ?, T> flow, Observable<?> until) {
-			super(source, flow, until);
+		public DerivedLWSet(ObservableCollection<E> source, CollectionManager<E, ?, T> flow) {
+			super(source, flow);
 		}
 	}
 

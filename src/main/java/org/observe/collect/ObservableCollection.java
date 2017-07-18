@@ -1174,7 +1174,8 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 	 * @param type The type for the root collection
 	 * @param initialValues The values for the collection to contain initially
 	 * @return A {@link CollectionDataFlow} that can be used to create a collection with any characteristics supported by the flow API. The
-	 *         collection will be mutable unless prevented via the flow API.
+	 *         collection will be mutable unless prevented via the flow API. The flow is not {@link CollectionDataFlow#isLightWeight()
+	 *         light-weight}.
 	 */
 	static <E> CollectionDataFlow<E, E, E> create(TypeToken<E> type, E... initialValues) {
 		return create(type, Arrays.asList(initialValues));
@@ -1420,9 +1421,7 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 
 		CollectionManager<E, ?, T> manageCollection();
 
-		default ObservableCollection<T> collect() {
-			return collect(Observable.empty);
-		}
+		ObservableCollection<T> collect();
 
 		ObservableCollection<T> collect(Observable<?> until);
 	}
@@ -1480,9 +1479,7 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 		UniqueModFilterBuilder<E, T> filterModification();
 
 		@Override
-		default ObservableSet<T> collect() {
-			return (ObservableSet<T>) CollectionDataFlow.super.collect();
-		}
+		ObservableSet<T> collect();
 
 		@Override
 		ObservableSet<T> collect(Observable<?> until);
@@ -1534,9 +1531,7 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 		UniqueSortedModFilterBuilder<E, T> filterModification();
 
 		@Override
-		default ObservableSortedSet<T> collect() {
-			return (ObservableSortedSet<T>) UniqueDataFlow.super.collect();
-		}
+		ObservableSortedSet<T> collect();
 
 		@Override
 		ObservableSortedSet<T> collect(Observable<?> until);

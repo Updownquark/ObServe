@@ -145,11 +145,16 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public ObservableCollection<T> collect(Observable<?> until) {
+		public ObservableCollection<T> collect() {
 			if (isLightWeight())
-				return new DerivedLWCollection<>(getSource(), manageCollection(), until);
+				return new DerivedLWCollection<>(getSource(), manageCollection());
 			else
-				return new DerivedCollection<>(getSource(), manageCollection(), until);
+				return new DerivedCollection<>(getSource(), manageCollection(), Observable.empty);
+		}
+
+		@Override
+		public ObservableCollection<T> collect(Observable<?> until) {
+			return new DerivedCollection<>(getSource(), manageCollection(), until);
 		}
 	}
 
@@ -199,11 +204,16 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public ObservableSet<T> collect(Observable<?> until) {
+		public ObservableSet<T> collect() {
 			if (isLightWeight())
-				return new ObservableSetImpl.DerivedLWSet<>(getSource(), manageCollection(), until);
+				return new ObservableSetImpl.DerivedLWSet<>(getSource(), manageCollection());
 			else
-				return new ObservableSetImpl.DerivedSet<>(getSource(), manageCollection(), until);
+				return new ObservableSetImpl.DerivedSet<>(getSource(), manageCollection(), Observable.empty);
+		}
+
+		@Override
+		public ObservableSet<T> collect(Observable<?> until) {
+			return new ObservableSetImpl.DerivedSet<>(getSource(), manageCollection(), until);
 		}
 	}
 
@@ -330,11 +340,16 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public ObservableSortedSet<T> collect(Observable<?> until) {
+		public ObservableSortedSet<T> collect() {
 			if (isLightWeight())
-				return new ObservableSortedSetImpl.DerivedLWSortedSet<>(getSource(), manageCollection(), theCompare, until);
+				return new ObservableSortedSetImpl.DerivedLWSortedSet<>(getSource(), manageCollection(), theCompare);
 			else
-				return new ObservableSortedSetImpl.DerivedSortedSet<>(getSource(), manageCollection(), theCompare, until);
+				return new ObservableSortedSetImpl.DerivedSortedSet<>(getSource(), manageCollection(), theCompare, Observable.empty);
+		}
+
+		@Override
+		public ObservableSortedSet<T> collect(Observable<?> until) {
+			return new ObservableSortedSetImpl.DerivedSortedSet<>(getSource(), manageCollection(), theCompare, until);
 		}
 	}
 
@@ -514,6 +529,14 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public ObservableSet<T> collect() {
+			if (isLightWeight())
+				return new ObservableSetImpl.DerivedLWSet<>(getSource(), manageCollection());
+			else
+				return new ObservableSetImpl.DerivedSet<>(getSource(), manageCollection(), Observable.empty);
+		}
+
+		@Override
 		public ObservableSet<T> collect(Observable<?> until) {
 			return new ObservableSetImpl.DerivedSet<>(getSource(), manageCollection(), until);
 		}
@@ -563,6 +586,14 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public UniqueSortedModFilterBuilder<E, T> filterModification() {
 			return new UniqueSortedModFilterBuilder<>(getSource(), this);
+		}
+
+		@Override
+		public ObservableSortedSet<T> collect() {
+			if (isLightWeight())
+				return new ObservableSortedSetImpl.DerivedLWSortedSet<>(getSource(), manageCollection(), comparator());
+			else
+				return new ObservableSortedSetImpl.DerivedSortedSet<>(getSource(), manageCollection(), comparator(), Observable.empty);
 		}
 
 		@Override
@@ -774,6 +805,14 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public ObservableSet<T> collect() {
+			if (isLightWeight())
+				return new ObservableSetImpl.DerivedLWSet<>(getSource(), manageCollection());
+			else
+				return new ObservableSetImpl.DerivedSet<>(getSource(), manageCollection(), Observable.empty);
+		}
+
+		@Override
 		public ObservableSet<T> collect(Observable<?> until) {
 			return new ObservableSetImpl.DerivedSet<>(getSource(), manageCollection(), until);
 		}
@@ -821,6 +860,14 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public UniqueSortedModFilterBuilder<E, T> filterModification() {
 			return new UniqueSortedModFilterBuilder<>(getSource(), this);
+		}
+
+		@Override
+		public ObservableSortedSet<T> collect() {
+			if (isLightWeight())
+				return new ObservableSortedSetImpl.DerivedLWSortedSet<>(getSource(), manageCollection(), comparator());
+			else
+				return new ObservableSortedSetImpl.DerivedSortedSet<>(getSource(), manageCollection(), comparator(), Observable.empty);
 		}
 
 		@Override

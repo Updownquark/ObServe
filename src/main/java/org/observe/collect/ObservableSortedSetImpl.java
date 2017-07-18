@@ -174,6 +174,19 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
+		public int getElementsBefore(ElementId id) {
+			return getWrapped().getElementsBefore(id) - getMinIndex();
+		}
+
+		@Override
+		public int getElementsAfter(ElementId id) {
+			int wrappedAfter = getWrapped().getElementsAfter(id);
+			int wrappedSize = getWrapped().size();
+			int maxIndex = getMaxIndex();
+			return wrappedAfter - (wrappedSize - maxIndex - 1);
+		}
+
+		@Override
 		public int size() {
 			int minIndex = getMinIndex();
 			int maxIndex = getMaxIndex();
@@ -311,6 +324,24 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
+		public <T> T ofElementAt(int index, Function<? super ObservableCollectionElement<? extends E>, T> onElement) {
+			return getWrapped().ofElementAt(index - getMinIndex(), el -> {
+				if (isInRange(el.get()) != 0)
+					throw new IndexOutOfBoundsException(index + " of " + size());
+				return onElement.apply(el);
+			});
+		}
+
+		@Override
+		public <T> T ofMutableElementAt(int index, Function<? super MutableObservableElement<? extends E>, T> onElement) {
+			return getWrapped().ofMutableElementAt(index - getMinIndex(), el -> {
+				if (isInRange(el.get()) != 0)
+					throw new IndexOutOfBoundsException(index + " of " + size());
+				return onElement.apply(new BoundedMutableElement<>(el));
+			});
+		}
+
+		@Override
 		public ObservableElementSpliterator<E> spliterator(boolean fromStart) {
 			E start = fromStart ? theMin : theMax;
 			boolean startIncluded = fromStart ? isMinIncluded : isMaxIncluded;
@@ -338,6 +369,15 @@ public class ObservableSortedSetImpl {
 			if (bounded == null)
 				return MutableObservableSpliterator.empty(getType());
 			return new BoundedMutableSpliterator(theWrapped.mutableSpliterator(bounded.value, up, bounded.included));
+		}
+
+		@Override
+		public MutableObservableSpliterator<E> mutableSpliterator(int index) {
+			int minIndex = getMinIndex();
+			int maxIndex = getMaxIndex();
+			if (index > (maxIndex - minIndex + 1))
+				throw new IndexOutOfBoundsException(index + " of " + (maxIndex - minIndex + 1));
+			return new BoundedMutableSpliterator(getWrapped().mutableSpliterator(index - minIndex));
 		}
 
 		@Override
@@ -866,23 +906,13 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public UniqueSortedDataFlow<E, E, E> filter(Function<? super E, String> filter) {
-			return (UniqueSortedDataFlow<E, E, E>) super.filter(filter);
-		}
-
-		@Override
-		public UniqueSortedDataFlow<E, E, E> filter(Function<? super E, String> filter, boolean filterNulls) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, E>) super.filter(filter, filterNulls),
+			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, E>) super.filter(filter),
 				getSource().comparator());
 		}
 
 		@Override
 		public UniqueSortedDataFlow<E, E, E> filterStatic(Function<? super E, String> filter) {
-			return (UniqueSortedDataFlow<E, E, E>) super.filterStatic(filter);
-		}
-
-		@Override
-		public UniqueSortedDataFlow<E, E, E> filterStatic(Function<? super E, String> filter, boolean filterNulls) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, E>) super.filterStatic(filter, filterNulls),
+			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, E>) super.filterStatic(filter),
 				getSource().comparator());
 		}
 
@@ -909,6 +939,11 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
+		public ObservableSortedSet<E> collect() {
+			return getSource();
+		}
+
+		@Override
 		public ObservableSortedSet<E> collect(Observable<?> until) {
 			if (until == Observable.empty)
 				return getSource();
@@ -920,9 +955,8 @@ public class ObservableSortedSetImpl {
 	public static class DerivedLWSortedSet<E, T> extends ObservableSetImpl.DerivedLWSet<E, T> implements ObservableSortedSet<T> {
 		private final Comparator<? super T> theCompare;
 
-		public DerivedLWSortedSet(ObservableCollection<E> source, CollectionManager<E, ?, T> flow, Comparator<? super T> compare,
-			Observable<?> until) {
-			super(source, flow, until);
+		public DerivedLWSortedSet(ObservableCollection<E> source, CollectionManager<E, ?, T> flow, Comparator<? super T> compare) {
+			super(source, flow);
 			theCompare = compare;
 		}
 	}
@@ -981,34 +1015,4 @@ public class ObservableSortedSetImpl {
 			return new MutableDerivedSpliterator(getPresentElements().spliteratorFrom(element));
 		}
 	}
-
-	/**
-	 * Implements {@link ObservableSortedSet#flattenValue(ObservableValue)}
-	 *
-	 * @param <E> The type of elements in the set
-	 */
-	public static class FlattenedValueSortedSet<E> extends ObservableReversibleCollectionImpl.FlattenedReversibleValueCollection<E>
-	implements ObservableSortedSet<E> {
-		public FlattenedValueSortedSet(ObservableValue<? extends ObservableSortedSet<E>> collectionObservable) {
-			super(collectionObservable);
-		}
-
-		@Override
-		protected ObservableValue<? extends ObservableSortedSet<E>> getWrapped() {
-			return (ObservableValue<? extends ObservableSortedSet<E>>) super.getWrapped();
-		}
-
-		@Override
-		public Comparator<? super E> comparator() {
-			ObservableSortedSet<E> set = getWrapped().get();
-			return set == null ? (o1, o2) -> -1 : (Comparator<? super E>) set.comparator();
-		}
-
-		@Override
-		public Iterable<E> iterateFrom(E element, boolean included, boolean reversed) {
-			ObservableSortedSet<E> set = getWrapped().get();
-			return set == null ? java.util.Collections.EMPTY_LIST : set.iterateFrom(element, included, reversed);
-		}
-	}
-
 }
