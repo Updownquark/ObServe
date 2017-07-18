@@ -939,8 +939,13 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public ObservableSortedSet<E> collect() {
+		public ObservableSortedSet<E> collectLW() {
 			return getSource();
+		}
+
+		@Override
+		public ObservableSortedSet<E> collect() {
+			return (ObservableSortedSet<E>) super.collect();
 		}
 
 		@Override
@@ -955,9 +960,37 @@ public class ObservableSortedSetImpl {
 	public static class DerivedLWSortedSet<E, T> extends ObservableSetImpl.DerivedLWSet<E, T> implements ObservableSortedSet<T> {
 		private final Comparator<? super T> theCompare;
 
-		public DerivedLWSortedSet(ObservableCollection<E> source, CollectionManager<E, ?, T> flow, Comparator<? super T> compare) {
+		public DerivedLWSortedSet(ObservableSortedSet<E> source, CollectionDataFlow<E, ?, T> flow, Comparator<? super T> compare) {
 			super(source, flow);
 			theCompare = compare;
+		}
+
+		@Override
+		protected ObservableSortedSet<E> getSource() {
+			return (ObservableSortedSet<E>) super.getSource();
+		}
+
+		@Override
+		public Comparator<? super T> comparator() {
+			return theCompare;
+		}
+
+		@Override
+		public ObservableValue<T> relative(T value, boolean up, boolean withValue) {
+		}
+
+		@Override
+		public boolean forElement(T value, boolean up, boolean withValue,
+			Consumer<? super ObservableCollectionElement<? extends T>> onElement) {
+		}
+
+		@Override
+		public boolean forMutableElement(T value, boolean up, boolean withValue,
+			Consumer<? super MutableObservableElement<? extends T>> onElement) {
+		}
+
+		@Override
+		public MutableObservableSpliterator<T> mutableSpliterator(T value, boolean up, boolean withValue) {
 		}
 	}
 

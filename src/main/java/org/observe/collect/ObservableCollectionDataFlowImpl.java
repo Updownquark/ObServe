@@ -145,11 +145,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public ObservableCollection<T> collect() {
-			if (isLightWeight())
-				return new DerivedLWCollection<>(getSource(), manageCollection());
-			else
-				return new DerivedCollection<>(getSource(), manageCollection(), Observable.empty);
+		public ObservableCollection<T> collectLW() {
+			return new DerivedLWCollection<>(getSource(), this);
 		}
 
 		@Override
@@ -204,11 +201,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public ObservableSet<T> collect() {
-			if (isLightWeight())
-				return new ObservableSetImpl.DerivedLWSet<>(getSource(), manageCollection());
-			else
-				return new ObservableSetImpl.DerivedSet<>(getSource(), manageCollection(), Observable.empty);
+		public ObservableSet<T> collectLW() {
+			return new ObservableSetImpl.DerivedLWSet<>((ObservableSet<E>) getSource(), this);
 		}
 
 		@Override
@@ -340,11 +334,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public ObservableSortedSet<T> collect() {
-			if (isLightWeight())
-				return new ObservableSortedSetImpl.DerivedLWSortedSet<>(getSource(), manageCollection(), theCompare);
-			else
-				return new ObservableSortedSetImpl.DerivedSortedSet<>(getSource(), manageCollection(), theCompare, Observable.empty);
+		public ObservableSortedSet<T> collectLW() {
+			return new ObservableSortedSetImpl.DerivedLWSortedSet<>((ObservableSortedSet<E>) getSource(), this, theCompare);
 		}
 
 		@Override
@@ -529,11 +520,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public ObservableSet<T> collect() {
-			if (isLightWeight())
-				return new ObservableSetImpl.DerivedLWSet<>(getSource(), manageCollection());
-			else
-				return new ObservableSetImpl.DerivedSet<>(getSource(), manageCollection(), Observable.empty);
+		public ObservableSet<T> collectLW() {
+			return new ObservableSetImpl.DerivedLWSet<>((ObservableSet<E>) getSource(), this);
 		}
 
 		@Override
@@ -589,11 +577,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public ObservableSortedSet<T> collect() {
-			if (isLightWeight())
-				return new ObservableSortedSetImpl.DerivedLWSortedSet<>(getSource(), manageCollection(), comparator());
-			else
-				return new ObservableSortedSetImpl.DerivedSortedSet<>(getSource(), manageCollection(), comparator(), Observable.empty);
+		public ObservableSortedSet<T> collectLW() {
+			return new ObservableSortedSetImpl.DerivedLWSortedSet<>((ObservableSortedSet<E>) getSource(), this, comparator());
 		}
 
 		@Override
@@ -805,11 +790,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public ObservableSet<T> collect() {
-			if (isLightWeight())
-				return new ObservableSetImpl.DerivedLWSet<>(getSource(), manageCollection());
-			else
-				return new ObservableSetImpl.DerivedSet<>(getSource(), manageCollection(), Observable.empty);
+		public ObservableSet<T> collectLW() {
+			return new ObservableSetImpl.DerivedLWSet<>((ObservableSet<E>) getSource(), this);
 		}
 
 		@Override
@@ -863,11 +845,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public ObservableSortedSet<T> collect() {
-			if (isLightWeight())
-				return new ObservableSortedSetImpl.DerivedLWSortedSet<>(getSource(), manageCollection(), comparator());
-			else
-				return new ObservableSortedSetImpl.DerivedSortedSet<>(getSource(), manageCollection(), comparator(), Observable.empty);
+		public ObservableSortedSet<T> collectLW() {
+			return new ObservableSortedSetImpl.DerivedLWSortedSet<>((ObservableSortedSet<E>) getSource(), this, comparator());
 		}
 
 		@Override
@@ -921,9 +900,10 @@ public class ObservableCollectionDataFlowImpl {
 	public static abstract class AbstractCollectionManager<E, I, T> implements CollectionManager<E, I, T> {
 		private final CollectionManager<E, ?, I> theParent;
 		private final TypeToken<T> theTargetType;
-		private ReentrantReadWriteLock theLock;
-		private Consumer<CollectionUpdate> theUpdateListener;
+		private final ReentrantReadWriteLock theLock;
 		private final List<Runnable> thePostChanges;
+		private boolean isBegun;
+		private Consumer<CollectionUpdate> theUpdateListener;
 
 		protected AbstractCollectionManager(CollectionManager<E, ?, I> parent, TypeToken<T> targetType) {
 			theParent = parent;
@@ -938,6 +918,10 @@ public class ObservableCollectionDataFlowImpl {
 
 		protected Consumer<CollectionUpdate> getUpdateListener() {
 			return theUpdateListener;
+		}
+
+		protected boolean isLightWeight() {
+			return isBegun && theUpdateListener == null;
 		}
 
 		@Override
@@ -1047,8 +1031,9 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public void begin(Consumer<CollectionUpdate> onUpdate, Observable<?> until) {
-			if (theUpdateListener != null)
+			if (isBegun)
 				throw new IllegalStateException("Cannot begin twice");
+			isBegun = true;
 			theUpdateListener = onUpdate;
 			begin(until);
 			if (theParent != null)
@@ -2016,6 +2001,16 @@ public class ObservableCollectionDataFlowImpl {
 			return (v1, v2) -> pc.compare(reverseValue(v1), reverseValue(v2));
 		}
 
+		protected <V> V getArgValue(ObservableValue<V> arg) {
+			ArgHolder<V> holder = (ArgHolder<V>) theArgs.get(arg);
+			if (holder == null)
+				throw new IllegalArgumentException("Unrecognized value: " + arg);
+			if (isLightWeight())
+				return arg.get();
+			else
+				return holder.value;
+		}
+
 		protected T combineValue(I source) {
 			return theCombination.apply(new CombinedValues<I>() {
 				@Override
@@ -2025,10 +2020,7 @@ public class ObservableCollectionDataFlowImpl {
 
 				@Override
 				public <V> V get(ObservableValue<V> arg) {
-					ArgHolder<V> holder = (ArgHolder<V>) theArgs.get(arg);
-					if (holder == null)
-						throw new IllegalArgumentException("Unrecognized value: " + arg);
-					return holder.value;
+					return getArgValue(arg);
 				}
 			});
 		}
@@ -2042,10 +2034,7 @@ public class ObservableCollectionDataFlowImpl {
 
 				@Override
 				public <V> V get(ObservableValue<V> arg) {
-					ArgHolder<V> holder = (ArgHolder<V>) theArgs.get(arg);
-					if (holder == null)
-						throw new IllegalArgumentException("Unrecognized value: " + arg);
-					return holder.value;
+					return getArgValue(arg);
 				}
 			});
 		}
@@ -2085,9 +2074,8 @@ public class ObservableCollectionDataFlowImpl {
 
 				@Override
 				protected boolean refresh(I source, Object cause) {
-					if (isCached) {
+					if (isCached)
 						theValue = combineValue(source);
-					}
 					return true;
 				}
 			}
@@ -2096,19 +2084,21 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public void begin(Observable<?> until) {
-			for (Map.Entry<ObservableValue<?>, ArgHolder<?>> arg : theArgs.entrySet()) {
-				ArgHolder<?> holder = arg.getValue();
-				holder.action = evt -> {
-					try (Transaction t = lock(true, null)) {
-						((ArgHolder<Object>) holder).value = evt.getValue();
-						getUpdateListener().accept(new CollectionUpdate(this, null, evt));
-					}
-				};
-				WeakConsumer<ObservableValueEvent<?>> weak = new WeakConsumer<>(holder.action);
-				if (until == Observable.empty)
-					weak.withSubscription(arg.getKey().act(weak));
-				else
-					weak.withSubscription(arg.getKey().takeUntil(until).act(weak));
+			if (!isLightWeight()) {
+				for (Map.Entry<ObservableValue<?>, ArgHolder<?>> arg : theArgs.entrySet()) {
+					ArgHolder<?> holder = arg.getValue();
+					holder.action = evt -> {
+						try (Transaction t = lock(true, null)) {
+							((ArgHolder<Object>) holder).value = evt.getValue();
+							getUpdateListener().accept(new CollectionUpdate(this, null, evt));
+						}
+					};
+					WeakConsumer<ObservableValueEvent<?>> weak = new WeakConsumer<>(holder.action);
+					if (until == Observable.empty)
+						weak.withSubscription(arg.getKey().act(weak));
+					else
+						weak.withSubscription(arg.getKey().takeUntil(until).act(weak));
+				}
 			}
 		}
 	}
@@ -2129,12 +2119,14 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public void begin(Observable<?> until) {
-			theAction = v -> getUpdateListener().accept(new CollectionUpdate(this, null, v));
-			WeakConsumer<Object> weak = new WeakConsumer<>(theAction);
-			if (until == Observable.empty)
-				weak.withSubscription(theRefresh.act(weak));
-			else
-				weak.withSubscription(theRefresh.takeUntil(until).act(weak));
+			if (!isLightWeight()) {
+				theAction = v -> getUpdateListener().accept(new CollectionUpdate(this, null, v));
+				WeakConsumer<Object> weak = new WeakConsumer<>(theAction);
+				if (until == Observable.empty)
+					weak.withSubscription(theRefresh.act(weak));
+				else
+					weak.withSubscription(theRefresh.takeUntil(until).act(weak));
+			}
 		}
 
 		@Override

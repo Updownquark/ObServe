@@ -361,8 +361,13 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public ObservableSet<E> collect() {
+		public ObservableSet<E> collectLW() {
 			return getSource();
+		}
+
+		@Override
+		public ObservableSet<E> collect() {
+			return (ObservableSet<E>) super.collect();
 		}
 
 		@Override
@@ -375,8 +380,17 @@ public class ObservableSetImpl {
 	}
 
 	public static class DerivedLWSet<E, T> extends DerivedLWCollection<E, T> implements ObservableSet<T> {
-		public DerivedLWSet(ObservableCollection<E> source, CollectionManager<E, ?, T> flow) {
+		/**
+		 * @param source The source set. The unique operation is not light-weight, so the input must be a set
+		 * @param flow The data flow used to create the modified collection
+		 */
+		public DerivedLWSet(ObservableSet<E> source, CollectionDataFlow<E, ?, T> flow) {
 			super(source, flow);
+		}
+
+		@Override
+		protected ObservableSet<E> getSource() {
+			return (ObservableSet<E>) super.getSource();
 		}
 	}
 

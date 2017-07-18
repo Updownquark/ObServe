@@ -1407,21 +1407,13 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 		 */
 		boolean isLightWeight();
 
-		/**
-		 * Does not modify the data flow or create a derived one, but asserts that this data flow is {@link #isLightWeight() light weight}.
-		 *
-		 * @return This data flow
-		 * @throws IllegalStateException If this data flow is not light weight
-		 */
-		default CollectionDataFlow<E, I, T> lightWeight() throws IllegalStateException {
-			if (!isLightWeight())
-				throw new IllegalStateException("This data flow is not light weight");
-			return this;
-		}
-
 		CollectionManager<E, ?, T> manageCollection();
 
-		ObservableCollection<T> collect();
+		ObservableCollection<T> collectLW();
+
+		default ObservableCollection<T> collect() {
+			return collect(Observable.empty);
+		}
 
 		ObservableCollection<T> collect(Observable<?> until);
 	}
@@ -1479,7 +1471,12 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 		UniqueModFilterBuilder<E, T> filterModification();
 
 		@Override
-		ObservableSet<T> collect();
+		ObservableSet<T> collectLW();
+
+		@Override
+		default ObservableSet<T> collect() {
+			return (ObservableSet<T>) CollectionDataFlow.super.collect();
+		}
 
 		@Override
 		ObservableSet<T> collect(Observable<?> until);
@@ -1531,7 +1528,12 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 		UniqueSortedModFilterBuilder<E, T> filterModification();
 
 		@Override
-		ObservableSortedSet<T> collect();
+		ObservableSortedSet<T> collectLW();
+
+		@Override
+		default ObservableSortedSet<T> collect() {
+			return (ObservableSortedSet<T>) UniqueDataFlow.super.collect();
+		}
 
 		@Override
 		ObservableSortedSet<T> collect(Observable<?> until);

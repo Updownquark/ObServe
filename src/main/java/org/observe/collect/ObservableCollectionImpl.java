@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -22,10 +23,12 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
+import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.collect.ElementId.SimpleElementIdGenerator;
+import org.observe.collect.MutableObservableSpliterator.MutableObservableSpliteratorMap;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.GroupingBuilder;
 import org.observe.collect.ObservableCollection.SortedGroupingBuilder;
@@ -42,10 +45,13 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.ElementUpdateResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueElementFinder;
 import org.qommons.Causable;
+import org.qommons.ConcurrentHashSet;
 import org.qommons.LinkedQueue;
 import org.qommons.ListenerSet;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
+import org.qommons.collect.CollectionElement;
+import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.ReversibleCollection;
 import org.qommons.collect.ReversibleSpliterator;
 import org.qommons.collect.SimpleCause;
@@ -989,13 +995,31 @@ public final class ObservableCollectionImpl {
 
 	public static class DerivedLWCollection<E, T> implements ObservableCollection<T> {
 		private final ObservableCollection<E> theSource;
-		private final CollectionManager<E, ?, T> theFlow;
+		private final CollectionDataFlow<E, ?, T> theFlow;
+		private final CollectionManager<E, ?, T> theStatelessManager;
 		private final Equivalence<? super T> theEquivalence;
 
-		public DerivedLWCollection(ObservableCollection<E> source, CollectionManager<E, ?, T> flow) {
+		public DerivedLWCollection(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> flow) {
+			if (!flow.isLightWeight())
+				throw new IllegalArgumentException("This flow is not light-weight");
 			theSource = source;
 			theFlow = flow;
-			theEquivalence = flow.equivalence();
+			theStatelessManager = theFlow.manageCollection();
+			theEquivalence = theStatelessManager.equivalence();
+
+			theStatelessManager.begin(null, null); // Nulls imply light-weight
+		}
+
+		protected ObservableCollection<E> getSource() {
+			return theSource;
+		}
+
+		protected CollectionDataFlow<E, ?, T> getFlow() {
+			return theFlow;
+		}
+
+		protected CollectionManager<E, ?, T> getStatelessManager() {
+			return theStatelessManager;
 		}
 
 		@Override
@@ -1030,7 +1054,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public String canAdd(T value) {
-			FilterMapResult<T, E> reversed = theFlow.reverse(value);
+			FilterMapResult<T, E> reversed = theStatelessManager.reverse(value);
 			if (reversed.error != null)
 				return reversed.error;
 			return theSource.canAdd(reversed.result);
@@ -1038,7 +1062,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean add(T e) {
-			FilterMapResult<T, E> reversed = theFlow.reverse(e);
+			FilterMapResult<T, E> reversed = theStatelessManager.reverse(e);
 			if (reversed.error != null)
 				throw new IllegalArgumentException(reversed.error);
 			return theSource.add(reversed.result);
@@ -1064,7 +1088,7 @@ public final class ObservableCollectionImpl {
 			ObservableElementSpliterator<E> spliter = first ? theSource.spliterator(true) : theSource.spliterator(false).reverse();
 			boolean[] success = new boolean[1];
 			while (!success[0] && spliter.tryAdvanceObservableElement(el -> {
-				if (equivalence().elementEquals(theFlow.map(el.get()).result, value)) {
+				if (equivalence().elementEquals(theStatelessManager.map(el.get()).result, value)) {
 					onElement.accept(elementFor(el));
 					success[0] = true;
 				}
@@ -1079,7 +1103,7 @@ public final class ObservableCollectionImpl {
 				: theSource.mutableSpliterator(false).reverse();
 			boolean[] success = new boolean[1];
 			while (!success[0] && spliter.tryAdvanceMutableElement(el -> {
-				if (equivalence().elementEquals(theFlow.map(el.get()).result, value)) {
+				if (equivalence().elementEquals(theStatelessManager.map(el.get()).result, value)) {
 					onElement.accept(mutableElementFor(el));
 					success[0] = true;
 				}
@@ -1089,11 +1113,26 @@ public final class ObservableCollectionImpl {
 		}
 
 		private ObservableCollectionElement<T> elementFor(ObservableCollectionElement<? extends E> el) {
-			// TODO Auto-generated method stub
+			return new ObservableCollectionElement<T>() {
+				@Override
+				public TypeToken<T> getType() {
+					return DerivedLWCollection.this.getType();
+				}
+
+				@Override
+				public T get() {
+					return theStatelessManager.map(el.get()).result;
+				}
+
+				@Override
+				public ElementId getElementId() {
+					return el.getElementId();
+				}
+			};
 		}
 
 		private MutableObservableElement<T> mutableElementFor(MutableObservableElement<? extends E> el) {
-			// TODO Auto-generated method stub
+			return theStatelessManager.createElement(el.getElementId(), el.get(), null).map(el, el.getElementId());
 		}
 
 		@Override
@@ -1118,24 +1157,225 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public MutableObservableSpliterator<T> mutableSpliterator(boolean fromStart) {
-			// TODO Auto-generated method stub
+			MutableObservableSpliterator<E> srcSpliter = theSource.mutableSpliterator(fromStart);
+			return new DerivedMutableSpliterator(srcSpliter);
 		}
 
 		@Override
 		public MutableObservableSpliterator<T> mutableSpliterator(int index) {
-			// TODO Auto-generated method stub
+			MutableObservableSpliterator<E> srcSpliter = theSource.mutableSpliterator(index);
+			return new DerivedMutableSpliterator(srcSpliter);
 		}
 
 		@Override
 		public boolean isEventIndexed() {
-			return theSource.isEventIndexed();
+			return true;
 		}
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends T>> observer) {
-			// TODO Auto-generated method stub
+			return ObservableCollectionImpl.defaultOnChange(this, observer);
+		}
+
+		@Override
+		public CollectionSubscription subscribeIndexed(Consumer<? super IndexedCollectionEvent<? extends T>> observer) {
+			return subscribe(observer, false);
+		}
+
+		@Override
+		public CollectionSubscription subscribeReverseIndexed(Consumer<? super IndexedCollectionEvent<? extends T>> observer) {
+			return subscribe(observer, true);
+		}
+
+		private CollectionSubscription subscribe(Consumer<? super IndexedCollectionEvent<? extends T>> observer, boolean reverse) {
+			try (Transaction t = lock(false, null)) {
+				// This should be safe to not get GC'd because we're installing this as a strong listener in the source
+				CollectionManager<E, ?, T> listenerManager = theFlow.manageCollection();
+				DefaultTreeMap<ElementId, CollectionElementManager<E, ?, T>> elements = new DefaultTreeMap<>(ElementId::compareTo);
+				Consumer<ObservableCollectionEvent<? extends E>> srcAction = evt -> {
+					try (Transaction mgrT = listenerManager.lock(false, evt)) {
+						CollectionElementManager<E, ?, T> element;
+						DefaultNode<Map.Entry<ElementId, CollectionElementManager<E, ?, T>>> node;
+						int index;
+						T oldValue, newValue;
+						switch (evt.getType()) {
+						case add:
+							oldValue = null;
+							element = listenerManager.createElement(evt.getElementId(), evt.getNewValue(), evt);
+							newValue = element.get();
+							node = elements.putGetNode(evt.getElementId(), element);
+							index = node.getIndex();
+							break;
+						case remove:
+							node = elements.getNode(evt.getElementId());
+							element = node.getValue().getValue();
+							index = node.getIndex();
+							elements.removeNode(node);
+							oldValue = element.get();
+							newValue = oldValue;
+							element.removed(evt);
+							break;
+						case set:
+							node = elements.getNode(evt.getElementId());
+							index = node.getIndex();
+							element = node.getValue().getValue();
+							oldValue = element.get();
+							if (!element.set(evt.getNewValue(), evt))
+								return; // No update
+							newValue = element.get();
+							break;
+						default:
+							throw new IllegalStateException("Unrecognized collection change type: " + evt.getType());
+						}
+						observer.accept(new IndexedCollectionEvent<>(evt.getElementId(), index, evt.getType(), oldValue, newValue, evt));
+					}
+				};
+				CollectionSubscription collSub = reverse ? theSource.subscribeReverse(srcAction) : theSource.subscribe(srcAction);
+				SimpleObservable<Void> unsubObs = new SimpleObservable<>();
+				listenerManager.begin(update -> {
+					try (Transaction collT = theSource.lock(false, update.getCause())) {
+						if (update.getElement() != null) {
+							DefaultNode<Map.Entry<ElementId, CollectionElementManager<E, ?, T>>> node = elements
+								.getNode(update.getElement());
+							CollectionElementManager<E, ?, T> element = node.getValue().getValue();
+							T oldValue = element.get();
+							ElementUpdateResult fireUpdate = element.update(update,
+								onEl -> theSource.forMutableElementAt(element.getElementId(), onEl));
+							switch (fireUpdate) {
+							case DoesNotApply:
+								// Weird, but whatever...
+							case AppliedNoUpdate:
+								break;
+							case FireUpdate:
+								T newValue = element.get();
+								observer.accept(new IndexedCollectionEvent<>(element.getElementId(), node.getIndex(),
+									CollectionChangeType.set, oldValue, newValue, update.getCause()));
+								break;
+							}
+						} else {
+							int index = 0;
+							for (CollectionElementManager<E, ?, T> element : elements.values()) {
+								T oldValue = element.get();
+								ElementUpdateResult fireUpdate = element.update(update,
+									onEl -> theSource.forMutableElementAt(element.getElementId(), onEl));
+								switch (fireUpdate) {
+								case DoesNotApply:
+								case AppliedNoUpdate:
+									break;
+								case FireUpdate:
+									T newValue = element.get();
+									observer.accept(new IndexedCollectionEvent<>(element.getElementId(), index, CollectionChangeType.set,
+										oldValue, newValue, update.getCause()));
+									break;
+								}
+								index++;
+							}
+						}
+					}
+				}, unsubObs);
+				return removeAll -> {
+					unsubObs.onNext(null);
+					collSub.unsubscribe(removeAll);
+				};
+			}
+		}
+
+		private class DerivedMutableSpliterator implements MutableObservableSpliterator<T> {
+			private final MutableObservableSpliterator<E> theSourceSpliter;
+
+			DerivedMutableSpliterator(MutableObservableSpliterator<E> srcSpliter) {
+				theSourceSpliter = srcSpliter;
+			}
+
+			@Override
+			public long estimateSize() {
+				return theSourceSpliter.estimateSize();
+			}
+
+			@Override
+			public long getExactSizeIfKnown() {
+				return theSourceSpliter.getExactSizeIfKnown();
+			}
+
+			@Override
+			public int characteristics() {
+				return theSourceSpliter.characteristics() & (~(DISTINCT | SORTED));
+			}
+
+			@Override
+			public TypeToken<T> getType() {
+				return DerivedLWCollection.this.getType();
+			}
+
+			@Override
+			public boolean tryAdvance(Consumer<? super T> action) {
+				return theSourceSpliter.tryAdvance(v -> action.accept(theStatelessManager.map(v).result));
+			}
+
+			@Override
+			public void forEachRemaining(Consumer<? super T> action) {
+				theSourceSpliter.forEachRemaining(v -> action.accept(theStatelessManager.map(v).result));
+			}
+
+			@Override
+			public boolean tryReverse(Consumer<? super T> action) {
+				return theSourceSpliter.tryReverse(v -> action.accept(theStatelessManager.map(v).result));
+			}
+
+			@Override
+			public void forEachReverse(Consumer<? super T> action) {
+				theSourceSpliter.forEachReverse(v -> action.accept(theStatelessManager.map(v).result));
+			}
+
+			@Override
+			public boolean tryAdvanceObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
+				return theSourceSpliter.tryAdvanceObservableElement(el -> action.accept(elementFor(el)));
+			}
+
+			@Override
+			public void forEachObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
+				theSourceSpliter.forEachObservableElement(el -> action.accept(elementFor(el)));
+			}
+
+			@Override
+			public boolean tryReverseObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
+				return theSourceSpliter.tryReverseObservableElement(el -> action.accept(elementFor(el)));
+			}
+
+			@Override
+			public void forEachReverseObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
+				theSourceSpliter.forEachReverseObservableElement(el -> action.accept(elementFor(el)));
+			}
+
+			@Override
+			public boolean tryAdvanceMutableElement(Consumer<? super MutableObservableElement<T>> action) {
+				return theSourceSpliter.tryAdvanceMutableElement(el -> action.accept(mutableElementFor(el)));
+			}
+
+			@Override
+			public void forEachMutableElement(Consumer<? super MutableObservableElement<T>> action) {
+				theSourceSpliter.forEachMutableElement(el -> action.accept(mutableElementFor(el)));
+			}
+
+			@Override
+			public boolean tryReverseMutableElement(Consumer<? super MutableObservableElement<T>> action) {
+				return theSourceSpliter.tryReverseMutableElement(el -> action.accept(mutableElementFor(el)));
+			}
+
+			@Override
+			public void forEachReverseMutableElement(Consumer<? super MutableObservableElement<T>> action) {
+				theSourceSpliter.forEachReverseMutableElement(el -> action.accept(mutableElementFor(el)));
+			}
+
+			@Override
+			public MutableObservableSpliterator<T> trySplit() {
+				MutableObservableSpliterator<E> srcSplit = theSourceSpliter.trySplit();
+				return srcSplit == null ? null : new DerivedMutableSpliterator(srcSplit);
+			}
 		}
 	}
+
+	private static final Set<DerivedCollection<?, ?>> STRONG_REFS = new ConcurrentHashSet<>();
 
 	public static class DerivedCollection<E, T> implements ObservableCollection<T> {
 		protected class DerivedCollectionElement implements ElementId {
@@ -1178,7 +1418,9 @@ public final class ObservableCollectionImpl {
 		private final DefaultTreeMap<ElementId, DerivedCollectionElement> theElements;
 		private final DefaultTreeSet<DerivedCollectionElement> thePresentElements;
 		private final LinkedQueue<Consumer<? super ObservableCollectionEvent<? extends T>>> theListeners;
+		private final AtomicInteger theListenerCount;
 		private final Equivalence<? super T> theEquivalence;
+		private final Consumer<ObservableCollectionEvent<? extends E>> theSourceAction;
 
 		public DerivedCollection(ObservableCollection<E> source, CollectionManager<E, ?, T> flow, Observable<?> until) {
 			theSource = source;
@@ -1186,7 +1428,48 @@ public final class ObservableCollectionImpl {
 			theElements = new DefaultTreeMap<>(ElementId::compareTo);
 			thePresentElements = new DefaultTreeSet<>((e1, e2) -> e1.manager.compareTo(e2.manager));
 			theListeners = new LinkedQueue<>();
+			theListenerCount = new AtomicInteger();
 			theEquivalence = flow.equivalence();
+			// Must maintain a strong reference to the event listener so it is not GC'd while the collection is still alive
+			theSourceAction = evt -> {
+				final DerivedCollectionElement element;
+				try (Transaction flowTransaction = theFlow.lock(false, null)) {
+					switch (evt.getType()) {
+					case add:
+						element = new DerivedCollectionElement(theFlow.createElement(evt.getElementId(), evt.getNewValue(), evt));
+						if (element.manager == null)
+							return; // Statically filtered out
+						theElements.put(evt.getElementId(), element);
+						if (element.manager.isPresent())
+							addToPresent(element, evt);
+						break;
+					case remove:
+						element = theElements.remove(evt.getElementId());
+						if (element == null)
+							return; // Must be statically filtered out or removed via spliterator
+						if (element.presentNode != null)
+							removeFromPresent(element, element.manager.get(), evt);
+						element.manager.removed(evt);
+						break;
+					case set:
+						element = theElements.get(evt.getElementId());
+						if (element == null)
+							return; // Must be statically filtered out
+						boolean prePresent = element.presentNode != null;
+						T oldValue = prePresent ? element.manager.get() : null;
+						boolean fireUpdate = element.manager.set(evt.getNewValue(), evt);
+						if (element.manager.isPresent()) {
+							if (prePresent)
+								updateInPresent(element, oldValue, evt, fireUpdate);
+							else
+								addToPresent(element, evt);
+						} else if (prePresent)
+							removeFromPresent(element, oldValue, evt);
+						break;
+					}
+					theFlow.postChange();
+				}
+			};
 
 			// Begin listening
 			try (Transaction initialTransaction = lock(false, null)) {
@@ -1201,45 +1484,7 @@ public final class ObservableCollectionImpl {
 					}
 					theFlow.postChange();
 				}, until);
-				WeakConsumer<ObservableCollectionEvent<? extends E>> weak = new WeakConsumer<>(evt -> {
-					final DerivedCollectionElement element;
-					try (Transaction flowTransaction = theFlow.lock(false, null)) {
-						switch (evt.getType()) {
-						case add:
-							element = new DerivedCollectionElement(theFlow.createElement(evt.getElementId(), evt.getNewValue(), evt));
-							if (element.manager == null)
-								return; // Statically filtered out
-							theElements.put(evt.getElementId(), element);
-							if (element.manager.isPresent())
-								addToPresent(element, evt);
-							break;
-						case remove:
-							element = theElements.remove(evt.getElementId());
-							if (element == null)
-								return; // Must be statically filtered out or removed via spliterator
-							if (element.presentNode != null)
-								removeFromPresent(element, element.manager.get(), evt);
-							element.manager.removed(evt);
-							break;
-						case set:
-							element = theElements.get(evt.getElementId());
-							if (element == null)
-								return; // Must be statically filtered out
-							boolean prePresent = element.presentNode != null;
-							T oldValue = prePresent ? element.manager.get() : null;
-							boolean fireUpdate = element.manager.set(evt.getNewValue(), evt);
-							if (element.manager.isPresent()) {
-								if (prePresent)
-									updateInPresent(element, oldValue, evt, fireUpdate);
-								else
-									addToPresent(element, evt);
-							} else if (prePresent)
-								removeFromPresent(element, oldValue, evt);
-							break;
-						}
-						theFlow.postChange();
-					}
-				});
+				WeakConsumer<ObservableCollectionEvent<? extends E>> weak = new WeakConsumer<>(theSourceAction);
 				CollectionSubscription sub = theSource.subscribe(weak);
 				weak.withSubscription(sub);
 				Subscription takeSub = until.take(1).act(v -> sub.unsubscribe(true));
@@ -1334,7 +1579,15 @@ public final class ObservableCollectionImpl {
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends T>> observer) {
 			theListeners.add(observer);
-			return () -> theListeners.remove(observer);
+			// Add a strong reference to this collection while we have listeners.
+			// Otherwise, this collection could be GC'd and listeners (which may not reference this collection) would just be left hanging
+			if (theListenerCount.getAndIncrement() == 0)
+				STRONG_REFS.add(this);
+			return () -> {
+				theListeners.remove(observer);
+				if (theListenerCount.decrementAndGet() == 0)
+					STRONG_REFS.remove(this);
+			};
 		}
 
 		@Override
