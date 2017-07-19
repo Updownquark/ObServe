@@ -4,25 +4,28 @@ import org.qommons.AbstractCausable;
 
 /**
  * An event representing a change to an {@link ObservableCollection}
- * 
+ *
  * @param <E> The type of values in the collection
  */
 public class ObservableCollectionEvent<E> extends AbstractCausable {
 	private final ElementId theElementId;
+	private final int theIndex;
 	private final CollectionChangeType theType;
 	private final E theOldValue;
 	private final E theNewValue;
 
 	/**
 	 * @param elementId The ID of the element that was changed
+	 * @param index The index of the element in the collection
 	 * @param type The type of the change
 	 * @param oldValue The old value for the element ({@link CollectionChangeType#set}-type only)
 	 * @param newValue The new value for the element
 	 * @param cause The cause of the change
 	 */
-	public ObservableCollectionEvent(ElementId elementId, CollectionChangeType type, E oldValue, E newValue, Object cause) {
+	public ObservableCollectionEvent(ElementId elementId, int index, CollectionChangeType type, E oldValue, E newValue, Object cause) {
 		super(cause);
 		theElementId = elementId;
+		theIndex = index;
 		theType = type;
 		theOldValue = oldValue;
 		theNewValue = newValue;
@@ -31,6 +34,11 @@ public class ObservableCollectionEvent<E> extends AbstractCausable {
 	/** @return The ID of the element that was changed */
 	public ElementId getElementId() {
 		return theElementId;
+	}
+
+	/** @return The index of the element in the collection */
+	public int getIndex() {
+		return theIndex;
 	}
 
 	/** @return The type of the change */

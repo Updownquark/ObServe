@@ -37,8 +37,6 @@ import org.qommons.collect.ReversibleList;
 import org.qommons.collect.SimpleCause;
 import org.qommons.collect.TransactableList;
 import org.qommons.collect.TreeList;
-import org.qommons.tree.CountedRedBlackNode.DefaultNode;
-import org.qommons.tree.CountedRedBlackNode.DefaultTreeSet;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -69,21 +67,9 @@ import com.google.common.reflect.TypeToken;
  * @param <E> The type of element in the collection
  */
 public interface ObservableCollection<E> extends ReversibleList<E>, TransactableList<E> {
-	/** Standard messages returned by this class */
-	interface StdMsg {
-		static String BAD_TYPE = "Object is the wrong type for this collection";
-		static String UNSUPPORTED_OPERATION = "Unsupported Operation";
-		static String NULL_DISALLOWED = "Null is not allowed";
-		static String ELEMENT_EXISTS = "Element already exists";
-		static String GROUP_EXISTS = "Group already exists";
-		static String WRONG_GROUP = "Item does not belong to this group";
-		static String NOT_FOUND = "No such item found";
-		static String ILLEGAL_ELEMENT = "Element is not allowed";
-	}
-
 	/**
 	 * The {@link ObservableCollectionEvent#getCause() cause} for events fired for extant elements in the collection upon
-	 * {@link #subscribe(Consumer) subscription}
+	 * {@link #subscribe(Consumer, boolean) subscription}
 	 */
 	public static class SubscriptionCause extends SimpleCause {}
 
@@ -199,7 +185,7 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 	default boolean contains(Object o) {
 		if (!belongs(o))
 			return false;
-		return forObservableElement((E) o, el -> {
+		return forElement((E) o, el -> {
 		}, true);
 	}
 
@@ -274,10 +260,10 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 	 */
 	default String canRemove(Object value) {
 		if (!belongs(value))
-			return StdMsg.NOT_FOUND;
+			return CollectionElement.StdMsg.NOT_FOUND;
 		String[] msg = new String[1];
 		if (!forElement((E) value, el -> msg[0] = el.canRemove(), true))
-			return StdMsg.NOT_FOUND;
+			return CollectionElement.StdMsg.NOT_FOUND;
 		return msg[0];
 	}
 
@@ -561,29 +547,30 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 	@Override
 	void clear();
 
-	/** @return Whether events given to the {@link #onChange(Consumer)} listener are always {@link IndexedCollectionEvent indexed} */
-	boolean isEventIndexed();
-
 	/**
 	 * Like {@link #onChange(Consumer)}, but also fires initial {@link CollectionChangeType#add add} events for each element currently in
 	 * the collection, and optionally fires final {@link CollectionChangeType#remove remove} events for each element in the collection on
 	 * unsubscription.
 	 *
 	 * @param observer The listener to be notified of each element change in the collection
+	 * @param reverse Whether to fire add events for the initial elements in reverse
 	 * @return The subscription to use to terminate listening
 	 */
-	default CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
+	default CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer, boolean forward) {
 		Subscription changeSub;
-		boolean indexed = isEventIndexed();
 		try (Transaction t = lock(false, null)) {
 			// Initial events
 			int[] index = new int[1];
-			SubscriptionCause.doWith(new SubscriptionCause(), c -> spliterator().forEachObservableElement(el -> {
-				ObservableCollectionEvent<E> event;
-				if (indexed)
-					event = new IndexedCollectionEvent<>(el.getElementId(), index[0]++, CollectionChangeType.add, null, el.get(), c);
-				else
-					event = new ObservableCollectionEvent<>(el.getElementId(), CollectionChangeType.add, null, el.get(), c);
+			ObservableElementSpliterator<E> spliter;
+			if (forward)
+				spliter = spliterator();
+			else {
+				spliter = spliterator(false).reverse();
+				index[0] = size() - 1;
+			}
+			SubscriptionCause.doWith(new SubscriptionCause(), c -> spliter.forEachObservableElement(el -> {
+				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), index[0]++,
+					CollectionChangeType.add, null, el.get(), c);
 				observer.accept(event);
 			}));
 			// Subscribe changes
@@ -596,13 +583,16 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 				if (removeAll) {
 					// Remove events
 					int[] index = new int[1];
-					SubscriptionCause.doWith(new SubscriptionCause(), c -> spliterator().forEachObservableElement(el -> {
-						ObservableCollectionEvent<E> event;
-						if (indexed)
-							event = new IndexedCollectionEvent<>(el.getElementId(), index[0]++, CollectionChangeType.add, null, el.get(),
-								c);
-						else
-							event = new ObservableCollectionEvent<>(el.getElementId(), CollectionChangeType.add, null, el.get(), c);
+					ObservableElementSpliterator<E> spliter;
+					if (forward)
+						spliter = spliterator();
+					else {
+						spliter = spliterator(false).reverse();
+						index[0] = size() - 1;
+					}
+					SubscriptionCause.doWith(new SubscriptionCause(), c -> spliter.forEachObservableElement(el -> {
+						ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), index[0]++,
+							CollectionChangeType.add, null, el.get(), c);
 						observer.accept(event);
 					}));
 				}
@@ -610,123 +600,11 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 		};
 	}
 
-	/**
-	 * Same as {@link #subscribe(Consumer)}, but the events are indexed by their position in the collection
-	 *
-	 * @param observer The listener to be notified of each element change in the collection
-	 * @return The subscription to use to terminate listening
-	 */
-	default CollectionSubscription subscribeIndexed(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
-		if (isEventIndexed())
-			return subscribe(evt -> observer.accept((IndexedCollectionEvent<E>) evt));
-		DefaultTreeSet<ElementId> ids = new DefaultTreeSet<>(Comparable::compareTo);
-		return subscribe(evt -> {
-			ElementId id = evt.getElementId();
-			int index = -1;
-			switch (evt.getType()) {
-			case add:
-				index = ids.addGetNode(id).getIndex();
-				break;
-			case remove:
-				DefaultNode<ElementId> node = ids.getNode(id);
-				index = node.getIndex();
-				ids.removeNode(node);
-				break;
-			case set:
-				index = ids.getNode(id).getIndex();
-				break;
-			}
-			observer.accept(new IndexedCollectionEvent<>(id, index, evt.getType(), evt.getOldValue(), evt.getNewValue(), evt));
-		});
-	}
-
-	/**
-	 * Same as {@link #subscribe(Consumer)}, except that the elements currently present in this collection are given to the observer in
-	 * reverse order
-	 *
-	 * @param observer The listener to be notified of changes to the collection
-	 * @return The subscription to call when the calling code is no longer interested in this collection
-	 */
-	default CollectionSubscription subscribeReverse(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-		Subscription changeSub;
-		try (Transaction t = lock(false, null)) {
-			// Initial events
-			SubscriptionCause.doWith(new SubscriptionCause(), c -> spliterator().reverse().forEachObservableElement(
-				el -> observer.accept(new ObservableCollectionEvent<>(el.getElementId(), CollectionChangeType.add, null, el.get(), c))));
-			// Subscribe changes
-			changeSub = onChange(observer);
-		}
-		return removeAll -> {
-			try (Transaction t = lock(false, null)) {
-				// Unsubscribe changes
-				changeSub.unsubscribe();
-				if (removeAll) {
-					// Remove events
-					SubscriptionCause.doWith(new SubscriptionCause(), c -> spliterator().reverse().forEachObservableElement(el -> observer
-						.accept(new ObservableCollectionEvent<>(el.getElementId(), CollectionChangeType.remove, null, el.get(), c))));
-				}
-			}
-		};
-	}
-
-	/**
-	 * Same as {@link #subscribeIndexed(Consumer)}, except that the elements currently present in this collection are given to the observer
-	 * in reverse order
-	 *
-	 * @param observer The listener to be notified of changes to the collection
-	 * @return The subscription to call when the calling code is no longer interested in this collection
-	 */
-	default CollectionSubscription subscribeReverseIndexed(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
-		DefaultTreeSet<ElementId> ids = new DefaultTreeSet<>(Comparable::compareTo);
-		return subscribeReverse(evt -> {
-			ElementId id = evt.getElementId();
-			int index = -1;
-			switch (evt.getType()) {
-			case add:
-				index = ids.addGetNode(id).getIndex();
-				break;
-			case remove:
-				DefaultNode<ElementId> node = ids.getNode(id);
-				index = node.getIndex();
-				ids.removeNode(node);
-				break;
-			case set:
-				index = ids.getNode(id).getIndex();
-				break;
-			}
-			observer.accept(new IndexedCollectionEvent<>(id, index, evt.getType(), evt.getOldValue(), evt.getNewValue(), evt));
-		});
-	}
-
 	/** @return A collection that is identical to this one, but with its elements reversed */
 	@Override
 	default ObservableCollection<E> reverse() {
 		return new ObservableCollectionImpl.ReversedObservableCollection<>(this);
 	}
-
-	// /**
-	// * <p>
-	// * The session allows listeners to retain state for the duration of a unit of work (controlled by implementation-specific means),
-	// * batching events where possible. Not all events on a collection will have a session (the value may be null). In addition, the
-	// presence
-	// * or absence of a session need not imply anything about the threaded interactions with a session. A transaction may encompass events
-	// * fired and received on multiple threads. In short, the only thing guaranteed about sessions is that they will end. Therefore, if a
-	// * session is present, observers may assume that they can delay expensive results of collection events until the session completes.
-	// * </p>
-	// * <p>
-	// * In order to use the session for a listening operation, 2 observers must be installed: one for the collection, and one for the
-	// * session. If an event that the observer is interested in occurs in the collection, the session value must be checked. If there is
-	// * currently a session, then the session must be tagged with information that will allow later reconstruction of the interesting
-	// * particulars of the event. When a session event occurs, the observer should check to see if the
-	// * {@link ObservableValueEvent#getOldValue() old value} of the event is non null and whether that old session (the one that is now
-	// * ending) has any information installed by the collection observer. If it does, the interesting information should be reconstructed
-	// and
-	// * dealt with at that time.
-	// * </p>
-	// *
-	// * @return The observable value for the current session of this collection
-	// */
-	// ObservableValue<CollectionSession> getSession();
 
 	/**
 	 * Gets access to the equivalence scheme that this collection uses. {@link ObservableCollection}s are permitted to compare their
@@ -910,12 +788,8 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 			@Override
 			public Subscription subscribe(Observer<Object> observer) {
 				Object key = new Object();
-				boolean[] initialized = new boolean[1];
-				Subscription sub = ObservableCollection.this.subscribe(evt -> {
-					if (initialized[0])
-						evt.getRootCausable().onFinish(key, (root, values) -> observer.onNext(root));
-				});
-				initialized[0] = true;
+				Subscription sub = ObservableCollection.this
+					.onChange(evt -> evt.getRootCausable().onFinish(key, (root, values) -> observer.onNext(root)));
 				return sub;
 			}
 
@@ -968,7 +842,7 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 		return new ObservableCollectionImpl.ContainsAnyValue<>(this, collection);
 	}
 
-	/** @return A builder that facilitates filtering, mapping, and other operations against this collection */
+	/** @return A builder that facilitates filtering, mapping, and other derivations of this collection's source data */
 	default <T> CollectionDataFlow<E, E, E> flow() {
 		return new ObservableCollectionDataFlowImpl.BaseCollectionDataFlow<>(this);
 	}
@@ -1196,7 +1070,7 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 	}
 
 	static <E> CollectionDataFlow<E, E, E> constant(TypeToken<E> type, Collection<? extends E> initialValues) {
-		return create(type, initialValues).filterModification().immutable(StdMsg.UNSUPPORTED_OPERATION, false).build();
+		return create(type, initialValues).filterModification().immutable(CollectionElement.StdMsg.UNSUPPORTED_OPERATION, false).build();
 	}
 
 	/**
@@ -1252,7 +1126,7 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 						}
 						break;
 					}
-				}).removeAll();
+				}, true).removeAll();
 			}
 
 			@Override
@@ -1342,33 +1216,85 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 
 		// Flow operations
 
+		/**
+		 * Filters some elements from the collection by value. The filtering is done dynamically, such that a change to an element may cause
+		 * the element to be excluded or included in the collection.
+		 *
+		 * @param filter A filter function that returns null for elements to maintain in the collection, or a message indicating why the
+		 *        element is excluded
+		 * @return A {@link #isLightWeight() heavy-weight} data flow capable of producing a collection that excludes certain elements from
+		 *         the input
+		 */
 		CollectionDataFlow<E, T, T> filter(Function<? super T, String> filter);
 
+		/**
+		 * Filters some elements from the collection by value. The filtering is done statically, such that the initial value of the element
+		 * determines whether it is excluded or included in the collection and cannot be re-included or excluded afterward.
+		 *
+		 * @param filter A filter function that returns null for elements to maintain in the collection, or a message indicating why the
+		 *        element is excluded
+		 * @return A {@link #isLightWeight() heavy-weight} data flow capable of producing a collection that excludes certain elements from
+		 *         the input
+		 */
 		CollectionDataFlow<E, T, T> filterStatic(Function<? super T, String> filter);
 
 		/**
+		 * Filters elements from this flow by type. The filtering is done {@link #filterStatic(Function) statically}.
+		 *
 		 * @param <X> The type for the new collection
 		 * @param type The type to filter this collection by
-		 * @return A collection backed by this collection, consisting only of elements in this collection whose values are instances of the
-		 *         given class
+		 * @return A {@link #isLightWeight() heavy-weight} collection consisting only of elements in the source whose values are instances
+		 *         of the given class
 		 */
 		default <X> CollectionDataFlow<E, ?, X> filter(Class<X> type) {
 			return filterStatic(value -> {
 				if (type == null || type.isInstance(value))
 					return null;
 				else
-					return StdMsg.BAD_TYPE;
+					return CollectionElement.StdMsg.BAD_TYPE;
 			}).map(TypeToken.of(type)).map(v -> (X) v);
 		}
 
+		/**
+		 * @param equivalence The new {@link ObservableCollection#equivalence() equivalence} scheme for the derived collection to use
+		 * @return A {@link #isLightWeight() light-weight} data flow capable of producing a collection that uses a different
+		 *         {@link ObservableCollection#equivalence() equivalence} scheme to determine containment and perform other by-value
+		 *         operations.
+		 */
 		CollectionDataFlow<E, T, T> withEquivalence(Equivalence<? super T> equivalence);
 
+		/**
+		 * @param refresh The observable to use to refresh the collection's values
+		 * @return A {@link #isLightWeight() heavy-weight} data flow capable of producing a collection that fires updates on the source's
+		 *         values whenever the given refresh observable fires
+		 */
 		CollectionDataFlow<E, T, T> refresh(Observable<?> refresh);
 
+		/**
+		 * Like {@link #refresh(Observable)}, but each element may use a different observable to refresh itself
+		 *
+		 * @param refresh The function to get observable to use to refresh individual values
+		 * @return A {@link #isLightWeight() heavy-weight} data flow capable of producing a collection that fires updates on the source's
+		 *         values whenever each element's refresh observable fires
+		 */
 		CollectionDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh);
 
+		/**
+		 * Allows elements to be transformed via a function. This operation may produce a {@link #isLightWeight() heavy- or light-weight}
+		 * flow depending on the options selected on the builder.
+		 *
+		 * @param <X> The type to map to
+		 * @param target The type to map to
+		 * @return A builder to build a mapped data flow
+		 */
 		<X> MappedCollectionBuilder<E, T, X> map(TypeToken<X> target);
 
+		/**
+		 * @param target The target type
+		 * @param map A function that produces observable values from each element of the source
+		 * @return A {@link #isLightWeight() heavy-weight} flow capable of producing a collection that is the value of the observable values
+		 *         mapped to each element of the source.
+		 */
 		default <X> CollectionDataFlow<E, ?, X> flatMap(TypeToken<X> target,
 			Function<? super T, ? extends ObservableValue<? extends X>> map) {
 			TypeToken<ObservableValue<? extends X>> valueType = new TypeToken<ObservableValue<? extends X>>() {}
@@ -1376,9 +1302,9 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 			return map(valueType).map(map).refreshEach(v -> v.noInit()).map(target).withElementSetting((ov, newValue, doSet, cause) -> {
 				// Allow setting elements via the wrapped settable value
 				if (!(ov instanceof SettableValue))
-					return StdMsg.UNSUPPORTED_OPERATION;
+					return CollectionElement.StdMsg.UNSUPPORTED_OPERATION;
 				else if (newValue != null && !ov.getType().getRawType().isInstance(newValue))
-					return StdMsg.BAD_TYPE;
+					return CollectionElement.StdMsg.BAD_TYPE;
 				String msg = ((SettableValue<X>) ov).isAcceptable(newValue);
 				if (msg != null)
 					return msg;
@@ -1388,33 +1314,101 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 			}).map(obs -> obs == null ? null : obs.get());
 		}
 
+		/**
+		 *
+		 * @param <V> The type of the value to combine with the source elements
+		 * @param <X> The type of the combined values
+		 * @param value The observable value to combine with the source elements
+		 * @param target The type of the combined values
+		 * @return A {@link #isLightWeight() heavy-weight} data flow capable of producing a collection whose elements are each some
+		 *         combination of the source element and the dynamic value of the observable
+		 */
 		<V, X> CombinedCollectionBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, TypeToken<X> target);
 
+		/**
+		 * @param compare The comparator to use to sort the source elements
+		 * @return A {@link #isLightWeight() heavy-weight} flow capable of producing a collection whose elements are sorted by the given
+		 *         comparison scheme.
+		 */
 		CollectionDataFlow<E, T, T> sorted(Comparator<? super T> compare);
 
+		/**
+		 * @param alwaysUseFirst Whether to always use the first element in the collection to represent other equivalent values. If this is
+		 *        false, the produced collection may be able to fire fewer events because elements that are added earlier in the collection
+		 *        can be ignored if they are already represented.
+		 * @return A {@link #isLightWeight() heavy-weight} flow capable of producing a set that excludes duplicate elements according to its
+		 *         {@link ObservableCollection#equivalence() equivalence} scheme.
+		 * @see #withEquivalence(Equivalence)
+		 */
 		UniqueDataFlow<E, T, T> unique(boolean alwaysUseFirst);
 
+		/**
+		 * @param compare The comparator to use to sort the source elements
+		 * @param alwaysUseFirst Whether to always use the first element in the collection to represent other equivalent values. If this is
+		 *        false, the produced collection may be able to fire fewer events because elements that are added earlier in the collection
+		 *        can be ignored if they are already represented.
+		 * @return A {@link #isLightWeight() heavy-weight} flow capable of producing a sorted set ordered by the given comparator that
+		 *         excludes duplicate elements according to the comparator's {@link Equivalence#of(Class, Comparator, boolean) equivalence}.
+		 */
 		UniqueSortedDataFlow<E, T, T> uniqueSorted(Comparator<? super T> compare, boolean alwaysUseFirst);
 
+		/**
+		 * Allows control of whether and how the produced collection may be modified. The produced collection will still reflect
+		 * modifications made to the source collection.
+		 *
+		 * @return A builder that produces a {@link #isLightWeight() light-weight} collection reflecting the source data but potentially
+		 *         disallowing some or all modifications.
+		 */
 		ModFilterBuilder<E, T> filterModification();
 
 		// Terminal operations
 
 		/**
-		 * @return Whether this data flow is light weight. A light weight data flow will return a {@link #collect() collection} that does
-		 *         not need to keep track of its own data, but rather performs light-weight per-access and per-operation transformations
-		 *         that delegate to the base collection.
+		 * <p>
+		 * Determines if a flow supports building light-weight collections via {@link #isLightWeight()}.
+		 * </p>
+		 *
+		 * <p>
+		 * A light weight collection does not need to keep track of its own data, but rather performs light-weight per-access and
+		 * per-operation transformations that delegate to the base collection. Because a light-weight collection maintains fewer resources,
+		 * it may be more suitable for collections that are not kept in memory, where the heavy-weight building of the derived set of
+		 * elements would be largely wasted.
+		 * </p>
+		 * <p>
+		 * Many flow operations are heavy-weight by nature, in that the operation is not stateless and requires extra book-keeping by the
+		 * derived collection. Each method on {@link ObservableCollection.CollectionDataFlow} documents whether it is a heavy- or
+		 * light-weight operation.
+		 * </p>
+		 *
+		 * @return Whether this data flow is light-weight
+		 *
 		 */
 		boolean isLightWeight();
 
+		/** @return A manager used by the derived collection */
 		CollectionManager<E, ?, T> manageCollection();
 
-		ObservableCollection<T> collectLW();
+		/**
+		 * @return A light-weight collection derived via this flow from the source collection, if supported
+		 * @throws IllegalStateException If this data flow is not light-weight
+		 * @see #isLightWeight()
+		 */
+		ObservableCollection<T> collectLW() throws IllegalStateException;
 
+		/**
+		 * @return A heavy-weight collection derived via this flow from the source collection
+		 * @see #isLightWeight()
+		 */
 		default ObservableCollection<T> collect() {
 			return collect(Observable.empty);
 		}
 
+		/**
+		 * @param until An observable that will kill the collection when it fires. May be used to control the release of unneeded resources
+		 *        instead of relying on the garbage collector to dispose of them in its own time.
+		 * @return A heavy-weight collection derived via this flow from the source collection
+		 * @see #isLightWeight()
+		 */
 		ObservableCollection<T> collect(Observable<?> until);
 	}
 
@@ -1438,7 +1432,7 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 				if (type == null || type.isInstance(value))
 					return null;
 				else
-					return StdMsg.BAD_TYPE;
+					return CollectionElement.StdMsg.BAD_TYPE;
 			}).mapEquivalent(TypeToken.of(type)).map(v -> (X) v, v -> (T) v);
 		}
 
@@ -1597,33 +1591,92 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 			return isCached;
 		}
 
+		/**
+		 * Specifies a reverse function for the operation, which can allow adding values to the derived collection
+		 *
+		 * @param reverse The function to convert a result of this map operation into a source-compatible value
+		 * @return This builder
+		 */
 		public MappedCollectionBuilder<E, I, T> withReverse(Function<? super T, ? extends I> reverse) {
 			theReverse = reverse;
 			return this;
 		}
 
+		/**
+		 * Specifies an intra-element reverse function for the operation, which can allow adding values to the derived collection collection
+		 *
+		 * @param reverse The function that may modify an element in the source via a result of this map operation without modifying the
+		 *        source
+		 * @return This builder
+		 */
 		public MappedCollectionBuilder<E, I, T> withElementSetting(ElementSetter<? super I, ? super T> reverse) {
 			theElementReverse = reverse;
 			return this;
 		}
 
+		/**
+		 * Controls whether this operation's map function will be re-evaluated when an update event (a {@link CollectionChangeType#set}
+		 * event where {@link ObservableCollectionEvent#getOldValue()} is {@link ObservableCollection#equivalence() equivalent} to
+		 * {@link ObservableCollectionEvent#getNewValue()}) is fired on a source element according to the source equivalence. This is true
+		 * by default.
+		 *
+		 * A false value for this setting is incompatible with {@link #cache(boolean) cache(false)}, because re-evaluation of the function
+		 * is done per-access if caching is off.
+		 *
+		 * @param reEval Whether to re-evaluate this map's function on update
+		 * @return This builder
+		 */
 		public MappedCollectionBuilder<E, I, T> reEvalOnUpdate(boolean reEval) {
+			if (!isCached && !reEval)
+				throw new IllegalStateException(
+					"cache=false and reEvalOnUpdate=false contradict. If the value isn't cached, then re-evaluation is done on access.");
 			reEvalOnUpdate = reEval;
 			return this;
 		}
 
+		/**
+		 * Controls whether this operation will fire an update event (a {@link CollectionChangeType#set} event where
+		 * {@link ObservableCollectionEvent#getOldValue()} is {@link ObservableCollection#equivalence() equivalent} to
+		 * {@link ObservableCollectionEvent#getNewValue()}) on an element if the mapping function produces a value equivalent to the
+		 * previous value. This is true by default.
+		 *
+		 * A false value for this setting is incompatible with {@link #cache(boolean) cache(false)}, because caching is required to remember
+		 * the old value to know if it has changed.
+		 *
+		 * @param fire Whether to fire updates if the result of the mapping operation is equivalent to the previous value.
+		 * @return This builder
+		 */
 		public MappedCollectionBuilder<E, I, T> fireIfUnchanged(boolean fire) {
+			if (!isCached && !fire)
+				throw new IllegalStateException(
+					"cache=false and fireIfUnchanged=false contradict. Can't know if the value is unchanged if it's not cached");
 			fireIfUnchanged = fire;
 			return this;
 		}
 
-		public MappedCollectionBuilder<E, I, T> noCache() {
-			if (!fireIfUnchanged)
+		/**
+		 * Controls whether the mapping operation caches its result value.
+		 *
+		 * If true, this allows the result to:
+		 * <ul>
+		 * <li>Avoid the cost of re-evaluation of the mapping function whenever an element is accessed</li>
+		 * <li>Allows the elements to contain stateful values</li>
+		 * <li>Enables {@link #reEvalOnUpdate(boolean) reEvalOnUpdate(false)} and {@link #fireIfUnchanged(boolean)
+		 * fireIfUnchanged(false)}</li>
+		 * </ul>
+		 *
+		 * This is true by default.
+		 *
+		 * @param cache Whether This operation will cache its result
+		 * @return This builder
+		 */
+		public MappedCollectionBuilder<E, I, T> cache(boolean cache) {
+			if (!fireIfUnchanged && !cache)
 				throw new IllegalStateException(
-					"noCache and fireIfUnchanged=false contradict. Can't know if the value is unchanged if it's not cached");
-			if (!reEvalOnUpdate)
-				throw new IllegalStateException(
-					"noCache and reEvalOnUpdate=false contradict. If the value isn't cached, then re-evaluation is done on access.");
+					"cache=false and fireIfUnchanged=false are incompatible." + " Can't know if the value is unchanged if it's not cached");
+			if (!reEvalOnUpdate && !cache)
+				throw new IllegalStateException("cache=false and reEvalOnUpdate=false are incompatible."
+					+ " If the value isn't cached, then re-evaluation is done on access.");
 			isCached = false;
 			return this;
 		}
@@ -1673,8 +1726,8 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 		}
 
 		@Override
-		public UniqueMappedCollectionBuilder<E, I, T> noCache() {
-			return (UniqueMappedCollectionBuilder<E, I, T>) super.noCache();
+		public UniqueMappedCollectionBuilder<E, I, T> cache(boolean cache) {
+			return (UniqueMappedCollectionBuilder<E, I, T>) super.cache(cache);
 		}
 
 		@Override
@@ -1721,8 +1774,8 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 		}
 
 		@Override
-		public UniqueSortedMappedCollectionBuilder<E, I, T> noCache() {
-			return (UniqueSortedMappedCollectionBuilder<E, I, T>) super.noCache();
+		public UniqueSortedMappedCollectionBuilder<E, I, T> cache(boolean cache) {
+			return (UniqueSortedMappedCollectionBuilder<E, I, T>) super.cache(cache);
 		}
 
 		@Override
@@ -1755,11 +1808,27 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 	 * @see ObservableCollection.CollectionDataFlow#combineWith(ObservableValue, TypeToken)
 	 */
 	interface CombinedCollectionBuilder<E, I, R> {
+		/**
+		 * Adds another observable value to the combination mix
+		 *
+		 * @param arg The observable value to combine to obtain the result
+		 * @return This builder
+		 */
 		<T> CombinedCollectionBuilder<E, I, R> and(ObservableValue<T> arg);
 
+		/**
+		 * Allows specification of a reverse function that may enable adding values to the result of this operation
+		 *
+		 * @param reverse A function capable of taking a result of this operation and reversing it to a source-compatible value
+		 * @return This builder
+		 */
 		CombinedCollectionBuilder<E, I, R> withReverse(Function<? super CombinedValues<? extends R>, ? extends I> reverse);
 
-		CombinedCollectionBuilder<E, I, R> noCache();
+		/**
+		 * @param cache Whether this operation caches its result to avoid re-evaluation on access. True by default.
+		 * @return This builder
+		 */
+		CombinedCollectionBuilder<E, I, R> cache(boolean cache);
 
 		CollectionDataFlow<E, I, R> build(Function<? super CombinedValues<? extends I>, ? extends R> combination);
 	}
@@ -1798,8 +1867,8 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 		}
 
 		@Override
-		public CombinedCollectionBuilder2<E, I, V, R> noCache() {
-			return (CombinedCollectionBuilder2<E, I, V, R>) super.noCache();
+		public CombinedCollectionBuilder2<E, I, V, R> cache(boolean cache) {
+			return (CombinedCollectionBuilder2<E, I, V, R>) super.cache(cache);
 		}
 
 		public CollectionDataFlow<E, I, R> build(BiFunction<? super I, ? super V, ? extends R> combination) {
@@ -1858,8 +1927,8 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 		}
 
 		@Override
-		public CombinedCollectionBuilder3<E, I, V1, V2, R> noCache() {
-			return (CombinedCollectionBuilder3<E, I, V1, V2, R>) super.noCache();
+		public CombinedCollectionBuilder3<E, I, V1, V2, R> cache(boolean cache) {
+			return (CombinedCollectionBuilder3<E, I, V1, V2, R>) super.cache(cache);
 		}
 
 		public CollectionDataFlow<E, I, R> build(TriFunction<? super I, ? super V1, ? super V2, ? extends R> combination) {
@@ -1899,8 +1968,8 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 		}
 
 		@Override
-		public CombinedCollectionBuilderN<E, I, R> noCache() {
-			return (CombinedCollectionBuilderN<E, I, R>) super.noCache();
+		public CombinedCollectionBuilderN<E, I, R> cache(boolean cache) {
+			return (CombinedCollectionBuilderN<E, I, R>) super.cache(cache);
 		}
 
 		@Override

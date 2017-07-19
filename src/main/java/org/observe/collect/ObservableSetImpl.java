@@ -18,6 +18,7 @@ import org.observe.collect.ObservableCollectionImpl.DerivedLWCollection;
 import org.observe.collect.ObservableCollectionImpl.FlattenedValueCollection;
 import org.observe.collect.ObservableCollectionImpl.ReversedObservableCollection;
 import org.qommons.Transaction;
+import org.qommons.collect.CollectionElement;
 
 import com.google.common.reflect.TypeToken;
 
@@ -220,7 +221,7 @@ public class ObservableSetImpl {
 			if (msg != null)
 				return msg;
 			if (value != null && !theRight.getType().getRawType().isInstance(value))
-				return ObservableCollection.StdMsg.BAD_TYPE;
+				return CollectionElement.StdMsg.BAD_TYPE;
 			msg = theRight.canAdd((X) value);
 			if (msg != null)
 				return msg;
@@ -315,7 +316,7 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
+		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer, boolean forward) {
 			// TODO Auto-generated method stub
 		}
 	}
@@ -384,7 +385,7 @@ public class ObservableSetImpl {
 		 * @param source The source set. The unique operation is not light-weight, so the input must be a set
 		 * @param flow The data flow used to create the modified collection
 		 */
-		public DerivedLWSet(ObservableSet<E> source, CollectionDataFlow<E, ?, T> flow) {
+		public DerivedLWSet(ObservableSet<E> source, CollectionManager<E, ?, T> flow) {
 			super(source, flow);
 		}
 

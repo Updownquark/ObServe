@@ -7,8 +7,10 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.NoSuchElementException;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -32,7 +34,6 @@ import org.observe.collect.MutableObservableSpliterator.MutableObservableSpliter
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.GroupingBuilder;
 import org.observe.collect.ObservableCollection.SortedGroupingBuilder;
-import org.observe.collect.ObservableCollection.StdMsg;
 import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractCollectionManager;
@@ -44,13 +45,16 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionUpdate;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ElementUpdateResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueElementFinder;
+import org.qommons.ArrayUtils;
 import org.qommons.Causable;
 import org.qommons.ConcurrentHashSet;
+import org.qommons.IntList;
 import org.qommons.LinkedQueue;
 import org.qommons.ListenerSet;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.CollectionElement;
+import org.qommons.collect.CollectionElement.StdMsg;
 import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.ReversibleCollection;
 import org.qommons.collect.ReversibleSpliterator;
@@ -67,6 +71,7 @@ import com.google.common.reflect.TypeToken;
 public final class ObservableCollectionImpl {
 	private ObservableCollectionImpl() {}
 
+	/** Cached TypeToken of {@link String} */
 	public static final TypeToken<String> STRING_TYPE = TypeToken.of(String.class);
 
 	/**
@@ -84,7 +89,7 @@ public final class ObservableCollectionImpl {
 	/**
 	 * A default version of {@link ObservableCollection#onChange(Consumer)} for collections whose changes may depend on the elements that
 	 * already existed in the collection when the change subscription was made. Such collections must override
-	 * {@link ObservableCollection#subscribe(Consumer)}
+	 * {@link ObservableCollection#subscribe(Consumer, boolean)}
 	 *
 	 * @param coll The collection to subscribe to changes for
 	 * @param observer The observer to be notified of changes (but not initial elements)
@@ -98,7 +103,7 @@ public final class ObservableCollectionImpl {
 			sub = coll.subscribe(evt -> {
 				if (initialized[0])
 					observer.accept(evt);
-			});
+			}, true);
 			initialized[0] = true;
 		}
 		return sub;
@@ -110,45 +115,37 @@ public final class ObservableCollectionImpl {
 	 * better application performance.
 	 *
 	 * @param <E> The type of values in the collection
-	 * @param <CCE> The sub-type of CollectionChangeEvents that this observable fires
 	 */
-	public static class CollectionChangesObservable<E, CCE extends CollectionChangeEvent<E>> implements Observable<CCE> {
+	public static class CollectionChangesObservable<E> implements Observable<CollectionChangeEvent<E>> {
 		/**
 		 * Tracks a set of changes corresponding to a set of {@link ObservableCollectionEvent}s, so those changes can be fired at once
 		 *
 		 * @param <E> The type of values in the collection
 		 */
-		protected static class SessionChangeTracker<E> {
-			/** The type of the change set that this tracker is currently accumulating. */
-			protected CollectionChangeType type;
-			/** The list of elements that have been added or removed, or the new values replaced in the collection */
-			protected final List<E> elements;
-			/** If this tracker's type is {@link CollectionChangeType#set}, the old values replaced in the collection */
-			protected List<E> oldElements;
+		private static class SessionChangeTracker<E> {
+			final CollectionChangeType type;
+			final List<ChangeValue<E>> elements;
 
 			/** @param typ The initial change type for this tracker's accumulation */
 			protected SessionChangeTracker(CollectionChangeType typ) {
 				type = typ;
 				elements = new ArrayList<>();
-				oldElements = type == CollectionChangeType.set ? new ArrayList<>() : null;
-			}
-
-			/** @param typ The new change type for this tracker's accumulation */
-			protected void clear(CollectionChangeType typ) {
-				elements.clear();
-				if (oldElements != null)
-					oldElements.clear();
-				type = typ;
-				if (type == CollectionChangeType.set && oldElements == null)
-					oldElements = new ArrayList<>();
 			}
 		}
 
-		/**
-		 * The key used in the {@link Causable#onFinish(Object, org.qommons.Causable.TerminalAction) finish action map} that the change
-		 * tracker is stored under
-		 */
-		protected static final String SESSION_TRACKER_PROPERTY = "change-tracker";
+		private static class ChangeValue<E> {
+			E newValue;
+			E oldValue;
+			int index;
+
+			ChangeValue(E oldValue, E newValue, int index) {
+				this.oldValue = oldValue;
+				this.newValue = newValue;
+				this.index = index;
+			}
+		}
+
+		private static final String SESSION_TRACKER_PROPERTY = "change-tracker";
 
 		/** The collection that this change observable watches */
 		protected final ObservableCollection<E> collection;
@@ -159,15 +156,13 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public Subscription subscribe(Observer<? super CCE> observer) {
+		public Subscription subscribe(Observer<? super CollectionChangeEvent<E>> observer) {
 			Object key = new Object();
-			return collection.subscribe(evt -> {
-				SessionChangeTracker<E> tracker = (SessionChangeTracker<E>) evt.getRootCausable()
-					.onFinish(key, //
-						(cause, data) -> fireEventsFromSessionData((SessionChangeTracker<E>) data.get(SESSION_TRACKER_PROPERTY), //
-							cause, observer))//
-					.computeIfAbsent(SESSION_TRACKER_PROPERTY, p -> new SessionChangeTracker<>(evt.getType()));
-				accumulate(tracker, evt, observer);
+			return collection.onChange(evt -> {
+				evt.getRootCausable().onFinish(key, (cause, data) -> {
+					fireEventsFromSessionData((SessionChangeTracker<E>) data.get(SESSION_TRACKER_PROPERTY), cause, observer);
+					data.remove(SESSION_TRACKER_PROPERTY);
+				}).compute(SESSION_TRACKER_PROPERTY, (k, tracker) -> accumulate((SessionChangeTracker<E>) tracker, evt, observer));
 			});
 		}
 
@@ -177,16 +172,111 @@ public final class ObservableCollectionImpl {
 		 * @param tracker The change tracker accumulating events
 		 * @param event The new event to accumulate
 		 * @param observer The observer to fire events for, if necessary
+		 * @return The tracker to place in the session to have its changes fired later, if any
 		 */
-		protected void accumulate(SessionChangeTracker<E> tracker, ObservableCollectionEvent<? extends E> event,
-			Observer<? super CCE> observer) {
-			if (event.getType() != tracker.type) {
-				fireEventsFromSessionData(tracker, event, observer);
-				tracker.clear(event.getType());
+		private SessionChangeTracker<E> accumulate(SessionChangeTracker<E> tracker, ObservableCollectionEvent<? extends E> event,
+			Observer<? super CollectionChangeEvent<E>> observer) {
+			int collIndex = collection.getElementsBefore(event.getElementId());
+			if (tracker == null)
+				return replace(tracker, event, observer, collIndex);
+			int changeIndex;
+			switch (tracker.type) {
+			case add:
+				switch (event.getType()) {
+				case add:
+					changeIndex = indexForAdd(tracker, collIndex);
+					tracker.elements.add(changeIndex, new ChangeValue<>(event.getOldValue(), event.getNewValue(), collIndex));
+					for (changeIndex++; changeIndex < tracker.elements.size(); changeIndex++)
+						tracker.elements.get(changeIndex).index++;
+					break;
+				case remove:
+					changeIndex = indexForAdd(tracker, collIndex);
+					if (changeIndex < tracker.elements.size() && tracker.elements.get(changeIndex).index == collIndex) {
+						tracker.elements.remove(changeIndex);
+						for (; changeIndex < tracker.elements.size(); changeIndex++)
+							tracker.elements.get(changeIndex).index--;
+					} else
+						tracker = replace(tracker, event, observer, collIndex);
+					break;
+				case set:
+					changeIndex = indexForAdd(tracker, collIndex);
+					if (changeIndex < tracker.elements.size() && tracker.elements.get(changeIndex).index == collIndex)
+						tracker.elements.get(changeIndex).newValue = event.getNewValue();
+					else
+						tracker = replace(tracker, event, observer, collIndex);
+					break;
+				}
+				break;
+			case remove:
+				switch (event.getType()) {
+				case add:
+					changeIndex = indexForAdd(tracker, collIndex);
+					if (tracker.elements.size() == 1 && changeIndex == 0 && tracker.elements.get(changeIndex).index == collIndex) {
+						ChangeValue<E> changeValue = tracker.elements.get(changeIndex);
+						tracker = new SessionChangeTracker<>(CollectionChangeType.set);
+						changeValue.newValue = event.getNewValue();
+						tracker.elements.add(changeValue);
+					} else
+						tracker = replace(tracker, event, observer, collIndex);
+					break;
+				case remove:
+					changeIndex = indexForAdd(tracker, collIndex);
+					while (changeIndex < tracker.elements.size() && tracker.elements.get(changeIndex).index == collIndex) {
+						collIndex++;
+						changeIndex++;
+					}
+					tracker.elements.add(changeIndex, new ChangeValue<>(event.getOldValue(), event.getNewValue(), collIndex));
+					break;
+				case set:
+					tracker = replace(tracker, event, observer, collIndex);
+					break;
+				}
+				break;
+			case set:
+				switch (event.getType()) {
+				case add:
+					tracker = replace(tracker, event, observer, collIndex);
+					break;
+				case remove:
+					changeIndex = indexForAdd(tracker, collIndex);
+					if (changeIndex < tracker.elements.size() && tracker.elements.get(changeIndex).index == collIndex)
+						tracker.elements.remove(changeIndex);
+					tracker = replace(tracker, event, observer, collIndex);
+					break;
+				case set:
+					changeIndex = indexForAdd(tracker, collIndex);
+					if (changeIndex < tracker.elements.size() && tracker.elements.get(changeIndex).index == collIndex)
+						tracker.elements.get(changeIndex).newValue = event.getNewValue();
+					else
+						tracker.elements.add(new ChangeValue<>(event.getOldValue(), event.getNewValue(), collIndex));
+					break;
+				}
+				break;
 			}
-			tracker.elements.add(event.getNewValue());
-			if (tracker.type == CollectionChangeType.set)
-				tracker.oldElements.add(event.getOldValue());
+			return tracker;
+		}
+
+		private SessionChangeTracker<E> replace(SessionChangeTracker<E> tracker, ObservableCollectionEvent<? extends E> event,
+			Observer<? super CollectionChangeEvent<E>> observer, int collIndex) {
+			fireEventsFromSessionData(tracker, event, observer);
+			tracker = new SessionChangeTracker<>(event.getType());
+			tracker.elements.add(new ChangeValue<>(event.getOldValue(), event.getNewValue(), collIndex));
+			return tracker;
+		}
+
+		private int indexForAdd(SessionChangeTracker<E> tracker, int collectionIndex) {
+			int index = ArrayUtils.binarySearch(tracker.elements, el -> collectionIndex - el.index);
+			if (index < 0)
+				index = -index - 1;
+			return index;
+		}
+
+		private void forEach(DefaultNode<Map.Entry<ElementId, ChangeValue<E>>> node, boolean left, Consumer<ChangeValue<E>> action) {
+			node = (DefaultNode<Entry<ElementId, ChangeValue<E>>>) node.getClosest(left);
+			while (node != null) {
+				action.accept(node.getValue().getValue());
+				node = (DefaultNode<Entry<ElementId, ChangeValue<E>>>) node.getClosest(left);
+			}
 		}
 
 		/**
@@ -196,11 +286,14 @@ public final class ObservableCollectionImpl {
 		 * @param cause The overall cause of the change event
 		 * @param observer The observer on which to fire the change event
 		 */
-		protected void fireEventsFromSessionData(SessionChangeTracker<E> tracker, Object cause, Observer<? super CCE> observer) {
-			if (tracker.elements.isEmpty())
+		private void fireEventsFromSessionData(SessionChangeTracker<E> tracker, Object cause,
+			Observer<? super CollectionChangeEvent<E>> observer) {
+			if (tracker == null || tracker.elements.isEmpty())
 				return;
-			CollectionChangeEvent.doWith(new CollectionChangeEvent<>(tracker.type, tracker.elements, tracker.oldElements, cause),
-				evt -> observer.onNext((CCE) evt));
+			List<CollectionChangeEvent.ElementChange<E>> elements = new ArrayList<>(tracker.elements.size());
+			for (ChangeValue<E> elChange : tracker.elements)
+				elements.add(new CollectionChangeEvent.ElementChange<>(elChange.newValue, elChange.oldValue, elChange.index));
+			CollectionChangeEvent.doWith(new CollectionChangeEvent<>(tracker.type, elements, cause), observer::onNext);
 		}
 
 		@Override
@@ -215,7 +308,7 @@ public final class ObservableCollectionImpl {
 	}
 
 	/**
-	 * Implements {@link ObservableCollection#find(Predicate, Supplier, boolean)}
+	 * Implements {@link ObservableCollection#observeFind(Predicate, Supplier, boolean)}
 	 *
 	 * @param <E> The type of the value
 	 */
@@ -383,21 +476,18 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-			boolean[] initialized = new boolean[1];
 			Object key = new Object();
 			Object[] x = new Object[] { init() };
 			Object[] v = new Object[] { getValue((X) x[0]) };
-			Subscription sub = theCollection.subscribe(evt -> {
+			Subscription sub = theCollection.onChange(evt -> {
 				T oldV = (T) v[0];
 				X newX = update((X) x[0], evt);
 				x[0] = newX;
 				v[0] = getValue(newX);
-				if (initialized[0])
-					evt.getRootCausable()
-					.onFinish(key, (root, values) -> fireChangeEvent((T) values.get("oldValue"), (T) v[0], root, observer::onNext))
-					.computeIfAbsent("oldValue", k -> oldV);
+				evt.getRootCausable()
+				.onFinish(key, (root, values) -> fireChangeEvent((T) values.get("oldValue"), (T) v[0], root, observer::onNext))
+				.computeIfAbsent("oldValue", k -> oldV);
 			});
-			initialized[0] = true;
 			fireInitialEvent((T) v[0], null, observer::onNext);
 			return sub;
 		}
@@ -922,36 +1012,26 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean isEventIndexed() {
-			return getWrapped().isEventIndexed();
+		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer, boolean forward) {
+			return getWrapped().subscribe(new ReversedSubscriber<>(observer), !forward);
 		}
 
-		@Override
-		public CollectionSubscription subscribeIndexed(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
-			return getWrapped().subscribeReverseIndexed(new ReversedSubscriber<>(observer));
-		}
-
-		@Override
-		public CollectionSubscription subscribeReverseIndexed(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
-			return getWrapped().subscribeIndexed(new ReversedSubscriber<>(observer));
-		}
-
-		private static class ReversedSubscriber<E> implements Consumer<IndexedCollectionEvent<? extends E>> {
-			private final Consumer<? super IndexedCollectionEvent<? extends E>> theObserver;
+		private static class ReversedSubscriber<E> implements Consumer<ObservableCollectionEvent<? extends E>> {
+			private final Consumer<? super ObservableCollectionEvent<? extends E>> theObserver;
 			private int theSize;
 
-			ReversedSubscriber(Consumer<? super IndexedCollectionEvent<? extends E>> observer) {
+			ReversedSubscriber(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
 				theObserver = observer;
 			}
 
 			@Override
-			public void accept(IndexedCollectionEvent<? extends E> evt) {
+			public void accept(ObservableCollectionEvent<? extends E> evt) {
 				if (evt.getType() == CollectionChangeType.add)
 					theSize++;
 				int index = theSize - evt.getIndex() - 1;
 				if (evt.getType() == CollectionChangeType.remove)
 					theSize++;
-				IndexedCollectionEvent.doWith(new IndexedCollectionEvent<>(evt.getElementId().reverse(), index, evt.getType(),
+				ObservableCollectionEvent.doWith(new ObservableCollectionEvent<>(evt.getElementId().reverse(), index, evt.getType(),
 					evt.getOldValue(), evt.getNewValue(), evt), theObserver);
 			}
 		}
@@ -995,31 +1075,23 @@ public final class ObservableCollectionImpl {
 
 	public static class DerivedLWCollection<E, T> implements ObservableCollection<T> {
 		private final ObservableCollection<E> theSource;
-		private final CollectionDataFlow<E, ?, T> theFlow;
-		private final CollectionManager<E, ?, T> theStatelessManager;
+		private final CollectionManager<E, ?, T> theFlow;
 		private final Equivalence<? super T> theEquivalence;
 
-		public DerivedLWCollection(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> flow) {
-			if (!flow.isLightWeight())
-				throw new IllegalArgumentException("This flow is not light-weight");
+		public DerivedLWCollection(ObservableCollection<E> source, CollectionManager<E, ?, T> flow) {
 			theSource = source;
 			theFlow = flow;
-			theStatelessManager = theFlow.manageCollection();
-			theEquivalence = theStatelessManager.equivalence();
+			theEquivalence = theFlow.equivalence();
 
-			theStatelessManager.begin(null, null); // Nulls imply light-weight
+			theFlow.begin(null, null); // Nulls imply light-weight
 		}
 
 		protected ObservableCollection<E> getSource() {
 			return theSource;
 		}
 
-		protected CollectionDataFlow<E, ?, T> getFlow() {
+		protected CollectionManager<E, ?, T> getFlow() {
 			return theFlow;
-		}
-
-		protected CollectionManager<E, ?, T> getStatelessManager() {
-			return theStatelessManager;
 		}
 
 		@Override
@@ -1054,7 +1126,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public String canAdd(T value) {
-			FilterMapResult<T, E> reversed = theStatelessManager.reverse(value);
+			FilterMapResult<T, E> reversed = theFlow.reverse(value);
 			if (reversed.error != null)
 				return reversed.error;
 			return theSource.canAdd(reversed.result);
@@ -1062,7 +1134,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean add(T e) {
-			FilterMapResult<T, E> reversed = theStatelessManager.reverse(e);
+			FilterMapResult<T, E> reversed = theFlow.reverse(e);
 			if (reversed.error != null)
 				throw new IllegalArgumentException(reversed.error);
 			return theSource.add(reversed.result);
@@ -1088,7 +1160,7 @@ public final class ObservableCollectionImpl {
 			ObservableElementSpliterator<E> spliter = first ? theSource.spliterator(true) : theSource.spliterator(false).reverse();
 			boolean[] success = new boolean[1];
 			while (!success[0] && spliter.tryAdvanceObservableElement(el -> {
-				if (equivalence().elementEquals(theStatelessManager.map(el.get()).result, value)) {
+				if (equivalence().elementEquals(theFlow.map(el.get()).result, value)) {
 					onElement.accept(elementFor(el));
 					success[0] = true;
 				}
@@ -1103,7 +1175,7 @@ public final class ObservableCollectionImpl {
 				: theSource.mutableSpliterator(false).reverse();
 			boolean[] success = new boolean[1];
 			while (!success[0] && spliter.tryAdvanceMutableElement(el -> {
-				if (equivalence().elementEquals(theStatelessManager.map(el.get()).result, value)) {
+				if (equivalence().elementEquals(theFlow.map(el.get()).result, value)) {
 					onElement.accept(mutableElementFor(el));
 					success[0] = true;
 				}
@@ -1112,7 +1184,7 @@ public final class ObservableCollectionImpl {
 			return success[0];
 		}
 
-		private ObservableCollectionElement<T> elementFor(ObservableCollectionElement<? extends E> el) {
+		protected ObservableCollectionElement<T> elementFor(ObservableCollectionElement<? extends E> el) {
 			return new ObservableCollectionElement<T>() {
 				@Override
 				public TypeToken<T> getType() {
@@ -1121,7 +1193,7 @@ public final class ObservableCollectionImpl {
 
 				@Override
 				public T get() {
-					return theStatelessManager.map(el.get()).result;
+					return theFlow.map(el.get()).result;
 				}
 
 				@Override
@@ -1131,8 +1203,8 @@ public final class ObservableCollectionImpl {
 			};
 		}
 
-		private MutableObservableElement<T> mutableElementFor(MutableObservableElement<? extends E> el) {
-			return theStatelessManager.createElement(el.getElementId(), el.get(), null).map(el, el.getElementId());
+		protected MutableObservableElement<T> mutableElementFor(MutableObservableElement<? extends E> el) {
+			return theFlow.createElement(el.getElementId(), el.get(), null).map(el, el.getElementId());
 		}
 
 		@Override
@@ -1168,119 +1240,31 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean isEventIndexed() {
-			return true;
-		}
-
-		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends T>> observer) {
-			return ObservableCollectionImpl.defaultOnChange(this, observer);
+			return getSource().onChange(evt -> {
+				T oldValue, newValue;
+				switch (evt.getType()) {
+				case add:
+					newValue = theFlow.map(evt.getNewValue()).result;
+					oldValue = null;
+					break;
+				case remove:
+					oldValue = theFlow.map(evt.getOldValue()).result;
+					newValue = oldValue;
+					break;
+				case set:
+					oldValue = theFlow.map(evt.getOldValue()).result;
+					newValue = theFlow.map(evt.getNewValue()).result;
+					break;
+				default:
+					throw new IllegalStateException("Unrecognized collection change type: " + evt.getType());
+				}
+				observer
+				.accept(new ObservableCollectionEvent<>(evt.getElementId(), evt.getIndex(), evt.getType(), oldValue, newValue, evt));
+			});
 		}
 
-		@Override
-		public CollectionSubscription subscribeIndexed(Consumer<? super IndexedCollectionEvent<? extends T>> observer) {
-			return subscribe(observer, false);
-		}
-
-		@Override
-		public CollectionSubscription subscribeReverseIndexed(Consumer<? super IndexedCollectionEvent<? extends T>> observer) {
-			return subscribe(observer, true);
-		}
-
-		private CollectionSubscription subscribe(Consumer<? super IndexedCollectionEvent<? extends T>> observer, boolean reverse) {
-			try (Transaction t = lock(false, null)) {
-				// This should be safe to not get GC'd because we're installing this as a strong listener in the source
-				CollectionManager<E, ?, T> listenerManager = theFlow.manageCollection();
-				DefaultTreeMap<ElementId, CollectionElementManager<E, ?, T>> elements = new DefaultTreeMap<>(ElementId::compareTo);
-				Consumer<ObservableCollectionEvent<? extends E>> srcAction = evt -> {
-					try (Transaction mgrT = listenerManager.lock(false, evt)) {
-						CollectionElementManager<E, ?, T> element;
-						DefaultNode<Map.Entry<ElementId, CollectionElementManager<E, ?, T>>> node;
-						int index;
-						T oldValue, newValue;
-						switch (evt.getType()) {
-						case add:
-							oldValue = null;
-							element = listenerManager.createElement(evt.getElementId(), evt.getNewValue(), evt);
-							newValue = element.get();
-							node = elements.putGetNode(evt.getElementId(), element);
-							index = node.getIndex();
-							break;
-						case remove:
-							node = elements.getNode(evt.getElementId());
-							element = node.getValue().getValue();
-							index = node.getIndex();
-							elements.removeNode(node);
-							oldValue = element.get();
-							newValue = oldValue;
-							element.removed(evt);
-							break;
-						case set:
-							node = elements.getNode(evt.getElementId());
-							index = node.getIndex();
-							element = node.getValue().getValue();
-							oldValue = element.get();
-							if (!element.set(evt.getNewValue(), evt))
-								return; // No update
-							newValue = element.get();
-							break;
-						default:
-							throw new IllegalStateException("Unrecognized collection change type: " + evt.getType());
-						}
-						observer.accept(new IndexedCollectionEvent<>(evt.getElementId(), index, evt.getType(), oldValue, newValue, evt));
-					}
-				};
-				CollectionSubscription collSub = reverse ? theSource.subscribeReverse(srcAction) : theSource.subscribe(srcAction);
-				SimpleObservable<Void> unsubObs = new SimpleObservable<>();
-				listenerManager.begin(update -> {
-					try (Transaction collT = theSource.lock(false, update.getCause())) {
-						if (update.getElement() != null) {
-							DefaultNode<Map.Entry<ElementId, CollectionElementManager<E, ?, T>>> node = elements
-								.getNode(update.getElement());
-							CollectionElementManager<E, ?, T> element = node.getValue().getValue();
-							T oldValue = element.get();
-							ElementUpdateResult fireUpdate = element.update(update,
-								onEl -> theSource.forMutableElementAt(element.getElementId(), onEl));
-							switch (fireUpdate) {
-							case DoesNotApply:
-								// Weird, but whatever...
-							case AppliedNoUpdate:
-								break;
-							case FireUpdate:
-								T newValue = element.get();
-								observer.accept(new IndexedCollectionEvent<>(element.getElementId(), node.getIndex(),
-									CollectionChangeType.set, oldValue, newValue, update.getCause()));
-								break;
-							}
-						} else {
-							int index = 0;
-							for (CollectionElementManager<E, ?, T> element : elements.values()) {
-								T oldValue = element.get();
-								ElementUpdateResult fireUpdate = element.update(update,
-									onEl -> theSource.forMutableElementAt(element.getElementId(), onEl));
-								switch (fireUpdate) {
-								case DoesNotApply:
-								case AppliedNoUpdate:
-									break;
-								case FireUpdate:
-									T newValue = element.get();
-									observer.accept(new IndexedCollectionEvent<>(element.getElementId(), index, CollectionChangeType.set,
-										oldValue, newValue, update.getCause()));
-									break;
-								}
-								index++;
-							}
-						}
-					}
-				}, unsubObs);
-				return removeAll -> {
-					unsubObs.onNext(null);
-					collSub.unsubscribe(removeAll);
-				};
-			}
-		}
-
-		private class DerivedMutableSpliterator implements MutableObservableSpliterator<T> {
+		protected class DerivedMutableSpliterator implements MutableObservableSpliterator<T> {
 			private final MutableObservableSpliterator<E> theSourceSpliter;
 
 			DerivedMutableSpliterator(MutableObservableSpliterator<E> srcSpliter) {
@@ -1309,22 +1293,22 @@ public final class ObservableCollectionImpl {
 
 			@Override
 			public boolean tryAdvance(Consumer<? super T> action) {
-				return theSourceSpliter.tryAdvance(v -> action.accept(theStatelessManager.map(v).result));
+				return theSourceSpliter.tryAdvance(v -> action.accept(theFlow.map(v).result));
 			}
 
 			@Override
 			public void forEachRemaining(Consumer<? super T> action) {
-				theSourceSpliter.forEachRemaining(v -> action.accept(theStatelessManager.map(v).result));
+				theSourceSpliter.forEachRemaining(v -> action.accept(theFlow.map(v).result));
 			}
 
 			@Override
 			public boolean tryReverse(Consumer<? super T> action) {
-				return theSourceSpliter.tryReverse(v -> action.accept(theStatelessManager.map(v).result));
+				return theSourceSpliter.tryReverse(v -> action.accept(theFlow.map(v).result));
 			}
 
 			@Override
 			public void forEachReverse(Consumer<? super T> action) {
-				theSourceSpliter.forEachReverse(v -> action.accept(theStatelessManager.map(v).result));
+				theSourceSpliter.forEachReverse(v -> action.accept(theFlow.map(v).result));
 			}
 
 			@Override
@@ -1485,7 +1469,7 @@ public final class ObservableCollectionImpl {
 					theFlow.postChange();
 				}, until);
 				WeakConsumer<ObservableCollectionEvent<? extends E>> weak = new WeakConsumer<>(theSourceAction);
-				CollectionSubscription sub = theSource.subscribe(weak);
+				CollectionSubscription sub = theSource.subscribe(weak, true);
 				weak.withSubscription(sub);
 				Subscription takeSub = until.take(1).act(v -> sub.unsubscribe(true));
 				weak.onUnsubscribe(() -> takeSub.unsubscribe());
@@ -1506,12 +1490,12 @@ public final class ObservableCollectionImpl {
 
 		private void addToPresent(DerivedCollectionElement element, Object cause) {
 			element.presentNode = thePresentElements.addGetNode(element);
-			fireListeners(new IndexedCollectionEvent<>(element, element.presentNode.getIndex(), CollectionChangeType.add, null,
+			fireListeners(new ObservableCollectionEvent<>(element, element.presentNode.getIndex(), CollectionChangeType.add, null,
 				element.manager.get(), cause));
 		}
 
 		private void removeFromPresent(DerivedCollectionElement element, T oldValue, Object cause) {
-			fireListeners(new IndexedCollectionEvent<>(element, element.presentNode.getIndex(), CollectionChangeType.remove, oldValue,
+			fireListeners(new ObservableCollectionEvent<>(element, element.presentNode.getIndex(), CollectionChangeType.remove, oldValue,
 				oldValue, cause));
 			thePresentElements.removeNode(element.presentNode);
 			element.presentNode = null;
@@ -1527,14 +1511,14 @@ public final class ObservableCollectionImpl {
 				removeFromPresent(element, oldValue, cause);
 				addToPresent(element, cause);
 			} else if (oldValue != element.manager.get())
-				fireListeners(new IndexedCollectionEvent<>(element, element.presentNode.getIndex(), CollectionChangeType.set, oldValue,
+				fireListeners(new ObservableCollectionEvent<>(element, element.presentNode.getIndex(), CollectionChangeType.set, oldValue,
 					element.manager.get(), cause));
 			else if (fireUpdate)
-				fireListeners(new IndexedCollectionEvent<>(element, element.presentNode.getIndex(), CollectionChangeType.set, oldValue,
+				fireListeners(new ObservableCollectionEvent<>(element, element.presentNode.getIndex(), CollectionChangeType.set, oldValue,
 					oldValue, cause));
 		}
 
-		private void fireListeners(IndexedCollectionEvent<T> event) {
+		private void fireListeners(ObservableCollectionEvent<T> event) {
 			for (Consumer<? super ObservableCollectionEvent<? extends T>> listener : theListeners)
 				listener.accept(event);
 		}
@@ -1572,11 +1556,6 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean isEventIndexed() {
-			return true;
-		}
-
-		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends T>> observer) {
 			theListeners.add(observer);
 			// Add a strong reference to this collection while we have listeners.
@@ -1591,25 +1570,20 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends T>> observer) {
-			return subscribeIndexed(observer);
-		}
-
-		@Override
-		public CollectionSubscription subscribeIndexed(Consumer<? super IndexedCollectionEvent<? extends T>> observer) {
+		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends T>> observer, boolean forward) {
 			try (Transaction t = lock(false, null)) {
 				SubscriptionCause.doWith(new SubscriptionCause(), c -> {
 					int index = 0;
 					for (DerivedCollectionElement element : thePresentElements) {
 						observer.accept(
-							new IndexedCollectionEvent<>(element, index++, CollectionChangeType.add, null, element.manager.get(), c));
+							new ObservableCollectionEvent<>(element, index++, CollectionChangeType.add, null, element.manager.get(), c));
 					}
 				});
 				return removeAll -> {
 					SubscriptionCause.doWith(new SubscriptionCause(), c -> {
 						int index = 0;
 						for (DerivedCollectionElement element : thePresentElements.reverse()) {
-							observer.accept(new IndexedCollectionEvent<>(element, index++, CollectionChangeType.remove, null,
+							observer.accept(new ObservableCollectionEvent<>(element, index++, CollectionChangeType.remove, null,
 								element.manager.get(), c));
 						}
 					});
@@ -1673,7 +1647,7 @@ public final class ObservableCollectionImpl {
 						return false;
 					DerivedCollectionElement element = theElements.get(id);
 					if (element == null)
-						throw new IllegalStateException(StdMsg.NOT_FOUND);
+						throw new IllegalStateException(CollectionElement.StdMsg.NOT_FOUND);
 					if (element.presentNode == null)
 						return false;
 					onElement.accept(observableElementFor(element));
@@ -1722,7 +1696,7 @@ public final class ObservableCollectionImpl {
 						return false;
 					DerivedCollectionElement element = theElements.get(id);
 					if (element == null)
-						throw new IllegalStateException(StdMsg.NOT_FOUND);
+						throw new IllegalStateException(CollectionElement.StdMsg.NOT_FOUND);
 					if (element.presentNode == null)
 						return false;
 					theSource.forMutableElementAt(id, srcEl -> onElement.accept(element.manager.map(srcEl, element)));
@@ -1766,9 +1740,9 @@ public final class ObservableCollectionImpl {
 		@Override
 		public String canAdd(T value) {
 			if (!theFlow.isReversible())
-				return StdMsg.UNSUPPORTED_OPERATION;
+				return CollectionElement.StdMsg.UNSUPPORTED_OPERATION;
 			else if (!checkValue(value))
-				return StdMsg.BAD_TYPE;
+				return CollectionElement.StdMsg.BAD_TYPE;
 			try (Transaction t = lock(false, null)) {
 				FilterMapResult<T, E> reversed = theFlow.canAdd(new FilterMapResult<>(value));
 				if (reversed.error != null)
@@ -1780,9 +1754,9 @@ public final class ObservableCollectionImpl {
 		@Override
 		public boolean add(T e) {
 			if (!theFlow.isReversible())
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				throw new UnsupportedOperationException(CollectionElement.StdMsg.UNSUPPORTED_OPERATION);
 			else if (!checkValue(e))
-				throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+				throw new IllegalArgumentException(CollectionElement.StdMsg.BAD_TYPE);
 			try (Transaction t = lock(false, null)) {
 				FilterMapResult<T, E> reversed = theFlow.canAdd(new FilterMapResult<>(e));
 				if (reversed.error != null)
@@ -2011,8 +1985,9 @@ public final class ObservableCollectionImpl {
 		@Override
 		public boolean add(E e) {
 			try (Transaction t = lock(true, null)) {
-				theObserver.accept(new ObservableCollectionEvent<>(theElementIdGen.newId(), CollectionChangeType.add, null, e,
-					theTransactionCauses.peekLast()));
+				ElementId newId = theElementIdGen.newId();
+				theObserver.accept(new ObservableCollectionEvent<>(newId, theElementIdGen.getElementsBefore(newId),
+					CollectionChangeType.add, null, e, theTransactionCauses.peekLast()));
 			}
 			return true;
 		}
@@ -2049,11 +2024,6 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean isEventIndexed() {
-			return false;
-		}
-
-		@Override
 		public boolean forObservableElement(E value, Consumer<? super ObservableCollectionElement<? extends E>> onElement, boolean first) {
 			throw new UnsupportedOperationException("This method is not implemented for the default observable collection");
 		}
@@ -2086,25 +2056,27 @@ public final class ObservableCollectionImpl {
 				@Override
 				public E get() {
 					// The collection manager on top of this element keeps track of its own value and does not ask for its source
-					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+					throw new UnsupportedOperationException(CollectionElement.StdMsg.UNSUPPORTED_OPERATION);
 				}
 
 				@Override
 				public String canRemove() {
 					if (isRemoved)
-						throw new IllegalStateException(StdMsg.NOT_FOUND);
+						throw new IllegalStateException(CollectionElement.StdMsg.NOT_FOUND);
 					return null;
 				}
 
 				@Override
 				public void remove(Object cause) throws UnsupportedOperationException {
 					if (isRemoved)
-						throw new IllegalStateException(StdMsg.NOT_FOUND);
+						throw new IllegalStateException(CollectionElement.StdMsg.NOT_FOUND);
 					try (Transaction t = lock(true, cause)) {
 						// The DerivedCollection keeps track of its own values and does not pay attention to the values in the event
-						theObserver.accept(new ObservableCollectionEvent<>(elementId, CollectionChangeType.remove, null, null,
-							theTransactionCauses.getLast()));
+						ObservableCollectionEvent<E> evt = new ObservableCollectionEvent<>(elementId,
+							theElementIdGen.getElementsBefore(elementId), CollectionChangeType.remove, null, null,
+							theTransactionCauses.getLast());
 						theElementIdGen.remove(elementId);
+						theObserver.accept(evt);
 						isRemoved = true;
 					}
 				}
@@ -2112,29 +2084,29 @@ public final class ObservableCollectionImpl {
 				@Override
 				public String canAdd(E value, boolean before) {
 					if (isRemoved)
-						throw new IllegalStateException(StdMsg.NOT_FOUND);
+						throw new IllegalStateException(CollectionElement.StdMsg.NOT_FOUND);
 					return null;
 				}
 
 				@Override
 				public void add(E value, boolean before, Object cause) throws UnsupportedOperationException, IllegalArgumentException {
 					if (isRemoved)
-						throw new IllegalStateException(StdMsg.NOT_FOUND);
+						throw new IllegalStateException(CollectionElement.StdMsg.NOT_FOUND);
 					try (Transaction t = lock(true, cause)) {
 						ElementId newId = theElementIdGen.newId(elementId, before);
-						theObserver.accept(
-							new ObservableCollectionEvent<>(newId, CollectionChangeType.add, null, value, theTransactionCauses.peekLast()));
+						theObserver.accept(new ObservableCollectionEvent<>(newId, theElementIdGen.getElementsBefore(newId),
+							CollectionChangeType.add, null, value, theTransactionCauses.peekLast()));
 					}
 				}
 
 				@Override
 				public <V extends E> E set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
 					if (isRemoved)
-						throw new IllegalStateException(StdMsg.NOT_FOUND);
+						throw new IllegalStateException(CollectionElement.StdMsg.NOT_FOUND);
 					try (Transaction t = lock(true, cause)) {
 						// The DerivedCollection keeps track of its own values and does not pay attention to the values in the event
-						theObserver.accept(new ObservableCollectionEvent<>(elementId, CollectionChangeType.remove, null, value,
-							theTransactionCauses.getLast()));
+						theObserver.accept(new ObservableCollectionEvent<>(elementId, theElementIdGen.getElementsBefore(elementId),
+							CollectionChangeType.remove, null, value, theTransactionCauses.getLast()));
 						return null; // The collection manager keeps track of its own value and ignores this
 					}
 				}
@@ -2142,14 +2114,14 @@ public final class ObservableCollectionImpl {
 				@Override
 				public <V extends E> String isAcceptable(V value) {
 					if (isRemoved)
-						throw new IllegalStateException(StdMsg.NOT_FOUND);
+						throw new IllegalStateException(CollectionElement.StdMsg.NOT_FOUND);
 					return null;
 				}
 
 				@Override
 				public Value<String> isEnabled() {
 					if (isRemoved)
-						throw new IllegalStateException(StdMsg.NOT_FOUND);
+						throw new IllegalStateException(CollectionElement.StdMsg.NOT_FOUND);
 					return Value.constant(STRING_TYPE, null);
 				}
 			}
@@ -2279,7 +2251,7 @@ public final class ObservableCollectionImpl {
 				return ObservableCollection.constant(theWrapped.getType()).collect();
 			CollectionDataFlow<E, E, E> flow = theWrapped.flow();
 			Function<E, String> filter = v -> theBuilder.getEquivalence().elementEquals((K) key, theBuilder.getKeyMaker().apply(v)) ? null
-				: StdMsg.WRONG_GROUP;
+				: CollectionElement.StdMsg.WRONG_GROUP;
 			if (theBuilder.isStatic())
 				flow = flow.filterStatic(filter);
 			else
@@ -2425,9 +2397,9 @@ public final class ObservableCollectionImpl {
 		public String canAdd(E value) {
 			ObservableCollection<? extends E> current = theCollectionObservable.get();
 			if (current == null)
-				return StdMsg.UNSUPPORTED_OPERATION;
+				return CollectionElement.StdMsg.UNSUPPORTED_OPERATION;
 			else if (value != null && !current.getType().getRawType().isInstance(value))
-				return StdMsg.BAD_TYPE;
+				return CollectionElement.StdMsg.BAD_TYPE;
 			return ((ObservableCollection<E>) current).canAdd(value);
 		}
 
@@ -2437,7 +2409,7 @@ public final class ObservableCollectionImpl {
 			if (coll == null)
 				return false;
 			if (e != null && !coll.getType().getRawType().isInstance(e))
-				throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+				throw new IllegalArgumentException(CollectionElement.StdMsg.BAD_TYPE);
 			return ((ObservableCollection<E>) coll).add(e);
 		}
 
@@ -2642,7 +2614,7 @@ public final class ObservableCollectionImpl {
 				}
 			}
 			if (firstMsg == null)
-				firstMsg = StdMsg.UNSUPPORTED_OPERATION;
+				firstMsg = CollectionElement.StdMsg.UNSUPPORTED_OPERATION;
 			return firstMsg;
 		}
 

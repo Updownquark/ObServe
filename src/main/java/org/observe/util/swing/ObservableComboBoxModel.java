@@ -10,20 +10,17 @@ import javax.swing.JComboBox;
 import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
-import org.observe.collect.ObservableList;
 
 /**
- * A combo box model backed by an {@link ObservableList}
+ * A combo box model backed by an {@link ObservableCollection}
  *
- * @param <E>
- *            The type of elements in the model
+ * @param <E> The type of elements in the model
  */
 public class ObservableComboBoxModel<E> extends ObservableListModel<E> implements ComboBoxModel<E> {
 	private E theSelectedValue;
 
 	/**
-	 * @param values
-	 *            The observable list to back this model
+	 * @param values The observable collection to back this model
 	 */
 	public ObservableComboBoxModel(ObservableCollection<E> values) {
 		super(values);

@@ -8,15 +8,14 @@ import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
 
 import org.observe.Subscription;
+import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
-import org.observe.collect.OrderedCollectionChangeEvent;
 
 /**
- * A swing ListModel backed by an ObservableList
+ * A swing ListModel backed by an {@link ObservableCollection}
  *
- * @param <E>
- *            The type of data in the list
+ * @param <E> The type of data in the collection
  */
 public class ObservableListModel<E> implements ListModel<E> {
 	private final ObservableCollection<E> theWrapped;
@@ -63,8 +62,8 @@ public class ObservableListModel<E> implements ListModel<E> {
 		}));
 	}
 
-	private void handleEvent(ListDataListener l, OrderedCollectionChangeEvent<E> event) {
-		int[][] split = ObservableSwingUtils.getContinuousIntervals(event.indexes.toArray(), true);
+	private void handleEvent(ListDataListener l, CollectionChangeEvent<E> event) {
+		int[][] split = ObservableSwingUtils.getContinuousIntervals(event.elements, true);
 		for (int[] indexes : split) {
 			ListDataEvent wrappedEvent = new ListDataEvent(ObservableListModel.this, getSwingType(event.type), indexes[0], indexes[1]);
 			switch (event.type) {

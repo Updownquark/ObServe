@@ -24,7 +24,6 @@ import org.observe.collect.ObservableCollection.CombinedValues;
 import org.observe.collect.ObservableCollection.ElementSetter;
 import org.observe.collect.ObservableCollection.MappedCollectionBuilder;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
-import org.observe.collect.ObservableCollection.StdMsg;
 import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableCollection.UniqueMappedCollectionBuilder;
 import org.observe.collect.ObservableCollection.UniqueModFilterBuilder;
@@ -35,6 +34,8 @@ import org.observe.collect.ObservableCollectionImpl.DerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.DerivedLWCollection;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
+import org.qommons.collect.CollectionElement;
+import org.qommons.collect.CollectionElement.StdMsg;
 import org.qommons.collect.IdentityHashSet;
 import org.qommons.collect.UpdatableMap;
 import org.qommons.tree.CountedRedBlackNode.DefaultNode;
@@ -146,7 +147,9 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public ObservableCollection<T> collectLW() {
-			return new DerivedLWCollection<>(getSource(), this);
+			if (!isLightWeight())
+				throw new IllegalStateException("This data flow is not light-weight");
+			return new DerivedLWCollection<>(getSource(), manageCollection());
 		}
 
 		@Override
@@ -202,7 +205,9 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public ObservableSet<T> collectLW() {
-			return new ObservableSetImpl.DerivedLWSet<>((ObservableSet<E>) getSource(), this);
+			if (!isLightWeight())
+				throw new IllegalStateException("This data flow is not light-weight");
+			return new ObservableSetImpl.DerivedLWSet<>((ObservableSet<E>) getSource(), manageCollection());
 		}
 
 		@Override
@@ -335,7 +340,9 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public ObservableSortedSet<T> collectLW() {
-			return new ObservableSortedSetImpl.DerivedLWSortedSet<>((ObservableSortedSet<E>) getSource(), this, theCompare);
+			if (!isLightWeight())
+				throw new IllegalStateException("This data flow is not light-weight");
+			return new ObservableSortedSetImpl.DerivedLWSortedSet<>((ObservableSortedSet<E>) getSource(), manageCollection(), theCompare);
 		}
 
 		@Override
@@ -521,7 +528,9 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public ObservableSet<T> collectLW() {
-			return new ObservableSetImpl.DerivedLWSet<>((ObservableSet<E>) getSource(), this);
+			if (!isLightWeight())
+				throw new IllegalStateException("This data flow is not light-weight");
+			return new ObservableSetImpl.DerivedLWSet<>((ObservableSet<E>) getSource(), manageCollection());
 		}
 
 		@Override
@@ -578,7 +587,9 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public ObservableSortedSet<T> collectLW() {
-			return new ObservableSortedSetImpl.DerivedLWSortedSet<>((ObservableSortedSet<E>) getSource(), this, comparator());
+			if (!isLightWeight())
+				throw new IllegalStateException("This data flow is not light-weight");
+			return new ObservableSortedSetImpl.DerivedLWSortedSet<>((ObservableSortedSet<E>) getSource(), manageCollection(), comparator());
 		}
 
 		@Override
@@ -612,9 +623,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public boolean isLightWeight() {
-			if (isCached)
-				return false;
-			return getParent().isLightWeight();
+			return false;
 		}
 
 		@Override
@@ -670,8 +679,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public AbstractCombinedCollectionBuilder<E, I, R> noCache() {
-			isCached = false;
+		public AbstractCombinedCollectionBuilder<E, I, R> cache(boolean cache) {
+			isCached = cache;
 			return this;
 		}
 
@@ -692,7 +701,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public boolean isLightWeight() {
-			return getParent().isLightWeight();
+			return false;
 		}
 
 		@Override
@@ -712,7 +721,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public boolean isLightWeight() {
-			return getParent().isLightWeight();
+			return false;
 		}
 
 		@Override
@@ -791,7 +800,9 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public ObservableSet<T> collectLW() {
-			return new ObservableSetImpl.DerivedLWSet<>((ObservableSet<E>) getSource(), this);
+			if (!isLightWeight())
+				throw new IllegalStateException("This data flow is not light-weight");
+			return new ObservableSetImpl.DerivedLWSet<>((ObservableSet<E>) getSource(), manageCollection());
 		}
 
 		@Override
@@ -846,7 +857,9 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public ObservableSortedSet<T> collectLW() {
-			return new ObservableSortedSetImpl.DerivedLWSortedSet<>((ObservableSortedSet<E>) getSource(), this, comparator());
+			if (!isLightWeight())
+				throw new IllegalStateException("This data flow is not light-weight");
+			return new ObservableSortedSetImpl.DerivedLWSortedSet<>((ObservableSortedSet<E>) getSource(), manageCollection(), comparator());
 		}
 
 		@Override
@@ -1136,7 +1149,7 @@ public class ObservableCollectionDataFlowImpl {
 					if (result.error != null)
 						return result.error;
 					if (result.result != null && !theWrapped.getType().getRawType().isInstance(result.result))
-						return StdMsg.BAD_TYPE;
+						return CollectionElement.StdMsg.BAD_TYPE;
 					return ((MutableObservableElement<E>) theWrapped).isAcceptable(result.result);
 				}
 
@@ -1149,7 +1162,7 @@ public class ObservableCollectionDataFlowImpl {
 					if (result.error != null)
 						throw new IllegalArgumentException(result.error);
 					if (result.result != null && !theWrapped.getType().getRawType().isInstance(result.result))
-						throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+						throw new IllegalArgumentException(CollectionElement.StdMsg.BAD_TYPE);
 					T old = get();
 					((MutableObservableElement<E>) theWrapped).set(result.result, cause);
 					return old;
@@ -1177,7 +1190,7 @@ public class ObservableCollectionDataFlowImpl {
 					if (result.error != null)
 						return result.error;
 					if (result.result != null && !theWrapped.getType().getRawType().isInstance(result.result))
-						return StdMsg.BAD_TYPE;
+						return CollectionElement.StdMsg.BAD_TYPE;
 					return ((MutableObservableElement<E>) theWrapped).canAdd(result.result, before);
 				}
 
@@ -1187,7 +1200,7 @@ public class ObservableCollectionDataFlowImpl {
 					if (result.error != null)
 						throw new IllegalArgumentException(result.error);
 					if (result.result != null && !theWrapped.getType().getRawType().isInstance(result.result))
-						throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+						throw new IllegalArgumentException(CollectionElement.StdMsg.BAD_TYPE);
 					((MutableObservableElement<E>) theWrapped).add(result.result, before, cause);
 				}
 			}
@@ -1228,9 +1241,9 @@ public class ObservableCollectionDataFlowImpl {
 
 		protected FilterMapResult<T, E> filterInterceptSet(FilterMapResult<T, E> value) {
 			if (getParent() == null)
-				value.error = StdMsg.UNSUPPORTED_OPERATION;
+				value.error = CollectionElement.StdMsg.UNSUPPORTED_OPERATION;
 			else if (!getParent().isInterceptingSet())
-				value.error = StdMsg.UNSUPPORTED_OPERATION;
+				value.error = CollectionElement.StdMsg.UNSUPPORTED_OPERATION;
 			else {
 				FilterMapResult<T, I> top = theCollection.reverseTop((FilterMapResult<T, I>) value);
 				if (top.error == null) {
@@ -1244,7 +1257,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		protected T interceptSet(FilterMapResult<T, E> value, Object cause) throws UnsupportedOperationException, IllegalArgumentException {
 			if (getParent() == null)
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				throw new UnsupportedOperationException(CollectionElement.StdMsg.UNSUPPORTED_OPERATION);
 			FilterMapResult<T, I> top = theCollection.reverseTop((FilterMapResult<T, I>) value);
 			if (top.error != null)
 				throw new IllegalArgumentException(top.error);
@@ -1497,7 +1510,7 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public FilterMapResult<T, T> canAddTop(FilterMapResult<T, T> toAdd) {
 			if (theElementsByValue.containsKey(toAdd.source))
-				toAdd.error = StdMsg.ELEMENT_EXISTS;
+				toAdd.error = CollectionElement.StdMsg.ELEMENT_EXISTS;
 			else
 				toAdd.result = toAdd.source;
 			return toAdd;
@@ -1869,7 +1882,7 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public FilterMapResult<T, I> reverseTop(FilterMapResult<T, I> dest) {
 			if (!isReversible())
-				dest.error = StdMsg.UNSUPPORTED_OPERATION;
+				dest.error = CollectionElement.StdMsg.UNSUPPORTED_OPERATION;
 			else
 				dest.result = reverseValue(dest.source);
 			return dest;
@@ -2048,7 +2061,7 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public FilterMapResult<T, I> reverseTop(FilterMapResult<T, I> dest) {
 			if (theReverse == null) {
-				dest.error = StdMsg.UNSUPPORTED_OPERATION;
+				dest.error = CollectionElement.StdMsg.UNSUPPORTED_OPERATION;
 				return dest;
 			}
 			dest.result = reverseValue(dest.source);
@@ -2438,7 +2451,7 @@ public class ObservableCollectionDataFlowImpl {
 			String msg = null;
 			if (theRemoveFilter != null) {
 				if (value != null && !getTargetType().getRawType().isInstance(value))
-					msg = StdMsg.BAD_TYPE;
+					msg = CollectionElement.StdMsg.BAD_TYPE;
 				msg = theRemoveFilter.apply((T) value);
 			}
 			if (msg == null && theRemoveMessage != null)

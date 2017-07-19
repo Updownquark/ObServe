@@ -161,13 +161,13 @@ public class ObservableCollectionWrapper<E> implements ObservableCollection<E> {
 	/** Throws an {@link UnsupportedOperationException} if this collection is not {@link #isModifiable() modifiable} */
 	protected void assertModifiable() {
 		if(!isModifiable)
-			throw new UnsupportedOperationException(ObservableCollection.StdMsg.UNSUPPORTED_OPERATION);
+			throw new UnsupportedOperationException(org.qommons.collect.CollectionElement.StdMsg.UNSUPPORTED_OPERATION);
 	}
 
 	@Override
 	public String canAdd(E value) {
 		if (!isModifiable)
-			return ObservableCollection.StdMsg.UNSUPPORTED_OPERATION;
+			return org.qommons.collect.CollectionElement.StdMsg.UNSUPPORTED_OPERATION;
 		return theWrapped.canAdd(value);
 	}
 
@@ -193,7 +193,7 @@ public class ObservableCollectionWrapper<E> implements ObservableCollection<E> {
 	@Override
 	public String canRemove(Object value) {
 		if (!isModifiable)
-			return ObservableCollection.StdMsg.UNSUPPORTED_OPERATION;
+			return org.qommons.collect.CollectionElement.StdMsg.UNSUPPORTED_OPERATION;
 		return theWrapped.canRemove(value);
 	}
 

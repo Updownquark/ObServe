@@ -107,25 +107,25 @@ public abstract class ObservableTreeModel implements TreeModel {
 				theChildNodes.add(newChild(value));
 			}
 			theChildrenSub = theChildren.changes().act(event -> {
-				int[] indexes = event.indexes.toArray();
+				int[] indexes = event.getIndexes();
 				switch (event.type) {
 				case add:
-					added(indexes, event.values.toArray());
+					added(indexes, event.getValues().toArray());
 					break;
 				case remove:
-					removed(indexes, event.values.toArray());
+					removed(indexes, event.getValues().toArray());
 					break;
 				case set:
 					boolean justChanges = true;
 					for (int i = 0; i < indexes.length && justChanges; i++) {
-						justChanges &= event.oldValues.get(i) == event.values.get(i);
+						justChanges &= event.elements.get(i).oldValue == event.elements.get(i).value;
 					}
 					if (justChanges) {
-						changed(indexes, event.values.toArray());
+						changed(indexes, event.getValues().toArray());
 					} else {
 						for (int i = 0; i < indexes.length; i++) {
-							removed(new int[] { indexes[i] }, new Object[] { event.oldValues.get(i) });
-							added(new int[] { indexes[i] }, new Object[] { event.values.get(i) });
+							removed(new int[] { indexes[i] }, new Object[] { event.elements.get(i).oldValue });
+							added(new int[] { indexes[i] }, new Object[] { event.elements.get(i).value });
 						}
 					}
 					break;

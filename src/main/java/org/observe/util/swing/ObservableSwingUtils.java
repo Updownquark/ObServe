@@ -15,7 +15,7 @@ import javax.swing.event.ChangeListener;
 
 import org.observe.SettableValue;
 import org.observe.Subscription;
-import org.qommons.IntList;
+import org.observe.collect.CollectionChangeEvent;
 
 /** Utilities for the org.observe.util.swing package */
 public class ObservableSwingUtils {
@@ -196,35 +196,47 @@ public class ObservableSwingUtils {
 	}
 
 	/**
-	 * Sorts a list of ints and returns the start and end of each continuous interval in the list
+	 * Sorts a list of element changes and returns the start and end of each continuous interval in the list
 	 *
-	 * @param ints The integers to parse into intervals
+	 * @param elChanges The element changes to parse into intervals
 	 * @param forward Whether to iterate from least to greatest or greatest to least
 	 * @return The intervals, in the form of [start, end] arrays
 	 */
-	public static int[][] getContinuousIntervals(int[] ints, boolean forward) {
-		IntList indexes = new IntList(true, true);
-		indexes.addAll(ints);
+	public static int[][] getContinuousIntervals(List<? extends CollectionChangeEvent.ElementChange<?>> elChanges, boolean forward) {
+		int[] indexes = new int[elChanges.size()];
+		for (int i = 0; i < indexes.length; i++)
+			indexes[i] = elChanges.get(i).index;
+		return getContinuousIntervals(indexes, forward);
+	}
+
+	/**
+	 * Sorts a list of indexes and returns the start and end of each continuous interval in the list
+	 *
+	 * @param indexes The integers to parse into intervals
+	 * @param forward Whether to iterate from least to greatest or greatest to least
+	 * @return The intervals, in the form of [start, end] arrays
+	 */
+	public static int[][] getContinuousIntervals(int[] indexes, boolean forward) {
 		int start, end;
 		List<int[]> ret = new ArrayList<>();
 		if (forward) {
 			start = 0;
 			end = 0;
-			while (end < indexes.size()) {
-				while (end < indexes.size() - 1 && indexes.get(end + 1) == indexes.get(end) + 1) {
+			while (end < indexes.length) {
+				while (end < indexes.length - 1 && indexes[end + 1] == indexes[end] + 1) {
 					end++;
 				}
-				ret.add(new int[] { indexes.get(start), indexes.get(end) });
+				ret.add(new int[] { indexes[start], indexes[end] });
 				start = end = end + 1;
 			}
 		} else {
-			end = indexes.size() - 1;
+			end = indexes.length - 1;
 			start = end;
 			while (start >= 0) {
-				while (start > 0 && indexes.get(start - 1) == indexes.get(start) - 1) {
+				while (start > 0 && indexes[start - 1] == indexes[start] - 1) {
 					start--;
 				}
-				ret.add(new int[] { indexes.get(start), indexes.get(end) });
+				ret.add(new int[] { indexes[start], indexes[end] });
 				start = end = start - 1;
 			}
 		}
