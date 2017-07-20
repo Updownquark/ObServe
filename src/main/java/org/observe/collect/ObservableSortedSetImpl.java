@@ -931,6 +931,11 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
+		public int indexFor(Comparable<? super T> search) {
+			return getPresentElements().indexFor(el -> search.compareTo(el.getValue()));
+		}
+
+		@Override
 		public ObservableValue<T> observeRelative(Comparable<? super T> search, boolean up) {
 			if (up)
 				return subSet(search, null).observeFind(v -> true, () -> null, true);

@@ -1,5 +1,6 @@
 package org.observe.collect;
 
+import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -9,7 +10,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.Set;
+import java.util.Spliterator;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
@@ -57,6 +60,7 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionElement.StdMsg;
 import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.ReversibleCollection;
+import org.qommons.collect.ReversibleList;
 import org.qommons.collect.ReversibleSpliterator;
 import org.qommons.collect.SimpleCause;
 import org.qommons.tree.CountedRedBlackNode;
@@ -435,7 +439,7 @@ public final class ObservableCollectionImpl {
 						theCurrentValue = newValue;
 					}
 				}
-			});
+			}, isFirst);
 		}
 	}
 
@@ -701,8 +705,8 @@ public final class ObservableCollectionImpl {
 		Subscription rightSub;
 		lock.lock();
 		try {
-			leftSub = left.subscribe(new ValueCountElModifier(true));
-			rightSub = right.subscribe(new ValueCountElModifier(false));
+			leftSub = left.subscribe(new ValueCountElModifier(true), true);
+			rightSub = right.subscribe(new ValueCountElModifier(false), true);
 
 			counts.check(true, null);
 		} finally {
@@ -1061,15 +1065,65 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
-	public static class SubList<E> implements ObservableCollection<E> {
-		private final ObservableCollection<E> theWrapped;
-		private int theStart;
-		private int theEnd;
+	public static class SubList<E> extends ReversibleList.ReversibleSubList<E> {
+		private final ObservableCollection<E> theObservableCollection;
 
-		public SubList(ObservableCollection<E> wrapped, int start, int end) {
-			theWrapped = wrapped;
-			theStart = start;
-			theEnd = end;
+		public SubList(ObservableCollection<E> obsCollection, ReversibleList<E> wrapped, int start, int end) {
+			super(wrapped, start, end);
+			theObservableCollection = obsCollection;
+		}
+
+		@Override
+		public boolean forElement(E value, Consumer<? super CollectionElement<? extends E>> onElement, boolean first) {
+			if (!belongs(value))
+				return false;
+			boolean[] success = new boolean[1];
+			ElementSpliterator<E> spliter = first ? mutableSpliterator(true) : mutableSpliterator(false).reverse();
+			while (!success[0] && spliter.tryAdvanceElement(el -> {
+				if (theObservableCollection.equivalence().elementEquals(el.get(), value)) {
+					onElement.accept(wrapElement(el));
+					success[0] = true;
+				}
+			})) {
+			}
+			return success[0];
+		}
+
+		@Override
+		public int indexOf(Object o) {
+			if (!belongs(o))
+				return -1;
+			int[] res = new int[] { -1 };
+			Spliterator<E> spliter = spliterator(true);
+			int[] index = new int[1];
+			while (res[0] < 0 && spliter.tryAdvance(v -> {
+				if (theObservableCollection.equivalence().elementEquals(v, o))
+					res[0] = index[0];
+				index[0]++;
+			})) {
+			}
+			return res[0];
+		}
+
+		@Override
+		public int lastIndexOf(Object o) {
+			if (!belongs(o))
+				return -1;
+			int[] res = new int[] { -1 };
+			Spliterator<E> spliter = spliterator(false).reverse();
+			int[] index = new int[1];
+			while (res[0] < 0 && spliter.tryAdvance(v -> {
+				if (theObservableCollection.equivalence().elementEquals(v, o))
+					res[0] = index[0];
+				index[0]++;
+			})) {
+			}
+			return res[0];
+		}
+
+		@Override
+		public ReversibleList<E> subList(int fromIndex, int toIndex) {
+			return new SubList<>(theObservableCollection, this, fromIndex, toIndex);
 		}
 	}
 
