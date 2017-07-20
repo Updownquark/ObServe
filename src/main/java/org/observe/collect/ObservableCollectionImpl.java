@@ -31,6 +31,7 @@ import org.observe.Observer;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
+import org.observe.assoc.ObservableMultiMap.ObservableMultiEntry;
 import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.collect.ElementId.SimpleElementIdGenerator;
 import org.observe.collect.MutableObservableSpliterator.MutableObservableSpliteratorMap;
@@ -311,27 +312,13 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
-	/**
-	 * Implements {@link ObservableCollection#observeFind(Predicate, Supplier, boolean)}
-	 *
-	 * @param <E> The type of the value
-	 */
-	public static class ObservableCollectionFinder<E> implements ObservableValue<E> {
-		private final ObservableCollection<E> theCollection;
-		private final Predicate<? super E> theTest;
-		private final Supplier<? extends E> theDefaultValue;
-		private final boolean isFirst;
+	public static abstract class AbstractObservableCollectionFinder<E> implements ObservableValue<E> {
+		protected final ObservableCollection<E> theCollection;
+		protected final Supplier<? extends E> theDefaultValue;
+		protected final boolean isFirst;
 
-		/**
-		 * @param collection The collection to find elements in
-		 * @param test The test to find elements that pass
-		 * @param defaultValue Provides default values when no elements of the collection pass the test
-		 * @param first Whether to get the first value in the collection that passes or the last value
-		 */
-		protected ObservableCollectionFinder(ObservableCollection<E> collection, Predicate<? super E> test,
-			Supplier<? extends E> defaultValue, boolean first) {
+		public AbstractObservableCollectionFinder(ObservableCollection<E> collection, Supplier<? extends E> defaultValue, boolean first) {
 			theCollection = collection;
-			theTest = test;
 			theDefaultValue = defaultValue;
 			isFirst = first;
 		}
@@ -349,97 +336,145 @@ public final class ObservableCollectionImpl {
 		@Override
 		public E get() {
 			Object[] value = new Object[1];
-			if (theCollection.find(theTest, el -> value[0] = el.get(), isFirst))
+			if (find(el -> value[0] = el.get()))
 				return (E) value[0];
 			else
 				return theDefaultValue.get();
 		}
 
+		protected abstract boolean find(Consumer<? super ObservableCollectionElement<? extends E>> onElement);
+
+		protected abstract boolean test(E value);
+
 		@Override
 		public Subscription subscribe(Observer<? super ObservableValueEvent<E>> observer) {
-			DefaultTreeMap<ElementId, E> matches = new DefaultTreeMap<>(ElementId::compareTo);
-			boolean[] initialized = new boolean[1];
-			return theCollection.subscribe(new Consumer<ObservableCollectionEvent<? extends E>>() {
-				private E theCurrentValue;
+			try (Transaction t = theCollection.lock(false, null)) {
+				class FinderListener implements Consumer<ObservableCollectionEvent<? extends E>> {
+					private ElementId theCurrentId;
+					private E theCurrentValue;
 
-				@Override
-				public void accept(ObservableCollectionEvent<? extends E> evt) {
-					switch (evt.getType()) {
-					case add:
-						if (!theTest.test(evt.getNewValue()))
-							return;
-						int index = matches.putGetNode(evt.getElementId(), evt.getNewValue()).getIndex();
-						if ((isFirst && index == 0) || (!isFirst && index == matches.size() - 1)) {
-							if (initialized[0])
-								fireChangeEvent(theCurrentValue, evt.getNewValue(), evt, observer::onNext);
-							theCurrentValue = evt.getNewValue();
-						}
-						break;
-					case remove:
-						if (!theTest.test(evt.getOldValue()))
-							return;
-						DefaultNode<Map.Entry<ElementId, E>> node = matches.getNode(evt.getElementId());
-						index = node.getIndex();
-						matches.removeNode(node);
-						if ((isFirst && index == 0) || (!isFirst && index == matches.size() - 1)) {
-							E newValue;
-							if (matches.isEmpty())
-								newValue = theDefaultValue.get();
-							else if (isFirst)
-								newValue = matches.firstEntry().getValue();
-							else
-								newValue = matches.lastEntry().getValue();
-							fireChangeEvent(theCurrentValue, newValue, evt, observer::onNext);
-							theCurrentValue = newValue;
-						}
-						break;
-					case set:
-						boolean oldPass = theTest.test(evt.getOldValue());
-						boolean newPass = evt.getOldValue() == evt.getNewValue() ? oldPass : theTest.test(evt.getNewValue());
-						if (oldPass == newPass) {
-							if (!oldPass)
-								return;
-							node = matches.putGetNode(evt.getElementId(), evt.getNewValue());
-							index = node.getIndex();
-							if ((isFirst && index == 0) || (!isFirst && index == matches.size() - 1)) {
-								fireChangeEvent(theCurrentValue, evt.getNewValue(), evt, observer::onNext);
-								theCurrentValue = evt.getNewValue();
+					@Override
+					public void accept(ObservableCollectionEvent<? extends E> evt) {
+						boolean mayReplace;
+						int comp;
+						if (theCurrentId == null) {
+							mayReplace = true;
+							comp = 0;
+						} else if (theCurrentId.equals(evt.getElementId())) {
+							mayReplace = true;
+							comp = 0;
+						} else
+							mayReplace = ((comp = evt.getElementId().compareTo(theCurrentId)) < 0) == isFirst;
+						if (!mayReplace)
+							return; // Even if the new element's value matches, it wouldn't replace the current value
+						boolean matches = test(evt.getNewValue());
+						if (!matches && comp != 0)
+							return; // If the new value doesn't match and it's not the current element, we don't care
+
+						// At this point we know that we will have to do something
+						Map<Object, Object> causeData = evt.getRootCausable().onFinish(this, (cause, data) -> {
+							E oldValue = theCurrentValue;
+							if (data.get("replacementId") == null) {
+								// Means we need to find the new value in the collection
+								if (!find(el -> {
+									theCurrentId = el.getElementId();
+									theCurrentValue = el.get();
+								}))
+									theCurrentValue = theDefaultValue.get();
+							} else {
+								theCurrentId = (ElementId) data.get("replacementId");
+								theCurrentValue = (E) data.get("replacementValue");
 							}
-						} else if (oldPass) {
-							doRemove(evt);
+							observer.onNext(createChangeEvent(oldValue, theCurrentValue, cause));
+						});
+						if (!matches) {
+							// The current element's value no longer matches--we need to search for the new value if we don't already know
+							// of a better match. The signal for this is a null replacementId, so nothing to do here.
 						} else {
-							doAdd(evt);
+							// Either:
+							// There is no current element and the new element matches--use it unless we already know of a better match
+							// Or there the new value is in a better position than the current element
+							ElementId replacementId = (ElementId) causeData.get("replacementId");
+							// If we already know of a replacement element even better-positioned than the new element, ignore the new one
+							if (replacementId == null || evt.getElementId().compareTo(replacementId) <= 0) {
+								causeData.put("replacementId", evt.getElementId());
+								causeData.put("replacementValue", evt.getNewValue());
+							}
 						}
-						break;
 					}
 				}
+				FinderListener listener = new FinderListener();
+				if (!find(el -> {
+					listener.theCurrentId = el.getElementId();
+					listener.theCurrentValue = el.get();
+				}))
+					listener.theCurrentValue = theDefaultValue.get();
+				Subscription collSub = theCollection.onChange(listener);
+				return new Subscription() {
+					private boolean isDone;
 
-				private void doAdd(ObservableCollectionEvent<? extends E> evt) {
-					int index = matches.putGetNode(evt.getElementId(), evt.getNewValue()).getIndex();
-					if ((isFirst && index == 0) || (!isFirst && index == matches.size() - 1)) {
-						if (initialized[0])
-							fireChangeEvent(theCurrentValue, evt.getNewValue(), evt, observer::onNext);
-						theCurrentValue = evt.getNewValue();
+					@Override
+					public void unsubscribe() {
+						if (isDone)
+							return;
+						isDone = true;
+						collSub.unsubscribe();
+						observer.onCompleted(createChangeEvent(listener.theCurrentValue, listener.theCurrentValue, null));
 					}
-				}
+				};
+			}
+		}
+	}
 
-				private void doRemove(ObservableCollectionEvent<? extends E> evt) {
-					DefaultNode<Map.Entry<ElementId, E>> node = matches.getNode(evt.getElementId());
-					int index = node.getIndex();
-					matches.removeNode(node);
-					if ((isFirst && index == 0) || (!isFirst && index == matches.size() - 1)) {
-						E newValue;
-						if (matches.isEmpty())
-							newValue = theDefaultValue.get();
-						else if (isFirst)
-							newValue = matches.firstEntry().getValue();
-						else
-							newValue = matches.lastEntry().getValue();
-						fireChangeEvent(theCurrentValue, newValue, evt, observer::onNext);
-						theCurrentValue = newValue;
-					}
-				}
-			}, isFirst);
+	/**
+	 * Implements {@link ObservableCollection#observeFind(Predicate, Supplier, boolean)}
+	 *
+	 * @param <E> The type of the value
+	 */
+	public static class ObservableCollectionFinder<E> extends AbstractObservableCollectionFinder<E> {
+		private final Predicate<? super E> theTest;
+
+		/**
+		 * @param collection The collection to find elements in
+		 * @param test The test to find elements that pass
+		 * @param defaultValue Provides default values when no elements of the collection pass the test
+		 * @param first Whether to get the first value in the collection that passes or the last value
+		 */
+		protected ObservableCollectionFinder(ObservableCollection<E> collection, Predicate<? super E> test,
+			Supplier<? extends E> defaultValue, boolean first) {
+			super(collection, defaultValue, first);
+			theTest = test;
+		}
+
+		@Override
+		protected boolean find(Consumer<? super ObservableCollectionElement<? extends E>> onElement) {
+			return theCollection.findObservableElement(theTest, onElement, isFirst);
+		}
+
+		@Override
+		protected boolean test(E value) {
+			return theTest.test(value);
+		}
+	}
+
+	public static class ObservableEquivalentFinder<E> extends AbstractObservableCollectionFinder<E> {
+		private final E theValue;
+
+		public ObservableEquivalentFinder(ObservableCollection<E> collection, E value, Supplier<? extends E> defaultValue, boolean first) {
+			super(collection, defaultValue, first);
+			if (!collection.belongs(value))
+				throw new IllegalArgumentException("Illegal value for collection: " + value);
+			theValue = value;
+		}
+
+		@Override
+		protected boolean find(Consumer<? super ObservableCollectionElement<? extends E>> onElement) {
+			return theCollection.forObservableElement(theValue, onElement, isFirst);
+		}
+
+		@Override
+		protected boolean test(E value) {
+			return theCollection.equivalence().elementEquals(theValue, value);
 		}
 	}
 
@@ -2242,6 +2277,7 @@ public final class ObservableCollectionImpl {
 		private final GroupingBuilder<E, K> theBuilder;
 
 		private final ObservableSet<K> theKeySet;
+		private final TypeToken<ObservableMultiEntry<K, E>> theEntryType;
 
 		/**
 		 * @param wrap The collection whose content to reflect
@@ -2254,6 +2290,7 @@ public final class ObservableCollectionImpl {
 			theKeySet = unique(
 				wrap.flow().map(theBuilder.getKeyType()).map(theBuilder.getKeyMaker()).withEquivalence(theBuilder.getEquivalence()))
 				.collect();
+			theEntryType = ObservableMultiMap.buildEntryType(getKeyType(), getValueType());
 		}
 
 		/** @return The collection whose content is reflected by this multi-map */
@@ -2285,6 +2322,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public TypeToken<ObservableMultiEntry<K, E>> getEntryType() {
+			return theEntryType;
+		}
+
+		@Override
 		public boolean isLockSupported() {
 			return theWrapped.isLockSupported();
 		}
@@ -2292,6 +2334,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public Transaction lock(boolean write, Object cause) {
 			return theWrapped.lock(write, cause);
+		}
+
+		@Override
+		public Equivalence<? super E> valueEquivalence() {
+			return theWrapped.equivalence();
 		}
 
 		@Override
@@ -2314,8 +2361,13 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public ObservableSet<? extends ObservableMultiEntry<K, E>> entrySet() {
-			return ObservableMultiMap.defaultEntrySet(this);
+		public ObservableCollection<E> values() {
+			return theWrapped;
+		}
+
+		@Override
+		public Observable<Object> changes() {
+			return theWrapped.simpleChanges();
 		}
 
 		@Override
@@ -2540,11 +2592,6 @@ public final class ObservableCollectionImpl {
 					throw new IndexOutOfBoundsException(index + " of 0");
 			}
 			return ((ObservableCollection<E>) coll).mutableSpliterator(index);
-		}
-
-		@Override
-		public boolean isEventIndexed() {
-			return false;
 		}
 
 		@Override

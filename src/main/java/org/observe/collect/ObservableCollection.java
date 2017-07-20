@@ -78,6 +78,7 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 	/** @return The type of elements in this collection */
 	TypeToken<E> getType();
 
+	@Override
 	default boolean belongs(Object value) {
 		return equivalence().isElement(value) && getType().getRawType().isInstance(value);
 	}
@@ -131,7 +132,7 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 
 	@Override
 	default ReversibleList<E> subList(int fromIndex, int toIndex) {
-		return new ObservableCollectionImpl.SubList<>(this, fromIndex, toIndex);
+		return new ObservableCollectionImpl.SubList<>(this, this, fromIndex, toIndex);
 	}
 
 	/**
@@ -671,16 +672,30 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 
 	<T> T ofMutableElementAt(int index, Function<? super MutableObservableElement<? extends E>, T> onElement);
 
+	default boolean findObservableElement(Predicate<? super E> search, Consumer<? super ObservableCollectionElement<? extends E>> onElement,
+		boolean first) {
+		ObservableElementSpliterator<E> spliter = spliterator(first);
+		boolean[] found = new boolean[1];
+		while (spliter.tryAdvanceObservableElement(el -> {
+			if (search.test(el.get())) {
+				found[0] = true;
+				onElement.accept(el);
+			}
+		})) {
+		}
+		return found[0];
+	}
+
 	/**
 	 * @param search The test to search for elements that pass
 	 * @param onElement The action to take on the first passing element in the collection
 	 * @param first Whether to find the first or last element
 	 * @return Whether an element was found that passed the test
-	 * @see #find(Predicate, Consumer, boolean)
+	 * @see #findElement(Predicate, Consumer, boolean)
 	 */
-	default boolean findObservableElement(Predicate<? super E> search, Consumer<? super MutableObservableElement<? extends E>> onElement,
+	default boolean findMutableElement(Predicate<? super E> search, Consumer<? super MutableObservableElement<? extends E>> onElement,
 		boolean first) {
-		return ReversibleList.super.find(search, el -> onElement.accept((MutableObservableElement<E>) el), first);
+		return ReversibleList.super.findElement(search, el -> onElement.accept((MutableObservableElement<E>) el), first);
 	}
 
 	/**
@@ -801,6 +816,10 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 	}
 
 	// Observable containment
+
+	default ObservableValue<E> observeEquivalent(E value, Supplier<? extends E> defaultValue, boolean first) {
+		return new ObservableCollectionImpl.ObservableEquivalentFinder<>(this, value, defaultValue, first);
+	}
 
 	/**
 	 * @param test The test to find passing elements for

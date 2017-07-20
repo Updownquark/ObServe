@@ -15,10 +15,7 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
-import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
-import org.observe.collect.ObservableElement;
-import org.observe.collect.ObservableIndexedCollection;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 
@@ -49,15 +46,6 @@ public interface ObservableTree<N, V> extends Transactable {
 	 * @return All nodes with the given node as their parent
 	 */
 	ObservableCollection<? extends N> getChildren(N node);
-
-	/**
-	 * @return Whether this tree is safe, in that all observables returned by this tree obey a common safe scheme such that events are only
-	 *         fired on one thread at a time.
-	 */
-	boolean isSafe();
-
-	/** @return The session for this tree */
-	ObservableValue<CollectionSession> getSession();
 
 	/**
 	 * Builds a tree from components
@@ -126,16 +114,6 @@ public interface ObservableTree<N, V> extends Transactable {
 		}
 
 		@Override
-		public boolean isSafe() {
-			return false;
-		}
-
-		@Override
-		public ObservableValue<CollectionSession> getSession() {
-			return ObservableValue.constant(TypeToken.of(CollectionSession.class), null);
-		}
-
-		@Override
 		public Transaction lock(boolean write, Object cause) {
 			return Transaction.NONE; // Can't think of a good mechanism to do locking on this kind of tree
 		}
@@ -167,7 +145,7 @@ public interface ObservableTree<N, V> extends Transactable {
 	 * @param <N> The node type of the tree
 	 * @param <V> The value type of the tree
 	 */
-	public static class ValuePathCollection<N, V> implements ObservableCollection.PartialCollectionImpl<List<V>> {
+	public static class ValuePathCollection<N, V> implements ObservableCollection<List<V>> {
 		private final ObservableTree<N, V> theTree;
 		private final Function<? super V, ? extends N> theNodeCreator;
 		private final boolean isOnlyTerminal;
@@ -187,16 +165,6 @@ public interface ObservableTree<N, V> extends Transactable {
 		@Override
 		public TypeToken<List<V>> getType() {
 			return new TypeToken<List<V>>(){}.where(new TypeParameter<V>(){}, theTree.getValueType());
-		}
-
-		@Override
-		public ObservableValue<CollectionSession> getSession() {
-			return theTree.getSession();
-		}
-
-		@Override
-		public boolean isSafe() {
-			return theTree.isSafe();
 		}
 
 		@Override
@@ -283,7 +251,7 @@ public interface ObservableTree<N, V> extends Transactable {
 		}
 
 		@Override
-		public boolean canAdd(List<V> path) {
+		public String canAdd(List<V> path) {
 			return testAdd(path, false);
 		}
 
@@ -332,7 +300,7 @@ public interface ObservableTree<N, V> extends Transactable {
 		}
 
 		@Override
-		public boolean canRemove(Object value) {
+		public String canRemove(Object value) {
 			return testRemove(value, false);
 		}
 
