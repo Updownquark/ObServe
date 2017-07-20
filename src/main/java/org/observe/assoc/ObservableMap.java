@@ -138,17 +138,26 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 	/** @return The type of values this map stores */
 	TypeToken<V> getValueType();
 
+	/** @return The type of elements in the entry set. Should be cached, as type tokens aren't cheap to build. */
 	TypeToken<ObservableEntry<K, V>> getEntryType();
 
-	@Override
-	abstract boolean isLockSupported();
-
-	Equivalence<? super V> equivalence();
-
+	/**
+	 * Builds an {@link #getEntryType() entry type} from the key and value types
+	 *
+	 * @param keyType The key type of the map
+	 * @param valueType The value type of the map
+	 * @return The entry type for the map
+	 */
 	static <K, V> TypeToken<ObservableEntry<K, V>> buildEntryType(TypeToken<K> keyType, TypeToken<V> valueType) {
 		return new TypeToken<ObservableEntry<K, V>>() {}.where(new TypeParameter<K>() {}, keyType).where(new TypeParameter<V>() {},
 			valueType);
 	}
+
+	@Override
+	abstract boolean isLockSupported();
+
+	/** @return The {@link Equivalence} that is used by this map's values (for {@link #containsValue(Object)}) */
+	Equivalence<? super V> equivalence();
 
 	@Override
 	ObservableSet<K> keySet();

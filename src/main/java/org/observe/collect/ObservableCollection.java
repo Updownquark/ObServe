@@ -32,7 +32,6 @@ import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
 import org.qommons.collect.CollectionElement;
-import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.ReversibleList;
 import org.qommons.collect.SimpleCause;
 import org.qommons.collect.TransactableList;
@@ -46,22 +45,35 @@ import com.google.common.reflect.TypeToken;
  *
  * The biggest differences between ObservableCollection and Collection are:
  * <ul>
- * <li><b>Observability</b> The {@link #subscribe(Consumer)} method and the {@link #changes()} and {@link #simpleChanges()} observables
- * allow subscribers to be notified of changes in the collection.</li>
+ * <li><b>Observability</b> ObservableCollections may be listened to via {@link #onChange(Consumer)}, {@link #subscribe(Consumer, boolean)},
+ * {@link #changes()} and {@link #simpleChanges()}.</li>
  * <li><b>Dynamic Transformation</b> The stream API allows transforming of the content of one collection into another, but the
  * transformation is done once for all, creating a new collection independent of the source. Sometimes it is desirable to make a transformed
  * collection that does its transformation dynamically, keeping the same data source, so that when the source is modified, the transformed
- * collection is also updated accordingly. #map(Function), #filter(Function), #groupBy(Function), and others allow this.</li>
- * <li><b>Modification Control</b> The {@link #view()} method creates a collection that forbids certain types of modifications to it.
- * Modification control can also be used to intercept and perform actions based on modifications to a collection.</li>
- * <li><b>ElementSpliterator</b> ObservableCollections must implement {@link #spliterator()}, which returns a {@link ElementSpliterator},
- * which is an enhanced {@link Spliterator}. This had potential for the improved performance associated with using {@link Spliterator}
- * instead of {@link Iterator} as well as the utility added by {@link ElementSpliterator}.</li>
+ * collection is also updated accordingly. The {@link #flow() flow} API allows the creation of collections that are the result of
+ * {@link CollectionDataFlow#map(TypeToken) map}, {@link CollectionDataFlow#filter(Function) filter},
+ * {@link CollectionDataFlow#unique(boolean) unique}, {@link CollectionDataFlow#sorted(Comparator) sort},
+ * {@link CollectionDataFlow#combineWith(ObservableValue, TypeToken) combination} or other operations on the elements of the source.
+ * Collections so derived from a source collection are themselves observable and reflect changes to the source. The derived collection may
+ * also be mutable, with modifications to the derived collection affecting the source.</li>
+ * <li><b>Modification Control</b> The {@link #flow() flow} API also supports constraints on how or whether a derived collection may be
+ * {@link CollectionDataFlow#filterModification() modified}.</li>
+ * <li><b>Enhanced {@link Spliterator}s</b> ObservableCollections must implement {@link #mutableSpliterator(boolean)}, which returns a
+ * {@link MutableObservableSpliterator}, which is an enhanced {@link Spliterator}. This has potential for the improved performance
+ * associated with using {@link Spliterator} instead of {@link Iterator} as well as the ability to
+ * {@link MutableObservableElement#add(Object, boolean, Object) add}, {@link MutableObservableElement#remove(Object) remove}, or
+ * {@link MutableObservableElement#set(Object, Object) replace} elements during iteration.</li>
  * <li><b>Transactionality</b> ObservableCollections support the {@link org.qommons.Transactable} interface, allowing callers to reserve a
  * collection for write or to ensure that the collection is not written to during an operation (for implementations that support this. See
  * {@link org.qommons.Transactable#isLockSupported() isLockSupported()}).</li>
  * <li><b>Run-time type safety</b> ObservableCollections have a {@link #getType() type} associated with them, allowing them to enforce
  * type-safety at run time. How strictly this type-safety is enforced is implementation-dependent.</li>
+ * <li><b>Custom {@link #equivalence() equivalence}</b> Instead of being a slave to each element's own {@link Object#equals(Object) equals}
+ * scheme, collections can be defined with custom schemes which will affect any operations involving element comparison, such as
+ * {@link #contains(Object)} and {@link #remove()}.</li>
+ * <li><b>Enhanced element access</b> The {@link #forObservableElement(Object, Consumer, boolean) forObservableElement} and
+ * {@link #forMutableElement(Object, Consumer, boolean) forMutableElement} methods, along with several others, allow access to elements in
+ * the array with the need and potentially without the performance cost of iterating.</li>
  * </ul>
  *
  * @param <E> The type of element in the collection
@@ -817,6 +829,14 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 
 	// Observable containment
 
+	/**
+	 * @param value The value to observe in the collection
+	 * @param defaultValue The default value for the result when the value is not found in the collection (typically <code>()->null</code>
+	 * @param first Whether to observe the first or the last equivalent value in the collection
+	 * @return An observable value whose content is the first or last value in the collection that is {@link #equivalence() equivalent} to
+	 *         the given value
+	 * @throws IllegalArgumentException If the given value may not be an element of this collection
+	 */
 	default ObservableValue<E> observeEquivalent(E value, Supplier<? extends E> defaultValue, boolean first) {
 		return new ObservableCollectionImpl.ObservableEquivalentFinder<>(this, value, defaultValue, first);
 	}
@@ -1074,22 +1094,78 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 		return create(type, Arrays.asList(initialValues));
 	}
 
+	/**
+	 * <p>
+	 * The typical means of creating {@link ObservableCollection}s from scratch.
+	 * </p>
+	 *
+	 * <p>
+	 * This method returns {@link CollectionDataFlow flow} that produces a new collection with any characteristics given it by the flow
+	 * operations.
+	 * </p>
+	 *
+	 * <p>
+	 * For example, this method may be used to create an observable:
+	 * <ul>
+	 * <li>IdentityHashSet: <code>
+	 * 		{@link CollectionDataFlow#withEquivalence(Equivalence) .withEquivalence}({@link Equivalence#ID Equivalence.ID}){@link
+	 * 		CollectionDataFlow#unique(boolean) .unique}(false)
+	 * 		</code></li>
+	 * <li>SortedSet: <code>{@link CollectionDataFlow#uniqueSorted(Comparator, boolean) .uniqueSorted(comparator, false)}</code></li>
+	 * <li>Sorted list: <code>{@link CollectionDataFlow#sorted(Comparator) .sorted(comparator)}</code></li>
+	 * <li>list with no null values: <code>
+	 * 		{@link CollectionDataFlow#filterModification() .filterModification()}{@link ModFilterBuilder#filterAdd(Function)
+	 *  	.filterAdd}(value->value!=null ? null : {@link org.qommons.collect.CollectionElement.StdMsg#NULL_DISALLOWED StdMsg.NULL_DISALLOWED})
+	 *  	</code></li>
+	 * </ul>
+	 * </p>
+	 *
+	 * <p>
+	 * The flow is {@link CollectionDataFlow#isLightWeight() heavy-weight}, and the {@link CollectionDataFlow#collect() built} collection is
+	 * {@link #isLockSupported() thread-safe}.
+	 * </p>
+	 *
+	 * @param type The type for the root collection
+	 * @param initialValues The values to insert into the collection when it is built
+	 * @return A {@link CollectionDataFlow} that can be used to create a mutable collection with any characteristics supported by the flow
+	 *         API.
+	 */
 	static <E> CollectionDataFlow<E, E, E> create(TypeToken<E> type, Collection<? extends E> initialValues) {
-		return ObservableCollectionImpl.create(type, initialValues);
+		return ObservableCollectionImpl.create(type, true, initialValues);
+	}
+
+	/**
+	 * Same as {@link #create(TypeToken, Collection)}, but creates a collection that does not ensure thread-safety.
+	 *
+	 * @param type The type for the root collection
+	 * @param initialValues The values to insert into the collection when it is built
+	 * @return A {@link CollectionDataFlow} that can be used to create a mutable collection with any characteristics supported by the flow
+	 *         API.
+	 */
+	static <E> CollectionDataFlow<E, E, E> createUnsafe(TypeToken<E> type, Collection<? extends E> initialValues) {
+		return ObservableCollectionImpl.create(type, false, initialValues);
 	}
 
 	/**
 	 * @param <E> The type for the root collection
 	 * @param type The type for the root collection
+	 * @param values The values to be in the immutable collection
 	 * @return A {@link CollectionDataFlow} that can be used to create an immutable collection with the given values and any characteristics
 	 *         supported by the flow API.
 	 */
-	static <E> CollectionDataFlow<E, E, E> constant(TypeToken<E> type, E... initialValues) {
-		return constant(type, Arrays.asList(initialValues));
+	static <E> CollectionDataFlow<E, E, E> constant(TypeToken<E> type, E... values) {
+		return constant(type, Arrays.asList(values));
 	}
 
-	static <E> CollectionDataFlow<E, E, E> constant(TypeToken<E> type, Collection<? extends E> initialValues) {
-		return create(type, initialValues).filterModification().immutable(CollectionElement.StdMsg.UNSUPPORTED_OPERATION, false).build();
+	/**
+	 * @param <E> The type for the root collection
+	 * @param type The type for the root collection
+	 * @param values The values to be in the immutable collection
+	 * @return A {@link CollectionDataFlow} that can be used to create an immutable collection with the given values and any characteristics
+	 *         supported by the flow API.
+	 */
+	static <E> CollectionDataFlow<E, E, E> constant(TypeToken<E> type, Collection<? extends E> values) {
+		return createUnsafe(type, values).filterModification().immutable(CollectionElement.StdMsg.UNSUPPORTED_OPERATION, false).build();
 	}
 
 	/**
@@ -1706,8 +1782,21 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 		}
 	}
 
+	/**
+	 * Supports modifying the values of elements in a collection via modification operations from a derived collection
+	 *
+	 * @param <I> The type of the source element
+	 * @param <T> The type of the derived element
+	 */
 	@FunctionalInterface
 	interface ElementSetter<I, T> {
+		/**
+		 * @param element The source value
+		 * @param newValue The derived value
+		 * @param replace Whether to actually do the replacement, as opposed to just testing whether it is possible/allowed
+		 * @param cause The cause of the replacement operation
+		 * @return Null if the replacement is possible/allowed/done; otherwise a string saying why it is not
+		 */
 		String setElement(I element, T newValue, boolean replace, Object cause);
 	}
 
@@ -1765,6 +1854,13 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 		}
 	}
 
+	/**
+	 * Builds a filtered and/or mapped sorted set, asserted to be similarly unique and sorted as the derived set
+	 *
+	 * @param <E> The type of values in the source set
+	 * @param <I> Intermediate type
+	 * @param <T> The type of values in the mapped set
+	 */
 	class UniqueSortedMappedCollectionBuilder<E, I, T> extends UniqueMappedCollectionBuilder<E, I, T> {
 		protected UniqueSortedMappedCollectionBuilder(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent, TypeToken<T> type) {
 			super(source, parent, type);
@@ -2013,17 +2109,17 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 	}
 
 	/**
-	 * Allows creation of a collection that reflects a collection's data, but may limit the operations the user can perform on the data or
-	 * when the user can observe the data
+	 * Allows creation of a collection that reflects a source collection's data, but may limit the operations the user can perform on the
+	 * data or when the user can observe the data
 	 *
 	 * @param <E> The type of the source collection
-	 * @param <T> The type of the collection to builder modification on
+	 * @param <T> The type of the collection to filter modification on
 	 */
 	class ModFilterBuilder<E, T> {
 		private final ObservableCollection<E> theSource;
 		private final CollectionDataFlow<E, ?, T> theParent;
 		private String theImmutableMsg;
-		private boolean allowUpdates;
+		private boolean areUpdatesAllowed;
 		private String theAddMsg;
 		private String theRemoveMsg;
 		private Function<? super T, String> theAddMsgFn;
@@ -2047,7 +2143,7 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 		}
 
 		protected boolean areUpdatesAllowed() {
-			return allowUpdates;
+			return areUpdatesAllowed;
 		}
 
 		protected String getAddMsg() {
@@ -2068,7 +2164,7 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 
 		public ModFilterBuilder<E, T> immutable(String modMsg, boolean allowUpdates) {
 			theImmutableMsg = modMsg;
-			this.allowUpdates = allowUpdates;
+			areUpdatesAllowed = allowUpdates;
 			return this;
 		}
 
@@ -2094,10 +2190,17 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 
 		public CollectionDataFlow<E, T, T> build() {
 			return new ObservableCollectionDataFlowImpl.ModFilteredOp<>(theSource, (AbstractDataFlow<E, ?, T>) theParent, theImmutableMsg,
-				allowUpdates, theAddMsg, theRemoveMsg, theAddMsgFn, theRemoveMsgFn);
+				areUpdatesAllowed, theAddMsg, theRemoveMsg, theAddMsgFn, theRemoveMsgFn);
 		}
 	}
 
+	/**
+	 * Allows creation of a set that reflects a source set's data, but may limit the operations the user can perform on the data or when the
+	 * user can observe the data
+	 *
+	 * @param <E> The type of the source set
+	 * @param <T> The type of the set to filter modification on
+	 */
 	class UniqueModFilterBuilder<E, T> extends ModFilterBuilder<E, T> {
 		public UniqueModFilterBuilder(ObservableCollection<E> source, UniqueDataFlow<E, ?, T> parent) {
 			super(source, parent);
@@ -2135,6 +2238,13 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 		}
 	}
 
+	/**
+	 * Allows creation of a sorted set that reflects a source set's data, but may limit the operations the user can perform on the data or
+	 * when the user can observe the data
+	 *
+	 * @param <E> The type of the source set
+	 * @param <T> The type of the set to filter modification on
+	 */
 	class UniqueSortedModFilterBuilder<E, T> extends UniqueModFilterBuilder<E, T> {
 		public UniqueSortedModFilterBuilder(ObservableCollection<E> source, UniqueSortedDataFlow<E, ?, T> parent) {
 			super(source, parent);

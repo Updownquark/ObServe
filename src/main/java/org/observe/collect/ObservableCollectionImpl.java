@@ -1974,8 +1974,8 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
-	public static <E> CollectionDataFlow<E, E, E> create(TypeToken<E> type, Collection<? extends E> initialValues) {
-		DefaultObservableCollection<E> collection = new DefaultObservableCollection<>(type);
+	public static <E> CollectionDataFlow<E, E, E> create(TypeToken<E> type, boolean threadSafe, Collection<? extends E> initialValues) {
+		DefaultObservableCollection<E> collection = new DefaultObservableCollection<>(type, threadSafe);
 		CollectionDataFlow<E, E, E> flow = collection.flow();
 		if (!initialValues.isEmpty())
 			flow = new ObservableCollectionDataFlowImpl.InitialElementsDataFlow<>(collection, flow, type, initialValues);
@@ -2001,22 +2001,29 @@ public final class ObservableCollectionImpl {
 		private final SimpleElementIdGenerator theElementIdGen;
 		private Consumer<? super ObservableCollectionEvent<? extends E>> theObserver;
 
-		DefaultObservableCollection(TypeToken<E> type) {
+		DefaultObservableCollection(TypeToken<E> type, boolean threadSafe) {
 			theType = type;
-			theLock = new ReentrantReadWriteLock();
+			theLock = threadSafe ? new ReentrantReadWriteLock() : null;
 			theTransactionCauses = new LinkedList<>();
 			theElementIdGen = ElementId.createSimpleIdGenerator();
 		}
 
 		@Override
 		public boolean isLockSupported() {
-			return true;
+			return theLock != null;
 		}
 
 		@Override
 		public Transaction lock(boolean write, Object cause) {
-			Lock lock = write ? theLock.writeLock() : theLock.readLock();
-			lock.lock();
+			Lock lock;
+			if (theLock == null)
+				lock = null;
+			else if (write)
+				lock = theLock.writeLock();
+			else
+				lock = theLock.readLock();
+			if (lock != null)
+				lock.lock();
 			Causable tCause;
 			if (cause == null && !theTransactionCauses.isEmpty())
 				tCause = null;
@@ -2036,7 +2043,8 @@ public final class ObservableCollectionImpl {
 					isClosed = true;
 					if (write && tCause != null)
 						theTransactionCauses.removeLastOccurrence(tCause);
-					lock.unlock();
+					if (lock != null)
+						lock.unlock();
 				}
 			};
 		}
@@ -2393,11 +2401,6 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public Comparator<? super K> comparator() {
-			return getBuilder().getCompare();
-		}
-
-		@Override
 		protected UniqueSortedDataFlow<E, ?, K> unique(CollectionDataFlow<E, ?, K> keyFlow) {
 			return keyFlow.uniqueSorted(getBuilder().getCompare(), getBuilder().isAlwaysUsingFirst());
 		}
@@ -2405,11 +2408,6 @@ public final class ObservableCollectionImpl {
 		@Override
 		public ObservableSortedSet<K> keySet() {
 			return (ObservableSortedSet<K>) super.keySet();
-		}
-
-		@Override
-		public ObservableSortedSet<? extends ObservableSortedMultiEntry<K, E>> entrySet() {
-			return ObservableSortedMultiMap.defaultEntrySet(this);
 		}
 	}
 
