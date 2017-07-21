@@ -983,7 +983,8 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-			return ObservableCollectionImpl.defaultOnChange(this, observer);
+			return getWrapped().onChange(evt -> observer.accept(new ObservableCollectionEvent<>(evt.getElementId().reverse(),
+				size() - evt.getIndex() - 1, evt.getType(), evt.getOldValue(), evt.getNewValue(), evt)));
 		}
 
 		@Override

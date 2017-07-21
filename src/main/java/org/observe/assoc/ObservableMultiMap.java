@@ -1,6 +1,7 @@
 package org.observe.assoc;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
@@ -90,7 +91,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 
 		/**
 		 * Creates an empty multi-entry
-		 * 
+		 *
 		 * @param <K> The key type for the entry
 		 * @param <V> The value type for the entry
 		 * @param keyType The key type for the entry
@@ -212,7 +213,8 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	/** @return All values stored in this map */
 	@Override
 	default ObservableCollection<V> values() {
-		TypeToken<ObservableCollection<V>> collType=new TypeToken<ObservableCollection<V>>(){}.where(new TypeParameter<V>(){}, getValueType());
+		TypeToken<ObservableCollection<V>> collType = new TypeToken<ObservableCollection<V>>() {}.where(new TypeParameter<V>() {},
+			getValueType());
 		return ObservableCollection.flatten(entrySet().flow().map(collType).cache(false).map(entry -> entry.getValues()).collectLW());
 	}
 
@@ -350,17 +352,108 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	class MultiMapBuilder<K, V> {
 		private final TypeToken<K> theKeyType;
 		private final TypeToken<V> theValueType;
-		private final TypeToken<ObservableMultiEntry<K, V>> theEntryType;
-		private Function<CollectionDataFlow<?, ?, K>, UniqueDataFlow<?, ?, K>> theKeyMaker;
+		private boolean isSafe = true;
 		private Function<CollectionDataFlow<?, ?, V>, CollectionDataFlow<?, ?, V>> theValueMaker;
 
 		public MultiMapBuilder(TypeToken<K> keyType, TypeToken<V> valueType) {
 			theKeyType = keyType;
 			theValueType = valueType;
-			theEntryType = buildEntryType(keyType, valueType);
-			theKeyMaker = flow -> flow.unique(true);
 		}
 
-		public ObservableMultiMap<K, V> build() {}
+		public MultiMapBuilder<K, V> unsafe() {
+			isSafe = false;
+			return this;
+		}
+
+		public MultiMapBuilder<K, V> onValues(Function<CollectionDataFlow<?, ?, V>, CollectionDataFlow<?, ?, V>> valueMaker) {
+			theValueMaker = valueMaker;
+			return this;
+		}
+
+		public ObservableMultiMap<K, V> build() {
+			return build(df -> df.unique(true));
+		}
+
+		public ObservableMultiMap<K, V> build(Function<? super CollectionDataFlow<?, ?, K>, ? extends UniqueDataFlow<?, ?, K>> keyMaker) {
+			return new SimpleMultiMap<>(theKeyType, theValueType, isSafe, keyMaker, theValueMaker);
+		}
+	}
+
+	class SimpleMultiMap<K, V> implements ObservableMultiMap<K, V> {
+		private final TypeToken<K> theKeyType;
+		private final TypeToken<V> theValueType;
+		private final TypeToken<ObservableMultiEntry<K, V>> theEntryType;
+		private final boolean isSafe;
+		private final Function<CollectionDataFlow<?, ?, V>, CollectionDataFlow<?, ?, V>> theValueMaker;
+		private final ObservableSet<K> theKeySet;
+		private final ObservableSet<ObservableMultiEntry<K, V>> theEntrySet;
+
+		public SimpleMultiMap(TypeToken<K> keyType, TypeToken<V> valueType, boolean safe,
+			Function<? super CollectionDataFlow<?, ?, K>, ? extends UniqueDataFlow<?, ?, K>> keyMaker,
+				Function<CollectionDataFlow<?, ?, V>, CollectionDataFlow<?, ?, V>> valueMaker) {
+			theKeyType = keyType;
+			theValueType = valueType;
+			theEntryType = buildEntryType(keyType, valueType);
+			isSafe = safe;
+			theValueMaker = valueMaker;
+			CollectionDataFlow<K, K, K> keySource = safe ? ObservableCollection.create(theKeyType)
+				: ObservableCollection.createUnsafe(theKeyType, Collections.emptyList());
+			theKeySet = keyMaker.apply(keySource).collect();
+			theEntrySet = theKeySet.flow()//
+				.mapEquivalent(theEntryType).cache(true).reEvalOnUpdate(false).map(this::createEntry, entry -> entry.getKey())//
+				.filterModification().noAdd("Entries cannot be added directly").build()//
+				.collect();
+			// When an entry is removed, clear its contents
+			theEntrySet.onChange(evt -> {
+				switch (evt.getType()) {
+				case add:
+					break;
+				case remove:
+					try (Transaction t = evt.getOldValue().getValues().lock(true, evt)) {
+						evt.getNewValue().getValues().clear();
+					}
+					break;
+				case set:
+					if (evt.getOldValue() != evt.getNewValue())
+						try (Transaction t = evt.getOldValue().getValues().lock(true, evt)) {
+							evt.getOldValue().getValues().clear();
+						}
+					break;
+				}
+			});
+		}
+
+		protected ObservableMultiEntry<K, V> createEntry(K key) {
+			return new SimpleMultiEntry(key);
+		}
+
+		protected class SimpleMultiEntry implements ObservableMultiEntry<K, V> {
+			private final K theKey;
+			private final ObservableCollection<V> theValues;
+
+			protected SimpleMultiEntry(K key) {
+				theKey = key;
+				CollectionDataFlow<?, ?, V> valueFlow = isSafe ? ObservableCollection.create(theValueType)
+					: ObservableCollection.createUnsafe(theValueType, Collections.emptyList());
+				if (theValueMaker != null)
+					valueFlow = theValueMaker.apply(valueFlow);
+				theValues = valueFlow.collect();
+			}
+
+			@Override
+			public TypeToken<K> getKeyType() {
+				return theKeyType;
+			}
+
+			@Override
+			public K getKey() {
+				return theKey;
+			}
+
+			@Override
+			public ObservableCollection<V> getValues() {
+				return theValues;
+			}
+		}
 	}
 }

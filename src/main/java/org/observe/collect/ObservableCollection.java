@@ -46,7 +46,8 @@ import com.google.common.reflect.TypeToken;
  * The biggest differences between ObservableCollection and Collection are:
  * <ul>
  * <li><b>Observability</b> ObservableCollections may be listened to via {@link #onChange(Consumer)}, {@link #subscribe(Consumer, boolean)},
- * {@link #changes()} and {@link #simpleChanges()}.</li>
+ * {@link #changes()}, and {@link #simpleChanges()}, as well as various other listenable derived information, such as
+ * {@link #observeSize()}.</li>
  * <li><b>Dynamic Transformation</b> The stream API allows transforming of the content of one collection into another, but the
  * transformation is done once for all, creating a new collection independent of the source. Sometimes it is desirable to make a transformed
  * collection that does its transformation dynamically, keeping the same data source, so that when the source is modified, the transformed
@@ -60,7 +61,7 @@ import com.google.common.reflect.TypeToken;
  * {@link CollectionDataFlow#filterModification() modified}.</li>
  * <li><b>Enhanced {@link Spliterator}s</b> ObservableCollections must implement {@link #mutableSpliterator(boolean)}, which returns a
  * {@link MutableObservableSpliterator}, which is an enhanced {@link Spliterator}. This has potential for the improved performance
- * associated with using {@link Spliterator} instead of {@link Iterator} as well as the ability to
+ * associated with using {@link Spliterator} instead of {@link Iterator} as well as the reversibility and ability to
  * {@link MutableObservableElement#add(Object, boolean, Object) add}, {@link MutableObservableElement#remove(Object) remove}, or
  * {@link MutableObservableElement#set(Object, Object) replace} elements during iteration.</li>
  * <li><b>Transactionality</b> ObservableCollections support the {@link org.qommons.Transactable} interface, allowing callers to reserve a
@@ -73,7 +74,7 @@ import com.google.common.reflect.TypeToken;
  * {@link #contains(Object)} and {@link #remove()}.</li>
  * <li><b>Enhanced element access</b> The {@link #forObservableElement(Object, Consumer, boolean) forObservableElement} and
  * {@link #forMutableElement(Object, Consumer, boolean) forMutableElement} methods, along with several others, allow access to elements in
- * the array with the need and potentially without the performance cost of iterating.</li>
+ * the array without the need and potentially without the performance cost of iterating.</li>
  * </ul>
  *
  * @param <E> The type of element in the collection
@@ -156,8 +157,16 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 		return ofElementAt(index, el -> el.get());
 	}
 
+	/**
+	 * @param id The ID of the element
+	 * @return The number of elements in this collection positioned before the given element
+	 */
 	int getElementsBefore(ElementId id);
 
+	/**
+	 * @param id The ID of the element
+	 * @return The number of elements in this collection positioned after the given element
+	 */
 	int getElementsAfter(ElementId id);
 
 	/**
@@ -566,6 +575,7 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 	 * unsubscription.
 	 *
 	 * @param observer The listener to be notified of each element change in the collection
+	 * @param forward Whether to fire events for initial values (and possibly terminal removes) in forward or reverse order
 	 * @param reverse Whether to fire add events for the initial elements in reverse
 	 * @return The subscription to use to terminate listening
 	 */
@@ -644,10 +654,33 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 		return forMutableElement(value, onElement, first);
 	}
 
+	/**
+	 * Finds an equivalent value in this collection
+	 *
+	 * @param value The value to find
+	 * @param onElement The listener to be called with the equivalent element
+	 * @param first Whether to find the first or last occurrence of the value
+	 * @return Whether the value was found
+	 */
 	boolean forObservableElement(E value, Consumer<? super ObservableCollectionElement<? extends E>> onElement, boolean first);
 
+	/**
+	 * Finds an equivalent value in this collection
+	 *
+	 * @param value The value to find
+	 * @param onElement The listener to be called with the equivalent mutable element
+	 * @param first Whether to find the first or last occurrence of the value
+	 * @return Whether the value was found
+	 */
 	boolean forMutableElement(E value, Consumer<? super MutableObservableElement<? extends E>> onElement, boolean first);
 
+	/**
+	 * Addresses an element in this collection
+	 *
+	 * @param elementId The element to get
+	 * @param onElement The listener to be called with the element
+	 * @throws IllegalArgumentException If the given element ID is unrecognized in this collection
+	 */
 	default void forElementAt(ElementId elementId, Consumer<? super ObservableCollectionElement<? extends E>> onElement) {
 		ofElementAt(elementId, el -> {
 			onElement.accept(el);
@@ -655,6 +688,13 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 		});
 	}
 
+	/**
+	 * Addresses an element in this collection
+	 *
+	 * @param elementId The element to get
+	 * @param onElement The listener to be called with the mutable element
+	 * @throws IllegalArgumentException If the given element ID is unrecognized in this collection
+	 */
 	default void forMutableElementAt(ElementId elementId, Consumer<? super MutableObservableElement<? extends E>> onElement) {
 		ofMutableElementAt(elementId, el -> {
 			onElement.accept(el);
@@ -662,10 +702,32 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 		});
 	}
 
+	/**
+	 * Calls a function on an element
+	 *
+	 * @param elementId The element to apply the function to
+	 * @param onElement The function to be called on the element
+	 * @return The result of the function
+	 * @throws IllegalArgumentException If the given element ID is unrecognized in this collection
+	 */
 	<T> T ofElementAt(ElementId elementId, Function<? super ObservableCollectionElement<? extends E>, T> onElement);
 
+	/**
+	 * Calls a function on an element
+	 *
+	 * @param elementId The element to apply the function to
+	 * @param onElement The function to be called on the mutable element
+	 * @return The result of the function
+	 * @throws IllegalArgumentException If the given element ID is unrecognized in this collection
+	 */
 	<T> T ofMutableElementAt(ElementId elementId, Function<? super MutableObservableElement<? extends E>, T> onElement);
 
+	/**
+	 * Addresses an element by index
+	 *
+	 * @param index The index of the element to get
+	 * @param onElement The listener to be called on the element
+	 */
 	default void forElementAt(int index, Consumer<? super ObservableCollectionElement<? extends E>> onElement) {
 		ofElementAt(index, el -> {
 			onElement.accept(el);
@@ -673,6 +735,12 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 		});
 	}
 
+	/**
+	 * Addresses an element by index
+	 *
+	 * @param index The index of the element to get
+	 * @param onElement The listener to be called on the mutable element
+	 */
 	default void forMutableElementAt(int index, Consumer<? super MutableObservableElement<? extends E>> onElement) {
 		ofMutableElementAt(index, el -> {
 			onElement.accept(el);
@@ -680,10 +748,32 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 		});
 	}
 
+	/**
+	 * Calls a function on an element by index
+	 *
+	 * @param index The index of the element to call the function on
+	 * @param onElement The function to be called on the element
+	 * @return The result of the function
+	 */
 	<T> T ofElementAt(int index, Function<? super ObservableCollectionElement<? extends E>, T> onElement);
 
+	/**
+	 * Calls a function on an element by index
+	 *
+	 * @param index The index of the element to call the function on
+	 * @param onElement The function to be called on the mutable element
+	 * @return The result of the function
+	 */
 	<T> T ofMutableElementAt(int index, Function<? super MutableObservableElement<? extends E>, T> onElement);
 
+	/**
+	 * Searches the collection's elements
+	 *
+	 * @param search The test function to call on each value
+	 * @param onElement The listener to be called on the first encountered match
+	 * @param first Whether to find the first or the last matching element
+	 * @return Whether a match was found
+	 */
 	default boolean findObservableElement(Predicate<? super E> search, Consumer<? super ObservableCollectionElement<? extends E>> onElement,
 		boolean first) {
 		ObservableElementSpliterator<E> spliter = spliterator(first);
@@ -1058,28 +1148,8 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 	 * @return A builder to create a multi-map containing each of this collection's elements, each in the collection of the value mapped by
 	 *         the given function applied to the element
 	 */
-	default <K> GroupingBuilder<E, K> groupBy(TypeToken<K> keyType, Function<? super E, ? extends K> keyMaker, boolean isStatic) {
-		return new GroupingBuilder<>(this, keyType, keyMaker, isStatic);
-	}
-
-	/**
-	 * @param grouping The grouping builder containing the information needed to create the map
-	 * @return A sorted multi-map whose keys are key-mapped elements of this collection and whose values are this collection's elements,
-	 *         grouped by their mapped keys
-	 */
-	default <K> ObservableMultiMap<K, E> groupBy(GroupingBuilder<E, K> grouping) {
-		return new ObservableCollectionImpl.GroupedMultiMap<>(this, grouping);
-	}
-
-	/**
-	 * TODO TEST ME!
-	 *
-	 * @param grouping The grouping builder containing the information needed to create the map
-	 * @return A sorted multi-map whose keys are key-mapped elements of this collection and whose values are this collection's elements,
-	 *         grouped by their mapped keys
-	 */
-	default <K> ObservableSortedMultiMap<K, E> groupBy(SortedGroupingBuilder<E, K> grouping) {
-		return new ObservableCollectionImpl.GroupedSortedMultiMap<>(this, grouping);
+	default <K> GroupingBuilder<E, K, E> groupBy(TypeToken<K> keyType, Function<? super E, ? extends K> keyMaker, boolean isStatic) {
+		return new GroupingBuilder<>(this, keyType, getType(), keyMaker, isStatic);
 	}
 
 	/**
@@ -2290,19 +2360,22 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 	 * @see ObservableCollection#groupBy(TypeToken, Function, boolean)
 	 * @see ObservableCollection#groupBy(GroupingBuilder)
 	 */
-	class GroupingBuilder<E, K> {
+	class GroupingBuilder<E, K, V> {
 		private final ObservableCollection<E> theCollection;
 		private final TypeToken<K> theKeyType;
+		private final TypeToken<V> theValueType;
 		private final Function<? super E, ? extends K> theKeyMaker;
+		private final Function<CollectionDataFlow<E,?,V>,
 		private final boolean isStatic;
-		private Equivalence<? super K> theEquivalence = Equivalence.DEFAULT;
+		private Equivalence<? super K> theKeyEquivalence = Equivalence.DEFAULT;
 		private boolean isAlwaysUsingFirst;
 		private boolean isBuilt;
 
-		public GroupingBuilder(ObservableCollection<E> collection, TypeToken<K> keyType, Function<? super E, ? extends K> keyMaker,
-			boolean isStatic) {
+		public GroupingBuilder(ObservableCollection<E> collection, TypeToken<K> keyType, TypeToken<V> valueType,
+			Function<? super E, ? extends K> keyMaker, boolean isStatic) {
 			theCollection = collection;
 			theKeyType = keyType;
+			theValueType = valueType;
 			theKeyMaker = keyMaker;
 			this.isStatic = isStatic;
 		}
@@ -2315,6 +2388,10 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 			return theKeyType;
 		}
 
+		public TypeToken<V> getValueType() {
+			return theValueType;
+		}
+
 		public Function<? super E, ? extends K> getKeyMaker() {
 			return theKeyMaker;
 		}
@@ -2323,18 +2400,18 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 			return isStatic;
 		}
 
-		public GroupingBuilder<E, K> withEquivalence(Equivalence<? super K> equivalence) {
+		public GroupingBuilder<E, K, V> withKeyEquivalence(Equivalence<? super K> equivalence) {
 			if (isBuilt)
 				throw new IllegalStateException("Cannot change the grouping builder's properties after building");
-			theEquivalence = equivalence;
+			theKeyEquivalence = equivalence;
 			return this;
 		}
 
-		public Equivalence<? super K> getEquivalence() {
-			return theEquivalence;
+		public Equivalence<? super K> getKeyEquivalence() {
+			return theKeyEquivalence;
 		}
 
-		public GroupingBuilder<E, K> alwaysUseFirst() {
+		public GroupingBuilder<E, K, V> alwaysUseFirst() {
 			if (isBuilt)
 				throw new IllegalStateException("Cannot change the grouping builder's properties after building");
 			isAlwaysUsingFirst = true;
@@ -2345,13 +2422,13 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 			return isAlwaysUsingFirst;
 		}
 
-		public SortedGroupingBuilder<E, K> sorted(Comparator<? super K> compare) {
+		public SortedGroupingBuilder<E, K, V> sorted(Comparator<? super K> compare) {
 			return new SortedGroupingBuilder<>(this, compare);
 		}
 
-		public ObservableMultiMap<K, E> build() {
+		public ObservableMultiMap<K, V> build() {
 			isBuilt = true;
-			return theCollection.groupBy(this);
+			return new ObservableCollectionImpl.GroupedMultiMap<>(theCollection, this);
 		}
 	}
 
@@ -2364,22 +2441,23 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 	 * @see ObservableCollection.GroupingBuilder#sorted(Comparator)
 	 * @see ObservableCollection#groupBy(SortedGroupingBuilder)
 	 */
-	class SortedGroupingBuilder<E, K> extends GroupingBuilder<E, K> {
+	class SortedGroupingBuilder<E, K, V> extends GroupingBuilder<E, K, V> {
 		private final Comparator<? super K> theCompare;
 
-		public SortedGroupingBuilder(GroupingBuilder<E, K> basicBuilder, Comparator<? super K> compare) {
-			super(basicBuilder.getCollection(), basicBuilder.getKeyType(), basicBuilder.getKeyMaker(), basicBuilder.isStatic());
+		public SortedGroupingBuilder(GroupingBuilder<E, K, V> basicBuilder, Comparator<? super K> compare) {
+			super(basicBuilder.getCollection(), basicBuilder.getKeyType(), basicBuilder.getValueType(), basicBuilder.getKeyMaker(),
+				basicBuilder.isStatic());
 			theCompare = compare;
 		}
 
 		@Override
-		public SortedGroupingBuilder<E, K> alwaysUseFirst() {
-			return (SortedGroupingBuilder<E, K>) super.alwaysUseFirst();
+		public SortedGroupingBuilder<E, K, V> alwaysUseFirst() {
+			return (SortedGroupingBuilder<E, K, V>) super.alwaysUseFirst();
 		}
 
 		@Override
-		public ObservableSortedMultiMap<K, E> build() {
-			return getCollection().groupBy(this);
+		public ObservableSortedMultiMap<K, V> build() {
+			return new ObservableCollectionImpl.GroupedSortedMultiMap<>(getCollection(), this);
 		}
 
 		public Comparator<? super K> getCompare() {
