@@ -1,10 +1,25 @@
 package org.observe.assoc;
 
-import org.observe.collect.Equivalence;
+import java.util.Comparator;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Consumer;
+import java.util.function.Function;
+
+import org.observe.Observable;
+import org.observe.ObservableValue;
+import org.observe.collect.MutableObservableElement;
+import org.observe.collect.MutableObservableSpliterator;
 import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableCollection.CollectionDataFlow;
+import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
+import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
+import org.observe.collect.ObservableCollectionElement;
 import org.observe.collect.ObservableSortedSet;
 import org.qommons.Transaction;
+import org.qommons.collect.CollectionElement.StdMsg;
 
+import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 /**
@@ -23,19 +38,19 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 	}
 
 	default ObservableMultiEntry<K, V> lowerEntry(K key) {
-		return entrySet().lower(ObservableMultiEntry.empty(key, getKeyType(), getValueType()));
+		return entrySet().lower(ObservableMultiEntry.empty(getKeyType(), getValueType(), key, keySet().equivalence()));
 	}
 
 	default ObservableMultiEntry<K, V> floorEntry(K key) {
-		return entrySet().floor(ObservableMultiEntry.empty(key, getKeyType(), getValueType()));
+		return entrySet().floor(ObservableMultiEntry.empty(getKeyType(), getValueType(), key, keySet().equivalence()));
 	}
 
 	default ObservableMultiEntry<K, V> ceilingEntry(K key) {
-		return entrySet().ceiling(ObservableMultiEntry.empty(key, getKeyType(), getValueType()));
+		return entrySet().ceiling(ObservableMultiEntry.empty(getKeyType(), getValueType(), key, keySet().equivalence()));
 	}
 
 	default ObservableMultiEntry<K, V> higherEntry(K key) {
-		return entrySet().higher(ObservableMultiEntry.empty(key, getKeyType(), getValueType()));
+		return entrySet().higher(ObservableMultiEntry.empty(getKeyType(), getValueType(), key, keySet().equivalence()));
 	}
 
 	default ObservableSortedMultiMap<K, V> reverse() {
@@ -64,11 +79,6 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 			@Override
 			public Transaction lock(boolean write, Object cause) {
 				return outer.lock(write, cause);
-			}
-
-			@Override
-			public Equivalence<? super V> valueEquivalence() {
-				return outer.valueEquivalence();
 			}
 
 			@Override
@@ -151,6 +161,178 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		return new UniqueSortedMap<>(this);
 	}
 
+	static <K, V> SortedMultiMapFlow<?, K, V> create(TypeToken<K> keyType, TypeToken<V> valueType, Comparator<? super K> keyCompare) {
+		TypeToken<Map.Entry<K, V>> entryType = new TypeToken<Map.Entry<K, V>>() {}.where(new TypeParameter<K>() {}, keyType)
+			.where(new TypeParameter<V>() {}, valueType);
+		class MapEntry implements Map.Entry<K, V> {
+			private final K theKey;
+			private V theValue;
+
+			public MapEntry(K key, V value) {
+				theKey = key;
+				theValue = value;
+			}
+
+			@Override
+			public K getKey() {
+				return theKey;
+			}
+
+			@Override
+			public V getValue() {
+				return theValue;
+			}
+
+			@Override
+			public V setValue(V value) {
+				V old = theValue;
+				theValue = value;
+				return old;
+			}
+
+			@Override
+			public int hashCode() {
+				return Objects.hashCode(theKey);
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				return (obj == null || keyType.getRawType().isInstance(obj)) && keyCompare.compare(theKey, (K) obj) == 0;
+			}
+
+			@Override
+			public String toString() {
+				return theKey + "=" + theValue;
+			}
+		}
+		ObservableCollection<Map.Entry<K, V>> simpleEntryCollection = ObservableCollection.create(entryType).collect();
+		ObservableSortedSet<K> keySet = simpleEntryCollection.flow().map(keyType).map(Map.Entry::getKey).uniqueSorted(keyCompare, true)
+			.collect();
+		return new DefaultSortedMultiMapFlow<>(keySet, keySet.flow(), valueType,
+			key -> simpleEntryCollection.flow()//
+			.filterStatic(entry -> keyCompare.compare(entry.getKey(), key) == 0 ? null : StdMsg.WRONG_GROUP)//
+			.map(valueType).cache(false).withReverse(value -> new MapEntry(key, value)).map(Map.Entry::getValue));
+	}
+
+	interface SortedMultiMapFlow<OK, K, V> extends MultiMapFlow<OK, K, V> {
+		@Override
+		UniqueSortedDataFlow<OK, ?, K> keys();
+
+		<K2> SortedMultiMapFlow<OK, K2, V> onEquivalentSortedKeys(
+			Function<? super UniqueSortedDataFlow<OK, ?, K>, ? extends UniqueSortedDataFlow<OK, ?, K2>> keyFlow);
+
+		@Override
+		<V2> SortedMultiMapFlow<OK, K, V2> onValues(TypeToken<V2> targetType,
+			Function<? super CollectionDataFlow<?, ?, V>, ? extends CollectionDataFlow<?, ?, V2>> valueFlow);
+
+		@Override
+		ObservableSortedMultiMap<K, V> collectLW();
+
+		@Override
+		default ObservableSortedMultiMap<K, V> collect() {
+			return (ObservableSortedMultiMap<K, V>) MultiMapFlow.super.collect();
+		}
+
+		@Override
+		ObservableSortedMultiMap<K, V> collect(Observable<?> until);
+	}
+
+	class DefaultSortedMultiMapFlow<OK, K, V> extends DefaultMultiMapFlow<OK, K, V> implements SortedMultiMapFlow<OK, K, V> {
+		public DefaultSortedMultiMapFlow(ObservableCollection<OK> keyCollection, UniqueSortedDataFlow<OK, ?, K> keyFlow,
+			TypeToken<V> valueType, Function<? super OK, CollectionDataFlow<?, ?, V>> valueMaker) {
+			super(keyCollection, keyFlow, valueType, valueMaker);
+		}
+
+		@Override
+		public UniqueSortedDataFlow<OK, ?, K> keys() {
+			return (UniqueSortedDataFlow<OK, ?, K>) super.keys();
+		}
+
+		@Override
+		public <K2> SortedMultiMapFlow<OK, K2, V> onEquivalentSortedKeys(
+			Function<? super UniqueSortedDataFlow<OK, ?, K>, ? extends UniqueSortedDataFlow<OK, ?, K2>> keyFlow) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public <V2> SortedMultiMapFlow<OK, K, V2> onValues(TypeToken<V2> targetType,
+			Function<? super CollectionDataFlow<?, ?, V>, ? extends CollectionDataFlow<?, ?, V2>> valueFlow) {
+			Function<? super OK, CollectionDataFlow<?, ?, V2>> newValues = getValueMaker().andThen(valueFlow);
+			return new DefaultSortedMultiMapFlow<>(getKeyCollection(), keys(), targetType, newValues);
+		}
+
+		@Override
+		public ObservableSortedMultiMap<K, V> collectLW() {
+			return (ObservableSortedMultiMap<K, V>) super.collectLW();
+		}
+
+		@Override
+		public ObservableSortedMultiMap<K, V> collect(Observable<?> until) {
+			return (ObservableSortedMultiMap<K, V>) super.collect(until);
+		}
+
+		@Override
+		protected ObservableSortedMultiMap<K, V> collect(boolean lightWeight, Observable<?> until) {
+			return new DerivedSortedMultiMap<>(getKeyCollection(), keys(), until, getTargetValueType(), getValueMaker(), lightWeight);
+		}
+	}
+
+	class DerivedSortedMultiMap<OK, K, V> extends DerivedMultiMap<OK, K, V> implements ObservableSortedMultiMap<K, V> {
+		public DerivedSortedMultiMap(ObservableCollection<OK> keySource, UniqueSortedDataFlow<OK, ?, K> keyFlow, Observable<?> until,
+			TypeToken<V> valueType, Function<? super OK, CollectionDataFlow<?, ?, V>> valueMaker, boolean lightWeight) {
+			super(keySource, keyFlow, until, valueType, valueMaker, lightWeight);
+		}
+
+		@Override
+		public ObservableSortedSet<K> keySet() {
+			return (ObservableSortedSet<K>) super.keySet();
+		}
+
+		@Override
+		protected DerivedEntrySet createEntrySet(ObservableCollection<OK> keySource) {
+			return new DerivedSortedEntrySet(keySource, getKeyManager(), getUntil());
+		}
+
+		protected class DerivedSortedEntrySet extends DerivedEntrySet implements ObservableSortedSet<K> {
+			public DerivedSortedEntrySet(ObservableCollection<OK> keySource, CollectionManager<OK, ?, K> flow, Observable<?> until) {
+				super(keySource, flow, until);
+			}
+
+			@Override
+			public Comparator<? super K> comparator() {
+				return getKeyManager().comparator();
+			}
+
+			@Override
+			public int indexFor(Comparable<? super K> search) {
+				// TODO Auto-generated method stub
+			}
+
+			@Override
+			public ObservableValue<K> observeRelative(Comparable<? super K> search, boolean up) {
+				// TODO Auto-generated method stub
+			}
+
+			@Override
+			public boolean forObservableElement(Comparable<? super K> search, boolean up,
+				Consumer<? super ObservableCollectionElement<? extends K>> onElement) {
+				// TODO Auto-generated method stub
+			}
+
+			@Override
+			public boolean forMutableElement(Comparable<? super K> search, boolean up,
+				Consumer<? super MutableObservableElement<? extends K>> onElement) {
+				// TODO Auto-generated method stub
+			}
+
+			@Override
+			public MutableObservableSpliterator<K> mutableSpliterator(Comparable<? super K> search, boolean up) {
+				// TODO Auto-generated method stub
+			}
+		}
+	}
+
 	/**
 	 * Implements {@link ObservableSortedMap#subMap(Object, boolean, Object, boolean)}
 	 *
@@ -191,11 +373,6 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		@Override
 		public Transaction lock(boolean write, Object cause) {
 			return theOuter.lock(write, cause);
-		}
-
-		@Override
-		public Equivalence<? super V> valueEquivalence() {
-			return theOuter.valueEquivalence();
 		}
 
 		@Override

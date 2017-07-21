@@ -18,6 +18,9 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Subscription;
+import org.observe.assoc.ObservableMultiMap;
+import org.observe.assoc.ObservableMultiMap.MultiMapFlow;
+import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.CombinedCollectionBuilder;
 import org.observe.collect.ObservableCollection.CombinedValues;
@@ -143,6 +146,73 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public UniqueSortedDataFlow<E, T, T> uniqueSorted(Comparator<? super T> compare, boolean alwaysUseFirst) {
 			return new UniqueSortedDataFlowImpl<>(theSource, this, compare, alwaysUseFirst);
+		}
+
+		@Override
+		public <K> MultiMapFlow<E, K, T> groupBy(Function<? super CollectionDataFlow<E, I, T>, UniqueDataFlow<E, ?, K>> keyFlow,
+			boolean staticCategories) {
+			UniqueDataFlow<E, ?, K> keyFlowed = keyFlow.apply(this);
+			CollectionManager<E, ?, K> keyMgr = keyFlowed.manageCollection();
+			keyMgr.begin(null, null); // Light-weight
+			CollectionManager<E, ?, T> valueMgr = manageCollection();
+			valueMgr.begin(null, null); // Light-weight
+			return new ObservableMultiMap.DefaultMultiMapFlow<>(theSource, keyFlowed, theTargetType, key -> {
+				FilterMapResult<E, K> mappedKey = keyMgr.map(key);
+				if (mappedKey.error != null) // Invalid key
+					return ObservableCollection.constant(theTargetType);
+				Function<T, String> filter = value -> {
+					// Stinks to have to back up to the root type and then map back to the key,
+					// but right now the API doesn't allow for better
+					FilterMapResult<T, E> reversed = valueMgr.reverse(value);
+					if (reversed.error != null)
+						return reversed.error;
+					FilterMapResult<E, K> mappedValueKey = keyMgr.map(reversed.result);
+					if (mappedValueKey.error != null)
+						return mappedValueKey.error;
+					else if (keyMgr.equivalence().elementEquals((K) key, mappedValueKey.result))
+						return null;
+					else
+						return StdMsg.WRONG_GROUP;
+				};
+				if (staticCategories)
+					return filterStatic(filter);
+				else
+					return filter(filter);
+			});
+		}
+
+		@Override
+		public <K> MultiMapFlow<E, K, T> groupBy(Function<? super CollectionDataFlow<E, I, T>, CollectionDataFlow<E, ?, K>> keyFlow,
+			Comparator<? super K> keyCompare, boolean staticCategories) {
+			UniqueSortedDataFlow<E, ?, K> keyFlowed = keyFlow.apply(this).uniqueSorted(keyCompare, true);
+			CollectionManager<E, ?, K> keyMgr = keyFlowed.manageCollection();
+			keyMgr.begin(null, null); // Light-weight
+			CollectionManager<E, ?, T> valueMgr = manageCollection();
+			valueMgr.begin(null, null); // Light-weight
+			// Can't think of a real easy way to pull this code out so it's not copy-and-paste from the method above
+			return new ObservableSortedMultiMap.DefaultSortedMultiMapFlow<>(theSource, keyFlowed, theTargetType, key -> {
+				FilterMapResult<E, K> mappedKey = keyMgr.map(key);
+				if (mappedKey.error != null) // Invalid key
+					return ObservableCollection.constant(theTargetType);
+				Function<T, String> filter = value -> {
+					// Stinks to have to back up to the root type and then map back to the key,
+					// but right now the API doesn't allow for better
+					FilterMapResult<T, E> reversed = valueMgr.reverse(value);
+					if (reversed.error != null)
+						return reversed.error;
+					FilterMapResult<E, K> mappedValueKey = keyMgr.map(reversed.result);
+					if (mappedValueKey.error != null)
+						return mappedValueKey.error;
+					else if (keyMgr.equivalence().elementEquals((K) key, mappedValueKey.result))
+						return null;
+					else
+						return StdMsg.WRONG_GROUP;
+				};
+				if (staticCategories)
+					return filterStatic(filter);
+				else
+					return filter(filter);
+			});
 		}
 
 		@Override

@@ -1,9 +1,14 @@
 package org.observe.assoc;
 
+import java.lang.ref.Reference;
+import java.lang.ref.ReferenceQueue;
+import java.lang.ref.WeakReference;
 import java.util.Collection;
-import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 
 import org.observe.Observable;
@@ -12,9 +17,15 @@ import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.UniqueDataFlow;
+import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionElementManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
+import org.observe.collect.ObservableCollectionImpl;
 import org.observe.collect.ObservableSet;
+import org.observe.collect.ObservableSetImpl;
 import org.observe.collect.ObservableSortedSet;
 import org.qommons.Transaction;
+import org.qommons.collect.CollectionElement.StdMsg;
 import org.qommons.collect.TransactableMultiMap;
 
 import com.google.common.reflect.TypeParameter;
@@ -137,9 +148,6 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 
 	@Override
 	abstract boolean isLockSupported();
-
-	/** @return The {@link Equivalence} that is used by this multi-map's values */
-	Equivalence<? super V> valueEquivalence();
 
 	/** @return The keys that have least one value in this map */
 	@Override
@@ -284,6 +292,63 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		return values().simpleChanges();
 	}
 
+	/** @return A multi-map data flow that may be used to produce derived maps whose data is based on this map's */
+	default MultiMapFlow<K, K, V> flow() {
+		return new DefaultMultiMapFlow<>(keySet(), keySet().flow(), getValueType(), key -> get(key).flow());
+	}
+
+	static <K, V> MultiMapFlow<?, K, V> create(TypeToken<K> keyType, TypeToken<V> valueType, Equivalence<? super K> keyEquivalence) {
+		TypeToken<Map.Entry<K, V>> entryType=new TypeToken<Map.Entry<K, V>>(){}.where(new TypeParameter<K>(){}, keyType).
+			where(new TypeParameter<V>(){}, valueType);
+		class MapEntry implements Map.Entry<K, V> {
+			private final K theKey;
+			private V theValue;
+
+			public MapEntry(K key, V value) {
+				theKey = key;
+				theValue = value;
+			}
+
+			@Override
+			public K getKey() {
+				return theKey;
+			}
+
+			@Override
+			public V getValue() {
+				return theValue;
+			}
+
+			@Override
+			public V setValue(V value) {
+				V old = theValue;
+				theValue = value;
+				return old;
+			}
+
+			@Override
+			public int hashCode() {
+				return Objects.hashCode(theKey);
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				return keyEquivalence.elementEquals(theKey, obj);
+			}
+
+			@Override
+			public String toString() {
+				return theKey + "=" + theValue;
+			}
+		}
+		ObservableCollection<Map.Entry<K, V>> simpleEntryCollection=ObservableCollection.create(entryType).collect();
+		ObservableSet<K> keySet = simpleEntryCollection.flow().map(keyType).map(Map.Entry::getKey).withEquivalence(keyEquivalence)
+			.unique(true).collect();
+		return new DefaultMultiMapFlow<>(keySet, keySet.flow(), valueType, key -> simpleEntryCollection.flow()//
+			.filterStatic(entry -> keyEquivalence.elementEquals(entry.getKey(), key) ? null : StdMsg.WRONG_GROUP)//
+			.map(valueType).cache(false).withReverse(value -> new MapEntry(key, value)).map(Map.Entry::getValue));
+	}
+
 	/**
 	 * Implements {@link ObservableMultiMap#unique()}
 	 *
@@ -330,7 +395,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 
 		@Override
 		public Equivalence<? super V> equivalence() {
-			return theOuter.valueEquivalence();
+			return Equivalence.DEFAULT;
 		}
 
 		@Override
@@ -349,110 +414,260 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		}
 	}
 
-	class MultiMapBuilder<K, V> {
-		private final TypeToken<K> theKeyType;
+	interface MultiMapFlow<OK, K, V> {
+		UniqueDataFlow<OK, ?, K> keys();
+		TypeToken<V> getTargetValueType();
+
+		/**
+		 * @param <K2> The type of the new map key
+		 * @param keyFlow Produces a new key flow from this map flow's keys. Although this cannot be checked, there is an implied assertion
+		 *        that the resulting key flow will be equivalent to this flow's keys. For example, the equivalence of the key flow cannot be
+		 *        switched. If this requirement is not met, errors are possible.
+		 * @return A new multi-map flow with a different set of keys
+		 */
+		<K2> MultiMapFlow<OK, K2, V> onEquivalentKeys(
+			Function<? super UniqueDataFlow<OK, ?, K>, ? extends UniqueDataFlow<OK, ?, K2>> keyFlow);
+
+		<V2> MultiMapFlow<OK, K, V2> onValues(TypeToken<V2> targetType,
+			Function<? super CollectionDataFlow<?, ?, V>, ? extends CollectionDataFlow<?, ?, V2>> valueFlow);
+
+		ObservableMultiMap<K, V> collectLW();
+
+		default ObservableMultiMap<K, V> collect() {
+			return collect(Observable.empty);
+		}
+		ObservableMultiMap<K, V> collect(Observable<?> until);
+	}
+
+	class DefaultMultiMapFlow<OK, K, V> implements MultiMapFlow<OK, K, V> {
+		private final ObservableCollection<OK> theKeyCollection;
+		private final UniqueDataFlow<OK, ?, K> theKeyFlow;
 		private final TypeToken<V> theValueType;
-		private boolean isSafe = true;
-		private Function<CollectionDataFlow<?, ?, V>, CollectionDataFlow<?, ?, V>> theValueMaker;
+		private final Function<? super OK, CollectionDataFlow<?, ?, V>> theValueMaker;
 
-		public MultiMapBuilder(TypeToken<K> keyType, TypeToken<V> valueType) {
-			theKeyType = keyType;
+		public DefaultMultiMapFlow(ObservableCollection<OK> keyCollection, UniqueDataFlow<OK, ?, K> keyFlow, TypeToken<V> valueType,
+			Function<? super OK, CollectionDataFlow<?, ?, V>> valueMaker) {
+			theKeyCollection = keyCollection;
+			theKeyFlow = keyFlow;
 			theValueType = valueType;
-		}
-
-		public MultiMapBuilder<K, V> unsafe() {
-			isSafe = false;
-			return this;
-		}
-
-		public MultiMapBuilder<K, V> onValues(Function<CollectionDataFlow<?, ?, V>, CollectionDataFlow<?, ?, V>> valueMaker) {
 			theValueMaker = valueMaker;
-			return this;
 		}
 
-		public ObservableMultiMap<K, V> build() {
-			return build(df -> df.unique(true));
+		protected ObservableCollection<OK> getKeyCollection() {
+			return theKeyCollection;
 		}
 
-		public ObservableMultiMap<K, V> build(Function<? super CollectionDataFlow<?, ?, K>, ? extends UniqueDataFlow<?, ?, K>> keyMaker) {
-			return new SimpleMultiMap<>(theKeyType, theValueType, isSafe, keyMaker, theValueMaker);
+		protected Function<? super OK, CollectionDataFlow<?, ?, V>> getValueMaker() {
+			return theValueMaker;
+		}
+
+		@Override
+		public UniqueDataFlow<OK, ?, K> keys() {
+			return theKeyFlow;
+		}
+
+		@Override
+		public TypeToken<V> getTargetValueType() {
+			return theValueType;
+		}
+
+		@Override
+		public <K2> MultiMapFlow<OK, K2, V> onEquivalentKeys(
+			Function<? super UniqueDataFlow<OK, ?, K>, ? extends UniqueDataFlow<OK, ?, K2>> keyFlow) {
+			UniqueDataFlow<OK, ?, K2> newKeys = keyFlow.apply(theKeyFlow);
+			return new DefaultMultiMapFlow<>(theKeyCollection, newKeys, theValueType, theValueMaker);
+		}
+
+		@Override
+		public <V2> MultiMapFlow<OK, K, V2> onValues(TypeToken<V2> targetType,
+			Function<? super CollectionDataFlow<?, ?, V>, ? extends CollectionDataFlow<?, ?, V2>> valueFlow) {
+			Function<? super OK, CollectionDataFlow<?, ?, V2>> newValues = theValueMaker.andThen(valueFlow);
+			return new DefaultMultiMapFlow<>(theKeyCollection, theKeyFlow, targetType, newValues);
+		}
+
+		@Override
+		public ObservableMultiMap<K, V> collectLW() {
+			return collect(true, Observable.empty);
+		}
+
+		@Override
+		public ObservableMultiMap<K, V> collect(Observable<?> until) {
+			return collect(false, until);
+		}
+
+		protected ObservableMultiMap<K, V> collect(boolean lightWeight, Observable<?> until) {
+			return new DerivedMultiMap<>(theKeyCollection, theKeyFlow, until, theValueType, theValueMaker, lightWeight);
 		}
 	}
 
-	class SimpleMultiMap<K, V> implements ObservableMultiMap<K, V> {
-		private final TypeToken<K> theKeyType;
+	class DerivedMultiMap<OK, K, V> implements ObservableMultiMap<K, V> {
+		private final ObservableCollection<OK> theSource;
+		private final CollectionManager<OK, ?, K> theKeyManager;
 		private final TypeToken<V> theValueType;
 		private final TypeToken<ObservableMultiEntry<K, V>> theEntryType;
-		private final boolean isSafe;
-		private final Function<CollectionDataFlow<?, ?, V>, CollectionDataFlow<?, ?, V>> theValueMaker;
-		private final ObservableSet<K> theKeySet;
-		private final ObservableSet<ObservableMultiEntry<K, V>> theEntrySet;
+		private final TypeToken<ObservableCollection<V>> theValueCollectionType;
+		private final Function<? super OK, CollectionDataFlow<?, ?, V>> theValueMaker;
+		private final Observable<?> theUntil;
+		private final boolean isLightWeight;
 
-		public SimpleMultiMap(TypeToken<K> keyType, TypeToken<V> valueType, boolean safe,
-			Function<? super CollectionDataFlow<?, ?, K>, ? extends UniqueDataFlow<?, ?, K>> keyMaker,
-				Function<CollectionDataFlow<?, ?, V>, CollectionDataFlow<?, ?, V>> valueMaker) {
-			theKeyType = keyType;
+		private final DerivedEntrySet theEntries;
+
+		// These transient value variables help reduce the duplicate creation of value collections, which may be expensive
+		private final Map<OK, Reference<ObservableCollection<V>>> theTransientValues;
+		private final ReferenceQueue<ObservableCollection<V>> theGCdTransientValues;
+		private final Map<Reference<ObservableCollection<V>>, K> theTransientKeysByReference;
+		private final Lock theTransientValueLock;
+
+		private final ObservableCollection<V> empty;
+
+		public DerivedMultiMap(ObservableCollection<OK> keySource, UniqueDataFlow<OK, ?, K> keyFlow, Observable<?> until,
+			TypeToken<V> valueType, Function<? super OK, CollectionDataFlow<?, ?, V>> valueMaker, boolean lightWeight) {
+			theSource = keySource;
 			theValueType = valueType;
-			theEntryType = buildEntryType(keyType, valueType);
-			isSafe = safe;
 			theValueMaker = valueMaker;
-			CollectionDataFlow<K, K, K> keySource = safe ? ObservableCollection.create(theKeyType)
-				: ObservableCollection.createUnsafe(theKeyType, Collections.emptyList());
-			theKeySet = keyMaker.apply(keySource).collect();
-			theEntrySet = theKeySet.flow()//
-				.mapEquivalent(theEntryType).cache(true).reEvalOnUpdate(false).map(this::createEntry, entry -> entry.getKey())//
-				.filterModification().noAdd("Entries cannot be added directly").build()//
-				.collect();
-			// When an entry is removed, clear its contents
-			theEntrySet.onChange(evt -> {
-				switch (evt.getType()) {
-				case add:
-					break;
-				case remove:
-					try (Transaction t = evt.getOldValue().getValues().lock(true, evt)) {
-						evt.getNewValue().getValues().clear();
+			theUntil = until;
+			isLightWeight = lightWeight;
+			theEntryType = buildEntryType(keyFlow.getTargetType(), valueType);
+			theValueCollectionType = new TypeToken<ObservableCollection<V>>() {}.where(new TypeParameter<V>() {}, theValueType);
+
+			theTransientValues = keySource.equivalence().createMap();
+			theGCdTransientValues = new ReferenceQueue<>();
+			theTransientKeysByReference = new IdentityHashMap<>();
+			theTransientValueLock = new ReentrantLock(); // Don't need the reentrancy, but whatever
+
+			empty = ObservableCollection.constant(theValueType).collect();
+
+			theKeyManager = keyFlow.manageCollection();
+
+			// Need to create the entries last because the constructor will cause all the initial entries to be created, and those entries
+			// need access to this class's initialized fields
+			theEntries = createEntrySet(theSource);
+		}
+
+		protected CollectionManager<OK, ?, K> getKeyManager() {
+			return theKeyManager;
+		}
+
+		protected Observable<?> getUntil() {
+			return theUntil;
+		}
+
+		protected boolean isLightWeight() {
+			return isLightWeight;
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return theEntries.isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			// We'll assume locking the key set will propagate to the values.
+			// If this is untrue, then the value collections would be unaffected by this, of course;
+			// but if it is true, then iterating through each key and locking the values would be wasted linear time
+			return theEntries.lock(write, cause);
+		}
+
+		@Override
+		public TypeToken<K> getKeyType() {
+			return theEntries.getType();
+		}
+
+		@Override
+		public TypeToken<V> getValueType() {
+			return theValueType;
+		}
+
+		@Override
+		public TypeToken<ObservableMultiEntry<K, V>> getEntryType() {
+			return theEntryType;
+		}
+
+		@Override
+		public ObservableSet<K> keySet() {
+			return theEntries;
+		}
+
+		@Override
+		public ObservableCollection<V> get(Object key) {
+			if (!theEntries.belongs(key))
+				return empty; // The belongs method is assumed to be stateless, so this will always be empty
+			return ObservableCollection.flattenValue(theEntries.observeElement((K) key, true).mapV(theValueCollectionType, el -> {
+				if (el == null) {
+					// Means there are currently no values for the given key.
+					FilterMapResult<K, OK> reversedKey = theKeyManager.reverse((K) key);
+					if (reversedKey.error != null) {
+						// We can't call the value maker. We'll include the message that says why.
+						return empty.flow().filterModification().immutable(reversedKey.error, false).build().collectLW();
 					}
-					break;
-				case set:
-					if (evt.getOldValue() != evt.getNewValue())
-						try (Transaction t = evt.getOldValue().getValues().lock(true, evt)) {
-							evt.getOldValue().getValues().clear();
-						}
-					break;
+					return valuesFor(reversedKey.result);
 				}
-			});
+				else
+					return ((DerivedEntrySet.DerivedEntryElement) el.getElementId()).getValues();
+			}));
 		}
 
-		protected ObservableMultiEntry<K, V> createEntry(K key) {
-			return new SimpleMultiEntry(key);
+		protected ObservableCollection<V> valuesFor(OK key) {
+			theTransientValueLock.lock();
+			try {
+				// See if these values are already cached
+				ObservableCollection<V> values = null;
+				boolean wasCached = false;
+				Reference<ObservableCollection<V>> ref = theTransientValues.get(key);
+				if (ref != null) {
+					values = ref.get();
+					wasCached = values != null;
+					if (!wasCached)
+						theTransientValues.remove(key); // Remove the GC'd entry
+				}
+				if (values == null) {
+					// We'll make the value collection (which should be empty initially) that may allow adding values
+					CollectionDataFlow<?, ?, V> valueFlow = theValueMaker.apply(key);
+					values = isLightWeight ? valueFlow.collectLW() : valueFlow.collect(theUntil);
+					// We'll cache these values and re-use them in case the user adds values to them, which presumably
+					// will propagate into adding a key for the entry and making it pop up in the key/entry set.
+					theTransientValues.put(key, new WeakReference<>(values, theGCdTransientValues));
+				}
+
+				// Before we leave, we need to take out the trash-- transient values may have been GC'd, but their keys are still in the map
+				Reference<? extends ObservableCollection<V>> removedValues = theGCdTransientValues.poll();
+				while (removedValues != null) {
+					theTransientValues.remove(theTransientKeysByReference.remove(removedValues));
+					removedValues = theGCdTransientValues.poll();
+				}
+
+				return values;
+			} finally {
+				theTransientValueLock.unlock();
+			}
 		}
 
-		protected class SimpleMultiEntry implements ObservableMultiEntry<K, V> {
-			private final K theKey;
-			private final ObservableCollection<V> theValues;
+		protected DerivedEntrySet createEntrySet(ObservableCollection<OK> keySource) {
+			return new DerivedEntrySet(keySource, theKeyManager, theUntil);
+		}
 
-			protected SimpleMultiEntry(K key) {
-				theKey = key;
-				CollectionDataFlow<?, ?, V> valueFlow = isSafe ? ObservableCollection.create(theValueType)
-					: ObservableCollection.createUnsafe(theValueType, Collections.emptyList());
-				if (theValueMaker != null)
-					valueFlow = theValueMaker.apply(valueFlow);
-				theValues = valueFlow.collect();
+		protected class DerivedEntrySet extends ObservableSetImpl.DerivedSet<OK, K> {
+			DerivedEntrySet(ObservableCollection<OK> keySource, CollectionManager<OK, ?, K> flow, Observable<?> until) {
+				super(keySource, flow, until);
 			}
 
-			@Override
-			public TypeToken<K> getKeyType() {
-				return theKeyType;
-			}
+			protected class DerivedEntryElement extends ObservableCollectionImpl.DerivedCollection.DerivedCollectionElement<OK, K> {
+				private final ObservableCollection<V> theValues;
 
-			@Override
-			public K getKey() {
-				return theKey;
-			}
+				protected DerivedEntryElement(CollectionElementManager<OK, ?, K> manager, OK initValue) {
+					super(manager, initValue);
+					// Note: Here we have to assume that the value flow is itself aware of changes to the keys.
+					// If this key was replaced with a non-equivalent key, for example, the values will not change unless the value flow
+					// does this.
+					// Similarly for an key update--if the underlying flow doesn't know about updates to the keys, the values won't
+					// be updated.
+					theValues = valuesFor(initValue);
+				}
 
-			@Override
-			public ObservableCollection<V> getValues() {
-				return theValues;
+				protected ObservableCollection<V> getValues() {
+					return theValues;
+				}
 			}
 		}
 	}

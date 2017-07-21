@@ -928,7 +928,19 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 	 * @throws IllegalArgumentException If the given value may not be an element of this collection
 	 */
 	default ObservableValue<E> observeEquivalent(E value, Supplier<? extends E> defaultValue, boolean first) {
-		return new ObservableCollectionImpl.ObservableEquivalentFinder<>(this, value, defaultValue, first);
+		return observeElement(value, first).mapV(getType(), el -> el != null ? el.get() : defaultValue.get());
+	}
+
+	/**
+	 * @param value The value to observe in the collection
+	 * @param defaultValue The default value for the result when the value is not found in the collection (typically <code>()->null</code>
+	 * @param first Whether to observe the first or the last equivalent value in the collection
+	 * @return An observable value whose content is the first or last value in the collection that is {@link #equivalence() equivalent} to
+	 *         the given value
+	 * @throws IllegalArgumentException If the given value may not be an element of this collection
+	 */
+	default ObservableValue<ObservableCollectionElement<? extends E>> observeElement(E value, boolean first) {
+		return new ObservableCollectionImpl.ObservableEquivalentFinder<>(this, value, first);
 	}
 
 	/**
@@ -938,7 +950,8 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 	 * @return An observable value containing a value in this collection passing the given test
 	 */
 	default ObservableValue<E> observeFind(Predicate<? super E> test, Supplier<? extends E> def, boolean first) {
-		return new ObservableCollectionImpl.ObservableCollectionFinder<>(this, test, def, first);
+		return new ObservableCollectionImpl.ObservableCollectionFinder<>(this, test, first).mapV(getType(),
+			el -> el != null ? el.get() : def.get());
 	}
 
 	/**
@@ -1138,18 +1151,6 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 			else
 				return v2;
 		}, null);
-	}
-
-	/**
-	 * @param <K> The compile-time key type for the multi-map
-	 * @param keyType The run-time key type for the multi-map
-	 * @param keyMaker The mapping function to group this collection's values by
-	 * @param isStatic Whether the key function is to be evaluated statically, that is, once per value and not again as it may change
-	 * @return A builder to create a multi-map containing each of this collection's elements, each in the collection of the value mapped by
-	 *         the given function applied to the element
-	 */
-	default <K> GroupingBuilder<E, K, E> groupBy(TypeToken<K> keyType, Function<? super E, ? extends K> keyMaker, boolean isStatic) {
-		return new GroupingBuilder<>(this, keyType, getType(), keyMaker, isStatic);
 	}
 
 	/**
@@ -1525,6 +1526,27 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 		 *         disallowing some or all modifications.
 		 */
 		ModFilterBuilder<E, T> filterModification();
+
+		/**
+		 * @param <K> The key type for the map
+		 * @param keyFlow Produces a flow of key categories from this flow
+		 * @param staticCategories Whether the categorization of this flow's value is static or dynamic
+		 * @return A multi-map flow that may be used to produce a multi-map of this flow's values, categorized by the given key mapping
+		 */
+		<K> ObservableMultiMap.MultiMapFlow<E, K, T> groupBy(
+			Function<? super CollectionDataFlow<E, I, T>, UniqueDataFlow<E, ?, K>> keyFlow, boolean staticCategories);
+
+		/**
+		 * @param <K> The key type for the map
+		 * @param keyFlow Produces a sorted flow of key categories from this flow
+		 * @param keyCompare The comparator to sort the key values with
+		 * @param staticCategories Whether the categorization of this flow's value is static or dynamic
+		 * @return A sorted multi-map flow that may be used to produce a sorted multi-map of this flow's values, categorized by the given
+		 *         key mapping
+		 */
+		<K> ObservableSortedMultiMap.MultiMapFlow<E, K, T> groupBy(
+			Function<? super CollectionDataFlow<E, I, T>, CollectionDataFlow<E, ?, K>> keyFlow, Comparator<? super K> keyCompare,
+				boolean staticCategories);
 
 		// Terminal operations
 
@@ -2349,119 +2371,6 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 		public UniqueSortedDataFlow<E, T, T> build() {
 			return new ObservableCollectionDataFlowImpl.UniqueSortedModFilteredOp<>(getSource(), (AbstractDataFlow<E, ?, T>) getParent(),
 				getImmutableMsg(), areUpdatesAllowed(), getAddMsg(), getRemoveMsg(), getAddMsgFn(), getRemoveMsgFn());
-		}
-	}
-
-	/**
-	 * Builds a grouping definition that can be used to create a collection-backed multi-map
-	 *
-	 * @param <E> The type of values in the collection, which will be the type of values in the multi-map
-	 * @param <K> The key type for the multi-map
-	 * @see ObservableCollection#groupBy(TypeToken, Function, boolean)
-	 * @see ObservableCollection#groupBy(GroupingBuilder)
-	 */
-	class GroupingBuilder<E, K, V> {
-		private final ObservableCollection<E> theCollection;
-		private final TypeToken<K> theKeyType;
-		private final TypeToken<V> theValueType;
-		private final Function<? super E, ? extends K> theKeyMaker;
-		private final Function<CollectionDataFlow<E,?,V>,
-		private final boolean isStatic;
-		private Equivalence<? super K> theKeyEquivalence = Equivalence.DEFAULT;
-		private boolean isAlwaysUsingFirst;
-		private boolean isBuilt;
-
-		public GroupingBuilder(ObservableCollection<E> collection, TypeToken<K> keyType, TypeToken<V> valueType,
-			Function<? super E, ? extends K> keyMaker, boolean isStatic) {
-			theCollection = collection;
-			theKeyType = keyType;
-			theValueType = valueType;
-			theKeyMaker = keyMaker;
-			this.isStatic = isStatic;
-		}
-
-		public ObservableCollection<E> getCollection() {
-			return theCollection;
-		}
-
-		public TypeToken<K> getKeyType() {
-			return theKeyType;
-		}
-
-		public TypeToken<V> getValueType() {
-			return theValueType;
-		}
-
-		public Function<? super E, ? extends K> getKeyMaker() {
-			return theKeyMaker;
-		}
-
-		public boolean isStatic() {
-			return isStatic;
-		}
-
-		public GroupingBuilder<E, K, V> withKeyEquivalence(Equivalence<? super K> equivalence) {
-			if (isBuilt)
-				throw new IllegalStateException("Cannot change the grouping builder's properties after building");
-			theKeyEquivalence = equivalence;
-			return this;
-		}
-
-		public Equivalence<? super K> getKeyEquivalence() {
-			return theKeyEquivalence;
-		}
-
-		public GroupingBuilder<E, K, V> alwaysUseFirst() {
-			if (isBuilt)
-				throw new IllegalStateException("Cannot change the grouping builder's properties after building");
-			isAlwaysUsingFirst = true;
-			return this;
-		}
-
-		public boolean isAlwaysUsingFirst() {
-			return isAlwaysUsingFirst;
-		}
-
-		public SortedGroupingBuilder<E, K, V> sorted(Comparator<? super K> compare) {
-			return new SortedGroupingBuilder<>(this, compare);
-		}
-
-		public ObservableMultiMap<K, V> build() {
-			isBuilt = true;
-			return new ObservableCollectionImpl.GroupedMultiMap<>(theCollection, this);
-		}
-	}
-
-	/**
-	 * Builds a sorted grouping definition that can be used to create a collection-backed sorted multi-map
-	 *
-	 * @param <E> The type of values in the collection, which will be the type of values in the multi-map
-	 * @param <K> The key type for the multi-map
-	 * @see ObservableCollection#groupBy(TypeToken, Function, boolean)
-	 * @see ObservableCollection.GroupingBuilder#sorted(Comparator)
-	 * @see ObservableCollection#groupBy(SortedGroupingBuilder)
-	 */
-	class SortedGroupingBuilder<E, K, V> extends GroupingBuilder<E, K, V> {
-		private final Comparator<? super K> theCompare;
-
-		public SortedGroupingBuilder(GroupingBuilder<E, K, V> basicBuilder, Comparator<? super K> compare) {
-			super(basicBuilder.getCollection(), basicBuilder.getKeyType(), basicBuilder.getValueType(), basicBuilder.getKeyMaker(),
-				basicBuilder.isStatic());
-			theCompare = compare;
-		}
-
-		@Override
-		public SortedGroupingBuilder<E, K, V> alwaysUseFirst() {
-			return (SortedGroupingBuilder<E, K, V>) super.alwaysUseFirst();
-		}
-
-		@Override
-		public ObservableSortedMultiMap<K, V> build() {
-			return new ObservableCollectionImpl.GroupedSortedMultiMap<>(getCollection(), this);
-		}
-
-		public Comparator<? super K> getCompare() {
-			return theCompare;
 		}
 	}
 }
