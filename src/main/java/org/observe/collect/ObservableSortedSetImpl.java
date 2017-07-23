@@ -1,6 +1,5 @@
 package org.observe.collect;
 
-import java.util.Collection;
 import java.util.Comparator;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -16,10 +15,10 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueSortedDataFlowWrapper;
 import org.observe.collect.ObservableSetImpl.UniqueBaseFlow;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterSortedSet;
+import org.qommons.collect.ElementHandle;
 import org.qommons.collect.MutableElementHandle;
-import org.qommons.collect.ElementId;
-import org.qommons.collect.SimpleCause;
-import org.qommons.value.Value;
+import org.qommons.collect.MutableElementSpliterator;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -32,315 +31,54 @@ public class ObservableSortedSetImpl {
 	 *
 	 * @param <E> The type of elements in the set
 	 */
-	public static class ObservableSubSet<E> implements ObservableSortedSet<E> {
-		protected static class BoundedValue<E> {
-			final E value;
-			final boolean included;
-
-			BoundedValue(E value, boolean included) {
-				this.value = value;
-				this.included = included;
-			}
-		}
-		private final ObservableSortedSet<E> theWrapped;
-
-		private final Comparable<? super E> from;
-		private final Comparable<? super E> to;
-
+	public static class ObservableSubSet<E> extends BetterSortedSet.BetterSubSet<E> implements ObservableSortedSet<E> {
 		public ObservableSubSet(ObservableSortedSet<E> set, Comparable<? super E> from, Comparable<? super E> to) {
-			theWrapped = set;
-			this.from = from;
-			this.to = to;
+			super(set, from, to);
 		}
 
+		@Override
 		public ObservableSortedSet<E> getWrapped() {
-			return theWrapped;
-		}
-
-		public Comparable<? super E> getFrom() {
-			return from;
-		}
-
-		public Comparable<? super E> getTo() {
-			return to;
-		}
-
-		public int isInRange(E value) {
-			if (from != null && from.compareTo(value) > 0)
-				return -1;
-			if (to != null && to.compareTo(value) < 0)
-				return 1;
-			return 0;
-		}
-
-		protected Comparable<E> boundSearch(Comparable<? super E> search) {
-			return v -> {
-				int compare = isInRange(v);
-				if (compare == 0)
-					compare = search.compareTo(v);
-				return compare;
-			};
-		}
-
-		/** @return The first index in the wrapped sorted set that is included in this set */
-		protected int getMinIndex() {
-			if (from == null)
-				return 0;
-			int index = theWrapped.indexFor(from);
-			if (index > 0)
-				return index;
-			else
-				return -index - 1;
-		}
-
-		/** @return The last index in the wrapped */
-		protected int getMaxIndex() {
-			if (to == null)
-				return size() - 1;
-			int index = theWrapped.indexFor(to);
-			if (index > 0)
-				return index;
-			else
-				return -index - 1;
+			return (ObservableSortedSet<E>) super.getWrapped();
 		}
 
 		@Override
 		public TypeToken<E> getType() {
-			return theWrapped.getType();
+			return getWrapped().getType();
 		}
 
 		@Override
 		public boolean isLockSupported() {
-			return theWrapped.isLockSupported();
+			return getWrapped().isLockSupported();
 		}
 
 		@Override
 		public Transaction lock(boolean write, Object cause) {
-			return theWrapped.lock(write, cause);
+			return getWrapped().lock(write, cause);
 		}
 
 		@Override
 		public Equivalence<? super E> equivalence() {
-			return theWrapped.equivalence();
+			return getWrapped().equivalence();
 		}
 
 		@Override
-		public Comparator<? super E> comparator() {
-			return theWrapped.comparator();
-		}
-
-		@Override
-		public int getElementsBefore(ElementId id) {
-			return getWrapped().getElementsBefore(id) - getMinIndex();
-		}
-
-		@Override
-		public int getElementsAfter(ElementId id) {
-			int wrappedAfter = getWrapped().getElementsAfter(id);
-			int wrappedSize = getWrapped().size();
-			int maxIndex = getMaxIndex();
-			return wrappedAfter - (wrappedSize - maxIndex - 1);
-		}
-
-		@Override
-		public int size() {
-			int minIndex = getMinIndex();
-			int maxIndex = getMaxIndex();
-			return maxIndex - minIndex + 1; // Both minIndex and maxIndex are included here
-		}
-
-		@Override
-		public boolean isEmpty() {
-			return getMinIndex() > getMaxIndex(); // Both minIndex and maxIndex are included here
-		}
-
-		@Override
-		public int indexFor(Comparable<? super E> search) {
-			return theWrapped.indexFor(boundSearch(search));
+		public E[] toArray() {
+			return ObservableSortedSet.super.toArray();
 		}
 
 		@Override
 		public ObservableValue<E> observeRelative(Comparable<? super E> search, boolean up) {
-			return theWrapped.observeRelative(boundSearch(search), up).mapV(v -> isInRange(v) == 0 ? v : null, true);
+			return getWrapped().observeRelative(boundSearch(search), up).mapV(v -> isInRange(v) == 0 ? v : null, true);
 		}
 
 		@Override
 		public ObservableSortedSet<E> subSet(Comparable<? super E> from, Comparable<? super E> to) {
-			return new ObservableSubSet<>(theWrapped, boundSearch(from), boundSearch(to));
-		}
-
-		@Override
-		public boolean forObservableElement(Comparable<? super E> search, boolean up,
-			Consumer<? super ObservableCollectionElement<? extends E>> onElement) {
-			boolean[] success = new boolean[1];
-			theWrapped.forObservableElement(boundSearch(from), up, el -> {
-				if (isInRange(el.get()) == 0) {
-					success[0] = true;
-					onElement.accept(el);
-				}
-			});
-			return success[0];
-		}
-
-		@Override
-		public boolean forMutableElement(Comparable<? super E> search, boolean up,
-			Consumer<? super MutableObservableElement<? extends E>> onElement) {
-			boolean[] success = new boolean[1];
-			theWrapped.forMutableElement(boundSearch(search), up, el -> {
-				if (isInRange(el.get()) == 0) {
-					success[0] = true;
-					onElement.accept(el);
-				}
-			});
-			return success[0];
-		}
-
-		@Override
-		public <T> T ofElementAt(ElementId elementId, Function<? super ObservableCollectionElement<? extends E>, T> onElement) {
-			return theWrapped.ofElementAt(elementId, el -> {
-				if (isInRange(el.get()) == 0)
-					return onElement.apply(el);
-				else
-					throw new IllegalArgumentException(MutableElementHandle.StdMsg.NOT_FOUND);
-			});
-		}
-
-		@Override
-		public <T> T ofMutableElementAt(ElementId elementId, Function<? super MutableObservableElement<? extends E>, T> onElement) {
-			return theWrapped.ofMutableElementAt(elementId, el -> {
-				if (isInRange(el.get()) == 0)
-					return onElement.apply(new BoundedMutableElement<>(el));
-				else
-					throw new IllegalArgumentException(MutableElementHandle.StdMsg.NOT_FOUND);
-			});
-		}
-
-		@Override
-		public <T> T ofElementAt(int index, Function<? super ObservableCollectionElement<? extends E>, T> onElement) {
-			return getWrapped().ofElementAt(index - getMinIndex(), el -> {
-				if (isInRange(el.get()) != 0)
-					throw new IndexOutOfBoundsException(index + " of " + size());
-				return onElement.apply(el);
-			});
-		}
-
-		@Override
-		public <T> T ofMutableElementAt(int index, Function<? super MutableObservableElement<? extends E>, T> onElement) {
-			return getWrapped().ofMutableElementAt(index - getMinIndex(), el -> {
-				if (isInRange(el.get()) != 0)
-					throw new IndexOutOfBoundsException(index + " of " + size());
-				return onElement.apply(new BoundedMutableElement<>(el));
-			});
-		}
-
-		@Override
-		public ObservableElementSpliterator<E> spliterator(boolean fromStart) {
-			ObservableElementSpliterator<E> wrapSpliter;
-			if (fromStart) {
-				if (from == null)
-					wrapSpliter = theWrapped.spliterator(true);
-				else
-					wrapSpliter = theWrapped.spliterator(from, true);
-			} else {
-				if (to == null)
-					wrapSpliter = theWrapped.spliterator(false);
-				else
-					wrapSpliter = theWrapped.spliterator(to, false);
-			}
-			return new BoundedSpliterator(wrapSpliter);
-		}
-
-		@Override
-		public MutableObservableSpliterator<E> mutableSpliterator(boolean fromStart) {
-			MutableObservableSpliterator<E> wrapSpliter;
-			if (fromStart) {
-				if (from == null)
-					wrapSpliter = theWrapped.mutableSpliterator(true);
-				else
-					wrapSpliter = theWrapped.mutableSpliterator(from, true);
-			} else {
-				if (to == null)
-					wrapSpliter = theWrapped.mutableSpliterator(false);
-				else
-					wrapSpliter = theWrapped.mutableSpliterator(to, false);
-			}
-			return new BoundedMutableSpliterator(wrapSpliter);
-		}
-
-		@Override
-		public ObservableElementSpliterator<E> spliterator(Comparable<? super E> search, boolean up) {
-			return new BoundedSpliterator(theWrapped.spliterator(boundSearch(search), up));
-		}
-
-		@Override
-		public MutableObservableSpliterator<E> mutableSpliterator(Comparable<? super E> search, boolean up) {
-			return new BoundedMutableSpliterator(theWrapped.mutableSpliterator(boundSearch(search), up));
-		}
-
-		@Override
-		public MutableObservableSpliterator<E> mutableSpliterator(int index) {
-			int minIndex = getMinIndex();
-			int maxIndex = getMaxIndex();
-			if (index > (maxIndex - minIndex + 1))
-				throw new IndexOutOfBoundsException(index + " of " + (maxIndex - minIndex + 1));
-			return new BoundedMutableSpliterator(getWrapped().mutableSpliterator(index - minIndex));
-		}
-
-		@Override
-		public String canAdd(E value) {
-			if (isInRange(value) != 0)
-				return MutableElementHandle.StdMsg.ILLEGAL_ELEMENT;
-			return theWrapped.canAdd(value);
-		}
-
-		@Override
-		public boolean add(E value) {
-			if (isInRange(value) != 0)
-				throw new IllegalArgumentException(MutableElementHandle.StdMsg.ILLEGAL_ELEMENT);
-			return theWrapped.add(value);
-		}
-
-		@Override
-		public boolean addAll(Collection<? extends E> values) {
-			for (E value : values)
-				if (isInRange(value) != 0)
-					throw new IllegalArgumentException(MutableElementHandle.StdMsg.ILLEGAL_ELEMENT);
-			return theWrapped.addAll(values);
-		}
-
-		@Override
-		public String canRemove(Object value) {
-			if (value != null || !theWrapped.getType().getRawType().isInstance(value))
-				return MutableElementHandle.StdMsg.BAD_TYPE;
-			if (isInRange((E) value) != 0)
-				return MutableElementHandle.StdMsg.ILLEGAL_ELEMENT;
-			return theWrapped.canRemove(value);
-		}
-
-		@Override
-		public boolean remove(Object value) {
-			if (isInRange((E) value) != 0)
-				return false;
-			return theWrapped.remove(value);
-		}
-
-		@Override
-		public boolean removeLast(Object o) {
-			if (!theWrapped.equivalence().isElement(o) || isInRange((E) o) != 0)
-				return false;
-			return theWrapped.removeLast(o);
-		}
-
-		@Override
-		public void clear() {
-			try (Transaction t = lock(true, null)) {
-				SimpleCause.doWith(new SimpleCause(), c -> mutableSpliterator().forEachMutableElement(el -> el.remove(c)));
-			}
+			return new ObservableSubSet<>(getWrapped(), boundSearch(from), boundSearch(to));
 		}
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-			return theWrapped.onChange(new Consumer<ObservableCollectionEvent<? extends E>>() {
+			return getWrapped().onChange(new Consumer<ObservableCollectionEvent<? extends E>>() {
 				private int startIndex;
 
 				@Override
@@ -402,324 +140,6 @@ public class ObservableSortedSetImpl {
 		public String toString() {
 			return ObservableSet.toString(this);
 		}
-
-		private class BoundedSpliterator implements ObservableElementSpliterator<E> {
-			private final ObservableElementSpliterator<E> theWrappedSpliter;
-
-			BoundedSpliterator(ObservableElementSpliterator<E> wrappedSpliter) {
-				theWrappedSpliter = wrappedSpliter;
-			}
-
-			protected ObservableElementSpliterator<E> getWrappedSpliter() {
-				return theWrappedSpliter;
-			}
-
-			@Override
-			public long estimateSize() {
-				return theWrappedSpliter.estimateSize();
-			}
-
-			@Override
-			public int characteristics() {
-				return DISTINCT | ORDERED | SORTED;
-			}
-
-			@Override
-			public Comparator<? super E> getComparator() {
-				return theWrappedSpliter.getComparator();
-			}
-
-			@Override
-			public TypeToken<E> getType() {
-				return ObservableSubSet.this.getType();
-			}
-
-			@Override
-			public boolean tryAdvanceObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
-				boolean[] success = new boolean[1];
-				if (theWrappedSpliter.tryAdvanceObservableElement(el -> {
-					if (isInRange(el.get()) == 0) {
-						success[0] = true;
-						action.accept(el);
-					}
-				}) && !success[0]) {
-					// If there was a super-set element that was not in range, need to back up back to the last in-range element
-					theWrappedSpliter.tryReverse(v -> {
-					});
-				}
-				return success[0];
-			}
-
-			@Override
-			public boolean tryReverseObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
-				boolean[] success = new boolean[1];
-				if (theWrappedSpliter.tryReverseObservableElement(el -> {
-					if (isInRange(el.get()) == 0) {
-						success[0] = true;
-						action.accept(el);
-					}
-				}) && !success[0]) {
-					// If there was a super-set element that was not in range, need to back up back to the last in-range element
-					theWrappedSpliter.tryAdvance(v -> {
-					});
-				}
-				return success[0];
-			}
-
-			@Override
-			public void forEachObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
-				boolean[] lastOutOfRange = new boolean[1];
-				theWrappedSpliter.forEachObservableElement(el -> {
-					if (isInRange(el.get()) == 0)
-						action.accept(el);
-					else
-						lastOutOfRange[0] = true;
-				});
-				if (lastOutOfRange[0]) {
-					// Need to back up back to the last in-range element
-					theWrappedSpliter.tryReverse(v -> {
-					});
-				}
-			}
-
-			@Override
-			public void forEachReverseObservableElement(Consumer<? super ObservableCollectionElement<E>> action) {
-				boolean[] lastOutOfRange = new boolean[1];
-				theWrappedSpliter.forEachReverseObservableElement(el -> {
-					if (isInRange(el.get()) == 0)
-						action.accept(el);
-					else
-						lastOutOfRange[0] = true;
-				});
-				if (lastOutOfRange[0]) {
-					// Need to back up back to the last in-range element
-					theWrappedSpliter.tryAdvance(v -> {
-					});
-				}
-			}
-
-			@Override
-			public boolean tryAdvance(Consumer<? super E> action) {
-				boolean[] success = new boolean[1];
-				if (theWrappedSpliter.tryAdvance(v -> {
-					if (isInRange(v) == 0) {
-						success[0] = true;
-						action.accept(v);
-					}
-				}) && !success[0]) {
-					// If there was a super-set element that was not in range, need to back up back to the last in-range element
-					theWrappedSpliter.tryReverse(v -> {
-					});
-				}
-				return success[0];
-			}
-
-			@Override
-			public boolean tryReverse(Consumer<? super E> action) {
-				boolean[] success = new boolean[1];
-				if (theWrappedSpliter.tryReverse(v -> {
-					if (isInRange(v) == 0) {
-						success[0] = true;
-						action.accept(v);
-					}
-				}) && !success[0]) {
-					// If there was a super-set element that was not in range, need to back up back to the last in-range element
-					theWrappedSpliter.tryAdvance(v -> {
-					});
-				}
-				return success[0];
-			}
-
-			@Override
-			public void forEachRemaining(Consumer<? super E> action) {
-				boolean[] lastOutOfRange = new boolean[1];
-				theWrappedSpliter.forEachRemaining(v -> {
-					if (isInRange(v) == 0)
-						action.accept(v);
-					else
-						lastOutOfRange[0] = true;
-				});
-				if (lastOutOfRange[0]) {
-					// Need to back up back to the last in-range element
-					theWrappedSpliter.tryReverse(v -> {
-					});
-				}
-			}
-
-			@Override
-			public void forEachReverse(Consumer<? super E> action) {
-				boolean[] lastOutOfRange = new boolean[1];
-				theWrappedSpliter.forEachReverse(v -> {
-					if (isInRange(v) == 0)
-						action.accept(v);
-					else
-						lastOutOfRange[0] = true;
-				});
-				if (lastOutOfRange[0]) {
-					// Need to back up back to the last in-range element
-					theWrappedSpliter.tryAdvance(v -> {
-					});
-				}
-			}
-
-			@Override
-			public ObservableElementSpliterator<E> trySplit() {
-				ObservableElementSpliterator<E> wrapSplit = theWrappedSpliter.trySplit();
-				return wrapSplit == null ? null : new BoundedSpliterator(wrapSplit);
-			}
-		}
-
-		private class BoundedMutableSpliterator extends BoundedSpliterator implements MutableObservableSpliterator<E> {
-			BoundedMutableSpliterator(MutableObservableSpliterator<E> wrappedSpliter) {
-				super(wrappedSpliter);
-			}
-
-			@Override
-			protected MutableObservableSpliterator<E> getWrappedSpliter() {
-				return (MutableObservableSpliterator<E>) super.getWrappedSpliter();
-			}
-
-			@Override
-			public boolean tryAdvanceMutableElement(Consumer<? super MutableObservableElement<E>> action) {
-				boolean[] success = new boolean[1];
-				if (getWrappedSpliter().tryAdvanceMutableElement(el -> {
-					if (isInRange(el.get()) == 0) {
-						success[0] = true;
-						action.accept(new BoundedMutableElement<>(el));
-					}
-				}) && !success[0]) {
-					// If there was a super-set element that was not in range, need to back up back to the last in-range element
-					getWrappedSpliter().tryReverse(v -> {
-					});
-				}
-				return success[0];
-			}
-
-			@Override
-			public boolean tryReverseMutableElement(Consumer<? super MutableObservableElement<E>> action) {
-				boolean[] success = new boolean[1];
-				if (getWrappedSpliter().tryReverseMutableElement(el -> {
-					if (isInRange(el.get()) == 0) {
-						success[0] = true;
-						action.accept(new BoundedMutableElement<>(el));
-					}
-				}) && !success[0]) {
-					// If there was a super-set element that was not in range, need to back up back to the last in-range element
-					getWrappedSpliter().tryAdvance(v -> {
-					});
-				}
-				return success[0];
-			}
-
-			@Override
-			public void forEachMutableElement(Consumer<? super MutableObservableElement<E>> action) {
-				boolean[] lastOutOfRange = new boolean[1];
-				getWrappedSpliter().forEachMutableElement(el -> {
-					if (isInRange(el.get()) == 0)
-						action.accept(new BoundedMutableElement<>(el));
-					else
-						lastOutOfRange[0] = true;
-				});
-				if (lastOutOfRange[0]) {
-					// Need to back up back to the last in-range element
-					getWrappedSpliter().tryReverse(v -> {
-					});
-				}
-			}
-
-			@Override
-			public void forEachReverseMutableElement(Consumer<? super MutableObservableElement<E>> action) {
-				boolean[] lastOutOfRange = new boolean[1];
-				getWrappedSpliter().forEachReverseMutableElement(el -> {
-					if (isInRange(el.get()) == 0)
-						action.accept(new BoundedMutableElement<>(el));
-					else
-						lastOutOfRange[0] = true;
-				});
-				if (lastOutOfRange[0]) {
-					// Need to back up back to the last in-range element
-					getWrappedSpliter().tryAdvance(v -> {
-					});
-				}
-			}
-
-			@Override
-			public MutableObservableSpliterator<E> trySplit() {
-				MutableObservableSpliterator<E> wrapSplit = getWrappedSpliter().trySplit();
-				return wrapSplit == null ? null : new BoundedMutableSpliterator(wrapSplit);
-			}
-		}
-
-		class BoundedMutableElement<T extends E> implements MutableObservableElement<T> {
-			private final MutableObservableElement<T> theWrappedEl;
-
-			BoundedMutableElement(MutableObservableElement<T> wrappedEl) {
-				theWrappedEl = wrappedEl;
-			}
-
-			@Override
-			public ElementId getElementId() {
-				return theWrappedEl.getElementId();
-			}
-
-			@Override
-			public TypeToken<T> getType() {
-				return theWrappedEl.getType();
-			}
-
-			@Override
-			public T get() {
-				return theWrappedEl.get();
-			}
-
-			@Override
-			public Value<String> isEnabled() {
-				return theWrappedEl.isEnabled();
-			}
-
-			@Override
-			public <V extends T> String isAcceptable(V value) {
-				if (isInRange(value) != 0)
-					return MutableElementHandle.StdMsg.ILLEGAL_ELEMENT;
-				return theWrappedEl.isAcceptable(value);
-			}
-
-			@Override
-			public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
-				if (isInRange(value) != 0)
-					throw new IllegalArgumentException(MutableElementHandle.StdMsg.ILLEGAL_ELEMENT);
-				return theWrappedEl.set(value, cause);
-			}
-
-			@Override
-			public String canRemove() {
-				return theWrappedEl.canRemove();
-			}
-
-			@Override
-			public void remove(Object cause) throws UnsupportedOperationException {
-				theWrappedEl.remove(cause);
-			}
-
-			@Override
-			public String canAdd(T value, boolean before) {
-				if (isInRange(value) != 0)
-					return MutableElementHandle.StdMsg.ILLEGAL_ELEMENT;
-				return theWrappedEl.canAdd(value, before);
-			}
-
-			@Override
-			public void add(T value, boolean before, Object cause) throws UnsupportedOperationException, IllegalArgumentException {
-				if (isInRange(value) != 0)
-					throw new IllegalArgumentException(MutableElementHandle.StdMsg.ILLEGAL_ELEMENT);
-				theWrappedEl.add(value, before, cause);
-			}
-
-			@Override
-			public String toString() {
-				return theWrappedEl.toString();
-			}
-		}
 	}
 
 	/**
@@ -762,35 +182,19 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public boolean forObservableElement(Comparable<? super E> value, boolean up,
-			Consumer<? super ObservableCollectionElement<? extends E>> onElement) {
-			return getWrapped().forObservableElement(value, !up, onElement);
+		public boolean forElement(Comparable<? super E> value, Consumer<? super ElementHandle<? extends E>> onElement, boolean up) {
+			return getWrapped().forElement(value, onElement, !up);
 		}
 
 		@Override
-		public boolean forMutableElement(Comparable<? super E> value, boolean up,
-			Consumer<? super MutableObservableElement<? extends E>> onElement) {
-			return getWrapped().forMutableElement(value, !up, onElement);
+		public boolean forMutableElement(Comparable<? super E> value, Consumer<? super MutableElementHandle<? extends E>> onElement,
+			boolean up) {
+			return getWrapped().forMutableElement(value, onElement, !up);
 		}
 
 		@Override
-		public MutableObservableSpliterator<E> mutableSpliterator(Comparable<? super E> value, boolean up) {
-			return getWrapped().mutableSpliterator(value, !up);
-		}
-
-		@Override
-		public ObservableSortedSet<E> subSet(E fromElement, boolean fromInclusive, E toElement, boolean toInclusive) {
-			return getWrapped().subSet(toElement, toInclusive, fromElement, fromInclusive);
-		}
-
-		@Override
-		public ObservableSortedSet<E> headSet(E toElement, boolean inclusive) {
-			return getWrapped().tailSet(toElement, inclusive);
-		}
-
-		@Override
-		public ObservableSortedSet<E> tailSet(E fromElement, boolean inclusive) {
-			return getWrapped().headSet(fromElement, inclusive);
+		public MutableElementSpliterator<E> mutableSpliterator(Comparable<? super E> value, boolean up) {
+			return getWrapped().mutableSpliterator(value, !up).reverse();
 		}
 
 		@Override
@@ -900,19 +304,18 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public boolean forObservableElement(Comparable<? super T> search, boolean up,
-			Consumer<? super ObservableCollectionElement<? extends T>> onElement) {
-			return getSource().forObservableElement(mappedSearch(search), up, el -> onElement.accept(elementFor(el)));
+		public boolean forElement(Comparable<? super T> search, Consumer<? super ElementHandle<? extends T>> onElement, boolean up) {
+			return getSource().forElement(mappedSearch(search), el -> onElement.accept(elementFor(el)), up);
 		}
 
 		@Override
-		public boolean forMutableElement(Comparable<? super T> search, boolean up,
-			Consumer<? super MutableObservableElement<? extends T>> onElement) {
-			return getSource().forMutableElement(mappedSearch(search), up, el -> onElement.accept(mutableElementFor(el)));
+		public boolean forMutableElement(Comparable<? super T> search, Consumer<? super MutableElementHandle<? extends T>> onElement,
+			boolean up) {
+			return getSource().forMutableElement(mappedSearch(search), el -> onElement.accept(mutableElementFor(el)), up);
 		}
 
 		@Override
-		public MutableObservableSpliterator<T> mutableSpliterator(Comparable<? super T> search, boolean up) {
+		public MutableElementSpliterator<T> mutableSpliterator(Comparable<? super T> search, boolean up) {
 			return new DerivedMutableSpliterator(getSource().mutableSpliterator(mappedSearch(search), up));
 		}
 	}
@@ -945,8 +348,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public boolean forObservableElement(Comparable<? super T> search, boolean up,
-			Consumer<? super ObservableCollectionElement<? extends T>> onElement) {
+		public boolean forElement(Comparable<? super T> search, Consumer<? super ElementHandle<? extends T>> onElement, boolean up) {
 			try (Transaction t = lock(false, null)) {
 				DerivedCollectionElement element = getPresentElements().relative(el -> search.compareTo(el.getValue()), up);
 				if (element == null)
@@ -957,8 +359,8 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public boolean forMutableElement(Comparable<? super T> search, boolean up,
-			Consumer<? super MutableObservableElement<? extends T>> onElement) {
+		public boolean forMutableElement(Comparable<? super T> search, Consumer<? super MutableElementHandle<? extends T>> onElement,
+			boolean up) {
 			try (Transaction t = lock(true, null)) {
 				DerivedCollectionElement element = getPresentElements().relative(el -> search.compareTo(el.getValue()), up);
 				if (element == null)
@@ -969,7 +371,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public MutableObservableSpliterator<T> mutableSpliterator(Comparable<? super T> search, boolean up) {
+		public MutableElementSpliterator<T> mutableSpliterator(Comparable<? super T> search, boolean up) {
 			return new MutableDerivedSpliterator(getPresentElements().relative(search, up));
 		}
 	}
@@ -1012,28 +414,27 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public boolean forObservableElement(Comparable<? super E> value, boolean up,
-			Consumer<? super ObservableCollectionElement<? extends E>> onElement) {
+		public boolean forElement(Comparable<? super E> value, Consumer<? super ElementHandle<? extends E>> onElement, boolean up) {
 			ObservableSortedSet<E> wrapped = getWrapped().get();
 			if (wrapped == null)
 				return false;
-			return wrapped.forObservableElement(value, up, onElement);
+			return wrapped.forElement(value, onElement, up);
 		}
 
 		@Override
-		public boolean forMutableElement(Comparable<? super E> value, boolean up,
-			Consumer<? super MutableObservableElement<? extends E>> onElement) {
+		public boolean forMutableElement(Comparable<? super E> value, Consumer<? super MutableElementHandle<? extends E>> onElement,
+			boolean up) {
 			ObservableSortedSet<E> wrapped = getWrapped().get();
 			if (wrapped == null)
 				return false;
-			return wrapped.forMutableElement(value, up, onElement);
+			return wrapped.forMutableElement(value, onElement, up);
 		}
 
 		@Override
-		public MutableObservableSpliterator<E> mutableSpliterator(Comparable<? super E> value, boolean up) {
+		public MutableElementSpliterator<E> mutableSpliterator(Comparable<? super E> value, boolean up) {
 			ObservableSortedSet<E> wrapped = getWrapped().get();
 			if (wrapped == null)
-				return MutableObservableSpliterator.empty(getType());
+				return MutableElementSpliterator.empty();
 			return wrapped.mutableSpliterator(value, up);
 		}
 	}

@@ -6,7 +6,7 @@ import java.util.function.Consumer;
 
 import org.observe.ObservableValue;
 import org.qommons.collect.BetterSortedSet;
-import org.qommons.collect.MutableElementHandle;
+import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.ImmutableIterator;
 import org.qommons.collect.TransactableSortedSet;
 
@@ -22,18 +22,18 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 	}
 
 	@Override
-	default ObservableElementSpliterator<E> spliterator() {
+	default ElementSpliterator<E> spliterator() {
 		return ObservableSet.super.spliterator();
 	}
 
 	@Override
 	default int indexOf(Object value) {
-		return ObservableSet.super.indexOf(value);
+		return BetterSortedSet.super.indexOf(value);
 	}
 
 	@Override
 	default int lastIndexOf(Object value) {
-		return ObservableSet.super.lastIndexOf(value);
+		return BetterSortedSet.super.lastIndexOf(value);
 	}
 
 	@Override
@@ -64,6 +64,46 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 	@Override
 	abstract void clear();
 
+	@Override
+	default ElementSpliterator<E> spliterator(int index) {
+		return BetterSortedSet.super.spliterator(index);
+	}
+
+	@Override
+	default E lower(E e) {
+		return BetterSortedSet.super.lower(e);
+	}
+
+	@Override
+	default E floor(E e) {
+		return BetterSortedSet.super.floor(e);
+	}
+
+	@Override
+	default E ceiling(E e) {
+		return BetterSortedSet.super.ceiling(e);
+	}
+
+	@Override
+	default E higher(E e) {
+		return BetterSortedSet.super.higher(e);
+	}
+
+	@Override
+	default E first() {
+		return BetterSortedSet.super.first();
+	}
+
+	@Override
+	default E last() {
+		return BetterSortedSet.super.last();
+	}
+
+	@Override
+	default boolean forValue(Comparable<? super E> search, Consumer<? super E> onValue, boolean up) {
+		return BetterSortedSet.super.forValue(search, onValue, up);
+	}
+
 	/**
 	 * Returns a value at or adjacent to another value
 	 *
@@ -79,59 +119,6 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 	}
 
 	@Override
-	default boolean forValue(Comparable<? super E> search, boolean up, Consumer<? super E> onValue) {
-		return forObservableElement(search, up, el -> onValue.accept(el.get()));
-	}
-
-	@Override
-	default boolean forElement(Comparable<? super E> search, boolean up, Consumer<? super MutableElementHandle<? extends E>> onElement) {
-		return forMutableElement(search, up, onElement);
-	}
-
-	@Override
-	default boolean forElement(E value, Consumer<? super MutableElementHandle<? extends E>> onElement, boolean first) {
-		return ObservableSet.super.forElement(value, onElement, first);
-	}
-
-	boolean forObservableElement(Comparable<? super E> search, boolean up, Consumer<? super ObservableCollectionElement<? extends E>> onElement);
-
-	boolean forMutableElement(Comparable<? super E> search, boolean up, Consumer<? super MutableObservableElement<? extends E>> onElement);
-
-	@Override
-	default boolean forObservableElement(E value, Consumer<? super ObservableCollectionElement<? extends E>> onElement, boolean first) {
-		boolean[] found = new boolean[1];
-		forObservableElement(v -> comparator().compare(value, v), first, el -> {
-			if (equivalence().elementEquals(el.get(), value)) {
-				found[0] = true;
-				onElement.accept(el);
-			}
-		});
-		return found[0];
-	}
-
-	@Override
-	default boolean forMutableElement(E value, Consumer<? super MutableObservableElement<? extends E>> onElement, boolean first) {
-		boolean[] found = new boolean[1];
-		forMutableElement(v -> comparator().compare(value, v), first, el -> {
-			if (equivalence().elementEquals(el.get(), value)) {
-				found[0] = true;
-				onElement.accept(el);
-			}
-		});
-		return found[0];
-	}
-
-	@Override
-	default E first() {
-		return getFirst();
-	}
-
-	@Override
-	default E last() {
-		return getLast();
-	}
-
-	@Override
 	default E pollLast() {
 		return ObservableSet.super.pollLast();
 	}
@@ -139,36 +126,6 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 	@Override
 	default E pollFirst() {
 		return ObservableSet.super.pollFirst();
-	}
-
-	@Override
-	default E floor(E e) {
-		return observeRelative(v -> comparator().compare(e, v), false).get();
-	}
-
-	@Override
-	default E lower(E e) {
-		return observeRelative(v -> {
-			int compare = comparator().compare(e, v);
-			if (compare == 0)
-				return 1;
-			return compare;
-		}, false).get();
-	}
-
-	@Override
-	default E ceiling(E e) {
-		return observeRelative(v -> comparator().compare(e, v), true).get();
-	}
-
-	@Override
-	default E higher(E e) {
-		return observeRelative(v -> {
-			int compare = comparator().compare(e, v);
-			if (compare == 0)
-				compare = -1;
-			return compare;
-		}, true).get();
 	}
 
 	@Override
@@ -185,14 +142,6 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 	default Iterator<E> descendingIterator() {
 		return reverse().iterator();
 	}
-
-	@Override
-	default ObservableElementSpliterator<E> spliterator(Comparable<? super E> search, boolean up) {
-		return mutableSpliterator(search, up).immutable();
-	}
-
-	@Override
-	MutableObservableSpliterator<E> mutableSpliterator(Comparable<? super E> search, boolean up);
 
 	/**
 	 * A sub-set of this set. Like {@link #subSet(Object, boolean, Object, boolean)}, but may be reversed.
@@ -221,41 +170,6 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 	@Override
 	default ObservableSortedSet<E> subSet(Comparable<? super E> from, Comparable<? super E> to) {
 		return new ObservableSortedSetImpl.ObservableSubSet<>(this, from, to);
-	}
-
-	@Override
-	default ObservableSortedSet<E> headSet(E toElement, boolean inclusive) {
-		return subSet(null, v -> {
-			int compare = comparator().compare(toElement, v);
-			if (!inclusive && compare == 0)
-				compare = -1;
-			return compare;
-		});
-	}
-
-	@Override
-	default ObservableSortedSet<E> tailSet(E fromElement, boolean inclusive) {
-		return subSet(v -> {
-			int compare = comparator().compare(fromElement, v);
-			if (!inclusive && compare == 0)
-				compare = 1;
-			return compare;
-		}, null);
-	}
-
-	@Override
-	default ObservableSortedSet<E> subSet(E fromElement, E toElement) {
-		return subSet(fromElement, true, toElement, false);
-	}
-
-	@Override
-	default ObservableSortedSet<E> headSet(E toElement) {
-		return headSet(toElement, false);
-	}
-
-	@Override
-	default ObservableSortedSet<E> tailSet(E fromElement) {
-		return tailSet(fromElement, true);
 	}
 
 	@Override

@@ -4,6 +4,7 @@ import java.util.Collection;
 
 import org.observe.ObservableValue;
 import org.qommons.Transaction;
+import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.ImmutableIterator;
 import org.qommons.collect.TransactableSet;
 
@@ -19,7 +20,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	}
 
 	@Override
-	default ObservableElementSpliterator<E> spliterator() {
+	default ElementSpliterator<E> spliterator() {
 		return ObservableCollection.super.spliterator();
 	}
 
