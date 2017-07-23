@@ -1199,10 +1199,10 @@ public class ObservableCollectionDataFlowImpl {
 				public String isAcceptable(T value) {
 					if (isInterceptingSet())
 						return filterInterceptSet(new FilterMapResult<>(value)).error;
-					FilterMapResult<T, E> result = CollectionElementManager.this.filterAccept(new FilterMapResult<>(value), false, null);
+					FilterMapResult<T, E> result = CollectionElementManager.this.filterAccept(new FilterMapResult<>(value), false);
 					if (result.error != null)
 						return result.error;
-					if (result.result != null && !theWrapped.getType().getRawType().isInstance(result.result))
+					if (result.result != null && !theCollection.getTargetType().getRawType().isInstance(result.result))
 						return MutableElementHandle.StdMsg.BAD_TYPE;
 					return ((MutableElementHandle<E>) theWrapped).isAcceptable(result.result);
 				}
@@ -1210,21 +1210,19 @@ public class ObservableCollectionDataFlowImpl {
 				@Override
 				public void set(T value) throws IllegalArgumentException, UnsupportedOperationException {
 					if (isInterceptingSet()) {
-						return interceptSet(new FilterMapResult<>(value), cause);
+						interceptSet(new FilterMapResult<>(value));
 					}
-					FilterMapResult<T, E> result = CollectionElementManager.this.filterAccept(new FilterMapResult<>(value), true, cause);
+					FilterMapResult<T, E> result = CollectionElementManager.this.filterAccept(new FilterMapResult<>(value), true);
 					if (result.error != null)
 						throw new IllegalArgumentException(result.error);
-					if (result.result != null && !theWrapped.getType().getRawType().isInstance(result.result))
+					if (result.result != null && !theCollection.getTargetType().getRawType().isInstance(result.result))
 						throw new IllegalArgumentException(MutableElementHandle.StdMsg.BAD_TYPE);
-					T old = get();
-					((MutableElementHandle<E>) theWrapped).set(result.result, cause);
-					return old;
+					((MutableElementHandle<E>) theWrapped).set(result.result);
 				}
 
 				@Override
 				public String canRemove() {
-					String msg = filterRemove(false, null);
+					String msg = filterRemove(false);
 					if (msg == null)
 						msg = theWrapped.canRemove();
 					return msg;
@@ -1232,7 +1230,7 @@ public class ObservableCollectionDataFlowImpl {
 
 				@Override
 				public void remove() throws UnsupportedOperationException {
-					String msg = filterRemove(true, cause);
+					String msg = filterRemove(true);
 					if (msg != null)
 						throw new UnsupportedOperationException(msg);
 					theWrapped.remove();
@@ -1240,51 +1238,51 @@ public class ObservableCollectionDataFlowImpl {
 
 				@Override
 				public String canAdd(T value, boolean before) {
-					FilterMapResult<T, E> result = filterAdd(new FilterMapResult<>(value), before, false, null);
+					FilterMapResult<T, E> result = filterAdd(new FilterMapResult<>(value), before, false);
 					if (result.error != null)
 						return result.error;
-					if (result.result != null && !theWrapped.getType().getRawType().isInstance(result.result))
+					if (result.result != null && !theCollection.getTargetType().getRawType().isInstance(result.result))
 						return MutableElementHandle.StdMsg.BAD_TYPE;
 					return ((MutableElementHandle<E>) theWrapped).canAdd(result.result, before);
 				}
 
 				@Override
 				public void add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-					FilterMapResult<T, E> result = filterAdd(new FilterMapResult<>(value), before, true, cause);
+					FilterMapResult<T, E> result = filterAdd(new FilterMapResult<>(value), before, true);
 					if (result.error != null)
 						throw new IllegalArgumentException(result.error);
-					if (result.result != null && !theWrapped.getType().getRawType().isInstance(result.result))
+					if (result.result != null && !theCollection.getTargetType().getRawType().isInstance(result.result))
 						throw new IllegalArgumentException(MutableElementHandle.StdMsg.BAD_TYPE);
-					((MutableElementHandle<E>) theWrapped).add(result.result, before, cause);
+					((MutableElementHandle<E>) theWrapped).add(result.result, before);
 				}
 			}
 			return new MutableManagedElement(element);
 		}
 
-		protected String filterRemove(boolean isRemoving, Object cause) {
-			return getParent() == null ? null : getParent().filterRemove(isRemoving, cause);
+		protected String filterRemove(boolean isRemoving) {
+			return getParent() == null ? null : getParent().filterRemove(isRemoving);
 		}
 
 		protected String filterEnabled() {
 			return getParent() == null ? null : getParent().filterEnabled();
 		}
 
-		protected FilterMapResult<T, E> filterAccept(FilterMapResult<T, E> value, boolean isReplacing, Object cause) {
+		protected FilterMapResult<T, E> filterAccept(FilterMapResult<T, E> value, boolean isReplacing) {
 			FilterMapResult<T, I> top = theCollection.reverseTop((FilterMapResult<T, I>) value);
 			if (top.error == null && getParent() != null) {
 				FilterMapResult<I, E> intermediate = (FilterMapResult<I, E>) top;
 				intermediate.source = top.result;
-				getParent().filterAccept(intermediate, isReplacing, cause);
+				getParent().filterAccept(intermediate, isReplacing);
 			}
 			return value;
 		}
 
-		protected FilterMapResult<T, E> filterAdd(FilterMapResult<T, E> value, boolean before, boolean isAdding, Object cause) {
+		protected FilterMapResult<T, E> filterAdd(FilterMapResult<T, E> value, boolean before, boolean isAdding) {
 			FilterMapResult<T, I> top = theCollection.reverseTop((FilterMapResult<T, I>) value);
 			if (top.error == null && getParent() != null) {
 				FilterMapResult<I, E> intermediate = (FilterMapResult<I, E>) top;
 				intermediate.source = top.result;
-				getParent().filterAdd(intermediate, before, isAdding, cause);
+				getParent().filterAdd(intermediate, before, isAdding);
 			}
 			return value;
 		}
@@ -1309,7 +1307,7 @@ public class ObservableCollectionDataFlowImpl {
 			return value;
 		}
 
-		protected T interceptSet(FilterMapResult<T, E> value, Object cause) throws UnsupportedOperationException, IllegalArgumentException {
+		protected void interceptSet(FilterMapResult<T, E> value) throws UnsupportedOperationException, IllegalArgumentException {
 			if (getParent() == null)
 				throw new UnsupportedOperationException(MutableElementHandle.StdMsg.UNSUPPORTED_OPERATION);
 			FilterMapResult<T, I> top = theCollection.reverseTop((FilterMapResult<T, I>) value);
@@ -1318,8 +1316,7 @@ public class ObservableCollectionDataFlowImpl {
 			FilterMapResult<I, E> intermediate = (FilterMapResult<I, E>) top;
 			intermediate.source = top.result;
 			FilterMapResult<I, T> map = (FilterMapResult<I, T>) value;
-			map.source = getParent().interceptSet(intermediate, cause);
-			return theCollection.mapTop(map).result;// Shouldn't have an error since it had the opportunity to reject
+			getParent().interceptSet(intermediate);
 		}
 
 		protected boolean applies(CollectionUpdate update) {
@@ -1663,8 +1660,8 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			@Override
-			protected String filterRemove(boolean isRemoving, Object cause) {
-				String msg = super.filterRemove(isRemoving, cause);
+			protected String filterRemove(boolean isRemoving) {
+				String msg = super.filterRemove(isRemoving);
 				if (isRemoving && msg == null) {
 					// The remove operation for this element needs to remove not only the source element mapping to to this element,
 					// but also all other equivalent elements.
@@ -1674,19 +1671,19 @@ public class ObservableCollectionDataFlowImpl {
 					for (UniqueElement other : elements) {
 						if (other == this)
 							continue;
-						getUpdateListener().accept(new RemoveElementUpdate(UniqueManager.this, other.getElementId(), cause));
+						getUpdateListener().accept(new RemoveElementUpdate(UniqueManager.this, other.getElementId(), null));
 					}
 				}
 				return msg;
 			}
 
 			@Override
-			protected FilterMapResult<T, E> filterAccept(FilterMapResult<T, E> value, boolean isReplacing, Object cause) {
+			protected FilterMapResult<T, E> filterAccept(FilterMapResult<T, E> value, boolean isReplacing) {
 				if (value.source != theValue && !equivalence().elementEquals(theValue, value.source)) {
 					value.error = "Cannot change equivalence of a unique element";
 					return value;
 				} else
-					return super.filterAccept(value, isReplacing, cause);
+					return super.filterAccept(value, isReplacing);
 			}
 
 			@Override
@@ -1745,16 +1742,16 @@ public class ObservableCollectionDataFlowImpl {
 				}
 
 				@Override
-				protected FilterMapResult<T, E> filterAccept(FilterMapResult<T, E> value, boolean isReplacing, Object cause) {
+				protected FilterMapResult<T, E> filterAccept(FilterMapResult<T, E> value, boolean isReplacing) {
 					if (get() != value.source && theCompare.compare(get(), value.source) != 0) {
 						value.error = "Cannot modify a sorted value";
 						return value;
 					}
-					return super.filterAccept(value, isReplacing, cause);
+					return super.filterAccept(value, isReplacing);
 				}
 
 				@Override
-				protected FilterMapResult<T, E> filterAdd(FilterMapResult<T, E> value, boolean before, boolean isAdding, Object cause) {
+				protected FilterMapResult<T, E> filterAdd(FilterMapResult<T, E> value, boolean before, boolean isAdding) {
 					value.error = "Cannot add values to a sorted collection via spliteration";
 					return value;
 				}
@@ -1769,12 +1766,11 @@ public class ObservableCollectionDataFlowImpl {
 				}
 
 				@Override
-				protected T interceptSet(FilterMapResult<T, E> value, Object cause)
-					throws UnsupportedOperationException, IllegalArgumentException {
+				protected void interceptSet(FilterMapResult<T, E> value) throws UnsupportedOperationException, IllegalArgumentException {
 					if (get() != value.source && theCompare.compare(get(), value.source) != 0) {
 						throw new UnsupportedOperationException("Cannot modify a sorted value");
 					}
-					return super.interceptSet(value, cause);
+					super.interceptSet(value);
 				}
 			}
 			return new SortedElement();
@@ -1976,14 +1972,13 @@ public class ObservableCollectionDataFlowImpl {
 				}
 
 				@Override
-				protected T interceptSet(FilterMapResult<T, E> value, Object cause)
+				protected void interceptSet(FilterMapResult<T, E> value)
 					throws UnsupportedOperationException, IllegalArgumentException {
 					if (theElementReverse != null) {
-						T oldValue = get();
 						theElementReverse.setElement(getParent().get(), value.source, true, cause);
-						return oldValue;
+						return;
 					}
-					return super.interceptSet(value, cause);
+					super.interceptSet(value);
 				}
 
 				@Override
@@ -2409,7 +2404,7 @@ public class ObservableCollectionDataFlowImpl {
 				}
 
 				@Override
-				protected String filterRemove(boolean isRemoving, Object cause) {
+				protected String filterRemove(boolean isRemoving) {
 					if (isRemoving)
 						tryRemove(get());
 					else {
@@ -2417,11 +2412,11 @@ public class ObservableCollectionDataFlowImpl {
 						if (msg != null)
 							return msg;
 					}
-					return super.filterRemove(isRemoving, cause);
+					return super.filterRemove(isRemoving);
 				}
 
 				@Override
-				protected FilterMapResult<T, E> filterAccept(FilterMapResult<T, E> value, boolean isReplacing, Object cause) {
+				protected FilterMapResult<T, E> filterAccept(FilterMapResult<T, E> value, boolean isReplacing) {
 					if (isReplacing)
 						tryReplace(get(), value.source);
 					else {
@@ -2432,11 +2427,11 @@ public class ObservableCollectionDataFlowImpl {
 					value.error = checkReplace(get(), value.source);
 					if (value.error != null)
 						return value;
-					return super.filterAccept(value, isReplacing, cause);
+					return super.filterAccept(value, isReplacing);
 				}
 
 				@Override
-				protected FilterMapResult<T, E> filterAdd(FilterMapResult<T, E> value, boolean before, boolean isAdding, Object cause) {
+				protected FilterMapResult<T, E> filterAdd(FilterMapResult<T, E> value, boolean before, boolean isAdding) {
 					if (isAdding)
 						tryAdd(value.source);
 					else {
@@ -2444,7 +2439,7 @@ public class ObservableCollectionDataFlowImpl {
 						if (value.error != null)
 							return value;
 					}
-					return super.filterAdd(value, before, isAdding, cause);
+					return super.filterAdd(value, before, isAdding);
 				}
 
 				@Override
@@ -2456,12 +2451,12 @@ public class ObservableCollectionDataFlowImpl {
 				}
 
 				@Override
-				protected T interceptSet(FilterMapResult<T, E> value, Object cause)
+				protected void interceptSet(FilterMapResult<T, E> value)
 					throws UnsupportedOperationException, IllegalArgumentException {
 					value.error = checkReplace(get(), value.source);
 					if (value.error != null)
 						throw new IllegalArgumentException(value.error);
-					return super.interceptSet(value, cause);
+					super.interceptSet(value);
 				}
 			}
 			return new ModFilteredElement();
