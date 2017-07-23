@@ -1,16 +1,17 @@
 package org.observe.collect;
 
-import org.qommons.collect.CollectionElement;
+import org.qommons.collect.MutableElementHandle;
+import org.qommons.collect.ElementId;
 import org.qommons.collect.ReversibleElementSpliterator;
 
 import com.google.common.reflect.TypeToken;
 
 /**
- * A {@link CollectionElement} that additionally provides the {@link ElementId element ID} for the element
+ * A {@link MutableElementHandle} that additionally provides the {@link ElementId element ID} for the element
  *
  * @param <E> The type of value in the element
  */
-public interface MutableObservableElement<E> extends ObservableCollectionElement<E>, CollectionElement<E> {
+public interface MutableObservableElement<E> extends ObservableCollectionElement<E>, MutableElementHandle<E> {
 	/** @return An immutable observable element backed by this mutable element's data */
 	default ObservableCollectionElement<E> immutable() {
 		return new ObservableCollectionElement<E>() {

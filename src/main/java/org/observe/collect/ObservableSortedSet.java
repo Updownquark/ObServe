@@ -6,7 +6,7 @@ import java.util.function.Consumer;
 
 import org.observe.ObservableValue;
 import org.qommons.collect.BetterSortedSet;
-import org.qommons.collect.CollectionElement;
+import org.qommons.collect.MutableElementHandle;
 import org.qommons.collect.ImmutableIterator;
 import org.qommons.collect.TransactableSortedSet;
 
@@ -84,12 +84,12 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 	}
 
 	@Override
-	default boolean forElement(Comparable<? super E> search, boolean up, Consumer<? super CollectionElement<? extends E>> onElement) {
+	default boolean forElement(Comparable<? super E> search, boolean up, Consumer<? super MutableElementHandle<? extends E>> onElement) {
 		return forMutableElement(search, up, onElement);
 	}
 
 	@Override
-	default boolean forElement(E value, Consumer<? super CollectionElement<? extends E>> onElement, boolean first) {
+	default boolean forElement(E value, Consumer<? super MutableElementHandle<? extends E>> onElement, boolean first) {
 		return ObservableSet.super.forElement(value, onElement, first);
 	}
 

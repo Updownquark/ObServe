@@ -4,13 +4,14 @@ import java.util.Comparator;
 import java.util.Spliterator;
 import java.util.function.Consumer;
 
-import org.qommons.collect.ElementSpliterator;
+import org.qommons.collect.ElementId;
+import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.collect.ReversibleSpliterator;
 
 import com.google.common.reflect.TypeToken;
 
 /**
- * An {@link ElementSpliterator} that supplies {@link ObservableCollectionElement}s
+ * An {@link MutableElementSpliterator} that supplies {@link ObservableCollectionElement}s
  *
  * @param <E> The type of values the spliterator provides
  */
@@ -19,11 +20,11 @@ public interface ObservableElementSpliterator<E> extends ReversibleSpliterator<E
 	TypeToken<E> getType();
 
 	/**
-	 * Iterates through each element covered by this ElementSpliterator
+	 * Iterates through each element covered by this MutableElementSpliterator
 	 *
-	 * @param action Accepts each element in sequence. Unless a sub-type of ElementSpliterator or a specific supplier of a
-	 *        ElementSpliterator advertises otherwise, the element object may only be treated as valid until the next element is returned
-	 *        and also should not be kept longer than the reference to the ElementSpliterator.
+	 * @param action Accepts each element in sequence. Unless a sub-type of MutableElementSpliterator or a specific supplier of a
+	 *        MutableElementSpliterator advertises otherwise, the element object may only be treated as valid until the next element is returned
+	 *        and also should not be kept longer than the reference to the MutableElementSpliterator.
 	 * @return false if no remaining elements existed upon entry to this method, else true.
 	 */
 	boolean tryAdvanceObservableElement(Consumer<? super ObservableCollectionElement<E>> action);
@@ -37,7 +38,7 @@ public interface ObservableElementSpliterator<E> extends ReversibleSpliterator<E
 	boolean tryReverseObservableElement(Consumer<? super ObservableCollectionElement<E>> action);
 
 	/**
-	 * Operates on each element remaining in this ElementSpliterator
+	 * Operates on each element remaining in this MutableElementSpliterator
 	 *
 	 * @param action The action to perform on each element
 	 */
@@ -111,8 +112,8 @@ public interface ObservableElementSpliterator<E> extends ReversibleSpliterator<E
 
 	/**
 	 * @param <E> The compile-time type for the spliterator
-	 * @param type The type for the ElementSpliterator
-	 * @return An empty ElementSpliterator of the given type
+	 * @param type The type for the MutableElementSpliterator
+	 * @return An empty MutableElementSpliterator of the given type
 	 */
 	static <E> ObservableElementSpliterator<E> empty(TypeToken<E> type) {
 		return new ObservableElementSpliterator<E>() {

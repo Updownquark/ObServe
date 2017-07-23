@@ -110,9 +110,9 @@ public class ObservableCollectionWrapper<E> implements ObservableCollection<E> {
 	}
 
 	@Override
-	public ElementSpliterator<E> spliterator() {
-		return new ElementSpliterator.WrappingSpliterator<>(theWrapped.spliterator(), theWrapped.getType(),
-			() -> el -> new CollectionElement<E>() {
+	public MutableElementSpliterator<E> spliterator() {
+		return new MutableElementSpliterator.WrappingSpliterator<>(theWrapped.spliterator(), theWrapped.getType(),
+			() -> el -> new MutableElementHandle<E>() {
 				@Override
 				public TypeToken<E> getType() {
 					return (TypeToken<E>) el.getType();
@@ -126,14 +126,14 @@ public class ObservableCollectionWrapper<E> implements ObservableCollection<E> {
 				@Override
 				public <V extends E> E set(V value, Object cause) throws IllegalArgumentException {
 					assertModifiable();
-					return ((CollectionElement<E>) el).set(value, cause);
+					return ((MutableElementHandle<E>) el).set(value, cause);
 				}
 
 				@Override
 				public <V extends E> String isAcceptable(V value) {
 					if (!isModifiable())
 						return ObservableCollection.StdMsg.UNSUPPORTED_OPERATION;
-					return ((CollectionElement<E>) el).isAcceptable(value);
+					return ((MutableElementHandle<E>) el).isAcceptable(value);
 				}
 
 				@Override
@@ -161,13 +161,13 @@ public class ObservableCollectionWrapper<E> implements ObservableCollection<E> {
 	/** Throws an {@link UnsupportedOperationException} if this collection is not {@link #isModifiable() modifiable} */
 	protected void assertModifiable() {
 		if(!isModifiable)
-			throw new UnsupportedOperationException(org.qommons.collect.CollectionElement.StdMsg.UNSUPPORTED_OPERATION);
+			throw new UnsupportedOperationException(org.qommons.collect.MutableElementHandle.StdMsg.UNSUPPORTED_OPERATION);
 	}
 
 	@Override
 	public String canAdd(E value) {
 		if (!isModifiable)
-			return org.qommons.collect.CollectionElement.StdMsg.UNSUPPORTED_OPERATION;
+			return org.qommons.collect.MutableElementHandle.StdMsg.UNSUPPORTED_OPERATION;
 		return theWrapped.canAdd(value);
 	}
 
@@ -193,7 +193,7 @@ public class ObservableCollectionWrapper<E> implements ObservableCollection<E> {
 	@Override
 	public String canRemove(Object value) {
 		if (!isModifiable)
-			return org.qommons.collect.CollectionElement.StdMsg.UNSUPPORTED_OPERATION;
+			return org.qommons.collect.MutableElementHandle.StdMsg.UNSUPPORTED_OPERATION;
 		return theWrapped.canRemove(value);
 	}
 

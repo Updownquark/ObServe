@@ -4,7 +4,8 @@ import java.util.Comparator;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-import org.qommons.collect.CollectionElement;
+import org.qommons.collect.MutableElementHandle;
+import org.qommons.collect.ElementId;
 import org.qommons.collect.ReversibleElementSpliterator;
 
 import com.google.common.reflect.TypeToken;
@@ -30,12 +31,12 @@ public interface MutableObservableSpliterator<E> extends ObservableElementSplite
 	}
 
 	@Override
-	default boolean tryAdvanceElement(Consumer<? super CollectionElement<E>> action) {
+	default boolean tryAdvanceElement(Consumer<? super MutableElementHandle<E>> action) {
 		return tryAdvanceMutableElement(action);
 	}
 
 	@Override
-	default boolean tryReverseElement(Consumer<? super CollectionElement<E>> action) {
+	default boolean tryReverseElement(Consumer<? super MutableElementHandle<E>> action) {
 		return tryReverseMutableElement(el -> action.accept(el));
 	}
 
@@ -45,7 +46,7 @@ public interface MutableObservableSpliterator<E> extends ObservableElementSplite
 	}
 
 	@Override
-	default void forEachElement(Consumer<? super CollectionElement<E>> action) {
+	default void forEachElement(Consumer<? super MutableElementHandle<E>> action) {
 		forEachMutableElement(action);
 	}
 
@@ -206,7 +207,7 @@ public interface MutableObservableSpliterator<E> extends ObservableElementSplite
 		}
 
 		@Override
-		default boolean test(CollectionElement<E> el) {
+		default boolean test(MutableElementHandle<E> el) {
 			return test((ObservableCollectionElement<E>) el);
 		}
 
@@ -427,7 +428,7 @@ public interface MutableObservableSpliterator<E> extends ObservableElementSplite
 			}
 
 			@Override
-			protected void setSource(CollectionElement<E> sourceEl) {
+			protected void setSource(MutableElementHandle<E> sourceEl) {
 				if (!(sourceEl instanceof MutableObservableElement))
 					throw new IllegalArgumentException("Element is not mutable");
 				super.setSource(sourceEl);

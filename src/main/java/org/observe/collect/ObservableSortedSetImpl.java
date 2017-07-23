@@ -16,7 +16,8 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueSortedDataFlowWrapper;
 import org.observe.collect.ObservableSetImpl.UniqueBaseFlow;
 import org.qommons.Transaction;
-import org.qommons.collect.CollectionElement;
+import org.qommons.collect.MutableElementHandle;
+import org.qommons.collect.ElementId;
 import org.qommons.collect.SimpleCause;
 import org.qommons.value.Value;
 
@@ -200,7 +201,7 @@ public class ObservableSortedSetImpl {
 				if (isInRange(el.get()) == 0)
 					return onElement.apply(el);
 				else
-					throw new IllegalArgumentException(CollectionElement.StdMsg.NOT_FOUND);
+					throw new IllegalArgumentException(MutableElementHandle.StdMsg.NOT_FOUND);
 			});
 		}
 
@@ -210,7 +211,7 @@ public class ObservableSortedSetImpl {
 				if (isInRange(el.get()) == 0)
 					return onElement.apply(new BoundedMutableElement<>(el));
 				else
-					throw new IllegalArgumentException(CollectionElement.StdMsg.NOT_FOUND);
+					throw new IllegalArgumentException(MutableElementHandle.StdMsg.NOT_FOUND);
 			});
 		}
 
@@ -288,14 +289,14 @@ public class ObservableSortedSetImpl {
 		@Override
 		public String canAdd(E value) {
 			if (isInRange(value) != 0)
-				return CollectionElement.StdMsg.ILLEGAL_ELEMENT;
+				return MutableElementHandle.StdMsg.ILLEGAL_ELEMENT;
 			return theWrapped.canAdd(value);
 		}
 
 		@Override
 		public boolean add(E value) {
 			if (isInRange(value) != 0)
-				throw new IllegalArgumentException(CollectionElement.StdMsg.ILLEGAL_ELEMENT);
+				throw new IllegalArgumentException(MutableElementHandle.StdMsg.ILLEGAL_ELEMENT);
 			return theWrapped.add(value);
 		}
 
@@ -303,16 +304,16 @@ public class ObservableSortedSetImpl {
 		public boolean addAll(Collection<? extends E> values) {
 			for (E value : values)
 				if (isInRange(value) != 0)
-					throw new IllegalArgumentException(CollectionElement.StdMsg.ILLEGAL_ELEMENT);
+					throw new IllegalArgumentException(MutableElementHandle.StdMsg.ILLEGAL_ELEMENT);
 			return theWrapped.addAll(values);
 		}
 
 		@Override
 		public String canRemove(Object value) {
 			if (value != null || !theWrapped.getType().getRawType().isInstance(value))
-				return CollectionElement.StdMsg.BAD_TYPE;
+				return MutableElementHandle.StdMsg.BAD_TYPE;
 			if (isInRange((E) value) != 0)
-				return CollectionElement.StdMsg.ILLEGAL_ELEMENT;
+				return MutableElementHandle.StdMsg.ILLEGAL_ELEMENT;
 			return theWrapped.canRemove(value);
 		}
 
@@ -679,14 +680,14 @@ public class ObservableSortedSetImpl {
 			@Override
 			public <V extends T> String isAcceptable(V value) {
 				if (isInRange(value) != 0)
-					return CollectionElement.StdMsg.ILLEGAL_ELEMENT;
+					return MutableElementHandle.StdMsg.ILLEGAL_ELEMENT;
 				return theWrappedEl.isAcceptable(value);
 			}
 
 			@Override
 			public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
 				if (isInRange(value) != 0)
-					throw new IllegalArgumentException(CollectionElement.StdMsg.ILLEGAL_ELEMENT);
+					throw new IllegalArgumentException(MutableElementHandle.StdMsg.ILLEGAL_ELEMENT);
 				return theWrappedEl.set(value, cause);
 			}
 
@@ -703,14 +704,14 @@ public class ObservableSortedSetImpl {
 			@Override
 			public String canAdd(T value, boolean before) {
 				if (isInRange(value) != 0)
-					return CollectionElement.StdMsg.ILLEGAL_ELEMENT;
+					return MutableElementHandle.StdMsg.ILLEGAL_ELEMENT;
 				return theWrappedEl.canAdd(value, before);
 			}
 
 			@Override
 			public void add(T value, boolean before, Object cause) throws UnsupportedOperationException, IllegalArgumentException {
 				if (isInRange(value) != 0)
-					throw new IllegalArgumentException(CollectionElement.StdMsg.ILLEGAL_ELEMENT);
+					throw new IllegalArgumentException(MutableElementHandle.StdMsg.ILLEGAL_ELEMENT);
 				theWrappedEl.add(value, before, cause);
 			}
 

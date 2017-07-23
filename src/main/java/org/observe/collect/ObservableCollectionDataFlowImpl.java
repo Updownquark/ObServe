@@ -37,8 +37,9 @@ import org.observe.collect.ObservableCollectionImpl.DerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.DerivedLWCollection;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
-import org.qommons.collect.CollectionElement;
-import org.qommons.collect.CollectionElement.StdMsg;
+import org.qommons.collect.MutableElementHandle;
+import org.qommons.collect.ElementId;
+import org.qommons.collect.MutableElementHandle.StdMsg;
 import org.qommons.collect.IdentityHashSet;
 import org.qommons.collect.UpdatableMap;
 import org.qommons.tree.CountedRedBlackNode.DefaultNode;
@@ -1219,7 +1220,7 @@ public class ObservableCollectionDataFlowImpl {
 					if (result.error != null)
 						return result.error;
 					if (result.result != null && !theWrapped.getType().getRawType().isInstance(result.result))
-						return CollectionElement.StdMsg.BAD_TYPE;
+						return MutableElementHandle.StdMsg.BAD_TYPE;
 					return ((MutableObservableElement<E>) theWrapped).isAcceptable(result.result);
 				}
 
@@ -1232,7 +1233,7 @@ public class ObservableCollectionDataFlowImpl {
 					if (result.error != null)
 						throw new IllegalArgumentException(result.error);
 					if (result.result != null && !theWrapped.getType().getRawType().isInstance(result.result))
-						throw new IllegalArgumentException(CollectionElement.StdMsg.BAD_TYPE);
+						throw new IllegalArgumentException(MutableElementHandle.StdMsg.BAD_TYPE);
 					T old = get();
 					((MutableObservableElement<E>) theWrapped).set(result.result, cause);
 					return old;
@@ -1260,7 +1261,7 @@ public class ObservableCollectionDataFlowImpl {
 					if (result.error != null)
 						return result.error;
 					if (result.result != null && !theWrapped.getType().getRawType().isInstance(result.result))
-						return CollectionElement.StdMsg.BAD_TYPE;
+						return MutableElementHandle.StdMsg.BAD_TYPE;
 					return ((MutableObservableElement<E>) theWrapped).canAdd(result.result, before);
 				}
 
@@ -1270,7 +1271,7 @@ public class ObservableCollectionDataFlowImpl {
 					if (result.error != null)
 						throw new IllegalArgumentException(result.error);
 					if (result.result != null && !theWrapped.getType().getRawType().isInstance(result.result))
-						throw new IllegalArgumentException(CollectionElement.StdMsg.BAD_TYPE);
+						throw new IllegalArgumentException(MutableElementHandle.StdMsg.BAD_TYPE);
 					((MutableObservableElement<E>) theWrapped).add(result.result, before, cause);
 				}
 			}
@@ -1311,9 +1312,9 @@ public class ObservableCollectionDataFlowImpl {
 
 		protected FilterMapResult<T, E> filterInterceptSet(FilterMapResult<T, E> value) {
 			if (getParent() == null)
-				value.error = CollectionElement.StdMsg.UNSUPPORTED_OPERATION;
+				value.error = MutableElementHandle.StdMsg.UNSUPPORTED_OPERATION;
 			else if (!getParent().isInterceptingSet())
-				value.error = CollectionElement.StdMsg.UNSUPPORTED_OPERATION;
+				value.error = MutableElementHandle.StdMsg.UNSUPPORTED_OPERATION;
 			else {
 				FilterMapResult<T, I> top = theCollection.reverseTop((FilterMapResult<T, I>) value);
 				if (top.error == null) {
@@ -1327,7 +1328,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		protected T interceptSet(FilterMapResult<T, E> value, Object cause) throws UnsupportedOperationException, IllegalArgumentException {
 			if (getParent() == null)
-				throw new UnsupportedOperationException(CollectionElement.StdMsg.UNSUPPORTED_OPERATION);
+				throw new UnsupportedOperationException(MutableElementHandle.StdMsg.UNSUPPORTED_OPERATION);
 			FilterMapResult<T, I> top = theCollection.reverseTop((FilterMapResult<T, I>) value);
 			if (top.error != null)
 				throw new IllegalArgumentException(top.error);
@@ -1580,7 +1581,7 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public FilterMapResult<T, T> canAddTop(FilterMapResult<T, T> toAdd) {
 			if (theElementsByValue.containsKey(toAdd.source))
-				toAdd.error = CollectionElement.StdMsg.ELEMENT_EXISTS;
+				toAdd.error = MutableElementHandle.StdMsg.ELEMENT_EXISTS;
 			else
 				toAdd.result = toAdd.source;
 			return toAdd;
@@ -1952,7 +1953,7 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public FilterMapResult<T, I> reverseTop(FilterMapResult<T, I> dest) {
 			if (!isReversible())
-				dest.error = CollectionElement.StdMsg.UNSUPPORTED_OPERATION;
+				dest.error = MutableElementHandle.StdMsg.UNSUPPORTED_OPERATION;
 			else
 				dest.result = reverseValue(dest.source);
 			return dest;
@@ -2131,7 +2132,7 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public FilterMapResult<T, I> reverseTop(FilterMapResult<T, I> dest) {
 			if (theReverse == null) {
-				dest.error = CollectionElement.StdMsg.UNSUPPORTED_OPERATION;
+				dest.error = MutableElementHandle.StdMsg.UNSUPPORTED_OPERATION;
 				return dest;
 			}
 			dest.result = reverseValue(dest.source);
@@ -2521,7 +2522,7 @@ public class ObservableCollectionDataFlowImpl {
 			String msg = null;
 			if (theRemoveFilter != null) {
 				if (value != null && !getTargetType().getRawType().isInstance(value))
-					msg = CollectionElement.StdMsg.BAD_TYPE;
+					msg = MutableElementHandle.StdMsg.BAD_TYPE;
 				msg = theRemoveFilter.apply((T) value);
 			}
 			if (msg == null && theRemoveMessage != null)

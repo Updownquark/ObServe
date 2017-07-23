@@ -31,7 +31,8 @@ import org.qommons.Causable;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
-import org.qommons.collect.CollectionElement;
+import org.qommons.collect.MutableElementHandle;
+import org.qommons.collect.ElementId;
 import org.qommons.collect.ReversibleList;
 import org.qommons.collect.SimpleCause;
 import org.qommons.collect.TransactableList;
@@ -282,10 +283,10 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 	 */
 	default String canRemove(Object value) {
 		if (!belongs(value))
-			return CollectionElement.StdMsg.NOT_FOUND;
+			return MutableElementHandle.StdMsg.NOT_FOUND;
 		String[] msg = new String[1];
 		if (!forElement((E) value, el -> msg[0] = el.canRemove(), true))
-			return CollectionElement.StdMsg.NOT_FOUND;
+			return MutableElementHandle.StdMsg.NOT_FOUND;
 		return msg[0];
 	}
 
@@ -650,7 +651,7 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 	Equivalence<? super E> equivalence();
 
 	@Override
-	default boolean forElement(E value, Consumer<? super CollectionElement<? extends E>> onElement, boolean first) {
+	default boolean forElement(E value, Consumer<? super MutableElementHandle<? extends E>> onElement, boolean first) {
 		return forMutableElement(value, onElement, first);
 	}
 
@@ -1186,7 +1187,7 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 	 * <li>Sorted list: <code>{@link CollectionDataFlow#sorted(Comparator) .sorted(comparator)}</code></li>
 	 * <li>list with no null values: <code>
 	 * 		{@link CollectionDataFlow#filterModification() .filterModification()}{@link ModFilterBuilder#filterAdd(Function)
-	 *  	.filterAdd}(value->value!=null ? null : {@link org.qommons.collect.CollectionElement.StdMsg#NULL_DISALLOWED StdMsg.NULL_DISALLOWED})
+	 *  	.filterAdd}(value->value!=null ? null : {@link org.qommons.collect.MutableElementHandle.StdMsg#NULL_DISALLOWED StdMsg.NULL_DISALLOWED})
 	 *  	</code></li>
 	 * </ul>
 	 * </p>
@@ -1236,7 +1237,7 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 	 *         supported by the flow API.
 	 */
 	static <E> CollectionDataFlow<E, E, E> constant(TypeToken<E> type, Collection<? extends E> values) {
-		return createUnsafe(type, values).filterModification().immutable(CollectionElement.StdMsg.UNSUPPORTED_OPERATION, false).build();
+		return createUnsafe(type, values).filterModification().immutable(MutableElementHandle.StdMsg.UNSUPPORTED_OPERATION, false).build();
 	}
 
 	/**
@@ -1417,7 +1418,7 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 				if (type == null || type.isInstance(value))
 					return null;
 				else
-					return CollectionElement.StdMsg.BAD_TYPE;
+					return MutableElementHandle.StdMsg.BAD_TYPE;
 			}).map(TypeToken.of(type)).map(v -> (X) v);
 		}
 
@@ -1468,9 +1469,9 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 			return map(valueType).map(map).refreshEach(v -> v.noInit()).map(target).withElementSetting((ov, newValue, doSet, cause) -> {
 				// Allow setting elements via the wrapped settable value
 				if (!(ov instanceof SettableValue))
-					return CollectionElement.StdMsg.UNSUPPORTED_OPERATION;
+					return MutableElementHandle.StdMsg.UNSUPPORTED_OPERATION;
 				else if (newValue != null && !ov.getType().getRawType().isInstance(newValue))
-					return CollectionElement.StdMsg.BAD_TYPE;
+					return MutableElementHandle.StdMsg.BAD_TYPE;
 				String msg = ((SettableValue<X>) ov).isAcceptable(newValue);
 				if (msg != null)
 					return msg;
@@ -1619,7 +1620,7 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 				if (type == null || type.isInstance(value))
 					return null;
 				else
-					return CollectionElement.StdMsg.BAD_TYPE;
+					return MutableElementHandle.StdMsg.BAD_TYPE;
 			}).mapEquivalent(TypeToken.of(type)).map(v -> (X) v, v -> (T) v);
 		}
 

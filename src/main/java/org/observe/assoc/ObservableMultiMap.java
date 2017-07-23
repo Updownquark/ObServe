@@ -25,7 +25,7 @@ import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSetImpl;
 import org.observe.collect.ObservableSortedSet;
 import org.qommons.Transaction;
-import org.qommons.collect.CollectionElement.StdMsg;
+import org.qommons.collect.MutableElementHandle.StdMsg;
 import org.qommons.collect.TransactableMultiMap;
 
 import com.google.common.reflect.TypeParameter;

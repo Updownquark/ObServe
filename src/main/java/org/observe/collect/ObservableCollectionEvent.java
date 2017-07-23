@@ -1,6 +1,7 @@
 package org.observe.collect;
 
 import org.qommons.AbstractCausable;
+import org.qommons.collect.ElementId;
 
 /**
  * An event representing a change to an {@link ObservableCollection}

@@ -1,12 +1,13 @@
 package org.observe.collect;
 
-import org.qommons.collect.CollectionElement;
+import org.qommons.collect.MutableElementHandle;
+import org.qommons.collect.ElementId;
 import org.qommons.value.Value;
 
 import com.google.common.reflect.TypeToken;
 
 /**
- * A {@link CollectionElement} that additionally provides the {@link ElementId element ID} for the element
+ * A {@link MutableElementHandle} that additionally provides the {@link ElementId element ID} for the element
  *
  * @param <E> The type of value in the element
  */

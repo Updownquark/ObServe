@@ -17,7 +17,7 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
 import org.observe.collect.ObservableCollectionElement;
 import org.observe.collect.ObservableSortedSet;
 import org.qommons.Transaction;
-import org.qommons.collect.CollectionElement.StdMsg;
+import org.qommons.collect.MutableElementHandle.StdMsg;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;

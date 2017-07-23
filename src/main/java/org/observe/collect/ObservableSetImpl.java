@@ -18,7 +18,7 @@ import org.observe.collect.ObservableCollectionImpl.DerivedLWCollection;
 import org.observe.collect.ObservableCollectionImpl.FlattenedValueCollection;
 import org.observe.collect.ObservableCollectionImpl.ReversedObservableCollection;
 import org.qommons.Transaction;
-import org.qommons.collect.CollectionElement;
+import org.qommons.collect.MutableElementHandle;
 
 import com.google.common.reflect.TypeToken;
 
@@ -221,7 +221,7 @@ public class ObservableSetImpl {
 			if (msg != null)
 				return msg;
 			if (value != null && !theRight.getType().getRawType().isInstance(value))
-				return CollectionElement.StdMsg.BAD_TYPE;
+				return MutableElementHandle.StdMsg.BAD_TYPE;
 			msg = theRight.canAdd((X) value);
 			if (msg != null)
 				return msg;
