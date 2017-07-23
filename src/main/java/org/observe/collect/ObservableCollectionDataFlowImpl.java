@@ -37,14 +37,13 @@ import org.observe.collect.ObservableCollectionImpl.DerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.DerivedLWCollection;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
-import org.qommons.collect.MutableElementHandle;
 import org.qommons.collect.ElementId;
-import org.qommons.collect.MutableElementHandle.StdMsg;
 import org.qommons.collect.IdentityHashSet;
+import org.qommons.collect.MutableElementHandle;
+import org.qommons.collect.MutableElementHandle.StdMsg;
 import org.qommons.collect.UpdatableMap;
 import org.qommons.tree.CountedRedBlackNode.DefaultNode;
 import org.qommons.tree.CountedRedBlackNode.DefaultTreeSet;
-import org.qommons.value.Value;
 
 import com.google.common.reflect.TypeToken;
 
@@ -1168,17 +1167,12 @@ public class ObservableCollectionDataFlowImpl {
 			return refresh(getParent().get(), cause);
 		}
 
-		public final MutableObservableElement<T> map(MutableObservableElement<? extends E> element, ElementId id) {
-			class MutableManagedElement implements MutableObservableElement<T> {
-				private final MutableObservableElement<? extends E> theWrapped;
+		public final MutableElementHandle<T> map(MutableElementHandle<? extends E> element, ElementId id) {
+			class MutableManagedElement implements MutableElementHandle<T> {
+				private final MutableElementHandle<? extends E> theWrapped;
 
-				MutableManagedElement(MutableObservableElement<? extends E> wrapped) {
+				MutableManagedElement(MutableElementHandle<? extends E> wrapped) {
 					theWrapped = wrapped;
-				}
-
-				@Override
-				public TypeToken<T> getType() {
-					return theCollection.getTargetType();
 				}
 
 				@Override
@@ -1192,28 +1186,17 @@ public class ObservableCollectionDataFlowImpl {
 				}
 
 				@Override
-				public Value<String> isEnabled() {
-					Value<String> wrapEnabled = theWrapped.isEnabled();
-					return new Value<String>() {
-						@Override
-						public TypeToken<String> getType() {
-							return TypeToken.of(String.class);
-						}
-
-						@Override
-						public String get() {
-							if (isInterceptingSet())
-								return null;
-							String msg = filterEnabled();
-							if (msg == null)
-								msg = wrapEnabled.get();
-							return msg;
-						}
-					};
+				public String isEnabled() {
+					if (isInterceptingSet())
+						return null;
+					String msg = filterEnabled();
+					if (msg == null)
+						msg = theWrapped.isEnabled();
+					return msg;
 				}
 
 				@Override
-				public <V extends T> String isAcceptable(V value) {
+				public String isAcceptable(T value) {
 					if (isInterceptingSet())
 						return filterInterceptSet(new FilterMapResult<>(value)).error;
 					FilterMapResult<T, E> result = CollectionElementManager.this.filterAccept(new FilterMapResult<>(value), false, null);
@@ -1221,11 +1204,11 @@ public class ObservableCollectionDataFlowImpl {
 						return result.error;
 					if (result.result != null && !theWrapped.getType().getRawType().isInstance(result.result))
 						return MutableElementHandle.StdMsg.BAD_TYPE;
-					return ((MutableObservableElement<E>) theWrapped).isAcceptable(result.result);
+					return ((MutableElementHandle<E>) theWrapped).isAcceptable(result.result);
 				}
 
 				@Override
-				public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+				public void set(T value) throws IllegalArgumentException, UnsupportedOperationException {
 					if (isInterceptingSet()) {
 						return interceptSet(new FilterMapResult<>(value), cause);
 					}
@@ -1235,7 +1218,7 @@ public class ObservableCollectionDataFlowImpl {
 					if (result.result != null && !theWrapped.getType().getRawType().isInstance(result.result))
 						throw new IllegalArgumentException(MutableElementHandle.StdMsg.BAD_TYPE);
 					T old = get();
-					((MutableObservableElement<E>) theWrapped).set(result.result, cause);
+					((MutableElementHandle<E>) theWrapped).set(result.result, cause);
 					return old;
 				}
 
@@ -1248,11 +1231,11 @@ public class ObservableCollectionDataFlowImpl {
 				}
 
 				@Override
-				public void remove(Object cause) throws UnsupportedOperationException {
+				public void remove() throws UnsupportedOperationException {
 					String msg = filterRemove(true, cause);
 					if (msg != null)
 						throw new UnsupportedOperationException(msg);
-					theWrapped.remove(cause);
+					theWrapped.remove();
 				}
 
 				@Override
@@ -1262,17 +1245,17 @@ public class ObservableCollectionDataFlowImpl {
 						return result.error;
 					if (result.result != null && !theWrapped.getType().getRawType().isInstance(result.result))
 						return MutableElementHandle.StdMsg.BAD_TYPE;
-					return ((MutableObservableElement<E>) theWrapped).canAdd(result.result, before);
+					return ((MutableElementHandle<E>) theWrapped).canAdd(result.result, before);
 				}
 
 				@Override
-				public void add(T value, boolean before, Object cause) throws UnsupportedOperationException, IllegalArgumentException {
+				public void add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
 					FilterMapResult<T, E> result = filterAdd(new FilterMapResult<>(value), before, true, cause);
 					if (result.error != null)
 						throw new IllegalArgumentException(result.error);
 					if (result.result != null && !theWrapped.getType().getRawType().isInstance(result.result))
 						throw new IllegalArgumentException(MutableElementHandle.StdMsg.BAD_TYPE);
-					((MutableObservableElement<E>) theWrapped).add(result.result, before, cause);
+					((MutableElementHandle<E>) theWrapped).add(result.result, before, cause);
 				}
 			}
 			return new MutableManagedElement(element);
@@ -1345,7 +1328,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		public ElementUpdateResult update(CollectionUpdate update,
-			Consumer<Consumer<MutableObservableElement<? extends E>>> sourceElement) {
+			Consumer<Consumer<MutableElementHandle<? extends E>>> sourceElement) {
 			if (applies(update)) {
 				return refresh(getParent().get(), update.getCause()) ? ElementUpdateResult.FireUpdate : ElementUpdateResult.AppliedNoUpdate;
 			} else {
@@ -1506,7 +1489,7 @@ public class ObservableCollectionDataFlowImpl {
 
 				@Override
 				public ElementUpdateResult update(CollectionUpdate update,
-					Consumer<Consumer<MutableObservableElement<? extends E>>> sourceElement) {
+					Consumer<Consumer<MutableElementHandle<? extends E>>> sourceElement) {
 					return ElementUpdateResult.DoesNotApply;
 				}
 
@@ -1708,9 +1691,9 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public ElementUpdateResult update(CollectionUpdate update,
-				Consumer<Consumer<MutableObservableElement<? extends E>>> sourceElement) {
+				Consumer<Consumer<MutableElementHandle<? extends E>>> sourceElement) {
 				if (update instanceof RemoveElementUpdate && applies(update)) {
-					sourceElement.accept(el -> el.remove(update.getCause()));
+					sourceElement.accept(el -> el.remove());
 					return ElementUpdateResult.AppliedNoUpdate; // We're removed now, so obviously don't update
 				} else
 					return super.update(update, sourceElement);
@@ -2293,7 +2276,7 @@ public class ObservableCollectionDataFlowImpl {
 
 				@Override
 				public ElementUpdateResult update(CollectionUpdate update,
-					Consumer<Consumer<MutableObservableElement<? extends E>>> sourceElement) {
+					Consumer<Consumer<MutableElementHandle<? extends E>>> sourceElement) {
 					if (applies(update)) {
 						refresh(getParent().get(), update.getCause());
 						return ElementUpdateResult.FireUpdate;

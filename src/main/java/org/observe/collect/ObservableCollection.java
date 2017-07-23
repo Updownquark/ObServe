@@ -3,11 +3,9 @@ package org.observe.collect;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.ListIterator;
 import java.util.Set;
 import java.util.Spliterator;
 import java.util.function.BiFunction;
@@ -15,7 +13,6 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
-import java.util.function.UnaryOperator;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -31,9 +28,11 @@ import org.qommons.Causable;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
-import org.qommons.collect.MutableElementHandle;
+import org.qommons.collect.BetterList;
+import org.qommons.collect.ElementHandle;
 import org.qommons.collect.ElementId;
-import org.qommons.collect.ReversibleList;
+import org.qommons.collect.ElementSpliterator;
+import org.qommons.collect.MutableElementHandle;
 import org.qommons.collect.SimpleCause;
 import org.qommons.collect.TransactableList;
 import org.qommons.collect.TreeList;
@@ -80,7 +79,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <E> The type of element in the collection
  */
-public interface ObservableCollection<E> extends ReversibleList<E>, TransactableList<E> {
+public interface ObservableCollection<E> extends BetterList<E>, TransactableList<E> {
 	/**
 	 * The {@link ObservableCollectionEvent#getCause() cause} for events fired for extant elements in the collection upon
 	 * {@link #subscribe(Consumer, boolean) subscription}
@@ -100,17 +99,6 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 	@Override
 	abstract boolean isLockSupported();
 
-	@Override
-	default MutableObservableSpliterator<E> mutableSpliterator() {
-		return mutableSpliterator(true);
-	}
-
-	@Override
-	MutableObservableSpliterator<E> mutableSpliterator(boolean fromStart);
-
-	@Override
-	MutableObservableSpliterator<E> mutableSpliterator(int index);
-
 	/**
 	 * Registers a listener for changes to this collection
 	 *
@@ -118,99 +106,6 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 	 * @return The subscription to use to terminate listening
 	 */
 	Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer);
-
-	@Override
-	default ObservableElementSpliterator<E> spliterator() {
-		return spliterator(true);
-	}
-
-	@Override
-	default ObservableElementSpliterator<E> spliterator(boolean fromStart) {
-		return mutableSpliterator(fromStart).immutable();
-	}
-
-	@Override
-	default ObservableElementSpliterator<E> spliterator(int index) {
-		return mutableSpliterator(index).immutable();
-	}
-
-	@Override
-	default ListIterator<E> listIterator() {
-		return listIterator(0);
-	}
-
-	@Override
-	default ListIterator<E> listIterator(int index) {
-		return new ObservableCollectionImpl.ObservableListIterator<>(this, mutableSpliterator(index));
-	}
-
-	@Override
-	default ReversibleList<E> subList(int fromIndex, int toIndex) {
-		return new ObservableCollectionImpl.SubList<>(this, this, fromIndex, toIndex);
-	}
-
-	/**
-	 * @param index The index of the element to get
-	 * @return The element of this collection at the given index
-	 */
-	@Override
-	default E get(int index) {
-		return ofElementAt(index, el -> el.get());
-	}
-
-	/**
-	 * @param id The ID of the element
-	 * @return The number of elements in this collection positioned before the given element
-	 */
-	int getElementsBefore(ElementId id);
-
-	/**
-	 * @param id The ID of the element
-	 * @return The number of elements in this collection positioned after the given element
-	 */
-	int getElementsAfter(ElementId id);
-
-	/**
-	 * @param value The value to get the index of in this collection
-	 * @return The index of the first position in this collection occupied by the given value, or &lt; 0 if the element does not exist in
-	 *         this collection
-	 */
-	@Override
-	default int indexOf(Object value) {
-		if (!belongs(value))
-			return -1;
-		try (Transaction t = lock(false, null)) {
-			int[] index = new int[1];
-			if (!forObservableElement((E) value, el -> index[0] = getElementsBefore(el.getElementId()), true))
-				return -1;
-			return index[0];
-		}
-	}
-
-	/**
-	 * @param value The value to get the index of in this collection
-	 * @return The index of the last position in this collection occupied by the given value, or &lt; 0 if the element does not exist in
-	 *         this collection
-	 */
-	@Override
-	default int lastIndexOf(Object value) {
-		if (!belongs(value))
-			return -1;
-		try (Transaction t = lock(false, null)) {
-			int[] index = new int[1];
-			if (!forObservableElement((E) value, el -> index[0] = getElementsBefore(el.getElementId()), false))
-				return -1;
-			return index[0];
-		}
-	}
-
-	@Override
-	default boolean contains(Object o) {
-		if (!belongs(o))
-			return false;
-		return forElement((E) o, el -> {
-		}, true);
-	}
 
 	@Override
 	default boolean containsAny(Collection<?> c) {
@@ -226,7 +121,7 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 				} else {
 					if (c.isEmpty())
 						return false;
-					Set<E> cSet = ObservableCollectionImpl.toSet(equivalence(), c);
+					Set<E> cSet = ObservableCollectionImpl.toSet(this, equivalence(), c);
 					Spliterator<E> iter = spliterator();
 					boolean[] found = new boolean[1];
 					while (iter.tryAdvance(next -> {
@@ -253,46 +148,12 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 				} else {
 					if (c.isEmpty())
 						return false;
-					Set<E> cSet = ObservableCollectionImpl.toSet(equivalence(), c);
+					Set<E> cSet = ObservableCollectionImpl.toSet(this, equivalence(), c);
 					cSet.removeAll(this);
 					return cSet.isEmpty();
 				}
 			}
 		}
-	}
-
-	/**
-	 * Tests the compatibility of an object with this collection. This method exposes a "best guess" on whether an element could be added to
-	 * the collection , but does not provide any guarantee. This method should return null for any object for which {@link #add(Object)} is
-	 * successful, but the fact that an object passes this test does not guarantee that it would be removed successfully. E.g. the position
-	 * of the element in the collection may be a factor, but is tested for here.
-	 *
-	 * @param value The value to test compatibility for
-	 * @return Null if given value could possibly be added to this collection, or a message why it can't
-	 */
-	String canAdd(E value);
-
-	/**
-	 * Tests the removability of an element from this collection. This method exposes a "best guess" on whether an element in the collection
-	 * could be removed, but does not provide any guarantee. This method should return null for any object for which {@link #remove(Object)}
-	 * is successful, but the fact that an object passes this test does not guarantee that it would be removed successfully. E.g. the
-	 * position of the element in the collection may be a factor, but may not be tested for here.
-	 *
-	 * @param value The value to test removability for
-	 * @return Null if given value could possibly be removed from this collection, or a message why it can't
-	 */
-	default String canRemove(Object value) {
-		if (!belongs(value))
-			return MutableElementHandle.StdMsg.NOT_FOUND;
-		String[] msg = new String[1];
-		if (!forElement((E) value, el -> msg[0] = el.canRemove(), true))
-			return MutableElementHandle.StdMsg.NOT_FOUND;
-		return msg[0];
-	}
-
-	@Override
-	default boolean remove(Object o) {
-		return removeFirstOccurrence(o);
 	}
 
 	@Override
@@ -301,7 +162,7 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 			try (Transaction ct = Transactable.lock(c, false, null)) {
 				if (isEmpty() || c.isEmpty())
 					return false;
-				return findAll(v -> c.contains(v), el -> el.remove(cause), true) > 0;
+				return findAll(v -> c.contains(v), el -> el.remove(), true) > 0;
 			}
 		});
 	}
@@ -316,30 +177,9 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 					clear();
 					return true;
 				}
-				return findAll(v -> !c.contains(v), el -> el.remove(cause), true) > 0;
+				return findAll(v -> !c.contains(v), el -> el.remove(), true) > 0;
 			}
 		});
-	}
-
-	@Override
-	default boolean removeLast(Object o) {
-		return removeLastOccurrence(o);
-	}
-
-	@Override
-	default boolean removeIf(Predicate<? super E> filter) {
-		boolean[] removed = new boolean[1];
-		try (Transaction t = lock(true, null)) {
-			MutableObservableSpliterator<E> iter = mutableSpliterator();
-			SimpleCause cause = new SimpleCause();
-			SimpleCause.doWith(cause, c -> iter.forEachElement(el -> {
-				if (filter.test(el.get())) {
-					el.remove(cause);
-					removed[0] = true;
-				}
-			}));
-			return removed[0];
-		}
 	}
 
 	@Override
@@ -357,50 +197,28 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 	@Override
 	default E getFirst() {
 		try (Transaction t = lock(false, null)) {
-			return ReversibleList.super.getFirst();
+			return BetterList.super.getFirst();
 		}
 	}
 
 	@Override
 	default E getLast() {
 		try (Transaction t = lock(false, null)) {
-			return ReversibleList.super.getLast();
+			return BetterList.super.getLast();
 		}
 	}
 
 	@Override
 	default E peekFirst() {
 		try (Transaction t = lock(false, null)) {
-			Object[] value = new Object[1];
-			if (spliterator(true).tryAdvance(v -> value[0] = v))
-				return (E) value[0];
-			else
-				return null;
+			return BetterList.super.peekFirst();
 		}
 	}
 
 	@Override
 	default E peekLast() {
 		try (Transaction t = lock(false, null)) {
-			Object[] value = new Object[1];
-			if (spliterator(false).tryReverse(v -> value[0] = v))
-				return (E) value[0];
-			else
-				return null;
-		}
-	}
-
-	@Override
-	default E element() {
-		try (Transaction t = lock(false, null)) {
-			return ReversibleList.super.element();
-		}
-	}
-
-	@Override
-	default E peek() {
-		try (Transaction t = lock(false, null)) {
-			return ReversibleList.super.peek();
+			return BetterList.super.peekLast();
 		}
 	}
 
@@ -410,7 +228,7 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 			String msg = canAdd(e);
 			if (msg == null)
 				throw new IllegalStateException(msg);
-			ReversibleList.super.addFirst(e);
+			BetterList.super.addFirst(e);
 		}
 	}
 
@@ -420,151 +238,57 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 			String msg = canAdd(e);
 			if (msg == null)
 				throw new IllegalStateException(msg);
-			ReversibleList.super.addLast(e);
+			BetterList.super.addLast(e);
 		}
 	}
 
 	@Override
 	default boolean offerFirst(E e) {
 		try (Transaction t = lock(true, null)) {
-			return ReversibleList.super.offerFirst(e);
+			return BetterList.super.offerFirst(e);
 		}
 	}
 
 	@Override
 	default boolean offerLast(E e) {
 		try (Transaction t = lock(true, null)) {
-			return ReversibleList.super.offerLast(e);
+			return BetterList.super.offerLast(e);
 		}
 	}
 
 	@Override
 	default E removeFirst() {
 		try (Transaction t = lock(true, null)) {
-			return ReversibleList.super.removeFirst();
+			return BetterList.super.removeFirst();
 		}
 	}
 
 	@Override
 	default E removeLast() {
 		try (Transaction t = lock(true, null)) {
-			return ReversibleList.super.removeLast();
+			return BetterList.super.removeLast();
 		}
 	}
 
 	@Override
 	default E pollFirst() {
 		try (Transaction t = lock(true, null)) {
-			return ReversibleList.super.pollFirst();
+			return BetterList.super.pollFirst();
 		}
 	}
 
 	@Override
 	default E pollLast() {
 		try (Transaction t = lock(true, null)) {
-			return ReversibleList.super.pollLast();
-		}
-	}
-
-	@Override
-	default boolean removeFirstOccurrence(Object o) {
-		if (!belongs(o))
-			return false;
-		try (Transaction t = lock(true, null)) {
-			return ReversibleList.super.removeFirstOccurrence(o);
-		}
-	}
-
-	@Override
-	default boolean removeLastOccurrence(Object o) {
-		if (!belongs(o))
-			return false;
-		try (Transaction t = lock(true, null)) {
-			return ReversibleList.super.removeLastOccurrence(o);
-		}
-	}
-
-	@Override
-	default boolean offer(E e) {
-		try (Transaction t = lock(true, null)) {
-			return ReversibleList.super.offer(e);
-		}
-	}
-
-	@Override
-	default E remove() {
-		try (Transaction t = lock(true, null)) {
-			return ReversibleList.super.remove();
-		}
-	}
-
-	@Override
-	default E poll() {
-		try (Transaction t = lock(true, null)) {
-			return ReversibleList.super.poll();
-		}
-	}
-
-	@Override
-	default void push(E e) {
-		try (Transaction t = lock(true, null)) {
-			ReversibleList.super.push(e);
-		}
-	}
-
-	@Override
-	default E pop() {
-		try (Transaction t = lock(true, null)) {
-			return ReversibleList.super.pop();
+			return BetterList.super.pollLast();
 		}
 	}
 
 	@Override
 	default void removeRange(int fromIndex, int toIndex) {
 		try (Transaction t = lock(true, null)) {
-			MutableObservableSpliterator<E> spliter = mutableSpliterator(fromIndex);
-			for (int i = fromIndex; i < toIndex; i++)
-				spliter.tryAdvanceElement(el -> el.remove(null));
+			BetterList.super.removeRange(fromIndex, toIndex);
 		}
-	}
-
-	@Override
-	default boolean addAll(int index, Collection<? extends E> c) {
-		if (c.isEmpty())
-			return false;
-		forMutableElementAt(index, el -> {
-			try (Transaction t = Transactable.lock(c, false, null)) {
-				Spliterator<? extends E> spliter;
-				if (c instanceof ReversedCollection)
-					spliter = ((ReversedCollection<? extends E>) c).spliterator(false).reverse();
-				else {
-					ArrayList<E> list = new ArrayList<>(c);
-					Collections.reverse(list);
-					spliter = list.spliterator();
-				}
-				spliter.forEachRemaining(v -> ((MutableObservableElement<E>) el).add(v, true, null));
-			}
-		});
-		return true;
-	}
-
-	@Override
-	default E set(int index, E element) {
-		return ofMutableElementAt(index, el -> ((MutableObservableElement<E>) el).set(element, null));
-	}
-
-	@Override
-	default void add(int index, E element) {
-		forMutableElementAt(index, el -> ((MutableObservableElement<E>) el).add(element, true, null));
-	}
-
-	@Override
-	default E remove(int index) {
-		return ofMutableElementAt(index, el -> {
-			E old = el.get();
-			el.remove(null);
-			return old;
-		});
 	}
 
 	@Override
@@ -585,14 +309,14 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 		try (Transaction t = lock(false, null)) {
 			// Initial events
 			int[] index = new int[1];
-			ObservableElementSpliterator<E> spliter;
+			ElementSpliterator<E> spliter;
 			if (forward)
 				spliter = spliterator();
 			else {
 				spliter = spliterator(false).reverse();
 				index[0] = size() - 1;
 			}
-			SubscriptionCause.doWith(new SubscriptionCause(), c -> spliter.forEachObservableElement(el -> {
+			SubscriptionCause.doWith(new SubscriptionCause(), c -> spliter.forEachElement(el -> {
 				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), index[0]++,
 					CollectionChangeType.add, null, el.get(), c);
 				observer.accept(event);
@@ -607,14 +331,14 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 				if (removeAll) {
 					// Remove events
 					int[] index = new int[1];
-					ObservableElementSpliterator<E> spliter;
+					ElementSpliterator<E> spliter;
 					if (forward)
 						spliter = spliterator();
 					else {
 						spliter = spliterator(false).reverse();
 						index[0] = size() - 1;
 					}
-					SubscriptionCause.doWith(new SubscriptionCause(), c -> spliter.forEachObservableElement(el -> {
+					SubscriptionCause.doWith(new SubscriptionCause(), c -> spliter.forEachElement(el -> {
 						ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), index[0]++,
 							CollectionChangeType.add, null, el.get(), c);
 						observer.accept(event);
@@ -649,204 +373,6 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 	 * @return The equivalence that governs this collection
 	 */
 	Equivalence<? super E> equivalence();
-
-	@Override
-	default boolean forElement(E value, Consumer<? super MutableElementHandle<? extends E>> onElement, boolean first) {
-		return forMutableElement(value, onElement, first);
-	}
-
-	/**
-	 * Finds an equivalent value in this collection
-	 *
-	 * @param value The value to find
-	 * @param onElement The listener to be called with the equivalent element
-	 * @param first Whether to find the first or last occurrence of the value
-	 * @return Whether the value was found
-	 */
-	boolean forObservableElement(E value, Consumer<? super ObservableCollectionElement<? extends E>> onElement, boolean first);
-
-	/**
-	 * Finds an equivalent value in this collection
-	 *
-	 * @param value The value to find
-	 * @param onElement The listener to be called with the equivalent mutable element
-	 * @param first Whether to find the first or last occurrence of the value
-	 * @return Whether the value was found
-	 */
-	boolean forMutableElement(E value, Consumer<? super MutableObservableElement<? extends E>> onElement, boolean first);
-
-	/**
-	 * Addresses an element in this collection
-	 *
-	 * @param elementId The element to get
-	 * @param onElement The listener to be called with the element
-	 * @throws IllegalArgumentException If the given element ID is unrecognized in this collection
-	 */
-	default void forElementAt(ElementId elementId, Consumer<? super ObservableCollectionElement<? extends E>> onElement) {
-		ofElementAt(elementId, el -> {
-			onElement.accept(el);
-			return null;
-		});
-	}
-
-	/**
-	 * Addresses an element in this collection
-	 *
-	 * @param elementId The element to get
-	 * @param onElement The listener to be called with the mutable element
-	 * @throws IllegalArgumentException If the given element ID is unrecognized in this collection
-	 */
-	default void forMutableElementAt(ElementId elementId, Consumer<? super MutableObservableElement<? extends E>> onElement) {
-		ofMutableElementAt(elementId, el -> {
-			onElement.accept(el);
-			return null;
-		});
-	}
-
-	/**
-	 * Calls a function on an element
-	 *
-	 * @param elementId The element to apply the function to
-	 * @param onElement The function to be called on the element
-	 * @return The result of the function
-	 * @throws IllegalArgumentException If the given element ID is unrecognized in this collection
-	 */
-	<T> T ofElementAt(ElementId elementId, Function<? super ObservableCollectionElement<? extends E>, T> onElement);
-
-	/**
-	 * Calls a function on an element
-	 *
-	 * @param elementId The element to apply the function to
-	 * @param onElement The function to be called on the mutable element
-	 * @return The result of the function
-	 * @throws IllegalArgumentException If the given element ID is unrecognized in this collection
-	 */
-	<T> T ofMutableElementAt(ElementId elementId, Function<? super MutableObservableElement<? extends E>, T> onElement);
-
-	/**
-	 * Addresses an element by index
-	 *
-	 * @param index The index of the element to get
-	 * @param onElement The listener to be called on the element
-	 */
-	default void forElementAt(int index, Consumer<? super ObservableCollectionElement<? extends E>> onElement) {
-		ofElementAt(index, el -> {
-			onElement.accept(el);
-			return null;
-		});
-	}
-
-	/**
-	 * Addresses an element by index
-	 *
-	 * @param index The index of the element to get
-	 * @param onElement The listener to be called on the mutable element
-	 */
-	default void forMutableElementAt(int index, Consumer<? super MutableObservableElement<? extends E>> onElement) {
-		ofMutableElementAt(index, el -> {
-			onElement.accept(el);
-			return null;
-		});
-	}
-
-	/**
-	 * Calls a function on an element by index
-	 *
-	 * @param index The index of the element to call the function on
-	 * @param onElement The function to be called on the element
-	 * @return The result of the function
-	 */
-	<T> T ofElementAt(int index, Function<? super ObservableCollectionElement<? extends E>, T> onElement);
-
-	/**
-	 * Calls a function on an element by index
-	 *
-	 * @param index The index of the element to call the function on
-	 * @param onElement The function to be called on the mutable element
-	 * @return The result of the function
-	 */
-	<T> T ofMutableElementAt(int index, Function<? super MutableObservableElement<? extends E>, T> onElement);
-
-	/**
-	 * Searches the collection's elements
-	 *
-	 * @param search The test function to call on each value
-	 * @param onElement The listener to be called on the first encountered match
-	 * @param first Whether to find the first or the last matching element
-	 * @return Whether a match was found
-	 */
-	default boolean findObservableElement(Predicate<? super E> search, Consumer<? super ObservableCollectionElement<? extends E>> onElement,
-		boolean first) {
-		ObservableElementSpliterator<E> spliter = spliterator(first);
-		boolean[] found = new boolean[1];
-		while (spliter.tryAdvanceObservableElement(el -> {
-			if (search.test(el.get())) {
-				found[0] = true;
-				onElement.accept(el);
-			}
-		})) {
-		}
-		return found[0];
-	}
-
-	/**
-	 * @param search The test to search for elements that pass
-	 * @param onElement The action to take on the first passing element in the collection
-	 * @param first Whether to find the first or last element
-	 * @return Whether an element was found that passed the test
-	 * @see #findElement(Predicate, Consumer, boolean)
-	 */
-	default boolean findMutableElement(Predicate<? super E> search, Consumer<? super MutableObservableElement<? extends E>> onElement,
-		boolean first) {
-		return ReversibleList.super.findElement(search, el -> onElement.accept((MutableObservableElement<E>) el), first);
-	}
-
-	/**
-	 * @param search The test to search for elements that pass
-	 * @param onElement The action to take on all passing elements in the collection
-	 * @param fromStart Whether to iterate from the beginning or end of the collection
-	 * @return The number of elements found that passed the test
-	 * @see #findAll(Predicate, Consumer, boolean)
-	 */
-	default int findAllObservableElements(Predicate<? super E> search, Consumer<? super MutableObservableElement<? extends E>> onElement,
-		boolean fromStart) {
-		return ReversibleList.super.findAll(search, el -> onElement.accept((MutableObservableElement<E>) el), fromStart);
-	}
-
-	/**
-	 * Optionally replaces each value in this collection with a mapped value. For every element, the map will be applied. If the result is
-	 * identically (==) different from the existing value, that element will be replaced with the mapped value.
-	 *
-	 * @param map The map to apply to each value in this collection
-	 * @param soft If true, this method will attempt to determine whether each differing mapped value is acceptable as a replacement. This
-	 *        may, but is not guaranteed to, prevent {@link IllegalArgumentException}s
-	 * @return Whether any elements were replaced
-	 * @throws IllegalArgumentException If a mapped value is not acceptable as a replacement
-	 */
-	default boolean replaceAll(Function<? super E, ? extends E> map, boolean soft) {
-		boolean[] replaced = new boolean[1];
-		MutableObservableSpliterator<E> iter = mutableSpliterator();
-		iter.forEachElement(el -> {
-			E value = el.get();
-			E newValue = map.apply(value);
-			if (value != newValue && (!soft || el.isAcceptable(newValue) == null)) {
-				el.set(newValue, null);
-				replaced[0] = true;
-			}
-		});
-		return replaced[0];
-	}
-
-	/**
-	 * Replaces each value in this collection with a mapped value. For every element, the operation will be applied. If the result is
-	 * identically (==) different from the existing value, that element will be replaced with the mapped value.
-	 *
-	 * @param op The operation to apply to each value in this collection
-	 */
-	@Override
-	default void replaceAll(UnaryOperator<E> op) {
-		replaceAll(v -> op.apply(v), false);
-	}
 
 	// Default implementations of redundant Collection methods
 
@@ -940,7 +466,7 @@ public interface ObservableCollection<E> extends ReversibleList<E>, Transactable
 	 *         the given value
 	 * @throws IllegalArgumentException If the given value may not be an element of this collection
 	 */
-	default ObservableValue<ObservableCollectionElement<? extends E>> observeElement(E value, boolean first) {
+	default ObservableValue<ElementHandle<? extends E>> observeElement(E value, boolean first) {
 		return new ObservableCollectionImpl.ObservableEquivalentFinder<>(this, value, first);
 	}
 

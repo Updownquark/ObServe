@@ -1,19 +1,14 @@
 package org.observe.collect;
 
-import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.NoSuchElementException;
-import java.util.Objects;
 import java.util.Set;
-import java.util.Spliterator;
-import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -28,17 +23,8 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
-import org.observe.SimpleObservable;
 import org.observe.Subscription;
-import org.observe.assoc.ObservableMultiMap;
-import org.observe.assoc.ObservableMultiMap.ObservableMultiEntry;
-import org.observe.assoc.ObservableSortedMultiMap;
-import org.observe.collect.MutableObservableSpliterator.MutableObservableSpliteratorMap;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
-import org.observe.collect.ObservableCollection.GroupingBuilder;
-import org.observe.collect.ObservableCollection.SortedGroupingBuilder;
-import org.observe.collect.ObservableCollection.UniqueDataFlow;
-import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.BaseCollectionDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.BaseCollectionManager;
@@ -51,18 +37,17 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueElementFinder;
 import org.qommons.ArrayUtils;
 import org.qommons.Causable;
 import org.qommons.ConcurrentHashSet;
-import org.qommons.IntList;
 import org.qommons.LinkedQueue;
-import org.qommons.ListenerSet;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
-import org.qommons.collect.CollectionElement;
+import org.qommons.collect.BetterCollection;
+import org.qommons.collect.BetterList;
+import org.qommons.collect.ElementHandle;
 import org.qommons.collect.ElementId;
-import org.qommons.collect.CollectionElement.StdMsg;
 import org.qommons.collect.ElementId.SimpleElementIdGenerator;
 import org.qommons.collect.ElementSpliterator;
-import org.qommons.collect.ReversibleCollection;
-import org.qommons.collect.ReversibleList;
+import org.qommons.collect.MutableElementHandle;
+import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.collect.ReversibleSpliterator;
 import org.qommons.collect.SimpleCause;
 import org.qommons.tree.CountedRedBlackNode;
@@ -87,9 +72,9 @@ public final class ObservableCollectionImpl {
 	 * @param c The collection whose values to add to the set
 	 * @return The set
 	 */
-	public static <E> Set<E> toSet(Equivalence<? super E> equiv, Collection<?> c) {
+	public static <E> Set<E> toSet(BetterCollection<E> collection, Equivalence<? super E> equiv, Collection<?> c) {
 		try (Transaction t = Transactable.lock(c, false, null)) {
-			return c.stream().filter(equiv::isElement).map(e -> (E) e).collect(Collectors.toCollection(equiv::createSet));
+			return c.stream().filter(el -> collection.belongs(el)).map(e -> (E) e).collect(Collectors.toCollection(equiv::createSet));
 		}
 	}
 
@@ -314,19 +299,19 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
-	public static abstract class AbstractObservableElementFinder<E> implements ObservableValue<ObservableCollectionElement<? extends E>> {
+	public static abstract class AbstractObservableElementFinder<E> implements ObservableValue<ElementHandle<? extends E>> {
 		protected final ObservableCollection<E> theCollection;
 		protected final boolean isFirst;
-		private final TypeToken<ObservableCollectionElement<? extends E>> theType;
+		private final TypeToken<ElementHandle<? extends E>> theType;
 
 		public AbstractObservableElementFinder(ObservableCollection<E> collection, boolean first) {
 			theCollection = collection;
 			isFirst = first;
-			theType = new TypeToken<ObservableCollectionElement<? extends E>>() {}.where(new TypeParameter<E>() {}, collection.getType());
+			theType = new TypeToken<ElementHandle<? extends E>>() {}.where(new TypeParameter<E>() {}, collection.getType());
 		}
 
 		@Override
-		public TypeToken<ObservableCollectionElement<? extends E>> getType() {
+		public TypeToken<ElementHandle<? extends E>> getType() {
 			return theType;
 		}
 
@@ -336,18 +321,18 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public ObservableCollectionElement<? extends E> get() {
-			ObservableCollectionElement<? extends E>[] element = new ObservableCollectionElement[1];
+		public ElementHandle<? extends E> get() {
+			ElementHandle<? extends E>[] element = new ElementHandle[1];
 			find(el -> element[0] = new SimpleElement(el.getElementId(), el.get()));
 			return element[0];
 		}
 
-		protected abstract boolean find(Consumer<? super ObservableCollectionElement<? extends E>> onElement);
+		protected abstract boolean find(Consumer<? super ElementHandle<? extends E>> onElement);
 
 		protected abstract boolean test(E value);
 
 		@Override
-		public Subscription subscribe(Observer<? super ObservableValueEvent<ObservableCollectionElement<? extends E>>> observer) {
+		public Subscription subscribe(Observer<? super ObservableValueEvent<ElementHandle<? extends E>>> observer) {
 			try (Transaction t = theCollection.lock(false, null)) {
 				class FinderListener implements Consumer<ObservableCollectionEvent<? extends E>> {
 					private SimpleElement theCurrentElement;
@@ -372,7 +357,7 @@ public final class ObservableCollectionImpl {
 
 						// At this point we know that we will have to do something
 						Map<Object, Object> causeData = evt.getRootCausable().onFinish(this, (cause, data) -> {
-							ObservableCollectionElement<E> oldElement = theCurrentElement;
+							ElementHandle<E> oldElement = theCurrentElement;
 							if (data.get("replacement") == null) {
 								// Means we need to find the new value in the collection
 								if (!find(el -> {
@@ -419,7 +404,7 @@ public final class ObservableCollectionImpl {
 			}
 		}
 
-		private class SimpleElement implements ObservableCollectionElement<E> {
+		private class SimpleElement implements ElementHandle<E> {
 			private final ElementId theId;
 			private final E theValue;
 
@@ -431,11 +416,6 @@ public final class ObservableCollectionImpl {
 			@Override
 			public ElementId getElementId() {
 				return theId;
-			}
-
-			@Override
-			public TypeToken<E> getType() {
-				return theCollection.getType();
 			}
 
 			@Override
@@ -464,8 +444,8 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		protected boolean find(Consumer<? super ObservableCollectionElement<? extends E>> onElement) {
-			return theCollection.findObservableElement(theTest, onElement, isFirst);
+		protected boolean find(Consumer<? super ElementHandle<? extends E>> onElement) {
+			return theCollection.find(theTest, onElement, isFirst);
 		}
 
 		@Override
@@ -485,8 +465,8 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		protected boolean find(Consumer<? super ObservableCollectionElement<? extends E>> onElement) {
-			return theCollection.forObservableElement(theValue, onElement, isFirst);
+		protected boolean find(Consumer<? super ElementHandle<? extends E>> onElement) {
+			return theCollection.forElement(theValue, onElement, isFirst);
 		}
 
 		@Override
@@ -905,7 +885,7 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
-	public static class ReversedObservableCollection<E> extends ReversibleCollection.ReversedCollection<E>
+	public static class ReversedObservableCollection<E> extends BetterList.ReversedList<E>
 	implements ObservableCollection<E> {
 		public ReversedObservableCollection(ObservableCollection<E> wrapped) {
 			super(wrapped);
@@ -947,58 +927,6 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean forObservableElement(E value, Consumer<? super ObservableCollectionElement<? extends E>> onElement, boolean first) {
-			return getWrapped().forObservableElement(value, el -> onElement.accept(el.reverse()), !first);
-		}
-
-		@Override
-		public boolean forMutableElement(E value, Consumer<? super MutableObservableElement<? extends E>> onElement, boolean first) {
-			return getWrapped().forMutableElement(value, el -> onElement.accept(el.reverse()), !first);
-		}
-
-		@Override
-		public <T> T ofElementAt(ElementId elementId, Function<? super ObservableCollectionElement<? extends E>, T> onElement) {
-			return getWrapped().ofElementAt(elementId.reverse(), el -> onElement.apply(el.reverse()));
-		}
-
-		@Override
-		public <T> T ofMutableElementAt(ElementId elementId, Function<? super MutableObservableElement<? extends E>, T> onElement) {
-			return getWrapped().ofMutableElementAt(elementId.reverse(), el -> onElement.apply(el.reverse()));
-		}
-
-		@Override
-		public <T> T ofElementAt(int index, Function<? super ObservableCollectionElement<? extends E>, T> onElement) {
-			return getWrapped().ofElementAt(reflect(index, false), el -> onElement.apply(el.reverse()));
-		}
-
-		@Override
-		public <T> T ofMutableElementAt(int index, Function<? super MutableObservableElement<? extends E>, T> onElement) {
-			return getWrapped().ofMutableElementAt(reflect(index, false), el -> onElement.apply(el.reverse()));
-		}
-
-		@Override
-		public ObservableElementSpliterator<E> spliterator() {
-			return spliterator(true);
-		}
-
-		@Override
-		public ObservableElementSpliterator<E> spliterator(boolean fromStart) {
-			return (ObservableElementSpliterator<E>) super.spliterator(!fromStart).reverse();
-		}
-
-		@Override
-		public MutableObservableSpliterator<E> mutableSpliterator(boolean fromStart) {
-			return getWrapped().mutableSpliterator(!fromStart).reverse();
-		}
-
-		@Override
-		public MutableObservableSpliterator<E> mutableSpliterator(int index) {
-			try (Transaction t = lock(true, null)) {
-				return getWrapped().mutableSpliterator(reflect(index, true)).reverse();
-			}
-		}
-
-		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
 			return getWrapped().onChange(evt -> observer.accept(new ObservableCollectionEvent<>(evt.getElementId().reverse(),
 				size() - evt.getIndex() - 1, evt.getType(), evt.getOldValue(), evt.getNewValue(), evt)));
@@ -1009,63 +937,39 @@ public final class ObservableCollectionImpl {
 			return getWrapped();
 		}
 
-		private int reflect(int index, boolean terminalInclusive) {
-			int size = getWrapped().size();
-			if (index < 0)
-				throw new IndexOutOfBoundsException("" + index);
-			if (index > size || (!terminalInclusive && index == size))
-				throw new IndexOutOfBoundsException(index + " of " + size);
-			int reflected = size - index;
-			if (!terminalInclusive)
-				reflected--;
-			return reflected;
-		}
-
 		@Override
-		public E get(int index) {
-			try (Transaction t = getWrapped().lock(false, null)) {
-				return getWrapped().get(reflect(index, false));
+		public ElementSpliterator<E> spliterator(int index) {
+			try (Transaction t = lock(false, null)) {
+				return super.spliterator(index);
 			}
 		}
 
 		@Override
-		public int indexOf(Object value) {
-			try (Transaction t = getWrapped().lock(false, null)) {
-				int idx = getWrapped().lastIndexOf(value);
-				if (idx >= 0)
-					idx = reflect(idx, false);
-				return idx;
+		public MutableElementSpliterator<E> mutableSpliterator(int index) {
+			try (Transaction t = lock(true, null)) {
+				return super.mutableSpliterator(index);
 			}
 		}
 
 		@Override
-		public int lastIndexOf(Object value) {
-			try (Transaction t = getWrapped().lock(false, null)) {
-				int idx = getWrapped().indexOf(value);
-				if (idx >= 0)
-					idx = reflect(idx, false);
-				return idx;
+		public <T> T ofElementAt(int index, Function<? super ElementHandle<? extends E>, T> onElement) {
+			try (Transaction t = lock(false, null)) {
+				return super.ofElementAt(index, onElement);
+			}
+		}
+
+		@Override
+		public <T> T ofMutableElementAt(int index, Function<? super MutableElementHandle<? extends E>, T> onElement) {
+			try (Transaction t = lock(true, null)) {
+				return super.ofMutableElementAt(index, onElement);
 			}
 		}
 
 		@Override
 		public E[] toArray() {
-			return ObservableCollection.super.toArray();
-		}
-
-		@Override
-		public <T> T[] toArray(T[] a) {
-			return ObservableCollection.super.toArray(a);
-		}
-
-		@Override
-		public String canRemove(Object value) {
-			return getWrapped().canRemove(value);
-		}
-
-		@Override
-		public String canAdd(E value) {
-			return getWrapped().canAdd(value);
+			try (Transaction t = lock(false, null)) {
+				return ObservableCollection.super.toArray();
+			}
 		}
 
 		@Override
@@ -1091,92 +995,6 @@ public final class ObservableCollectionImpl {
 				ObservableCollectionEvent.doWith(new ObservableCollectionEvent<>(evt.getElementId().reverse(), index, evt.getType(),
 					evt.getOldValue(), evt.getNewValue(), evt), theObserver);
 			}
-		}
-	}
-
-	public static class ObservableListIterator<E> extends org.qommons.collect.ReversibleElementSpliterator.SpliteratorListIterator<E> {
-		private final ObservableCollection<E> theCollection;
-
-		public ObservableListIterator(ObservableCollection<E> collection, MutableObservableSpliterator<E> backing) {
-			super(backing);
-			theCollection = collection;
-		}
-
-		@Override
-		protected MutableObservableElement<E> getCurrentElement() {
-			return (MutableObservableElement<E>) super.getCurrentElement();
-		}
-
-		@Override
-		public int nextIndex() {
-			return theCollection.getElementsBefore(getCurrentElement().getElementId()) + getSpliteratorCursorOffset();
-		}
-
-		@Override
-		public int previousIndex() {
-			return theCollection.getElementsBefore(getCurrentElement().getElementId()) + getSpliteratorCursorOffset() - 1;
-		}
-	}
-
-	public static class SubList<E> extends ReversibleList.ReversibleSubList<E> {
-		private final ObservableCollection<E> theObservableCollection;
-
-		public SubList(ObservableCollection<E> obsCollection, ReversibleList<E> wrapped, int start, int end) {
-			super(wrapped, start, end);
-			theObservableCollection = obsCollection;
-		}
-
-		@Override
-		public boolean forElement(E value, Consumer<? super CollectionElement<? extends E>> onElement, boolean first) {
-			if (!belongs(value))
-				return false;
-			boolean[] success = new boolean[1];
-			ElementSpliterator<E> spliter = first ? mutableSpliterator(true) : mutableSpliterator(false).reverse();
-			while (!success[0] && spliter.tryAdvanceElement(el -> {
-				if (theObservableCollection.equivalence().elementEquals(el.get(), value)) {
-					onElement.accept(wrapElement(el));
-					success[0] = true;
-				}
-			})) {
-			}
-			return success[0];
-		}
-
-		@Override
-		public int indexOf(Object o) {
-			if (!belongs(o))
-				return -1;
-			int[] res = new int[] { -1 };
-			Spliterator<E> spliter = spliterator(true);
-			int[] index = new int[1];
-			while (res[0] < 0 && spliter.tryAdvance(v -> {
-				if (theObservableCollection.equivalence().elementEquals(v, o))
-					res[0] = index[0];
-				index[0]++;
-			})) {
-			}
-			return res[0];
-		}
-
-		@Override
-		public int lastIndexOf(Object o) {
-			if (!belongs(o))
-				return -1;
-			int[] res = new int[] { -1 };
-			Spliterator<E> spliter = spliterator(false).reverse();
-			int[] index = new int[1];
-			while (res[0] < 0 && spliter.tryAdvance(v -> {
-				if (theObservableCollection.equivalence().elementEquals(v, o))
-					res[0] = index[0];
-				index[0]++;
-			})) {
-			}
-			return res[0];
-		}
-
-		@Override
-		public ReversibleList<E> subList(int fromIndex, int toIndex) {
-			return new SubList<>(theObservableCollection, this, fromIndex, toIndex);
 		}
 	}
 
@@ -1263,10 +1081,10 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean forObservableElement(T value, Consumer<? super ObservableCollectionElement<? extends T>> onElement, boolean first) {
-			ObservableElementSpliterator<E> spliter = first ? theSource.spliterator(true) : theSource.spliterator(false).reverse();
+		public boolean forElement(T value, Consumer<? super ElementHandle<? extends T>> onElement, boolean first) {
+			ElementSpliterator<E> spliter = first ? theSource.spliterator(true) : theSource.spliterator(false).reverse();
 			boolean[] success = new boolean[1];
-			while (!success[0] && spliter.tryAdvanceObservableElement(el -> {
+			while (!success[0] && spliter.tryAdvanceElement(el -> {
 				if (equivalence().elementEquals(theFlow.map(el.get()).result, value)) {
 					onElement.accept(elementFor(el));
 					success[0] = true;
@@ -1277,11 +1095,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean forMutableElement(T value, Consumer<? super MutableObservableElement<? extends T>> onElement, boolean first) {
-			MutableObservableSpliterator<E> spliter = first ? theSource.mutableSpliterator(true)
+		public boolean forMutableElement(T value, Consumer<? super MutableElementHandle<? extends T>> onElement, boolean first) {
+			MutableElementSpliterator<E> spliter = first ? theSource.mutableSpliterator(true)
 				: theSource.mutableSpliterator(false).reverse();
 			boolean[] success = new boolean[1];
-			while (!success[0] && spliter.tryAdvanceMutableElement(el -> {
+			while (!success[0] && spliter.tryAdvanceElementM(el -> {
 				if (equivalence().elementEquals(theFlow.map(el.get()).result, value)) {
 					onElement.accept(mutableElementFor(el));
 					success[0] = true;
@@ -1291,13 +1109,8 @@ public final class ObservableCollectionImpl {
 			return success[0];
 		}
 
-		protected ObservableCollectionElement<T> elementFor(ObservableCollectionElement<? extends E> el) {
-			return new ObservableCollectionElement<T>() {
-				@Override
-				public TypeToken<T> getType() {
-					return DerivedLWCollection.this.getType();
-				}
-
+		protected ElementHandle<T> elementFor(ElementHandle<? extends E> el) {
+			return new ElementHandle<T>() {
 				@Override
 				public T get() {
 					return theFlow.map(el.get()).result;
@@ -1310,39 +1123,39 @@ public final class ObservableCollectionImpl {
 			};
 		}
 
-		protected MutableObservableElement<T> mutableElementFor(MutableObservableElement<? extends E> el) {
+		protected MutableElementHandle<T> mutableElementFor(MutableElementHandle<? extends E> el) {
 			return theFlow.createElement(el.getElementId(), el.get(), null).map(el, el.getElementId());
 		}
 
 		@Override
-		public <X> X ofElementAt(ElementId elementId, Function<? super ObservableCollectionElement<? extends T>, X> onElement) {
+		public <X> X ofElementAt(ElementId elementId, Function<? super ElementHandle<? extends T>, X> onElement) {
 			return theSource.ofElementAt(elementId, el -> onElement.apply(elementFor(el)));
 		}
 
 		@Override
-		public <X> X ofMutableElementAt(ElementId elementId, Function<? super MutableObservableElement<? extends T>, X> onElement) {
+		public <X> X ofMutableElementAt(ElementId elementId, Function<? super MutableElementHandle<? extends T>, X> onElement) {
 			return theSource.ofMutableElementAt(elementId, el -> onElement.apply(mutableElementFor(el)));
 		}
 
 		@Override
-		public <X> X ofElementAt(int index, Function<? super ObservableCollectionElement<? extends T>, X> onElement) {
+		public <X> X ofElementAt(int index, Function<? super ElementHandle<? extends T>, X> onElement) {
 			return theSource.ofElementAt(index, el -> onElement.apply(elementFor(el)));
 		}
 
 		@Override
-		public <X> X ofMutableElementAt(int index, Function<? super MutableObservableElement<? extends T>, X> onElement) {
+		public <X> X ofMutableElementAt(int index, Function<? super MutableElementHandle<? extends T>, X> onElement) {
 			return theSource.ofMutableElementAt(index, el -> onElement.apply(mutableElementFor(el)));
 		}
 
 		@Override
-		public MutableObservableSpliterator<T> mutableSpliterator(boolean fromStart) {
-			MutableObservableSpliterator<E> srcSpliter = theSource.mutableSpliterator(fromStart);
+		public MutableElementSpliterator<T> mutableSpliterator(boolean fromStart) {
+			MutableElementSpliterator<E> srcSpliter = theSource.mutableSpliterator(fromStart);
 			return new DerivedMutableSpliterator(srcSpliter);
 		}
 
 		@Override
-		public MutableObservableSpliterator<T> mutableSpliterator(int index) {
-			MutableObservableSpliterator<E> srcSpliter = theSource.mutableSpliterator(index);
+		public MutableElementSpliterator<T> mutableSpliterator(int index) {
+			MutableElementSpliterator<E> srcSpliter = theSource.mutableSpliterator(index);
 			return new DerivedMutableSpliterator(srcSpliter);
 		}
 
@@ -1371,10 +1184,10 @@ public final class ObservableCollectionImpl {
 			});
 		}
 
-		protected class DerivedMutableSpliterator implements MutableObservableSpliterator<T> {
-			private final MutableObservableSpliterator<E> theSourceSpliter;
+		protected class DerivedMutableSpliterator implements MutableElementSpliterator<T> {
+			private final MutableElementSpliterator<E> theSourceSpliter;
 
-			DerivedMutableSpliterator(MutableObservableSpliterator<E> srcSpliter) {
+			DerivedMutableSpliterator(MutableElementSpliterator<E> srcSpliter) {
 				theSourceSpliter = srcSpliter;
 			}
 
@@ -1391,11 +1204,6 @@ public final class ObservableCollectionImpl {
 			@Override
 			public int characteristics() {
 				return theSourceSpliter.characteristics() & (~(DISTINCT | SORTED));
-			}
-
-			@Override
-			public TypeToken<T> getType() {
-				return DerivedLWCollection.this.getType();
 			}
 
 			@Override
@@ -1419,48 +1227,48 @@ public final class ObservableCollectionImpl {
 			}
 
 			@Override
-			public boolean tryAdvanceObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
-				return theSourceSpliter.tryAdvanceObservableElement(el -> action.accept(elementFor(el)));
+			public boolean tryAdvanceElement(Consumer<? super ElementHandle<T>> action) {
+				return theSourceSpliter.tryAdvanceElement(el -> action.accept(elementFor(el)));
 			}
 
 			@Override
-			public void forEachObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
-				theSourceSpliter.forEachObservableElement(el -> action.accept(elementFor(el)));
+			public void forEachElement(Consumer<? super ElementHandle<T>> action) {
+				theSourceSpliter.forEachElement(el -> action.accept(elementFor(el)));
 			}
 
 			@Override
-			public boolean tryReverseObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
-				return theSourceSpliter.tryReverseObservableElement(el -> action.accept(elementFor(el)));
+			public boolean tryReverseElement(Consumer<? super ElementHandle<T>> action) {
+				return theSourceSpliter.tryReverseElement(el -> action.accept(elementFor(el)));
 			}
 
 			@Override
-			public void forEachReverseObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
-				theSourceSpliter.forEachReverseObservableElement(el -> action.accept(elementFor(el)));
+			public void forEachElementReverse(Consumer<? super ElementHandle<T>> action) {
+				theSourceSpliter.forEachElementReverse(el -> action.accept(elementFor(el)));
 			}
 
 			@Override
-			public boolean tryAdvanceMutableElement(Consumer<? super MutableObservableElement<T>> action) {
-				return theSourceSpliter.tryAdvanceMutableElement(el -> action.accept(mutableElementFor(el)));
+			public boolean tryAdvanceElementM(Consumer<? super MutableElementHandle<T>> action) {
+				return theSourceSpliter.tryAdvanceElementM(el -> action.accept(mutableElementFor(el)));
 			}
 
 			@Override
-			public void forEachMutableElement(Consumer<? super MutableObservableElement<T>> action) {
-				theSourceSpliter.forEachMutableElement(el -> action.accept(mutableElementFor(el)));
+			public void forEachElementM(Consumer<? super MutableElementHandle<T>> action) {
+				theSourceSpliter.forEachElementM(el -> action.accept(mutableElementFor(el)));
 			}
 
 			@Override
-			public boolean tryReverseMutableElement(Consumer<? super MutableObservableElement<T>> action) {
-				return theSourceSpliter.tryReverseMutableElement(el -> action.accept(mutableElementFor(el)));
+			public boolean tryReverseElementM(Consumer<? super MutableElementHandle<T>> action) {
+				return theSourceSpliter.tryReverseElementM(el -> action.accept(mutableElementFor(el)));
 			}
 
 			@Override
-			public void forEachReverseMutableElement(Consumer<? super MutableObservableElement<T>> action) {
-				theSourceSpliter.forEachReverseMutableElement(el -> action.accept(mutableElementFor(el)));
+			public void forEachElementReverseM(Consumer<? super MutableElementHandle<T>> action) {
+				theSourceSpliter.forEachElementReverseM(el -> action.accept(mutableElementFor(el)));
 			}
 
 			@Override
-			public MutableObservableSpliterator<T> trySplit() {
-				MutableObservableSpliterator<E> srcSplit = theSourceSpliter.trySplit();
+			public MutableElementSpliterator<T> trySplit() {
+				MutableElementSpliterator<E> srcSplit = theSourceSpliter.trySplit();
 				return srcSplit == null ? null : new DerivedMutableSpliterator(srcSplit);
 			}
 		}
@@ -1496,7 +1304,7 @@ public final class ObservableCollectionImpl {
 			}
 
 			protected ElementUpdateResult update(CollectionUpdate update,
-				Consumer<Consumer<MutableObservableElement<? extends E>>> sourceElement) {
+				Consumer<Consumer<MutableElementHandle<? extends E>>> sourceElement) {
 				return manager.update(update, sourceElement);
 			}
 
@@ -1762,7 +1570,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean forObservableElement(T value, Consumer<? super ObservableCollectionElement<? extends T>> onElement, boolean first) {
+		public boolean forElement(T value, Consumer<? super ElementHandle<? extends T>> onElement, boolean first) {
 			try (Transaction t = lock(false, null)) {
 				UniqueElementFinder<T> finder = getFlow().getElementFinder();
 				if (finder != null) {
@@ -1771,7 +1579,7 @@ public final class ObservableCollectionImpl {
 						return false;
 					DerivedCollectionElement<E, T> element = theElements.get(id);
 					if (element == null)
-						throw new IllegalStateException(CollectionElement.StdMsg.NOT_FOUND);
+						throw new IllegalStateException(MutableElementHandle.StdMsg.NOT_FOUND);
 					if (element.presentNode == null)
 						return false;
 					onElement.accept(observableElementFor(element));
@@ -1787,17 +1595,12 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public <X> X ofElementAt(ElementId elementId, Function<? super ObservableCollectionElement<? extends T>, X> onElement) {
+		public <X> X ofElementAt(ElementId elementId, Function<? super ElementHandle<? extends T>, X> onElement) {
 			return onElement.apply(observableElementFor((DerivedCollectionElement<E, T>) elementId));
 		}
 
-		protected ObservableCollectionElement<T> observableElementFor(DerivedCollectionElement<E, T> el) {
-			return new ObservableCollectionElement<T>() {
-				@Override
-				public TypeToken<T> getType() {
-					return DerivedCollection.this.getType();
-				}
-
+		protected ElementHandle<T> observableElementFor(DerivedCollectionElement<E, T> el) {
+			return new ElementHandle<T>() {
 				@Override
 				public T get() {
 					return el.manager.get();
@@ -1811,7 +1614,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean forMutableElement(T value, Consumer<? super MutableObservableElement<? extends T>> onElement, boolean first) {
+		public boolean forMutableElement(T value, Consumer<? super MutableElementHandle<? extends T>> onElement, boolean first) {
 			try (Transaction t = lock(true, null)) {
 				UniqueElementFinder<T> finder = getFlow().getElementFinder();
 				if (finder != null) {
@@ -1820,7 +1623,7 @@ public final class ObservableCollectionImpl {
 						return false;
 					DerivedCollectionElement<E, T> element = theElements.get(id);
 					if (element == null)
-						throw new IllegalStateException(CollectionElement.StdMsg.NOT_FOUND);
+						throw new IllegalStateException(MutableElementHandle.StdMsg.NOT_FOUND);
 					if (element.presentNode == null)
 						return false;
 					theSource.forMutableElementAt(id, srcEl -> onElement.accept(element.manager.map(srcEl, element)));
@@ -1836,35 +1639,35 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public <X> X ofMutableElementAt(ElementId elementId, Function<? super MutableObservableElement<? extends T>, X> onElement) {
+		public <X> X ofMutableElementAt(ElementId elementId, Function<? super MutableElementHandle<? extends T>, X> onElement) {
 			DerivedCollectionElement<E, T> el = (DerivedCollectionElement<E, T>) elementId;
 			return theSource.ofMutableElementAt(el.manager.getElementId(), srcEl -> onElement.apply(el.manager.map(srcEl, el)));
 		}
 
 		@Override
-		public <X> X ofElementAt(int index, Function<? super ObservableCollectionElement<? extends T>, X> onElement) {
+		public <X> X ofElementAt(int index, Function<? super ElementHandle<? extends T>, X> onElement) {
 			return ofElementAt(thePresentElements.get(index), onElement);
 		}
 
 		@Override
-		public <X> X ofMutableElementAt(int index, Function<? super MutableObservableElement<? extends T>, X> onElement) {
+		public <X> X ofMutableElementAt(int index, Function<? super MutableElementHandle<? extends T>, X> onElement) {
 			return ofMutableElementAt(thePresentElements.get(index), onElement);
 		}
 
 		@Override
-		public MutableObservableSpliterator<T> mutableSpliterator(boolean fromStart) {
+		public MutableElementSpliterator<T> mutableSpliterator(boolean fromStart) {
 			return new MutableDerivedSpliterator(thePresentElements.spliterator(fromStart));
 		}
 
 		@Override
-		public MutableObservableSpliterator<T> mutableSpliterator(int index) {
+		public MutableElementSpliterator<T> mutableSpliterator(int index) {
 			return new MutableDerivedSpliterator(getPresentElements().spliteratorFrom(index));
 		}
 
 		@Override
 		public String canAdd(T value) {
 			if (!theFlow.isReversible())
-				return CollectionElement.StdMsg.UNSUPPORTED_OPERATION;
+				return MutableElementHandle.StdMsg.UNSUPPORTED_OPERATION;
 			else if (!checkValue(value))
 				return CollectionElement.StdMsg.BAD_TYPE;
 			try (Transaction t = lock(false, null)) {
@@ -1914,10 +1717,10 @@ public final class ObservableCollectionImpl {
 			return ObservableCollection.toString(this);
 		}
 
-		protected class MutableDerivedSpliterator implements MutableObservableSpliterator<T> {
-			private final ReversibleSpliterator<DerivedCollectionElement<E, T>> theElementSpliter;
+		protected class MutableDerivedSpliterator implements MutableElementSpliterator<T> {
+			private final ElementSpliterator<DerivedCollectionElement<E, T>> theElementSpliter;
 
-			MutableDerivedSpliterator(ReversibleSpliterator<DerivedCollectionElement<E, T>> elementSpliter) {
+			MutableDerivedSpliterator(ElementSpliterator<DerivedCollectionElement<E, T>> elementSpliter) {
 				theElementSpliter = elementSpliter;
 			}
 
@@ -1937,40 +1740,35 @@ public final class ObservableCollectionImpl {
 			}
 
 			@Override
-			public TypeToken<T> getType() {
-				return DerivedCollection.this.getType();
-			}
-
-			@Override
-			public boolean tryAdvanceObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
+			public boolean tryAdvanceElement(Consumer<? super ElementHandle<T>> action) {
 				try (Transaction t = lock(false, null)) {
 					return theElementSpliter.tryAdvance(element -> action.accept(observableElementFor(element)));
 				}
 			}
 
 			@Override
-			public boolean tryReverseObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
+			public boolean tryReverseElement(Consumer<? super ElementHandle<T>> action) {
 				try (Transaction t = lock(false, null)) {
 					return theElementSpliter.tryReverse(element -> action.accept(observableElementFor(element)));
 				}
 			}
 
 			@Override
-			public void forEachObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
+			public void forEachElement(Consumer<? super ElementHandle<T>> action) {
 				try (Transaction t = lock(false, null)) {
 					theElementSpliter.forEachRemaining(element -> action.accept(observableElementFor(element)));
 				}
 			}
 
 			@Override
-			public void forEachReverseObservableElement(Consumer<? super ObservableCollectionElement<T>> action) {
+			public void forEachElementReverse(Consumer<? super ElementHandle<T>> action) {
 				try (Transaction t = lock(false, null)) {
 					theElementSpliter.forEachReverse(element -> action.accept(observableElementFor(element)));
 				}
 			}
 
 			@Override
-			public boolean tryAdvanceMutableElement(Consumer<? super MutableObservableElement<T>> action) {
+			public boolean tryAdvanceElementM(Consumer<? super MutableElementHandle<T>> action) {
 				try (Transaction t = lock(true, null)) {
 					return theElementSpliter.tryAdvance(element -> theSource.forMutableElementAt(element.manager.getElementId(),
 						sourceEl -> action.accept(element.manager.map(sourceEl, element))));
@@ -1978,7 +1776,7 @@ public final class ObservableCollectionImpl {
 			}
 
 			@Override
-			public boolean tryReverseMutableElement(Consumer<? super MutableObservableElement<T>> action) {
+			public boolean tryReverseElementM(Consumer<? super MutableElementHandle<T>> action) {
 				try (Transaction t = lock(true, null)) {
 					return theElementSpliter.tryReverse(element -> theSource.forMutableElementAt(element.manager.getElementId(),
 						sourceEl -> action.accept(element.manager.map(sourceEl, element))));
@@ -1986,7 +1784,7 @@ public final class ObservableCollectionImpl {
 			}
 
 			@Override
-			public void forEachMutableElement(Consumer<? super MutableObservableElement<T>> action) {
+			public void forEachElementM(Consumer<? super MutableElementHandle<T>> action) {
 				try (Transaction t = lock(true, null)) {
 					theElementSpliter.forEachRemaining(element -> theSource.forMutableElementAt(element.manager.getElementId(),
 						sourceEl -> action.accept(element.manager.map(sourceEl, element))));
@@ -1994,7 +1792,7 @@ public final class ObservableCollectionImpl {
 			}
 
 			@Override
-			public void forEachReverseMutableElement(Consumer<? super MutableObservableElement<T>> action) {
+			public void forEachElementReverseM(Consumer<? super MutableElementHandle<T>> action) {
 				try (Transaction t = lock(true, null)) {
 					theElementSpliter.forEachReverse(element -> theSource.forMutableElementAt(element.manager.getElementId(),
 						sourceEl -> action.accept(element.manager.map(sourceEl, element))));
@@ -2002,8 +1800,8 @@ public final class ObservableCollectionImpl {
 			}
 
 			@Override
-			public MutableObservableSpliterator<T> trySplit() {
-				ReversibleSpliterator<DerivedCollectionElement<E, T>> split = theElementSpliter.trySplit();
+			public MutableElementSpliterator<T> trySplit() {
+				ElementSpliterator<DerivedCollectionElement<E, T>> split = theElementSpliter.trySplit();
 				return split == null ? null : new MutableDerivedSpliterator(split);
 			}
 		}
@@ -2130,15 +1928,15 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public MutableObservableSpliterator<E> mutableSpliterator(boolean fromStart) {
+		public MutableElementSpliterator<E> mutableSpliterator(boolean fromStart) {
 			if (!theElementIdGen.isEmpty())
 				throw new UnsupportedOperationException(
 					"This method is not implemented for the default observable collection" + " (when non-empty)");
-			return MutableObservableSpliterator.empty(theType);
+			return MutableElementSpliterator.empty();
 		}
 
 		@Override
-		public MutableObservableSpliterator<E> mutableSpliterator(int index) {
+		public MutableElementSpliterator<E> mutableSpliterator(int index) {
 			throw new UnsupportedOperationException("This method is not implemented for the default observable collection");
 		}
 
@@ -2156,23 +1954,23 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean forObservableElement(E value, Consumer<? super ObservableCollectionElement<? extends E>> onElement, boolean first) {
+		public boolean forElement(E value, Consumer<? super ElementHandle<? extends E>> onElement, boolean first) {
 			throw new UnsupportedOperationException("This method is not implemented for the default observable collection");
 		}
 
 		@Override
-		public boolean forMutableElement(E value, Consumer<? super MutableObservableElement<? extends E>> onElement, boolean first) {
+		public boolean forMutableElement(E value, Consumer<? super MutableElementHandle<? extends E>> onElement, boolean first) {
 			throw new UnsupportedOperationException("This method is not implemented for the default observable collection");
 		}
 
 		@Override
-		public <T> T ofElementAt(ElementId elementId, Function<? super ObservableCollectionElement<? extends E>, T> onElement) {
+		public <T> T ofElementAt(ElementId elementId, Function<? super ElementHandle<? extends E>, T> onElement) {
 			throw new UnsupportedOperationException("This method is not implemented for the default observable collection");
 		}
 
 		@Override
-		public <T> T ofMutableElementAt(ElementId elementId, Function<? super MutableObservableElement<? extends E>, T> onElement) {
-			class DefaultMutableElement implements MutableObservableElement<E> {
+		public <T> T ofMutableElementAt(ElementId elementId, Function<? super MutableElementHandle<? extends E>, T> onElement) {
+			class DefaultMutableElement implements MutableElementHandle<E> {
 				private boolean isRemoved;
 
 				@Override
@@ -2181,28 +1979,23 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
-				public TypeToken<E> getType() {
-					return DefaultObservableCollection.this.getType();
-				}
-
-				@Override
 				public E get() {
 					// The collection manager on top of this element keeps track of its own value and does not ask for its source
-					throw new UnsupportedOperationException(CollectionElement.StdMsg.UNSUPPORTED_OPERATION);
+					throw new UnsupportedOperationException(MutableElementHandle.StdMsg.UNSUPPORTED_OPERATION);
 				}
 
 				@Override
 				public String canRemove() {
 					if (isRemoved)
-						throw new IllegalStateException(CollectionElement.StdMsg.NOT_FOUND);
+						throw new IllegalStateException(MutableElementHandle.StdMsg.NOT_FOUND);
 					return null;
 				}
 
 				@Override
-				public void remove(Object cause) throws UnsupportedOperationException {
+				public void remove() throws UnsupportedOperationException {
 					if (isRemoved)
-						throw new IllegalStateException(CollectionElement.StdMsg.NOT_FOUND);
-					try (Transaction t = lock(true, cause)) {
+						throw new IllegalStateException(MutableElementHandle.StdMsg.NOT_FOUND);
+					try (Transaction t = lock(true)) {
 						// The DerivedCollection keeps track of its own values and does not pay attention to the values in the event
 						ObservableCollectionEvent<E> evt = new ObservableCollectionEvent<>(elementId,
 							theElementIdGen.getElementsBefore(elementId), CollectionChangeType.remove, null, null,
@@ -2216,15 +2009,15 @@ public final class ObservableCollectionImpl {
 				@Override
 				public String canAdd(E value, boolean before) {
 					if (isRemoved)
-						throw new IllegalStateException(CollectionElement.StdMsg.NOT_FOUND);
+						throw new IllegalStateException(MutableElementHandle.StdMsg.NOT_FOUND);
 					return null;
 				}
 
 				@Override
-				public void add(E value, boolean before, Object cause) throws UnsupportedOperationException, IllegalArgumentException {
+				public void add(E value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
 					if (isRemoved)
-						throw new IllegalStateException(CollectionElement.StdMsg.NOT_FOUND);
-					try (Transaction t = lock(true, cause)) {
+						throw new IllegalStateException(MutableElementHandle.StdMsg.NOT_FOUND);
+					try (Transaction t = lock(true)) {
 						ElementId newId = theElementIdGen.newId(elementId, before);
 						theObserver.accept(new ObservableCollectionEvent<>(newId, theElementIdGen.getElementsBefore(newId),
 							CollectionChangeType.add, null, value, theTransactionCauses.peekLast()));
@@ -2232,41 +2025,40 @@ public final class ObservableCollectionImpl {
 				}
 
 				@Override
-				public <V extends E> E set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+				public void set(E value) throws IllegalArgumentException, UnsupportedOperationException {
 					if (isRemoved)
-						throw new IllegalStateException(CollectionElement.StdMsg.NOT_FOUND);
-					try (Transaction t = lock(true, cause)) {
+						throw new IllegalStateException(MutableElementHandle.StdMsg.NOT_FOUND);
+					try (Transaction t = lock(true, null)) {
 						// The DerivedCollection keeps track of its own values and does not pay attention to the values in the event
 						theObserver.accept(new ObservableCollectionEvent<>(elementId, theElementIdGen.getElementsBefore(elementId),
 							CollectionChangeType.remove, null, value, theTransactionCauses.getLast()));
-						return null; // The collection manager keeps track of its own value and ignores this
 					}
 				}
 
 				@Override
-				public <V extends E> String isAcceptable(V value) {
+				public String isAcceptable(E value) {
 					if (isRemoved)
-						throw new IllegalStateException(CollectionElement.StdMsg.NOT_FOUND);
+						throw new IllegalStateException(MutableElementHandle.StdMsg.NOT_FOUND);
 					return null;
 				}
 
 				@Override
-				public Value<String> isEnabled() {
+				public String isEnabled() {
 					if (isRemoved)
-						throw new IllegalStateException(CollectionElement.StdMsg.NOT_FOUND);
-					return Value.constant(STRING_TYPE, null);
+						throw new IllegalStateException(MutableElementHandle.StdMsg.NOT_FOUND);
+					return null;
 				}
 			}
 			return onElement.apply(new DefaultMutableElement());
 		}
 
 		@Override
-		public <T> T ofElementAt(int index, Function<? super ObservableCollectionElement<? extends E>, T> onElement) {
+		public <T> T ofElementAt(int index, Function<? super ElementHandle<? extends E>, T> onElement) {
 			throw new UnsupportedOperationException("This method is not implemented for the default observable collection");
 		}
 
 		@Override
-		public <T> T ofMutableElementAt(int index, Function<? super MutableObservableElement<? extends E>, T> onElement) {
+		public <T> T ofMutableElementAt(int index, Function<? super MutableElementHandle<? extends E>, T> onElement) {
 			throw new UnsupportedOperationException("This method is not implemented for the default observable collection");
 		}
 
@@ -2405,9 +2197,9 @@ public final class ObservableCollectionImpl {
 		public String canAdd(E value) {
 			ObservableCollection<? extends E> current = theCollectionObservable.get();
 			if (current == null)
-				return CollectionElement.StdMsg.UNSUPPORTED_OPERATION;
+				return MutableElementHandle.StdMsg.UNSUPPORTED_OPERATION;
 			else if (value != null && !current.getType().getRawType().isInstance(value))
-				return CollectionElement.StdMsg.BAD_TYPE;
+				return MutableElementHandle.StdMsg.BAD_TYPE;
 			return ((ObservableCollection<E>) current).canAdd(value);
 		}
 
@@ -2417,7 +2209,7 @@ public final class ObservableCollectionImpl {
 			if (coll == null)
 				return false;
 			if (e != null && !coll.getType().getRawType().isInstance(e))
-				throw new IllegalArgumentException(CollectionElement.StdMsg.BAD_TYPE);
+				throw new IllegalArgumentException(MutableElementHandle.StdMsg.BAD_TYPE);
 			return ((ObservableCollection<E>) coll).add(e);
 		}
 
@@ -2429,15 +2221,15 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean forObservableElement(E value, Consumer<? super ObservableCollectionElement<? extends E>> onElement, boolean first) {
+		public boolean forElement(E value, Consumer<? super ElementHandle<? extends E>> onElement, boolean first) {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			if (coll == null || !coll.belongs(value))
 				return false;
-			return ((ObservableCollection<E>) coll).forObservableElement(value, onElement, first);
+			return ((ObservableCollection<E>) coll).forElement(value, onElement, first);
 		}
 
 		@Override
-		public boolean forMutableElement(E value, Consumer<? super MutableObservableElement<? extends E>> onElement, boolean first) {
+		public boolean forMutableElement(E value, Consumer<? super MutableElementHandle<? extends E>> onElement, boolean first) {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			if (coll == null || !coll.belongs(value))
 				return false;
@@ -2445,7 +2237,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public <T> T ofElementAt(ElementId elementId, Function<? super ObservableCollectionElement<? extends E>, T> onElement) {
+		public <T> T ofElementAt(ElementId elementId, Function<? super ElementHandle<? extends E>, T> onElement) {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			if (coll == null)
 				throw new NoSuchElementException();
@@ -2453,7 +2245,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public <T> T ofMutableElementAt(ElementId elementId, Function<? super MutableObservableElement<? extends E>, T> onElement) {
+		public <T> T ofMutableElementAt(ElementId elementId, Function<? super MutableElementHandle<? extends E>, T> onElement) {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			if (coll == null)
 				throw new NoSuchElementException();
@@ -2461,7 +2253,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public <T> T ofElementAt(int index, Function<? super ObservableCollectionElement<? extends E>, T> onElement) {
+		public <T> T ofElementAt(int index, Function<? super ElementHandle<? extends E>, T> onElement) {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			if (coll == null)
 				throw new NoSuchElementException();
@@ -2469,7 +2261,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public <T> T ofMutableElementAt(int index, Function<? super MutableObservableElement<? extends E>, T> onElement) {
+		public <T> T ofMutableElementAt(int index, Function<? super MutableElementHandle<? extends E>, T> onElement) {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			if (coll == null)
 				throw new NoSuchElementException();
@@ -2477,19 +2269,19 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public MutableObservableSpliterator<E> mutableSpliterator(boolean fromStart) {
+		public MutableElementSpliterator<E> mutableSpliterator(boolean fromStart) {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			if (coll == null)
-				return MutableObservableSpliterator.empty(theType);
+				return MutableElementSpliterator.empty(theType);
 			return ((ObservableCollection<E>) coll).mutableSpliterator(fromStart);
 		}
 
 		@Override
-		public MutableObservableSpliterator<E> mutableSpliterator(int index) {
+		public MutableElementSpliterator<E> mutableSpliterator(int index) {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			if (coll == null) {
 				if (index == 0)
-					return MutableObservableSpliterator.empty(theType);
+					return MutableElementSpliterator.empty(theType);
 				else
 					throw new IndexOutOfBoundsException(index + " of 0");
 			}
