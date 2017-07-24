@@ -33,9 +33,9 @@ import org.qommons.collect.ElementHandle;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.MutableElementHandle;
+import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.collect.SimpleCause;
 import org.qommons.collect.TransactableList;
-import org.qommons.collect.TreeList;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -60,10 +60,10 @@ import com.google.common.reflect.TypeToken;
  * <li><b>Modification Control</b> The {@link #flow() flow} API also supports constraints on how or whether a derived collection may be
  * {@link CollectionDataFlow#filterModification() modified}.</li>
  * <li><b>Enhanced {@link Spliterator}s</b> ObservableCollections must implement {@link #mutableSpliterator(boolean)}, which returns a
- * {@link MutableObservableSpliterator}, which is an enhanced {@link Spliterator}. This has potential for the improved performance
- * associated with using {@link Spliterator} instead of {@link Iterator} as well as the reversibility and ability to
- * {@link MutableObservableElement#add(Object, boolean, Object) add}, {@link MutableObservableElement#remove(Object) remove}, or
- * {@link MutableObservableElement#set(Object, Object) replace} elements during iteration.</li>
+ * {@link MutableElementSpliterator}, which is an enhanced {@link Spliterator}. This has potential for the improved performance associated
+ * with using {@link Spliterator} instead of {@link Iterator} as well as the reversibility and ability to
+ * {@link MutableElementHandle#add(Object, boolean) add}, {@link MutableElementHandle#remove() remove}, or
+ * {@link MutableElementHandle#set(Object) replace} elements during iteration.</li>
  * <li><b>Transactionality</b> ObservableCollections support the {@link org.qommons.Transactable} interface, allowing callers to reserve a
  * collection for write or to ensure that the collection is not written to during an operation (for implementations that support this. See
  * {@link org.qommons.Transactable#isLockSupported() isLockSupported()}).</li>
@@ -72,7 +72,7 @@ import com.google.common.reflect.TypeToken;
  * <li><b>Custom {@link #equivalence() equivalence}</b> Instead of being a slave to each element's own {@link Object#equals(Object) equals}
  * scheme, collections can be defined with custom schemes which will affect any operations involving element comparison, such as
  * {@link #contains(Object)} and {@link #remove()}.</li>
- * <li><b>Enhanced element access</b> The {@link #forObservableElement(Object, Consumer, boolean) forObservableElement} and
+ * <li><b>Enhanced element access</b> The {@link #forElement(Object, Consumer, boolean) forObservableElement} and
  * {@link #forMutableElement(Object, Consumer, boolean) forMutableElement} methods, along with several others, allow access to elements in
  * the array without the need and potentially without the performance cost of iterating.</li>
  * </ul>
@@ -518,38 +518,13 @@ public interface ObservableCollection<E> extends BetterList<E>, TransactableList
 
 	/** @return An observable value containing the only value in this collection while its size==1, otherwise null TODO TEST ME! */
 	default ObservableValue<E> only() {
-		return new ObservableCollectionImpl.ReducedValue<E, TreeList<E>, E>(this, getType().wrap()) {
-			@Override
-			public E get() {
-				return size() == 1 ? iterator().next() : null;
-			}
-
-			@Override
-			protected TreeList<E> init() {
-				return new TreeList<>();
-			}
-
-			@Override
-			protected TreeList<E> update(TreeList<E> oldValue, ObservableCollectionEvent<? extends E> change) {
-				switch (change.getType()) {
-				case add:
-					oldValue.add(change.getNewValue());
-					break;
-				case remove:
-					oldValue.remove(change.getOldValue());
-					break;
-				case set:
-					oldValue.findAndReplace(v -> v == change.getOldValue(), v -> change.getNewValue());
-					break;
-				}
-				return oldValue;
-			}
-
-			@Override
-			protected E getValue(TreeList<E> updated) {
-				return updated.size() == 1 ? updated.get(0) : null;
-			}
-		};
+		return reduce(new int[1], (sz, v) -> {
+			sz[0]++;
+			return sz;
+		}, (sz, v) -> {
+			sz[0]--;
+			return sz;
+		}).mapV(getType(), sz -> sz[0] == 1 ? getFirst() : null);
 	}
 
 	/**
@@ -1060,8 +1035,8 @@ public interface ObservableCollection<E> extends BetterList<E>, TransactableList
 		 * @param staticCategories Whether the categorization of this flow's value is static or dynamic
 		 * @return A multi-map flow that may be used to produce a multi-map of this flow's values, categorized by the given key mapping
 		 */
-		<K> ObservableMultiMap.MultiMapFlow<E, K, T> groupBy(
-			Function<? super CollectionDataFlow<E, I, T>, UniqueDataFlow<E, ?, K>> keyFlow, boolean staticCategories);
+		<K> ObservableMultiMap.MultiMapFlow<E, K, T> groupBy(Function<? super CollectionDataFlow<E, I, T>, UniqueDataFlow<E, ?, K>> keyFlow,
+			boolean staticCategories);
 
 		/**
 		 * @param <K> The key type for the map

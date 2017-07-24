@@ -50,6 +50,8 @@ import org.qommons.collect.MutableElementHandle;
 import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.collect.ReversibleSpliterator;
 import org.qommons.collect.SimpleCause;
+import org.qommons.collect.TreeSet;
+import org.qommons.tree.BinaryTreeNode;
 import org.qommons.tree.CountedRedBlackNode;
 import org.qommons.tree.CountedRedBlackNode.DefaultNode;
 import org.qommons.tree.CountedRedBlackNode.DefaultTreeMap;
@@ -261,14 +263,6 @@ public final class ObservableCollectionImpl {
 			if (index < 0)
 				index = -index - 1;
 			return index;
-		}
-
-		private void forEach(DefaultNode<Map.Entry<ElementId, ChangeValue<E>>> node, boolean left, Consumer<ChangeValue<E>> action) {
-			node = (DefaultNode<Entry<ElementId, ChangeValue<E>>>) node.getClosest(left);
-			while (node != null) {
-				action.accept(node.getValue().getValue());
-				node = (DefaultNode<Entry<ElementId, ChangeValue<E>>>) node.getClosest(left);
-			}
 		}
 
 		/**
@@ -1279,7 +1273,7 @@ public final class ObservableCollectionImpl {
 	public static class DerivedCollection<E, T> implements ObservableCollection<T> {
 		protected static class DerivedCollectionElement<E, T> implements ElementId {
 			final CollectionElementManager<E, ?, T> manager;
-			DefaultNode<DerivedCollectionElement<E, T>> presentNode;
+			BinaryTreeNode<DerivedCollectionElement<E, T>> presentNode;
 
 			protected DerivedCollectionElement(CollectionElementManager<E, ?, T> manager, E initValue) {
 				this.manager = manager;
@@ -1292,7 +1286,7 @@ public final class ObservableCollectionImpl {
 				DerivedCollectionElement<E, T> other = (DerivedCollectionElement<E, T>) o;
 				if (other.presentNode == null)
 					throw new IllegalStateException("The node is not currentl present in the collection");
-				return presentNode.getIndex() - other.presentNode.getIndex();
+				return presentNode.getNodesBefore() - other.presentNode.getNodesBefore();
 			}
 
 			protected boolean set(E baseValue, Object cause) {
@@ -1328,7 +1322,7 @@ public final class ObservableCollectionImpl {
 		private final ObservableCollection<E> theSource;
 		private final CollectionManager<E, ?, T> theFlow;
 		private final DefaultTreeMap<ElementId, DerivedCollectionElement<E, T>> theElements;
-		private final DefaultTreeSet<DerivedCollectionElement<E, T>> thePresentElements;
+		private final TreeSet<DerivedCollectionElement<E, T>> thePresentElements;
 		private final LinkedQueue<Consumer<? super ObservableCollectionEvent<? extends T>>> theListeners;
 		private final AtomicInteger theListenerCount;
 		private final Equivalence<? super T> theEquivalence;
@@ -1338,7 +1332,7 @@ public final class ObservableCollectionImpl {
 			theSource = source;
 			theFlow = flow;
 			theElements = new DefaultTreeMap<>(ElementId::compareTo);
-			thePresentElements = new DefaultTreeSet<>((e1, e2) -> e1.manager.compareTo(e2.manager));
+			thePresentElements = new TreeSet<>(false, (e1, e2) -> e1.manager.compareTo(e2.manager));
 			theListeners = new LinkedQueue<>();
 			theListenerCount = new AtomicInteger();
 			theEquivalence = flow.equivalence();
@@ -1416,37 +1410,40 @@ public final class ObservableCollectionImpl {
 			return theFlow;
 		}
 
-		protected DefaultTreeSet<DerivedCollectionElement<E, T>> getPresentElements() {
+		protected TreeSet<DerivedCollectionElement<E, T>> getPresentElements() {
 			return thePresentElements;
 		}
 
 		private void addToPresent(DerivedCollectionElement<E, T> element, Object cause) {
 			element.presentNode = thePresentElements.addGetNode(element);
-			fireListeners(new ObservableCollectionEvent<>(element, element.presentNode.getIndex(), CollectionChangeType.add, null,
+			fireListeners(new ObservableCollectionEvent<>(element, element.presentNode.getNodesBefore(), CollectionChangeType.add, null,
 				element.manager.get(), cause));
 		}
 
 		private void removeFromPresent(DerivedCollectionElement<E, T> element, T oldValue, Object cause) {
-			fireListeners(new ObservableCollectionEvent<>(element, element.presentNode.getIndex(), CollectionChangeType.remove, oldValue,
-				oldValue, cause));
-			thePresentElements.removeNode(element.presentNode);
+			fireListeners(
+				new ObservableCollectionEvent<>(element, element.presentNode.getNodesBefore(), CollectionChangeType.remove, oldValue,
+					oldValue, cause));
+			thePresentElements.forMutableElementAt(element.presentNode, el -> el.remove());
 			element.presentNode = null;
 		}
 
 		private void updateInPresent(DerivedCollectionElement<E, T> element, T oldValue, Object cause, boolean fireUpdate) {
 			// Need to verify that the ordering is still correct. Otherwise, remove and re-add.
-			CountedRedBlackNode<DerivedCollectionElement<E, T>> left = element.presentNode.getClosest(true);
-			CountedRedBlackNode<DerivedCollectionElement<E, T>> right = element.presentNode.getClosest(false);
+			BinaryTreeNode<DerivedCollectionElement<E, T>> left = element.presentNode.getClosest(true);
+			BinaryTreeNode<DerivedCollectionElement<E, T>> right = element.presentNode.getClosest(false);
 			if ((left != null && left.compareTo(element.presentNode) > 0) || (right != null && right.compareTo(element.presentNode) < 0)) {
 				// Remove the element and re-add at the new position.
 				// Need to fire the remove event while the node is in the old position.
 				removeFromPresent(element, oldValue, cause);
 				addToPresent(element, cause);
 			} else if (oldValue != element.manager.get())
-				fireListeners(new ObservableCollectionEvent<>(element, element.presentNode.getIndex(), CollectionChangeType.set, oldValue,
+				fireListeners(
+					new ObservableCollectionEvent<>(element, element.presentNode.getNodesBefore(), CollectionChangeType.set, oldValue,
 					element.manager.get(), cause));
 			else if (fireUpdate)
-				fireListeners(new ObservableCollectionEvent<>(element, element.presentNode.getIndex(), CollectionChangeType.set, oldValue,
+				fireListeners(
+					new ObservableCollectionEvent<>(element, element.presentNode.getNodesBefore(), CollectionChangeType.set, oldValue,
 					oldValue, cause));
 		}
 
@@ -1473,18 +1470,18 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public int getElementsBefore(ElementId id) {
-			DefaultNode<?> node = ((DerivedCollectionElement<E, T>) id).presentNode;
+			BinaryTreeNode<?> node = ((DerivedCollectionElement<E, T>) id).presentNode;
 			if (node == null)
 				throw new IllegalArgumentException("This element is not present in the collection");
-			return node.getIndex();
+			return node.getNodesBefore();
 		}
 
 		@Override
 		public int getElementsAfter(ElementId id) {
-			DefaultNode<?> node = ((DerivedCollectionElement<E, T>) id).presentNode;
+			BinaryTreeNode<?> node = ((DerivedCollectionElement<E, T>) id).presentNode;
 			if (node == null)
 				throw new IllegalArgumentException("This element is not present in the collection");
-			return node.getElementsGreater();
+			return node.getNodesAfter();
 		}
 
 		@Override

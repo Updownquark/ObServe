@@ -47,6 +47,11 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 	}
 
 	@Override
+	default E[] toArray() {
+		return ObservableSet.super.toArray();
+	}
+
+	@Override
 	default boolean remove(Object c) {
 		return ObservableSet.super.remove(c);
 	}
