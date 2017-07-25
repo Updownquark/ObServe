@@ -12,13 +12,13 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import org.qommons.IterableUtils;
+import org.qommons.collect.BetterMap;
+import org.qommons.collect.BetterSet;
 import org.qommons.collect.IdentityHashSet;
-import org.qommons.collect.UpdatableHashMap;
-import org.qommons.collect.UpdatableHashSet;
+import org.qommons.collect.TreeSet;
 import org.qommons.collect.UpdatableIdentityHashMap;
 import org.qommons.collect.UpdatableMap;
 import org.qommons.collect.UpdatableSet;
-import org.qommons.tree.CountedRedBlackNode;
 
 /**
  * Defines an equality scheme for comparing values for equivalence
@@ -49,14 +49,14 @@ public interface Equivalence<E> {
 	 * @param <E2> The type for the set
 	 * @return A new, empty set whose exclusivity is governed by this equivalence
 	 */
-	<E2 extends E> UpdatableSet<E2> createSet();
+	<E2 extends E> BetterSet<E2> createSet();
 
 	/**
 	 * @param <E2> The key type for the map
 	 * @param <V> The value type for the map
 	 * @return A new, empty map whose key exclusivity is governed by this equivalence
 	 */
-	<E2 extends E, V> UpdatableMap<E2, V> createMap();
+	<E2 extends E, V> BetterMap<E2, V> createMap();
 
 	/** The default {@link Object#equals(Object)} implementation of equivalence. Used by most java collections. */
 	Equivalence<Object> DEFAULT=new Equivalence<Object>() {
@@ -71,13 +71,13 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public <E2> UpdatableSet<E2> createSet() {
-			return new UpdatableHashSet<>();
+		public <E2> BetterSet<E2> createSet() {
+			return new BetterHashSet<>();
 		}
 
 		@Override
-		public <E2, V> UpdatableMap<E2, V> createMap() {
-			return new UpdatableHashMap<>();
+		public <E2, V> BetterMap<E2, V> createMap() {
+			return new BetterHashMap<>();
 		}
 	};
 
@@ -145,13 +145,13 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public <E2 extends E> UpdatableSet<E2> createSet() {
-			return new CountedRedBlackNode.DefaultTreeSet<>(compare);
+		public <E2 extends E> BetterSet<E2> createSet() {
+			return new TreeSet<>(false, compare);
 		}
 
 		@Override
-		public <E2 extends E, V> UpdatableMap<E2, V> createMap() {
-			return new CountedRedBlackNode.DefaultTreeMap<>(compare);
+		public <E2 extends E, V> BetterMap<E2, V> createMap() {
+			return new org.qommons.collect.TreeMap<>(compare);
 		}
 	}
 
@@ -195,12 +195,12 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public <E2 extends T> UpdatableSet<E2> createSet() {
+		public <E2 extends T> BetterSet<E2> createSet() {
 			return new MappedSet<>(this, theWrapped.createSet(), theMap, theReverse);
 		}
 
 		@Override
-		public <E2 extends T, V> UpdatableMap<E2, V> createMap() {
+		public <E2 extends T, V> BetterMap<E2, V> createMap() {
 			return new MappedMap<>(this, theWrapped.createMap(), theMap, theReverse);
 		}
 
@@ -214,7 +214,7 @@ public interface Equivalence<E> {
 		}
 	}
 
-	class MappedSet<E, T, T2 extends T> extends AbstractSet<T2> implements UpdatableSet<T2> {
+	class MappedSet<E, T, T2 extends T> extends AbstractSet<T2> implements BetterSet<T2> {
 		private final MappedEquivalence<E, T> theEquivalence;
 		private final UpdatableSet<E> theWrapped;
 		private final Function<? super E, ? extends T> theMap;
@@ -299,7 +299,7 @@ public interface Equivalence<E> {
 		}
 	}
 
-	class MappedMap<E, T, T2 extends T, V> extends AbstractMap<T2, V> implements UpdatableMap<T2, V> {
+	class MappedMap<E, T, T2 extends T, V> extends AbstractMap<T2, V> implements BetterMap<T2, V> {
 		private final MappedEquivalence<E, T> theEquivalence;
 		private final UpdatableMap<E, V> theWrapped;
 		private final Function<? super E, ? extends T> theMap;

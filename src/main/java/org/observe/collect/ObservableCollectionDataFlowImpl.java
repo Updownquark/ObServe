@@ -1247,13 +1247,13 @@ public class ObservableCollectionDataFlowImpl {
 				}
 
 				@Override
-				public void add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
+				public ElementId add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
 					FilterMapResult<T, E> result = filterAdd(new FilterMapResult<>(value), before, true);
 					if (result.error != null)
 						throw new IllegalArgumentException(result.error);
 					if (result.result != null && !theCollection.getTargetType().getRawType().isInstance(result.result))
 						throw new IllegalArgumentException(MutableElementHandle.StdMsg.BAD_TYPE);
-					((MutableElementHandle<E>) theWrapped).add(result.result, before);
+					return ((MutableElementHandle<E>) theWrapped).add(result.result, before);
 				}
 			}
 			return new MutableManagedElement(element);

@@ -8,16 +8,17 @@ import java.util.function.Function;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
-import org.observe.collect.MutableObservableElement;
-import org.observe.collect.MutableObservableSpliterator;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
-import org.observe.collect.ObservableCollectionElement;
 import org.observe.collect.ObservableSortedSet;
 import org.qommons.Transaction;
+import org.qommons.collect.ElementHandle;
+import org.qommons.collect.ElementId;
+import org.qommons.collect.MutableElementHandle;
 import org.qommons.collect.MutableElementHandle.StdMsg;
+import org.qommons.collect.MutableElementSpliterator;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -305,30 +306,53 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 			}
 
 			@Override
+			public ElementId addIfEmpty(K value) throws IllegalStateException {
+				try (Transaction t = lock(true, null)) {
+					if (!isEmpty())
+						throw new IllegalStateException("Set is not empty");
+					return super.addElement(value);
+				}
+			}
+
+			@Override
 			public int indexFor(Comparable<? super K> search) {
-				// TODO Auto-generated method stub
+				return getPresentElements().indexFor(el -> search.compareTo(el.get()));
+			}
+
+			@Override
+			public boolean forElement(Comparable<? super K> search, Consumer<? super ElementHandle<? extends K>> onElement, boolean up) {
+				try (Transaction t = lock(false, null)) {
+					DerivedCollectionElement<OK, K> element = getPresentElements().relative(el -> search.compareTo(el.get()), up);
+					if (element == null)
+						return false;
+					forElementAt(element, onElement);
+					return true;
+				}
+			}
+
+			@Override
+			public boolean forMutableElement(Comparable<? super K> search, Consumer<? super MutableElementHandle<? extends K>> onElement,
+				boolean up) {
+				try (Transaction t = lock(true, null)) {
+					DerivedCollectionElement<OK, K> element = getPresentElements().relative(el -> search.compareTo(el.get()), up);
+					if (element == null)
+						return false;
+					forMutableElementAt(element, onElement);
+					return true;
+				}
+			}
+
+			@Override
+			public MutableElementSpliterator<K> mutableSpliterator(Comparable<? super K> searchForStart, boolean higher) {
+				return spliterator(getPresentElements().spliterator(el -> searchForStart.compareTo(el.get()), higher));
 			}
 
 			@Override
 			public ObservableValue<K> observeRelative(Comparable<? super K> search, boolean up) {
-				// TODO Auto-generated method stub
-			}
-
-			@Override
-			public boolean forObservableElement(Comparable<? super K> search, boolean up,
-				Consumer<? super ObservableCollectionElement<? extends K>> onElement) {
-				// TODO Auto-generated method stub
-			}
-
-			@Override
-			public boolean forMutableElement(Comparable<? super K> search, boolean up,
-				Consumer<? super MutableObservableElement<? extends K>> onElement) {
-				// TODO Auto-generated method stub
-			}
-
-			@Override
-			public MutableObservableSpliterator<K> mutableSpliterator(Comparable<? super K> search, boolean up) {
-				// TODO Auto-generated method stub
+				if (up)
+					return subSet(search, null).observeFind(v -> true, () -> null, true);
+				else
+					return subSet(null, search).observeFind(v -> true, () -> null, false);
 			}
 		}
 	}

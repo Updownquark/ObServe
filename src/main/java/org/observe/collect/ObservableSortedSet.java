@@ -8,14 +8,13 @@ import org.observe.ObservableValue;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.ImmutableIterator;
-import org.qommons.collect.TransactableSortedSet;
 
 /**
  * A sorted set whose content can be observed
  *
  * @param <E> The type of element in the set
  */
-public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSortedSet<E>, BetterSortedSet<E> {
+public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSet<E> {
 	@Override
 	default ImmutableIterator<E> iterator() {
 		return ObservableSet.super.iterator();
@@ -175,6 +174,31 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, TransactableSo
 	@Override
 	default ObservableSortedSet<E> subSet(Comparable<? super E> from, Comparable<? super E> to) {
 		return new ObservableSortedSetImpl.ObservableSubSet<>(this, from, to);
+	}
+
+	@Override
+	default ObservableSortedSet<E> headSet(E toElement, boolean inclusive) {
+		return (ObservableSortedSet<E>) BetterSortedSet.super.headSet(toElement, inclusive);
+	}
+
+	@Override
+	default ObservableSortedSet<E> tailSet(E fromElement, boolean inclusive) {
+		return (ObservableSortedSet<E>) BetterSortedSet.super.tailSet(fromElement, inclusive);
+	}
+
+	@Override
+	default ObservableSortedSet<E> subSet(E fromElement, E toElement) {
+		return (ObservableSortedSet<E>) BetterSortedSet.super.subSet(fromElement, toElement);
+	}
+
+	@Override
+	default ObservableSortedSet<E> headSet(E toElement) {
+		return (ObservableSortedSet<E>) BetterSortedSet.super.headSet(toElement);
+	}
+
+	@Override
+	default ObservableSortedSet<E> tailSet(E fromElement) {
+		return (ObservableSortedSet<E>) BetterSortedSet.super.tailSet(fromElement);
 	}
 
 	@Override
