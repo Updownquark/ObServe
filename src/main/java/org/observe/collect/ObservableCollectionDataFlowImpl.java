@@ -37,13 +37,13 @@ import org.observe.collect.ObservableCollectionImpl.DerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.DerivedLWCollection;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterMap;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.IdentityHashSet;
 import org.qommons.collect.MutableElementHandle;
 import org.qommons.collect.MutableElementHandle.StdMsg;
-import org.qommons.collect.UpdatableMap;
-import org.qommons.tree.CountedRedBlackNode.DefaultNode;
-import org.qommons.tree.CountedRedBlackNode.DefaultTreeSet;
+import org.qommons.tree.BetterTreeSet;
+import org.qommons.tree.BinaryTreeNode;
 
 import com.google.common.reflect.TypeToken;
 
@@ -1504,7 +1504,7 @@ public class ObservableCollectionDataFlowImpl {
 	}
 
 	public static class UniqueManager<E, T> extends AbstractCollectionManager<E, T, T> {
-		private final UpdatableMap<T, DefaultTreeSet<UniqueElement>> theElementsByValue;
+		private final BetterMap<T, BetterTreeSet<UniqueElement>> theElementsByValue;
 		private final boolean isAlwaysUsingFirst;
 
 		protected UniqueManager(CollectionManager<E, ?, T> parent, boolean alwaysUseFirst) {
@@ -1519,7 +1519,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		public ElementId getUniqueElement(T value) {
-			DefaultTreeSet<UniqueElement> valueElements = theElementsByValue.get(value);
+			BetterTreeSet<UniqueElement> valueElements = theElementsByValue.get(value);
 			if (valueElements == null)
 				return null;
 			for (UniqueElement el : valueElements)
@@ -1582,8 +1582,8 @@ public class ObservableCollectionDataFlowImpl {
 		class UniqueElement extends CollectionElementManager<E, T, T> {
 			private T theValue;
 			private boolean isPresent;
-			private DefaultTreeSet<UniqueElement> theValueElements;
-			private DefaultNode<UniqueElement> theNode;
+			private BetterTreeSet<UniqueElement> theValueElements;
+			private BinaryTreeNode<UniqueElement> theNode;
 
 			protected UniqueElement(ElementId id, E init, Object cause) {
 				super(UniqueManager.this, UniqueManager.this.getParent().createElement(id, init, cause), id);
@@ -1620,7 +1620,7 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			private void removeFromSet(Object cause) {
-				theValueElements.removeNode(theNode);
+				theValueElements.forMutableElementAt(theNode, el -> el.remove());
 				theNode = null;
 				if (theValueElements.isEmpty())
 					theElementsByValue.remove(theValue);
@@ -1640,13 +1640,13 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			private void addToSet(Object cause) {
-				theValueElements = theElementsByValue.computeIfAbsent(theValue, v -> new DefaultTreeSet<>(UniqueElement::compareTo));
+				theValueElements = theElementsByValue.computeIfAbsent(theValue, v -> new BetterTreeSet<>(false, UniqueElement::compareTo));
 				// Grab our node, since we can use it to remove even if the comparison properties change
-				theNode = theValueElements.addGetNode(this);
+				theNode = theValueElements.addElement(this);
 				if (theValueElements.size() == 1) {
 					// We're currently the only element for the value
 					isPresent = true;
-				} else if (isAlwaysUsingFirst && theNode.getIndex() == 0) {
+				} else if (isAlwaysUsingFirst && theNode.getNodesBefore() == 0) {
 					isPresent = true;
 					// We're replacing the existing representative for the value
 					UniqueElement replaced = theValueElements.higher(this);

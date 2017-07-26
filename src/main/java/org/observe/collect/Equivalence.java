@@ -1,6 +1,5 @@
 package org.observe.collect;
 
-import java.util.AbstractMap;
 import java.util.AbstractSet;
 import java.util.Collection;
 import java.util.Comparator;
@@ -12,13 +11,14 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import org.qommons.IterableUtils;
+import org.qommons.collect.BetterHashSet;
 import org.qommons.collect.BetterMap;
 import org.qommons.collect.BetterSet;
-import org.qommons.collect.IdentityHashSet;
-import org.qommons.collect.TreeSet;
 import org.qommons.collect.UpdatableIdentityHashMap;
 import org.qommons.collect.UpdatableMap;
 import org.qommons.collect.UpdatableSet;
+import org.qommons.tree.BetterTreeMap;
+import org.qommons.tree.BetterTreeSet;
 
 /**
  * Defines an equality scheme for comparing values for equivalence
@@ -72,12 +72,12 @@ public interface Equivalence<E> {
 
 		@Override
 		public <E2> BetterSet<E2> createSet() {
-			return new BetterHashSet<>();
+			return BetterHashSet.<E2> build().unsafe().build();
 		}
 
 		@Override
 		public <E2, V> BetterMap<E2, V> createMap() {
-			return new BetterHashMap<>();
+			return BetterHashMap.<E2, V>.build().unsafe().build();
 		}
 	};
 
@@ -94,13 +94,13 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public <E2> UpdatableSet<E2> createSet() {
-			return new IdentityHashSet<>();
+		public <E2> BetterSet<E2> createSet() {
+			return BetterHashSet.<E2> build().unsafe().identity().build();
 		}
 
 		@Override
-		public <E2, V> UpdatableMap<E2, V> createMap() {
-			return new UpdatableIdentityHashMap<>();
+		public <E2, V> BetterMap<E2, V> createMap() {
+			return BetterHashMap.<E2, V>.build().unsafe().identity().build();
 		}
 	};
 
@@ -146,12 +146,12 @@ public interface Equivalence<E> {
 
 		@Override
 		public <E2 extends E> BetterSet<E2> createSet() {
-			return new TreeSet<>(false, compare);
+			return new BetterTreeSet<>(false, compare);
 		}
 
 		@Override
 		public <E2 extends E, V> BetterMap<E2, V> createMap() {
-			return new org.qommons.collect.TreeMap<>(compare);
+			return new BetterTreeMap<>(false, compare);
 		}
 	}
 
@@ -214,7 +214,7 @@ public interface Equivalence<E> {
 		}
 	}
 
-	class MappedSet<E, T, T2 extends T> extends AbstractSet<T2> implements BetterSet<T2> {
+	class MappedSet<E, T, T2 extends T> implements BetterSet<T2> {
 		private final MappedEquivalence<E, T> theEquivalence;
 		private final UpdatableSet<E> theWrapped;
 		private final Function<? super E, ? extends T> theMap;
@@ -299,7 +299,7 @@ public interface Equivalence<E> {
 		}
 	}
 
-	class MappedMap<E, T, T2 extends T, V> extends AbstractMap<T2, V> implements BetterMap<T2, V> {
+	class MappedMap<E, T, T2 extends T, V> implements BetterMap<T2, V> {
 		private final MappedEquivalence<E, T> theEquivalence;
 		private final UpdatableMap<E, V> theWrapped;
 		private final Function<? super E, ? extends T> theMap;

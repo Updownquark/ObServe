@@ -50,7 +50,7 @@ import org.qommons.collect.MutableElementHandle;
 import org.qommons.collect.MutableElementHandle.StdMsg;
 import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.collect.SimpleCause;
-import org.qommons.collect.TreeSet;
+import org.qommons.tree.BetterTreeSet;
 import org.qommons.tree.BinaryTreeNode;
 import org.qommons.tree.CountedRedBlackNode;
 import org.qommons.tree.CountedRedBlackNode.DefaultNode;
@@ -1326,7 +1326,7 @@ public final class ObservableCollectionImpl {
 		private final ObservableCollection<E> theSource;
 		private final CollectionManager<E, ?, T> theFlow;
 		private final Map<ElementId, DerivedCollectionElement<E, T>> theElements;
-		private final TreeSet<DerivedCollectionElement<E, T>> thePresentElements;
+		private final BetterTreeSet<DerivedCollectionElement<E, T>> thePresentElements;
 		private final LinkedQueue<Consumer<? super ObservableCollectionEvent<? extends T>>> theListeners;
 		private final AtomicInteger theListenerCount;
 		private final Equivalence<? super T> theEquivalence;
@@ -1336,7 +1336,7 @@ public final class ObservableCollectionImpl {
 			theSource = source;
 			theFlow = flow;
 			theElements = new java.util.TreeMap<>(ElementId::compareTo);
-			thePresentElements = new TreeSet<>(false, (e1, e2) -> e1.manager.compareTo(e2.manager));
+			thePresentElements = new BetterTreeSet<>(false, (e1, e2) -> e1.manager.compareTo(e2.manager));
 			theListeners = new LinkedQueue<>();
 			theListenerCount = new AtomicInteger();
 			theEquivalence = flow.equivalence();
@@ -1414,7 +1414,7 @@ public final class ObservableCollectionImpl {
 			return theFlow;
 		}
 
-		protected TreeSet<DerivedCollectionElement<E, T>> getPresentElements() {
+		protected BetterTreeSet<DerivedCollectionElement<E, T>> getPresentElements() {
 			return thePresentElements;
 		}
 

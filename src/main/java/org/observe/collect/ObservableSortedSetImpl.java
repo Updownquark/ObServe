@@ -69,11 +69,6 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public ObservableValue<E> observeRelative(Comparable<? super E> search, boolean up) {
-			return getWrapped().observeRelative(boundSearch(search), up).mapV(v -> isInRange(v) == 0 ? v : null, true);
-		}
-
-		@Override
 		public ObservableSortedSet<E> subSet(Comparable<? super E> from, Comparable<? super E> to) {
 			return new ObservableSubSet<>(getWrapped(), boundSearch(from), boundSearch(to));
 		}
@@ -179,19 +174,15 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public ObservableValue<E> observeRelative(Comparable<? super E> search, boolean up) {
-			return getWrapped().observeRelative(search, !up);
-		}
-
-		@Override
-		public boolean forElement(Comparable<? super E> value, Consumer<? super ElementHandle<? extends E>> onElement, boolean up) {
-			return getWrapped().forElement(value, onElement, !up);
+		public boolean forElement(Comparable<? super E> value, Consumer<? super ElementHandle<? extends E>> onElement,
+			SortedSearchFilter filter) {
+			return getWrapped().forElement(value, el -> onElement.accept(el.reverse()), filter.opposite());
 		}
 
 		@Override
 		public boolean forMutableElement(Comparable<? super E> value, Consumer<? super MutableElementHandle<? extends E>> onElement,
-			boolean up) {
-			return getWrapped().forMutableElement(value, onElement, !up);
+			SortedSearchFilter filter) {
+			return getWrapped().forMutableElement(value, el -> onElement.accept(el.reverse()), filter.opposite());
 		}
 
 		@Override
@@ -301,24 +292,20 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public ObservableValue<T> observeRelative(Comparable<? super T> search, boolean up) {
-			return getSource().observeRelative(mappedSearch(search), up).mapV(getType(), v -> getFlow().map(v).result);
-		}
-
-		@Override
 		public int indexFor(Comparable<? super T> search) {
 			return getSource().indexFor(mappedSearch(search));
 		}
 
 		@Override
-		public boolean forElement(Comparable<? super T> search, Consumer<? super ElementHandle<? extends T>> onElement, boolean up) {
-			return getSource().forElement(mappedSearch(search), el -> onElement.accept(elementFor(el)), up);
+		public boolean forElement(Comparable<? super T> search, Consumer<? super ElementHandle<? extends T>> onElement,
+			SortedSearchFilter filter) {
+			return getSource().forElement(mappedSearch(search), el -> onElement.accept(elementFor(el)), filter);
 		}
 
 		@Override
 		public boolean forMutableElement(Comparable<? super T> search, Consumer<? super MutableElementHandle<? extends T>> onElement,
-			boolean up) {
-			return getSource().forMutableElement(mappedSearch(search), el -> onElement.accept(mutableElementFor(el)), up);
+			SortedSearchFilter filter) {
+			return getSource().forMutableElement(mappedSearch(search), el -> onElement.accept(mutableElementFor(el)), filter);
 		}
 
 		@Override
@@ -352,17 +339,10 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public ObservableValue<T> observeRelative(Comparable<? super T> search, boolean up) {
-			if (up)
-				return subSet(search, null).observeFind(v -> true, () -> null, true);
-			else
-				return subSet(null, search).observeFind(v -> true, () -> null, false);
-		}
-
-		@Override
-		public boolean forElement(Comparable<? super T> search, Consumer<? super ElementHandle<? extends T>> onElement, boolean up) {
+		public boolean forElement(Comparable<? super T> search, Consumer<? super ElementHandle<? extends T>> onElement,
+			SortedSearchFilter filter) {
 			try (Transaction t = lock(false, null)) {
-				DerivedCollectionElement<E, T> element = getPresentElements().relative(el -> search.compareTo(el.get()), up);
+				DerivedCollectionElement<E, T> element = getPresentElements().relative(el -> search.compareTo(el.get()), filter);
 				if (element == null)
 					return false;
 				forElementAt(element, onElement);
@@ -372,9 +352,9 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public boolean forMutableElement(Comparable<? super T> search, Consumer<? super MutableElementHandle<? extends T>> onElement,
-			boolean up) {
+			SortedSearchFilter filter) {
 			try (Transaction t = lock(true, null)) {
-				DerivedCollectionElement<E, T> element = getPresentElements().relative(el -> search.compareTo(el.get()), up);
+				DerivedCollectionElement<E, T> element = getPresentElements().relative(el -> search.compareTo(el.get()), filter);
 				if (element == null)
 					return false;
 				forMutableElementAt(element, onElement);
@@ -428,27 +408,28 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public ObservableValue<E> observeRelative(Comparable<? super E> value, boolean up) {
+		public ObservableValue<E> observeRelative(Comparable<? super E> value, SortedSearchFilter filter) {
 			return ObservableValue
 				.flatten(getWrapped().mapV(new TypeToken<ObservableValue<E>>() {}.where(new TypeParameter<E>() {}, getType()),
-					v -> v == null ? null : v.observeRelative(value, up)));
+					v -> v == null ? null : v.observeRelative(value, filter)));
 		}
 
 		@Override
-		public boolean forElement(Comparable<? super E> value, Consumer<? super ElementHandle<? extends E>> onElement, boolean up) {
+		public boolean forElement(Comparable<? super E> value, Consumer<? super ElementHandle<? extends E>> onElement,
+			SortedSearchFilter filter) {
 			ObservableSortedSet<E> wrapped = getWrapped().get();
 			if (wrapped == null)
 				return false;
-			return wrapped.forElement(value, onElement, up);
+			return wrapped.forElement(value, onElement, filter);
 		}
 
 		@Override
 		public boolean forMutableElement(Comparable<? super E> value, Consumer<? super MutableElementHandle<? extends E>> onElement,
-			boolean up) {
+			SortedSearchFilter filter) {
 			ObservableSortedSet<E> wrapped = getWrapped().get();
 			if (wrapped == null)
 				return false;
-			return wrapped.forMutableElement(value, onElement, up);
+			return wrapped.forMutableElement(value, onElement, filter);
 		}
 
 		@Override

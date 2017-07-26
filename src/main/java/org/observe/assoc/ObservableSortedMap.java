@@ -11,8 +11,8 @@ import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedSet;
-import org.qommons.SimpleMapEntry;
 import org.qommons.Transaction;
+import org.qommons.collect.SimpleMapEntry;
 
 import com.google.common.reflect.TypeToken;
 

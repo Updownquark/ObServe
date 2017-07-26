@@ -104,8 +104,8 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 	}
 
 	@Override
-	default boolean forValue(Comparable<? super E> search, Consumer<? super E> onValue, boolean up) {
-		return BetterSortedSet.super.forValue(search, onValue, up);
+	default boolean forValue(Comparable<? super E> search, Consumer<? super E> onValue, SortedSearchFilter filter) {
+		return BetterSortedSet.super.forValue(search, onValue, filter);
 	}
 
 	/**
@@ -115,11 +115,12 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 	 * @param up Whether to get the closest value greater or less than the given value
 	 * @return An observable value with the result of the operation
 	 */
-	ObservableValue<E> observeRelative(Comparable<? super E> search, boolean up);
+	default ObservableValue<E> observeRelative(Comparable<? super E> search, SortedSearchFilter filter) {
+	}
 
 	@Override
-	default E relative(Comparable<? super E> search, boolean up) {
-		return observeRelative(search, up).get();
+	default E relative(Comparable<? super E> search, SortedSearchFilter filter) {
+		return observeRelative(search, filter).get();
 	}
 
 	@Override
