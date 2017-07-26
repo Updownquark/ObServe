@@ -2,6 +2,7 @@ package org.observe.collect;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -52,10 +53,6 @@ import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.collect.SimpleCause;
 import org.qommons.tree.BetterTreeSet;
 import org.qommons.tree.BinaryTreeNode;
-import org.qommons.tree.CountedRedBlackNode;
-import org.qommons.tree.CountedRedBlackNode.DefaultNode;
-import org.qommons.tree.CountedRedBlackNode.DefaultTreeMap;
-import org.qommons.tree.CountedRedBlackNode.DefaultTreeSet;
 import org.qommons.value.Value;
 
 import com.google.common.reflect.TypeParameter;
@@ -294,14 +291,23 @@ public final class ObservableCollectionImpl {
 	}
 
 	public static abstract class AbstractObservableElementFinder<E> implements ObservableValue<ElementHandle<? extends E>> {
-		protected final ObservableCollection<E> theCollection;
-		protected final boolean isFirst;
+		private final ObservableCollection<E> theCollection;
+		private final Comparator<ElementHandle<? extends E>> theElementCompare;
 		private final TypeToken<ElementHandle<? extends E>> theType;
 
-		public AbstractObservableElementFinder(ObservableCollection<E> collection, boolean first) {
+		/**
+		 * @param collection The collection to find elements in
+		 * @param elementCompare A comparator to determine whether to prefer one {@link #test(Object) matching} element over another. When
+		 *        <code>elementCompare{@link Comparable#compareTo(Object) compareTo}(el1, el2)<0</code>, el1 will replace el2.
+		 */
+		public AbstractObservableElementFinder(ObservableCollection<E> collection, Comparator<ElementHandle<? extends E>> elementCompare) {
 			theCollection = collection;
-			isFirst = first;
+			theElementCompare = elementCompare;
 			theType = new TypeToken<ElementHandle<? extends E>>() {}.where(new TypeParameter<E>() {}, collection.getType());
+		}
+
+		protected ObservableCollection<E> getCollection() {
+			return theCollection;
 		}
 
 		@Override
@@ -334,19 +340,18 @@ public final class ObservableCollectionImpl {
 					@Override
 					public void accept(ObservableCollectionEvent<? extends E> evt) {
 						boolean mayReplace;
-						int comp;
-						if (theCurrentElement == null) {
+						if (theCurrentElement == null)
 							mayReplace = true;
-							comp = 0;
-						} else if (theCurrentElement.getElementId().equals(evt.getElementId())) {
+						else if (theCurrentElement.getElementId().equals(evt.getElementId()))
 							mayReplace = true;
-							comp = 0;
-						} else
-							mayReplace = ((comp = evt.getElementId().compareTo(theCurrentElement.getElementId())) < 0) == isFirst;
+						else {
+							mayReplace = theElementCompare.compare(theCurrentElement,
+								new SimpleElement(evt.getElementId(), evt.getNewValue())) > 0;
+						}
 						if (!mayReplace)
 							return; // Even if the new element's value matches, it wouldn't replace the current value
 						boolean matches = test(evt.getNewValue());
-						if (!matches && comp != 0)
+						if (!matches && (theCurrentElement == null || !theCurrentElement.getElementId().equals(evt.getElementId())))
 							return; // If the new value doesn't match and it's not the current element, we don't care
 
 						// At this point we know that we will have to do something
@@ -426,6 +431,7 @@ public final class ObservableCollectionImpl {
 	 */
 	public static class ObservableCollectionFinder<E> extends AbstractObservableElementFinder<E> {
 		private final Predicate<? super E> theTest;
+		private final boolean isFirst;
 
 		/**
 		 * @param collection The collection to find elements in
@@ -433,13 +439,19 @@ public final class ObservableCollectionImpl {
 		 * @param first Whether to get the first value in the collection that passes or the last value
 		 */
 		protected ObservableCollectionFinder(ObservableCollection<E> collection, Predicate<? super E> test, boolean first) {
-			super(collection, first);
+			super(collection, (el1, el2) -> {
+				int compare = el1.getElementId().compareTo(el2.getElementId());
+				if (!first)
+					compare = -compare;
+				return compare;
+			});
 			theTest = test;
+			isFirst = first;
 		}
 
 		@Override
 		protected boolean find(Consumer<? super ElementHandle<? extends E>> onElement) {
-			return theCollection.find(theTest, onElement, isFirst);
+			return getCollection().find(theTest, onElement, isFirst);
 		}
 
 		@Override
@@ -450,22 +462,29 @@ public final class ObservableCollectionImpl {
 
 	public static class ObservableEquivalentFinder<E> extends AbstractObservableElementFinder<E> {
 		private final E theValue;
+		private final boolean isFirst;
 
 		public ObservableEquivalentFinder(ObservableCollection<E> collection, E value, boolean first) {
-			super(collection, first);
+			super(collection, (el1, el2) -> {
+				int compare = el1.getElementId().compareTo(el2.getElementId());
+				if (!first)
+					compare = -compare;
+				return compare;
+			});
 			if (!collection.belongs(value))
 				throw new IllegalArgumentException("Illegal value for collection: " + value);
 			theValue = value;
+			isFirst = first;
 		}
 
 		@Override
 		protected boolean find(Consumer<? super ElementHandle<? extends E>> onElement) {
-			return theCollection.forElement(theValue, onElement, isFirst);
+			return getCollection().forElement(theValue, onElement, isFirst);
 		}
 
 		@Override
 		protected boolean test(E value) {
-			return theCollection.equivalence().elementEquals(theValue, value);
+			return getCollection().equivalence().elementEquals(theValue, value);
 		}
 	}
 

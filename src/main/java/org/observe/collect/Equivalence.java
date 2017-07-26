@@ -1,22 +1,24 @@
 package org.observe.collect;
 
-import java.util.AbstractSet;
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.Iterator;
 import java.util.Objects;
-import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.stream.Collectors;
 
-import org.qommons.IterableUtils;
+import org.qommons.Transactable;
+import org.qommons.Transaction;
+import org.qommons.collect.BetterHashMap;
 import org.qommons.collect.BetterHashSet;
 import org.qommons.collect.BetterMap;
 import org.qommons.collect.BetterSet;
-import org.qommons.collect.UpdatableIdentityHashMap;
-import org.qommons.collect.UpdatableMap;
-import org.qommons.collect.UpdatableSet;
+import org.qommons.collect.ElementHandle;
+import org.qommons.collect.ElementId;
+import org.qommons.collect.MapEntryHandle;
+import org.qommons.collect.MutableElementHandle;
+import org.qommons.collect.MutableElementSpliterator;
+import org.qommons.collect.MutableMapEntryHandle;
 import org.qommons.tree.BetterTreeMap;
 import org.qommons.tree.BetterTreeSet;
 
@@ -72,12 +74,12 @@ public interface Equivalence<E> {
 
 		@Override
 		public <E2> BetterSet<E2> createSet() {
-			return BetterHashSet.<E2> build().unsafe().build();
+			return BetterHashSet.build().unsafe().buildSet();
 		}
 
 		@Override
 		public <E2, V> BetterMap<E2, V> createMap() {
-			return BetterHashMap.<E2, V>.build().unsafe().build();
+			return BetterHashMap.build().unsafe().buildMap();
 		}
 	};
 
@@ -95,12 +97,12 @@ public interface Equivalence<E> {
 
 		@Override
 		public <E2> BetterSet<E2> createSet() {
-			return BetterHashSet.<E2> build().unsafe().identity().build();
+			return BetterHashSet.build().unsafe().identity().buildSet();
 		}
 
 		@Override
 		public <E2, V> BetterMap<E2, V> createMap() {
-			return BetterHashMap.<E2, V>.build().unsafe().identity().build();
+			return BetterHashMap.build().unsafe().identity().buildMap();
 		}
 	};
 
@@ -216,16 +218,21 @@ public interface Equivalence<E> {
 
 	class MappedSet<E, T, T2 extends T> implements BetterSet<T2> {
 		private final MappedEquivalence<E, T> theEquivalence;
-		private final UpdatableSet<E> theWrapped;
+		private final BetterSet<E> theWrapped;
 		private final Function<? super E, ? extends T> theMap;
 		private final Function<? super T, ? extends E> theReverse;
 
-		public MappedSet(MappedEquivalence<E, T> equiv, UpdatableSet<E> wrapped, Function<? super E, ? extends T> map,
+		public MappedSet(MappedEquivalence<E, T> equiv, BetterSet<E> wrapped, Function<? super E, ? extends T> map,
 			Function<? super T, ? extends E> reverse) {
 			theEquivalence = equiv;
 			theWrapped = wrapped;
 			theMap = map;
 			theReverse = reverse;
+		}
+
+		@Override
+		public boolean belongs(Object o) {
+			return theEquivalence.isElement(o);
 		}
 
 		@Override
@@ -239,73 +246,84 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public boolean contains(Object o) {
-			return theEquivalence.isElement(o) && theWrapped.contains(theReverse.apply((T) o));
+		public boolean isLockSupported() {
+			return theWrapped.isLockSupported();
 		}
 
 		@Override
-		public UpdatableSet.ElementUpdateResult update(T2 value) {
-			return theWrapped.update(theReverse.apply(value));
+		public Transaction lock(boolean write, Object cause) {
+			return theWrapped.lock(write, cause);
 		}
 
 		@Override
-		public boolean containsAll(Collection<?> c) {
-			return theWrapped
-				.containsAll(c.stream().filter(theEquivalence::isElement).map(o -> theReverse.apply((T) o)).collect(Collectors.toList()));
+		public boolean forElement(T2 value, Consumer<? super ElementHandle<? extends T2>> onElement, boolean first) {
+			// TODO Auto-generated method stub
+			return false;
 		}
 
 		@Override
-		public Iterator<T2> iterator() {
-			return IterableUtils.map(theWrapped, v -> (T2) theMap.apply(v)).iterator();
+		public boolean forMutableElement(T2 value, Consumer<? super MutableElementHandle<? extends T2>> onElement, boolean first) {
+			// TODO Auto-generated method stub
+			return false;
 		}
 
 		@Override
-		public boolean add(T2 e) {
-			if (!theEquivalence.isElement(e))
-				throw new IllegalArgumentException("Illegal value");
-			return theWrapped.add(theReverse.apply(e));
+		public <X> X ofElementAt(ElementId elementId, Function<? super ElementHandle<? extends T2>, X> onElement) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public <X> X ofMutableElementAt(ElementId elementId, Function<? super MutableElementHandle<? extends T2>, X> onElement) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public MutableElementSpliterator<T2> mutableSpliterator(boolean fromStart) {
+			return new MappedMutableSpliterator(theWrapped.mutableSpliterator(fromStart));
+		}
+
+		@Override
+		public String canAdd(T2 value) {
+			return theWrapped.canAdd(theReverse.apply(value));
+		}
+
+		@Override
+		public ElementId addElement(T2 value) {
+			return theWrapped.addElement(theReverse.apply(value));
 		}
 
 		@Override
 		public boolean addAll(Collection<? extends T2> c) {
-			for (Object o : c)
-				if (!theEquivalence.isElement(o))
-					throw new IllegalArgumentException("Illegal value");
-			return theWrapped.addAll(c.stream().map(theReverse).collect(Collectors.toList()));
-		}
-
-		@Override
-		public boolean remove(Object o) {
-			if (!theEquivalence.isElement(o))
-				return false;
-			return theWrapped.remove(theReverse.apply((T) o));
-		}
-
-		@Override
-		public boolean retainAll(Collection<?> c) {
-			return theWrapped
-				.retainAll(c.stream().filter(theEquivalence::isElement).map(v -> theReverse.apply((T) v)).collect(Collectors.toList()));
-		}
-
-		@Override
-		public boolean removeAll(Collection<?> c) {
-			return theWrapped
-				.removeAll(c.stream().filter(theEquivalence::isElement).map(v -> theReverse.apply((T) v)).collect(Collectors.toList()));
+			try (Transaction t = lock(true, null); Transaction ct = Transactable.lock(c, false, null)) {
+				for (T2 e : c)
+					add(e);
+				return !c.isEmpty();
+			}
 		}
 
 		@Override
 		public void clear() {
 			theWrapped.clear();
+		}
+
+		private class MappedMutableSpliterator implements MutableElementSpliterator<T2> {
+			private final MutableElementSpliterator<E> theWrapped;
+
+			public MappedMutableSpliterator(MutableElementSpliterator<E> wrap) {
+				theWrapped = wrap;
+			}
 		}
 	}
 
 	class MappedMap<E, T, T2 extends T, V> implements BetterMap<T2, V> {
 		private final MappedEquivalence<E, T> theEquivalence;
-		private final UpdatableMap<E, V> theWrapped;
+		private final BetterMap<E, V> theWrapped;
 		private final Function<? super E, ? extends T> theMap;
 		private final Function<? super T, ? extends E> theReverse;
 
-		public MappedMap(MappedEquivalence<E, T> equiv, UpdatableMap<E, V> wrapped, Function<? super E, ? extends T> map,
+		public MappedMap(MappedEquivalence<E, T> equiv, BetterMap<E, V> wrapped, Function<? super E, ? extends T> map,
 			Function<? super T, ? extends E> reverse) {
 			theEquivalence = equiv;
 			theWrapped = wrapped;
@@ -314,100 +332,106 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public int size() {
-			return theWrapped.size();
+		public BetterSet<T2> keySet() {
+			return new MappedSet<>(theEquivalence, theWrapped.keySet(), theMap, theReverse);
 		}
 
 		@Override
-		public boolean isEmpty() {
-			return theWrapped.isEmpty();
+		public ElementId putEntry(T2 key, V value) {
+			return theWrapped.putEntry(theReverse.apply(key), value);
 		}
 
-		@Override
-		public boolean containsValue(Object value) {
-			return theWrapped.containsValue(value);
-		}
-
-		@Override
-		public boolean containsKey(Object key) {
-			return theEquivalence.isElement(key) && theWrapped.containsKey(theReverse.apply((T) key));
-		}
-
-		@Override
-		public UpdatableSet.ElementUpdateResult update(T2 key) {
-			return theWrapped.update(theReverse.apply(key));
-		}
-
-		@Override
-		public V get(Object key) {
-			if (!theEquivalence.isElement(key))
-				return null;
-			return theWrapped.get(theReverse.apply((T) key));
-		}
-
-		@Override
-		public V put(T2 key, V value) {
-			if (!theEquivalence.isElement(key))
-				throw new IllegalArgumentException("Invalid key");
-			return theWrapped.put(theReverse.apply(key), value);
-		}
-
-		@Override
-		public V remove(Object key) {
-			if (!theEquivalence.isElement(key))
-				return null;
-			return theWrapped.remove(theReverse.apply((T) key));
-		}
-
-		@Override
-		public void clear() {
-			theWrapped.clear();
-		}
-
-		@Override
-		public Collection<V> values() {
-			return theWrapped.values();
-		}
-
-		@Override
-		public Set<Entry<T2, V>> entrySet() {
-			return new AbstractSet<Entry<T2, V>>() {
+		private MapEntryHandle<T2, V> handleFor(MapEntryHandle<E, V> entry) {
+			return new MapEntryHandle<T2, V>() {
 				@Override
-				public Iterator<java.util.Map.Entry<T2, V>> iterator() {
-					Function<Entry<E, V>, Entry<T2, V>> map = entry -> new Entry<T2, V>() {
-						@Override
-						public T2 getKey() {
-							return (T2) theMap.apply(entry.getKey());
-						}
-
-						@Override
-						public V getValue() {
-							return entry.getValue();
-						}
-
-						@Override
-						public V setValue(V value) {
-							return entry.setValue(value);
-						}
-					};
-					return IterableUtils.map(theWrapped.entrySet(), map).iterator();
+				public ElementId getElementId() {
+					return entry.getElementId();
 				}
 
 				@Override
-				public int size() {
-					return theWrapped.size();
+				public V get() {
+					return entry.get();
 				}
 
 				@Override
-				public void clear() {
-					theWrapped.clear();
+				public T2 getKey() {
+					return (T2) theMap.apply(entry.getKey());
+				}
+			};
+		}
+
+		private MutableMapEntryHandle<T2, V> mutableHandleFor(MutableMapEntryHandle<E, V> entry) {
+			return new MutableMapEntryHandle<T2, V>() {
+				@Override
+				public ElementId getElementId() {
+					return entry.getElementId();
+				}
+
+				@Override
+				public V get() {
+					return entry.get();
+				}
+
+				@Override
+				public T2 getKey() {
+					return (T2) theMap.apply(entry.getKey());
+				}
+
+				@Override
+				public String isEnabled() {
+					return entry.isEnabled();
+				}
+
+				@Override
+				public String isAcceptable(V value) {
+					return entry.isAcceptable(value);
+				}
+
+				@Override
+				public void set(V value) throws UnsupportedOperationException, IllegalArgumentException {
+					entry.set(value);
+				}
+
+				@Override
+				public String canRemove() {
+					return entry.canRemove();
+				}
+
+				@Override
+				public void remove() throws UnsupportedOperationException {
+					entry.remove();
+				}
+
+				@Override
+				public String canAdd(V value, boolean before) {
+					return StdMsg.UNSUPPORTED_OPERATION;
+				}
+
+				@Override
+				public ElementId add(V value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 				}
 			};
 		}
 
 		@Override
-		public UpdatableSet<T2> keySet() {
-			return super.keySet();
+		public boolean forEntry(T2 key, Consumer<? super MapEntryHandle<T2, V>> onEntry) {
+			return theWrapped.forEntry(theReverse.apply(key), entry -> onEntry.accept(handleFor(entry)));
+		}
+
+		@Override
+		public boolean forMutableEntry(T2 key, Consumer<? super MutableMapEntryHandle<T2, V>> onEntry) {
+			return theWrapped.forMutableEntry(theReverse.apply(key), entry -> onEntry.accept(mutableHandleFor(entry)));
+		}
+
+		@Override
+		public <X> X ofEntry(ElementId entryId, Function<? super MapEntryHandle<T2, V>, X> onEntry) {
+			return theWrapped.ofEntry(entryId, entry -> onEntry.apply(handleFor(entry)));
+		}
+
+		@Override
+		public <X> X ofMutableEntry(ElementId entryId, Function<? super MutableMapEntryHandle<T2, V>, X> onEntry) {
+			return theWrapped.ofMutableEntry(entryId, entry -> onEntry.apply(mutableHandleFor(entry)));
 		}
 	}
 }

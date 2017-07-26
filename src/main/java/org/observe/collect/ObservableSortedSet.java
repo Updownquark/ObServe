@@ -3,6 +3,7 @@ package org.observe.collect;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import org.observe.ObservableValue;
 import org.qommons.collect.BetterSortedSet;
@@ -115,12 +116,13 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 	 * @param up Whether to get the closest value greater or less than the given value
 	 * @return An observable value with the result of the operation
 	 */
-	default ObservableValue<E> observeRelative(Comparable<? super E> search, SortedSearchFilter filter) {
+	default ObservableValue<E> observeRelative(Comparable<? super E> search, SortedSearchFilter filter, Supplier<? extends E> def) {
+		return new ObservableSortedSetImpl.RelativeFinder<E>(this, search, filter).mapV(getType(), el -> el != null ? el.get() : def.get());
 	}
 
 	@Override
 	default E relative(Comparable<? super E> search, SortedSearchFilter filter) {
-		return observeRelative(search, filter).get();
+		return observeRelative(search, filter, () -> null).get();
 	}
 
 	@Override

@@ -3,6 +3,7 @@ package org.observe.collect;
 import java.util.Comparator;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -16,6 +17,7 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.UniqueSortedDataFlow
 import org.observe.collect.ObservableSetImpl.UniqueBaseFlow;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterSortedSet;
+import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
 import org.qommons.collect.ElementHandle;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableElementHandle;
@@ -27,6 +29,58 @@ import com.google.common.reflect.TypeToken;
 
 public class ObservableSortedSetImpl {
 	private ObservableSortedSetImpl() {}
+
+	public static class RelativeFinder<E> extends ObservableCollectionImpl.AbstractObservableElementFinder<E> {
+		private final Comparable<? super E> theSearch;
+		private final SortedSearchFilter theFilter;
+
+		public RelativeFinder(ObservableSortedSet<E> set, Comparable<? super E> search, SortedSearchFilter filter) {
+			super(set, (el1, el2) -> {
+				int comp1 = search.compareTo(el1.get());
+				int comp2 = search.compareTo(el2.get());
+				if (comp1 == 0) {
+					if (comp2 == 0)
+						return 0;
+					else
+						return -1;
+				} else if (comp2 == 0)
+					return 1;
+				// Neither are a perfect match.
+				// From here on, it's safe to assume filter.less.value is non-null because otherwise one or the other element
+				// would not have passed the test method.
+				else if (comp1 < 0) {
+					if (comp2 < 0)
+						return -el1.getElementId().compareTo(el2.getElementId());// Both less, so take the greater of the two
+					else
+						return filter.less.value ? -1 : 1;
+				} else {
+					if (comp2 < 0)
+						return filter.less.value ? 1 : -1;
+					else
+						return el1.getElementId().compareTo(el2.getElementId());// Both greater, so take the lesser of the two
+				}
+			});
+			theSearch = search;
+			theFilter = filter;
+		}
+
+		@Override
+		protected ObservableSortedSet<E> getCollection() {
+			return (ObservableSortedSet<E>) super.getCollection();
+		}
+
+		@Override
+		protected boolean find(Consumer<? super ElementHandle<? extends E>> onElement) {
+			return getCollection().forElement(theSearch, onElement, theFilter);
+		}
+
+		@Override
+		protected boolean test(E value) {
+			if (theFilter == SortedSearchFilter.OnlyMatch && theSearch.compareTo(value) != 0)
+				return false;
+			return true;
+		}
+	}
 
 	/**
 	 * Implements {@link ObservableSortedSet#subSet(Object, boolean, Object, boolean)}
@@ -408,10 +462,10 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public ObservableValue<E> observeRelative(Comparable<? super E> value, SortedSearchFilter filter) {
+		public ObservableValue<E> observeRelative(Comparable<? super E> value, SortedSearchFilter filter, Supplier<? extends E> def) {
 			return ObservableValue
 				.flatten(getWrapped().mapV(new TypeToken<ObservableValue<E>>() {}.where(new TypeParameter<E>() {}, getType()),
-					v -> v == null ? null : v.observeRelative(value, filter)));
+					v -> v == null ? null : v.observeRelative(value, filter, def)));
 		}
 
 		@Override

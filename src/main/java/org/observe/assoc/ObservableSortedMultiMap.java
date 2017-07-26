@@ -7,7 +7,6 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Observable;
-import org.observe.ObservableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
@@ -320,9 +319,10 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 			}
 
 			@Override
-			public boolean forElement(Comparable<? super K> search, Consumer<? super ElementHandle<? extends K>> onElement, boolean up) {
+			public boolean forElement(Comparable<? super K> search, Consumer<? super ElementHandle<? extends K>> onElement,
+				SortedSearchFilter filter) {
 				try (Transaction t = lock(false, null)) {
-					DerivedCollectionElement<OK, K> element = getPresentElements().relative(el -> search.compareTo(el.get()), up);
+					DerivedCollectionElement<OK, K> element = getPresentElements().relative(el -> search.compareTo(el.get()), filter);
 					if (element == null)
 						return false;
 					forElementAt(element, onElement);
@@ -332,9 +332,9 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 
 			@Override
 			public boolean forMutableElement(Comparable<? super K> search, Consumer<? super MutableElementHandle<? extends K>> onElement,
-				boolean up) {
+				SortedSearchFilter filter) {
 				try (Transaction t = lock(true, null)) {
-					DerivedCollectionElement<OK, K> element = getPresentElements().relative(el -> search.compareTo(el.get()), up);
+					DerivedCollectionElement<OK, K> element = getPresentElements().relative(el -> search.compareTo(el.get()), filter);
 					if (element == null)
 						return false;
 					forMutableElementAt(element, onElement);
@@ -345,14 +345,6 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 			@Override
 			public MutableElementSpliterator<K> mutableSpliterator(Comparable<? super K> searchForStart, boolean higher) {
 				return spliterator(getPresentElements().spliterator(el -> searchForStart.compareTo(el.get()), higher));
-			}
-
-			@Override
-			public ObservableValue<K> observeRelative(Comparable<? super K> search, boolean up) {
-				if (up)
-					return subSet(search, null).observeFind(v -> true, () -> null, true);
-				else
-					return subSet(null, search).observeFind(v -> true, () -> null, false);
 			}
 		}
 	}
