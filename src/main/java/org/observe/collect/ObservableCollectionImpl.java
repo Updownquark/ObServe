@@ -560,13 +560,29 @@ public final class ObservableCollectionImpl {
 		protected abstract T getValue(X updated);
 	}
 
-	private static class ValueCount<E> {
-		final E value;
+	public static class ValueCount<E> {
+		E value;
 		int left;
 		int right;
 
-		ValueCount(E val) {
+		public ValueCount(E val) {
 			value = val;
+		}
+
+		public E getValue() {
+			return value;
+		}
+
+		public int getLeftCount() {
+			return left;
+		}
+
+		public int getRightCount() {
+			return right;
+		}
+
+		public boolean isEmpty() {
+			return left == 0 && right == 0;
 		}
 
 		boolean modify(boolean add, boolean lft) {
@@ -591,10 +607,6 @@ public final class ObservableCollectionImpl {
 			return modified;
 		}
 
-		boolean isEmpty() {
-			return left == 0 && right == 0;
-		}
-
 		@Override
 		public String toString() {
 			return value + " (" + left + "/" + right + ")";
@@ -611,7 +623,7 @@ public final class ObservableCollectionImpl {
 		final Equivalence<? super E> leftEquiv;
 		final Map<E, ValueCount<E>> leftCounts;
 		final Map<X, ValueCount<X>> rightCounts;
-		int leftCount;
+		private int leftCount;
 		int commonCount;
 		int rightCount;
 
@@ -620,8 +632,6 @@ public final class ObservableCollectionImpl {
 			leftCounts = leftEquiv.createMap();
 			rightCounts = rightEquiv == null ? null : rightEquiv.createMap();
 		}
-
-		abstract void check(boolean initial, Object cause);
 
 		/** @return The number of values in the left collection that do not exist in the right collection */
 		public int getLeftCount() {
@@ -637,27 +647,67 @@ public final class ObservableCollectionImpl {
 		public int getCommonCount() {
 			return commonCount;
 		}
+
+		void modify(Object value, boolean add, boolean onLeft, Causable cause) {
+			ValueCount<?> count = leftCounts.get(value);
+			if (count == null && rightCounts != null)
+				count = rightCounts.get(value);
+			if (count == null) {
+				if (add)
+					count = new ValueCount<>(value);
+				else if (onLeft || rightCounts != null)
+					throw new IllegalStateException("Value not found: " + value + " on " + (onLeft ? "left" : "right"));
+				else
+					return; // Not of concern
+			}
+			boolean containmentChange = count.modify(add, onLeft);
+			if (containmentChange) {
+				if (onLeft) {
+					if (add) {
+						leftCount++;
+						leftCounts.put((E) value, (ValueCount<E>) count);
+					} else {
+						leftCount--;
+						leftCounts.remove(value);
+					}
+				} else if (rightCounts != null) {
+					if (add) {
+						rightCount++;
+						rightCounts.put((X) value, (ValueCount<X>) count);
+					} else {
+						rightCount--;
+						rightCounts.remove(value);
+					}
+				}
+			}
+			Object oldValue = add ? null : value;
+			changed(count, oldValue, add ? CollectionChangeType.add : CollectionChangeType.remove, onLeft, containmentChange, cause);
+		}
+
+		void update(Object oldValue, Object newValue, boolean onLeft, Causable cause) {
+			ValueCount<?> count = leftCounts.get(oldValue);
+			if (count == null && rightCounts != null)
+				count = rightCounts.get(oldValue);
+			if (count == null) {
+				if (onLeft || rightCounts != null)
+					throw new IllegalStateException("Value not found: " + oldValue + " on " + (onLeft ? "left" : "right"));
+				else
+					return; // Not of concern
+			}
+			if (onLeft && oldValue != newValue && count.getLeftCount() == 1)
+				((ValueCount<Object>) count).value = newValue;
+			changed(count, oldValue, CollectionChangeType.set, onLeft, false, cause);
+		}
+
+		protected abstract void changed(ValueCount<?> count, Object oldValue, CollectionChangeType type, boolean onLeft,
+			boolean containmentChange, Causable cause);
 	}
 
 	private static <E, X> Subscription maintainValueCount(ValueCounts<E, X> counts, ObservableCollection<E> left,
-		ObservableCollection<X> right) {
+		ObservableCollection<X> right, Runnable initAction) {
 		final ReentrantLock lock = new ReentrantLock();
 		boolean[] initialized = new boolean[1];
-		Object key = new Object();
-		abstract class ValueCountModifier {
-			final void doNotify(Causable cause) {
-				if (initialized[0])
-					cause.getRootCausable().onFinish(key, (root, values) -> {
-						lock.lock();
-						try {
-							counts.check(false, root);
-						} finally {
-							lock.unlock();
-						}
-					});
-			}
-		}
-		class ValueCountElModifier extends ValueCountModifier implements Consumer<ObservableCollectionEvent<?>> {
+		class ValueCountElModifier implements Consumer<ObservableCollectionEvent<?>> {
 			final boolean onLeft;
 
 			ValueCountElModifier(boolean lft) {
@@ -666,83 +716,27 @@ public final class ObservableCollectionImpl {
 
 			@Override
 			public void accept(ObservableCollectionEvent<?> evt) {
-				if (!initialized[0])
+				if (initialized[0])
 					lock.lock();
 				try {
 					switch (evt.getType()) {
 					case add:
-						modify(evt.getNewValue(), true);
-						doNotify(evt);
+						counts.modify(evt.getNewValue(), true, onLeft, evt);
 						break;
 					case remove:
-						modify(evt.getOldValue(), false);
-						doNotify(evt);
+						counts.modify(evt.getOldValue(), false, onLeft, evt);
 						break;
 					case set:
 						Equivalence<Object> equiv = (Equivalence<Object>) (onLeft ? left.equivalence() : right.equivalence());
 						if (!equiv.elementEquals(evt.getOldValue(), evt.getNewValue())) {
-							modify(evt.getOldValue(), false);
-							modify(evt.getNewValue(), true);
-							doNotify(evt);
-						}
+							counts.modify(evt.getOldValue(), false, onLeft, evt);
+							counts.modify(evt.getNewValue(), true, onLeft, evt);
+						} else
+							counts.update(evt.getOldValue(), evt.getNewValue(), onLeft, evt);
 					}
 				} finally {
-					if (!initialized[0])
+					if (initialized[0])
 						lock.unlock();
-				}
-			}
-
-			private <V> void modify(V value, boolean add) {
-				Map<V, ValueCount<V>> countMap;
-				if (!onLeft) {
-					if (counts.leftEquiv.isElement(value))
-						countMap = (Map<V, ValueCount<V>>) (Map<?, ?>) counts.leftCounts;
-					else if (counts.rightCounts == null)
-						return;
-					else
-						countMap = (Map<V, ValueCount<V>>) (Map<?, ?>) counts.rightCounts;
-				} else
-					countMap = (Map<V, ValueCount<V>>) (Map<?, ?>) counts.leftCounts;
-				ValueCount<V> count;
-				if (add) {
-					boolean[] added = new boolean[1];
-					count = countMap.computeIfAbsent(value, v -> {
-						added[0] = true;
-						return new ValueCount<>(v);
-					});
-					if (added[0]) {
-						count.modify(true, onLeft);
-						if (onLeft)
-							counts.leftCount++;
-						else
-							counts.rightCount++;
-						return;
-					}
-				} else {
-					count = countMap.get(value);
-					if (count == null)
-						return;
-				}
-				if (count.modify(add, onLeft)) {
-					if (add) {
-						if (onLeft)
-							counts.rightCount--;
-						else
-							counts.leftCount--;
-						counts.commonCount++;
-					} else if (count.isEmpty()) {
-						countMap.remove(value);
-						if (onLeft)
-							counts.leftCount--;
-						else
-							counts.rightCount--;
-					} else {
-						counts.commonCount--;
-						if (onLeft)
-							counts.rightCount++;
-						else
-							counts.leftCount++;
-					}
 				}
 			}
 		}
@@ -753,7 +747,8 @@ public final class ObservableCollectionImpl {
 			leftSub = left.subscribe(new ValueCountElModifier(true), true);
 			rightSub = right.subscribe(new ValueCountElModifier(false), true);
 
-			counts.check(true, null);
+			if (initAction != null)
+				initAction.run();
 		} finally {
 			initialized[0] = true;
 			lock.unlock();
@@ -810,20 +805,21 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Subscription subscribe(Observer<? super ObservableValueEvent<Boolean>> observer) {
+			boolean[] initialized = new boolean[1];
+			boolean[] satisfied = new boolean[1];
 			ValueCounts<E, X> counts = new ValueCounts<E, X>(theLeft.equivalence(), isTrackingRight ? theRight.equivalence() : null) {
-				private boolean isSatisfied;
-
 				@Override
-				void check(boolean initial, Object cause) {
-					boolean satisfied = theSatisfiedCheck.test(this);
-					if (initial)
-						fireInitialEvent(satisfied, null, observer::onNext);
-					else if (satisfied != isSatisfied)
-						fireChangeEvent(isSatisfied, satisfied, cause, observer::onNext);
-					isSatisfied = satisfied;
+				protected void changed(ValueCount<?> count, Object oldValue, CollectionChangeType type, boolean onLeft,
+					boolean containmentChange, Causable cause) {
+					cause.getRootCausable().onFinish(this, (c, data) -> {
+						boolean wasSatisfied = satisfied[0];
+						satisfied[0] = theSatisfiedCheck.test(this);
+						if (!initialized[0] && wasSatisfied != satisfied[0])
+							fireChangeEvent(wasSatisfied, satisfied[0], cause, observer::onNext);
+					});
 				}
 			};
-			return maintainValueCount(counts, theLeft, theRight);
+			return maintainValueCount(counts, theLeft, theRight, () -> fireInitialEvent(satisfied[0], null, observer::onNext));
 		}
 	}
 
@@ -1349,7 +1345,7 @@ public final class ObservableCollectionImpl {
 		private final LinkedQueue<Consumer<? super ObservableCollectionEvent<? extends T>>> theListeners;
 		private final AtomicInteger theListenerCount;
 		private final Equivalence<? super T> theEquivalence;
-		private final Consumer<ObservableCollectionEvent<? extends E>> theSourceAction;
+		private final Subscription theWeakSubscription;
 
 		public DerivedCollection(ObservableCollection<E> source, CollectionManager<E, ?, T> flow, Observable<?> until) {
 			theSource = source;
@@ -1360,45 +1356,6 @@ public final class ObservableCollectionImpl {
 			theListenerCount = new AtomicInteger();
 			theEquivalence = flow.equivalence();
 			// Must maintain a strong reference to the event listener so it is not GC'd while the collection is still alive
-			theSourceAction = evt -> {
-				final DerivedCollectionElement<E, T> element;
-				try (Transaction flowTransaction = theFlow.lock(false, null)) {
-					switch (evt.getType()) {
-					case add:
-						element = createElement(theFlow.createElement(evt.getElementId(), evt.getNewValue(), evt), evt.getNewValue());
-						if (element.manager == null)
-							return; // Statically filtered out
-						theElements.put(evt.getElementId(), element);
-						if (element.manager.isPresent())
-							addToPresent(element, evt);
-						break;
-					case remove:
-						element = theElements.remove(evt.getElementId());
-						if (element == null)
-							return; // Must be statically filtered out or removed via spliterator
-						if (element.presentNode != null)
-							removeFromPresent(element, element.get(), evt);
-						element.removed(evt);
-						break;
-					case set:
-						element = theElements.get(evt.getElementId());
-						if (element == null)
-							return; // Must be statically filtered out
-						boolean prePresent = element.presentNode != null;
-						T oldValue = prePresent ? element.get() : null;
-						boolean fireUpdate = element.set(evt.getNewValue(), evt);
-						if (element.manager.isPresent()) {
-							if (prePresent)
-								updateInPresent(element, oldValue, evt, fireUpdate);
-							else
-								addToPresent(element, evt);
-						} else if (prePresent)
-							removeFromPresent(element, oldValue, evt);
-						break;
-					}
-					theFlow.postChange();
-				}
-			};
 
 			// Begin listening
 			try (Transaction initialTransaction = lock(false, null)) {
@@ -1413,11 +1370,50 @@ public final class ObservableCollectionImpl {
 					}
 					theFlow.postChange();
 				}, until);
-				WeakConsumer<ObservableCollectionEvent<? extends E>> weak = new WeakConsumer<>(theSourceAction);
-				CollectionSubscription sub = theSource.subscribe(weak, true);
-				weak.withSubscription(sub);
-				Subscription takeSub = until.take(1).act(v -> sub.unsubscribe(true));
-				weak.onUnsubscribe(() -> takeSub.unsubscribe());
+
+				// Need to hold on to the subscription because it contains strong references that keep the listeners alive
+				theWeakSubscription = WeakConsumer.<ObservableCollectionEvent<? extends E>> subscribeWeak(evt -> {
+					final DerivedCollectionElement<E, T> element;
+					try (Transaction flowTransaction = theFlow.lock(false, null)) {
+						switch (evt.getType()) {
+						case add:
+							element = createElement(theFlow.createElement(evt.getElementId(), evt.getNewValue(), evt), evt.getNewValue());
+							if (element.manager == null)
+								return; // Statically filtered out
+							theElements.put(evt.getElementId(), element);
+							if (element.manager.isPresent())
+								addToPresent(element, evt);
+							break;
+						case remove:
+							element = theElements.remove(evt.getElementId());
+							if (element == null)
+								return; // Must be statically filtered out or removed via spliterator
+							if (element.presentNode != null)
+								removeFromPresent(element, element.get(), evt);
+							element.removed(evt);
+							break;
+						case set:
+							element = theElements.get(evt.getElementId());
+							if (element == null)
+								return; // Must be statically filtered out
+							boolean prePresent = element.presentNode != null;
+							T oldValue = prePresent ? element.get() : null;
+							boolean fireUpdate = element.set(evt.getNewValue(), evt);
+							if (element.manager.isPresent()) {
+								if (prePresent)
+									updateInPresent(element, oldValue, evt, fireUpdate);
+								else
+									addToPresent(element, evt);
+							} else if (prePresent)
+								removeFromPresent(element, oldValue, evt);
+							break;
+						}
+						theFlow.postChange();
+					}
+				}, action -> {
+					CollectionSubscription cs = theSource.subscribe(action, true);
+					return cs.removeAll();
+				}, until);
 			}
 		}
 

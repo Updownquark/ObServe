@@ -231,6 +231,16 @@ public interface Equivalence<E> {
 		}
 
 		@Override
+		public boolean isLockSupported() {
+			return theWrapped.isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theWrapped.lock(write, cause);
+		}
+
+		@Override
 		public boolean belongs(Object o) {
 			return theEquivalence.isElement(o);
 		}
@@ -246,37 +256,96 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return theWrapped.isLockSupported();
+		public <X> X[] toArray(X[] a) {
+			return BetterSet.super.toArray(a);
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theWrapped.lock(write, cause);
+		public Object[] toArray() {
+			return BetterSet.super.toArray();
+		}
+
+		private ElementHandle<T2> handleFor(ElementHandle<? extends E> el) {
+			return new ElementHandle<T2>() {
+				@Override
+				public ElementId getElementId() {
+					return el.getElementId();
+				}
+
+				@Override
+				public T2 get() {
+					return (T2) theMap.apply(el.get());
+				}
+			};
+		}
+
+		private MutableElementHandle<T2> mutableHandleFor(MutableElementHandle<? extends E> el) {
+			return new MutableElementHandle<T2>() {
+				@Override
+				public ElementId getElementId() {
+					return el.getElementId();
+				}
+
+				@Override
+				public T2 get() {
+					return (T2) theMap.apply(el.get());
+				}
+
+				@Override
+				public String isEnabled() {
+					return el.isEnabled();
+				}
+
+				@Override
+				public String isAcceptable(T2 value) {
+					return ((MutableElementHandle<E>) el).isAcceptable(theReverse.apply(value));
+				}
+
+				@Override
+				public void set(T2 value) throws UnsupportedOperationException, IllegalArgumentException {
+					((MutableElementHandle<E>) el).set(theReverse.apply(value));
+				}
+
+				@Override
+				public String canRemove() {
+					return el.canRemove();
+				}
+
+				@Override
+				public void remove() throws UnsupportedOperationException {
+					el.remove();
+				}
+
+				@Override
+				public String canAdd(T2 value, boolean before) {
+					return ((MutableElementHandle<E>) el).canAdd(theReverse.apply(value), before);
+				}
+
+				@Override
+				public ElementId add(T2 value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
+					return ((MutableElementHandle<E>) el).add(theReverse.apply(value), before);
+				}
+			};
 		}
 
 		@Override
 		public boolean forElement(T2 value, Consumer<? super ElementHandle<? extends T2>> onElement, boolean first) {
-			// TODO Auto-generated method stub
-			return false;
+			return theWrapped.forElement(theReverse.apply(value), el -> onElement.accept(handleFor(el)), first);
 		}
 
 		@Override
 		public boolean forMutableElement(T2 value, Consumer<? super MutableElementHandle<? extends T2>> onElement, boolean first) {
-			// TODO Auto-generated method stub
-			return false;
+			return theWrapped.forMutableElement(theReverse.apply(value), el -> onElement.accept(mutableHandleFor(el)), first);
 		}
 
 		@Override
 		public <X> X ofElementAt(ElementId elementId, Function<? super ElementHandle<? extends T2>, X> onElement) {
-			// TODO Auto-generated method stub
-			return null;
+			return theWrapped.ofElementAt(elementId, el -> onElement.apply(handleFor(el)));
 		}
 
 		@Override
 		public <X> X ofMutableElementAt(ElementId elementId, Function<? super MutableElementHandle<? extends T2>, X> onElement) {
-			// TODO Auto-generated method stub
-			return null;
+			return theWrapped.ofMutableElementAt(elementId, el -> onElement.apply(mutableHandleFor(el)));
 		}
 
 		@Override
@@ -313,6 +382,55 @@ public interface Equivalence<E> {
 
 			public MappedMutableSpliterator(MutableElementSpliterator<E> wrap) {
 				theWrapped = wrap;
+			}
+
+			@Override
+			public long estimateSize() {
+				return theWrapped.estimateSize();
+			}
+
+			@Override
+			public long getExactSizeIfKnown() {
+				return theWrapped.getExactSizeIfKnown();
+			}
+
+			@Override
+			public int characteristics() {
+				return theWrapped.characteristics();
+			}
+
+			@Override
+			public Comparator<? super T2> getComparator() {
+				Comparator<? super E> wrapCompare = theWrapped.getComparator();
+				if (wrapCompare == null)
+					return null;
+				return (t1, t2) -> wrapCompare.compare(theReverse.apply(t1), theReverse.apply(t2));
+			}
+
+			@Override
+			public boolean tryAdvanceElement(Consumer<? super ElementHandle<T2>> action) {
+				return theWrapped.tryAdvanceElement(el -> action.accept(handleFor(el)));
+			}
+
+			@Override
+			public boolean tryReverseElement(Consumer<? super ElementHandle<T2>> action) {
+				return theWrapped.tryReverseElement(el -> action.accept(handleFor(el)));
+			}
+
+			@Override
+			public boolean tryAdvanceElementM(Consumer<? super MutableElementHandle<T2>> action) {
+				return theWrapped.tryAdvanceElementM(el -> action.accept(mutableHandleFor(el)));
+			}
+
+			@Override
+			public boolean tryReverseElementM(Consumer<? super MutableElementHandle<T2>> action) {
+				return theWrapped.tryReverseElementM(el -> action.accept(mutableHandleFor(el)));
+			}
+
+			@Override
+			public MutableElementSpliterator<T2> trySplit() {
+				MutableElementSpliterator<E> wrapSplit = theWrapped.trySplit();
+				return wrapSplit == null ? null : new MappedMutableSpliterator(wrapSplit);
 			}
 		}
 	}

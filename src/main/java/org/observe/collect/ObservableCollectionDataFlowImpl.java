@@ -37,9 +37,9 @@ import org.observe.collect.ObservableCollectionImpl.DerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.DerivedLWCollection;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterHashSet;
 import org.qommons.collect.BetterMap;
 import org.qommons.collect.ElementId;
-import org.qommons.collect.IdentityHashSet;
 import org.qommons.collect.MutableElementHandle;
 import org.qommons.collect.MutableElementHandle.StdMsg;
 import org.qommons.tree.BetterTreeSet;
@@ -707,7 +707,7 @@ public class ObservableCollectionDataFlowImpl {
 		private final ObservableCollection<E> theSource;
 		private final AbstractDataFlow<E, ?, I> theParent;
 		private final TypeToken<R> theTargetType;
-		private final IdentityHashSet<ObservableValue<?>> theArgs;
+		private final BetterHashSet<ObservableValue<?>> theArgs;
 		private Function<? super CombinedValues<? extends R>, ? extends I> theReverse;
 		private boolean isCached;
 
@@ -716,7 +716,7 @@ public class ObservableCollectionDataFlowImpl {
 			theSource = source;
 			theParent = parent;
 			theTargetType = targetType;
-			theArgs = new IdentityHashSet<>();
+			theArgs = BetterHashSet.build().identity().unsafe().buildSet();
 			isCached = true;
 		}
 
@@ -756,8 +756,8 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public CollectionDataFlow<E, I, R> build(Function<? super CombinedValues<? extends I>, ? extends R> combination) {
-			return new CombinedCollectionDef<>(theSource, theParent, theTargetType, new IdentityHashSet<>(theArgs), combination,
-				theReverse, isCached);
+			return new CombinedCollectionDef<>(theSource, theParent, theTargetType,
+				BetterHashSet.build().identity().unsafe().buildSet(theArgs), combination, theReverse, isCached);
 		}
 	}
 
@@ -2008,7 +2008,7 @@ public class ObservableCollectionDataFlowImpl {
 
 	public static class CombinedCollectionManager<E, I, T> extends AbstractCollectionManager<E, I, T> {
 		private static class ArgHolder<T> {
-			Consumer<ObservableValueEvent<?>> action;
+			Subscription actionSub;
 			T value;
 		}
 		private final Map<ObservableValue<?>, ArgHolder<?>> theArgs;
@@ -2149,17 +2149,12 @@ public class ObservableCollectionDataFlowImpl {
 			if (!isLightWeight()) {
 				for (Map.Entry<ObservableValue<?>, ArgHolder<?>> arg : theArgs.entrySet()) {
 					ArgHolder<?> holder = arg.getValue();
-					holder.action = evt -> {
+					holder.actionSub = WeakConsumer.subscribeWeak((ObservableValueEvent<?> evt) -> {
 						try (Transaction t = lock(true, null)) {
 							((ArgHolder<Object>) holder).value = evt.getValue();
 							getUpdateListener().accept(new CollectionUpdate(this, null, evt));
 						}
-					};
-					WeakConsumer<ObservableValueEvent<?>> weak = new WeakConsumer<>(holder.action);
-					if (until == Observable.empty)
-						weak.withSubscription(arg.getKey().act(weak));
-					else
-						weak.withSubscription(arg.getKey().takeUntil(until).act(weak));
+					}, action -> arg.getKey().act(action), until);
 				}
 			}
 		}
@@ -2167,7 +2162,7 @@ public class ObservableCollectionDataFlowImpl {
 
 	public static class RefreshingCollectionManager<E, T> extends NonMappingCollectionManager<E, T> {
 		private final Observable<?> theRefresh;
-		private Consumer<Object> theAction;
+		private Subscription theActionSub;
 
 		protected RefreshingCollectionManager(CollectionManager<E, ?, T> parent, Observable<?> refresh) {
 			super(parent);
@@ -2181,14 +2176,9 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public void begin(Observable<?> until) {
-			if (!isLightWeight()) {
-				theAction = v -> getUpdateListener().accept(new CollectionUpdate(this, null, v));
-				WeakConsumer<Object> weak = new WeakConsumer<>(theAction);
-				if (until == Observable.empty)
-					weak.withSubscription(theRefresh.act(weak));
-				else
-					weak.withSubscription(theRefresh.takeUntil(until).act(weak));
-			}
+			if (!isLightWeight())
+				theActionSub = WeakConsumer.subscribeWeak(v -> getUpdateListener().accept(new CollectionUpdate(this, null, v)),
+					theRefresh::act, until);
 		}
 
 		@Override
@@ -2216,13 +2206,11 @@ public class ObservableCollectionDataFlowImpl {
 	public static class ElementRefreshingCollectionManager<E, T> extends NonMappingCollectionManager<E, T> {
 		private static class RefreshHolder {
 			final Observable<?> theRefresh;
-			Consumer<Object> theAction;
 			Subscription theSub;
 			int theElementCount;
 
-			RefreshHolder(Observable<?> refresh, Consumer<Object> action, Subscription sub) {
+			RefreshHolder(Observable<?> refresh, Subscription sub) {
 				theRefresh = refresh;
-				theAction = action;
 				theSub = sub;
 			}
 		}
@@ -2319,10 +2307,9 @@ public class ObservableCollectionDataFlowImpl {
 
 				private RefreshHolder createHolder(Observable<?> refreshObs) {
 					Consumer<Object> action = v -> ElementRefreshingCollectionManager.this.update(refreshObs, v);
-					WeakConsumer<Object> weak = new WeakConsumer<>(action);
-					Subscription sub = refreshObs.act(weak);
-					weak.withSubscription(sub);
-					return new RefreshHolder(refreshObs, action, sub);
+					Subscription sub = WeakConsumer.subscribeWeak(v -> ElementRefreshingCollectionManager.this.update(refreshObs, v),
+						refreshObs::act, null);
+					return new RefreshHolder(refreshObs, sub);
 				}
 			}
 			return new ElementRefreshElement();

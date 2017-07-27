@@ -7,6 +7,7 @@ import java.util.function.Function;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
+import org.observe.Subscription;
 import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableCollection.UniqueMappedCollectionBuilder;
 import org.observe.collect.ObservableCollection.UniqueModFilterBuilder;
@@ -48,21 +49,25 @@ public class ObservableSetImpl {
 	 * @param <E> The type of the elements in the set
 	 * @param <X> The type of elements in the filtering collection
 	 */
-	public static class IntersectedSet<E, X> implements ObservableSet<E> {
+	public static class CombinedSet<E, X> implements ObservableSet<E> {
 		// Note: Several (E) v casts below are technically incorrect, as the values may not be of type E
 		// But they are runtime-safe because of the isElement tests
 		private final ObservableSet<E> theLeft;
 		private final ObservableCollection<X> theRight;
+		private final boolean isUnion;
 		private final boolean sameEquivalence;
+		private final Subscription theSubscription;
 
 		/**
 		 * @param left The left set whose elements to reflect
 		 * @param right The right set to filter this set's elements by
 		 */
-		protected IntersectedSet(ObservableSet<E> left, ObservableCollection<X> right) {
+		protected CombinedSet(ObservableSet<E> left, ObservableCollection<X> right, boolean union, Observable<?> until) {
 			theLeft = left;
 			theRight = right;
+			isUnion = union;
 			sameEquivalence = left.equivalence().equals(right.equivalence());
+			Subscription[] takeSub = new Subscription[1];
 		}
 
 		/** @return The left set whose elements this set reflects */
@@ -73,6 +78,10 @@ public class ObservableSetImpl {
 		/** @return The right collection that this set's elements are filtered by */
 		protected ObservableCollection<X> getRight() {
 			return theRight;
+		}
+
+		protected boolean isUnion() {
+			return isUnion;
 		}
 
 		@Override
@@ -87,7 +96,7 @@ public class ObservableSetImpl {
 
 		@Override
 		public boolean isLockSupported() {
-			return theLeft.isLockSupported() || theRight.isLockSupported(); // Report whether locking will have any effect
+			return theLeft.isLockSupported() || theRight.isLockSupported();
 		}
 
 		@Override
