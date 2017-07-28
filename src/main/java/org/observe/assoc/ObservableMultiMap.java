@@ -223,7 +223,8 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	default ObservableCollection<V> values() {
 		TypeToken<ObservableCollection<V>> collType = new TypeToken<ObservableCollection<V>>() {}.where(new TypeParameter<V>() {},
 			getValueType());
-		return ObservableCollection.flatten(entrySet().flow().map(collType).cache(false).map(entry -> entry.getValues()).collectLW());
+		return ObservableCollection.flatten(entrySet().flow().map(collType).cache(false).map(entry -> entry.getValues()).collectLW())
+			.collect();
 	}
 
 	/** @return A collection of plain (non-observable) {@link java.util.Map.Entry entries}, one for each value in this map */
@@ -274,7 +275,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		.where(new TypeParameter<K>() {}, getKeyType()).where(new TypeParameter<V>() {}, getValueType());
 
 		return ObservableCollection.flatten(entrySet().flow().map(entryCollectionType).cache(false).map(entry -> entry.getValues().flow()
-			.map(entryType).cache(false).map(value -> new DefaultMapEntry(entry.getKey(), value)).collectLW()).collectLW());
+			.map(entryType).cache(false).map(value -> new DefaultMapEntry(entry.getKey(), value)).collectLW()).collectLW()).collect();
 	}
 
 	/**

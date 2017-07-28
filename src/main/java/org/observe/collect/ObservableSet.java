@@ -2,7 +2,6 @@ package org.observe.collect;
 
 import java.util.Collection;
 
-import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.qommons.Transaction;
 import org.qommons.collect.ElementSpliterator;
@@ -63,27 +62,6 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	@Override
 	default boolean retainAll(Collection<?> c) {
 		return ObservableCollection.super.retainAll(c);
-	}
-
-	/**
-	 * @param <X> The type of the combined collection
-	 * @param collection The set to combine with this set
-	 * @param until An observable that will terminate the result of this method, causing it to become empty and unsubscribe any listeners
-	 * @return A set containing all of this set's elements that are also present in the argument collection
-	 */
-	default <X> ObservableSet<E> intersect(ObservableCollection<X> collection, Observable<?> until) {
-		return new ObservableSetImpl.CombinedSet<>(this, collection, false, until);
-	}
-
-	/**
-	 * @param <X> The type of the combined collection
-	 * @param collection The set to combine with this set
-	 * @param until An observable that will terminate the result of this method, causing it to become empty and unsubscribe any listeners
-	 * @return A set containing all elements that are present in either this collection or the argument collection, according to this set's
-	 *         {@link #equivalence() equivalence}. Elements in the argument that are not members of this set's equivalence will be excluded.
-	 */
-	default <X> ObservableSet<E> union(ObservableCollection<X> collection, Observable<?> until) {
-		return new ObservableSetImpl.CombinedSet<>(this, collection, true, until);
 	}
 
 	@Override

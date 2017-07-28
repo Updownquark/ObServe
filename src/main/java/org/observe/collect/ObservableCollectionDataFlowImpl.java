@@ -4,6 +4,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -28,22 +29,15 @@ import org.observe.collect.ObservableCollection.ElementSetter;
 import org.observe.collect.ObservableCollection.MappedCollectionBuilder;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollection.UniqueDataFlow;
-import org.observe.collect.ObservableCollection.UniqueMappedCollectionBuilder;
-import org.observe.collect.ObservableCollection.UniqueModFilterBuilder;
 import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
-import org.observe.collect.ObservableCollection.UniqueSortedMappedCollectionBuilder;
-import org.observe.collect.ObservableCollection.UniqueSortedModFilterBuilder;
 import org.observe.collect.ObservableCollectionImpl.DerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.DerivedLWCollection;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterHashSet;
-import org.qommons.collect.BetterMap;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableElementHandle;
 import org.qommons.collect.MutableElementHandle.StdMsg;
-import org.qommons.tree.BetterTreeSet;
-import org.qommons.tree.BinaryTreeNode;
 
 import com.google.common.reflect.TypeToken;
 
@@ -103,6 +97,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public <X> CollectionDataFlow<E, T, T> whereContained(ObservableCollection<X> other, boolean include) {
+			return new IntersectionFlow<>(theSource, this, other, !include);
+		}
+
+		@Override
 		public CollectionDataFlow<E, T, T> withEquivalence(Equivalence<? super T> equivalence) {
 			return new EquivalenceSwitchOp<>(theSource, this, equivalence);
 		}
@@ -140,12 +139,12 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public UniqueDataFlow<E, T, T> unique(boolean alwaysUseFirst) {
-			return new UniqueOp<>(theSource, this, alwaysUseFirst);
+			return new ObservableSetImpl.UniqueOp<>(theSource, this, alwaysUseFirst);
 		}
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> uniqueSorted(Comparator<? super T> compare, boolean alwaysUseFirst) {
-			return new UniqueSortedDataFlowImpl<>(theSource, this, compare, alwaysUseFirst);
+			return new ObservableSortedSetImpl.UniqueSortedDataFlowImpl<>(theSource, this, compare, alwaysUseFirst);
 		}
 
 		@Override
@@ -228,78 +227,6 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
-	public static class UniqueDataFlowWrapper<E, T> extends AbstractDataFlow<E, T, T> implements UniqueDataFlow<E, T, T> {
-		protected UniqueDataFlowWrapper(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent) {
-			super(source, parent, parent.getTargetType());
-		}
-
-		@Override
-		public UniqueDataFlow<E, T, T> filter(Function<? super T, String> filter) {
-			return new UniqueDataFlowWrapper<>(getSource(), getParent().filter(filter));
-		}
-
-		@Override
-		public UniqueDataFlow<E, T, T> filterStatic(Function<? super T, String> filter) {
-			return new UniqueDataFlowWrapper<>(getSource(), getParent().filterStatic(filter));
-		}
-
-		@Override
-		public <X> UniqueMappedCollectionBuilder<E, T, X> mapEquivalent(TypeToken<X> target) {
-			return new UniqueMappedCollectionBuilder<>(getSource(), this, target);
-		}
-
-		@Override
-		public UniqueDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), getParent().refresh(refresh));
-		}
-
-		@Override
-		public UniqueDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), getParent().refreshEach(refresh));
-		}
-
-		@Override
-		public UniqueModFilterBuilder<E, T> filterModification() {
-			return new UniqueModFilterBuilder<>(getSource(), this);
-		}
-
-		@Override
-		public boolean isLightWeight() {
-			return false;
-		}
-
-		@Override
-		public CollectionManager<E, ?, T> manageCollection() {
-			return getParent().manageCollection();
-		}
-
-		@Override
-		public ObservableSet<T> collectLW() {
-			if (!isLightWeight())
-				throw new IllegalStateException("This data flow is not light-weight");
-			return new ObservableSetImpl.DerivedLWSet<>((ObservableSet<E>) getSource(), manageCollection());
-		}
-
-		@Override
-		public ObservableSet<T> collect(Observable<?> until) {
-			return new ObservableSetImpl.DerivedSet<>(getSource(), manageCollection(), until);
-		}
-	}
-
-	public static class UniqueOp<E, T> extends UniqueDataFlowWrapper<E, T> {
-		private final boolean isAlwaysUsingFirst;
-
-		protected UniqueOp(ObservableCollection<E> source, AbstractDataFlow<E, ?, T> parent, boolean alwaysUseFirst) {
-			super(source, parent);
-			isAlwaysUsingFirst = alwaysUseFirst;
-		}
-
-		@Override
-		public CollectionManager<E, ?, T> manageCollection() {
-			return new UniqueManager<>(getParent().manageCollection(), isAlwaysUsingFirst);
-		}
-	}
-
 	public static class InitialElementsDataFlow<E> extends AbstractDataFlow<E, E, E> {
 		private final Collection<? extends E> theInitialValues;
 
@@ -359,83 +286,6 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
-	public static class UniqueSortedDataFlowWrapper<E, T> extends UniqueDataFlowWrapper<E, T> implements UniqueSortedDataFlow<E, T, T> {
-		private final Comparator<? super T> theCompare;
-
-		protected UniqueSortedDataFlowWrapper(ObservableCollection<E> source, AbstractDataFlow<E, ?, T> parent,
-			Comparator<? super T> compare) {
-			super(source, parent);
-			theCompare = compare;
-		}
-
-		@Override
-		public Comparator<? super T> comparator() {
-			return theCompare;
-		}
-
-		@Override
-		public UniqueSortedDataFlow<E, T, T> filter(Function<? super T, String> filter) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, T>) getParent().filter(filter), theCompare);
-		}
-
-		@Override
-		public UniqueSortedDataFlow<E, T, T> filterStatic(Function<? super T, String> filter) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, T>) getParent().filterStatic(filter), theCompare);
-		}
-
-		@Override
-		public <X> UniqueSortedMappedCollectionBuilder<E, T, X> mapEquivalent(TypeToken<X> target) {
-			return new UniqueSortedMappedCollectionBuilder<>(getSource(), this, target);
-		}
-
-		@Override
-		public UniqueSortedDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, T>) getParent().refresh(refresh), theCompare);
-		}
-
-		@Override
-		public UniqueSortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, T>) getParent().refreshEach(refresh), theCompare);
-		}
-
-		@Override
-		public UniqueSortedModFilterBuilder<E, T> filterModification() {
-			return new UniqueSortedModFilterBuilder<>(getSource(), this);
-		}
-
-		@Override
-		public CollectionManager<E, ?, T> manageCollection() {
-			return getParent().manageCollection();
-		}
-
-		@Override
-		public ObservableSortedSet<T> collectLW() {
-			if (!isLightWeight())
-				throw new IllegalStateException("This data flow is not light-weight");
-			return new ObservableSortedSetImpl.DerivedLWSortedSet<>((ObservableSortedSet<E>) getSource(), manageCollection(), theCompare);
-		}
-
-		@Override
-		public ObservableSortedSet<T> collect(Observable<?> until) {
-			return new ObservableSortedSetImpl.DerivedSortedSet<>(getSource(), manageCollection(), theCompare, until);
-		}
-	}
-
-	public static class UniqueSortedDataFlowImpl<E, T> extends UniqueSortedDataFlowWrapper<E, T> {
-		private final boolean isAlwaysUsingFirst;
-
-		protected UniqueSortedDataFlowImpl(ObservableCollection<E> source, AbstractDataFlow<E, ?, T> parent, Comparator<? super T> compare,
-			boolean alwaysUseFirst) {
-			super(source, parent, compare);
-			isAlwaysUsingFirst = alwaysUseFirst;
-		}
-
-		@Override
-		public CollectionManager<E, ?, T> manageCollection() {
-			return new UniqueManager<>(new SortedManager<>(getParent().manageCollection(), comparator()), isAlwaysUsingFirst);
-		}
-	}
-
 	public static class BaseCollectionDataFlow<E> extends AbstractDataFlow<E, E, E> {
 		protected BaseCollectionDataFlow(ObservableCollection<E> source) {
 			super(source, null, source.getType());
@@ -484,6 +334,26 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public AbstractCollectionManager<E, ?, T> manageCollection() {
 			return new FilteredCollectionManager<>(getParent().manageCollection(), theFilter, isStaticFilter);
+		}
+	}
+
+	protected static class IntersectionFlow<E, T, X> extends AbstractDataFlow<E, T, T> {
+		private final ObservableCollection<X> theFilter;
+		private final boolean isExclude;
+
+		protected IntersectionFlow(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, ObservableCollection<X> filter,
+			boolean exclude) {
+			super(source, parent, parent.getTargetType());
+			theFilter = filter;
+			isExclude = exclude;
+		}
+		@Override
+		public boolean isLightWeight() {
+			return false;
+		}
+		@Override
+		public CollectionManager<E, ?, T> manageCollection() {
+			return new IntersectionManager<>(getParent().manageCollection(), theFilter, isExclude);
 		}
 	}
 
@@ -556,115 +426,6 @@ public class ObservableCollectionDataFlowImpl {
 		public CollectionManager<E, ?, T> manageCollection() {
 			return new MappedCollectionManager<>(getParent().manageCollection(), getTargetType(), theMap, theReverse, theElementReverse,
 				reEvalOnUpdate, fireIfUnchanged, isCached);
-		}
-	}
-
-	public static class UniqueMapOp<E, I, T> extends MapOp<E, I, T> implements UniqueDataFlow<E, I, T> {
-		protected UniqueMapOp(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent, TypeToken<T> target,
-			Function<? super I, ? extends T> map, Function<? super T, ? extends I> reverse,
-			ElementSetter<? super I, ? super T> elementReverse, boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean isCached) {
-			super(source, parent, target, map, reverse, elementReverse, reEvalOnUpdate, fireIfUnchanged, isCached);
-		}
-
-		@Override
-		public UniqueDataFlow<E, T, T> filter(Function<? super T, String> filter) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter));
-		}
-
-		@Override
-		public UniqueDataFlow<E, T, T> filterStatic(Function<? super T, String> filter) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.filterStatic(filter));
-		}
-
-		@Override
-		public <X> UniqueMappedCollectionBuilder<E, T, X> mapEquivalent(TypeToken<X> target) {
-			return new UniqueMappedCollectionBuilder<>(getSource(), this, target);
-		}
-
-		@Override
-		public UniqueDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.refresh(refresh));
-		}
-
-		@Override
-		public UniqueDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.refreshEach(refresh));
-		}
-
-		@Override
-		public UniqueModFilterBuilder<E, T> filterModification() {
-			return new UniqueModFilterBuilder<>(getSource(), this);
-		}
-
-		@Override
-		public ObservableSet<T> collectLW() {
-			if (!isLightWeight())
-				throw new IllegalStateException("This data flow is not light-weight");
-			return new ObservableSetImpl.DerivedLWSet<>((ObservableSet<E>) getSource(), manageCollection());
-		}
-
-		@Override
-		public ObservableSet<T> collect(Observable<?> until) {
-			return new ObservableSetImpl.DerivedSet<>(getSource(), manageCollection(), until);
-		}
-	}
-
-	public static class UniqueSortedMapOp<E, I, T> extends UniqueMapOp<E, I, T> implements UniqueSortedDataFlow<E, I, T> {
-		private final Comparator<? super T> theCompare;
-
-		protected UniqueSortedMapOp(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent, TypeToken<T> target,
-			Function<? super I, ? extends T> map, Function<? super T, ? extends I> reverse,
-			ElementSetter<? super I, ? super T> elementReverse, boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean isCached,
-			Comparator<? super T> compare) {
-			super(source, parent, target, map, reverse, elementReverse, reEvalOnUpdate, fireIfUnchanged, isCached);
-			theCompare = compare;
-		}
-
-		@Override
-		public Comparator<? super T> comparator() {
-			return theCompare;
-		}
-
-		@Override
-		public UniqueSortedDataFlow<E, T, T> filter(Function<? super T, String> filter) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, T>) super.filter(filter), comparator());
-		}
-
-		@Override
-		public UniqueSortedDataFlow<E, T, T> filterStatic(Function<? super T, String> filter) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, T>) super.filterStatic(filter), comparator());
-		}
-
-		@Override
-		public <X> UniqueSortedMappedCollectionBuilder<E, T, X> mapEquivalent(TypeToken<X> target) {
-			return new UniqueSortedMappedCollectionBuilder<>(getSource(), this, target);
-		}
-
-		@Override
-		public UniqueSortedDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, T>) super.refresh(refresh), comparator());
-		}
-
-		@Override
-		public UniqueSortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, T>) super.refreshEach(refresh), comparator());
-		}
-
-		@Override
-		public UniqueSortedModFilterBuilder<E, T> filterModification() {
-			return new UniqueSortedModFilterBuilder<>(getSource(), this);
-		}
-
-		@Override
-		public ObservableSortedSet<T> collectLW() {
-			if (!isLightWeight())
-				throw new IllegalStateException("This data flow is not light-weight");
-			return new ObservableSortedSetImpl.DerivedLWSortedSet<>((ObservableSortedSet<E>) getSource(), manageCollection(), comparator());
-		}
-
-		@Override
-		public ObservableSortedSet<T> collect(Observable<?> until) {
-			return new ObservableSortedSetImpl.DerivedSortedSet<>(getSource(), manageCollection(), comparator(), until);
 		}
 	}
 
@@ -831,117 +592,6 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
-	public static class UniqueModFilteredOp<E, T> extends ModFilteredOp<E, T> implements UniqueDataFlow<E, T, T> {
-		public UniqueModFilteredOp(ObservableCollection<E> source, AbstractDataFlow<E, ?, T> parent, String immutableMsg,
-			boolean allowUpdates, String addMsg, String removeMsg, Function<? super T, String> addMsgFn,
-			Function<? super T, String> removeMsgFn) {
-			super(source, parent, immutableMsg, allowUpdates, addMsg, removeMsg, addMsgFn, removeMsgFn);
-		}
-
-		@Override
-		public UniqueDataFlow<E, T, T> filter(Function<? super T, String> filter) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter));
-		}
-
-		@Override
-		public UniqueDataFlow<E, T, T> filterStatic(Function<? super T, String> filter) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.filterStatic(filter));
-		}
-
-		@Override
-		public <X> UniqueMappedCollectionBuilder<E, T, X> mapEquivalent(TypeToken<X> target) {
-			return new UniqueMappedCollectionBuilder<>(getSource(), this, target);
-		}
-
-		@Override
-		public UniqueDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.refresh(refresh));
-		}
-
-		@Override
-		public UniqueDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.refreshEach(refresh));
-		}
-
-		@Override
-		public UniqueModFilterBuilder<E, T> filterModification() {
-			return new UniqueModFilterBuilder<>(getSource(), this);
-		}
-
-		@Override
-		public ObservableSet<T> collectLW() {
-			if (!isLightWeight())
-				throw new IllegalStateException("This data flow is not light-weight");
-			return new ObservableSetImpl.DerivedLWSet<>((ObservableSet<E>) getSource(), manageCollection());
-		}
-
-		@Override
-		public ObservableSet<T> collect(Observable<?> until) {
-			return new ObservableSetImpl.DerivedSet<>(getSource(), manageCollection(), until);
-		}
-	}
-
-	public static class UniqueSortedModFilteredOp<E, T> extends UniqueModFilteredOp<E, T> implements UniqueSortedDataFlow<E, T, T> {
-		public UniqueSortedModFilteredOp(ObservableCollection<E> source, AbstractDataFlow<E, ?, T> parent, String immutableMsg,
-			boolean allowUpdates, String addMsg, String removeMsg, Function<? super T, String> addMsgFn,
-			Function<? super T, String> removeMsgFn) {
-			super(source, parent, immutableMsg, allowUpdates, addMsg, removeMsg, addMsgFn, removeMsgFn);
-		}
-
-		@Override
-		public Comparator<? super T> comparator() {
-			return ((UniqueSortedDataFlow<E, ?, T>) getParent()).comparator();
-		}
-
-		@Override
-		public UniqueSortedDataFlow<E, T, T> filter(Function<? super T, String> filter) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, T>) getParent().filter(filter), comparator());
-		}
-
-		@Override
-		public UniqueSortedDataFlow<E, T, T> filterStatic(Function<? super T, String> filter) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, T>) getParent().filterStatic(filter),
-				comparator());
-		}
-
-		@Override
-		public <X> UniqueSortedMappedCollectionBuilder<E, T, X> mapEquivalent(TypeToken<X> target) {
-			return new UniqueSortedMappedCollectionBuilder<>(getSource(), this, target);
-		}
-
-		@Override
-		public UniqueSortedDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, T>) getParent().refresh(refresh), comparator());
-		}
-
-		@Override
-		public UniqueSortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), (AbstractDataFlow<E, ?, T>) getParent().refreshEach(refresh),
-				comparator());
-		}
-
-		@Override
-		public UniqueSortedModFilterBuilder<E, T> filterModification() {
-			return new UniqueSortedModFilterBuilder<>(getSource(), this);
-		}
-
-		@Override
-		public ObservableSortedSet<T> collectLW() {
-			if (!isLightWeight())
-				throw new IllegalStateException("This data flow is not light-weight");
-			return new ObservableSortedSetImpl.DerivedLWSortedSet<>((ObservableSortedSet<E>) getSource(), manageCollection(), comparator());
-		}
-
-		@Override
-		public ObservableSortedSet<T> collect(Observable<?> until) {
-			return new ObservableSortedSetImpl.DerivedSortedSet<>(getSource(), manageCollection(), comparator(), until);
-		}
-	}
-
-	public static interface UniqueElementFinder<T> {
-		ElementId getUniqueElement(T value);
-	}
-
 	public static interface CollectionManager<E, I, T> extends Transactable {
 		TypeToken<T> getTargetType();
 
@@ -955,7 +605,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		boolean isReversible();
 
-		UniqueElementFinder<T> getElementFinder();
+		ObservableSetImpl.UniqueElementFinder<T> getElementFinder();
 
 		Comparator<? super T> comparator();
 
@@ -1389,7 +1039,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public UniqueElementFinder<T> getElementFinder() {
+		public ObservableSetImpl.UniqueElementFinder<T> getElementFinder() {
 			return getParent().getElementFinder();
 		}
 
@@ -1443,7 +1093,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public UniqueElementFinder<E> getElementFinder() {
+		public ObservableSetImpl.UniqueElementFinder<E> getElementFinder() {
 			return null;
 		}
 
@@ -1501,201 +1151,6 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public void begin(Observable<?> until) {}
-	}
-
-	public static class UniqueManager<E, T> extends AbstractCollectionManager<E, T, T> {
-		private final BetterMap<T, BetterTreeSet<UniqueElement>> theElementsByValue;
-		private final boolean isAlwaysUsingFirst;
-
-		protected UniqueManager(CollectionManager<E, ?, T> parent, boolean alwaysUseFirst) {
-			super(parent, parent.getTargetType());
-			theElementsByValue = parent.equivalence().createMap();
-			isAlwaysUsingFirst = alwaysUseFirst;
-		}
-
-		@Override
-		public UniqueElementFinder<T> getElementFinder() {
-			return this::getUniqueElement;
-		}
-
-		public ElementId getUniqueElement(T value) {
-			BetterTreeSet<UniqueElement> valueElements = theElementsByValue.get(value);
-			if (valueElements == null)
-				return null;
-			for (UniqueElement el : valueElements)
-				if (el.isPresent)
-					return el.getElementId();
-			// Although this state is incorrect, since one value should be present, this state is reachable temporarily during
-			// modifications. It represents a state where the present element for the value has been removed or deactivated
-			// and the new one has not yet been installed. So according to what the derived collection knows, the element doesn't exist.
-			return null;
-		}
-
-		@Override
-		public Comparator<? super T> comparator() {
-			return getParent().comparator();
-		}
-
-		@Override
-		public Equivalence<? super T> equivalence() {
-			return getParent().equivalence();
-		}
-
-		@Override
-		public boolean isDynamicallyFiltered() {
-			return true;
-		}
-
-		@Override
-		public FilterMapResult<T, T> mapTop(FilterMapResult<T, T> source) {
-			source.result = source.source;
-			return source;
-		}
-
-		@Override
-		public FilterMapResult<T, T> reverseTop(FilterMapResult<T, T> dest) {
-			dest.result = dest.source;
-			return dest;
-		}
-
-		@Override
-		public FilterMapResult<T, T> canAddTop(FilterMapResult<T, T> toAdd) {
-			if (theElementsByValue.containsKey(toAdd.source))
-				toAdd.error = MutableElementHandle.StdMsg.ELEMENT_EXISTS;
-			else
-				toAdd.result = toAdd.source;
-			return toAdd;
-		}
-
-		@Override
-		protected void begin(Observable<?> until) {}
-
-		@Override
-		public CollectionElementManager<E, ?, T> createElement(ElementId id, E init, Object cause) {
-			return new UniqueElement(id, init, cause);
-		}
-
-		void update(UniqueElement element, Object cause) {
-			getUpdateListener().accept(new CollectionUpdate(this, element.getElementId(), cause));
-		}
-
-		class UniqueElement extends CollectionElementManager<E, T, T> {
-			private T theValue;
-			private boolean isPresent;
-			private BetterTreeSet<UniqueElement> theValueElements;
-			private BinaryTreeNode<UniqueElement> theNode;
-
-			protected UniqueElement(ElementId id, E init, Object cause) {
-				super(UniqueManager.this, UniqueManager.this.getParent().createElement(id, init, cause), id);
-
-				T value = getParent().get();
-				theValue = value;
-				addToSet(cause);
-			}
-
-			@Override
-			public boolean isPresent() {
-				return isPresent;
-			}
-
-			@Override
-			public T get() {
-				return theValue;
-			}
-
-			@Override
-			protected boolean refresh(T source, Object cause) {
-				if (theElementsByValue.get(source) != theValueElements) {
-					removeFromSet(cause);
-					theValue = source;
-					addToSet(cause);
-				}
-				return true;
-			}
-
-			@Override
-			public void removed(Object cause) {
-				super.removed(cause);
-				removeFromSet(cause);
-			}
-
-			private void removeFromSet(Object cause) {
-				theValueElements.forMutableElementAt(theNode, el -> el.remove());
-				theNode = null;
-				if (theValueElements.isEmpty())
-					theElementsByValue.remove(theValue);
-				else {
-					if (isPresent) {
-						// We're the first value
-						isPresent = false;
-						UniqueElement newFirst = theValueElements.first();
-						// Delay installing the new value this node has been reported removed so the set is always unique
-						postChange(() -> {
-							newFirst.isPresent = true;
-							UniqueManager.this.update(newFirst, cause);
-						});
-					}
-					theValueElements = null; // Other elements are using that set, so we can't re-use it
-				}
-			}
-
-			private void addToSet(Object cause) {
-				theValueElements = theElementsByValue.computeIfAbsent(theValue, v -> new BetterTreeSet<>(false, UniqueElement::compareTo));
-				// Grab our node, since we can use it to remove even if the comparison properties change
-				theNode = theValueElements.addElement(this);
-				if (theValueElements.size() == 1) {
-					// We're currently the only element for the value
-					isPresent = true;
-				} else if (isAlwaysUsingFirst && theNode.getNodesBefore() == 0) {
-					isPresent = true;
-					// We're replacing the existing representative for the value
-					UniqueElement replaced = theValueElements.higher(this);
-					// Remove the replaced node before this one is installed so the set is always unique
-					replaced.isPresent = false;
-					UniqueManager.this.update(replaced, cause);
-				} else {
-					// There are other elements for the value that we will not replace
-					isPresent = false;
-				}
-			}
-
-			@Override
-			protected String filterRemove(boolean isRemoving) {
-				String msg = super.filterRemove(isRemoving);
-				if (isRemoving && msg == null) {
-					// The remove operation for this element needs to remove not only the source element mapping to to this element,
-					// but also all other equivalent elements.
-					// Remove the other elements first, since they are not present in the derived collection and won't result in events
-					// for the collection if they're removed while this element is still present.
-					UniqueElement[] elements = theValueElements.toArray(new UniqueManager.UniqueElement[theValueElements.size()]);
-					for (UniqueElement other : elements) {
-						if (other == this)
-							continue;
-						getUpdateListener().accept(new RemoveElementUpdate(UniqueManager.this, other.getElementId(), null));
-					}
-				}
-				return msg;
-			}
-
-			@Override
-			protected FilterMapResult<T, E> filterAccept(FilterMapResult<T, E> value, boolean isReplacing) {
-				if (value.source != theValue && !equivalence().elementEquals(theValue, value.source)) {
-					value.error = "Cannot change equivalence of a unique element";
-					return value;
-				} else
-					return super.filterAccept(value, isReplacing);
-			}
-
-			@Override
-			public ElementUpdateResult update(CollectionUpdate update,
-				Consumer<Consumer<MutableElementHandle<? extends E>>> sourceElement) {
-				if (update instanceof RemoveElementUpdate && applies(update)) {
-					sourceElement.accept(el -> el.remove());
-					return ElementUpdateResult.AppliedNoUpdate; // We're removed now, so obviously don't update
-				} else
-					return super.update(update, sourceElement);
-			}
-		}
 	}
 
 	public static class SortedManager<E, T> extends NonMappingCollectionManager<E, T> {
@@ -1860,6 +1315,142 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
+	protected static class IntersectionManager<E, T, X> extends NonMappingCollectionManager<E, T> {
+		private class IntersectionElement {
+			int rightCount;
+			final Set<ElementId> leftElements;
+
+			IntersectionElement() {
+				leftElements = new HashSet<>();
+			}
+		}
+
+		private final ObservableCollection<X> theFilter;
+		private final Equivalence<? super T> theEquivalence; // Make this a field since we'll need it often
+		private final boolean isExclude;
+		private Map<T, IntersectionElement> theValues;
+		// The following two fields are needed because the values may mutate
+		private Map<ElementId, IntersectionElement> theLeftElementValues;
+		private Map<ElementId, IntersectionElement> theRightElementValues;
+		private Subscription theCountSub; // Need to hold a strong ref to this to prevent GC of listeners
+
+		public IntersectionManager(CollectionManager<E, ?, T> parent, ObservableCollection<X> filter, boolean exclude) {
+			super(parent);
+			theFilter = filter;
+			theEquivalence = parent.equivalence();
+			isExclude = exclude;
+			theValues = new HashMap<>();
+			theLeftElementValues = new HashMap<>();
+		}
+
+		@Override
+		public Equivalence<? super T> equivalence() {
+			return theEquivalence;
+		}
+
+		@Override
+		public FilterMapResult<T, T> mapTop(FilterMapResult<T, T> source) {
+			FilterMapResult<T, T> res = super.mapTop(source);
+			if (res.error == null) {
+				IntersectionElement element = theValues.get(res.result);
+				if (element == null || element.rightCount == 0)
+					res.error = StdMsg.ILLEGAL_ELEMENT;
+			}
+			return res;
+		}
+
+		@Override
+		public FilterMapResult<T, T> reverseTop(FilterMapResult<T, T> dest) {
+			IntersectionElement element = theValues.get(dest.source);
+			if (element == null || element.rightCount == 0) {
+				dest.error = StdMsg.ILLEGAL_ELEMENT;
+				return dest;
+			}
+			return super.reverseTop(dest);
+		}
+
+		@Override
+		protected void begin(Observable<?> until) {
+			theCountSub = WeakConsumer.build().<ObservableCollectionEvent<? extends X>> withAction(evt -> {
+				try (Transaction t = getParent().lock(false, evt)) {
+					IntersectionElement element;
+					switch (evt.getType()) {
+					case add:
+						if (!equivalence().isElement(evt.getNewValue()))
+							return;
+						element = theValues.computeIfAbsent((T) evt.getNewValue(), v -> new IntersectionElement());
+						element.rightCount++;
+						if (element.rightCount == 1)
+							update(element.leftElements, evt);
+						theRightElementValues.put(evt.getElementId(), element);
+						break;
+					case remove:
+						element = theRightElementValues.remove(evt.getElementId());
+						if (element == null)
+							return;
+						element.rightCount--;
+						if (element.rightCount == 0)
+							update(element.leftElements, evt);
+						break;
+					case set:
+						boolean oldIsElement = equivalence().isElement(evt.getOldValue());
+						boolean newIsElement = equivalence().isElement(evt.getNewValue());
+						if ((oldIsElement == newIsElement)
+							&& (!oldIsElement || equivalence().elementEquals((T) evt.getOldValue(), evt.getNewValue())))
+							return; // No change
+						if (oldIsElement) {
+							element = theRightElementValues.remove(evt.getElementId());
+							element.rightCount--;
+							if (element.rightCount == 0)
+								update(element.leftElements, evt);
+						}
+						if (newIsElement) {
+							element = theValues.computeIfAbsent((T) evt.getNewValue(), v -> new IntersectionElement());
+							element.rightCount++;
+							if (element.rightCount == 1)
+								update(element.leftElements, evt);
+							theRightElementValues.put(evt.getElementId(), element);
+						}
+						break;
+					}
+				}
+			}, action -> theFilter.subscribe(action, true).removeAll()).build();
+		}
+
+		private void update(Set<ElementId> leftElements, Object cause) {
+			for (ElementId element : leftElements)
+				getUpdateListener().accept(new CollectionUpdate(this, element, cause));
+		}
+
+		@Override
+		public CollectionElementManager<E, ?, T> createElement(ElementId id, E init, Object cause) {
+			class IntersectedCollectionElement extends NonMappingCollectionElement<E, T> {
+				IntersectedCollectionElement() {
+					super(IntersectionManager.this, IntersectionManager.this.getParent().createElement(id, init, cause), id);
+				}
+
+				@Override
+				public T get() {
+					return getParent().get();
+				}
+
+				@Override
+				public boolean isPresent() {
+					if (!super.isPresent())
+						return false;
+					boolean rightIncluded = theLeftElementValues.get(getElementId()).rightCount > 0;
+					return rightIncluded != isExclude;
+				}
+
+				@Override
+				protected boolean refresh(T source, Object cause2) {
+					return false; // If the present state doesn't change, don't fire an update
+				}
+			}
+			return new IntersectedCollectionElement();
+		}
+	}
+
 	public static class MappedCollectionManager<E, I, T> extends AbstractCollectionManager<E, I, T> {
 		private final Function<? super I, ? extends T> theMap;
 		private final Function<? super T, ? extends I> theReverse;
@@ -1896,10 +1487,10 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public UniqueElementFinder<T> getElementFinder() {
+		public ObservableSetImpl.UniqueElementFinder<T> getElementFinder() {
 			if (theReverse == null)
 				return null;
-			UniqueElementFinder<I> pef = getParent().getElementFinder();
+			ObservableSetImpl.UniqueElementFinder<I> pef = getParent().getElementFinder();
 			if (pef == null)
 				return null;
 			return v -> pef.getUniqueElement(reverseValue(v));
@@ -2015,6 +1606,7 @@ public class ObservableCollectionDataFlowImpl {
 		private final Function<? super CombinedValues<? extends I>, ? extends T> theCombination;
 		private final Function<? super CombinedValues<? extends T>, ? extends I> theReverse;
 		private final boolean isCached;
+		private Subscription theSubscription;
 
 		protected CombinedCollectionManager(CollectionManager<E, ?, I> parent, TypeToken<T> targetType, Set<ObservableValue<?>> args,
 			Function<? super CombinedValues<? extends I>, ? extends T> combination,
@@ -2044,10 +1636,10 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public UniqueElementFinder<T> getElementFinder() {
+		public ObservableSetImpl.UniqueElementFinder<T> getElementFinder() {
 			if (theReverse == null)
 				return null;
-			UniqueElementFinder<I> pef = getParent().getElementFinder();
+			ObservableSetImpl.UniqueElementFinder<I> pef = getParent().getElementFinder();
 			if (pef == null)
 				return null;
 			return v -> pef.getUniqueElement(reverseValue(v));
@@ -2147,15 +1739,18 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public void begin(Observable<?> until) {
 			if (!isLightWeight()) {
+				WeakConsumer.WeakConsumerBuilder builder = WeakConsumer.build();
 				for (Map.Entry<ObservableValue<?>, ArgHolder<?>> arg : theArgs.entrySet()) {
 					ArgHolder<?> holder = arg.getValue();
-					holder.actionSub = WeakConsumer.subscribeWeak((ObservableValueEvent<?> evt) -> {
+					builder.withAction((ObservableValueEvent<?> evt) -> {
 						try (Transaction t = lock(true, null)) {
 							((ArgHolder<Object>) holder).value = evt.getValue();
 							getUpdateListener().accept(new CollectionUpdate(this, null, evt));
 						}
-					}, action -> arg.getKey().act(action), until);
+					}, action -> arg.getKey().act(action));
 				}
+				builder.withUntil(until::act);
+				theSubscription = builder.build();
 			}
 		}
 	}
@@ -2177,8 +1772,9 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public void begin(Observable<?> until) {
 			if (!isLightWeight())
-				theActionSub = WeakConsumer.subscribeWeak(v -> getUpdateListener().accept(new CollectionUpdate(this, null, v)),
-					theRefresh::act, until);
+				theActionSub = WeakConsumer.build()//
+				.withAction(v -> getUpdateListener().accept(new CollectionUpdate(this, null, v)), theRefresh::act)//
+				.withUntil(until::act).build();
 		}
 
 		@Override
@@ -2307,8 +1903,19 @@ public class ObservableCollectionDataFlowImpl {
 
 				private RefreshHolder createHolder(Observable<?> refreshObs) {
 					Consumer<Object> action = v -> ElementRefreshingCollectionManager.this.update(refreshObs, v);
-					Subscription sub = WeakConsumer.subscribeWeak(v -> ElementRefreshingCollectionManager.this.update(refreshObs, v),
-						refreshObs::act, null);
+					Subscription sub = WeakConsumer.build()
+						.withAction(v -> ElementRefreshingCollectionManager.this.update(refreshObs, v), refreshObs::act).build(); // No need
+					// for
+					// until;
+					// the
+					// elements
+					// will
+					// be
+					// removed
+					// when
+					// the
+					// until
+					// fires
 					return new RefreshHolder(refreshObs, sub);
 				}
 			}

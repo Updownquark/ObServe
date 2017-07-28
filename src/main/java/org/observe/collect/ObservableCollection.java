@@ -33,9 +33,7 @@ import org.qommons.collect.ElementHandle;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.MutableElementHandle;
-import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.collect.SimpleCause;
-import org.qommons.collect.TransactableList;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -60,8 +58,8 @@ import com.google.common.reflect.TypeToken;
  * <li><b>Modification Control</b> The {@link #flow() flow} API also supports constraints on how or whether a derived collection may be
  * {@link CollectionDataFlow#filterModification() modified}.</li>
  * <li><b>Enhanced {@link Spliterator}s</b> ObservableCollections must implement {@link #mutableSpliterator(boolean)}, which returns a
- * {@link MutableElementSpliterator}, which is an enhanced {@link Spliterator}. This has potential for the improved performance associated
- * with using {@link Spliterator} instead of {@link Iterator} as well as the reversibility and ability to
+ * {@link org.qommons.collect.MutableElementSpliterator}, which is an enhanced {@link Spliterator}. This has potential for the improved
+ * performance associated with using {@link Spliterator} instead of {@link Iterator} as well as the reversibility and ability to
  * {@link MutableElementHandle#add(Object, boolean) add}, {@link MutableElementHandle#remove() remove}, or
  * {@link MutableElementHandle#set(Object) replace} elements during iteration.</li>
  * <li><b>Transactionality</b> ObservableCollections support the {@link org.qommons.Transactable} interface, allowing callers to reserve a
@@ -79,7 +77,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <E> The type of element in the collection
  */
-public interface ObservableCollection<E> extends BetterList<E>, TransactableList<E> {
+public interface ObservableCollection<E> extends BetterList<E> {
 	/**
 	 * The {@link ObservableCollectionEvent#getCause() cause} for events fired for extant elements in the collection upon
 	 * {@link #subscribe(Consumer, boolean) subscription}
@@ -754,19 +752,19 @@ public interface ObservableCollection<E> extends BetterList<E>, TransactableList
 	/**
 	 * @param <E> The super-type of elements in the inner collections
 	 * @param coll The collection to flatten
-	 * @return A collection containing all elements of all collections in the outer collection
+	 * @return A data flow to create a collection containing all elements of all inner collections inside elements in the outer collection
 	 */
-	public static <E> ObservableCollection<E> flatten(ObservableCollection<? extends ObservableCollection<? extends E>> coll) {
-		return new ObservableCollectionImpl.FlattenedObservableCollection<>(coll);
+	public static <E> CollectionDataFlow<E, E, E> flatten(ObservableCollection<? extends ObservableCollection<? extends E>> coll) {
+		return ObservableCollectionImpl.flatten(coll);
 	}
 
 	/**
-	 * @param <T> An observable collection that contains all elements the given collections
+	 * @param <E> The super type of element in the collections
 	 * @param colls The collections to flatten
 	 * @return A collection containing all elements of the given collections
 	 */
-	public static <T> ObservableCollection<T> flattenCollections(ObservableCollection<? extends T>... colls) {
-		return flatten(constant(new TypeToken<ObservableCollection<? extends T>>() {}, colls).collect());
+	public static <E> CollectionDataFlow<E, E, E> flattenCollections(ObservableCollection<? extends E>... colls) {
+		return flatten(constant(new TypeToken<ObservableCollection<? extends E>>() {}, colls).collect());
 	}
 
 	/**
@@ -922,6 +920,18 @@ public interface ObservableCollection<E> extends BetterList<E>, TransactableList
 					return MutableElementHandle.StdMsg.BAD_TYPE;
 			}).map(TypeToken.of(type)).map(v -> (X) v);
 		}
+
+		/**
+		 * Performs an intersection or exclusion operation. The result is {@link #isLightWeight() heavy-weight}.
+		 *
+		 * @param <X> The type of the collection to filter with
+		 * @param other The other collection to use to filter this flow's elements
+		 * @param include If true, the resulting flow will be an intersection of this flow's elements with those of the other collection,
+		 *        according to this flow's {@link ObservableCollection#equivalence()}. Otherwise the resulting flow will be all elements of
+		 *        this flow that are <b>NOT</b> included in the other collection.
+		 * @return The filtered data flow
+		 */
+		<X> CollectionDataFlow<E, T, T> whereContained(ObservableCollection<X> other, boolean include);
 
 		/**
 		 * @param equivalence The new {@link ObservableCollection#equivalence() equivalence} scheme for the derived collection to use
@@ -1126,6 +1136,9 @@ public interface ObservableCollection<E> extends BetterList<E>, TransactableList
 		}
 
 		@Override
+		<X> UniqueDataFlow<E, T, T> whereContained(ObservableCollection<X> other, boolean include);
+
+		@Override
 		UniqueDataFlow<E, T, T> refresh(Observable<?> refresh);
 
 		@Override
@@ -1180,6 +1193,9 @@ public interface ObservableCollection<E> extends BetterList<E>, TransactableList
 
 		@Override
 		UniqueSortedDataFlow<E, T, T> filterStatic(Function<? super T, String> filter);
+
+		@Override
+		<X> UniqueSortedDataFlow<E, T, T> whereContained(ObservableCollection<X> other, boolean include);
 
 		/**
 		 * <p>
@@ -1443,8 +1459,8 @@ public interface ObservableCollection<E> extends BetterList<E>, TransactableList
 		public UniqueDataFlow<E, I, T> map(Function<? super I, ? extends T> map, Function<? super T, ? extends I> reverse) {
 			if (reverse == null)
 				throw new IllegalArgumentException("Reverse must be specified to maintain uniqueness");
-			return new ObservableCollectionDataFlowImpl.UniqueMapOp<>(getSource(), getParent(), getTargetType(), map, getReverse(),
-				getElementReverse(), isReEvalOnUpdate(), isFireIfUnchanged(), isCached());
+			return new ObservableSetImpl.UniqueMapOp<>(getSource(), getParent(), getTargetType(), map, getReverse(), getElementReverse(),
+				isReEvalOnUpdate(), isFireIfUnchanged(), isCached());
 		}
 	}
 
@@ -1502,7 +1518,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TransactableList
 		public UniqueSortedDataFlow<E, I, T> map(Function<? super I, ? extends T> map, Comparator<? super T> compare) {
 			if (compare == null)
 				throw new IllegalArgumentException("Comparator must be specified to maintain uniqueness");
-			return new ObservableCollectionDataFlowImpl.UniqueSortedMapOp<>(getSource(), getParent(), getTargetType(), map, getReverse(),
+			return new ObservableSortedSetImpl.UniqueSortedMapOp<>(getSource(), getParent(), getTargetType(), map, getReverse(),
 				getElementReverse(), isReEvalOnUpdate(), isFireIfUnchanged(), isCached(), compare);
 		}
 	}
@@ -1827,8 +1843,8 @@ public interface ObservableCollection<E> extends BetterList<E>, TransactableList
 
 		@Override
 		public UniqueDataFlow<E, T, T> build() {
-			return new ObservableCollectionDataFlowImpl.UniqueModFilteredOp<>(getSource(), (AbstractDataFlow<E, ?, T>) getParent(),
-				getImmutableMsg(), areUpdatesAllowed(), getAddMsg(), getRemoveMsg(), getAddMsgFn(), getRemoveMsgFn());
+			return new ObservableSetImpl.UniqueModFilteredOp<>(getSource(), (AbstractDataFlow<E, ?, T>) getParent(), getImmutableMsg(),
+				areUpdatesAllowed(), getAddMsg(), getRemoveMsg(), getAddMsgFn(), getRemoveMsgFn());
 		}
 	}
 
@@ -1871,7 +1887,7 @@ public interface ObservableCollection<E> extends BetterList<E>, TransactableList
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> build() {
-			return new ObservableCollectionDataFlowImpl.UniqueSortedModFilteredOp<>(getSource(), (AbstractDataFlow<E, ?, T>) getParent(),
+			return new ObservableSortedSetImpl.UniqueSortedModFilteredOp<>(getSource(), (AbstractDataFlow<E, ?, T>) getParent(),
 				getImmutableMsg(), areUpdatesAllowed(), getAddMsg(), getRemoveMsg(), getAddMsgFn(), getRemoveMsgFn());
 		}
 	}
