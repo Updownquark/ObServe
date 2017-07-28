@@ -3,29 +3,29 @@ package org.observe.collect;
 import java.lang.ref.WeakReference;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Subscription;
 
 public class WeakConsumer<E> implements Consumer<E> {
-	private final WeakConsumerGroup theGroup;
-	private final WeakReference<Consumer<? super E>> theAction;
+	private final WeakReference<WeakConsumerGroup> theGroup;
+	private final int theActionIndex;
 	private Subscription theSubscription;
 
-	private WeakConsumer(WeakConsumerGroup group, Consumer<? super E> action) {
-		theGroup = group;
-		theAction = new WeakReference<>(action);
+	private WeakConsumer(WeakConsumerGroup group, int index) {
+		theGroup = new WeakReference<>(group);
+		theActionIndex = index;
 	}
 
 	@Override
 	public void accept(E evt) {
-		Consumer<? super E> action = theAction.get();
-		if (action != null)
-			action.accept(evt);
-		else
+		WeakConsumerGroup group = theGroup.get();
+		if (group == null) {
 			theSubscription.unsubscribe();
+			theSubscription = null;
+		} else
+			((Consumer<E>) group.theActions[theActionIndex]).accept(evt);
 	}
 
 	public static WeakConsumerBuilder build() {
@@ -65,14 +65,17 @@ public class WeakConsumer<E> implements Consumer<E> {
 	}
 
 	public static class WeakConsumerGroup implements Subscription {
-		private final AtomicReference<WeakConsumer<?>[]> theActions;
+		private final WeakConsumer<?> theWeakActions;
+		private final Consumer<?>[] theActions;
 
-		public WeakConsumerGroup(WeakConsumer<?>[] actions) {
-			theActions = new AtomicReference<>(actions);
+		public WeakConsumerGroup(WeakConsumer<?> weakActions, Consumer<?>[] actions) {
+			theWeakActions = weakActions;
+			theActions = actions;
 		}
 
 		@Override
 		public void unsubscribe() {
+
 			WeakConsumer<?>[] actions = theActions.getAndSet(null);
 			if (actions == null)
 				return;
