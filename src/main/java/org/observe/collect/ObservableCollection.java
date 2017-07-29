@@ -29,10 +29,10 @@ import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
 import org.qommons.collect.BetterList;
-import org.qommons.collect.ElementHandle;
+import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ElementSpliterator;
-import org.qommons.collect.MutableElementHandle;
+import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.SimpleCause;
 
 import com.google.common.reflect.TypeParameter;
@@ -60,8 +60,8 @@ import com.google.common.reflect.TypeToken;
  * <li><b>Enhanced {@link Spliterator}s</b> ObservableCollections must implement {@link #mutableSpliterator(boolean)}, which returns a
  * {@link org.qommons.collect.MutableElementSpliterator}, which is an enhanced {@link Spliterator}. This has potential for the improved
  * performance associated with using {@link Spliterator} instead of {@link Iterator} as well as the reversibility and ability to
- * {@link MutableElementHandle#add(Object, boolean) add}, {@link MutableElementHandle#remove() remove}, or
- * {@link MutableElementHandle#set(Object) replace} elements during iteration.</li>
+ * {@link MutableCollectionElement#add(Object, boolean) add}, {@link MutableCollectionElement#remove() remove}, or
+ * {@link MutableCollectionElement#set(Object) replace} elements during iteration.</li>
  * <li><b>Transactionality</b> ObservableCollections support the {@link org.qommons.Transactable} interface, allowing callers to reserve a
  * collection for write or to ensure that the collection is not written to during an operation (for implementations that support this. See
  * {@link org.qommons.Transactable#isLockSupported() isLockSupported()}).</li>
@@ -464,7 +464,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 *         the given value
 	 * @throws IllegalArgumentException If the given value may not be an element of this collection
 	 */
-	default ObservableValue<ElementHandle<? extends E>> observeElement(E value, boolean first) {
+	default ObservableValue<CollectionElement<? extends E>> observeElement(E value, boolean first) {
 		return new ObservableCollectionImpl.ObservableEquivalentFinder<>(this, value, first);
 	}
 
@@ -686,7 +686,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * <li>Sorted list: <code>{@link CollectionDataFlow#sorted(Comparator) .sorted(comparator)}</code></li>
 	 * <li>list with no null values: <code>
 	 * 		{@link CollectionDataFlow#filterModification() .filterModification()}{@link ModFilterBuilder#filterAdd(Function)
-	 *  	.filterAdd}(value->value!=null ? null : {@link org.qommons.collect.MutableElementHandle.StdMsg#NULL_DISALLOWED StdMsg.NULL_DISALLOWED})
+	 *  	.filterAdd}(value->value!=null ? null : {@link org.qommons.collect.MutableCollectionElement.StdMsg#NULL_DISALLOWED StdMsg.NULL_DISALLOWED})
 	 *  	</code></li>
 	 * </ul>
 	 * </p>
@@ -736,7 +736,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 *         supported by the flow API.
 	 */
 	static <E> CollectionDataFlow<E, E, E> constant(TypeToken<E> type, Collection<? extends E> values) {
-		return createUnsafe(type, values).filterModification().immutable(MutableElementHandle.StdMsg.UNSUPPORTED_OPERATION, false).build();
+		return createUnsafe(type, values).filterModification().immutable(MutableCollectionElement.StdMsg.UNSUPPORTED_OPERATION, false).build();
 	}
 
 	/**
@@ -917,7 +917,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 				if (type == null || type.isInstance(value))
 					return null;
 				else
-					return MutableElementHandle.StdMsg.BAD_TYPE;
+					return MutableCollectionElement.StdMsg.BAD_TYPE;
 			}).map(TypeToken.of(type)).map(v -> (X) v);
 		}
 
@@ -980,9 +980,9 @@ public interface ObservableCollection<E> extends BetterList<E> {
 			return map(valueType).map(map).refreshEach(v -> v.noInit()).map(target).withElementSetting((ov, newValue, doSet, cause) -> {
 				// Allow setting elements via the wrapped settable value
 				if (!(ov instanceof SettableValue))
-					return MutableElementHandle.StdMsg.UNSUPPORTED_OPERATION;
+					return MutableCollectionElement.StdMsg.UNSUPPORTED_OPERATION;
 				else if (newValue != null && !ov.getType().getRawType().isInstance(newValue))
-					return MutableElementHandle.StdMsg.BAD_TYPE;
+					return MutableCollectionElement.StdMsg.BAD_TYPE;
 				String msg = ((SettableValue<X>) ov).isAcceptable(newValue);
 				if (msg != null)
 					return msg;
@@ -1131,7 +1131,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 				if (type == null || type.isInstance(value))
 					return null;
 				else
-					return MutableElementHandle.StdMsg.BAD_TYPE;
+					return MutableCollectionElement.StdMsg.BAD_TYPE;
 			}).mapEquivalent(TypeToken.of(type)).map(v -> (X) v, v -> (T) v);
 		}
 

@@ -13,10 +13,10 @@ import org.qommons.collect.BetterHashMap;
 import org.qommons.collect.BetterHashSet;
 import org.qommons.collect.BetterMap;
 import org.qommons.collect.BetterSet;
-import org.qommons.collect.ElementHandle;
+import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
-import org.qommons.collect.MutableElementHandle;
+import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.collect.MutableMapEntryHandle;
 import org.qommons.tree.BetterTreeMap;
@@ -265,8 +265,8 @@ public interface Equivalence<E> {
 			return BetterSet.super.toArray();
 		}
 
-		private ElementHandle<T2> handleFor(ElementHandle<? extends E> el) {
-			return new ElementHandle<T2>() {
+		private CollectionElement<T2> handleFor(CollectionElement<? extends E> el) {
+			return new CollectionElement<T2>() {
 				@Override
 				public ElementId getElementId() {
 					return el.getElementId();
@@ -279,8 +279,8 @@ public interface Equivalence<E> {
 			};
 		}
 
-		private MutableElementHandle<T2> mutableHandleFor(MutableElementHandle<? extends E> el) {
-			return new MutableElementHandle<T2>() {
+		private MutableCollectionElement<T2> mutableHandleFor(MutableCollectionElement<? extends E> el) {
+			return new MutableCollectionElement<T2>() {
 				@Override
 				public ElementId getElementId() {
 					return el.getElementId();
@@ -298,12 +298,12 @@ public interface Equivalence<E> {
 
 				@Override
 				public String isAcceptable(T2 value) {
-					return ((MutableElementHandle<E>) el).isAcceptable(theReverse.apply(value));
+					return ((MutableCollectionElement<E>) el).isAcceptable(theReverse.apply(value));
 				}
 
 				@Override
 				public void set(T2 value) throws UnsupportedOperationException, IllegalArgumentException {
-					((MutableElementHandle<E>) el).set(theReverse.apply(value));
+					((MutableCollectionElement<E>) el).set(theReverse.apply(value));
 				}
 
 				@Override
@@ -318,33 +318,33 @@ public interface Equivalence<E> {
 
 				@Override
 				public String canAdd(T2 value, boolean before) {
-					return ((MutableElementHandle<E>) el).canAdd(theReverse.apply(value), before);
+					return ((MutableCollectionElement<E>) el).canAdd(theReverse.apply(value), before);
 				}
 
 				@Override
 				public ElementId add(T2 value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-					return ((MutableElementHandle<E>) el).add(theReverse.apply(value), before);
+					return ((MutableCollectionElement<E>) el).add(theReverse.apply(value), before);
 				}
 			};
 		}
 
 		@Override
-		public boolean forElement(T2 value, Consumer<? super ElementHandle<? extends T2>> onElement, boolean first) {
+		public boolean forElement(T2 value, Consumer<? super CollectionElement<? extends T2>> onElement, boolean first) {
 			return theWrapped.forElement(theReverse.apply(value), el -> onElement.accept(handleFor(el)), first);
 		}
 
 		@Override
-		public boolean forMutableElement(T2 value, Consumer<? super MutableElementHandle<? extends T2>> onElement, boolean first) {
+		public boolean forMutableElement(T2 value, Consumer<? super MutableCollectionElement<? extends T2>> onElement, boolean first) {
 			return theWrapped.forMutableElement(theReverse.apply(value), el -> onElement.accept(mutableHandleFor(el)), first);
 		}
 
 		@Override
-		public <X> X ofElementAt(ElementId elementId, Function<? super ElementHandle<? extends T2>, X> onElement) {
+		public <X> X ofElementAt(ElementId elementId, Function<? super CollectionElement<? extends T2>, X> onElement) {
 			return theWrapped.ofElementAt(elementId, el -> onElement.apply(handleFor(el)));
 		}
 
 		@Override
-		public <X> X ofMutableElementAt(ElementId elementId, Function<? super MutableElementHandle<? extends T2>, X> onElement) {
+		public <X> X ofMutableElementAt(ElementId elementId, Function<? super MutableCollectionElement<? extends T2>, X> onElement) {
 			return theWrapped.ofMutableElementAt(elementId, el -> onElement.apply(mutableHandleFor(el)));
 		}
 
@@ -408,22 +408,22 @@ public interface Equivalence<E> {
 			}
 
 			@Override
-			public boolean tryAdvanceElement(Consumer<? super ElementHandle<T2>> action) {
+			public boolean tryAdvanceElement(Consumer<? super CollectionElement<T2>> action) {
 				return theWrapped.tryAdvanceElement(el -> action.accept(handleFor(el)));
 			}
 
 			@Override
-			public boolean tryReverseElement(Consumer<? super ElementHandle<T2>> action) {
+			public boolean tryReverseElement(Consumer<? super CollectionElement<T2>> action) {
 				return theWrapped.tryReverseElement(el -> action.accept(handleFor(el)));
 			}
 
 			@Override
-			public boolean tryAdvanceElementM(Consumer<? super MutableElementHandle<T2>> action) {
+			public boolean tryAdvanceElementM(Consumer<? super MutableCollectionElement<T2>> action) {
 				return theWrapped.tryAdvanceElementM(el -> action.accept(mutableHandleFor(el)));
 			}
 
 			@Override
-			public boolean tryReverseElementM(Consumer<? super MutableElementHandle<T2>> action) {
+			public boolean tryReverseElementM(Consumer<? super MutableCollectionElement<T2>> action) {
 				return theWrapped.tryReverseElementM(el -> action.accept(mutableHandleFor(el)));
 			}
 

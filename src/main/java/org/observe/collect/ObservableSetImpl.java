@@ -19,7 +19,7 @@ import org.observe.collect.ObservableCollectionImpl.FlattenedValueCollection;
 import org.observe.collect.ObservableCollectionImpl.ReversedObservableCollection;
 import org.qommons.collect.BetterMap;
 import org.qommons.collect.ElementId;
-import org.qommons.collect.MutableElementHandle;
+import org.qommons.collect.MutableCollectionElement;
 import org.qommons.tree.BetterTreeSet;
 import org.qommons.tree.BinaryTreeNode;
 
@@ -297,7 +297,7 @@ public class ObservableSetImpl {
 		public ObservableCollectionDataFlowImpl.FilterMapResult<T, T> canAddTop(
 			ObservableCollectionDataFlowImpl.FilterMapResult<T, T> toAdd) {
 			if (theElementsByValue.containsKey(toAdd.source))
-				toAdd.error = MutableElementHandle.StdMsg.ELEMENT_EXISTS;
+				toAdd.error = MutableCollectionElement.StdMsg.ELEMENT_EXISTS;
 			else
 				toAdd.result = toAdd.source;
 			return toAdd;
@@ -426,7 +426,7 @@ public class ObservableSetImpl {
 
 			@Override
 			public ObservableCollectionDataFlowImpl.ElementUpdateResult update(ObservableCollectionDataFlowImpl.CollectionUpdate update,
-				Consumer<Consumer<MutableElementHandle<? extends E>>> sourceElement) {
+				Consumer<Consumer<MutableCollectionElement<? extends E>>> sourceElement) {
 				if (update instanceof ObservableCollectionDataFlowImpl.RemoveElementUpdate && applies(update)) {
 					sourceElement.accept(el -> el.remove());
 					return ObservableCollectionDataFlowImpl.ElementUpdateResult.AppliedNoUpdate; // We're removed now, so obviously don't

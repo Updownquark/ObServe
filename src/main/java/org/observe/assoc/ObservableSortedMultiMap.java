@@ -13,10 +13,10 @@ import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
 import org.observe.collect.ObservableSortedSet;
 import org.qommons.Transaction;
-import org.qommons.collect.ElementHandle;
+import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
-import org.qommons.collect.MutableElementHandle;
-import org.qommons.collect.MutableElementHandle.StdMsg;
+import org.qommons.collect.MutableCollectionElement;
+import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.MutableElementSpliterator;
 
 import com.google.common.reflect.TypeParameter;
@@ -319,7 +319,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 			}
 
 			@Override
-			public boolean forElement(Comparable<? super K> search, Consumer<? super ElementHandle<? extends K>> onElement,
+			public boolean forElement(Comparable<? super K> search, Consumer<? super CollectionElement<? extends K>> onElement,
 				SortedSearchFilter filter) {
 				try (Transaction t = lock(false, null)) {
 					DerivedCollectionElement<OK, K> element = getPresentElements().relative(el -> search.compareTo(el.get()), filter);
@@ -331,7 +331,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 			}
 
 			@Override
-			public boolean forMutableElement(Comparable<? super K> search, Consumer<? super MutableElementHandle<? extends K>> onElement,
+			public boolean forMutableElement(Comparable<? super K> search, Consumer<? super MutableCollectionElement<? extends K>> onElement,
 				SortedSearchFilter filter) {
 				try (Transaction t = lock(true, null)) {
 					DerivedCollectionElement<OK, K> element = getPresentElements().relative(el -> search.compareTo(el.get()), filter);

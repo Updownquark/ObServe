@@ -20,10 +20,10 @@ import org.observe.collect.ObservableSetImpl.UniqueBaseFlow;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
-import org.qommons.collect.ElementHandle;
+import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
-import org.qommons.collect.MutableElementHandle;
-import org.qommons.collect.MutableElementHandle.StdMsg;
+import org.qommons.collect.MutableCollectionElement;
+import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.MutableElementSpliterator;
 
 import com.google.common.reflect.TypeParameter;
@@ -72,7 +72,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		protected boolean find(Consumer<? super ElementHandle<? extends E>> onElement) {
+		protected boolean find(Consumer<? super CollectionElement<? extends E>> onElement) {
 			return getCollection().forElement(theSearch, onElement, theFilter);
 		}
 
@@ -230,13 +230,13 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public boolean forElement(Comparable<? super E> value, Consumer<? super ElementHandle<? extends E>> onElement,
+		public boolean forElement(Comparable<? super E> value, Consumer<? super CollectionElement<? extends E>> onElement,
 			SortedSearchFilter filter) {
 			return getWrapped().forElement(value, el -> onElement.accept(el.reverse()), filter.opposite());
 		}
 
 		@Override
-		public boolean forMutableElement(Comparable<? super E> value, Consumer<? super MutableElementHandle<? extends E>> onElement,
+		public boolean forMutableElement(Comparable<? super E> value, Consumer<? super MutableCollectionElement<? extends E>> onElement,
 			SortedSearchFilter filter) {
 			return getWrapped().forMutableElement(value, el -> onElement.accept(el.reverse()), filter.opposite());
 		}
@@ -563,13 +563,13 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public boolean forElement(Comparable<? super T> search, Consumer<? super ElementHandle<? extends T>> onElement,
+		public boolean forElement(Comparable<? super T> search, Consumer<? super CollectionElement<? extends T>> onElement,
 			SortedSearchFilter filter) {
 			return getSource().forElement(mappedSearch(search), el -> onElement.accept(elementFor(el)), filter);
 		}
 
 		@Override
-		public boolean forMutableElement(Comparable<? super T> search, Consumer<? super MutableElementHandle<? extends T>> onElement,
+		public boolean forMutableElement(Comparable<? super T> search, Consumer<? super MutableCollectionElement<? extends T>> onElement,
 			SortedSearchFilter filter) {
 			return getSource().forMutableElement(mappedSearch(search), el -> onElement.accept(mutableElementFor(el)), filter);
 		}
@@ -605,7 +605,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public boolean forElement(Comparable<? super T> search, Consumer<? super ElementHandle<? extends T>> onElement,
+		public boolean forElement(Comparable<? super T> search, Consumer<? super CollectionElement<? extends T>> onElement,
 			SortedSearchFilter filter) {
 			try (Transaction t = lock(false, null)) {
 				DerivedCollectionElement<E, T> element = getPresentElements().relative(el -> search.compareTo(el.get()), filter);
@@ -617,7 +617,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public boolean forMutableElement(Comparable<? super T> search, Consumer<? super MutableElementHandle<? extends T>> onElement,
+		public boolean forMutableElement(Comparable<? super T> search, Consumer<? super MutableCollectionElement<? extends T>> onElement,
 			SortedSearchFilter filter) {
 			try (Transaction t = lock(true, null)) {
 				DerivedCollectionElement<E, T> element = getPresentElements().relative(el -> search.compareTo(el.get()), filter);
@@ -681,7 +681,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public boolean forElement(Comparable<? super E> value, Consumer<? super ElementHandle<? extends E>> onElement,
+		public boolean forElement(Comparable<? super E> value, Consumer<? super CollectionElement<? extends E>> onElement,
 			SortedSearchFilter filter) {
 			ObservableSortedSet<E> wrapped = getWrapped().get();
 			if (wrapped == null)
@@ -690,7 +690,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public boolean forMutableElement(Comparable<? super E> value, Consumer<? super MutableElementHandle<? extends E>> onElement,
+		public boolean forMutableElement(Comparable<? super E> value, Consumer<? super MutableCollectionElement<? extends E>> onElement,
 			SortedSearchFilter filter) {
 			ObservableSortedSet<E> wrapped = getWrapped().get();
 			if (wrapped == null)
