@@ -2,7 +2,6 @@ package org.observe.collect;
 
 import java.util.Collection;
 import java.util.Iterator;
-import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import org.observe.ObservableValue;
@@ -104,11 +103,6 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 		return BetterSortedSet.super.last();
 	}
 
-	@Override
-	default boolean forValue(Comparable<? super E> search, Consumer<? super E> onValue, SortedSearchFilter filter) {
-		return BetterSortedSet.super.forValue(search, onValue, filter);
-	}
-
 	/**
 	 * Returns a value at or adjacent to another value
 	 *
@@ -117,12 +111,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 	 * @return An observable value with the result of the operation
 	 */
 	default ObservableValue<E> observeRelative(Comparable<? super E> search, SortedSearchFilter filter, Supplier<? extends E> def) {
-		return new ObservableSortedSetImpl.RelativeFinder<E>(this, search, filter).mapV(getType(), el -> el != null ? el.get() : def.get());
-	}
-
-	@Override
-	default E relative(Comparable<? super E> search, SortedSearchFilter filter) {
-		return observeRelative(search, filter, () -> null).get();
+		return new ObservableSortedSetImpl.RelativeFinder<>(this, search, filter).mapV(getType(), el -> el != null ? el.get() : def.get());
 	}
 
 	@Override

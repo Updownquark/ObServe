@@ -356,7 +356,7 @@ public class ObservableSetImpl {
 			}
 
 			private void removeFromSet(Object cause) {
-				theValueElements.forMutableElementAt(theNode, el -> el.remove());
+				theValueElements.forMutableElement(theNode.getElementId(), el -> el.remove());
 				theNode = null;
 				if (theValueElements.isEmpty())
 					theElementsByValue.remove(theValue);

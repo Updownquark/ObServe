@@ -5,10 +5,15 @@ import org.junit.runners.Suite;
 import org.junit.runners.Suite.SuiteClasses;
 import org.observe.assoc.ObservableAssocTest;
 import org.observe.collect.ObservableCollectionsTest;
-import org.qommons.tree.TreeUtilsTest;
+import org.qommons.QommonsTests;
 
 /** Runs all unit tests in the ObServe project. */
 @RunWith(Suite.class)
-@SuiteClasses({ObservableTest.class, ObservableCollectionsTest.class, TreeUtilsTest.class, ObservableAssocTest.class})
+@SuiteClasses({ //
+	QommonsTests.class, //
+	ObservableTest.class, //
+	ObservableCollectionsTest.class, //
+	ObservableAssocTest.class//
+})
 public class ObserveTests {
 }

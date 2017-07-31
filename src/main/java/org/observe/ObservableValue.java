@@ -11,6 +11,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
+import org.observe.collect.ObservableCollection;
 import org.qommons.BiTuple;
 import org.qommons.ListenerSet;
 import org.qommons.TriFunction;
@@ -400,9 +401,10 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * Creates an observable value that reflects the value of the first value in the given sequence passing the given test, or the value
 	 * given by the default if none of the values in the sequence pass. This can also be accomplished via:
 	 *
-	 * <code>
-	 * 	{@link ObservableList#constant(TypeToken, Object...) ObservableList.constant(type, values)}
-	 * {@link ObservableIndexedCollection#findFirst(Predicate) .findFirst(test)}{{@link #mapV(Function) .mapV(v->v!=null ? v : def.get()}
+	 * TODO Fix this <code>
+	 * 	{@link ObservableCollection#constant(TypeToken, Object...) ObservableList.constant(type, values)}.collect()
+	 * {@link ObservableCollection#observeFind(Predicate, Supplier, boolean) .observeFind(test, ()->null, true)}
+	 * {{@link #mapV(Function) .mapV(v->v!=null ? v : def.get()}
 	 * </code>
 	 *
 	 * but this method only subscribes to the values in the sequence up to the one that has a passing value. This can be of great advantage

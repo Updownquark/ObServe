@@ -329,23 +329,24 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public boolean forElement(T2 value, Consumer<? super CollectionElement<? extends T2>> onElement, boolean first) {
-			return theWrapped.forElement(theReverse.apply(value), el -> onElement.accept(handleFor(el)), first);
+		public CollectionElement<T2> getElement(T2 value, boolean first) {
+			CollectionElement<E> wrapEl = theWrapped.getElement(theReverse.apply(value), first);
+			return wrapEl == null ? null : handleFor(wrapEl);
 		}
 
 		@Override
-		public boolean forMutableElement(T2 value, Consumer<? super MutableCollectionElement<? extends T2>> onElement, boolean first) {
-			return theWrapped.forMutableElement(theReverse.apply(value), el -> onElement.accept(mutableHandleFor(el)), first);
+		public CollectionElement<T2> getElement(ElementId id) {
+			return handleFor(theWrapped.getElement(id));
 		}
 
 		@Override
-		public <X> X ofElementAt(ElementId elementId, Function<? super CollectionElement<? extends T2>, X> onElement) {
-			return theWrapped.ofElementAt(elementId, el -> onElement.apply(handleFor(el)));
+		public <X> X ofMutableElement(ElementId element, Function<? super MutableCollectionElement<T2>, X> onElement) {
+			return theWrapped.ofMutableElement(element, el -> onElement.apply(mutableHandleFor(el)));
 		}
 
 		@Override
-		public <X> X ofMutableElementAt(ElementId elementId, Function<? super MutableCollectionElement<? extends T2>, X> onElement) {
-			return theWrapped.ofMutableElementAt(elementId, el -> onElement.apply(mutableHandleFor(el)));
+		public MutableElementSpliterator<T2> mutableSpliterator(ElementId element, boolean asNext) {
+			return new MappedMutableSpliterator(theWrapped.mutableSpliterator(element, asNext));
 		}
 
 		@Override
@@ -359,8 +360,8 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public ElementId addElement(T2 value) {
-			return theWrapped.addElement(theReverse.apply(value));
+		public CollectionElement<T2> addElement(T2 value) {
+			return handleFor(theWrapped.addElement(theReverse.apply(value)));
 		}
 
 		@Override
@@ -455,8 +456,8 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public ElementId putEntry(T2 key, V value) {
-			return theWrapped.putEntry(theReverse.apply(key), value);
+		public MapEntryHandle<T2, V> putEntry(T2 key, V value) {
+			return handleFor(theWrapped.putEntry(theReverse.apply(key), value));
 		}
 
 		private MapEntryHandle<T2, V> handleFor(MapEntryHandle<E, V> entry) {
@@ -533,18 +534,14 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public boolean forEntry(T2 key, Consumer<? super MapEntryHandle<T2, V>> onEntry) {
-			return theWrapped.forEntry(theReverse.apply(key), entry -> onEntry.accept(handleFor(entry)));
+		public MapEntryHandle<T2, V> getEntry(T2 key) {
+			MapEntryHandle<E, V> wrapEntry = theWrapped.getEntry(theReverse.apply(key));
+			return wrapEntry == null ? null : handleFor(wrapEntry);
 		}
 
 		@Override
-		public boolean forMutableEntry(T2 key, Consumer<? super MutableMapEntryHandle<T2, V>> onEntry) {
-			return theWrapped.forMutableEntry(theReverse.apply(key), entry -> onEntry.accept(mutableHandleFor(entry)));
-		}
-
-		@Override
-		public <X> X ofEntry(ElementId entryId, Function<? super MapEntryHandle<T2, V>, X> onEntry) {
-			return theWrapped.ofEntry(entryId, entry -> onEntry.apply(handleFor(entry)));
+		public MapEntryHandle<T2, V> getEntry(ElementId entryId) {
+			return handleFor(theWrapped.getEntry(entryId));
 		}
 
 		@Override

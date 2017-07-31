@@ -39,13 +39,12 @@ public class ObservableTest {
 	/** Tests {@link Observable#filter(java.util.function.Function)} */
 	@Test
 	public void filter() {
-		DefaultObservable<Integer> obs = new DefaultObservable<>();
-		Observer<Integer> controller = obs.control(null);
+		SimpleObservable<Integer> obs = new SimpleObservable<>();
 		int [] received = new int[] {0};
 		obs.filter(value -> value % 3 == 0).act(value -> received[0] = value);
 
 		for(int i = 1; i < 30; i++) {
-			controller.onNext(i);
+			obs.onNext(i);
 			assertEquals((i / 3) * 3, received[0]);
 		}
 	}
@@ -53,8 +52,7 @@ public class ObservableTest {
 	/** Tests {@link Observable#take(int)} */
 	@Test
 	public void takeNumber() {
-		DefaultObservable<Integer> obs = new DefaultObservable<>();
-		Observer<Integer> controller = obs.control(null);
+		SimpleObservable<Integer> obs = new SimpleObservable<>();
 		int [] received = new int[] {0};
 		boolean [] complete = new boolean[1];
 		Observable<Integer> take = obs.take(10);
@@ -62,7 +60,7 @@ public class ObservableTest {
 		take.completed().act(value -> complete[0] = true);
 
 		for(int i = 1; i < 30; i++) {
-			controller.onNext(i);
+			obs.onNext(i);
 			if(i < 10) {
 				assertEquals(i, received[0]);
 				assertEquals(false, complete[0]);
@@ -76,10 +74,8 @@ public class ObservableTest {
 	/** Tests {@link Observable#takeUntil(Observable)} */
 	@Test
 	public void takeUntil() {
-		DefaultObservable<Integer> obs = new DefaultObservable<>();
-		Observer<Integer> controller = obs.control(null);
-		DefaultObservable<Boolean> stop = new DefaultObservable<>();
-		Observer<Boolean> stopControl = stop.control(null);
+		SimpleObservable<Integer> obs = new SimpleObservable<>();
+		SimpleObservable<Boolean> stop = new SimpleObservable<>();
 		int [] received = new int[] {0};
 		int [] count = new int[1];
 		boolean [] complete = new boolean[1];
@@ -91,30 +87,29 @@ public class ObservableTest {
 		take.completed().act(value -> complete[0] = true);
 
 		for(int i = 1; i <= 30; i++) {
-			controller.onNext(i);
+			obs.onNext(i);
 			assertEquals(i, received[0]);
 			assertEquals(i, count[0]);
 		}
-		stopControl.onNext(true);
+		stop.onNext(true);
 		assertEquals(true, complete[0]);
 		final int finalValue = received[0];
 		for(int i = 1; i <= 30; i++) {
-			controller.onNext(i);
+			obs.onNext(i);
 			assertEquals(finalValue, received[0]);
 			assertEquals(30, count[0]);
 		}
 
 		complete[0] = false;
-		controller.onCompleted(0);
+		obs.onCompleted(0);
 		assertEquals(false, complete[0]);
 
-		obs = new DefaultObservable<>();
-		controller = obs.control(null);
+		obs = new SimpleObservable<>();
 		complete[0] = false;
 		take = obs.takeUntil(stop);
 		take.completed().act(value -> complete[0] = true);
 
-		controller.onCompleted(0);
+		obs.onCompleted(0);
 		assertEquals(true, complete[0]);
 	}
 
@@ -123,8 +118,7 @@ public class ObservableTest {
 	public void valueTakeUntil() {
 		SimpleSettableValue<Integer> obs = new SimpleSettableValue<>(Integer.TYPE, false);
 		obs.set(0, null);
-		DefaultObservable<Boolean> stop = new DefaultObservable<>();
-		Observer<Boolean> stopControl = stop.control(null);
+		SimpleObservable<Boolean> stop = new SimpleObservable<>();
 		int [] received = new int[] {0};
 		int [] count = new int[1];
 		boolean [] complete = new boolean[1];
@@ -140,7 +134,7 @@ public class ObservableTest {
 			assertEquals(i, received[0]);
 			assertEquals(i + 1, count[0]); // Plus 1 because of the initialization
 		}
-		stopControl.onNext(true);
+		stop.onNext(true);
 		assertEquals(true, complete[0]);
 		final int finalValue = received[0];
 		for(int i = 1; i <= 30; i++) {
@@ -153,14 +147,13 @@ public class ObservableTest {
 	/** Tests {@link Observable#skip(int)} */
 	@Test
 	public void skip() {
-		DefaultObservable<Integer> obs = new DefaultObservable<>();
-		Observer<Integer> controller = obs.control(null);
+		SimpleObservable<Integer> obs = new SimpleObservable<>();
 
 		int [] received = new int[1];
 		obs.skip(5).act(value -> received[0] = value);
 
 		for(int i = 0; i < 10; i++) {
-			controller.onNext(i);
+			obs.onNext(i);
 			int correct = i < 5 ? 0 : i;
 			assertEquals(correct, received[0]);
 		}
@@ -172,8 +165,7 @@ public class ObservableTest {
 	 */
 	@Test
 	public void chaining() {
-		DefaultObservable<Integer> obs = new DefaultObservable<>();
-		Observer<Integer> controller = obs.control(null);
+		SimpleObservable<Integer> obs = new SimpleObservable<>();
 		int [] received = new int[] {0};
 		ChainingObservable<Integer> sub = obs.chain().act(value -> received[0] = value);
 		int [] received2 = new int[] {0};
@@ -182,7 +174,7 @@ public class ObservableTest {
 		sub2.act(value -> received3[0] = value);
 
 		for(int i = 1; i < 30; i++) {
-			controller.onNext(i);
+			obs.onNext(i);
 			assertEquals(i, received[0]);
 			assertEquals(i, received2[0]);
 			assertEquals(i, received3[0]);
@@ -190,7 +182,7 @@ public class ObservableTest {
 		final int finalValue = received[0];
 		sub2.unsubscribe();
 		for(int i = 1; i < 30; i++) {
-			controller.onNext(i);
+			obs.onNext(i);
 			assertEquals(finalValue, received[0]);
 			assertEquals(finalValue, received2[0]);
 			assertEquals(finalValue, received3[0]);
@@ -200,16 +192,15 @@ public class ObservableTest {
 	/** Tests {@link Observable#completed()} */
 	@Test
 	public void completed() {
-		DefaultObservable<Integer> obs = new DefaultObservable<>();
-		Observer<Integer> controller = obs.control(null);
+		SimpleObservable<Integer> obs = new SimpleObservable<>();
 		int [] received = new int[] {0};
 		obs.completed().act(value -> received[0] = value);
 
 		for(int i = 1; i < 30; i++) {
-			controller.onNext(i);
+			obs.onNext(i);
 			assertEquals(0, received[0]);
 		}
-		controller.onCompleted(10);
+		obs.onCompleted(10);
 		assertEquals(10, received[0]);
 	}
 

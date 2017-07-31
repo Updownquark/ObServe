@@ -15,16 +15,14 @@ import org.observe.collect.ObservableCollection.UniqueSortedMappedCollectionBuil
 import org.observe.collect.ObservableCollection.UniqueSortedModFilterBuilder;
 import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.SortedManager;
 import org.observe.collect.ObservableSetImpl.UniqueBaseFlow;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
-import org.qommons.collect.ElementId;
-import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-import org.qommons.collect.MutableElementSpliterator;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -73,7 +71,11 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		protected boolean find(Consumer<? super CollectionElement<? extends E>> onElement) {
-			return getCollection().forElement(theSearch, onElement, theFilter);
+			CollectionElement<E> el = getCollection().search(theSearch, theFilter);
+			if (el == null)
+				return false;
+			onElement.accept(el);
+			return true;
 		}
 
 		@Override
@@ -230,25 +232,13 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public boolean forElement(Comparable<? super E> value, Consumer<? super CollectionElement<? extends E>> onElement,
-			SortedSearchFilter filter) {
-			return getWrapped().forElement(value, el -> onElement.accept(el.reverse()), filter.opposite());
+		public CollectionElement<E> search(Comparable<? super E> search, SortedSearchFilter filter) {
+			return getWrapped().search(v -> -search.compareTo(v), filter.opposite());
 		}
 
 		@Override
-		public boolean forMutableElement(Comparable<? super E> value, Consumer<? super MutableCollectionElement<? extends E>> onElement,
-			SortedSearchFilter filter) {
-			return getWrapped().forMutableElement(value, el -> onElement.accept(el.reverse()), filter.opposite());
-		}
-
-		@Override
-		public MutableElementSpliterator<E> mutableSpliterator(Comparable<? super E> value, boolean up) {
-			return getWrapped().mutableSpliterator(value, !up).reverse();
-		}
-
-		@Override
-		public ElementId addIfEmpty(E value) throws IllegalStateException {
-			return getWrapped().addIfEmpty(value);
+		public CollectionElement<E> addIfEmpty(E value) throws IllegalStateException {
+			return getWrapped().addIfEmpty(value).reverse();
 		}
 
 		@Override
@@ -563,25 +553,14 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public boolean forElement(Comparable<? super T> search, Consumer<? super CollectionElement<? extends T>> onElement,
-			SortedSearchFilter filter) {
-			return getSource().forElement(mappedSearch(search), el -> onElement.accept(elementFor(el)), filter);
+		public CollectionElement<T> search(Comparable<? super T> search, SortedSearchFilter filter) {
+			CollectionElement<E> srcEl = getSource().search(mappedSearch(search), filter);
+			return srcEl == null ? null : elementFor(srcEl);
 		}
 
 		@Override
-		public boolean forMutableElement(Comparable<? super T> search, Consumer<? super MutableCollectionElement<? extends T>> onElement,
-			SortedSearchFilter filter) {
-			return getSource().forMutableElement(mappedSearch(search), el -> onElement.accept(mutableElementFor(el)), filter);
-		}
-
-		@Override
-		public MutableElementSpliterator<T> mutableSpliterator(Comparable<? super T> search, boolean up) {
-			return new DerivedMutableSpliterator(getSource().mutableSpliterator(mappedSearch(search), up));
-		}
-
-		@Override
-		public ElementId addIfEmpty(T value) throws IllegalStateException {
-			return ObservableSortedSet.super.addElement(value);
+		public CollectionElement<T> addIfEmpty(T value) throws IllegalStateException {
+			return elementFor(getSource().addIfEmpty(getFlow().reverse(value).result));
 		}
 	}
 
@@ -605,40 +584,22 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public boolean forElement(Comparable<? super T> search, Consumer<? super CollectionElement<? extends T>> onElement,
-			SortedSearchFilter filter) {
-			try (Transaction t = lock(false, null)) {
-				DerivedCollectionElement<E, T> element = getPresentElements().relative(el -> search.compareTo(el.get()), filter);
-				if (element == null)
-					return false;
-				forElementAt(element, onElement);
-				return true;
-			}
+		public CollectionElement<T> search(Comparable<? super T> search, SortedSearchFilter filter) {
+			CollectionElement<DerivedCollectionElement<E, T>> presentEl = getPresentElements().search(el -> search.compareTo(el.get()),
+				filter);
+			return presentEl == null ? null : observableElementFor(presentEl.get());
 		}
 
 		@Override
-		public boolean forMutableElement(Comparable<? super T> search, Consumer<? super MutableCollectionElement<? extends T>> onElement,
-			SortedSearchFilter filter) {
+		public CollectionElement<T> addIfEmpty(T value) throws IllegalStateException {
+			if (!belongs(value))
+				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 			try (Transaction t = lock(true, null)) {
-				DerivedCollectionElement<E, T> element = getPresentElements().relative(el -> search.compareTo(el.get()), filter);
-				if (element == null)
-					return false;
-				forMutableElementAt(element, onElement);
-				return true;
-			}
-		}
-
-		@Override
-		public MutableElementSpliterator<T> mutableSpliterator(Comparable<? super T> search, boolean up) {
-			return spliterator(getPresentElements().spliterator(el -> search.compareTo(el.get()), up));
-		}
-
-		@Override
-		public ElementId addIfEmpty(T value) throws IllegalStateException {
-			try (Transaction t = lock(true, null)) {
-				if (!isEmpty())
-					throw new IllegalStateException("Set is not empty");
-				return super.addElement(value);
+				FilterMapResult<T, E> reverse = getFlow().reverse(value);
+				if (reverse.error != null)
+					throw new IllegalArgumentException(reverse.error);
+				CollectionElement<E> added = getSource().addElement(reverse.result);
+				return observableElementFor(getPresentElement(added.getElementId()));
 			}
 		}
 	}
@@ -674,6 +635,14 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
+		public CollectionElement<E> search(Comparable<? super E> search, SortedSearchFilter filter) {
+			ObservableSortedSet<E> wrapped = getWrapped().get();
+			if (wrapped == null)
+				return null;
+			return wrapped.search(search, filter);
+		}
+
+		@Override
 		public ObservableValue<E> observeRelative(Comparable<? super E> value, SortedSearchFilter filter, Supplier<? extends E> def) {
 			return ObservableValue
 				.flatten(getWrapped().mapV(new TypeToken<ObservableValue<E>>() {}.where(new TypeParameter<E>() {}, getType()),
@@ -681,33 +650,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public boolean forElement(Comparable<? super E> value, Consumer<? super CollectionElement<? extends E>> onElement,
-			SortedSearchFilter filter) {
-			ObservableSortedSet<E> wrapped = getWrapped().get();
-			if (wrapped == null)
-				return false;
-			return wrapped.forElement(value, onElement, filter);
-		}
-
-		@Override
-		public boolean forMutableElement(Comparable<? super E> value, Consumer<? super MutableCollectionElement<? extends E>> onElement,
-			SortedSearchFilter filter) {
-			ObservableSortedSet<E> wrapped = getWrapped().get();
-			if (wrapped == null)
-				return false;
-			return wrapped.forMutableElement(value, onElement, filter);
-		}
-
-		@Override
-		public MutableElementSpliterator<E> mutableSpliterator(Comparable<? super E> value, boolean up) {
-			ObservableSortedSet<E> wrapped = getWrapped().get();
-			if (wrapped == null)
-				return MutableElementSpliterator.empty();
-			return wrapped.mutableSpliterator(value, up);
-		}
-
-		@Override
-		public ElementId addIfEmpty(E value) throws IllegalStateException {
+		public CollectionElement<E> addIfEmpty(E value) throws IllegalStateException {
 			ObservableSortedSet<E> wrapped = getWrapped().get();
 			if (wrapped == null)
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);

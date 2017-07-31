@@ -3,7 +3,6 @@ package org.observe.assoc;
 import java.util.Comparator;
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Observable;
@@ -14,10 +13,7 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
 import org.observe.collect.ObservableSortedSet;
 import org.qommons.Transaction;
 import org.qommons.collect.CollectionElement;
-import org.qommons.collect.ElementId;
-import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-import org.qommons.collect.MutableElementSpliterator;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -305,7 +301,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 			}
 
 			@Override
-			public ElementId addIfEmpty(K value) throws IllegalStateException {
+			public CollectionElement<K> addIfEmpty(K value) throws IllegalStateException {
 				try (Transaction t = lock(true, null)) {
 					if (!isEmpty())
 						throw new IllegalStateException("Set is not empty");
@@ -319,32 +315,12 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 			}
 
 			@Override
-			public boolean forElement(Comparable<? super K> search, Consumer<? super CollectionElement<? extends K>> onElement,
-				SortedSearchFilter filter) {
-				try (Transaction t = lock(false, null)) {
-					DerivedCollectionElement<OK, K> element = getPresentElements().relative(el -> search.compareTo(el.get()), filter);
-					if (element == null)
-						return false;
-					forElementAt(element, onElement);
-					return true;
-				}
-			}
-
-			@Override
-			public boolean forMutableElement(Comparable<? super K> search, Consumer<? super MutableCollectionElement<? extends K>> onElement,
-				SortedSearchFilter filter) {
-				try (Transaction t = lock(true, null)) {
-					DerivedCollectionElement<OK, K> element = getPresentElements().relative(el -> search.compareTo(el.get()), filter);
-					if (element == null)
-						return false;
-					forMutableElementAt(element, onElement);
-					return true;
-				}
-			}
-
-			@Override
-			public MutableElementSpliterator<K> mutableSpliterator(Comparable<? super K> searchForStart, boolean higher) {
-				return spliterator(getPresentElements().spliterator(el -> searchForStart.compareTo(el.get()), higher));
+			public CollectionElement<K> search(Comparable<? super K> search, SortedSearchFilter filter) {
+				CollectionElement<DerivedCollectionElement<OK, K>> element = getPresentElements().search(el -> search.compareTo(el.get()),
+					filter);
+				if (element == null)
+					return null;
+				return observableElementFor(element.get());
 			}
 		}
 	}

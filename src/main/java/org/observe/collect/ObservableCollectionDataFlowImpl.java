@@ -158,7 +158,7 @@ public class ObservableCollectionDataFlowImpl {
 			return new ObservableMultiMap.DefaultMultiMapFlow<>(theSource, keyFlowed, theTargetType, key -> {
 				FilterMapResult<E, K> mappedKey = keyMgr.map(key);
 				if (mappedKey.error != null) // Invalid key
-					return ObservableCollection.constant(theTargetType);
+					return ObservableCollection.constant(theTargetType).flow();
 				Function<T, String> filter = value -> {
 					// Stinks to have to back up to the root type and then map back to the key,
 					// but right now the API doesn't allow for better
@@ -192,7 +192,7 @@ public class ObservableCollectionDataFlowImpl {
 			return new ObservableSortedMultiMap.DefaultSortedMultiMapFlow<>(theSource, keyFlowed, theTargetType, key -> {
 				FilterMapResult<E, K> mappedKey = keyMgr.map(key);
 				if (mappedKey.error != null) // Invalid key
-					return ObservableCollection.constant(theTargetType);
+					return ObservableCollection.constant(theTargetType).flow();
 				Function<T, String> filter = value -> {
 					// Stinks to have to back up to the root type and then map back to the key,
 					// but right now the API doesn't allow for better

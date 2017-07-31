@@ -661,7 +661,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 *         collection will be mutable unless prevented via the flow API. The flow is not {@link CollectionDataFlow#isLightWeight()
 	 *         light-weight}.
 	 */
-	static <E> CollectionDataFlow<E, E, E> create(TypeToken<E> type, E... initialValues) {
+	static <E> ObservableCollection<E> create(TypeToken<E> type, E... initialValues) {
 		return create(type, Arrays.asList(initialValues));
 	}
 
@@ -701,7 +701,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @return A {@link CollectionDataFlow} that can be used to create a mutable collection with any characteristics supported by the flow
 	 *         API.
 	 */
-	static <E> CollectionDataFlow<E, E, E> create(TypeToken<E> type, Collection<? extends E> initialValues) {
+	static <E> ObservableCollection<E> create(TypeToken<E> type, Collection<? extends E> initialValues) {
 		return ObservableCollectionImpl.create(type, true, initialValues);
 	}
 
@@ -713,7 +713,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @return A {@link CollectionDataFlow} that can be used to create a mutable collection with any characteristics supported by the flow
 	 *         API.
 	 */
-	static <E> CollectionDataFlow<E, E, E> createUnsafe(TypeToken<E> type, Collection<? extends E> initialValues) {
+	static <E> ObservableCollection<E> createUnsafe(TypeToken<E> type, Collection<? extends E> initialValues) {
 		return ObservableCollectionImpl.create(type, false, initialValues);
 	}
 
@@ -724,7 +724,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @return A {@link CollectionDataFlow} that can be used to create an immutable collection with the given values and any characteristics
 	 *         supported by the flow API.
 	 */
-	static <E> CollectionDataFlow<E, E, E> constant(TypeToken<E> type, E... values) {
+	static <E> ObservableCollection<E> constant(TypeToken<E> type, E... values) {
 		return constant(type, Arrays.asList(values));
 	}
 
@@ -735,8 +735,9 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @return A {@link CollectionDataFlow} that can be used to create an immutable collection with the given values and any characteristics
 	 *         supported by the flow API.
 	 */
-	static <E> CollectionDataFlow<E, E, E> constant(TypeToken<E> type, Collection<? extends E> values) {
-		return createUnsafe(type, values).filterModification().immutable(MutableCollectionElement.StdMsg.UNSUPPORTED_OPERATION, false).build();
+	static <E> ObservableCollection<E> constant(TypeToken<E> type, Collection<? extends E> values) {
+		return createUnsafe(type, values).flow().filterModification()
+			.immutable(MutableCollectionElement.StdMsg.UNSUPPORTED_OPERATION, false).build().collectLW();
 	}
 
 	/**
@@ -764,7 +765,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @return A collection containing all elements of the given collections
 	 */
 	public static <E> CollectionDataFlow<E, E, E> flattenCollections(ObservableCollection<? extends E>... colls) {
-		return flatten(constant(new TypeToken<ObservableCollection<? extends E>>() {}, colls).collect());
+		return flatten(constant(new TypeToken<ObservableCollection<? extends E>>() {}, colls));
 	}
 
 	/**

@@ -19,9 +19,6 @@ import javax.swing.tree.TreePath;
 
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.collect.ObservableCollection;
-import org.observe.collect.ObservableList;
-import org.observe.collect.ObservableIndexedCollection;
-import org.observe.collect.impl.ObservableArrayList;
 import org.observe.util.swing.ObservableComboBoxModel;
 import org.observe.util.swing.ObservableListModel;
 import org.observe.util.swing.ObservableListSelectionModel;
@@ -34,11 +31,11 @@ public class ObservableDemoGui extends JPanel {
 	static class ValueCategory {
 		final String name;
 
-		final ObservableList<Integer> values;
+		final ObservableCollection<Integer> values;
 
 		ValueCategory(String nm) {
 			name = nm;
-			values = new ObservableArrayList<>(new TypeToken<Integer>() {});
+			values = ObservableCollection.create(TypeToken.of(Integer.class)).collect();
 		}
 
 		@Override
@@ -47,7 +44,7 @@ public class ObservableDemoGui extends JPanel {
 		}
 	}
 
-	private ObservableList<ValueCategory> theCategories;
+	private ObservableCollection<ValueCategory> theCategories;
 	private SimpleSettableValue<ValueCategory> theSelectedCategory;
 	private ObservableCollection<Integer> theSelectedValues;
 
@@ -77,7 +74,7 @@ public class ObservableDemoGui extends JPanel {
 	}
 
 	private void initObservables() {
-		theCategories = new ObservableArrayList<>(new TypeToken<ValueCategory>() {});
+		theCategories = ObservableCollection.create(TypeToken.of(ValueCategory.class)).collect();
 		theSelectedCategory = new SimpleSettableValue<>(new TypeToken<ValueCategory>() {}, true);
 		theCategoryAddObservable = new SimpleObservable<>();
 		theCategoryRemoveObservable = new SimpleObservable<>();
@@ -103,7 +100,7 @@ public class ObservableDemoGui extends JPanel {
 		theCategoryRemoveButton = new JButton("Remove Selected Category");
 		theCategoryRemoveButton
 		.addActionListener(evt -> theCategoryRemoveObservable.onNext((ValueCategory) theCategoryCombo.getSelectedItem()));
-		ObservableList<Integer> selectedValues = ObservableList.flattenValue(theSelectedCategory.mapV(cat -> cat.values));
+		ObservableCollection<Integer> selectedValues = ObservableCollection.flattenValue(theSelectedCategory.mapV(cat -> cat.values));
 		theValueList = new JList<>(new ObservableListModel<>(selectedValues));
 		ObservableListSelectionModel<Integer> selectionModel = new ObservableListSelectionModel<>(selectedValues);
 		theValueList.setSelectionModel(selectionModel);
@@ -123,13 +120,13 @@ public class ObservableDemoGui extends JPanel {
 			}
 
 			@Override
-			protected ObservableIndexedCollection<?> getChildren(Object parent) {
+			protected ObservableCollection<?> getChildren(Object parent) {
 				if (parent instanceof String)
 					return theCategories;
 				else if (parent instanceof ValueCategory)
 					return ((ValueCategory) parent).values;
 				else
-					return ObservableList.constant(new TypeToken<Void>() {});
+					return ObservableCollection.constant(TypeToken.of(Void.class)).collect();
 			}
 		});
 		theValueTree.setEditable(false);
@@ -138,8 +135,12 @@ public class ObservableDemoGui extends JPanel {
 			private ObservableMultiMap<Long, Integer> theMap;
 
 			{
-				ObservableList<Integer> values = ObservableList.flattenValue(theSelectedCategory.mapV(cat -> cat.values));
-				theMap = values.groupBy(v -> Long.valueOf(v % 5));
+				ObservableCollection<Integer> values = ObservableCollection.flattenValue(theSelectedCategory.mapV(cat -> cat.values));
+				theMap = values.flow()
+					.groupBy(//
+						vals -> vals.map(TypeToken.of(Long.class)).map(v -> Long.valueOf(v % 5)).unique(false), //
+						true)
+					.collect();
 			}
 
 			@Override
@@ -151,13 +152,13 @@ public class ObservableDemoGui extends JPanel {
 			public void valueForPathChanged(TreePath path, Object newValue) {}
 
 			@Override
-			protected ObservableIndexedCollection<?> getChildren(Object parent) {
+			protected ObservableCollection<?> getChildren(Object parent) {
 				if (parent instanceof String)
-					return ObservableList.asList(theMap.keySet());
+					return theMap.keySet();
 				else if (parent instanceof Long)
-					return (ObservableIndexedCollection<Integer>) theMap.get(parent);
+					return theMap.get(parent);
 				else
-					return ObservableList.constant(new TypeToken<Void>() {});
+					return ObservableCollection.constant(TypeToken.of(Void.class)).collect();
 			}
 		});
 	}
@@ -178,24 +179,24 @@ public class ObservableDemoGui extends JPanel {
 
 		controlLayout
 		.setVerticalGroup(
-				controlLayout.createSequentialGroup()//
-				.addGroup(controlLayout.createParallelGroup().addComponent(theNewCategoryText, 30, 30, 30)
-						.addComponent(theCategoryAddButton))
-				.addGroup(controlLayout.createParallelGroup().addComponent(theCategoryCombo, 30, 30, 30)
-						.addComponent(theCategoryRemoveButton))
-				.addGroup(controlLayout.createParallelGroup().addComponent(theValueSpinner, 30, 30, 30).addComponent(theValueAddButton))
-				.addComponent(theValueList)//
-				.addComponent(theValueRemoveButton));
+			controlLayout.createSequentialGroup()//
+			.addGroup(controlLayout.createParallelGroup().addComponent(theNewCategoryText, 30, 30, 30)
+				.addComponent(theCategoryAddButton))
+			.addGroup(controlLayout.createParallelGroup().addComponent(theCategoryCombo, 30, 30, 30)
+				.addComponent(theCategoryRemoveButton))
+			.addGroup(controlLayout.createParallelGroup().addComponent(theValueSpinner, 30, 30, 30).addComponent(theValueAddButton))
+			.addComponent(theValueList)//
+			.addComponent(theValueRemoveButton));
 		controlLayout
 		.setHorizontalGroup(
-				controlLayout.createParallelGroup()//
-				.addGroup(controlLayout.createSequentialGroup()
-						.addGroup(controlLayout.createParallelGroup().addComponent(theNewCategoryText).addComponent(theCategoryCombo)
-								.addComponent(theValueSpinner))
-						.addGroup(controlLayout.createParallelGroup().addComponent(theCategoryAddButton)
-								.addComponent(theCategoryRemoveButton).addComponent(theValueAddButton)))
-				.addComponent(theValueList)//
-				.addComponent(theValueRemoveButton));
+			controlLayout.createParallelGroup()//
+			.addGroup(controlLayout.createSequentialGroup()
+				.addGroup(controlLayout.createParallelGroup().addComponent(theNewCategoryText).addComponent(theCategoryCombo)
+					.addComponent(theValueSpinner))
+				.addGroup(controlLayout.createParallelGroup().addComponent(theCategoryAddButton)
+					.addComponent(theCategoryRemoveButton).addComponent(theValueAddButton)))
+			.addComponent(theValueList)//
+			.addComponent(theValueRemoveButton));
 		mainSplit.setLeftComponent(controlPanel);
 	}
 
