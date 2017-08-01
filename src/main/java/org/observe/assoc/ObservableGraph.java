@@ -131,15 +131,17 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 			.where(new TypeParameter<E>() {}, edgeType);
 		TypeToken<Edge<N, E>> edgeType2 = new TypeToken<Edge<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType)
 			.where(new TypeParameter<E>() {}, edgeType);
+		ObservableCollection<Node<N, E>> nodes = ObservableCollection.constant(nodeType2);
+		ObservableCollection<Edge<N, E>> edges = ObservableCollection.constant(edgeType2);
 		return new ObservableGraph<N, E>() {
 			@Override
 			public ObservableCollection<Node<N, E>> getNodes() {
-				return ObservableCollection.constant(nodeType2).collect();
+				return nodes;
 			}
 
 			@Override
 			public ObservableCollection<Edge<N, E>> getEdges() {
-				return ObservableCollection.constant(edgeType2).collect();
+				return edges;
 			}
 
 			@Override

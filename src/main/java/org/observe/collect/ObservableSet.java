@@ -1,11 +1,11 @@
 package org.observe.collect;
 
 import java.util.Collection;
+import java.util.Iterator;
 
 import org.observe.ObservableValue;
 import org.qommons.Transaction;
 import org.qommons.collect.ElementSpliterator;
-import org.qommons.collect.ImmutableIterator;
 import org.qommons.collect.TransactableSet;
 
 /**
@@ -15,7 +15,7 @@ import org.qommons.collect.TransactableSet;
  */
 public interface ObservableSet<E> extends ObservableCollection<E>, TransactableSet<E> {
 	@Override
-	default ImmutableIterator<E> iterator() {
+	default Iterator<E> iterator() {
 		return ObservableCollection.super.iterator();
 	}
 

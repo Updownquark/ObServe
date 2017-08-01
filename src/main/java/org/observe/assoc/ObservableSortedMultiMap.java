@@ -201,7 +201,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 				return theKey + "=" + theValue;
 			}
 		}
-		ObservableCollection<Map.Entry<K, V>> simpleEntryCollection = ObservableCollection.create(entryType).collect();
+		ObservableCollection<Map.Entry<K, V>> simpleEntryCollection = ObservableCollection.create(entryType);
 		ObservableSortedSet<K> keySet = simpleEntryCollection.flow().map(keyType).map(Map.Entry::getKey).uniqueSorted(keyCompare, true)
 			.collect();
 		return new DefaultSortedMultiMapFlow<>(keySet, keySet.flow(), valueType,
@@ -375,7 +375,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		@Override
 		public ObservableCollection<V> get(Object key) {
 			if (!keySet().belongs(key))
-				return ObservableCollection.constant(getValueType()).collect();
+				return ObservableCollection.constant(getValueType());
 			return theOuter.get(key);
 		}
 	};

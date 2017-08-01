@@ -7,7 +7,6 @@ import java.util.function.Supplier;
 import org.observe.ObservableValue;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.ElementSpliterator;
-import org.qommons.collect.ImmutableIterator;
 
 /**
  * A sorted set whose content can be observed
@@ -16,7 +15,7 @@ import org.qommons.collect.ImmutableIterator;
  */
 public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSet<E> {
 	@Override
-	default ImmutableIterator<E> iterator() {
+	default Iterator<E> iterator() {
 		return ObservableSet.super.iterator();
 	}
 

@@ -113,7 +113,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		 */
 		static <K, V> ObservableMultiEntry<K, V> empty(TypeToken<K> keyType, TypeToken<V> valueType, K key,
 			Equivalence<? super K> keyEquivalence) {
-			return create(keyType, key, keyEquivalence, ObservableCollection.constant(valueType).collect());
+			return create(keyType, key, keyEquivalence, ObservableCollection.constant(valueType));
 		}
 	}
 
@@ -342,7 +342,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 				return theKey + "=" + theValue;
 			}
 		}
-		ObservableCollection<Map.Entry<K, V>> simpleEntryCollection=ObservableCollection.create(entryType).collect();
+		ObservableCollection<Map.Entry<K, V>> simpleEntryCollection = ObservableCollection.create(entryType);
 		ObservableSet<K> keySet = simpleEntryCollection.flow().map(keyType).map(Map.Entry::getKey).withEquivalence(keyEquivalence)
 			.unique(true).collect();
 		return new DefaultMultiMapFlow<>(keySet, keySet.flow(), valueType, key -> simpleEntryCollection.flow()//
@@ -536,7 +536,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			theTransientKeysByReference = new IdentityHashMap<>();
 			theTransientValueLock = new ReentrantLock(); // Don't need the reentrancy, but whatever
 
-			empty = ObservableCollection.constant(theValueType).collect();
+			empty = ObservableCollection.constant(theValueType);
 
 			theKeyManager = keyFlow.manageCollection();
 

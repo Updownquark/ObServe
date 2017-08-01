@@ -33,7 +33,7 @@ public class ObservableListSelectionModel<E> implements ListSelectionModel {
 	/** @param values The list of values to be selected from */
 	public ObservableListSelectionModel(ObservableCollection<E> values) {
 		theValues = values;
-		theSelectedIndexes = ObservableCollection.create(TypeToken.of(Integer.TYPE)).filter(idx -> {
+		theSelectedIndexes = ObservableCollection.create(TypeToken.of(Integer.TYPE)).flow().filter(idx -> {
 			if (idx < 0)
 				return "Negative index";
 			else if (idx >= theValues.size())

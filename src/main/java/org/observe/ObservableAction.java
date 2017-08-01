@@ -97,7 +97,7 @@ public interface ObservableAction<T> {
 	static <T> ObservableAction<T[]> and(TypeToken<T> type, ObservableAction<? extends T>... actions) {
 		TypeToken<ObservableAction<? extends T>> actionType = new TypeToken<ObservableAction<? extends T>>() {}
 		.where(new TypeParameter<T>() {}, type);
-		return and(ObservableCollection.constant(actionType, java.util.Arrays.asList(actions)).collect());
+		return and(ObservableCollection.constant(actionType, java.util.Arrays.asList(actions)));
 	}
 
 	/**
