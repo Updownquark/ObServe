@@ -429,6 +429,26 @@ public interface Equivalence<E> {
 			}
 
 			@Override
+			public void forEachElement(Consumer<? super CollectionElement<T2>> action) {
+				theWrapped.forEachElement(el -> action.accept(handleFor(el)));
+			}
+
+			@Override
+			public void forEachElementReverse(Consumer<? super CollectionElement<T2>> action) {
+				theWrapped.forEachElementReverse(el -> action.accept(handleFor(el)));
+			}
+
+			@Override
+			public void forEachElementM(Consumer<? super MutableCollectionElement<T2>> action) {
+				theWrapped.forEachElementM(el -> action.accept(mutableHandleFor(el)));
+			}
+
+			@Override
+			public void forEachElementReverseM(Consumer<? super MutableCollectionElement<T2>> action) {
+				theWrapped.forEachElementReverseM(el -> action.accept(mutableHandleFor(el)));
+			}
+
+			@Override
 			public MutableElementSpliterator<T2> trySplit() {
 				MutableElementSpliterator<E> wrapSplit = theWrapped.trySplit();
 				return wrapSplit == null ? null : new MappedMutableSpliterator(wrapSplit);

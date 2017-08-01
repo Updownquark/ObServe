@@ -281,6 +281,26 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 		}
 
 		@Override
+		public void forEachElement(Consumer<? super CollectionElement<E>> action) {
+			theValueSpliter.forEachElement(action);
+		}
+
+		@Override
+		public void forEachElementReverse(Consumer<? super CollectionElement<E>> action) {
+			theValueSpliter.forEachElementReverse(action);
+		}
+
+		@Override
+		public void forEachElementM(Consumer<? super MutableCollectionElement<E>> action) {
+			theValueSpliter.forEachElementM(el -> action.accept(mutableElementFor(el)));
+		}
+
+		@Override
+		public void forEachElementReverseM(Consumer<? super MutableCollectionElement<E>> action) {
+			theValueSpliter.forEachElementReverseM(el -> action.accept(mutableElementFor(el)));
+		}
+
+		@Override
 		public MutableElementSpliterator<E> trySplit() {
 			MutableElementSpliterator<E> valueSplit = theValueSpliter.trySplit();
 			return valueSplit == null ? null : new DefaultMutableSpliterator(valueSplit);

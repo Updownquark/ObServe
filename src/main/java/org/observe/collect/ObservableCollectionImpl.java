@@ -2492,6 +2492,57 @@ public final class ObservableCollectionImpl {
 				}
 			}
 
+			@Override
+			public void forEachElement(Consumer<? super CollectionElement<E>> action) {
+				try (Transaction t = lock(false, null)) {
+					while (true) {
+						if (theInnerSpliter != null)
+							theInnerSpliter
+							.tryAdvanceElement(innerEl -> action.accept(elementFor(theOuterId, innerEl)));
+						if (!nextInnerCollection(true))
+							break;
+					}
+				}
+			}
+
+			@Override
+			public void forEachElementReverse(Consumer<? super CollectionElement<E>> action) {
+				try (Transaction t = lock(false, null)) {
+					while (true) {
+						if (theInnerSpliter != null)
+							theInnerSpliter.tryReverseElement(innerEl -> action.accept(elementFor(theOuterId, innerEl)));
+						if (!nextInnerCollection(false))
+							break;
+					}
+				}
+			}
+
+			@Override
+			public void forEachElementM(Consumer<? super MutableCollectionElement<E>> action) {
+				try (Transaction t = lock(true, null)) {
+					while (true) {
+						if (theInnerSpliter != null)
+							theInnerSpliter
+							.tryAdvanceElementM(innerEl -> action.accept(mutableElementFor(theOuterId, theInnerCollection, innerEl)));
+						if (!nextInnerCollection(true))
+							break;
+					}
+				}
+			}
+
+			@Override
+			public void forEachElementReverseM(Consumer<? super MutableCollectionElement<E>> action) {
+				try (Transaction t = lock(true, null)) {
+					while (true) {
+						if (theInnerSpliter != null)
+							theInnerSpliter
+							.tryReverseElementM(innerEl -> action.accept(mutableElementFor(theOuterId, theInnerCollection, innerEl)));
+						if (!nextInnerCollection(false))
+							break;
+					}
+				}
+			}
+
 			private boolean nextInnerCollection(boolean forward) {
 				if (isInnerSplit) {
 					// If this spliterator's inner spliterator is from an inner split, then advancing to the next inner collection
