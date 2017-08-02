@@ -360,8 +360,8 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public CollectionElement<T2> addElement(T2 value) {
-			return handleFor(theWrapped.addElement(theReverse.apply(value)));
+		public CollectionElement<T2> addElement(T2 value, boolean first) {
+			return handleFor(theWrapped.addElement(theReverse.apply(value), first));
 		}
 
 		@Override

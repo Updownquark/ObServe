@@ -1058,11 +1058,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public CollectionElement<T> addElement(T e) {
+		public CollectionElement<T> addElement(T e, boolean first) {
 			FilterMapResult<T, E> reversed = theFlow.reverse(e);
 			if (reversed.error != null)
 				throw new IllegalArgumentException(reversed.error);
-			return elementFor(theSource.addElement(reversed.result));
+			return elementFor(theSource.addElement(reversed.result, first));
 		}
 
 		@Override
@@ -1357,7 +1357,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		private void addToPresent(DerivedCollectionElement<E, T> element, Object cause) {
-			element.presentNode = thePresentElements.addElement(element);
+			element.presentNode = thePresentElements.addElement(element, false);
 			fireListeners(new ObservableCollectionEvent<>(element, element.presentNode.getNodesBefore(), CollectionChangeType.add, null,
 				element.get(), cause));
 		}
@@ -1588,7 +1588,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public CollectionElement<T> addElement(T e) {
+		public CollectionElement<T> addElement(T e, boolean first) {
 			if (!theFlow.isReversible())
 				throw new UnsupportedOperationException(MutableCollectionElement.StdMsg.UNSUPPORTED_OPERATION);
 			else if (!checkValue(e))
@@ -1597,7 +1597,7 @@ public final class ObservableCollectionImpl {
 				FilterMapResult<T, E> reversed = theFlow.canAdd(new FilterMapResult<>(e));
 				if (reversed.error != null)
 					throw new IllegalArgumentException(reversed.error);
-				CollectionElement<E> sourceElement = theSource.addElement(reversed.result);
+				CollectionElement<E> sourceElement = theSource.addElement(reversed.result, first);
 				return observableElementFor(theElements.get(sourceElement.getElementId())); // Should have been added
 			}
 		}
@@ -1884,13 +1884,13 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public CollectionElement<E> addElement(E e) {
+		public CollectionElement<E> addElement(E e, boolean first) {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			if (coll == null)
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			if (e != null && !coll.getType().getRawType().isInstance(e))
 				throw new IllegalArgumentException(MutableCollectionElement.StdMsg.BAD_TYPE);
-			return ((ObservableCollection<E>) coll).addElement(e);
+			return ((ObservableCollection<E>) coll).addElement(e, first);
 		}
 
 		@Override
@@ -2055,20 +2055,20 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public CollectionElement<E> addElement(E e) {
+		public CollectionElement<E> addElement(E e, boolean first) {
 			String[] msg = new String[1];
 			boolean[] hasInner = new boolean[1];
 			CollectionElement<E>[] element = new CollectionElement[1];
 			try (Transaction t = lock(true, null)) {
-				ElementSpliterator<? extends ObservableCollection<? extends E>> outerSplit = theOuter.spliterator(false).reverse();
+				ElementSpliterator<? extends ObservableCollection<? extends E>> outerSplit = theOuter.spliterator(first);
 				while (element[0] == null && outerSplit.forElement(el -> {
 					hasInner[0] = true;
 					if (!el.get().belongs(e))
 						return;
 					msg[0] = ((ObservableCollection<E>) el.get()).canAdd(e);
 					if (msg[0] == null)
-						element[0] = elementFor(el.getElementId(), ((ObservableCollection<E>) el.get()).addElement(e));
-				}, false)) {
+						element[0] = elementFor(el.getElementId(), ((ObservableCollection<E>) el.get()).addElement(e, first));
+				}, first)) {
 				}
 			}
 			if (msg[0] == null) {
@@ -2257,8 +2257,8 @@ public final class ObservableCollectionImpl {
 						outerEvt.getOldValue().spliterator()
 						.forEachElement(el -> observer.accept(//
 							new ObservableCollectionEvent<>(new CompoundId(outerEvt.getElementId(), el.getElementId()), index,
-									CollectionChangeType.remove, el.get(), el.get(), outerEvt)),
-								true);
+								CollectionChangeType.remove, el.get(), el.get(), outerEvt)),
+							true);
 					}
 				});
 			return () -> {

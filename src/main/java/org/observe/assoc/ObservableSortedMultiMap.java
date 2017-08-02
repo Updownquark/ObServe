@@ -305,7 +305,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 				try (Transaction t = lock(true, null)) {
 					if (!isEmpty())
 						throw new IllegalStateException("Set is not empty");
-					return super.addElement(value);
+					return super.addElement(value, true);
 				}
 			}
 

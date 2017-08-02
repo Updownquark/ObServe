@@ -598,7 +598,7 @@ public class ObservableSortedSetImpl {
 				FilterMapResult<T, E> reverse = getFlow().reverse(value);
 				if (reverse.error != null)
 					throw new IllegalArgumentException(reverse.error);
-				CollectionElement<E> added = getSource().addElement(reverse.result);
+				CollectionElement<E> added = getSource().addElement(reverse.result, false);
 				return observableElementFor(getPresentElement(added.getElementId()));
 			}
 		}

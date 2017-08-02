@@ -378,7 +378,7 @@ public class ObservableSetImpl {
 			private void addToSet(Object cause) {
 				theValueElements = theElementsByValue.computeIfAbsent(theValue, v -> new BetterTreeSet<>(false, UniqueElement::compareTo));
 				// Grab our node, since we can use it to remove even if the comparison properties change
-				theNode = theValueElements.addElement(this);
+				theNode = theValueElements.addElement(this, false);
 				if (theValueElements.size() == 1) {
 					// We're currently the only element for the value
 					isPresent = true;

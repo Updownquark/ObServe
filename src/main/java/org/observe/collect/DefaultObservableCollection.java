@@ -135,9 +135,9 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	}
 
 	@Override
-	public CollectionElement<E> addElement(E e) {
+	public CollectionElement<E> addElement(E e, boolean first) {
 		try (Transaction t = lock(true, null)) {
-			CollectionElement<E> el = theValues.addElement(e);
+			CollectionElement<E> el = theValues.addElement(e, first);
 			if (el == null)
 				return null;
 			fire(new ObservableCollectionEvent<>(el.getElementId(), theValues.getElementsBefore(el.getElementId()),
