@@ -31,7 +31,6 @@ import org.qommons.TriFunction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
-import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.SimpleCause;
 
@@ -306,19 +305,12 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		Subscription changeSub;
 		try (Transaction t = lock(false, null)) {
 			// Initial events
-			int[] index = new int[1];
-			ElementSpliterator<E> spliter;
-			if (forward)
-				spliter = spliterator();
-			else {
-				spliter = spliterator(false).reverse();
-				index[0] = size() - 1;
-			}
-			SubscriptionCause.doWith(new SubscriptionCause(), c -> spliter.forEachElement(el -> {
+			int[] index = new int[] { forward ? 0 : size() - 1 };
+			SubscriptionCause.doWith(new SubscriptionCause(), c -> spliterator(forward).forEachElement(el -> {
 				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), index[0]++,
 					CollectionChangeType.add, null, el.get(), c);
 				observer.accept(event);
-			}));
+			}, forward));
 			// Subscribe changes
 			changeSub = onChange(observer);
 		}
@@ -328,19 +320,12 @@ public interface ObservableCollection<E> extends BetterList<E> {
 				changeSub.unsubscribe();
 				if (removeAll) {
 					// Remove events
-					int[] index = new int[1];
-					ElementSpliterator<E> spliter;
-					if (forward)
-						spliter = spliterator();
-					else {
-						spliter = spliterator(false).reverse();
-						index[0] = size() - 1;
-					}
-					SubscriptionCause.doWith(new SubscriptionCause(), c -> spliter.forEachElement(el -> {
+					int[] index = new int[] { forward ? 0 : size() - 1 };
+					SubscriptionCause.doWith(new SubscriptionCause(), c -> spliterator(forward).forEachElement(el -> {
 						ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), index[0]++,
 							CollectionChangeType.add, null, el.get(), c);
 						observer.accept(event);
-					}));
+					}, forward));
 				}
 			}
 		};

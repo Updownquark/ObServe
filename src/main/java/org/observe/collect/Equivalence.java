@@ -378,79 +378,50 @@ public interface Equivalence<E> {
 			theWrapped.clear();
 		}
 
-		private class MappedMutableSpliterator implements MutableElementSpliterator<T2> {
-			private final MutableElementSpliterator<E> theWrapped;
+		private class MappedMutableSpliterator extends MutableElementSpliterator.SimpleMutableSpliterator<T2> {
+			private final MutableElementSpliterator<E> theWrappedSpliter;
 
 			public MappedMutableSpliterator(MutableElementSpliterator<E> wrap) {
-				theWrapped = wrap;
+				super(MappedSet.this);
+				theWrappedSpliter = wrap;
 			}
 
 			@Override
 			public long estimateSize() {
-				return theWrapped.estimateSize();
+				return theWrappedSpliter.estimateSize();
 			}
 
 			@Override
 			public long getExactSizeIfKnown() {
-				return theWrapped.getExactSizeIfKnown();
+				return theWrappedSpliter.getExactSizeIfKnown();
 			}
 
 			@Override
 			public int characteristics() {
-				return theWrapped.characteristics();
+				return theWrappedSpliter.characteristics();
 			}
 
 			@Override
 			public Comparator<? super T2> getComparator() {
-				Comparator<? super E> wrapCompare = theWrapped.getComparator();
+				Comparator<? super E> wrapCompare = theWrappedSpliter.getComparator();
 				if (wrapCompare == null)
 					return null;
 				return (t1, t2) -> wrapCompare.compare(theReverse.apply(t1), theReverse.apply(t2));
 			}
 
 			@Override
-			public boolean tryAdvanceElement(Consumer<? super CollectionElement<T2>> action) {
-				return theWrapped.tryAdvanceElement(el -> action.accept(handleFor(el)));
+			protected boolean internalForElement(Consumer<? super CollectionElement<T2>> action, boolean forward) {
+				return theWrappedSpliter.forElement(el -> action.accept(handleFor(el)), forward);
 			}
 
 			@Override
-			public boolean tryReverseElement(Consumer<? super CollectionElement<T2>> action) {
-				return theWrapped.tryReverseElement(el -> action.accept(handleFor(el)));
-			}
-
-			@Override
-			public boolean tryAdvanceElementM(Consumer<? super MutableCollectionElement<T2>> action) {
-				return theWrapped.tryAdvanceElementM(el -> action.accept(mutableHandleFor(el)));
-			}
-
-			@Override
-			public boolean tryReverseElementM(Consumer<? super MutableCollectionElement<T2>> action) {
-				return theWrapped.tryReverseElementM(el -> action.accept(mutableHandleFor(el)));
-			}
-
-			@Override
-			public void forEachElement(Consumer<? super CollectionElement<T2>> action) {
-				theWrapped.forEachElement(el -> action.accept(handleFor(el)));
-			}
-
-			@Override
-			public void forEachElementReverse(Consumer<? super CollectionElement<T2>> action) {
-				theWrapped.forEachElementReverse(el -> action.accept(handleFor(el)));
-			}
-
-			@Override
-			public void forEachElementM(Consumer<? super MutableCollectionElement<T2>> action) {
-				theWrapped.forEachElementM(el -> action.accept(mutableHandleFor(el)));
-			}
-
-			@Override
-			public void forEachElementReverseM(Consumer<? super MutableCollectionElement<T2>> action) {
-				theWrapped.forEachElementReverseM(el -> action.accept(mutableHandleFor(el)));
+			protected boolean internalForElementM(Consumer<? super MutableCollectionElement<T2>> action, boolean forward) {
+				return theWrappedSpliter.forElementM(el -> action.accept(mutableHandleFor(el)), forward);
 			}
 
 			@Override
 			public MutableElementSpliterator<T2> trySplit() {
-				MutableElementSpliterator<E> wrapSplit = theWrapped.trySplit();
+				MutableElementSpliterator<E> wrapSplit = theWrappedSpliter.trySplit();
 				return wrapSplit == null ? null : new MappedMutableSpliterator(wrapSplit);
 			}
 		}

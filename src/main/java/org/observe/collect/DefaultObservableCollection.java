@@ -160,7 +160,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 					el.get(), el.get(), theTransactionCauses.peekLast());
 				el.remove();
 				fire(evt);
-			});
+			}, true);
 		}
 	}
 
@@ -233,10 +233,11 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 		};
 	}
 
-	private class DefaultMutableSpliterator implements MutableElementSpliterator<E> {
+	private class DefaultMutableSpliterator extends MutableElementSpliterator.SimpleMutableSpliterator<E> {
 		private final MutableElementSpliterator<E> theValueSpliter;
 
 		DefaultMutableSpliterator(MutableElementSpliterator<E> valueSpliter) {
+			super(DefaultObservableCollection.this);
 			theValueSpliter = valueSpliter;
 		}
 
@@ -261,43 +262,13 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 		}
 
 		@Override
-		public boolean tryAdvanceElement(Consumer<? super CollectionElement<E>> action) {
-			return theValueSpliter.tryAdvanceElement(action);
+		protected boolean internalForElement(Consumer<? super CollectionElement<E>> action, boolean forward) {
+			return theValueSpliter.forElement(action, forward);
 		}
 
 		@Override
-		public boolean tryReverseElement(Consumer<? super CollectionElement<E>> action) {
-			return theValueSpliter.tryReverseElement(action);
-		}
-
-		@Override
-		public boolean tryAdvanceElementM(Consumer<? super MutableCollectionElement<E>> action) {
-			return theValueSpliter.tryAdvanceElementM(el -> action.accept(mutableElementFor(el)));
-		}
-
-		@Override
-		public boolean tryReverseElementM(Consumer<? super MutableCollectionElement<E>> action) {
-			return theValueSpliter.tryReverseElementM(el -> action.accept(mutableElementFor(el)));
-		}
-
-		@Override
-		public void forEachElement(Consumer<? super CollectionElement<E>> action) {
-			theValueSpliter.forEachElement(action);
-		}
-
-		@Override
-		public void forEachElementReverse(Consumer<? super CollectionElement<E>> action) {
-			theValueSpliter.forEachElementReverse(action);
-		}
-
-		@Override
-		public void forEachElementM(Consumer<? super MutableCollectionElement<E>> action) {
-			theValueSpliter.forEachElementM(el -> action.accept(mutableElementFor(el)));
-		}
-
-		@Override
-		public void forEachElementReverseM(Consumer<? super MutableCollectionElement<E>> action) {
-			theValueSpliter.forEachElementReverseM(el -> action.accept(mutableElementFor(el)));
+		protected boolean internalForElementM(Consumer<? super MutableCollectionElement<E>> action, boolean forward) {
+			return theValueSpliter.forElementM(el -> action.accept(mutableElementFor(el)), forward);
 		}
 
 		@Override

@@ -1155,10 +1155,11 @@ public final class ObservableCollectionImpl {
 			});
 		}
 
-		protected class DerivedMutableSpliterator implements MutableElementSpliterator<T> {
+		protected class DerivedMutableSpliterator extends MutableElementSpliterator.SimpleMutableSpliterator<T> {
 			private final MutableElementSpliterator<E> theSourceSpliter;
 
 			DerivedMutableSpliterator(MutableElementSpliterator<E> srcSpliter) {
+				super(DerivedLWCollection.this);
 				theSourceSpliter = srcSpliter;
 			}
 
@@ -1178,63 +1179,13 @@ public final class ObservableCollectionImpl {
 			}
 
 			@Override
-			public boolean tryAdvance(Consumer<? super T> action) {
-				return theSourceSpliter.tryAdvance(v -> action.accept(theFlow.map(v).result));
+			protected boolean internalForElement(Consumer<? super CollectionElement<T>> action, boolean forward) {
+				return theSourceSpliter.forElement(el -> action.accept(elementFor(el)), forward);
 			}
 
 			@Override
-			public void forEachRemaining(Consumer<? super T> action) {
-				theSourceSpliter.forEachRemaining(v -> action.accept(theFlow.map(v).result));
-			}
-
-			@Override
-			public boolean tryReverse(Consumer<? super T> action) {
-				return theSourceSpliter.tryReverse(v -> action.accept(theFlow.map(v).result));
-			}
-
-			@Override
-			public void forEachReverse(Consumer<? super T> action) {
-				theSourceSpliter.forEachReverse(v -> action.accept(theFlow.map(v).result));
-			}
-
-			@Override
-			public boolean tryAdvanceElement(Consumer<? super CollectionElement<T>> action) {
-				return theSourceSpliter.tryAdvanceElement(el -> action.accept(elementFor(el)));
-			}
-
-			@Override
-			public void forEachElement(Consumer<? super CollectionElement<T>> action) {
-				theSourceSpliter.forEachElement(el -> action.accept(elementFor(el)));
-			}
-
-			@Override
-			public boolean tryReverseElement(Consumer<? super CollectionElement<T>> action) {
-				return theSourceSpliter.tryReverseElement(el -> action.accept(elementFor(el)));
-			}
-
-			@Override
-			public void forEachElementReverse(Consumer<? super CollectionElement<T>> action) {
-				theSourceSpliter.forEachElementReverse(el -> action.accept(elementFor(el)));
-			}
-
-			@Override
-			public boolean tryAdvanceElementM(Consumer<? super MutableCollectionElement<T>> action) {
-				return theSourceSpliter.tryAdvanceElementM(el -> action.accept(mutableElementFor(el)));
-			}
-
-			@Override
-			public void forEachElementM(Consumer<? super MutableCollectionElement<T>> action) {
-				theSourceSpliter.forEachElementM(el -> action.accept(mutableElementFor(el)));
-			}
-
-			@Override
-			public boolean tryReverseElementM(Consumer<? super MutableCollectionElement<T>> action) {
-				return theSourceSpliter.tryReverseElementM(el -> action.accept(mutableElementFor(el)));
-			}
-
-			@Override
-			public void forEachElementReverseM(Consumer<? super MutableCollectionElement<T>> action) {
-				theSourceSpliter.forEachElementReverseM(el -> action.accept(mutableElementFor(el)));
+			protected boolean internalForElementM(Consumer<? super MutableCollectionElement<T>> action, boolean forward) {
+				return theSourceSpliter.forElementM(el -> action.accept(mutableElementFor(el)), forward);
 			}
 
 			@Override
@@ -1657,7 +1608,7 @@ public final class ObservableCollectionImpl {
 				if (!theFlow.isStaticallyFiltered() && !theFlow.isDynamicallyFiltered())
 					theSource.clear();
 				else
-					mutableSpliterator().forEachElementM(el -> el.remove());
+					mutableSpliterator().forEachElementM(el -> el.remove(), true);
 			}
 		}
 
@@ -1676,10 +1627,11 @@ public final class ObservableCollectionImpl {
 			return ObservableCollection.toString(this);
 		}
 
-		private class MutableDerivedSpliterator implements MutableElementSpliterator<T> {
+		private class MutableDerivedSpliterator extends MutableElementSpliterator.SimpleMutableSpliterator<T> {
 			private final ElementSpliterator<DerivedCollectionElement<E, T>> theElementSpliter;
 
 			MutableDerivedSpliterator(ElementSpliterator<DerivedCollectionElement<E, T>> elementSpliter) {
+				super(DerivedCollection.this);
 				theElementSpliter = elementSpliter;
 			}
 
@@ -1699,63 +1651,14 @@ public final class ObservableCollectionImpl {
 			}
 
 			@Override
-			public boolean tryAdvanceElement(Consumer<? super CollectionElement<T>> action) {
-				try (Transaction t = lock(false, null)) {
-					return theElementSpliter.tryAdvance(element -> action.accept(observableElementFor(element)));
-				}
+			protected boolean internalForElement(Consumer<? super CollectionElement<T>> action, boolean forward) {
+				return theElementSpliter.forValue(element -> action.accept(observableElementFor(element)), forward);
 			}
 
 			@Override
-			public boolean tryReverseElement(Consumer<? super CollectionElement<T>> action) {
-				try (Transaction t = lock(false, null)) {
-					return theElementSpliter.tryReverse(element -> action.accept(observableElementFor(element)));
-				}
-			}
-
-			@Override
-			public void forEachElement(Consumer<? super CollectionElement<T>> action) {
-				try (Transaction t = lock(false, null)) {
-					theElementSpliter.forEachRemaining(element -> action.accept(observableElementFor(element)));
-				}
-			}
-
-			@Override
-			public void forEachElementReverse(Consumer<? super CollectionElement<T>> action) {
-				try (Transaction t = lock(false, null)) {
-					theElementSpliter.forEachReverse(element -> action.accept(observableElementFor(element)));
-				}
-			}
-
-			@Override
-			public boolean tryAdvanceElementM(Consumer<? super MutableCollectionElement<T>> action) {
-				try (Transaction t = lock(true, null)) {
-					return theElementSpliter.tryAdvance(element -> theSource.forMutableElement(element.manager.getElementId(),
-						sourceEl -> action.accept(element.manager.map(sourceEl, element))));
-				}
-			}
-
-			@Override
-			public boolean tryReverseElementM(Consumer<? super MutableCollectionElement<T>> action) {
-				try (Transaction t = lock(true, null)) {
-					return theElementSpliter.tryReverse(element -> theSource.forMutableElement(element.manager.getElementId(),
-						sourceEl -> action.accept(element.manager.map(sourceEl, element))));
-				}
-			}
-
-			@Override
-			public void forEachElementM(Consumer<? super MutableCollectionElement<T>> action) {
-				try (Transaction t = lock(true, null)) {
-					theElementSpliter.forEachRemaining(element -> theSource.forMutableElement(element.manager.getElementId(),
-						sourceEl -> action.accept(element.manager.map(sourceEl, element))));
-				}
-			}
-
-			@Override
-			public void forEachElementReverseM(Consumer<? super MutableCollectionElement<T>> action) {
-				try (Transaction t = lock(true, null)) {
-					theElementSpliter.forEachReverse(element -> theSource.forMutableElement(element.manager.getElementId(),
-						sourceEl -> action.accept(element.manager.map(sourceEl, element))));
-				}
+			protected boolean internalForElementM(Consumer<? super MutableCollectionElement<T>> action, boolean forward) {
+				return theElementSpliter.forValue(element -> theSource.forMutableElement(element.manager.getElementId(),
+					sourceEl -> action.accept(element.manager.map(sourceEl, element))), forward);
 			}
 
 			@Override
@@ -2095,13 +1998,13 @@ public final class ObservableCollectionImpl {
 				ElementSpliterator<? extends ObservableCollection<? extends E>> outerSplit = theOuter.spliterator();
 				boolean[] found = new boolean[1];
 				int[] soFar = new int[1];
-				while (!found[0] && outerSplit.tryAdvanceElement(el -> {
+				while (!found[0] && outerSplit.forElement(el -> {
 					if (el.getElementId().equals(compound.getOuter())) {
 						soFar[0] += el.get().getElementsBefore(compound.getInner());
 						found[0] = true;
 					} else
 						soFar[0] += el.get().size();
-				})) {
+				}, true)) {
 				}
 				if (!found[0])
 					throw new IllegalArgumentException(StdMsg.NOT_FOUND);
@@ -2115,16 +2018,16 @@ public final class ObservableCollectionImpl {
 				throw new IllegalArgumentException(StdMsg.NOT_FOUND);
 			CompoundId compound = (CompoundId) id;
 			try (Transaction t = lock(false, null)) {
-				ElementSpliterator<? extends ObservableCollection<? extends E>> outerSplit = theOuter.spliterator(false).reverse();
+				ElementSpliterator<? extends ObservableCollection<? extends E>> outerSplit = theOuter.spliterator(false);
 				boolean[] found = new boolean[1];
 				int[] soFar = new int[1];
-				while (!found[0] && outerSplit.tryAdvanceElement(el -> {
+				while (!found[0] && outerSplit.forElement(el -> {
 					if (el.getElementId().equals(compound.getOuter())) {
 						soFar[0] += el.get().getElementsAfter(compound.getInner());
 						found[0] = true;
 					} else
 						soFar[0] += el.get().size();
-				})) {
+				}, false)) {
 				}
 				if (!found[0])
 					throw new IllegalArgumentException(StdMsg.NOT_FOUND);
@@ -2158,14 +2061,14 @@ public final class ObservableCollectionImpl {
 			CollectionElement<E>[] element = new CollectionElement[1];
 			try (Transaction t = lock(true, null)) {
 				ElementSpliterator<? extends ObservableCollection<? extends E>> outerSplit = theOuter.spliterator(false).reverse();
-				while (element[0] == null && outerSplit.tryAdvanceElement(el -> {
+				while (element[0] == null && outerSplit.forElement(el -> {
 					hasInner[0] = true;
 					if (!el.get().belongs(e))
 						return;
 					msg[0] = ((ObservableCollection<E>) el.get()).canAdd(e);
 					if (msg[0] == null)
 						element[0] = elementFor(el.getElementId(), ((ObservableCollection<E>) el.get()).addElement(e));
-				})) {
+				}, false)) {
 				}
 			}
 			if (msg[0] == null) {
@@ -2318,14 +2221,13 @@ public final class ObservableCollectionImpl {
 						int[] index = new int[1];
 						boolean[] found = new boolean[1];
 						ElementSpliterator<? extends ObservableCollection<? extends E>> outerSplit = theOuter.spliterator();
-						while (!found[0] && outerSplit.tryAdvanceElement(el -> {
+						while (!found[0] && outerSplit.forElement(el -> {
 							if (el.getElementId().compareTo(outerId) < 0)
 								index[0] += el.get().size();
 							else
 								found[0] = true;
-						})) {
+						}, true)) {
 						}
-						;
 						if (!found[0])
 							throw new IllegalStateException(StdMsg.NOT_FOUND);
 						return index[0];
@@ -2355,7 +2257,8 @@ public final class ObservableCollectionImpl {
 						outerEvt.getOldValue().spliterator()
 						.forEachElement(el -> observer.accept(//
 							new ObservableCollectionEvent<>(new CompoundId(outerEvt.getElementId(), el.getElementId()), index,
-								CollectionChangeType.remove, el.get(), el.get(), outerEvt)));
+									CollectionChangeType.remove, el.get(), el.get(), outerEvt)),
+								true);
 					}
 				});
 			return () -> {
@@ -2413,7 +2316,7 @@ public final class ObservableCollectionImpl {
 			}
 		}
 
-		class FlattenedSpliterator implements MutableElementSpliterator<E> {
+		class FlattenedSpliterator extends MutableElementSpliterator.SimpleMutableSpliterator<E> {
 			private final MutableElementSpliterator<? extends ObservableCollection<? extends E>> theOuterSpliter;
 			private ElementId theOuterId;
 			private ObservableCollection<? extends E> theInnerCollection;
@@ -2423,6 +2326,7 @@ public final class ObservableCollectionImpl {
 			public FlattenedSpliterator(MutableElementSpliterator<? extends ObservableCollection<? extends E>> outerSpliter,
 				ElementId outerId, ObservableCollection<? extends E> innerCollection, MutableElementSpliterator<? extends E> innerSpliter,
 				boolean innerSplit) {
+				super(FlattenedObservableCollection.this);
 				theOuterSpliter = outerSpliter;
 				theOuterId = outerId;
 				theInnerCollection = innerCollection;
@@ -2441,105 +2345,24 @@ public final class ObservableCollectionImpl {
 			}
 
 			@Override
-			public boolean tryAdvanceElement(Consumer<? super CollectionElement<E>> action) {
-				try (Transaction t = lock(false, null)) {
-					while (true) {
-						if (theInnerSpliter != null
-							&& theInnerSpliter.tryAdvanceElement(innerEl -> action.accept(elementFor(theOuterId, innerEl))))
-							return true;
-						if (!nextInnerCollection(true))
-							return false;
-					}
+			protected boolean internalForElement(Consumer<? super CollectionElement<E>> action, boolean forward) {
+				while (true) {
+					if (theInnerSpliter != null
+						&& theInnerSpliter.forElement(innerEl -> action.accept(elementFor(theOuterId, innerEl)), forward))
+						return true;
+					if (!nextInnerCollection(forward))
+						return false;
 				}
 			}
 
 			@Override
-			public boolean tryReverseElement(Consumer<? super CollectionElement<E>> action) {
-				try (Transaction t = lock(false, null)) {
-					while (true) {
-						if (theInnerSpliter != null
-							&& theInnerSpliter.tryReverseElement(innerEl -> action.accept(elementFor(theOuterId, innerEl))))
-							return true;
-						if (!nextInnerCollection(false))
-							return false;
-					}
-				}
-			}
-
-			@Override
-			public boolean tryAdvanceElementM(Consumer<? super MutableCollectionElement<E>> action) {
-				try (Transaction t = lock(true, null)) {
-					while (true) {
-						if (theInnerSpliter != null && theInnerSpliter
-							.tryAdvanceElementM(innerEl -> action.accept(mutableElementFor(theOuterId, theInnerCollection, innerEl))))
-							return true;
-						if (!nextInnerCollection(true))
-							return false;
-					}
-				}
-			}
-
-			@Override
-			public boolean tryReverseElementM(Consumer<? super MutableCollectionElement<E>> action) {
-				try (Transaction t = lock(true, null)) {
-					while (true) {
-						if (theInnerSpliter != null && theInnerSpliter
-							.tryReverseElementM(innerEl -> action.accept(mutableElementFor(theOuterId, theInnerCollection, innerEl))))
-							return true;
-						if (!nextInnerCollection(false))
-							return false;
-					}
-				}
-			}
-
-			@Override
-			public void forEachElement(Consumer<? super CollectionElement<E>> action) {
-				try (Transaction t = lock(false, null)) {
-					while (true) {
-						if (theInnerSpliter != null)
-							theInnerSpliter
-							.tryAdvanceElement(innerEl -> action.accept(elementFor(theOuterId, innerEl)));
-						if (!nextInnerCollection(true))
-							break;
-					}
-				}
-			}
-
-			@Override
-			public void forEachElementReverse(Consumer<? super CollectionElement<E>> action) {
-				try (Transaction t = lock(false, null)) {
-					while (true) {
-						if (theInnerSpliter != null)
-							theInnerSpliter.tryReverseElement(innerEl -> action.accept(elementFor(theOuterId, innerEl)));
-						if (!nextInnerCollection(false))
-							break;
-					}
-				}
-			}
-
-			@Override
-			public void forEachElementM(Consumer<? super MutableCollectionElement<E>> action) {
-				try (Transaction t = lock(true, null)) {
-					while (true) {
-						if (theInnerSpliter != null)
-							theInnerSpliter
-							.tryAdvanceElementM(innerEl -> action.accept(mutableElementFor(theOuterId, theInnerCollection, innerEl)));
-						if (!nextInnerCollection(true))
-							break;
-					}
-				}
-			}
-
-			@Override
-			public void forEachElementReverseM(Consumer<? super MutableCollectionElement<E>> action) {
-				try (Transaction t = lock(true, null)) {
-					while (true) {
-						if (theInnerSpliter != null)
-							theInnerSpliter
-							.tryReverseElementM(innerEl -> action.accept(mutableElementFor(theOuterId, theInnerCollection, innerEl)));
-						if (!nextInnerCollection(false))
-							break;
-					}
+			protected boolean internalForElementM(Consumer<? super MutableCollectionElement<E>> action, boolean forward) {
+				while (true) {
+					if (theInnerSpliter != null && theInnerSpliter
+						.forElementM(innerEl -> action.accept(mutableElementFor(theOuterId, theInnerCollection, innerEl)), forward))
+						return true;
+					if (!nextInnerCollection(forward))
+						return false;
 				}
 			}
 
@@ -2549,12 +2372,11 @@ public final class ObservableCollectionImpl {
 					// would iterate over duplicate data
 					return false;
 				}
-				Consumer<CollectionElement<? extends ObservableCollection<? extends E>>> onInner = outerEl -> {
+				return theOuterSpliter.forElement(outerEl -> {
 					theOuterId = outerEl.getElementId();
 					theInnerCollection = outerEl.get();
 					theInnerSpliter = theInnerCollection == null ? null : theInnerCollection.mutableSpliterator(true);
-				};
-				return forward ? theOuterSpliter.tryAdvanceElement(onInner) : theOuterSpliter.tryReverseElement(onInner);
+				}, forward);
 			}
 
 			@Override
@@ -2567,10 +2389,10 @@ public final class ObservableCollectionImpl {
 						Consumer<Object> nothing = v -> {
 						};
 						// Grab the next or previous inner spliterator
-						if (tryAdvanceElement(nothing))
-							tryReverseElement(nothing);
-						else if (tryReverseElement(nothing))
-							tryAdvanceElement(nothing);
+						if (forElement(nothing, true))
+							forElement(nothing, false);
+						else if (forElement(nothing, false))
+							forElement(nothing, true);
 						// Should have an inner spliterator now if there is a non-empty one
 						if (theInnerSpliter == null)
 							return null;
