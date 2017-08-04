@@ -89,12 +89,23 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		return ObservableValueEvent.createChangeEvent(this, oldVal, newVal, cause);
 	}
 
-	default ObservableValueEvent<T> fireInitialEvent(T value, Object cause, Consumer<? super ObservableValueEvent<T>> action) {
-		return ObservableValueEvent.doWith(createInitialEvent(value, cause), action);
+	/**
+	 * @param value The initial value to fire the event for
+	 * @param cause The cause of the initial event
+	 * @param action The action to perform on the event
+	 */
+	default void fireInitialEvent(T value, Object cause, Consumer<? super ObservableValueEvent<T>> action) {
+		ObservableValueEvent.doWith(createInitialEvent(value, cause), action);
 	}
 
-	default ObservableValueEvent<T> fireChangeEvent(T oldVal, T newVal, Object cause, Consumer<? super ObservableValueEvent<T>> action) {
-		return ObservableValueEvent.doWith(createChangeEvent(oldVal, newVal, cause), action);
+	/**
+	 * @param newVal The old value to fire the change event for
+	 * @param oldVal The new value to fire the change event for
+	 * @param cause The cause of the change
+	 * @param action The action to perform on the event
+	 */
+	default void fireChangeEvent(T oldVal, T newVal, Object cause, Consumer<? super ObservableValueEvent<T>> action) {
+		ObservableValueEvent.doWith(createChangeEvent(oldVal, newVal, cause), action);
 	}
 
 	/**
@@ -371,12 +382,12 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 						if (event.getValue() != null) {
 							event.getValue().takeUntil(value.noInit()).subscribe(new Observer<T>() {
 								@Override
-								public <V extends T> void onNext(V value2) {
-									observer.onNext(value2);
+								public <V extends T> void onNext(V event2) {
+									observer.onNext(event2);
 								}
 
 								@Override
-								public <V extends T> void onCompleted(V value) {
+								public <V extends T> void onCompleted(V event2) {
 									// Don't use the completed events because the contents of this observable may be replaced
 								}
 							});
@@ -1088,7 +1099,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 									}
 
 									@Override
-									public <V extends ObservableValueEvent<? extends T>> void onCompleted(V value) {}
+									public <V2 extends ObservableValueEvent<? extends T>> void onCompleted(V2 value) {}
 								})));
 							if (!firedInit2[0])
 								throw new IllegalStateException(innerObs + " did not fire an initial value");

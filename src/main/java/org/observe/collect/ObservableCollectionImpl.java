@@ -34,7 +34,6 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.qommons.ArrayUtils;
 import org.qommons.Causable;
 import org.qommons.ConcurrentHashSet;
-import org.qommons.LinkedQueue;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -1261,7 +1260,7 @@ public final class ObservableCollectionImpl {
 		private final CollectionManager<E, ?, T> theFlow;
 		private final Map<ElementId, DerivedCollectionElement<E, T>> theElements;
 		private final BetterTreeSet<DerivedCollectionElement<E, T>> thePresentElements;
-		private final LinkedQueue<Consumer<? super ObservableCollectionEvent<? extends T>>> theListeners;
+		private final BetterTreeList<Consumer<? super ObservableCollectionEvent<? extends T>>> theListeners;
 		private final AtomicInteger theListenerCount;
 		private final Equivalence<? super T> theEquivalence;
 		private final Subscription theWeakSubscription;
@@ -1271,7 +1270,7 @@ public final class ObservableCollectionImpl {
 			theFlow = flow;
 			theElements = new java.util.TreeMap<>(ElementId::compareTo);
 			thePresentElements = new BetterTreeSet<>(false, (e1, e2) -> e1.manager.compareTo(e2.manager));
-			theListeners = new LinkedQueue<>();
+			theListeners = new BetterTreeList<>(true);
 			theListenerCount = new AtomicInteger();
 			theEquivalence = flow.equivalence();
 			// Must maintain a strong reference to the event listener so it is not GC'd while the collection is still alive

@@ -7,7 +7,6 @@ import java.util.function.Function;
 
 import org.observe.Subscription;
 import org.qommons.Causable;
-import org.qommons.LinkedQueue;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
@@ -15,6 +14,7 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.collect.SimpleCause;
+import org.qommons.tree.BetterTreeList;
 
 import com.google.common.reflect.TypeToken;
 
@@ -27,7 +27,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	private final TypeToken<E> theType;
 	private final LinkedList<Causable> theTransactionCauses;
 	private final BetterList<E> theValues;
-	private LinkedQueue<Consumer<? super ObservableCollectionEvent<? extends E>>> theObservers;
+	private BetterTreeList<Consumer<? super ObservableCollectionEvent<? extends E>>> theObservers;
 
 	/**
 	 * @param type The type for this collection
@@ -39,7 +39,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			throw new UnsupportedOperationException("ObservableCollection is not supported here");
 		theTransactionCauses = new LinkedList<>();
 		theValues = list;
-		theObservers = new LinkedQueue<>();
+		theObservers = new BetterTreeList<>(true);
 	}
 
 	@Override
@@ -165,8 +165,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	}
 
 	private void fire(ObservableCollectionEvent<E> evt) {
-		for (Consumer<? super ObservableCollectionEvent<? extends E>> listener : theObservers)
-			listener.accept(evt);
+		theObservers.spliterator().forEachRemaining(listener -> listener.accept(evt));
 	}
 
 	@Override

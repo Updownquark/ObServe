@@ -12,13 +12,14 @@ import java.util.function.Consumer;
 public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 	private Consumer<? super Observer<? super T>> theOnSubscribe;
 	private AtomicBoolean isAlive = new AtomicBoolean(true);
-	private AtomicBoolean hasIssuedController = new AtomicBoolean(false);
 	private Queue<Observer<? super T>> theListeners;
 
+	/** Creates a simple observable */
 	public SimpleObservable() {
 		this(null);
 	}
 
+	/** @param onSubscribe The function to notify when a subscription is added to this observable */
 	public SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe) {
 		/* Java's ConcurrentLinkedQueue has a problem (for me) that makes the class unusable here.  As documented in fireNext() below, the
 		 * behavior of observables is advertised such that if a listener is added by a listener, the new listener will be added at the end
@@ -30,7 +31,7 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 		 * mine.
 		 */
 		// theListeners = new ConcurrentLinkedQueue<>();
-		theListeners = new org.qommons.LinkedQueue<>();
+		theListeners = new org.qommons.tree.BetterTreeList<>(true);
 		theOnSubscribe = onSubscribe;
 	}
 
