@@ -140,7 +140,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			CollectionElement<E> el = theValues.addElement(e, first);
 			if (el == null)
 				return null;
-			fire(new ObservableCollectionEvent<>(el.getElementId(), theValues.getElementsBefore(el.getElementId()),
+			fire(new ObservableCollectionEvent<>(el.getElementId(), getType(), theValues.getElementsBefore(el.getElementId()),
 				CollectionChangeType.add, null, e, theTransactionCauses.peekLast()));
 			return el;
 		}
@@ -156,8 +156,8 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	public void clear() {
 		try (Transaction t = lock(true, null)) {
 			theValues.mutableSpliterator().forEachElementM(el -> {
-				ObservableCollectionEvent<E> evt = new ObservableCollectionEvent<>(el.getElementId(), 0, CollectionChangeType.remove,
-					el.get(), el.get(), theTransactionCauses.peekLast());
+				ObservableCollectionEvent<E> evt = new ObservableCollectionEvent<>(el.getElementId(), getType(), 0,
+					CollectionChangeType.remove, el.get(), el.get(), theTransactionCauses.peekLast());
 				el.remove();
 				fire(evt);
 			}, true);
@@ -199,8 +199,8 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			public void set(E value) throws UnsupportedOperationException, IllegalArgumentException {
 				E old = get();
 				valueEl.set(value);
-				fire(new ObservableCollectionEvent<>(getElementId(), getElementsBefore(getElementId()), CollectionChangeType.set, old,
-					value, theTransactionCauses.peekLast()));
+				fire(new ObservableCollectionEvent<>(getElementId(), getType(), getElementsBefore(getElementId()), CollectionChangeType.set,
+					old, value, theTransactionCauses.peekLast()));
 			}
 
 			@Override
@@ -212,9 +212,8 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			public void remove() throws UnsupportedOperationException {
 				E old = get();
 				valueEl.canRemove();
-				fire(new ObservableCollectionEvent<>(getElementId(), getElementsBefore(getElementId()), CollectionChangeType.remove, old,
-					old,
-					theTransactionCauses.peekLast()));
+				fire(new ObservableCollectionEvent<>(getElementId(), getType(), getElementsBefore(getElementId()),
+					CollectionChangeType.remove, old, old, theTransactionCauses.peekLast()));
 			}
 
 			@Override
@@ -225,7 +224,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			@Override
 			public ElementId add(E value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
 				ElementId newId = valueEl.add(value, before);
-				fire(new ObservableCollectionEvent<>(newId, getElementsBefore(newId), CollectionChangeType.add, null, value,
+				fire(new ObservableCollectionEvent<>(newId, getType(), getElementsBefore(newId), CollectionChangeType.add, null, value,
 					theTransactionCauses.peekLast()));
 				return newId;
 			}

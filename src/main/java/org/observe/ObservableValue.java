@@ -39,12 +39,12 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 				return ObservableValue.this.subscribe(new Observer<ObservableValueEvent<T>>() {
 					@Override
 					public <V extends ObservableValueEvent<T>> void onNext(V value) {
-						observer.onNext(value.getValue());
+						observer.onNext(value.getNewValue());
 					}
 
 					@Override
 					public <V extends ObservableValueEvent<T>> void onCompleted(V value) {
-						observer.onCompleted(value.getValue());
+						observer.onCompleted(value.getNewValue());
 					}
 				});
 			}
@@ -379,8 +379,8 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 				return value.subscribe(new Observer<ObservableValueEvent<? extends Observable<? extends T>>>() {
 					@Override
 					public <E extends ObservableValueEvent<? extends Observable<? extends T>>> void onNext(E event) {
-						if (event.getValue() != null) {
-							event.getValue().takeUntil(value.noInit()).subscribe(new Observer<T>() {
+						if (event.getNewValue() != null) {
+							event.getNewValue().takeUntil(value.noInit()).subscribe(new Observer<T>() {
 								@Override
 								public <V extends T> void onNext(V event2) {
 									observer.onNext(event2);
@@ -576,7 +576,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 							composedSubs[i] = theComposed.get(i).subscribe(new Observer<ObservableValueEvent<?>>() {
 								@Override
 								public <V extends ObservableValueEvent<?>> void onNext(V event) {
-									composedValues[index] = event.getValue();
+									composedValues[index] = event.getNewValue();
 									if (event.isInitial()) {
 										initialized[index] = true;
 										return;
@@ -600,7 +600,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 
 								@Override
 								public <V extends ObservableValueEvent<?>> void onCompleted(V event) {
-									composedValues[index] = event.getValue();
+									composedValues[index] = event.getNewValue();
 									completed[0] = true;
 									if (!isInitialized())
 										return;
@@ -852,7 +852,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 							@Override
 							public <V extends ObservableValueEvent<T>> void onNext(V value) {
 								T oldValue = theValue;
-								theValue = value.getValue();
+								theValue = value.getNewValue();
 								if(initialized[0]) {
 									ObservableValueEvent<T> cachedEvent = createChangeEvent(oldValue, theValue, value.getCause());
 									ObservableValueEvent.doWith(cachedEvent, evt -> theObservers.forEach(observer -> observer.onNext(evt)));
@@ -862,7 +862,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 							@Override
 							public <V extends ObservableValueEvent<T>> void onCompleted(V value) {
 								T oldValue = theValue;
-								T newValue = value.getValue();
+								T newValue = value.getNewValue();
 								if(initialized[0]) {
 									ObservableValueEvent<T> cachedEvent = createChangeEvent(oldValue, newValue, value.getCause());
 									ObservableValueEvent.doWith(cachedEvent, evt -> theObservers.forEach(observer -> observer.onNext(evt)));
@@ -1067,7 +1067,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 					firedInit[0] = true;
 					theLock.lock();
 					try {
-						final ObservableValue<? extends T> innerObs = event.getValue();
+						final ObservableValue<? extends T> innerObs = event.getNewValue();
 						// Shouldn't have 2 inner observables potentially generating events at the same time
 						if (!Objects.equals(innerObs, event.getOldValue()))
 							Subscription.unsubscribe(innerSub.getAndSet(null));
@@ -1087,11 +1087,11 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 											else
 												old[0] = innerOld = event2.getOldValue();
 											if (event.isInitial() && event2.isInitial())
-												ObservableValueEvent.doWith(retObs.createInitialEvent(event2.getValue(), event2.getCause()),
+												ObservableValueEvent.doWith(retObs.createInitialEvent(event2.getNewValue(), event2.getCause()),
 													observer::onNext);
 											else
 												ObservableValueEvent.doWith(
-													retObs.createChangeEvent(innerOld, event2.getValue(), event2.getCause()),
+													retObs.createChangeEvent(innerOld, event2.getNewValue(), event2.getCause()),
 													observer::onNext);
 										} finally {
 											theLock.unlock();
@@ -1120,7 +1120,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 					theLock.lock();
 					try {
 						ObservableValueEvent.doWith(
-							retObs.createChangeEvent(get(event.getOldValue()), get(event.getValue()), event.getCause()),
+							retObs.createChangeEvent(get(event.getOldValue()), get(event.getNewValue()), event.getCause()),
 							observer::onCompleted);
 					} finally {
 						theLock.unlock();
@@ -1214,7 +1214,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 				private void event(ObservableValueEvent<? extends T> event, boolean complete){
 					lock.lock();
 					try{
-						boolean found = !complete && theTest.test(event.getValue());
+						boolean found = !complete && theTest.test(event.getNewValue());
 						int nextIndex = index + 1;
 						if (!found) {
 							while (nextIndex < theValues.length && finished[nextIndex])
@@ -1226,17 +1226,15 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 							finished[index] = true;
 							valueSubs[index] = null;
 							if (allCompleted())
-								toFire = new ObservableValueEvent<>(FirstObservableValue.this, !hasFiredInit[0], oldValue, oldValue, event);
+								toFire = new ObservableValueEvent<>(getType(), !hasFiredInit[0], oldValue, oldValue, event);
 							else
 								toFire = null;
 						} else {
 							if (found) {
-								lastValue[0] = event.getValue();
-								toFire = new ObservableValueEvent<>(FirstObservableValue.this, !hasFiredInit[0], oldValue, event.getValue(),
-									event);
+								lastValue[0] = event.getNewValue();
+								toFire = new ObservableValueEvent<>(getType(), !hasFiredInit[0], oldValue, event.getNewValue(), event);
 							} else if (nextIndex == theValues.length)
-								toFire = new ObservableValueEvent<>(FirstObservableValue.this, !hasFiredInit[0], oldValue, theDefault.get(),
-									event);
+								toFire = new ObservableValueEvent<>(getType(), !hasFiredInit[0], oldValue, theDefault.get(), event);
 							else
 								toFire = null;
 						}

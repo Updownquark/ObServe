@@ -185,8 +185,8 @@ public class ObservableSortedSetImpl {
 				}
 
 				void fire(ObservableCollectionEvent<? extends E> evt, CollectionChangeType type, E oldValue, E newValue) {
-					observer.accept(new ObservableCollectionEvent<>(evt.getElementId(), evt.getIndex() - startIndex, evt.getType(),
-						evt.getOldValue(), evt.getNewValue(), evt));
+					observer.accept(new ObservableCollectionEvent<>(evt.getElementId(), getType(), evt.getIndex() - startIndex,
+						evt.getType(), evt.getOldValue(), evt.getNewValue(), evt));
 				}
 			});
 		}

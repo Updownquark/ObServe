@@ -427,7 +427,7 @@ public interface ObservableTree<N, V> extends Transactable {
 								for (int j = 0; j < oldValue.size(); j++) {
 									if (j == pathIndex) {
 										oldValue.add(valueEvent.getOldValue());
-										newValue.add(valueEvent.getValue());
+										newValue.add(valueEvent.getNewValue());
 									} else {
 										V value_i = theValues.get(j).get();
 										oldValue.add(value_i);
@@ -488,7 +488,7 @@ public interface ObservableTree<N, V> extends Transactable {
 
 				@Override
 				public <E extends ObservableValueEvent<? extends N>> void onNext(E nodeEvent) {
-					ObservableCollection<? extends N> children = theTree.getChildren(nodeEvent.getValue());
+					ObservableCollection<? extends N> children = theTree.getChildren(nodeEvent.getNewValue());
 					if (!isOnlyTerminal) {
 						// The easy case
 						onElement.accept(new PathNode(thePathValues));

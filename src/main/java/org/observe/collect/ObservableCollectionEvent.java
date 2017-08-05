@@ -1,19 +1,19 @@
 package org.observe.collect;
 
-import org.qommons.AbstractCausable;
+import org.observe.ObservableValueEvent;
 import org.qommons.collect.ElementId;
+
+import com.google.common.reflect.TypeToken;
 
 /**
  * An event representing a change to an {@link ObservableCollection}
  *
  * @param <E> The type of values in the collection
  */
-public class ObservableCollectionEvent<E> extends AbstractCausable {
+public class ObservableCollectionEvent<E> extends ObservableValueEvent<E> {
 	private final ElementId theElementId;
 	private final int theIndex;
 	private final CollectionChangeType theType;
-	private final E theOldValue;
-	private final E theNewValue;
 
 	/**
 	 * @param elementId The ID of the element that was changed
@@ -23,13 +23,12 @@ public class ObservableCollectionEvent<E> extends AbstractCausable {
 	 * @param newValue The new value for the element
 	 * @param cause The cause of the change
 	 */
-	public ObservableCollectionEvent(ElementId elementId, int index, CollectionChangeType type, E oldValue, E newValue, Object cause) {
-		super(cause);
+	public ObservableCollectionEvent(ElementId elementId, TypeToken<E> valueType, int index, CollectionChangeType type, E oldValue,
+		E newValue, Object cause) {
+		super(valueType, type == CollectionChangeType.add, oldValue, newValue, cause);
 		theElementId = elementId;
 		theIndex = index;
 		theType = type;
-		theOldValue = oldValue;
-		theNewValue = newValue;
 	}
 
 	/** @return The ID of the element that was changed */
@@ -47,32 +46,6 @@ public class ObservableCollectionEvent<E> extends AbstractCausable {
 		return theType;
 	}
 
-	/** @return 1 for {@link CollectionChangeType#add}, -1 for {@link CollectionChangeType#remove}, 0 otherwise */
-	public int getDiff() {
-		switch (theType) {
-		case add:
-			return 1;
-		case remove:
-			return -1;
-		default:
-			return 0;
-		}
-	}
-
-	/** @return The old value for the element ({@link CollectionChangeType#set}-type only) */
-	public E getOldValue() {
-		return theOldValue;
-	}
-
-	/** @return The new value for the element */
-	public E getNewValue() {
-		return theNewValue;
-	}
-
-	/** @return true for type {@link CollectionChangeType#add}, false otherwise */
-	public boolean isInitial() {
-		return theType == CollectionChangeType.add;
-	}
 
 	/** @return true for type {@link CollectionChangeType#remove}, false otherwise */
 	public boolean isFinal() {
@@ -85,13 +58,13 @@ public class ObservableCollectionEvent<E> extends AbstractCausable {
 		str.append('[').append(theElementId).append(']');
 		switch (theType) {
 		case add:
-			str.append("+:").append(theNewValue);
+			str.append("+:").append(getNewValue());
 			break;
 		case remove:
-			str.append("-:").append(theOldValue);
+			str.append("-:").append(getOldValue());
 			break;
 		case set:
-			str.append(':').append(theOldValue).append("->").append(theNewValue);
+			str.append(':').append(getOldValue()).append("->").append(getNewValue());
 			break;
 		}
 		return str.toString();

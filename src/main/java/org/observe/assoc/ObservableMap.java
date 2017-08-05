@@ -2,6 +2,7 @@ package org.observe.assoc;
 
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import org.observe.Observable;
@@ -10,6 +11,7 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.SettableValue;
 import org.observe.Subscription;
+import org.observe.collect.CollectionSubscription;
 import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
@@ -167,6 +169,20 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 	 * @return An observable value that changes whenever the value for the given key changes in this map
 	 */
 	ObservableValue<V> observe(Object key);
+
+	/**
+	 * @param action The action to perform on map events
+	 * @param forward Whether to subscribe to the map forward or reverse)
+	 * @return The collection subscription to use to terminate listening
+	 */
+	default CollectionSubscription subscribe(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action, boolean forward) {
+		return entrySet().subscribe(entryEvent -> {
+			V oldValue = entryEvent.getOldValue() == null ? null : entryEvent.getOldValue().getValue();
+			action.accept(new ObservableMapEvent<>(entryEvent.getElementId(), entryEvent.getElementId(), getKeyType(), getValueType(),
+				entryEvent.getIndex(), entryEvent.getIndex(), entryEvent.getType(), entryEvent.getNewValue().getKey(), oldValue,
+				entryEvent.getNewValue().getValue(), entryEvent));
+		}, forward);
+	}
 
 	/**
 	 * @param key The key to get the entry for

@@ -51,7 +51,7 @@ public class ObservableValueTester<T> extends AbstractObservableTester<T> {
 	protected Subscription sync() {
 		return theValue.act(evt -> {
 			op();
-			theSynced = evt.getValue();
+			theSynced = evt.getNewValue();
 		});
 	}
 }

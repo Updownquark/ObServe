@@ -15,7 +15,7 @@ public class ObservableTest {
 		SimpleSettableValue<Integer> obs = new SimpleSettableValue<>(Integer.TYPE, false);
 		obs.set(0, null);
 		int [] received = new int[] {0};
-		obs.act(value -> received[0] = value.getValue());
+		obs.act(value -> received[0] = value.getNewValue());
 		for(int i = 1; i < 10; i++) {
 			obs.set(i, null);
 			assertEquals(i, received[0]);
@@ -28,7 +28,7 @@ public class ObservableTest {
 		SimpleSettableValue<Integer> obs = new SimpleSettableValue<>(Integer.TYPE, false);
 		obs.set(0, null);
 		int [] received = new int[] {0};
-		obs.mapV(value -> value * 10).act(value -> received[0] = value.getValue());
+		obs.mapV(value -> value * 10).act(value -> received[0] = value.getNewValue());
 
 		for(int i = 1; i < 10; i++) {
 			obs.set(i, null);
@@ -125,7 +125,7 @@ public class ObservableTest {
 		ObservableValue<Integer> take = obs.takeUntil(stop);
 		take.act(value -> {
 			count[0]++;
-			received[0] = value.getValue();
+			received[0] = value.getNewValue();
 		});
 		take.completed().act(value -> complete[0] = true);
 
@@ -217,7 +217,7 @@ public class ObservableTest {
 		int [] received = new int[] {0};
 		obs1.combineV((arg1, arg2, arg3) -> arg1 * arg2 + arg3, obs2, obs3).act(event -> {
 			events[0]++;
-			received[0] = event.getValue();
+			received[0] = event.getNewValue();
 		});
 		for(int i = 1; i < 10; i++) {
 			obs1.set(i + 3, null);
@@ -238,7 +238,7 @@ public class ObservableTest {
 		SimpleSettableValue<Integer> inner2 = new SimpleSettableValue<>(Integer.TYPE, false);
 		inner2.set(2, null);
 		int [] received = new int[1];
-		ObservableValue.flatten(outer).act(value -> received[0] = value.getValue());
+		ObservableValue.flatten(outer).act(value -> received[0] = value.getNewValue());
 
 		assertEquals(1, received[0]);
 		inner1.set(3, null);
@@ -270,7 +270,7 @@ public class ObservableTest {
 		Integer[] reported = new Integer[1];
 		int[] events = new int[1];
 		Subscription sub = first.act(evt -> {
-			reported[0] = evt.getValue();
+			reported[0] = evt.getNewValue();
 			events[0]++;
 		});
 		assertEquals(1, events[0]);

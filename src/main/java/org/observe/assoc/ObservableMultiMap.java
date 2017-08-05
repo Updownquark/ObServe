@@ -7,12 +7,15 @@ import java.util.Collection;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
+import org.observe.collect.CollectionSubscription;
 import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
@@ -20,11 +23,13 @@ import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionElementManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
+import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableCollectionImpl;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSetImpl;
 import org.observe.collect.ObservableSortedSet;
 import org.qommons.Transaction;
+import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.TransactableMultiMap;
 
@@ -159,6 +164,56 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	 */
 	@Override
 	ObservableCollection<V> get(Object key);
+
+	/**
+	 * @param action The action to perform on map events
+	 * @param keyForward Whether to subscribe to the key set in forward or reverse order
+	 * @param valueForward Whether to subscribe to the value collections for each key in forward or reverse order
+	 * @return The collection subscription to terminate listening
+	 */
+	default CollectionSubscription subscribe(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action, boolean keyForward,
+		boolean valueForward) {
+		Map<ElementId, CollectionSubscription> valueSubs = new TreeMap<>();
+		class ValueSubscriber implements Consumer<ObservableCollectionEvent<? extends V>> {
+			private final ElementId theKeyElement;
+			private final K theKey;
+
+			ValueSubscriber(ElementId keyElement, K key) {
+				theKeyElement = keyElement;
+				theKey = key;
+			}
+
+			@Override
+			public void accept(ObservableCollectionEvent<? extends V> valueEvent) {
+				action.accept(new ObservableMapEvent<>(theKeyElement, valueEvent.getElementId(), getKeyType(), getValueType(),
+					keySet().getElementsBefore(theKeyElement), valueEvent.getIndex(), valueEvent.getType(), theKey,
+					valueEvent.getOldValue(), valueEvent.getNewValue(), valueEvent));
+			}
+		}
+		CollectionSubscription keySub = keySet().subscribe(keyEvent -> {
+			switch (keyEvent.getType()) {
+			case add:
+				valueSubs.put(keyEvent.getElementId(), get(keyEvent.getNewValue())
+					.subscribe(new ValueSubscriber(keyEvent.getElementId(), keyEvent.getNewValue()), valueForward));
+				break;
+			case remove:
+				valueSubs.remove(keyEvent.getElementId()).unsubscribe(true);
+				break;
+			case set:
+				break; // Value changes for key updates should be handled by the map itself
+			}
+		}, keyForward);
+
+		return removeAll -> {
+			try (Transaction t = keySet().lock(false, null)) {
+				keySub.unsubscribe(removeAll);
+				if (!removeAll) {
+					for (CollectionSubscription valueSub : valueSubs.values())
+						valueSub.unsubscribe(false);
+				}
+			}
+		};
+	}
 
 	/**
 	 * @param key The key to get the entry for

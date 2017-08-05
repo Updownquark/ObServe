@@ -66,14 +66,14 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 			if (!callbackLock[0]) {
 				callbackLock[0] = true;
 				try {
-					comboBox.setSelectedItem(evt.getValue());
+					comboBox.setSelectedItem(evt.getNewValue());
 				} finally {
 					callbackLock[0] = false;
 				}
 			}
 			checkEnabled.accept(selected.isEnabled().get());
 		});
-		Subscription enabledSub = selected.isEnabled().act(evt -> checkEnabled.accept(evt.getValue()));
+		Subscription enabledSub = selected.isEnabled().act(evt -> checkEnabled.accept(evt.getNewValue()));
 		return () -> {
 			valueSub.unsubscribe();
 			enabledSub.unsubscribe();

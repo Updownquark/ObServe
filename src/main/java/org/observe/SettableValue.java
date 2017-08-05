@@ -64,7 +64,7 @@ public interface SettableValue<T> extends ObservableValue<T>, Settable<T> {
 	 */
 	default <V extends T> Subscription link(ObservableValue<V> value) {
 		return value.act(event -> {
-			set(event.getValue(), event);
+			set(event.getNewValue(), event);
 		});
 	}
 

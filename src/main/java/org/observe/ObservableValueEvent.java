@@ -2,38 +2,32 @@ package org.observe;
 
 import org.qommons.AbstractCausable;
 
+import com.google.common.reflect.TypeToken;
+
 /**
  * An event representing the change of an observable's value
  *
  * @param <T> The compile-time type of the observable's value
  */
 public class ObservableValueEvent<T> extends AbstractCausable {
-	private final ObservableValue<T> theObservable;
-
 	private final boolean isInitial;
 	private final T theOldValue;
 	private final T theNewValue;
 
 	/**
-	 * @param observable The observable whose value changed
+	 * @param type The type of the observable whose value changed
 	 * @param initial Whether this represents the population of the initial value of an observable value in response to subscription
 	 * @param oldValue The old value of the observable
 	 * @param newValue The new value in the observable
 	 * @param cause The cause of this event--typically another event or null
 	 */
-	protected ObservableValueEvent(ObservableValue<T> observable, boolean initial, T oldValue, T newValue, Object cause) {
+	protected ObservableValueEvent(TypeToken<T> type, boolean initial, T oldValue, T newValue, Object cause) {
 		super(cause);
-		theObservable = observable;
 		isInitial = initial;
 		if(oldValue != null) // Allow null for old value even for primitive types
-			oldValue = (T) observable.getType().wrap().getRawType().cast(oldValue);
+			oldValue = (T) type.wrap().getRawType().cast(oldValue);
 		theOldValue = oldValue;
-		theNewValue = (T) observable.getType().wrap().getRawType().cast(newValue);
-	}
-
-	/** @return The observable that caused this event */
-	public ObservableValue<T> getObservable() {
-		return theObservable;
+		theNewValue = (T) type.wrap().getRawType().cast(newValue);
 	}
 
 	/** @return Whether this represents the population of the initial value of an observable value in response to subscription */
@@ -47,13 +41,13 @@ public class ObservableValueEvent<T> extends AbstractCausable {
 	}
 
 	/** @return The new value in the observable */
-	public T getValue() {
+	public T getNewValue() {
 		return theNewValue;
 	}
 
 	@Override
 	public String toString(){
-		return theObservable + ": " + theOldValue + "->" + theNewValue;
+		return theOldValue + "->" + theNewValue;
 	}
 
 	/**
@@ -66,7 +60,7 @@ public class ObservableValueEvent<T> extends AbstractCausable {
 	 * @return The event to fire
 	 */
 	public static <T> ObservableValueEvent<T> createInitialEvent(ObservableValue<T> observable, T value, Object cause) {
-		return new ObservableValueEvent<>(observable, true, null, value, cause);
+		return new ObservableValueEvent<>(observable.getType(), true, null, value, cause);
 	}
 
 	/**
@@ -80,6 +74,6 @@ public class ObservableValueEvent<T> extends AbstractCausable {
 	 * @return The event to fire
 	 */
 	public static <T> ObservableValueEvent<T> createChangeEvent(ObservableValue<T> observable, T oldValue, T newValue, Object cause) {
-		return new ObservableValueEvent<>(observable, false, oldValue, newValue, cause);
+		return new ObservableValueEvent<>(observable.getType(), false, oldValue, newValue, cause);
 	}
 }

@@ -927,7 +927,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-			return getWrapped().onChange(evt -> observer.accept(new ObservableCollectionEvent<>(evt.getElementId().reverse(),
+			return getWrapped().onChange(evt -> observer.accept(new ObservableCollectionEvent<>(evt.getElementId().reverse(), getType(),
 				size() - evt.getIndex() - 1, evt.getType(), evt.getOldValue(), evt.getNewValue(), evt)));
 		}
 
@@ -973,10 +973,10 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer, boolean forward) {
-			return getWrapped().subscribe(new ReversedSubscriber<>(observer), !forward);
+			return getWrapped().subscribe(new ReversedSubscriber(observer), !forward);
 		}
 
-		private static class ReversedSubscriber<E> implements Consumer<ObservableCollectionEvent<? extends E>> {
+		private class ReversedSubscriber implements Consumer<ObservableCollectionEvent<? extends E>> {
 			private final Consumer<? super ObservableCollectionEvent<? extends E>> theObserver;
 			private int theSize;
 
@@ -991,8 +991,8 @@ public final class ObservableCollectionImpl {
 				int index = theSize - evt.getIndex() - 1;
 				if (evt.getType() == CollectionChangeType.remove)
 					theSize++;
-				ObservableCollectionEvent.doWith(new ObservableCollectionEvent<>(evt.getElementId().reverse(), index, evt.getType(),
-					evt.getOldValue(), evt.getNewValue(), evt), theObserver);
+				ObservableCollectionEvent.doWith(new ObservableCollectionEvent<>(evt.getElementId().reverse(), getType(), index,
+					evt.getType(), evt.getOldValue(), evt.getNewValue(), evt), theObserver);
 			}
 		}
 	}
@@ -1149,8 +1149,8 @@ public final class ObservableCollectionImpl {
 				default:
 					throw new IllegalStateException("Unrecognized collection change type: " + evt.getType());
 				}
-				observer
-				.accept(new ObservableCollectionEvent<>(evt.getElementId(), evt.getIndex(), evt.getType(), oldValue, newValue, evt));
+				observer.accept(
+					new ObservableCollectionEvent<>(evt.getElementId(), getType(), evt.getIndex(), evt.getType(), oldValue, newValue, evt));
 			});
 		}
 
@@ -1357,13 +1357,13 @@ public final class ObservableCollectionImpl {
 
 		private void addToPresent(DerivedCollectionElement<E, T> element, Object cause) {
 			element.presentNode = thePresentElements.addElement(element, false);
-			fireListeners(new ObservableCollectionEvent<>(element, element.presentNode.getNodesBefore(), CollectionChangeType.add, null,
-				element.get(), cause));
+			fireListeners(new ObservableCollectionEvent<>(element, getType(), element.presentNode.getNodesBefore(),
+				CollectionChangeType.add, null, element.get(), cause));
 		}
 
 		private void removeFromPresent(DerivedCollectionElement<E, T> element, T oldValue, Object cause) {
-			fireListeners(new ObservableCollectionEvent<>(element, element.presentNode.getNodesBefore(), CollectionChangeType.remove,
-				oldValue, oldValue, cause));
+			fireListeners(new ObservableCollectionEvent<>(element, getType(), element.presentNode.getNodesBefore(),
+				CollectionChangeType.remove, oldValue, oldValue, cause));
 			thePresentElements.forMutableElement(element.presentNode.getElementId(), el -> el.remove());
 			element.presentNode = null;
 		}
@@ -1378,11 +1378,11 @@ public final class ObservableCollectionImpl {
 				removeFromPresent(element, oldValue, cause);
 				addToPresent(element, cause);
 			} else if (oldValue != element.get())
-				fireListeners(new ObservableCollectionEvent<>(element, element.presentNode.getNodesBefore(), CollectionChangeType.set,
-					oldValue, element.get(), cause));
+				fireListeners(new ObservableCollectionEvent<>(element, getType(), element.presentNode.getNodesBefore(),
+					CollectionChangeType.set, oldValue, element.get(), cause));
 			else if (fireUpdate)
-				fireListeners(new ObservableCollectionEvent<>(element, element.presentNode.getNodesBefore(), CollectionChangeType.set,
-					oldValue, oldValue, cause));
+				fireListeners(new ObservableCollectionEvent<>(element, getType(), element.presentNode.getNodesBefore(),
+					CollectionChangeType.set, oldValue, oldValue, cause));
 		}
 
 		private void fireListeners(ObservableCollectionEvent<T> event) {
@@ -1442,16 +1442,16 @@ public final class ObservableCollectionImpl {
 				SubscriptionCause.doWith(new SubscriptionCause(), c -> {
 					int index = 0;
 					for (DerivedCollectionElement<E, T> element : thePresentElements) {
-						observer
-						.accept(new ObservableCollectionEvent<>(element, index++, CollectionChangeType.add, null, element.get(), c));
+						observer.accept(
+							new ObservableCollectionEvent<>(element, getType(), index++, CollectionChangeType.add, null, element.get(), c));
 					}
 				});
 				return removeAll -> {
 					SubscriptionCause.doWith(new SubscriptionCause(), c -> {
 						int index = 0;
 						for (DerivedCollectionElement<E, T> element : thePresentElements.reverse()) {
-							observer.accept(
-								new ObservableCollectionEvent<>(element, index++, CollectionChangeType.remove, null, element.get(), c));
+							observer.accept(new ObservableCollectionEvent<>(element, getType(), index++, CollectionChangeType.remove, null,
+								element.get(), c));
 						}
 					});
 				};
@@ -2242,8 +2242,8 @@ public final class ObservableCollectionImpl {
 							try (Transaction t = lock(false, null)) {
 								CompoundId id = new CompoundId(outerEvt.getElementId(), innerEvt.getElementId());
 								int innerIndex = getInnerElementsBefore(outerEvt.getElementId()) + innerEvt.getIndex();
-								observer.accept(new ObservableCollectionEvent<>(id, innerIndex, innerEvt.getType(), innerEvt.getOldValue(),
-									innerEvt.getNewValue(), innerEvt));
+								observer.accept(new ObservableCollectionEvent<>(id, getType(), innerIndex, innerEvt.getType(),
+									innerEvt.getOldValue(), innerEvt.getNewValue(), innerEvt));
 							}
 						}));
 					}
@@ -2255,8 +2255,8 @@ public final class ObservableCollectionImpl {
 							return;
 						outerEvt.getOldValue().spliterator()
 						.forEachElement(el -> observer.accept(//
-							new ObservableCollectionEvent<>(new CompoundId(outerEvt.getElementId(), el.getElementId()), index,
-								CollectionChangeType.remove, el.get(), el.get(), outerEvt)),
+							new ObservableCollectionEvent<>(new CompoundId(outerEvt.getElementId(), el.getElementId()), getType(),
+								index, CollectionChangeType.remove, el.get(), el.get(), outerEvt)),
 							true);
 					}
 				});

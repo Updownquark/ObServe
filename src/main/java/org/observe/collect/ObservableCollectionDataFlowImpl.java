@@ -1744,7 +1744,7 @@ public class ObservableCollectionDataFlowImpl {
 					ArgHolder<?> holder = arg.getValue();
 					builder.withAction((ObservableValueEvent<?> evt) -> {
 						try (Transaction t = lock(true, null)) {
-							((ArgHolder<Object>) holder).value = evt.getValue();
+							((ArgHolder<Object>) holder).value = evt.getNewValue();
 							getUpdateListener().accept(new CollectionUpdate(this, null, evt));
 						}
 					}, action -> arg.getKey().act(action));

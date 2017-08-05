@@ -17,9 +17,9 @@ public class ObservableUtils {
 	 */
 	public static <T> ObservableValueEvent<T> wrap(ObservableValueEvent<? extends T> event, ObservableValue<T> wrapper) {
 		if (event.isInitial())
-			return wrapper.createInitialEvent(event.getValue(), event.getCause());
+			return wrapper.createInitialEvent(event.getNewValue(), event.getCause());
 		else
-			return wrapper.createChangeEvent(event.getOldValue(), event.getValue(), event.getCause());
+			return wrapper.createChangeEvent(event.getOldValue(), event.getNewValue(), event.getCause());
 	}
 
 	/**

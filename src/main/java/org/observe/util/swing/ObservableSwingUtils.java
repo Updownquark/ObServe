@@ -34,10 +34,10 @@ public class ObservableSwingUtils {
 		};
 		Subscription valueSub = selected.act(evt -> {
 			if (!callbackLock[0])
-				checkBox.setSelected(evt.getValue());
+				checkBox.setSelected(evt.getNewValue());
 			checkEnabled.accept(selected.isEnabled().get());
 		});
-		Subscription enabledSub = selected.isEnabled().act(evt -> checkEnabled.accept(evt.getValue()));
+		Subscription enabledSub = selected.isEnabled().act(evt -> checkEnabled.accept(evt.getNewValue()));
 		return () -> {
 			valueSub.unsubscribe();
 			enabledSub.unsubscribe();
@@ -71,13 +71,13 @@ public class ObservableSwingUtils {
 			}
 		};
 		Subscription selectedSub = selected.act(evt -> {
-			T value = evt.getValue();
+			T value = evt.getNewValue();
 			for (int i = 0; i < options.length; i++) {
 				buttons[i].setSelected(Objects.equals(options[i], value));
 			}
 			checkEnabled.accept(selected.isEnabled().get());
 		});
-		Subscription enabledSub = selected.isEnabled().act(evt -> checkEnabled.accept(evt.getValue()));
+		Subscription enabledSub = selected.isEnabled().act(evt -> checkEnabled.accept(evt.getNewValue()));
 		return () -> {
 			selectedSub.unsubscribe();
 			enabledSub.unsubscribe();
@@ -132,9 +132,9 @@ public class ObservableSwingUtils {
 				try {
 					Number newValue;
 					if (integer)
-						newValue = Integer.valueOf(evt.getValue().intValue());
+						newValue = Integer.valueOf(evt.getNewValue().intValue());
 					else
-						newValue = Double.valueOf(evt.getValue().doubleValue());
+						newValue = Double.valueOf(evt.getNewValue().doubleValue());
 					spinner.setValue(newValue);
 				} finally {
 					callbackLock[0] = false;
@@ -142,7 +142,7 @@ public class ObservableSwingUtils {
 			}
 		});
 		Subscription enabledSub = value.isEnabled().act(evt -> {
-			String enabled = evt.getValue();
+			String enabled = evt.getNewValue();
 			spinner.setEnabled(enabled == null);
 			spinner.setToolTipText(enabled != null ? enabled : descrip);
 		});
@@ -177,14 +177,14 @@ public class ObservableSwingUtils {
 			if (!callbackLock[0]) {
 				callbackLock[0] = true;
 				try {
-					slider.setValue(evt.getValue());
+					slider.setValue(evt.getNewValue());
 				} finally {
 					callbackLock[0] = false;
 				}
 			}
 		});
 		Subscription enabledSub = value.isEnabled().act(evt -> {
-			String enabled = evt.getValue();
+			String enabled = evt.getNewValue();
 			slider.setEnabled(enabled == null);
 			slider.setToolTipText(enabled != null ? enabled : descrip);
 		});
