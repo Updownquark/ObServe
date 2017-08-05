@@ -17,6 +17,7 @@ public class ObservableCollectionEvent<E> extends ObservableValueEvent<E> {
 
 	/**
 	 * @param elementId The ID of the element that was changed
+	 * @param valueType The type of the value, for validation
 	 * @param index The index of the element in the collection
 	 * @param type The type of the change
 	 * @param oldValue The old value for the element ({@link CollectionChangeType#set}-type only)
