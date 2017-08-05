@@ -35,7 +35,7 @@ public class ObservableDemoGui extends JPanel {
 
 		ValueCategory(String nm) {
 			name = nm;
-			values = ObservableCollection.create(TypeToken.of(Integer.class)).collect();
+			values = ObservableCollection.create(TypeToken.of(Integer.class));
 		}
 
 		@Override
@@ -74,7 +74,7 @@ public class ObservableDemoGui extends JPanel {
 	}
 
 	private void initObservables() {
-		theCategories = ObservableCollection.create(TypeToken.of(ValueCategory.class)).collect();
+		theCategories = ObservableCollection.create(TypeToken.of(ValueCategory.class));
 		theSelectedCategory = new SimpleSettableValue<>(new TypeToken<ValueCategory>() {}, true);
 		theCategoryAddObservable = new SimpleObservable<>();
 		theCategoryRemoveObservable = new SimpleObservable<>();
@@ -126,7 +126,7 @@ public class ObservableDemoGui extends JPanel {
 				else if (parent instanceof ValueCategory)
 					return ((ValueCategory) parent).values;
 				else
-					return ObservableCollection.constant(TypeToken.of(Void.class)).collect();
+					return ObservableCollection.constant(TypeToken.of(Void.class));
 			}
 		});
 		theValueTree.setEditable(false);
@@ -158,7 +158,7 @@ public class ObservableDemoGui extends JPanel {
 				else if (parent instanceof Long)
 					return theMap.get(parent);
 				else
-					return ObservableCollection.constant(TypeToken.of(Void.class)).collect();
+					return ObservableCollection.constant(TypeToken.of(Void.class));
 			}
 		});
 	}

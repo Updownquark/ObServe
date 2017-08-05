@@ -1,12 +1,10 @@
 package org.observe.collect;
 
-import static org.hamcrest.CoreMatchers.notNullValue;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.qommons.QommonsTestUtils.collectionsEqual;
-import static org.qommons.QommonsTestUtils.contains;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -48,8 +46,11 @@ import org.qommons.collect.TransactableList;
 
 import com.google.common.reflect.TypeToken;
 
+import javafx.collections.ObservableList;
+
 /** Tests observable collections and their default implementations */
 public class ObservableCollectionsTest {
+	public static final TypeToken<Integer> intType = TypeToken.of(Integer.class);
 	/**
 	 * A predicate interface that helps with testing observable structures
 	 *
@@ -96,19 +97,16 @@ public class ObservableCollectionsTest {
 
 		Function<Integer, Integer> mapFn = v -> v + 1000;
 		Function<Integer, Integer> reverseMapFn = v -> v - 1000;
-		ObservableCollection<Integer> mappedOL = coll.map(null, mapFn, reverseMapFn);
+		ObservableCollection<Integer> mappedOL = coll.flow().map(intType).cache(false).withReverse(reverseMapFn).map(mapFn).collectLW();
 		ObservableCollectionTester<Integer> mappedTester = new ObservableCollectionTester<>(mappedOL);
 
-		Predicate<Integer> filterFn1 = v -> v % 3 == 0;
-		ObservableCollection<Integer> filteredOL1 = coll.filter(filterFn1);
+		Function<Integer, String> filterFn1 = v -> v % 3 == 0 ? null : "no";
+		ObservableCollection<Integer> filteredOL1 = coll.flow().filter(filterFn1).collect();
 		ObservableCollectionTester<Integer> filterTester1 = new ObservableCollectionTester<>(filteredOL1);
 
-		Function<Integer, Integer> filterMap = v -> v;
-		ObservableCollection<Integer> filterMapOL = coll.filterMap(null, filterMap, filterMap, false);
-		ObservableCollectionTester<Integer> filterMapTester = new ObservableCollectionTester<>(filterMapOL);
-
 		Function<Integer, Integer> groupFn = v -> v % 3;
-		ObservableMultiMap<Integer, Integer> grouped = coll.groupBy(groupFn);
+		ObservableMultiMap<Integer, Integer> grouped = coll.flow()
+			.groupBy(keys -> keys.map(intType).map(groupFn).unique(true), true).collect();
 		Map<Integer, List<Integer>> groupedSynced = new LinkedHashMap<>();
 		ObservableCollectionsTest.sync(grouped, groupedSynced, () -> new ArrayList<>());
 
@@ -116,10 +114,11 @@ public class ObservableCollectionsTest {
 		BinaryOperator<Integer> reverseCombineFn = (v1, v2) -> v1 - v2;
 		SimpleSettableValue<Integer> combineVar = new SimpleSettableValue<>(Integer.class, false);
 		combineVar.set(10000, null);
-		ObservableCollection<Integer> combinedOL = coll.combine(combineVar, coll.getType(), combineFn, reverseCombineFn);
+		ObservableCollection<Integer> combinedOL = coll.flow().combineWith(combineVar, intType).withReverse(reverseCombineFn)
+			.build(combineFn).collect();
 		ObservableCollectionTester<Integer> combinedTester = new ObservableCollectionTester<>(combinedOL);
 
-		// TODO Test reversed sets
+		// TODO Test reversed collections
 
 		BinaryOperator<Integer> maxFn = (v1, v2) -> v1 >= v2 ? v1 : v2;
 		ObservableValue<Integer> sum = coll.reduce(0, combineFn, reverseCombineFn);
@@ -198,7 +197,6 @@ public class ObservableCollectionsTest {
 		return new Checker<ObservableCollection<Integer>>() {
 			@Override
 			public void accept(ObservableCollection<Integer> value) {
-				boolean ordered = coll instanceof ObservableIndexedCollection;
 				tester.checkSynced();
 				if(check != null)
 					check.accept(coll);
@@ -206,11 +204,8 @@ public class ObservableCollectionsTest {
 				mappedTester.set(coll.stream().map(mapFn).collect(Collectors.toList()));
 				mappedTester.check();
 
-				filterTester1.set(coll.stream().filter(filterFn1).collect(Collectors.toList()));
+				filterTester1.set(coll.stream().filter(v -> filterFn1.apply(v) == null).collect(Collectors.toList()));
 				filterTester1.check();
-
-				filterMapTester.set(tester.getSyncedCopy());
-				filterMapTester.check();
 
 				Set<Integer> groupKeySet = tester.getSyncedCopy().stream().map(groupFn).collect(Collectors.toSet());
 				assertThat(grouped.keySet(), collectionsEqual(groupKeySet, false));
@@ -218,8 +213,8 @@ public class ObservableCollectionsTest {
 				for(Integer groupKey : groupKeySet) {
 					List<Integer> values = tester.getSyncedCopy().stream().filter(v -> Objects.equals(groupFn.apply(v), groupKey))
 						.collect(Collectors.toList());
-					assertThat(grouped.get(groupKey), collectionsEqual(values, ordered));
-					assertThat(groupedSynced.get(groupKey), collectionsEqual(values, ordered));
+					assertThat(grouped.get(groupKey), collectionsEqual(values, true));
+					assertThat(groupedSynced.get(groupKey), collectionsEqual(values, true));
 				}
 
 				combinedTester.set(coll.stream().map(v -> v + combineVar.get()).collect(Collectors.toList()));
@@ -282,7 +277,6 @@ public class ObservableCollectionsTest {
 			public void close() {
 				if (depth < QommonsTestUtils.COLLECTION_TEST_DEPTH) {
 					testCollection(mappedOL, this, depth + 1);
-					testCollection(filterMapOL, this, depth + 1);
 					testCollection(combinedOL, this, depth + 1);
 				}
 
@@ -322,7 +316,6 @@ public class ObservableCollectionsTest {
 				tester.setSynced(false);
 				mappedTester.setSynced(false);
 				filterTester1.setSynced(false);
-				filterMapTester.setSynced(false);
 				combinedTester.setSynced(false);
 				if(syncedSubSetSubs != null) {
 					for(Subscription sub : syncedSubSetSubs)
@@ -348,48 +341,19 @@ public class ObservableCollectionsTest {
 	}
 
 	private static <T> Subscription sync(ObservableCollection<T> coll, List<T> synced, int [] opCount) {
-		if(coll instanceof ObservableIndexedCollection)
-			return ((ObservableIndexedCollection<T>) coll).onOrderedElement(el -> {
-				el.subscribe(new Observer<ObservableValueEvent<T>>() {
-					@Override
-					public <V extends ObservableValueEvent<T>> void onNext(V evt) {
-						opCount[0]++;
-						if(evt.isInitial())
-							synced.add(el.getIndex(), evt.getValue());
-						else {
-							assertEquals(evt.getOldValue(), synced.unwrap(el.getIndex()));
-							synced.set(el.getIndex(), evt.getValue());
-						}
-					}
-
-					@Override
-					public <V extends ObservableValueEvent<T>> void onCompleted(V evt) {
-						opCount[0]++;
-						assertEquals(evt.getValue(), synced.remove(el.getIndex()));
-					}
-				});
-			});
-		else
-			return coll.onElement(el -> {
-				el.subscribe(new Observer<ObservableValueEvent<T>>() {
-					@Override
-					public <V extends ObservableValueEvent<T>> void onNext(V evt) {
-						opCount[0]++;
-						if(evt.isInitial())
-							synced.add(evt.getValue());
-						else {
-							assertTrue(synced.remove(evt.getOldValue()));
-							synced.add(evt.getValue());
-						}
-					}
-
-					@Override
-					public <V extends ObservableValueEvent<T>> void onCompleted(V evt) {
-						opCount[0]++;
-						assertTrue(synced.remove(evt.getValue()));
-					}
-				});
-			});
+		return coll.subscribe(evt -> {
+			switch (evt.getType()) {
+			case add:
+				synced.add(evt.getIndex(), evt.getNewValue());
+				break;
+			case remove:
+				assertEquals(evt.getOldValue(), synced.remove(evt.getIndex()));
+				break;
+			case set:
+				assertEquals(evt.getOldValue(), synced.set(evt.getIndex(), evt.getNewValue()));
+				break;
+			}
+		}, true);
 	}
 
 	/**
@@ -405,54 +369,60 @@ public class ObservableCollectionsTest {
 	 */
 	public static <K, V, C extends Collection<V>> Subscription sync(ObservableMultiMap<K, V> map, Map<K, C> synced,
 		Supplier<? extends C> collectCreator) {
-		return map.keySet().onElement(el -> el.subscribe(new Observer<ObservableValueEvent<K>>() {
-			@Override
-			public <E extends ObservableValueEvent<K>> void onNext(E event) {
-				if(!event.isInitial())
-					return;
-				assertEquals(null, synced.unwrap(event.getValue()));
-				C collect = collectCreator.get();
-				synced.put(event.getValue(), collect);
-				Subscription elSub = map.unwrap(event.getValue()).onElement(el2 -> el2.subscribe(new Observer<ObservableValueEvent<V>>() {
+		return map.keySet().subscribe(evt->{
+			switch(evt.getType()){
+			case add:
+				assertNull(synced
+			}
+		}, true);
+				return map.keySet().onElement(el -> el.subscribe(new Observer<ObservableValueEvent<K>>() {
 					@Override
-					public <E2 extends ObservableValueEvent<V>> void onNext(E2 event2) {
-						if(el2 instanceof ObservableOrderedElement && collect instanceof List) {
-							ObservableOrderedElement<V> orderedEl = (ObservableOrderedElement<V>) el2;
-							if(event2.isInitial())
-								((List<V>) collect).add(orderedEl.getIndex(), event2.getValue());
-							else {
-								assertEquals(event2.getOldValue(), ((List<V>) collect).unwrap(orderedEl.getIndex()));
-								((List<V>) collect).set(orderedEl.getIndex(), event2.getValue());
+					public <E extends ObservableValueEvent<K>> void onNext(E event) {
+						if(!event.isInitial())
+							return;
+						assertEquals(null, synced.unwrap(event.getValue()));
+						C collect = collectCreator.get();
+						synced.put(event.getValue(), collect);
+						Subscription elSub = map.unwrap(event.getValue()).onElement(el2 -> el2.subscribe(new Observer<ObservableValueEvent<V>>() {
+							@Override
+							public <E2 extends ObservableValueEvent<V>> void onNext(E2 event2) {
+								if(el2 instanceof ObservableOrderedElement && collect instanceof List) {
+									ObservableOrderedElement<V> orderedEl = (ObservableOrderedElement<V>) el2;
+									if(event2.isInitial())
+										((List<V>) collect).add(orderedEl.getIndex(), event2.getValue());
+									else {
+										assertEquals(event2.getOldValue(), ((List<V>) collect).unwrap(orderedEl.getIndex()));
+										((List<V>) collect).set(orderedEl.getIndex(), event2.getValue());
+									}
+								} else {
+									if(event2.isInitial())
+										collect.add(event2.getValue());
+									else {
+										assertEquals(event2.getOldValue(), collect.remove(event2.getOldValue()));
+										collect.add(event2.getValue());
+									}
+								}
 							}
-						} else {
-							if(event2.isInitial())
-								collect.add(event2.getValue());
-							else {
-								assertEquals(event2.getOldValue(), collect.remove(event2.getOldValue()));
-								collect.add(event2.getValue());
+
+							@Override
+							public <E2 extends ObservableValueEvent<V>> void onCompleted(E2 event2) {
+								if(el2 instanceof ObservableOrderedElement && collect instanceof List) {
+									ObservableOrderedElement<V> orderedEl = (ObservableOrderedElement<V>) el2;
+									assertEquals(event2.getValue(), ((List<V>) collect).remove(orderedEl.getIndex()));
+								} else {
+									assertThat(collect, contains(event2.getValue()));
+									collect.remove(event2.getValue());
+								}
 							}
-						}
+						}));
+						el.completed().act(evt -> elSub.unsubscribe());
 					}
 
 					@Override
-					public <E2 extends ObservableValueEvent<V>> void onCompleted(E2 event2) {
-						if(el2 instanceof ObservableOrderedElement && collect instanceof List) {
-							ObservableOrderedElement<V> orderedEl = (ObservableOrderedElement<V>) el2;
-							assertEquals(event2.getValue(), ((List<V>) collect).remove(orderedEl.getIndex()));
-						} else {
-							assertThat(collect, contains(event2.getValue()));
-							collect.remove(event2.getValue());
-						}
+					public <E extends ObservableValueEvent<K>> void onCompleted(E event) {
+						assertThat(synced.remove(event.getValue()), notNullValue());
 					}
 				}));
-				el.completed().act(evt -> elSub.unsubscribe());
-			}
-
-			@Override
-			public <E extends ObservableValueEvent<K>> void onCompleted(E event) {
-				assertThat(synced.remove(event.getValue()), notNullValue());
-			}
-		}));
 	}
 
 	/** Runs a barrage of tests on {@link ObservableArrayList} */

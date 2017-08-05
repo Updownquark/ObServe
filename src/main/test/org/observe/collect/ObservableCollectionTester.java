@@ -2,17 +2,13 @@ package org.observe.collect;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
-import static org.junit.Assert.assertTrue;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
-import java.util.function.Consumer;
 
 import org.observe.AbstractObservableTester;
-import org.observe.ObservableValueEvent;
-import org.observe.Observer;
 import org.observe.Subscription;
 import org.qommons.QommonsTestUtils;
 
@@ -104,7 +100,7 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 	/**
 	 * Checks this observable's value against its synced internal state and against the expected values in {@link #getExpected()} and checks
 	 * for the given number of operations
-	 * 
+	 *
 	 * @param ops The number of operations expected to have occurred since the last check
 	 */
 	public void check(int ops) {
@@ -114,7 +110,7 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 	/**
 	 * Checks this observable's value against its synced internal state and against the expected values in {@link #getExpected()} and checks
 	 * for the given number of operations
-	 * 
+	 *
 	 * @param minOps The minimum number of operations expected to have occurred since the last check
 	 * @param maxOps The minimum number of operations expected to have occurred since the last check
 	 */
@@ -124,65 +120,29 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 
 	@Override
 	public void checkValue(Collection<E> expected) {
-		boolean ordered = theCollection instanceof ObservableIndexedCollection;
-		assertThat(theExpected, QommonsTestUtils.collectionsEqual(theSyncedCopy, ordered));
+		assertThat(theExpected, QommonsTestUtils.collectionsEqual(theSyncedCopy, true));
 	}
 
 	@Override
 	public void checkSynced() {
-		boolean ordered = theCollection instanceof ObservableIndexedCollection;
-		assertThat(theSyncedCopy, QommonsTestUtils.collectionsEqual(theCollection, ordered));
+		assertThat(theSyncedCopy, QommonsTestUtils.collectionsEqual(theCollection, true));
 	}
 
 	@Override
 	protected Subscription sync() {
-		if (theCollection instanceof ObservableIndexedCollection)
-			return ((ObservableIndexedCollection<E>) theCollection).onOrderedElement(new Consumer<ObservableOrderedElement<E>>() {
-				@Override
-				public void accept(ObservableOrderedElement<E> el) {
-					el.subscribe(new Observer<ObservableValueEvent<E>>() {
-						@Override
-						public <V extends ObservableValueEvent<E>> void onNext(V evt) {
-							op();
-							if (evt.isInitial())
-								theSyncedCopy.add(el.getIndex(), evt.getValue());
-							else {
-								assertEquals(evt.getOldValue(), theSyncedCopy.unwrap(el.getIndex()));
-								theSyncedCopy.set(el.getIndex(), evt.getValue());
-							}
-						}
-
-						@Override
-						public <V extends ObservableValueEvent<E>> void onCompleted(V evt) {
-							op();
-							assertEquals(evt.getValue(), theSyncedCopy.remove(el.getIndex()));
-						}
-					});
-				}
-			});
-		else
-			return theCollection.onElement(new Consumer<ObservableElement<E>>() {
-				@Override
-				public void accept(ObservableElement<E> el) {
-					el.subscribe(new Observer<ObservableValueEvent<E>>() {
-						@Override
-						public <V extends ObservableValueEvent<E>> void onNext(V evt) {
-							op();
-							if (evt.isInitial())
-								theSyncedCopy.add(evt.getValue());
-							else {
-								assertTrue(theSyncedCopy.remove(evt.getOldValue()));
-								theSyncedCopy.add(evt.getValue());
-							}
-						}
-
-						@Override
-						public <V extends ObservableValueEvent<E>> void onCompleted(V evt) {
-							op();
-							assertTrue(theSyncedCopy.remove(evt.getValue()));
-						}
-					});
-				}
-			});
+		return theCollection.subscribe(evt -> {
+			op();
+			switch (evt.getType()) {
+			case add:
+				theSyncedCopy.add(evt.getIndex(), evt.getNewValue());
+				break;
+			case remove:
+				assertEquals(evt.getOldValue(), theSyncedCopy.remove(evt.getIndex()));
+				break;
+			case set:
+				assertEquals(evt.getOldValue(), theSyncedCopy.set(evt.getIndex(), evt.getNewValue()));
+				break;
+			}
+		}, true);
 	}
 }

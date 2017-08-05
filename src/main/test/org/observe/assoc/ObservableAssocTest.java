@@ -9,7 +9,6 @@ import org.observe.ObservableValue;
 import org.observe.SimpleSettableValue;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionTester;
-import org.observe.collect.impl.ObservableArrayList;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -20,11 +19,11 @@ public class ObservableAssocTest {
 
 	class TreeNode<T> {
 		final SimpleSettableValue<T> value;
-		final ObservableArrayList<TreeNode<T>> children;
+		final ObservableCollection<TreeNode<T>> children;
 
 		TreeNode(TypeToken<T> type, T initValue) {
 			value = new SimpleSettableValue<>(type, false);
-			children = new ObservableArrayList<>(new TypeToken<TreeNode<T>>() {}.where(new TypeParameter<T>() {}, type));
+			children = ObservableCollection.create(new TypeToken<TreeNode<T>>() {}.where(new TypeParameter<T>() {}, type));
 
 			value.set(initValue, null);
 		}
