@@ -90,7 +90,14 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 	@Override
 	default boolean belongs(Object value) {
-		return equivalence().isElement(value) && getType().getRawType().isInstance(value);
+		if (!equivalence().isElement(value))
+			return false;
+		TypeToken<E> type = getType();
+		if (value == null)
+			return !type.isPrimitive();
+		else if (!getType().wrap().getRawType().isInstance(value))
+			return false;
+		return true;
 	}
 
 	@Override
@@ -840,7 +847,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @return The string representation of the collection's contents
 	 */
 	public static String toString(ObservableCollection<?> coll) {
-		StringBuilder ret = new StringBuilder("(");
+		StringBuilder ret = new StringBuilder("[");
 		boolean first = true;
 		try (Transaction t = coll.lock(false, null)) {
 			for (Object value : coll) {
@@ -851,7 +858,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 				ret.append(value);
 			}
 		}
-		ret.append(')');
+		ret.append(']');
 		return ret.toString();
 	}
 

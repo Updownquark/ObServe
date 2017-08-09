@@ -1446,14 +1446,18 @@ public final class ObservableCollectionImpl {
 							new ObservableCollectionEvent<>(element, getType(), index++, CollectionChangeType.add, null, element.get(), c));
 					}
 				});
+				Subscription changeSub = onChange(observer);
 				return removeAll -> {
-					SubscriptionCause.doWith(new SubscriptionCause(), c -> {
-						int index = 0;
-						for (DerivedCollectionElement<E, T> element : thePresentElements.reverse()) {
-							observer.accept(new ObservableCollectionEvent<>(element, getType(), index++, CollectionChangeType.remove, null,
-								element.get(), c));
-						}
-					});
+					try (Transaction closeT = lock(false, null)) {
+						changeSub.unsubscribe();
+						SubscriptionCause.doWith(new SubscriptionCause(), c -> {
+							int index = 0;
+							for (DerivedCollectionElement<E, T> element : thePresentElements.reverse()) {
+								observer.accept(new ObservableCollectionEvent<>(element, getType(), index++, CollectionChangeType.remove,
+									null, element.get(), c));
+							}
+						});
+					}
 				};
 			}
 		}
@@ -1498,10 +1502,6 @@ public final class ObservableCollectionImpl {
 			try (Transaction t = lock(false, null)) {
 				return thePresentElements.get(index).get();
 			}
-		}
-
-		protected boolean checkValue(Object o) {
-			return equivalence().isElement(o) && (o == null || getType().getRawType().isInstance(o));
 		}
 
 		@Override
@@ -1576,7 +1576,7 @@ public final class ObservableCollectionImpl {
 		public String canAdd(T value) {
 			if (!theFlow.isReversible())
 				return MutableCollectionElement.StdMsg.UNSUPPORTED_OPERATION;
-			else if (!checkValue(value))
+			else if (!belongs(value))
 				return MutableCollectionElement.StdMsg.BAD_TYPE;
 			try (Transaction t = lock(false, null)) {
 				FilterMapResult<T, E> reversed = theFlow.canAdd(new FilterMapResult<>(value));
@@ -1590,7 +1590,7 @@ public final class ObservableCollectionImpl {
 		public CollectionElement<T> addElement(T e, boolean first) {
 			if (!theFlow.isReversible())
 				throw new UnsupportedOperationException(MutableCollectionElement.StdMsg.UNSUPPORTED_OPERATION);
-			else if (!checkValue(e))
+			else if (!belongs(e))
 				throw new IllegalArgumentException(MutableCollectionElement.StdMsg.BAD_TYPE);
 			try (Transaction t = lock(true, null)) {
 				FilterMapResult<T, E> reversed = theFlow.canAdd(new FilterMapResult<>(e));

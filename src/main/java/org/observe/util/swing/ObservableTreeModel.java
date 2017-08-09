@@ -118,14 +118,14 @@ public abstract class ObservableTreeModel implements TreeModel {
 				case set:
 					boolean justChanges = true;
 					for (int i = 0; i < indexes.length && justChanges; i++) {
-						justChanges &= event.elements.get(i).oldValue == event.elements.get(i).value;
+						justChanges &= event.elements.get(i).oldValue == event.elements.get(i).newValue;
 					}
 					if (justChanges) {
 						changed(indexes, event.getValues().toArray());
 					} else {
 						for (int i = 0; i < indexes.length; i++) {
 							removed(new int[] { indexes[i] }, new Object[] { event.elements.get(i).oldValue });
-							added(new int[] { indexes[i] }, new Object[] { event.elements.get(i).value });
+							added(new int[] { indexes[i] }, new Object[] { event.elements.get(i).newValue });
 						}
 					}
 					break;

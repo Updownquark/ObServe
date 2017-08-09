@@ -211,7 +211,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			@Override
 			public void remove() throws UnsupportedOperationException {
 				E old = get();
-				valueEl.canRemove();
+				valueEl.remove();
 				fire(new ObservableCollectionEvent<>(getElementId(), getType(), getElementsBefore(getElementId()),
 					CollectionChangeType.remove, old, old, theTransactionCauses.peekLast()));
 			}
@@ -229,6 +229,21 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 				return newId;
 			}
 		};
+	}
+
+	@Override
+	public int hashCode() {
+		return theValues.hashCode();
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		return theValues.equals(obj);
+	}
+
+	@Override
+	public String toString() {
+		return theValues.toString();
 	}
 
 	private class DefaultMutableSpliterator extends MutableElementSpliterator.SimpleMutableSpliterator<E> {

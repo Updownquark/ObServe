@@ -64,10 +64,19 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 	}
 
 	/**
+	 * @param value The value to remove from the expected collection
+	 * @return This tester
+	 */
+	public ObservableCollectionTester<E> remove(E value) {
+		theExpected.remove(value);
+		return this;
+	}
+
+	/**
 	 * @param values The values to remove from the expected collection
 	 * @return This tester
 	 */
-	public ObservableCollectionTester<E> remove(E... values) {
+	public ObservableCollectionTester<E> removeAll(E... values) {
 		theExpected.removeAll(Arrays.asList(values));
 		return this;
 	}

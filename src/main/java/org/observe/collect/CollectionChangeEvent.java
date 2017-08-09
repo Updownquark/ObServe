@@ -19,7 +19,7 @@ public class CollectionChangeEvent<E> extends AbstractCausable {
 	 */
 	public static class ElementChange<E> {
 		/** The new value of the element */
-		public final E value;
+		public final E newValue;
 		/** The old value of the element, if the event is of type {@link CollectionChangeType#set} */
 		public final E oldValue;
 		/** The index of the element in the collection */
@@ -31,7 +31,7 @@ public class CollectionChangeEvent<E> extends AbstractCausable {
 		 * @param index The index of the element in the collection
 		 */
 		public ElementChange(E value, E oldValue, int index) {
-			this.value = value;
+			this.newValue = value;
 			this.oldValue = oldValue;
 			this.index = index;
 		}
@@ -63,7 +63,7 @@ public class CollectionChangeEvent<E> extends AbstractCausable {
 
 			@Override
 			public E get(int index) {
-				return elements.get(index).value;
+				return elements.get(index).newValue;
 			}
 		};
 	}
@@ -95,13 +95,13 @@ public class CollectionChangeEvent<E> extends AbstractCausable {
 			ret.append("\t[").append(elChange.index).append("]: ");
 			switch (type) {
 			case add:
-				ret.append(elChange.value);
+				ret.append(elChange.newValue);
 				break;
 			case remove:
-				ret.append(elChange.value);
+				ret.append(elChange.newValue);
 				break;
 			case set:
-				ret.append(elChange.oldValue).append("->").append(elChange.value);
+				ret.append(elChange.oldValue).append("->").append(elChange.newValue);
 				break;
 			}
 			ret.append('\n');

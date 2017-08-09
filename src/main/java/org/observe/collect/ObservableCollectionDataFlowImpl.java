@@ -292,11 +292,6 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		protected ObservableCollection<E> getSource() {
-			return getSource();
-		}
-
-		@Override
 		public boolean isLightWeight() {
 			return true;
 		}
@@ -1124,6 +1119,11 @@ public class ObservableCollectionDataFlowImpl {
 				}
 
 				@Override
+				public boolean isPresent() {
+					return true;
+				}
+
+				@Override
 				public E get() {
 					return theValue;
 				}
@@ -1538,6 +1538,7 @@ public class ObservableCollectionDataFlowImpl {
 
 				MappedElement() {
 					super(MappedCollectionManager.this, MappedCollectionManager.this.getParent().createElement(id, init, cause), id);
+					refresh(getParent().get(), null);
 				}
 
 				@Override
