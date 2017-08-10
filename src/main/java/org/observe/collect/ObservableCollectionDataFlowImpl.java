@@ -778,10 +778,14 @@ public class ObservableCollectionDataFlowImpl {
 		private final ElementId theId;
 
 		protected CollectionElementManager(AbstractCollectionManager<E, I, T> collection, CollectionElementManager<E, ?, I> parent,
-			ElementId id) {
+			ElementId id, E init, Object cause) {
 			theCollection = collection;
 			theParent = parent;
 			theId = id;
+			if (theParent != null)
+				refresh(theParent.get(), cause);
+			else
+				refresh((I) init, cause);
 		}
 
 		protected CollectionElementManager<E, ?, I> getParent() {
@@ -1058,8 +1062,8 @@ public class ObservableCollectionDataFlowImpl {
 
 	public static abstract class NonMappingCollectionElement<E, T> extends CollectionElementManager<E, T, T> {
 		protected NonMappingCollectionElement(NonMappingCollectionManager<E, T> collection, CollectionElementManager<E, ?, T> parent,
-			ElementId id) {
-			super(collection, parent, id);
+			ElementId id, E init, Object cause) {
+			super(collection, parent, id, init, cause);
 		}
 	}
 
@@ -1115,7 +1119,7 @@ public class ObservableCollectionDataFlowImpl {
 				private E theValue;
 
 				protected DefaultElement() {
-					super(BaseCollectionManager.this, null, id);
+					super(BaseCollectionManager.this, null, id, init, cause);
 				}
 
 				@Override
@@ -1142,7 +1146,7 @@ public class ObservableCollectionDataFlowImpl {
 
 				@Override
 				protected boolean refresh(E source, Object cause) {
-					// Never called
+					theValue = source;
 					return true;
 				}
 			}
@@ -1175,7 +1179,7 @@ public class ObservableCollectionDataFlowImpl {
 		public CollectionElementManager<E, ?, T> createElement(ElementId id, E init, Object cause) {
 			class SortedElement extends NonMappingCollectionElement<E, T> {
 				SortedElement() {
-					super(SortedManager.this, SortedManager.this.getParent().createElement(id, init, cause), id);
+					super(SortedManager.this, SortedManager.this.getParent().createElement(id, init, cause), id, init, cause);
 				}
 
 				@Override
@@ -1291,7 +1295,7 @@ public class ObservableCollectionDataFlowImpl {
 
 					protected FilteredElement() {
 						super(FilteredCollectionManager.this, FilteredCollectionManager.this.getParent().createElement(id, init, cause),
-							id);
+							id, init, cause);
 					}
 
 					@Override
@@ -1426,7 +1430,7 @@ public class ObservableCollectionDataFlowImpl {
 		public CollectionElementManager<E, ?, T> createElement(ElementId id, E init, Object cause) {
 			class IntersectedCollectionElement extends NonMappingCollectionElement<E, T> {
 				IntersectedCollectionElement() {
-					super(IntersectionManager.this, IntersectionManager.this.getParent().createElement(id, init, cause), id);
+					super(IntersectionManager.this, IntersectionManager.this.getParent().createElement(id, init, cause), id, init, cause);
 				}
 
 				@Override
@@ -1537,8 +1541,8 @@ public class ObservableCollectionDataFlowImpl {
 				private boolean isInitial;
 
 				MappedElement() {
-					super(MappedCollectionManager.this, MappedCollectionManager.this.getParent().createElement(id, init, cause), id);
-					refresh(getParent().get(), null);
+					super(MappedCollectionManager.this, MappedCollectionManager.this.getParent().createElement(id, init, cause), id, init,
+						cause);
 				}
 
 				@Override
@@ -1716,7 +1720,8 @@ public class ObservableCollectionDataFlowImpl {
 				private T theValue;
 
 				CombinedCollectionElement() {
-					super(CombinedCollectionManager.this, CombinedCollectionManager.this.getParent().createElement(id, init, cause), id);
+					super(CombinedCollectionManager.this, CombinedCollectionManager.this.getParent().createElement(id, init, cause), id,
+						init, cause);
 				}
 
 				@Override
@@ -1783,7 +1788,7 @@ public class ObservableCollectionDataFlowImpl {
 			class RefreshingElement extends NonMappingCollectionElement<E, T> {
 				public RefreshingElement() {
 					super(RefreshingCollectionManager.this, RefreshingCollectionManager.this.getParent().createElement(id, init, cause),
-						id);
+						id, init, cause);
 				}
 
 				@Override
@@ -1834,7 +1839,7 @@ public class ObservableCollectionDataFlowImpl {
 
 				protected ElementRefreshElement() {
 					super(ElementRefreshingCollectionManager.this,
-						ElementRefreshingCollectionManager.this.getParent().createElement(id, init, cause), id);
+						ElementRefreshingCollectionManager.this.getParent().createElement(id, init, cause), id, init, cause);
 				}
 
 				@Override
@@ -1904,19 +1909,9 @@ public class ObservableCollectionDataFlowImpl {
 
 				private RefreshHolder createHolder(Observable<?> refreshObs) {
 					Consumer<Object> action = v -> ElementRefreshingCollectionManager.this.update(refreshObs, v);
+					// No need for until the elements will be removed when the until fires
 					Subscription sub = WeakConsumer.build()
-						.withAction(v -> ElementRefreshingCollectionManager.this.update(refreshObs, v), refreshObs::act).build(); // No need
-					// for
-					// until;
-					// the
-					// elements
-					// will
-					// be
-					// removed
-					// when
-					// the
-					// until
-					// fires
+						.withAction(v -> ElementRefreshingCollectionManager.this.update(refreshObs, v), refreshObs::act).build();
 					return new RefreshHolder(refreshObs, sub);
 				}
 			}
@@ -1985,7 +1980,7 @@ public class ObservableCollectionDataFlowImpl {
 			class ModFilteredElement extends NonMappingCollectionElement<E, T> {
 				ModFilteredElement() {
 					super(ModFilteredCollectionManager.this, ModFilteredCollectionManager.this.getParent().createElement(id, init, cause),
-						id);
+						id, init, cause);
 				}
 
 				@Override

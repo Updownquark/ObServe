@@ -1263,6 +1263,8 @@ public final class ObservableCollectionImpl {
 		private final BetterTreeList<Consumer<? super ObservableCollectionEvent<? extends T>>> theListeners;
 		private final AtomicInteger theListenerCount;
 		private final Equivalence<? super T> theEquivalence;
+		@SuppressWarnings("unused")
+		/** This reference is required so that the source listeners driving this collection are not GC'd */
 		private final Subscription theWeakSubscription;
 
 		public DerivedCollection(ObservableCollection<E> source, CollectionManager<E, ?, T> flow, Observable<?> until) {
@@ -1362,9 +1364,9 @@ public final class ObservableCollectionImpl {
 		}
 
 		private void removeFromPresent(DerivedCollectionElement<E, T> element, T oldValue, Object cause) {
+			thePresentElements.forMutableElement(element.presentNode.getElementId(), el -> el.remove());
 			fireListeners(new ObservableCollectionEvent<>(element, getType(), element.presentNode.getNodesBefore(),
 				CollectionChangeType.remove, oldValue, oldValue, cause));
-			thePresentElements.forMutableElement(element.presentNode.getElementId(), el -> el.remove());
 			element.presentNode = null;
 		}
 
