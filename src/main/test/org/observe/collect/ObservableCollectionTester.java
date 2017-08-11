@@ -64,6 +64,15 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 	}
 
 	/**
+	 * @param values The values to add to the expected collection
+	 * @return This tester
+	 */
+	public ObservableCollectionTester<E> addAll(Collection<? extends E> values) {
+		theExpected.addAll(values);
+		return this;
+	}
+
+	/**
 	 * @param value The value to remove from the expected collection
 	 * @return This tester
 	 */

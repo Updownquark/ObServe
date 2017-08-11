@@ -151,8 +151,9 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 	 * @return The entry type for the map
 	 */
 	static <K, V> TypeToken<ObservableEntry<K, V>> buildEntryType(TypeToken<K> keyType, TypeToken<V> valueType) {
-		return new TypeToken<ObservableEntry<K, V>>() {}.where(new TypeParameter<K>() {}, keyType).where(new TypeParameter<V>() {},
-			valueType);
+		return new TypeToken<ObservableEntry<K, V>>() {}//
+			.where(new TypeParameter<K>() {}, keyType.wrap())//
+			.where(new TypeParameter<V>() {}, valueType.wrap());
 	}
 
 	@Override

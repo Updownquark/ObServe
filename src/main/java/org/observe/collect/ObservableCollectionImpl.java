@@ -297,7 +297,7 @@ public final class ObservableCollectionImpl {
 			Comparator<CollectionElement<? extends E>> elementCompare) {
 			theCollection = collection;
 			theElementCompare = elementCompare;
-			theType = new TypeToken<CollectionElement<? extends E>>() {}.where(new TypeParameter<E>() {}, collection.getType());
+			theType = new TypeToken<CollectionElement<? extends E>>() {}.where(new TypeParameter<E>() {}, collection.getType().wrap());
 		}
 
 		protected ObservableCollection<E> getCollection() {
@@ -379,6 +379,7 @@ public final class ObservableCollectionImpl {
 				}))
 					listener.theCurrentElement = null;
 				Subscription collSub = theCollection.onChange(listener);
+				observer.onNext(createInitialEvent(listener.theCurrentElement, null));
 				return new Subscription() {
 					private boolean isDone;
 

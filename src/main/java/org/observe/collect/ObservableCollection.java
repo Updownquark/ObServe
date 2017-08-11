@@ -969,7 +969,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		default <X> CollectionDataFlow<E, ?, X> flatMap(TypeToken<X> target,
 			Function<? super T, ? extends ObservableValue<? extends X>> map) {
 			TypeToken<ObservableValue<? extends X>> valueType = new TypeToken<ObservableValue<? extends X>>() {}
-			.where(new TypeParameter<X>() {}, target);
+				.where(new TypeParameter<X>() {}, target.wrap());
 			return map(valueType).map(map).refreshEach(v -> v.noInit()).map(target).withElementSetting((ov, newValue, doSet, cause) -> {
 				// Allow setting elements via the wrapped settable value
 				if (!(ov instanceof SettableValue))

@@ -322,7 +322,7 @@ public class ObservableSetImpl {
 			private BinaryTreeNode<UniqueElement> theNode;
 
 			protected UniqueElement(ElementId id, E init, Object cause) {
-				super(UniqueManager.this, UniqueManager.this.getParent().createElement(id, init, cause), id);
+				super(UniqueManager.this, UniqueManager.this.getParent().createElement(id, init, cause), id, init, cause);
 
 				T value = getParent().get();
 				theValue = value;
@@ -337,6 +337,12 @@ public class ObservableSetImpl {
 			@Override
 			public T get() {
 				return theValue;
+			}
+
+			@Override
+			protected void init(T source, Object cause) {
+				theValue = source;
+				addToSet(cause);
 			}
 
 			@Override
@@ -356,7 +362,8 @@ public class ObservableSetImpl {
 			}
 
 			private void removeFromSet(Object cause) {
-				theValueElements.forMutableElement(theNode.getElementId(), el -> el.remove());
+				theValueElements.forMutableElement(//
+					theNode.getElementId(), el -> el.remove());
 				theNode = null;
 				if (theValueElements.isEmpty())
 					theElementsByValue.remove(theValue);

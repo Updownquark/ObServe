@@ -782,10 +782,12 @@ public class ObservableCollectionDataFlowImpl {
 			theCollection = collection;
 			theParent = parent;
 			theId = id;
+			I value;
 			if (theParent != null)
-				refresh(theParent.get(), cause);
+				value = theParent.get();
 			else
-				refresh((I) init, cause);
+				value = (I) init;
+			init(value, cause);
 		}
 
 		protected CollectionElementManager<E, ?, I> getParent() {
@@ -991,6 +993,8 @@ public class ObservableCollectionDataFlowImpl {
 			}
 		}
 
+		protected abstract void init(I source, Object cause);
+
 		protected abstract boolean refresh(I source, Object cause);
 
 		public void removed(Object cause) {
@@ -1145,6 +1149,11 @@ public class ObservableCollectionDataFlowImpl {
 				}
 
 				@Override
+				protected void init(E source, Object cause) {
+					theValue = source;
+				}
+
+				@Override
 				protected boolean refresh(E source, Object cause) {
 					theValue = source;
 					return true;
@@ -1186,6 +1195,9 @@ public class ObservableCollectionDataFlowImpl {
 				public T get() {
 					return getParent().get();
 				}
+
+				@Override
+				protected void init(T source, Object cause) {}
 
 				@Override
 				protected boolean refresh(T source, Object cause) {
@@ -1306,6 +1318,11 @@ public class ObservableCollectionDataFlowImpl {
 					@Override
 					public T get() {
 						return getParent().get();
+					}
+
+					@Override
+					protected void init(T source, Object cause) {
+						isPresent = theFilter.apply(source) == null;
 					}
 
 					@Override
@@ -1447,6 +1464,9 @@ public class ObservableCollectionDataFlowImpl {
 				}
 
 				@Override
+				protected void init(T source, Object cause) {}
+
+				@Override
 				protected boolean refresh(T source, Object cause2) {
 					return false; // If the present state doesn't change, don't fire an update
 				}
@@ -1575,6 +1595,13 @@ public class ObservableCollectionDataFlowImpl {
 						return;
 					}
 					super.interceptSet(value);
+				}
+
+				@Override
+				protected void init(I source, Object cause) {
+					theSource = source;
+					if (isCached)
+						theValue = mapValue(source);
 				}
 
 				@Override
@@ -1733,6 +1760,12 @@ public class ObservableCollectionDataFlowImpl {
 				}
 
 				@Override
+				protected void init(I source, Object cause) {
+					if (isCached)
+						theValue = combineValue(source);
+				}
+
+				@Override
 				protected boolean refresh(I source, Object cause) {
 					if (isCached)
 						theValue = combineValue(source);
@@ -1749,6 +1782,11 @@ public class ObservableCollectionDataFlowImpl {
 				for (Map.Entry<ObservableValue<?>, ArgHolder<?>> arg : theArgs.entrySet()) {
 					ArgHolder<?> holder = arg.getValue();
 					builder.withAction((ObservableValueEvent<?> evt) -> {
+						if (evt.isInitial()) {
+							// If this is an initial event, don't do any locking or updating
+							((ArgHolder<Object>) holder).value = evt.getNewValue();
+							return;
+						}
 						try (Transaction t = lock(true, null)) {
 							((ArgHolder<Object>) holder).value = evt.getNewValue();
 							getUpdateListener().accept(new CollectionUpdate(this, null, evt));
@@ -1795,6 +1833,9 @@ public class ObservableCollectionDataFlowImpl {
 				public T get() {
 					return getParent().get();
 				}
+
+				@Override
+				protected void init(T source, Object cause) {}
 
 				@Override
 				protected boolean refresh(T source, Object cause) {
@@ -1883,6 +1924,11 @@ public class ObservableCollectionDataFlowImpl {
 						}
 						throw new IllegalStateException("Unrecognized update result " + parentResult);
 					}
+				}
+
+				@Override
+				protected void init(T source, Object cause) {
+					newRefreshObs(theRefresh.apply(source));
 				}
 
 				@Override
@@ -1987,6 +2033,9 @@ public class ObservableCollectionDataFlowImpl {
 				public T get() {
 					return getParent().get();
 				}
+
+				@Override
+				protected void init(T source, Object cause) {}
 
 				@Override
 				protected boolean refresh(T source, Object cause) {

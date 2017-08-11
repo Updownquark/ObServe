@@ -147,8 +147,9 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	 * @return The entry type for the map
 	 */
 	static <K, V> TypeToken<ObservableMultiEntry<K, V>> buildEntryType(TypeToken<K> keyType, TypeToken<V> valueType) {
-		return new TypeToken<ObservableMultiEntry<K, V>>() {}.where(new TypeParameter<K>() {}, keyType).where(new TypeParameter<V>() {},
-			valueType);
+		return new TypeToken<ObservableMultiEntry<K, V>>() {}//
+			.where(new TypeParameter<K>() {}, keyType.wrap())//
+			.where(new TypeParameter<V>() {}, valueType.wrap());
 	}
 
 	@Override
