@@ -456,7 +456,7 @@ public class ObservableCollectionsTest {
 		ObservableSet<Integer> set = ObservableCollection.create(intType).flow().unique(false).collect();
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
-		Subscription sub = set.subscribe(evt -> {
+		CollectionSubscription sub = set.subscribe(evt -> {
 			switch (evt.getType()) {
 			case add:
 				assertTrue(compare1.add(evt.getNewValue()));
@@ -470,31 +470,37 @@ public class ObservableCollectionsTest {
 		}, true);
 
 		for(int i = 0; i < 30; i++) {
-			set.add(i);
+			assertTrue(set.add(i));
+			correct.add(i);
+			assertEquals(new TreeSet<>(set), compare1);
+			assertEquals(correct, compare1);
+		}
+		for (int i = 0; i < 30; i++) {
+			assertFalse(set.add(i));
 			correct.add(i);
 			assertEquals(new TreeSet<>(set), compare1);
 			assertEquals(correct, compare1);
 		}
 		for(int i = 0; i < 30; i++) {
-			set.remove(Integer.valueOf(i));
+			assertTrue(set.remove(Integer.valueOf(i)));
 			correct.remove(i);
 			assertEquals(new TreeSet<>(set), compare1);
 			assertEquals(correct, compare1);
 		}
 
 		for(int i = 0; i < 30; i++) {
-			set.add(i);
+			assertTrue(set.add(i));
 			correct.add(i);
 			assertEquals(new TreeSet<>(set), compare1);
 			assertEquals(correct, compare1);
 		}
 		sub.unsubscribe();
 		for(int i = 30; i < 50; i++) {
-			set.add(i);
+			assertTrue(set.add(i));
 			assertEquals(correct, compare1);
 		}
 		for(int i = 0; i < 30; i++) {
-			set.remove(Integer.valueOf(i));
+			assertTrue(set.remove(Integer.valueOf(i)));
 			assertEquals(correct, compare1);
 		}
 	}
@@ -596,7 +602,7 @@ public class ObservableCollectionsTest {
 			assertEquals(correct, compare1);
 		}
 		for(int i = 0; i < 30; i++) {
-			set.remove(i);
+			set.remove(Integer.valueOf(i));
 			correct.remove(i * 10);
 			assertEquals(correct, compare1);
 		}
@@ -628,7 +634,7 @@ public class ObservableCollectionsTest {
 			assertEquals(correct, compare1);
 		}
 		for(int i = 0; i < 30; i++) {
-			set.remove(i);
+			set.remove(Integer.valueOf(i));
 			if(i % 2 == 0)
 				correct.remove(i);
 			assertEquals(correct, compare1);
@@ -661,7 +667,7 @@ public class ObservableCollectionsTest {
 			assertEquals(correct, compare1);
 		}
 		for (int i = 0; i < 30; i++) {
-			set.remove(i);
+			set.remove(Integer.valueOf(i));
 			if (i % 2 == 0)
 				correct.remove(i);
 			assertEquals(correct, compare1);
@@ -697,7 +703,7 @@ public class ObservableCollectionsTest {
 			assertEquals(correct, compare1);
 		}
 		for(int i = 0; i < 30; i++) {
-			set.remove(i);
+			set.remove(Integer.valueOf(i));
 			if(i % 2 == 0)
 				correct.remove(i / 2);
 			assertEquals(correct, compare1);
@@ -724,7 +730,9 @@ public class ObservableCollectionsTest {
 				assertTrue(compare1.remove(evt.getOldValue()));
 				break;
 			case set:
-				throw new IllegalStateException("No sets on sets");
+					assertTrue(compare1.remove(evt.getOldValue()));
+					assertTrue(compare1.add(evt.getNewValue()));
+					break;
 			}
 		}, true);
 
@@ -758,7 +766,7 @@ public class ObservableCollectionsTest {
 		assertEquals(correct.size(), compare1.size());
 
 		for(int i = 0; i < 30; i++) {
-			set.remove(i);
+			set.remove(Integer.valueOf(i));
 			int value = i * value1.get();
 			if(value % 3 == 0)
 				correct.remove(value);
@@ -931,9 +939,9 @@ public class ObservableCollectionsTest {
 		filterTester.check();
 
 		for(int i = 0; i < 30; i++) {
-			set1.remove(i);
-			set2.remove(i * 10);
-			set3.remove(i * 100);
+			set1.remove(Integer.valueOf(i));
+			set2.remove(Integer.valueOf(i * 10));
+			set3.remove(Integer.valueOf(i * 100));
 			correct1.remove((Integer) i);
 			correct2.remove((Integer) (i * 10));
 			correct3.remove((Integer) (i * 100));

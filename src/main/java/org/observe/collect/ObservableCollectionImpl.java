@@ -1052,16 +1052,16 @@ public final class ObservableCollectionImpl {
 		@Override
 		public String canAdd(T value) {
 			FilterMapResult<T, E> reversed = theFlow.reverse(value);
-			if (reversed.error != null)
-				return reversed.error;
+			if (!reversed.isAccepted())
+				return reversed.getRejectReason();
 			return theSource.canAdd(reversed.result);
 		}
 
 		@Override
 		public CollectionElement<T> addElement(T e, boolean first) {
 			FilterMapResult<T, E> reversed = theFlow.reverse(e);
-			if (reversed.error != null)
-				throw new IllegalArgumentException(reversed.error);
+			if (reversed.throwIfError(IllegalArgumentException::new) != null)
+				return null;
 			return elementFor(theSource.addElement(reversed.result, first));
 		}
 
@@ -1451,13 +1451,17 @@ public final class ObservableCollectionImpl {
 				});
 				Subscription changeSub = onChange(observer);
 				return removeAll -> {
+					if (!removeAll) {
+						changeSub.unsubscribe();
+						return;
+					}
 					try (Transaction closeT = lock(false, null)) {
 						changeSub.unsubscribe();
 						SubscriptionCause.doWith(new SubscriptionCause(), c -> {
 							int index = 0;
-							for (DerivedCollectionElement<E, T> element : thePresentElements.reverse()) {
+							for (DerivedCollectionElement<E, T> element : thePresentElements) {
 								observer.accept(new ObservableCollectionEvent<>(element, getType(), index++, CollectionChangeType.remove,
-									null, element.get(), c));
+									element.get(), element.get(), c));
 							}
 						});
 					}
@@ -1583,8 +1587,8 @@ public final class ObservableCollectionImpl {
 				return MutableCollectionElement.StdMsg.BAD_TYPE;
 			try (Transaction t = lock(false, null)) {
 				FilterMapResult<T, E> reversed = theFlow.canAdd(new FilterMapResult<>(value));
-				if (reversed.error != null)
-					return reversed.error;
+				if (!reversed.isAccepted())
+					return reversed.getRejectReason();
 				return theSource.canAdd(reversed.result);
 			}
 		}
@@ -1597,8 +1601,8 @@ public final class ObservableCollectionImpl {
 				throw new IllegalArgumentException(MutableCollectionElement.StdMsg.BAD_TYPE);
 			try (Transaction t = lock(true, null)) {
 				FilterMapResult<T, E> reversed = theFlow.canAdd(new FilterMapResult<>(e));
-				if (reversed.error != null)
-					throw new IllegalArgumentException(reversed.error);
+				if (reversed.throwIfError(IllegalArgumentException::new) != null)
+					return null;
 				CollectionElement<E> sourceElement = theSource.addElement(reversed.result, first);
 				return observableElementFor(theElements.get(sourceElement.getElementId())); // Should have been added
 			}

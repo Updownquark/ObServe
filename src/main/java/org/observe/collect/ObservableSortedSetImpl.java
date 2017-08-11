@@ -596,8 +596,8 @@ public class ObservableSortedSetImpl {
 				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 			try (Transaction t = lock(true, null)) {
 				FilterMapResult<T, E> reverse = getFlow().reverse(value);
-				if (reverse.error != null)
-					throw new IllegalArgumentException(reverse.error);
+				if (reverse.throwIfError(IllegalArgumentException::new) != null)
+					return null;
 				CollectionElement<E> added = getSource().addElement(reverse.result, false);
 				return observableElementFor(getPresentElement(added.getElementId()));
 			}

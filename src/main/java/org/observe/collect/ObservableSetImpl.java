@@ -297,7 +297,7 @@ public class ObservableSetImpl {
 		public ObservableCollectionDataFlowImpl.FilterMapResult<T, T> canAddTop(
 			ObservableCollectionDataFlowImpl.FilterMapResult<T, T> toAdd) {
 			if (theElementsByValue.containsKey(toAdd.source))
-				toAdd.error = MutableCollectionElement.StdMsg.ELEMENT_EXISTS;
+				toAdd.reject(MutableCollectionElement.StdMsg.ELEMENT_EXISTS, false);
 			else
 				toAdd.result = toAdd.source;
 			return toAdd;
@@ -418,10 +418,9 @@ public class ObservableSetImpl {
 			@Override
 			protected ObservableCollectionDataFlowImpl.FilterMapResult<T, E> filterAccept(
 				ObservableCollectionDataFlowImpl.FilterMapResult<T, E> value, boolean isReplacing) {
-				if (value.source != theValue && !equivalence().elementEquals(theValue, value.source)) {
-					value.error = "Cannot change equivalence of a unique element";
-					return value;
-				} else
+				if (value.source != theValue && !equivalence().elementEquals(theValue, value.source))
+					return value.reject("Cannot change equivalence of a unique element", true);
+				else
 					return super.filterAccept(value, isReplacing);
 			}
 

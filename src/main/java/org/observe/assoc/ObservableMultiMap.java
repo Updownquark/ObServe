@@ -148,8 +148,8 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	 */
 	static <K, V> TypeToken<ObservableMultiEntry<K, V>> buildEntryType(TypeToken<K> keyType, TypeToken<V> valueType) {
 		return new TypeToken<ObservableMultiEntry<K, V>>() {}//
-			.where(new TypeParameter<K>() {}, keyType.wrap())//
-			.where(new TypeParameter<V>() {}, valueType.wrap());
+		.where(new TypeParameter<K>() {}, keyType.wrap())//
+		.where(new TypeParameter<V>() {}, valueType.wrap());
 	}
 
 	@Override
@@ -654,9 +654,9 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 				if (el == null) {
 					// Means there are currently no values for the given key.
 					FilterMapResult<K, OK> reversedKey = theKeyManager.reverse((K) key);
-					if (reversedKey.error != null) {
+					if (reversedKey.getRejectReason() != null) {
 						// We can't call the value maker. We'll include the message that says why.
-						return empty.flow().filterModification().immutable(reversedKey.error, false).build().collectLW();
+						return empty.flow().filterModification().immutable(reversedKey.getRejectReason(), false).build().collectLW();
 					}
 					return valuesFor(reversedKey.result);
 				}
