@@ -18,6 +18,7 @@ import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
+import org.qommons.collect.MutableCollectionElement.StdMsg;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -257,20 +258,20 @@ public interface ObservableTree<N, V> extends Transactable {
 
 		@Override
 		public boolean add(List<V> e) {
-			return testAdd(e, true);
+			return testAdd(e, true) == null;
 		}
 
 		@Override
 		public boolean addAll(Collection<? extends List<V>> c) {
 			boolean changed = false;
 			for (List<V> path : c)
-				changed |= testAdd(path, true);
+				changed |= testAdd(path, true) != null;
 			return changed;
 		}
 
-		private boolean testAdd(List<V> path, boolean reallyAdd) {
+		private String testAdd(List<V> path, boolean reallyAdd) {
 			if (path.isEmpty())
-				return false;
+				return "Empty path not allowed";
 
 			N node = theTree.getRoot().get();
 			ObservableCollection<? extends N> children = null;
@@ -288,15 +289,15 @@ public interface ObservableTree<N, V> extends Transactable {
 				}
 			}
 			if (i < path.size() - 1)
-				return false; // No such path prefix found
+				return StdMsg.NOT_FOUND; // No such path prefix found
 			N newNode = theNodeCreator.apply(pathValue);
 			if (newNode == null)
-				return false;
+				return StdMsg.ILLEGAL_ELEMENT;
 			// We'll assume the node creator creates nodes of the right sub-type for the collection
 			if (reallyAdd)
-				return ((ObservableIndexedCollection<N>) children).add(newNode);
+				return ((ObservableCollection<N>) children).add(newNode) ? null : StdMsg.UNSUPPORTED_OPERATION;
 			else
-				return ((ObservableIndexedCollection<N>) children).canAdd(newNode);
+				return ((ObservableCollection<N>) children).canAdd(newNode);
 		}
 
 		@Override
@@ -306,23 +307,23 @@ public interface ObservableTree<N, V> extends Transactable {
 
 		@Override
 		public boolean remove(Object o) {
-			return testRemove(o, true);
+			return testRemove(o, true) == null;
 		}
 
 		@Override
 		public boolean removeAll(Collection<?> c) {
 			boolean changed = false;
 			for (Object o : c)
-				changed |= testRemove(o, true);
+				changed |= testRemove(o, true) == null;
 			return changed;
 		}
 
-		private boolean testRemove(Object value, boolean reallyRemove) {
+		private String testRemove(Object value, boolean reallyRemove) {
 			if (!(value instanceof List))
-				return false;
+				return StdMsg.BAD_TYPE;
 			List<V> path = (List<V>) value;
 			if (path.isEmpty())
-				return false;
+				return StdMsg.NOT_FOUND;
 
 			N node = theTree.getRoot().get();
 			ObservableCollection<? extends N> children = null;
@@ -340,11 +341,11 @@ public interface ObservableTree<N, V> extends Transactable {
 				}
 			}
 			if (i < path.size())
-				return false; // No such path found
+				return StdMsg.NOT_FOUND; // No such path found
 			if (isOnlyTerminal && !theTree.getChildren(node).isEmpty())
-				return false; // The node is not terminal
+				return StdMsg.ILLEGAL_ELEMENT; // The node is not terminal
 			if (reallyRemove)
-				return children.remove(pathValue);
+				return children.remove(pathValue) ? null : StdMsg.UNSUPPORTED_OPERATION;
 			else
 				return children.canRemove(pathValue);
 		}
