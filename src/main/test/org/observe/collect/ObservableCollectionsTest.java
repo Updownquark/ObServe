@@ -476,7 +476,7 @@ public class ObservableCollectionsTest {
 			assertEquals(correct, compare1);
 		}
 		for(int i = 0; i < 30; i++) {
-			set.remove(i);
+			set.remove(Integer.valueOf(i));
 			correct.remove(i);
 			assertEquals(new TreeSet<>(set), compare1);
 			assertEquals(correct, compare1);
@@ -494,7 +494,7 @@ public class ObservableCollectionsTest {
 			assertEquals(correct, compare1);
 		}
 		for(int i = 0; i < 30; i++) {
-			set.remove(i);
+			set.remove(Integer.valueOf(i));
 			assertEquals(correct, compare1);
 		}
 	}

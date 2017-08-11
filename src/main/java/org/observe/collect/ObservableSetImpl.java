@@ -340,12 +340,6 @@ public class ObservableSetImpl {
 			}
 
 			@Override
-			protected void init(T source, Object cause) {
-				theValue = source;
-				addToSet(cause);
-			}
-
-			@Override
 			protected boolean refresh(T source, Object cause) {
 				if (theElementsByValue.get(source) != theValueElements) {
 					removeFromSet(cause);

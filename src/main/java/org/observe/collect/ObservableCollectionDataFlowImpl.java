@@ -782,12 +782,6 @@ public class ObservableCollectionDataFlowImpl {
 			theCollection = collection;
 			theParent = parent;
 			theId = id;
-			I value;
-			if (theParent != null)
-				value = theParent.get();
-			else
-				value = (I) init;
-			init(value, cause);
 		}
 
 		protected CollectionElementManager<E, ?, I> getParent() {
@@ -993,8 +987,6 @@ public class ObservableCollectionDataFlowImpl {
 			}
 		}
 
-		protected abstract void init(I source, Object cause);
-
 		protected abstract boolean refresh(I source, Object cause);
 
 		public void removed(Object cause) {
@@ -1124,6 +1116,7 @@ public class ObservableCollectionDataFlowImpl {
 
 				protected DefaultElement() {
 					super(BaseCollectionManager.this, null, id, init, cause);
+					theValue = init;
 				}
 
 				@Override
@@ -1149,13 +1142,7 @@ public class ObservableCollectionDataFlowImpl {
 				}
 
 				@Override
-				protected void init(E source, Object cause) {
-					theValue = source;
-				}
-
-				@Override
 				protected boolean refresh(E source, Object cause) {
-					theValue = source;
 					return true;
 				}
 			}
@@ -1195,9 +1182,6 @@ public class ObservableCollectionDataFlowImpl {
 				public T get() {
 					return getParent().get();
 				}
-
-				@Override
-				protected void init(T source, Object cause) {}
 
 				@Override
 				protected boolean refresh(T source, Object cause) {
@@ -1308,6 +1292,7 @@ public class ObservableCollectionDataFlowImpl {
 					protected FilteredElement() {
 						super(FilteredCollectionManager.this, FilteredCollectionManager.this.getParent().createElement(id, init, cause),
 							id, init, cause);
+						isPresent = theFilter.apply(getParent().get()) == null;
 					}
 
 					@Override
@@ -1318,11 +1303,6 @@ public class ObservableCollectionDataFlowImpl {
 					@Override
 					public T get() {
 						return getParent().get();
-					}
-
-					@Override
-					protected void init(T source, Object cause) {
-						isPresent = theFilter.apply(source) == null;
 					}
 
 					@Override
@@ -1464,9 +1444,6 @@ public class ObservableCollectionDataFlowImpl {
 				}
 
 				@Override
-				protected void init(T source, Object cause) {}
-
-				@Override
 				protected boolean refresh(T source, Object cause2) {
 					return false; // If the present state doesn't change, don't fire an update
 				}
@@ -1563,6 +1540,9 @@ public class ObservableCollectionDataFlowImpl {
 				MappedElement() {
 					super(MappedCollectionManager.this, MappedCollectionManager.this.getParent().createElement(id, init, cause), id, init,
 						cause);
+					theSource = getParent().get();
+					if (isCached)
+						theValue = mapValue(theSource);
 				}
 
 				@Override
@@ -1595,13 +1575,6 @@ public class ObservableCollectionDataFlowImpl {
 						return;
 					}
 					super.interceptSet(value);
-				}
-
-				@Override
-				protected void init(I source, Object cause) {
-					theSource = source;
-					if (isCached)
-						theValue = mapValue(source);
 				}
 
 				@Override
@@ -1749,6 +1722,8 @@ public class ObservableCollectionDataFlowImpl {
 				CombinedCollectionElement() {
 					super(CombinedCollectionManager.this, CombinedCollectionManager.this.getParent().createElement(id, init, cause), id,
 						init, cause);
+					if (isCached)
+						theValue = combineValue(getParent().get());
 				}
 
 				@Override
@@ -1757,12 +1732,6 @@ public class ObservableCollectionDataFlowImpl {
 						return theValue;
 					else
 						return combineValue(getParent().get());
-				}
-
-				@Override
-				protected void init(I source, Object cause) {
-					if (isCached)
-						theValue = combineValue(source);
 				}
 
 				@Override
@@ -1835,9 +1804,6 @@ public class ObservableCollectionDataFlowImpl {
 				}
 
 				@Override
-				protected void init(T source, Object cause) {}
-
-				@Override
 				protected boolean refresh(T source, Object cause) {
 					return true;
 				}
@@ -1881,6 +1847,8 @@ public class ObservableCollectionDataFlowImpl {
 				protected ElementRefreshElement() {
 					super(ElementRefreshingCollectionManager.this,
 						ElementRefreshingCollectionManager.this.getParent().createElement(id, init, cause), id, init, cause);
+
+					newRefreshObs(theRefresh.apply(get()));
 				}
 
 				@Override
@@ -1924,11 +1892,6 @@ public class ObservableCollectionDataFlowImpl {
 						}
 						throw new IllegalStateException("Unrecognized update result " + parentResult);
 					}
-				}
-
-				@Override
-				protected void init(T source, Object cause) {
-					newRefreshObs(theRefresh.apply(source));
 				}
 
 				@Override
@@ -2033,9 +1996,6 @@ public class ObservableCollectionDataFlowImpl {
 				public T get() {
 					return getParent().get();
 				}
-
-				@Override
-				protected void init(T source, Object cause) {}
 
 				@Override
 				protected boolean refresh(T source, Object cause) {
