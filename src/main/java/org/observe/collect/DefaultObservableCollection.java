@@ -48,8 +48,8 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	}
 
 	@Override
-	public Transaction lock(boolean write, Object cause) {
-		Transaction t = theValues.lock(write, cause);
+	public Transaction lock(boolean write, boolean structural, Object cause) {
+		Transaction t = theValues.lock(write, structural, cause);
 		Causable tCause;
 		if (cause == null && !theTransactionCauses.isEmpty())
 			tCause = null;
@@ -72,6 +72,11 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 				t.close();
 			}
 		};
+	}
+
+	@Override
+	public long getStamp(boolean structuralOnly) {
+		return theValues.getStamp(structuralOnly);
 	}
 
 	@Override

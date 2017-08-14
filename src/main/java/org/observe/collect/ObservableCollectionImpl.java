@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -907,26 +908,6 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return getWrapped().isLockSupported();
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return getWrapped().lock(write, cause);
-		}
-
-		@Override
-		public int getElementsBefore(ElementId id) {
-			return getWrapped().getElementsAfter(id);
-		}
-
-		@Override
-		public int getElementsAfter(ElementId id) {
-			return getWrapped().getElementsBefore(id);
-		}
-
-		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
 			return getWrapped().onChange(evt -> observer.accept(new ObservableCollectionEvent<>(evt.getElementId().reverse(), getType(),
 				size() - evt.getIndex() - 1, evt.getType(), evt.getOldValue(), evt.getNewValue(), evt)));
@@ -935,34 +916,6 @@ public final class ObservableCollectionImpl {
 		@Override
 		public ObservableCollection<E> reverse() {
 			return getWrapped();
-		}
-
-		@Override
-		public ElementSpliterator<E> spliterator(int index) {
-			try (Transaction t = lock(false, null)) {
-				return super.spliterator(index);
-			}
-		}
-
-		@Override
-		public MutableElementSpliterator<E> mutableSpliterator(int index) {
-			try (Transaction t = lock(true, null)) {
-				return super.mutableSpliterator(index);
-			}
-		}
-
-		@Override
-		public <T> T ofElementAt(int index, Function<? super CollectionElement<? extends E>, T> onElement) {
-			try (Transaction t = lock(false, null)) {
-				return super.ofElementAt(index, onElement);
-			}
-		}
-
-		@Override
-		public <T> T ofMutableElementAt(int index, Function<? super MutableCollectionElement<? extends E>, T> onElement) {
-			try (Transaction t = lock(true, null)) {
-				return super.ofMutableElementAt(index, onElement);
-			}
 		}
 
 		@Override
@@ -1035,8 +988,13 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theSource.lock(write, cause);
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			return theSource.lock(write, structural, cause);
+		}
+
+		@Override
+		public long getStamp(boolean structuralOnly) {
+			return theSource.getStamp(structuralOnly);
 		}
 
 		@Override
@@ -1264,6 +1222,8 @@ public final class ObservableCollectionImpl {
 		private final BetterTreeList<Consumer<? super ObservableCollectionEvent<? extends T>>> theListeners;
 		private final AtomicInteger theListenerCount;
 		private final Equivalence<? super T> theEquivalence;
+		private final AtomicLong theModCount;
+		private final AtomicLong theStructureStamp;
 		@SuppressWarnings("unused")
 		/** This reference is required so that the source listeners driving this collection are not GC'd */
 		private final Subscription theWeakSubscription;
@@ -1276,6 +1236,8 @@ public final class ObservableCollectionImpl {
 			theListeners = new BetterTreeList<>(true);
 			theListenerCount = new AtomicInteger();
 			theEquivalence = flow.equivalence();
+			theModCount = new AtomicLong();
+			theStructureStamp = new AtomicLong();
 			// Must maintain a strong reference to the event listener so it is not GC'd while the collection is still alive
 
 			// Begin listening
@@ -1360,12 +1322,16 @@ public final class ObservableCollectionImpl {
 
 		private void addToPresent(DerivedCollectionElement<E, T> element, Object cause) {
 			element.presentNode = thePresentElements.addElement(element, false);
+			theModCount.incrementAndGet();
+			theStructureStamp.incrementAndGet();
 			fireListeners(new ObservableCollectionEvent<>(element, getType(), element.presentNode.getNodesBefore(),
 				CollectionChangeType.add, null, element.get(), cause));
 		}
 
 		private void removeFromPresent(DerivedCollectionElement<E, T> element, T oldValue, Object cause) {
 			thePresentElements.forMutableElement(element.presentNode.getElementId(), el -> el.remove());
+			theModCount.incrementAndGet();
+			theStructureStamp.incrementAndGet();
 			fireListeners(new ObservableCollectionEvent<>(element, getType(), element.presentNode.getNodesBefore(),
 				CollectionChangeType.remove, oldValue, oldValue, cause));
 			element.presentNode = null;
@@ -1380,12 +1346,15 @@ public final class ObservableCollectionImpl {
 				// Need to fire the remove event while the node is in the old position.
 				removeFromPresent(element, oldValue, cause);
 				addToPresent(element, cause);
-			} else if (oldValue != element.get())
+			} else if (oldValue != element.get()) {
+				theModCount.incrementAndGet();
 				fireListeners(new ObservableCollectionEvent<>(element, getType(), element.presentNode.getNodesBefore(),
 					CollectionChangeType.set, oldValue, element.get(), cause));
-			else if (fireUpdate)
+			} else if (fireUpdate) {
+				theModCount.incrementAndGet();
 				fireListeners(new ObservableCollectionEvent<>(element, getType(), element.presentNode.getNodesBefore(),
 					CollectionChangeType.set, oldValue, oldValue, cause));
+			}
 		}
 
 		private void fireListeners(ObservableCollectionEvent<T> event) {
@@ -1480,13 +1449,18 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
+		public Transaction lock(boolean write, boolean structural, Object cause) {
 			Transaction flowSub = theFlow.lock(write, cause);
-			Transaction collSub = theSource.lock(write, cause);
+			Transaction collSub = theSource.lock(write, structural, cause);
 			return () -> {
 				collSub.close();
 				flowSub.close();
 			};
+		}
+
+		@Override
+		public long getStamp(boolean structuralOnly) {
+			return structuralOnly ? theStructureStamp.get() : theModCount.get();
 		}
 
 		@Override
@@ -1788,15 +1762,21 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
+		public Transaction lock(boolean write, boolean structural, Object cause) {
 			Lock lock = write ? theLock.writeLock() : theLock.readLock();
 			lock.lock();
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
-			Transaction t = coll == null ? Transaction.NONE : coll.lock(write, cause);
+			Transaction t = coll == null ? Transaction.NONE : coll.lock(write, structural, cause);
 			return () -> {
 				t.close();
 				lock.unlock();
 			};
+		}
+
+		@Override
+		public long getStamp(boolean structuralOnly) {
+			ObservableCollection<? extends E> coll = theCollectionObservable.get();
+			return coll == null ? -1 : coll.getStamp(structuralOnly);
 		}
 
 		@Override
@@ -1969,12 +1949,12 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			Transaction outerLock = theOuter.lock(write, cause);
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			Transaction outerLock = theOuter.lock(write, false, cause);
 			Transaction[] innerLocks = new Transaction[theOuter.size()];
 			int i = 0;
 			for (ObservableCollection<?> c : theOuter)
-				innerLocks[i++] = c.lock(write, cause);
+				innerLocks[i++] = c.lock(write, structural, cause);
 			return new Transaction() {
 				private volatile boolean hasRun;
 
@@ -1988,6 +1968,15 @@ public final class ObservableCollectionImpl {
 					outerLock.close();
 				}
 			};
+		}
+
+		@Override
+		public long getStamp(boolean structuralOnly) {
+			// This method technically does not provide the guarantee of its contract, since it is a hash.
+			// This is unavoidable since there is more information than can be represented in a single long value.
+			long[] stamp = new long[] { theOuter.getStamp(structuralOnly) };
+			theOuter.spliterator().forEachRemaining(coll -> stamp[0] = stamp[0] * 17 + (coll == null ? 0 : coll.getStamp(structuralOnly)));
+			return stamp[0];
 		}
 
 		@Override
