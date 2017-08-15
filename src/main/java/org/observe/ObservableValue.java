@@ -16,7 +16,6 @@ import org.qommons.BiTuple;
 import org.qommons.ListenerSet;
 import org.qommons.TriFunction;
 import org.qommons.TriTuple;
-import org.qommons.value.Value;
 
 import com.google.common.reflect.TypeToken;
 
@@ -26,7 +25,9 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <T> The compile-time type of this observable's value
  */
-public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>, Value<T>, java.util.function.Supplier<T> {
+public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>, java.util.function.Supplier<T> {
+	TypeToken<T> getType();
+
 	/** @return The current value of this observable */
 	@Override
 	T get();
@@ -149,7 +150,6 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @param function The function to apply to this observable's value
 	 * @return The new observable whose value is a function of this observable's value
 	 */
-	@Override
 	default <R> ObservableValue<R> mapV(Function<? super T, R> function) {
 		return mapV(null, function);
 	};
@@ -162,7 +162,6 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @param filterNull Whether to apply the filter to null values or simply preserve the null
 	 * @return The new observable whose value is a function of this observable's value
 	 */
-	@Override
 	default <R> ObservableValue<R> mapV(Function<? super T, R> function, boolean filterNull) {
 		return mapV(null, function, filterNull);
 	};
@@ -175,7 +174,6 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @param function The function to apply to this observable's value
 	 * @return The new observable whose value is a function of this observable's value
 	 */
-	@Override
 	default <R> ObservableValue<R> mapV(TypeToken<R> type, Function<? super T, R> function) {
 		return mapV(type, function, false);
 	}
@@ -189,7 +187,6 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @param filterNull Whether to apply the filter to null values or simply preserve the null
 	 * @return The new observable whose value is a function of this observable's value
 	 */
-	@Override
 	default <R> ObservableValue<R> mapV(TypeToken<R> type, Function<? super T, R> function, boolean filterNull) {
 		return new ComposedObservableValue<>(type, args -> {
 			return function.apply((T) args[0]);

@@ -6,7 +6,6 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 import org.qommons.TriFunction;
-import org.qommons.value.Settable;
 
 import com.google.common.reflect.TypeToken;
 
@@ -15,9 +14,27 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <T> The type of the value
  */
-public interface SettableValue<T> extends ObservableValue<T>, Settable<T> {
+public interface SettableValue<T> extends ObservableValue<T> {
+	/**
+	 * @param <V> The type of the value to set
+	 * @param value The value to assign to this value
+	 * @param cause Something that may have caused this change
+	 * @return The value that was previously set for in this container
+	 * @throws IllegalArgumentException If the value is not acceptable or setting it fails
+	 * @throws UnsupportedOperationException If this operation is not supported (e.g. because this value is {@link #isEnabled() disabled}
+	 */
+	<V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException;
+
+	/**
+	 * @param <V> The type of the value to check
+	 * @param value The value to check
+	 * @return null if the value is not known to be unacceptable for this value, or an error text if it is known to be unacceptable. A null
+	 *         value returned from this method does not guarantee that a call to {@link #set(Object, Object)} for the same value will not
+	 *         throw an IllegalArgumentException
+	 */
+	<V extends T> String isAcceptable(V value);
+
 	/** @return An observable whose value reports null if this value can be set directly, or a string describing why it cannot */
-	@Override
 	ObservableValue<String> isEnabled();
 
 	/**
@@ -69,7 +86,6 @@ public interface SettableValue<T> extends ObservableValue<T>, Settable<T> {
 	}
 
 	/** @return This value, but not settable */
-	@Override
 	default ObservableValue<T> unsettable() {
 		return new ObservableValue<T>() {
 			@Override
@@ -103,7 +119,6 @@ public interface SettableValue<T> extends ObservableValue<T>, Settable<T> {
 	 * @param accept The filter
 	 * @return A settable value that rejects values that return other than null for the given test
 	 */
-	@Override
 	default SettableValue<T> filterAccept(Function<? super T, String> accept) {
 		SettableValue<T> outer = this;
 		return new SettableValue<T>() {
@@ -163,7 +178,6 @@ public interface SettableValue<T> extends ObservableValue<T>, Settable<T> {
 	 * @param onSetAction The action to invoke just before {@link #set(Object, Object)} is called
 	 * @return The settable
 	 */
-	@Override
 	default SettableValue<T> onSet(Consumer<T> onSetAction) {
 		SettableValue<T> outer = this;
 		return new SettableValue<T>() {
@@ -282,7 +296,6 @@ public interface SettableValue<T> extends ObservableValue<T>, Settable<T> {
 	 *            result will be null.
 	 * @return The mapped settable value
 	 */
-	@Override
 	public default <R> SettableValue<R> mapV(TypeToken<R> type, Function<? super T, R> function, Function<? super R, ? extends T> reverse,
 		boolean combineNull) {
 		SettableValue<T> root = this;
