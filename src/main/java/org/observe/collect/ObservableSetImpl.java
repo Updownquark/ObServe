@@ -12,6 +12,7 @@ import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableCollection.UniqueMappedCollectionBuilder;
 import org.observe.collect.ObservableCollection.UniqueModFilterBuilder;
 import org.observe.collect.ObservableCollectionDataFlowImpl.BaseCollectionDataFlow;
+import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionElementManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
 import org.observe.collect.ObservableCollectionImpl.DerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.DerivedLWCollection;
@@ -275,7 +276,7 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public boolean isDynamicallyFiltered() {
+		public boolean isFiltered() {
 			return true;
 		}
 
@@ -307,8 +308,8 @@ public class ObservableSetImpl {
 		protected void begin(Observable<?> until) {}
 
 		@Override
-		public ObservableCollectionDataFlowImpl.CollectionElementManager<E, ?, T> createElement(ElementId id, E init, Object cause) {
-			return new UniqueElement(id, init, cause);
+		public void createElement(ElementId id, E init, Object cause, Consumer<CollectionElementManager<E, ?, T>> onElement) {
+			getParent().createElement(id, init, cause, el -> onElement.accept(new UniqueElement(id, init, cause, el)));
 		}
 
 		void update(UniqueElement element, Object cause) {
@@ -321,8 +322,8 @@ public class ObservableSetImpl {
 			private BetterTreeSet<UniqueElement> theValueElements;
 			private BinaryTreeNode<UniqueElement> theNode;
 
-			protected UniqueElement(ElementId id, E init, Object cause) {
-				super(UniqueManager.this, UniqueManager.this.getParent().createElement(id, init, cause), id, init, cause);
+			protected UniqueElement(ElementId id, E init, Object cause, CollectionElementManager<E, ?, T> parent) {
+				super(UniqueManager.this, parent, id, init, cause);
 
 				T value = getParent().get();
 				theValue = value;

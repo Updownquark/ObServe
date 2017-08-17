@@ -1358,7 +1358,7 @@ public class ObservableCollectionsTest {
 		}
 	}
 
-	/** Tests {@link CollectionDataFlow#flatMap(TypeToken, Function)} */
+	/** Tests {@link CollectionDataFlow#flatMapV(TypeToken, Function)} */
 	@Test
 	public void flattenListValues() {
 		ObservableCollection<ObservableValue<Integer>> list = ObservableCollection.create(new TypeToken<ObservableValue<Integer>>() {});
@@ -1375,7 +1375,7 @@ public class ObservableCollectionsTest {
 		list.addAll(java.util.Arrays.asList(value1, value2, value3, value4));
 
 		Integer [] received = new Integer[1];
-		list.flow().flatMap(intType, v -> v).collect().observeFind(value -> value % 3 == 0, () -> null, false).value()
+		list.flow().flatMapV(intType, v -> v).collect().observeFind(value -> value % 3 == 0, () -> null, false).value()
 		.act(value -> received[0] = value);
 		assertEquals(Integer.valueOf(3), received[0]);
 		value3.set(4, null);

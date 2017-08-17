@@ -966,10 +966,10 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * @return A {@link #isLightWeight() heavy-weight} flow capable of producing a collection that is the value of the observable values
 		 *         mapped to each element of the source.
 		 */
-		default <X> CollectionDataFlow<E, ?, X> flatMap(TypeToken<X> target,
+		default <X> CollectionDataFlow<E, ?, X> flatMapV(TypeToken<X> target,
 			Function<? super T, ? extends ObservableValue<? extends X>> map) {
 			TypeToken<ObservableValue<? extends X>> valueType = new TypeToken<ObservableValue<? extends X>>() {}
-				.where(new TypeParameter<X>() {}, target.wrap());
+			.where(new TypeParameter<X>() {}, target.wrap());
 			return map(valueType).map(map).refreshEach(v -> v.noInit()).map(target).withElementSetting((ov, newValue, doSet, cause) -> {
 				// Allow setting elements via the wrapped settable value
 				if (!(ov instanceof SettableValue))
@@ -984,6 +984,17 @@ public interface ObservableCollection<E> extends BetterList<E> {
 				return null;
 			}).map(obs -> obs == null ? null : obs.get());
 		}
+
+		default <X> CollectionDataFlow<E, ?, X> flatMapC(TypeToken<X> target,
+			Function<? super T, ? extends ObservableCollection<? extends X>> map) {
+			return flatMapF(target, v -> {
+				ObservableCollection<? extends X> coll = map.apply(v);
+				return coll == null ? null : coll.flow();
+			});
+		}
+
+		<X> CollectionDataFlow<E, ?, X> flatMapF(TypeToken<X> target,
+			Function<? super T, ? extends CollectionDataFlow<?, ?, ? extends X>> map);
 
 		/**
 		 *

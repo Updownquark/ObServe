@@ -32,6 +32,7 @@ import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
 import org.observe.collect.ObservableCollectionImpl.DerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.DerivedLWCollection;
+import org.observe.collect.ObservableSetImpl.UniqueElementFinder;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterHashSet;
@@ -160,6 +161,12 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public <X> MappedCollectionBuilder<E, T, X> map(TypeToken<X> target) {
 			return new MappedCollectionBuilder<>(theSource, this, target);
+		}
+
+		@Override
+		public <X> CollectionDataFlow<E, ?, X> flatMapF(TypeToken<X> target,
+			Function<? super T, ? extends CollectionDataFlow<?, ?, ? extends X>> map) {
+			return new FlattenedOp<>(theSource, this, target, map);
 		}
 
 		@Override
@@ -383,10 +390,12 @@ public class ObservableCollectionDataFlowImpl {
 			theFilter = filter;
 			isExclude = exclude;
 		}
+
 		@Override
 		public boolean isLightWeight() {
 			return false;
 		}
+
 		@Override
 		public CollectionManager<E, ?, T> manageCollection() {
 			return new IntersectionManager<>(getParent().manageCollection(), theFilter, isExclude);
@@ -415,8 +424,8 @@ public class ObservableCollectionDataFlowImpl {
 				}
 
 				@Override
-				public CollectionElementManager<E, ?, T> createElement(ElementId id, E init, Object cause) {
-					return getParent().createElement(id, init, cause);
+				public void createElement(ElementId id, E init, Object cause, Consumer<CollectionElementManager<E, ?, T>> onElement) {
+					getParent().createElement(id, init, cause, onElement);
 				}
 
 				@Override
@@ -628,16 +637,32 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
+	private static class FlattenedOp<E, I, T> extends AbstractDataFlow<E, I, T> {
+		private final Function<? super I, ? extends CollectionDataFlow<?, ?, ? extends T>> theMap;
+
+		FlattenedOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, I> parent, TypeToken<T> targetType,
+			Function<? super I, ? extends CollectionDataFlow<?, ?, ? extends T>> map) {
+			super(source, parent, targetType);
+			theMap = map;
+		}
+
+		@Override
+		public boolean isLightWeight() {
+			return false;
+		}
+
+		@Override
+		public CollectionManager<E, ?, T> manageCollection() {
+			return new FlattenedManager<>(getParent().manageCollection(), getTargetType(), theMap);
+		}
+	}
+
 	public static interface CollectionManager<E, I, T> extends Transactable {
 		TypeToken<T> getTargetType();
 
 		Equivalence<? super T> equivalence();
 
-		boolean isDynamicallyFiltered();
-
-		boolean isStaticallyFiltered();
-
-		boolean isMapped();
+		boolean isFiltered();
 
 		boolean isReversible();
 
@@ -661,7 +686,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		void begin(Consumer<CollectionUpdate> onUpdate, Observable<?> until);
 
-		CollectionElementManager<E, ?, T> createElement(ElementId id, E init, Object cause);
+		void createElement(ElementId id, E init, Object cause, Consumer<CollectionElementManager<E, ?, T>> onElement);
 
 		void postChange();
 	}
@@ -708,18 +733,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isDynamicallyFiltered() {
-			return theParent == null ? false : theParent.isDynamicallyFiltered();
-		}
-
-		@Override
-		public boolean isStaticallyFiltered() {
-			return theParent == null ? false : theParent.isStaticallyFiltered();
-		}
-
-		@Override
-		public boolean isMapped() {
-			return theParent == null ? false : theParent.isMapped();
+		public boolean isFiltered() {
+			return theParent == null ? false : theParent.isFiltered();
 		}
 
 		@Override
@@ -810,7 +825,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public abstract CollectionElementManager<E, ?, T> createElement(ElementId id, E init, Object cause);
+		public abstract void createElement(ElementId id, E init, Object cause, Consumer<CollectionElementManager<E, ?, T>> onElement);
 	}
 
 	public static abstract class CollectionElementManager<E, I, T> implements Comparable<CollectionElementManager<E, ?, T>> {
@@ -1149,7 +1164,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public CollectionElementManager<E, ?, E> createElement(ElementId id, E init, Object cause) {
+		public void createElement(ElementId id, E init, Object cause, Consumer<CollectionElementManager<E, ?, E>> onElement) {
 			class DefaultElement extends CollectionElementManager<E, E, E> {
 				private E theValue;
 
@@ -1185,7 +1200,7 @@ public class ObservableCollectionDataFlowImpl {
 					return true;
 				}
 			}
-			return new DefaultElement();
+			onElement.accept(new DefaultElement());
 		}
 
 		@Override
@@ -1211,10 +1226,10 @@ public class ObservableCollectionDataFlowImpl {
 		protected void begin(Observable<?> until) {}
 
 		@Override
-		public CollectionElementManager<E, ?, T> createElement(ElementId id, E init, Object cause) {
+		public void createElement(ElementId id, E init, Object cause, Consumer<CollectionElementManager<E, ?, T>> onElement) {
 			class SortedElement extends NonMappingCollectionElement<E, T> {
-				SortedElement() {
-					super(SortedManager.this, SortedManager.this.getParent().createElement(id, init, cause), id, init, cause);
+				SortedElement(CollectionElementManager<E, ?, T> parent) {
+					super(SortedManager.this, parent, id, init, cause);
 				}
 
 				@Override
@@ -1262,7 +1277,7 @@ public class ObservableCollectionDataFlowImpl {
 					super.interceptSet(value);
 				}
 			}
-			return new SortedElement();
+			getParent().createElement(id, init, cause, el -> onElement.accept(new SortedElement(el)));
 		}
 	}
 
@@ -1282,7 +1297,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isDynamicallyFiltered() {
+		public boolean isFiltered() {
 			return true;
 		}
 
@@ -1309,42 +1324,40 @@ public class ObservableCollectionDataFlowImpl {
 		public void begin(Observable<?> until) {}
 
 		@Override
-		public CollectionElementManager<E, ?, T> createElement(ElementId id, E init, Object cause) {
-			CollectionElementManager<E, ?, T> parentElement = getParent().createElement(id, init, cause);
-			if (isStaticFilter) {
-				T value = parentElement.get();
-				if (theFilter.apply(value) != null)
-					return null;
-				else
-					return parentElement;
-			} else {
-				class FilteredElement extends NonMappingCollectionElement<E, T> {
-					private boolean isPresent;
+		public void createElement(ElementId id, E init, Object cause, Consumer<CollectionElementManager<E, ?, T>> onElement) {
+			getParent().createElement(id, init, cause, parentElement -> {
+				if (isStaticFilter) {
+					T value = parentElement.get();
+					if (theFilter.apply(value) == null)
+						onElement.accept(parentElement);
+				} else {
+					class FilteredElement extends NonMappingCollectionElement<E, T> {
+						private boolean isPresent;
 
-					protected FilteredElement() {
-						super(FilteredCollectionManager.this, FilteredCollectionManager.this.getParent().createElement(id, init, cause),
-							id, init, cause);
-						isPresent = theFilter.apply(getParent().get()) == null;
-					}
+						protected FilteredElement(CollectionElementManager<E, ?, T> parent) {
+							super(FilteredCollectionManager.this, parent, id, init, cause);
+							isPresent = theFilter.apply(getParent().get()) == null;
+						}
 
-					@Override
-					public boolean isPresent() {
-						return isPresent && super.isPresent();
-					}
+						@Override
+						public boolean isPresent() {
+							return isPresent && super.isPresent();
+						}
 
-					@Override
-					public T get() {
-						return getParent().get();
-					}
+						@Override
+						public T get() {
+							return getParent().get();
+						}
 
-					@Override
-					protected boolean refresh(T source, Object cause) {
-						isPresent = theFilter.apply(source) == null;
-						return true;
+						@Override
+						protected boolean refresh(T source, Object cause) {
+							isPresent = theFilter.apply(source) == null;
+							return true;
+						}
 					}
+					onElement.accept(new FilteredElement(parentElement));
 				}
-				return new FilteredElement();
-			}
+			});
 		}
 	}
 
@@ -1457,10 +1470,10 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public CollectionElementManager<E, ?, T> createElement(ElementId id, E init, Object cause) {
+		public void createElement(ElementId id, E init, Object cause, Consumer<CollectionElementManager<E, ?, T>> onElement) {
 			class IntersectedCollectionElement extends NonMappingCollectionElement<E, T> {
-				IntersectedCollectionElement() {
-					super(IntersectionManager.this, IntersectionManager.this.getParent().createElement(id, init, cause), id, init, cause);
+				IntersectedCollectionElement(CollectionElementManager<E, ?, T> parent) {
+					super(IntersectionManager.this, parent, id, init, cause);
 				}
 
 				@Override
@@ -1481,7 +1494,7 @@ public class ObservableCollectionDataFlowImpl {
 					return false; // If the present state doesn't change, don't fire an update
 				}
 			}
-			return new IntersectedCollectionElement();
+			getParent().createElement(id, init, cause, el -> onElement.accept(new IntersectedCollectionElement(el)));
 		}
 	}
 
@@ -1508,11 +1521,6 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public Equivalence<? super T> equivalence() {
 			return Equivalence.DEFAULT;
-		}
-
-		@Override
-		public boolean isMapped() {
-			return true;
 		}
 
 		@Override
@@ -1564,15 +1572,14 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public CollectionElementManager<E, I, T> createElement(ElementId id, E init, Object cause) {
+		public void createElement(ElementId id, E init, Object cause, Consumer<CollectionElementManager<E, ?, T>> onElement) {
 			class MappedElement extends CollectionElementManager<E, I, T> {
 				private I theSource;
 				private T theValue;
 				private boolean isInitial;
 
-				MappedElement() {
-					super(MappedCollectionManager.this, MappedCollectionManager.this.getParent().createElement(id, init, cause), id, init,
-						cause);
+				MappedElement(CollectionElementManager<E, ?, I> parent) {
+					super(MappedCollectionManager.this, parent, id, init, cause);
 					theSource = getParent().get();
 					if (isCached)
 						theValue = mapValue(theSource);
@@ -1599,8 +1606,7 @@ public class ObservableCollectionDataFlowImpl {
 				}
 
 				@Override
-				protected void interceptSet(FilterMapResult<T, E> value)
-					throws UnsupportedOperationException, IllegalArgumentException {
+				protected void interceptSet(FilterMapResult<T, E> value) throws UnsupportedOperationException, IllegalArgumentException {
 					if (theElementReverse != null) {
 						value.maybeReject(theElementReverse.setElement(getParent().get(), value.source, true, cause), true)
 						.throwIfError(IllegalArgumentException::new);
@@ -1627,7 +1633,7 @@ public class ObservableCollectionDataFlowImpl {
 					return true;
 				}
 			}
-			return new MappedElement();
+			getParent().createElement(id, init, cause, el -> onElement.accept(new MappedElement(el)));
 		}
 
 		@Override
@@ -1643,6 +1649,7 @@ public class ObservableCollectionDataFlowImpl {
 		private final Function<? super CombinedValues<? extends I>, ? extends T> theCombination;
 		private final Function<? super CombinedValues<? extends T>, ? extends I> theReverse;
 		private final boolean isCached;
+		/** Held as a strong reference to keep the observable value listeners from being GC'd */
 		private Subscription theSubscription;
 
 		protected CombinedCollectionManager(CollectionManager<E, ?, I> parent, TypeToken<T> targetType, Set<ObservableValue<?>> args,
@@ -1655,11 +1662,6 @@ public class ObservableCollectionDataFlowImpl {
 			theCombination = combination;
 			theReverse = reverse;
 			isCached = cached;
-		}
-
-		@Override
-		public boolean isMapped() {
-			return true;
 		}
 
 		@Override
@@ -1747,13 +1749,12 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public CollectionElementManager<E, I, T> createElement(ElementId id, E init, Object cause) {
+		public void createElement(ElementId id, E init, Object cause, Consumer<CollectionElementManager<E, ?, T>> onElement) {
 			class CombinedCollectionElement extends CollectionElementManager<E, I, T> {
 				private T theValue;
 
-				CombinedCollectionElement() {
-					super(CombinedCollectionManager.this, CombinedCollectionManager.this.getParent().createElement(id, init, cause), id,
-						init, cause);
+				CombinedCollectionElement(CollectionElementManager<E, ?, I> parent) {
+					super(CombinedCollectionManager.this, parent, id, init, cause);
 					if (isCached)
 						theValue = combineValue(getParent().get());
 				}
@@ -1773,7 +1774,7 @@ public class ObservableCollectionDataFlowImpl {
 					return true;
 				}
 			}
-			return new CombinedCollectionElement();
+			getParent().createElement(id, init, cause, el -> onElement.accept(new CombinedCollectionElement(el)));
 		}
 
 		@Override
@@ -1823,11 +1824,10 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public CollectionElementManager<E, ?, T> createElement(ElementId id, E init, Object cause) {
+		public void createElement(ElementId id, E init, Object cause, Consumer<CollectionElementManager<E, ?, T>> onElement) {
 			class RefreshingElement extends NonMappingCollectionElement<E, T> {
-				public RefreshingElement() {
-					super(RefreshingCollectionManager.this, RefreshingCollectionManager.this.getParent().createElement(id, init, cause),
-						id, init, cause);
+				public RefreshingElement(CollectionElementManager<E, ?, T> parent) {
+					super(RefreshingCollectionManager.this, parent, id, init, cause);
 				}
 
 				@Override
@@ -1840,7 +1840,7 @@ public class ObservableCollectionDataFlowImpl {
 					return true;
 				}
 			}
-			return new RefreshingElement();
+			getParent().createElement(id, init, cause, el -> new RefreshingElement(el));
 		}
 	}
 
@@ -1872,13 +1872,12 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public CollectionElementManager<E, ?, T> createElement(ElementId id, E init, Object cause) {
+		public void createElement(ElementId id, E init, Object cause, Consumer<CollectionElementManager<E, ?, T>> onElement) {
 			class ElementRefreshElement extends NonMappingCollectionElement<E, T> {
 				private Observable<?> theRefreshObservable;
 
-				protected ElementRefreshElement() {
-					super(ElementRefreshingCollectionManager.this,
-						ElementRefreshingCollectionManager.this.getParent().createElement(id, init, cause), id, init, cause);
+				protected ElementRefreshElement(CollectionElementManager<E, ?, T> parent) {
+					super(ElementRefreshingCollectionManager.this, parent, id, init, cause);
 
 					newRefreshObs(theRefresh.apply(get()));
 				}
@@ -1956,7 +1955,7 @@ public class ObservableCollectionDataFlowImpl {
 					return new RefreshHolder(refreshObs, sub);
 				}
 			}
-			return new ElementRefreshElement();
+			getParent().createElement(id, init, cause, el -> onElement.accept(new ElementRefreshElement(el)));
 		}
 
 		private void update(Observable<?> refreshObs, Object cause) {
@@ -2017,11 +2016,10 @@ public class ObservableCollectionDataFlowImpl {
 		protected void begin(Observable<?> until) {}
 
 		@Override
-		public CollectionElementManager<E, ?, T> createElement(ElementId id, E init, Object cause) {
+		public void createElement(ElementId id, E init, Object cause, Consumer<CollectionElementManager<E, ?, T>> onElement) {
 			class ModFilteredElement extends NonMappingCollectionElement<E, T> {
-				ModFilteredElement() {
-					super(ModFilteredCollectionManager.this, ModFilteredCollectionManager.this.getParent().createElement(id, init, cause),
-						id, init, cause);
+				ModFilteredElement(CollectionElementManager<E, ?, T> parent) {
+					super(ModFilteredCollectionManager.this, parent, id, init, cause);
 				}
 
 				@Override
@@ -2082,14 +2080,13 @@ public class ObservableCollectionDataFlowImpl {
 				}
 
 				@Override
-				protected void interceptSet(FilterMapResult<T, E> value)
-					throws UnsupportedOperationException, IllegalArgumentException {
+				protected void interceptSet(FilterMapResult<T, E> value) throws UnsupportedOperationException, IllegalArgumentException {
 					value.maybeReject(checkReplace(get(), value.source), true).throwIfError(IllegalArgumentException::new);
 					if (value.isAccepted())
 						super.interceptSet(value);
 				}
 			}
-			return new ModFilteredElement();
+			getParent().createElement(id, init, cause, el -> onElement.accept(new ModFilteredElement(el)));
 		}
 
 		// Remove?
@@ -2171,6 +2168,52 @@ public class ObservableCollectionDataFlowImpl {
 			tryRemove(current);
 			tryAdd(newValue);
 			return newValue;
+		}
+	}
+
+	private static class FlattenedManager<E, I, T> extends AbstractCollectionManager<E, I, T> {
+		private final Function<? super I, ? extends CollectionDataFlow<?, ?, ? extends T>> theMap;
+
+		public FlattenedManager(CollectionManager<E, ?, I> parent, TypeToken<T> targetType,
+			Function<? super I, ? extends CollectionDataFlow<?, ?, ? extends T>> map) {
+			super(parent, targetType);
+			theMap = map;
+		}
+
+		@Override
+		public Equivalence<? super T> equivalence() {
+			return Equivalence.DEFAULT;
+		}
+
+		@Override
+		public UniqueElementFinder<T> getElementFinder() {
+			return null;
+		}
+
+		@Override
+		public Comparator<? super T> comparator() {
+			return null;
+		}
+
+		@Override
+		protected FilterMapResult<I, T> mapTop(FilterMapResult<I, T> source) {
+			// TODO Auto-generated method stub
+		}
+
+		@Override
+		protected FilterMapResult<T, I> reverseTop(FilterMapResult<T, I> dest) {
+			// TODO Auto-generated method stub
+		}
+
+		@Override
+		protected void begin(Observable<?> until) {}
+
+		@Override
+		public void createElement(ElementId id, E init, Object cause, Consumer<CollectionElementManager<E, ?, T>> onElement) {
+			getParent().createElement(id, init, cause, el -> {
+				CollectionDataFlow<?, ?, ? extends T> flow = theMap.apply(el.get());
+				// TODO
+			});
 		}
 	}
 }

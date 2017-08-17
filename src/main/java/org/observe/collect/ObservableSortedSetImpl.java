@@ -1,6 +1,7 @@
 package org.observe.collect;
 
 import java.util.Comparator;
+import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -599,7 +600,8 @@ public class ObservableSortedSetImpl {
 				if (reverse.throwIfError(IllegalArgumentException::new) != null)
 					return null;
 				CollectionElement<E> added = getSource().addElement(reverse.result, false);
-				return observableElementFor(getPresentElement(added.getElementId()));
+				List<DerivedCollectionElement<E, T>> els = getPresentElements(added.getElementId());
+				return observableElementFor(els.get(els.size() - 1));
 			}
 		}
 	}

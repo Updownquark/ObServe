@@ -1079,7 +1079,9 @@ public final class ObservableCollectionImpl {
 		}
 
 		protected MutableCollectionElement<T> mutableElementFor(MutableCollectionElement<? extends E> el) {
-			return theFlow.createElement(el.getElementId(), el.get(), null).map(el, el.getElementId());
+			CollectionElementManager<E, ?, T>[] elMgr = new CollectionElementManager[1];
+			theFlow.createElement(el.getElementId(), el.get(), null, mgr -> elMgr[0] = mgr);
+			return elMgr[0].map(el, el.getElementId());
 		}
 
 		@Override
@@ -1161,7 +1163,7 @@ public final class ObservableCollectionImpl {
 			final CollectionElementManager<E, ?, T> manager;
 			BinaryTreeNode<DerivedCollectionElement<E, T>> presentNode;
 
-			protected DerivedCollectionElement(CollectionElementManager<E, ?, T> manager, E initValue) {
+			protected DerivedCollectionElement(CollectionElementManager<E, ?, T> manager) {
 				this.manager = manager;
 			}
 
@@ -1217,7 +1219,7 @@ public final class ObservableCollectionImpl {
 
 		private final ObservableCollection<E> theSource;
 		private final CollectionManager<E, ?, T> theFlow;
-		private final Map<ElementId, DerivedCollectionElement<E, T>> theElements;
+		private final Map<ElementId, List<DerivedCollectionElement<E, T>>> theElements;
 		private final BetterTreeSet<DerivedCollectionElement<E, T>> thePresentElements;
 		private final BetterTreeList<Consumer<? super ObservableCollectionEvent<? extends T>>> theListeners;
 		private final AtomicInteger theListenerCount;
@@ -1247,7 +1249,7 @@ public final class ObservableCollectionImpl {
 						if (update.getElement() != null)
 							applyUpdate(theElements.get(update.getElement()), update);
 						else {
-							for (DerivedCollectionElement<E, T> element : theElements.values())
+							for (List<DerivedCollectionElement<E, T>> element : theElements.values())
 								applyUpdate(element, update);
 						}
 					}
@@ -1257,40 +1259,45 @@ public final class ObservableCollectionImpl {
 				// Need to hold on to the subscription because it contains strong references that keep the listeners alive
 				theWeakSubscription = WeakConsumer.build()//
 					.<ObservableCollectionEvent<? extends E>> withAction(evt -> {
-						final DerivedCollectionElement<E, T> element;
+						ElementId elementId = evt.getElementId();
 						try (Transaction flowTransaction = theFlow.lock(false, null)) {
 							switch (evt.getType()) {
 							case add:
-								element = createElement(theFlow.createElement(evt.getElementId(), evt.getNewValue(), evt),
-									evt.getNewValue());
-								if (element.manager == null)
-									return; // Statically filtered out
-								theElements.put(evt.getElementId(), element);
-								if (element.manager.isPresent())
-									addToPresent(element, evt);
+								theFlow.createElement(evt.getElementId(), evt.getNewValue(), evt, elMgr -> {
+									final DerivedCollectionElement<E, T> element = createElement(elMgr);
+									if (element.manager == null)
+										return; // Statically filtered out
+									theElements.computeIfAbsent(elementId, id -> new ArrayList<>()).add(element);
+									if (element.manager.isPresent())
+										addToPresent(element, evt);
+								});
 								break;
 							case remove:
-								element = theElements.remove(evt.getElementId());
-								if (element == null)
+								List<DerivedCollectionElement<E, T>> elements = theElements.remove(elementId);
+								if (elements == null)
 									return; // Must be statically filtered out or removed via spliterator
-								if (element.presentNode != null)
-									removeFromPresent(element, element.get(), evt);
-								element.removed(evt);
+								for (DerivedCollectionElement<E, T> element : elements) {
+									if (element.presentNode != null)
+										removeFromPresent(element, element.get(), evt);
+									element.removed(evt);
+								}
 								break;
 							case set:
-								element = theElements.get(evt.getElementId());
-								if (element == null)
+								elements = theElements.get(elementId);
+								if (elements == null)
 									return; // Must be statically filtered out
-								boolean prePresent = element.presentNode != null;
-								T oldValue = prePresent ? element.get() : null;
-								boolean fireUpdate = element.set(evt.getNewValue(), evt);
-								if (element.manager.isPresent()) {
-									if (prePresent)
-										updateInPresent(element, oldValue, evt, fireUpdate);
-									else
-										addToPresent(element, evt);
-								} else if (prePresent)
-									removeFromPresent(element, oldValue, evt);
+								for (DerivedCollectionElement<E, T> element : elements) {
+									boolean prePresent = element.presentNode != null;
+									T oldValue = prePresent ? element.get() : null;
+									boolean fireUpdate = element.set(evt.getNewValue(), evt);
+									if (element.manager.isPresent()) {
+										if (prePresent)
+											updateInPresent(element, oldValue, evt, fireUpdate);
+										else
+											addToPresent(element, evt);
+									} else if (prePresent)
+										removeFromPresent(element, oldValue, evt);
+								}
 								break;
 							}
 							theFlow.postChange();
@@ -1300,8 +1307,8 @@ public final class ObservableCollectionImpl {
 			}
 		}
 
-		protected DerivedCollectionElement<E, T> createElement(CollectionElementManager<E, ?, T> elMgr, E initValue) {
-			return new DerivedCollectionElement<>(elMgr, initValue);
+		protected DerivedCollectionElement<E, T> createElement(CollectionElementManager<E, ?, T> elMgr) {
+			return new DerivedCollectionElement<>(elMgr);
 		}
 
 		protected ObservableCollection<E> getSource() {
@@ -1312,8 +1319,8 @@ public final class ObservableCollectionImpl {
 			return theFlow;
 		}
 
-		protected DerivedCollectionElement<E, T> getPresentElement(ElementId sourceId) {
-			return theElements.get(sourceId).check();
+		protected List<DerivedCollectionElement<E, T>> getPresentElements(ElementId sourceId) {
+			return theElements.get(sourceId).stream().filter(el -> el.isPresent()).collect(Collectors.toList());
 		}
 
 		protected BetterTreeSet<DerivedCollectionElement<E, T>> getPresentElements() {
@@ -1362,20 +1369,22 @@ public final class ObservableCollectionImpl {
 				listener.accept(event);
 		}
 
-		private void applyUpdate(DerivedCollectionElement<E, T> element, CollectionUpdate update) {
-			boolean prePresent = element.manager.isPresent();
-			T oldValue = prePresent ? element.get() : null;
-			ElementUpdateResult fireUpdate = element.update(update,
-				onEl -> theSource.forMutableElement(element.manager.getElementId(), onEl));
-			if (fireUpdate == ElementUpdateResult.DoesNotApply)
-				return;
-			if (element.manager.isPresent()) {
-				if (prePresent)
-					updateInPresent(element, oldValue, update.getCause(), fireUpdate == ElementUpdateResult.FireUpdate);
-				else
-					addToPresent(element, update.getCause());
-			} else if (prePresent)
-				removeFromPresent(element, oldValue, update.getCause());
+		private void applyUpdate(List<DerivedCollectionElement<E, T>> elements, CollectionUpdate update) {
+			for (DerivedCollectionElement<E, T> element : elements) {
+				boolean prePresent = element.manager.isPresent();
+				T oldValue = prePresent ? element.get() : null;
+				ElementUpdateResult fireUpdate = element.update(update,
+					onEl -> theSource.forMutableElement(element.manager.getElementId(), onEl));
+				if (fireUpdate == ElementUpdateResult.DoesNotApply)
+					return;
+				if (element.manager.isPresent()) {
+					if (prePresent)
+						updateInPresent(element, oldValue, update.getCause(), fireUpdate == ElementUpdateResult.FireUpdate);
+					else
+						addToPresent(element, update.getCause());
+				} else if (prePresent)
+					removeFromPresent(element, oldValue, update.getCause());
+			}
 		}
 
 		@Override
@@ -1498,12 +1507,18 @@ public final class ObservableCollectionImpl {
 					ElementId id = finder.getUniqueElement(value);
 					if (id == null)
 						return null;
-					DerivedCollectionElement<E, T> element = theElements.get(id);
-					if (element == null)
+					List<DerivedCollectionElement<E, T>> elements = theElements.get(id);
+					if (elements == null)
 						throw new IllegalStateException(MutableCollectionElement.StdMsg.NOT_FOUND);
-					if (element.presentNode == null)
-						return null;
-					return observableElementFor(element);
+					if(!first){
+						elements = new ArrayList<>(elements);
+						java.util.Collections.reverse(elements);
+					}
+					for (DerivedCollectionElement<E, T> element : elements) {
+						if (element.presentNode != null)
+							return observableElementFor(element);
+					}
+					return null;
 				}
 				for (DerivedCollectionElement<E, T> el : (first ? thePresentElements : thePresentElements.reverse()))
 					if (equivalence().elementEquals(el.get(), value))
@@ -1578,14 +1593,15 @@ public final class ObservableCollectionImpl {
 				if (reversed.throwIfError(IllegalArgumentException::new) != null)
 					return null;
 				CollectionElement<E> sourceElement = theSource.addElement(reversed.result, first);
-				return observableElementFor(theElements.get(sourceElement.getElementId())); // Should have been added
+				List<DerivedCollectionElement<E, T>> elements = theElements.get(sourceElement.getElementId());
+				return observableElementFor(elements.get(elements.size() - 1)); // Should have been added
 			}
 		}
 
 		@Override
 		public void clear() {
 			try (Transaction t = lock(true, null)) {
-				if (!theFlow.isStaticallyFiltered() && !theFlow.isDynamicallyFiltered())
+				if (!theFlow.isFiltered())
 					theSource.clear();
 				else
 					mutableSpliterator().forEachElementM(el -> el.remove(), true);
