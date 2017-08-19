@@ -304,15 +304,11 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public ObservableSortedSet<T> collectLW() {
-			if (!isLightWeight())
-				throw new IllegalStateException("This data flow is not light-weight");
-			return new DerivedLWSortedSet<>((ObservableSortedSet<E>) getSource(), manageCollection(), theCompare);
-		}
-
-		@Override
 		public ObservableSortedSet<T> collect(Observable<?> until) {
-			return new DerivedSortedSet<>(getSource(), manageCollection(), theCompare, until);
+			if (until == Observable.empty && isLightWeight())
+				return new DerivedLWSortedSet<>((ObservableSortedSet<E>) getSource(), manageCollection(), theCompare);
+			else
+				return new DerivedSortedSet<>(getSource(), manageCollection(), theCompare, until);
 		}
 	}
 
@@ -384,15 +380,11 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public ObservableSortedSet<T> collectLW() {
-			if (!isLightWeight())
-				throw new IllegalStateException("This data flow is not light-weight");
-			return new DerivedLWSortedSet<>((ObservableSortedSet<E>) getSource(), manageCollection(), comparator());
-		}
-
-		@Override
 		public ObservableSortedSet<T> collect(Observable<?> until) {
-			return new DerivedSortedSet<>(getSource(), manageCollection(), comparator(), until);
+			if (until == Observable.empty && isLightWeight())
+				return new DerivedLWSortedSet<>((ObservableSortedSet<E>) getSource(), manageCollection(), comparator());
+			else
+				return new DerivedSortedSet<>(getSource(), manageCollection(), comparator(), until);
 		}
 	}
 
@@ -445,15 +437,11 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public ObservableSortedSet<T> collectLW() {
-			if (!isLightWeight())
-				throw new IllegalStateException("This data flow is not light-weight");
-			return new DerivedLWSortedSet<>((ObservableSortedSet<E>) getSource(), manageCollection(), comparator());
-		}
-
-		@Override
 		public ObservableSortedSet<T> collect(Observable<?> until) {
-			return new DerivedSortedSet<>(getSource(), manageCollection(), comparator(), until);
+			if (until == Observable.empty && isLightWeight())
+				return new DerivedLWSortedSet<>((ObservableSortedSet<E>) getSource(), manageCollection(), comparator());
+			else
+				return new DerivedSortedSet<>(getSource(), manageCollection(), comparator(), until);
 		}
 	}
 
@@ -505,11 +493,6 @@ public class ObservableSortedSetImpl {
 		@Override
 		public UniqueSortedModFilterBuilder<E, E> filterModification() {
 			return new UniqueSortedModFilterBuilder<>(getSource(), this);
-		}
-
-		@Override
-		public ObservableSortedSet<E> collectLW() {
-			return getSource();
 		}
 
 		@Override

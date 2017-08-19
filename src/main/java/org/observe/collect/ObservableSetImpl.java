@@ -101,15 +101,11 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public ObservableSet<T> collectLW() {
-			if (!isLightWeight())
-				throw new IllegalStateException("This data flow is not light-weight");
-			return new DerivedLWSet<>((ObservableSet<E>) getSource(), manageCollection());
-		}
-
-		@Override
 		public ObservableSet<T> collect(Observable<?> until) {
-			return new DerivedSet<>(getSource(), manageCollection(), until);
+			if (until == Observable.empty && isLightWeight())
+				return new DerivedLWSet<>((ObservableSet<E>) getSource(), manageCollection());
+			else
+				return new DerivedSet<>(getSource(), manageCollection(), until);
 		}
 	}
 
@@ -170,15 +166,11 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public ObservableSet<T> collectLW() {
-			if (!isLightWeight())
-				throw new IllegalStateException("This data flow is not light-weight");
-			return new DerivedLWSet<>((ObservableSet<E>) getSource(), manageCollection());
-		}
-
-		@Override
 		public ObservableSet<T> collect(Observable<?> until) {
-			return new DerivedSet<>(getSource(), manageCollection(), until);
+			if (until == Observable.empty && isLightWeight())
+				return new DerivedLWSet<>((ObservableSet<E>) getSource(), manageCollection());
+			else
+				return new DerivedSet<>(getSource(), manageCollection(), until);
 		}
 	}
 
@@ -225,15 +217,11 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public ObservableSet<T> collectLW() {
-			if (!isLightWeight())
-				throw new IllegalStateException("This data flow is not light-weight");
-			return new DerivedLWSet<>((ObservableSet<E>) getSource(), manageCollection());
-		}
-
-		@Override
 		public ObservableSet<T> collect(Observable<?> until) {
-			return new DerivedSet<>(getSource(), manageCollection(), until);
+			if (until == Observable.empty && isLightWeight())
+				return new DerivedLWSet<>((ObservableSet<E>) getSource(), manageCollection());
+			else
+				return new DerivedSet<>(getSource(), manageCollection(), until);
 		}
 	}
 
@@ -430,8 +418,8 @@ public class ObservableSetImpl {
 				Consumer<Consumer<MutableCollectionElement<? extends E>>> sourceElement) {
 				if (update instanceof ObservableCollectionDataFlowImpl.RemoveElementUpdate && applies(update)) {
 					sourceElement.accept(el -> el.remove());
-					return ObservableCollectionDataFlowImpl.ElementUpdateResult.AppliedNoUpdate; // We're removed now, so obviously don't
-					// update
+					// We're removed now, so obviously don't update
+					return ObservableCollectionDataFlowImpl.ElementUpdateResult.AppliedNoUpdate;
 				} else
 					return super.update(update, sourceElement);
 			}
@@ -481,11 +469,6 @@ public class ObservableSetImpl {
 		@Override
 		public UniqueModFilterBuilder<E, E> filterModification() {
 			return new UniqueModFilterBuilder<>(getSource(), this);
-		}
-
-		@Override
-		public ObservableSet<E> collectLW() {
-			return getSource();
 		}
 
 		@Override

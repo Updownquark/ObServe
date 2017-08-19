@@ -263,15 +263,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public ObservableCollection<T> collectLW() {
-			if (!isLightWeight())
-				throw new IllegalStateException("This data flow is not light-weight");
-			return new DerivedLWCollection<>(getSource(), manageCollection());
-		}
-
-		@Override
 		public ObservableCollection<T> collect(Observable<?> until) {
-			return new DerivedCollection<>(getSource(), manageCollection(), until);
+			if (until == Observable.empty && isLightWeight())
+				return new DerivedLWCollection<>(getSource(), manageCollection());
+			else
+				return new DerivedCollection<>(getSource(), manageCollection(), until);
 		}
 	}
 

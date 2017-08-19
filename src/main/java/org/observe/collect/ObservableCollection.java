@@ -729,7 +729,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 */
 	static <E> ObservableCollection<E> constant(TypeToken<E> type, Collection<? extends E> values) {
 		return createUnsafe(type, values).flow().filterModification()
-			.immutable(MutableCollectionElement.StdMsg.UNSUPPORTED_OPERATION, false).build().collectLW();
+			.immutable(MutableCollectionElement.StdMsg.UNSUPPORTED_OPERATION, false).build().collect();
 	}
 
 	/**
@@ -1068,7 +1068,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 		/**
 		 * <p>
-		 * Determines if a flow supports building light-weight collections via {@link #isLightWeight()}.
+		 * Determines if this flow supports building light-weight collections via {@link #isLightWeight()}.
 		 * </p>
 		 *
 		 * <p>
@@ -1090,13 +1090,6 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 		/** @return A manager used by the derived collection */
 		CollectionManager<E, ?, T> manageCollection();
-
-		/**
-		 * @return A light-weight collection derived via this flow from the source collection, if supported
-		 * @throws IllegalStateException If this data flow is not light-weight
-		 * @see #isLightWeight()
-		 */
-		ObservableCollection<T> collectLW() throws IllegalStateException;
 
 		/**
 		 * @return A heavy-weight collection derived via this flow from the source collection
@@ -1171,9 +1164,6 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		UniqueModFilterBuilder<E, T> filterModification();
 
 		@Override
-		ObservableSet<T> collectLW();
-
-		@Override
 		default ObservableSet<T> collect() {
 			return (ObservableSet<T>) CollectionDataFlow.super.collect();
 		}
@@ -1229,9 +1219,6 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 		@Override
 		UniqueSortedModFilterBuilder<E, T> filterModification();
-
-		@Override
-		ObservableSortedSet<T> collectLW();
 
 		@Override
 		default ObservableSortedSet<T> collect() {
