@@ -28,7 +28,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, Navigabl
 
 	@Override
 	default ObservableSortedSet<ObservableEntry<K, V>> observeEntries() {
-		return keySet().flow().mapEquivalent(getEntryType()).map(this::entryFor, entry -> entry.getKey()).collectLW();
+		return keySet().flow().mapEquivalent(getEntryType()).map(this::entryFor, entry -> entry.getKey()).collect();
 	}
 
 	@Override

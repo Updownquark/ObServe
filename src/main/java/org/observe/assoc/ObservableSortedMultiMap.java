@@ -30,7 +30,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 
 	@Override
 	default ObservableSortedSet<ObservableMultiEntry<K, V>> entrySet() {
-		return keySet().flow().mapEquivalent(getEntryType()).cache(false).map(this::entryFor, entry -> entry.getKey()).collectLW();
+		return keySet().flow().mapEquivalent(getEntryType()).cache(false).map(this::entryFor, entry -> entry.getKey()).collect();
 	}
 
 	default ObservableMultiEntry<K, V> lowerEntry(K key) {

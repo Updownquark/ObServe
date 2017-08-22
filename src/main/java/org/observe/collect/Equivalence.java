@@ -345,18 +345,18 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public <X> X ofMutableElement(ElementId element, Function<? super MutableCollectionElement<T2>, X> onElement) {
-			return theWrapped.ofMutableElement(element, el -> onElement.apply(mutableHandleFor(el)));
+		public MutableCollectionElement<T2> mutableElement(ElementId id) {
+			return mutableHandleFor(theWrapped.mutableElement(id));
 		}
 
 		@Override
-		public MutableElementSpliterator<T2> mutableSpliterator(ElementId element, boolean asNext) {
-			return new MappedMutableSpliterator(theWrapped.mutableSpliterator(element, asNext));
+		public MutableElementSpliterator<T2> spliterator(ElementId element, boolean asNext) {
+			return new MappedMutableSpliterator(theWrapped.spliterator(element, asNext));
 		}
 
 		@Override
-		public MutableElementSpliterator<T2> mutableSpliterator(boolean fromStart) {
-			return new MappedMutableSpliterator(theWrapped.mutableSpliterator(fromStart));
+		public MutableElementSpliterator<T2> spliterator(boolean fromStart) {
+			return new MappedMutableSpliterator(theWrapped.spliterator(fromStart));
 		}
 
 		@Override
@@ -541,8 +541,8 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public <X> X ofMutableEntry(ElementId entryId, Function<? super MutableMapEntryHandle<T2, V>, X> onEntry) {
-			return theWrapped.ofMutableEntry(entryId, entry -> onEntry.apply(mutableHandleFor(entry)));
+		public MutableMapEntryHandle<T2, V> mutableEntry(ElementId entryId) {
+			return mutableHandleFor(theWrapped.mutableEntry(entryId));
 		}
 	}
 }

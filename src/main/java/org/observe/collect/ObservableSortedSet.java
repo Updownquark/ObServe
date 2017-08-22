@@ -6,7 +6,7 @@ import java.util.function.Supplier;
 
 import org.observe.ObservableValue;
 import org.qommons.collect.BetterSortedSet;
-import org.qommons.collect.ElementSpliterator;
+import org.qommons.collect.MutableElementSpliterator;
 
 /**
  * A sorted set whose content can be observed
@@ -20,7 +20,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 	}
 
 	@Override
-	default ElementSpliterator<E> spliterator() {
+	default MutableElementSpliterator<E> spliterator() {
 		return ObservableSet.super.spliterator();
 	}
 
@@ -68,7 +68,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 	abstract void clear();
 
 	@Override
-	default ElementSpliterator<E> spliterator(int index) {
+	default MutableElementSpliterator<E> spliterator(int index) {
 		return BetterSortedSet.super.spliterator(index);
 	}
 

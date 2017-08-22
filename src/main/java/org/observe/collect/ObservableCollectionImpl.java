@@ -13,7 +13,6 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -1055,13 +1054,13 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public <X> X ofMutableElement(ElementId element, Function<? super MutableCollectionElement<T>, X> onElement) {
-			return theSource.ofMutableElement(element, el -> onElement.apply(mutableElementFor(el)));
+		public MutableCollectionElement<T> mutableElement(ElementId id) {
+			return mutableElementFor(theSource.mutableElement(id));
 		}
 
 		@Override
-		public MutableElementSpliterator<T> mutableSpliterator(ElementId element, boolean asNext) {
-			return new DerivedMutableSpliterator(theSource.mutableSpliterator(element, asNext));
+		public MutableElementSpliterator<T> spliterator(ElementId element, boolean asNext) {
+			return new DerivedMutableSpliterator(theSource.spliterator(element, asNext));
 		}
 
 		protected CollectionElement<T> elementFor(CollectionElement<? extends E> el) {
@@ -1085,8 +1084,8 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public MutableElementSpliterator<T> mutableSpliterator(boolean fromStart) {
-			MutableElementSpliterator<E> srcSpliter = theSource.mutableSpliterator(fromStart);
+		public MutableElementSpliterator<T> spliterator(boolean fromStart) {
+			MutableElementSpliterator<E> srcSpliter = theSource.spliterator(fromStart);
 			return new DerivedMutableSpliterator(srcSpliter);
 		}
 
@@ -1533,13 +1532,13 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public <X> X ofMutableElement(ElementId element, Function<? super MutableCollectionElement<T>, X> onElement) {
-			DerivedCollectionElement<E, T> el = (DerivedCollectionElement<E, T>) element;
-			return theSource.ofMutableElement(el.check().manager.getElementId(), srcEl -> onElement.apply(el.manager.map(srcEl, el)));
+		public MutableCollectionElement<T> mutableElement(ElementId id) {
+			DerivedCollectionElement<E, T> el = (DerivedCollectionElement<E, T>) id;
+			return el.manager.map(theSource.mutableElement(el.check().manager.getElementId()), el);
 		}
 
 		@Override
-		public MutableElementSpliterator<T> mutableSpliterator(ElementId element, boolean asNext) {
+		public MutableElementSpliterator<T> spliterator(ElementId element, boolean asNext) {
 			DerivedCollectionElement<E, T> el = (DerivedCollectionElement<E, T>) element;
 			return new MutableDerivedSpliterator(thePresentElements.spliterator(el.check().presentNode.getElementId(), asNext));
 		}
@@ -1560,7 +1559,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public MutableElementSpliterator<T> mutableSpliterator(boolean fromStart) {
+		public MutableElementSpliterator<T> spliterator(boolean fromStart) {
 			return new MutableDerivedSpliterator(thePresentElements.spliterator(fromStart));
 		}
 
@@ -1604,7 +1603,7 @@ public final class ObservableCollectionImpl {
 				if (!theFlow.isFiltered())
 					theSource.clear();
 				else
-					mutableSpliterator().forEachElementM(el -> el.remove(), true);
+					spliterator().forEachElementM(el -> el.remove(), true); // TODO Change to removeIf
 			}
 		}
 
@@ -1868,11 +1867,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public <X> X ofMutableElement(ElementId element, Function<? super MutableCollectionElement<E>, X> onElement) {
+		public MutableCollectionElement<E> mutableElement(ElementId id) {
 			ObservableCollection<? extends E> current = getWrapped().get();
 			if (current == null)
 				throw new IllegalArgumentException(StdMsg.NOT_FOUND);
-			return ((ObservableCollection<E>) current).ofMutableElement(element, onElement);
+			return ((ObservableCollection<E>) current).mutableElement(id);
 		}
 
 		@Override
@@ -1903,19 +1902,19 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public MutableElementSpliterator<E> mutableSpliterator(boolean fromStart) {
+		public MutableElementSpliterator<E> spliterator(boolean fromStart) {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			if (coll == null)
 				return MutableElementSpliterator.empty();
-			return ((ObservableCollection<E>) coll).mutableSpliterator(fromStart);
+			return ((ObservableCollection<E>) coll).spliterator(fromStart);
 		}
 
 		@Override
-		public MutableElementSpliterator<E> mutableSpliterator(ElementId id, boolean asNext) {
+		public MutableElementSpliterator<E> spliterator(ElementId id, boolean asNext) {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			if (coll == null)
 				throw new IllegalArgumentException(StdMsg.NOT_FOUND);
-			return ((ObservableCollection<E>) coll).mutableSpliterator(id, asNext);
+			return ((ObservableCollection<E>) coll).spliterator(id, asNext);
 		}
 
 		@Override
@@ -2172,13 +2171,12 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public <T> T ofMutableElement(ElementId elementId, Function<? super MutableCollectionElement<E>, T> onElement) {
+		public MutableCollectionElement<E> mutableElement(ElementId elementId) {
 			if (!(elementId instanceof FlattenedObservableCollection.CompoundId))
 				throw new IllegalArgumentException(StdMsg.NOT_FOUND);
 			CompoundId compound = (CompoundId) elementId;
 			ObservableCollection<? extends E> innerColl = theOuter.getElement(compound.getOuter()).get();
-			return innerColl.ofMutableElement(compound.getInner(),
-				el -> onElement.apply(mutableElementFor(compound.getOuter(), innerColl, el)));
+			return mutableElementFor(compound.getOuter(), innerColl, innerColl.mutableElement(compound.getInner()));
 		}
 
 		@Override
@@ -2188,18 +2186,18 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public MutableElementSpliterator<E> mutableSpliterator(ElementId element, boolean asNext) {
+		public MutableElementSpliterator<E> spliterator(ElementId element, boolean asNext) {
 			CompoundId compound = (CompoundId) element;
 			MutableElementSpliterator<? extends ObservableCollection<? extends E>> outerSplit = theOuter
-				.mutableSpliterator(compound.getOuter(), true);
+				.spliterator(compound.getOuter(), true);
 			ObservableCollection<? extends E> innerColl = theOuter.getElement(compound.getOuter()).get();
-			MutableElementSpliterator<? extends E> innerSpliter = innerColl.mutableSpliterator(compound.getInner(), asNext);
+			MutableElementSpliterator<? extends E> innerSpliter = innerColl.spliterator(compound.getInner(), asNext);
 			return new FlattenedSpliterator(outerSplit, compound.getOuter(), innerColl, innerSpliter, false);
 		}
 
 		@Override
-		public MutableElementSpliterator<E> mutableSpliterator(boolean fromStart) {
-			return new FlattenedSpliterator(theOuter.mutableSpliterator(), null, null, null, false);
+		public MutableElementSpliterator<E> spliterator(boolean fromStart) {
+			return new FlattenedSpliterator(theOuter.spliterator(), null, null, null, false);
 		}
 
 		@Override
@@ -2386,7 +2384,7 @@ public final class ObservableCollectionImpl {
 				return theOuterSpliter.forElement(outerEl -> {
 					theOuterId = outerEl.getElementId();
 					theInnerCollection = outerEl.get();
-					theInnerSpliter = theInnerCollection == null ? null : theInnerCollection.mutableSpliterator(true);
+					theInnerSpliter = theInnerCollection == null ? null : theInnerCollection.spliterator(true);
 				}, forward);
 			}
 

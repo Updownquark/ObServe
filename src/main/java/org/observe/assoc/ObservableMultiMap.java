@@ -229,7 +229,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	 */
 	@Override
 	default ObservableSet<ObservableMultiEntry<K, V>> entrySet() {
-		return keySet().flow().mapEquivalent(getEntryType()).cache(false).map(this::entryFor, entry -> entry.getKey()).collectLW();
+		return keySet().flow().mapEquivalent(getEntryType()).cache(false).map(this::entryFor, entry -> entry.getKey()).collect();
 	}
 
 	/**
@@ -279,7 +279,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	default ObservableCollection<V> values() {
 		TypeToken<ObservableCollection<V>> collType = new TypeToken<ObservableCollection<V>>() {}.where(new TypeParameter<V>() {},
 			getValueType());
-		return ObservableCollection.flatten(entrySet().flow().map(collType).cache(false).map(entry -> entry.getValues()).collectLW())
+		return ObservableCollection.flatten(entrySet().flow().map(collType).cache(false).map(entry -> entry.getValues()).collect())
 			.collect();
 	}
 
@@ -331,7 +331,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		.where(new TypeParameter<K>() {}, getKeyType()).where(new TypeParameter<V>() {}, getValueType());
 
 		return ObservableCollection.flatten(entrySet().flow().map(entryCollectionType).cache(false).map(entry -> entry.getValues().flow()
-			.map(entryType).cache(false).map(value -> new DefaultMapEntry(entry.getKey(), value)).collectLW()).collectLW()).collect();
+			.map(entryType).cache(false).map(value -> new DefaultMapEntry(entry.getKey(), value)).collect()).collect()).collect();
 	}
 
 	/**
@@ -656,7 +656,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 					FilterMapResult<K, OK> reversedKey = theKeyManager.reverse((K) key);
 					if (reversedKey.getRejectReason() != null) {
 						// We can't call the value maker. We'll include the message that says why.
-						return empty.flow().filterModification().immutable(reversedKey.getRejectReason(), false).build().collectLW();
+						return empty.flow().filterModification().immutable(reversedKey.getRejectReason(), false).build().collect();
 					}
 					return valuesFor(reversedKey.result);
 				}
@@ -681,7 +681,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 				if (values == null) {
 					// We'll make the value collection (which should be empty initially) that may allow adding values
 					CollectionDataFlow<?, ?, V> valueFlow = theValueMaker.apply(key);
-					values = isLightWeight ? valueFlow.collectLW() : valueFlow.collect(theUntil);
+					values = isLightWeight ? valueFlow.collect() : valueFlow.collect(theUntil);
 					// We'll cache these values and re-use them in case the user adds values to them, which presumably
 					// will propagate into adding a key for the entry and making it pop up in the key/entry set.
 					theTransientValues.put(key, new WeakReference<>(values, theGCdTransientValues));
@@ -713,7 +713,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 				private final ObservableCollection<V> theValues;
 
 				protected DerivedEntryElement(CollectionElementManager<OK, ?, K> manager, OK initValue) {
-					super(manager, initValue);
+					super(manager);
 					// Note: Here we have to assume that the value flow is itself aware of changes to the keys.
 					// If this key was replaced with a non-equivalent key, for example, the values will not change unless the value flow
 					// does this.

@@ -152,8 +152,8 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 	 */
 	static <K, V> TypeToken<ObservableEntry<K, V>> buildEntryType(TypeToken<K> keyType, TypeToken<V> valueType) {
 		return new TypeToken<ObservableEntry<K, V>>() {}//
-			.where(new TypeParameter<K>() {}, keyType.wrap())//
-			.where(new TypeParameter<V>() {}, valueType.wrap());
+		.where(new TypeParameter<K>() {}, keyType.wrap())//
+		.where(new TypeParameter<V>() {}, valueType.wrap());
 	}
 
 	@Override
@@ -199,7 +199,7 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 
 	/** @return An observable collection of {@link ObservableEntry observable entries} of all the key-value pairs stored in this map */
 	default ObservableSet<ObservableEntry<K, V>> observeEntries() {
-		return keySet().flow().mapEquivalent(getEntryType()).cache(false).map(this::entryFor, entry -> entry.getKey()).collectLW();
+		return keySet().flow().mapEquivalent(getEntryType()).cache(false).map(this::entryFor, entry -> entry.getKey()).collect();
 	}
 
 	/** @return An observable collection of all the values stored in this map */

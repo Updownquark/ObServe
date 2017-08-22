@@ -3,7 +3,6 @@ package org.observe.collect;
 import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 import org.observe.Subscription;
 import org.qommons.Causable;
@@ -125,13 +124,13 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	}
 
 	@Override
-	public <X> X ofMutableElement(ElementId element, Function<? super MutableCollectionElement<E>, X> onElement) {
-		return theValues.ofMutableElement(element, el -> onElement.apply(mutableElementFor(el)));
+	public MutableCollectionElement<E> mutableElement(ElementId id) {
+		return mutableElementFor(theValues.mutableElement(id));
 	}
 
 	@Override
-	public MutableElementSpliterator<E> mutableSpliterator(ElementId element, boolean asNext) {
-		return new DefaultMutableSpliterator(theValues.mutableSpliterator(element, asNext));
+	public MutableElementSpliterator<E> spliterator(ElementId element, boolean asNext) {
+		return new DefaultMutableSpliterator(theValues.spliterator(element, asNext));
 	}
 
 	@Override
@@ -160,7 +159,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	@Override
 	public void clear() {
 		try (Transaction t = lock(true, null)) {
-			theValues.mutableSpliterator().forEachElementM(el -> {
+			theValues.spliterator().forEachElementM(el -> {
 				ObservableCollectionEvent<E> evt = new ObservableCollectionEvent<>(el.getElementId(), getType(), 0,
 					CollectionChangeType.remove, el.get(), el.get(), theTransactionCauses.peekLast());
 				el.remove();
@@ -174,8 +173,8 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	}
 
 	@Override
-	public MutableElementSpliterator<E> mutableSpliterator(boolean fromStart) {
-		return new DefaultMutableSpliterator(theValues.mutableSpliterator(fromStart));
+	public MutableElementSpliterator<E> spliterator(boolean fromStart) {
+		return new DefaultMutableSpliterator(theValues.spliterator(fromStart));
 	}
 
 	private MutableCollectionElement<E> mutableElementFor(MutableCollectionElement<E> valueEl) {
