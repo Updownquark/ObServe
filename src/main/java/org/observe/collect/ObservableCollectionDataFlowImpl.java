@@ -6,8 +6,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
-import java.util.LinkedList;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.locks.Lock;
@@ -30,6 +28,9 @@ import org.observe.collect.ObservableCollection.MappedCollectionBuilder;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
+import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionElementManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.FilteredCollectionManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.NonMappingCollectionElement;
 import org.observe.collect.ObservableCollectionImpl.DerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.DerivedLWCollection;
 import org.observe.collect.ObservableSetImpl.UniqueElementFinder;
@@ -39,6 +40,7 @@ import org.qommons.collect.BetterHashSet;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.tree.BetterTreeList;
 
 import com.google.common.reflect.TypeToken;
 
@@ -421,7 +423,7 @@ public class ObservableCollectionDataFlowImpl {
 
 				@Override
 				public void createElement(ElementId id, E init, Object cause, Consumer<CollectionElementManager<E, ?, T>> onElement) {
-					getParent().createElement(id, init, cause, onElement);
+					getParent().addElement(id, init, cause, onElement);
 				}
 
 				@Override
@@ -680,30 +682,39 @@ public class ObservableCollectionDataFlowImpl {
 
 		FilterMapResult<T, E> canAdd(FilterMapResult<T, E> toAdd);
 
-		void begin(Consumer<CollectionUpdate> onUpdate, Observable<?> until);
+		void begin(Consumer<CollectionElementManager<E, ?, T>> onElement, Consumer<CollectionUpdate> onUpdate, Observable<?> until);
 
-		void createElement(ElementId id, E init, Object cause, Consumer<CollectionElementManager<E, ?, T>> onElement);
+		ElementController<E> addElement(ElementId id, E init, Object cause);
+	}
 
-		void postChange();
+	public interface ElementController<E> {
+		ElementId getSourceId();
+
+		Collection<CollectionUpdate> set(E value, Object cause, Collection<CollectionUpdate> updates);
+
+		Collection<CollectionUpdate> remove(Collection<CollectionUpdate> updates);
 	}
 
 	public static abstract class AbstractCollectionManager<E, I, T> implements CollectionManager<E, I, T> {
 		private final CollectionManager<E, ?, I> theParent;
 		private final TypeToken<T> theTargetType;
 		private final ReentrantReadWriteLock theLock;
-		private final List<Runnable> thePostChanges;
 		private boolean isBegun;
+		private Consumer<CollectionElementManager<E, ?, T>> theElementAccepter;
 		private Consumer<CollectionUpdate> theUpdateListener;
 
 		protected AbstractCollectionManager(CollectionManager<E, ?, I> parent, TypeToken<T> targetType) {
 			theParent = parent;
 			theTargetType = targetType;
 			theLock = theParent != null ? null : new ReentrantReadWriteLock();
-			thePostChanges = new LinkedList<>();
 		}
 
 		protected CollectionManager<E, ?, I> getParent() {
 			return theParent;
+		}
+
+		protected Consumer<CollectionElementManager<E, ?, T>> getElementAccepter() {
+			return theElementAccepter;
 		}
 
 		protected Consumer<CollectionUpdate> getUpdateListener() {
@@ -793,61 +804,91 @@ public class ObservableCollectionDataFlowImpl {
 			return toAdd;
 		}
 
-		@Override
-		public void postChange() {
-			if (!thePostChanges.isEmpty()) {
-				Runnable[] changes = thePostChanges.toArray(new Runnable[thePostChanges.size()]);
-				thePostChanges.clear();
-				for (Runnable postChange : changes)
-					postChange.run();
-			}
-		}
-
-		protected void postChange(Runnable run) {
-			thePostChanges.add(run);
-		}
-
 		protected abstract void begin(Observable<?> until);
 
 		@Override
-		public void begin(Consumer<CollectionUpdate> onUpdate, Observable<?> until) {
+		public void begin(Consumer<CollectionElementManager<E, ?, T>> onElement, Consumer<CollectionUpdate> onUpdate, Observable<?> until) {
 			if (isBegun)
 				throw new IllegalStateException("Cannot begin twice");
 			isBegun = true;
+			theElementAccepter = onElement;
 			theUpdateListener = onUpdate;
 			begin(until);
 			if (theParent != null)
-				theParent.begin(onUpdate, until);
+				theParent.begin(this::elementCreated, onUpdate, until);
 		}
 
+		protected abstract void elementCreated(CollectionElementManager<E, ?, I> parent);
+
 		@Override
-		public abstract void createElement(ElementId id, E init, Object cause, Consumer<CollectionElementManager<E, ?, T>> onElement);
+		public ElementController<E> addElement(ElementId id, E init, Object cause, Collection<CollectionUpdate> updates) {
+			return theParent.addElement(id, init, cause);
+		}
+	}
+
+	public static class FlowSourceEvent<E, T> {
+		public final E source;
+		public T value;
+
+		public FlowSourceEvent(E src, T val) {
+			source = src;
+			value = val;
+		}
+
+		public <X> FlowSourceEvent<E, X> onward(X value) {
+			FlowSourceEvent<E, X> evt = (FlowSourceEvent<E, X>) this;
+			evt.value = value;
+			return evt;
+		}
+	}
+
+	@FunctionalInterface
+	public interface FlowSourceListener<E, T> {
+		void changed(FlowSourceEvent<E, T> event, Collection<CollectionUpdate> updates);
 	}
 
 	public static abstract class CollectionElementManager<E, I, T> implements Comparable<CollectionElementManager<E, ?, T>> {
 		private final AbstractCollectionManager<E, I, T> theCollection;
 		private final CollectionElementManager<E, ?, I> theParent;
-		private final ElementId theId;
+		private final BetterTreeList<FlowSourceListener<E, T>> theSourceListeners;
+		private final ElementId theSourceId;
 
 		protected CollectionElementManager(AbstractCollectionManager<E, I, T> collection, CollectionElementManager<E, ?, I> parent,
 			ElementId id, E init, Object cause) {
 			theCollection = collection;
 			theParent = parent;
-			theId = id;
+			theSourceId = id;
+			theSourceListeners = new BetterTreeList<>(false); // Super light-weight collection
+
+			if (parent != null)
+				parent.addSourceListener((evt, updates) -> fireNewValue(evt.onward(refresh(evt.value, cause, updates)), updates));
 		}
 
 		protected CollectionElementManager<E, ?, I> getParent() {
 			return theParent;
 		}
 
+		public void addSourceListener(FlowSourceListener<E, T> listener) {
+			theSourceListeners.add(listener);
+		}
+
+		protected void fireNewValue(FlowSourceEvent<E, T> event, Collection<CollectionUpdate> updates) {
+			// Re-using the event
+			T value = event.value;
+			for (FlowSourceListener<E, T> listener : theSourceListeners) {
+				listener.changed(event, updates);
+				event.value = value;
+			}
+		}
+
 		public ElementId getElementId() {
-			return theId;
+			return theSourceId;
 		}
 
 		@Override
 		public int compareTo(CollectionElementManager<E, ?, T> other) {
 			if (getParent() == null)
-				return theId.compareTo(other.theId);
+				return theSourceId.compareTo(other.theSourceId);
 			return getParent().compareTo(((CollectionElementManager<E, I, T>) other).getParent());
 		}
 
@@ -858,13 +899,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		public abstract T get();
 
-		public boolean set(E value, Object cause) {
-			if (!getParent().set(value, cause))
-				return false;
-			return refresh(getParent().get(), cause);
-		}
-
-		public final MutableCollectionElement<T> map(MutableCollectionElement<? extends E> element, ElementId id) {
+		public MutableCollectionElement<T> mutable(ObservableCollection<E> source) {
 			class MutableManagedElement implements MutableCollectionElement<T> {
 				private final MutableCollectionElement<? extends E> theWrapped;
 
@@ -879,7 +914,7 @@ public class ObservableCollectionDataFlowImpl {
 
 				@Override
 				public ElementId getElementId() {
-					return id; // The ID we have locally is from the source collection
+					return CollectionElementManager.this.getElementId();
 				}
 
 				@Override
@@ -953,7 +988,7 @@ public class ObservableCollectionDataFlowImpl {
 					return ((MutableCollectionElement<E>) theWrapped).add(result.result, before);
 				}
 			}
-			return new MutableManagedElement(element);
+			return new MutableManagedElement(source.mutableElement(theSourceId));
 		}
 
 		protected String filterRemove(boolean isRemoving) {
@@ -1019,29 +1054,7 @@ public class ObservableCollectionDataFlowImpl {
 				&& (update.getElement() == null || update.getElement().equals(getElementId()));
 		}
 
-		public ElementUpdateResult update(CollectionUpdate update,
-			Consumer<Consumer<MutableCollectionElement<? extends E>>> sourceElement) {
-			if (applies(update)) {
-				return refresh(getParent().get(), update.getCause()) ? ElementUpdateResult.FireUpdate : ElementUpdateResult.AppliedNoUpdate;
-			} else {
-				ElementUpdateResult result = getParent().update(update, sourceElement);
-				switch (result) {
-				case DoesNotApply:
-				case AppliedNoUpdate:
-					return result;
-				case FireUpdate:
-					return refresh(getParent().get(), update.getCause()) ? ElementUpdateResult.FireUpdate
-						: ElementUpdateResult.AppliedNoUpdate;
-				}
-				throw new IllegalStateException("Unrecognized update result: " + result);
-			}
-		}
-
-		protected abstract boolean refresh(I source, Object cause);
-
-		public void removed(Object cause) {
-			// Most elements don't need to do anything when they're removed
-		}
+		protected abstract T refresh(I source, Object cause, Collection<CollectionUpdate> updates);
 	}
 
 	public static class CollectionUpdate {
@@ -1160,8 +1173,13 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public void createElement(ElementId id, E init, Object cause, Consumer<CollectionElementManager<E, ?, E>> onElement) {
-			class DefaultElement extends CollectionElementManager<E, E, E> {
+		protected void elementCreated(CollectionElementManager<E, ?, E> parent) {
+			// No parent--shouldn't ever be called
+		}
+
+		@Override
+		public ElementController<E> addElement(ElementId id, E init, Object cause) {
+			class DefaultElement extends CollectionElementManager<E, E, E> implements ElementController<E> {
 				private E theValue;
 
 				protected DefaultElement() {
@@ -1180,9 +1198,8 @@ public class ObservableCollectionDataFlowImpl {
 				}
 
 				@Override
-				public boolean set(E value, Object cause) {
+				public void set(E value, Object cause) {
 					theValue = value;
-					return true;
 				}
 
 				@Override
@@ -1196,7 +1213,7 @@ public class ObservableCollectionDataFlowImpl {
 					return true;
 				}
 			}
-			onElement.accept(new DefaultElement());
+			getElementAccepter().accept(new DefaultElement());
 		}
 
 		@Override
@@ -1273,7 +1290,7 @@ public class ObservableCollectionDataFlowImpl {
 					super.interceptSet(value);
 				}
 			}
-			getParent().createElement(id, init, cause, el -> onElement.accept(new SortedElement(el)));
+			getParent().addElement(id, init, cause, el -> onElement.accept(new SortedElement(el)));
 		}
 	}
 
@@ -1321,7 +1338,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public void createElement(ElementId id, E init, Object cause, Consumer<CollectionElementManager<E, ?, T>> onElement) {
-			getParent().createElement(id, init, cause, parentElement -> {
+			getParent().addElement(id, init, cause, parentElement -> {
 				if (isStaticFilter) {
 					T value = parentElement.get();
 					if (theFilter.apply(value) == null)
@@ -1490,7 +1507,7 @@ public class ObservableCollectionDataFlowImpl {
 					return false; // If the present state doesn't change, don't fire an update
 				}
 			}
-			getParent().createElement(id, init, cause, el -> onElement.accept(new IntersectedCollectionElement(el)));
+			getParent().addElement(id, init, cause, el -> onElement.accept(new IntersectedCollectionElement(el)));
 		}
 	}
 
@@ -1629,7 +1646,7 @@ public class ObservableCollectionDataFlowImpl {
 					return true;
 				}
 			}
-			getParent().createElement(id, init, cause, el -> onElement.accept(new MappedElement(el)));
+			getParent().addElement(id, init, cause, el -> onElement.accept(new MappedElement(el)));
 		}
 
 		@Override
@@ -1770,7 +1787,7 @@ public class ObservableCollectionDataFlowImpl {
 					return true;
 				}
 			}
-			getParent().createElement(id, init, cause, el -> onElement.accept(new CombinedCollectionElement(el)));
+			getParent().addElement(id, init, cause, el -> onElement.accept(new CombinedCollectionElement(el)));
 		}
 
 		@Override
@@ -1836,7 +1853,7 @@ public class ObservableCollectionDataFlowImpl {
 					return true;
 				}
 			}
-			getParent().createElement(id, init, cause, el -> new RefreshingElement(el));
+			getParent().addElement(id, init, cause, el -> new RefreshingElement(el));
 		}
 	}
 
@@ -1951,7 +1968,7 @@ public class ObservableCollectionDataFlowImpl {
 					return new RefreshHolder(refreshObs, sub);
 				}
 			}
-			getParent().createElement(id, init, cause, el -> onElement.accept(new ElementRefreshElement(el)));
+			getParent().addElement(id, init, cause, el -> onElement.accept(new ElementRefreshElement(el)));
 		}
 
 		private void update(Observable<?> refreshObs, Object cause) {
@@ -2082,7 +2099,7 @@ public class ObservableCollectionDataFlowImpl {
 						super.interceptSet(value);
 				}
 			}
-			getParent().createElement(id, init, cause, el -> onElement.accept(new ModFilteredElement(el)));
+			getParent().addElement(id, init, cause, el -> onElement.accept(new ModFilteredElement(el)));
 		}
 
 		// Remove?
@@ -2206,7 +2223,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public void createElement(ElementId id, E init, Object cause, Consumer<CollectionElementManager<E, ?, T>> onElement) {
-			getParent().createElement(id, init, cause, el -> {
+			getParent().addElement(id, init, cause, el -> {
 				CollectionDataFlow<?, ?, ? extends T> flow = theMap.apply(el.get());
 				// TODO
 			});
