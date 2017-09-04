@@ -265,42 +265,18 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public ObservableCollection<T> collectPassive() {
+			if (!isPassive())
+				throw new UnsupportedOperationException("This flow does not support passive collection");
+			return new DerivedLWCollection<>(getSource(), managePassive());
+		}
+
+		@Override
 		public ObservableCollection<T> collect(Observable<?> until) {
-			if (until == Observable.empty && isLightWeight())
-				return new DerivedLWCollection<>(getSource(), manageCollection());
+			if (until == Observable.empty && isPassive())
+				return new DerivedLWCollection<>(getSource(), managePassive());
 			else
-				return new DerivedCollection<>(getSource(), manageCollection(), until);
-		}
-	}
-
-	public static class InitialElementsDataFlow<E> extends AbstractDataFlow<E, E, E> {
-		private final Collection<? extends E> theInitialValues;
-
-		public InitialElementsDataFlow(ObservableCollection<E> source, CollectionDataFlow<E, ?, E> parent, TypeToken<E> targetType,
-			Collection<? extends E> initialValues) {
-			super(source, parent, targetType);
-			theInitialValues = initialValues;
-		}
-
-		protected Collection<? extends E> getInitialValues() {
-			return theInitialValues;
-		}
-
-		@Override
-		public boolean isLightWeight() {
-			return getParent().isLightWeight();
-		}
-
-		@Override
-		public CollectionManager<E, ?, E> manageCollection() {
-			return getParent().manageCollection();
-		}
-
-		@Override
-		public ObservableCollection<E> collect(Observable<?> until) {
-			ObservableCollection<E> collected = super.collect(until);
-			getSource().addAll(theInitialValues);
-			return collected;
+				return new DerivedCollection<>(getSource(), manageActive(), until);
 		}
 	}
 
@@ -317,18 +293,18 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isLightWeight() {
-			return getParent().isLightWeight();
+		public boolean isPassive() {
+			return false;
 		}
 
 		@Override
-		public CollectionManager<E, ?, T> manageCollection() {
-			return new SortedManager<>(getParent().manageCollection(), theCompare);
+		public PassiveCollectionManager<E, ?, T> managePassive() {
+			return null;
 		}
 
 		@Override
-		public ObservableCollection<T> collect(Observable<?> until) {
-			return new DerivedCollection<>(getSource(), manageCollection(), until);
+		public ActiveCollectionManager<E, ?, T> manageActive() {
+			return new SortedManager<>(getParent().manageActive(), theCompare);
 		}
 	}
 
@@ -338,12 +314,17 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isLightWeight() {
+		public boolean isPassive() {
 			return true;
 		}
 
 		@Override
-		public AbstractCollectionManager<E, ?, E> manageCollection() {
+		public PassiveCollectionManager<E, ?, E> managePassive() {
+			return new BaseCollectionPassThrough<>(getSource().getType(), getSource().equivalence(), getSource().isLockSupported());
+		}
+
+		@Override
+		public ActiveCollectionManager<E, ?, E> manageActive() {
 			return new BaseCollectionManager<>(getSource().getType(), getSource().equivalence(), getSource().isLockSupported());
 		}
 
@@ -352,7 +333,7 @@ public class ObservableCollectionDataFlowImpl {
 			if (until == Observable.empty)
 				return getSource();
 			else
-				return new DerivedCollection<>(getSource(), manageCollection(), until);
+				return new DerivedCollection<>(getSource(), manageActive(), until);
 		}
 	}
 
@@ -368,13 +349,18 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isLightWeight() {
+		public boolean isPassive() {
 			return false;
 		}
 
 		@Override
-		public AbstractCollectionManager<E, ?, T> manageCollection() {
-			return new FilteredCollectionManager<>(getParent().manageCollection(), theFilter, isStaticFilter);
+		public PassiveCollectionManager<E, ?, T> managePassive() {
+			return null;
+		}
+
+		@Override
+		public ActiveCollectionManager<E, ?, T> manageActive() {
+			return new FilteredCollectionManager<>(getParent().manageActive(), theFilter, isStaticFilter);
 		}
 	}
 
@@ -390,12 +376,12 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isLightWeight() {
+		public boolean isPassive() {
 			return false;
 		}
 
 		@Override
-		public CollectionManager<E, ?, T> manageCollection() {
+		public ActiveCollectionManager<E, ?, T> manageActive() {
 			return new IntersectionManager<>(getParent().manageCollection(), theFilter, isExclude);
 		}
 	}
@@ -410,7 +396,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isLightWeight() {
+		public boolean isPassive() {
 			return true;
 		}
 
@@ -653,6 +639,46 @@ public class ObservableCollectionDataFlowImpl {
 		public CollectionManager<E, ?, T> manageCollection() {
 			return new FlattenedManager<>(getParent().manageCollection(), getTargetType(), theMap);
 		}
+	}
+
+	public static interface PassiveCollectionManager<E, I, T> extends Transactable {
+		TypeToken<T> getTargetType();
+
+		Equivalence<? super T> equivalence();
+
+		boolean isReversible();
+
+		FilterMapResult<E, T> map(FilterMapResult<E, T> source);
+
+		default FilterMapResult<E, T> map(E source) {
+			return map(new FilterMapResult<>(source));
+		}
+
+		FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest);
+
+		default FilterMapResult<T, E> reverse(T dest) {
+			return reverse(new FilterMapResult<>(dest));
+		}
+	}
+
+	public static interface ActiveCollectionManager<E, I, T> extends Transactable {
+		TypeToken<T> getTargetType();
+
+		Equivalence<? super T> equivalence();
+
+		boolean isOneToOne();
+
+		ObservableSetImpl.UniqueElementFinder<T> getElementFinder();
+
+		FilterMapResult<T, E> canAdd(FilterMapResult<T, E> toAdd);
+
+		void begin(Consumer<DerivedCollectionElement<T>> onElement, Consumer<CollectionUpdate> onUpdate, Observable<?> until);
+
+		ElementController<E> addElement(ElementId id, E init, Object cause);
+	}
+
+	public static interface DerivedCollectionElement<E> extends MutableCollectionElement<E> {
+		boolean isPresent();
 	}
 
 	public static interface CollectionManager<E, I, T> extends Transactable {

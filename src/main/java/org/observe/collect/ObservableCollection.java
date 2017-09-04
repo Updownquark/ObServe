@@ -23,7 +23,8 @@ import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractCombinedCollectionBuilder;
 import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractDataFlow;
-import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
 import org.qommons.Causable;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
@@ -881,8 +882,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 *
 		 * @param filter A filter function that returns null for elements to maintain in the collection, or a message indicating why the
 		 *        element is excluded
-		 * @return A {@link #isLightWeight() heavy-weight} data flow capable of producing a collection that excludes certain elements from
-		 *         the input
+		 * @return A {@link #isPassive() active} data flow capable of producing a collection that excludes certain elements from the input
 		 */
 		CollectionDataFlow<E, T, T> filter(Function<? super T, String> filter);
 
@@ -892,8 +892,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 *
 		 * @param filter A filter function that returns null for elements to maintain in the collection, or a message indicating why the
 		 *        element is excluded
-		 * @return A {@link #isLightWeight() heavy-weight} data flow capable of producing a collection that excludes certain elements from
-		 *         the input
+		 * @return A {@link #isPassive() active} data flow capable of producing a collection that excludes certain elements from the input
 		 */
 		CollectionDataFlow<E, T, T> filterStatic(Function<? super T, String> filter);
 
@@ -902,8 +901,8 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 *
 		 * @param <X> The type for the new collection
 		 * @param type The type to filter this collection by
-		 * @return A {@link #isLightWeight() heavy-weight} collection consisting only of elements in the source whose values are instances
-		 *         of the given class
+		 * @return A {@link #isPassive() active} collection consisting only of elements in the source whose values are instances of the
+		 *         given class
 		 */
 		default <X> CollectionDataFlow<E, ?, X> filter(Class<X> type) {
 			return filterStatic(value -> {
@@ -915,7 +914,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		}
 
 		/**
-		 * Performs an intersection or exclusion operation. The result is {@link #isLightWeight() heavy-weight}.
+		 * Performs an intersection or exclusion operation. The result is {@link #isPassive() active}.
 		 *
 		 * @param <X> The type of the collection to filter with
 		 * @param other The other collection to use to filter this flow's elements
@@ -928,7 +927,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 		/**
 		 * @param equivalence The new {@link ObservableCollection#equivalence() equivalence} scheme for the derived collection to use
-		 * @return A {@link #isLightWeight() light-weight} data flow capable of producing a collection that uses a different
+		 * @return A {@link #isPassive() passive} data flow capable of producing a collection that uses a different
 		 *         {@link ObservableCollection#equivalence() equivalence} scheme to determine containment and perform other by-value
 		 *         operations.
 		 */
@@ -936,8 +935,8 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 		/**
 		 * @param refresh The observable to use to refresh the collection's values
-		 * @return A {@link #isLightWeight() heavy-weight} data flow capable of producing a collection that fires updates on the source's
-		 *         values whenever the given refresh observable fires
+		 * @return A {@link #isPassive() passive} data flow capable of producing a collection that fires updates on the source's values
+		 *         whenever the given refresh observable fires
 		 */
 		CollectionDataFlow<E, T, T> refresh(Observable<?> refresh);
 
@@ -945,14 +944,14 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * Like {@link #refresh(Observable)}, but each element may use a different observable to refresh itself
 		 *
 		 * @param refresh The function to get observable to use to refresh individual values
-		 * @return A {@link #isLightWeight() heavy-weight} data flow capable of producing a collection that fires updates on the source's
-		 *         values whenever each element's refresh observable fires
+		 * @return A {@link #isPassive() active} data flow capable of producing a collection that fires updates on the source's values
+		 *         whenever each element's refresh observable fires
 		 */
 		CollectionDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh);
 
 		/**
-		 * Allows elements to be transformed via a function. This operation may produce a {@link #isLightWeight() heavy- or light-weight}
-		 * flow depending on the options selected on the builder.
+		 * Allows elements to be transformed via a function. This operation may produce an {@link #isPassive() active or passive} flow
+		 * depending on the options selected on the builder.
 		 *
 		 * @param <X> The type to map to
 		 * @param target The type to map to
@@ -963,8 +962,8 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		/**
 		 * @param target The target type
 		 * @param map A function that produces observable values from each element of the source
-		 * @return A {@link #isLightWeight() heavy-weight} flow capable of producing a collection that is the value of the observable values
-		 *         mapped to each element of the source.
+		 * @return A {@link #isPassive() active} flow capable of producing a collection that is the value of the observable values mapped to
+		 *         each element of the source.
 		 */
 		default <X> CollectionDataFlow<E, ?, X> flatMapV(TypeToken<X> target,
 			Function<? super T, ? extends ObservableValue<? extends X>> map) {
@@ -997,20 +996,22 @@ public interface ObservableCollection<E> extends BetterList<E> {
 			Function<? super T, ? extends CollectionDataFlow<?, ?, ? extends X>> map);
 
 		/**
+		 * Combines each element of this flow the the value of one or more observable values. This operation may produce an
+		 * {@link #isPassive() active or passive} flow depending on the options selected on the builder.
 		 *
 		 * @param <V> The type of the value to combine with the source elements
 		 * @param <X> The type of the combined values
 		 * @param value The observable value to combine with the source elements
 		 * @param target The type of the combined values
-		 * @return A {@link #isLightWeight() heavy-weight} data flow capable of producing a collection whose elements are each some
-		 *         combination of the source element and the dynamic value of the observable
+		 * @return A data flow capable of producing a collection whose elements are each some combination of the source element and the
+		 *         dynamic value of the observable
 		 */
 		<V, X> CombinedCollectionBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, TypeToken<X> target);
 
 		/**
 		 * @param compare The comparator to use to sort the source elements
-		 * @return A {@link #isLightWeight() heavy-weight} flow capable of producing a collection whose elements are sorted by the given
-		 *         comparison scheme.
+		 * @return A {@link #isPassive() active} flow capable of producing a collection whose elements are sorted by the given comparison
+		 *         scheme.
 		 */
 		CollectionDataFlow<E, T, T> sorted(Comparator<? super T> compare);
 
@@ -1018,7 +1019,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * @param alwaysUseFirst Whether to always use the first element in the collection to represent other equivalent values. If this is
 		 *        false, the produced collection may be able to fire fewer events because elements that are added earlier in the collection
 		 *        can be ignored if they are already represented.
-		 * @return A {@link #isLightWeight() heavy-weight} flow capable of producing a set that excludes duplicate elements according to its
+		 * @return A {@link #isPassive() active} flow capable of producing a set that excludes duplicate elements according to its
 		 *         {@link ObservableCollection#equivalence() equivalence} scheme.
 		 * @see #withEquivalence(Equivalence)
 		 */
@@ -1029,8 +1030,8 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * @param alwaysUseFirst Whether to always use the first element in the collection to represent other equivalent values. If this is
 		 *        false, the produced collection may be able to fire fewer events because elements that are added earlier in the collection
 		 *        can be ignored if they are already represented.
-		 * @return A {@link #isLightWeight() heavy-weight} flow capable of producing a sorted set ordered by the given comparator that
-		 *         excludes duplicate elements according to the comparator's {@link Equivalence#of(Class, Comparator, boolean) equivalence}.
+		 * @return A {@link #isPassive() active} flow capable of producing a sorted set ordered by the given comparator that excludes
+		 *         duplicate elements according to the comparator's {@link Equivalence#of(Class, Comparator, boolean) equivalence}.
 		 */
 		UniqueSortedDataFlow<E, T, T> uniqueSorted(Comparator<? super T> compare, boolean alwaysUseFirst);
 
@@ -1038,8 +1039,8 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * Allows control of whether and how the produced collection may be modified. The produced collection will still reflect
 		 * modifications made to the source collection.
 		 *
-		 * @return A builder that produces a {@link #isLightWeight() light-weight} collection reflecting the source data but potentially
-		 *         disallowing some or all modifications.
+		 * @return A builder that produces a {@link #isPassive() passive} collection reflecting the source data but potentially disallowing
+		 *         some or all modifications.
 		 */
 		ModFilterBuilder<E, T> filterModification();
 
@@ -1068,42 +1069,50 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 		/**
 		 * <p>
-		 * Determines if this flow supports building light-weight collections via {@link #isLightWeight()}.
+		 * Determines if this flow supports building passive collections via {@link #collect()}.
 		 * </p>
 		 *
 		 * <p>
-		 * A light weight collection does not need to keep track of its own data, but rather performs light-weight per-access and
-		 * per-operation transformations that delegate to the base collection. Because a light-weight collection maintains fewer resources,
-		 * it may be more suitable for collections that are not kept in memory, where the heavy-weight building of the derived set of
-		 * elements would be largely wasted.
+		 * A passive collection does not need to keep track of its own data, but rather performs light-weight per-access and per-operation
+		 * transformations that delegate to the base collection. Because a passive collection maintains fewer resources, it may be more
+		 * suitable for collections that are not kept in memory, where the heavy-weight building of the derived set of elements would be
+		 * largely wasted.
 		 * </p>
 		 * <p>
-		 * Many flow operations are heavy-weight by nature, in that the operation is not stateless and requires extra book-keeping by the
-		 * derived collection. Each method on {@link ObservableCollection.CollectionDataFlow} documents whether it is a heavy- or
-		 * light-weight operation.
+		 * Many flow operations are active by nature, in that the operation is not stateless and requires extra book-keeping by the derived
+		 * collection. Each method on {@link ObservableCollection.CollectionDataFlow} documents whether it is an active or passive
+		 * operation.
 		 * </p>
 		 *
 		 * @return Whether this data flow is light-weight
 		 *
 		 */
-		boolean isLightWeight();
+		boolean isPassive();
 
-		/** @return A manager used by the derived collection */
-		CollectionManager<E, ?, T> manageCollection();
+		/** @return A collection manager to be used by the active derived collection produced by {@link #collect(Observable)} */
+		ActiveCollectionManager<E, ?, T> manageActive();
+
+		/**
+		 * @return A collection manager to be used by the passive derived collection produced by {@link #collectPassive()}. Will be null if
+		 *         this collection is not {@link #isPassive() passive}.
+		 */
+		PassiveCollectionManager<E, ?, T> managePassive();
 
 		/**
 		 * @return A heavy-weight collection derived via this flow from the source collection
-		 * @see #isLightWeight()
+		 * @see #isPassive()
 		 */
 		default ObservableCollection<T> collect() {
 			return collect(Observable.empty);
 		}
 
+		ObservableCollection<T> collectPassive();
+
 		/**
 		 * @param until An observable that will kill the collection when it fires. May be used to control the release of unneeded resources
 		 *        instead of relying on the garbage collector to dispose of them in its own time.
-		 * @return A heavy-weight collection derived via this flow from the source collection
-		 * @see #isLightWeight()
+		 * @return A collection derived via this flow from the source collection. The collection will be {@link #isPassive() passive} if
+		 *         this flow is passive and <code>until</code> is {@link Observable#empty}.
 		 */
 		ObservableCollection<T> collect(Observable<?> until);
 	}
