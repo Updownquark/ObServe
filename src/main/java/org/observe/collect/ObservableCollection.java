@@ -1073,10 +1073,15 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * </p>
 		 *
 		 * <p>
-		 * A passive collection does not need to keep track of its own data, but rather performs light-weight per-access and per-operation
+		 * A passive collection does not need to keep track of its own data, but rather performs per-access and per-operation
 		 * transformations that delegate to the base collection. Because a passive collection maintains fewer resources, it may be more
-		 * suitable for collections that are not kept in memory, where the heavy-weight building of the derived set of elements would be
-		 * largely wasted.
+		 * suitable for collections of unknown size that derived by light-weight operations, where the building of the derived collection of
+		 * elements would be largely wasted.
+		 * </p>
+		 * <p>
+		 * On the other hand, because active collections maintain all their elements at the ready, access is generally cheaper. And because
+		 * the elements are maintained dynamically regardless of the number of subscriptions on the derived collection, multiple
+		 * subscriptions may be cheaper.
 		 * </p>
 		 * <p>
 		 * Many flow operations are active by nature, in that the operation is not stateless and requires extra book-keeping by the derived
@@ -1084,8 +1089,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * operation.
 		 * </p>
 		 *
-		 * @return Whether this data flow is light-weight
-		 *
+		 * @return Whether this data flow is capable of producing a passive collection
 		 */
 		boolean isPassive();
 

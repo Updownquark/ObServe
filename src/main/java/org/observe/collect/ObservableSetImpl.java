@@ -46,10 +46,6 @@ public class ObservableSetImpl {
 		}
 	}
 
-	public static interface UniqueElementFinder<T> {
-		ElementId getUniqueElement(T value);
-	}
-
 	public static class UniqueDataFlowWrapper<E, T> extends ObservableCollectionDataFlowImpl.AbstractDataFlow<E, T, T> implements UniqueDataFlow<E, T, T> {
 		protected UniqueDataFlowWrapper(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent) {
 			super(source, parent, parent.getTargetType());
@@ -236,7 +232,7 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public UniqueElementFinder<T> getElementFinder() {
+		public ObservableCollectionDataFlowImpl.ElementFinder<T> getElementFinder() {
 			return this::getUniqueElement;
 		}
 

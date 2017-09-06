@@ -29,11 +29,11 @@ import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionElementManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.DerivedCollectionElement;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilteredCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.NonMappingCollectionElement;
 import org.observe.collect.ObservableCollectionImpl.DerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.DerivedLWCollection;
-import org.observe.collect.ObservableSetImpl.UniqueElementFinder;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterHashSet;
@@ -41,6 +41,8 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.tree.BetterTreeList;
+import org.qommons.tree.BetterTreeSet;
+import org.qommons.tree.BinaryTreeNode;
 
 import com.google.common.reflect.TypeToken;
 
@@ -104,6 +106,10 @@ public class ObservableCollectionDataFlowImpl {
 				reject(reason, error);
 			return this;
 		}
+	}
+
+	public static interface ElementFinder<T> {
+		ElementId findElement(T value, boolean first);
 	}
 
 	public static abstract class AbstractDataFlow<E, I, T> implements CollectionDataFlow<E, I, T> {
@@ -201,10 +207,8 @@ public class ObservableCollectionDataFlowImpl {
 		public <K> MultiMapFlow<E, K, T> groupBy(Function<? super CollectionDataFlow<E, I, T>, UniqueDataFlow<E, ?, K>> keyFlow,
 			boolean staticCategories) {
 			UniqueDataFlow<E, ?, K> keyFlowed = keyFlow.apply(this);
-			CollectionManager<E, ?, K> keyMgr = keyFlowed.manageCollection();
-			keyMgr.begin(null, null); // Light-weight
-			CollectionManager<E, ?, T> valueMgr = manageCollection();
-			valueMgr.begin(null, null); // Light-weight
+			CollectionOperation<E, ?, K> keyMgr = keyFlowed.manageActive();
+			CollectionOperation<E, ?, T> valueMgr = isPassive() ? managePassive() : manageActive();
 			return new ObservableMultiMap.DefaultMultiMapFlow<>(theSource, keyFlowed, theTargetType, key -> {
 				FilterMapResult<E, K> mappedKey = keyMgr.map(key);
 				if (!mappedKey.isAccepted()) // Invalid key
@@ -234,10 +238,8 @@ public class ObservableCollectionDataFlowImpl {
 		public <K> MultiMapFlow<E, K, T> groupBy(Function<? super CollectionDataFlow<E, I, T>, CollectionDataFlow<E, ?, K>> keyFlow,
 			Comparator<? super K> keyCompare, boolean staticCategories) {
 			UniqueSortedDataFlow<E, ?, K> keyFlowed = keyFlow.apply(this).uniqueSorted(keyCompare, true);
-			CollectionManager<E, ?, K> keyMgr = keyFlowed.manageCollection();
-			keyMgr.begin(null, null); // Light-weight
-			CollectionManager<E, ?, T> valueMgr = manageCollection();
-			valueMgr.begin(null, null); // Light-weight
+			CollectionOperation<E, ?, K> keyMgr = keyFlowed.manageActive();
+			CollectionOperation<E, ?, T> valueMgr = isPassive() ? managePassive() : manageActive();
 			// Can't think of a real easy way to pull this code out so it's not copy-and-paste from the method above
 			return new ObservableSortedMultiMap.DefaultSortedMultiMapFlow<>(theSource, keyFlowed, theTargetType, key -> {
 				FilterMapResult<E, K> mappedKey = keyMgr.map(key);
@@ -381,8 +383,13 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public PassiveCollectionManager<E, ?, T> managePassive() {
+			return null;
+		}
+
+		@Override
 		public ActiveCollectionManager<E, ?, T> manageActive() {
-			return new IntersectionManager<>(getParent().manageCollection(), theFilter, isExclude);
+			return new IntersectionManager<>(getParent().manageActive(), theFilter, isExclude);
 		}
 	}
 
@@ -641,12 +648,10 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
-	public static interface PassiveCollectionManager<E, I, T> extends Transactable {
+	public static interface CollectionOperation<E, I, T> extends Transactable{
 		TypeToken<T> getTargetType();
 
 		Equivalence<? super T> equivalence();
-
-		boolean isReversible();
 
 		FilterMapResult<E, T> map(FilterMapResult<E, T> source);
 
@@ -661,20 +666,20 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
-	public static interface ActiveCollectionManager<E, I, T> extends Transactable {
-		TypeToken<T> getTargetType();
+	public static interface PassiveCollectionManager<E, I, T> extends CollectionOperation<E, I, T>{
+		boolean isReversible();
+	}
 
-		Equivalence<? super T> equivalence();
-
+	public static interface ActiveCollectionManager<E, I, T> extends CollectionOperation<E, I, T> {
 		boolean isOneToOne();
 
-		ObservableSetImpl.UniqueElementFinder<T> getElementFinder();
+		ObservableCollectionDataFlowImpl.ElementFinder<T> getElementFinder();
 
 		FilterMapResult<T, E> canAdd(FilterMapResult<T, E> toAdd);
 
 		void begin(Consumer<DerivedCollectionElement<T>> onElement, Consumer<CollectionUpdate> onUpdate, Observable<?> until);
 
-		ElementController<E> addElement(ElementId id, E init, Object cause);
+		ElementController<E> addElement(MutableCollectionElement<E> source, Object cause);
 	}
 
 	public static interface DerivedCollectionElement<E> extends MutableCollectionElement<E> {
@@ -690,7 +695,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		boolean isReversible();
 
-		ObservableSetImpl.UniqueElementFinder<T> getElementFinder();
+		ElementFinder<T> getElementFinder();
 
 		Comparator<? super T> comparator();
 
@@ -716,30 +721,30 @@ public class ObservableCollectionDataFlowImpl {
 	public interface ElementController<E> {
 		ElementId getSourceId();
 
-		Collection<CollectionUpdate> set(E value, Object cause, Collection<CollectionUpdate> updates);
+		void set(E value, Object cause);
 
-		Collection<CollectionUpdate> remove(Collection<CollectionUpdate> updates);
+		void remove();
 	}
 
-	public static abstract class AbstractCollectionManager<E, I, T> implements CollectionManager<E, I, T> {
-		private final CollectionManager<E, ?, I> theParent;
+	public static abstract class AbstractCollectionManager<E, I, T> implements ActiveCollectionManager<E, I, T> {
+		private final ActiveCollectionManager<E, ?, I> theParent;
 		private final TypeToken<T> theTargetType;
 		private final ReentrantReadWriteLock theLock;
 		private boolean isBegun;
-		private Consumer<CollectionElementManager<E, ?, T>> theElementAccepter;
+		private Consumer<DerivedCollectionElement<T>> theElementAccepter;
 		private Consumer<CollectionUpdate> theUpdateListener;
 
-		protected AbstractCollectionManager(CollectionManager<E, ?, I> parent, TypeToken<T> targetType) {
+		protected AbstractCollectionManager(ActiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType) {
 			theParent = parent;
 			theTargetType = targetType;
 			theLock = theParent != null ? null : new ReentrantReadWriteLock();
 		}
 
-		protected CollectionManager<E, ?, I> getParent() {
+		protected ActiveCollectionManager<E, ?, I> getParent() {
 			return theParent;
 		}
 
-		protected Consumer<CollectionElementManager<E, ?, T>> getElementAccepter() {
+		protected Consumer<DerivedCollectionElement<T>> getElementAccepter() {
 			return theElementAccepter;
 		}
 
@@ -766,13 +771,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isFiltered() {
-			return theParent == null ? false : theParent.isFiltered();
-		}
-
-		@Override
-		public boolean isReversible() {
-			return theParent == null ? true : theParent.isReversible();
+		public boolean isOneToOne() {
+			return theParent.isOneToOne();
 		}
 
 		protected abstract FilterMapResult<I, T> mapTop(FilterMapResult<I, T> source);
@@ -833,7 +833,7 @@ public class ObservableCollectionDataFlowImpl {
 		protected abstract void begin(Observable<?> until);
 
 		@Override
-		public void begin(Consumer<CollectionElementManager<E, ?, T>> onElement, Consumer<CollectionUpdate> onUpdate, Observable<?> until) {
+		public void begin(Consumer<DerivedCollectionElement<T>> onElement, Consumer<CollectionUpdate> onUpdate, Observable<?> until) {
 			if (isBegun)
 				throw new IllegalStateException("Cannot begin twice");
 			isBegun = true;
@@ -844,12 +844,12 @@ public class ObservableCollectionDataFlowImpl {
 				theParent.begin(this::elementCreated, onUpdate, until);
 		}
 
-		protected abstract void elementCreated(CollectionElementManager<E, ?, I> parent);
-
 		@Override
-		public ElementController<E> addElement(ElementId id, E init, Object cause, Collection<CollectionUpdate> updates) {
-			return theParent.addElement(id, init, cause);
+		public ElementController<E> addElement(MutableCollectionElement<E> source, Object cause) {
+			return theParent.addElement(source, cause);
 		}
+
+		protected abstract void elementCreated(DerivedCollectionElement<I> parent);
 	}
 
 	public static class FlowSourceEvent<E, T> {
@@ -1118,18 +1118,13 @@ public class ObservableCollectionDataFlowImpl {
 	}
 
 	public static abstract class NonMappingCollectionManager<E, T> extends AbstractCollectionManager<E, T, T> {
-		protected NonMappingCollectionManager(CollectionManager<E, ?, T> parent) {
+		protected NonMappingCollectionManager(AbstractCollectionManager<E, ?, T> parent) {
 			super(parent, parent.getTargetType());
 		}
 
 		@Override
-		public ObservableSetImpl.UniqueElementFinder<T> getElementFinder() {
+		public ObservableCollectionDataFlowImpl.ElementFinder<T> getElementFinder() {
 			return getParent().getElementFinder();
-		}
-
-		@Override
-		public Comparator<? super T> comparator() {
-			return getParent().comparator();
 		}
 
 		@Override
@@ -1177,12 +1172,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public ObservableSetImpl.UniqueElementFinder<E> getElementFinder() {
-			return null;
-		}
-
-		@Override
-		public Comparator<? super E> comparator() {
+		public ObservableCollectionDataFlowImpl.ElementFinder<E> getElementFinder() {
 			return null;
 		}
 
@@ -1199,47 +1189,86 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		protected void elementCreated(CollectionElementManager<E, ?, E> parent) {
+		protected void elementCreated(DerivedCollectionElement<E> parent) {
 			// No parent--shouldn't ever be called
 		}
 
+		/* Overridden because the super method invokes the parent */
 		@Override
-		public ElementController<E> addElement(ElementId id, E init, Object cause) {
-			class DefaultElement extends CollectionElementManager<E, E, E> implements ElementController<E> {
-				private E theValue;
+		public boolean isOneToOne() {
+			return true;
+		}
 
-				protected DefaultElement() {
-					super(BaseCollectionManager.this, null, id, init, cause);
-					theValue = init;
-				}
-
+		@Override
+		public ElementController<E> addElement(MutableCollectionElement<E> source, Object cause) {
+			class BaseElement implements DerivedCollectionElement<E> {
 				@Override
 				public boolean isPresent() {
 					return true;
 				}
 
 				@Override
+				public ElementId getElementId() {
+					return source.getElementId();
+				}
+
+				@Override
 				public E get() {
-					return theValue;
+					return source.get();
+				}
+
+				@Override
+				public String isEnabled() {
+					return source.isEnabled();
+				}
+
+				@Override
+				public String isAcceptable(E value) {
+					return source.isAcceptable(value);
+				}
+
+				@Override
+				public void set(E value) throws UnsupportedOperationException, IllegalArgumentException {
+					source.set(value);
+				}
+
+				@Override
+				public String canRemove() {
+					return source.canRemove();
+				}
+
+				@Override
+				public void remove() throws UnsupportedOperationException {
+					source.remove();
+				}
+
+				@Override
+				public String canAdd(E value, boolean before) {
+					return source.canAdd(value, before);
+				}
+
+				@Override
+				public ElementId add(E value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
+					return source.add(value, before);
+				}
+			}
+			getElementAccepter().accept(new BaseElement());
+			return new ElementController<E>() {
+				@Override
+				public ElementId getSourceId() {
+					return source.getElementId();
 				}
 
 				@Override
 				public void set(E value, Object cause) {
-					theValue = value;
+					getUpdateListener().accept(new CollectionUpdate(BaseCollectionManager.this, source.getElementId(), cause));
 				}
 
 				@Override
-				public ElementUpdateResult update(CollectionUpdate update,
-					Consumer<Consumer<MutableCollectionElement<? extends E>>> sourceElement) {
-					return ElementUpdateResult.DoesNotApply;
+				public void remove() {
+					getUpdateListener().accept(new RemoveElementUpdate(BaseCollectionManager.this, source.getElementId(), cause));
 				}
-
-				@Override
-				protected boolean refresh(E source, Object cause) {
-					return true;
-				}
-			}
-			getElementAccepter().accept(new DefaultElement());
+			};
 		}
 
 		@Override
@@ -1250,7 +1279,7 @@ public class ObservableCollectionDataFlowImpl {
 		private final Comparator<? super T> theCompare;
 		private final Equivalence<? super T> theEquivalence;
 
-		protected SortedManager(CollectionManager<E, ?, T> parent, Comparator<? super T> compare) {
+		protected SortedManager(AbstractCollectionManager<E, ?, T> parent, Comparator<? super T> compare) {
 			super(parent);
 			theCompare = compare;
 			theEquivalence = Equivalence.of((Class<T>) parent.getTargetType().getRawType(), theCompare, true);
@@ -1263,6 +1292,71 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		protected void begin(Observable<?> until) {}
+
+		@Override
+		protected void elementCreated(DerivedCollectionElement<T> parent) {
+			class SortedElementI
+			class SortedElement implements DerivedCollectionElement<T>{
+				@Override
+				public boolean isPresent() {
+					return parent.isPresent();
+				}
+
+				@Override
+				public ElementId getElementId() {
+					// TODO Auto-generated method stub
+					return null;
+				}
+
+				@Override
+				public T get() {
+					// TODO Auto-generated method stub
+					return null;
+				}
+
+				@Override
+				public String isEnabled() {
+					// TODO Auto-generated method stub
+					return null;
+				}
+
+				@Override
+				public String isAcceptable(T value) {
+					// TODO Auto-generated method stub
+					return null;
+				}
+
+				@Override
+				public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
+					// TODO Auto-generated method stub
+
+				}
+
+				@Override
+				public String canRemove() {
+					// TODO Auto-generated method stub
+					return null;
+				}
+
+				@Override
+				public void remove() throws UnsupportedOperationException {
+					// TODO Auto-generated method stub
+
+				}
+
+				@Override
+				public String canAdd(T value, boolean before) {
+					// TODO Auto-generated method stub
+					return null;
+				}
+
+				@Override
+				public ElementId add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
+					// TODO Auto-generated method stub
+					return null;
+				}
+			}
+		}
 
 		@Override
 		public void createElement(ElementId id, E init, Object cause, Consumer<CollectionElementManager<E, ?, T>> onElement) {
@@ -1568,13 +1662,13 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public ObservableSetImpl.UniqueElementFinder<T> getElementFinder() {
+		public ObservableCollectionDataFlowImpl.ElementFinder<T> getElementFinder() {
 			if (theReverse == null)
 				return null;
-			ObservableSetImpl.UniqueElementFinder<I> pef = getParent().getElementFinder();
+			ObservableCollectionDataFlowImpl.ElementFinder<I> pef = getParent().getElementFinder();
 			if (pef == null)
 				return null;
-			return v -> pef.getUniqueElement(reverseValue(v));
+			return v -> pef.findElement(reverseValue(v));
 		}
 
 		@Override
@@ -1714,13 +1808,13 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public ObservableSetImpl.UniqueElementFinder<T> getElementFinder() {
+		public ObservableCollectionDataFlowImpl.ElementFinder<T> getElementFinder() {
 			if (theReverse == null)
 				return null;
-			ObservableSetImpl.UniqueElementFinder<I> pef = getParent().getElementFinder();
+			ObservableCollectionDataFlowImpl.ElementFinder<I> pef = getParent().getElementFinder();
 			if (pef == null)
 				return null;
-			return v -> pef.getUniqueElement(reverseValue(v));
+			return v -> pef.findElement(reverseValue(v));
 		}
 
 		@Override
@@ -2225,7 +2319,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public UniqueElementFinder<T> getElementFinder() {
+		public ObservableCollectionDataFlowImpl.ElementFinder<T> getElementFinder() {
 			return null;
 		}
 
@@ -2255,4 +2349,5 @@ public class ObservableCollectionDataFlowImpl {
 			});
 		}
 	}
+
 }

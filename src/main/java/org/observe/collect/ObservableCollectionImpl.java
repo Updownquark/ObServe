@@ -1501,9 +1501,9 @@ public final class ObservableCollectionImpl {
 		@Override
 		public CollectionElement<T> getElement(T value, boolean first) {
 			try (Transaction t = lock(false, null)) {
-				ObservableSetImpl.UniqueElementFinder<T> finder = getFlow().getElementFinder();
+				ObservableCollectionDataFlowImpl.ElementFinder<T> finder = getFlow().getElementFinder();
 				if (finder != null) {
-					ElementId id = finder.getUniqueElement(value);
+					ElementId id = finder.findElement(value, first);
 					if (id == null)
 						return null;
 					List<DerivedCollectionElement<E, T>> elements = theElements.get(id);
