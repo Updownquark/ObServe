@@ -37,6 +37,7 @@ import org.observe.collect.ObservableCollectionImpl.DerivedLWCollection;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterHashSet;
+import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
@@ -109,7 +110,64 @@ public class ObservableCollectionDataFlowImpl {
 	}
 
 	public static interface ElementFinder<T> {
-		ElementId findElement(T value, boolean first);
+		DerivedCollectionElement<T> findElement(BetterSortedSet<DerivedCollectionElement<T>> elements, T value, boolean first);
+	}
+
+	public static interface CollectionOperation<E, I, T> extends Transactable {
+		TypeToken<T> getTargetType();
+
+		Equivalence<? super T> equivalence();
+	}
+
+	public static interface PassiveCollectionManager<E, I, T> extends CollectionOperation<E, I, T> {
+		T map(E source);
+
+		boolean isReversible();
+
+		FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest);
+
+		default FilterMapResult<T, E> reverse(T dest) {
+			return reverse(new FilterMapResult<>(dest));
+		}
+	}
+
+	public static interface ActiveCollectionManager<E, I, T> extends CollectionOperation<E, I, T> {
+		/** @return Whether this manager always has a representation for each element in the source collection */
+		boolean isEachRepresented();
+
+		ElementFinder<T> getElementFinder();
+
+		FilterMapResult<T, E> canAdd(FilterMapResult<T, E> toAdd);
+
+		void begin(Consumer<DerivedCollectionElement<T>> onElement, Observable<?> until);
+
+		ElementController<E> addElement(MutableCollectionElement<E> source, Object cause);
+	}
+
+	public static interface DerivedCollectionElement<E> extends Comparable<DerivedCollectionElement<E>> {
+		void setListener(CollectionElementListener<E> listener);
+
+		E get();
+
+		String isEnabled();
+
+		String isAcceptable(E value);
+
+		void set(E value) throws UnsupportedOperationException, IllegalArgumentException;
+
+		String canRemove();
+
+		void remove() throws UnsupportedOperationException;
+
+		String canAdd(E value, boolean before);
+
+		DerivedCollectionElement<E> add(E value, boolean before) throws UnsupportedOperationException, IllegalArgumentException;
+	}
+
+	public static interface CollectionElementListener<E> {
+		void update(DerivedCollectionElement<E> element, E oldValue, E newValue, Object cause);
+
+		void removed(DerivedCollectionElement<E> element, E value, Object cause);
 	}
 
 	public static abstract class AbstractDataFlow<E, I, T> implements CollectionDataFlow<E, I, T> {
@@ -646,44 +704,6 @@ public class ObservableCollectionDataFlowImpl {
 		public CollectionManager<E, ?, T> manageCollection() {
 			return new FlattenedManager<>(getParent().manageCollection(), getTargetType(), theMap);
 		}
-	}
-
-	public static interface CollectionOperation<E, I, T> extends Transactable{
-		TypeToken<T> getTargetType();
-
-		Equivalence<? super T> equivalence();
-
-		FilterMapResult<E, T> map(FilterMapResult<E, T> source);
-
-		default FilterMapResult<E, T> map(E source) {
-			return map(new FilterMapResult<>(source));
-		}
-
-		FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest);
-
-		default FilterMapResult<T, E> reverse(T dest) {
-			return reverse(new FilterMapResult<>(dest));
-		}
-	}
-
-	public static interface PassiveCollectionManager<E, I, T> extends CollectionOperation<E, I, T>{
-		boolean isReversible();
-	}
-
-	public static interface ActiveCollectionManager<E, I, T> extends CollectionOperation<E, I, T> {
-		boolean isOneToOne();
-
-		ObservableCollectionDataFlowImpl.ElementFinder<T> getElementFinder();
-
-		FilterMapResult<T, E> canAdd(FilterMapResult<T, E> toAdd);
-
-		void begin(Consumer<DerivedCollectionElement<T>> onElement, Consumer<CollectionUpdate> onUpdate, Observable<?> until);
-
-		ElementController<E> addElement(MutableCollectionElement<E> source, Object cause);
-	}
-
-	public static interface DerivedCollectionElement<E> extends MutableCollectionElement<E> {
-		boolean isPresent();
 	}
 
 	public static interface CollectionManager<E, I, T> extends Transactable {
