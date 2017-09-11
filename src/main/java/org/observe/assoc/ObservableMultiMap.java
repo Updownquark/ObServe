@@ -709,7 +709,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 				super(keySource, flow, until);
 			}
 
-			protected class DerivedEntryElement extends ObservableCollectionImpl.DerivedCollection.DerivedCollectionElement<OK, K> {
+			protected class DerivedEntryElement extends ObservableCollectionImpl.ActiveDerivedCollection.DerivedCollectionElement<OK, K> {
 				private final ObservableCollection<V> theValues;
 
 				protected DerivedEntryElement(CollectionElementManager<OK, ?, K> manager, OK initValue) {

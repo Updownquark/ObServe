@@ -14,8 +14,8 @@ import org.observe.collect.ObservableCollection.UniqueModFilterBuilder;
 import org.observe.collect.ObservableCollectionDataFlowImpl.BaseCollectionDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionElementManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
-import org.observe.collect.ObservableCollectionImpl.DerivedCollection;
-import org.observe.collect.ObservableCollectionImpl.DerivedLWCollection;
+import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection;
+import org.observe.collect.ObservableCollectionImpl.PassiveDerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.FlattenedValueCollection;
 import org.observe.collect.ObservableCollectionImpl.ReversedObservableCollection;
 import org.qommons.collect.BetterMap;
@@ -481,7 +481,7 @@ public class ObservableSetImpl {
 		}
 	}
 
-	public static class DerivedLWSet<E, T> extends DerivedLWCollection<E, T> implements ObservableSet<T> {
+	public static class DerivedLWSet<E, T> extends PassiveDerivedCollection<E, T> implements ObservableSet<T> {
 		/**
 		 * @param source The source set. The unique operation is not light-weight, so the input must be a set
 		 * @param flow The data flow used to create the modified collection
@@ -496,7 +496,7 @@ public class ObservableSetImpl {
 		}
 	}
 
-	public static class DerivedSet<E, T> extends DerivedCollection<E, T> implements ObservableSet<T> {
+	public static class DerivedSet<E, T> extends ActiveDerivedCollection<E, T> implements ObservableSet<T> {
 		public DerivedSet(ObservableCollection<E> source, CollectionManager<E, ?, T> flow, Observable<?> until) {
 			super(source, flow, until);
 		}

@@ -24,13 +24,16 @@ import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractCollectionManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.BaseCollectionDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.BaseCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionElementManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionUpdate;
+import org.observe.collect.ObservableCollectionDataFlowImpl.DerivedCollectionElement;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ElementUpdateResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
+import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
 import org.qommons.ArrayUtils;
 import org.qommons.Causable;
 import org.qommons.ConcurrentHashSet;
@@ -950,24 +953,22 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
-	public static class DerivedLWCollection<E, T> implements ObservableCollection<T> {
+	public static class PassiveDerivedCollection<E, T> implements ObservableCollection<T> {
 		private final ObservableCollection<E> theSource;
-		private final CollectionManager<E, ?, T> theFlow;
+		private final PassiveCollectionManager<E, ?, T> theFlow;
 		private final Equivalence<? super T> theEquivalence;
 
-		public DerivedLWCollection(ObservableCollection<E> source, CollectionManager<E, ?, T> flow) {
+		public PassiveDerivedCollection(ObservableCollection<E> source, PassiveCollectionManager<E, ?, T> flow) {
 			theSource = source;
 			theFlow = flow;
 			theEquivalence = theFlow.equivalence();
-
-			theFlow.begin(null, null); // Nulls imply light-weight
 		}
 
 		protected ObservableCollection<E> getSource() {
 			return theSource;
 		}
 
-		protected CollectionManager<E, ?, T> getFlow() {
+		protected PassiveCollectionManager<E, ?, T> getFlow() {
 			return theFlow;
 		}
 
@@ -983,12 +984,17 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean isLockSupported() {
-			return theSource.isLockSupported();
+			return theSource.isLockSupported() || theFlow.isLockSupported();
 		}
 
 		@Override
 		public Transaction lock(boolean write, boolean structural, Object cause) {
-			return theSource.lock(write, structural, cause);
+			Transaction srcT = theSource.lock(write, structural, cause);
+			Transaction flowT = theFlow.lock(write, cause);
+			return () -> {
+				srcT.close();
+				flowT.close();
+			};
 		}
 
 		@Override
@@ -1060,14 +1066,14 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public MutableElementSpliterator<T> spliterator(ElementId element, boolean asNext) {
-			return new DerivedMutableSpliterator(theSource.spliterator(element, asNext));
+			return new PassiveDerivedMutableSpliterator(theSource.spliterator(element, asNext));
 		}
 
 		protected CollectionElement<T> elementFor(CollectionElement<? extends E> el) {
 			return new CollectionElement<T>() {
 				@Override
 				public T get() {
-					return theFlow.map(el.get()).result;
+					return theFlow.map(el.get());
 				}
 
 				@Override
@@ -1077,16 +1083,80 @@ public final class ObservableCollectionImpl {
 			};
 		}
 
-		protected MutableCollectionElement<T> mutableElementFor(MutableCollectionElement<? extends E> el) {
-			CollectionElementManager<E, ?, T>[] elMgr = new CollectionElementManager[1];
-			theFlow.createElement(el.getElementId(), el.get(), null, mgr -> elMgr[0] = mgr);
-			return elMgr[0].map(el, el.getElementId());
+		protected MutableCollectionElement<T> mutableElementFor(MutableCollectionElement<E> el) {
+			class PassiveMappedMCE implements MutableCollectionElement<T> {
+				@Override
+				public ElementId getElementId() {
+					return el.getElementId();
+				}
+
+				@Override
+				public T get() {
+					return theFlow.map(el.get());
+				}
+
+				@Override
+				public String isEnabled() {
+					if (!theFlow.isReversible())
+						return StdMsg.UNSUPPORTED_OPERATION;
+					return el.isEnabled();
+				}
+
+				@Override
+				public String isAcceptable(T value) {
+					if (!theFlow.isReversible())
+						return StdMsg.UNSUPPORTED_OPERATION;
+					FilterMapResult<T, E> res = theFlow.reverse(value);
+					if (!res.isAccepted())
+						return res.getRejectReason();
+					return el.isAcceptable(res.result);
+				}
+
+				@Override
+				public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
+					if (!theFlow.isReversible())
+						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+					FilterMapResult<T, E> res = theFlow.reverse(value);
+					res.throwIfError(IllegalArgumentException::new);
+					el.set(res.result);
+				}
+
+				@Override
+				public String canRemove() {
+					return el.canRemove();
+				}
+
+				@Override
+				public void remove() throws UnsupportedOperationException {
+					el.remove();
+				}
+
+				@Override
+				public String canAdd(T value, boolean before) {
+					if (!theFlow.isReversible())
+						return StdMsg.UNSUPPORTED_OPERATION;
+					FilterMapResult<T, E> res = theFlow.reverse(value);
+					if (!res.isAccepted())
+						return res.getRejectReason();
+					return el.canAdd(res.result, before);
+				}
+
+				@Override
+				public ElementId add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
+					if (!theFlow.isReversible())
+						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+					FilterMapResult<T, E> res = theFlow.reverse(value);
+					res.throwIfError(IllegalArgumentException::new);
+					return el.add(res.result, before);
+				}
+			}
+			return new PassiveMappedMCE();
 		}
 
 		@Override
 		public MutableElementSpliterator<T> spliterator(boolean fromStart) {
 			MutableElementSpliterator<E> srcSpliter = theSource.spliterator(fromStart);
-			return new DerivedMutableSpliterator(srcSpliter);
+			return new PassiveDerivedMutableSpliterator(srcSpliter);
 		}
 
 		@Override
@@ -1095,16 +1165,16 @@ public final class ObservableCollectionImpl {
 				T oldValue, newValue;
 				switch (evt.getType()) {
 				case add:
-					newValue = theFlow.map(evt.getNewValue()).result;
+					newValue = theFlow.map(evt.getNewValue());
 					oldValue = null;
 					break;
 				case remove:
-					oldValue = theFlow.map(evt.getOldValue()).result;
+					oldValue = theFlow.map(evt.getOldValue());
 					newValue = oldValue;
 					break;
 				case set:
-					oldValue = theFlow.map(evt.getOldValue()).result;
-					newValue = theFlow.map(evt.getNewValue()).result;
+					oldValue = theFlow.map(evt.getOldValue());
+					newValue = theFlow.map(evt.getNewValue());
 					break;
 				default:
 					throw new IllegalStateException("Unrecognized collection change type: " + evt.getType());
@@ -1114,11 +1184,11 @@ public final class ObservableCollectionImpl {
 			});
 		}
 
-		protected class DerivedMutableSpliterator extends MutableElementSpliterator.SimpleMutableSpliterator<T> {
+		protected class PassiveDerivedMutableSpliterator extends MutableElementSpliterator.SimpleMutableSpliterator<T> {
 			private final MutableElementSpliterator<E> theSourceSpliter;
 
-			DerivedMutableSpliterator(MutableElementSpliterator<E> srcSpliter) {
-				super(DerivedLWCollection.this);
+			PassiveDerivedMutableSpliterator(MutableElementSpliterator<E> srcSpliter) {
+				super(PassiveDerivedCollection.this);
 				theSourceSpliter = srcSpliter;
 			}
 
@@ -1150,76 +1220,62 @@ public final class ObservableCollectionImpl {
 			@Override
 			public MutableElementSpliterator<T> trySplit() {
 				MutableElementSpliterator<E> srcSplit = theSourceSpliter.trySplit();
-				return srcSplit == null ? null : new DerivedMutableSpliterator(srcSplit);
+				return srcSplit == null ? null : new PassiveDerivedMutableSpliterator(srcSplit);
 			}
 		}
 	}
 
-	private static final Set<DerivedCollection<?, ?>> STRONG_REFS = new ConcurrentHashSet<>();
+	private static final Set<ActiveDerivedCollection<?, ?>> STRONG_REFS = new ConcurrentHashSet<>();
 
-	public static class DerivedCollection<E, T> implements ObservableCollection<T> {
-		protected static class DerivedCollectionElement<E, T> implements ElementId {
-			final CollectionElementManager<E, ?, T> manager;
-			BinaryTreeNode<DerivedCollectionElement<E, T>> presentNode;
+	public static class ActiveDerivedCollection<E, T> implements ObservableCollection<T> {
+		protected static class DerivedElementHolder<T> implements ElementId {
+			final DerivedCollectionElement<T> element;
+			BinaryTreeNode<DerivedElementHolder<T>> treeNode;
 
-			protected DerivedCollectionElement(CollectionElementManager<E, ?, T> manager) {
-				this.manager = manager;
+			protected DerivedElementHolder(DerivedCollectionElement<T> manager) {
+				this.element = manager;
 			}
 
 			@Override
 			public boolean isPresent() {
-				return presentNode.getElementId().isPresent();
+				return treeNode.getElementId().isPresent();
 			}
 
 			@Override
 			public int compareTo(ElementId o) {
-				return presentNode.getElementId().compareTo(((DerivedCollectionElement<E, T>) o).presentNode.getElementId());
+				return treeNode.getElementId().compareTo(((DerivedElementHolder<T>) o).treeNode.getElementId());
 			}
 
-			DerivedCollectionElement<E, T> check() {
-				if (presentNode == null)
+			DerivedElementHolder<T> check() {
+				if (treeNode == null)
 					throw new IllegalStateException("This node is not currentlly present in the collection");
 				return this;
 			}
 
 			public T get() {
-				return manager.get();
-			}
-
-			protected boolean set(E baseValue, Object cause) {
-				return manager.set(baseValue, cause);
-			}
-
-			protected void removed(Object cause) {
-				manager.removed(cause);
-			}
-
-			protected ElementUpdateResult update(CollectionUpdate update,
-				Consumer<Consumer<MutableCollectionElement<? extends E>>> sourceElement) {
-				return manager.update(update, sourceElement);
+				return element.get();
 			}
 
 			@Override
 			public int hashCode() {
-				return manager.getElementId().hashCode();
+				return treeNode.hashCode();
 			}
 
 			@Override
 			public boolean equals(Object obj) {
-				return obj instanceof DerivedCollection.DerivedCollectionElement
-					&& manager.getElementId().equals(((DerivedCollectionElement<E, T>) obj).manager.getElementId());
+				// This type collection does not produce duplicate Element IDs, so we can compare by identity
+				return this == obj;
 			}
 
 			@Override
 			public String toString() {
-				return manager.getElementId().toString();
+				return element.toString();
 			}
 		}
 
 		private final ObservableCollection<E> theSource;
-		private final CollectionManager<E, ?, T> theFlow;
-		private final Map<ElementId, List<DerivedCollectionElement<E, T>>> theElements;
-		private final BetterTreeSet<DerivedCollectionElement<E, T>> thePresentElements;
+		private final ActiveCollectionManager<?, ?, T> theFlow;
+		private final BetterTreeSet<DerivedElementHolder<T>> theDerivedElements;
 		private final BetterTreeList<Consumer<? super ObservableCollectionEvent<? extends T>>> theListeners;
 		private final AtomicInteger theListenerCount;
 		private final Equivalence<? super T> theEquivalence;
@@ -1229,11 +1285,10 @@ public final class ObservableCollectionImpl {
 		/** This reference is required so that the source listeners driving this collection are not GC'd */
 		private final Subscription theWeakSubscription;
 
-		public DerivedCollection(ObservableCollection<E> source, CollectionManager<E, ?, T> flow, Observable<?> until) {
+		public ActiveDerivedCollection(ObservableCollection<E> source, ActiveCollectionManager<E, ?, T> flow, Observable<?> until) {
 			theSource = source;
 			theFlow = flow;
-			theElements = new java.util.TreeMap<>(ElementId::compareTo);
-			thePresentElements = new BetterTreeSet<>(false, (e1, e2) -> e1.manager.compareTo(e2.manager));
+			theDerivedElements = new BetterTreeSet<>(false, (e1, e2) -> e1.element.compareTo(e2.element));
 			theListeners = new BetterTreeList<>(true);
 			theListenerCount = new AtomicInteger();
 			theEquivalence = flow.equivalence();
@@ -1242,13 +1297,20 @@ public final class ObservableCollectionImpl {
 			// Must maintain a strong reference to the event listener so it is not GC'd while the collection is still alive
 
 			// Begin listening
+			Consumer<DerivedCollectionElement<T>> onElement = el -> {
+				DerivedElementHolder<T> holder = new DerivedElementHolder<>(el);
+				holder.treeNode = theDerivedElements.addElement(holder, false);
+				// TODO Fire the add event to listeners
+				// TODO Call el.setListener to monitor update/remove for the element
+			};
+			theWeakSubscription = theFlow.begin(onElement, until);
 			try (Transaction initialTransaction = lock(false, null)) {
 				theFlow.begin(update -> {
 					try (Transaction collT = theSource.lock(false, update.getCause())) {
 						if (update.getElement() != null)
 							applyUpdate(theElements.get(update.getElement()), update);
 						else {
-							for (List<DerivedCollectionElement<E, T>> element : theElements.values())
+							for (List<DerivedElementHolder<E, T>> element : theElements.values())
 								applyUpdate(element, update);
 						}
 					}
@@ -1272,10 +1334,10 @@ public final class ObservableCollectionImpl {
 								});
 								break;
 							case remove:
-								List<DerivedCollectionElement<E, T>> elements = theElements.remove(elementId);
+								List<DerivedElementHolder<E, T>> elements = theElements.remove(elementId);
 								if (elements == null)
 									return; // Must be statically filtered out or removed via spliterator
-								for (DerivedCollectionElement<E, T> element : elements) {
+								for (DerivedElementHolder<E, T> element : elements) {
 									if (element.presentNode != null)
 										removeFromPresent(element, element.get(), evt);
 									element.removed(evt);
@@ -1285,7 +1347,7 @@ public final class ObservableCollectionImpl {
 								elements = theElements.get(elementId);
 								if (elements == null)
 									return; // Must be statically filtered out
-								for (DerivedCollectionElement<E, T> element : elements) {
+								for (DerivedElementHolder<E, T> element : elements) {
 									boolean prePresent = element.presentNode != null;
 									T oldValue = prePresent ? element.get() : null;
 									boolean fireUpdate = element.set(evt.getNewValue(), evt);
@@ -1306,8 +1368,8 @@ public final class ObservableCollectionImpl {
 			}
 		}
 
-		protected DerivedCollectionElement<E, T> createElement(CollectionElementManager<E, ?, T> elMgr) {
-			return new DerivedCollectionElement<>(elMgr);
+		protected DerivedElementHolder<E, T> createElement(CollectionElementManager<E, ?, T> elMgr) {
+			return new DerivedElementHolder<>(elMgr);
 		}
 
 		protected ObservableCollection<E> getSource() {
@@ -1318,24 +1380,24 @@ public final class ObservableCollectionImpl {
 			return theFlow;
 		}
 
-		protected List<DerivedCollectionElement<E, T>> getPresentElements(ElementId sourceId) {
+		protected List<DerivedElementHolder<E, T>> getPresentElements(ElementId sourceId) {
 			return theElements.get(sourceId).stream().filter(el -> el.isPresent()).collect(Collectors.toList());
 		}
 
-		protected BetterTreeSet<DerivedCollectionElement<E, T>> getPresentElements() {
-			return thePresentElements;
+		protected BetterTreeSet<DerivedElementHolder<E, T>> getPresentElements() {
+			return theDerivedElements;
 		}
 
-		private void addToPresent(DerivedCollectionElement<E, T> element, Object cause) {
-			element.presentNode = thePresentElements.addElement(element, false);
+		private void addToPresent(DerivedElementHolder<E, T> element, Object cause) {
+			element.presentNode = theDerivedElements.addElement(element, false);
 			theModCount.incrementAndGet();
 			theStructureStamp.incrementAndGet();
 			fireListeners(new ObservableCollectionEvent<>(element, getType(), element.presentNode.getNodesBefore(),
 				CollectionChangeType.add, null, element.get(), cause));
 		}
 
-		private void removeFromPresent(DerivedCollectionElement<E, T> element, T oldValue, Object cause) {
-			thePresentElements.forMutableElement(element.presentNode.getElementId(), el -> el.remove());
+		private void removeFromPresent(DerivedElementHolder<E, T> element, T oldValue, Object cause) {
+			theDerivedElements.forMutableElement(element.presentNode.getElementId(), el -> el.remove());
 			theModCount.incrementAndGet();
 			theStructureStamp.incrementAndGet();
 			fireListeners(new ObservableCollectionEvent<>(element, getType(), element.presentNode.getNodesBefore(),
@@ -1343,10 +1405,10 @@ public final class ObservableCollectionImpl {
 			element.presentNode = null;
 		}
 
-		private void updateInPresent(DerivedCollectionElement<E, T> element, T oldValue, Object cause, boolean fireUpdate) {
+		private void updateInPresent(DerivedElementHolder<E, T> element, T oldValue, Object cause, boolean fireUpdate) {
 			// Need to verify that the ordering is still correct. Otherwise, remove and re-add.
-			BinaryTreeNode<DerivedCollectionElement<E, T>> left = element.presentNode.getClosest(true);
-			BinaryTreeNode<DerivedCollectionElement<E, T>> right = element.presentNode.getClosest(false);
+			BinaryTreeNode<DerivedElementHolder<E, T>> left = element.presentNode.getClosest(true);
+			BinaryTreeNode<DerivedElementHolder<E, T>> right = element.presentNode.getClosest(false);
 			if ((left != null && left.compareTo(element.presentNode) > 0) || (right != null && right.compareTo(element.presentNode) < 0)) {
 				// Remove the element and re-add at the new position.
 				// Need to fire the remove event while the node is in the old position.
@@ -1368,8 +1430,8 @@ public final class ObservableCollectionImpl {
 				listener.accept(event);
 		}
 
-		private void applyUpdate(List<DerivedCollectionElement<E, T>> elements, CollectionUpdate update) {
-			for (DerivedCollectionElement<E, T> element : elements) {
+		private void applyUpdate(List<DerivedElementHolder<E, T>> elements, CollectionUpdate update) {
+			for (DerivedElementHolder<E, T> element : elements) {
 				boolean prePresent = element.manager.isPresent();
 				T oldValue = prePresent ? element.get() : null;
 				ElementUpdateResult fireUpdate = element.update(update,
@@ -1388,7 +1450,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public int getElementsBefore(ElementId id) {
-			BinaryTreeNode<?> node = ((DerivedCollectionElement<E, T>) id).presentNode;
+			BinaryTreeNode<?> node = ((DerivedElementHolder<E, T>) id).presentNode;
 			if (node == null)
 				throw new IllegalArgumentException("This element is not present in the collection");
 			return node.getNodesBefore();
@@ -1396,7 +1458,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public int getElementsAfter(ElementId id) {
-			BinaryTreeNode<?> node = ((DerivedCollectionElement<E, T>) id).presentNode;
+			BinaryTreeNode<?> node = ((DerivedElementHolder<E, T>) id).presentNode;
 			if (node == null)
 				throw new IllegalArgumentException("This element is not present in the collection");
 			return node.getNodesAfter();
@@ -1421,7 +1483,7 @@ public final class ObservableCollectionImpl {
 			try (Transaction t = lock(false, null)) {
 				SubscriptionCause.doWith(new SubscriptionCause(), c -> {
 					int index = 0;
-					for (DerivedCollectionElement<E, T> element : thePresentElements) {
+					for (DerivedElementHolder<E, T> element : theDerivedElements) {
 						observer.accept(
 							new ObservableCollectionEvent<>(element, getType(), index++, CollectionChangeType.add, null, element.get(), c));
 					}
@@ -1436,7 +1498,7 @@ public final class ObservableCollectionImpl {
 						changeSub.unsubscribe();
 						SubscriptionCause.doWith(new SubscriptionCause(), c -> {
 							int index = 0;
-							for (DerivedCollectionElement<E, T> element : thePresentElements) {
+							for (DerivedElementHolder<E, T> element : theDerivedElements) {
 								observer.accept(new ObservableCollectionEvent<>(element, getType(), index++, CollectionChangeType.remove,
 									element.get(), element.get(), c));
 							}
@@ -1478,24 +1540,24 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public int size() {
-			return thePresentElements.size();
+			return theDerivedElements.size();
 		}
 
 		@Override
 		public boolean isEmpty() {
-			return thePresentElements.isEmpty();
+			return theDerivedElements.isEmpty();
 		}
 
 		@Override
 		public T get(int index) {
 			try (Transaction t = lock(false, null)) {
-				return thePresentElements.get(index).get();
+				return theDerivedElements.get(index).get();
 			}
 		}
 
 		@Override
 		public CollectionElement<T> getElement(int index) {
-			return observableElementFor(thePresentElements.get(index));
+			return observableElementFor(theDerivedElements.get(index));
 		}
 
 		@Override
@@ -1506,20 +1568,20 @@ public final class ObservableCollectionImpl {
 					ElementId id = finder.findElement(value, first);
 					if (id == null)
 						return null;
-					List<DerivedCollectionElement<E, T>> elements = theElements.get(id);
+					List<DerivedElementHolder<E, T>> elements = theElements.get(id);
 					if (elements == null)
 						throw new IllegalStateException(MutableCollectionElement.StdMsg.NOT_FOUND);
 					if(!first){
 						elements = new ArrayList<>(elements);
 						java.util.Collections.reverse(elements);
 					}
-					for (DerivedCollectionElement<E, T> element : elements) {
+					for (DerivedElementHolder<E, T> element : elements) {
 						if (element.presentNode != null)
 							return observableElementFor(element);
 					}
 					return null;
 				}
-				for (DerivedCollectionElement<E, T> el : (first ? thePresentElements : thePresentElements.reverse()))
+				for (DerivedElementHolder<E, T> el : (first ? theDerivedElements : theDerivedElements.reverse()))
 					if (equivalence().elementEquals(el.get(), value))
 						return observableElementFor(el);
 				return null;
@@ -1528,22 +1590,22 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public CollectionElement<T> getElement(ElementId id) {
-			return observableElementFor((DerivedCollectionElement<E, T>) id);
+			return observableElementFor((DerivedElementHolder<E, T>) id);
 		}
 
 		@Override
 		public MutableCollectionElement<T> mutableElement(ElementId id) {
-			DerivedCollectionElement<E, T> el = (DerivedCollectionElement<E, T>) id;
+			DerivedElementHolder<E, T> el = (DerivedElementHolder<E, T>) id;
 			return el.manager.map(theSource.mutableElement(el.check().manager.getElementId()), el);
 		}
 
 		@Override
 		public MutableElementSpliterator<T> spliterator(ElementId element, boolean asNext) {
-			DerivedCollectionElement<E, T> el = (DerivedCollectionElement<E, T>) element;
-			return new MutableDerivedSpliterator(thePresentElements.spliterator(el.check().presentNode.getElementId(), asNext));
+			DerivedElementHolder<E, T> el = (DerivedElementHolder<E, T>) element;
+			return new MutableDerivedSpliterator(theDerivedElements.spliterator(el.check().presentNode.getElementId(), asNext));
 		}
 
-		protected CollectionElement<T> observableElementFor(DerivedCollectionElement<E, T> el) {
+		protected CollectionElement<T> observableElementFor(DerivedElementHolder<E, T> el) {
 			el.check();
 			return new CollectionElement<T>() {
 				@Override
@@ -1560,10 +1622,10 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public MutableElementSpliterator<T> spliterator(boolean fromStart) {
-			return new MutableDerivedSpliterator(thePresentElements.spliterator(fromStart));
+			return new MutableDerivedSpliterator(theDerivedElements.spliterator(fromStart));
 		}
 
-		protected MutableElementSpliterator<T> spliterator(ElementSpliterator<DerivedCollectionElement<E, T>> elementSpliter) {
+		protected MutableElementSpliterator<T> spliterator(ElementSpliterator<DerivedElementHolder<E, T>> elementSpliter) {
 			return new MutableDerivedSpliterator(elementSpliter);
 		}
 
@@ -1592,7 +1654,7 @@ public final class ObservableCollectionImpl {
 				if (reversed.throwIfError(IllegalArgumentException::new) != null)
 					return null;
 				CollectionElement<E> sourceElement = theSource.addElement(reversed.result, first);
-				List<DerivedCollectionElement<E, T>> elements = theElements.get(sourceElement.getElementId());
+				List<DerivedElementHolder<E, T>> elements = theElements.get(sourceElement.getElementId());
 				return observableElementFor(elements.get(elements.size() - 1)); // Should have been added
 			}
 		}
@@ -1623,10 +1685,10 @@ public final class ObservableCollectionImpl {
 		}
 
 		private class MutableDerivedSpliterator extends MutableElementSpliterator.SimpleMutableSpliterator<T> {
-			private final ElementSpliterator<DerivedCollectionElement<E, T>> theElementSpliter;
+			private final ElementSpliterator<DerivedElementHolder<E, T>> theElementSpliter;
 
-			MutableDerivedSpliterator(ElementSpliterator<DerivedCollectionElement<E, T>> elementSpliter) {
-				super(DerivedCollection.this);
+			MutableDerivedSpliterator(ElementSpliterator<DerivedElementHolder<E, T>> elementSpliter) {
+				super(ActiveDerivedCollection.this);
 				theElementSpliter = elementSpliter;
 			}
 
@@ -1658,7 +1720,7 @@ public final class ObservableCollectionImpl {
 
 			@Override
 			public MutableElementSpliterator<T> trySplit() {
-				ElementSpliterator<DerivedCollectionElement<E, T>> split = theElementSpliter.trySplit();
+				ElementSpliterator<DerivedElementHolder<E, T>> split = theElementSpliter.trySplit();
 				return split == null ? null : new MutableDerivedSpliterator(split);
 			}
 		}
@@ -1673,9 +1735,9 @@ public final class ObservableCollectionImpl {
 
 	/**
 	 * <p>
-	 * This collection is a base class for gimped collections that rely on {@link DerivedCollection} for almost all their functionality and
+	 * This collection is a base class for gimped collections that rely on {@link ActiveDerivedCollection} for almost all their functionality and
 	 * must be used as the base of a {@link CollectionDataFlow#isLightWeight() heavy-weight} data flow. Such collections should never be
-	 * used, except as a source for DerivedCollection.
+	 * used, except as a source for ActiveDerivedCollection.
 	 * </p>
 	 *
 	 * @param <E> The type of the collection
@@ -1739,7 +1801,7 @@ public final class ObservableCollectionImpl {
 
 			@Override
 			public ObservableCollection<E> collect(Observable<?> until) {
-				return new DerivedCollection<>(getSource(), manageCollection(), until);
+				return new ActiveDerivedCollection<>(getSource(), manageCollection(), until);
 			}
 		}
 	}

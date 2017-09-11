@@ -42,6 +42,7 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.tree.BetterTreeList;
+import org.qommons.tree.BetterTreeMap;
 import org.qommons.tree.BetterTreeSet;
 import org.qommons.tree.BinaryTreeNode;
 
@@ -140,8 +141,6 @@ public class ObservableCollectionDataFlowImpl {
 		FilterMapResult<T, E> canAdd(FilterMapResult<T, E> toAdd);
 
 		void begin(Consumer<DerivedCollectionElement<T>> onElement, Observable<?> until);
-
-		ElementController<E> addElement(MutableCollectionElement<E> source, Object cause);
 	}
 
 	public static interface DerivedCollectionElement<E> extends Comparable<DerivedCollectionElement<E>> {
@@ -165,9 +164,9 @@ public class ObservableCollectionDataFlowImpl {
 	}
 
 	public static interface CollectionElementListener<E> {
-		void update(DerivedCollectionElement<E> element, E oldValue, E newValue, Object cause);
+		void update(E oldValue, E newValue, Object cause);
 
-		void removed(DerivedCollectionElement<E> element, E value, Object cause);
+		void removed(E value, Object cause);
 	}
 
 	public static abstract class AbstractDataFlow<E, I, T> implements CollectionDataFlow<E, I, T> {
@@ -1168,27 +1167,24 @@ public class ObservableCollectionDataFlowImpl {
 	}
 
 	public static class BaseCollectionManager<E> extends AbstractCollectionManager<E, E, E> {
-		private final Equivalence<? super E> theEquivalence;
-		private final ReentrantReadWriteLock theLock;
+		private final ObservableCollection<E> theSource;
+		private Subscription theWeakSubscription;
+		private final BetterTreeMap<ElementId, CollectionElementListener<E>> theElementListeners;
 
-		public BaseCollectionManager(TypeToken<E> targetType, Equivalence<? super E> equivalence, boolean threadSafe) {
-			super(null, targetType);
-			theEquivalence = equivalence;
-			theLock = threadSafe ? new ReentrantReadWriteLock() : null;
+		public BaseCollectionManager(ObservableCollection<E> source) {
+			super(null, source.getType());
+			theSource = source;
+			theElementListeners = new BetterTreeMap<>(false, ElementId::compareTo);
 		}
 
 		@Override
 		public Transaction lock(boolean write, Object cause) {
-			if (theLock == null)
-				return Transaction.NONE;
-			Lock lock = write ? theLock.writeLock() : theLock.readLock();
-			lock.lock();
-			return () -> lock.unlock();
+			return theSource.lock(write, cause);
 		}
 
 		@Override
 		public Equivalence<? super E> equivalence() {
-			return theEquivalence;
+			return theSource.equivalence();
 		}
 
 		@Override
@@ -1196,27 +1192,87 @@ public class ObservableCollectionDataFlowImpl {
 			return null;
 		}
 
-		@Override
-		public FilterMapResult<E, E> mapTop(FilterMapResult<E, E> source) {
-			source.result = source.source;
-			return source;
-		}
-
-		@Override
-		public FilterMapResult<E, E> reverseTop(FilterMapResult<E, E> dest) {
-			dest.result = dest.source;
-			return dest;
-		}
-
-		@Override
-		protected void elementCreated(DerivedCollectionElement<E> parent) {
-			// No parent--shouldn't ever be called
-		}
-
 		/* Overridden because the super method invokes the parent */
 		@Override
-		public boolean isOneToOne() {
+		public boolean isEachRepresented() {
 			return true;
+		}
+
+		@Override
+		public void begin(Consumer<DerivedCollectionElement<E>> onElement, Observable<?> until) {
+			class BaseDerivedElement implements DerivedCollectionElement<E> {
+				private final MutableCollectionElement<E> source;
+
+				BaseDerivedElement(MutableCollectionElement<E> src) {
+					source = src;
+				}
+
+				@Override
+				public int compareTo(DerivedCollectionElement<E> o) {
+					return source.getElementId().compareTo(((BaseDerivedElement) o).source.getElementId());
+				}
+
+				@Override
+				public void setListener(CollectionElementListener<E> listener) {
+					theElementListeners.put(source.getElementId(), listener);
+				}
+
+				@Override
+				public E get() {
+					return source.get();
+				}
+
+				@Override
+				public String isEnabled() {
+					return source.isEnabled();
+				}
+
+				@Override
+				public String isAcceptable(E value) {
+					return source.isAcceptable(value);
+				}
+
+				@Override
+				public void set(E value) throws UnsupportedOperationException, IllegalArgumentException {
+					source.set(value);
+				}
+
+				@Override
+				public String canRemove() {
+					return source.canRemove();
+				}
+
+				@Override
+				public void remove() throws UnsupportedOperationException {
+					source.remove();
+				}
+
+				@Override
+				public String canAdd(E value, boolean before) {
+					return source.canAdd(value, before);
+				}
+
+				@Override
+				public DerivedCollectionElement<E> add(E value, boolean before)
+					throws UnsupportedOperationException, IllegalArgumentException {
+					ElementId newId = source.add(value, before);
+
+					// TODO Auto-generated method stub
+				}
+			}
+			// Need to hold on to the subscription because it contains strong references that keep the listeners alive
+			theWeakSubscription = WeakConsumer.build()//
+				.<ObservableCollectionEvent<? extends E>> withAction(evt -> {
+					switch (evt.getType()) {
+					case add:
+						BaseDerivedElement el = new BaseDerivedElement(theSource.mutableElement(evt.getElementId()));
+						getElementAccepter().accept(el);
+					case remove:
+					case set:
+						// TODO Auto-generated method stub
+					}
+				}, action -> theSource.subscribe(action, true).removeAll())//
+				.withUntil(until::act).build();
 		}
 
 		@Override
