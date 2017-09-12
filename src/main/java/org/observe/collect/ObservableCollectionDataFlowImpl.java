@@ -8,8 +8,6 @@ import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -28,11 +26,7 @@ import org.observe.collect.ObservableCollection.MappedCollectionBuilder;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
-import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionElementManager;
-import org.observe.collect.ObservableCollectionDataFlowImpl.DerivedCollectionElement;
-import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
-import org.observe.collect.ObservableCollectionDataFlowImpl.FilteredCollectionManager;
-import org.observe.collect.ObservableCollectionDataFlowImpl.NonMappingCollectionElement;
+import org.observe.collect.ObservableCollectionDataFlowImpl.IntersectionManager;
 import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.DerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.DerivedLWCollection;
@@ -46,8 +40,6 @@ import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeMap;
-import org.qommons.tree.BetterTreeSet;
-import org.qommons.tree.BinaryTreeNode;
 
 import com.google.common.reflect.TypeToken;
 
@@ -145,7 +137,11 @@ public class ObservableCollectionDataFlowImpl {
 
 		DerivedCollectionElement<T> addElement(T value, boolean first);
 
-		void begin(Consumer<DerivedCollectionElement<T>> onElement, Observable<?> until);
+		void begin(ElementAccepter<T> onElement, Observable<?> until);
+	}
+
+	public static interface ElementAccepter<E> {
+		void accept(DerivedCollectionElement<E> element, Object cause);
 	}
 
 	public static interface DerivedCollectionElement<E> extends Comparable<DerivedCollectionElement<E>> {
@@ -1143,14 +1139,14 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public void begin(Consumer<DerivedCollectionElement<E>> onElement, Observable<?> until) {
+		public void begin(ElementAccepter<E> onElement, Observable<?> until) {
 			// Need to hold on to the subscription because it contains strong references that keep the listeners alive
 			theWeakSubscription = WeakConsumer.build()//
 				.<ObservableCollectionEvent<? extends E>> withAction(evt -> {
 					switch (evt.getType()) {
 					case add:
 						BaseDerivedElement el = new BaseDerivedElement(theSource.mutableElement(evt.getElementId()));
-						onElement.accept(el);
+						onElement.accept(el, evt);
 						break;
 					case remove:
 						theElementListeners.remove(evt.getElementId()).removed(evt.getOldValue(), evt);
@@ -1223,11 +1219,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
-	public static class SortedManager2<E, T> implements ActiveCollectionManager<E, T, T> {
+	public static class SortedManager<E, T> implements ActiveCollectionManager<E, T, T> {
 		private final ActiveCollectionManager<E, ?, T> theParent;
 		private final Comparator<? super T> theCompare;
 
-		public SortedManager2(ActiveCollectionManager<E, ?, T> parent, Comparator<? super T> compare) {
+		public SortedManager(ActiveCollectionManager<E, ?, T> parent, Comparator<? super T> compare) {
 			theParent = parent;
 			theCompare = compare;
 		}
@@ -1269,8 +1265,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public void begin(Consumer<DerivedCollectionElement<T>> onElement, Observable<?> until) {
-			theParent.begin(parentEl -> onElement.accept(new SortedElement(parentEl)), until);
+		public void begin(ElementAccepter<T> onElement, Observable<?> until) {
+			theParent.begin((parentEl, cause) -> onElement.accept(new SortedElement(parentEl), cause), until);
 		}
 
 		class SortedElement implements DerivedCollectionElement<T> {
@@ -1335,157 +1331,13 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
-	public static class SortedManager<E, T> extends NonMappingCollectionManager<E, T> {
-		private final Comparator<? super T> theCompare;
-		private final Equivalence<? super T> theEquivalence;
-
-		protected SortedManager(AbstractCollectionManager<E, ?, T> parent, Comparator<? super T> compare) {
-			super(parent);
-			theCompare = compare;
-			theEquivalence = Equivalence.of((Class<T>) parent.getTargetType().getRawType(), theCompare, true);
-		}
-
-		@Override
-		public Equivalence<? super T> equivalence() {
-			return theEquivalence;
-		}
-
-		@Override
-		protected FilterMapResult<T, T> canAddTop(FilterMapResult<T, T> dest) {
-			// TODO Auto-generated method stub
-			return null;
-		}
-
-		@Override
-		protected void begin(Observable<?> until) {}
-
-		@Override
-		protected void elementCreated(DerivedCollectionElement<T> parent) {
-			class SortedElementI
-			class SortedElement implements DerivedCollectionElement<T>{
-				@Override
-				public boolean isPresent() {
-					return parent.isPresent();
-				}
-
-				@Override
-				public ElementId getElementId() {
-					// TODO Auto-generated method stub
-					return null;
-				}
-
-				@Override
-				public T get() {
-					// TODO Auto-generated method stub
-					return null;
-				}
-
-				@Override
-				public String isEnabled() {
-					// TODO Auto-generated method stub
-					return null;
-				}
-
-				@Override
-				public String isAcceptable(T value) {
-					// TODO Auto-generated method stub
-					return null;
-				}
-
-				@Override
-				public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
-					// TODO Auto-generated method stub
-
-				}
-
-				@Override
-				public String canRemove() {
-					// TODO Auto-generated method stub
-					return null;
-				}
-
-				@Override
-				public void remove() throws UnsupportedOperationException {
-					// TODO Auto-generated method stub
-
-				}
-
-				@Override
-				public String canAdd(T value, boolean before) {
-					// TODO Auto-generated method stub
-					return null;
-				}
-
-				@Override
-				public ElementId add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-					// TODO Auto-generated method stub
-					return null;
-				}
-			}
-		}
-
-		@Override
-		public void createElement(ElementId id, E init, Object cause, Consumer<CollectionElementManager<E, ?, T>> onElement) {
-			class SortedElement extends NonMappingCollectionElement<E, T> {
-				SortedElement(CollectionElementManager<E, ?, T> parent) {
-					super(SortedManager.this, parent, id, init, cause);
-				}
-
-				@Override
-				public T get() {
-					return getParent().get();
-				}
-
-				@Override
-				protected boolean refresh(T source, Object cause) {
-					return true;
-				}
-
-				@Override
-				public int compareTo(CollectionElementManager<E, ?, T> other) {
-					int compare = theCompare.compare(get(), other.get());
-					if (compare != 0)
-						return compare;
-					return super.compareTo(other);
-				}
-
-				@Override
-				protected FilterMapResult<T, E> filterAccept(FilterMapResult<T, E> value, boolean isReplacing) {
-					if (get() != value.source && theCompare.compare(get(), value.source) != 0)
-						return value.reject("Cannot modify a sorted value", true);
-					return super.filterAccept(value, isReplacing);
-				}
-
-				@Override
-				protected FilterMapResult<T, E> filterAdd(FilterMapResult<T, E> value, boolean before, boolean isAdding) {
-					value.reject("Cannot add values to a sorted collection via spliteration", true);
-					return value;
-				}
-
-				@Override
-				protected FilterMapResult<T, E> filterInterceptSet(FilterMapResult<T, E> value) {
-					if (get() != value.source && theCompare.compare(get(), value.source) != 0)
-						return value.reject("Cannot modify a sorted value", true);
-					return super.filterInterceptSet(value);
-				}
-
-				@Override
-				protected void interceptSet(FilterMapResult<T, E> value) throws UnsupportedOperationException, IllegalArgumentException {
-					if (get() != value.source && theCompare.compare(get(), value.source) != 0)
-						throw new UnsupportedOperationException("Cannot modify a sorted value");
-					super.interceptSet(value);
-				}
-			}
-			getParent().addElement(id, init, cause, el -> onElement.accept(new SortedElement(el)));
-		}
-	}
-
-	public static class FilteredCollectionManager2<E, T> implements ActiveCollectionManager<E, T, T> {
+	public static class FilteredCollectionManager<E, T> implements ActiveCollectionManager<E, T, T> {
 		private final ActiveCollectionManager<E, ?, T> theParent;
 		private final Function<? super T, String> theFilter;
 		private final boolean isStatic;
+		private ElementAccepter<T> theElementAccepter;
 
-		public FilteredCollectionManager2(ActiveCollectionManager<E, ?, T> parent, Function<? super T, String> filter, boolean isStatic) {
+		public FilteredCollectionManager(ActiveCollectionManager<E, ?, T> parent, Function<? super T, String> filter, boolean isStatic) {
 			theParent = parent;
 			theFilter = filter;
 			this.isStatic = isStatic;
@@ -1530,105 +1382,131 @@ public class ObservableCollectionDataFlowImpl {
 			if (msg != null)
 				throw new IllegalArgumentException(msg);
 			DerivedCollectionElement<T> parentEl = theParent.addElement(value, first);
-			return parentEl == null ? null : new FilteredElement(parentEl);
+			if (parentEl == null || theFilter.apply(parentEl.get()) != null)
+				return null;
+			return new FilteredElement(parentEl, true, true);
 		}
 
 		@Override
-		public void begin(Consumer<DerivedCollectionElement<T>> onElement, Observable<?> until) {
-			// TODO Auto-generated method stub
-
+		public void begin(ElementAccepter<T> onElement, Observable<?> until) {
+			theElementAccepter = onElement;
+			theParent.begin((parentEl, cause) -> {
+				String msg = theFilter.apply(parentEl.get());
+				if (msg == null)
+					onElement.accept(new FilteredElement(parentEl, false, true), cause);
+				else if (isStatic) {
+					return;
+				} else
+					new FilteredElement(parentEl, false, false);
+			}, until);
 		}
 
 		class FilteredElement implements DerivedCollectionElement<T> {
 			private final DerivedCollectionElement<T> theParentEl;
+			private final boolean isSynthetic;
+			private boolean included;
+			private CollectionElementListener<T> theListener;
 
-			FilteredElement(DerivedCollectionElement<T> parentEl) {
+			FilteredElement(DerivedCollectionElement<T> parentEl, boolean synthetic, boolean included) {
 				theParentEl = parentEl;
+				isSynthetic = synthetic;
+				this.included = included;
+				if (!isSynthetic && !isStatic) {
+					theParentEl.setListener(new CollectionElementListener<T>() {
+						@Override
+						public void update(T oldValue, T newValue, Object cause) {
+							boolean oldIncluded = FilteredElement.this.included;
+							boolean newIncluded = theFilter.apply(newValue) == null;
+							FilteredElement.this.included = newIncluded;
+							if (!oldIncluded && newIncluded) {
+								theElementAccepter.accept(FilteredElement.this, cause);
+							} else if (oldIncluded && !newIncluded && theListener != null) {
+								theListener.removed(oldValue, cause);
+								theListener = null;
+							} else if (oldIncluded && newIncluded && theListener != null)
+								theListener.update(oldValue, newValue, cause);
+						}
+
+						@Override
+						public void removed(T value, Object cause) {
+							if (FilteredElement.this.included && theListener != null) {
+								theListener.removed(value, cause);
+								theListener = null;
+							}
+						}
+					});
+				}
+			}
+
+			@Override
+			public int compareTo(DerivedCollectionElement<T> o) {
+				return theParentEl.compareTo(((FilteredElement) o).theParentEl);
+			}
+
+			@Override
+			public void setListener(CollectionElementListener<T> listener) {
+				if (isStatic)
+					theParentEl.setListener(listener);
+				else
+					theListener = listener;
+			}
+
+			@Override
+			public T get() {
+				return theParentEl.get();
+			}
+
+			@Override
+			public String isEnabled() {
+				return theParentEl.isEnabled();
+			}
+
+			@Override
+			public String isAcceptable(T value) {
+				String msg = theFilter.apply(value);
+				if (msg == null)
+					msg = theParentEl.isAcceptable(value);
+				return msg;
+			}
+
+			@Override
+			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
+				String msg = theFilter.apply(value);
+				if (msg != null)
+					throw new IllegalArgumentException(msg);
+				theParentEl.set(value);
+			}
+
+			@Override
+			public String canRemove() {
+				return theParentEl.canRemove();
+			}
+
+			@Override
+			public void remove() throws UnsupportedOperationException {
+				theParentEl.remove();
+			}
+
+			@Override
+			public String canAdd(T value, boolean before) {
+				String msg = theFilter.apply(value);
+				if (msg == null)
+					msg = theParentEl.canAdd(value, before);
+				return msg;
+			}
+
+			@Override
+			public DerivedCollectionElement<T> add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
+				String msg = theFilter.apply(value);
+				if (msg != null)
+					throw new IllegalArgumentException(msg);
+				DerivedCollectionElement<T> parentEl = theParentEl.add(value, before);
+				return parentEl == null ? null : new FilteredElement(parentEl, true, true);
 			}
 		}
 	}
 
-	public static class FilteredCollectionManager<E, T> extends NonMappingCollectionManager<E, T> {
-		private final Function<? super T, String> theFilter;
-		private final boolean isStaticFilter;
-
-		protected FilteredCollectionManager(CollectionManager<E, ?, T> parent, Function<? super T, String> filter, boolean staticFilter) {
-			super(parent);
-			theFilter = filter;
-			this.isStaticFilter = staticFilter;
-		}
-
-		@Override
-		public Equivalence<? super T> equivalence() {
-			return getParent().equivalence();
-		}
-
-		@Override
-		public boolean isFiltered() {
-			return true;
-		}
-
-		@Override
-		public FilterMapResult<E, T> map(FilterMapResult<E, T> source) {
-			getParent().map(source);
-			String error = theFilter.apply(source.result);
-			if (error != null)
-				source.reject(error, true);
-			return source;
-		}
-
-		@Override
-		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest) {
-			String error = theFilter.apply(dest.source);
-			if (error != null)
-				dest.reject(error, true);
-			else
-				getParent().reverse(dest);
-			return dest;
-		}
-
-		@Override
-		public void begin(Observable<?> until) {}
-
-		@Override
-		public void createElement(ElementId id, E init, Object cause, Consumer<CollectionElementManager<E, ?, T>> onElement) {
-			getParent().addElement(id, init, cause, parentElement -> {
-				if (isStaticFilter) {
-					T value = parentElement.get();
-					if (theFilter.apply(value) == null)
-						onElement.accept(parentElement);
-				} else {
-					class FilteredElement extends NonMappingCollectionElement<E, T> {
-						private boolean isPresent;
-
-						protected FilteredElement(CollectionElementManager<E, ?, T> parent) {
-							super(FilteredCollectionManager.this, parent, id, init, cause);
-							isPresent = theFilter.apply(getParent().get()) == null;
-						}
-
-						@Override
-						public boolean isPresent() {
-							return isPresent && super.isPresent();
-						}
-
-						@Override
-						public T get() {
-							return getParent().get();
-						}
-
-						@Override
-						protected boolean refresh(T source, Object cause) {
-							isPresent = theFilter.apply(source) == null;
-							return true;
-						}
-					}
-					onElement.accept(new FilteredElement(parentElement));
-				}
-			});
-		}
-	}
-
-	protected static class IntersectionManager<E, T, X> extends NonMappingCollectionManager<E, T> {
+	public static class IntersectionManager2<E, T, X> implements ActiveCollectionManager<E, T, T> {
 		private class IntersectionElement {
 			int rightCount;
 			final Set<ElementId> leftElements;
@@ -1638,9 +1516,10 @@ public class ObservableCollectionDataFlowImpl {
 			}
 		}
 
+		private final ActiveCollectionManager<E, ?, T> theParent;
 		private final ObservableCollection<X> theFilter;
 		private final Equivalence<? super T> theEquivalence; // Make this a field since we'll need it often
-		/** Whether a values' presence in the right causes the value in the left to be present (true) or absent (false) in the result */
+		/** Whether a value's presence in the right causes the value in the left to be present (true) or absent (false) in the result */
 		private final boolean isExclude;
 		private Map<T, IntersectionElement> theValues;
 		// The following two fields are needed because the values may mutate
@@ -1648,8 +1527,8 @@ public class ObservableCollectionDataFlowImpl {
 		private Map<ElementId, IntersectionElement> theRightElementValues;
 		private Subscription theCountSub; // Need to hold a strong ref to this to prevent GC of listeners
 
-		public IntersectionManager(CollectionManager<E, ?, T> parent, ObservableCollection<X> filter, boolean exclude) {
-			super(parent);
+		public IntersectionManager2(ActiveCollectionManager<E, ?, T> parent, ObservableCollection<X> filter, boolean exclude) {
+			theParent = parent;
 			theFilter = filter;
 			theEquivalence = parent.equivalence();
 			isExclude = exclude;
@@ -1663,30 +1542,9 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public FilterMapResult<T, T> mapTop(FilterMapResult<T, T> source) {
-			FilterMapResult<T, T> res = super.mapTop(source);
-			if (res.isAccepted()) {
-				IntersectionElement element = theValues.get(res.result);
-				boolean rightPresent = element != null && element.rightCount != 0;
-				if (rightPresent == isExclude)
-					res.reject(StdMsg.ILLEGAL_ELEMENT, false);
-			}
-			return res;
-		}
-
-		@Override
-		public FilterMapResult<T, T> reverseTop(FilterMapResult<T, T> dest) {
-			IntersectionElement element = theValues.get(dest.source);
-			boolean rightPresent = element != null && element.rightCount != 0;
-			if (rightPresent == isExclude)
-				return dest.reject(StdMsg.ILLEGAL_ELEMENT, false);
-			return super.reverseTop(dest);
-		}
-
-		@Override
-		protected void begin(Observable<?> until) {
+		public void begin(ElementAccepter<T> onElement, Observable<?> until) {
 			theCountSub = WeakConsumer.build().<ObservableCollectionEvent<? extends X>> withAction(evt -> {
-				try (Transaction t = getParent().lock(false, evt)) {
+				try (Transaction t = theParent.lock(false, evt)) {
 					IntersectionElement element;
 					switch (evt.getType()) {
 					case add:
@@ -1728,40 +1586,20 @@ public class ObservableCollectionDataFlowImpl {
 						break;
 					}
 				}
-			}, action -> theFilter.subscribe(action, true).removeAll()).build();
+			}, action -> theFilter.subscribe(action, true).removeAll()).withUntil(until::act).build();
+			theParent.begin((parentEl, cause) -> {
+				IntersectedCollectionElement el = new IntersectedCollectionElement(parentEl);
+				if (el.isPresent())
+					onElement.accept(el, cause);
+			}, until);
 		}
 
-		private void update(Set<ElementId> leftElements, Object cause) {
-			for (ElementId element : leftElements)
-				getUpdateListener().accept(new CollectionUpdate(this, element, cause));
-		}
+		class IntersectedCollectionElement implements DerivedCollectionElement<T> {
+			private final DerivedCollectionElement<T> theParentEl;
 
-		@Override
-		public void createElement(ElementId id, E init, Object cause, Consumer<CollectionElementManager<E, ?, T>> onElement) {
-			class IntersectedCollectionElement extends NonMappingCollectionElement<E, T> {
-				IntersectedCollectionElement(CollectionElementManager<E, ?, T> parent) {
-					super(IntersectionManager.this, parent, id, init, cause);
-				}
-
-				@Override
-				public T get() {
-					return getParent().get();
-				}
-
-				@Override
-				public boolean isPresent() {
-					if (!super.isPresent())
-						return false;
-					boolean rightIncluded = theLeftElementValues.get(getElementId()).rightCount > 0;
-					return rightIncluded != isExclude;
-				}
-
-				@Override
-				protected boolean refresh(T source, Object cause2) {
-					return false; // If the present state doesn't change, don't fire an update
-				}
+			IntersectedCollectionElement(DerivedCollectionElement<T> parentEl) {
+				theParentEl = parentEl;
 			}
-			getParent().addElement(id, init, cause, el -> onElement.accept(new IntersectedCollectionElement(el)));
 		}
 	}
 

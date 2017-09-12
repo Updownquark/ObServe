@@ -29,6 +29,7 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.BaseCollectionDataFl
 import org.observe.collect.ObservableCollectionDataFlowImpl.BaseCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionElementListener;
 import org.observe.collect.ObservableCollectionDataFlowImpl.DerivedCollectionElement;
+import org.observe.collect.ObservableCollectionDataFlowImpl.ElementAccepter;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
 import org.qommons.ArrayUtils;
@@ -1292,51 +1293,46 @@ public final class ObservableCollectionImpl {
 			// Must maintain a strong reference to the event listener so it is not GC'd while the collection is still alive
 
 			// Begin listening
-			SubscriptionCause[] initial = new SubscriptionCause[] { new SubscriptionCause() };
-			SubscriptionCause.doWith(initial[0], c -> {
-				Consumer<DerivedCollectionElement<T>> onElement = el -> {
-					if (initial[0] == null)
-						theStructureStamp.incrementAndGet();
-					DerivedElementHolder<T> holder = new DerivedElementHolder<>(el);
-					holder.treeNode = theDerivedElements.addElement(holder, false);
-					fireListeners(new ObservableCollectionEvent<>(holder, theFlow.getTargetType(), holder.treeNode.getNodesBefore(),
-						CollectionChangeType.add, null, el.get(), initial[0]));
-					el.setListener(new CollectionElementListener<T>() {
-						@Override
-						public void update(T oldValue, T newValue, Object cause) {
-							BinaryTreeNode<DerivedElementHolder<T>> left = holder.treeNode.getClosest(true);
-							BinaryTreeNode<DerivedElementHolder<T>> right = holder.treeNode.getClosest(false);
-							if ((left != null && left.compareTo(holder.treeNode) > 0)
-								|| (right != null && right.compareTo(holder.treeNode) < 0)) {
-								theStructureStamp.incrementAndGet();
-								// Remove the element and re-add at the new position.
-								int index = holder.treeNode.getNodesBefore();
-								theDerivedElements.mutableElement(holder.treeNode.getElementId()).remove();
-								fireListeners(new ObservableCollectionEvent<>(holder, theFlow.getTargetType(), index,
-									CollectionChangeType.remove, oldValue, null, cause));
-								holder.treeNode = theDerivedElements.addElement(holder, false);
-								fireListeners(new ObservableCollectionEvent<>(holder, theFlow.getTargetType(),
-									holder.treeNode.getNodesBefore(), CollectionChangeType.add, null, newValue, cause));
-							} else {
-								theModCount.incrementAndGet();
-								fireListeners(new ObservableCollectionEvent<>(holder, getType(), holder.treeNode.getNodesBefore(),
-									CollectionChangeType.set, oldValue, newValue, cause));
-							}
-						}
-
-						@Override
-						public void removed(T value, Object cause) {
+			ElementAccepter<T> onElement = (el, cause) -> {
+				theStructureStamp.incrementAndGet();
+				DerivedElementHolder<T> holder = new DerivedElementHolder<>(el);
+				holder.treeNode = theDerivedElements.addElement(holder, false);
+				fireListeners(new ObservableCollectionEvent<>(holder, theFlow.getTargetType(), holder.treeNode.getNodesBefore(),
+					CollectionChangeType.add, null, el.get(), cause));
+				el.setListener(new CollectionElementListener<T>() {
+					@Override
+					public void update(T oldValue, T newValue, Object elCause) {
+						BinaryTreeNode<DerivedElementHolder<T>> left = holder.treeNode.getClosest(true);
+						BinaryTreeNode<DerivedElementHolder<T>> right = holder.treeNode.getClosest(false);
+						if ((left != null && left.compareTo(holder.treeNode) > 0)
+							|| (right != null && right.compareTo(holder.treeNode) < 0)) {
 							theStructureStamp.incrementAndGet();
+							// Remove the element and re-add at the new position.
 							int index = holder.treeNode.getNodesBefore();
 							theDerivedElements.mutableElement(holder.treeNode.getElementId()).remove();
 							fireListeners(new ObservableCollectionEvent<>(holder, theFlow.getTargetType(), index,
-								CollectionChangeType.remove, value, null, cause));
+								CollectionChangeType.remove, oldValue, null, elCause));
+							holder.treeNode = theDerivedElements.addElement(holder, false);
+							fireListeners(new ObservableCollectionEvent<>(holder, theFlow.getTargetType(), holder.treeNode.getNodesBefore(),
+								CollectionChangeType.add, null, newValue, elCause));
+						} else {
+							theModCount.incrementAndGet();
+							fireListeners(new ObservableCollectionEvent<>(holder, getType(), holder.treeNode.getNodesBefore(),
+								CollectionChangeType.set, oldValue, newValue, elCause));
 						}
-					});
-				};
-				theFlow.begin(onElement, until);
-				initial[0] = null;
-			});
+					}
+
+					@Override
+					public void removed(T value, Object elCause) {
+						theStructureStamp.incrementAndGet();
+						int index = holder.treeNode.getNodesBefore();
+						theDerivedElements.mutableElement(holder.treeNode.getElementId()).remove();
+						fireListeners(new ObservableCollectionEvent<>(holder, theFlow.getTargetType(), index, CollectionChangeType.remove,
+							value, null, elCause));
+					}
+				});
+			};
+			theFlow.begin(onElement, until);
 		}
 
 		protected ObservableCollection<E> getSource() {
