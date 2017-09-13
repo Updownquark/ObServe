@@ -1,11 +1,12 @@
 package org.observe.collect;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -1508,11 +1509,45 @@ public class ObservableCollectionDataFlowImpl {
 
 	public static class IntersectionManager2<E, T, X> implements ActiveCollectionManager<E, T, T> {
 		private class IntersectionElement {
-			int rightCount;
-			final Set<ElementId> leftElements;
+			private int rightCount;
+			final List<IntersectedCollectionElement> leftElements;
 
 			IntersectionElement() {
-				leftElements = new HashSet<>();
+				leftElements = new ArrayList<>();
+			}
+
+			boolean isPresent() {
+				return (rightCount > 0) ^ isExclude;
+			}
+
+			void incrementRight(Object cause) {
+				rightCount++;
+				if (rightCount == 1)
+					presentChanged(cause);
+			}
+
+			void decrementRight(Object cause) {
+				rightCount--;
+				if (rightCount == 0)
+					presentChanged(cause);
+			}
+
+			private void presentChanged(Object cause) {
+				if (isPresent()) {
+					for (IntersectedCollectionElement el : leftElements)
+						theAccepter.accept(el, cause);
+				} else {
+					for (IntersectedCollectionElement el : leftElements)
+						el.fireRemove();
+				}
+			}
+		}
+
+		class IntersectedCollectionElement implements DerivedCollectionElement<T> {
+			private final DerivedCollectionElement<T> theParentEl;
+
+			IntersectedCollectionElement(DerivedCollectionElement<T> parentEl) {
+				theParentEl = parentEl;
 			}
 		}
 
@@ -1523,9 +1558,10 @@ public class ObservableCollectionDataFlowImpl {
 		private final boolean isExclude;
 		private Map<T, IntersectionElement> theValues;
 		// The following two fields are needed because the values may mutate
-		private Map<ElementId, IntersectionElement> theLeftElementValues;
 		private Map<ElementId, IntersectionElement> theRightElementValues;
 		private Subscription theCountSub; // Need to hold a strong ref to this to prevent GC of listeners
+
+		private ElementAccepter<T> theAccepter;
 
 		public IntersectionManager2(ActiveCollectionManager<E, ?, T> parent, ObservableCollection<X> filter, boolean exclude) {
 			theParent = parent;
@@ -1533,7 +1569,6 @@ public class ObservableCollectionDataFlowImpl {
 			theEquivalence = parent.equivalence();
 			isExclude = exclude;
 			theValues = new HashMap<>();
-			theLeftElementValues = new HashMap<>();
 		}
 
 		@Override
@@ -1544,25 +1579,23 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public void begin(ElementAccepter<T> onElement, Observable<?> until) {
 			theCountSub = WeakConsumer.build().<ObservableCollectionEvent<? extends X>> withAction(evt -> {
-				try (Transaction t = theParent.lock(false, evt)) {
+				// We're not modifying, but we want to obtain an exclusive lock
+				// to ensure that nothing above or below us is firing events at the same time.
+				try (Transaction t = theParent.lock(true, evt)) {
 					IntersectionElement element;
 					switch (evt.getType()) {
 					case add:
 						if (!equivalence().isElement(evt.getNewValue()))
 							return;
 						element = theValues.computeIfAbsent((T) evt.getNewValue(), v -> new IntersectionElement());
-						element.rightCount++;
-						if (element.rightCount == 1)
-							update(element.leftElements, evt);
+						element.incrementRight(evt);
 						theRightElementValues.put(evt.getElementId(), element);
 						break;
 					case remove:
 						element = theRightElementValues.remove(evt.getElementId());
 						if (element == null)
 							return;
-						element.rightCount--;
-						if (element.rightCount == 0)
-							update(element.leftElements, evt);
+						element.decrementRight(evt);
 						break;
 					case set:
 						boolean oldIsElement = equivalence().isElement(evt.getOldValue());
@@ -1572,15 +1605,11 @@ public class ObservableCollectionDataFlowImpl {
 							return; // No change
 						if (oldIsElement) {
 							element = theRightElementValues.remove(evt.getElementId());
-							element.rightCount--;
-							if (element.rightCount == 0)
-								update(element.leftElements, evt);
+							element.decrementRight(evt);
 						}
 						if (newIsElement) {
 							element = theValues.computeIfAbsent((T) evt.getNewValue(), v -> new IntersectionElement());
-							element.rightCount++;
-							if (element.rightCount == 1)
-								update(element.leftElements, evt);
+							element.incrementRight(evt);
 							theRightElementValues.put(evt.getElementId(), element);
 						}
 						break;
@@ -1589,17 +1618,11 @@ public class ObservableCollectionDataFlowImpl {
 			}, action -> theFilter.subscribe(action, true).removeAll()).withUntil(until::act).build();
 			theParent.begin((parentEl, cause) -> {
 				IntersectedCollectionElement el = new IntersectedCollectionElement(parentEl);
-				if (el.isPresent())
+				IntersectionElement element = theValues.get(parentEl.get());
+				element.leftElements.add(el);
+				if (element.isPresent())
 					onElement.accept(el, cause);
 			}, until);
-		}
-
-		class IntersectedCollectionElement implements DerivedCollectionElement<T> {
-			private final DerivedCollectionElement<T> theParentEl;
-
-			IntersectedCollectionElement(DerivedCollectionElement<T> parentEl) {
-				theParentEl = parentEl;
-			}
 		}
 	}
 
