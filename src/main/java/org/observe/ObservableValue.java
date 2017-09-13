@@ -494,28 +494,6 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	}
 
 	/**
-	 * @param <V> The first argument type
-	 * @param <U> The second argument type
-	 * @return A binary function that returns its first argument
-	 */
-	public static <V, U> BiFunction<V, U, V> first() {
-		return (V v1, U v2) -> {
-			return v1;
-		};
-	}
-
-	/**
-	 * @param <V> The first argument type
-	 * @param <U> The second argument type
-	 * @return A binary function that returns its second argument
-	 */
-	public static <V, U> BiFunction<V, U, U> second() {
-		return (V v1, U v2) -> {
-			return v2;
-		};
-	}
-
-	/**
 	 * An observable that depends on the values of other observables
 	 *
 	 * @param <T> The type of the composed observable
