@@ -1565,7 +1565,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public String canAdd(T value) {
-			return theFlow.canAdd(new FilterMapResult<>(value)).getRejectReason();
+			return theFlow.canAdd(value);
 		}
 
 		@Override
