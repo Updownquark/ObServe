@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -19,6 +20,7 @@ import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableMultiMap.MultiMapFlow;
 import org.observe.assoc.ObservableSortedMultiMap;
+import org.observe.assoc.ObservableSortedMultiMap.SortedMultiMapFlow;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.CombinedCollectionBuilder;
 import org.observe.collect.ObservableCollection.CombinedValues;
@@ -27,10 +29,7 @@ import org.observe.collect.ObservableCollection.MappedCollectionBuilder;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
-import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionElementManager;
-import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
-import org.observe.collect.ObservableCollectionDataFlowImpl.NonMappingCollectionElement;
-import org.observe.collect.ObservableCollectionDataFlowImpl.NonMappingCollectionManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.PassiveDerivedCollection;
 import org.qommons.Transactable;
@@ -115,10 +114,6 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
-	public static interface ElementFinder<T> {
-		DerivedCollectionElement<T> findElement(BetterSortedSet<DerivedCollectionElement<T>> elements, T value, boolean first);
-	}
-
 	public static interface CollectionOperation<E, I, T> extends Transactable {
 		TypeToken<T> getTargetType();
 
@@ -128,20 +123,24 @@ public class ObservableCollectionDataFlowImpl {
 	public static interface PassiveCollectionManager<E, I, T> extends CollectionOperation<E, I, T> {
 		T map(E source);
 
-		boolean isReversible();
+		String canReverse();
 
 		FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest);
 
 		default FilterMapResult<T, E> reverse(T dest) {
 			return reverse(new FilterMapResult<>(dest));
 		}
+
+		boolean isRemoveFiltered();
+
+		MutableCollectionElement<T> map(MutableCollectionElement<E> element);
 	}
 
 	public static interface ActiveCollectionManager<E, I, T> extends CollectionOperation<E, I, T> {
 		/** @return Whether this manager always has a representation for each element in the source collection */
 		boolean isEachRepresented();
 
-		ElementFinder<T> getElementFinder();
+		Comparable<DerivedCollectionElement<T>> getElementFinder(T value);
 
 		String canAdd(T toAdd);
 
@@ -279,6 +278,21 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public UniqueSortedDataFlow<E, T, T> uniqueSorted(Comparator<? super T> compare, boolean alwaysUseFirst) {
 			return new ObservableSortedSetImpl.UniqueSortedDataFlowImpl<>(theSource, this, compare, alwaysUseFirst);
+		}
+
+		@Override
+		public <K> MultiMapFlow<E, K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap, boolean staticCategories,
+			boolean useFirstKey) {
+			return new ObservableMultiMap.DefaultMultiMapFlow<>(theSource, unique(useFirstKey), null, null)
+				// TODO Auto-generated method stub
+				return null;
+		}
+
+		@Override
+		public <K> SortedMultiMapFlow<E, K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap,
+			Comparator<? super K> keyCompare, boolean staticCategories, boolean useFirstKey) {
+			// TODO Auto-generated method stub
+			return null;
 		}
 
 		@Override
@@ -561,7 +575,9 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public boolean isPassive() {
-			return false; // TODO If cached is false, this could be passive
+			// TODO If cached is false, this could be passive if the passive API were adjusted to allow the manager to listen to the
+			// values for each subscription to the derived collection
+			return false;
 		}
 
 		@Override
@@ -773,14 +789,24 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isReversible() {
-			return true;
+		public String canReverse() {
+			return null;
 		}
 
 		@Override
 		public FilterMapResult<E, E> reverse(FilterMapResult<E, E> dest) {
 			dest.result = dest.source;
 			return dest;
+		}
+
+		@Override
+		public boolean isRemoveFiltered() {
+			return false;
+		}
+
+		@Override
+		public MutableCollectionElement<E> map(MutableCollectionElement<E> mapped) {
+			return mapped;
 		}
 	}
 
@@ -810,7 +836,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public ObservableCollectionDataFlowImpl.ElementFinder<E> getElementFinder() {
+		public Comparable<DerivedCollectionElement<E>> getElementFinder(E value) {
 			return null;
 		}
 
@@ -941,7 +967,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public ElementFinder<T> getElementFinder() {
+		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
 			return null; // Even if the parent could've found it, the order will be mixed up now
 		}
 
@@ -1056,8 +1082,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public ElementFinder<T> getElementFinder() {
-			return theParent.getElementFinder();
+		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
+			return theParent.getElementFinder(value);
 		}
 
 		@Override
@@ -1406,8 +1432,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public ElementFinder<T> getElementFinder() {
-			return theParent.getElementFinder();
+		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
+			return theParent.getElementFinder(value);
 		}
 
 		@Override
@@ -1514,13 +1540,23 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isReversible() {
-			return theParent.isReversible();
+		public String canReverse() {
+			return theParent.canReverse();
 		}
 
 		@Override
 		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest) {
 			return theParent.reverse(dest);
+		}
+
+		@Override
+		public boolean isRemoveFiltered() {
+			return theParent.isRemoveFiltered();
+		}
+
+		@Override
+		public MutableCollectionElement<T> map(MutableCollectionElement<E> mapped) {
+			return theParent.map(mapped);
 		}
 	}
 
@@ -1554,7 +1590,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public ElementFinder<T> getElementFinder() {
+		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
 			return null;
 		}
 
@@ -1618,8 +1654,10 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isReversible() {
-			return theReverse != null && theParent.isReversible();
+		public String canReverse() {
+			if (theReverse == null)
+				return StdMsg.UNSUPPORTED_OPERATION;
+			return theParent.canReverse();
 		}
 
 		@Override
@@ -1628,6 +1666,72 @@ public class ObservableCollectionDataFlowImpl {
 				return dest.reject(StdMsg.UNSUPPORTED_OPERATION, true);
 			FilterMapResult<I, E> intermediate = dest.map(theReverse);
 			return (FilterMapResult<T, E>) theParent.reverse(intermediate);
+		}
+
+		@Override
+		public boolean isRemoveFiltered() {
+			return theParent.isRemoveFiltered();
+		}
+
+		@Override
+		public MutableCollectionElement<T> map(MutableCollectionElement<E> source) {
+			MutableCollectionElement<I> parentMap = theParent.map(source);
+			return new MutableCollectionElement<T>() {
+				@Override
+				public ElementId getElementId() {
+					return parentMap.getElementId();
+				}
+
+				@Override
+				public T get() {
+					return theMap.apply(parentMap.get());
+				}
+
+				@Override
+				public String isEnabled() {
+					if (theReverse == null)
+						return StdMsg.UNSUPPORTED_OPERATION;
+					return parentMap.isEnabled();
+				}
+
+				@Override
+				public String isAcceptable(T value) {
+					if (theReverse == null)
+						return StdMsg.UNSUPPORTED_OPERATION;
+					return parentMap.isAcceptable(theReverse.apply(value));
+				}
+
+				@Override
+				public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
+					if (theReverse == null)
+						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+					parentMap.set(theReverse.apply(value));
+				}
+
+				@Override
+				public String canRemove() {
+					return source.canRemove();
+				}
+
+				@Override
+				public void remove() throws UnsupportedOperationException {
+					source.remove();
+				}
+
+				@Override
+				public String canAdd(T value, boolean before) {
+					if (theReverse == null)
+						return StdMsg.UNSUPPORTED_OPERATION;
+					return parentMap.canAdd(theReverse.apply(value), before);
+				}
+
+				@Override
+				public ElementId add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
+					if (theReverse == null)
+						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+					return parentMap.add(theReverse.apply(value), before);
+				}
+			};
 		}
 	}
 
@@ -1678,15 +1782,13 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public ElementFinder<T> getElementFinder() {
-			// TODO This might be possible if this manager is reversible. Revisit this after the element finder arch is thought out.
-			// if (theReverse == null)
-			// return null;
-			// ElementFinder<I> pef = theParent.getElementFinder();
-			// if (pef == null)
-			// return null;
-			// return v -> pef.findElement(reverseValue(v));
-			return null;
+		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
+			if (theReverse == null)
+				return null;
+			Comparable<DerivedCollectionElement<I>> pef = theParent.getElementFinder(theReverse.apply(value));
+			if (pef == null)
+				return null;
+			return el -> pef.compareTo(((MappedElement) el).theParentEl);
 		}
 
 		@Override
@@ -1881,15 +1983,13 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public ElementFinder<T> getElementFinder() {
-			// TODO This might be possible if this manager is reversible. Revisit this after the element finder arch is thought out.
-			// if (theReverse == null)
-			// return null;
-			// ObservableCollectionDataFlowImpl.ElementFinder<I> pef = getParent().getElementFinder();
-			// if (pef == null)
-			// return null;
-			// return v -> pef.findElement(reverseValue(v));
-			return null;
+		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
+			if (theReverse == null)
+				return null;
+			Comparable<DerivedCollectionElement<I>> pef = theParent.getElementFinder(reverseValue(value));
+			if (pef == null)
+				return null;
+			return el -> pef.compareTo(((CombinedElement) el).theParentEl);
 		}
 
 		@Override
@@ -2267,23 +2367,13 @@ public class ObservableCollectionDataFlowImpl {
 	// TODO TODO TODO!! This class doesn't have opportunity to do anything! Design flaw in passive derived collection architecture.
 	static class PassiveModFilteredManager<E, T> implements PassiveCollectionManager<E, T, T> {
 		private final PassiveCollectionManager<E, ?, T> theParent;
-		private final String theImmutableMessage;
-		private final boolean areUpdatesAllowed;
-		private final String theAddMessage;
-		private final String theRemoveMessage;
-		private final Function<? super T, String> theAddFilter;
-		private final Function<? super T, String> theRemoveFilter;
+		private final ModFilterer<T> theFilter;
 
 		PassiveModFilteredManager(PassiveCollectionManager<E, ?, T> parent, String immutableMessage, boolean allowUpdates,
 			String addMessage, String removeMessage, Function<? super T, String> addFilter, Function<? super T, String> removeFilter) {
 			theParent = parent;
 
-			theImmutableMessage = immutableMessage;
-			areUpdatesAllowed = allowUpdates;
-			theAddMessage = addMessage;
-			theRemoveMessage = removeMessage;
-			theAddFilter = addFilter;
-			theRemoveFilter = removeFilter;
+			theFilter = new ModFilterer<>(immutableMessage, allowUpdates, addMessage, removeMessage, addFilter, removeFilter);
 		}
 
 		@Override
@@ -2307,18 +2397,90 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isReversible() {
-			return theParent.isReversible();
+		public String canReverse() {
+			String msg = theFilter.canAdd();
+			if (msg != null)
+				return msg;
+			return theParent.canReverse();
 		}
 
 		@Override
 		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest) {
+			dest.maybeReject(theFilter.canAdd(dest.source), true);
+			if (!dest.isAccepted())
+				return dest;
 			return theParent.reverse(dest);
+		}
+
+		@Override
+		public boolean isRemoveFiltered() {
+			return theFilter.isRemoveFiltered() || theParent.isRemoveFiltered();
+		}
+
+		@Override
+		public MutableCollectionElement<T> map(MutableCollectionElement<E> element) {
+			MutableCollectionElement<T> parentMapped = theParent.map(element);
+			return new MutableCollectionElement<T>() {
+				@Override
+				public ElementId getElementId() {
+					return parentMapped.getElementId();
+				}
+
+				@Override
+				public T get() {
+					return parentMapped.get();
+				}
+
+				@Override
+				public String isEnabled() {
+					return theFilter.isEnabled();
+				}
+
+				@Override
+				public String isAcceptable(T value) {
+					String msg = theFilter.isAcceptable(value, this::get);
+					if (msg == null)
+						msg = parentMapped.isAcceptable(value);
+					return msg;
+				}
+
+				@Override
+				public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
+					theFilter.assertSet(value, this::get);
+					parentMapped.set(value);
+				}
+
+				@Override
+				public String canRemove() {
+					return theFilter.canRemove(this::get);
+				}
+
+				@Override
+				public void remove() throws UnsupportedOperationException {
+					String msg = theFilter.canRemove(this::get);
+					if (msg != null)
+						throw new UnsupportedOperationException(msg);
+					parentMapped.remove();
+				}
+
+				@Override
+				public String canAdd(T value, boolean before) {
+					String msg = theFilter.canAdd(value);
+					if (msg == null)
+						msg = parentMapped.canAdd(value, before);
+					return msg;
+				}
+
+				@Override
+				public ElementId add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
+					theFilter.assertAdd(value);
+					return parentMapped.add(value, before);
+				}
+			};
 		}
 	}
 
-	static class ActiveModFilteredManager<E, T> implements ActiveCollectionManager<E, T, T> {
-		private final ActiveCollectionManager<E, ?, T> theParent;
+	static class ModFilterer<T> {
 		private final String theImmutableMessage;
 		private final boolean areUpdatesAllowed;
 		private final String theAddMessage;
@@ -2326,16 +2488,111 @@ public class ObservableCollectionDataFlowImpl {
 		private final Function<? super T, String> theAddFilter;
 		private final Function<? super T, String> theRemoveFilter;
 
-		ActiveModFilteredManager(ActiveCollectionManager<E, ?, T> parent, String immutableMessage, boolean allowUpdates,
+		ModFilterer(String immutableMessage, boolean areUpdatesAllowed,
 			String addMessage, String removeMessage, Function<? super T, String> addFilter, Function<? super T, String> removeFilter) {
-			theParent = parent;
-
 			theImmutableMessage = immutableMessage;
-			areUpdatesAllowed = allowUpdates;
+			this.areUpdatesAllowed = areUpdatesAllowed;
 			theAddMessage = addMessage;
 			theRemoveMessage = removeMessage;
 			theAddFilter = addFilter;
 			theRemoveFilter = removeFilter;
+		}
+
+		public String isEnabled() {
+			return theImmutableMessage;
+		}
+
+		public String isAcceptable(T value, Supplier<T> oldValue) {
+			String msg = null;
+			if (theAddFilter != null)
+				msg = theAddFilter.apply(value);
+			if (msg == null) {
+				if (value != oldValue.get()) {
+					msg = theAddMessage;
+					if (msg == null)
+						msg = theImmutableMessage;
+				} else if (!areUpdatesAllowed)
+					msg = theImmutableMessage;
+			}
+			return msg;
+		}
+
+		public void assertSet(T value, Supplier<T> oldValue) {
+			String msg = null;
+			if (theAddFilter != null)
+				msg = theAddFilter.apply(value);
+			if (msg != null)
+				throw new IllegalArgumentException(msg);
+			if (msg == null) {
+				if (value != oldValue.get()) {
+					msg = theAddMessage;
+					if (msg == null)
+						msg = theImmutableMessage;
+				} else if (!areUpdatesAllowed)
+					msg = theImmutableMessage;
+			}
+			if (msg != null)
+				throw new UnsupportedOperationException(msg);
+		}
+
+		public boolean isRemoveFiltered() {
+			return theRemoveFilter != null || theRemoveMessage != null || theImmutableMessage != null;
+		}
+
+		public String canRemove(Supplier<T> oldValue) {
+			String msg = null;
+			if (theRemoveFilter != null)
+				msg = theRemoveFilter.apply(oldValue.get());
+			if (msg == null)
+				msg = theRemoveMessage;
+			if (msg == null)
+				msg = theImmutableMessage;
+			return msg;
+		}
+
+		public String canAdd() {
+			if (theAddMessage != null)
+				return theAddMessage;
+			if (theImmutableMessage != null)
+				return theImmutableMessage;
+			return null;
+		}
+
+		public String canAdd(T value) {
+			String msg = null;
+			if (theAddFilter != null)
+				msg = theAddFilter.apply(value);
+			if (msg == null && theAddMessage != null)
+				msg = theAddMessage;
+			if (msg == null && theImmutableMessage != null)
+				msg = theImmutableMessage;
+			return msg;
+		}
+
+		public void assertAdd(T value) throws UnsupportedOperationException, IllegalArgumentException {
+			String msg = null;
+			if (theAddFilter != null)
+				msg = theAddFilter.apply(value);
+			if (msg != null)
+				throw new IllegalArgumentException(msg);
+			if (msg == null && theAddMessage != null)
+				msg = theAddMessage;
+			if (msg == null && theImmutableMessage != null)
+				msg = theImmutableMessage;
+			if (msg != null)
+				throw new UnsupportedOperationException(msg);
+		}
+	}
+
+	static class ActiveModFilteredManager<E, T> implements ActiveCollectionManager<E, T, T> {
+		private final ActiveCollectionManager<E, ?, T> theParent;
+
+		private final ModFilterer<T> theFilter;
+
+		ActiveModFilteredManager(ActiveCollectionManager<E, ?, T> parent, String immutableMessage, boolean allowUpdates, String addMessage,
+			String removeMessage, Function<? super T, String> addFilter, Function<? super T, String> removeFilter) {
+			theParent = parent;
+			theFilter = new ModFilterer<>(immutableMessage, allowUpdates, addMessage, removeMessage, addFilter, removeFilter);
 		}
 
 		@Override
@@ -2359,37 +2616,18 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public ElementFinder<T> getElementFinder() {
-			return theParent.getElementFinder();
+		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
+			return theParent.getElementFinder(value);
 		}
 
 		@Override
 		public String canAdd(T toAdd) {
-			String msg = null;
-			if (theAddFilter != null)
-				msg = theAddFilter.apply(toAdd);
-			if (msg == null && theAddMessage != null)
-				msg = theAddMessage;
-			if (msg == null && theImmutableMessage != null)
-				msg = theImmutableMessage;
-			if (msg == null)
-				msg = theParent.canAdd(toAdd);
-			return msg;
+			return theFilter.canAdd(toAdd);
 		}
 
 		@Override
 		public DerivedCollectionElement<T> addElement(T value, boolean first) {
-			String msg = null;
-			if (theAddFilter != null)
-				msg = theAddFilter.apply(value);
-			if (msg != null)
-				throw new IllegalArgumentException(msg);
-			if (msg == null && theAddMessage != null)
-				msg = theAddMessage;
-			if (msg == null && theImmutableMessage != null)
-				msg = theImmutableMessage;
-			if (msg != null)
-				throw new UnsupportedOperationException(msg);
+			theFilter.assertAdd(value);
 			DerivedCollectionElement<T> parentEl = theParent.addElement(value, first);
 			return parentEl == null ? null : new ModFilteredElement(parentEl);
 		}
@@ -2423,24 +2661,12 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public String isEnabled() {
-				if (theImmutableMessage != null)
-					return theImmutableMessage;
-				return theParentEl.isEnabled();
+				return theFilter.isEnabled();
 			}
 
 			@Override
 			public String isAcceptable(T value) {
-				String msg = null;
-				if (theAddFilter != null)
-					msg = theAddFilter.apply(value);
-				if (msg == null) {
-					if (value != get()) {
-						msg = theAddMessage;
-						if (msg == null)
-							msg = theImmutableMessage;
-					} else if (!areUpdatesAllowed)
-						msg = theImmutableMessage;
-				}
+				String msg = theFilter.isAcceptable(value, this::get);
 				if (msg == null)
 					msg = theParentEl.isAcceptable(value);
 				return msg;
@@ -2448,45 +2674,18 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
-				String msg = null;
-				if (theAddFilter != null)
-					msg = theAddFilter.apply(value);
-				if (msg != null)
-					throw new IllegalArgumentException(msg);
-				if (msg == null) {
-					if (value != get()) {
-						msg = theAddMessage;
-						if (msg == null)
-							msg = theImmutableMessage;
-					} else if (!areUpdatesAllowed)
-						msg = theImmutableMessage;
-				}
-				if (msg != null)
-					throw new UnsupportedOperationException(msg);
+				theFilter.assertSet(value, this::get);
 				theParentEl.set(value);
 			}
 
 			@Override
 			public String canRemove() {
-				String msg = null;
-				if (theRemoveFilter != null)
-					msg = theRemoveFilter.apply(get());
-				if (msg == null)
-					msg = theRemoveMessage;
-				if (msg == null)
-					msg = theImmutableMessage;
-				return msg;
+				return theFilter.canRemove(this::get);
 			}
 
 			@Override
 			public void remove() throws UnsupportedOperationException {
-				String msg = null;
-				if (theRemoveFilter != null)
-					msg = theRemoveFilter.apply(get());
-				if (msg == null)
-					msg = theRemoveMessage;
-				if (msg == null)
-					msg = theImmutableMessage;
+				String msg = theFilter.canRemove(this::get);
 				if (msg != null)
 					throw new UnsupportedOperationException(msg);
 				theParentEl.remove();
@@ -2494,13 +2693,7 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public String canAdd(T value, boolean before) {
-				String msg = null;
-				if (theAddFilter != null)
-					msg = theAddFilter.apply(value);
-				if (msg == null && theAddMessage != null)
-					msg = theAddMessage;
-				if (msg == null && theImmutableMessage != null)
-					msg = theImmutableMessage;
+				String msg = theFilter.canAdd(value);
 				if (msg == null)
 					msg = theParentEl.canAdd(value, before);
 				return msg;
@@ -2508,17 +2701,7 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public DerivedCollectionElement<T> add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-				String msg = null;
-				if (theAddFilter != null)
-					msg = theAddFilter.apply(value);
-				if (msg != null)
-					throw new IllegalArgumentException(msg);
-				if (msg == null && theAddMessage != null)
-					msg = theAddMessage;
-				if (msg == null && theImmutableMessage != null)
-					msg = theImmutableMessage;
-				if (msg != null)
-					throw new UnsupportedOperationException(msg);
+				theFilter.assertAdd(value);
 				DerivedCollectionElement<T> parentEl = theParentEl.add(value, before);
 				return parentEl == null ? null : new ModFilteredElement(parentEl);
 			}

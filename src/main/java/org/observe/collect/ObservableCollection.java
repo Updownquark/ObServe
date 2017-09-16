@@ -1050,8 +1050,8 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * @param staticCategories Whether the categorization of this flow's value is static or dynamic
 		 * @return A multi-map flow that may be used to produce a multi-map of this flow's values, categorized by the given key mapping
 		 */
-		<K> ObservableMultiMap.MultiMapFlow<E, K, T> groupBy(Function<? super CollectionDataFlow<E, I, T>, UniqueDataFlow<E, ?, K>> keyFlow,
-			boolean staticCategories);
+		<K> ObservableMultiMap.MultiMapFlow<E, K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap,
+			boolean staticCategories, boolean useFirstKey);
 
 		/**
 		 * @param <K> The key type for the map
@@ -1061,9 +1061,8 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * @return A sorted multi-map flow that may be used to produce a sorted multi-map of this flow's values, categorized by the given
 		 *         key mapping
 		 */
-		<K> ObservableSortedMultiMap.MultiMapFlow<E, K, T> groupBy(
-			Function<? super CollectionDataFlow<E, I, T>, CollectionDataFlow<E, ?, K>> keyFlow, Comparator<? super K> keyCompare,
-				boolean staticCategories);
+		<K> ObservableSortedMultiMap.SortedMultiMapFlow<E, K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap,
+			Comparator<? super K> keyCompare, boolean staticCategories, boolean useFirstKey);
 
 		// Terminal operations
 

@@ -23,7 +23,6 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
-import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.BaseCollectionDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.BaseCollectionManager;
@@ -1029,7 +1028,14 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public void clear() {
-			theSource.clear();
+			if (!theFlow.isRemoveFiltered())
+				theSource.clear();
+			else {
+				spliterator().forEachElementM(el -> {
+					if (el.canRemove() == null)
+						el.remove();
+				}, true);
+			}
 		}
 
 		@Override
@@ -1083,73 +1089,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		protected MutableCollectionElement<T> mutableElementFor(MutableCollectionElement<E> el) {
-			class PassiveMappedMCE implements MutableCollectionElement<T> {
-				@Override
-				public ElementId getElementId() {
-					return el.getElementId();
-				}
-
-				@Override
-				public T get() {
-					return theFlow.map(el.get());
-				}
-
-				@Override
-				public String isEnabled() {
-					if (!theFlow.isReversible())
-						return StdMsg.UNSUPPORTED_OPERATION;
-					return el.isEnabled();
-				}
-
-				@Override
-				public String isAcceptable(T value) {
-					if (!theFlow.isReversible())
-						return StdMsg.UNSUPPORTED_OPERATION;
-					FilterMapResult<T, E> res = theFlow.reverse(value);
-					if (!res.isAccepted())
-						return res.getRejectReason();
-					return el.isAcceptable(res.result);
-				}
-
-				@Override
-				public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
-					if (!theFlow.isReversible())
-						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-					FilterMapResult<T, E> res = theFlow.reverse(value);
-					res.throwIfError(IllegalArgumentException::new);
-					el.set(res.result);
-				}
-
-				@Override
-				public String canRemove() {
-					return el.canRemove();
-				}
-
-				@Override
-				public void remove() throws UnsupportedOperationException {
-					el.remove();
-				}
-
-				@Override
-				public String canAdd(T value, boolean before) {
-					if (!theFlow.isReversible())
-						return StdMsg.UNSUPPORTED_OPERATION;
-					FilterMapResult<T, E> res = theFlow.reverse(value);
-					if (!res.isAccepted())
-						return res.getRejectReason();
-					return el.canAdd(res.result, before);
-				}
-
-				@Override
-				public ElementId add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-					if (!theFlow.isReversible())
-						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-					FilterMapResult<T, E> res = theFlow.reverse(value);
-					res.throwIfError(IllegalArgumentException::new);
-					return el.add(res.result, before);
-				}
-			}
-			return new PassiveMappedMCE();
+			return theFlow.map(el);
 		}
 
 		@Override
@@ -1461,12 +1401,15 @@ public final class ObservableCollectionImpl {
 		@Override
 		public CollectionElement<T> getElement(T value, boolean first) {
 			try (Transaction t = lock(false, null)) {
-				ObservableCollectionDataFlowImpl.ElementFinder<T> finder = getFlow().getElementFinder();
+				Comparable<DerivedCollectionElement<T>> finder = getFlow().getElementFinder(value);
 				if (finder != null) {
-					DerivedCollectionElement<T> id = finder.findElement(theDerivedElements, value, first);
-					if (id == null)
+					BinaryTreeNode<DerivedElementHolder<T>> found = theDerivedElements.search(holder -> finder.compareTo(holder.element), //
+						SortedSearchFilter.of(first, false));
+					if (found == null)
 						return null;
-					return getElement(idFromSynthetic(id));
+					while (found.getChild(first) != null && equivalence().elementEquals(found.getChild(first).get().element.get(), value))
+						found = found.getChild(first);
+					return elementFor(found.get());
 				}
 				for (DerivedElementHolder<T> el : (first ? theDerivedElements : theDerivedElements.reverse()))
 					if (equivalence().elementEquals(el.get(), value))
