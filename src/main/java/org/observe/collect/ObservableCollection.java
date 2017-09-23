@@ -21,18 +21,20 @@ import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
-import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractCombinedCollectionBuilder;
-import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractDataFlow;
+import org.observe.collect.Combination.CombinationPrecursor;
+import org.observe.collect.Combination.CombinedFlowDef;
+import org.observe.collect.FlowOptions.GroupingOptions;
+import org.observe.collect.FlowOptions.MapOptions;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
 import org.qommons.Causable;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
-import org.qommons.TriFunction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
+import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.SimpleCause;
 
 import com.google.common.reflect.TypeParameter;
@@ -729,8 +731,8 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 *         supported by the flow API.
 	 */
 	static <E> ObservableCollection<E> constant(TypeToken<E> type, Collection<? extends E> values) {
-		return createUnsafe(type, values).flow().filterModification()
-			.immutable(MutableCollectionElement.StdMsg.UNSUPPORTED_OPERATION, false).build().collect();
+		return createUnsafe(type, values).flow()
+			.filterMod(options -> options.immutable(MutableCollectionElement.StdMsg.UNSUPPORTED_OPERATION, false)).collect();
 	}
 
 	/**
@@ -910,7 +912,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 					return null;
 				else
 					return MutableCollectionElement.StdMsg.BAD_TYPE;
-			}).map(TypeToken.of(type)).map(v -> (X) v);
+			}).map(TypeToken.of(type), v -> (X) v);
 		}
 
 		/**
@@ -949,51 +951,22 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 */
 		CollectionDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh);
 
-		/**
-		 * Allows elements to be transformed via a function. This operation may produce an {@link #isPassive() active or passive} flow
-		 * depending on the options selected on the builder.
-		 *
-		 * @param <X> The type to map to
-		 * @param target The type to map to
-		 * @return A builder to build a mapped data flow
-		 */
-		<X> MappedCollectionBuilder<E, T, X> map(TypeToken<X> target);
-
-		/**
-		 * @param target The target type
-		 * @param map A function that produces observable values from each element of the source
-		 * @return A {@link #isPassive() active} flow capable of producing a collection that is the value of the observable values mapped to
-		 *         each element of the source.
-		 */
-		default <X> CollectionDataFlow<E, ?, X> flatMapV(TypeToken<X> target,
-			Function<? super T, ? extends ObservableValue<? extends X>> map) {
-			TypeToken<ObservableValue<? extends X>> valueType = new TypeToken<ObservableValue<? extends X>>() {}
-			.where(new TypeParameter<X>() {}, target.wrap());
-			return map(valueType).map(map).refreshEach(v -> v.noInit()).map(target).withElementSetting((ov, newValue, doSet, cause) -> {
-				// Allow setting elements via the wrapped settable value
-				if (!(ov instanceof SettableValue))
-					return MutableCollectionElement.StdMsg.UNSUPPORTED_OPERATION;
-				else if (newValue != null && !ov.getType().getRawType().isInstance(newValue))
-					return MutableCollectionElement.StdMsg.BAD_TYPE;
-				String msg = ((SettableValue<X>) ov).isAcceptable(newValue);
-				if (msg != null)
-					return msg;
-				if (doSet)
-					((SettableValue<X>) ov).set(newValue, cause);
-				return null;
-			}).map(obs -> obs == null ? null : obs.get());
-		}
-
-		default <X> CollectionDataFlow<E, ?, X> flatMapC(TypeToken<X> target,
-			Function<? super T, ? extends ObservableCollection<? extends X>> map) {
-			return flatMapF(target, v -> {
-				ObservableCollection<? extends X> coll = map.apply(v);
-				return coll == null ? null : coll.flow();
+		default <X> CollectionDataFlow<E, T, X> map(TypeToken<X> target, Function<? super T, ? extends X> map) {
+			return map(target, map, options -> {
 			});
 		}
 
-		<X> CollectionDataFlow<E, ?, X> flatMapF(TypeToken<X> target,
-			Function<? super T, ? extends CollectionDataFlow<?, ?, ? extends X>> map);
+		/**
+		 * Allows elements to be transformed via a function. This operation may produce an {@link #isPassive() active or passive} flow
+		 * depending on the options selected.
+		 *
+		 * @param <X> The type to map to
+		 * @param target The type to map to
+		 * @param map The mapping function to apply to each element
+		 * @param options Allows various options to be selected that determine the behavior of the mapped set
+		 * @return A builder to build a mapped data flow
+		 */
+		<X> CollectionDataFlow<E, T, X> map(TypeToken<X> target, Function<? super T, ? extends X> map, Consumer<MapOptions<T, X>> options);
 
 		/**
 		 * Combines each element of this flow the the value of one or more observable values. This operation may produce an
@@ -1006,7 +979,45 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * @return A data flow capable of producing a collection whose elements are each some combination of the source element and the
 		 *         dynamic value of the observable
 		 */
-		<V, X> CombinedCollectionBuilder2<E, T, V, X> combineWith(ObservableValue<V> value, TypeToken<X> target);
+		<X> CollectionDataFlow<E, T, X> combine(TypeToken<X> targetType,
+			Function<CombinationPrecursor<T, X>, CombinedFlowDef<T, X>> combination);
+
+		/**
+		 * @param target The target type
+		 * @param map A function that produces observable values from each element of the source
+		 * @return A {@link #isPassive() active} flow capable of producing a collection that is the value of the observable values mapped to
+		 *         each element of the source.
+		 */
+		default <X> CollectionDataFlow<E, ?, X> flatMapV(TypeToken<X> target,
+			Function<? super T, ? extends ObservableValue<? extends X>> map) {
+			TypeToken<ObservableValue<? extends X>> valueType = new TypeToken<ObservableValue<? extends X>>() {}
+			.where(new TypeParameter<X>() {}, target.wrap());
+			return map(valueType, map).refreshEach(v -> v.noInit()).map(target, obs -> obs == null ? null : obs.get(), options -> options//
+				.withElementSetting((ov, newValue, doSet, cause) -> {
+					// Allow setting elements via the wrapped settable value
+					if (!(ov instanceof SettableValue))
+						return MutableCollectionElement.StdMsg.UNSUPPORTED_OPERATION;
+					else if (newValue != null && !ov.getType().getRawType().isInstance(newValue))
+						return MutableCollectionElement.StdMsg.BAD_TYPE;
+					String msg = ((SettableValue<X>) ov).isAcceptable(newValue);
+					if (msg != null)
+						return msg;
+					if (doSet)
+						((SettableValue<X>) ov).set(newValue, cause);
+					return null;
+				}));
+		}
+
+		default <X> CollectionDataFlow<E, ?, X> flatMapC(TypeToken<X> target,
+			Function<? super T, ? extends ObservableCollection<? extends X>> map) {
+			return flatMapF(target, v -> {
+				ObservableCollection<? extends X> coll = map.apply(v);
+				return coll == null ? null : coll.flow();
+			});
+		}
+
+		<X> CollectionDataFlow<E, ?, X> flatMapF(TypeToken<X> target,
+			Function<? super T, ? extends CollectionDataFlow<?, ?, ? extends X>> map);
 
 		/**
 		 * @param compare The comparator to use to sort the source elements
@@ -1035,14 +1046,27 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 */
 		UniqueSortedDataFlow<E, T, T> uniqueSorted(Comparator<? super T> compare, boolean alwaysUseFirst);
 
+		default CollectionDataFlow<E, I, T> immutable() {
+			return filterMod(options -> options.immutable(StdMsg.UNSUPPORTED_OPERATION, true));
+		}
+
 		/**
 		 * Allows control of whether and how the produced collection may be modified. The produced collection will still reflect
 		 * modifications made to the source collection.
 		 *
-		 * @return A builder that produces a {@link #isPassive() passive} collection reflecting the source data but potentially disallowing
-		 *         some or all modifications.
+		 * @param options A builder that determines what modifications may be performed on the resulting flow
+		 * @return The mod-filtered flow
 		 */
-		ModFilterBuilder<E, T> filterModification();
+		CollectionDataFlow<E, I, T> filterMod(Consumer<ModFilterBuilder<T>> options);
+
+		default <K> ObservableMultiMap.MultiMapFlow<E, K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap) {
+			return groupBy(keyType, keyMap, options -> {});
+		}
+
+		default <K> ObservableSortedMultiMap.SortedMultiMapFlow<E, K, T> groupBy(TypeToken<K> keyType,
+			Function<? super T, ? extends K> keyMap, Comparator<? super K> keyCompare) {
+			return groupBy(keyType, keyMap, keyCompare, options -> {});
+		}
 
 		/**
 		 * @param <K> The key type for the map
@@ -1051,7 +1075,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * @return A multi-map flow that may be used to produce a multi-map of this flow's values, categorized by the given key mapping
 		 */
 		<K> ObservableMultiMap.MultiMapFlow<E, K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap,
-			boolean staticCategories, boolean useFirstKey);
+			Consumer<GroupingOptions> options);
 
 		/**
 		 * @param <K> The key type for the map
@@ -1062,7 +1086,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 *         key mapping
 		 */
 		<K> ObservableSortedMultiMap.SortedMultiMapFlow<E, K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap,
-			Comparator<? super K> keyCompare, boolean staticCategories, boolean useFirstKey);
+			Comparator<? super K> keyCompare, Consumer<GroupingOptions> options);
 
 		// Terminal operations
 
@@ -1141,7 +1165,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 					return null;
 				else
 					return MutableCollectionElement.StdMsg.BAD_TYPE;
-			}).mapEquivalent(TypeToken.of(type)).map(v -> (X) v, v -> (T) v);
+			}).mapEquivalent(TypeToken.of(type), v -> (X) v, v -> (T) v);
 		}
 
 		@Override
@@ -1152,6 +1176,12 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 		@Override
 		UniqueDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh);
+
+		default <X> UniqueDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+			Function<? super X, ? extends T> reverse) {
+			return mapEquivalent(target, map, reverse, options -> {
+			});
+		}
 
 		/**
 		 * <p>
@@ -1170,10 +1200,11 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * @param target The type of the mapped values
 		 * @return A builder to create a set of values which are this set's values mapped by a function
 		 */
-		<X> UniqueMappedCollectionBuilder<E, T, X> mapEquivalent(TypeToken<X> target);
+		<X> UniqueDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+			Function<? super X, ? extends T> reverse, Consumer<MapOptions<T, X>> options);
 
 		@Override
-		UniqueModFilterBuilder<E, T> filterModification();
+		UniqueDataFlow<E, I, T> filterMod(Consumer<ModFilterBuilder<T>> options);
 
 		@Override
 		default ObservableSet<T> collect() {
@@ -1201,7 +1232,34 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		UniqueSortedDataFlow<E, T, T> filterStatic(Function<? super T, String> filter);
 
 		@Override
+		default <X> UniqueSortedDataFlow<E, T, X> filter(Class<X> type) {
+			return filterStatic(value -> {
+				if (type == null || type.isInstance(value))
+					return null;
+				else
+					return MutableCollectionElement.StdMsg.BAD_TYPE;
+			}).mapEquivalent(TypeToken.of(type), v -> (X) v, v -> (T) v);
+		}
+
+		@Override
 		<X> UniqueSortedDataFlow<E, T, T> whereContained(ObservableCollection<X> other, boolean include);
+
+		@Override
+		UniqueSortedDataFlow<E, T, T> refresh(Observable<?> refresh);
+
+		@Override
+		UniqueSortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh);
+
+		@Override
+		default <X> UniqueSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+			Function<? super X, ? extends T> reverse) {
+			return mapEquivalent(target, map, reverse, options -> {});
+		}
+
+		default <X> UniqueSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+			Comparator<? super X> compare) {
+			return mapEquivalent(target, map, compare, options -> {});
+		}
 
 		/**
 		 * <p>
@@ -1221,16 +1279,14 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * @return A builder to create a set of values which are this set's values mapped by a function
 		 */
 		@Override
-		<X> UniqueSortedMappedCollectionBuilder<E, T, X> mapEquivalent(TypeToken<X> target);
+		<X> UniqueSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+			Function<? super X, ? extends T> reverse, Consumer<MapOptions<T, X>> options);
+
+		<X> UniqueSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+			Comparator<? super X> compare, Consumer<MapOptions<T, X>> options);
 
 		@Override
-		UniqueSortedDataFlow<E, T, T> refresh(Observable<?> refresh);
-
-		@Override
-		UniqueSortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh);
-
-		@Override
-		UniqueSortedModFilterBuilder<E, T> filterModification();
+		UniqueSortedDataFlow<E, I, T> filterMod(Consumer<ModFilterBuilder<T>> options);
 
 		@Override
 		default ObservableSortedSet<T> collect() {
@@ -1239,160 +1295,6 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 		@Override
 		ObservableSortedSet<T> collect(Observable<?> until);
-	}
-
-	/**
-	 * Builds a filtered and/or mapped collection
-	 *
-	 * @param <E> The type of values in the source collection
-	 * @param <I> Intermediate type
-	 * @param <T> The type of values in the mapped collection
-	 */
-	class MappedCollectionBuilder<E, I, T> {
-		private final ObservableCollection<E> theSource;
-		private final AbstractDataFlow<E, ?, I> theParent;
-		private final TypeToken<T> theTargetType;
-		private Function<? super T, ? extends I> theReverse;
-		private ElementSetter<? super I, ? super T> theElementReverse;
-		private boolean reEvalOnUpdate;
-		private boolean fireIfUnchanged;
-		private boolean isCached;
-
-		protected MappedCollectionBuilder(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent, TypeToken<T> type) {
-			theSource = source;
-			theParent = parent;
-			theTargetType = type;
-			reEvalOnUpdate = true;
-			fireIfUnchanged = true;
-			isCached = true;
-		}
-
-		protected ObservableCollection<E> getSource() {
-			return theSource;
-		}
-
-		protected AbstractDataFlow<E, ?, I> getParent() {
-			return theParent;
-		}
-
-		protected TypeToken<T> getTargetType() {
-			return theTargetType;
-		}
-
-		protected Function<? super T, ? extends I> getReverse() {
-			return theReverse;
-		}
-
-		protected ElementSetter<? super I, ? super T> getElementReverse() {
-			return theElementReverse;
-		}
-
-		protected boolean isReEvalOnUpdate() {
-			return reEvalOnUpdate;
-		}
-
-		protected boolean isFireIfUnchanged() {
-			return fireIfUnchanged;
-		}
-
-		protected boolean isCached() {
-			return isCached;
-		}
-
-		/**
-		 * Specifies a reverse function for the operation, which can allow adding values to the derived collection
-		 *
-		 * @param reverse The function to convert a result of this map operation into a source-compatible value
-		 * @return This builder
-		 */
-		public MappedCollectionBuilder<E, I, T> withReverse(Function<? super T, ? extends I> reverse) {
-			theReverse = reverse;
-			return this;
-		}
-
-		/**
-		 * Specifies an intra-element reverse function for the operation, which can allow adding values to the derived collection collection
-		 *
-		 * @param reverse The function that may modify an element in the source via a result of this map operation without modifying the
-		 *        source
-		 * @return This builder
-		 */
-		public MappedCollectionBuilder<E, I, T> withElementSetting(ElementSetter<? super I, ? super T> reverse) {
-			theElementReverse = reverse;
-			return this;
-		}
-
-		/**
-		 * Controls whether this operation's map function will be re-evaluated when an update event (a {@link CollectionChangeType#set}
-		 * event where {@link ObservableCollectionEvent#getOldValue()} is {@link ObservableCollection#equivalence() equivalent} to
-		 * {@link ObservableCollectionEvent#getNewValue()}) is fired on a source element according to the source equivalence. This is true
-		 * by default.
-		 *
-		 * A false value for this setting is incompatible with {@link #cache(boolean) cache(false)}, because re-evaluation of the function
-		 * is done per-access if caching is off.
-		 *
-		 * @param reEval Whether to re-evaluate this map's function on update
-		 * @return This builder
-		 */
-		public MappedCollectionBuilder<E, I, T> reEvalOnUpdate(boolean reEval) {
-			if (!isCached && !reEval)
-				throw new IllegalStateException(
-					"cache=false and reEvalOnUpdate=false contradict. If the value isn't cached, then re-evaluation is done on access.");
-			reEvalOnUpdate = reEval;
-			return this;
-		}
-
-		/**
-		 * Controls whether this operation will fire an update event (a {@link CollectionChangeType#set} event where
-		 * {@link ObservableCollectionEvent#getOldValue()} is {@link ObservableCollection#equivalence() equivalent} to
-		 * {@link ObservableCollectionEvent#getNewValue()}) on an element if the mapping function produces a value equivalent to the
-		 * previous value. This is true by default.
-		 *
-		 * A false value for this setting is incompatible with {@link #cache(boolean) cache(false)}, because caching is required to remember
-		 * the old value to know if it has changed.
-		 *
-		 * @param fire Whether to fire updates if the result of the mapping operation is equivalent to the previous value.
-		 * @return This builder
-		 */
-		public MappedCollectionBuilder<E, I, T> fireIfUnchanged(boolean fire) {
-			if (!isCached && !fire)
-				throw new IllegalStateException(
-					"cache=false and fireIfUnchanged=false contradict. Can't know if the value is unchanged if it's not cached");
-			fireIfUnchanged = fire;
-			return this;
-		}
-
-		/**
-		 * Controls whether the mapping operation caches its result value.
-		 *
-		 * If true, this allows the result to:
-		 * <ul>
-		 * <li>Avoid the cost of re-evaluation of the mapping function whenever an element is accessed</li>
-		 * <li>Allows the elements to contain stateful values</li>
-		 * <li>Enables {@link #reEvalOnUpdate(boolean) reEvalOnUpdate(false)} and {@link #fireIfUnchanged(boolean)
-		 * fireIfUnchanged(false)}</li>
-		 * </ul>
-		 *
-		 * This is true by default.
-		 *
-		 * @param cache Whether This operation will cache its result
-		 * @return This builder
-		 */
-		public MappedCollectionBuilder<E, I, T> cache(boolean cache) {
-			if (!fireIfUnchanged && !cache)
-				throw new IllegalStateException(
-					"cache=false and fireIfUnchanged=false are incompatible." + " Can't know if the value is unchanged if it's not cached");
-			if (!reEvalOnUpdate && !cache)
-				throw new IllegalStateException("cache=false and reEvalOnUpdate=false are incompatible."
-					+ " If the value isn't cached, then re-evaluation is done on access.");
-			isCached = false;
-			return this;
-		}
-
-		public CollectionDataFlow<E, I, T> map(Function<? super I, ? extends T> map) {
-			return new ObservableCollectionDataFlowImpl.MapOp<>(theSource, theParent, theTargetType, map, theReverse, theElementReverse,
-				reEvalOnUpdate, fireIfUnchanged, isCached);
-		}
 	}
 
 	/**
@@ -1414,323 +1316,12 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	}
 
 	/**
-	 * Builds a filtered and/or mapped set, asserted to be similarly unique as the derived set
-	 *
-	 * @param <E> The type of values in the source set
-	 * @param <I> Intermediate type
-	 * @param <T> The type of values in the mapped set
-	 */
-	class UniqueMappedCollectionBuilder<E, I, T> extends MappedCollectionBuilder<E, I, T> {
-
-		protected UniqueMappedCollectionBuilder(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent, TypeToken<T> type) {
-			super(source, parent, type);
-		}
-
-		@Override
-		public UniqueMappedCollectionBuilder<E, I, T> withReverse(Function<? super T, ? extends I> reverse) {
-			return (UniqueMappedCollectionBuilder<E, I, T>) super.withReverse(reverse);
-		}
-
-		@Override
-		public UniqueMappedCollectionBuilder<E, I, T> withElementSetting(ElementSetter<? super I, ? super T> reverse) {
-			return (UniqueMappedCollectionBuilder<E, I, T>) super.withElementSetting(reverse);
-		}
-
-		@Override
-		public UniqueMappedCollectionBuilder<E, I, T> reEvalOnUpdate(boolean reEval) {
-			return (UniqueMappedCollectionBuilder<E, I, T>) super.reEvalOnUpdate(reEval);
-		}
-
-		@Override
-		public UniqueMappedCollectionBuilder<E, I, T> fireIfUnchanged(boolean fire) {
-			return (UniqueMappedCollectionBuilder<E, I, T>) super.fireIfUnchanged(fire);
-		}
-
-		@Override
-		public UniqueMappedCollectionBuilder<E, I, T> cache(boolean cache) {
-			return (UniqueMappedCollectionBuilder<E, I, T>) super.cache(cache);
-		}
-
-		@Override
-		public CollectionDataFlow<E, I, T> map(Function<? super I, ? extends T> map) {
-			if (getReverse() != null)
-				return map(map, getReverse());
-			else
-				return super.map(map);
-		}
-
-		public UniqueDataFlow<E, I, T> map(Function<? super I, ? extends T> map, Function<? super T, ? extends I> reverse) {
-			if (reverse == null)
-				throw new IllegalArgumentException("Reverse must be specified to maintain uniqueness");
-			return new ObservableSetImpl.UniqueMapOp<>(getSource(), getParent(), getTargetType(), map, getReverse(), getElementReverse(),
-				isReEvalOnUpdate(), isFireIfUnchanged(), isCached());
-		}
-	}
-
-	/**
-	 * Builds a filtered and/or mapped sorted set, asserted to be similarly unique and sorted as the derived set
-	 *
-	 * @param <E> The type of values in the source set
-	 * @param <I> Intermediate type
-	 * @param <T> The type of values in the mapped set
-	 */
-	class UniqueSortedMappedCollectionBuilder<E, I, T> extends UniqueMappedCollectionBuilder<E, I, T> {
-		protected UniqueSortedMappedCollectionBuilder(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent, TypeToken<T> type) {
-			super(source, parent, type);
-			if (!(parent instanceof UniqueSortedDataFlow))
-				throw new IllegalArgumentException("The parent of a unique-sorted map builder must be unique-sorted");
-		}
-
-		@Override
-		public UniqueSortedMappedCollectionBuilder<E, I, T> withReverse(Function<? super T, ? extends I> reverse) {
-			return (UniqueSortedMappedCollectionBuilder<E, I, T>) super.withReverse(reverse);
-		}
-
-		@Override
-		public UniqueSortedMappedCollectionBuilder<E, I, T> withElementSetting(ElementSetter<? super I, ? super T> reverse) {
-			return (UniqueSortedMappedCollectionBuilder<E, I, T>) super.withElementSetting(reverse);
-		}
-
-		@Override
-		public UniqueSortedMappedCollectionBuilder<E, I, T> reEvalOnUpdate(boolean reEval) {
-			return (UniqueSortedMappedCollectionBuilder<E, I, T>) super.reEvalOnUpdate(reEval);
-		}
-
-		@Override
-		public UniqueSortedMappedCollectionBuilder<E, I, T> fireIfUnchanged(boolean fire) {
-			return (UniqueSortedMappedCollectionBuilder<E, I, T>) super.fireIfUnchanged(fire);
-		}
-
-		@Override
-		public UniqueSortedMappedCollectionBuilder<E, I, T> cache(boolean cache) {
-			return (UniqueSortedMappedCollectionBuilder<E, I, T>) super.cache(cache);
-		}
-
-		@Override
-		public UniqueSortedDataFlow<E, I, T> map(Function<? super I, ? extends T> map, Function<? super T, ? extends I> reverse) {
-			if (reverse == null)
-				throw new IllegalArgumentException("Reverse must be specified to maintain uniqueness");
-			withReverse(reverse);
-			return map(map, (t1, t2) -> {
-				I i1 = reverse.apply(t1);
-				I i2 = reverse.apply(t2);
-				return ((UniqueSortedDataFlow<E, ?, I>) getParent()).comparator().compare(i1, i2);
-			});
-		}
-
-		public UniqueSortedDataFlow<E, I, T> map(Function<? super I, ? extends T> map, Comparator<? super T> compare) {
-			if (compare == null)
-				throw new IllegalArgumentException("Comparator must be specified to maintain uniqueness");
-			return new ObservableSortedSetImpl.UniqueSortedMapOp<>(getSource(), getParent(), getTargetType(), map, getReverse(),
-				getElementReverse(), isReEvalOnUpdate(), isFireIfUnchanged(), isCached(), compare);
-		}
-	}
-
-	/**
-	 * A structure that may be used to define a collection whose elements are those of a single source collection combined with one or more
-	 * values
-	 *
-	 * @param <E> The type of elements in the source collection
-	 * @param <I> Intermediate type
-	 * @param <R> The type of elements in the resulting collection
-	 * @see ObservableCollection.CollectionDataFlow#combineWith(ObservableValue, TypeToken)
-	 */
-	interface CombinedCollectionBuilder<E, I, R> {
-		/**
-		 * Adds another observable value to the combination mix
-		 *
-		 * @param arg The observable value to combine to obtain the result
-		 * @return This builder
-		 */
-		<T> CombinedCollectionBuilder<E, I, R> and(ObservableValue<T> arg);
-
-		/**
-		 * Allows specification of a reverse function that may enable adding values to the result of this operation
-		 *
-		 * @param reverse A function capable of taking a result of this operation and reversing it to a source-compatible value
-		 * @return This builder
-		 */
-		CombinedCollectionBuilder<E, I, R> withReverse(Function<? super CombinedValues<? extends R>, ? extends I> reverse);
-
-		/**
-		 * @param cache Whether this operation caches its result to avoid re-evaluation on access. True by default.
-		 * @return This builder
-		 */
-		CombinedCollectionBuilder<E, I, R> cache(boolean cache);
-
-		CollectionDataFlow<E, I, R> build(Function<? super CombinedValues<? extends I>, ? extends R> combination);
-	}
-
-	/**
-	 * A {@link ObservableCollection.CombinedCollectionBuilder} for the combination of a collection with a single value. Use
-	 * {@link #and(ObservableValue)} to combine with additional values.
-	 *
-	 * @param <E> The type of elements in the source collection
-	 * @param <I> Intermediate type
-	 * @param <V> The type of the combined value
-	 * @param <R> The type of elements in the resulting collection
-	 * @see ObservableCollection.CollectionDataFlow#combineWith(ObservableValue, TypeToken)
-	 */
-	class CombinedCollectionBuilder2<E, I, V, R> extends AbstractCombinedCollectionBuilder<E, I, R> {
-		private final ObservableValue<V> theArg2;
-
-		protected CombinedCollectionBuilder2(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent, TypeToken<R> targetType,
-			ObservableValue<V> arg2) {
-			super(source, parent, targetType);
-			theArg2 = arg2;
-			addArg(arg2);
-		}
-
-		protected ObservableValue<V> getArg2() {
-			return theArg2;
-		}
-
-		public CombinedCollectionBuilder2<E, I, V, R> withReverse(BiFunction<? super R, ? super V, ? extends I> reverse) {
-			return withReverse(cv -> reverse.apply(cv.getElement(), cv.get(theArg2)));
-		}
-
-		@Override
-		public CombinedCollectionBuilder2<E, I, V, R> withReverse(Function<? super CombinedValues<? extends R>, ? extends I> reverse) {
-			return (CombinedCollectionBuilder2<E, I, V, R>) super.withReverse(reverse);
-		}
-
-		@Override
-		public CombinedCollectionBuilder2<E, I, V, R> cache(boolean cache) {
-			return (CombinedCollectionBuilder2<E, I, V, R>) super.cache(cache);
-		}
-
-		public CollectionDataFlow<E, I, R> build(BiFunction<? super I, ? super V, ? extends R> combination) {
-			return build(cv -> combination.apply(cv.getElement(), cv.get(theArg2)));
-		}
-
-		@Override
-		public <U> CombinedCollectionBuilder3<E, I, V, U, R> and(ObservableValue<U> arg3) {
-			if (getReverse() != null)
-				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
-			return new CombinedCollectionBuilder3<>(getSource(), getParent(), getTargetType(), theArg2, arg3);
-		}
-	}
-
-	/**
-	 * A {@link ObservableCollection.CombinedCollectionBuilder} for the combination of a collection with 2 values. Use
-	 * {@link #and(ObservableValue)} to combine with additional values.
-	 *
-	 * @param <E> The type of elements in the source collection
-	 * @param <I> Intermediate type
-	 * @param <V1> The type of the first combined value
-	 * @param <V2> The type of the second combined value
-	 * @param <R> The type of elements in the resulting collection
-	 * @see ObservableCollection.CollectionDataFlow#combineWith(ObservableValue, TypeToken)
-	 * @see ObservableCollection.CombinedCollectionBuilder2#and(ObservableValue)
-	 */
-	class CombinedCollectionBuilder3<E, I, V1, V2, R> extends AbstractCombinedCollectionBuilder<E, I, R> {
-		private final ObservableValue<V1> theArg2;
-		private final ObservableValue<V2> theArg3;
-
-		protected CombinedCollectionBuilder3(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent, TypeToken<R> targetType,
-			ObservableValue<V1> arg2, ObservableValue<V2> arg3) {
-			super(source, parent, targetType);
-			theArg2 = arg2;
-			theArg3 = arg3;
-			addArg(arg2);
-			addArg(arg3);
-		}
-
-		protected ObservableValue<V1> getArg2() {
-			return theArg2;
-		}
-
-		protected ObservableValue<V2> getArg3() {
-			return theArg3;
-		}
-
-		public CombinedCollectionBuilder3<E, I, V1, V2, R> withReverse(
-			TriFunction<? super R, ? super V1, ? super V2, ? extends I> reverse) {
-			return withReverse(cv -> reverse.apply(cv.getElement(), cv.get(theArg2), cv.get(theArg3)));
-		}
-
-		@Override
-		public CombinedCollectionBuilder3<E, I, V1, V2, R> withReverse(Function<? super CombinedValues<? extends R>, ? extends I> reverse) {
-			return (CombinedCollectionBuilder3<E, I, V1, V2, R>) super.withReverse(reverse);
-		}
-
-		@Override
-		public CombinedCollectionBuilder3<E, I, V1, V2, R> cache(boolean cache) {
-			return (CombinedCollectionBuilder3<E, I, V1, V2, R>) super.cache(cache);
-		}
-
-		public CollectionDataFlow<E, I, R> build(TriFunction<? super I, ? super V1, ? super V2, ? extends R> combination) {
-			return build(cv -> combination.apply(cv.getElement(), cv.get(theArg2), cv.get(theArg3)));
-		}
-
-		@Override
-		public <T2> CombinedCollectionBuilderN<E, I, R> and(ObservableValue<T2> arg) {
-			if (getReverse() != null)
-				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
-			return new CombinedCollectionBuilderN<>(getSource(), getParent(), getTargetType(), theArg2, theArg3, arg);
-		}
-	}
-
-	/**
-	 * A {@link ObservableCollection.CombinedCollectionBuilder} for the combination of a collection with one or more (typically at least 3)
-	 * values. Use {@link #and(ObservableValue)} to combine with additional values.
-	 *
-	 * @param <E> The type of elements in the source collection
-	 * @param <I> Intermediate type
-	 * @param <R> The type of elements in the resulting collection
-	 * @see ObservableCollection.CollectionDataFlow#combineWith(ObservableValue, TypeToken)
-	 * @see ObservableCollection.CombinedCollectionBuilder3#and(ObservableValue)
-	 */
-	class CombinedCollectionBuilderN<E, I, R> extends AbstractCombinedCollectionBuilder<E, I, R> {
-		protected CombinedCollectionBuilderN(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent, TypeToken<R> targetType,
-			ObservableValue<?> arg2, ObservableValue<?> arg3, ObservableValue<?> arg4) {
-			super(source, parent, targetType);
-			addArg(arg2);
-			addArg(arg3);
-			addArg(arg4);
-		}
-
-		@Override
-		public CombinedCollectionBuilderN<E, I, R> withReverse(Function<? super CombinedValues<? extends R>, ? extends I> reverse) {
-			return (CombinedCollectionBuilderN<E, I, R>) super.withReverse(reverse);
-		}
-
-		@Override
-		public CombinedCollectionBuilderN<E, I, R> cache(boolean cache) {
-			return (CombinedCollectionBuilderN<E, I, R>) super.cache(cache);
-		}
-
-		@Override
-		public <T> CombinedCollectionBuilderN<E, I, R> and(ObservableValue<T> arg) {
-			if (getReverse() != null)
-				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
-			addArg(arg);
-			return this;
-		}
-	}
-
-	/**
-	 * A structure that is operated on to produce the elements of a combined collection
-	 *
-	 * @param <E> The type of the source element (or the value to be reversed)
-	 * @see ObservableCollection.CollectionDataFlow#combineWith(ObservableValue, TypeToken)
-	 */
-	interface CombinedValues<E> {
-		E getElement();
-
-		<T> T get(ObservableValue<T> arg);
-	}
-
-	/**
 	 * Allows creation of a collection that reflects a source collection's data, but may limit the operations the user can perform on the
 	 * data or when the user can observe the data
 	 *
-	 * @param <E> The type of the source collection
 	 * @param <T> The type of the collection to filter modification on
 	 */
-	class ModFilterBuilder<E, T> {
-		private final ObservableCollection<E> theSource;
-		private final CollectionDataFlow<E, ?, T> theParent;
+	class ModFilterBuilder<T> {
 		private String theImmutableMsg;
 		private boolean areUpdatesAllowed;
 		private String theAddMsg;
@@ -1738,160 +1329,57 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		private Function<? super T, String> theAddMsgFn;
 		private Function<? super T, String> theRemoveMsgFn;
 
-		public ModFilterBuilder(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent) {
-			theSource = source;
-			theParent = parent;
+		public ModFilterBuilder() {
 		}
 
-		protected ObservableCollection<E> getSource() {
-			return theSource;
-		}
-
-		protected CollectionDataFlow<E, ?, T> getParent() {
-			return theParent;
-		}
-
-		protected String getImmutableMsg() {
+		public String getImmutableMsg() {
 			return theImmutableMsg;
 		}
 
-		protected boolean areUpdatesAllowed() {
+		public boolean areUpdatesAllowed() {
 			return areUpdatesAllowed;
 		}
 
-		protected String getAddMsg() {
+		public String getAddMsg() {
 			return theAddMsg;
 		}
 
-		protected String getRemoveMsg() {
+		public String getRemoveMsg() {
 			return theRemoveMsg;
 		}
 
-		protected Function<? super T, String> getAddMsgFn() {
+		public Function<? super T, String> getAddMsgFn() {
 			return theAddMsgFn;
 		}
 
-		protected Function<? super T, String> getRemoveMsgFn() {
+		public Function<? super T, String> getRemoveMsgFn() {
 			return theRemoveMsgFn;
 		}
 
-		public ModFilterBuilder<E, T> immutable(String modMsg, boolean allowUpdates) {
+		public ModFilterBuilder<T> immutable(String modMsg, boolean allowUpdates) {
 			theImmutableMsg = modMsg;
 			areUpdatesAllowed = allowUpdates;
 			return this;
 		}
 
-		public ModFilterBuilder<E, T> noAdd(String modMsg) {
+		public ModFilterBuilder<T> noAdd(String modMsg) {
 			theAddMsg = modMsg;
 			return this;
 		}
 
-		public ModFilterBuilder<E, T> noRemove(String modMsg) {
+		public ModFilterBuilder<T> noRemove(String modMsg) {
 			theRemoveMsg = modMsg;
 			return this;
 		}
 
-		public ModFilterBuilder<E, T> filterAdd(Function<? super T, String> messageFn) {
+		public ModFilterBuilder<T> filterAdd(Function<? super T, String> messageFn) {
 			theAddMsgFn = messageFn;
 			return this;
 		}
 
-		public ModFilterBuilder<E, T> filterRemove(Function<? super T, String> messageFn) {
+		public ModFilterBuilder<T> filterRemove(Function<? super T, String> messageFn) {
 			theRemoveMsgFn = messageFn;
 			return this;
-		}
-
-		public CollectionDataFlow<E, T, T> build() {
-			return new ObservableCollectionDataFlowImpl.ModFilteredOp<>(theSource, (AbstractDataFlow<E, ?, T>) theParent, theImmutableMsg,
-				areUpdatesAllowed, theAddMsg, theRemoveMsg, theAddMsgFn, theRemoveMsgFn);
-		}
-	}
-
-	/**
-	 * Allows creation of a set that reflects a source set's data, but may limit the operations the user can perform on the data or when the
-	 * user can observe the data
-	 *
-	 * @param <E> The type of the source set
-	 * @param <T> The type of the set to filter modification on
-	 */
-	class UniqueModFilterBuilder<E, T> extends ModFilterBuilder<E, T> {
-		public UniqueModFilterBuilder(ObservableCollection<E> source, UniqueDataFlow<E, ?, T> parent) {
-			super(source, parent);
-		}
-
-		@Override
-		public UniqueModFilterBuilder<E, T> immutable(String modMsg, boolean allowUpdates) {
-			return (UniqueModFilterBuilder<E, T>) super.immutable(modMsg, allowUpdates);
-		}
-
-		@Override
-		public UniqueModFilterBuilder<E, T> noAdd(String modMsg) {
-			return (UniqueModFilterBuilder<E, T>) super.noAdd(modMsg);
-		}
-
-		@Override
-		public UniqueModFilterBuilder<E, T> noRemove(String modMsg) {
-			return (UniqueModFilterBuilder<E, T>) super.noRemove(modMsg);
-		}
-
-		@Override
-		public UniqueModFilterBuilder<E, T> filterAdd(Function<? super T, String> messageFn) {
-			return (UniqueModFilterBuilder<E, T>) super.filterAdd(messageFn);
-		}
-
-		@Override
-		public UniqueModFilterBuilder<E, T> filterRemove(Function<? super T, String> messageFn) {
-			return (UniqueModFilterBuilder<E, T>) super.filterRemove(messageFn);
-		}
-
-		@Override
-		public UniqueDataFlow<E, T, T> build() {
-			return new ObservableSetImpl.UniqueModFilteredOp<>(getSource(), (AbstractDataFlow<E, ?, T>) getParent(), getImmutableMsg(),
-				areUpdatesAllowed(), getAddMsg(), getRemoveMsg(), getAddMsgFn(), getRemoveMsgFn());
-		}
-	}
-
-	/**
-	 * Allows creation of a sorted set that reflects a source set's data, but may limit the operations the user can perform on the data or
-	 * when the user can observe the data
-	 *
-	 * @param <E> The type of the source set
-	 * @param <T> The type of the set to filter modification on
-	 */
-	class UniqueSortedModFilterBuilder<E, T> extends UniqueModFilterBuilder<E, T> {
-		public UniqueSortedModFilterBuilder(ObservableCollection<E> source, UniqueSortedDataFlow<E, ?, T> parent) {
-			super(source, parent);
-		}
-
-		@Override
-		public UniqueSortedModFilterBuilder<E, T> immutable(String modMsg, boolean allowUpdates) {
-			return (UniqueSortedModFilterBuilder<E, T>) super.immutable(modMsg, allowUpdates);
-		}
-
-		@Override
-		public UniqueSortedModFilterBuilder<E, T> noAdd(String modMsg) {
-			return (UniqueSortedModFilterBuilder<E, T>) super.noAdd(modMsg);
-		}
-
-		@Override
-		public UniqueSortedModFilterBuilder<E, T> noRemove(String modMsg) {
-			return (UniqueSortedModFilterBuilder<E, T>) super.noRemove(modMsg);
-		}
-
-		@Override
-		public UniqueSortedModFilterBuilder<E, T> filterAdd(Function<? super T, String> messageFn) {
-			return (UniqueSortedModFilterBuilder<E, T>) super.filterAdd(messageFn);
-		}
-
-		@Override
-		public UniqueSortedModFilterBuilder<E, T> filterRemove(Function<? super T, String> messageFn) {
-			return (UniqueSortedModFilterBuilder<E, T>) super.filterRemove(messageFn);
-		}
-
-		@Override
-		public UniqueSortedDataFlow<E, T, T> build() {
-			return new ObservableSortedSetImpl.UniqueSortedModFilteredOp<>(getSource(), (AbstractDataFlow<E, ?, T>) getParent(),
-				getImmutableMsg(), areUpdatesAllowed(), getAddMsg(), getRemoveMsg(), getAddMsgFn(), getRemoveMsgFn());
 		}
 	}
 }

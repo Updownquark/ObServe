@@ -8,6 +8,7 @@ import java.util.IdentityHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -21,11 +22,15 @@ import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableMultiMap.MultiMapFlow;
 import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap.SortedMultiMapFlow;
+import org.observe.collect.Combination.CombinationPrecursor;
+import org.observe.collect.Combination.CombinedCollectionBuilder;
+import org.observe.collect.Combination.CombinedFlowDef;
+import org.observe.collect.Combination.CombinedValues;
+import org.observe.collect.FlowOptions.GroupingOptions;
+import org.observe.collect.FlowOptions.MapDef;
+import org.observe.collect.FlowOptions.MapOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
-import org.observe.collect.ObservableCollection.CombinedCollectionBuilder;
-import org.observe.collect.ObservableCollection.CombinedValues;
 import org.observe.collect.ObservableCollection.ElementSetter;
-import org.observe.collect.ObservableCollection.MappedCollectionBuilder;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
@@ -34,7 +39,6 @@ import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.PassiveDerivedCollection;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
-import org.qommons.collect.BetterHashSet;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionElement;
@@ -137,12 +141,11 @@ public class ObservableCollectionDataFlowImpl {
 	}
 
 	public static interface ActiveCollectionManager<E, I, T> extends CollectionOperation<E, I, T> {
-		/** @return Whether this manager always has a representation for each element in the source collection */
-		boolean isEachRepresented();
-
 		Comparable<DerivedCollectionElement<T>> getElementFinder(T value);
 
 		String canAdd(T toAdd);
+
+		void clear();
 
 		DerivedCollectionElement<T> addElement(T value, boolean first);
 
@@ -244,8 +247,18 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public <X> MappedCollectionBuilder<E, T, X> map(TypeToken<X> target) {
-			return new MappedCollectionBuilder<>(theSource, this, target);
+		public <X> CollectionDataFlow<E, T, X> map(TypeToken<X> target, Function<? super T, ? extends X> map,
+			Consumer<MapOptions<T, X>> options) {
+			MapOptions<T, X> mapOptions = new MapOptions<>();
+			options.accept(mapOptions);
+			return new MapOp<>(theSource, this, target, map, new MapDef<>(mapOptions));
+		}
+
+		@Override
+		public <X> CollectionDataFlow<E, T, X> combine(TypeToken<X> targetType,
+			Function<CombinationPrecursor<T, X>, CombinedFlowDef<T, X>> combination) {
+			CombinedFlowDef<T, X> def = combination.apply(new CombinationPrecursor<>());
+			return new CombinedCollectionOp<>(theSource, this, targetType, def);
 		}
 
 		@Override
@@ -255,14 +268,10 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public <V, X> ObservableCollection.CombinedCollectionBuilder2<E, T, V, X> combineWith(ObservableValue<V> value,
-			TypeToken<X> target) {
-			return new ObservableCollection.CombinedCollectionBuilder2<>(theSource, this, target, value);
-		}
-
-		@Override
-		public ModFilterBuilder<E, T> filterModification() {
-			return new ModFilterBuilder<>(theSource, this);
+		public CollectionDataFlow<E, I, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
+			ModFilterBuilder<T> filter = new ModFilterBuilder<>();
+			options.accept(filter);
+			return new ModFilteredOp(theSource, this, new ModFilterer<>(filter));
 		}
 
 		@Override
@@ -281,81 +290,31 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public <K> MultiMapFlow<E, K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap, boolean staticCategories,
-			boolean useFirstKey) {
-			return new ObservableMultiMap.DefaultMultiMapFlow<>(theSource, unique(useFirstKey), null, null)
-				// TODO Auto-generated method stub
-				return null;
+		public <K> MultiMapFlow<E, K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap,
+			Consumer<GroupingOptions> options) {
+			GroupingOptions groupOptions=new GroupingOptions();
+			options.accept(groupOptions);
+			UniqueDataFlow<E, ?, K> keyFlow;
+			Function<K, CollectionDataFlow<E, I, T>> valueMap;
+			if(options.isStatic){
+				keyFlow=
+			} else{
+				keyFlow=map(keyType, keyMap, mapOptions->{}).unique(groupOptions.isUseFirstKey());
+				valueMap=key->this.filter(v->{
+					if(Objects.equals(key, keyMap.apply(v)))
+						return null;
+					else
+						return StdMsg.WRONG_GROUP;
+				});
+			}
+			return new ObservableMultiMap.DefaultMultiMapFlow(theSource, keyFlow, theTargetType, filterMap);
 		}
 
 		@Override
 		public <K> SortedMultiMapFlow<E, K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap,
-			Comparator<? super K> keyCompare, boolean staticCategories, boolean useFirstKey) {
+			Comparator<? super K> keyCompare, Consumer<GroupingOptions> options) {
 			// TODO Auto-generated method stub
 			return null;
-		}
-
-		@Override
-		public <K> MultiMapFlow<E, K, T> groupBy(Function<? super CollectionDataFlow<E, I, T>, UniqueDataFlow<E, ?, K>> keyFlow,
-			boolean staticCategories) {
-			UniqueDataFlow<E, ?, K> keyFlowed = keyFlow.apply(this);
-			CollectionOperation<E, ?, K> keyMgr = keyFlowed.manageActive();
-			CollectionOperation<E, ?, T> valueMgr = isPassive() ? managePassive() : manageActive();
-			return new ObservableMultiMap.DefaultMultiMapFlow<>(theSource, keyFlowed, theTargetType, key -> {
-				FilterMapResult<E, K> mappedKey = keyMgr.map(key);
-				if (!mappedKey.isAccepted()) // Invalid key
-					return ObservableCollection.constant(theTargetType).flow();
-				Function<T, String> filter = value -> {
-					// Stinks to have to back up to the root type and then map back to the key,
-					// but right now the API doesn't allow for better
-					FilterMapResult<T, E> reversed = valueMgr.reverse(value);
-					if (!reversed.isAccepted())
-						return reversed.getRejectReason();
-					FilterMapResult<E, K> mappedValueKey = keyMgr.map(reversed.result);
-					if (!mappedValueKey.isAccepted())
-						return mappedValueKey.getRejectReason();
-					else if (keyMgr.equivalence().elementEquals((K) key, mappedValueKey.result))
-						return null;
-					else
-						return StdMsg.WRONG_GROUP;
-				};
-				if (staticCategories)
-					return filterStatic(filter);
-				else
-					return filter(filter);
-			});
-		}
-
-		@Override
-		public <K> MultiMapFlow<E, K, T> groupBy(Function<? super CollectionDataFlow<E, I, T>, CollectionDataFlow<E, ?, K>> keyFlow,
-			Comparator<? super K> keyCompare, boolean staticCategories) {
-			UniqueSortedDataFlow<E, ?, K> keyFlowed = keyFlow.apply(this).uniqueSorted(keyCompare, true);
-			CollectionOperation<E, ?, K> keyMgr = keyFlowed.manageActive();
-			CollectionOperation<E, ?, T> valueMgr = isPassive() ? managePassive() : manageActive();
-			// Can't think of a real easy way to pull this code out so it's not copy-and-paste from the method above
-			return new ObservableSortedMultiMap.DefaultSortedMultiMapFlow<>(theSource, keyFlowed, theTargetType, key -> {
-				FilterMapResult<E, K> mappedKey = keyMgr.map(key);
-				if (!mappedKey.isAccepted()) // Invalid key
-					return ObservableCollection.constant(theTargetType).flow();
-				Function<T, String> filter = value -> {
-					// Stinks to have to back up to the root type and then map back to the key,
-					// but right now the API doesn't allow for better
-					FilterMapResult<T, E> reversed = valueMgr.reverse(value);
-					if (!reversed.isAccepted())
-						return reversed.getRejectReason();
-					FilterMapResult<E, K> mappedValueKey = keyMgr.map(reversed.result);
-					if (!mappedValueKey.isAccepted())
-						return mappedValueKey.getRejectReason();
-					else if (keyMgr.equivalence().elementEquals((K) key, mappedValueKey.result))
-						return null;
-					else
-						return StdMsg.WRONG_GROUP;
-				};
-				if (staticCategories)
-					return filterStatic(filter);
-				else
-					return filter(filter);
-			});
 		}
 
 		@Override
@@ -370,7 +329,7 @@ public class ObservableCollectionDataFlowImpl {
 			if (until == Observable.empty && isPassive())
 				return new PassiveDerivedCollection<>(getSource(), managePassive());
 			else
-				return new ActiveDerivedCollection<>(getSource(), manageActive(), until);
+				return new ActiveDerivedCollection<>(manageActive(), until);
 		}
 	}
 
@@ -512,41 +471,30 @@ public class ObservableCollectionDataFlowImpl {
 
 	public static class MapOp<E, I, T> extends AbstractDataFlow<E, I, T> {
 		private final Function<? super I, ? extends T> theMap;
-		private final Function<? super T, ? extends I> theReverse;
-		private final ElementSetter<? super I, ? super T> theElementReverse;
-		private final boolean reEvalOnUpdate;
-		private final boolean fireIfUnchanged;
-		private final boolean isCached;
+		private final MapDef<I, T> theOptions;
 
 		protected MapOp(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent, TypeToken<T> target,
-			Function<? super I, ? extends T> map, Function<? super T, ? extends I> reverse,
-			ElementSetter<? super I, ? super T> elementReverse, boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean cached) {
+			Function<? super I, ? extends T> map, MapDef<I, T> options) {
 			super(source, parent, target);
 			theMap = map;
-			theReverse = reverse;
-			theElementReverse = elementReverse;
-			this.reEvalOnUpdate = reEvalOnUpdate;
-			this.fireIfUnchanged = fireIfUnchanged;
-			isCached = cached;
+			theOptions = options;
 		}
 
 		@Override
 		public boolean isPassive() {
-			if (isCached)
+			if (theOptions.isCached())
 				return false;
 			return getParent().isPassive();
 		}
 
 		@Override
 		public PassiveCollectionManager<E, ?, T> managePassive() {
-			return new PassiveMappedCollectionManager<>(getParent().managePassive(), getTargetType(), theMap, theReverse, theElementReverse,
-				fireIfUnchanged);
+			return new PassiveMappedCollectionManager<>(getParent().managePassive(), getTargetType(), theMap, theOptions);
 		}
 
 		@Override
 		public ActiveCollectionManager<E, ?, T> manageActive() {
-			return new MappedCollectionManager2<>(getParent().manageActive(), getTargetType(), theMap, theReverse, theElementReverse,
-				reEvalOnUpdate, fireIfUnchanged, isCached);
+			return new ActiveMappedCollectionManager<>(getParent().manageActive(), getTargetType(), theMap, theOptions);
 		}
 	}
 
@@ -557,20 +505,13 @@ public class ObservableCollectionDataFlowImpl {
 	 * @param <I> Intermediate type
 	 * @param <T> The type of elements in the resulting collection
 	 */
-	public static class CombinedCollectionDef<E, I, T> extends AbstractDataFlow<E, I, T> {
-		private final Set<ObservableValue<?>> theArgs;
-		private final Function<? super CombinedValues<? extends I>, ? extends T> theCombination;
-		private final Function<? super CombinedValues<? extends T>, ? extends I> theReverse;
-		private final boolean isCached;
+	public static class CombinedCollectionOp<E, I, T> extends AbstractDataFlow<E, I, T> {
+		private final CombinedFlowDef<I, T> theDef;
 
-		protected CombinedCollectionDef(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent, TypeToken<T> target,
-			Set<ObservableValue<?>> args, Function<? super CombinedValues<? extends I>, ? extends T> combination,
-			Function<? super CombinedValues<? extends T>, ? extends I> reverse, boolean cached) {
+		protected CombinedCollectionOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, I> parent, TypeToken<T> target,
+			CombinedFlowDef<I, T> def) {
 			super(source, parent, target);
-			theArgs = Collections.unmodifiableSet(args);
-			theCombination = combination;
-			theReverse = reverse;
-			isCached = cached;
+			theDef = def;
 		}
 
 		@Override
@@ -587,66 +528,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public ActiveCollectionManager<E, ?, T> manageActive() {
-			return new CombinedCollectionManager<>(getParent().manageActive(), getTargetType(), theArgs, theCombination, theReverse,
-				isCached);
-		}
-	}
-
-	public static abstract class AbstractCombinedCollectionBuilder<E, I, R> implements CombinedCollectionBuilder<E, I, R> {
-		private final ObservableCollection<E> theSource;
-		private final AbstractDataFlow<E, ?, I> theParent;
-		private final TypeToken<R> theTargetType;
-		private final BetterHashSet<ObservableValue<?>> theArgs;
-		private Function<? super CombinedValues<? extends R>, ? extends I> theReverse;
-		private boolean isCached;
-
-		protected AbstractCombinedCollectionBuilder(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent,
-			TypeToken<R> targetType) {
-			theSource = source;
-			theParent = parent;
-			theTargetType = targetType;
-			theArgs = BetterHashSet.build().identity().unsafe().buildSet();
-			isCached = true;
-		}
-
-		protected ObservableCollection<E> getSource() {
-			return theSource;
-		}
-
-		protected void addArg(ObservableValue<?> arg) {
-			if (theArgs.contains(arg))
-				throw new IllegalArgumentException("Argument " + arg + " is already combined");
-			theArgs.add(arg);
-		}
-
-		protected AbstractDataFlow<E, ?, I> getParent() {
-			return theParent;
-		}
-
-		protected TypeToken<R> getTargetType() {
-			return theTargetType;
-		}
-
-		protected Function<? super CombinedValues<? extends R>, ? extends I> getReverse() {
-			return theReverse;
-		}
-
-		@Override
-		public AbstractCombinedCollectionBuilder<E, I, R> withReverse(Function<? super CombinedValues<? extends R>, ? extends I> reverse) {
-			theReverse = reverse;
-			return this;
-		}
-
-		@Override
-		public AbstractCombinedCollectionBuilder<E, I, R> cache(boolean cache) {
-			isCached = cache;
-			return this;
-		}
-
-		@Override
-		public CollectionDataFlow<E, I, R> build(Function<? super CombinedValues<? extends I>, ? extends R> combination) {
-			return new CombinedCollectionDef<>(theSource, theParent, theTargetType,
-				BetterHashSet.build().identity().unsafe().buildSet(theArgs), combination, theReverse, isCached);
+			return new CombinedCollectionManager<>(getParent().manageActive(), getTargetType(), theDef);
 		}
 	}
 
@@ -700,22 +582,11 @@ public class ObservableCollectionDataFlowImpl {
 	}
 
 	public static class ModFilteredOp<E, T> extends AbstractDataFlow<E, T, T> {
-		private final String theImmutableMessage;
-		private final boolean areUpdatesAllowed;
-		private final String theAddMessage;
-		private final String theRemoveMessage;
-		private final Function<? super T, String> theAddFilter;
-		private final Function<? super T, String> theRemoveFilter;
+		private final ModFilterer<T> theOptions;
 
-		public ModFilteredOp(ObservableCollection<E> source, AbstractDataFlow<E, ?, T> parent, String immutableMsg, boolean allowUpdates,
-			String addMsg, String removeMsg, Function<? super T, String> addMsgFn, Function<? super T, String> removeMsgFn) {
+		public ModFilteredOp(ObservableCollection<E> source, AbstractDataFlow<E, ?, T> parent, ModFilterer<T> options) {
 			super(source, parent, parent.getTargetType());
-			theImmutableMessage = immutableMsg;
-			areUpdatesAllowed = allowUpdates;
-			theAddMessage = addMsg;
-			theRemoveMessage = removeMsg;
-			theAddFilter = addMsgFn;
-			theRemoveFilter = removeMsgFn;
+			theOptions = options;
 		}
 
 		@Override
@@ -725,14 +596,12 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public PassiveCollectionManager<E, ?, T> managePassive() {
-			return new PassiveModFilteredManager<>(getParent().managePassive(), theImmutableMessage, areUpdatesAllowed, theAddMessage,
-				theRemoveMessage, theAddFilter, theRemoveFilter);
+			return new PassiveModFilteredManager<>(getParent().managePassive(), theOptions);
 		}
 
 		@Override
 		public ActiveCollectionManager<E, ?, T> manageActive() {
-			return new ActiveModFilteredManager<>(getParent().manageActive(), theImmutableMessage, areUpdatesAllowed, theAddMessage,
-				theRemoveMessage, theAddFilter, theRemoveFilter);
+			return new ActiveModFilteredManager<>(getParent().manageActive(), theOptions);
 		}
 	}
 
@@ -1614,19 +1483,14 @@ public class ObservableCollectionDataFlowImpl {
 		private final PassiveCollectionManager<E, ?, I> theParent;
 		private final TypeToken<T> theTargetType;
 		private final Function<? super I, ? extends T> theMap;
-		private final Function<? super T, ? extends I> theReverse;
-		private final ElementSetter<? super I, ? super T> theElementReverse;
-		private final boolean fireIfUnchanged;
+		private final MapDef<I, T> theOptions;
 
 		public PassiveMappedCollectionManager(PassiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
-			Function<? super I, ? extends T> map, Function<? super T, ? extends I> reverse,
-			ElementSetter<? super I, ? super T> elementReverse, boolean fireIfUnchanged) {
+			Function<? super I, ? extends T> map, MapDef<I, T> options) {
 			theParent = parent;
 			theTargetType = targetType;
 			theMap = map;
-			theReverse = reverse;
-			theElementReverse = elementReverse;
-			this.fireIfUnchanged = fireIfUnchanged;
+			theOptions = options;
 		}
 
 		@Override
@@ -1735,27 +1599,18 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
-	public static class MappedCollectionManager2<E, I, T> implements ActiveCollectionManager<E, I, T> {
+	public static class ActiveMappedCollectionManager<E, I, T> implements ActiveCollectionManager<E, I, T> {
 		private final ActiveCollectionManager<E, ?, I> theParent;
 		private final TypeToken<T> theTargetType;
 		private final Function<? super I, ? extends T> theMap;
-		private final Function<? super T, ? extends I> theReverse;
-		private final ElementSetter<? super I, ? super T> theElementReverse;
-		private final boolean reEvalOnUpdate;
-		private final boolean fireIfUnchanged;
-		private final boolean isCached;
+		private final MapDef<I, T> theOptions;
 
-		protected MappedCollectionManager2(ActiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
-			Function<? super I, ? extends T> map, Function<? super T, ? extends I> reverse,
-			ElementSetter<? super I, ? super T> elementReverse, boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean cached) {
+		protected ActiveMappedCollectionManager(ActiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
+			Function<? super I, ? extends T> map, MapDef<I, T> options) {
 			theParent = parent;
 			theTargetType = targetType;
 			theMap = map;
-			theReverse = reverse;
-			theElementReverse = elementReverse;
-			this.reEvalOnUpdate = reEvalOnUpdate;
-			this.fireIfUnchanged = fireIfUnchanged;
-			isCached = cached;
+			theOptions = options;
 		}
 
 		@Override
@@ -1783,9 +1638,9 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
-			if (theReverse == null)
+			if (theOptions.getReverse() == null)
 				return null;
-			Comparable<DerivedCollectionElement<I>> pef = theParent.getElementFinder(theReverse.apply(value));
+			Comparable<DerivedCollectionElement<I>> pef = theParent.getElementFinder(theOptions.getReverse().apply(value));
 			if (pef == null)
 				return null;
 			return el -> pef.compareTo(((MappedElement) el).theParentEl);
@@ -1793,16 +1648,16 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public String canAdd(T toAdd) {
-			if (theReverse == null)
+			if (theOptions.getReverse() == null)
 				return StdMsg.UNSUPPORTED_OPERATION;
-			return theParent.canAdd(theReverse.apply(toAdd));
+			return theParent.canAdd(theOptions.getReverse().apply(toAdd));
 		}
 
 		@Override
 		public DerivedCollectionElement<T> addElement(T value, boolean first) {
-			if (theReverse == null)
+			if (theOptions.getReverse() == null)
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			DerivedCollectionElement<I> parentEl = theParent.addElement(theReverse.apply(value), first);
+			DerivedCollectionElement<I> parentEl = theParent.addElement(theOptions.getReverse().apply(value), first);
 			return parentEl == null ? null : new MappedElement(parentEl, true);
 		}
 
@@ -1826,27 +1681,27 @@ public class ObservableCollectionDataFlowImpl {
 						@Override
 						public void update(I oldValue, I newValue, Object cause) {
 							I srcVal;
-							if (!fireIfUnchanged) {
+							if (!theOptions.isFireIfUnchanged()) {
 								if (newValue == theSourceValue)
 									return;
 								srcVal = theSourceValue;
 								theSourceValue = newValue;
 							} else
 								srcVal = oldValue;
-							if (!reEvalOnUpdate && srcVal == newValue) {
+							if (!theOptions.isReEvalOnUpdate() && srcVal == newValue) {
 								ObservableCollectionDataFlowImpl.update(theListener, theValue, theValue, cause);
 								return;
 							}
-							T oldVal = isCached ? theValue : theMap.apply(oldValue);
+							T oldVal = theOptions.isCached() ? theValue : theMap.apply(oldValue);
 							T newVal = theMap.apply(newValue);
-							if (isCached)
+							if (theOptions.isCached())
 								theValue = newVal;
 							ObservableCollectionDataFlowImpl.update(theListener, oldVal, newVal, cause);
 						}
 
 						@Override
 						public void removed(I value, Object cause) {
-							T val = isCached ? theValue : theMap.apply(value);
+							T val = theOptions.isCached() ? theValue : theMap.apply(value);
 							ObservableCollectionDataFlowImpl.removed(theListener, val, cause);
 							theListener = null;
 							theSourceValue = null;
@@ -1854,11 +1709,11 @@ public class ObservableCollectionDataFlowImpl {
 						}
 					});
 					// Populate the initial values if these are needed
-					if (isCached || !fireIfUnchanged) {
+					if (theOptions.isCached() || !theOptions.isFireIfUnchanged()) {
 						I srcVal = parentEl.get();
-						if (!fireIfUnchanged)
+						if (!theOptions.isFireIfUnchanged())
 							theSourceValue = srcVal;
-						if (isCached)
+						if (theOptions.isCached())
 							theValue = theMap.apply(srcVal);
 					}
 				}
@@ -1876,7 +1731,7 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public T get() {
-				return isCached ? theValue : theMap.apply(theParentEl.get());
+				return theOptions.isCached() ? theValue : theMap.apply(theParentEl.get());
 			}
 
 			@Override
@@ -1886,14 +1741,14 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public String isAcceptable(T value) {
-				if (theReverse == null)
+				if (theOptions.getReverse() == null)
 					return StdMsg.UNSUPPORTED_OPERATION;
 				return theParentEl.isAcceptable(theReverse.apply(value));
 			}
 
 			@Override
 			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
-				if (theReverse == null)
+				if (theOptions.getReverse() == null)
 					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 				theParentEl.set(theReverse.apply(value));
 			}
@@ -1910,14 +1765,14 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public String canAdd(T value, boolean before) {
-				if (theReverse == null)
+				if (theOptions.getReverse() == null)
 					return StdMsg.UNSUPPORTED_OPERATION;
 				return theParentEl.canAdd(theReverse.apply(value), before);
 			}
 
 			@Override
 			public DerivedCollectionElement<T> add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-				if (theReverse == null)
+				if (theOptions.getReverse() == null)
 					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 				DerivedCollectionElement<I> parentEl = theParentEl.add(theReverse.apply(value), before);
 				return parentEl == null ? null : new MappedElement(parentEl, true);
@@ -1933,28 +1788,22 @@ public class ObservableCollectionDataFlowImpl {
 
 		private final ActiveCollectionManager<E, ?, I> theParent;
 		private final TypeToken<T> theTargetType;
+		private final CombinedFlowDef<I, T> theDef;
 
 		private final Map<ObservableValue<?>, ArgHolder<?>> theArgs;
-		private final Function<? super CombinedValues<? extends I>, ? extends T> theCombination;
-		private final Function<? super CombinedValues<? extends T>, ? extends I> theReverse;
-		private final boolean isCached;
 		/** Held as a strong reference to keep the observable value listeners from being GC'd */
 		private Subscription theSubscription;
 
 		// Need to keep track of these to update them when the combined values change
 		private final List<CombinedElement> theElements;
 
-		CombinedCollectionManager(ActiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType, Set<ObservableValue<?>> args,
-			Function<? super CombinedValues<? extends I>, ? extends T> combination,
-			Function<? super CombinedValues<? extends T>, ? extends I> reverse, boolean cached) {
+		CombinedCollectionManager(ActiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType, CombinedFlowDef<I, T> def) {
 			theParent = parent;
 			theTargetType = targetType;
+			theDef = def;
 			theArgs = new HashMap<>();
-			for (ObservableValue<?> arg : args)
+			for (ObservableValue<?> arg : def.getArgs())
 				theArgs.put(arg, new ArgHolder<>());
-			theCombination = combination;
-			theReverse = reverse;
-			isCached = cached;
 
 			theElements = new ArrayList<>();
 		}
@@ -1984,7 +1833,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
-			if (theReverse == null)
+			if (theDef.getReverse() == null)
 				return null;
 			Comparable<DerivedCollectionElement<I>> pef = theParent.getElementFinder(reverseValue(value));
 			if (pef == null)
@@ -2016,8 +1865,8 @@ public class ObservableCollectionDataFlowImpl {
 					}
 					try (Transaction t = lock(true, null)) {
 						// The old values are not needed if we're caching each element value
-						Object[] source = isCached ? null : new Object[1];
-						CombinedValues<I> oldValues = isCached ? null : getCopy(source);
+						Object[] source = theDef.isCached() ? null : new Object[1];
+						Combination.CombinedValues<I> oldValues = theDef.isCached() ? null : getCopy(source);
 						((ArgHolder<Object>) holder).value = evt.getNewValue();
 						// The order of update here may be different than the order in the derived collection
 						// It's a lot of work to keep the elements in order (since the order may change),
@@ -2047,7 +1896,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		private T combineValue(I source) {
-			return theCombination.apply(new CombinedValues<I>() {
+			return theDef.getCombination().apply(new Combination.CombinedValues<I>() {
 				@Override
 				public I getElement() {
 					return source;
@@ -2061,7 +1910,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		private I reverseValue(T dest) {
-			return theReverse.apply(new CombinedValues<T>() {
+			return theDef.getReverse().apply(new Combination.CombinedValues<T>() {
 				@Override
 				public T getElement() {
 					return dest;
@@ -2074,11 +1923,11 @@ public class ObservableCollectionDataFlowImpl {
 			});
 		}
 
-		private CombinedValues<I> getCopy(Object[] source) {
+		private Combination.CombinedValues<I> getCopy(Object[] source) {
 			Map<ObservableValue<?>, Object> theValues = new HashMap<>();
 			for (Map.Entry<ObservableValue<?>, ArgHolder<?>> holder : theArgs.entrySet())
 				theValues.put(holder.getKey(), holder.getValue().value);
-			return new CombinedValues<I>() {
+			return new Combination.CombinedValues<I>() {
 				@Override
 				public I getElement() {
 					return (I) source[0];
@@ -2102,34 +1951,34 @@ public class ObservableCollectionDataFlowImpl {
 					theParentEl.setListener(new CollectionElementListener<I>() {
 						@Override
 						public void update(I oldValue, I newValue, Object cause) {
-							T oldVal = isCached ? theValue : combineValue(oldValue);
+							T oldVal = theDef.isCached() ? theValue : combineValue(oldValue);
 							T newVal = combineValue(newValue);
-							if (isCached)
+							if (theDef.isCached())
 								theValue = newVal;
 							ObservableCollectionDataFlowImpl.update(theListener, oldVal, newVal, cause);
 						}
 
 						@Override
 						public void removed(I value, Object cause) {
-							T val = isCached ? theValue : combineValue(value);
+							T val = theDef.isCached() ? theValue : combineValue(value);
 							theElements.remove(this);
 							ObservableCollectionDataFlowImpl.removed(theListener, val, cause);
 							theListener = null;
 							theValue = null;
 						}
 					});
-					if (isCached)
+					if (theDef.isCached())
 						theValue = combineValue(theParentEl.get());
 				}
 			}
 
-			void updated(Function<I, CombinedValues<I>> oldValues, Object cause) {
+			void updated(Function<I, Combination.CombinedValues<I>> oldValues, Object cause) {
 				T newVal = combineValue(theParentEl.get());
 				T oldVal;
-				if (isCached)
+				if (theDef.isCached())
 					oldVal = theValue;
 				else
-					oldVal = theCombination.apply(oldValues.apply(theParentEl.get()));
+					oldVal = theDef.getCombination().apply(oldValues.apply(theParentEl.get()));
 				ObservableCollectionDataFlowImpl.update(theListener, oldVal, newVal, cause);
 			}
 
@@ -2145,7 +1994,7 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public T get() {
-				return isCached ? theValue : combineValue(theParentEl.get());
+				return theDef.isCached() ? theValue : combineValue(theParentEl.get());
 			}
 
 			@Override
@@ -2369,11 +2218,10 @@ public class ObservableCollectionDataFlowImpl {
 		private final PassiveCollectionManager<E, ?, T> theParent;
 		private final ModFilterer<T> theFilter;
 
-		PassiveModFilteredManager(PassiveCollectionManager<E, ?, T> parent, String immutableMessage, boolean allowUpdates,
-			String addMessage, String removeMessage, Function<? super T, String> addFilter, Function<? super T, String> removeFilter) {
+		PassiveModFilteredManager(PassiveCollectionManager<E, ?, T> parent, ModFilterer<T> filter) {
 			theParent = parent;
 
-			theFilter = new ModFilterer<>(immutableMessage, allowUpdates, addMessage, removeMessage, addFilter, removeFilter);
+			theFilter = filter;
 		}
 
 		@Override
@@ -2488,14 +2336,13 @@ public class ObservableCollectionDataFlowImpl {
 		private final Function<? super T, String> theAddFilter;
 		private final Function<? super T, String> theRemoveFilter;
 
-		ModFilterer(String immutableMessage, boolean areUpdatesAllowed,
-			String addMessage, String removeMessage, Function<? super T, String> addFilter, Function<? super T, String> removeFilter) {
-			theImmutableMessage = immutableMessage;
-			this.areUpdatesAllowed = areUpdatesAllowed;
-			theAddMessage = addMessage;
-			theRemoveMessage = removeMessage;
-			theAddFilter = addFilter;
-			theRemoveFilter = removeFilter;
+		ModFilterer(ModFilterBuilder<T> options) {
+			theImmutableMessage = options.getImmutableMsg();
+			this.areUpdatesAllowed = options.areUpdatesAllowed();
+			theAddMessage = options.getAddMsg();
+			theRemoveMessage = options.getRemoveMsg();
+			theAddFilter = options.getAddMsgFn();
+			theRemoveFilter = options.getRemoveMsgFn();
 		}
 
 		public String isEnabled() {
@@ -2589,10 +2436,9 @@ public class ObservableCollectionDataFlowImpl {
 
 		private final ModFilterer<T> theFilter;
 
-		ActiveModFilteredManager(ActiveCollectionManager<E, ?, T> parent, String immutableMessage, boolean allowUpdates, String addMessage,
-			String removeMessage, Function<? super T, String> addFilter, Function<? super T, String> removeFilter) {
+		ActiveModFilteredManager(ActiveCollectionManager<E, ?, T> parent, ModFilterer<T> filter) {
 			theParent = parent;
-			theFilter = new ModFilterer<>(immutableMessage, allowUpdates, addMessage, removeMessage, addFilter, removeFilter);
+			theFilter = filter;
 		}
 
 		@Override

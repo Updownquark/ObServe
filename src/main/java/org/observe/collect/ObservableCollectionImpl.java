@@ -1212,7 +1212,6 @@ public final class ObservableCollectionImpl {
 			}
 		}
 
-		private final ObservableCollection<E> theSource;
 		private final ActiveCollectionManager<E, ?, T> theFlow;
 		private final BetterTreeSet<DerivedElementHolder<T>> theDerivedElements;
 		private final BetterTreeList<Consumer<? super ObservableCollectionEvent<? extends T>>> theListeners;
@@ -1221,8 +1220,7 @@ public final class ObservableCollectionImpl {
 		private final AtomicLong theModCount;
 		private final AtomicLong theStructureStamp;
 
-		public ActiveDerivedCollection(ObservableCollection<E> source, ActiveCollectionManager<E, ?, T> flow, Observable<?> until) {
-			theSource = source;
+		public ActiveDerivedCollection(ActiveCollectionManager<E, ?, T> flow, Observable<?> until) {
 			theFlow = flow;
 			theDerivedElements = new BetterTreeSet<>(false, (e1, e2) -> e1.element.compareTo(e2.element));
 			theListeners = new BetterTreeList<>(true);
@@ -1273,10 +1271,6 @@ public final class ObservableCollectionImpl {
 				});
 			};
 			theFlow.begin(onElement, until);
-		}
-
-		protected ObservableCollection<E> getSource() {
-			return theSource;
 		}
 
 		protected ActiveCollectionManager<E, ?, T> getFlow() {
@@ -1353,17 +1347,12 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean isLockSupported() {
-			return theSource.isLockSupported();
+			return theFlow.isLockSupported();
 		}
 
 		@Override
 		public Transaction lock(boolean write, boolean structural, Object cause) {
-			Transaction flowSub = theFlow.lock(write, cause);
-			Transaction collSub = theSource.lock(write, structural, cause);
-			return () -> {
-				collSub.close();
-				flowSub.close();
-			};
+			return theFlow.lock(write, cause);
 		}
 
 		@Override
@@ -1523,12 +1512,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public void clear() {
-			try (Transaction t = lock(true, null)) {
-				if (theFlow.isEachRepresented())
-					theSource.clear();
-				else
-					spliterator().forEachElementM(el -> el.remove(), true); // TODO Change to removeIf
-			}
+			theFlow.clear();
 		}
 
 		@Override
