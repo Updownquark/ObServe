@@ -2060,21 +2060,18 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
-			int todo;
-			// TODO Auto-generated method stub
-			return null;
+			int todo = todo; // Not right
+			return theParent.getElementFinder(value);
 		}
 
 		@Override
 		public String canAdd(T toAdd) {
-			// TODO Auto-generated method stub
-			return null;
+			return theParent.canAdd(toAdd);
 		}
 
 		@Override
 		public boolean clear() {
-			// TODO Auto-generated method stub
-			return false;
+			return theParent.clear();
 		}
 
 		@Override
