@@ -1,7 +1,6 @@
 package org.observe.collect;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -9,7 +8,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -23,24 +21,19 @@ import org.observe.assoc.ObservableMultiMap.MultiMapFlow;
 import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap.SortedMultiMapFlow;
 import org.observe.collect.Combination.CombinationPrecursor;
-import org.observe.collect.Combination.CombinedCollectionBuilder;
 import org.observe.collect.Combination.CombinedFlowDef;
-import org.observe.collect.Combination.CombinedValues;
 import org.observe.collect.FlowOptions.GroupingOptions;
 import org.observe.collect.FlowOptions.MapDef;
 import org.observe.collect.FlowOptions.MapOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
-import org.observe.collect.ObservableCollection.ElementSetter;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
-import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.PassiveDerivedCollection;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
-import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
@@ -145,7 +138,12 @@ public class ObservableCollectionDataFlowImpl {
 
 		String canAdd(T toAdd);
 
-		void clear();
+		/**
+		 * Removes all elements in this manager, if possible
+		 *
+		 * @return Whether this method removed all elements. If false, the derived collection may need to remove elements itself.
+		 */
+		boolean clear();
 
 		DerivedCollectionElement<T> addElement(T value, boolean first);
 
@@ -294,27 +292,30 @@ public class ObservableCollectionDataFlowImpl {
 			Consumer<GroupingOptions> options) {
 			GroupingOptions groupOptions=new GroupingOptions();
 			options.accept(groupOptions);
-			UniqueDataFlow<E, ?, K> keyFlow;
-			Function<K, CollectionDataFlow<E, I, T>> valueMap;
-			if(options.isStatic){
-				keyFlow=
+			UniqueDataFlow<E, ?, K> keyFlow = map(keyType, keyMap, mapOptions -> {}).unique(groupOptions.isUseFirstKey());
+			Function<K, CollectionDataFlow<E, ?, T>> valueMap;
+			if (groupOptions.isStaticCategories()) {
+				valueMap = key -> this.filterStatic(v -> Objects.equals(key, keyMap.apply(v)) ? null : StdMsg.WRONG_GROUP);
 			} else{
-				keyFlow=map(keyType, keyMap, mapOptions->{}).unique(groupOptions.isUseFirstKey());
-				valueMap=key->this.filter(v->{
-					if(Objects.equals(key, keyMap.apply(v)))
-						return null;
-					else
-						return StdMsg.WRONG_GROUP;
-				});
+				valueMap = key -> this.filter(v -> Objects.equals(key, keyMap.apply(v)) ? null : StdMsg.WRONG_GROUP);
 			}
-			return new ObservableMultiMap.DefaultMultiMapFlow(theSource, keyFlow, theTargetType, filterMap);
+			return new ObservableMultiMap.DefaultMultiMapFlow(theSource, keyFlow, theTargetType, valueMap);
 		}
 
 		@Override
 		public <K> SortedMultiMapFlow<E, K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap,
 			Comparator<? super K> keyCompare, Consumer<GroupingOptions> options) {
-			// TODO Auto-generated method stub
-			return null;
+			GroupingOptions groupOptions = new GroupingOptions();
+			options.accept(groupOptions);
+			UniqueSortedDataFlow<E, ?, K> keyFlow = map(keyType, keyMap, mapOptions -> {}).uniqueSorted(keyCompare,
+				groupOptions.isUseFirstKey());
+			Function<K, CollectionDataFlow<E, ?, T>> valueMap;
+			if (groupOptions.isStaticCategories()) {
+				valueMap = key -> this.filterStatic(v -> Objects.equals(key, keyMap.apply(v)) ? null : StdMsg.WRONG_GROUP);
+			} else {
+				valueMap = key -> this.filter(v -> Objects.equals(key, keyMap.apply(v)) ? null : StdMsg.WRONG_GROUP);
+			}
+			return new ObservableSortedMultiMap.DefaultSortedMultiMapFlow(theSource, keyFlow, theTargetType, valueMap);
 		}
 
 		@Override
@@ -386,7 +387,7 @@ public class ObservableCollectionDataFlowImpl {
 			if (until == Observable.empty)
 				return getSource();
 			else
-				return new ActiveDerivedCollection<>(getSource(), manageActive(), until);
+				return new ActiveDerivedCollection<>(manageActive(), until);
 		}
 	}
 
@@ -710,7 +711,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isEachRepresented() {
+		public boolean clear() {
+			theSource.clear();
 			return true;
 		}
 
@@ -831,8 +833,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isEachRepresented() {
-			return theParent.isEachRepresented();
+		public boolean clear() {
+			return theParent.clear();
 		}
 
 		@Override
@@ -946,7 +948,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isEachRepresented() {
+		public boolean clear() {
 			return false;
 		}
 
@@ -1454,8 +1456,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isEachRepresented() {
-			return theParent.isEachRepresented();
+		public boolean clear() {
+			return theParent.clear();
 		}
 
 		@Override
@@ -1519,16 +1521,16 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public String canReverse() {
-			if (theReverse == null)
+			if (theOptions.getReverse() == null)
 				return StdMsg.UNSUPPORTED_OPERATION;
 			return theParent.canReverse();
 		}
 
 		@Override
 		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest) {
-			if (theReverse == null)
+			if (theOptions.getReverse() == null)
 				return dest.reject(StdMsg.UNSUPPORTED_OPERATION, true);
-			FilterMapResult<I, E> intermediate = dest.map(theReverse);
+			FilterMapResult<I, E> intermediate = dest.map(theOptions.getReverse());
 			return (FilterMapResult<T, E>) theParent.reverse(intermediate);
 		}
 
@@ -1553,23 +1555,23 @@ public class ObservableCollectionDataFlowImpl {
 
 				@Override
 				public String isEnabled() {
-					if (theReverse == null)
+					if (theOptions.getReverse() == null)
 						return StdMsg.UNSUPPORTED_OPERATION;
 					return parentMap.isEnabled();
 				}
 
 				@Override
 				public String isAcceptable(T value) {
-					if (theReverse == null)
+					if (theOptions.getReverse() == null)
 						return StdMsg.UNSUPPORTED_OPERATION;
-					return parentMap.isAcceptable(theReverse.apply(value));
+					return parentMap.isAcceptable(theOptions.getReverse().apply(value));
 				}
 
 				@Override
 				public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
-					if (theReverse == null)
+					if (theOptions.getReverse() == null)
 						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-					parentMap.set(theReverse.apply(value));
+					parentMap.set(theOptions.getReverse().apply(value));
 				}
 
 				@Override
@@ -1584,16 +1586,16 @@ public class ObservableCollectionDataFlowImpl {
 
 				@Override
 				public String canAdd(T value, boolean before) {
-					if (theReverse == null)
+					if (theOptions.getReverse() == null)
 						return StdMsg.UNSUPPORTED_OPERATION;
-					return parentMap.canAdd(theReverse.apply(value), before);
+					return parentMap.canAdd(theOptions.getReverse().apply(value), before);
 				}
 
 				@Override
 				public ElementId add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-					if (theReverse == null)
+					if (theOptions.getReverse() == null)
 						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-					return parentMap.add(theReverse.apply(value), before);
+					return parentMap.add(theOptions.getReverse().apply(value), before);
 				}
 			};
 		}
@@ -1632,8 +1634,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isEachRepresented() {
-			return theParent.isEachRepresented();
+		public boolean clear() {
+			return theParent.clear();
 		}
 
 		@Override
@@ -1743,14 +1745,14 @@ public class ObservableCollectionDataFlowImpl {
 			public String isAcceptable(T value) {
 				if (theOptions.getReverse() == null)
 					return StdMsg.UNSUPPORTED_OPERATION;
-				return theParentEl.isAcceptable(theReverse.apply(value));
+				return theParentEl.isAcceptable(theOptions.getReverse().apply(value));
 			}
 
 			@Override
 			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
 				if (theOptions.getReverse() == null)
 					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-				theParentEl.set(theReverse.apply(value));
+				theParentEl.set(theOptions.getReverse().apply(value));
 			}
 
 			@Override
@@ -1767,14 +1769,14 @@ public class ObservableCollectionDataFlowImpl {
 			public String canAdd(T value, boolean before) {
 				if (theOptions.getReverse() == null)
 					return StdMsg.UNSUPPORTED_OPERATION;
-				return theParentEl.canAdd(theReverse.apply(value), before);
+				return theParentEl.canAdd(theOptions.getReverse().apply(value), before);
 			}
 
 			@Override
 			public DerivedCollectionElement<T> add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
 				if (theOptions.getReverse() == null)
 					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-				DerivedCollectionElement<I> parentEl = theParentEl.add(theReverse.apply(value), before);
+				DerivedCollectionElement<I> parentEl = theParentEl.add(theOptions.getReverse().apply(value), before);
 				return parentEl == null ? null : new MappedElement(parentEl, true);
 			}
 		}
@@ -2213,7 +2215,6 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
-	// TODO TODO TODO!! This class doesn't have opportunity to do anything! Design flaw in passive derived collection architecture.
 	static class PassiveModFilteredManager<E, T> implements PassiveCollectionManager<E, T, T> {
 		private final PassiveCollectionManager<E, ?, T> theParent;
 		private final ModFilterer<T> theFilter;
@@ -2457,8 +2458,13 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isEachRepresented() {
-			return theParent.isEachRepresented();
+		public boolean clear() {
+			if (!theFilter.isRemoveFiltered())
+				return theParent.clear();
+			if (theFilter.theImmutableMessage != null || theFilter.theRemoveMessage != null)
+				return true;
+			else
+				return false;
 		}
 
 		@Override
@@ -2595,13 +2601,13 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isEachRepresented() {
-			return false;
+		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
+			return null;
 		}
 
 		@Override
-		public ObservableCollectionDataFlowImpl.ElementFinder<T> getElementFinder() {
-			return null;
+		public boolean clear() {
+			// TODO Auto-generated method stub
 		}
 
 		@Override

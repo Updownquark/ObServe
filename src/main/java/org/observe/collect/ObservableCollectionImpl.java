@@ -1512,7 +1512,12 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public void clear() {
-			theFlow.clear();
+			if (!theFlow.clear()) {
+				new ArrayList<>(theDerivedElements).forEach(el -> {
+					if (el.element.canRemove() == null)
+						el.element.remove();
+				});
+			}
 		}
 
 		@Override
