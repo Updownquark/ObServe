@@ -31,6 +31,7 @@ import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
 import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.PassiveDerivedCollection;
+import org.observe.util.WeakListening;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
@@ -134,6 +135,13 @@ public class ObservableCollectionDataFlowImpl {
 	}
 
 	public static interface ActiveCollectionManager<E, I, T> extends CollectionOperation<E, I, T> {
+		Transaction lock(boolean write, boolean structural, Object cause);
+
+		@Override
+		default Transaction lock(boolean write, Object cause) {
+			return lock(write, write, cause);
+		}
+
 		Comparable<DerivedCollectionElement<T>> getElementFinder(T value);
 
 		String canAdd(T toAdd);
@@ -147,7 +155,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		DerivedCollectionElement<T> addElement(T value, boolean first);
 
-		void begin(ElementAccepter<T> onElement, Observable<?> until);
+		void begin(ElementAccepter<T> onElement, WeakListening listening);
 	}
 
 	public static interface ElementAccepter<E> {
@@ -543,7 +551,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public boolean isPassive() {
-			return false;
+			return false; // TODO If subscription is ever supported for the passive API, this could support passive
 		}
 
 		@Override
@@ -553,7 +561,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public ActiveCollectionManager<E, ?, T> manageActive() {
-			return new RefreshingCollectionManager<>(getParent().manageActive(), theRefresh);
+			return new RefreshingCollectionManager2<>(getParent().manageActive(), theRefresh);
 		}
 	}
 
@@ -682,7 +690,6 @@ public class ObservableCollectionDataFlowImpl {
 
 	public static class BaseCollectionManager<E> implements ActiveCollectionManager<E, E, E> {
 		private final ObservableCollection<E> theSource;
-		private Subscription theWeakSubscription;
 		private final BetterTreeMap<ElementId, CollectionElementListener<E>> theElementListeners;
 
 		public BaseCollectionManager(ObservableCollection<E> source) {
@@ -691,8 +698,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theSource.lock(write, cause);
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			return theSource.lock(write, structural, cause);
 		}
 
 		@Override
@@ -728,24 +735,21 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public void begin(ElementAccepter<E> onElement, Observable<?> until) {
-			// Need to hold on to the subscription because it contains strong references that keep the listeners alive
-			theWeakSubscription = WeakConsumer.build()//
-				.<ObservableCollectionEvent<? extends E>> withAction(evt -> {
-					switch (evt.getType()) {
-					case add:
-						BaseDerivedElement el = new BaseDerivedElement(theSource.mutableElement(evt.getElementId()));
-						onElement.accept(el, evt);
-						break;
-					case remove:
-						theElementListeners.remove(evt.getElementId()).removed(evt.getOldValue(), evt);
-						break;
-					case set:
-						theElementListeners.get(evt.getElementId()).update(evt.getOldValue(), evt.getNewValue(), evt);
-						break;
-					}
-				}, action -> theSource.subscribe(action, true).removeAll())//
-				.withUntil(until::act).build();
+		public void begin(ElementAccepter<E> onElement, WeakListening listening) {
+			listening.withConsumer((ObservableCollectionEvent<? extends E> evt) -> {
+				switch (evt.getType()) {
+				case add:
+					BaseDerivedElement el = new BaseDerivedElement(theSource.mutableElement(evt.getElementId()));
+					onElement.accept(el, evt);
+					break;
+				case remove:
+					theElementListeners.remove(evt.getElementId()).removed(evt.getOldValue(), evt);
+					break;
+				case set:
+					theElementListeners.get(evt.getElementId()).update(evt.getOldValue(), evt.getNewValue(), evt);
+					break;
+				}
+			}, action -> theSource.subscribe(action, true).removeAll());
 		}
 
 		class BaseDerivedElement implements DerivedCollectionElement<E> {
@@ -828,8 +832,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theParent.lock(write, cause);
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			return theParent.lock(write, structural, cause);
 		}
 
 		@Override
@@ -854,8 +858,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public void begin(ElementAccepter<T> onElement, Observable<?> until) {
-			theParent.begin((parentEl, cause) -> onElement.accept(new SortedElement(parentEl), cause), until);
+		public void begin(ElementAccepter<T> onElement, WeakListening listening) {
+			theParent.begin((parentEl, cause) -> onElement.accept(new SortedElement(parentEl), cause), listening);
 		}
 
 		class SortedElement implements DerivedCollectionElement<T> {
@@ -943,8 +947,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theParent.lock(write, cause);
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			return theParent.lock(write, structural, cause);
 		}
 
 		@Override
@@ -977,7 +981,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public void begin(ElementAccepter<T> onElement, Observable<?> until) {
+		public void begin(ElementAccepter<T> onElement, WeakListening listening) {
 			theElementAccepter = onElement;
 			theParent.begin((parentEl, cause) -> {
 				String msg = theFilter.apply(parentEl.get());
@@ -987,7 +991,7 @@ public class ObservableCollectionDataFlowImpl {
 					return;
 				} else
 					new FilteredElement(parentEl, false, false);
-			}, until);
+			}, listening);
 		}
 
 		class FilteredElement implements DerivedCollectionElement<T> {
@@ -1275,7 +1279,6 @@ public class ObservableCollectionDataFlowImpl {
 		private Map<T, IntersectionElement> theValues;
 		// The following two fields are needed because the values may mutate
 		private Map<ElementId, IntersectionElement> theRightElementValues;
-		private Subscription theCountSub; // Need to hold a strong ref to this to prevent GC of listeners
 
 		private ElementAccepter<T> theAccepter;
 
@@ -1293,12 +1296,12 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theParent.lock(write, cause);
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			return theParent.lock(write, structural, cause);
 		}
 
 		@Override
-		public boolean isEachRepresented() {
+		public boolean clear() {
 			return false;
 		}
 
@@ -1332,8 +1335,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public void begin(ElementAccepter<T> onElement, Observable<?> until) {
-			theCountSub = WeakConsumer.build().<ObservableCollectionEvent<? extends X>> withAction(evt -> {
+		public void begin(ElementAccepter<T> onElement, WeakListening listening) {
+			listening.withConsumer((ObservableCollectionEvent<? extends X> evt) -> {
 				// We're not modifying, but we want to obtain an exclusive lock
 				// to ensure that nothing above or below us is firing events at the same time.
 				// TODO Maybe replace this with an independent lock on the base flow to avoid lock-writing?
@@ -1370,14 +1373,14 @@ public class ObservableCollectionDataFlowImpl {
 						break;
 					}
 				}
-			}, action -> theFilter.subscribe(action, true).removeAll()).withUntil(until::act).build();
+			}, action -> theFilter.subscribe(action, true).removeAll());
 			theParent.begin((parentEl, cause) -> {
 				IntersectionElement element = theValues.computeIfAbsent(parentEl.get(), v -> new IntersectionElement(v));
 				IntersectedCollectionElement el = new IntersectedCollectionElement(parentEl, element, false);
 				element.addLeft(el);
 				if (element.isPresent())
 					onElement.accept(el, cause);
-			}, until);
+			}, listening);
 		}
 	}
 
@@ -1451,8 +1454,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theParent.lock(write, cause);
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			return theParent.lock(write, structural, cause);
 		}
 
 		@Override
@@ -1476,8 +1479,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public void begin(ElementAccepter<T> onElement, Observable<?> until) {
-			theParent.begin(onElement, until);
+		public void begin(ElementAccepter<T> onElement, WeakListening listening) {
+			theParent.begin(onElement, listening);
 		}
 	}
 
@@ -1629,8 +1632,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theParent.lock(write, cause);
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			return theParent.lock(write, structural, cause);
 		}
 
 		@Override
@@ -1664,10 +1667,10 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public void begin(ElementAccepter<T> onElement, Observable<?> until) {
+		public void begin(ElementAccepter<T> onElement, WeakListening listening) {
 			theParent.begin((parentEl, cause) -> {
 				onElement.accept(new MappedElement(parentEl, false), cause);
-			}, until);
+			}, listening);
 		}
 
 		private class MappedElement implements DerivedCollectionElement<T> {
@@ -1784,7 +1787,6 @@ public class ObservableCollectionDataFlowImpl {
 
 	static class CombinedCollectionManager<E, I, T> implements ActiveCollectionManager<E, I, T> {
 		private static class ArgHolder<T> {
-			Subscription actionSub;
 			T value;
 		}
 
@@ -1793,8 +1795,6 @@ public class ObservableCollectionDataFlowImpl {
 		private final CombinedFlowDef<I, T> theDef;
 
 		private final Map<ObservableValue<?>, ArgHolder<?>> theArgs;
-		/** Held as a strong reference to keep the observable value listeners from being GC'd */
-		private Subscription theSubscription;
 
 		// Need to keep track of these to update them when the combined values change
 		private final List<CombinedElement> theElements;
@@ -1824,13 +1824,13 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theParent.lock(write, cause);
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			return theParent.lock(write, structural, cause);
 		}
 
 		@Override
-		public boolean isEachRepresented() {
-			return theParent.isEachRepresented();
+		public boolean clear() {
+			return theParent.clear();
 		}
 
 		@Override
@@ -1855,11 +1855,10 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public void begin(ElementAccepter<T> onElement, Observable<?> until) {
-			WeakConsumer.WeakConsumerBuilder builder = WeakConsumer.build();
+		public void begin(ElementAccepter<T> onElement, WeakListening listening) {
 			for (Map.Entry<ObservableValue<?>, ArgHolder<?>> arg : theArgs.entrySet()) {
 				ArgHolder<?> holder = arg.getValue();
-				builder.withAction((ObservableValueEvent<?> evt) -> {
+				listening.withConsumer((ObservableValueEvent<?> evt) -> {
 					if (evt.isInitial()) {
 						// If this is an initial event, don't do any locking or updating
 						((ArgHolder<Object>) holder).value = evt.getNewValue();
@@ -1881,13 +1880,11 @@ public class ObservableCollectionDataFlowImpl {
 					}
 				}, action -> arg.getKey().act(action));
 			}
-			builder.withUntil(until::act);
-			theSubscription = builder.build();
 			theParent.begin((parentEl, cause) -> {
 				CombinedElement el = new CombinedElement(parentEl, false);
 				theElements.add(el);
 				onElement.accept(el, cause);
-			}, until);
+			}, listening);
 		}
 
 		private <V> V getArgValue(ObservableValue<V> arg) {
@@ -2034,6 +2031,62 @@ public class ObservableCollectionDataFlowImpl {
 				DerivedCollectionElement<I> parentEl = theParentEl.add(reverseValue(value), before);
 				return parentEl == null ? null : new CombinedElement(parentEl, true);
 			}
+		}
+	}
+
+	private static class RefreshingCollectionManager2<E, T> implements ActiveCollectionManager<E, T, T> {
+		private final ActiveCollectionManager<E, ?, T> theParent;
+		private final Observable<?> theRefresh;
+
+		RefreshingCollectionManager2(ActiveCollectionManager<E, ?, T> parent, Observable<?> refresh) {
+			theParent = parent;
+			theRefresh = refresh;
+		}
+
+		@Override
+		public TypeToken<T> getTargetType() {
+			return theParent.getTargetType();
+		}
+
+		@Override
+		public Equivalence<? super T> equivalence() {
+			return theParent.equivalence();
+		}
+
+		@Override
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			return theParent.lock(write, structural, cause);
+		}
+
+		@Override
+		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
+			int todo;
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public String canAdd(T toAdd) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public boolean clear() {
+			// TODO Auto-generated method stub
+			return false;
+		}
+
+		@Override
+		public DerivedCollectionElement<T> addElement(T value, boolean first) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public void begin(ElementAccepter<T> onElement, WeakListening listening) {
+			// TODO Auto-generated method stub
+
 		}
 	}
 
@@ -2453,8 +2506,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theParent.lock(write, cause);
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			return theParent.lock(write, structural, cause);
 		}
 
 		@Override
@@ -2485,8 +2538,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public void begin(ElementAccepter<T> onElement, Observable<?> until) {
-			theParent.begin((parentEl, cause) -> onElement.accept(new ModFilteredElement(parentEl), cause), until);
+		public void begin(ElementAccepter<T> onElement, WeakListening listening) {
+			theParent.begin((parentEl, cause) -> onElement.accept(new ModFilteredElement(parentEl), cause), listening);
 		}
 
 		private class ModFilteredElement implements DerivedCollectionElement<T> {
@@ -2588,11 +2641,13 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			Transaction outerLock = theParent.lock(write, cause);
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			Transaction outerLock = theParent.lock(write, structural, cause);
 			List<Transaction> innerLocks = new LinkedList<>();
-			for (FlattenedHolder holder : theOuterElements)
-				innerLocks.add(Transactable.lock(holder.flow, write, cause));
+			for (FlattenedHolder holder : theOuterElements) {
+				if (holder.flow != null)
+					innerLocks.add(holder.flow.lock(write, structural, cause));
+			}
 			return () -> {
 				for (Transaction innerLock : innerLocks)
 					innerLock.close();
@@ -2652,11 +2707,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public void begin(ElementAccepter<T> onElement, Observable<?> until) {
+		public void begin(ElementAccepter<T> onElement, WeakListening listening) {
 			theAccepter = onElement;
 			theParent.begin((parentEl, cause) -> {
-				theOuterElements.add(new FlattenedHolder(parentEl, until));
-			}, until);
+				theOuterElements.add(new FlattenedHolder(parentEl, listening));
+			}, listening);
 		}
 
 		private class FlattenedHolder {
@@ -2665,12 +2720,12 @@ public class ObservableCollectionDataFlowImpl {
 			private Subscription theWeakSubscription;
 			ActiveCollectionManager<?, ?, ? extends T> flow;
 
-			FlattenedHolder(DerivedCollectionElement<I> parentEl, Observable<?> until) {
+			FlattenedHolder(DerivedCollectionElement<I> parentEl, WeakListening listening) {
 				theParentEl = parentEl;
 				flow = theMap.apply(theParentEl.get()).manageActive();
 				theElements = new LinkedList<>();
 				// Need to hold on to the subscription because it contains strong references that keep the listeners alive
-				// TODO
+				int todo;// TODO
 				// theWeakSubscription = WeakConsumer.build()//
 				// .<ObservableCollectionEvent<? extends E>> withAction(el -> {
 				// }, action -> flow.subscribe(action, true).removeAll())//

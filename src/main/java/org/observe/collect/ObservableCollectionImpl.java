@@ -31,6 +31,7 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.DerivedCollectionEle
 import org.observe.collect.ObservableCollectionDataFlowImpl.ElementAccepter;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
+import org.observe.util.WeakListening;
 import org.qommons.ArrayUtils;
 import org.qommons.Causable;
 import org.qommons.ConcurrentHashSet;
@@ -1219,6 +1220,7 @@ public final class ObservableCollectionImpl {
 		private final Equivalence<? super T> theEquivalence;
 		private final AtomicLong theModCount;
 		private final AtomicLong theStructureStamp;
+		private final WeakListening.Builder theWeakListening;
 
 		public ActiveDerivedCollection(ActiveCollectionManager<E, ?, T> flow, Observable<?> until) {
 			theFlow = flow;
@@ -1270,7 +1272,8 @@ public final class ObservableCollectionImpl {
 					}
 				});
 			};
-			theFlow.begin(onElement, until);
+			theWeakListening = WeakListening.build().withUntil(r -> until.act(v -> r.run()));
+			theFlow.begin(onElement, theWeakListening.getListening());
 		}
 
 		protected ActiveCollectionManager<E, ?, T> getFlow() {
@@ -1352,7 +1355,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Transaction lock(boolean write, boolean structural, Object cause) {
-			return theFlow.lock(write, cause);
+			return theFlow.lock(write, structural, cause);
 		}
 
 		@Override
@@ -1533,6 +1536,12 @@ public final class ObservableCollectionImpl {
 		@Override
 		public String toString() {
 			return ObservableCollection.toString(this);
+		}
+
+		@Override
+		protected void finalize() throws Throwable {
+			super.finalize();
+			theWeakListening.unsubscribe();
 		}
 
 		private class MutableDerivedSpliterator extends MutableElementSpliterator.SimpleMutableSpliterator<T> {
