@@ -10,6 +10,7 @@ import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import org.observe.SimpleObservable;
 import org.observe.Subscription;
 
 public class WeakListening {
@@ -32,6 +33,19 @@ public class WeakListening {
 	public <T, U> Subscription withBiConsumer(BiConsumer<T, U> action,
 		Function<? super BiConsumer<T, U>, ? extends Subscription> subscribe) {
 		return with(action, WeakBiConsumer::new, subscribe);
+	}
+
+	public Builder child() {
+		Long actionId = theIdGen.getAndIncrement();
+		ActionStruct as = new ActionStruct(null);
+		theActions.put(actionId, as);
+
+		SimpleObservable<Void> childUnsub = new SimpleObservable<>();
+		as.subscription = () -> childUnsub.onNext(null);
+
+		Builder child = new Builder().withUntil(//
+			action -> childUnsub.act(v -> action.run()));
+		return child;
 	}
 
 	// This a utility method, not public, as weakMaker must produce an X that is also an extension of WeakAction

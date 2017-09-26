@@ -3,7 +3,6 @@ package org.observe.collect;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.IdentityHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -34,7 +33,10 @@ import org.observe.collect.ObservableCollectionImpl.PassiveDerivedCollection;
 import org.observe.util.WeakListening;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterCollection;
+import org.qommons.collect.BetterHashMap;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterMap;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
@@ -561,7 +563,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public ActiveCollectionManager<E, ?, T> manageActive() {
-			return new RefreshingCollectionManager2<>(getParent().manageActive(), theRefresh);
+			return new RefreshingCollectionManager<>(getParent().manageActive(), theRefresh);
 		}
 	}
 
@@ -1933,8 +1935,8 @@ public class ObservableCollectionDataFlowImpl {
 				}
 
 				@Override
-				public <T> T get(ObservableValue<T> arg) {
-					return (T) theValues.get(arg);
+				public <X> X get(ObservableValue<X> arg) {
+					return (X) theValues.get(arg);
 				}
 			};
 		}
@@ -2034,13 +2036,15 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
-	private static class RefreshingCollectionManager2<E, T> implements ActiveCollectionManager<E, T, T> {
+	private static class RefreshingCollectionManager<E, T> implements ActiveCollectionManager<E, T, T> {
 		private final ActiveCollectionManager<E, ?, T> theParent;
 		private final Observable<?> theRefresh;
+		private final BetterCollection<RefreshingElement> theElements;
 
-		RefreshingCollectionManager2(ActiveCollectionManager<E, ?, T> parent, Observable<?> refresh) {
+		RefreshingCollectionManager(ActiveCollectionManager<E, ?, T> parent, Observable<?> refresh) {
 			theParent = parent;
 			theRefresh = refresh;
+			theElements = new BetterTreeList<>(false);
 		}
 
 		@Override
@@ -2060,8 +2064,10 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
-			int todo = todo; // Not right
-			return theParent.getElementFinder(value);
+			Comparable<DerivedCollectionElement<T>> parentFinder = theParent.getElementFinder(value);
+			if (parentFinder != null)
+				return el -> parentFinder.compareTo(((RefreshingElement) el).theParentEl);
+				return null;
 		}
 
 		@Override
@@ -2076,191 +2082,283 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public DerivedCollectionElement<T> addElement(T value, boolean first) {
-			// TODO Auto-generated method stub
-			return null;
+			DerivedCollectionElement<T> parentEl = theParent.addElement(value, first);
+			return parentEl == null ? null : new RefreshingElement(parentEl, true);
 		}
 
 		@Override
 		public void begin(ElementAccepter<T> onElement, WeakListening listening) {
-			// TODO Auto-generated method stub
+			theParent.begin((parentEl, cause) -> {
+				onElement.accept(new RefreshingElement(parentEl, false), listening);
+			}, listening);
+			listening.withConsumer((Object r) -> {
+				try (Transaction t = lock(true, false, r)) {
+					for (RefreshingElement el : theElements)
+						el.refresh(r);
+				}
+			}, theRefresh::act);
+		}
 
+		private class RefreshingElement implements DerivedCollectionElement<T> {
+			private final DerivedCollectionElement<T> theParentEl;
+			private final ElementId theElementId;
+			private CollectionElementListener<T> theListener;
+
+			RefreshingElement(DerivedCollectionElement<T> parent, boolean synthetic) {
+				theParentEl = parent;
+				if (!synthetic) {
+					theElementId = theElements.addElement(this, false).getElementId();
+					theParentEl.setListener(new CollectionElementListener<T>() {
+						@Override
+						public void update(T oldValue, T newValue, Object cause) {
+							ObservableCollectionDataFlowImpl.update(theListener, oldValue, newValue, cause);
+						}
+
+						@Override
+						public void removed(T value, Object cause) {
+							theElements.mutableElement(theElementId).remove();
+							ObservableCollectionDataFlowImpl.removed(theListener, value, cause);
+						}
+					});
+				} else
+					theElementId = null;
+			}
+
+			void refresh(Object cause) {
+				T value = get();
+				ObservableCollectionDataFlowImpl.update(theListener, value, value, cause);
+			}
+
+			@Override
+			public int compareTo(DerivedCollectionElement<T> o) {
+				return theParentEl.compareTo(((RefreshingElement) o).theParentEl);
+			}
+
+			@Override
+			public void setListener(CollectionElementListener<T> listener) {
+				theListener = listener;
+			}
+
+			@Override
+			public T get() {
+				return theParentEl.get();
+			}
+
+			@Override
+			public String isEnabled() {
+				return theParentEl.isEnabled();
+			}
+
+			@Override
+			public String isAcceptable(T value) {
+				return theParentEl.isAcceptable(value);
+			}
+
+			@Override
+			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
+				theParentEl.set(value);
+			}
+
+			@Override
+			public String canRemove() {
+				return theParentEl.canRemove();
+			}
+
+			@Override
+			public void remove() throws UnsupportedOperationException {
+				theParentEl.remove();
+			}
+
+			@Override
+			public String canAdd(T value, boolean before) {
+				return theParentEl.canAdd(value, before);
+			}
+
+			@Override
+			public DerivedCollectionElement<T> add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
+				DerivedCollectionElement<T> parent = theParentEl.add(value, before);
+				return parent == null ? null : new RefreshingElement(parent, true);
+			}
 		}
 	}
 
-	public static class RefreshingCollectionManager<E, T> extends NonMappingCollectionManager<E, T> {
-		private final Observable<?> theRefresh;
-		private Subscription theActionSub;
+	private static class ElementRefreshingCollectionManager<E, T> implements ActiveCollectionManager<E, T, T> {
+		private class RefreshHolder {
+			private final ElementId theElementId;
+			private final Subscription theSub;
+			final BetterCollection<RefreshingElement> elements;
 
-		protected RefreshingCollectionManager(CollectionManager<E, ?, T> parent, Observable<?> refresh) {
-			super(parent);
-			theRefresh = refresh;
-		}
-
-		@Override
-		public Equivalence<? super T> equivalence() {
-			return getParent().equivalence();
-		}
-
-		@Override
-		public void begin(Observable<?> until) {
-			if (!isLightWeight())
-				theActionSub = WeakConsumer.build()//
-				.withAction(v -> getUpdateListener().accept(new CollectionUpdate(this, null, v)), theRefresh::act)//
-				.withUntil(until::act).build();
-		}
-
-		@Override
-		public void createElement(ElementId id, E init, Object cause, Consumer<CollectionElementManager<E, ?, T>> onElement) {
-			class RefreshingElement extends NonMappingCollectionElement<E, T> {
-				public RefreshingElement(CollectionElementManager<E, ?, T> parent) {
-					super(RefreshingCollectionManager.this, parent, id, init, cause);
-				}
-
-				@Override
-				public T get() {
-					return getParent().get();
-				}
-
-				@Override
-				protected boolean refresh(T source, Object cause) {
-					return true;
-				}
+			RefreshHolder(Observable<?> refresh) {
+				theElementId = theRefreshObservables.putEntry(refresh, this).getElementId();
+				elements = new BetterTreeList<>(false);
+				theSub = theListening.withConsumer(r -> {
+					try (Transaction t = lock(true, false, r)) {
+						for (RefreshingElement el : elements)
+							el.refresh(r);
+					}
+				}, refresh::act);
 			}
-			getParent().addElement(id, init, cause, el -> new RefreshingElement(el));
-		}
-	}
 
-	public static class ElementRefreshingCollectionManager<E, T> extends NonMappingCollectionManager<E, T> {
-		private static class RefreshHolder {
-			final Observable<?> theRefresh;
-			Subscription theSub;
-			int theElementCount;
-
-			RefreshHolder(Observable<?> refresh, Subscription sub) {
-				theRefresh = refresh;
-				theSub = sub;
+			void remove(ElementId element) {
+				elements.mutableElement(element).remove();
+				if (elements.isEmpty()) {
+					theSub.unsubscribe();
+					theRefreshObservables.mutableEntry(theElementId).remove();
+				}
 			}
 		}
 
+		private final ActiveCollectionManager<E, ?, T> theParent;
 		private final Function<? super T, ? extends Observable<?>> theRefresh;
-		private final Map<Observable<?>, RefreshHolder> theRefreshObservables;
+		private final BetterMap<Observable<?>, RefreshHolder> theRefreshObservables;
+		private WeakListening theListening;
 
-		protected ElementRefreshingCollectionManager(CollectionManager<E, ?, T> parent,
-			Function<? super T, ? extends Observable<?>> refresh) {
-			super(parent);
+		ElementRefreshingCollectionManager(ActiveCollectionManager<E, ?, T> parent, Function<? super T, ? extends Observable<?>> refresh) {
+			theParent = parent;
 			theRefresh = refresh;
-			theRefreshObservables = new IdentityHashMap<>();
+			theRefreshObservables = BetterHashMap.build().unsafe().buildMap();
+		}
+
+		@Override
+		public TypeToken<T> getTargetType() {
+			return theParent.getTargetType();
 		}
 
 		@Override
 		public Equivalence<? super T> equivalence() {
-			return getParent().equivalence();
+			return theParent.equivalence();
 		}
 
 		@Override
-		public void createElement(ElementId id, E init, Object cause, Consumer<CollectionElementManager<E, ?, T>> onElement) {
-			class ElementRefreshElement extends NonMappingCollectionElement<E, T> {
-				private Observable<?> theRefreshObservable;
-
-				protected ElementRefreshElement(CollectionElementManager<E, ?, T> parent) {
-					super(ElementRefreshingCollectionManager.this, parent, id, init, cause);
-
-					newRefreshObs(theRefresh.apply(get()));
-				}
-
-				@Override
-				public T get() {
-					return getParent().get();
-				}
-
-				@Override
-				public void removed(Object cause) {
-					if (theRefreshObservable != null)
-						removeRefreshObs(theRefreshObservable);
-					super.removed(cause);
-				}
-
-				@Override
-				protected boolean applies(CollectionUpdate update) {
-					return super.applies(update) && ((ElementRefreshUpdate) update).getRefreshObs() == theRefreshObservable;
-				}
-
-				@Override
-				public ElementUpdateResult update(CollectionUpdate update,
-					Consumer<Consumer<MutableCollectionElement<? extends E>>> sourceElement) {
-					if (applies(update)) {
-						refresh(getParent().get(), update.getCause());
-						return ElementUpdateResult.FireUpdate;
-					} else {
-						ElementUpdateResult parentResult = getParent().update(update, sourceElement);
-						switch (parentResult) {
-						case DoesNotApply:
-						case AppliedNoUpdate:
-							return parentResult;
-						case FireUpdate:
-							T value = getParent().get();
-							Observable<?> refreshObs = theRefresh.apply(value);
-							if (theRefreshObservable != refreshObs) {
-								removeRefreshObs(theRefreshObservable);
-								newRefreshObs(refreshObs);
-							}
-							refresh(value, update.getCause());
-							return ElementUpdateResult.FireUpdate;
-						}
-						throw new IllegalStateException("Unrecognized update result " + parentResult);
-					}
-				}
-
-				@Override
-				protected boolean refresh(T source, Object cause) {
-					return true;
-				}
-
-				private void removeRefreshObs(Observable<?> refreshObs) {
-					if (refreshObs != null) {
-						RefreshHolder holder = theRefreshObservables.get(refreshObs);
-						holder.theElementCount--;
-						if (holder.theElementCount == 0) {
-							theRefreshObservables.remove(refreshObs);
-							holder.theSub.unsubscribe();
-						}
-					}
-				}
-
-				private void newRefreshObs(Observable<?> refreshObs) {
-					if (refreshObs != null)
-						theRefreshObservables.computeIfAbsent(refreshObs, this::createHolder).theElementCount++;
-					theRefreshObservable = refreshObs;
-				}
-
-				private RefreshHolder createHolder(Observable<?> refreshObs) {
-					Consumer<Object> action = v -> ElementRefreshingCollectionManager.this.update(refreshObs, v);
-					// No need for until the elements will be removed when the until fires
-					Subscription sub = WeakConsumer.build()
-						.withAction(v -> ElementRefreshingCollectionManager.this.update(refreshObs, v), refreshObs::act).build();
-					return new RefreshHolder(refreshObs, sub);
-				}
-			}
-			getParent().addElement(id, init, cause, el -> onElement.accept(new ElementRefreshElement(el)));
-		}
-
-		private void update(Observable<?> refreshObs, Object cause) {
-			getUpdateListener().accept(new ElementRefreshUpdate(refreshObs, cause));
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			return theParent.lock(write, structural, cause);
 		}
 
 		@Override
-		public void begin(Observable<?> until) {}
+		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
+			Comparable<DerivedCollectionElement<T>> parentFinder = theParent.getElementFinder(value);
+			if (parentFinder != null)
+				return el -> parentFinder.compareTo(((RefreshingElement) el).theParentEl);
+				return null;
+		}
 
-		private class ElementRefreshUpdate extends CollectionUpdate {
-			private final Observable<?> theRefreshObs;
+		@Override
+		public String canAdd(T toAdd) {
+			return theParent.canAdd(toAdd);
+		}
 
-			ElementRefreshUpdate(Observable<?> refreshObs, Object cause) {
-				super(ElementRefreshingCollectionManager.this, null, cause);
-				theRefreshObs = refreshObs;
+		@Override
+		public boolean clear() {
+			return theParent.clear();
+		}
+
+		@Override
+		public DerivedCollectionElement<T> addElement(T value, boolean first) {
+			DerivedCollectionElement<T> parentEl = theParent.addElement(value, first);
+			return parentEl == null ? null : new RefreshingElement(parentEl, true);
+		}
+
+		@Override
+		public void begin(ElementAccepter<T> onElement, WeakListening listening) {
+			theListening = listening;
+			theParent.begin((parentEl, cause) -> {
+				onElement.accept(new RefreshingElement(parentEl, false), cause);
+			}, listening);
+		}
+
+		private class RefreshingElement implements DerivedCollectionElement<T> {
+			private final DerivedCollectionElement<T> theParentEl;
+			private Observable<?> theCurrentRefresh;
+			private RefreshHolder theCurrentHolder;
+			private ElementId theElementId;
+			private CollectionElementListener<T> theListener;
+
+			RefreshingElement(DerivedCollectionElement<T> parentEl, boolean synthetic) {
+				theParentEl = parentEl;
+				if (!synthetic)
+					updated(theParentEl.get()); // Subscribe to the initial refresh value
 			}
 
-			Observable<?> getRefreshObs() {
-				return theRefreshObs;
+			/**
+			 * Called when the value of the element changes. Handles the case where the element's refresh observable changes as a result.
+			 *
+			 * @param value The new value for the element
+			 */
+			private void updated(T value) {
+				Observable<?> newRefresh = theRefresh.apply(value);
+				if (newRefresh == theCurrentRefresh)
+					return;
+
+				// Refresh is different, need to remove from old refresh and add to new
+				if (theCurrentHolder != null) { // Remove from old refresh if non-null
+					theCurrentHolder.remove(theElementId);
+					theElementId = null;
+					theCurrentHolder = null;
+				}
+				theCurrentRefresh = newRefresh;
+				if (newRefresh != null) {
+					RefreshHolder newHolder = theRefreshObservables.get(newRefresh);
+					if (newHolder == null)
+						newHolder = new RefreshHolder(newRefresh); // Adds itself
+					theCurrentHolder = newHolder;
+					theElementId = newHolder.elements.addElement(this, false).getElementId();
+				}
+			}
+
+			private void refresh(Object cause) {
+				T value = get();
+				ObservableCollectionDataFlowImpl.update(theListener, value, value, cause);
+			}
+
+			@Override
+			public int compareTo(DerivedCollectionElement<T> o) {
+				return theParentEl.compareTo(((RefreshingElement) o).theParentEl);
+			}
+
+			@Override
+			public void setListener(CollectionElementListener<T> listener) {
+				theListener = listener;
+			}
+
+			@Override
+			public T get() {
+				return theParentEl.get();
+			}
+
+			@Override
+			public String isEnabled() {
+				return theParentEl.isEnabled();
+			}
+
+			@Override
+			public String isAcceptable(T value) {
+				return theParentEl.isAcceptable(value);
+			}
+
+			@Override
+			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
+				theParentEl.set(value);
+			}
+
+			@Override
+			public String canRemove() {
+				return theParentEl.canRemove();
+			}
+
+			@Override
+			public void remove() throws UnsupportedOperationException {
+				theParentEl.remove();
+			}
+
+			@Override
+			public String canAdd(T value, boolean before) {
+				return theParentEl.canAdd(value, before);
+			}
+
+			@Override
+			public DerivedCollectionElement<T> add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
+				DerivedCollectionElement<T> parentEl = theParentEl.add(value, before);
+				return parentEl == null ? null : new RefreshingElement(parentEl, true);
 			}
 		}
 	}
@@ -2616,6 +2714,7 @@ public class ObservableCollectionDataFlowImpl {
 		private final Function<? super I, ? extends CollectionDataFlow<?, ?, ? extends T>> theMap;
 
 		private ElementAccepter<T> theAccepter;
+		private WeakListening theListening;
 		private final BetterList<FlattenedHolder> theOuterElements;
 
 		public FlattenedManager(ActiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
@@ -2642,8 +2741,8 @@ public class ObservableCollectionDataFlowImpl {
 			Transaction outerLock = theParent.lock(write, structural, cause);
 			List<Transaction> innerLocks = new LinkedList<>();
 			for (FlattenedHolder holder : theOuterElements) {
-				if (holder.flow != null)
-					innerLocks.add(holder.flow.lock(write, structural, cause));
+				if (holder.manager != null)
+					innerLocks.add(holder.manager.lock(write, structural, cause));
 			}
 			return () -> {
 				for (Transaction innerLock : innerLocks)
@@ -2659,19 +2758,31 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public boolean clear() {
-			// TODO Auto-generated method stub
+			try (Transaction t = theParent.lock(true, false, null)) {
+				boolean allCleared = true;
+				for (FlattenedHolder outerEl : theOuterElements) {
+					if (outerEl.manager == null)
+						continue;
+					allCleared &= outerEl.manager.clear();
+				}
+				return allCleared;
+			}
 		}
 
 		@Override
 		public String canAdd(T toAdd) {
 			String msg = null;
-			for (FlattenedHolder holder : theOuterElements) {
-				if (holder.flow.getTargetType().getRawType().isInstance(toAdd) && holder.flow.equivalence().isElement(toAdd))
-					msg = ((ActiveCollectionManager<?, ?, T>) holder.flow).canAdd(toAdd);
-				else
-					msg = StdMsg.ILLEGAL_ELEMENT;
-				if (msg == null)
-					return null;
+			try (Transaction t = theParent.lock(true, false, null)) {
+				for (FlattenedHolder holder : theOuterElements) {
+					if (holder.manager == null)
+						continue;
+					if (holder.manager.getTargetType().getRawType().isInstance(toAdd) && holder.manager.equivalence().isElement(toAdd))
+						msg = ((ActiveCollectionManager<?, ?, T>) holder.manager).canAdd(toAdd);
+					else
+						msg = StdMsg.ILLEGAL_ELEMENT;
+					if (msg == null)
+						return null;
+				}
 			}
 			if (msg == null)
 				msg = StdMsg.UNSUPPORTED_OPERATION;
@@ -2682,19 +2793,23 @@ public class ObservableCollectionDataFlowImpl {
 		public DerivedCollectionElement<T> addElement(T value, boolean first) {
 			String msg = null;
 			boolean tried = false;
-			for (FlattenedHolder holder : (first ? theOuterElements : theOuterElements.reverse())) {
-				String msg_i;
-				if (holder.flow.getTargetType().getRawType().isInstance(value) && holder.flow.equivalence().isElement(value))
-					msg_i = ((ActiveCollectionManager<?, ?, T>) holder.flow).canAdd(value);
-				else
-					msg_i = StdMsg.ILLEGAL_ELEMENT;
-				if (msg == null) {
-					tried = true;
-					DerivedCollectionElement<T> el = ((ActiveCollectionManager<?, ?, T>) holder.flow).addElement(value, first);
-					if (el != null)
-						return el;
-				} else
-					msg = msg_i;
+			try (Transaction t = theParent.lock(true, false, null)) {
+				for (FlattenedHolder holder : (first ? theOuterElements : theOuterElements.reverse())) {
+					String msg_i;
+					if (holder.manager == null)
+						continue;
+					if (holder.manager.getTargetType().getRawType().isInstance(value) && holder.manager.equivalence().isElement(value))
+						msg_i = ((ActiveCollectionManager<?, ?, T>) holder.manager).canAdd(value);
+					else
+						msg_i = StdMsg.ILLEGAL_ELEMENT;
+					if (msg == null) {
+						tried = true;
+						DerivedCollectionElement<T> el = ((ActiveCollectionManager<?, ?, T>) holder.manager).addElement(value, first);
+						if (el != null)
+							return new FlattenedElement(holder, el, true);
+					} else
+						msg = msg_i;
+				}
 			}
 			if (tried)
 				return null;
@@ -2706,30 +2821,163 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public void begin(ElementAccepter<T> onElement, WeakListening listening) {
 			theAccepter = onElement;
+			theListening = listening;
 			theParent.begin((parentEl, cause) -> {
-				theOuterElements.add(new FlattenedHolder(parentEl, listening));
+				theOuterElements.add(new FlattenedHolder(parentEl, listening, cause));
 			}, listening);
 		}
 
 		private class FlattenedHolder {
 			private final DerivedCollectionElement<I> theParentEl;
-			private final List<FlattenedElement> theElements;
-			private Subscription theWeakSubscription;
-			ActiveCollectionManager<?, ?, ? extends T> flow;
+			private final BetterCollection<FlattenedElement> theElements;
+			private final WeakListening.Builder theChildListening = theListening.child();
+			private CollectionDataFlow<?, ?, ? extends T> theFlow;
+			ActiveCollectionManager<?, ?, ? extends T> manager;
 
-			FlattenedHolder(DerivedCollectionElement<I> parentEl, WeakListening listening) {
+			FlattenedHolder(DerivedCollectionElement<I> parentEl, WeakListening listening, Object cause) {
 				theParentEl = parentEl;
-				flow = theMap.apply(theParentEl.get()).manageActive();
-				theElements = new LinkedList<>();
-				// Need to hold on to the subscription because it contains strong references that keep the listeners alive
-				int todo;// TODO
-				// theWeakSubscription = WeakConsumer.build()//
-				// .<ObservableCollectionEvent<? extends E>> withAction(el -> {
-				// }, action -> flow.subscribe(action, true).removeAll())//
-				// .withUntil(until::act).build();
+				theElements = new BetterTreeList<>(false);
+				updated(theParentEl.get(), cause);
+				theParentEl.setListener(new CollectionElementListener<I>() {
+					@Override
+					public void update(I oldValue, I newValue, Object innerCause) {
+						updated(newValue, innerCause);
+					}
+
+					@Override
+					public void removed(I value, Object innerCause) {
+						clearSubElements(innerCause);
+					}
+				});
+			}
+
+			private void updated(I newValue, Object cause) {
+				try (Transaction t = theParent.lock(true, false, cause)) {
+					CollectionDataFlow<?, ?, ? extends T> newFlow = theMap.apply(newValue);
+					if (newFlow == theFlow)
+						return;
+					clearSubElements(cause);
+					theFlow = newFlow;
+					manager = newFlow.manageActive();
+					manager.begin((childEl, innerCause) -> {
+						FlattenedElement flatEl = new FlattenedElement(this, childEl, false);
+						theAccepter.accept(flatEl, innerCause);
+					}, theChildListening.getListening());
+				}
+			}
+
+			private void clearSubElements(Object cause) {
+				if (manager == null)
+					return;
+				try (Transaction t = manager.lock(true, true, cause)) {
+					for (FlattenedElement el : theElements)
+						el.removed(cause);
+					theElements.clear();
+					theChildListening.unsubscribe();
+					manager = null;
+				}
 			}
 		}
 
-		private class FlattenedElement {}
+		private class FlattenedElement implements DerivedCollectionElement<T> {
+			private final FlattenedHolder theHolder;
+			private final DerivedCollectionElement<? extends T> theParentEl;
+			private final ElementId theElementId;
+			private CollectionElementListener<T> theListener;
+
+			<X extends T> FlattenedElement(FlattenedHolder holder, DerivedCollectionElement<X> parentEl, boolean synthetic) {
+				theHolder = holder;
+				theParentEl = parentEl;
+				if (!synthetic) {
+					theElementId = theHolder.theElements.addElement(this, false).getElementId();
+					parentEl.setListener(new CollectionElementListener<X>() {
+						@Override
+						public void update(X oldValue, X newValue, Object cause) {
+							// Need to make sure that the flattened collection isn't firing at the same time as the child collection
+							try (Transaction t = theParent.lock(true, false, null)) {
+								ObservableCollectionDataFlowImpl.update(theListener, oldValue, newValue, cause);
+							}
+						}
+
+						@Override
+						public void removed(X value, Object cause) {
+							theHolder.theElements.mutableElement(theElementId).remove();
+							// Need to make sure that the flattened collection isn't firing at the same time as the child collection
+							try (Transaction t = theParent.lock(true, false, null)) {
+								ObservableCollectionDataFlowImpl.removed(theListener, value, cause);
+							}
+						}
+					});
+				} else
+					theElementId = null;
+			}
+
+			void removed(Object cause) {
+				ObservableCollectionDataFlowImpl.removed(theListener, get(), cause);
+			}
+
+			@Override
+			public int compareTo(DerivedCollectionElement<T> o) {
+				FlattenedElement flat = (FlattenedElement) o;
+				int comp = theHolder.theParentEl.compareTo(flat.theHolder.theParentEl);
+				if (comp == 0)
+					comp = ((DerivedCollectionElement<T>) theParentEl).compareTo((DerivedCollectionElement<T>) flat.theParentEl);
+				return comp;
+			}
+
+			@Override
+			public void setListener(CollectionElementListener<T> listener) {
+				theListener = listener;
+			}
+
+			@Override
+			public T get() {
+				return theParentEl.get();
+			}
+
+			@Override
+			public String isEnabled() {
+				return theParentEl.isEnabled();
+			}
+
+			@Override
+			public String isAcceptable(T value) {
+				if (value != null && !theHolder.manager.getTargetType().getRawType().isInstance(value))
+					return StdMsg.BAD_TYPE;
+				return ((DerivedCollectionElement<T>) theParentEl).isAcceptable(value);
+			}
+
+			@Override
+			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
+				if (value != null && !theHolder.manager.getTargetType().getRawType().isInstance(value))
+					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+				((DerivedCollectionElement<T>) theParentEl).set(value);
+			}
+
+			@Override
+			public String canRemove() {
+				return theParentEl.canRemove();
+			}
+
+			@Override
+			public void remove() throws UnsupportedOperationException {
+				theParentEl.remove();
+			}
+
+			@Override
+			public String canAdd(T value, boolean before) {
+				if (value != null && !theHolder.manager.getTargetType().getRawType().isInstance(value))
+					return StdMsg.BAD_TYPE;
+				return ((DerivedCollectionElement<T>) theParentEl).canAdd(value, before);
+			}
+
+			@Override
+			public DerivedCollectionElement<T> add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
+				if (value != null && !theHolder.manager.getTargetType().getRawType().isInstance(value))
+					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+				DerivedCollectionElement<? extends T> parentEl = ((DerivedCollectionElement<T>) theParentEl).add(value, before);
+				return parentEl == null ? null : new FlattenedElement(theHolder, parentEl, true);
+			}
+		}
 	}
 }

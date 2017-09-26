@@ -746,21 +746,12 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	}
 
 	/**
-	 * @param <E> The super-type of elements in the inner collections
-	 * @param coll The collection to flatten
-	 * @return A data flow to create a collection containing all elements of all inner collections inside elements in the outer collection
-	 */
-	public static <E> CollectionDataFlow<E, E, E> flatten(ObservableCollection<? extends ObservableCollection<? extends E>> coll) {
-		return ObservableCollectionImpl.flatten(coll);
-	}
-
-	/**
 	 * @param <E> The super type of element in the collections
 	 * @param colls The collections to flatten
 	 * @return A collection containing all elements of the given collections
 	 */
-	public static <E> CollectionDataFlow<E, E, E> flattenCollections(ObservableCollection<? extends E>... colls) {
-		return flatten(constant(new TypeToken<ObservableCollection<? extends E>>() {}, colls));
+	public static <E> CollectionDataFlow<?, ?, E> flattenCollections(TypeToken<E> innerType, ObservableCollection<? extends E>... colls) {
+		return constant(new TypeToken<ObservableCollection<? extends E>>() {}, colls).flow().flatMapC(innerType, c -> c);
 	}
 
 	/**
