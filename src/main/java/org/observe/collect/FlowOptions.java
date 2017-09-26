@@ -19,6 +19,16 @@ public interface FlowOptions {
 		boolean isCached();
 	}
 
+	interface UniqueOptions {
+		UniqueOptions useFirst(boolean useFirst);
+
+		UniqueOptions preserveSourceOrder(boolean preserveOrder);
+
+		boolean isUseFirst();
+
+		boolean isPreservingSourceOrder();
+	}
+
 	abstract class AbstractXformOptions implements XformOptions {
 		private boolean reEvalOnUpdate;
 		private boolean fireIfUnchanged;
@@ -100,9 +110,43 @@ public interface FlowOptions {
 		}
 	}
 
-	class GroupingOptions extends AbstractXformOptions {
-		private boolean staticCategories;
-		private boolean useFirstKey;
+	class SimpleUniqueOptions implements UniqueOptions {
+		private boolean useFirst = false;
+		private boolean isPreservingSourceOrder = false;
+
+		@Override
+		public SimpleUniqueOptions useFirst(boolean useFirst) {
+			this.useFirst = useFirst;
+			return this;
+		}
+
+		@Override
+		public SimpleUniqueOptions preserveSourceOrder(boolean preserveOrder) {
+			isPreservingSourceOrder = preserveOrder;
+			return this;
+		}
+
+		@Override
+		public boolean isUseFirst() {
+			return useFirst;
+		}
+
+		@Override
+		public boolean isPreservingSourceOrder() {
+			return isPreservingSourceOrder;
+		}
+
+	}
+
+	class GroupingOptions extends AbstractXformOptions implements UniqueOptions {
+		private final boolean isSorted;
+		private boolean staticCategories = false;
+		private boolean useFirst = false;
+		private boolean isPreservingSourceOrder = false;
+
+		public GroupingOptions(boolean sorted) {
+			isSorted = sorted;
+		}
 
 		@Override
 		public GroupingOptions reEvalOnUpdate(boolean reEval) {
@@ -124,13 +168,31 @@ public interface FlowOptions {
 			return this;
 		}
 
-		public GroupingOptions useFirstKey(boolean useFirst) {
-			this.useFirstKey = useFirst;
+		@Override
+		public GroupingOptions useFirst(boolean useFirst) {
+			this.useFirst = useFirst;
 			return this;
 		}
 
-		public boolean isUseFirstKey() {
-			return useFirstKey;
+		@Override
+		public GroupingOptions preserveSourceOrder(boolean preserveOrder) {
+			if (isSorted && preserveOrder) {
+				System.err.println(
+					"Preserve source order is not allowed for sorted maps," + " where ordering is determined by the uniqueness itself");
+				return this;
+			}
+			isPreservingSourceOrder = preserveOrder;
+			return this;
+		}
+
+		@Override
+		public boolean isUseFirst() {
+			return useFirst;
+		}
+
+		@Override
+		public boolean isPreservingSourceOrder() {
+			return isPreservingSourceOrder;
 		}
 
 		public boolean isStaticCategories() {

@@ -24,6 +24,8 @@ import org.observe.collect.Combination.CombinedFlowDef;
 import org.observe.collect.FlowOptions.GroupingOptions;
 import org.observe.collect.FlowOptions.MapDef;
 import org.observe.collect.FlowOptions.MapOptions;
+import org.observe.collect.FlowOptions.SimpleUniqueOptions;
+import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollection.UniqueDataFlow;
@@ -148,14 +150,14 @@ public class ObservableCollectionDataFlowImpl {
 
 		String canAdd(T toAdd);
 
+		DerivedCollectionElement<T> addElement(T value, boolean first);
+
 		/**
 		 * Removes all elements in this manager, if possible
 		 *
 		 * @return Whether this method removed all elements. If false, the derived collection may need to remove elements itself.
 		 */
 		boolean clear();
-
-		DerivedCollectionElement<T> addElement(T value, boolean first);
 
 		void begin(ElementAccepter<T> onElement, WeakListening listening);
 	}
@@ -190,12 +192,12 @@ public class ObservableCollectionDataFlowImpl {
 		void removed(E value, Object cause);
 	}
 
-	private static <T> void update(CollectionElementListener<T> listener, T oldValue, T newValue, Object cause) {
+	static <T> void update(CollectionElementListener<T> listener, T oldValue, T newValue, Object cause) {
 		if (listener != null)
 			listener.update(oldValue, newValue, cause);
 	}
 
-	private static <T> void removed(CollectionElementListener<T> listener, T value, Object cause) {
+	static <T> void removed(CollectionElementListener<T> listener, T value, Object cause) {
 		if (listener != null)
 			listener.removed(value, cause);
 	}
@@ -276,10 +278,10 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public CollectionDataFlow<E, I, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
+		public CollectionDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
 			ModFilterBuilder<T> filter = new ModFilterBuilder<>();
 			options.accept(filter);
-			return new ModFilteredOp(theSource, this, new ModFilterer<>(filter));
+			return new ModFilteredOp<>(theSource, this, new ModFilterer<>(filter));
 		}
 
 		@Override
@@ -288,44 +290,47 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public UniqueDataFlow<E, T, T> unique(boolean alwaysUseFirst) {
-			return new ObservableSetImpl.UniqueOp<>(theSource, this, alwaysUseFirst);
+		public UniqueDataFlow<E, T, T> unique(Consumer<UniqueOptions> options) {
+			SimpleUniqueOptions uo = new SimpleUniqueOptions();
+			options.accept(uo);
+			return new ObservableSetImpl.UniqueOp<>(theSource, this, uo.isUseFirst(), uo.isPreservingSourceOrder());
 		}
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> uniqueSorted(Comparator<? super T> compare, boolean alwaysUseFirst) {
-			return new ObservableSortedSetImpl.UniqueSortedDataFlowImpl<>(theSource, this, compare, alwaysUseFirst);
+			return new ObservableSortedSetImpl.UniqueSortedOp<>(theSource, this, compare, alwaysUseFirst);
 		}
 
 		@Override
 		public <K> MultiMapFlow<E, K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap,
 			Consumer<GroupingOptions> options) {
-			GroupingOptions groupOptions=new GroupingOptions();
+			GroupingOptions groupOptions = new GroupingOptions(false);
 			options.accept(groupOptions);
-			UniqueDataFlow<E, ?, K> keyFlow = map(keyType, keyMap, mapOptions -> {}).unique(groupOptions.isUseFirstKey());
+			UniqueDataFlow<E, ?, K> keyFlow = map(keyType, keyMap, mapOptions -> {}).unique(go -> //
+			go.useFirst(groupOptions.isUseFirst()).preserveSourceOrder(go.isPreservingSourceOrder()));
 			Function<K, CollectionDataFlow<E, ?, T>> valueMap;
 			if (groupOptions.isStaticCategories()) {
 				valueMap = key -> this.filterStatic(v -> Objects.equals(key, keyMap.apply(v)) ? null : StdMsg.WRONG_GROUP);
 			} else{
 				valueMap = key -> this.filter(v -> Objects.equals(key, keyMap.apply(v)) ? null : StdMsg.WRONG_GROUP);
 			}
-			return new ObservableMultiMap.DefaultMultiMapFlow(theSource, keyFlow, theTargetType, valueMap);
+			return new ObservableMultiMap.DefaultMultiMapFlow<>(theSource, keyFlow, theTargetType, valueMap);
 		}
 
 		@Override
 		public <K> SortedMultiMapFlow<E, K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap,
 			Comparator<? super K> keyCompare, Consumer<GroupingOptions> options) {
-			GroupingOptions groupOptions = new GroupingOptions();
+			GroupingOptions groupOptions = new GroupingOptions(true);
 			options.accept(groupOptions);
 			UniqueSortedDataFlow<E, ?, K> keyFlow = map(keyType, keyMap, mapOptions -> {}).uniqueSorted(keyCompare,
-				groupOptions.isUseFirstKey());
+				groupOptions.isUseFirst());
 			Function<K, CollectionDataFlow<E, ?, T>> valueMap;
 			if (groupOptions.isStaticCategories()) {
 				valueMap = key -> this.filterStatic(v -> Objects.equals(key, keyMap.apply(v)) ? null : StdMsg.WRONG_GROUP);
 			} else {
 				valueMap = key -> this.filter(v -> Objects.equals(key, keyMap.apply(v)) ? null : StdMsg.WRONG_GROUP);
 			}
-			return new ObservableSortedMultiMap.DefaultSortedMultiMapFlow(theSource, keyFlow, theTargetType, valueMap);
+			return new ObservableSortedMultiMap.DefaultSortedMultiMapFlow<>(theSource, keyFlow, theTargetType, valueMap);
 		}
 
 		@Override
@@ -347,7 +352,7 @@ public class ObservableCollectionDataFlowImpl {
 	public static class SortedDataFlow<E, T> extends AbstractDataFlow<E, T, T> {
 		private final Comparator<? super T> theCompare;
 
-		protected SortedDataFlow(ObservableCollection<E> source, AbstractDataFlow<E, ?, T> parent, Comparator<? super T> compare) {
+		protected SortedDataFlow(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, Comparator<? super T> compare) {
 			super(source, parent, parent.getTargetType());
 			theCompare = compare;
 		}
@@ -405,7 +410,7 @@ public class ObservableCollectionDataFlowImpl {
 		private final Function<? super T, String> theFilter;
 		private final boolean isStaticFilter;
 
-		protected FilterOp(ObservableCollection<E> source, AbstractDataFlow<E, ?, T> parent, Function<? super T, String> filter,
+		protected FilterOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, Function<? super T, String> filter,
 			boolean staticFilter) {
 			super(source, parent, parent.getTargetType());
 			theFilter = filter;
@@ -458,7 +463,7 @@ public class ObservableCollectionDataFlowImpl {
 	public static class EquivalenceSwitchOp<E, T> extends AbstractDataFlow<E, T, T> {
 		private final Equivalence<? super T> theEquivalence;
 
-		protected EquivalenceSwitchOp(ObservableCollection<E> source, AbstractDataFlow<E, ?, T> parent,
+		protected EquivalenceSwitchOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent,
 			Equivalence<? super T> equivalence) {
 			super(source, parent, parent.getTargetType());
 			theEquivalence = equivalence;
@@ -484,7 +489,7 @@ public class ObservableCollectionDataFlowImpl {
 		private final Function<? super I, ? extends T> theMap;
 		private final MapDef<I, T> theOptions;
 
-		protected MapOp(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent, TypeToken<T> target,
+		protected MapOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, I> parent, TypeToken<T> target,
 			Function<? super I, ? extends T> map, MapDef<I, T> options) {
 			super(source, parent, target);
 			theMap = map;
@@ -546,7 +551,7 @@ public class ObservableCollectionDataFlowImpl {
 	public static class RefreshOp<E, T> extends AbstractDataFlow<E, T, T> {
 		private final Observable<?> theRefresh;
 
-		protected RefreshOp(ObservableCollection<E> source, AbstractDataFlow<E, ?, T> parent, Observable<?> refresh) {
+		protected RefreshOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, Observable<?> refresh) {
 			super(source, parent, parent.getTargetType());
 			theRefresh = refresh;
 		}
@@ -570,7 +575,7 @@ public class ObservableCollectionDataFlowImpl {
 	public static class ElementRefreshOp<E, T> extends AbstractDataFlow<E, T, T> {
 		private final Function<? super T, ? extends Observable<?>> theElementRefresh;
 
-		protected ElementRefreshOp(ObservableCollection<E> source, AbstractDataFlow<E, ?, T> parent,
+		protected ElementRefreshOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent,
 			Function<? super T, ? extends Observable<?>> elementRefresh) {
 			super(source, parent, parent.getTargetType());
 			theElementRefresh = elementRefresh;
@@ -595,7 +600,7 @@ public class ObservableCollectionDataFlowImpl {
 	public static class ModFilteredOp<E, T> extends AbstractDataFlow<E, T, T> {
 		private final ModFilterer<T> theOptions;
 
-		public ModFilteredOp(ObservableCollection<E> source, AbstractDataFlow<E, ?, T> parent, ModFilterer<T> options) {
+		public ModFilteredOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, ModFilterer<T> options) {
 			super(source, parent, parent.getTargetType());
 			theOptions = options;
 		}

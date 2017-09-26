@@ -9,14 +9,18 @@ import java.util.function.Supplier;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.Subscription;
+import org.observe.collect.FlowOptions.MapDef;
+import org.observe.collect.FlowOptions.MapOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
-import org.observe.collect.ObservableCollection.ElementSetter;
+import org.observe.collect.ObservableCollection.ModFilterBuilder;
+import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
 import org.observe.collect.ObservableCollection.UniqueSortedMappedCollectionBuilder;
-import org.observe.collect.ObservableCollection.UniqueSortedModFilterBuilder;
-import org.observe.collect.ObservableCollectionDataFlowImpl.AbstractDataFlow;
-import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.DerivedCollectionElement;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
+import org.observe.collect.ObservableCollectionDataFlowImpl.ModFilterer;
+import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.SortedManager;
 import org.observe.collect.ObservableSetImpl.UniqueBaseFlow;
 import org.qommons.Transaction;
@@ -279,8 +283,22 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public <X> UniqueSortedMappedCollectionBuilder<E, T, X> mapEquivalent(TypeToken<X> target) {
-			return new UniqueSortedMappedCollectionBuilder<>(getSource(), this, target);
+		public <X> UniqueSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+			Function<? super X, ? extends T> reverse, Consumer<MapOptions<T, X>> options) {
+			MapOptions<T, X> mapOptions = new MapOptions<>();
+			options.accept(mapOptions);
+			mapOptions.withReverse(reverse);
+			return new UniqueSortedMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions), (x1, x2) -> {
+				return theCompare.compare(reverse.apply(x1), reverse.apply(x2));
+			});
+		}
+
+		@Override
+		public <X> UniqueSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+			Comparator<? super X> compare, Consumer<MapOptions<T, X>> options) {
+			MapOptions<T, X> mapOptions = new MapOptions<>();
+			options.accept(mapOptions);
+			return new UniqueSortedMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions), compare);
 		}
 
 		@Override
@@ -294,48 +312,43 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public UniqueSortedModFilterBuilder<E, T> filterModification() {
-			return new UniqueSortedModFilterBuilder<>(getSource(), this);
-		}
-
-		@Override
-		public CollectionManager<E, ?, T> manageCollection() {
-			return getParent().manageCollection();
+		public UniqueSortedDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
+			ModFilterBuilder<T> filter = new ModFilterBuilder<>();
+			options.accept(filter);
+			return new UniqueSortedModFilteredOp<>(getSource(), this, new ModFilterer<>(filter));
 		}
 
 		@Override
 		public ObservableSortedSet<T> collect(Observable<?> until) {
-			if (until == Observable.empty && isLightWeight())
-				return new DerivedLWSortedSet<>((ObservableSortedSet<E>) getSource(), manageCollection(), theCompare);
+			if (until == Observable.empty && isPassive())
+				return new PassiveDerivedSortedSet<>((ObservableSortedSet<E>) getSource(), managePassive(), theCompare);
 			else
-				return new DerivedSortedSet<>(getSource(), manageCollection(), theCompare, until);
+				return new ActiveDerivedSortedSet<>(manageActive(), theCompare, until);
 		}
 	}
 
-	public static class UniqueSortedDataFlowImpl<E, T> extends UniqueSortedDataFlowWrapper<E, T> {
+	public static class UniqueSortedOp<E, T> extends UniqueSortedDataFlowWrapper<E, T> {
 		private final boolean isAlwaysUsingFirst;
 
-		protected UniqueSortedDataFlowImpl(ObservableCollection<E> source, AbstractDataFlow<E, ?, T> parent, Comparator<? super T> compare,
+		protected UniqueSortedOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, Comparator<? super T> compare,
 			boolean alwaysUseFirst) {
 			super(source, parent, compare);
 			isAlwaysUsingFirst = alwaysUseFirst;
 		}
 
 		@Override
-		public CollectionManager<E, ?, T> manageCollection() {
-			return new ObservableSetImpl.UniqueManager<>(new SortedManager<>(getParent().manageCollection(), comparator()),
-				isAlwaysUsingFirst);
+		public ActiveCollectionManager<E, ?, T> manageActive() {
+			return new ObservableSetImpl.UniqueManager<>(new SortedManager<>(getParent().manageActive(), comparator()), isAlwaysUsingFirst,
+				false);
 		}
 	}
 
 	public static class UniqueSortedMapOp<E, I, T> extends ObservableSetImpl.UniqueMapOp<E, I, T> implements UniqueSortedDataFlow<E, I, T> {
 		private final Comparator<? super T> theCompare;
 
-		protected UniqueSortedMapOp(ObservableCollection<E> source, AbstractDataFlow<E, ?, I> parent, TypeToken<T> target,
-			Function<? super I, ? extends T> map, Function<? super T, ? extends I> reverse,
-			ElementSetter<? super I, ? super T> elementReverse, boolean reEvalOnUpdate, boolean fireIfUnchanged, boolean isCached,
-			Comparator<? super T> compare) {
-			super(source, parent, target, map, reverse, elementReverse, reEvalOnUpdate, fireIfUnchanged, isCached);
+		public UniqueSortedMapOp(ObservableCollection<E> source, UniqueDataFlow<E, ?, I> parent, TypeToken<T> target,
+			Function<? super I, ? extends T> map, MapDef<I, T> options, Comparator<? super T> compare) {
+			super(source, parent, target, map, options);
 			theCompare = compare;
 		}
 
@@ -360,11 +373,6 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public <X> UniqueSortedMappedCollectionBuilder<E, T, X> mapEquivalent(TypeToken<X> target) {
-			return new UniqueSortedMappedCollectionBuilder<>(getSource(), this, target);
-		}
-
-		@Override
 		public UniqueSortedDataFlow<E, T, T> refresh(Observable<?> refresh) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), super.refresh(refresh), comparator());
 		}
@@ -375,25 +383,25 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public UniqueSortedModFilterBuilder<E, T> filterModification() {
-			return new UniqueSortedModFilterBuilder<>(getSource(), this);
+		public UniqueSortedDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
+			ModFilterBuilder<T> filter = new ModFilterBuilder<>();
+			options.accept(filter);
+			return new UniqueSortedModFilteredOp<>(getSource(), this, new ModFilterer<>(filter));
 		}
 
 		@Override
 		public ObservableSortedSet<T> collect(Observable<?> until) {
-			if (until == Observable.empty && isLightWeight())
-				return new DerivedLWSortedSet<>((ObservableSortedSet<E>) getSource(), manageCollection(), comparator());
+			if (until == Observable.empty && isPassive())
+				return new PassiveDerivedSortedSet<>((ObservableSortedSet<E>) getSource(), managePassive(), comparator());
 			else
-				return new DerivedSortedSet<>(getSource(), manageCollection(), comparator(), until);
+				return new ActiveDerivedSortedSet<>(manageActive(), comparator(), until);
 		}
 	}
 
 	public static class UniqueSortedModFilteredOp<E, T> extends ObservableSetImpl.UniqueModFilteredOp<E, T>
 	implements UniqueSortedDataFlow<E, T, T> {
-		public UniqueSortedModFilteredOp(ObservableCollection<E> source, AbstractDataFlow<E, ?, T> parent, String immutableMsg,
-			boolean allowUpdates, String addMsg, String removeMsg, Function<? super T, String> addMsgFn,
-			Function<? super T, String> removeMsgFn) {
-			super(source, parent, immutableMsg, allowUpdates, addMsg, removeMsg, addMsgFn, removeMsgFn);
+		public UniqueSortedModFilteredOp(ObservableCollection<E> source, UniqueDataFlow<E, ?, T> parent, ModFilterer<T> options) {
+			super(source, parent, options);
 		}
 
 		@Override
@@ -432,16 +440,18 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public UniqueSortedModFilterBuilder<E, T> filterModification() {
-			return new UniqueSortedModFilterBuilder<>(getSource(), this);
+		public UniqueSortedDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
+			ModFilterBuilder<T> filter = new ModFilterBuilder<>();
+			options.accept(filter);
+			return new UniqueSortedModFilteredOp<>(getSource(), this, new ModFilterer<>(filter));
 		}
 
 		@Override
 		public ObservableSortedSet<T> collect(Observable<?> until) {
-			if (until == Observable.empty && isLightWeight())
-				return new DerivedLWSortedSet<>((ObservableSortedSet<E>) getSource(), manageCollection(), comparator());
+			if (until == Observable.empty && isPassive())
+				return new PassiveDerivedSortedSet<>((ObservableSortedSet<E>) getSource(), managePassive(), comparator());
 			else
-				return new DerivedSortedSet<>(getSource(), manageCollection(), comparator(), until);
+				return new ActiveDerivedSortedSet<>(manageActive(), comparator(), until);
 		}
 	}
 
@@ -491,8 +501,10 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public UniqueSortedModFilterBuilder<E, E> filterModification() {
-			return new UniqueSortedModFilterBuilder<>(getSource(), this);
+		public UniqueSortedDataFlow<E, E, E> filterMod(Consumer<ModFilterBuilder<E>> options) {
+			ModFilterBuilder<E> filter = new ModFilterBuilder<>();
+			options.accept(filter);
+			return new UniqueSortedModFilteredOp<>(getSource(), this, new ModFilterer<>(filter));
 		}
 
 		@Override
@@ -505,14 +517,15 @@ public class ObservableSortedSetImpl {
 			if (until == Observable.empty)
 				return getSource();
 			else
-				return new DerivedSortedSet<>(getSource(), manageCollection(), getSource().comparator(), until);
+				return new ActiveDerivedSortedSet<>(manageActive(), getSource().comparator(), until);
 		}
 	}
 
-	public static class DerivedLWSortedSet<E, T> extends ObservableSetImpl.DerivedLWSet<E, T> implements ObservableSortedSet<T> {
+	public static class PassiveDerivedSortedSet<E, T> extends ObservableSetImpl.PassiveDerivedSet<E, T> implements ObservableSortedSet<T> {
 		private final Comparator<? super T> theCompare;
 
-		public DerivedLWSortedSet(ObservableSortedSet<E> source, CollectionManager<E, ?, T> flow, Comparator<? super T> compare) {
+		public PassiveDerivedSortedSet(ObservableSortedSet<E> source, PassiveCollectionManager<E, ?, T> flow,
+			Comparator<? super T> compare) {
 			super(source, flow);
 			theCompare = compare;
 		}
@@ -548,12 +561,12 @@ public class ObservableSortedSetImpl {
 		}
 	}
 
-	public static class DerivedSortedSet<E, T> extends ObservableSetImpl.DerivedSet<E, T> implements ObservableSortedSet<T> {
+	public static class ActiveDerivedSortedSet<E, T> extends ObservableSetImpl.ActiveDerivedSet<E, T> implements ObservableSortedSet<T> {
 		private final Comparator<? super T> theCompare;
 
-		public DerivedSortedSet(ObservableCollection<E> source, CollectionManager<E, ?, T> flow, Comparator<? super T> compare,
+		public ActiveDerivedSortedSet(ActiveCollectionManager<E, ?, T> flow, Comparator<? super T> compare,
 			Observable<?> until) {
-			super(source, flow, until);
+			super(flow, until);
 			theCompare = compare;
 		}
 

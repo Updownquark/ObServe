@@ -25,6 +25,7 @@ import org.observe.collect.Combination.CombinationPrecursor;
 import org.observe.collect.Combination.CombinedFlowDef;
 import org.observe.collect.FlowOptions.GroupingOptions;
 import org.observe.collect.FlowOptions.MapOptions;
+import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
 import org.qommons.Causable;
@@ -1017,6 +1018,10 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 */
 		CollectionDataFlow<E, T, T> sorted(Comparator<? super T> compare);
 
+		default UniqueDataFlow<E, T, T> unique() {
+			return unique(options -> {});
+		}
+
 		/**
 		 * @param alwaysUseFirst Whether to always use the first element in the collection to represent other equivalent values. If this is
 		 *        false, the produced collection may be able to fire fewer events because elements that are added earlier in the collection
@@ -1025,7 +1030,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 *         {@link ObservableCollection#equivalence() equivalence} scheme.
 		 * @see #withEquivalence(Equivalence)
 		 */
-		UniqueDataFlow<E, T, T> unique(boolean alwaysUseFirst);
+		UniqueDataFlow<E, T, T> unique(Consumer<UniqueOptions> options);
 
 		/**
 		 * @param compare The comparator to use to sort the source elements
@@ -1037,7 +1042,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 */
 		UniqueSortedDataFlow<E, T, T> uniqueSorted(Comparator<? super T> compare, boolean alwaysUseFirst);
 
-		default CollectionDataFlow<E, I, T> immutable() {
+		default CollectionDataFlow<E, T, T> immutable() {
 			return filterMod(options -> options.immutable(StdMsg.UNSUPPORTED_OPERATION, true));
 		}
 
@@ -1048,7 +1053,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * @param options A builder that determines what modifications may be performed on the resulting flow
 		 * @return The mod-filtered flow
 		 */
-		CollectionDataFlow<E, I, T> filterMod(Consumer<ModFilterBuilder<T>> options);
+		CollectionDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options);
 
 		default <K> ObservableMultiMap.MultiMapFlow<E, K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap) {
 			return groupBy(keyType, keyMap, options -> {});
@@ -1195,7 +1200,12 @@ public interface ObservableCollection<E> extends BetterList<E> {
 			Function<? super X, ? extends T> reverse, Consumer<MapOptions<T, X>> options);
 
 		@Override
-		UniqueDataFlow<E, I, T> filterMod(Consumer<ModFilterBuilder<T>> options);
+		default UniqueDataFlow<E, T, T> immutable() {
+			return filterMod(options -> options.immutable(StdMsg.UNSUPPORTED_OPERATION, true));
+		}
+
+		@Override
+		UniqueDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options);
 
 		@Override
 		default ObservableSet<T> collect() {
@@ -1277,7 +1287,12 @@ public interface ObservableCollection<E> extends BetterList<E> {
 			Comparator<? super X> compare, Consumer<MapOptions<T, X>> options);
 
 		@Override
-		UniqueSortedDataFlow<E, I, T> filterMod(Consumer<ModFilterBuilder<T>> options);
+		default UniqueSortedDataFlow<E, T, T> immutable() {
+			return filterMod(options -> options.immutable(StdMsg.UNSUPPORTED_OPERATION, true));
+		}
+
+		@Override
+		UniqueSortedDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options);
 
 		@Override
 		default ObservableSortedSet<T> collect() {

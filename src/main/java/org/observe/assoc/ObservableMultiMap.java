@@ -20,6 +20,7 @@ import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.UniqueDataFlow;
+import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionElementManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
@@ -700,13 +701,13 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			}
 		}
 
-		protected DerivedEntrySet createEntrySet(ObservableCollection<OK> keySource) {
-			return new DerivedEntrySet(keySource, theKeyManager, theUntil);
+		protected DerivedEntrySet createEntrySet() {
+			return new DerivedEntrySet(theKeyManager, theUntil);
 		}
 
-		protected class DerivedEntrySet extends ObservableSetImpl.DerivedSet<OK, K> {
-			DerivedEntrySet(ObservableCollection<OK> keySource, CollectionManager<OK, ?, K> flow, Observable<?> until) {
-				super(keySource, flow, until);
+		protected class DerivedEntrySet extends ObservableSetImpl.ActiveDerivedSet<OK, K> {
+			DerivedEntrySet(ActiveCollectionManager<OK, ?, K> flow, Observable<?> until) {
+				super(flow, until);
 			}
 
 			protected class DerivedEntryElement extends ObservableCollectionImpl.ActiveDerivedCollection.DerivedCollectionElement<OK, K> {
