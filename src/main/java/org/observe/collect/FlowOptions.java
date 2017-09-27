@@ -3,6 +3,7 @@ package org.observe.collect;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import org.observe.XformOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.ElementSetter;
 
@@ -10,21 +11,6 @@ import com.google.common.reflect.TypeToken;
 
 /** Options for various {@link ObservableCollection.CollectionDataFlow} */
 public interface FlowOptions {
-	/** Super-interface used for options by several map-type operations */
-	interface XformOptions {
-		XformOptions reEvalOnUpdate(boolean reEval);
-
-		XformOptions fireIfUnchanged(boolean fire);
-
-		XformOptions cache(boolean cache);
-
-		boolean isReEvalOnUpdate();
-
-		boolean isFireIfUnchanged();
-
-		boolean isCached();
-	}
-
 	/** Allows customization of the behavior of a {@link CollectionDataFlow#distinct(Consumer) distinct} set */
 	interface UniqueOptions {
 		/**
@@ -52,55 +38,11 @@ public interface FlowOptions {
 		 */
 		UniqueOptions preserveSourceOrder(boolean preserveOrder);
 
+		/** @return Whether {@link #useFirst(boolean) useFirst} is set */
 		boolean isUseFirst();
 
+		/** @return Whether {@link #preserveSourceOrder(boolean) preserving source order} is set */
 		boolean isPreservingSourceOrder();
-	}
-
-	/** A simple abstract implementation of XformOptions */
-	abstract class AbstractXformOptions implements XformOptions {
-		private boolean reEvalOnUpdate;
-		private boolean fireIfUnchanged;
-		private boolean isCached;
-
-		public AbstractXformOptions() {
-			reEvalOnUpdate = true;
-			fireIfUnchanged = true;
-			isCached = true;
-		}
-
-		@Override
-		public XformOptions reEvalOnUpdate(boolean reEval) {
-			reEvalOnUpdate = reEval;
-			return this;
-		}
-
-		@Override
-		public XformOptions fireIfUnchanged(boolean fire) {
-			fireIfUnchanged = fire;
-			return this;
-		}
-
-		@Override
-		public XformOptions cache(boolean cache) {
-			isCached = cache;
-			return this;
-		}
-
-		@Override
-		public boolean isReEvalOnUpdate() {
-			return reEvalOnUpdate;
-		}
-
-		@Override
-		public boolean isFireIfUnchanged() {
-			return fireIfUnchanged;
-		}
-
-		@Override
-		public boolean isCached() {
-			return isCached;
-		}
 	}
 
 	/**
@@ -109,7 +51,7 @@ public interface FlowOptions {
 	 * @param <E> The source type
 	 * @param <T> The mapped type
 	 */
-	class MapOptions<E, T> extends AbstractXformOptions {
+	class MapOptions<E, T> extends XformOptions.SimpleXformOptions {
 		private Function<? super T, ? extends E> theReverse;
 		private ElementSetter<? super E, ? super T> theElementReverse;
 
@@ -154,10 +96,12 @@ public interface FlowOptions {
 			return this;
 		}
 
+		/** @return The reverse function, if set */
 		public Function<? super T, ? extends E> getReverse() {
 			return theReverse;
 		}
 
+		/** @return The element reverse function, if set */
 		public ElementSetter<? super E, ? super T> getElementReverse() {
 			return theElementReverse;
 		}
@@ -193,7 +137,7 @@ public interface FlowOptions {
 	}
 
 	/** Options used by {@link ObservableCollection.CollectionDataFlow#groupBy(TypeToken, Function, Consumer)} */
-	class GroupingOptions extends AbstractXformOptions implements UniqueOptions {
+	class GroupingOptions extends XformOptions.SimpleXformOptions implements UniqueOptions {
 		private final boolean isSorted;
 		private boolean isStaticCategories = false;
 		private boolean isUsingFirst = false;
@@ -254,33 +198,9 @@ public interface FlowOptions {
 			return isPreservingSourceOrder;
 		}
 
+		/** @return Whether {@link #withStaticCategories(boolean) static categories} is set */
 		public boolean isStaticCategories() {
 			return isStaticCategories;
-		}
-	}
-
-	/** An immutable version of {@link AbstractXformOptions} */
-	abstract class XformDef {
-		private final boolean reEvalOnUpdate;
-		private final boolean fireIfUnchanged;
-		private final boolean isCached;
-
-		public XformDef(XformOptions options) {
-			reEvalOnUpdate = options.isReEvalOnUpdate();
-			fireIfUnchanged = options.isFireIfUnchanged();
-			isCached = options.isCached();
-		}
-
-		public boolean isReEvalOnUpdate() {
-			return reEvalOnUpdate;
-		}
-
-		public boolean isFireIfUnchanged() {
-			return fireIfUnchanged;
-		}
-
-		public boolean isCached() {
-			return isCached;
 		}
 	}
 
@@ -290,7 +210,7 @@ public interface FlowOptions {
 	 * @param <E> The source type
 	 * @param <T> The mapped type
 	 */
-	class MapDef<E, T> extends XformDef {
+	class MapDef<E, T> extends XformOptions.XformDef {
 		private final Function<? super T, ? extends E> theReverse;
 		private final ElementSetter<? super E, ? super T> theElementReverse;
 
@@ -300,10 +220,12 @@ public interface FlowOptions {
 			theElementReverse = options.getElementReverse();
 		}
 
+		/** @return The element reverse function, if set */
 		public ElementSetter<? super E, ? super T> getElementReverse() {
 			return theElementReverse;
 		}
 
+		/** @return The reverse function, if set */
 		public Function<? super T, ? extends E> getReverse() {
 			return theReverse;
 		}

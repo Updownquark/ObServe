@@ -6,8 +6,7 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import org.observe.ObservableValue;
-import org.observe.collect.FlowOptions.AbstractXformOptions;
-import org.observe.collect.FlowOptions.XformOptions;
+import org.observe.XformOptions;
 import org.qommons.TriFunction;
 import org.qommons.collect.BetterHashSet;
 
@@ -21,7 +20,7 @@ public class Combination {
 	 * @param <E> The source type
 	 * @param <T> The target type
 	 */
-	public static class CombinationPrecursor<E, T> extends AbstractXformOptions {
+	public static class CombinationPrecursor<E, T> extends XformOptions.SimpleXformOptions {
 		@Override
 		public CombinationPrecursor<E, T> reEvalOnUpdate(boolean reEval) {
 			super.reEvalOnUpdate(reEval);
@@ -56,7 +55,7 @@ public class Combination {
 	 * @param <E> The source type
 	 * @param <T> The target type
 	 */
-	public static class CombinedFlowDef<E, T> extends FlowOptions.XformDef {
+	public static class CombinedFlowDef<E, T> extends XformOptions.XformDef {
 		private final Set<ObservableValue<?>> theArgs;
 		private final Function<? super CombinedValues<E>, ? extends T> theCombination;
 		private final Function<? super CombinedValues<T>, ? extends E> theReverse;
@@ -353,7 +352,7 @@ public class Combination {
 		<T> T get(ObservableValue<T> arg);
 	}
 
-	private static abstract class AbstractCombinedCollectionBuilder<E, R> extends AbstractXformOptions
+	private static abstract class AbstractCombinedCollectionBuilder<E, R> extends XformOptions.SimpleXformOptions
 	implements CombinedCollectionBuilder<E, R> {
 		private final BetterHashSet<ObservableValue<?>> theArgs;
 		private Function<? super CombinedValues<? extends R>, ? extends E> theReverse;

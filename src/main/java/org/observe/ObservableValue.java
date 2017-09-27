@@ -1,5 +1,6 @@
 package org.observe;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
@@ -11,6 +12,8 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
+import org.observe.XformOptions.SimpleXformOptions;
+import org.observe.XformOptions.XformDef;
 import org.observe.collect.ObservableCollection;
 import org.qommons.ListenerSet;
 import org.qommons.Transaction;
@@ -42,7 +45,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 	/**
 	 * Locks this value for modification. Does not affect {@link #get()}, i.e. the lock is not exclusive. Only prevents modification of this
 	 * value while the lock is held.
-	 * 
+	 *
 	 * @return The transaction to close to release the lock
 	 */
 	Transaction lock();
@@ -137,7 +140,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 	 */
 	default <R> ObservableValue<R> map(Function<? super T, R> function) {
 		return map(null, function);
-	};
+	}
 
 	/**
 	 * Composes this observable into another observable that depends on this one
@@ -148,8 +151,8 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 	 * @return The new observable whose value is a function of this observable's value
 	 */
 	default <R> ObservableValue<R> map(Function<? super T, R> function, boolean filterNull) {
-		return map(null, function, filterNull);
-	};
+		return map(null, function, options -> {});
+	}
 
 	/**
 	 * Composes this observable into another observable that depends on this one
@@ -160,23 +163,23 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 	 * @return The new observable whose value is a function of this observable's value
 	 */
 	default <R> ObservableValue<R> map(TypeToken<R> type, Function<? super T, R> function) {
-		return map(type, function, false);
+		return map(type, function, options -> {});
 	}
 
 	/**
-	 * Composes this observable into another observable that depends on this one
-	 *
 	 * @param <R> The type of the new observable
 	 * @param type The run-time type of the new observable
 	 * @param function The function to apply to this observable's value
-	 * @param filterNull Whether to apply the filter to null values or simply preserve the null
+	 * @param options Options determining the behavior of the result
 	 * @return The new observable whose value is a function of this observable's value
 	 */
-	default <R> ObservableValue<R> map(TypeToken<R> type, Function<? super T, R> function, boolean filterNull) {
+	default <R> ObservableValue<R> map(TypeToken<R> type, Function<? super T, R> function, Consumer<XformOptions> options) {
+		SimpleXformOptions xform = new SimpleXformOptions();
+		options.accept(xform);
 		return new ComposedObservableValue<>(type, args -> {
 			return function.apply((T) args[0]);
-		}, filterNull, this);
-	};
+		}, new XformDef(xform), this);
+	}
 
 	/**
 	 * A shortcut for {@link #flatten(ObservableValue) flatten}({@link #map(Function) mapV}(map))
@@ -198,7 +201,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 	 * @return The new observable whose value is a function of this observable's value and the other's
 	 */
 	default <U, R> ObservableValue<R> combine(BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg) {
-		return combine(null, function, arg, false);
+		return combine(null, function, arg, options -> {});
 	}
 
 	/**
@@ -209,15 +212,16 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 	 * @param type The run-time type of the new observable
 	 * @param function The function to apply to the values of the observables
 	 * @param arg The other observable to be composed
-	 * @param combineNull Whether to apply the combination function if the arguments are null. If false and any arguments are null, the
-	 *        result will be null.
+	 * @param options Options determining the behavior of the result
 	 * @return The new observable whose value is a function of this observable's value and the other's
 	 */
 	default <U, R> ObservableValue<R> combine(TypeToken<R> type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
-		boolean combineNull) {
+		Consumer<XformOptions> options) {
+		SimpleXformOptions xform = new SimpleXformOptions();
+		options.accept(xform);
 		return new ComposedObservableValue<>(type, args -> {
 			return function.apply((T) args[0], (U) args[1]);
-		}, combineNull, this, arg);
+		}, new XformDef(xform), this, arg);
 	}
 
 	/**
@@ -233,7 +237,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 	 */
 	default <U, V, R> ObservableValue<R> combine(TriFunction<? super T, ? super U, ? super V, R> function, ObservableValue<U> arg2,
 		ObservableValue<V> arg3) {
-		return combine(null, function, arg2, arg3, false);
+		return combine(null, function, arg2, arg3, options -> {});
 	}
 
 	/**
@@ -246,15 +250,16 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 	 * @param function The function to apply to the values of the observables
 	 * @param arg2 The first other observable to be composed
 	 * @param arg3 The second other observable to be composed
-	 * @param combineNull Whether to apply the combination function if the arguments are null. If false and any arguments are null, the
-	 *        result will be null.
+	 * @param options Options determining the behavior of the result
 	 * @return The new observable whose value is a function of this observable's value and the others'
 	 */
 	default <U, V, R> ObservableValue<R> combine(TypeToken<R> type, TriFunction<? super T, ? super U, ? super V, R> function,
-		ObservableValue<U> arg2, ObservableValue<V> arg3, boolean combineNull) {
+		ObservableValue<U> arg2, ObservableValue<V> arg3, Consumer<XformOptions> options) {
+		SimpleXformOptions xform = new SimpleXformOptions();
+		options.accept(xform);
 		return new ComposedObservableValue<>(type, args -> {
 			return function.apply((T) args[0], (U) args[1], (V) args[2]);
-		}, combineNull, this, arg2, arg3);
+		}, new XformDef(xform), this, arg2, arg3);
 	}
 
 	/**
@@ -496,31 +501,29 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 
 		private final TypeToken<T> theType;
 
-		private final boolean combineNulls;
+		private final XformDef theOptions;
 
 		private T theValue;
 
 		/**
 		 * @param function The function that operates on the argument observables to produce this observable's value
-		 * @param combineNull Whether to apply the combination function if the arguments are null. If false and any arguments are null, the
-		 *        result will be null.
+		 * @param options Options determining the behavior of the observable
 		 * @param composed The argument observables whose values are passed to the function
 		 */
-		public ComposedObservableValue(Function<Object[], T> function, boolean combineNull, ObservableValue<?>... composed) {
-			this(null, function, combineNull, composed);
+		public ComposedObservableValue(Function<Object[], T> function, XformDef options, ObservableValue<?>... composed) {
+			this(null, function, options, composed);
 		}
 
 		/**
 		 * @param type The type for this value
 		 * @param function The function that operates on the argument observables to produce this observable's value
-		 * @param combineNull Whether to apply the combination function if the arguments are null. If false and any arguments are null, the
-		 *        result will be null.
+		 * @param options Options determining the behavior of the observable
 		 * @param composed The argument observables whose values are passed to the function
 		 */
-		public ComposedObservableValue(TypeToken<T> type, Function<Object[], T> function, boolean combineNull,
+		public ComposedObservableValue(TypeToken<T> type, Function<Object[], T> function, XformDef options,
 			ObservableValue<?>... composed) {
 			theFunction = function;
-			combineNulls = combineNull;
+			theOptions = options;
 			theType = type != null ? type
 				: (TypeToken<T>) TypeToken.of(function.getClass()).resolveType(Function.class.getTypeParameters()[1]);
 			theComposed = java.util.Collections.unmodifiableList(java.util.Arrays.asList(composed));
@@ -531,8 +534,6 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 				@Override
 				public void accept(Boolean used) {
 					if (used) {
-						if (theComposed.toString().equals("[model.flash.value, 0]"))
-							System.out.print("");
 						Object[] composedValues = new Object[theComposed.size()];
 						boolean[] initialized = new boolean[composedValues.length];
 						for (int i = 0; i < composedValues.length; i++) {
@@ -540,18 +541,57 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 							composedSubs[i] = theComposed.get(i).changes().subscribe(new Observer<ObservableValueEvent<?>>() {
 								@Override
 								public <V extends ObservableValueEvent<?>> void onNext(V event) {
-									composedValues[index] = event.getNewValue();
+									Object oldStored = composedValues[index]; // May or may not have a valid value depending on caching
+									if (theOptions.isCached())
+										composedValues[index] = event.getNewValue();
 									if (event.isInitial()) {
 										initialized[index] = true;
 										return;
 									} else if (!isInitialized())
 										return;
-									T oldValue = theValue;
-									theValue = combine(composedValues);
-									if (theValue != oldValue) {
-										ObservableValueEvent<T> toFire = ComposedObservableValue.this.createChangeEvent(oldValue, theValue,
-											event);
-										fireNext(toFire);
+									boolean isUpdate;
+									if (!theOptions.isReEvalOnUpdate() && !theOptions.isFireIfUnchanged()) {
+										if (theOptions.isCached())
+											isUpdate = oldStored == event.getNewValue();
+										else
+											isUpdate = event.getOldValue() == event.getNewValue();
+									} else
+										isUpdate = false; // Otherwise we don't care if it's an update
+									if (!theOptions.isFireIfUnchanged() && isUpdate)
+										return; // No change, no event
+									try (Transaction t = lock()) {
+										// Now figure out if we need to fire an event
+										T oldValue, newValue;
+										if (theOptions.isReEvalOnUpdate() || !isUpdate) {
+											if (theOptions.isCached()) {
+												oldValue = theValue;
+												theValue = newValue = combine(composedValues);
+											} else {
+												for (int j = 0; j < composed.length; j++) {
+													if (j != index)
+														composedValues[j] = composed[j].get();
+												}
+												composedValues[index] = event.getOldValue();
+												oldValue = combine(composedValues);
+												composedValues[index] = event.getNewValue();
+												newValue = combine(composedValues);
+											}
+										} else {
+											for (int j = 0; j < composed.length; j++) {
+												if (j != index)
+													composedValues[j] = composed[j].get();
+											}
+											composedValues[index] = event.getOldValue();
+											oldValue = newValue = combine(composedValues);
+											Arrays.fill(composedValues, null);
+										}
+										if (theOptions.isCached())
+											theValue = newValue;
+										if (theOptions.isFireIfUnchanged() || oldValue != newValue) {
+											ObservableValueEvent<T> toFire = ComposedObservableValue.this.createChangeEvent(oldValue,
+												newValue, event);
+											fireNext(toFire);
+										}
 									}
 								}
 
@@ -568,11 +608,25 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 									completed[0] = true;
 									if (!isInitialized())
 										return;
-									T oldValue = theValue;
-									T newValue = combine(composedValues);
-									theValue = null;
-									ObservableValueEvent<T> toFire = createChangeEvent(oldValue, newValue, event);
-									fireCompleted(toFire);
+									try (Transaction t = lock()) {
+										T oldValue, newValue;
+										if (theOptions.isCached()) {
+											oldValue = theValue;
+											newValue = combine(composedValues);
+											theValue = null;
+										} else {
+											for (int j = 0; j < composed.length; j++) {
+												if (j != index)
+													composedValues[j] = composed[j].get();
+											}
+											composedValues[index] = event.getOldValue();
+											oldValue = combine(composedValues);
+											composedValues[index] = event.getNewValue();
+											newValue = combine(composedValues);
+										}
+										ObservableValueEvent<T> toFire = createChangeEvent(oldValue, newValue, event);
+										fireCompleted(toFire);
+									}
 								}
 
 								private void fireNext(ObservableValueEvent<T> next) {
@@ -592,7 +646,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 						for (int i = 0; i < composedValues.length; i++)
 							if (!initialized[i])
 								throw new IllegalStateException(theComposed.get(i) + " did not fire an initial value");
-						if (!completed[0])
+						if (!completed[0] && theOptions.isCached())
 							theValue = combine(composedValues);
 						// initialized[0] = true;
 					} else {
@@ -630,12 +684,9 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 			return theFunction;
 		}
 
-		/**
-		 * @return Whether the combination function will be applied if the arguments are null. If false and any arguments are null, the
-		 *         result will be null.
-		 */
-		public boolean isNullCombined() {
-			return combineNulls;
+		/** @return Options that determine the behavior of this value */
+		public XformDef getOptions() {
+			return theOptions;
 		}
 
 		@Override
@@ -655,11 +706,6 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 		 * @return The combined value
 		 */
 		protected T combine(Object[] args) {
-			if (!combineNulls) {
-				for (Object arg : args)
-					if (arg == null)
-						return null;
-			}
 			return theFunction.apply(args.clone());
 		}
 

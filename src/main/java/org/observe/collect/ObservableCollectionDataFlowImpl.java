@@ -1685,24 +1685,34 @@ public class ObservableCollectionDataFlowImpl {
 				if (!synthetic) {
 					theParentEl.setListener(new CollectionElementListener<I>() {
 						@Override
-						public void update(I oldValue, I newValue, Object cause) {
-							I srcVal;
-							if (!theOptions.isFireIfUnchanged()) {
-								if (newValue == theSourceValue)
-									return;
-								srcVal = theSourceValue;
-								theSourceValue = newValue;
-							} else
-								srcVal = oldValue;
-							if (!theOptions.isReEvalOnUpdate() && srcVal == newValue) {
-								ObservableCollectionDataFlowImpl.update(theListener, theValue, theValue, cause);
-								return;
-							}
-							T oldVal = theOptions.isCached() ? theValue : theMap.apply(oldValue);
-							T newVal = theMap.apply(newValue);
+						public void update(I oldSource, I newSource, Object cause) {
+							Object oldStored = theSourceValue;
 							if (theOptions.isCached())
-								theValue = newVal;
-							ObservableCollectionDataFlowImpl.update(theListener, oldVal, newVal, cause);
+								theSourceValue = newSource;
+							boolean isUpdate;
+							if (!theOptions.isReEvalOnUpdate() && !theOptions.isFireIfUnchanged()) {
+								if (theOptions.isCached())
+									isUpdate = oldStored == newSource;
+								else
+									isUpdate = oldSource == newSource;
+							} else
+								isUpdate = false; // Otherwise we don't care if it's an update
+							if (!theOptions.isFireIfUnchanged() && isUpdate)
+								return; // No change, no event
+							// Now figure out if we need to fire an event
+							T oldValue, newValue;
+							if (theOptions.isReEvalOnUpdate() || !isUpdate) {
+								if (theOptions.isCached()) {
+									oldValue = theValue;
+									theValue = newValue = theMap.apply(newSource);
+								} else {
+									oldValue = theMap.apply(oldSource);
+									newValue = theMap.apply(newSource);
+								}
+							} else
+								oldValue = newValue = theMap.apply(newSource);
+							if (theOptions.isFireIfUnchanged() || oldValue != newValue)
+								ObservableCollectionDataFlowImpl.update(theListener, oldValue, newValue, cause);
 						}
 
 						@Override
@@ -1876,16 +1886,28 @@ public class ObservableCollectionDataFlowImpl {
 			for (Map.Entry<ObservableValue<?>, ArgHolder<?>> arg : theArgs.entrySet()) {
 				ArgHolder<?> holder = arg.getValue();
 				listening.withConsumer((ObservableValueEvent<?> evt) -> {
+					Object oldStored = holder.value;
 					if (evt.isInitial()) {
 						// If this is an initial event, don't do any locking or updating
 						((ArgHolder<Object>) holder).value = evt.getNewValue();
 						return;
 					}
+					boolean isUpdate;
+					if (!theDef.isReEvalOnUpdate() && !theDef.isFireIfUnchanged()) {
+						if (theDef.isCached())
+							isUpdate = oldStored == evt.getNewValue();
+						else
+							isUpdate = evt.getOldValue() == evt.getNewValue();
+					} else
+						isUpdate = false; // Otherwise we don't care if it's an update
+					if (!theDef.isFireIfUnchanged() && isUpdate)
+						return; // No change, no event
 					try (Transaction t = lock(true, false, null)) {
 						// The old values are not needed if we're caching each element value
 						Object[] source = theDef.isCached() ? null : new Object[1];
 						Combination.CombinedValues<I> oldValues = theDef.isCached() ? null : getCopy(source);
-						((ArgHolder<Object>) holder).value = evt.getNewValue();
+						if (theDef.isCached())
+							((ArgHolder<Object>) holder).value = evt.getNewValue();
 						// The order of update here may be different than the order in the derived collection
 						// It's a lot of work to keep the elements in order (since the order may change),
 						// so we'll just let order of addition be good enough
@@ -1893,7 +1915,7 @@ public class ObservableCollectionDataFlowImpl {
 							el.updated(src -> {
 								source[0] = src;
 								return oldValues;
-							}, evt);
+							}, evt, isUpdate);
 					}
 				}, action -> arg.getKey().changes().act(action));
 			}
@@ -1910,7 +1932,10 @@ public class ObservableCollectionDataFlowImpl {
 			ArgHolder<V> holder = (ArgHolder<V>) theArgs.get(arg);
 			if (holder == null)
 				throw new IllegalArgumentException("Unrecognized value: " + arg);
-			return holder.value;
+			if (theDef.isCached())
+				return holder.value;
+			else
+				return arg.get();
 		}
 
 		private T combineValue(I source) {
@@ -1961,6 +1986,7 @@ public class ObservableCollectionDataFlowImpl {
 		private class CombinedElement implements DerivedCollectionElement<T> {
 			private final DerivedCollectionElement<I> theParentEl;
 			private CollectionElementListener<T> theListener;
+			private I theParentValue;
 			private T theValue;
 
 			CombinedElement(DerivedCollectionElement<I> parentEl, boolean synthetic) {
@@ -1968,13 +1994,37 @@ public class ObservableCollectionDataFlowImpl {
 				if (!synthetic) {
 					theParentEl.setListener(new CollectionElementListener<I>() {
 						@Override
-						public void update(I oldValue, I newValue, Object cause) {
-							try (Transaction t = lockArgs()) {
-								T oldVal = theDef.isCached() ? theValue : combineValue(oldValue);
-								T newVal = combineValue(newValue);
+						public void update(I oldSource, I newSource, Object cause) {
+							Object oldStored = theParentValue;
+							if (theDef.isCached())
+								theParentValue = newSource;
+							boolean isUpdate;
+							if (!theDef.isReEvalOnUpdate() && !theDef.isFireIfUnchanged()) {
 								if (theDef.isCached())
-									theValue = newVal;
-								ObservableCollectionDataFlowImpl.update(theListener, oldVal, newVal, cause);
+									isUpdate = oldStored == newSource;
+								else
+									isUpdate = oldSource == newSource;
+							} else
+								isUpdate = false; // Otherwise we don't care if it's an update
+							if (!theDef.isFireIfUnchanged() && isUpdate)
+								return; // No change, no event
+							try (Transaction t = lockArgs()) {
+								// Now figure out if we need to fire an event
+								T oldValue, newValue;
+								if (theDef.isReEvalOnUpdate() || !isUpdate) {
+									if (theDef.isCached()) {
+										oldValue = theValue;
+										theValue = newValue = combineValue(theParentValue);
+									} else {
+										oldValue = combineValue(newSource);
+										newValue = combineValue(newSource);
+									}
+								} else
+									oldValue = newValue = combineValue(newSource);
+								if (theDef.isCached())
+									theValue = newValue;
+								if (theDef.isFireIfUnchanged() || oldValue != newValue)
+									ObservableCollectionDataFlowImpl.update(theListener, oldValue, newValue, cause);
 							}
 						}
 
@@ -1989,19 +2039,31 @@ public class ObservableCollectionDataFlowImpl {
 							}
 						}
 					});
-					if (theDef.isCached())
-						theValue = combineValue(theParentEl.get());
+					if (theDef.isCached()) {
+						theParentValue = theParentEl.get();
+						theValue = combineValue(theParentValue);
+					}
 				}
 			}
 
-			void updated(Function<I, Combination.CombinedValues<I>> oldValues, Object cause) {
-				T newVal = combineValue(theParentEl.get());
-				T oldVal;
+			void updated(Function<I, Combination.CombinedValues<I>> oldValues, Object cause, boolean isUpdate) {
+				// Now figure out if we need to fire an event
+				T oldValue, newValue;
+				if (theDef.isReEvalOnUpdate() || !isUpdate) {
+					if (theDef.isCached()) {
+						oldValue = theValue;
+						theValue = newValue = combineValue(theParentValue);
+					} else {
+						I parentVal = theParentEl.get();
+						oldValue = theDef.getCombination().apply(oldValues.apply(parentVal));
+						newValue = combineValue(theParentEl.get());
+					}
+				} else
+					oldValue = newValue = combineValue(theParentEl.get());
 				if (theDef.isCached())
-					oldVal = theValue;
-				else
-					oldVal = theDef.getCombination().apply(oldValues.apply(theParentEl.get()));
-				ObservableCollectionDataFlowImpl.update(theListener, oldVal, newVal, cause);
+					theValue = newValue;
+				if (theDef.isFireIfUnchanged() || oldValue != newValue)
+					ObservableCollectionDataFlowImpl.update(theListener, oldValue, newValue, cause);
 			}
 
 			@Override
