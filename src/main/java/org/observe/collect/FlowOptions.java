@@ -78,13 +78,31 @@ public interface FlowOptions {
 		private Function<? super T, ? extends E> theReverse;
 		private ElementSetter<? super E, ? super T> theElementReverse;
 
+		@Override
+		public MapOptions<E, T> reEvalOnUpdate(boolean reEval) {
+			super.reEvalOnUpdate(reEval);
+			return this;
+		}
+
+		@Override
+		public MapOptions<E, T> fireIfUnchanged(boolean fire) {
+			super.fireIfUnchanged(fire);
+			return this;
+		}
+
+		@Override
+		public MapOptions<E, T> cache(boolean cache) {
+			super.cache(cache);
+			return this;
+		}
+
 		/**
 		 * Specifies a reverse function for the operation, which can allow adding values to the derived collection
 		 *
 		 * @param reverse The function to convert a result of this map operation into a source-compatible value
 		 * @return This builder
 		 */
-		MapOptions<E, T> withReverse(Function<? super T, ? extends E> reverse) {
+		public MapOptions<E, T> withReverse(Function<? super T, ? extends E> reverse) {
 			theReverse = reverse;
 			return this;
 		}
@@ -163,7 +181,7 @@ public interface FlowOptions {
 			return (GroupingOptions) super.cache(cache);
 		}
 
-		public GroupingOptions setStaticCategories(boolean staticCategories) {
+		public GroupingOptions withStaticCategories(boolean staticCategories) {
 			this.staticCategories = staticCategories;
 			return this;
 		}

@@ -199,7 +199,8 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 
 	/** @return An observable collection of {@link ObservableEntry observable entries} of all the key-value pairs stored in this map */
 	default ObservableSet<ObservableEntry<K, V>> observeEntries() {
-		return keySet().flow().mapEquivalent(getEntryType()).cache(false).map(this::entryFor, entry -> entry.getKey()).collect();
+		return keySet().flow().mapEquivalent(getEntryType(), this::entryFor, entry -> entry.getKey(), options -> options.cache(false))
+			.collect();
 	}
 
 	/** @return An observable collection of all the values stored in this map */
@@ -282,7 +283,7 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 	 */
 	static <K, V> ObservableMap<K, V> empty(TypeToken<K> keyType, TypeToken<V> valueType) {
 		TypeToken<ObservableEntry<K, V>> entryType = buildEntryType(keyType, valueType);
-		ObservableSet<K> keySet = ObservableCollection.constant(keyType).flow().unique(false).collect();
+		ObservableSet<K> keySet = ObservableCollection.constant(keyType).flow().unique().collect();
 		return new ObservableMap<K, V>() {
 			@Override
 			public TypeToken<K> getKeyType() {

@@ -96,7 +96,8 @@ public class ObservableCollectionsTest {
 
 		Function<Integer, Integer> mapFn = v -> v + 1000;
 		Function<Integer, Integer> reverseMapFn = v -> v - 1000;
-		ObservableCollection<Integer> mappedOL = coll.flow().map(intType).cache(false).withReverse(reverseMapFn).map(mapFn).collectLW();
+		ObservableCollection<Integer> mappedOL = coll.flow().map(intType, mapFn, options -> options.cache(false).withReverse(reverseMapFn))
+			.collectPassive();
 		ObservableCollectionTester<Integer> mappedTester = new ObservableCollectionTester<>(mappedOL);
 
 		Function<Integer, String> filterFn1 = v -> v % 3 == 0 ? null : "no";
@@ -105,7 +106,7 @@ public class ObservableCollectionsTest {
 
 		Function<Integer, Integer> groupFn = v -> v % 3;
 		ObservableMultiMap<Integer, Integer> grouped = coll.flow()
-			.groupBy(keys -> keys.map(intType).map(groupFn).unique(true), true).collect();
+			.groupBy(intType, groupFn, options -> options.useFirst(true).withStaticCategories(true)).collect();
 		Map<Integer, List<Integer>> groupedSynced = new LinkedHashMap<>();
 		ObservableCollectionsTest.sync(grouped, groupedSynced, () -> new ArrayList<>());
 
@@ -113,8 +114,9 @@ public class ObservableCollectionsTest {
 		BinaryOperator<Integer> reverseCombineFn = (v1, v2) -> v1 - v2;
 		SimpleSettableValue<Integer> combineVar = new SimpleSettableValue<>(Integer.class, false);
 		combineVar.set(10000, null);
-		ObservableCollection<Integer> combinedOL = coll.flow().combineWith(combineVar, intType).withReverse(reverseCombineFn)
-			.build(combineFn).collect();
+		ObservableCollection<Integer> combinedOL = coll.flow().combine(intType, combine -> {
+			return combine.with(combineVar).withReverse(reverseCombineFn).build(combineFn);
+		}).collect();
 		ObservableCollectionTester<Integer> combinedTester = new ObservableCollectionTester<>(combinedOL);
 
 		// TODO Test reversed observable collections
@@ -453,7 +455,7 @@ public class ObservableCollectionsTest {
 	/** Tests basic {@link ObservableSet} functionality */
 	@Test
 	public void observableSet() {
-		ObservableSet<Integer> set = ObservableCollection.create(intType).flow().unique(false).collect();
+		ObservableSet<Integer> set = ObservableCollection.create(intType).flow().unique().collect();
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
 		CollectionSubscription sub = set.subscribe(evt -> {
@@ -577,13 +579,13 @@ public class ObservableCollectionsTest {
 		assertEquals(correctEvents, events[0]);
 	}
 
-	/** Tests {@link CollectionDataFlow#map(TypeToken)} */
+	/** Tests {@link CollectionDataFlow#map(TypeToken, Function)} */
 	@Test
 	public void observableSetMap() {
-		ObservableSet<Integer> set = ObservableCollection.create(intType).flow().unique(false).collect();
+		ObservableSet<Integer> set = ObservableCollection.create(intType).flow().unique().collect();
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
-		set.flow().map(intType).cache(false).map(value -> value * 10).collectLW().subscribe(evt -> {
+		set.flow().map(intType, value -> value * 10, options -> options.cache(false)).collectPassive().subscribe(evt -> {
 			switch (evt.getType()) {
 			case add:
 				assertTrue(compare1.add(evt.getNewValue()));
@@ -611,7 +613,7 @@ public class ObservableCollectionsTest {
 	/** Tests {@link CollectionDataFlow#filter(Function)} */
 	@Test
 	public void observableSetFilter() {
-		ObservableSet<Integer> set = ObservableCollection.create(intType).flow().unique(false).collect();
+		ObservableSet<Integer> set = ObservableCollection.create(intType).flow().unique().collect();
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
 		set.flow().filter(value -> (value != null && value % 2 == 0) ? null : StdMsg.ILLEGAL_ELEMENT).collect().subscribe(evt -> {
@@ -644,7 +646,7 @@ public class ObservableCollectionsTest {
 	/** Tests {@link CollectionDataFlow#filterStatic(Function)} */
 	@Test
 	public void observableSetFilterStatic() {
-		ObservableSet<Integer> set = ObservableCollection.create(intType).flow().unique(false).collect();
+		ObservableSet<Integer> set = ObservableCollection.create(intType).flow().unique().collect();
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
 		set.flow().filterStatic(value -> (value != null && value % 2 == 0) ? null : StdMsg.ILLEGAL_ELEMENT).collect().subscribe(evt -> {
@@ -674,15 +676,15 @@ public class ObservableCollectionsTest {
 		}
 	}
 
-	/** Tests {@link CollectionDataFlow#filter(Function)} and {@link CollectionDataFlow#map(TypeToken)} together */
+	/** Tests {@link CollectionDataFlow#filter(Function)} and {@link CollectionDataFlow#map(TypeToken, Function)} together */
 	@Test
 	public void observableSetFilterMap() {
-		ObservableSet<Integer> set = ObservableCollection.create(intType).flow().unique(false).collect();
+		ObservableSet<Integer> set = ObservableCollection.create(intType).flow().unique().collect();
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
 		set.flow()//
 		.filter(value -> (value == null || value % 2 != 0) ? StdMsg.ILLEGAL_ELEMENT : null)//
-		.map(intType).map(value -> value / 2)//
+		.map(intType, value -> value / 2)//
 		.collect().subscribe(evt -> {
 			switch (evt.getType()) {
 			case add:
@@ -710,17 +712,18 @@ public class ObservableCollectionsTest {
 		}
 	}
 
-	/** Tests {@link CollectionDataFlow#combineWith(ObservableValue, TypeToken)} */
+	/** Tests {@link CollectionDataFlow#combine(TypeToken, Function)} */
 	@Test
 	public void observableSetCombine() {
-		ObservableSet<Integer> set = ObservableCollection.create(intType).flow().unique(false).collect();
+		ObservableSet<Integer> set = ObservableCollection.create(intType).flow().unique().collect();
 		SimpleSettableValue<Integer> value1 = new SimpleSettableValue<>(Integer.TYPE, false);
 		value1.set(1, null);
 		List<Integer> compare1 = new ArrayList<>();
 		Set<Integer> correct = new TreeSet<>();
 		set.flow()//
-		.combineWith(value1, intType).build((v1, v2) -> v1 * v2)//
-		.filter(value -> value != null && value % 3 == 0 ? null : StdMsg.ILLEGAL_ELEMENT)//
+		.combine(intType, combine -> {
+			return combine.with(value1).build((v1, v2) -> v1 * v2);
+		}).filter(value -> value != null && value % 3 == 0 ? null : StdMsg.ILLEGAL_ELEMENT)//
 		.collect().subscribe(evt -> {
 			switch (evt.getType()) {
 			case add:
@@ -730,9 +733,9 @@ public class ObservableCollectionsTest {
 				assertTrue(compare1.remove(evt.getOldValue()));
 				break;
 			case set:
-					assertTrue(compare1.remove(evt.getOldValue()));
-					assertTrue(compare1.add(evt.getNewValue()));
-					break;
+				assertTrue(compare1.remove(evt.getOldValue()));
+				assertTrue(compare1.add(evt.getNewValue()));
+				break;
 			}
 		}, true);
 
@@ -775,11 +778,11 @@ public class ObservableCollectionsTest {
 		}
 	}
 
-	/** Tests {@link CollectionDataFlow#unique(boolean)} */
+	/** Tests {@link CollectionDataFlow#unique()} */
 	@Test
 	public void observableSetUnique() {
 		ObservableCollection<Integer> list = ObservableCollection.create(intType);
-		ObservableSet<Integer> unique = list.flow().unique(false).collect();
+		ObservableSet<Integer> unique = list.flow().unique().collect();
 		testUnique(list, unique);
 	}
 
@@ -864,16 +867,16 @@ public class ObservableCollectionsTest {
 		assertThat(compare1, collectionsEqual(correct, true));
 	}
 
-	/** Tests {@link ObservableCollection#flatten(ObservableCollection)} */
+	/** Tests {@link CollectionDataFlow#flatMapC(TypeToken, Function)} */
 	@Test
 	public void observableCollectionFlatten() {
-		ObservableSet<Integer> set1 = ObservableCollection.create(intType).flow().unique(false).collect();
-		ObservableSet<Integer> set2 = ObservableCollection.create(intType).flow().unique(false).collect();
-		ObservableSet<Integer> set3 = ObservableCollection.create(intType).flow().unique(false).collect();
+		ObservableSet<Integer> set1 = ObservableCollection.create(intType).flow().unique().collect();
+		ObservableSet<Integer> set2 = ObservableCollection.create(intType).flow().unique().collect();
+		ObservableSet<Integer> set3 = ObservableCollection.create(intType).flow().unique().collect();
 		ObservableCollection<ObservableSet<Integer>> outer = ObservableCollection.create(new TypeToken<ObservableSet<Integer>>() {});
 		outer.add(set1);
 		outer.add(set2);
-		CollectionDataFlow<Integer, Integer, Integer> flat = ObservableCollection.flatten(outer);
+		CollectionDataFlow<?, ?, Integer> flat = outer.flow().flatMapC(intType, s -> s);
 		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(flat.collect());
 		ObservableCollectionTester<Integer> filterTester = new ObservableCollectionTester<>(//
 			flat.filter(value -> value != null && value % 3 == 0 ? null : StdMsg.ILLEGAL_ELEMENT).collect());
@@ -968,11 +971,12 @@ public class ObservableCollectionsTest {
 		SimpleSettableValue<Integer> obs2 = new SimpleSettableValue<>(Integer.class, true);
 		SimpleSettableValue<Integer> obs3 = new SimpleSettableValue<>(Integer.class, true);
 		ObservableSet<ObservableValue<Integer>> set = ObservableCollection.create(new TypeToken<ObservableValue<Integer>>() {}).flow()
-			.unique(false).collect();
+			.unique().collect();
 		set.add(obs1);
 		set.add(obs2);
 		Observable<Integer> folded = ObservableCollection
-			.fold(set.flow().map(new TypeToken<Observable<Integer>>() {}).cache(false).map(value -> value.value()).collectLW());
+			.fold(set.flow().map(new TypeToken<Observable<Integer>>() {}, value -> value.value(), options -> options.cache(false))
+				.collectPassive());
 		int [] received = new int[1];
 		folded.noInit().act(value -> received[0] = value);
 
@@ -991,14 +995,14 @@ public class ObservableCollectionsTest {
 		assertEquals(4, received[0]);
 	}
 
-	/** Tests {@link CollectionDataFlow#map(TypeToken)} */
+	/** Tests {@link CollectionDataFlow#map(TypeToken, Function)} */
 	@Test
 	public void observableListMap() {
 		ObservableCollection<Integer> list = ObservableCollection.create(intType);
 		ObservableCollectionTester<Integer> lwTester = new ObservableCollectionTester<>(
-			list.flow().map(intType).cache(false).map(value -> value * 10).collectLW());
+			list.flow().map(intType, value -> value * 10, options -> options.cache(false)).collectPassive());
 		ObservableCollectionTester<Integer> hwTester = new ObservableCollectionTester<>(
-			list.flow().map(intType).map(value -> value * 10).collect());
+			list.flow().map(intType, value -> value * 10).collect());
 
 		for(int i = 0; i < 30; i++) {
 			list.add(i);
@@ -1156,13 +1160,13 @@ public class ObservableCollectionsTest {
 		}
 	}
 
-	/** Tests {@link CollectionDataFlow#filter(Function)} and {@link CollectionDataFlow#map(TypeToken)} together */
+	/** Tests {@link CollectionDataFlow#filter(Function)} and {@link CollectionDataFlow#map(TypeToken, Function)} together */
 	@Test
 	public void observableListFilterMap() {
 		ObservableCollection<Integer> list = ObservableCollection.create(intType);
 		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(list.flow()//
 			.filter(value -> (value == null || value % 2 != 0) ? StdMsg.ILLEGAL_ELEMENT : null)//
-			.map(intType).map(value -> value / 2)//
+			.map(intType, value -> value / 2)//
 			.collect());
 
 		for(int i = 0; i < 30; i++) {
@@ -1185,15 +1189,16 @@ public class ObservableCollectionsTest {
 		}
 	}
 
-	/** Tests {@link CollectionDataFlow#combineWith(ObservableValue, TypeToken)} */
+	/** Tests {@link CollectionDataFlow#combine(TypeToken, Function)} */
 	@Test
 	public void observableListCombine() {
 		ObservableCollection<Integer> list = ObservableCollection.create(intType);
 		SimpleSettableValue<Integer> value1 = new SimpleSettableValue<>(Integer.TYPE, false);
 		value1.set(1, null);
 		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(list.flow()//
-			.combineWith(value1, intType).build((v1, v2) -> v1 * v2)//
-			.filter(value -> value != null && value % 3 == 0 ? null : StdMsg.ILLEGAL_ELEMENT)//
+			.combine(intType, combine -> {
+				return combine.with(value1).build((v1, v2) -> v1 * v2);
+			}).filter(value -> value != null && value % 3 == 0 ? null : StdMsg.ILLEGAL_ELEMENT)//
 			.collect());
 
 		for(int i = 0; i < 30; i++) {
@@ -1231,7 +1236,7 @@ public class ObservableCollectionsTest {
 		}
 	}
 
-	/** Tests {@link ObservableCollection#flatten(ObservableCollection)} */
+	/** Tests {@link CollectionDataFlow#flatMapC(TypeToken, Function)} */
 	@Test
 	public void observableListFlatten() {
 		ObservableCollection<Integer> set1 = ObservableCollection.create(intType);
@@ -1241,7 +1246,7 @@ public class ObservableCollectionsTest {
 			.create(new TypeToken<ObservableCollection<Integer>>() {});
 		outer.add(set1);
 		outer.add(set2);
-		ObservableCollection<Integer> flat = ObservableCollection.flatten(outer).collect();
+		ObservableCollection<Integer> flat = outer.flow().flatMapC(intType, s -> s).collect();
 		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(flat);
 		ObservableCollectionTester<Integer> filteredTester = new ObservableCollectionTester<>(//
 			flat.flow().filter(value -> value != null && value % 3 == 0 ? null : StdMsg.ILLEGAL_ELEMENT).collect());
@@ -1420,7 +1425,7 @@ public class ObservableCollectionsTest {
 		}
 	}
 
-	/** Tests {@link ObservableCollection#flatten(ObservableCollection)} and {@link CollectionDataFlow#sorted(Comparator)} */
+	/** Tests {@link CollectionDataFlow#flatMapC(TypeToken, Function)} and {@link CollectionDataFlow#sorted(Comparator)} */
 	@Test
 	public void observableOrderedFlatten() {
 		observableOrderedFlatten(null);
@@ -1456,7 +1461,7 @@ public class ObservableCollectionsTest {
 			}
 		}
 
-		CollectionDataFlow<Integer, Integer, Integer> flow = ObservableCollection.flatten(outer);
+		CollectionDataFlow<?, ?, Integer> flow = outer.flow().flatMapC(intType, c -> c);
 		if (comparator != null)
 			flow = flow.sorted(comparator);
 		SimpleObservable<Void> unsub = new SimpleObservable<>();
@@ -1500,7 +1505,7 @@ public class ObservableCollectionsTest {
 			elObservables.put(el, elObs);
 			list.add(el);
 		}
-		ObservableCollection<Integer> values = list.flow().refreshEach(el -> elObservables.get(el)).map(intType).map(el -> el[0]).collect();
+		ObservableCollection<Integer> values = list.flow().refreshEach(el -> elObservables.get(el)).map(intType, el -> el[0]).collect();
 		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(values);
 		tester.check();
 
@@ -1555,7 +1560,7 @@ public class ObservableCollectionsTest {
 		testTransactionsByChanges(list, list);
 	}
 
-	/** Tests transactions in {@link ObservableCollection#flatten(ObservableCollection) flattened} collections */
+	/** Tests transactions in {@link CollectionDataFlow#flatMapC(TypeToken, Function) flattened} collections */
 	@Test
 	public void testTransactionsFlattened() {
 		ObservableCollection<Integer> list1 = ObservableCollection.create(intType);
@@ -1704,18 +1709,16 @@ public class ObservableCollectionsTest {
 		assertEquals(preChanges, changes[0]);
 	}
 
-	/**
-	 * Tests transactions caused by {@link CollectionDataFlow#combineWith(ObservableValue, TypeToken) combining} a list with an observable
-	 * value
-	 */
+	/** Tests transactions caused by {@link CollectionDataFlow#combine(TypeToken, Function) combining} a list with an observable value */
 	@Test
 	public void testTransactionsCombined() {
 		ObservableCollection<Integer> list = ObservableCollection.create(new TypeToken<Integer>() {});
 		SimpleSettableValue<Integer> mult = new SimpleSettableValue<>(new TypeToken<Integer>() {}, false);
 		mult.set(1, null);
-		ObservableCollection<Integer> product = list.flow().combineWith(mult, intType).build((v1, v2) -> //
-		v1 * v2//
-			).collect();
+		ObservableCollection<Integer> product = list.flow().combine(intType, combine -> {
+			return combine.with(mult).build((v1, v2) -> //
+			v1 * v2);
+		}).collect();
 
 		for(int i = 0; i < 30; i++)
 			list.add(i);

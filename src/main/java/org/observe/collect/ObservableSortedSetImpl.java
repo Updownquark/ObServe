@@ -1,7 +1,6 @@
 package org.observe.collect;
 
 import java.util.Comparator;
-import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -15,10 +14,7 @@ import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
-import org.observe.collect.ObservableCollection.UniqueSortedMappedCollectionBuilder;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
-import org.observe.collect.ObservableCollectionDataFlowImpl.DerivedCollectionElement;
-import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ModFilterer;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.SortedManager;
@@ -373,6 +369,25 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
+		public <X> UniqueSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+			Function<? super X, ? extends T> reverse, Consumer<MapOptions<T, X>> options) {
+			MapOptions<T, X> mapOptions = new MapOptions<>();
+			options.accept(mapOptions);
+			mapOptions.withReverse(reverse);
+			return new UniqueSortedMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions), (x1, x2) -> {
+				return theCompare.compare(reverse.apply(x1), reverse.apply(x2));
+			});
+		}
+
+		@Override
+		public <X> UniqueSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+			Comparator<? super X> compare, Consumer<MapOptions<T, X>> options) {
+			MapOptions<T, X> mapOptions = new MapOptions<>();
+			options.accept(mapOptions);
+			return new UniqueSortedMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions), compare);
+		}
+
+		@Override
 		public UniqueSortedDataFlow<E, T, T> refresh(Observable<?> refresh) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), super.refresh(refresh), comparator());
 		}
@@ -425,8 +440,22 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public <X> UniqueSortedMappedCollectionBuilder<E, T, X> mapEquivalent(TypeToken<X> target) {
-			return new UniqueSortedMappedCollectionBuilder<>(getSource(), this, target);
+		public <X> UniqueSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+			Function<? super X, ? extends T> reverse, Consumer<MapOptions<T, X>> options) {
+			MapOptions<T, X> mapOptions = new MapOptions<>();
+			options.accept(mapOptions);
+			mapOptions.withReverse(reverse);
+			return new UniqueSortedMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions), (x1, x2) -> {
+				return comparator().compare(reverse.apply(x1), reverse.apply(x2));
+			});
+		}
+
+		@Override
+		public <X> UniqueSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+			Comparator<? super X> compare, Consumer<MapOptions<T, X>> options) {
+			MapOptions<T, X> mapOptions = new MapOptions<>();
+			options.accept(mapOptions);
+			return new UniqueSortedMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions), compare);
 		}
 
 		@Override
@@ -486,8 +515,22 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public <X> UniqueSortedMappedCollectionBuilder<E, E, X> mapEquivalent(TypeToken<X> target) {
-			return new UniqueSortedMappedCollectionBuilder<>(getSource(), this, target);
+		public <X> UniqueSortedDataFlow<E, E, X> mapEquivalent(TypeToken<X> target, Function<? super E, ? extends X> map,
+			Function<? super X, ? extends E> reverse, Consumer<MapOptions<E, X>> options) {
+			MapOptions<E, X> mapOptions = new MapOptions<>();
+			options.accept(mapOptions);
+			mapOptions.withReverse(reverse);
+			return new UniqueSortedMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions), (x1, x2) -> {
+				return comparator().compare(reverse.apply(x1), reverse.apply(x2));
+			});
+		}
+
+		@Override
+		public <X> UniqueSortedDataFlow<E, E, X> mapEquivalent(TypeToken<X> target, Function<? super E, ? extends X> map,
+			Comparator<? super X> compare, Consumer<MapOptions<E, X>> options) {
+			MapOptions<E, X> mapOptions = new MapOptions<>();
+			options.accept(mapOptions);
+			return new UniqueSortedMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions), compare);
 		}
 
 		@Override
@@ -541,7 +584,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		protected Comparable<? super E> mappedSearch(Comparable<? super T> search) {
-			return v -> search.compareTo(getFlow().map(v).result);
+			return v -> search.compareTo(getFlow().map(v));
 		}
 
 		@Override
@@ -582,22 +625,17 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public CollectionElement<T> search(Comparable<? super T> search, SortedSearchFilter filter) {
-			CollectionElement<DerivedCollectionElement<E, T>> presentEl = getPresentElements().search(el -> search.compareTo(el.get()),
+			CollectionElement<DerivedElementHolder<T>> presentEl = getPresentElements().search(el -> search.compareTo(el.get()),
 				filter);
-			return presentEl == null ? null : observableElementFor(presentEl.get());
+			return presentEl == null ? null : elementFor(presentEl.get());
 		}
 
 		@Override
 		public CollectionElement<T> addIfEmpty(T value) throws IllegalStateException {
-			if (!belongs(value))
-				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 			try (Transaction t = lock(true, null)) {
-				FilterMapResult<T, E> reverse = getFlow().reverse(value);
-				if (reverse.throwIfError(IllegalArgumentException::new) != null)
-					return null;
-				CollectionElement<E> added = getSource().addElement(reverse.result, false);
-				List<DerivedCollectionElement<E, T>> els = getPresentElements(added.getElementId());
-				return observableElementFor(els.get(els.size() - 1));
+				if (!isEmpty())
+					throw new IllegalStateException("Set is not empty");
+				return super.addElement(value, true);
 			}
 		}
 	}

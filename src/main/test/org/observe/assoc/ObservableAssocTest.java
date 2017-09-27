@@ -78,11 +78,11 @@ public class ObservableAssocTest {
 		terminalPathsTester.check();
 
 		root.children.remove(1);
-		allPathsTester.remove(//
+		allPathsTester.removeAll(//
 			asList(0, 2), //
 			asList(0, 2, 5), asList(0, 2, 8), asList(0, 2, 11), //
 			asList(0, 2, 8, 12), asList(0, 2, 8, 15), asList(0, 2, 8, 18));
-		terminalPathsTester.remove(//
+		terminalPathsTester.removeAll(//
 			asList(0, 2, 5), asList(0, 2, 11), //
 			asList(0, 2, 8, 12), asList(0, 2, 8, 15), asList(0, 2, 8, 18));
 

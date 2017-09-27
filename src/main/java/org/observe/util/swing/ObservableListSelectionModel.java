@@ -41,8 +41,8 @@ public class ObservableListSelectionModel<E> implements ListSelectionModel {
 			else
 				return null;
 		}).uniqueSorted(Integer::compareTo, false).collect();
-		theSelectedValues = theSelectedIndexes.flow().filter(idx -> idx < theValues.size() ? null : "Index>size").map(values.getType())
-			.map(idx -> theValues.get(idx)).collect();
+		theSelectedValues = theSelectedIndexes.flow().filter(idx -> idx < theValues.size() ? null : "Index>size")
+			.map(values.getType(), idx -> theValues.get(idx)).collect();
 		theListeners = new LinkedHashMap<>();
 	}
 

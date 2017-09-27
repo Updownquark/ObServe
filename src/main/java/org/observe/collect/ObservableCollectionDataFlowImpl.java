@@ -314,7 +314,7 @@ public class ObservableCollectionDataFlowImpl {
 			} else{
 				valueMap = key -> this.filter(v -> Objects.equals(key, keyMap.apply(v)) ? null : StdMsg.WRONG_GROUP);
 			}
-			return new ObservableMultiMap.DefaultMultiMapFlow<>(theSource, keyFlow, theTargetType, valueMap);
+			return new ObservableMultiMap.DefaultMultiMapFlow<>(keyFlow, theTargetType, valueMap);
 		}
 
 		@Override
@@ -330,7 +330,7 @@ public class ObservableCollectionDataFlowImpl {
 			} else {
 				valueMap = key -> this.filter(v -> Objects.equals(key, keyMap.apply(v)) ? null : StdMsg.WRONG_GROUP);
 			}
-			return new ObservableSortedMultiMap.DefaultSortedMultiMapFlow<>(theSource, keyFlow, theTargetType, valueMap);
+			return new ObservableSortedMultiMap.DefaultSortedMultiMapFlow<>(keyFlow, theTargetType, valueMap);
 		}
 
 		@Override
