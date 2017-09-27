@@ -62,7 +62,7 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 				checkEnabled.accept(selected.isEnabled().get());
 		};
 		comboBox.addItemListener(itemListener);
-		Subscription valueSub = selected.act(evt -> {
+		Subscription valueSub = selected.changes().act(evt -> {
 			if (!callbackLock[0]) {
 				callbackLock[0] = true;
 				try {
@@ -73,7 +73,7 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 			}
 			checkEnabled.accept(selected.isEnabled().get());
 		});
-		Subscription enabledSub = selected.isEnabled().act(evt -> checkEnabled.accept(evt.getNewValue()));
+		Subscription enabledSub = selected.isEnabled().changes().act(evt -> checkEnabled.accept(evt.getNewValue()));
 		return () -> {
 			valueSub.unsubscribe();
 			enabledSub.unsubscribe();

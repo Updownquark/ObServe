@@ -65,6 +65,12 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	}
 
 	@Override
+	default ObservableSet<E> with(E... values) {
+		ObservableCollection.super.with(values);
+		return this;
+	}
+
+	@Override
 	default <T> UniqueDataFlow<E, E, E> flow() {
 		return new ObservableSetImpl.UniqueBaseFlow<>(this);
 	}

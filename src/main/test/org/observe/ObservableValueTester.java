@@ -49,7 +49,7 @@ public class ObservableValueTester<T> extends AbstractObservableTester<T> {
 
 	@Override
 	protected Subscription sync() {
-		return theValue.act(evt -> {
+		return theValue.changes().act(evt -> {
 			op();
 			theSynced = evt.getNewValue();
 		});

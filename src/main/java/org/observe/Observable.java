@@ -667,11 +667,17 @@ public interface Observable<T> {
 		private final Observable<T> theWrapped;
 		private final Observable<?> theUntil;
 		private final boolean isTerminating;
+		private final Supplier<T> theDefaultValue;
 
 		protected ObservableTakenUntil(Observable<T> wrap, Observable<?> until, boolean terminate) {
+			this(wrap, until, terminate, () -> null);
+		}
+
+		protected ObservableTakenUntil(Observable<T> wrap, Observable<?> until, boolean terminate, Supplier<T> def) {
 			theWrapped = wrap;
 			theUntil = until;
 			isTerminating = terminate;
+			theDefaultValue = def;
 		}
 
 		protected Observable<T> getWrapped() {
@@ -680,10 +686,6 @@ public interface Observable<T> {
 
 		protected Observable<?> getUntil() {
 			return theUntil;
-		}
-
-		protected T getDefaultValue() {
-			return null;
 		}
 
 		@Override
@@ -704,7 +706,7 @@ public interface Observable<T> {
 					complete[0] = true;
 					outerSub.unsubscribe();
 					if (isTerminating) {
-						T defValue = getDefaultValue();
+						T defValue = theDefaultValue.get();
 						if (defValue instanceof AbstractCausable)
 							AbstractCausable.doWith((AbstractCausable) defValue, v -> observer.onCompleted((T) v));
 						else

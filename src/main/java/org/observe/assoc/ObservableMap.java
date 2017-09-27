@@ -55,15 +55,19 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 				}
 
 				@Override
-				public Subscription subscribe(Observer<? super ObservableValueEvent<V>> observer) {
-					observer.onNext(createInitialEvent(value, null));
-					return () -> {
-					};
-				}
+				public Observable<ObservableValueEvent<V>> changes() {
+					return new Observable<ObservableValueEvent<V>>() {
+						@Override
+						public Subscription subscribe(Observer<? super ObservableValueEvent<V>> observer) {
+							observer.onNext(createInitialEvent(value, null));
+							return () -> {};
+						}
 
-				@Override
-				public boolean isSafe() {
-					return true;
+						@Override
+						public boolean isSafe() {
+							return true;
+						}
+					};
 				}
 
 				@Override
@@ -283,7 +287,7 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 	 */
 	static <K, V> ObservableMap<K, V> empty(TypeToken<K> keyType, TypeToken<V> valueType) {
 		TypeToken<ObservableEntry<K, V>> entryType = buildEntryType(keyType, valueType);
-		ObservableSet<K> keySet = ObservableCollection.of(keyType).flow().unique().collect();
+		ObservableSet<K> keySet = ObservableCollection.of(keyType).flow().distinct().collect();
 		return new ObservableMap<K, V>() {
 			@Override
 			public TypeToken<K> getKeyType() {
@@ -322,7 +326,7 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 
 			@Override
 			public ObservableValue<V> observe(Object key) {
-				return ObservableValue.constant(valueType, null);
+				return ObservableValue.of(valueType, null);
 			}
 
 			@Override
@@ -368,18 +372,13 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 		}
 
 		@Override
-		public boolean isSafe() {
-			return theValue.isSafe();
+		public Observable<ObservableValueEvent<V>> changes() {
+			return theValue.changes();
 		}
 
 		@Override
 		public TypeToken<V> getType() {
 			return theValue.getType();
-		}
-
-		@Override
-		public Subscription subscribe(Observer<? super ObservableValueEvent<V>> observer) {
-			return theValue.subscribe(observer);
 		}
 
 		@Override

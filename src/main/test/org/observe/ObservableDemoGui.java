@@ -100,7 +100,7 @@ public class ObservableDemoGui extends JPanel {
 		theCategoryRemoveButton = new JButton("Remove Selected Category");
 		theCategoryRemoveButton
 		.addActionListener(evt -> theCategoryRemoveObservable.onNext((ValueCategory) theCategoryCombo.getSelectedItem()));
-		ObservableCollection<Integer> selectedValues = ObservableCollection.flattenValue(theSelectedCategory.mapV(cat -> cat.values));
+		ObservableCollection<Integer> selectedValues = ObservableCollection.flattenValue(theSelectedCategory.map(cat -> cat.values));
 		theValueList = new JList<>(new ObservableListModel<>(selectedValues));
 		ObservableListSelectionModel<Integer> selectionModel = new ObservableListSelectionModel<>(selectedValues);
 		theValueList.setSelectionModel(selectionModel);
@@ -126,7 +126,7 @@ public class ObservableDemoGui extends JPanel {
 				else if (parent instanceof ValueCategory)
 					return ((ValueCategory) parent).values;
 				else
-					return ObservableCollection.constant(TypeToken.of(Void.class));
+					return ObservableCollection.of(TypeToken.of(Void.class));
 			}
 		});
 		theValueTree.setEditable(false);
@@ -135,7 +135,7 @@ public class ObservableDemoGui extends JPanel {
 			private ObservableMultiMap<Long, Integer> theMap;
 
 			{
-				ObservableCollection<Integer> values = ObservableCollection.flattenValue(theSelectedCategory.mapV(cat -> cat.values));
+				ObservableCollection<Integer> values = ObservableCollection.flattenValue(theSelectedCategory.map(cat -> cat.values));
 				theMap = values.flow()
 					.groupBy(TypeToken.of(Long.class), //
 						v -> Long.valueOf(v % 5), //
@@ -158,7 +158,7 @@ public class ObservableDemoGui extends JPanel {
 				else if (parent instanceof Long)
 					return theMap.get(parent);
 				else
-					return ObservableCollection.constant(TypeToken.of(Void.class));
+					return ObservableCollection.of(TypeToken.of(Void.class));
 			}
 		});
 	}

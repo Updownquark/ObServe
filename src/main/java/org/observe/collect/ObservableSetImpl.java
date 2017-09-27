@@ -101,8 +101,8 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public boolean isPassive() {
-			return getParent().isPassive();
+		public boolean supportsPassive() {
+			return getParent().supportsPassive();
 		}
 
 		@Override
@@ -116,11 +116,13 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public ObservableSet<T> collect(Observable<?> until) {
-			if (until == Observable.empty && isPassive())
-				return new PassiveDerivedSet<>((ObservableSet<E>) getSource(), managePassive());
-			else
-				return new ActiveDerivedSet<>(manageActive(), until);
+		public ObservableSet<T> collectPassive() {
+			return new PassiveDerivedSet<>((ObservableSet<E>) getSource(), managePassive());
+		}
+
+		@Override
+		public ObservableSet<T> collectActive(Observable<?> until) {
+			return new ActiveDerivedSet<>(manageActive(), until);
 		}
 	}
 
@@ -188,11 +190,13 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public ObservableSet<T> collect(Observable<?> until) {
-			if (until == Observable.empty && isPassive())
-				return new PassiveDerivedSet<>((ObservableSet<E>) getSource(), managePassive());
-			else
-				return new ActiveDerivedSet<>(manageActive(), until);
+		public ObservableSet<T> collectPassive() {
+			return new PassiveDerivedSet<>((ObservableSet<E>) getSource(), managePassive());
+		}
+
+		@Override
+		public ObservableSet<T> collectActive(Observable<?> until) {
+			return new ActiveDerivedSet<>(manageActive(), until);
 		}
 	}
 
@@ -243,11 +247,13 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public ObservableSet<T> collect(Observable<?> until) {
-			if (until == Observable.empty && isPassive())
-				return new PassiveDerivedSet<>((ObservableSet<E>) getSource(), managePassive());
-			else
-				return new ActiveDerivedSet<>(manageActive(), until);
+		public ObservableSet<T> collectPassive() {
+			return new PassiveDerivedSet<>((ObservableSet<E>) getSource(), managePassive());
+		}
+
+		@Override
+		public ObservableSet<T> collectActive(Observable<?> until) {
+			return new ActiveDerivedSet<>(manageActive(), until);
 		}
 	}
 
@@ -566,11 +572,13 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public ObservableSet<E> collect(Observable<?> until) {
-			if (until == Observable.empty)
-				return getSource();
-			else
-				return new ActiveDerivedSet<>(manageActive(), until);
+		public ObservableSet<E> collectPassive() {
+			return getSource();
+		}
+
+		@Override
+		public ObservableSet<E> collectActive(Observable<?> until) {
+			return new ActiveDerivedSet<>(manageActive(), until);
 		}
 	}
 

@@ -38,13 +38,8 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 	}
 
 	@Override
-	public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-		return theEventer.subscribe(observer);
-	}
-
-	@Override
-	public boolean isSafe() {
-		return theEventer.isSafe();
+	public Observable<ObservableValueEvent<T>> changes() {
+		return theEventer.readOnly();
 	}
 
 	/** @return Whether null can be assigned to this value */
@@ -84,7 +79,7 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 
 	@Override
 	public ObservableValue<String> isEnabled() {
-		return ObservableValue.constant(TypeToken.of(String.class), null);
+		return ObservableValue.of(TypeToken.of(String.class), null);
 	}
 
 	@Override

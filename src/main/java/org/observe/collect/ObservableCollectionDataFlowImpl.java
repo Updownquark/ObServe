@@ -290,14 +290,14 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public UniqueDataFlow<E, T, T> unique(Consumer<UniqueOptions> options) {
+		public UniqueDataFlow<E, T, T> distinct(Consumer<UniqueOptions> options) {
 			SimpleUniqueOptions uo = new SimpleUniqueOptions();
 			options.accept(uo);
 			return new ObservableSetImpl.UniqueOp<>(theSource, this, uo.isUseFirst(), uo.isPreservingSourceOrder());
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, T, T> uniqueSorted(Comparator<? super T> compare, boolean alwaysUseFirst) {
+		public UniqueSortedDataFlow<E, T, T> distinctSorted(Comparator<? super T> compare, boolean alwaysUseFirst) {
 			return new ObservableSortedSetImpl.UniqueSortedOp<>(theSource, this, compare, alwaysUseFirst);
 		}
 
@@ -306,7 +306,7 @@ public class ObservableCollectionDataFlowImpl {
 			Consumer<GroupingOptions> options) {
 			GroupingOptions groupOptions = new GroupingOptions(false);
 			options.accept(groupOptions);
-			UniqueDataFlow<E, ?, K> keyFlow = map(keyType, keyMap, mapOptions -> {}).unique(go -> //
+			UniqueDataFlow<E, ?, K> keyFlow = map(keyType, keyMap, mapOptions -> {}).distinct(go -> //
 			go.useFirst(groupOptions.isUseFirst()).preserveSourceOrder(go.isPreservingSourceOrder()));
 			Function<K, CollectionDataFlow<E, ?, T>> valueMap;
 			if (groupOptions.isStaticCategories()) {
@@ -322,7 +322,7 @@ public class ObservableCollectionDataFlowImpl {
 			Comparator<? super K> keyCompare, Consumer<GroupingOptions> options) {
 			GroupingOptions groupOptions = new GroupingOptions(true);
 			options.accept(groupOptions);
-			UniqueSortedDataFlow<E, ?, K> keyFlow = map(keyType, keyMap, mapOptions -> {}).uniqueSorted(keyCompare,
+			UniqueSortedDataFlow<E, ?, K> keyFlow = map(keyType, keyMap, mapOptions -> {}).distinctSorted(keyCompare,
 				groupOptions.isUseFirst());
 			Function<K, CollectionDataFlow<E, ?, T>> valueMap;
 			if (groupOptions.isStaticCategories()) {
@@ -335,17 +335,14 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public ObservableCollection<T> collectPassive() {
-			if (!isPassive())
+			if (!supportsPassive())
 				throw new UnsupportedOperationException("This flow does not support passive collection");
 			return new PassiveDerivedCollection<>(getSource(), managePassive());
 		}
 
 		@Override
-		public ObservableCollection<T> collect(Observable<?> until) {
-			if (until == Observable.empty && isPassive())
-				return new PassiveDerivedCollection<>(getSource(), managePassive());
-			else
-				return new ActiveDerivedCollection<>(manageActive(), until);
+		public ObservableCollection<T> collectActive(Observable<?> until) {
+			return new ActiveDerivedCollection<>(manageActive(), until);
 		}
 	}
 
@@ -362,7 +359,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isPassive() {
+		public boolean supportsPassive() {
 			return false;
 		}
 
@@ -383,7 +380,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isPassive() {
+		public boolean supportsPassive() {
 			return true;
 		}
 
@@ -398,11 +395,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public ObservableCollection<E> collect(Observable<?> until) {
-			if (until == Observable.empty)
-				return getSource();
-			else
-				return new ActiveDerivedCollection<>(manageActive(), until);
+		public ObservableCollection<E> collectPassive() {
+			return getSource();
 		}
 	}
 
@@ -418,7 +412,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isPassive() {
+		public boolean supportsPassive() {
 			return false;
 		}
 
@@ -445,7 +439,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isPassive() {
+		public boolean supportsPassive() {
 			return false;
 		}
 
@@ -470,7 +464,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isPassive() {
+		public boolean supportsPassive() {
 			return true;
 		}
 
@@ -497,10 +491,10 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isPassive() {
+		public boolean supportsPassive() {
 			if (theOptions.isCached())
 				return false;
-			return getParent().isPassive();
+			return getParent().supportsPassive();
 		}
 
 		@Override
@@ -531,7 +525,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isPassive() {
+		public boolean supportsPassive() {
 			// TODO If cached is false, this could be passive if the passive API were adjusted to allow the manager to listen to the
 			// values for each subscription to the derived collection
 			return false;
@@ -557,7 +551,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isPassive() {
+		public boolean supportsPassive() {
 			return false; // TODO If subscription is ever supported for the passive API, this could support passive
 		}
 
@@ -582,7 +576,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isPassive() {
+		public boolean supportsPassive() {
 			return false;
 		}
 
@@ -606,8 +600,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isPassive() {
-			return getParent().isPassive();
+		public boolean supportsPassive() {
+			return getParent().supportsPassive();
 		}
 
 		@Override
@@ -631,7 +625,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public boolean isPassive() {
+		public boolean supportsPassive() {
 			return false;
 		}
 
@@ -1885,7 +1879,7 @@ public class ObservableCollectionDataFlowImpl {
 								return oldValues;
 							}, evt);
 					}
-				}, action -> arg.getKey().act(action));
+				}, action -> arg.getKey().changes().act(action));
 			}
 			theParent.begin((parentEl, cause) -> {
 				CombinedElement el = new CombinedElement(parentEl, false);

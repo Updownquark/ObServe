@@ -13,22 +13,60 @@ import org.qommons.collect.BetterHashSet;
 
 import com.google.common.reflect.TypeToken;
 
+/** Classes and interfaces used by {@link ObservableCollection.CollectionDataFlow#combine(TypeToken, Function)} */
 public class Combination {
+	/**
+	 * The starting point of a combination operation
+	 * 
+	 * @param <E> The source type
+	 * @param <T> The target type
+	 */
 	public static class CombinationPrecursor<E, T> extends AbstractXformOptions {
-		private boolean reEvalOnUpdate;
-		private boolean fireIfUnchanged;
-		private boolean isCache;
+		@Override
+		public CombinationPrecursor<E, T> reEvalOnUpdate(boolean reEval) {
+			super.reEvalOnUpdate(reEval);
+			return this;
+		}
 
+		@Override
+		public CombinationPrecursor<E, T> fireIfUnchanged(boolean fire) {
+			super.fireIfUnchanged(fire);
+			return this;
+		}
+
+		@Override
+		public CombinationPrecursor<E, T> cache(boolean cache) {
+			super.cache(cache);
+			return this;
+		}
+
+		/**
+		 * @param <V> The type of the argument value
+		 * @param value The argument value to combine with the source elements
+		 * @return A binary (source + argument) combined collection builder
+		 */
 		public <V> CombinedCollectionBuilder2<E, V, T> with(ObservableValue<V> value) {
 			return new CombinedCollectionBuilder2<>(value);
 		}
 	}
 
+	/**
+	 * The complete, immutable definition of a combination operation
+	 * 
+	 * @param <E> The source type
+	 * @param <T> The target type
+	 */
 	public static class CombinedFlowDef<E, T> extends FlowOptions.XformDef {
 		private final Set<ObservableValue<?>> theArgs;
 		private final Function<? super CombinedValues<E>, ? extends T> theCombination;
 		private final Function<? super CombinedValues<T>, ? extends E> theReverse;
 
+		/**
+		 * @param builder The builder containing the option data
+		 * @param args The observable values to combine with each source element
+		 * @param combination The combination function to combine the source and argument values
+		 * @param reverse The reverse function to map from result values to source values, for adding values to the result, etc.
+		 */
 		public CombinedFlowDef(CombinedCollectionBuilder<E, T> builder, Set<ObservableValue<?>> args,
 			Function<? super CombinedValues<E>, ? extends T> combination, Function<? super CombinedValues<T>, ? extends E> reverse) {
 			super(builder);
@@ -37,14 +75,17 @@ public class Combination {
 			theReverse = reverse;
 		}
 
+		/** @return The observable values to combine with each source element */
 		public Set<ObservableValue<?>> getArgs() {
 			return theArgs;
 		}
 
+		/** @return The combination function to combine the source and argument values */
 		public Function<? super CombinedValues<E>, ? extends T> getCombination() {
 			return theCombination;
 		}
 
+		/** @return The reverse function to map from result values to source values, for adding values to the result, etc. */
 		public Function<? super CombinedValues<T>, ? extends E> getReverse() {
 			return theReverse;
 		}
@@ -93,23 +134,24 @@ public class Combination {
 	}
 
 	/**
-	 * A {@link ObservableCollection.CombinedCollectionBuilder} for the combination of a collection with a single value. Use
-	 * {@link #and(ObservableValue)} to combine with additional values.
+	 * A {@link CombinedCollectionBuilder} for the combination of a collection with a single value. Use {@link #with(ObservableValue)} to
+	 * combine with additional values.
 	 *
 	 * @param <E> The type of elements in the source collection
-	 * @param <I> Intermediate type
 	 * @param <V> The type of the combined value
 	 * @param <T> The type of elements in the resulting collection
-	 * @see ObservableCollection.CollectionDataFlow#combineWith(ObservableValue, TypeToken)
+	 * @see ObservableCollection.CollectionDataFlow#combine(TypeToken, Function)
 	 */
 	public static class CombinedCollectionBuilder2<E, V, T> extends Combination.AbstractCombinedCollectionBuilder<E, T> {
 		private final ObservableValue<V> theArg2;
 
+		/** @param arg2 The argument to combine with the flow values */
 		protected CombinedCollectionBuilder2(ObservableValue<V> arg2) {
 			theArg2 = arg2;
 			addArg(arg2);
 		}
 
+		/** @return This builder's value argument */
 		protected ObservableValue<V> getArg2() {
 			return theArg2;
 		}
@@ -131,6 +173,10 @@ public class Combination {
 			return this;
 		}
 
+		/**
+		 * @param reverse The reverse function to enable adding values to the result
+		 * @return This builder
+		 */
 		public CombinedCollectionBuilder2<E, V, T> withReverse(BiFunction<? super T, ? super V, ? extends E> reverse) {
 			return withReverse(cv -> reverse.apply(cv.getElement(), cv.get(theArg2)));
 		}
@@ -141,6 +187,10 @@ public class Combination {
 			return this;
 		}
 
+		/**
+		 * @param combination The function to combine the source value and the argument value
+		 * @return The combination definition
+		 */
 		public CombinedFlowDef<E, T> build(BiFunction<? super E, ? super V, ? extends T> combination) {
 			return build(cv -> combination.apply(cv.getElement(), cv.get(theArg2)));
 		}
@@ -154,21 +204,24 @@ public class Combination {
 	}
 
 	/**
-	 * A {@link ObservableCollection.CombinedCollectionBuilder} for the combination of a collection with 2 values. Use
-	 * {@link #and(ObservableValue)} to combine with additional values.
+	 * A {@link CombinedCollectionBuilder} for the combination of a collection with 2 values. Use {@link #with(ObservableValue)} to combine
+	 * with additional values.
 	 *
 	 * @param <E> The type of elements in the source collection
-	 * @param <I> Intermediate type
 	 * @param <V1> The type of the first combined value
 	 * @param <V2> The type of the second combined value
 	 * @param <T> The type of elements in the resulting collection
-	 * @see ObservableCollection.CollectionDataFlow#combineWith(ObservableValue, TypeToken)
-	 * @see ObservableCollection.CombinedCollectionBuilder2#and(ObservableValue)
+	 * @see ObservableCollection.CollectionDataFlow#combine(TypeToken, Function)
+	 * @see CombinedCollectionBuilder2#with(ObservableValue)
 	 */
 	public static class CombinedCollectionBuilder3<E, V1, V2, T> extends Combination.AbstractCombinedCollectionBuilder<E, T> {
 		private final ObservableValue<V1> theArg2;
 		private final ObservableValue<V2> theArg3;
 
+		/**
+		 * @param arg2 The first argument to combine with the flow values
+		 * @param arg3 The second argument to combine with the flow values
+		 */
 		protected CombinedCollectionBuilder3(ObservableValue<V1> arg2, ObservableValue<V2> arg3) {
 			theArg2 = arg2;
 			theArg3 = arg3;
@@ -176,10 +229,12 @@ public class Combination {
 			addArg(arg3);
 		}
 
+		/** @return This builder's first value argument */
 		protected ObservableValue<V1> getArg2() {
 			return theArg2;
 		}
 
+		/** @return This builder's second value argument */
 		protected ObservableValue<V2> getArg3() {
 			return theArg3;
 		}
@@ -202,6 +257,10 @@ public class Combination {
 			return this;
 		}
 
+		/**
+		 * @param reverse The reverse function to enable adding values to the result
+		 * @return This builder
+		 */
 		public CombinedCollectionBuilder3<E, V1, V2, T> withReverse(TriFunction<? super T, ? super V1, ? super V2, ? extends E> reverse) {
 			return withReverse(cv -> reverse.apply(cv.getElement(), cv.get(theArg2), cv.get(theArg3)));
 		}
@@ -212,6 +271,10 @@ public class Combination {
 			return this;
 		}
 
+		/**
+		 * @param combination The function to combine the source value and the 2 argument values
+		 * @return The combination definition
+		 */
 		public CombinedFlowDef<E, T> build(TriFunction<? super E, ? super V1, ? super V2, ? extends T> combination) {
 			return build(cv -> combination.apply(cv.getElement(), cv.get(theArg2), cv.get(theArg3)));
 		}
@@ -225,16 +288,20 @@ public class Combination {
 	}
 
 	/**
-	 * A {@link ObservableCollection.CombinedCollectionBuilder} for the combination of a collection with one or more (typically at least 3)
-	 * values. Use {@link #and(ObservableValue)} to combine with additional values.
+	 * A {@link CombinedCollectionBuilder} for the combination of a collection with one or more (typically at least 3) values. Use
+	 * {@link #with(ObservableValue)} to combine with additional values.
 	 *
 	 * @param <E> The type of elements in the source collection
-	 * @param <I> Intermediate type
 	 * @param <T> The type of elements in the resulting collection
-	 * @see ObservableCollection.CollectionDataFlow#combineWith(ObservableValue, TypeToken)
-	 * @see ObservableCollection.CombinedCollectionBuilder3#and(ObservableValue)
+	 * @see ObservableCollection.CollectionDataFlow#combine(TypeToken, Function)
+	 * @see CombinedCollectionBuilder3#with(ObservableValue)
 	 */
 	public static class CombinedCollectionBuilderN<E, T> extends Combination.AbstractCombinedCollectionBuilder<E, T> {
+		/**
+		 * @param arg2 The first argument value
+		 * @param arg3 The second argument value
+		 * @param arg4 The third argument value
+		 */
 		protected CombinedCollectionBuilderN(ObservableValue<?> arg2, ObservableValue<?> arg3, ObservableValue<?> arg4) {
 			addArg(arg2);
 			addArg(arg3);
@@ -332,7 +399,7 @@ public class Combination {
 		@Override
 		public CombinedFlowDef<E, R> build(Function<? super CombinedValues<? extends E>, ? extends R> combination) {
 			Set<ObservableValue<?>> args = Collections.unmodifiableSet(BetterHashSet.build().identity().unsafe().buildSet(theArgs));
-			return new CombinedFlowDef<E, R>(this, args, combination, theReverse);
+			return new CombinedFlowDef<>(this, args, combination, theReverse);
 		}
 	}
 }

@@ -12,59 +12,35 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import org.observe.collect.ObservableCollection;
-import org.qommons.BiTuple;
 import org.qommons.ListenerSet;
 import org.qommons.TriFunction;
-import org.qommons.TriTuple;
 
 import com.google.common.reflect.TypeToken;
 
 /**
- * A value holder that can notify listeners when the value changes. This type of observable will always notify subscribers with an event
- * whose old value is null and whose new value is this holder's current value before the {@link #subscribe(Observer)} method exits.
+ * A value holder that can notify listeners when the value changes. The {@link #changes()} observable will always notify subscribers with an
+ * {@link ObservableValueEvent#isInitial() initial} event whose old value is null and whose new value is this holder's current value before
+ * the {@link Observable#subscribe(Observer)} method exits.
  *
  * @param <T> The compile-time type of this observable's value
  */
-public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>, java.util.function.Supplier<T> {
+public interface ObservableValue<T> extends java.util.function.Supplier<T> {
+	/** @return The run-time type of this value */
 	TypeToken<T> getType();
 
 	/** @return The current value of this observable */
 	@Override
 	T get();
 
+	/**
+	 * @return An observable that fires an {@link ObservableValueEvent#isInitial() initial} event for the current value and subsequent
+	 *         change events when this value changes
+	 */
+	Observable<ObservableValueEvent<T>> changes();
+
 	/** @return An observable that just reports this observable value's value in an observable without the event */
 	default Observable<T> value() {
-		return new Observable<T>() {
-			@Override
-			public Subscription subscribe(Observer<? super T> observer) {
-				return ObservableValue.this.subscribe(new Observer<ObservableValueEvent<T>>() {
-					@Override
-					public <V extends ObservableValueEvent<T>> void onNext(V value) {
-						observer.onNext(value.getNewValue());
-					}
-
-					@Override
-					public <V extends ObservableValueEvent<T>> void onCompleted(V value) {
-						observer.onCompleted(value.getNewValue());
-					}
-				});
-			}
-
-			@Override
-			public boolean isSafe() {
-				return ObservableValue.this.isSafe();
-			}
-
-			@Override
-			public String toString() {
-				return ObservableValue.this.toString() + ".value()";
-			}
-		};
-	}
-
-	/** @return A cached version of this value, which */
-	default ObservableValue<T> cached() {
-		return new CachedObservableValue<>(this);
+		return changes().map(evt -> evt.getNewValue());
 	}
 
 	/**
@@ -113,7 +89,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @param eventMap The mapping function that intercepts value events from this value and creates new, equivalent events
 	 * @return An observable value identical to this one but whose change events are mapped by the given function
 	 */
-	default ObservableValue<T> mapEvent(Function<? super ObservableValueEvent<T>, ? extends ObservableValueEvent<T>> eventMap) {
+	default ObservableValue<T> mapEvent(Function<? super ObservableValueEvent<T>, ObservableValueEvent<T>> eventMap) {
 		ObservableValue<T> outer = this;
 		return new ObservableValue<T>() {
 			@Override
@@ -127,13 +103,8 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 			}
 
 			@Override
-			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-				return outer.map(eventMap).subscribe(observer);
-			}
-
-			@Override
-			public boolean isSafe() {
-				return outer.isSafe();
+			public Observable<ObservableValueEvent<T>> changes() {
+				return outer.changes().map(eventMap);
 			}
 
 			@Override
@@ -150,8 +121,8 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @param function The function to apply to this observable's value
 	 * @return The new observable whose value is a function of this observable's value
 	 */
-	default <R> ObservableValue<R> mapV(Function<? super T, R> function) {
-		return mapV(null, function);
+	default <R> ObservableValue<R> map(Function<? super T, R> function) {
+		return map(null, function);
 	};
 
 	/**
@@ -162,8 +133,8 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @param filterNull Whether to apply the filter to null values or simply preserve the null
 	 * @return The new observable whose value is a function of this observable's value
 	 */
-	default <R> ObservableValue<R> mapV(Function<? super T, R> function, boolean filterNull) {
-		return mapV(null, function, filterNull);
+	default <R> ObservableValue<R> map(Function<? super T, R> function, boolean filterNull) {
+		return map(null, function, filterNull);
 	};
 
 	/**
@@ -174,8 +145,8 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @param function The function to apply to this observable's value
 	 * @return The new observable whose value is a function of this observable's value
 	 */
-	default <R> ObservableValue<R> mapV(TypeToken<R> type, Function<? super T, R> function) {
-		return mapV(type, function, false);
+	default <R> ObservableValue<R> map(TypeToken<R> type, Function<? super T, R> function) {
+		return map(type, function, false);
 	}
 
 	/**
@@ -187,20 +158,20 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @param filterNull Whether to apply the filter to null values or simply preserve the null
 	 * @return The new observable whose value is a function of this observable's value
 	 */
-	default <R> ObservableValue<R> mapV(TypeToken<R> type, Function<? super T, R> function, boolean filterNull) {
+	default <R> ObservableValue<R> map(TypeToken<R> type, Function<? super T, R> function, boolean filterNull) {
 		return new ComposedObservableValue<>(type, args -> {
 			return function.apply((T) args[0]);
 		}, filterNull, this);
 	};
 
 	/**
-	 * A shortcut for {@link #flatten(ObservableValue) flatten}({@link #mapV(Function) mapV}(map))
+	 * A shortcut for {@link #flatten(ObservableValue) flatten}({@link #map(Function) mapV}(map))
 	 *
 	 * @param map The function producing an observable for each value from this observable
 	 * @return An observable that may produce any number of values for each value from this observable
 	 */
-	default <R> ObservableValue<R> flatMapV(Function<? super T, ? extends ObservableValue<? extends R>> map) {
-		return flatten(mapV(map));
+	default <R> ObservableValue<R> flatMap(Function<? super T, ? extends ObservableValue<? extends R>> map) {
+		return flatten(map(map));
 	}
 
 	/**
@@ -212,8 +183,8 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @param arg The other observable to be composed
 	 * @return The new observable whose value is a function of this observable's value and the other's
 	 */
-	default <U, R> ObservableValue<R> combineV(BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg) {
-		return combineV(null, function, arg, false);
+	default <U, R> ObservableValue<R> combine(BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg) {
+		return combine(null, function, arg, false);
 	}
 
 	/**
@@ -225,10 +196,10 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @param function The function to apply to the values of the observables
 	 * @param arg The other observable to be composed
 	 * @param combineNull Whether to apply the combination function if the arguments are null. If false and any arguments are null, the
-	 *            result will be null.
+	 *        result will be null.
 	 * @return The new observable whose value is a function of this observable's value and the other's
 	 */
-	default <U, R> ObservableValue<R> combineV(TypeToken<R> type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
+	default <U, R> ObservableValue<R> combine(TypeToken<R> type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		boolean combineNull) {
 		return new ComposedObservableValue<>(type, args -> {
 			return function.apply((T) args[0], (U) args[1]);
@@ -236,26 +207,6 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	}
 
 	/**
-	 * @param <U> The type of the other observable to tuplize
-	 * @param arg The other observable to tuplize
-	 * @return An observable which broadcasts tuples of the latest values of this observable value and another
-	 */
-	default <U> ObservableValue<BiTuple<T, U>> tupleV(ObservableValue<U> arg) {
-		return combineV(null, BiTuple<T, U>::new, arg, true);
-	}
-
-	/**
-	 * @param <U> The type of the first other observable to tuplize
-	 * @param <V> The type of the second other observable to tuplize
-	 * @param arg1 The first other observable to tuplize
-	 * @param arg2 The second other observable to tuplize
-	 * @return An observable which broadcasts tuples of the latest values of this observable value and 2 others
-	 */
-	default <U, V> ObservableValue<TriTuple<T, U, V>> tupleV(ObservableValue<U> arg1, ObservableValue<V> arg2) {
-		return combineV(null, TriTuple<T, U, V>::new, arg1, arg2, true);
-	}
-
-	/**
 	 * Composes this observable into another observable that depends on this one and two others
 	 *
 	 * @param <U> The type of the first other argument observable
@@ -266,9 +217,9 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @param arg3 The second other observable to be composed
 	 * @return The new observable whose value is a function of this observable's value and the others'
 	 */
-	default <U, V, R> ObservableValue<R> combineV(TriFunction<? super T, ? super U, ? super V, R> function, ObservableValue<U> arg2,
+	default <U, V, R> ObservableValue<R> combine(TriFunction<? super T, ? super U, ? super V, R> function, ObservableValue<U> arg2,
 		ObservableValue<V> arg3) {
-		return combineV(null, function, arg2, arg3, false);
+		return combine(null, function, arg2, arg3, false);
 	}
 
 	/**
@@ -282,24 +233,31 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @param arg2 The first other observable to be composed
 	 * @param arg3 The second other observable to be composed
 	 * @param combineNull Whether to apply the combination function if the arguments are null. If false and any arguments are null, the
-	 *            result will be null.
+	 *        result will be null.
 	 * @return The new observable whose value is a function of this observable's value and the others'
 	 */
-	default <U, V, R> ObservableValue<R> combineV(TypeToken<R> type, TriFunction<? super T, ? super U, ? super V, R> function,
+	default <U, V, R> ObservableValue<R> combine(TypeToken<R> type, TriFunction<? super T, ? super U, ? super V, R> function,
 		ObservableValue<U> arg2, ObservableValue<V> arg3, boolean combineNull) {
 		return new ComposedObservableValue<>(type, args -> {
 			return function.apply((T) args[0], (U) args[1], (V) args[2]);
 		}, combineNull, this, arg2, arg3);
 	}
 
-	@Override
+	/**
+	 * @param until The observable to complete the value
+	 * @return An observable value identical to this one, but that will {@link Observer#onCompleted(Object) complete} when
+	 *         <code>until</code> fires
+	 */
 	default ObservableValue<T> takeUntil(Observable<?> until) {
 		return new ObservableValueTakenUntil<>(this, until, true);
 	}
 
-	@Override
+	/**
+	 * @param until The observable to cease subscription on
+	 * @return {@link #changes() changes()}.Observable{@link #unsubscribeOn(Observable) unsubscribeOn}<code>(until)</code>
+	 */
 	default Observable<ObservableValueEvent<T>> unsubscribeOn(Observable<?> until) {
-		return new ObservableValueTakenUntil<>(this, until, false);
+		return changes().unsubscribeOn(until);
 	}
 
 	/**
@@ -310,13 +268,13 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		return new RefreshingObservableValue<>(this, refresh);
 	}
 
-	@Override
+	/** @return An observable identical to this, but whose {@link #changes()} observable is {@link Observable#isSafe() safe} */
 	default ObservableValue<T> safe() {
 		return new SafeObservableValue<>(this);
 	}
 
 	/**
-	 * A shortened version of {@link #constant(TypeToken, Object)}. The type of the object will be value's class. This is not always a good
+	 * A shortened version of {@link #of(TypeToken, Object)}. The type of the object will be value's class. This is not always a good
 	 * idea. If the variable passed to this method may have a value that is a subclass of the variable's type, there may be unintended
 	 * consequences of using this method. Also, the type cannot be derived if the value is null, so an {@link IllegalArgumentException} will
 	 * be thrown in this case.
@@ -327,7 +285,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @param value The value to wrap
 	 * @return An observable that always returns the given value
 	 */
-	public static <X> ObservableValue<X> constant(final X value) {
+	public static <X> ObservableValue<X> of(final X value) {
 		if (value == null)
 			throw new IllegalArgumentException("Cannot call constant(value) with a null value.  Use constant(TypeToken<X>, X).");
 		return new ConstantObservableValue<>(TypeToken.of((Class<X>) value.getClass()), value);
@@ -339,7 +297,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * @param value The value to wrap
 	 * @return An observable that always returns the given value
 	 */
-	public static <X> ObservableValue<X> constant(final TypeToken<X> type, final X value) {
+	public static <X> ObservableValue<X> of(final TypeToken<X> type, final X value) {
 		return new ConstantObservableValue<>(type, value);
 	}
 
@@ -373,11 +331,11 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		return new Observable<T>() {
 			@Override
 			public Subscription subscribe(Observer<? super T> observer) {
-				return value.subscribe(new Observer<ObservableValueEvent<? extends Observable<? extends T>>>() {
+				return value.changes().subscribe(new Observer<ObservableValueEvent<? extends Observable<? extends T>>>() {
 					@Override
 					public <E extends ObservableValueEvent<? extends Observable<? extends T>>> void onNext(E event) {
 						if (event.getNewValue() != null) {
-							event.getNewValue().takeUntil(value.noInit()).subscribe(new Observer<T>() {
+							event.getNewValue().takeUntil(value.changes().noInit()).subscribe(new Observer<T>() {
 								@Override
 								public <V extends T> void onNext(V event2) {
 									observer.onNext(event2);
@@ -409,10 +367,10 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 * Creates an observable value that reflects the value of the first value in the given sequence passing the given test, or the value
 	 * given by the default if none of the values in the sequence pass. This can also be accomplished via:
 	 *
-	 * TODO Fix this <code>
-	 * 	{@link ObservableCollection#constant(TypeToken, Object...) ObservableList.constant(type, values)}.collect()
+	 * <code>
+	 * 	{@link ObservableCollection#of(TypeToken, Object...) ObservableCollection.of(type, values)}.collect()
 	 * {@link ObservableCollection#observeFind(Predicate, Supplier, boolean) .observeFind(test, ()->null, true)}
-	 * {{@link #mapV(Function) .mapV(v->v!=null ? v : def.get()}
+	 * {{@link #map(Function) .mapV(v->v!=null ? v : def.get()}
 	 * </code>
 	 *
 	 * but this method only subscribes to the values in the sequence up to the one that has a passing value. This can be of great advantage
@@ -455,35 +413,41 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 			}
 
 			@Override
-			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+			public Observable<ObservableValueEvent<T>> changes() {
 				ObservableValue<T> outer = this;
-				Subscription[] subSubs = new Subscription[components.length];
-				Object[] oldValue = new Object[1];
-				for (int i = 0; i < subSubs.length; i++)
-					subSubs[i] = components[i].subscribe(new Observer<ObservableValueEvent<?>>() {
-						@Override
-						public <V extends ObservableValueEvent<?>> void onNext(V value2) {
-							T newVal = value.get();
-							T oldVal = (T) oldValue[0];
-							oldValue[0] = newVal;
-							if (value2.isInitial())
-								ObservableValueEvent.doWith(outer.createInitialEvent(newVal, value2.getCause()), observer::onNext);
-							else
-								ObservableValueEvent.doWith(outer.createChangeEvent(oldVal, newVal, value2.getCause()), observer::onNext);
-						}
+				return new Observable<ObservableValueEvent<T>>() {
+					@Override
+					public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+						Subscription[] subSubs = new Subscription[components.length];
+						Object[] oldValue = new Object[1];
+						for (int i = 0; i < subSubs.length; i++)
+							subSubs[i] = components[i].changes().subscribe(new Observer<ObservableValueEvent<?>>() {
+								@Override
+								public <V extends ObservableValueEvent<?>> void onNext(V value2) {
+									T newVal = value.get();
+									T oldVal = (T) oldValue[0];
+									oldValue[0] = newVal;
+									if (value2.isInitial())
+										ObservableValueEvent.doWith(outer.createInitialEvent(newVal, value2.getCause()), observer::onNext);
+									else
+										ObservableValueEvent.doWith(outer.createChangeEvent(oldVal, newVal, value2.getCause()),
+											observer::onNext);
+								}
 
-						@Override
-						public <V extends ObservableValueEvent<?>> void onCompleted(V value2) {}
-					});
-				return () -> {
-					for (Subscription sub : subSubs)
-						sub.unsubscribe();
+								@Override
+								public <V extends ObservableValueEvent<?>> void onCompleted(V value2) {}
+							});
+						return () -> {
+							for (Subscription sub : subSubs)
+								sub.unsubscribe();
+						};
+					}
+
+					@Override
+					public boolean isSafe() {
+						return false;
+					}
 				};
-			}
-
-			@Override
-			public boolean isSafe() {
-				return false;
 			}
 
 			@Override
@@ -501,7 +465,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	public class ComposedObservableValue<T> implements ObservableValue<T> {
 		private final List<ObservableValue<?>> theComposed;
 
-		private final Function<Object [], T> theFunction;
+		private final Function<Object[], T> theFunction;
 
 		private final ListenerSet<Observer<? super ObservableValueEvent<T>>> theObservers;
 
@@ -514,10 +478,10 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		/**
 		 * @param function The function that operates on the argument observables to produce this observable's value
 		 * @param combineNull Whether to apply the combination function if the arguments are null. If false and any arguments are null, the
-		 *            result will be null.
+		 *        result will be null.
 		 * @param composed The argument observables whose values are passed to the function
 		 */
-		public ComposedObservableValue(Function<Object [], T> function, boolean combineNull, ObservableValue<?>... composed) {
+		public ComposedObservableValue(Function<Object[], T> function, boolean combineNull, ObservableValue<?>... composed) {
 			this(null, function, combineNull, composed);
 		}
 
@@ -525,10 +489,10 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		 * @param type The type for this value
 		 * @param function The function that operates on the argument observables to produce this observable's value
 		 * @param combineNull Whether to apply the combination function if the arguments are null. If false and any arguments are null, the
-		 *            result will be null.
+		 *        result will be null.
 		 * @param composed The argument observables whose values are passed to the function
 		 */
-		public ComposedObservableValue(TypeToken<T> type, Function<Object [], T> function, boolean combineNull,
+		public ComposedObservableValue(TypeToken<T> type, Function<Object[], T> function, boolean combineNull,
 			ObservableValue<?>... composed) {
 			theFunction = function;
 			combineNulls = combineNull;
@@ -536,19 +500,19 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 				: (TypeToken<T>) TypeToken.of(function.getClass()).resolveType(Function.class.getTypeParameters()[1]);
 			theComposed = java.util.Collections.unmodifiableList(java.util.Arrays.asList(composed));
 			theObservers = new ListenerSet<>();
-			final Subscription [] composedSubs = new Subscription[theComposed.size()];
-			boolean [] completed = new boolean[1];
+			final Subscription[] composedSubs = new Subscription[theComposed.size()];
+			boolean[] completed = new boolean[1];
 			theObservers.setUsedListener(new Consumer<Boolean>() {
 				@Override
 				public void accept(Boolean used) {
-					if(used) {
+					if (used) {
 						if (theComposed.toString().equals("[model.flash.value, 0]"))
 							System.out.print("");
 						Object[] composedValues = new Object[theComposed.size()];
 						boolean[] initialized = new boolean[composedValues.length];
 						for (int i = 0; i < composedValues.length; i++) {
 							int index = i;
-							composedSubs[i] = theComposed.get(i).subscribe(new Observer<ObservableValueEvent<?>>() {
+							composedSubs[i] = theComposed.get(i).changes().subscribe(new Observer<ObservableValueEvent<?>>() {
 								@Override
 								public <V extends ObservableValueEvent<?>> void onNext(V event) {
 									composedValues[index] = event.getNewValue();
@@ -597,7 +561,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 									});
 								}
 							});
-							if(completed[0])
+							if (completed[0])
 								break;
 						}
 						for (int i = 0; i < composedValues.length; i++)
@@ -608,8 +572,8 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 						// initialized[0] = true;
 					} else {
 						theValue = null;
-						for(int i = 0; i < theComposed.size(); i++) {
-							if(composedSubs[i] != null) {
+						for (int i = 0; i < theComposed.size(); i++) {
+							if (composedSubs[i] != null) {
 								composedSubs[i].unsubscribe();
 								composedSubs[i] = null;
 							}
@@ -619,7 +583,7 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 				}
 			});
 			theObservers.setOnSubscribe(observer -> {
-				if(completed[0])
+				if (completed[0])
 					ObservableValueEvent.doWith(createInitialEvent(theValue, null), observer::onCompleted);
 				else
 					ObservableValueEvent.doWith(createInitialEvent(theValue, null), observer::onNext);
@@ -632,12 +596,12 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		}
 
 		/** @return The observable values that compose this value */
-		public ObservableValue<?> [] getComposed() {
+		public ObservableValue<?>[] getComposed() {
 			return theComposed.toArray(new ObservableValue[theComposed.size()]);
 		}
 
 		/** @return The function used to map this observable's composed values into its return value */
-		public Function<Object [], T> getFunction() {
+		public Function<Object[], T> getFunction() {
 			return theFunction;
 		}
 
@@ -651,11 +615,11 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 
 		@Override
 		public T get() {
-			if(theObservers.isUsed())
+			if (theObservers.isUsed())
 				return theValue;
 			else {
-				Object [] composed = new Object[theComposed.size()];
-				for(int i = 0; i < composed.length; i++)
+				Object[] composed = new Object[theComposed.size()];
+				for (int i = 0; i < composed.length; i++)
 					composed[i] = theComposed.get(i).get();
 				return combine(composed);
 			}
@@ -666,23 +630,28 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		 * @return The combined value
 		 */
 		protected T combine(Object[] args) {
-			if(!combineNulls) {
-				for(Object arg : args)
-					if(arg == null)
+			if (!combineNulls) {
+				for (Object arg : args)
+					if (arg == null)
 						return null;
 			}
 			return theFunction.apply(args.clone());
 		}
 
 		@Override
-		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-			theObservers.add(observer);
-			return () -> theObservers.remove(observer);
-		}
+		public Observable<ObservableValueEvent<T>> changes() {
+			return new Observable<ObservableValueEvent<T>>() {
+				@Override
+				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+					theObservers.add(observer);
+					return () -> theObservers.remove(observer);
+				}
 
-		@Override
-		public boolean isSafe() {
-			return true;
+				@Override
+				public boolean isSafe() {
+					return true;
+				}
+			};
 		}
 
 		@Override
@@ -696,30 +665,35 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 *
 	 * @param <T> The type of the value
 	 */
-	class ObservableValueTakenUntil<T> extends Observable.ObservableTakenUntil<ObservableValueEvent<T>> implements ObservableValue<T> {
+	class ObservableValueTakenUntil<T> implements ObservableValue<T> {
+		private final ObservableValue<T> theWrapped;
+		private final Observable<ObservableValueEvent<T>> theChanges;
+
 		protected ObservableValueTakenUntil(ObservableValue<T> wrap, Observable<?> until, boolean terminate) {
-			super(wrap, until, terminate);
+			theWrapped = wrap;
+			theChanges = new Observable.ObservableTakenUntil<>(theWrapped.changes(), until, terminate, () -> {
+				T value = theWrapped.get();
+				return theWrapped.createChangeEvent(value, value, null);
+			});
 		}
 
-		@Override
 		protected ObservableValue<T> getWrapped() {
-			return (ObservableValue<T>) super.getWrapped();
+			return theWrapped;
 		}
 
 		@Override
 		public TypeToken<T> getType() {
-			return getWrapped().getType();
+			return theWrapped.getType();
 		}
 
 		@Override
 		public T get() {
-			return getWrapped().get();
+			return theWrapped.get();
 		}
 
 		@Override
-		protected ObservableValueEvent<T> getDefaultValue() {
-			T value = get();
-			return getWrapped().createChangeEvent(value, value, null);
+		public Observable<ObservableValueEvent<T>> changes() {
+			return theChanges;
 		}
 	}
 
@@ -756,136 +730,47 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		}
 
 		@Override
-		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-			Subscription [] refireSub = new Subscription[1];
-			boolean [] completed = new boolean[1];
-			Subscription outerSub = theWrapped.subscribe(new Observer<ObservableValueEvent<T>>() {
+		public Observable<ObservableValueEvent<T>> changes() {
+			return new Observable<ObservableValueEvent<T>>() {
 				@Override
-				public <V extends ObservableValueEvent<T>> void onNext(V value) {
-					observer.onNext(value);
-				}
+				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+					Subscription[] refireSub = new Subscription[1];
+					boolean[] completed = new boolean[1];
+					Subscription outerSub = theWrapped.changes().subscribe(new Observer<ObservableValueEvent<T>>() {
+						@Override
+						public <V extends ObservableValueEvent<T>> void onNext(V value) {
+							observer.onNext(value);
+						}
 
-				@Override
-				public <V extends ObservableValueEvent<T>> void onCompleted(V value) {
-					observer.onCompleted(value);
-					if(refireSub[0] != null) {
-						refireSub[0].unsubscribe();
-						refireSub[0] = null;
-					}
-					completed[0] = true;
-				}
-			});
-			if(completed[0]) {
-				return () -> {
-				};
-			}
-			refireSub[0] = theRefresh.act(evt -> {
-				T value = get();
-				ObservableValueEvent.doWith(createChangeEvent(value, value, evt), observer::onNext);
-			});
-			return () -> {
-				outerSub.unsubscribe();
-				if(refireSub[0] != null)
-					refireSub[0].unsubscribe();
-			};
-		}
-
-		@Override
-		public boolean isSafe() {
-			return false;
-		}
-
-		@Override
-		public String toString() {
-			return theWrapped.toString();
-		}
-	}
-
-	/**
-	 * Observable value implementing the {@link #cached()} method
-	 *
-	 * @param <T> The type of the value
-	 */
-	class CachedObservableValue<T> implements ObservableValue<T> {
-		private final ObservableValue<T> theWrapped;
-
-		private T theValue;
-
-		private org.qommons.ListenerSet<Observer<? super ObservableValueEvent<T>>> theObservers;
-
-		public CachedObservableValue(ObservableValue<T> wrapped) {
-			theWrapped = wrapped;
-			theObservers = new org.qommons.ListenerSet<>();
-			theObservers.setUsedListener(new java.util.function.Consumer<Boolean>() {
-				private Subscription sub;
-
-				@Override
-				public void accept(Boolean used) {
-					if(used) {
-						boolean [] initialized = new boolean[1];
-						sub = theWrapped.subscribe(new Observer<ObservableValueEvent<T>>() {
-							@Override
-							public <V extends ObservableValueEvent<T>> void onNext(V value) {
-								T oldValue = theValue;
-								theValue = value.getNewValue();
-								if(initialized[0]) {
-									ObservableValueEvent<T> cachedEvent = createChangeEvent(oldValue, theValue, value.getCause());
-									ObservableValueEvent.doWith(cachedEvent, evt -> theObservers.forEach(observer -> observer.onNext(evt)));
-								}
+						@Override
+						public <V extends ObservableValueEvent<T>> void onCompleted(V value) {
+							observer.onCompleted(value);
+							if (refireSub[0] != null) {
+								refireSub[0].unsubscribe();
+								refireSub[0] = null;
 							}
-
-							@Override
-							public <V extends ObservableValueEvent<T>> void onCompleted(V value) {
-								T oldValue = theValue;
-								T newValue = value.getNewValue();
-								if(initialized[0]) {
-									ObservableValueEvent<T> cachedEvent = createChangeEvent(oldValue, newValue, value.getCause());
-									ObservableValueEvent.doWith(cachedEvent, evt -> theObservers.forEach(observer -> observer.onNext(evt)));
-								}
-							}
-						});
-					} else {
-						sub.unsubscribe();
-						sub = null;
-						theValue = null;
+							completed[0] = true;
+						}
+					});
+					if (completed[0]) {
+						return () -> {};
 					}
+					refireSub[0] = theRefresh.act(evt -> {
+						T value = get();
+						ObservableValueEvent.doWith(createChangeEvent(value, value, evt), observer::onNext);
+					});
+					return () -> {
+						outerSub.unsubscribe();
+						if (refireSub[0] != null)
+							refireSub[0].unsubscribe();
+					};
 				}
-			});
-		}
 
-		protected ObservableValue<T> getWrapped() {
-			return theWrapped;
-		}
-
-		@Override
-		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-			theObservers.add(observer);
-			return () -> {
-				theObservers.remove(observer);
+				@Override
+				public boolean isSafe() {
+					return false;
+				}
 			};
-		}
-
-		@Override
-		public TypeToken<T> getType() {
-			return theWrapped.getType();
-		}
-
-		@Override
-		public T get() {
-			if(theObservers.isUsed())
-				return theValue;
-			else
-				return theWrapped.get();
-		}
-
-		@Override
-		public ObservableValue<T> cached() {
-			return this;
-		}
-
-		@Override
-		public boolean isSafe() {
-			return true;
 		}
 
 		@Override
@@ -913,9 +798,18 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		}
 
 		@Override
-		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-			ObservableValueEvent.doWith(createInitialEvent(theValue, null), observer::onNext);
-			return () -> {
+		public Observable<ObservableValueEvent<T>> changes() {
+			return new Observable<ObservableValueEvent<T>>() {
+				@Override
+				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+					ObservableValueEvent.doWith(createInitialEvent(theValue, null), observer::onNext);
+					return () -> {};
+				}
+
+				@Override
+				public boolean isSafe() {
+					return true;
+				}
 			};
 		}
 
@@ -930,11 +824,6 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		}
 
 		@Override
-		public boolean isSafe() {
-			return true;
-		}
-
-		@Override
 		public String toString() {
 			return "" + theValue;
 		}
@@ -945,24 +834,30 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 	 *
 	 * @param <T> The type of the value
 	 */
-	class SafeObservableValue<T> extends SafeObservable<ObservableValueEvent<T>> implements ObservableValue<T> {
+	class SafeObservableValue<T> implements ObservableValue<T> {
+		private final ObservableValue<T> theWrapped;
+
 		public SafeObservableValue(ObservableValue<T> wrap) {
-			super(wrap);
+			theWrapped = wrap;
 		}
 
-		@Override
 		protected ObservableValue<T> getWrapped() {
-			return (ObservableValue<T>) super.getWrapped();
+			return theWrapped;
 		}
 
 		@Override
 		public TypeToken<T> getType() {
-			return getWrapped().getType();
+			return theWrapped.getType();
 		}
 
 		@Override
 		public T get() {
-			return getWrapped().get();
+			return theWrapped.get();
+		}
+
+		@Override
+		public Observable<ObservableValueEvent<T>> changes() {
+			return theWrapped.changes().safe();
 		}
 
 		@Override
@@ -1030,89 +925,97 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		}
 
 		@Override
-		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-			ObservableValue<T> retObs = this;
-			AtomicReference<Subscription> innerSub = new AtomicReference<>();
-			boolean[] firedInit = new boolean[1];
-			Subscription outerSub = theValue.subscribe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends T>>>() {
-				private final ReentrantLock theLock = new ReentrantLock();
-
+		public Observable<ObservableValueEvent<T>> changes() {
+			return new Observable<ObservableValueEvent<T>>() {
 				@Override
-				public <V extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onNext(V event) {
-					firedInit[0] = true;
-					theLock.lock();
-					try {
-						final ObservableValue<? extends T> innerObs = event.getNewValue();
-						// Shouldn't have 2 inner observables potentially generating events at the same time
-						if (!Objects.equals(innerObs, event.getOldValue()))
-							Subscription.unsubscribe(innerSub.getAndSet(null));
-						Object[] old = new Object[1];
-						if (innerObs != null && !innerObs.equals(event.getOldValue())) {
-							boolean[] firedInit2 = new boolean[1];
-							Subscription.unsubscribe(
-								innerSub.getAndSet(innerObs.subscribe(new Observer<ObservableValueEvent<? extends T>>() {
-									@Override
-									public <V2 extends ObservableValueEvent<? extends T>> void onNext(V2 event2) {
-										firedInit2[0] = true;
-										theLock.lock();
-										try {
-											T innerOld;
-											if (event2.isInitial())
-												innerOld = (T) old[0];
-											else
-												old[0] = innerOld = event2.getOldValue();
-											if (event.isInitial() && event2.isInitial())
-												ObservableValueEvent.doWith(retObs.createInitialEvent(event2.getNewValue(), event2.getCause()),
-													observer::onNext);
-											else
-												ObservableValueEvent.doWith(
-													retObs.createChangeEvent(innerOld, event2.getNewValue(), event2.getCause()),
-													observer::onNext);
-										} finally {
-											theLock.unlock();
-										}
-									}
+				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+					ObservableValue<T> retObs = FlattenedObservableValue.this;
+					AtomicReference<Subscription> innerSub = new AtomicReference<>();
+					boolean[] firedInit = new boolean[1];
+					Subscription outerSub = theValue.changes()
+						.subscribe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends T>>>() {
+							private final ReentrantLock theLock = new ReentrantLock();
 
-									@Override
-									public <V2 extends ObservableValueEvent<? extends T>> void onCompleted(V2 value) {}
-								})));
-							if (!firedInit2[0])
-								throw new IllegalStateException(innerObs + " did not fire an initial value");
-						} else if (event.isInitial())
-							ObservableValueEvent.doWith(retObs.createInitialEvent(get(null), event.getCause()), observer::onNext);
-						else if (old[0] != null)
-							ObservableValueEvent.doWith(retObs.createChangeEvent((T) old[0], get(null), event.getCause()),
-								observer::onNext);
-					} finally {
-						theLock.unlock();
-					}
+							@Override
+							public <V extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onNext(V event) {
+								firedInit[0] = true;
+								theLock.lock();
+								try {
+									final ObservableValue<? extends T> innerObs = event.getNewValue();
+									// Shouldn't have 2 inner observables potentially generating events at the same time
+									if (!Objects.equals(innerObs, event.getOldValue()))
+										Subscription.unsubscribe(innerSub.getAndSet(null));
+									Object[] old = new Object[1];
+									if (innerObs != null && !innerObs.equals(event.getOldValue())) {
+										boolean[] firedInit2 = new boolean[1];
+										Subscription.unsubscribe(innerSub
+											.getAndSet(innerObs.changes().subscribe(new Observer<ObservableValueEvent<? extends T>>() {
+												@Override
+												public <V2 extends ObservableValueEvent<? extends T>> void onNext(V2 event2) {
+													firedInit2[0] = true;
+													theLock.lock();
+													try {
+														T innerOld;
+														if (event2.isInitial())
+															innerOld = (T) old[0];
+														else
+															old[0] = innerOld = event2.getOldValue();
+														if (event.isInitial() && event2.isInitial())
+															ObservableValueEvent.doWith(
+																retObs.createInitialEvent(event2.getNewValue(), event2.getCause()),
+																observer::onNext);
+														else
+															ObservableValueEvent.doWith(
+																retObs.createChangeEvent(innerOld, event2.getNewValue(), event2.getCause()),
+																observer::onNext);
+													} finally {
+														theLock.unlock();
+													}
+												}
+
+												@Override
+												public <V2 extends ObservableValueEvent<? extends T>> void onCompleted(V2 value) {}
+											})));
+										if (!firedInit2[0])
+											throw new IllegalStateException(innerObs + " did not fire an initial value");
+									} else if (event.isInitial())
+										ObservableValueEvent.doWith(retObs.createInitialEvent(get(null), event.getCause()),
+											observer::onNext);
+									else if (old[0] != null)
+										ObservableValueEvent.doWith(retObs.createChangeEvent((T) old[0], get(null), event.getCause()),
+											observer::onNext);
+								} finally {
+									theLock.unlock();
+								}
+							}
+
+							@Override
+							public <V extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onCompleted(V event) {
+								firedInit[0] = true;
+								Subscription.unsubscribe(innerSub.getAndSet(null));
+								theLock.lock();
+								try {
+									ObservableValueEvent.doWith(
+										retObs.createChangeEvent(get(event.getOldValue()), get(event.getNewValue()), event.getCause()),
+										observer::onCompleted);
+								} finally {
+									theLock.unlock();
+								}
+							}
+						});
+					if (!firedInit[0])
+						throw new IllegalStateException(theValue + " did not fire an initial value");
+					return () -> {
+						outerSub.unsubscribe();
+						Subscription.unsubscribe(innerSub.getAndSet(null));
+					};
 				}
 
 				@Override
-				public <V extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onCompleted(V event) {
-					firedInit[0] = true;
-					Subscription.unsubscribe(innerSub.getAndSet(null));
-					theLock.lock();
-					try {
-						ObservableValueEvent.doWith(
-							retObs.createChangeEvent(get(event.getOldValue()), get(event.getNewValue()), event.getCause()),
-							observer::onCompleted);
-					} finally {
-						theLock.unlock();
-					}
+				public boolean isSafe() {
+					return false;
 				}
-			});
-			if (!firedInit[0])
-				throw new IllegalStateException(theValue + " did not fire an initial value");
-			return () -> {
-				outerSub.unsubscribe();
-				Subscription.unsubscribe(innerSub.getAndSet(null));
 			};
-		}
-
-		@Override
-		public boolean isSafe() {
-			return false;
 		}
 
 		@Override
@@ -1157,105 +1060,111 @@ public interface ObservableValue<T> extends Observable<ObservableValueEvent<T>>,
 		}
 
 		@Override
-		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-			if (theValues.length == 0) {
-				ObservableValueEvent.doWith(createInitialEvent(null, null), observer::onNext);
-				return () -> {
-				};
-			}
-			Subscription[] valueSubs = new Subscription[theValues.length];
-			boolean[] finished = new boolean[theValues.length];
-			Object [] lastValue=new Object[1];
-			boolean[] hasFiredInit = new boolean[1];
-			Lock lock = new ReentrantLock();
-			class ElementFirstObserver implements Observer<ObservableValueEvent<? extends T>> {
-				private final int index;
-				private boolean isFound;
-
-				ElementFirstObserver(int idx) {
-					index = idx;
-				}
-
+		public Observable<ObservableValueEvent<T>> changes() {
+			return new Observable<ObservableValueEvent<T>>() {
 				@Override
-				public <V extends ObservableValueEvent<? extends T>> void onNext(V event) {
-					event(event, false);
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<? extends T>> void onCompleted(V event) {
-					event(event, true);
-				}
-
-				private void event(ObservableValueEvent<? extends T> event, boolean complete){
-					lock.lock();
-					try{
-						boolean found = !complete && theTest.test(event.getNewValue());
-						int nextIndex = index + 1;
-						if (!found) {
-							while (nextIndex < theValues.length && finished[nextIndex])
-								nextIndex++;
-						}
-						T oldValue = (T) lastValue[0];
-						ObservableValueEvent<T> toFire;
-						if (complete) {
-							finished[index] = true;
-							valueSubs[index] = null;
-							if (allCompleted())
-								toFire = new ObservableValueEvent<>(getType(), !hasFiredInit[0], oldValue, oldValue, event);
-							else
-								toFire = null;
-						} else {
-							if (found) {
-								lastValue[0] = event.getNewValue();
-								toFire = new ObservableValueEvent<>(getType(), !hasFiredInit[0], oldValue, event.getNewValue(), event);
-							} else if (nextIndex == theValues.length)
-								toFire = new ObservableValueEvent<>(getType(), !hasFiredInit[0], oldValue, theDefault.get(), event);
-							else
-								toFire = null;
-						}
-						if (toFire != null) {
-							hasFiredInit[0] = true;
-							ObservableValueEvent.doWith(toFire, observer::onNext);
-						}
-						if (found != isFound) {
-							isFound = found;
-							if(found){
-								for (int i = index + 1; i < valueSubs.length; i++) {
-									if (valueSubs[i] != null) {
-										valueSubs[i].unsubscribe();
-										valueSubs[i] = null;
-									}
-								}
-							} else if (nextIndex < theValues.length)
-								valueSubs[nextIndex] = theValues[nextIndex].subscribe(new ElementFirstObserver(nextIndex));
-						} else if (!hasFiredInit[0])
-							valueSubs[nextIndex] = theValues[nextIndex].subscribe(new ElementFirstObserver(nextIndex));
-					} finally{
-						lock.unlock();
+				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+					if (theValues.length == 0) {
+						ObservableValueEvent.doWith(createInitialEvent(null, null), observer::onNext);
+						return () -> {};
 					}
+					Subscription[] valueSubs = new Subscription[theValues.length];
+					boolean[] finished = new boolean[theValues.length];
+					Object[] lastValue = new Object[1];
+					boolean[] hasFiredInit = new boolean[1];
+					Lock lock = new ReentrantLock();
+					class ElementFirstObserver implements Observer<ObservableValueEvent<? extends T>> {
+						private final int index;
+						private boolean isFound;
+
+						ElementFirstObserver(int idx) {
+							index = idx;
+						}
+
+						@Override
+						public <V extends ObservableValueEvent<? extends T>> void onNext(V event) {
+							event(event, false);
+						}
+
+						@Override
+						public <V extends ObservableValueEvent<? extends T>> void onCompleted(V event) {
+							event(event, true);
+						}
+
+						private void event(ObservableValueEvent<? extends T> event, boolean complete) {
+							lock.lock();
+							try {
+								boolean found = !complete && theTest.test(event.getNewValue());
+								int nextIndex = index + 1;
+								if (!found) {
+									while (nextIndex < theValues.length && finished[nextIndex])
+										nextIndex++;
+								}
+								T oldValue = (T) lastValue[0];
+								ObservableValueEvent<T> toFire;
+								if (complete) {
+									finished[index] = true;
+									valueSubs[index] = null;
+									if (allCompleted())
+										toFire = new ObservableValueEvent<>(getType(), !hasFiredInit[0], oldValue, oldValue, event);
+									else
+										toFire = null;
+								} else {
+									if (found) {
+										lastValue[0] = event.getNewValue();
+										toFire = new ObservableValueEvent<>(getType(), !hasFiredInit[0], oldValue, event.getNewValue(),
+											event);
+									} else if (nextIndex == theValues.length)
+										toFire = new ObservableValueEvent<>(getType(), !hasFiredInit[0], oldValue, theDefault.get(), event);
+									else
+										toFire = null;
+								}
+								if (toFire != null) {
+									hasFiredInit[0] = true;
+									ObservableValueEvent.doWith(toFire, observer::onNext);
+								}
+								if (found != isFound) {
+									isFound = found;
+									if (found) {
+										for (int i = index + 1; i < valueSubs.length; i++) {
+											if (valueSubs[i] != null) {
+												valueSubs[i].unsubscribe();
+												valueSubs[i] = null;
+											}
+										}
+									} else if (nextIndex < theValues.length)
+										valueSubs[nextIndex] = theValues[nextIndex].changes()
+										.subscribe(new ElementFirstObserver(nextIndex));
+								} else if (!hasFiredInit[0])
+									valueSubs[nextIndex] = theValues[nextIndex].changes().subscribe(new ElementFirstObserver(nextIndex));
+							} finally {
+								lock.unlock();
+							}
+						}
+
+						private boolean allCompleted() {
+							for (boolean f : finished)
+								if (f)
+									return false;
+							return true;
+						}
+					}
+					valueSubs[0] = theValues[0].safe().changes().subscribe(new ElementFirstObserver(0));
+					return () -> {
+						for (int i = 0; i < valueSubs.length; i++) {
+							if (valueSubs[i] != null) {
+								valueSubs[i].unsubscribe();
+								valueSubs[i] = null;
+							}
+						}
+					};
 				}
 
-				private boolean allCompleted() {
-					for (boolean f : finished)
-						if (f)
-							return false;
+				@Override
+				public boolean isSafe() {
 					return true;
 				}
-			}
-			valueSubs[0] = theValues[0].safe().subscribe(new ElementFirstObserver(0));
-			return () -> {
-				for (int i = 0; i < valueSubs.length; i++){
-					if(valueSubs[i]!=null){
-						valueSubs[i].unsubscribe();
-						valueSubs[i]=null;
-					}
-				}
 			};
-		}
-
-		@Override
-		public boolean isSafe() {
-			return true;
 		}
 	}
 }

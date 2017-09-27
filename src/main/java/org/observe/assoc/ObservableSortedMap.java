@@ -322,7 +322,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, Navigabl
 		@Override
 		public ObservableValue<V> observe(Object key) {
 			if (!keySet().belongs(key))
-				return ObservableValue.constant(getValueType(), null);
+				return ObservableValue.of(getValueType(), null);
 			return theOuter.observe(key);
 		}
 	};

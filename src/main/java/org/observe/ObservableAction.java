@@ -56,7 +56,7 @@ public interface ObservableAction<T> {
 
 			@Override
 			public ObservableValue<String> isEnabled() {
-				return ObservableValue.constant(TypeToken.of(String.class), null);
+				return ObservableValue.of(TypeToken.of(String.class), null);
 			}
 		};
 	}
@@ -81,7 +81,7 @@ public interface ObservableAction<T> {
 
 			@Override
 			public ObservableValue<String> isEnabled() {
-				return ObservableValue.constant(message);
+				return ObservableValue.of(message);
 			}
 		};
 	}
@@ -146,7 +146,7 @@ public interface ObservableAction<T> {
 
 		@Override
 		public ObservableValue<String> isEnabled() {
-			return ObservableValue.flatten(theWrapper.mapV(action -> action.isEnabled()),
+			return ObservableValue.flatten(theWrapper.map(action -> action.isEnabled()),
 				() -> "This wrapper (" + theWrapper + ") is empty");
 		}
 	}

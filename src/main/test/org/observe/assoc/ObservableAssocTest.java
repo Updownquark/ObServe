@@ -46,7 +46,7 @@ public class ObservableAssocTest {
 		root.children.get(2).addChild(6, 9, 12);
 
 		ObservableTree<TreeNode<Integer>, Integer> tree = ObservableTree.of(
-			ObservableValue.constant(root.children.getType(), root), type,
+			ObservableValue.of(root.children.getType(), root), type,
 			n -> n.value, n -> n.children);
 
 		ObservableCollection<List<Integer>> allPaths = ObservableTree.valuePathsOf(tree, false);

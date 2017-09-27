@@ -482,7 +482,7 @@ public interface ObservableTree<N, V> extends Transactable {
 					List<ObservableValue<? extends V>> pathValues = new ArrayList<>(parentValues.size() + 1);
 					pathValues.addAll(parentValues);
 					ObservableValue<? extends V> nodeValue = ObservableValue
-						.flatten(theNodeObservable.mapV(node -> theTree.getValue(node)));
+						.flatten(theNodeObservable.map(node -> theTree.getValue(node)));
 					pathValues.add(nodeValue);
 					thePathValues = pathValues;
 				}

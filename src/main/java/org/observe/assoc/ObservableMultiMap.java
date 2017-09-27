@@ -28,6 +28,7 @@ import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSetImpl;
 import org.observe.collect.ObservableSortedSet;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterList;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.TransactableMultiMap;
@@ -117,7 +118,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		 */
 		static <K, V> ObservableMultiEntry<K, V> empty(TypeToken<K> keyType, TypeToken<V> valueType, K key,
 			Equivalence<? super K> keyEquivalence) {
-			return create(keyType, key, keyEquivalence, ObservableCollection.constant(valueType));
+			return create(keyType, key, keyEquivalence, ObservableCollection.of(valueType));
 		}
 	}
 
@@ -353,6 +354,11 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	}
 
 	static <K, V> MultiMapFlow<?, K, V> create(TypeToken<K> keyType, TypeToken<V> valueType, Equivalence<? super K> keyEquivalence) {
+		return create(keyType, valueType, keyEquivalence, ObservableCollection.createDefaultBacking());
+	}
+
+	static <K, V> MultiMapFlow<?, K, V> create(TypeToken<K> keyType, TypeToken<V> valueType, Equivalence<? super K> keyEquivalence,
+		BetterList<Map.Entry<K, V>> entryCollection) {
 		TypeToken<Map.Entry<K, V>> entryType=new TypeToken<Map.Entry<K, V>>(){}.where(new TypeParameter<K>(){}, keyType).
 			where(new TypeParameter<V>(){}, valueType);
 		class MapEntry implements Map.Entry<K, V> {
@@ -396,9 +402,9 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 				return theKey + "=" + theValue;
 			}
 		}
-		ObservableCollection<Map.Entry<K, V>> simpleEntryCollection = ObservableCollection.create(entryType);
+		ObservableCollection<Map.Entry<K, V>> simpleEntryCollection = ObservableCollection.create(entryType, entryCollection);
 		ObservableSet<K> keySet = simpleEntryCollection.flow().map(keyType, Map.Entry::getKey).withEquivalence(keyEquivalence)
-			.unique(options -> options.useFirst(true)).collect();
+			.distinct(options -> options.useFirst(true)).collect();
 		return new DefaultMultiMapFlow<>(keySet.flow(), valueType,
 			key -> simpleEntryCollection.flow()//
 			.filterStatic(entry -> keyEquivalence.elementEquals(entry.getKey(), key) ? null : StdMsg.WRONG_GROUP)//
@@ -630,7 +636,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		public ObservableCollection<V> get(Object key) {
 			if (!theEntries.belongs(key))
 				return empty; // The belongs method is assumed to be stateless, so this will always be empty
-			return ObservableCollection.flattenValue(theEntries.observeElement((K) key, true).mapV(theValueCollectionType, el -> {
+			return ObservableCollection.flattenValue(theEntries.observeElement((K) key, true).map(theValueCollectionType, el -> {
 				if (el == null) {
 					// Means there are currently no values for the given key.
 					return valuesFor((K) key);
@@ -656,7 +662,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 				if (values == null) {
 					// We'll make the value collection (which should be empty initially) that may allow adding values
 					CollectionDataFlow<?, ?, V> valueFlow = theValueMaker.apply(key);
-					values = isLightWeight ? valueFlow.collect() : valueFlow.collect(theUntil);
+					values = isLightWeight ? valueFlow.collect() : valueFlow.collectActive(theUntil);
 					// We'll cache these values and re-use them in case the user adds values to them, which presumably
 					// will propagate into adding a key for the entry and making it pop up in the key/entry set.
 					theTransientValues.put(key, new WeakReference<>(values, theGCdTransientValues));

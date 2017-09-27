@@ -106,11 +106,12 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 	 * Returns a value at or adjacent to another value
 	 *
 	 * @param search The search to find the target value
-	 * @param up Whether to get the closest value greater or less than the given value
+	 * @param filter The filter to direct and filter the search
+	 * @param def Produces a default value in the case that no element of this set matches the given search
 	 * @return An observable value with the result of the operation
 	 */
 	default ObservableValue<E> observeRelative(Comparable<? super E> search, SortedSearchFilter filter, Supplier<? extends E> def) {
-		return new ObservableSortedSetImpl.RelativeFinder<>(this, search, filter).mapV(getType(), el -> el != null ? el.get() : def.get());
+		return new ObservableSortedSetImpl.RelativeFinder<>(this, search, filter).map(getType(), el -> el != null ? el.get() : def.get());
 	}
 
 	@Override
@@ -190,6 +191,12 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 	@Override
 	default ObservableSortedSet<E> tailSet(E fromElement) {
 		return (ObservableSortedSet<E>) BetterSortedSet.super.tailSet(fromElement);
+	}
+
+	@Override
+	default ObservableSortedSet<E> with(E... values) {
+		ObservableSet.super.with(values);
+		return this;
 	}
 
 	@Override

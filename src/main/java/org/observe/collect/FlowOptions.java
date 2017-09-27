@@ -1,10 +1,16 @@
 package org.observe.collect;
 
+import java.util.function.Consumer;
 import java.util.function.Function;
 
+import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.ElementSetter;
 
+import com.google.common.reflect.TypeToken;
+
+/** Options for various {@link ObservableCollection.CollectionDataFlow} */
 public interface FlowOptions {
+	/** Super-interface used for options by several map-type operations */
 	interface XformOptions {
 		XformOptions reEvalOnUpdate(boolean reEval);
 
@@ -19,9 +25,31 @@ public interface FlowOptions {
 		boolean isCached();
 	}
 
+	/** Allows customization of the behavior of a {@link CollectionDataFlow#distinct(Consumer) distinct} set */
 	interface UniqueOptions {
+		/**
+		 * @param useFirst Whether to always use the first element in the source to represent other equivalent values. If this is false (the
+		 *        default), the produced collection may be able to fire fewer events because elements that are added earlier in the
+		 *        collection can be ignored if they are already represented.
+		 * @return This option set
+		 */
 		UniqueOptions useFirst(boolean useFirst);
 
+		/**
+		 * <p>
+		 * Adjusts whether the order of elements in the source collection should be preserved in the result.
+		 * </p>
+		 * <p>
+		 * This option may cause extra events in the unique collection, as elements may change their order as a result of the representative
+		 * source element being removed or changed.
+		 * </p>
+		 * <p>
+		 * This option is unavailable for sorted uniqueness, in which case this call will be ignored.
+		 * </p>
+		 *
+		 * @param preserveOrder Whether to preserve the source element order in the unique flow
+		 * @return This option set
+		 */
 		UniqueOptions preserveSourceOrder(boolean preserveOrder);
 
 		boolean isUseFirst();
@@ -29,6 +57,7 @@ public interface FlowOptions {
 		boolean isPreservingSourceOrder();
 	}
 
+	/** A simple abstract implementation of XformOptions */
 	abstract class AbstractXformOptions implements XformOptions {
 		private boolean reEvalOnUpdate;
 		private boolean fireIfUnchanged;
@@ -74,6 +103,12 @@ public interface FlowOptions {
 		}
 	}
 
+	/**
+	 * Allows customization of the behavior of a {@link CollectionDataFlow#map(TypeToken, Function, Consumer) mapped} collection
+	 *
+	 * @param <E> The source type
+	 * @param <T> The mapped type
+	 */
 	class MapOptions<E, T> extends AbstractXformOptions {
 		private Function<? super T, ? extends E> theReverse;
 		private ElementSetter<? super E, ? super T> theElementReverse;
@@ -128,13 +163,14 @@ public interface FlowOptions {
 		}
 	}
 
+	/** Simple {@link UniqueOptions} implementation */
 	class SimpleUniqueOptions implements UniqueOptions {
-		private boolean useFirst = false;
+		private boolean isUsingFirst = false;
 		private boolean isPreservingSourceOrder = false;
 
 		@Override
 		public SimpleUniqueOptions useFirst(boolean useFirst) {
-			this.useFirst = useFirst;
+			this.isUsingFirst = useFirst;
 			return this;
 		}
 
@@ -146,7 +182,7 @@ public interface FlowOptions {
 
 		@Override
 		public boolean isUseFirst() {
-			return useFirst;
+			return isUsingFirst;
 		}
 
 		@Override
@@ -156,10 +192,11 @@ public interface FlowOptions {
 
 	}
 
+	/** Options used by {@link ObservableCollection.CollectionDataFlow#groupBy(TypeToken, Function, Consumer)} */
 	class GroupingOptions extends AbstractXformOptions implements UniqueOptions {
 		private final boolean isSorted;
-		private boolean staticCategories = false;
-		private boolean useFirst = false;
+		private boolean isStaticCategories = false;
+		private boolean isUsingFirst = false;
 		private boolean isPreservingSourceOrder = false;
 
 		public GroupingOptions(boolean sorted) {
@@ -181,14 +218,18 @@ public interface FlowOptions {
 			return (GroupingOptions) super.cache(cache);
 		}
 
+		/**
+		 * @param staticCategories Whether the categorization of the source values is static or dynamic
+		 * @return This option set
+		 */
 		public GroupingOptions withStaticCategories(boolean staticCategories) {
-			this.staticCategories = staticCategories;
+			this.isStaticCategories = staticCategories;
 			return this;
 		}
 
 		@Override
 		public GroupingOptions useFirst(boolean useFirst) {
-			this.useFirst = useFirst;
+			this.isUsingFirst = useFirst;
 			return this;
 		}
 
@@ -205,7 +246,7 @@ public interface FlowOptions {
 
 		@Override
 		public boolean isUseFirst() {
-			return useFirst;
+			return isUsingFirst;
 		}
 
 		@Override
@@ -214,10 +255,11 @@ public interface FlowOptions {
 		}
 
 		public boolean isStaticCategories() {
-			return staticCategories;
+			return isStaticCategories;
 		}
 	}
 
+	/** An immutable version of {@link AbstractXformOptions} */
 	abstract class XformDef {
 		private final boolean reEvalOnUpdate;
 		private final boolean fireIfUnchanged;
@@ -242,6 +284,12 @@ public interface FlowOptions {
 		}
 	}
 
+	/**
+	 * An immutable version of {@link MapOptions}
+	 *
+	 * @param <E> The source type
+	 * @param <T> The mapped type
+	 */
 	class MapDef<E, T> extends XformDef {
 		private final Function<? super T, ? extends E> theReverse;
 		private final ElementSetter<? super E, ? super T> theElementReverse;

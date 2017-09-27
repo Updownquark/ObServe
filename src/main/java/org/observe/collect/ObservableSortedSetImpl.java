@@ -315,11 +315,13 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public ObservableSortedSet<T> collect(Observable<?> until) {
-			if (until == Observable.empty && isPassive())
-				return new PassiveDerivedSortedSet<>((ObservableSortedSet<E>) getSource(), managePassive(), theCompare);
-			else
-				return new ActiveDerivedSortedSet<>(manageActive(), theCompare, until);
+		public ObservableSortedSet<T> collectPassive() {
+			return new PassiveDerivedSortedSet<>((ObservableSortedSet<E>) getSource(), managePassive(), comparator());
+		}
+
+		@Override
+		public ObservableSortedSet<T> collectActive(Observable<?> until) {
+			return new ActiveDerivedSortedSet<>(manageActive(), comparator(), until);
 		}
 	}
 
@@ -405,11 +407,13 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public ObservableSortedSet<T> collect(Observable<?> until) {
-			if (until == Observable.empty && isPassive())
-				return new PassiveDerivedSortedSet<>((ObservableSortedSet<E>) getSource(), managePassive(), comparator());
-			else
-				return new ActiveDerivedSortedSet<>(manageActive(), comparator(), until);
+		public ObservableSortedSet<T> collectPassive() {
+			return new PassiveDerivedSortedSet<>((ObservableSortedSet<E>) getSource(), managePassive(), comparator());
+		}
+
+		@Override
+		public ObservableSortedSet<T> collectActive(Observable<?> until) {
+			return new ActiveDerivedSortedSet<>(manageActive(), comparator(), until);
 		}
 	}
 
@@ -476,11 +480,13 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public ObservableSortedSet<T> collect(Observable<?> until) {
-			if (until == Observable.empty && isPassive())
-				return new PassiveDerivedSortedSet<>((ObservableSortedSet<E>) getSource(), managePassive(), comparator());
-			else
-				return new ActiveDerivedSortedSet<>(manageActive(), comparator(), until);
+		public ObservableSortedSet<T> collectPassive() {
+			return new PassiveDerivedSortedSet<>((ObservableSortedSet<E>) getSource(), managePassive(), comparator());
+		}
+
+		@Override
+		public ObservableSortedSet<T> collectActive(Observable<?> until) {
+			return new ActiveDerivedSortedSet<>(manageActive(), comparator(), until);
 		}
 	}
 
@@ -556,11 +562,13 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public ObservableSortedSet<E> collect(Observable<?> until) {
-			if (until == Observable.empty)
-				return getSource();
-			else
-				return new ActiveDerivedSortedSet<>(manageActive(), getSource().comparator(), until);
+		public ObservableSortedSet<E> collectPassive() {
+			return getSource();
+		}
+
+		@Override
+		public ObservableSortedSet<E> collectActive(Observable<?> until) {
+			return new ActiveDerivedSortedSet<>(manageActive(), comparator(), until);
 		}
 	}
 
@@ -681,7 +689,7 @@ public class ObservableSortedSetImpl {
 		@Override
 		public ObservableValue<E> observeRelative(Comparable<? super E> value, SortedSearchFilter filter, Supplier<? extends E> def) {
 			return ObservableValue
-				.flatten(getWrapped().mapV(new TypeToken<ObservableValue<E>>() {}.where(new TypeParameter<E>() {}, getType()),
+				.flatten(getWrapped().map(new TypeToken<ObservableValue<E>>() {}.where(new TypeParameter<E>() {}, getType()),
 					v -> v == null ? null : v.observeRelative(value, filter, def)));
 		}
 

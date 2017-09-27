@@ -36,6 +36,7 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.SimpleCause;
+import org.qommons.tree.BetterTreeList;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -52,14 +53,14 @@ import com.google.common.reflect.TypeToken;
  * transformation is done once for all, creating a new collection independent of the source. Sometimes it is desirable to make a transformed
  * collection that does its transformation dynamically, keeping the same data source, so that when the source is modified, the transformed
  * collection is also updated accordingly. The {@link #flow() flow} API allows the creation of collections that are the result of
- * {@link CollectionDataFlow#map(TypeToken) map}, {@link CollectionDataFlow#filter(Function) filter},
- * {@link CollectionDataFlow#unique(boolean) unique}, {@link CollectionDataFlow#sorted(Comparator) sort},
- * {@link CollectionDataFlow#combineWith(ObservableValue, TypeToken) combination} or other operations on the elements of the source.
- * Collections so derived from a source collection are themselves observable and reflect changes to the source. The derived collection may
- * also be mutable, with modifications to the derived collection affecting the source.</li>
+ * {@link CollectionDataFlow#map(TypeToken, Function, Consumer) map}, {@link CollectionDataFlow#filter(Function) filter},
+ * {@link CollectionDataFlow#distinct(Consumer) unique}, {@link CollectionDataFlow#sorted(Comparator) sort},
+ * {@link CollectionDataFlow#combine(TypeToken, Function) combination} or other operations on the elements of the source. Collections so
+ * derived from a source collection are themselves observable and reflect changes to the source. The derived collection may also be mutable,
+ * with modifications to the derived collection affecting the source.</li>
  * <li><b>Modification Control</b> The {@link #flow() flow} API also supports constraints on how or whether a derived collection may be
- * {@link CollectionDataFlow#filterModification() modified}.</li>
- * <li><b>Enhanced {@link Spliterator}s</b> ObservableCollections must implement {@link #mutableSpliterator(boolean)}, which returns a
+ * {@link CollectionDataFlow#filterMod(Consumer) modified}.</li>
+ * <li><b>Enhanced {@link Spliterator}s</b> ObservableCollections must implement {@link #spliterator(boolean)}, which returns a
  * {@link org.qommons.collect.MutableElementSpliterator}, which is an enhanced {@link Spliterator}. This has potential for the improved
  * performance associated with using {@link Spliterator} instead of {@link Iterator} as well as the reversibility and ability to
  * {@link MutableCollectionElement#add(Object, boolean) add}, {@link MutableCollectionElement#remove() remove}, or
@@ -392,11 +393,8 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 	// Simple utility methods
 
-	/**
-	 * @param values The values to add to the collection
-	 * @return This collection
-	 */
-	default ObservableCollection<E> addValues(E... values) {
+	@Override
+	default ObservableCollection<E> with(E... values) {
 		addAll(java.util.Arrays.asList(values));
 		return this;
 	}
@@ -448,7 +446,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @throws IllegalArgumentException If the given value may not be an element of this collection
 	 */
 	default ObservableValue<E> observeEquivalent(E value, Supplier<? extends E> defaultValue, boolean first) {
-		return observeElement(value, first).mapV(getType(), el -> el != null ? el.get() : defaultValue.get());
+		return observeElement(value, first).map(getType(), el -> el != null ? el.get() : defaultValue.get());
 	}
 
 	/**
@@ -470,7 +468,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @return An observable value containing a value in this collection passing the given test
 	 */
 	default ObservableValue<E> observeFind(Predicate<? super E> test, Supplier<? extends E> def, boolean first) {
-		return new ObservableCollectionImpl.ObservableCollectionFinder<>(this, test, first).mapV(getType(),
+		return new ObservableCollectionImpl.ObservableCollectionFinder<>(this, test, first).map(getType(),
 			el -> el != null ? el.get() : def.get());
 	}
 
@@ -517,7 +515,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		}, (sz, v) -> {
 			sz[0]--;
 			return sz;
-		}).mapV(getType(), sz -> sz[0] == 1 ? getFirst() : null);
+		}).map(getType(), sz -> sz[0] == 1 ? getFirst() : null);
 	}
 
 	/**
@@ -670,21 +668,50 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	}
 
 	/**
+	 * @param <E> The type for the collection
+	 * @param type The type for the collection
+	 * @return A new, empty, mutable observable collection
+	 */
+	static <E> ObservableCollection<E> create(TypeToken<E> type) {
+		return create(type, createDefaultBacking());
+	}
+
+	/**
+	 * @param <E> The type for the collection
+	 * @return A new list to back a collection created by {@link #create(TypeToken)}
+	 */
+	static <E> BetterList<E> createDefaultBacking() {
+		return new BetterTreeList<>(true);
+	}
+
+	/**
+	 * @param <E> The type for the collection
+	 * @param type The type for the collection
+	 * @param backing The list to hold the collection's data
+	 * @return A new, empty, mutable observable collection whose performance and storage characteristics are determined by
+	 *         <code> backing</code>
+	 */
+	static <E> ObservableCollection<E> create(TypeToken<E> type, BetterList<E> backing) {
+		return new DefaultObservableCollection<>(type, backing);
+	}
+
+	/**
 	 * Turns an observable value containing an observable collection into the contents of the value
 	 *
 	 * @param collectionObservable The observable value
 	 * @return A collection representing the contents of the value, or a zero-length collection when null
 	 */
-	public static <E> ObservableCollection<E> flattenValue(ObservableValue<? extends ObservableCollection<E>> collectionObservable) {
+	static <E> ObservableCollection<E> flattenValue(ObservableValue<? extends ObservableCollection<E>> collectionObservable) {
 		return new ObservableCollectionImpl.FlattenedValueCollection<>(collectionObservable);
 	}
 
 	/**
 	 * @param <E> The super type of element in the collections
+	 * @param innerType The type of elements in the result
 	 * @param colls The collections to flatten
 	 * @return A collection containing all elements of the given collections
 	 */
-	public static <E> CollectionDataFlow<?, ?, E> flattenCollections(TypeToken<E> innerType, ObservableCollection<? extends E>... colls) {
+	static <E> CollectionDataFlow<?, ?, E> flattenCollections(TypeToken<E> innerType, ObservableCollection<? extends E>... colls) {
 		return of(new TypeToken<ObservableCollection<? extends E>>() {}, colls).flow().flatMapC(innerType, c -> c);
 	}
 
@@ -693,7 +720,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @param coll The collection to fold
 	 * @return An observable that is notified for every event on any observable in the collection
 	 */
-	public static <T> Observable<T> fold(ObservableCollection<? extends Observable<T>> coll) {
+	static <T> Observable<T> fold(ObservableCollection<? extends Observable<T>> coll) {
 		return new Observable<T>() {
 			@Override
 			public Subscription subscribe(Observer<? super T> observer) {
@@ -734,7 +761,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @param coll The collection to hash
 	 * @return The hash code of the collection's contents
 	 */
-	public static int hashCode(ObservableCollection<?> coll) {
+	static int hashCode(ObservableCollection<?> coll) {
 		try (Transaction t = coll.lock(false, null)) {
 			int hashCode = 1;
 			for (Object e : coll)
@@ -750,7 +777,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @param o The object to test the collection against
 	 * @return Whether the two objects are equal
 	 */
-	public static <E> boolean equals(ObservableCollection<E> coll, Object o) {
+	static <E> boolean equals(ObservableCollection<E> coll, Object o) {
 		if (!(o instanceof Collection))
 			return false;
 		Collection<?> c = (Collection<?>) o;
@@ -774,7 +801,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @param coll The collection to print
 	 * @return The string representation of the collection's contents
 	 */
-	public static String toString(ObservableCollection<?> coll) {
+	static String toString(ObservableCollection<?> coll) {
 		StringBuilder ret = new StringBuilder("[");
 		boolean first = true;
 		try (Transaction t = coll.lock(false, null)) {
@@ -809,7 +836,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 *
 		 * @param filter A filter function that returns null for elements to maintain in the collection, or a message indicating why the
 		 *        element is excluded
-		 * @return A {@link #isPassive() active} data flow capable of producing a collection that excludes certain elements from the input
+		 * @return A {@link #supportsPassive() active} data flow capable of producing a collection that excludes certain elements from the input
 		 */
 		CollectionDataFlow<E, T, T> filter(Function<? super T, String> filter);
 
@@ -819,7 +846,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 *
 		 * @param filter A filter function that returns null for elements to maintain in the collection, or a message indicating why the
 		 *        element is excluded
-		 * @return A {@link #isPassive() active} data flow capable of producing a collection that excludes certain elements from the input
+		 * @return A {@link #supportsPassive() active} data flow capable of producing a collection that excludes certain elements from the input
 		 */
 		CollectionDataFlow<E, T, T> filterStatic(Function<? super T, String> filter);
 
@@ -828,7 +855,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 *
 		 * @param <X> The type for the new collection
 		 * @param type The type to filter this collection by
-		 * @return A {@link #isPassive() active} collection consisting only of elements in the source whose values are instances of the
+		 * @return A {@link #supportsPassive() active} collection consisting only of elements in the source whose values are instances of the
 		 *         given class
 		 */
 		default <X> CollectionDataFlow<E, ?, X> filter(Class<X> type) {
@@ -841,7 +868,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		}
 
 		/**
-		 * Performs an intersection or exclusion operation. The result is {@link #isPassive() active}.
+		 * Performs an intersection or exclusion operation. The result is {@link #supportsPassive() active}.
 		 *
 		 * @param <X> The type of the collection to filter with
 		 * @param other The other collection to use to filter this flow's elements
@@ -854,7 +881,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 		/**
 		 * @param equivalence The new {@link ObservableCollection#equivalence() equivalence} scheme for the derived collection to use
-		 * @return A {@link #isPassive() passive} data flow capable of producing a collection that uses a different
+		 * @return A {@link #supportsPassive() passive} data flow capable of producing a collection that uses a different
 		 *         {@link ObservableCollection#equivalence() equivalence} scheme to determine containment and perform other by-value
 		 *         operations.
 		 */
@@ -862,7 +889,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 		/**
 		 * @param refresh The observable to use to refresh the collection's values
-		 * @return A {@link #isPassive() passive} data flow capable of producing a collection that fires updates on the source's values
+		 * @return A {@link #supportsPassive() passive} data flow capable of producing a collection that fires updates on the source's values
 		 *         whenever the given refresh observable fires
 		 */
 		CollectionDataFlow<E, T, T> refresh(Observable<?> refresh);
@@ -871,36 +898,41 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * Like {@link #refresh(Observable)}, but each element may use a different observable to refresh itself
 		 *
 		 * @param refresh The function to get observable to use to refresh individual values
-		 * @return A {@link #isPassive() active} data flow capable of producing a collection that fires updates on the source's values
+		 * @return A {@link #supportsPassive() active} data flow capable of producing a collection that fires updates on the source's values
 		 *         whenever each element's refresh observable fires
 		 */
 		CollectionDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh);
 
+		/**
+		 * @param <X> The type to map to
+		 * @param target The type to map to
+		 * @param map The mapping function to apply to each element
+		 * @return The mapped flow
+		 */
 		default <X> CollectionDataFlow<E, T, X> map(TypeToken<X> target, Function<? super T, ? extends X> map) {
 			return map(target, map, options -> {
 			});
 		}
 
 		/**
-		 * Allows elements to be transformed via a function. This operation may produce an {@link #isPassive() active or passive} flow
+		 * Allows elements to be transformed via a function. This operation may produce an {@link #supportsPassive() active or passive} flow
 		 * depending on the options selected.
 		 *
 		 * @param <X> The type to map to
 		 * @param target The type to map to
 		 * @param map The mapping function to apply to each element
 		 * @param options Allows various options to be selected that determine the behavior of the mapped set
-		 * @return A builder to build a mapped data flow
+		 * @return The mapped flow
 		 */
 		<X> CollectionDataFlow<E, T, X> map(TypeToken<X> target, Function<? super T, ? extends X> map, Consumer<MapOptions<T, X>> options);
 
 		/**
 		 * Combines each element of this flow the the value of one or more observable values. This operation may produce an
-		 * {@link #isPassive() active or passive} flow depending on the options selected on the builder.
+		 * {@link #supportsPassive() active or passive} flow depending on the options selected on the builder.
 		 *
-		 * @param <V> The type of the value to combine with the source elements
 		 * @param <X> The type of the combined values
-		 * @param value The observable value to combine with the source elements
-		 * @param target The type of the combined values
+		 * @param targetType The type of the combined values
+		 * @param combination The function to create the combination definition
 		 * @return A data flow capable of producing a collection whose elements are each some combination of the source element and the
 		 *         dynamic value of the observable
 		 */
@@ -910,14 +942,15 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		/**
 		 * @param target The target type
 		 * @param map A function that produces observable values from each element of the source
-		 * @return A {@link #isPassive() active} flow capable of producing a collection that is the value of the observable values mapped to
+		 * @return A {@link #supportsPassive() active} flow capable of producing a collection that is the value of the observable values mapped to
 		 *         each element of the source.
 		 */
 		default <X> CollectionDataFlow<E, ?, X> flatMapV(TypeToken<X> target,
 			Function<? super T, ? extends ObservableValue<? extends X>> map) {
 			TypeToken<ObservableValue<? extends X>> valueType = new TypeToken<ObservableValue<? extends X>>() {}
 			.where(new TypeParameter<X>() {}, target.wrap());
-			return map(valueType, map).refreshEach(v -> v.noInit()).map(target, obs -> obs == null ? null : obs.get(), options -> options//
+			return map(valueType, map).refreshEach(v -> v.changes().noInit()).map(target, obs -> obs == null ? null : obs.get(),
+				options -> options//
 				.withElementSetting((ov, newValue, doSet, cause) -> {
 					// Allow setting elements via the wrapped settable value
 					if (!(ov instanceof SettableValue))
@@ -933,6 +966,11 @@ public interface ObservableCollection<E> extends BetterList<E> {
 				}));
 		}
 
+		/**
+		 * @param target The type of values in the flattened result
+		 * @param map The function to produce {@link ObservableCollection collections} from each element in this flow
+		 * @return A flow containing each element in the collection produced by the map of each element in this flow
+		 */
 		default <X> CollectionDataFlow<E, ?, X> flatMapC(TypeToken<X> target,
 			Function<? super T, ? extends ObservableCollection<? extends X>> map) {
 			return flatMapF(target, v -> {
@@ -941,40 +979,49 @@ public interface ObservableCollection<E> extends BetterList<E> {
 			});
 		}
 
+		/**
+		 * @param target The type of values in the flattened result
+		 * @param map The function to produce {@link ObservableCollection.CollectionDataFlow data flows} from each element in this flow
+		 * @return A flow containing each element in the data flow produced by the map of each element in this flow
+		 */
 		<X> CollectionDataFlow<E, ?, X> flatMapF(TypeToken<X> target,
 			Function<? super T, ? extends CollectionDataFlow<?, ?, ? extends X>> map);
 
 		/**
 		 * @param compare The comparator to use to sort the source elements
-		 * @return A {@link #isPassive() active} flow capable of producing a collection whose elements are sorted by the given comparison
+		 * @return A {@link #supportsPassive() active} flow capable of producing a collection whose elements are sorted by the given comparison
 		 *         scheme.
 		 */
 		CollectionDataFlow<E, T, T> sorted(Comparator<? super T> compare);
 
-		default UniqueDataFlow<E, T, T> unique() {
-			return unique(options -> {});
-		}
-
 		/**
-		 * @param alwaysUseFirst Whether to always use the first element in the collection to represent other equivalent values. If this is
-		 *        false, the produced collection may be able to fire fewer events because elements that are added earlier in the collection
-		 *        can be ignored if they are already represented.
-		 * @return A {@link #isPassive() active} flow capable of producing a set that excludes duplicate elements according to its
+		 * @return A {@link #supportsPassive() active} flow capable of producing a set that excludes duplicate elements according to its
 		 *         {@link ObservableCollection#equivalence() equivalence} scheme.
 		 * @see #withEquivalence(Equivalence)
 		 */
-		UniqueDataFlow<E, T, T> unique(Consumer<UniqueOptions> options);
+		default UniqueDataFlow<E, T, T> distinct() {
+			return distinct(options -> {});
+		}
+
+		/**
+		 * @param options Allows some customization of the behavior of collections collected from the unique flow
+		 * @return A {@link #supportsPassive() active} flow capable of producing a set that excludes duplicate elements according to its
+		 *         {@link ObservableCollection#equivalence() equivalence} scheme.
+		 * @see #withEquivalence(Equivalence)
+		 */
+		UniqueDataFlow<E, T, T> distinct(Consumer<UniqueOptions> options);
 
 		/**
 		 * @param compare The comparator to use to sort the source elements
 		 * @param alwaysUseFirst Whether to always use the first element in the collection to represent other equivalent values. If this is
 		 *        false, the produced collection may be able to fire fewer events because elements that are added earlier in the collection
 		 *        can be ignored if they are already represented.
-		 * @return A {@link #isPassive() active} flow capable of producing a sorted set ordered by the given comparator that excludes
+		 * @return A {@link #supportsPassive() active} flow capable of producing a sorted set ordered by the given comparator that excludes
 		 *         duplicate elements according to the comparator's {@link Equivalence#of(Class, Comparator, boolean) equivalence}.
 		 */
-		UniqueSortedDataFlow<E, T, T> uniqueSorted(Comparator<? super T> compare, boolean alwaysUseFirst);
+		UniqueSortedDataFlow<E, T, T> distinctSorted(Comparator<? super T> compare, boolean alwaysUseFirst);
 
+		/** @return A flow with the same data and properties as this flow, but whose collected results cannot be modified externally */
 		default CollectionDataFlow<E, T, T> immutable() {
 			return filterMod(options -> options.immutable(StdMsg.UNSUPPORTED_OPERATION, true));
 		}
@@ -988,10 +1035,24 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 */
 		CollectionDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options);
 
+		/**
+		 * @param <K> The key type for the map
+		 * @param keyType The key type for the map
+		 * @param keyMap The function to produce keys from this flow's values
+		 * @return A multi-map flow that may be used to produce a multi-map of this flow's values, categorized by the given key mapping
+		 */
 		default <K> ObservableMultiMap.MultiMapFlow<E, K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap) {
 			return groupBy(keyType, keyMap, options -> {});
 		}
 
+		/**
+		 * @param <K> The key type for the map
+		 * @param keyType The key type for the map
+		 * @param keyMap The function to produce keys from this flow's values
+		 * @param keyCompare The comparator to sort the keys
+		 * @return A sorted multi-map flow that may be used to produce a sorted multi-map of this flow's values, categorized by the given
+		 *         key mapping
+		 */
 		default <K> ObservableSortedMultiMap.SortedMultiMapFlow<E, K, T> groupBy(TypeToken<K> keyType,
 			Function<? super T, ? extends K> keyMap, Comparator<? super K> keyCompare) {
 			return groupBy(keyType, keyMap, keyCompare, options -> {});
@@ -999,8 +1060,9 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 		/**
 		 * @param <K> The key type for the map
-		 * @param keyFlow Produces a flow of key categories from this flow
-		 * @param staticCategories Whether the categorization of this flow's value is static or dynamic
+		 * @param keyType The key type for the map
+		 * @param keyMap The function to produce keys from this flow's values
+		 * @param options Allows some customization of the behavior of the resulting map
 		 * @return A multi-map flow that may be used to produce a multi-map of this flow's values, categorized by the given key mapping
 		 */
 		<K> ObservableMultiMap.MultiMapFlow<E, K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap,
@@ -1008,9 +1070,10 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 		/**
 		 * @param <K> The key type for the map
-		 * @param keyFlow Produces a sorted flow of key categories from this flow
+		 * @param keyType The key type for the map
+		 * @param keyMap The function to produce keys from this flow's values
 		 * @param keyCompare The comparator to sort the key values with
-		 * @param staticCategories Whether the categorization of this flow's value is static or dynamic
+		 * @param options Allows some customization of the behavior of the resulting map
 		 * @return A sorted multi-map flow that may be used to produce a sorted multi-map of this flow's values, categorized by the given
 		 *         key mapping
 		 */
@@ -1043,34 +1106,48 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 *
 		 * @return Whether this data flow is capable of producing a passive collection
 		 */
-		boolean isPassive();
+		boolean supportsPassive();
 
-		/** @return A collection manager to be used by the active derived collection produced by {@link #collect(Observable)} */
+		/**
+		 * @return Whether this data flow not only {@link #supportsPassive() supports passive} collection building, but will default to this
+		 *         if collected using {@link #collect()}
+		 */
+		default boolean prefersPassive() {
+			return supportsPassive();
+		}
+
+		/** @return A collection manager to be used by the active derived collection produced by {@link #collectActive(Observable)} */
 		ActiveCollectionManager<E, ?, T> manageActive();
 
 		/**
 		 * @return A collection manager to be used by the passive derived collection produced by {@link #collectPassive()}. Will be null if
-		 *         this collection is not {@link #isPassive() passive}.
+		 *         this collection is not {@link #supportsPassive() passive}.
 		 */
 		PassiveCollectionManager<E, ?, T> managePassive();
 
 		/**
 		 * @return A heavy-weight collection derived via this flow from the source collection
-		 * @see #isPassive()
+		 * @see #supportsPassive()
 		 */
 		default ObservableCollection<T> collect() {
-			return collect(Observable.empty);
+			if (prefersPassive())
+				return collectPassive();
+			else
+				return collectActive(Observable.empty);
 		}
 
-		ObservableCollection<T> collectPassive();
+		/**
+		 * @return A {@link #supportsPassive() passively-managed} collection derived via this flow from the source collection
+		 * @throws UnsupportedOperationException If this flow does not support passive collection
+		 */
+		ObservableCollection<T> collectPassive() throws UnsupportedOperationException;
 
 		/**
 		 * @param until An observable that will kill the collection when it fires. May be used to control the release of unneeded resources
 		 *        instead of relying on the garbage collector to dispose of them in its own time.
-		 * @return A collection derived via this flow from the source collection. The collection will be {@link #isPassive() passive} if
-		 *         this flow is passive and <code>until</code> is {@link Observable#empty}.
+		 * @return An {@link #supportsPassive() actively-managed} collection derived via this flow from the source collection.
 		 */
-		ObservableCollection<T> collect(Observable<?> until);
+		ObservableCollection<T> collectActive(Observable<?> until);
 	}
 
 	/**
@@ -1106,6 +1183,14 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		@Override
 		UniqueDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh);
 
+		/**
+		 * @param <X> The type for the mapped flow
+		 * @param target The type for the mapped flow
+		 * @param map The mapping function for each source element's value
+		 * @param reverse The mapping function to recover source values from mapped values--required for equivalence
+		 * @return The mapped flow
+		 * @see #mapEquivalent(TypeToken, Function, Function, Consumer)
+		 */
 		default <X> UniqueDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
 			Function<? super X, ? extends T> reverse) {
 			return mapEquivalent(target, map, reverse, options -> {
@@ -1114,20 +1199,23 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 		/**
 		 * <p>
-		 * Same as {@link #map(TypeToken)}, but with the additional assertion that the produced mapped data will be one-to-one with the
-		 * source data, such that the produced collection is unique in a similar way, without a need for an additional
-		 * {@link #unique(boolean) uniqueness} check.
+		 * Same as {@link #map(TypeToken, Function, Consumer)}, but with the additional assertion that the produced mapped data will be
+		 * one-to-one with the source data, such that the produced collection is unique in a similar way, without a need for an additional
+		 * {@link #distinct(Consumer) uniqueness} check.
 		 * </p>
 		 * <p>
 		 * This assertion cannot be checked (at compile time or run time), and if the assertion is incorrect such that multiple source
 		 * values map to equivalent target values, <b>the resulting set will not be unique and data errors, including internal
 		 * ObservableCollection errors, are possible</b>. Therefore caution should be used when considering whether to invoke this method.
-		 * When in doubt, use {@link #map(TypeToken)} and {@link #unique(boolean)}.
+		 * When in doubt, use {@link #map(TypeToken, Function, Consumer)} and {@link #distinct(Consumer)}.
 		 * </p>
 		 *
 		 * @param <X> The type of the mapped values
 		 * @param target The type of the mapped values
-		 * @return A builder to create a set of values which are this set's values mapped by a function
+		 * @param map The function to produce result values from source values
+		 * @param reverse The function to produce source values from result values--required to facilitate equivalence with the source flow
+		 * @param options Allows customization of the behavior of the mapped set
+		 * @return The mapped flow
 		 */
 		<X> UniqueDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
 			Function<? super X, ? extends T> reverse, Consumer<MapOptions<T, X>> options);
@@ -1146,7 +1234,10 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		}
 
 		@Override
-		ObservableSet<T> collect(Observable<?> until);
+		ObservableSet<T> collectPassive();
+
+		@Override
+		ObservableSet<T> collectActive(Observable<?> until);
 	}
 
 	/**
@@ -1190,6 +1281,13 @@ public interface ObservableCollection<E> extends BetterList<E> {
 			return mapEquivalent(target, map, reverse, options -> {});
 		}
 
+		/**
+		 * @param <X> The type for the mapped flow
+		 * @param target The type for the mapped flow
+		 * @param map The mapping function to produce values from each source element
+		 * @param compare The comparator to source the mapped values in the same order as the corresponding source values
+		 * @return The mapped flow
+		 */
 		default <X> UniqueSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
 			Comparator<? super X> compare) {
 			return mapEquivalent(target, map, compare, options -> {});
@@ -1197,25 +1295,33 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 		/**
 		 * <p>
-		 * Same as {@link #map(TypeToken)}, but with the additional assertion that the produced mapped data will be one-to-one with the
-		 * source data, such that the produced collection is unique in a similar way, without a need for an additional
-		 * {@link #uniqueSorted(Comparator, boolean) uniqueness} check.
+		 * Same as {@link #map(TypeToken, Function, Consumer)}, but with the additional assertion that the produced mapped data will be
+		 * one-to-one with the source data, such that the produced collection is unique in a similar way, without a need for an additional
+		 * {@link #distinctSorted(Comparator, boolean) uniqueness} check.
 		 * </p>
 		 * <p>
 		 * This assertion cannot be checked (at compile time or run time), and if the assertion is incorrect such that multiple source
 		 * values map to equivalent target values, <b>the resulting set will not be unique and data errors, including internal
 		 * ObservableCollection errors, are possible</b>. Therefore caution should be used when considering whether to invoke this method.
-		 * When in doubt, use {@link #map(TypeToken)} and {@link #uniqueSorted(Comparator, boolean)}.
+		 * When in doubt, use {@link #map(TypeToken, Function, Consumer)} and {@link #distinctSorted(Comparator, boolean)}.
 		 * </p>
 		 *
 		 * @param <X> The type of the mapped values
 		 * @param target The type of the mapped values
-		 * @return A builder to create a set of values which are this set's values mapped by a function
+		 * @return The mapped flow
 		 */
 		@Override
 		<X> UniqueSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
 			Function<? super X, ? extends T> reverse, Consumer<MapOptions<T, X>> options);
 
+		/**
+		 * @param <X> The type for the mapped flow
+		 * @param target The type for the mapped flow
+		 * @param map The mapping function to produce values from each source element
+		 * @param compare The comparator to source the mapped values in the same order as the corresponding source values
+		 * @param options Allows customization for the behavior of the mapped flow
+		 * @return The mapped flow
+		 */
 		<X> UniqueSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
 			Comparator<? super X> compare, Consumer<MapOptions<T, X>> options);
 
@@ -1233,7 +1339,10 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		}
 
 		@Override
-		ObservableSortedSet<T> collect(Observable<?> until);
+		ObservableSortedSet<T> collectPassive();
+
+		@Override
+		ObservableSortedSet<T> collectActive(Observable<?> until);
 	}
 
 	/**

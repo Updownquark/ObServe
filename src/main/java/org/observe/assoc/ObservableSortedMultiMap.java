@@ -12,6 +12,7 @@ import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
 import org.observe.collect.ObservableSortedSet;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
@@ -159,6 +160,11 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 	}
 
 	static <K, V> SortedMultiMapFlow<?, K, V> create(TypeToken<K> keyType, TypeToken<V> valueType, Comparator<? super K> keyCompare) {
+		return create(keyType, valueType, keyCompare, ObservableCollection.createDefaultBacking());
+	}
+
+	static <K, V> SortedMultiMapFlow<?, K, V> create(TypeToken<K> keyType, TypeToken<V> valueType, Comparator<? super K> keyCompare,
+		BetterList<Map.Entry<K, V>> entryCollection) {
 		TypeToken<Map.Entry<K, V>> entryType = new TypeToken<Map.Entry<K, V>>() {}.where(new TypeParameter<K>() {}, keyType)
 			.where(new TypeParameter<V>() {}, valueType);
 		class MapEntry implements Map.Entry<K, V> {
@@ -202,8 +208,8 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 				return theKey + "=" + theValue;
 			}
 		}
-		ObservableCollection<Map.Entry<K, V>> simpleEntryCollection = ObservableCollection.create(entryType);
-		ObservableSortedSet<K> keySet = simpleEntryCollection.flow().map(keyType, Map.Entry::getKey).uniqueSorted(keyCompare, true)
+		ObservableCollection<Map.Entry<K, V>> simpleEntryCollection = ObservableCollection.create(entryType, entryCollection);
+		ObservableSortedSet<K> keySet = simpleEntryCollection.flow().map(keyType, Map.Entry::getKey).distinctSorted(keyCompare, true)
 			.collect();
 		return new DefaultSortedMultiMapFlow<>(keySet.flow(), valueType,
 			key -> simpleEntryCollection.flow()//

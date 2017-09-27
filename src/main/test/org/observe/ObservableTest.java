@@ -15,20 +15,20 @@ public class ObservableTest {
 		SimpleSettableValue<Integer> obs = new SimpleSettableValue<>(Integer.TYPE, false);
 		obs.set(0, null);
 		int [] received = new int[] {0};
-		obs.act(value -> received[0] = value.getNewValue());
+		obs.changes().act(value -> received[0] = value.getNewValue());
 		for(int i = 1; i < 10; i++) {
 			obs.set(i, null);
 			assertEquals(i, received[0]);
 		}
 	}
 
-	/** Tests {@link ObservableValue#mapV(java.util.function.Function)} */
+	/** Tests {@link ObservableValue#map(java.util.function.Function)} */
 	@Test
 	public void valueMap() {
 		SimpleSettableValue<Integer> obs = new SimpleSettableValue<>(Integer.TYPE, false);
 		obs.set(0, null);
 		int [] received = new int[] {0};
-		obs.mapV(value -> value * 10).act(value -> received[0] = value.getNewValue());
+		obs.map(value -> value * 10).changes().act(value -> received[0] = value.getNewValue());
 
 		for(int i = 1; i < 10; i++) {
 			obs.set(i, null);
@@ -123,11 +123,11 @@ public class ObservableTest {
 		int [] count = new int[1];
 		boolean [] complete = new boolean[1];
 		ObservableValue<Integer> take = obs.takeUntil(stop);
-		take.act(value -> {
+		take.changes().act(value -> {
 			count[0]++;
 			received[0] = value.getNewValue();
 		});
-		take.completed().act(value -> complete[0] = true);
+		take.changes().completed().act(value -> complete[0] = true);
 
 		for(int i = 1; i <= 30; i++) {
 			obs.set(i, null);
@@ -204,7 +204,7 @@ public class ObservableTest {
 		assertEquals(10, received[0]);
 	}
 
-	/** Tests {@link ObservableValue#combineV(TriFunction, ObservableValue, ObservableValue)} */
+	/** Tests {@link ObservableValue#combine(TriFunction, ObservableValue, ObservableValue)} */
 	@Test
 	public void combine() {
 		int [] events = new int[1];
@@ -215,7 +215,7 @@ public class ObservableTest {
 		SimpleSettableValue<Integer> obs3 = new SimpleSettableValue<>(Integer.TYPE, false);
 		obs3.set(0, null);
 		int [] received = new int[] {0};
-		obs1.combineV((arg1, arg2, arg3) -> arg1 * arg2 + arg3, obs2, obs3).act(event -> {
+		obs1.combine((arg1, arg2, arg3) -> arg1 * arg2 + arg3, obs2, obs3).changes().act(event -> {
 			events[0]++;
 			received[0] = event.getNewValue();
 		});
@@ -238,7 +238,7 @@ public class ObservableTest {
 		SimpleSettableValue<Integer> inner2 = new SimpleSettableValue<>(Integer.TYPE, false);
 		inner2.set(2, null);
 		int [] received = new int[1];
-		ObservableValue.flatten(outer).act(value -> received[0] = value.getNewValue());
+		ObservableValue.flatten(outer).changes().act(value -> received[0] = value.getNewValue());
 
 		assertEquals(1, received[0]);
 		inner1.set(3, null);
@@ -269,7 +269,7 @@ public class ObservableTest {
 		assertEquals(Integer.valueOf(2), first.get());
 		Integer[] reported = new Integer[1];
 		int[] events = new int[1];
-		Subscription sub = first.act(evt -> {
+		Subscription sub = first.changes().act(evt -> {
 			reported[0] = evt.getNewValue();
 			events[0]++;
 		});

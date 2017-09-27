@@ -309,11 +309,6 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean isSafe() {
-			return true;
-		}
-
-		@Override
 		public CollectionElement<? extends E> get() {
 			CollectionElement<? extends E>[] element = new CollectionElement[1];
 			find(el -> element[0] = new SimpleElement(el.getElementId(), el.get()));
@@ -325,73 +320,86 @@ public final class ObservableCollectionImpl {
 		protected abstract boolean test(E value);
 
 		@Override
-		public Subscription subscribe(Observer<? super ObservableValueEvent<CollectionElement<? extends E>>> observer) {
-			try (Transaction t = theCollection.lock(false, null)) {
-				class FinderListener implements Consumer<ObservableCollectionEvent<? extends E>> {
-					private SimpleElement theCurrentElement;
+		public Observable<ObservableValueEvent<CollectionElement<? extends E>>> changes() {
+			return new Observable<ObservableValueEvent<CollectionElement<? extends E>>>() {
+				@Override
+				public Subscription subscribe(Observer<? super ObservableValueEvent<CollectionElement<? extends E>>> observer) {
+					try (Transaction t = theCollection.lock(false, null)) {
+						class FinderListener implements Consumer<ObservableCollectionEvent<? extends E>> {
+							private SimpleElement theCurrentElement;
 
-					@Override
-					public void accept(ObservableCollectionEvent<? extends E> evt) {
-						boolean mayReplace;
-						if (theCurrentElement == null)
-							mayReplace = true;
-						else if (theCurrentElement.getElementId().equals(evt.getElementId()))
-							mayReplace = true;
-						else {
-							mayReplace = theElementCompare.compare(theCurrentElement,
-								new SimpleElement(evt.getElementId(), evt.getNewValue())) > 0;
-						}
-						if (!mayReplace)
-							return; // Even if the new element's value matches, it wouldn't replace the current value
-						boolean matches = test(evt.getNewValue());
-						if (!matches && (theCurrentElement == null || !theCurrentElement.getElementId().equals(evt.getElementId())))
-							return; // If the new value doesn't match and it's not the current element, we don't care
+							@Override
+							public void accept(ObservableCollectionEvent<? extends E> evt) {
+								boolean mayReplace;
+								if (theCurrentElement == null)
+									mayReplace = true;
+								else if (theCurrentElement.getElementId().equals(evt.getElementId()))
+									mayReplace = true;
+								else {
+									mayReplace = theElementCompare.compare(theCurrentElement,
+										new SimpleElement(evt.getElementId(), evt.getNewValue())) > 0;
+								}
+								if (!mayReplace)
+									return; // Even if the new element's value matches, it wouldn't replace the current value
+								boolean matches = test(evt.getNewValue());
+								if (!matches && (theCurrentElement == null || !theCurrentElement.getElementId().equals(evt.getElementId())))
+									return; // If the new value doesn't match and it's not the current element, we don't care
 
-						// At this point we know that we will have to do something
-						Map<Object, Object> causeData = evt.getRootCausable().onFinish(this, (cause, data) -> {
-							SimpleElement oldElement = theCurrentElement;
-							if (data.get("replacement") == null) {
-								// Means we need to find the new value in the collection
-								if (!find(el -> theCurrentElement = new SimpleElement(el.getElementId(), el.get())))
-									theCurrentElement = null;
-							} else
-								theCurrentElement = (SimpleElement) data.get("replacement");
-							observer.onNext(createChangeEvent(oldElement, theCurrentElement, cause));
-						});
-						if (!matches) {
-							// The current element's value no longer matches--we need to search for the new value if we don't already know
-							// of a better match. The signal for this is a null replacement, so nothing to do here.
-						} else {
-							// Either:
-							// There is no current element and the new element matches--use it unless we already know of a better match
-							// Or there the new value is in a better position than the current element
-							SimpleElement replacement = (SimpleElement) causeData.get("replacement");
-							// If we already know of a replacement element even better-positioned than the new element, ignore the new one
-							if (replacement == null || evt.getElementId().compareTo(replacement.getElementId()) <= 0)
-								causeData.put("replacement", new SimpleElement(evt.getElementId(), evt.getNewValue()));
+								// At this point we know that we will have to do something
+								Map<Object, Object> causeData = evt.getRootCausable().onFinish(this, (cause, data) -> {
+									SimpleElement oldElement = theCurrentElement;
+									if (data.get("replacement") == null) {
+										// Means we need to find the new value in the collection
+										if (!find(el -> theCurrentElement = new SimpleElement(el.getElementId(), el.get())))
+											theCurrentElement = null;
+									} else
+										theCurrentElement = (SimpleElement) data.get("replacement");
+									observer.onNext(createChangeEvent(oldElement, theCurrentElement, cause));
+								});
+								if (!matches) {
+									// The current element's value no longer matches--we need to search for the new value if we don't
+									// already know
+									// of a better match. The signal for this is a null replacement, so nothing to do here.
+								} else {
+									// Either:
+									// There is no current element and the new element matches--use it unless we already know of a better
+									// match
+									// Or there the new value is in a better position than the current element
+									SimpleElement replacement = (SimpleElement) causeData.get("replacement");
+									// If we already know of a replacement element even better-positioned than the new element, ignore the
+									// new one
+									if (replacement == null || evt.getElementId().compareTo(replacement.getElementId()) <= 0)
+										causeData.put("replacement", new SimpleElement(evt.getElementId(), evt.getNewValue()));
+								}
+							}
 						}
+						FinderListener listener = new FinderListener();
+						if (!find(el -> {
+							listener.theCurrentElement = new SimpleElement(el.getElementId(), el.get());
+						}))
+							listener.theCurrentElement = null;
+						Subscription collSub = theCollection.onChange(listener);
+						observer.onNext(createInitialEvent(listener.theCurrentElement, null));
+						return new Subscription() {
+							private boolean isDone;
+
+							@Override
+							public void unsubscribe() {
+								if (isDone)
+									return;
+								isDone = true;
+								collSub.unsubscribe();
+								observer.onCompleted(createChangeEvent(listener.theCurrentElement, listener.theCurrentElement, null));
+							}
+						};
 					}
 				}
-				FinderListener listener = new FinderListener();
-				if (!find(el -> {
-					listener.theCurrentElement = new SimpleElement(el.getElementId(), el.get());
-				}))
-					listener.theCurrentElement = null;
-				Subscription collSub = theCollection.onChange(listener);
-				observer.onNext(createInitialEvent(listener.theCurrentElement, null));
-				return new Subscription() {
-					private boolean isDone;
 
-					@Override
-					public void unsubscribe() {
-						if (isDone)
-							return;
-						isDone = true;
-						collSub.unsubscribe();
-						observer.onCompleted(createChangeEvent(listener.theCurrentElement, listener.theCurrentElement, null));
-					}
-				};
-			}
+				@Override
+				public boolean isSafe() {
+					return true;
+				}
+			};
 		}
 
 		private class SimpleElement implements CollectionElement<E> {
@@ -510,26 +518,31 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean isSafe() {
-			return true;
-		}
+		public Observable<ObservableValueEvent<T>> changes() {
+			return new Observable<ObservableValueEvent<T>>() {
+				@Override
+				public boolean isSafe() {
+					return true;
+				}
 
-		@Override
-		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-			Object key = new Object();
-			Object[] x = new Object[] { init() };
-			Object[] v = new Object[] { getValue((X) x[0]) };
-			Subscription sub = theCollection.onChange(evt -> {
-				T oldV = (T) v[0];
-				X newX = update((X) x[0], evt);
-				x[0] = newX;
-				v[0] = getValue(newX);
-				evt.getRootCausable()
-				.onFinish(key, (root, values) -> fireChangeEvent((T) values.get("oldValue"), (T) v[0], root, observer::onNext))
-				.computeIfAbsent("oldValue", k -> oldV);
-			});
-			fireInitialEvent((T) v[0], null, observer::onNext);
-			return sub;
+				@Override
+				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+					Object key = new Object();
+					Object[] x = new Object[] { init() };
+					Object[] v = new Object[] { getValue((X) x[0]) };
+					Subscription sub = theCollection.onChange(evt -> {
+						T oldV = (T) v[0];
+						X newX = update((X) x[0], evt);
+						x[0] = newX;
+						v[0] = getValue(newX);
+						evt.getRootCausable()
+						.onFinish(key, (root, values) -> fireChangeEvent((T) values.get("oldValue"), (T) v[0], root, observer::onNext))
+						.computeIfAbsent("oldValue", k -> oldV);
+					});
+					fireInitialEvent((T) v[0], null, observer::onNext);
+					return sub;
+				}
+			};
 		}
 
 		/** @return The initial computation value */
@@ -653,12 +666,13 @@ public final class ObservableCollectionImpl {
 				Consumer<ObservableCollectionEvent<? extends E>> leftListener = evt -> onEvent(evt, true);
 				Consumer<ObservableCollectionEvent<? extends X>> rightListener = evt -> onEvent(evt, false);
 				if (weak) {
-					WeakConsumer.WeakConsumerBuilder builder = WeakConsumer.build()//
-						.withAction(leftListener, left::onChange)//
-						.withAction(rightListener, right::onChange);
+					WeakListening.Builder builder = WeakListening.build();
 					if (until != null)
-						builder.withUntil(until::act);
-					return builder.build();
+						builder.withUntil(r -> until.act(v -> r.run()));
+					WeakListening listening = builder.getListening();
+					listening.withConsumer(leftListener, left::onChange);
+					listening.withConsumer(rightListener, right::onChange);
+					return builder::unsubscribe;
 				} else {
 					Subscription leftSub = left.onChange(leftListener);
 					Subscription rightSub = right.onChange(rightListener);
@@ -790,27 +804,32 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean isSafe() {
-			return true;
-		}
-
-		@Override
-		public Subscription subscribe(Observer<? super ObservableValueEvent<Boolean>> observer) {
-			boolean[] initialized = new boolean[1];
-			boolean[] satisfied = new boolean[1];
-			ValueCounts<E, X> counts = new ValueCounts<E, X>(theLeft.equivalence()) {
+		public Observable<ObservableValueEvent<Boolean>> changes() {
+			return new Observable<ObservableValueEvent<Boolean>>() {
 				@Override
-				protected void changed(ValueCount<?> count, Object oldValue, CollectionChangeType type, boolean onLeft,
-					boolean containmentChange, Causable cause) {
-					cause.getRootCausable().onFinish(this, (c, data) -> {
-						boolean wasSatisfied = satisfied[0];
-						satisfied[0] = theSatisfiedCheck.test(this);
-						if (!initialized[0] && wasSatisfied != satisfied[0])
-							fireChangeEvent(wasSatisfied, satisfied[0], cause, observer::onNext);
-					});
+				public boolean isSafe() {
+					return true;
+				}
+
+				@Override
+				public Subscription subscribe(Observer<? super ObservableValueEvent<Boolean>> observer) {
+					boolean[] initialized = new boolean[1];
+					boolean[] satisfied = new boolean[1];
+					ValueCounts<E, X> counts = new ValueCounts<E, X>(theLeft.equivalence()) {
+						@Override
+						protected void changed(ValueCount<?> count, Object oldValue, CollectionChangeType type, boolean onLeft,
+							boolean containmentChange, Causable cause) {
+							cause.getRootCausable().onFinish(this, (c, data) -> {
+								boolean wasSatisfied = satisfied[0];
+								satisfied[0] = theSatisfiedCheck.test(this);
+								if (!initialized[0] && wasSatisfied != satisfied[0])
+									fireChangeEvent(wasSatisfied, satisfied[0], cause, observer::onNext);
+							});
+						}
+					};
+					return counts.init(theLeft, theRight, null, false);
 				}
 			};
-			return counts.init(theLeft, theRight, null, false);
 		}
 	}
 
@@ -833,7 +852,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		private static <T> ObservableCollection<T> toCollection(ObservableValue<T> value) {
-			ObservableValue<ObservableCollection<T>> cv = value.mapV(v -> ObservableCollection.of(value.getType(), v));
+			ObservableValue<ObservableCollection<T>> cv = value.map(v -> ObservableCollection.of(value.getType(), v));
 			return ObservableCollection.flattenValue(cv);
 		}
 
@@ -1580,13 +1599,6 @@ public final class ObservableCollectionImpl {
 				return split == null ? null : new MutableDerivedSpliterator(split);
 			}
 		}
-	}
-
-	public static <E> ObservableCollection<E> create(TypeToken<E> type, boolean threadSafe, Collection<? extends E> initialValues) {
-		DefaultObservableCollection<E> collection = new DefaultObservableCollection<>(type, new BetterTreeList<>(threadSafe));
-		if (initialValues != null)
-			collection.addAll(initialValues);
-		return collection;
 	}
 
 	public static class ConstantCollection<E> implements ObservableCollection<E> {
