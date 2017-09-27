@@ -5,6 +5,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+import org.observe.XformOptions.XformDef;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
 
@@ -65,7 +66,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			public ObservableValue<String> isEnabled() {
 				BiFunction<String, String, String> combineFn = (str1, str2) -> str1 != null ? str1 : str2;
 				return SettableValue.this.isEnabled().combine(TypeToken.of(String.class), combineFn,
-					value.refresh(SettableValue.this.changes().noInit()).map(v -> isAcceptable(v)), true);
+					value.refresh(SettableValue.this.changes().noInit()).map(v -> isAcceptable(v)));
 			}
 
 			@Override
@@ -534,13 +535,12 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @param <T> The type of the value
 	 */
 	abstract class ComposedSettableValue<T> extends ComposedObservableValue<T> implements SettableValue<T> {
-		public ComposedSettableValue(Function<Object [], T> function, boolean combineNull, ObservableValue<?> [] composed) {
-			super(function, combineNull, composed);
+		public ComposedSettableValue(Function<Object[], T> function, XformDef options, ObservableValue<?>[] composed) {
+			super(function, options, composed);
 		}
 
-		public ComposedSettableValue(TypeToken<T> type, Function<Object [], T> function, boolean combineNull,
-			ObservableValue<?>... composed) {
-			super(type, function, combineNull, composed);
+		public ComposedSettableValue(TypeToken<T> type, Function<Object[], T> function, XformDef options, ObservableValue<?>... composed) {
+			super(type, function, options, composed);
 		}
 	}
 
