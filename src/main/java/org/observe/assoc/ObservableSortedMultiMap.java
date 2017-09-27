@@ -369,7 +369,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		@Override
 		public ObservableCollection<V> get(Object key) {
 			if (!keySet().belongs(key))
-				return ObservableCollection.constant(getValueType());
+				return ObservableCollection.of(getValueType());
 			return theOuter.get(key);
 		}
 	};

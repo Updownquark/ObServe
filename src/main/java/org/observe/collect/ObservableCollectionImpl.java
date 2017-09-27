@@ -6,6 +6,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Spliterator;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
@@ -832,7 +833,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		private static <T> ObservableCollection<T> toCollection(ObservableValue<T> value) {
-			ObservableValue<ObservableCollection<T>> cv = value.mapV(v -> ObservableCollection.constant(value.getType(), v));
+			ObservableValue<ObservableCollection<T>> cv = value.mapV(v -> ObservableCollection.of(value.getType(), v));
 			return ObservableCollection.flattenValue(cv);
 		}
 
@@ -1586,6 +1587,213 @@ public final class ObservableCollectionImpl {
 		if (initialValues != null)
 			collection.addAll(initialValues);
 		return collection;
+	}
+
+	public static class ConstantCollection<E> implements ObservableCollection<E> {
+		private final TypeToken<E> theType;
+		private final BetterList<? extends E> theValues;
+
+		public ConstantCollection(TypeToken<E> type, BetterList<? extends E> values) {
+			theType = type;
+			theValues = values;
+		}
+
+		@Override
+		public Equivalence<? super E> equivalence() {
+			return Equivalence.DEFAULT;
+		}
+
+		@Override
+		public TypeToken<E> getType() {
+			return theType;
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return true;
+		}
+
+		@Override
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			return Transaction.NONE;
+		}
+
+		@Override
+		public long getStamp(boolean structuralOnly) {
+			return 0;
+		}
+
+		@Override
+		public int size() {
+			return theValues.size();
+		}
+
+		@Override
+		public boolean isEmpty() {
+			return theValues.isEmpty();
+		}
+
+		@Override
+		public int getElementsBefore(ElementId id) {
+			return theValues.getElementsBefore(id);
+		}
+
+		@Override
+		public int getElementsAfter(ElementId id) {
+			return theValues.getElementsAfter(id);
+		}
+
+		@Override
+		public CollectionElement<E> getElement(int index) {
+			return (CollectionElement<E>) theValues.getElement(index);
+		}
+
+		@Override
+		public CollectionElement<E> getElement(E value, boolean first) {
+			if (!theValues.belongs(value))
+				return null;
+			return ((BetterList<E>) theValues).getElement(value, first);
+		}
+
+		@Override
+		public CollectionElement<E> getElement(ElementId id) {
+			return (CollectionElement<E>) theValues.getElement(id);
+		}
+
+		@Override
+		public MutableCollectionElement<E> mutableElement(ElementId id) {
+			MutableCollectionElement<? extends E> mutable = theValues.mutableElement(id);
+			return mutableElement(mutable);
+		}
+
+		private MutableCollectionElement<E> mutableElement(MutableCollectionElement<? extends E> el) {
+			return new MutableCollectionElement<E>() {
+				@Override
+				public ElementId getElementId() {
+					return el.getElementId();
+				}
+
+				@Override
+				public E get() {
+					return el.get();
+				}
+
+				@Override
+				public String isEnabled() {
+					return StdMsg.UNSUPPORTED_OPERATION;
+				}
+
+				@Override
+				public String isAcceptable(E value) {
+					return StdMsg.UNSUPPORTED_OPERATION;
+				}
+
+				@Override
+				public void set(E value) throws UnsupportedOperationException, IllegalArgumentException {
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				}
+
+				@Override
+				public String canRemove() {
+					return StdMsg.UNSUPPORTED_OPERATION;
+				}
+
+				@Override
+				public void remove() throws UnsupportedOperationException {
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				}
+
+				@Override
+				public String canAdd(E value, boolean before) {
+					return StdMsg.UNSUPPORTED_OPERATION;
+				}
+
+				@Override
+				public ElementId add(E value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				}
+			};
+		}
+
+		@Override
+		public String canAdd(E value) {
+			return StdMsg.UNSUPPORTED_OPERATION;
+		}
+
+		@Override
+		public CollectionElement<E> addElement(E value, boolean first) {
+			return null;
+		}
+
+		@Override
+		public MutableElementSpliterator<E> spliterator(boolean fromStart) {
+			MutableElementSpliterator<? extends E> split = theValues.spliterator(fromStart);
+			return mutableSpliterator(split);
+		}
+
+		@Override
+		public MutableElementSpliterator<E> spliterator(ElementId element, boolean asNext) {
+			MutableElementSpliterator<? extends E> split = theValues.spliterator(element, asNext);
+			return mutableSpliterator(split);
+		}
+
+		private MutableElementSpliterator<E> mutableSpliterator(MutableElementSpliterator<? extends E> split) {
+			return new MutableElementSpliterator<E>() {
+				@Override
+				public long estimateSize() {
+					return split.estimateSize();
+				}
+
+				@Override
+				public int characteristics() {
+					return split.characteristics() | Spliterator.IMMUTABLE;
+				}
+
+				@Override
+				public long getExactSizeIfKnown() {
+					return split.getExactSizeIfKnown();
+				}
+
+				@Override
+				public Comparator<? super E> getComparator() {
+					return (Comparator<? super E>) split.getComparator();
+				}
+
+				@Override
+				public boolean forElement(Consumer<? super CollectionElement<E>> action, boolean forward) {
+					return split.forElement(el -> action.accept((CollectionElement<E>) el), forward);
+				}
+
+				@Override
+				public void forEachElement(Consumer<? super CollectionElement<E>> action, boolean forward) {
+					split.forEachElement(el -> action.accept((CollectionElement<E>) el), forward);
+				}
+
+				@Override
+				public boolean forElementM(Consumer<? super MutableCollectionElement<E>> action, boolean forward) {
+					return split.forElementM(el -> action.accept(mutableElement(el)), forward);
+				}
+
+				@Override
+				public void forEachElementM(Consumer<? super MutableCollectionElement<E>> action, boolean forward) {
+					split.forEachElementM(el -> action.accept(mutableElement(el)), forward);
+				}
+
+				@Override
+				public MutableElementSpliterator<E> trySplit() {
+					MutableElementSpliterator<? extends E> subSplit = split.trySplit();
+					return subSplit == null ? null : mutableSpliterator(subSplit);
+				}
+			};
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
+			return () -> {};
+		}
+
+		@Override
+		public void clear() {}
 	}
 
 	/**

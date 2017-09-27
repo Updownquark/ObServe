@@ -1,7 +1,6 @@
 package org.observe.collect;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -652,88 +651,22 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	/**
 	 * @param <E> The type for the root collection
 	 * @param type The type for the root collection
-	 * @param initialValues The values for the collection to contain initially
-	 * @return A {@link CollectionDataFlow} that can be used to create a collection with any characteristics supported by the flow API. The
-	 *         collection will be mutable unless prevented via the flow API. The flow is not {@link CollectionDataFlow#isLightWeight()
-	 *         light-weight}.
-	 */
-	static <E> ObservableCollection<E> create(TypeToken<E> type, E... initialValues) {
-		return create(type, Arrays.asList(initialValues));
-	}
-
-	/**
-	 * <p>
-	 * The typical means of creating {@link ObservableCollection}s from scratch.
-	 * </p>
-	 *
-	 * <p>
-	 * This method returns {@link CollectionDataFlow flow} that produces a new collection with any characteristics given it by the flow
-	 * operations.
-	 * </p>
-	 *
-	 * <p>
-	 * For example, this method may be used to create an observable:
-	 * <ul>
-	 * <li>IdentityHashSet: <code>
-	 * 		{@link CollectionDataFlow#withEquivalence(Equivalence) .withEquivalence}({@link Equivalence#ID Equivalence.ID}){@link
-	 * 		CollectionDataFlow#unique(boolean) .unique}(false)
-	 * 		</code></li>
-	 * <li>SortedSet: <code>{@link CollectionDataFlow#uniqueSorted(Comparator, boolean) .uniqueSorted(comparator, false)}</code></li>
-	 * <li>Sorted list: <code>{@link CollectionDataFlow#sorted(Comparator) .sorted(comparator)}</code></li>
-	 * <li>list with no null values: <code>
-	 * 		{@link CollectionDataFlow#filterModification() .filterModification()}{@link ModFilterBuilder#filterAdd(Function)
-	 *  	.filterAdd}(value->value!=null ? null : {@link org.qommons.collect.MutableCollectionElement.StdMsg#NULL_DISALLOWED StdMsg.NULL_DISALLOWED})
-	 *  	</code></li>
-	 * </ul>
-	 * </p>
-	 *
-	 * <p>
-	 * The flow is {@link CollectionDataFlow#isLightWeight() heavy-weight}, and the {@link CollectionDataFlow#collect() built} collection is
-	 * {@link #isLockSupported() thread-safe}.
-	 * </p>
-	 *
-	 * @param type The type for the root collection
-	 * @param initialValues The values to insert into the collection when it is built
-	 * @return A {@link CollectionDataFlow} that can be used to create a mutable collection with any characteristics supported by the flow
-	 *         API.
-	 */
-	static <E> ObservableCollection<E> create(TypeToken<E> type, Collection<? extends E> initialValues) {
-		return ObservableCollectionImpl.create(type, true, initialValues);
-	}
-
-	/**
-	 * Same as {@link #create(TypeToken, Collection)}, but creates a collection that does not ensure thread-safety.
-	 *
-	 * @param type The type for the root collection
-	 * @param initialValues The values to insert into the collection when it is built
-	 * @return A {@link CollectionDataFlow} that can be used to create a mutable collection with any characteristics supported by the flow
-	 *         API.
-	 */
-	static <E> ObservableCollection<E> createUnsafe(TypeToken<E> type, Collection<? extends E> initialValues) {
-		return ObservableCollectionImpl.create(type, false, initialValues);
-	}
-
-	/**
-	 * @param <E> The type for the root collection
-	 * @param type The type for the root collection
 	 * @param values The values to be in the immutable collection
 	 * @return A {@link CollectionDataFlow} that can be used to create an immutable collection with the given values and any characteristics
 	 *         supported by the flow API.
 	 */
-	static <E> ObservableCollection<E> constant(TypeToken<E> type, E... values) {
-		return constant(type, Arrays.asList(values));
+	static <E> ObservableCollection<E> of(TypeToken<E> type, E... values) {
+		return of(type, BetterList.of(values));
 	}
 
 	/**
-	 * @param <E> The type for the root collection
-	 * @param type The type for the root collection
-	 * @param values The values to be in the immutable collection
-	 * @return A {@link CollectionDataFlow} that can be used to create an immutable collection with the given values and any characteristics
-	 *         supported by the flow API.
+	 * @param <E> The type for the collection
+	 * @param type The type for the collection
+	 * @param values The values to be in the collection
+	 * @return An immutable observable collection with the given contents
 	 */
-	static <E> ObservableCollection<E> constant(TypeToken<E> type, Collection<? extends E> values) {
-		return createUnsafe(type, values).flow()
-			.filterMod(options -> options.immutable(MutableCollectionElement.StdMsg.UNSUPPORTED_OPERATION, false)).collect();
+	static <E> ObservableCollection<E> of(TypeToken<E> type, BetterList<? extends E> values) {
+		return new ObservableCollectionImpl.ConstantCollection<>(type, values);
 	}
 
 	/**
@@ -752,7 +685,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @return A collection containing all elements of the given collections
 	 */
 	public static <E> CollectionDataFlow<?, ?, E> flattenCollections(TypeToken<E> innerType, ObservableCollection<? extends E>... colls) {
-		return constant(new TypeToken<ObservableCollection<? extends E>>() {}, colls).flow().flatMapC(innerType, c -> c);
+		return of(new TypeToken<ObservableCollection<? extends E>>() {}, colls).flow().flatMapC(innerType, c -> c);
 	}
 
 	/**

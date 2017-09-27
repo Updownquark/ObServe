@@ -570,7 +570,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			theTransientKeysByReference = new IdentityHashMap<>();
 			theTransientValueLock = new ReentrantLock(); // Don't need the reentrancy, but whatever
 
-			empty = ObservableCollection.constant(theValueType);
+			empty = ObservableCollection.of(theValueType);
 
 			// Need to create the entries last because the constructor will cause all the initial entries to be created, and those entries
 			// need access to this class's initialized fields

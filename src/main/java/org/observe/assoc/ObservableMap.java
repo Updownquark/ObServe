@@ -283,7 +283,7 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 	 */
 	static <K, V> ObservableMap<K, V> empty(TypeToken<K> keyType, TypeToken<V> valueType) {
 		TypeToken<ObservableEntry<K, V>> entryType = buildEntryType(keyType, valueType);
-		ObservableSet<K> keySet = ObservableCollection.constant(keyType).flow().unique().collect();
+		ObservableSet<K> keySet = ObservableCollection.of(keyType).flow().unique().collect();
 		return new ObservableMap<K, V>() {
 			@Override
 			public TypeToken<K> getKeyType() {
