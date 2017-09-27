@@ -1,5 +1,9 @@
 package org.observe;
 
+import java.util.concurrent.locks.ReentrantLock;
+
+import org.qommons.Transaction;
+
 import com.google.common.reflect.TypeToken;
 
 /**
@@ -12,6 +16,7 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 
 	private final TypeToken<T> theType;
 	private final boolean isNullable;
+	private final ReentrantLock theLock;
 	private T theValue;
 
 	/**
@@ -22,6 +27,7 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 		theEventer = new SimpleObservable<>(observer -> fireInitial(observer));
 		theType = type;
 		isNullable = nullable && !type.isPrimitive();
+		theLock = new ReentrantLock();
 	}
 
 	/**
@@ -40,6 +46,12 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 	@Override
 	public Observable<ObservableValueEvent<T>> changes() {
 		return theEventer.readOnly();
+	}
+
+	@Override
+	public Transaction lock() {
+		theLock.lock();
+		return () -> theLock.unlock();
 	}
 
 	/** @return Whether null can be assigned to this value */
@@ -62,10 +74,15 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 		String accept = isAcceptable(value);
 		if(accept != null)
 			throw new IllegalArgumentException(accept);
-		T old = theValue;
-		theValue = value;
-		ObservableValueEvent.doWith(createChangeEvent(old, value, cause), theEventer::onNext);
-		return old;
+		theLock.lock();
+		try {
+			T old = theValue;
+			theValue = value;
+			ObservableValueEvent.doWith(createChangeEvent(old, value, cause), theEventer::onNext);
+			return old;
+		} finally {
+			theLock.unlock();
+		}
 	}
 
 	@Override

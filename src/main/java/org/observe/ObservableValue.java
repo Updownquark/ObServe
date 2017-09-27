@@ -13,6 +13,7 @@ import java.util.function.Supplier;
 
 import org.observe.collect.ObservableCollection;
 import org.qommons.ListenerSet;
+import org.qommons.Transaction;
 import org.qommons.TriFunction;
 
 import com.google.common.reflect.TypeToken;
@@ -37,6 +38,14 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 	 *         change events when this value changes
 	 */
 	Observable<ObservableValueEvent<T>> changes();
+
+	/**
+	 * Locks this value for modification. Does not affect {@link #get()}, i.e. the lock is not exclusive. Only prevents modification of this
+	 * value while the lock is held.
+	 * 
+	 * @return The transaction to close to release the lock
+	 */
+	Transaction lock();
 
 	/** @return An observable that just reports this observable value's value in an observable without the event */
 	default Observable<T> value() {
@@ -105,6 +114,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 			@Override
 			public Observable<ObservableValueEvent<T>> changes() {
 				return outer.changes().map(eventMap);
+			}
+
+			@Override
+			public Transaction lock() {
+				return outer.lock();
 			}
 
 			@Override
@@ -451,6 +465,17 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 			}
 
 			@Override
+			public Transaction lock() {
+				Transaction[] locks = new Transaction[components.length];
+				for (int i = 0; i < locks.length; i++)
+					locks[i] = components[i].lock();
+				return () -> {
+					for (int i = 0; i < locks.length; i++)
+						locks[i].close();
+				};
+			}
+
+			@Override
 			public String toString() {
 				return "Assembled " + type;
 			}
@@ -655,6 +680,17 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 		}
 
 		@Override
+		public Transaction lock() {
+			Transaction[] locks = new Transaction[theComposed.size()];
+			for (int i = 0; i < locks.length; i++)
+				locks[i] = theComposed.get(i).lock();
+			return () -> {
+				for (int i = 0; i < locks.length; i++)
+					locks[i].close();
+			};
+		}
+
+		@Override
 		public String toString() {
 			return theComposed.toString();
 		}
@@ -694,6 +730,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 		@Override
 		public Observable<ObservableValueEvent<T>> changes() {
 			return theChanges;
+		}
+
+		@Override
+		public Transaction lock() {
+			return theWrapped.lock();
 		}
 	}
 
@@ -774,6 +815,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 		}
 
 		@Override
+		public Transaction lock() {
+			return theWrapped.lock();
+		}
+
+		@Override
 		public String toString() {
 			return theWrapped.toString();
 		}
@@ -824,6 +870,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 		}
 
 		@Override
+		public Transaction lock() {
+			return Transaction.NONE;
+		}
+
+		@Override
 		public String toString() {
 			return "" + theValue;
 		}
@@ -858,6 +909,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 		@Override
 		public Observable<ObservableValueEvent<T>> changes() {
 			return theWrapped.changes().safe();
+		}
+
+		@Override
+		public Transaction lock() {
+			return theWrapped.lock();
 		}
 
 		@Override
@@ -1019,6 +1075,17 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 		}
 
 		@Override
+		public Transaction lock() {
+			Transaction outerLock = theValue.lock();
+			ObservableValue<? extends T> inner = theValue.get();
+			Transaction innerLock = inner == null ? Transaction.NONE : inner.lock();
+			return () -> {
+				innerLock.close();
+				outerLock.close();
+			};
+		}
+
+		@Override
 		public String toString() {
 			return "flat(" + theValue + ")";
 		}
@@ -1164,6 +1231,17 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 				public boolean isSafe() {
 					return true;
 				}
+			};
+		}
+
+		@Override
+		public Transaction lock() {
+			Transaction[] locks = new Transaction[theValues.length];
+			for (int i = 0; i < locks.length; i++)
+				locks[i] = theValues[i].lock();
+			return () -> {
+				for (int i = 0; i < locks.length; i++)
+					locks[i].close();
 			};
 		}
 	}

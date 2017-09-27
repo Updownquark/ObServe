@@ -71,6 +71,11 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 				}
 
 				@Override
+				public Transaction lock() {
+					return Transaction.NONE;
+				}
+
+				@Override
 				public K getKey() {
 					return key;
 				}
@@ -374,6 +379,11 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 		@Override
 		public Observable<ObservableValueEvent<V>> changes() {
 			return theValue.changes();
+		}
+
+		@Override
+		public Transaction lock() {
+			return theValue.lock();
 		}
 
 		@Override

@@ -1826,7 +1826,23 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public Transaction lock(boolean write, boolean structural, Object cause) {
-			return theParent.lock(write, structural, cause);
+			Transaction parentLock = theParent.lock(write, structural, cause);
+			Transaction argLock = lockArgs();
+			return () -> {
+				argLock.close();
+				parentLock.close();
+			};
+		}
+
+		private Transaction lockArgs() {
+			Transaction[] argLocks = new Transaction[theArgs.size()];
+			int a = 0;
+			for (ObservableValue<?> arg : theArgs.keySet())
+				argLocks[a++] = arg.lock();
+			return () -> {
+				for (int a2 = 0; a2 < argLocks.length; a2++)
+					argLocks[a2].close();
+			};
 		}
 
 		@Override
@@ -1865,7 +1881,7 @@ public class ObservableCollectionDataFlowImpl {
 						((ArgHolder<Object>) holder).value = evt.getNewValue();
 						return;
 					}
-					try (Transaction t = lock(true, null)) {
+					try (Transaction t = lock(true, false, null)) {
 						// The old values are not needed if we're caching each element value
 						Object[] source = theDef.isCached() ? null : new Object[1];
 						Combination.CombinedValues<I> oldValues = theDef.isCached() ? null : getCopy(source);
@@ -1882,9 +1898,11 @@ public class ObservableCollectionDataFlowImpl {
 				}, action -> arg.getKey().changes().act(action));
 			}
 			theParent.begin((parentEl, cause) -> {
-				CombinedElement el = new CombinedElement(parentEl, false);
-				theElements.add(el);
-				onElement.accept(el, cause);
+				try (Transaction t = lockArgs()) {
+					CombinedElement el = new CombinedElement(parentEl, false);
+					theElements.add(el);
+					onElement.accept(el, cause);
+				}
 			}, listening);
 		}
 
@@ -1951,20 +1969,24 @@ public class ObservableCollectionDataFlowImpl {
 					theParentEl.setListener(new CollectionElementListener<I>() {
 						@Override
 						public void update(I oldValue, I newValue, Object cause) {
-							T oldVal = theDef.isCached() ? theValue : combineValue(oldValue);
-							T newVal = combineValue(newValue);
-							if (theDef.isCached())
-								theValue = newVal;
-							ObservableCollectionDataFlowImpl.update(theListener, oldVal, newVal, cause);
+							try (Transaction t = lockArgs()) {
+								T oldVal = theDef.isCached() ? theValue : combineValue(oldValue);
+								T newVal = combineValue(newValue);
+								if (theDef.isCached())
+									theValue = newVal;
+								ObservableCollectionDataFlowImpl.update(theListener, oldVal, newVal, cause);
+							}
 						}
 
 						@Override
 						public void removed(I value, Object cause) {
-							T val = theDef.isCached() ? theValue : combineValue(value);
-							theElements.remove(this);
-							ObservableCollectionDataFlowImpl.removed(theListener, val, cause);
-							theListener = null;
-							theValue = null;
+							try (Transaction t = lockArgs()) {
+								T val = theDef.isCached() ? theValue : combineValue(value);
+								theElements.remove(this);
+								ObservableCollectionDataFlowImpl.removed(theListener, val, cause);
+								theListener = null;
+								theValue = null;
+							}
 						}
 					});
 					if (theDef.isCached())

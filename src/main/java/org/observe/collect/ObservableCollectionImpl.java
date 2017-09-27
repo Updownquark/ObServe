@@ -402,6 +402,11 @@ public final class ObservableCollectionImpl {
 			};
 		}
 
+		@Override
+		public Transaction lock() {
+			return theCollection.lock(false, null);
+		}
+
 		private class SimpleElement implements CollectionElement<E> {
 			private final ElementId theId;
 			private final E theValue;
@@ -543,6 +548,11 @@ public final class ObservableCollectionImpl {
 					return sub;
 				}
 			};
+		}
+
+		@Override
+		public Transaction lock() {
+			return theCollection.lock(false, null);
 		}
 
 		/** @return The initial computation value */
@@ -829,6 +839,16 @@ public final class ObservableCollectionImpl {
 					};
 					return counts.init(theLeft, theRight, null, false);
 				}
+			};
+		}
+
+		@Override
+		public Transaction lock() {
+			Transaction leftLock = theLeft.lock(false, null);
+			Transaction rightLock = theRight.lock(false, null);
+			return () -> {
+				leftLock.close();
+				rightLock.close();
 			};
 		}
 	}
