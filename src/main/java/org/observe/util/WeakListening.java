@@ -13,6 +13,19 @@ import java.util.function.Function;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
 
+/**
+ * <p>
+ * A collection of listeners that are weakly reachable from the event sources they are subscribed to. As long the WeakListening object is
+ * strongly reachable, all the listeners are safe from garbage collection. If the WeakListening object is garbage-collected, all listeners
+ * become available for garbage collection and the subscriptions to the event sources will be unsubscribed.
+ * </p>
+ *
+ * <p>
+ * This mechanism is used by {@link org.observe.collect.ObservableCollection.CollectionDataFlow#supportsPassive() actively-managed} derived
+ * collections so that as long as the collection is being used, the collection functions. But when the collection is no longer used, the
+ * subscriptions driving the derived collection's values may be released.
+ * </p>
+ */
 public class WeakListening {
 	private final AtomicLong theIdGen;
 	private final ConcurrentHashMap<Long, ActionStruct> theActions;
@@ -22,19 +35,45 @@ public class WeakListening {
 		theActions = new ConcurrentHashMap<>();
 	}
 
+	/**
+	 * Adds a runnable (zero-argument) subscription to this listening
+	 * 
+	 * @param action The runnable action to invoke when the event source fires
+	 * @param subscribe A function to subscribe to the event source
+	 * @return A subscription that will terminate the subscription to the event source
+	 */
 	public Subscription withAction(Runnable action, Function<? super Runnable, ? extends Subscription> subscribe) {
 		return with(action, WeakRunnable::new, subscribe);
 	}
 
+	/**
+	 * Adds a consumer (one-argument) subscription to this listening
+	 * 
+	 * @param action The consumer action to invoke when the event source fires
+	 * @param subscribe A function to subscribe to the event source
+	 * @return A subscription that will terminate the subscription to the event source
+	 */
 	public <T> Subscription withConsumer(Consumer<T> action, Function<? super Consumer<T>, ? extends Subscription> subscribe) {
 		return with(action, WeakConsumer::new, subscribe);
 	}
 
+	/**
+	 * Adds a bi-consumer (two-argument) subscription to this listening
+	 * 
+	 * @param action The consumer action to invoke when the event source fires
+	 * @param subscribe A function to subscribe to the event source
+	 * @return A subscription that will terminate the subscription to the event source
+	 */
 	public <T, U> Subscription withBiConsumer(BiConsumer<T, U> action,
 		Function<? super BiConsumer<T, U>, ? extends Subscription> subscribe) {
 		return with(action, WeakBiConsumer::new, subscribe);
 	}
 
+	/**
+	 * @return The builder for a WeakListening object dependent on this one. If the parent object is cleared, the child is cleared. But if
+	 *         the child is cleared by an {@link Builder#withUntil(Function) until} or by {@link Builder#unsubscribe() unsubscribe()}, the
+	 *         parent is not affected.
+	 */
 	public Builder child() {
 		Long actionId = theIdGen.getAndIncrement();
 		ActionStruct as = new ActionStruct(null);
@@ -64,7 +103,7 @@ public class WeakListening {
 	}
 
 	private Object getAction(Long actionId) {
-		return theActions.get(actionId);
+		return theActions.get(actionId).action;
 	}
 
 	private void unsubscribe() {
@@ -75,10 +114,12 @@ public class WeakListening {
 		}
 	}
 
+	/** @return A builder containing a WeakListening object that can also perform additional operations on it */
 	public static Builder build() {
 		return new Builder();
 	}
 
+	/** Contains and manages a WeakListening object */
 	public static class Builder implements Subscription {
 		private final WeakListening theListening;
 
@@ -86,6 +127,12 @@ public class WeakListening {
 			theListening = new WeakListening();
 		}
 
+		/**
+		 * Adds an until to the WeakListening, meaning that when the given event source fires, the WeakListening object will be cleared.
+		 *
+		 * @param until The event source to clear the WeakListening
+		 * @return This builder
+		 */
 		public Builder withUntil(Function<? super Runnable, ? extends Subscription> until) {
 			theListening.withAction(//
 				() -> theListening.unsubscribe(), //
@@ -93,6 +140,7 @@ public class WeakListening {
 			return this;
 		}
 
+		/** @return The WeakListening managed by this builder */
 		public WeakListening getListening() {
 			return theListening;
 		}
