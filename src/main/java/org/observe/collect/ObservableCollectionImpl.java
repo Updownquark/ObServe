@@ -31,6 +31,7 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
 import org.observe.util.WeakListening;
 import org.qommons.ArrayUtils;
+import org.qommons.BiTuple;
 import org.qommons.Causable;
 import org.qommons.ConcurrentHashSet;
 import org.qommons.Transactable;
@@ -1192,8 +1193,11 @@ public final class ObservableCollectionImpl {
 								newValue = oldValue;
 								break;
 							case set:
-								oldValue = currentMap[0].apply(evt.getOldValue());
-								newValue = currentMap[0].apply(evt.getNewValue());
+								BiTuple<T, T> values = theFlow.map(evt.getOldValue(), evt.getNewValue(), currentMap[0]);
+								if (values == null)
+									return;
+								oldValue = values.getValue1();
+								newValue = values.getValue2();
 								break;
 							default:
 								throw new IllegalStateException("Unrecognized collection change type: " + evt.getType());

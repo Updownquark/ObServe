@@ -3,6 +3,7 @@ package org.observe;
 import java.util.function.Function;
 
 import org.qommons.BiTuple;
+import org.qommons.Ternian;
 import org.qommons.Transaction;
 
 /** Super-interface used for options by several map-type operations */
@@ -101,12 +102,12 @@ public interface XformOptions {
 			return isCached;
 		}
 
-		public <E, T> CacheHandler<E, T> createCacheHandler(CacheHandlingInterface<E, T> intf) {
-			return new CacheHandler<>(this, intf);
+		public <E, T> XformCacheHandler<E, T> createCacheHandler(XformCacheHandlingInterface<E, T> intf) {
+			return new XformCacheHandler<>(this, intf);
 		}
 	}
 
-	interface CacheHandlingInterface<E, T> {
+	interface XformCacheHandlingInterface<E, T> {
 		Function<? super E, ? extends T> map();
 
 		Transaction lock();
@@ -116,14 +117,18 @@ public interface XformOptions {
 		void setDestCache(T value);
 	}
 
-	class CacheHandler<E, T> {
+	class XformCacheHandler<E, T> {
 		private final XformDef theDef;
 		private E theSrcCache;
-		private final CacheHandlingInterface<E, T> theIntf;
+		private final XformCacheHandlingInterface<E, T> theIntf;
 
-		CacheHandler(XformDef def, CacheHandlingInterface<E, T> intf) {
+		XformCacheHandler(XformDef def, XformCacheHandlingInterface<E, T> intf) {
 			theDef = def;
 			theIntf = intf;
+		}
+
+		public E getSourceCache() {
+			return theSrcCache;
 		}
 
 		public void initialize(E value) {
@@ -131,7 +136,7 @@ public interface XformOptions {
 				theSrcCache = value;
 		}
 
-		public BiTuple<T, T> handleChange(E oldSource, E newSource) {
+		public Ternian isUpdate(E oldSource, E newSource) {
 			E oldStored = theSrcCache; // May or may not have a valid value depending on caching
 			if (theDef.isCached())
 				theSrcCache = newSource;
@@ -143,28 +148,40 @@ public interface XformOptions {
 					isUpdate = oldSource == newSource;
 			} else
 				isUpdate = false; // Otherwise we don't care if it's an update
-			if (!theDef.isFireIfUnchanged() && isUpdate)
+			if (theDef.isFireIfUnchanged() || !isUpdate)
+				return Ternian.of(isUpdate);
+			else
+				return Ternian.NONE;
+		}
+
+		public BiTuple<T, T> handleChange(E oldSource, E newSource, boolean update) {
+			// Now figure out if we need to fire an event
+			T oldValue, newValue;
+			Function<? super E, ? extends T> map = theIntf.map();
+			if (theDef.isReEvalOnUpdate() || !update) {
+				if (theDef.isCached()) {
+					oldValue = theIntf.getDestCache();
+					theIntf.setDestCache(newValue = map.apply(newSource));
+				} else {
+					oldValue = map.apply(oldSource);
+					newValue = map.apply(newSource);
+				}
+			} else {
+				oldValue = newValue = map.apply(newSource);
+			}
+			if (theDef.isCached())
+				theIntf.setDestCache(newValue);
+			if (theDef.isFireIfUnchanged() || oldValue != newValue)
+				new BiTuple<>(oldValue, newValue);
+			return null;
+		}
+
+		public BiTuple<T, T> handleChange(E oldSource, E newSource) {
+			Ternian update = isUpdate(oldSource, newSource);
+			if (update == null)
 				return null; // No change, no event
 			try (Transaction t = theIntf.lock()) {
-				// Now figure out if we need to fire an event
-				T oldValue, newValue;
-				Function<? super E, ? extends T> map = theIntf.map();
-				if (theDef.isReEvalOnUpdate() || !isUpdate) {
-					if (theDef.isCached()) {
-						oldValue = theIntf.getDestCache();
-						theIntf.setDestCache(newValue = map.apply(newSource));
-					} else {
-						oldValue = map.apply(oldSource);
-						newValue = map.apply(newSource);
-					}
-				} else {
-					oldValue = newValue = map.apply(newSource);
-				}
-				if (theDef.isCached())
-					theIntf.setDestCache(newValue);
-				if (theDef.isFireIfUnchanged() || oldValue != newValue)
-					new BiTuple<>(oldValue, newValue);
-				return null;
+				return handleChange(oldSource, newSource, update.value);
 			}
 		}
 	}

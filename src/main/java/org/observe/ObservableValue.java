@@ -538,8 +538,8 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 						boolean[] initialized = new boolean[composedValues.length];
 						for (int i = 0; i < composedValues.length; i++) {
 							int index = i;
-							XformOptions.CacheHandler<Object, T> cacheHandler = theOptions
-								.createCacheHandler(new XformOptions.CacheHandlingInterface<Object, T>() {
+							XformOptions.XformCacheHandler<Object, T> cacheHandler = theOptions
+								.createCacheHandler(new XformOptions.XformCacheHandlingInterface<Object, T>() {
 									@Override
 									public Function<? super Object, ? extends T> map() {
 										for (int j = 0; j < composed.length; j++) {

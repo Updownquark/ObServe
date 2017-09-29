@@ -17,6 +17,7 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
+import org.observe.XformOptions;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableMultiMap.MultiMapFlow;
 import org.observe.assoc.ObservableSortedMultiMap;
@@ -35,6 +36,8 @@ import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
 import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.PassiveDerivedCollection;
 import org.observe.util.WeakListening;
+import org.qommons.BiTuple;
+import org.qommons.Ternian;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -140,6 +143,8 @@ public class ObservableCollectionDataFlowImpl {
 		boolean isRemoveFiltered();
 
 		MutableCollectionElement<T> map(MutableCollectionElement<E> element, Function<? super E, ? extends T> map);
+
+		BiTuple<T, T> map(E oldSource, E newSource, Function<? super E, ? extends T> map);
 	}
 
 	public static <E, T> TypeToken<Function<? super E, T>> functionType(TypeToken<E> srcType, TypeToken<T> destType) {
@@ -165,6 +170,10 @@ public class ObservableCollectionDataFlowImpl {
 
 		Function<? super E, ? extends I> getParentMap() {
 			return theParentMap;
+		}
+
+		public Function<? super I, ? extends T> getChildMap() {
+			return theMap;
 		}
 	}
 
@@ -837,6 +846,11 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public MutableCollectionElement<E> map(MutableCollectionElement<E> mapped, Function<? super E, ? extends E> map) {
 			return mapped;
+		}
+
+		@Override
+		public BiTuple<E, E> map(E oldSource, E newSource, Function<? super E, ? extends E> map) {
+			return new BiTuple<>(oldSource, newSource);
 		}
 	}
 
@@ -1584,6 +1598,11 @@ public class ObservableCollectionDataFlowImpl {
 		public MutableCollectionElement<T> map(MutableCollectionElement<E> mapped, Function<? super E, ? extends T> map) {
 			return theParent.map(mapped, map);
 		}
+
+		@Override
+		public BiTuple<T, T> map(E oldSource, E newSource, Function<? super E, ? extends T> map) {
+			return theParent.map(oldSource, newSource, map);
+		}
 	}
 
 	private static class ActiveEquivalenceSwitchedManager<E, T> implements ActiveCollectionManager<E, T, T> {
@@ -1754,6 +1773,30 @@ public class ObservableCollectionDataFlowImpl {
 			};
 		}
 
+		@Override
+		public BiTuple<T, T> map(E oldSource, E newSource, Function<? super E, ? extends T> map) {
+			if (oldSource == newSource) {
+				if (!theOptions.isFireIfUnchanged())
+					return null;
+				if (!theOptions.isReEvalOnUpdate()) {
+					T newDest = map.apply(newSource);
+					return new BiTuple<>(newDest, newDest);
+				}
+			}
+			MapWithParent<E, I, T> mwp = (MapWithParent<E, I, T>) map;
+			BiTuple<I, I> interm = theParent.map(oldSource, newSource, mwp.getParentMap());
+			if (interm == null)
+				return null;
+			if (interm.getValue1() == interm.getValue2()) {
+				if (!theOptions.isFireIfUnchanged())
+					return null;
+				if (!theOptions.isReEvalOnUpdate()) {
+					T newDest = mwp.getChildMap().apply(interm.getValue2());
+					return new BiTuple<>(newDest, newDest);
+				}
+			}
+			return new BiTuple<>(mwp.getChildMap().apply(interm.getValue1()), mwp.getChildMap().apply(interm.getValue2()));
+		}
 	}
 
 	private static class ActiveMappedCollectionManager<E, I, T> implements ActiveCollectionManager<E, I, T> {
@@ -1828,42 +1871,40 @@ public class ObservableCollectionDataFlowImpl {
 		private class MappedElement implements DerivedCollectionElement<T> {
 			private final DerivedCollectionElement<I> theParentEl;
 			private CollectionElementListener<T> theListener;
-			private I theSourceValue;
 			private T theValue;
+			private final XformOptions.XformCacheHandler<I, T> theCacheHandler;
 
 			MappedElement(DerivedCollectionElement<I> parentEl, boolean synthetic) {
 				theParentEl = parentEl;
 				if (!synthetic) {
+					theCacheHandler = theOptions.createCacheHandler(new XformOptions.XformCacheHandlingInterface<I, T>() {
+						@Override
+						public Function<? super I, ? extends T> map() {
+							return theMap;
+						}
+
+						@Override
+						public Transaction lock() {
+							// No need to lock, as modifications only come from one source
+							return Transaction.NONE;
+						}
+
+						@Override
+						public T getDestCache() {
+							return theValue;
+						}
+
+						@Override
+						public void setDestCache(T value) {
+							theValue = value;
+						}
+					});
 					theParentEl.setListener(new CollectionElementListener<I>() {
 						@Override
 						public void update(I oldSource, I newSource, Object cause) {
-							Object oldStored = theSourceValue;
-							if (theOptions.isCached())
-								theSourceValue = newSource;
-							boolean isUpdate;
-							if (!theOptions.isReEvalOnUpdate() && !theOptions.isFireIfUnchanged()) {
-								if (theOptions.isCached())
-									isUpdate = oldStored == newSource;
-								else
-									isUpdate = oldSource == newSource;
-							} else
-								isUpdate = false; // Otherwise we don't care if it's an update
-							if (!theOptions.isFireIfUnchanged() && isUpdate)
-								return; // No change, no event
-							// Now figure out if we need to fire an event
-							T oldValue, newValue;
-							if (theOptions.isReEvalOnUpdate() || !isUpdate) {
-								if (theOptions.isCached()) {
-									oldValue = theValue;
-									theValue = newValue = theMap.apply(newSource);
-								} else {
-									oldValue = theMap.apply(oldSource);
-									newValue = theMap.apply(newSource);
-								}
-							} else
-								oldValue = newValue = theMap.apply(newSource);
-							if (theOptions.isFireIfUnchanged() || oldValue != newValue)
-								ObservableCollectionDataFlowImpl.update(theListener, oldValue, newValue, cause);
+							BiTuple<T, T> values = theCacheHandler.handleChange(oldSource, newSource);
+							if (values != null)
+								ObservableCollectionDataFlowImpl.update(theListener, values.getValue1(), values.getValue2(), cause);
 						}
 
 						@Override
@@ -1871,19 +1912,19 @@ public class ObservableCollectionDataFlowImpl {
 							T val = theOptions.isCached() ? theValue : theMap.apply(value);
 							ObservableCollectionDataFlowImpl.removed(theListener, val, cause);
 							theListener = null;
-							theSourceValue = null;
+							theCacheHandler.initialize(null);
 							theValue = null;
 						}
 					});
 					// Populate the initial values if these are needed
 					if (theOptions.isCached() || !theOptions.isFireIfUnchanged()) {
 						I srcVal = parentEl.get();
-						if (!theOptions.isFireIfUnchanged())
-							theSourceValue = srcVal;
+						theCacheHandler.initialize(srcVal);
 						if (theOptions.isCached())
 							theValue = theMap.apply(srcVal);
 					}
-				}
+				} else
+					theCacheHandler = null;
 			}
 
 			@Override
@@ -2210,6 +2251,31 @@ public class ObservableCollectionDataFlowImpl {
 			};
 		}
 
+		@Override
+		public BiTuple<T, T> map(E oldSource, E newSource, Function<? super E, ? extends T> map) {
+			if (oldSource == newSource) {
+				if (!theDef.isFireIfUnchanged())
+					return null;
+				if (!theDef.isReEvalOnUpdate()) {
+					T newDest = map.apply(newSource);
+					return new BiTuple<>(newDest, newDest);
+				}
+			}
+			CombinedMap combinedMap = (CombinedMap) map;
+			BiTuple<I, I> interm = theParent.map(oldSource, newSource, combinedMap.getParentMap());
+			if (interm == null)
+				return null;
+			if (interm.getValue1() == interm.getValue2()) {
+				if (!theDef.isFireIfUnchanged())
+					return null;
+				if (!theDef.isReEvalOnUpdate()) {
+					T newDest = combinedMap.map(interm.getValue2());
+					return new BiTuple<>(newDest, newDest);
+				}
+			}
+			return new BiTuple<>(combinedMap.map(interm.getValue1()), combinedMap.map(interm.getValue2()));
+		}
+
 		class SimpleSupplier implements Supplier<Object> {
 			final Object value;
 
@@ -2275,15 +2341,11 @@ public class ObservableCollectionDataFlowImpl {
 	}
 
 	private static class ActiveCombinedCollectionManager<E, I, T> implements ActiveCollectionManager<E, I, T> {
-		private static class ArgHolder<T> {
-			T value;
-		}
-
 		private final ActiveCollectionManager<E, ?, I> theParent;
 		private final TypeToken<T> theTargetType;
 		private final CombinedFlowDef<I, T> theDef;
 
-		private final Map<ObservableValue<?>, ArgHolder<?>> theArgs;
+		private final Map<ObservableValue<?>, XformOptions.XformCacheHandler<Object, Void>> theArgs;
 
 		// Need to keep track of these to update them when the combined values change
 		private final List<CombinedElement> theElements;
@@ -2294,7 +2356,26 @@ public class ObservableCollectionDataFlowImpl {
 			theDef = def;
 			theArgs = new HashMap<>();
 			for (ObservableValue<?> arg : def.getArgs())
-				theArgs.put(arg, new ArgHolder<>());
+				theArgs.put(arg, theDef.createCacheHandler(new XformOptions.XformCacheHandlingInterface<Object, Void>() {
+					@Override
+					public Function<? super Object, ? extends Void> map() {
+						return v -> null;
+					}
+
+					@Override
+					public Transaction lock() {
+						// Should not be called, though
+						return ActiveCombinedCollectionManager.this.lock(true, false, null);
+					}
+
+					@Override
+					public Void getDestCache() {
+						return null;
+					}
+
+					@Override
+					public void setDestCache(Void value) {}
+				}));
 
 			theElements = new ArrayList<>();
 		}
@@ -2361,31 +2442,21 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public void begin(ElementAccepter<T> onElement, WeakListening listening) {
-			for (Map.Entry<ObservableValue<?>, ArgHolder<?>> arg : theArgs.entrySet()) {
-				ArgHolder<?> holder = arg.getValue();
+			for (Map.Entry<ObservableValue<?>, XformOptions.XformCacheHandler<Object, Void>> arg : theArgs.entrySet()) {
+				XformOptions.XformCacheHandler<Object, Void> holder = arg.getValue();
 				listening.withConsumer((ObservableValueEvent<?> evt) -> {
-					Object oldStored = holder.value;
 					if (evt.isInitial()) {
-						// If this is an initial event, don't do any locking or updating
-						((ArgHolder<Object>) holder).value = evt.getNewValue();
+						holder.initialize(evt.getNewValue());
 						return;
 					}
-					boolean isUpdate;
-					if (!theDef.isReEvalOnUpdate() && !theDef.isFireIfUnchanged()) {
-						if (theDef.isCached())
-							isUpdate = oldStored == evt.getNewValue();
-						else
-							isUpdate = evt.getOldValue() == evt.getNewValue();
-					} else
-						isUpdate = false; // Otherwise we don't care if it's an update
-					if (!theDef.isFireIfUnchanged() && isUpdate)
+					Object oldValue = theDef.isCached() ? holder.getSourceCache() : evt.getOldValue();
+					Ternian update = holder.isUpdate(evt.getOldValue(), evt.getNewValue());
+					if (update == null)
 						return; // No change, no event
 					try (Transaction t = lock(true, false, null)) {
 						// The old values are not needed if we're caching each element value
 						Object[] source = theDef.isCached() ? null : new Object[1];
-						Combination.CombinedValues<I> oldValues = theDef.isCached() ? null : getCopy(source);
-						if (theDef.isCached())
-							((ArgHolder<Object>) holder).value = evt.getNewValue();
+						Combination.CombinedValues<I> oldValues = theDef.isCached() ? null : getCopy(source, arg.getKey(), oldValue);
 						// The order of update here may be different than the order in the derived collection
 						// It's a lot of work to keep the elements in order (since the order may change),
 						// so we'll just let order of addition be good enough
@@ -2393,7 +2464,7 @@ public class ObservableCollectionDataFlowImpl {
 							el.updated(src -> {
 								source[0] = src;
 								return oldValues;
-							}, evt, isUpdate);
+							}, evt, update.value);
 					}
 				}, action -> arg.getKey().changes().act(action));
 			}
@@ -2407,11 +2478,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		private <V> V getArgValue(ObservableValue<V> arg) {
-			ArgHolder<V> holder = (ArgHolder<V>) theArgs.get(arg);
+			XformOptions.XformCacheHandler<Object, Void> holder = theArgs.get(arg);
 			if (holder == null)
 				throw new IllegalArgumentException("Unrecognized value: " + arg);
 			if (theDef.isCached())
-				return holder.value;
+				return (V) holder.getSourceCache();
 			else
 				return arg.get();
 		}
@@ -2444,10 +2515,16 @@ public class ObservableCollectionDataFlowImpl {
 			});
 		}
 
-		private Combination.CombinedValues<I> getCopy(Object[] source) {
+		private Combination.CombinedValues<I> getCopy(Object[] source, ObservableValue<?> replaceArg, Object value) {
 			Map<ObservableValue<?>, Object> theValues = new HashMap<>();
-			for (Map.Entry<ObservableValue<?>, ArgHolder<?>> holder : theArgs.entrySet())
-				theValues.put(holder.getKey(), holder.getValue().value);
+			for (Map.Entry<ObservableValue<?>, XformOptions.XformCacheHandler<Object, Void>> holder : theArgs.entrySet()) {
+				if (holder.getKey() == replaceArg)
+					theValues.put(holder.getKey(), value);
+				else if (theDef.isCached())
+					theValues.put(holder.getKey(), holder.getValue().getSourceCache());
+				else
+					theValues.put(holder.getKey(), holder.getKey().get());
+			}
 			return new Combination.CombinedValues<I>() {
 				@Override
 				public I getElement() {
@@ -2464,46 +2541,39 @@ public class ObservableCollectionDataFlowImpl {
 		private class CombinedElement implements DerivedCollectionElement<T> {
 			private final DerivedCollectionElement<I> theParentEl;
 			private CollectionElementListener<T> theListener;
-			private I theParentValue;
+			private final XformOptions.XformCacheHandler<I, T> theCacheHandler;
 			private T theValue;
 
 			CombinedElement(DerivedCollectionElement<I> parentEl, boolean synthetic) {
 				theParentEl = parentEl;
 				if (!synthetic) {
+					theCacheHandler = theDef.createCacheHandler(new XformOptions.XformCacheHandlingInterface<I, T>() {
+						@Override
+						public Function<? super I, ? extends T> map() {
+							return v -> combineValue(v);
+						}
+
+						@Override
+						public Transaction lock() {
+							return lockArgs();
+						}
+
+						@Override
+						public T getDestCache() {
+							return theValue;
+						}
+
+						@Override
+						public void setDestCache(T value) {
+							theValue = value;
+						}
+					});
 					theParentEl.setListener(new CollectionElementListener<I>() {
 						@Override
 						public void update(I oldSource, I newSource, Object cause) {
-							Object oldStored = theParentValue;
-							if (theDef.isCached())
-								theParentValue = newSource;
-							boolean isUpdate;
-							if (!theDef.isReEvalOnUpdate() && !theDef.isFireIfUnchanged()) {
-								if (theDef.isCached())
-									isUpdate = oldStored == newSource;
-								else
-									isUpdate = oldSource == newSource;
-							} else
-								isUpdate = false; // Otherwise we don't care if it's an update
-							if (!theDef.isFireIfUnchanged() && isUpdate)
-								return; // No change, no event
-							try (Transaction t = lockArgs()) {
-								// Now figure out if we need to fire an event
-								T oldValue, newValue;
-								if (theDef.isReEvalOnUpdate() || !isUpdate) {
-									if (theDef.isCached()) {
-										oldValue = theValue;
-										theValue = newValue = combineValue(theParentValue);
-									} else {
-										oldValue = combineValue(newSource);
-										newValue = combineValue(newSource);
-									}
-								} else
-									oldValue = newValue = combineValue(newSource);
-								if (theDef.isCached())
-									theValue = newValue;
-								if (theDef.isFireIfUnchanged() || oldValue != newValue)
-									ObservableCollectionDataFlowImpl.update(theListener, oldValue, newValue, cause);
-							}
+							BiTuple<T, T> values = theCacheHandler.handleChange(oldSource, newSource);
+							if (values != null)
+								ObservableCollectionDataFlowImpl.update(theListener, values.getValue1(), values.getValue2(), cause);
 						}
 
 						@Override
@@ -2518,30 +2588,19 @@ public class ObservableCollectionDataFlowImpl {
 						}
 					});
 					if (theDef.isCached()) {
-						theParentValue = theParentEl.get();
-						theValue = combineValue(theParentValue);
+						I parentValue = theParentEl.get();
+						theCacheHandler.initialize(parentValue);
+						theValue = combineValue(parentValue);
 					}
-				}
+				} else
+					theCacheHandler = null;
 			}
 
 			void updated(Function<I, Combination.CombinedValues<I>> oldValues, Object cause, boolean isUpdate) {
-				// Now figure out if we need to fire an event
-				T oldValue, newValue;
-				if (theDef.isReEvalOnUpdate() || !isUpdate) {
-					if (theDef.isCached()) {
-						oldValue = theValue;
-						theValue = newValue = combineValue(theParentValue);
-					} else {
-						I parentVal = theParentEl.get();
-						oldValue = theDef.getCombination().apply(oldValues.apply(parentVal));
-						newValue = combineValue(theParentEl.get());
-					}
-				} else
-					oldValue = newValue = combineValue(theParentEl.get());
-				if (theDef.isCached())
-					theValue = newValue;
-				if (theDef.isFireIfUnchanged() || oldValue != newValue)
-					ObservableCollectionDataFlowImpl.update(theListener, oldValue, newValue, cause);
+				I parentValue = theDef.isCached() ? theCacheHandler.getSourceCache() : theParentEl.get();
+				BiTuple<T, T> values = theCacheHandler.handleChange(parentValue, parentValue, isUpdate);
+				if (values != null)
+					ObservableCollectionDataFlowImpl.update(theListener, values.getValue1(), values.getValue2(), cause);
 			}
 
 			@Override
@@ -2655,6 +2714,11 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public MutableCollectionElement<T> map(MutableCollectionElement<E> element, Function<? super E, ? extends T> map) {
 			return theParent.map(element, map);
+		}
+
+		@Override
+		public BiTuple<T, T> map(E oldSource, E newSource, Function<? super E, ? extends T> map) {
+			return theParent.map(oldSource, newSource, map);
 		}
 	}
 
@@ -3096,6 +3160,11 @@ public class ObservableCollectionDataFlowImpl {
 					return parentMapped.add(value, before);
 				}
 			};
+		}
+
+		@Override
+		public BiTuple<T, T> map(E oldSource, E newSource, Function<? super E, ? extends T> map) {
+			return theParent.map(oldSource, newSource, map);
 		}
 	}
 
