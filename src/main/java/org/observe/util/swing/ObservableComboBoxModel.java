@@ -36,6 +36,16 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		return theSelectedValue;
 	}
 
+	/**
+	 * Creates and installs a combo box model whose data is backed by an {@link ObservableCollection} and whose selection is governed by a
+	 * {@link SettableValue}
+	 * 
+	 * @param comboBox The combo box to install the model into
+	 * @param descrip The tooltip description for the combo box (when the selected value is enabled)
+	 * @param availableValues The values available for (potential) selection in the combo box
+	 * @param selected The selected value that will control the combo box's selection and report it
+	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to to cease listening
+	 */
 	public static <T> Subscription comboFor(JComboBox<T> comboBox, String descrip, ObservableCollection<T> availableValues,
 		SettableValue<? super T> selected) {
 		ObservableComboBoxModel<T> comboModel = new ObservableComboBoxModel<>(availableValues);
