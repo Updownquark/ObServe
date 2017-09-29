@@ -1,6 +1,5 @@
 package org.observe;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
@@ -15,6 +14,7 @@ import java.util.function.Supplier;
 import org.observe.XformOptions.SimpleXformOptions;
 import org.observe.XformOptions.XformDef;
 import org.observe.collect.ObservableCollection;
+import org.qommons.BiTuple;
 import org.qommons.ListenerSet;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
@@ -538,60 +538,50 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 						boolean[] initialized = new boolean[composedValues.length];
 						for (int i = 0; i < composedValues.length; i++) {
 							int index = i;
+							XformOptions.CacheHandler<Object, T> cacheHandler = theOptions
+								.createCacheHandler(new XformOptions.CacheHandlingInterface<Object, T>() {
+									@Override
+									public Function<? super Object, ? extends T> map() {
+										for (int j = 0; j < composed.length; j++) {
+											if (j != index)
+												composedValues[j] = composed[j].get();
+										}
+										return src -> {
+											composedValues[index] = src;
+											return combine(composedValues);
+										};
+									}
+
+									@Override
+									public Transaction lock() {
+										return ComposedObservableValue.this.lock();
+									}
+
+									@Override
+									public T getDestCache() {
+										return theValue;
+									}
+
+									@Override
+									public void setDestCache(T value) {
+										theValue = value;
+									}
+								});
 							composedSubs[i] = theComposed.get(i).changes().subscribe(new Observer<ObservableValueEvent<?>>() {
 								@Override
 								public <V extends ObservableValueEvent<?>> void onNext(V event) {
-									Object oldStored = composedValues[index]; // May or may not have a valid value depending on caching
-									if (theOptions.isCached())
-										composedValues[index] = event.getNewValue();
 									if (event.isInitial()) {
-										initialized[index] = true;
+										initialized[0] = true;
+										cacheHandler.initialize(event.getNewValue());
 										return;
-									} else if (!isInitialized())
-										return;
-									boolean isUpdate;
-									if (!theOptions.isReEvalOnUpdate() && !theOptions.isFireIfUnchanged()) {
-										if (theOptions.isCached())
-											isUpdate = oldStored == event.getNewValue();
-										else
-											isUpdate = event.getOldValue() == event.getNewValue();
-									} else
-										isUpdate = false; // Otherwise we don't care if it's an update
-									if (!theOptions.isFireIfUnchanged() && isUpdate)
-										return; // No change, no event
-									try (Transaction t = lock()) {
-										// Now figure out if we need to fire an event
-										T oldValue, newValue;
-										if (theOptions.isReEvalOnUpdate() || !isUpdate) {
-											if (theOptions.isCached()) {
-												oldValue = theValue;
-												theValue = newValue = combine(composedValues);
-											} else {
-												for (int j = 0; j < composed.length; j++) {
-													if (j != index)
-														composedValues[j] = composed[j].get();
-												}
-												composedValues[index] = event.getOldValue();
-												oldValue = combine(composedValues);
-												composedValues[index] = event.getNewValue();
-												newValue = combine(composedValues);
-											}
-										} else {
-											for (int j = 0; j < composed.length; j++) {
-												if (j != index)
-													composedValues[j] = composed[j].get();
-											}
-											composedValues[index] = event.getOldValue();
-											oldValue = newValue = combine(composedValues);
-											Arrays.fill(composedValues, null);
-										}
-										if (theOptions.isCached())
-											theValue = newValue;
-										if (theOptions.isFireIfUnchanged() || oldValue != newValue) {
-											ObservableValueEvent<T> toFire = ComposedObservableValue.this.createChangeEvent(oldValue,
-												newValue, event);
-											fireNext(toFire);
-										}
+									} else if (!isInitialized()) {
+										cacheHandler.initialize(event.getNewValue());
+									}
+									BiTuple<T, T> change = cacheHandler.handleChange(event.getOldValue(), event.getNewValue());
+									if (change != null) {
+										ObservableValueEvent<T> toFire = ComposedObservableValue.this.createChangeEvent(change.getValue1(),
+											change.getValue2(), event);
+										fireNext(toFire);
 									}
 								}
 

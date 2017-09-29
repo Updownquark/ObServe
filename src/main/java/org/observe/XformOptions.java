@@ -1,5 +1,10 @@
 package org.observe;
 
+import java.util.function.Function;
+
+import org.qommons.BiTuple;
+import org.qommons.Transaction;
+
 /** Super-interface used for options by several map-type operations */
 public interface XformOptions {
 	/**
@@ -94,6 +99,73 @@ public interface XformOptions {
 
 		public boolean isCached() {
 			return isCached;
+		}
+
+		public <E, T> CacheHandler<E, T> createCacheHandler(CacheHandlingInterface<E, T> intf) {
+			return new CacheHandler<>(this, intf);
+		}
+	}
+
+	interface CacheHandlingInterface<E, T> {
+		Function<? super E, ? extends T> map();
+
+		Transaction lock();
+
+		T getDestCache();
+
+		void setDestCache(T value);
+	}
+
+	class CacheHandler<E, T> {
+		private final XformDef theDef;
+		private E theSrcCache;
+		private final CacheHandlingInterface<E, T> theIntf;
+
+		CacheHandler(XformDef def, CacheHandlingInterface<E, T> intf) {
+			theDef = def;
+			theIntf = intf;
+		}
+
+		public void initialize(E value) {
+			if (theDef.isCached())
+				theSrcCache = value;
+		}
+
+		public BiTuple<T, T> handleChange(E oldSource, E newSource) {
+			E oldStored = theSrcCache; // May or may not have a valid value depending on caching
+			if (theDef.isCached())
+				theSrcCache = newSource;
+			boolean isUpdate;
+			if (!theDef.isReEvalOnUpdate() && !theDef.isFireIfUnchanged()) {
+				if (theDef.isCached())
+					isUpdate = oldStored == newSource;
+				else
+					isUpdate = oldSource == newSource;
+			} else
+				isUpdate = false; // Otherwise we don't care if it's an update
+			if (!theDef.isFireIfUnchanged() && isUpdate)
+				return null; // No change, no event
+			try (Transaction t = theIntf.lock()) {
+				// Now figure out if we need to fire an event
+				T oldValue, newValue;
+				Function<? super E, ? extends T> map = theIntf.map();
+				if (theDef.isReEvalOnUpdate() || !isUpdate) {
+					if (theDef.isCached()) {
+						oldValue = theIntf.getDestCache();
+						theIntf.setDestCache(newValue = map.apply(newSource));
+					} else {
+						oldValue = map.apply(oldSource);
+						newValue = map.apply(newSource);
+					}
+				} else {
+					oldValue = newValue = map.apply(newSource);
+				}
+				if (theDef.isCached())
+					theIntf.setDestCache(newValue);
+				if (theDef.isFireIfUnchanged() || oldValue != newValue)
+					new BiTuple<>(oldValue, newValue);
+				return null;
+			}
 		}
 	}
 }
