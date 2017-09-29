@@ -107,16 +107,36 @@ public interface XformOptions {
 		}
 	}
 
+	/**
+	 * Interfaces between a {@link XformCacheHandler} and the data it manages
+	 * 
+	 * @param <E> The type of the source values
+	 * @param <T> The type of the mapped values
+	 */
 	interface XformCacheHandlingInterface<E, T> {
+		/** @return A mapping function to produce mapped values from source values */
 		Function<? super E, ? extends T> map();
 
+		/**
+		 * Ensures no modification occurs while the lock is held
+		 * 
+		 * @return A transaction to use to release the lock
+		 */
 		Transaction lock();
 
+		/** @return The value of the destination cache (may be shared) */
 		T getDestCache();
 
+		/** @param value The value for the destination cache */
 		void setDestCache(T value);
 	}
 
+	/**
+	 * Class used for implementing {@link XformOptions}
+	 * 
+	 * @param <E> The type of the source values
+	 * @param <T> The type of the mapped values
+	 */
 	class XformCacheHandler<E, T> {
 		private final XformDef theDef;
 		private E theSrcCache;
@@ -127,15 +147,23 @@ public interface XformOptions {
 			theIntf = intf;
 		}
 
+		/** @return The cached source value, if caching is enabled */
 		public E getSourceCache() {
 			return theSrcCache;
 		}
 
+		/** @param value The initial source value for this cache */
 		public void initialize(E value) {
 			if (theDef.isCached())
 				theSrcCache = value;
 		}
 
+		/**
+		 * @param oldSource The previous source value (according to an event)
+		 * @param newSource The new source value
+		 * @return Whether the change is to be treated as an update, or {@link Ternian#NONE NONE} if the change is irrelevant to the data
+		 *         set
+		 */
 		public Ternian isUpdate(E oldSource, E newSource) {
 			E oldStored = theSrcCache; // May or may not have a valid value depending on caching
 			if (theDef.isCached())
@@ -154,6 +182,12 @@ public interface XformOptions {
 				return Ternian.NONE;
 		}
 
+		/**
+		 * @param oldSource The previous source value (according to an event)
+		 * @param newSource The new source value
+		 * @param update Whether the change is to be treated as an update
+		 * @return A tuple of old and new mapped values to fire an event on, or null if the change is irrelevant to this data set
+		 */
 		public BiTuple<T, T> handleChange(E oldSource, E newSource, boolean update) {
 			// Now figure out if we need to fire an event
 			T oldValue, newValue;
@@ -176,6 +210,11 @@ public interface XformOptions {
 			return null;
 		}
 
+		/**
+		 * @param oldSource The previous source value (according to an event)
+		 * @param newSource The new source value
+		 * @return A tuple of old and new mapped values to fire an event on, or null if the change is irrelevant to this data set
+		 */
 		public BiTuple<T, T> handleChange(E oldSource, E newSource) {
 			Ternian update = isUpdate(oldSource, newSource);
 			if (update == null)
