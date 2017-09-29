@@ -592,7 +592,8 @@ public class ObservableSortedSetImpl {
 		}
 
 		protected Comparable<? super E> mappedSearch(Comparable<? super T> search) {
-			return v -> search.compareTo(getFlow().map(v));
+			Function<? super E, ? extends T> map = getFlow().map().get();
+			return v -> search.compareTo(map.apply(v));
 		}
 
 		@Override
@@ -603,12 +604,12 @@ public class ObservableSortedSetImpl {
 		@Override
 		public CollectionElement<T> search(Comparable<? super T> search, SortedSearchFilter filter) {
 			CollectionElement<E> srcEl = getSource().search(mappedSearch(search), filter);
-			return srcEl == null ? null : elementFor(srcEl);
+			return srcEl == null ? null : elementFor(srcEl, null);
 		}
 
 		@Override
 		public CollectionElement<T> addIfEmpty(T value) throws IllegalStateException {
-			return elementFor(getSource().addIfEmpty(getFlow().reverse(value).result));
+			return elementFor(getSource().addIfEmpty(getFlow().reverse(value).result), null);
 		}
 	}
 

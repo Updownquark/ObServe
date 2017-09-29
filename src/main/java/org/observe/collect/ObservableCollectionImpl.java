@@ -13,6 +13,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -1057,10 +1058,13 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public CollectionElement<T> addElement(T e, boolean first) {
-			FilterMapResult<T, E> reversed = theFlow.reverse(e);
-			if (reversed.throwIfError(IllegalArgumentException::new) != null)
-				return null;
-			return elementFor(theSource.addElement(reversed.result, first));
+			try (Transaction t = lock(true, null)) {
+				// Lock so the reversed value is consistent until it is added
+				FilterMapResult<T, E> reversed = theFlow.reverse(e);
+				if (reversed.throwIfError(IllegalArgumentException::new) != null)
+					return null;
+				return elementFor(theSource.addElement(reversed.result, first), null);
+			}
 		}
 
 		@Override
@@ -1087,23 +1091,23 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public CollectionElement<T> getElement(int index) {
-			return elementFor(theSource.getElement(index));
+			return elementFor(theSource.getElement(index), null);
 		}
 
 		@Override
 		public CollectionElement<T> getElement(T value, boolean first) {
 			CollectionElement<E> srcEl = theSource.getElement(theFlow.reverse(value).result, first);
-			return srcEl == null ? null : elementFor(srcEl);
+			return srcEl == null ? null : elementFor(srcEl, null);
 		}
 
 		@Override
 		public CollectionElement<T> getElement(ElementId id) {
-			return elementFor(theSource.getElement(id));
+			return elementFor(theSource.getElement(id), null);
 		}
 
 		@Override
 		public MutableCollectionElement<T> mutableElement(ElementId id) {
-			return mutableElementFor(theSource.mutableElement(id));
+			return mutableElementFor(theSource.mutableElement(id), null);
 		}
 
 		@Override
@@ -1111,11 +1115,12 @@ public final class ObservableCollectionImpl {
 			return new PassiveDerivedMutableSpliterator(theSource.spliterator(element, asNext));
 		}
 
-		protected CollectionElement<T> elementFor(CollectionElement<? extends E> el) {
+		protected CollectionElement<T> elementFor(CollectionElement<? extends E> el, Function<? super E, ? extends T> map) {
+			Function<? super E, ? extends T> fMap = map == null ? theFlow.map().get() : map;
 			return new CollectionElement<T>() {
 				@Override
 				public T get() {
-					return theFlow.map(el.get());
+					return fMap.apply(el.get());
 				}
 
 				@Override
@@ -1125,8 +1130,8 @@ public final class ObservableCollectionImpl {
 			};
 		}
 
-		protected MutableCollectionElement<T> mutableElementFor(MutableCollectionElement<E> el) {
-			return theFlow.map(el);
+		protected MutableCollectionElement<T> mutableElementFor(MutableCollectionElement<E> el, Function<? super E, ? extends T> map) {
+			return theFlow.map(el, map);
 		}
 
 		@Override
@@ -1137,35 +1142,63 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends T>> observer) {
-			return getSource().onChange(evt -> {
-				T oldValue, newValue;
-				switch (evt.getType()) {
-				case add:
-					newValue = theFlow.map(evt.getNewValue());
-					oldValue = null;
-					break;
-				case remove:
-					oldValue = theFlow.map(evt.getOldValue());
-					newValue = oldValue;
-					break;
-				case set:
-					oldValue = theFlow.map(evt.getOldValue());
-					newValue = theFlow.map(evt.getNewValue());
-					break;
-				default:
-					throw new IllegalStateException("Unrecognized collection change type: " + evt.getType());
-				}
-				observer.accept(
-					new ObservableCollectionEvent<>(evt.getElementId(), getType(), evt.getIndex(), evt.getType(), oldValue, newValue, evt));
-			});
+			Subscription sourceSub, mapSub;
+			try (Transaction outerFlowLock = theFlow.lock(false, null)) {
+				Function<? super E, ? extends T>[] currentMap = new Function[1];
+				mapSub = theFlow.map().changes().act(evt -> {
+					if (evt.isInitial()) {
+						currentMap[0] = evt.getNewValue();
+						return;
+					}
+					try (Transaction sourceLock = theSource.lock(false, evt)) {
+						currentMap[0] = evt.getNewValue();
+						MutableElementSpliterator<? extends E> sourceSpliter = theSource.spliterator();
+						int[] index = new int[1];
+						sourceSpliter.forEachElement(sourceEl -> {
+							E sourceVal = sourceEl.get();
+							observer.accept(new ObservableCollectionEvent<>(sourceEl.getElementId(), getType(), index[0]++,
+								CollectionChangeType.set, evt.getOldValue().apply(sourceVal), currentMap[0].apply(sourceVal), evt));
+						}, true);
+					}
+				});
+				sourceSub = getSource().onChange(new Consumer<ObservableCollectionEvent<? extends E>>() {
+					@Override
+					public void accept(ObservableCollectionEvent<? extends E> evt) {
+						try (Transaction t = theFlow.lock(true, evt)) {
+							T oldValue, newValue;
+							switch (evt.getType()) {
+							case add:
+								newValue = currentMap[0].apply(evt.getNewValue());
+								oldValue = null;
+								break;
+							case remove:
+								oldValue = currentMap[0].apply(evt.getOldValue());
+								newValue = oldValue;
+								break;
+							case set:
+								oldValue = currentMap[0].apply(evt.getOldValue());
+								newValue = currentMap[0].apply(evt.getNewValue());
+								break;
+							default:
+								throw new IllegalStateException("Unrecognized collection change type: " + evt.getType());
+							}
+							observer.accept(new ObservableCollectionEvent<>(evt.getElementId(), getType(), evt.getIndex(), evt.getType(),
+								oldValue, newValue, evt));
+						}
+					}
+				});
+			}
+			return Subscription.forAll(sourceSub, mapSub);
 		}
 
 		protected class PassiveDerivedMutableSpliterator extends MutableElementSpliterator.SimpleMutableSpliterator<T> {
 			private final MutableElementSpliterator<E> theSourceSpliter;
+			private final Function<? super E, ? extends T> theMap;
 
 			PassiveDerivedMutableSpliterator(MutableElementSpliterator<E> srcSpliter) {
 				super(PassiveDerivedCollection.this);
 				theSourceSpliter = srcSpliter;
+				theMap = theFlow.map().get();
 			}
 
 			@Override
@@ -1185,12 +1218,12 @@ public final class ObservableCollectionImpl {
 
 			@Override
 			protected boolean internalForElement(Consumer<? super CollectionElement<T>> action, boolean forward) {
-				return theSourceSpliter.forElement(el -> action.accept(elementFor(el)), forward);
+				return theSourceSpliter.forElement(el -> action.accept(elementFor(el, theMap)), forward);
 			}
 
 			@Override
 			protected boolean internalForElementM(Consumer<? super MutableCollectionElement<T>> action, boolean forward) {
-				return theSourceSpliter.forElementM(el -> action.accept(mutableElementFor(el)), forward);
+				return theSourceSpliter.forElementM(el -> action.accept(mutableElementFor(el, theMap)), forward);
 			}
 
 			@Override

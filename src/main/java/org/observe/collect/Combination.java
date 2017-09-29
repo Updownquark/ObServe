@@ -16,7 +16,7 @@ import com.google.common.reflect.TypeToken;
 public class Combination {
 	/**
 	 * The starting point of a combination operation
-	 * 
+	 *
 	 * @param <E> The source type
 	 * @param <T> The target type
 	 */
@@ -51,13 +51,13 @@ public class Combination {
 
 	/**
 	 * The complete, immutable definition of a combination operation
-	 * 
+	 *
 	 * @param <E> The source type
 	 * @param <T> The target type
 	 */
 	public static class CombinedFlowDef<E, T> extends XformOptions.XformDef {
 		private final Set<ObservableValue<?>> theArgs;
-		private final Function<? super CombinedValues<E>, ? extends T> theCombination;
+		private final Function<? super CombinedValues<? extends E>, ? extends T> theCombination;
 		private final Function<? super CombinedValues<T>, ? extends E> theReverse;
 
 		/**
@@ -67,7 +67,8 @@ public class Combination {
 		 * @param reverse The reverse function to map from result values to source values, for adding values to the result, etc.
 		 */
 		public CombinedFlowDef(CombinedCollectionBuilder<E, T> builder, Set<ObservableValue<?>> args,
-			Function<? super CombinedValues<E>, ? extends T> combination, Function<? super CombinedValues<T>, ? extends E> reverse) {
+			Function<? super CombinedValues<? extends E>, ? extends T> combination,
+			Function<? super CombinedValues<T>, ? extends E> reverse) {
 			super(builder);
 			theArgs = args;
 			theCombination = combination;
@@ -80,7 +81,7 @@ public class Combination {
 		}
 
 		/** @return The combination function to combine the source and argument values */
-		public Function<? super CombinedValues<E>, ? extends T> getCombination() {
+		public Function<? super CombinedValues<? extends E>, ? extends T> getCombination() {
 			return theCombination;
 		}
 
