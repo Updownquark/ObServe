@@ -507,7 +507,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
-	/** Implements {@link CollectionDataFlow} */
+	/**
+	 * Implements {@link CollectionDataFlow}
+	 *
+	 * @param <E> The type of the source collection
+	 */
 	public static class BaseCollectionDataFlow<E> extends AbstractDataFlow<E, E, E> {
 		protected BaseCollectionDataFlow(ObservableCollection<E> source) {
 			super(source, null, source.getType());
@@ -613,7 +617,13 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
-	/** Implements {@link CollectionDataFlow#map(TypeToken, Function, Consumer)} */
+	/**
+	 * Implements {@link CollectionDataFlow#map(TypeToken, Function, Consumer)}
+	 *
+	 * @param <E> The type of the source collection
+	 * @param <I> The target type of this flow's parent flow
+	 * @param <T> The type of values produced by this flow
+	 */
 	protected static class MapOp<E, I, T> extends AbstractDataFlow<E, I, T> {
 		private final Function<? super I, ? extends T> theMap;
 		private final MapDef<I, T> theOptions;
@@ -627,7 +637,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public boolean supportsPassive() {
-			if (theOptions.isCached())
+			if (theOptions.isCached() || theOptions.getElementReverse() != null)
 				return false;
 			return getParent().supportsPassive();
 		}
@@ -1893,18 +1903,34 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public String isEnabled() {
+				if (theOptions.getElementReverse() != null)
+					return null;
 				return theParentEl.isEnabled();
 			}
 
 			@Override
 			public String isAcceptable(T value) {
+				String msg = null;
+				if (theOptions.getElementReverse() != null) {
+					msg = theOptions.getElementReverse().setElement(theParentEl.get(), value, false);
+					if (msg == null)
+						return null;
+				}
 				if (theOptions.getReverse() == null)
 					return StdMsg.UNSUPPORTED_OPERATION;
-				return theParentEl.isAcceptable(theOptions.getReverse().apply(value));
+				String setMsg = theParentEl.isAcceptable(theOptions.getReverse().apply(value));
+				// If the element reverse is set, it should get the final word on the error message if
+				if (setMsg == null || msg == null)
+					return setMsg;
+				return msg;
 			}
 
 			@Override
 			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
+				if (theOptions.getElementReverse() != null) {
+					if (theOptions.getElementReverse().setElement(theParentEl.get(), value, true) == null)
+						return;
+				}
 				if (theOptions.getReverse() == null)
 					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 				theParentEl.set(theOptions.getReverse().apply(value));
@@ -2010,26 +2036,11 @@ public class ObservableCollectionDataFlowImpl {
 				@Override
 				public Function<? super E, T> get() {
 					Function<? super E, ? extends I> parentMapVal = parentMap.get();
-					Map<ObservableValue<?>, Object[]> values = new HashMap<>();
+					Map<ObservableValue<?>, ObservableValue<?>> values = new HashMap<>();
 					for (ObservableValue<?> v : theDef.getArgs())
-						values.put(v, new Object[] { v.get() });
+						values.put(v, v);
 
-					return new CombinedMap(parentMapVal, v -> {
-						return theDef.getCombination().apply(new Combination.CombinedValues<I>() {
-							@Override
-							public I getElement() {
-								return v;
-							}
-
-							@Override
-							public <X> X get(ObservableValue<X> arg) {
-								Object[] holder = values.get(arg);
-								if (holder == null)
-									throw new IllegalArgumentException("Unrecognized value: " + arg);
-								return (X) holder[0];
-							}
-						});
-					}, values);
+					return new CombinedMap(parentMapVal, null, values);
 				}
 
 				@Override
@@ -2067,12 +2078,14 @@ public class ObservableCollectionDataFlowImpl {
 									@Override
 									public void accept(ObservableValueEvent<?> argEvent) {
 										if (argEvent.isInitial()) {
-											theCurrentMap.theValues.put(arg, new Object[] { argEvent.getNewValue() });
+											((Map<ObservableValue<?>, SimpleSupplier>) theCurrentMap.theValues).put(arg,
+												new SimpleSupplier(argEvent.getNewValue()));
 										}
 										try (Transaction t = lock()) {
 											CombinedMap oldMap = theCurrentMap;
-											Map<ObservableValue<?>, Object[]> newValues = new HashMap<>(oldMap.theValues);
-											newValues.put(arg, new Object[] { argEvent.getNewValue() });
+											Map<ObservableValue<?>, SimpleSupplier> newValues = new HashMap<>(
+												(Map<ObservableValue<?>, SimpleSupplier>) oldMap.theValues);
+											newValues.put(arg, new SimpleSupplier(argEvent.getNewValue()));
 											theCurrentMap = new CombinedMap(oldMap.getParentMap(), null, newValues);
 											observer.onNext(createChangeEvent(oldMap, theCurrentMap, argEvent));
 										}
@@ -2197,11 +2210,24 @@ public class ObservableCollectionDataFlowImpl {
 			};
 		}
 
+		class SimpleSupplier implements Supplier<Object> {
+			final Object value;
+
+			SimpleSupplier(Object value) {
+				this.value = value;
+			}
+
+			@Override
+			public Object get() {
+				return value;
+			}
+		}
+
 		class CombinedMap extends MapWithParent<E, I, T> {
-			final Map<ObservableValue<?>, Object[]> theValues;
+			final Map<ObservableValue<?>, ? extends Supplier<?>> theValues;
 
 			CombinedMap(Function<? super E, ? extends I> parentMap, Function<? super I, ? extends T> map,
-				Map<ObservableValue<?>, Object[]> values) {
+				Map<ObservableValue<?>, ? extends Supplier<?>> values) {
 				super(parentMap, map);
 				theValues = values;
 			}
@@ -2221,10 +2247,10 @@ public class ObservableCollectionDataFlowImpl {
 
 					@Override
 					public <X> X get(ObservableValue<X> arg) {
-						Object[] holder = theValues.get(arg);
+						Supplier<?> holder = theValues.get(arg);
 						if (holder == null)
 							throw new IllegalArgumentException("Unrecognized value: " + arg);
-						return (X) holder[0];
+						return (X) holder.get();
 					}
 				});
 			}
@@ -2238,10 +2264,10 @@ public class ObservableCollectionDataFlowImpl {
 
 					@Override
 					public <X> X get(ObservableValue<X> arg) {
-						Object[] holder = theValues.get(arg);
+						Supplier<?> holder = theValues.get(arg);
 						if (holder == null)
 							throw new IllegalArgumentException("Unrecognized value: " + arg);
-						return (X) holder[0];
+						return (X) holder.get();
 					}
 				});
 			}

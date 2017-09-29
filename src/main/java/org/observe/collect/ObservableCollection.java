@@ -951,7 +951,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 			.where(new TypeParameter<X>() {}, target.wrap());
 			return map(valueType, map).refreshEach(v -> v.changes().noInit()).map(target, obs -> obs == null ? null : obs.get(),
 				options -> options//
-				.withElementSetting((ov, newValue, doSet, cause) -> {
+					.withElementSetting((ov, newValue, doSet) -> {
 					// Allow setting elements via the wrapped settable value
 					if (!(ov instanceof SettableValue))
 						return MutableCollectionElement.StdMsg.UNSUPPORTED_OPERATION;
@@ -961,7 +961,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 					if (msg != null)
 						return msg;
 					if (doSet)
-						((SettableValue<X>) ov).set(newValue, cause);
+							((SettableValue<X>) ov).set(newValue, null);
 					return null;
 				}));
 		}
@@ -1357,10 +1357,9 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * @param element The source value
 		 * @param newValue The derived value
 		 * @param replace Whether to actually do the replacement, as opposed to just testing whether it is possible/allowed
-		 * @param cause The cause of the replacement operation
 		 * @return Null if the replacement is possible/allowed/done; otherwise a string saying why it is not
 		 */
-		String setElement(I element, T newValue, boolean replace, Object cause);
+		String setElement(I element, T newValue, boolean replace);
 	}
 
 	/**

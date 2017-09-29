@@ -1096,8 +1096,24 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public CollectionElement<T> getElement(T value, boolean first) {
-			CollectionElement<E> srcEl = theSource.getElement(theFlow.reverse(value).result, first);
-			return srcEl == null ? null : elementFor(srcEl, null);
+			if (!getType().getRawType().isInstance(value))
+				return null;
+			FilterMapResult<T, E> reversed = theFlow.reverse(value);
+			if (reversed.isError()) {
+				ElementId[] match = new ElementId[1];
+				MutableElementSpliterator<E> spliter = theSource.spliterator(first);
+				Function<? super E, ? extends T> map = theFlow.map().get();
+				while (match[0] == null && spliter.forElement(el -> {
+					if (equivalence().elementEquals(map.apply(el.get()), value))
+						match[0] = el.getElementId();
+				}, first)) {}
+				if (match[0] == null)
+					return null;
+				return elementFor(theSource.getElement(match[0]), map);
+			} else {
+				CollectionElement<E> srcEl = theSource.getElement(reversed.result, first);
+				return srcEl == null ? null : elementFor(srcEl, null);
+			}
 		}
 
 		@Override
