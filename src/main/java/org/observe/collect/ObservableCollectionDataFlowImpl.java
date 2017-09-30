@@ -134,10 +134,10 @@ public class ObservableCollectionDataFlowImpl {
 
 		String canReverse();
 
-		FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest);
+		FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest, boolean forAdd);
 
-		default FilterMapResult<T, E> reverse(T dest) {
-			return reverse(new FilterMapResult<>(dest));
+		default FilterMapResult<T, E> reverse(T dest, boolean forAdd) {
+			return reverse(new FilterMapResult<>(dest), forAdd);
 		}
 
 		boolean isRemoveFiltered();
@@ -646,7 +646,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public boolean supportsPassive() {
-			if (theOptions.isCached() || theOptions.getElementReverse() != null)
+			if (theOptions.isCached())
 				return false;
 			return getParent().supportsPassive();
 		}
@@ -833,7 +833,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public FilterMapResult<E, E> reverse(FilterMapResult<E, E> dest) {
+		public FilterMapResult<E, E> reverse(FilterMapResult<E, E> dest, boolean forAdd) {
 			dest.result = dest.source;
 			return dest;
 		}
@@ -1585,8 +1585,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest) {
-			return theParent.reverse(dest);
+		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest, boolean forAdd) {
+			return theParent.reverse(dest, forAdd);
 		}
 
 		@Override
@@ -1700,11 +1700,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest) {
+		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest, boolean forAdd) {
 			if (theOptions.getReverse() == null)
 				return dest.reject(StdMsg.UNSUPPORTED_OPERATION, true);
 			FilterMapResult<I, E> intermediate = dest.map(theOptions.getReverse());
-			return (FilterMapResult<T, E>) theParent.reverse(intermediate);
+			return (FilterMapResult<T, E>) theParent.reverse(intermediate, forAdd);
 		}
 
 		@Override
@@ -1728,6 +1728,8 @@ public class ObservableCollectionDataFlowImpl {
 
 				@Override
 				public String isEnabled() {
+					if (theOptions.getElementReverse() != null)
+						return null;
 					if (theOptions.getReverse() == null)
 						return StdMsg.UNSUPPORTED_OPERATION;
 					return parentMap.isEnabled();
@@ -1735,13 +1737,27 @@ public class ObservableCollectionDataFlowImpl {
 
 				@Override
 				public String isAcceptable(T value) {
+					String msg = null;
+					if (theOptions.getElementReverse() != null) {
+						msg = theOptions.getElementReverse().setElement(parentMap.get(), value, false);
+						if (msg == null)
+							return null;
+					}
 					if (theOptions.getReverse() == null)
 						return StdMsg.UNSUPPORTED_OPERATION;
-					return parentMap.isAcceptable(theOptions.getReverse().apply(value));
+					String setMsg = parentMap.isAcceptable(theOptions.getReverse().apply(value));
+					// If the element reverse is set, it should get the final word on the error message if
+					if (setMsg == null || msg == null)
+						return setMsg;
+					return msg;
 				}
 
 				@Override
 				public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
+					if (theOptions.getElementReverse() != null) {
+						if (theOptions.getElementReverse().setElement(parentMap.get(), value, true) == null)
+							return;
+					}
 					if (theOptions.getReverse() == null)
 						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 					parentMap.set(theOptions.getReverse().apply(value));
@@ -1946,6 +1962,8 @@ public class ObservableCollectionDataFlowImpl {
 			public String isEnabled() {
 				if (theOptions.getElementReverse() != null)
 					return null;
+				if (theOptions.getReverse() == null)
+					return StdMsg.UNSUPPORTED_OPERATION;
 				return theParentEl.isEnabled();
 			}
 
@@ -2153,7 +2171,9 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest) {
+		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest, boolean forAdd) {
+			if (theDef.getReverse() == null)
+				return dest.reject(StdMsg.UNSUPPORTED_OPERATION, true);
 			Map<ObservableValue<?>, Object[]> values = new HashMap<>();
 			for (ObservableValue<?> v : theDef.getArgs())
 				values.put(v, new Object[] { v.get() });
@@ -2172,7 +2192,7 @@ public class ObservableCollectionDataFlowImpl {
 					return (X) holder[0];
 				}
 			});
-			return (FilterMapResult<T, E>) theParent.reverse(interm);
+			return (FilterMapResult<T, E>) theParent.reverse(interm, forAdd);
 		}
 
 		@Override
@@ -2702,8 +2722,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest) {
-			return theParent.reverse(dest);
+		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest, boolean forAdd) {
+			return theParent.reverse(dest, forAdd);
 		}
 
 		@Override
@@ -3055,7 +3075,6 @@ public class ObservableCollectionDataFlowImpl {
 
 		PassiveModFilteredManager(PassiveCollectionManager<E, ?, T> parent, ModFilterer<T> filter) {
 			theParent = parent;
-
 			theFilter = filter;
 		}
 
@@ -3088,11 +3107,13 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest) {
-			dest.maybeReject(theFilter.canAdd(dest.source), true);
-			if (!dest.isAccepted())
-				return dest;
-			return theParent.reverse(dest);
+		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest, boolean forAdd) {
+			if (forAdd) {
+				dest.maybeReject(theFilter.canAdd(dest.source), true);
+				if (!dest.isAccepted())
+					return dest;
+			}
+			return theParent.reverse(dest, forAdd);
 		}
 
 		@Override

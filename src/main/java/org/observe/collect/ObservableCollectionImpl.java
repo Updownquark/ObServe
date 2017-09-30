@@ -1051,7 +1051,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public String canAdd(T value) {
-			FilterMapResult<T, E> reversed = theFlow.reverse(value);
+			FilterMapResult<T, E> reversed = theFlow.reverse(value, true);
 			if (!reversed.isAccepted())
 				return reversed.getRejectReason();
 			return theSource.canAdd(reversed.result);
@@ -1061,7 +1061,7 @@ public final class ObservableCollectionImpl {
 		public CollectionElement<T> addElement(T e, boolean first) {
 			try (Transaction t = lock(true, null)) {
 				// Lock so the reversed value is consistent until it is added
-				FilterMapResult<T, E> reversed = theFlow.reverse(e);
+				FilterMapResult<T, E> reversed = theFlow.reverse(e, true);
 				if (reversed.throwIfError(IllegalArgumentException::new) != null)
 					return null;
 				return elementFor(theSource.addElement(reversed.result, first), null);
@@ -1099,7 +1099,7 @@ public final class ObservableCollectionImpl {
 		public CollectionElement<T> getElement(T value, boolean first) {
 			if (!getType().getRawType().isInstance(value))
 				return null;
-			FilterMapResult<T, E> reversed = theFlow.reverse(value);
+			FilterMapResult<T, E> reversed = theFlow.reverse(value, false);
 			if (reversed.isError()) {
 				ElementId[] match = new ElementId[1];
 				MutableElementSpliterator<E> spliter = theSource.spliterator(first);
