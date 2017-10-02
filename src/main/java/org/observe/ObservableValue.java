@@ -534,17 +534,18 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 				@Override
 				public void accept(Boolean used) {
 					if (used) {
+						XformOptions.XformCacheHandler<Object, T>[] caches = new XformOptions.XformCacheHandler[composed.length];
 						boolean[] initialized = new boolean[composed.length];
 						for (int i = 0; i < composed.length; i++) {
 							int index = i;
-							XformOptions.XformCacheHandler<Object, T> cacheHandler = theOptions
+							caches[index] = theOptions
 								.createCacheHandler(new XformOptions.XformCacheHandlingInterface<Object, T>() {
 									@Override
 									public Function<? super Object, ? extends T> map() {
 										Object[] composedValues = new Object[theComposed.size()];
 										for (int j = 0; j < composed.length; j++) {
 											if (j != index)
-												composedValues[j] = composed[j].get();
+												composedValues[j] = theOptions.isCached() ? caches[j].getSourceCache() : composed[j].get();
 										}
 										return src -> {
 											composedValues[index] = src;
@@ -572,12 +573,12 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 								public <V extends ObservableValueEvent<?>> void onNext(V event) {
 									if (event.isInitial()) {
 										initialized[0] = true;
-										cacheHandler.initialize(event.getNewValue());
+										caches[index].initialize(event.getNewValue());
 										return;
 									} else if (!isInitialized()) {
-										cacheHandler.initialize(event.getNewValue());
+										caches[index].initialize(event.getNewValue());
 									}
-									BiTuple<T, T> change = cacheHandler.handleChange(event.getOldValue(), event.getNewValue());
+									BiTuple<T, T> change = caches[index].handleChange(event.getOldValue(), event.getNewValue());
 									if (change != null) {
 										ObservableValueEvent<T> toFire = ComposedObservableValue.this.createChangeEvent(change.getValue1(),
 											change.getValue2(), event);
@@ -594,30 +595,18 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 
 								@Override
 								public <V extends ObservableValueEvent<?>> void onCompleted(V event) {
-									if (!initialized[0])
-										cacheHandler.initialize(event.getNewValue());
 									completed[0] = true;
-									if (!isInitialized())
+									if (!isInitialized()) {
+										caches[index].initialize(event.getNewValue());
 										return;
-									try (Transaction t = lock()) {
-										T oldValue, newValue;
-										if (theOptions.isCached()) {
-											oldValue = theValue;
-											newValue = combine(composedValues);
-											theValue = null;
-										} else {
-											for (int j = 0; j < composed.length; j++) {
-												if (j != index)
-													composedValues[j] = composed[j].get();
-											}
-											composedValues[index] = event.getOldValue();
-											oldValue = combine(composedValues);
-											composedValues[index] = event.getNewValue();
-											newValue = combine(composedValues);
-										}
-										ObservableValueEvent<T> toFire = createChangeEvent(oldValue, newValue, event);
-										fireCompleted(toFire);
 									}
+									BiTuple<T, T> change = caches[index].handleChange(event.getOldValue(), event.getNewValue());
+									if (change == null) {
+										T value = combineCache(caches, index, event.getNewValue());
+										change = new BiTuple<>(value, value);
+									}
+									ObservableValueEvent<T> toFire = createChangeEvent(change.getValue1(), change.getValue2(), event);
+									fireCompleted(toFire);
 								}
 
 								private void fireNext(ObservableValueEvent<T> next) {
@@ -637,8 +626,9 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 						for (int i = 0; i < composed.length; i++)
 							if (!initialized[i])
 								throw new IllegalStateException(theComposed.get(i) + " did not fire an initial value");
-						if (!completed[0] && theOptions.isCached())
-							theValue = combine(composedValues);
+						if (!completed[0] && theOptions.isCached()) {
+							theValue = combineCache(caches, -1, null);
+						}
 						// initialized[0] = true;
 					} else {
 						theValue = null;
@@ -650,6 +640,17 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 						}
 						completed[0] = false;
 					}
+				}
+
+				private T combineCache(XformOptions.XformCacheHandler<Object, T>[] caches, int valueIdx, Object value) {
+					Object[] composedValues = new Object[theComposed.size()];
+					for (int j = 0; j < composed.length; j++) {
+						if (j == valueIdx)
+							composedValues[j] = value;
+						else
+							composedValues[j] = theOptions.isCached() ? caches[j].getSourceCache() : composed[j].get();
+					}
+					return combine(composedValues);
 				}
 			});
 			theObservers.setOnSubscribe(observer -> {

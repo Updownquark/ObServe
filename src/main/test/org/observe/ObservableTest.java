@@ -30,9 +30,10 @@ public class ObservableTest {
 		int [] received = new int[] {0};
 		obs.map(//
 			value -> value * 10//
-		).changes().act(//
-			value -> received[0] = value.getNewValue());
+			).changes().act(//
+				value -> received[0] = value.getNewValue());
 
+		assertEquals(0, received[0]);
 		for(int i = 1; i < 10; i++) {
 			obs.set(i, null);
 			assertEquals(i * 10, received[0]);
