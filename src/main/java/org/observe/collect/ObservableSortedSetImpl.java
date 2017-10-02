@@ -609,7 +609,7 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public CollectionElement<T> addIfEmpty(T value) throws IllegalStateException {
-			return elementFor(getSource().addIfEmpty(getFlow().reverse(value).result), null);
+			return elementFor(getSource().addIfEmpty(getFlow().reverse(value, true).result), null);
 		}
 	}
 
