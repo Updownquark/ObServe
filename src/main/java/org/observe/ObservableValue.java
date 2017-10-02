@@ -534,14 +534,14 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 				@Override
 				public void accept(Boolean used) {
 					if (used) {
-						Object[] composedValues = new Object[theComposed.size()];
-						boolean[] initialized = new boolean[composedValues.length];
-						for (int i = 0; i < composedValues.length; i++) {
+						boolean[] initialized = new boolean[composed.length];
+						for (int i = 0; i < composed.length; i++) {
 							int index = i;
 							XformOptions.XformCacheHandler<Object, T> cacheHandler = theOptions
 								.createCacheHandler(new XformOptions.XformCacheHandlingInterface<Object, T>() {
 									@Override
 									public Function<? super Object, ? extends T> map() {
+										Object[] composedValues = new Object[theComposed.size()];
 										for (int j = 0; j < composed.length; j++) {
 											if (j != index)
 												composedValues[j] = composed[j].get();
@@ -594,7 +594,8 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 
 								@Override
 								public <V extends ObservableValueEvent<?>> void onCompleted(V event) {
-									composedValues[index] = event.getNewValue();
+									if (!initialized[0])
+										cacheHandler.initialize(event.getNewValue());
 									completed[0] = true;
 									if (!isInitialized())
 										return;
@@ -633,7 +634,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 							if (completed[0])
 								break;
 						}
-						for (int i = 0; i < composedValues.length; i++)
+						for (int i = 0; i < composed.length; i++)
 							if (!initialized[i])
 								throw new IllegalStateException(theComposed.get(i) + " did not fire an initial value");
 						if (!completed[0] && theOptions.isCached())

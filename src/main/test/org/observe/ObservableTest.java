@@ -28,7 +28,10 @@ public class ObservableTest {
 		SimpleSettableValue<Integer> obs = new SimpleSettableValue<>(Integer.TYPE, false);
 		obs.set(0, null);
 		int [] received = new int[] {0};
-		obs.map(value -> value * 10).changes().act(value -> received[0] = value.getNewValue());
+		obs.map(//
+			value -> value * 10//
+		).changes().act(//
+			value -> received[0] = value.getNewValue());
 
 		for(int i = 1; i < 10; i++) {
 			obs.set(i, null);
