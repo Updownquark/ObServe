@@ -13,7 +13,6 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.collect.SimpleCause;
-import org.qommons.tree.BetterTreeList;
 
 import com.google.common.reflect.TypeToken;
 
@@ -26,7 +25,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	private final TypeToken<E> theType;
 	private final LinkedList<Causable> theTransactionCauses;
 	private final BetterList<E> theValues;
-	private BetterTreeList<Consumer<? super ObservableCollectionEvent<? extends E>>> theObservers;
+	private org.qommons.collect.ListenerList<Consumer<? super ObservableCollectionEvent<? extends E>>> theObservers;
 
 	/**
 	 * @param type The type for this collection
@@ -38,7 +37,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			throw new UnsupportedOperationException("ObservableCollection is not supported here");
 		theTransactionCauses = new LinkedList<>();
 		theValues = list;
-		theObservers = new BetterTreeList<>(true);
+		theObservers = new org.qommons.collect.ListenerList<>();
 	}
 
 	@Override
@@ -152,8 +151,9 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 
 	@Override
 	public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-		theObservers.add(observer);
-		return () -> theObservers.remove(observer);
+		try (Transaction t = lock(true, false, null)) {
+			return theObservers.add(observer)::run;
+		}
 	}
 
 	@Override
@@ -169,7 +169,8 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	}
 
 	private void fire(ObservableCollectionEvent<E> evt) {
-		theObservers.spliterator().forEachRemaining(listener -> listener.accept(evt));
+		theObservers.forEach(//
+			listener -> listener.accept(evt));
 	}
 
 	@Override
@@ -231,6 +232,11 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 				fire(new ObservableCollectionEvent<>(newId, getType(), getElementsBefore(newId), CollectionChangeType.add, null, value,
 					theTransactionCauses.peekLast()));
 				return newId;
+			}
+
+			@Override
+			public String toString() {
+				return valueEl.toString();
 			}
 		};
 	}

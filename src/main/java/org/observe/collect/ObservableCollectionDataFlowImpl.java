@@ -975,6 +975,11 @@ public class ObservableCollectionDataFlowImpl {
 				ElementId newId = source.add(value, before);
 				return new BaseDerivedElement(theSource.mutableElement(newId));
 			}
+
+			@Override
+			public String toString() {
+				return source.toString();
+			}
 		}
 	}
 

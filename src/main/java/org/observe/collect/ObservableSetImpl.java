@@ -297,9 +297,7 @@ public class ObservableSetImpl {
 		@Override
 		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
 			UniqueElement2 element = theElementsByValue.get(value);
-			if (element == null)
-				return el -> -1;
-				return element;
+			return element == null ? el -> -1 : element;
 		}
 
 		@Override
@@ -389,6 +387,7 @@ public class ObservableSetImpl {
 
 					@Override
 					public void removed(T value, Object innerCause) {
+						theParentElements.mutableElement(node.getElementId()).remove();
 						if (theParentElements.isEmpty()) {
 							// This element is no longer represented
 							theElementsByValue.mutableEntry(theValueId).remove();
@@ -519,6 +518,16 @@ public class ObservableSetImpl {
 				// If it's not there, here I'm returning null, implying that the element was not added to the unique set
 				// This would probably be a bug though.
 				return theElementsByValue.get(value);
+			}
+
+			@Override
+			public String toString() {
+				if (theActiveElement != null)
+					return theActiveElement.toString();
+				else if (!theParentElements.isEmpty())
+					return theParentElements.iterator().next().toString();
+				else
+					return "null";
 			}
 		}
 	}
