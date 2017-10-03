@@ -625,9 +625,8 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 						for (int i = 0; i < composed.length; i++)
 							if (!initialized[i])
 								throw new IllegalStateException(theComposed.get(i) + " did not fire an initial value");
-						if (!completed[0] && theOptions.isCached()) {
+						if (!completed[0] && theOptions.isCached())
 							theValue = combineCache(caches, -1, null);
-						}
 						// initialized[0] = true;
 					} else {
 						theValue = null;

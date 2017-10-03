@@ -1,6 +1,5 @@
 package org.observe;
 
-import java.util.Queue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
@@ -12,7 +11,7 @@ import java.util.function.Consumer;
 public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 	private Consumer<? super Observer<? super T>> theOnSubscribe;
 	private AtomicBoolean isAlive = new AtomicBoolean(true);
-	private Queue<Observer<? super T>> theListeners;
+	private org.qommons.collect.ListenerList<Observer<? super T>> theListeners;
 
 	/** Creates a simple observable */
 	public SimpleObservable() {
@@ -31,7 +30,7 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 		 * mine.
 		 */
 		// theListeners = new ConcurrentLinkedQueue<>();
-		theListeners = new org.qommons.tree.BetterTreeList<>(true);
+		theListeners = new org.qommons.collect.ListenerList<>();
 		theOnSubscribe = onSubscribe;
 	}
 
@@ -39,15 +38,12 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 	public Subscription subscribe(Observer<? super T> observer) {
 		if (!isAlive.get()) {
 			observer.onCompleted(null);
-			return () -> {
-			};
+			return () -> {};
 		} else {
-			theListeners.add(observer);
+			Runnable unsub = theListeners.add(observer);
 			if (theOnSubscribe != null)
 				theOnSubscribe.accept(observer);
-			return () -> {
-				theListeners.remove(observer);
-			};
+			return unsub::run;
 		}
 	}
 
@@ -56,17 +52,14 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 		if (!isAlive.get())
 			throw new IllegalStateException("Firing a value on a completed observable");
 		// This allows listeners to be added by listeners. Those new listeners will be fired last.
-		for (Observer<? super T> observer : theListeners)
-			observer.onNext(value);
+		theListeners.forEach(observer -> observer.onNext(value));
 	}
 
 	@Override
 	public <V extends T> void onCompleted(V value) {
 		if (isAlive.getAndSet(false)) {
-			Observer<? super T>[] observers = theListeners.toArray(new Observer[theListeners.size()]);
+			theListeners.forEach(observer -> observer.onCompleted(value));
 			theListeners.clear();
-			for (Observer<? super T> observer : observers)
-				observer.onCompleted(value);
 		}
 	}
 
