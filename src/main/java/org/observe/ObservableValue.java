@@ -572,12 +572,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 								@Override
 								public <V extends ObservableValueEvent<?>> void onNext(V event) {
 									if (event.isInitial()) {
-										initialized[0] = true;
+										initialized[index] = true;
 										caches[index].initialize(event.getNewValue());
 										return;
-									} else if (!isInitialized()) {
+									} else if (!isInitialized())
 										caches[index].initialize(event.getNewValue());
-									}
 									BiTuple<T, T> change = caches[index].handleChange(event.getOldValue(), event.getNewValue());
 									if (change != null) {
 										ObservableValueEvent<T> toFire = ComposedObservableValue.this.createChangeEvent(change.getValue1(),

@@ -109,7 +109,7 @@ public interface XformOptions {
 
 	/**
 	 * Interfaces between a {@link XformCacheHandler} and the data it manages
-	 * 
+	 *
 	 * @param <E> The type of the source values
 	 * @param <T> The type of the mapped values
 	 */
@@ -119,7 +119,7 @@ public interface XformOptions {
 
 		/**
 		 * Ensures no modification occurs while the lock is held
-		 * 
+		 *
 		 * @return A transaction to use to release the lock
 		 */
 		Transaction lock();
@@ -133,7 +133,7 @@ public interface XformOptions {
 
 	/**
 	 * Class used for implementing {@link XformOptions}
-	 * 
+	 *
 	 * @param <E> The type of the source values
 	 * @param <T> The type of the mapped values
 	 */
@@ -200,13 +200,10 @@ public interface XformOptions {
 					oldValue = map.apply(oldSource);
 					newValue = map.apply(newSource);
 				}
-			} else {
+			} else
 				oldValue = newValue = map.apply(newSource);
-			}
-			if (theDef.isCached())
-				theIntf.setDestCache(newValue);
 			if (theDef.isFireIfUnchanged() || oldValue != newValue)
-				new BiTuple<>(oldValue, newValue);
+				return new BiTuple<>(oldValue, newValue);
 			return null;
 		}
 
