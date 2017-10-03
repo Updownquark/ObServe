@@ -117,6 +117,8 @@ public class ObservableSetImpl {
 
 		@Override
 		public ObservableSet<T> collectPassive() {
+			if (!supportsPassive())
+				throw new UnsupportedOperationException("Passive collection not supported");
 			return new PassiveDerivedSet<>((ObservableSet<E>) getSource(), managePassive());
 		}
 
@@ -135,6 +137,11 @@ public class ObservableSetImpl {
 			super(source, parent);
 			isAlwaysUsingFirst = alwaysUseFirst;
 			isPreservingSourceOrder = preserveSourceOrder;
+		}
+
+		@Override
+		public boolean supportsPassive() {
+			return false;
 		}
 
 		@Override
