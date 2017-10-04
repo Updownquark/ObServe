@@ -3526,10 +3526,7 @@ public class ObservableCollectionDataFlowImpl {
 				if (manager == null)
 					return;
 				try (Transaction t = manager.lock(true, true, cause)) {
-					for (FlattenedElement el : theElements)
-						el.removed(cause);
-					theElements.clear();
-					theChildListening.unsubscribe();
+					theChildListening.unsubscribe(); // unsubscribe here removes all elements
 					manager = null;
 				}
 			}
@@ -3566,10 +3563,6 @@ public class ObservableCollectionDataFlowImpl {
 					});
 				} else
 					theElementId = null;
-			}
-
-			void removed(Object cause) {
-				ObservableCollectionDataFlowImpl.removed(theListener, get(), cause);
 			}
 
 			@Override

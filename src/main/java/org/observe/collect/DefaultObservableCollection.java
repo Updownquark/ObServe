@@ -166,8 +166,9 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	@Override
 	public void clear() {
 		try (Transaction t = lock(true, null)) {
+			int[] index = new int[] { size() - 1 };
 			theValues.spliterator(false).forEachElementM(el -> {
-				ObservableCollectionEvent<E> evt = new ObservableCollectionEvent<>(el.getElementId(), getType(), 0,
+				ObservableCollectionEvent<E> evt = new ObservableCollectionEvent<>(el.getElementId(), getType(), index[0]--,
 					CollectionChangeType.remove, el.get(), el.get(), theTransactionCauses.peekLast());
 				el.remove();
 				fire(evt);

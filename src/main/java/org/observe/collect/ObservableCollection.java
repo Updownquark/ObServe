@@ -334,8 +334,9 @@ public interface ObservableCollection<E> extends BetterList<E> {
 					// Remove events
 					int[] index = new int[] { forward ? 0 : size() - 1 };
 					SubscriptionCause.doWith(new SubscriptionCause(), c -> spliterator(forward).forEachElement(el -> {
+						E value = el.get();
 						ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(), index[0]++,
-							CollectionChangeType.add, null, el.get(), c);
+							CollectionChangeType.remove, value, value, c);
 						observer.accept(event);
 					}, forward));
 				}
