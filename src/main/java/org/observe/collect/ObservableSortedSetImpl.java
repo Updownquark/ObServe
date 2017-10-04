@@ -316,6 +316,8 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public ObservableSortedSet<T> collectPassive() {
+			if (!supportsPassive())
+				throw new UnsupportedOperationException("Passive collection not supported");
 			return new PassiveDerivedSortedSet<>((ObservableSortedSet<E>) getSource(), managePassive(), comparator());
 		}
 
@@ -332,6 +334,11 @@ public class ObservableSortedSetImpl {
 			boolean alwaysUseFirst) {
 			super(source, parent, compare);
 			isAlwaysUsingFirst = alwaysUseFirst;
+		}
+
+		@Override
+		public boolean supportsPassive() {
+			return false;
 		}
 
 		@Override

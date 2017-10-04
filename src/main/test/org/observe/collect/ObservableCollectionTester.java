@@ -55,6 +55,16 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 	}
 
 	/**
+	 * @param index The index to add the value at
+	 * @param value The value to add
+	 * @return This tester
+	 */
+	public ObservableCollectionTester<E> add(int index, E value) {
+		theExpected.add(index, value);
+		return this;
+	}
+
+	/**
 	 * @param values The values to add to the expected collection
 	 * @return This tester
 	 */

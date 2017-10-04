@@ -28,6 +28,7 @@ import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
 import org.qommons.Causable;
+import org.qommons.Ternian;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
@@ -468,6 +469,17 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @return An observable value containing a value in this collection passing the given test
 	 */
 	default ObservableValue<E> observeFind(Predicate<? super E> test, Supplier<? extends E> def, boolean first) {
+		return observeFind(test, def, Ternian.of(first));
+	}
+
+	/**
+	 * @param test The test to find passing elements for
+	 * @param def Supplies a default value for the observable result when no elements in this collection pass the test
+	 * @param first {@link Ternian#TRUE} to always use the first element passing the test, {@link Ternian#FALSE} to always use the last
+	 *        element, or {@link Ternian#NONE NONE} to use any passing element
+	 * @return An observable value containing a value in this collection passing the given test
+	 */
+	default ObservableValue<E> observeFind(Predicate<? super E> test, Supplier<? extends E> def, Ternian first) {
 		return new ObservableCollectionImpl.ObservableCollectionFinder<>(this, test, first).map(getType(),
 			el -> el != null ? el.get() : def.get());
 	}
@@ -951,7 +963,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 			.where(new TypeParameter<X>() {}, target.wrap());
 			return map(valueType, map).refreshEach(v -> v.changes().noInit()).map(target, obs -> obs == null ? null : obs.get(),
 				options -> options//
-					.withElementSetting((ov, newValue, doSet) -> {
+				.withElementSetting((ov, newValue, doSet) -> {
 					// Allow setting elements via the wrapped settable value
 					if (!(ov instanceof SettableValue))
 						return MutableCollectionElement.StdMsg.UNSUPPORTED_OPERATION;
@@ -961,7 +973,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 					if (msg != null)
 						return msg;
 					if (doSet)
-							((SettableValue<X>) ov).set(newValue, null);
+						((SettableValue<X>) ov).set(newValue, null);
 					return null;
 				}));
 		}

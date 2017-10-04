@@ -148,8 +148,8 @@ public class ObservableCollectionDataFlowImpl {
 	}
 
 	public static <E, T> TypeToken<Function<? super E, T>> functionType(TypeToken<E> srcType, TypeToken<T> destType) {
-		return new TypeToken<Function<? super E, T>>() {}.where(new TypeParameter<E>() {}, srcType).where(new TypeParameter<T>() {},
-			destType);
+		return new TypeToken<Function<? super E, T>>() {}.where(new TypeParameter<E>() {}, srcType.wrap()).where(new TypeParameter<T>() {},
+			destType.wrap());
 	}
 
 	static class MapWithParent<E, I, T> implements Function<E, T> {
@@ -909,10 +909,14 @@ public class ObservableCollectionDataFlowImpl {
 					onElement.accept(el, evt);
 					break;
 				case remove:
-					theElementListeners.remove(evt.getElementId()).removed(evt.getOldValue(), evt);
+					CollectionElementListener<E> listener = theElementListeners.remove(evt.getElementId());
+					if (listener != null)
+						listener.removed(evt.getOldValue(), evt);
 					break;
 				case set:
-					theElementListeners.get(evt.getElementId()).update(evt.getOldValue(), evt.getNewValue(), evt);
+					listener = theElementListeners.get(evt.getElementId());
+					if (listener != null)
+						listener.update(evt.getOldValue(), evt.getNewValue(), evt);
 					break;
 				}
 			}, action -> theSource.subscribe(action, true).removeAll());
@@ -2024,6 +2028,11 @@ public class ObservableCollectionDataFlowImpl {
 				DerivedCollectionElement<I> parentEl = theParentEl.add(theOptions.getReverse().apply(value), before);
 				return parentEl == null ? null : new MappedElement(parentEl, true);
 			}
+
+			@Override
+			public String toString() {
+				return String.valueOf(get());
+			}
 		}
 	}
 
@@ -2907,7 +2916,7 @@ public class ObservableCollectionDataFlowImpl {
 						for (RefreshingElement el : elements)
 							el.refresh(r);
 					}
-				}, refresh::act);
+				}, action -> refresh.safe().act(action));
 			}
 
 			void remove(ElementId element) {
@@ -2966,14 +2975,14 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public DerivedCollectionElement<T> addElement(T value, boolean first) {
 			DerivedCollectionElement<T> parentEl = theParent.addElement(value, first);
-			return parentEl == null ? null : new RefreshingElement(parentEl, true);
+			return parentEl == null ? null : new RefreshingElement(parentEl);
 		}
 
 		@Override
 		public void begin(ElementAccepter<T> onElement, WeakListening listening) {
 			theListening = listening;
 			theParent.begin((parentEl, cause) -> {
-				onElement.accept(new RefreshingElement(parentEl, false), cause);
+				onElement.accept(new RefreshingElement(parentEl), cause);
 			}, listening);
 		}
 
@@ -2983,11 +2992,10 @@ public class ObservableCollectionDataFlowImpl {
 			private RefreshHolder theCurrentHolder;
 			private ElementId theElementId;
 			private CollectionElementListener<T> theListener;
+			private boolean isInstalled;
 
-			RefreshingElement(DerivedCollectionElement<T> parentEl, boolean synthetic) {
+			RefreshingElement(DerivedCollectionElement<T> parentEl) {
 				theParentEl = parentEl;
-				if (!synthetic)
-					updated(theParentEl.get()); // Subscribe to the initial refresh value
 			}
 
 			/**
@@ -2995,7 +3003,7 @@ public class ObservableCollectionDataFlowImpl {
 			 *
 			 * @param value The new value for the element
 			 */
-			private void updated(T value) {
+			void updated(T value) {
 				Observable<?> newRefresh = theRefresh.apply(value);
 				if (newRefresh == theCurrentRefresh)
 					return;
@@ -3016,6 +3024,39 @@ public class ObservableCollectionDataFlowImpl {
 				}
 			}
 
+			private void installOrUninstall() {
+				if (!isInstalled && theListener != null) {
+					isInstalled = true;
+					updated(theParentEl.get()); // Subscribe to the initial refresh value
+					theParentEl.setListener(new CollectionElementListener<T>() {
+						@Override
+						public void update(T oldValue, T newValue, Object cause) {
+							ObservableCollectionDataFlowImpl.update(theListener, oldValue, newValue, cause);
+							updated(newValue);
+						}
+
+						@Override
+						public void removed(T value, Object cause) {
+							if (theCurrentHolder != null) { // Remove from old refresh if non-null
+								theCurrentHolder.remove(theElementId);
+								theElementId = null;
+								theCurrentHolder = null;
+							}
+							theCurrentRefresh = null;
+							ObservableCollectionDataFlowImpl.removed(theListener, value, cause);
+						}
+					});
+				} else if (isInstalled && theListener == null) {
+					theParentEl.setListener(null);
+					if (theCurrentHolder != null) { // Remove from old refresh if non-null
+						theCurrentHolder.remove(theElementId);
+						theElementId = null;
+						theCurrentHolder = null;
+					}
+					theCurrentRefresh = null;
+				}
+			}
+
 			private void refresh(Object cause) {
 				T value = get();
 				ObservableCollectionDataFlowImpl.update(theListener, value, value, cause);
@@ -3029,6 +3070,7 @@ public class ObservableCollectionDataFlowImpl {
 			@Override
 			public void setListener(CollectionElementListener<T> listener) {
 				theListener = listener;
+				installOrUninstall();
 			}
 
 			@Override
@@ -3069,7 +3111,7 @@ public class ObservableCollectionDataFlowImpl {
 			@Override
 			public DerivedCollectionElement<T> add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
 				DerivedCollectionElement<T> parentEl = theParentEl.add(value, before);
-				return parentEl == null ? null : new RefreshingElement(parentEl, true);
+				return parentEl == null ? null : new RefreshingElement(parentEl);
 			}
 		}
 	}
@@ -3465,7 +3507,7 @@ public class ObservableCollectionDataFlowImpl {
 				});
 			}
 
-			private void updated(I newValue, Object cause) {
+			void updated(I newValue, Object cause) {
 				try (Transaction t = theParent.lock(true, false, cause)) {
 					CollectionDataFlow<?, ?, ? extends T> newFlow = theMap.apply(newValue);
 					if (newFlow == theFlow)
@@ -3480,7 +3522,7 @@ public class ObservableCollectionDataFlowImpl {
 				}
 			}
 
-			private void clearSubElements(Object cause) {
+			void clearSubElements(Object cause) {
 				if (manager == null)
 					return;
 				try (Transaction t = manager.lock(true, true, cause)) {

@@ -35,6 +35,11 @@ public class CollectionChangeEvent<E> extends AbstractCausable {
 			this.oldValue = oldValue;
 			this.index = index;
 		}
+
+		@Override
+		public String toString() {
+			return new StringBuilder().append(index).append(':').append(oldValue).append('/').append(newValue).toString();
+		}
 	}
 	/** The type of the changes that this event represents */
 	public final CollectionChangeType type;
@@ -64,6 +69,21 @@ public class CollectionChangeEvent<E> extends AbstractCausable {
 			@Override
 			public E get(int index) {
 				return elements.get(index).newValue;
+			}
+		};
+	}
+
+	/** @return a list of this change's {@link #elements}, ordered by descending index */
+	public List<ElementChange<E>> getElementsReversed() {
+		return new AbstractList<ElementChange<E>>() {
+			@Override
+			public int size() {
+				return elements.size();
+			}
+
+			@Override
+			public ElementChange<E> get(int index) {
+				return elements.get(elements.size() - index - 1);
 			}
 		};
 	}

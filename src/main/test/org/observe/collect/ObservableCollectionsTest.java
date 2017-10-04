@@ -28,16 +28,21 @@ import java.util.stream.Collectors;
 import org.junit.Assert;
 import org.junit.Test;
 import org.observe.Observable;
+import org.observe.ObservableTester;
 import org.observe.ObservableValue;
+import org.observe.ObservableValueTester;
 import org.observe.SimpleObservable;
 import org.observe.SimpleSettableValue;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
+import org.qommons.Causable;
 import org.qommons.QommonsTestUtils;
+import org.qommons.Ternian;
 import org.qommons.Transaction;
 import org.qommons.collect.CircularArrayList;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.collect.SimpleCause;
 import org.qommons.collect.TransactableList;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeSet;
@@ -515,68 +520,42 @@ public class ObservableCollectionsTest {
 		list1.with(0, 1, 2, 4, 5, 6, 7, 8, 8);
 		list2.with(0, 2, 4, 6, 8, 10, 10);
 		ObservableValue<Boolean> containsAll = list1.observeContainsAll(list2);
-		assertEquals(false, containsAll.get());
-		boolean[] reported = new boolean[1];
-		int[] events = new int[1];
-		Subscription sub = containsAll.value().act(//
-			ca -> {
-				reported[0] = ca;
-				events[0]++;
-			});
-		int correctEvents = 1;
-		assertEquals(false, reported[0]);
-		assertEquals(correctEvents, events[0]);
+		ObservableValueTester<Boolean> tester = new ObservableValueTester<>(containsAll);
+		tester.check(false, 1);
 		list1.add(10);
-		correctEvents++;
-		assertEquals(true, reported[0]);
-		assertEquals(correctEvents, events[0]);
+		tester.check(true, 1);
 		list1.remove(Integer.valueOf(10));
-		correctEvents++;
-		assertEquals(false, reported[0]);
-		assertEquals(correctEvents, events[0]);
+		tester.check(false, 1);
 		list2.remove(Integer.valueOf(10));
-		assertEquals(false, reported[0]);
-		assertEquals(correctEvents, events[0]);
+		tester.check(false, 0);
 		list2.remove(Integer.valueOf(10));
-		correctEvents++;
-		assertEquals(true, reported[0]);
-		assertEquals(correctEvents, events[0]);
+		tester.check(true, 1);
 		list2.add(10);
-		correctEvents++;
-		assertEquals(false, reported[0]);
-		assertEquals(correctEvents, events[0]);
+		tester.check(false, 1);
 		list2.remove(Integer.valueOf(10));
-		correctEvents++;
-		assertEquals(true, reported[0]);
-		assertEquals(correctEvents, events[0]);
+		tester.check(true, 1);
 		list1.remove(Integer.valueOf(8));
-		assertEquals(true, reported[0]);
-		assertEquals(correctEvents, events[0]);
+		tester.check(true, 0);
 		list1.remove(Integer.valueOf(8));
-		correctEvents++;
-		assertEquals(false, reported[0]);
-		assertEquals(correctEvents, events[0]);
+		tester.check(false, 1);
 		try (Transaction t = list1.lock(true, null)) {
 			list1.add(8);
 			list1.remove(Integer.valueOf(8));
 			list1.add(8);
 			list1.remove(Integer.valueOf(8));
 		}
-		assertEquals(false, reported[0]);
-		assertEquals(correctEvents, events[0]);
+		tester.check(false, 0);
 		try (Transaction t = list1.lock(true, null)) {
 			list1.add(8);
 			list1.remove(Integer.valueOf(8));
 			list1.add(8);
 		}
-		correctEvents++;
-		assertEquals(true, reported[0]);
-		assertEquals(correctEvents, events[0]);
+		tester.check(true, 1);
 
-		sub.unsubscribe();
+		tester.setSynced(false);
 		list1.remove(Integer.valueOf(8));
-		assertEquals(true, reported[0]);
-		assertEquals(correctEvents, events[0]);
+		tester.checkValue(true);
+		tester.checkOps(0);
 	}
 
 	/** Tests {@link CollectionDataFlow#map(TypeToken, Function)} */
@@ -1154,9 +1133,9 @@ public class ObservableCollectionsTest {
 				tester2.remove(Integer.valueOf(value));
 				break;
 			}
-			tester0.check(i % 3 == 0 ? 1 : 0);
-			tester1.check(i % 3 == 1 ? 1 : 0);
-			tester2.check(i % 3 == 2 ? 1 : 0);
+			tester0.check(value % 3 == 0 ? 1 : 0);
+			tester1.check(value % 3 == 1 ? 1 : 0);
+			tester2.check(value % 3 == 2 ? 1 : 0);
 		}
 	}
 
@@ -1337,19 +1316,18 @@ public class ObservableCollectionsTest {
 	@Test
 	public void observableListFind() {
 		ObservableCollection<Integer> list = ObservableCollection.create(intType);
-		ObservableValue<Integer> found = list.observeFind(value -> value % 3 == 0, () -> null, false);
-		Integer [] received = new Integer[] {0};
-		found.changes().act(value -> received[0] = value.getNewValue());
+		ObservableValue<Integer> found = list.observeFind(value -> value % 3 == 0, () -> null, true);
+		ObservableValueTester<Integer> tester = new ObservableValueTester<>(found);
 		Integer [] correct = new Integer[] {null};
+		tester.check(correct[0], 1);
 
-		assertEquals(correct[0], received[0]);
-		assertEquals(correct[0], found.get());
 		for(int i = 1; i < 30; i++) {
 			list.add(i);
-			if(i % 3 == 0 && correct[0] == null)
+			if (i % 3 == 0 && correct[0] == null) {
 				correct[0] = i;
-			assertEquals(correct[0], received[0]);
-			assertEquals(correct[0], found.get());
+				tester.check(i, 1);
+			} else
+				tester.check(correct[0], 0);
 		}
 		for(int i = 1; i < 30; i++) {
 			list.remove(Integer.valueOf(i));
@@ -1357,9 +1335,9 @@ public class ObservableCollectionsTest {
 				correct[0] += 3;
 				if(correct[0] >= 30)
 					correct[0] = null;
-			}
-			assertEquals(correct[0], received[0]);
-			assertEquals(correct[0], found.get());
+				tester.check(correct[0], 1);
+			} else
+				tester.check(correct[0], 0);
 		}
 	}
 
@@ -1380,7 +1358,7 @@ public class ObservableCollectionsTest {
 		list.addAll(java.util.Arrays.asList(value1, value2, value3, value4));
 
 		Integer [] received = new Integer[1];
-		list.flow().flatMapV(intType, v -> v).collect().observeFind(value -> value % 3 == 0, () -> null, false).value()
+		list.flow().flatMapV(intType, v -> v).collect().observeFind(value -> value % 3 == 0, () -> null, Ternian.NONE).value()
 		.act(value -> received[0] = value);
 		assertEquals(Integer.valueOf(3), received[0]);
 		value3.set(4, null);
@@ -1575,30 +1553,26 @@ public class ObservableCollectionsTest {
 	}
 
 	private void testTransactionsByFind(ObservableCollection<Integer> observable, TransactableList<Integer> controller) {
-		Integer [] found = new Integer[1];
-		int [] findCount = new int[1];
-		Subscription sub = observable.observeFind(value -> value % 5 == 4, () -> null, false).changes().act(event -> {
-			findCount[0]++;
-			found[0] = event.getNewValue();
-		});
+		ObservableValueTester<Integer> tester = new ObservableValueTester<>(
+			observable.observeFind(value -> value % 5 == 4, () -> null, true));
 
-		assertEquals(1, findCount[0]);
+		tester.checkOps(1);
 		controller.add(0);
-		assertEquals(1, findCount[0]);
+		tester.checkOps(0);
 		controller.add(3);
-		assertEquals(1, findCount[0]);
+		tester.checkOps(0);
 		controller.add(9);
-		assertEquals(2, findCount[0]);
-		assertEquals(9, (int) found[0]);
-		Transaction trans = controller.lock(true, null);
-		assertEquals(2, findCount[0]);
-		controller.add(0, 4);
-		assertEquals(2, findCount[0]);
-		trans.close();
-		assertEquals(3, findCount[0]);
-		assertEquals(4, (int) found[0]);
+		tester.check(9, 1);
+		SimpleCause.doWith(new SimpleCause(), c -> {
+			Transaction trans = controller.lock(true, c);
+			tester.checkOps(0);
+			controller.add(0, 4);
+			tester.checkOps(0);
+			trans.close();
+		});
+		tester.check(4, 1);
 
-		sub.unsubscribe();
+		tester.setSynced(false);
 		controller.clear();
 	}
 
@@ -1606,49 +1580,58 @@ public class ObservableCollectionsTest {
 		ArrayList<Integer> compare = new ArrayList<>(observable);
 		ArrayList<Integer> correct = new ArrayList<>(observable);
 		int [] changeCount = new int[1];
+		int[] correctChanges = new int[1];
 		Subscription sub = observable.changes().act(event -> {
 			changeCount[0]++;
-			for(CollectionChangeEvent.ElementChange<Integer> change : event.elements){
-				switch (event.type) {
-				case add:
+			switch (event.type) {
+			case add:
+				for (CollectionChangeEvent.ElementChange<Integer> change : event.elements) {
 					compare.add(change.index, change.newValue);
-					break;
-				case remove:
-					assertEquals(compare.remove(change.index), change.newValue);
-					break;
-				case set:
-					assertEquals(compare.set(change.index, change.newValue), change.oldValue);
-					break;
 				}
+				break;
+			case remove:
+				for (CollectionChangeEvent.ElementChange<Integer> change : event.getElementsReversed()) {
+					assertEquals(compare.remove(change.index), change.newValue);
+				}
+				break;
+			case set:
+				for (CollectionChangeEvent.ElementChange<Integer> change : event.elements) {
+					assertEquals(compare.set(change.index, change.newValue), change.oldValue);
+				}
+				break;
 			}
 		});
-		assertEquals(0, changeCount[0]);
+		assertEquals(correctChanges[0], changeCount[0]);
 
 		for(int i = 0; i < 30; i++) {
-			assertEquals(i, changeCount[0]);
+			assertEquals(correctChanges[0], changeCount[0]);
 			int toAdd = (int) (Math.random() * 2000000) - 1000000;
 			controller.add(toAdd);
+			correctChanges[0]++;
 			correct.add(toAdd);
 			assertEquals(correct, new ArrayList<>(observable));
 			assertEquals(correct, compare);
 		}
-		assertEquals(30, changeCount[0]);
+		assertEquals(correctChanges[0], changeCount[0]);
 
-		Transaction trans = controller.lock(true, null);
-		controller.clear();
-		correct.clear();
-		correct.addAll(observable);
-		for(int i = 0; i < 30; i++) {
-			int toAdd = (int) (Math.random() * 2000000) - 1000000;
-			controller.add(toAdd);
-			correct.add(toAdd);
-			assertEquals(correct, new ArrayList<>(observable));
-		}
-		// The exact numbers here and down are pretty deep in the weeds of the changes observable. Still need this test to draw attention
-		// to when this changes
-		assertEquals(32, changeCount[0]);
-		trans.close();
-		assertEquals(33, changeCount[0]);
+		SimpleCause.doWith(new SimpleCause(), c -> {
+			Transaction trans = controller.lock(true, c);
+			controller.clear();
+			correct.clear();
+			correct.addAll(observable);
+			correctChanges[0]++;
+			assertEquals(correctChanges[0], changeCount[0]);
+			for (int i = 0; i < 30; i++) {
+				int toAdd = (int) (Math.random() * 2000000) - 1000000;
+				controller.add(toAdd);
+				correct.add(toAdd);
+				assertEquals(correct, new ArrayList<>(observable));
+			}
+			assertEquals(correctChanges[0], changeCount[0]);
+			trans.close();
+		});
+		correctChanges[0]++;
+		assertEquals(correctChanges[0], changeCount[0]);
 		assertEquals(correct, compare);
 
 		sub.unsubscribe();
@@ -1659,55 +1642,48 @@ public class ObservableCollectionsTest {
 	@Test
 	public void testTransactionsRefresh() {
 		ObservableCollection<Integer> list = ObservableCollection.create(new TypeToken<Integer>() {});
-		SimpleObservable<Void> refresh = new SimpleObservable<>();
+		SimpleObservable<Causable> refresh = new SimpleObservable<>();
 
 		for(int i = 0; i < 30; i++)
 			list.add(i);
 
-		int [] changes = new int[1];
-		Subscription sub = list.flow().refresh(refresh).collect().simpleChanges().act(v -> {
-			changes[0]++;
+		ObservableTester tester = new ObservableTester(list.flow().refresh(refresh).collect().simpleChanges());
+
+		tester.checkOps(0);
+
+		refresh.onNext(null);
+		tester.checkOps(1);
+
+		SimpleCause.doWith(new SimpleCause(), c -> {
+			Transaction trans = list.lock(true, c);
+			refresh.onNext(c);
+			refresh.onNext(c);
+			trans.close();
 		});
-		int correctChanges = 0;
+		tester.checkOps(1);
 
-		assertEquals(correctChanges, changes[0]);
-
-		refresh.onNext(null);
-		correctChanges++;
-		assertEquals(correctChanges, changes[0]);
-
-		Transaction trans = list.lock(true, null);
-		refresh.onNext(null);
-		refresh.onNext(null);
-		trans.close();
-		correctChanges++;
-		assertEquals(correctChanges, changes[0]);
-
-		trans = list.lock(true, null);
-		for(int i = 0; i < 30; i++)
-			list.set(i, i + 1);
-		refresh.onNext(null);
-		trans.close();
-		correctChanges++;
-		assertEquals(correctChanges, changes[0]);
+		SimpleCause.doWith(new SimpleCause(), c -> {
+			Transaction trans = list.lock(true, c);
+			for (int i = 0; i < 30; i++)
+				list.set(i, i + 1);
+			refresh.onNext(c);
+			trans.close();
+		});
+		tester.checkOps(1);
 
 		list.clear();
-		correctChanges++;
-		assertEquals(correctChanges, changes[0]);
+		tester.checkOps(1);
 		refresh.onNext(null);
-		assertEquals(correctChanges, changes[0]);
+		tester.checkOps(0);
 
 		list.addAll(java.util.Arrays.asList(0, 1, 2, 3, 4));
-		correctChanges++;
-		assertEquals(correctChanges, changes[0]);
+		tester.checkOps(1);
 		refresh.onNext(null);
-		correctChanges++;
-		assertEquals(correctChanges, changes[0]);
+		tester.checkOps(1);
 
-		int preChanges = changes[0];
-		sub.unsubscribe();
+		tester.setSynced(false);
 		refresh.onNext(null);
-		assertEquals(preChanges, changes[0]);
+		tester.checkOps(0);
 	}
 
 	/** Tests transactions caused by {@link CollectionDataFlow#combine(TypeToken, Function) combining} a list with an observable value */
@@ -1736,18 +1712,22 @@ public class ObservableCollectionsTest {
 		correctChanges++;
 		assertEquals(correctChanges, changes[0]);
 
-		Transaction trans = list.lock(true, null);
-		mult.set(3, null);
-		mult.set(4, null);
-		trans.close();
+		SimpleCause.doWith(new SimpleCause(), c -> {
+			Transaction trans = list.lock(true, c);
+			mult.set(3, c);
+			mult.set(4, c);
+			trans.close();
+		});
 		correctChanges++;
 		assertEquals(correctChanges, changes[0]);
 
-		trans = list.lock(true, null);
-		for(int i = 0; i < 30; i++)
-			list.set(i, i + 1);
-		mult.set(5, null);
-		trans.close();
+		SimpleCause.doWith(new SimpleCause(), c -> {
+			Transaction trans = list.lock(true, c);
+			for (int i = 0; i < 30; i++)
+				list.set(i, i + 1);
+			mult.set(5, c);
+			trans.close();
+		});
 		correctChanges++;
 		assertEquals(correctChanges, changes[0]);
 

@@ -5,6 +5,7 @@ import java.util.LinkedList;
 import java.util.function.Consumer;
 
 import org.observe.Subscription;
+import org.qommons.AbstractCausable;
 import org.qommons.Causable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
@@ -49,12 +50,17 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	public Transaction lock(boolean write, boolean structural, Object cause) {
 		Transaction t = theValues.lock(write, structural, cause);
 		Causable tCause;
-		if (cause == null && !theTransactionCauses.isEmpty())
+		boolean createdCause;
+		if (cause == null && !theTransactionCauses.isEmpty()) {
+			createdCause = false;
 			tCause = null;
-		else if (cause instanceof Causable)
+		} else if (cause instanceof Causable) {
+			createdCause = false;
 			tCause = (Causable) cause;
-		else
+		} else {
+			createdCause = true;
 			tCause = new SimpleCause(cause);
+		}
 		if (write && tCause != null)
 			theTransactionCauses.add(tCause);
 		return new Transaction() {
@@ -65,6 +71,8 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 				if (isClosed)
 					return;
 				isClosed = true;
+				if (createdCause)
+					AbstractCausable.finish((AbstractCausable) tCause);
 				if (write && tCause != null)
 					theTransactionCauses.removeLastOccurrence(tCause);
 				t.close();
@@ -143,34 +151,34 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			CollectionElement<E> el = theValues.addElement(e, first);
 			if (el == null)
 				return null;
-			fire(new ObservableCollectionEvent<>(el.getElementId(), getType(), theValues.getElementsBefore(el.getElementId()),
-				CollectionChangeType.add, null, e, theTransactionCauses.peekLast()));
+			ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(),
+				theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, null, e, theTransactionCauses.peekLast());
+			fire(event);
 			return el;
 		}
 	}
 
 	@Override
 	public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-		try (Transaction t = lock(true, false, null)) {
-			return theObservers.add(observer)::run;
-		}
+		return theObservers.add(observer)::run;
 	}
 
 	@Override
 	public void clear() {
 		try (Transaction t = lock(true, null)) {
-			theValues.spliterator().forEachElementM(el -> {
+			theValues.spliterator(false).forEachElementM(el -> {
 				ObservableCollectionEvent<E> evt = new ObservableCollectionEvent<>(el.getElementId(), getType(), 0,
 					CollectionChangeType.remove, el.get(), el.get(), theTransactionCauses.peekLast());
 				el.remove();
 				fire(evt);
-			}, true);
+			}, false);
 		}
 	}
 
-	private void fire(ObservableCollectionEvent<E> evt) {
-		theObservers.forEach(//
-			listener -> listener.accept(evt));
+	void fire(ObservableCollectionEvent<E> evt) {
+		ObservableCollectionEvent.doWith(evt, //
+			e -> theObservers.forEach(//
+				listener -> listener.accept(e)));
 	}
 
 	@Override
@@ -215,10 +223,12 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 
 			@Override
 			public void remove() throws UnsupportedOperationException {
-				E old = get();
-				valueEl.remove();
-				fire(new ObservableCollectionEvent<>(getElementId(), getType(), getElementsBefore(getElementId()),
-					CollectionChangeType.remove, old, old, theTransactionCauses.peekLast()));
+				try (Transaction t = lock(true, null)) {
+					E old = get();
+					valueEl.remove();
+					fire(new ObservableCollectionEvent<>(getElementId(), getType(), getElementsBefore(getElementId()),
+						CollectionChangeType.remove, old, old, theTransactionCauses.peekLast()));
+				}
 			}
 
 			@Override
@@ -228,10 +238,12 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 
 			@Override
 			public ElementId add(E value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-				ElementId newId = valueEl.add(value, before);
-				fire(new ObservableCollectionEvent<>(newId, getType(), getElementsBefore(newId), CollectionChangeType.add, null, value,
-					theTransactionCauses.peekLast()));
-				return newId;
+				try (Transaction t = lock(true, null)) {
+					ElementId newId = valueEl.add(value, before);
+					fire(new ObservableCollectionEvent<>(newId, getType(), getElementsBefore(newId), CollectionChangeType.add, null, value,
+						theTransactionCauses.peekLast()));
+					return newId;
+				}
 			}
 
 			@Override

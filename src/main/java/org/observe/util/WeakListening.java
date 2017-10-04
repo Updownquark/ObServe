@@ -37,7 +37,7 @@ public class WeakListening {
 
 	/**
 	 * Adds a runnable (zero-argument) subscription to this listening
-	 * 
+	 *
 	 * @param action The runnable action to invoke when the event source fires
 	 * @param subscribe A function to subscribe to the event source
 	 * @return A subscription that will terminate the subscription to the event source
@@ -48,7 +48,7 @@ public class WeakListening {
 
 	/**
 	 * Adds a consumer (one-argument) subscription to this listening
-	 * 
+	 *
 	 * @param action The consumer action to invoke when the event source fires
 	 * @param subscribe A function to subscribe to the event source
 	 * @return A subscription that will terminate the subscription to the event source
@@ -59,7 +59,7 @@ public class WeakListening {
 
 	/**
 	 * Adds a bi-consumer (two-argument) subscription to this listening
-	 * 
+	 *
 	 * @param action The consumer action to invoke when the event source fires
 	 * @param subscribe A function to subscribe to the event source
 	 * @return A subscription that will terminate the subscription to the event source
@@ -102,11 +102,11 @@ public class WeakListening {
 		};
 	}
 
-	private Object getAction(Long actionId) {
+	Object getAction(Long actionId) {
 		return theActions.get(actionId).action;
 	}
 
-	private void unsubscribe() {
+	void unsubscribe() {
 		Iterator<ActionStruct> subIter = theActions.values().iterator();
 		while (subIter.hasNext()) {
 			subIter.next().unsubscribe();
@@ -159,7 +159,7 @@ public class WeakListening {
 			this.action = action;
 		}
 
-		private void unsubscribe() {
+		void unsubscribe() {
 			Subscription sub = subscription;
 			subscription = null;
 			if (sub != null)
@@ -200,7 +200,8 @@ public class WeakListening {
 
 		@Override
 		public void run() {
-			doOnAction((Runnable r) -> r.run());
+			doOnAction(//
+				(Runnable r) -> r.run());
 		}
 	}
 
@@ -211,7 +212,8 @@ public class WeakListening {
 
 		@Override
 		public void accept(E value) {
-			doOnAction((Consumer<E> action) -> action.accept(value));
+			doOnAction(//
+				(Consumer<E> action) -> action.accept(value));
 		}
 	}
 
@@ -222,7 +224,8 @@ public class WeakListening {
 
 		@Override
 		public void accept(E value1, F value2) {
-			doOnAction((BiConsumer<E, F> action) -> action.accept(value1, value2));
+			doOnAction(//
+				(BiConsumer<E, F> action) -> action.accept(value1, value2));
 		}
 	}
 }

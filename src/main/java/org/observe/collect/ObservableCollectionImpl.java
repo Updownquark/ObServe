@@ -34,6 +34,7 @@ import org.qommons.ArrayUtils;
 import org.qommons.BiTuple;
 import org.qommons.Causable;
 import org.qommons.ConcurrentHashSet;
+import org.qommons.Ternian;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -42,10 +43,10 @@ import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ElementSpliterator;
+import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.MutableElementSpliterator;
-import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeSet;
 import org.qommons.tree.BinaryTreeNode;
 
@@ -128,6 +129,11 @@ public final class ObservableCollectionImpl {
 				this.newValue = newValue;
 				this.index = index;
 			}
+
+			@Override
+			public String toString() {
+				return new StringBuilder().append(index).append(':').append(oldValue).append('/').append(newValue).toString();
+			}
 		}
 
 		private static final String SESSION_TRACKER_PROPERTY = "change-tracker";
@@ -161,34 +167,29 @@ public final class ObservableCollectionImpl {
 		 */
 		private SessionChangeTracker<E> accumulate(SessionChangeTracker<E> tracker, ObservableCollectionEvent<? extends E> event,
 			Observer<? super CollectionChangeEvent<E>> observer) {
-			int collIndex = collection.getElementsBefore(event.getElementId());
+			int collIndex = event.getIndex();
 			if (tracker == null)
-				return replace(tracker, event, observer, collIndex);
+				return replace(tracker, event, observer);
 			int changeIndex;
 			switch (tracker.type) {
 			case add:
 				switch (event.getType()) {
 				case add:
-					changeIndex = indexForAdd(tracker, collIndex);
-					tracker.elements.add(changeIndex, new ChangeValue<>(event.getOldValue(), event.getNewValue(), collIndex));
-					for (changeIndex++; changeIndex < tracker.elements.size(); changeIndex++)
-						tracker.elements.get(changeIndex).index++;
+					tracker = insertAddition(tracker, event);
 					break;
 				case remove:
 					changeIndex = indexForAdd(tracker, collIndex);
 					if (changeIndex < tracker.elements.size() && tracker.elements.get(changeIndex).index == collIndex) {
-						tracker.elements.remove(changeIndex);
-						for (; changeIndex < tracker.elements.size(); changeIndex++)
-							tracker.elements.get(changeIndex).index--;
+						removeAddition(tracker, changeIndex);
 					} else
-						tracker = replace(tracker, event, observer, collIndex);
+						tracker = replace(tracker, event, observer);
 					break;
 				case set:
 					changeIndex = indexForAdd(tracker, collIndex);
 					if (changeIndex < tracker.elements.size() && tracker.elements.get(changeIndex).index == collIndex)
 						tracker.elements.get(changeIndex).newValue = event.getNewValue();
 					else
-						tracker = replace(tracker, event, observer, collIndex);
+						tracker = replace(tracker, event, observer);
 					break;
 				}
 				break;
@@ -202,31 +203,36 @@ public final class ObservableCollectionImpl {
 						changeValue.newValue = event.getNewValue();
 						tracker.elements.add(changeValue);
 					} else
-						tracker = replace(tracker, event, observer, collIndex);
+						tracker = replace(tracker, event, observer);
 					break;
 				case remove:
-					changeIndex = indexForAdd(tracker, collIndex);
-					while (changeIndex < tracker.elements.size() && tracker.elements.get(changeIndex).index == collIndex) {
-						collIndex++;
-						changeIndex++;
+					tracker = insertRemove(tracker, event);
+					if (collection.isEmpty() && tracker.elements.size() > 1) {
+						// If the collection is empty, no more elements can be removed and any other change will just call a replace,
+						// so there's no more information we can possibly accumulate in this session.
+						// Let's preemptively fire the event now.
+						fireEventsFromSessionData(tracker, event, observer);
+						tracker = null;
 					}
-					tracker.elements.add(changeIndex, new ChangeValue<>(event.getOldValue(), event.getNewValue(), collIndex));
 					break;
 				case set:
-					tracker = replace(tracker, event, observer, collIndex);
+					tracker = replace(tracker, event, observer);
 					break;
 				}
 				break;
 			case set:
 				switch (event.getType()) {
 				case add:
-					tracker = replace(tracker, event, observer, collIndex);
+					tracker = replace(tracker, event, observer);
 					break;
 				case remove:
+					if (tracker.elements.size() == 1 && tracker.elements.get(0).index == event.getIndex()) {
+						return replace(null, event, observer);
+					}
 					changeIndex = indexForAdd(tracker, collIndex);
 					if (changeIndex < tracker.elements.size() && tracker.elements.get(changeIndex).index == collIndex)
 						tracker.elements.remove(changeIndex);
-					tracker = replace(tracker, event, observer, collIndex);
+					tracker = replace(tracker, event, observer);
 					break;
 				case set:
 					changeIndex = indexForAdd(tracker, collIndex);
@@ -242,10 +248,36 @@ public final class ObservableCollectionImpl {
 		}
 
 		private SessionChangeTracker<E> replace(SessionChangeTracker<E> tracker, ObservableCollectionEvent<? extends E> event,
-			Observer<? super CollectionChangeEvent<E>> observer, int collIndex) {
+			Observer<? super CollectionChangeEvent<E>> observer) {
 			fireEventsFromSessionData(tracker, event, observer);
 			tracker = new SessionChangeTracker<>(event.getType());
-			tracker.elements.add(new ChangeValue<>(event.getOldValue(), event.getNewValue(), collIndex));
+			tracker.elements.add(new ChangeValue<>(event.getOldValue(), event.getNewValue(), event.getIndex()));
+			return tracker;
+		}
+
+		private SessionChangeTracker<E> insertAddition(SessionChangeTracker<E> tracker, ObservableCollectionEvent<? extends E> event) {
+			int changeIndex = indexForAdd(tracker, event.getIndex());
+			for (int i = changeIndex + 1; i < tracker.elements.size(); i++)
+				tracker.elements.get(i).index++;
+			tracker.elements.add(changeIndex, new ChangeValue<>(null, event.getNewValue(), event.getIndex()));
+			return tracker;
+		}
+
+		private void removeAddition(SessionChangeTracker<E> tracker, int changeIndex) {
+			tracker.elements.remove(changeIndex);
+			for (; changeIndex < tracker.elements.size(); changeIndex++)
+				tracker.elements.get(changeIndex).index--;
+		}
+
+		private SessionChangeTracker<E> insertRemove(SessionChangeTracker<E> tracker, ObservableCollectionEvent<? extends E> event) {
+			int collectionIndex = event.getIndex();
+			int changeIndex = indexForAdd(tracker, collectionIndex);
+			collectionIndex += changeIndex;
+			while (changeIndex < tracker.elements.size() && tracker.elements.get(changeIndex).index <= collectionIndex) {
+				changeIndex++;
+				collectionIndex++;
+			}
+			tracker.elements.add(changeIndex, new ChangeValue<>(event.getOldValue(), event.getNewValue(), collectionIndex));
 			return tracker;
 		}
 
@@ -343,7 +375,7 @@ public final class ObservableCollectionImpl {
 								}
 								if (!mayReplace)
 									return; // Even if the new element's value matches, it wouldn't replace the current value
-								boolean matches = test(evt.getNewValue());
+								boolean matches = test(evt.isFinal() ? evt.getOldValue() : evt.getNewValue());
 								if (!matches && (theCurrentElement == null || !theCurrentElement.getElementId().equals(evt.getElementId())))
 									return; // If the new value doesn't match and it's not the current element, we don't care
 
@@ -352,26 +384,33 @@ public final class ObservableCollectionImpl {
 									SimpleElement oldElement = theCurrentElement;
 									if (data.get("replacement") == null) {
 										// Means we need to find the new value in the collection
-										if (!find(el -> theCurrentElement = new SimpleElement(el.getElementId(), el.get())))
+										if (!find(//
+											el -> theCurrentElement = new SimpleElement(el.getElementId(), el.get())))
 											theCurrentElement = null;
 									} else
 										theCurrentElement = (SimpleElement) data.get("replacement");
 									observer.onNext(createChangeEvent(oldElement, theCurrentElement, cause));
 								});
 								if (!matches) {
-									// The current element's value no longer matches--we need to search for the new value if we don't
-									// already know
-									// of a better match. The signal for this is a null replacement, so nothing to do here.
+									// The current element's value no longer matches
+									// We need to search for the new value if we don't already know of a better match.
+									// The signal for this is a null replacement, so nothing to do here.
 								} else {
-									// Either:
-									// There is no current element and the new element matches--use it unless we already know of a better
-									// match
-									// Or there the new value is in a better position than the current element
-									SimpleElement replacement = (SimpleElement) causeData.get("replacement");
-									// If we already know of a replacement element even better-positioned than the new element, ignore the
-									// new one
-									if (replacement == null || evt.getElementId().compareTo(replacement.getElementId()) <= 0)
-										causeData.put("replacement", new SimpleElement(evt.getElementId(), evt.getNewValue()));
+									if (evt.isFinal()) {
+										// The current element has been removed
+										// We need to search for the new value if we don't already know of a better match.
+										// The signal for this is a null replacement, so nothing to do here.
+									} else {
+										// Either:
+										// There is no current element and the new element matches
+										// --use it unless we already know of a better match
+										// Or there the new value is in a better position than the current element
+										SimpleElement replacement = (SimpleElement) causeData.get("replacement");
+										// If we already know of a replacement element even better-positioned than the new element,
+										// ignore the new one
+										if (replacement == null || evt.getElementId().compareTo(replacement.getElementId()) <= 0)
+											causeData.put("replacement", new SimpleElement(evt.getElementId(), evt.getNewValue()));
+									}
 								}
 							}
 						}
@@ -437,17 +476,19 @@ public final class ObservableCollectionImpl {
 	 */
 	public static class ObservableCollectionFinder<E> extends AbstractObservableElementFinder<E> {
 		private final Predicate<? super E> theTest;
-		private final boolean isFirst;
+		private final Ternian isFirst;
 
 		/**
 		 * @param collection The collection to find elements in
 		 * @param test The test to find elements that pass
-		 * @param first Whether to get the first value in the collection that passes or the last value
+		 * @param first Whether to get the first value in the collection that passes, the last value, or any passing value
 		 */
-		protected ObservableCollectionFinder(ObservableCollection<E> collection, Predicate<? super E> test, boolean first) {
+		protected ObservableCollectionFinder(ObservableCollection<E> collection, Predicate<? super E> test, Ternian first) {
 			super(collection, (el1, el2) -> {
+				if (first == Ternian.NONE)
+					return 0;
 				int compare = el1.getElementId().compareTo(el2.getElementId());
-				if (!first)
+				if (!first.value)
 					compare = -compare;
 				return compare;
 			});
@@ -457,7 +498,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		protected boolean find(Consumer<? super CollectionElement<? extends E>> onElement) {
-			return getCollection().find(theTest, onElement, isFirst);
+			return getCollection().find(theTest, onElement, isFirst.withDefault(true));
 		}
 
 		@Override
@@ -666,7 +707,8 @@ public final class ObservableCollectionImpl {
 			return commonCount;
 		}
 
-		public Subscription init(ObservableCollection<E> left, ObservableCollection<X> right, Observable<?> until, boolean weak) {
+		public Subscription init(ObservableCollection<E> left, ObservableCollection<X> right, Observable<?> until, boolean weak,
+			Consumer<ValueCounts<E, X>> initAction) {
 			theLock.lock();
 			try (Transaction lt = left.lock(false, null); Transaction rt = right.lock(false, null)) {
 				left.spliterator().forEachRemaining(e -> modify(e, true, true, null));
@@ -677,6 +719,7 @@ public final class ObservableCollectionImpl {
 
 				Consumer<ObservableCollectionEvent<? extends E>> leftListener = evt -> onEvent(evt, true);
 				Consumer<ObservableCollectionEvent<? extends X>> rightListener = evt -> onEvent(evt, false);
+				Subscription sub;
 				if (weak) {
 					WeakListening.Builder builder = WeakListening.build();
 					if (until != null)
@@ -684,12 +727,14 @@ public final class ObservableCollectionImpl {
 					WeakListening listening = builder.getListening();
 					listening.withConsumer(leftListener, left::onChange);
 					listening.withConsumer(rightListener, right::onChange);
-					return builder::unsubscribe;
+					sub = builder::unsubscribe;
 				} else {
 					Subscription leftSub = left.onChange(leftListener);
 					Subscription rightSub = right.onChange(rightListener);
-					return Subscription.forAll(leftSub, rightSub);
+					sub = Subscription.forAll(leftSub, rightSub);
 				}
+				initAction.accept(this);
+				return sub;
 			} finally {
 				theLock.unlock();
 			}
@@ -739,17 +784,25 @@ public final class ObservableCollectionImpl {
 					if (add) {
 						leftCount++;
 						leftCounts.put(value, count);
+						if (count.right > 0)
+							commonCount++;
 					} else {
 						leftCount--;
 						leftCounts.remove(value);
+						if (count.right > 0)
+							commonCount--;
 					}
 				} else {
 					if (add) {
 						rightCount++;
 						rightCounts.put(value, count);
+						if (count.left > 0)
+							commonCount++;
 					} else {
 						rightCount--;
 						rightCounts.remove(value);
+						if (count.left > 0)
+							commonCount--;
 					}
 				}
 			}
@@ -839,7 +892,9 @@ public final class ObservableCollectionImpl {
 							});
 						}
 					};
-					return counts.init(theLeft, theRight, null, false);
+					return counts.init(theLeft, theRight, null, false, c -> {
+						ObservableValueEvent.doWith(createInitialEvent(theSatisfiedCheck.test(counts), null), observer::onNext);
+					});
 				}
 			};
 		}
@@ -896,7 +951,7 @@ public final class ObservableCollectionImpl {
 		 * @param right The right collection
 		 */
 		public ContainsAllValue(ObservableCollection<E> left, ObservableCollection<X> right) {
-			super(left, right, counts -> counts.getRightCount() == 0);
+			super(left, right, counts -> counts.getRightCount() == counts.getCommonCount());
 		}
 
 		@Override
@@ -1304,7 +1359,7 @@ public final class ObservableCollectionImpl {
 
 		private final ActiveCollectionManager<E, ?, T> theFlow;
 		private final BetterTreeSet<DerivedElementHolder<T>> theDerivedElements;
-		private final BetterTreeList<Consumer<? super ObservableCollectionEvent<? extends T>>> theListeners;
+		private final ListenerList<Consumer<? super ObservableCollectionEvent<? extends T>>> theListeners;
 		private final AtomicInteger theListenerCount;
 		private final Equivalence<? super T> theEquivalence;
 		private final AtomicLong theModCount;
@@ -1314,7 +1369,7 @@ public final class ObservableCollectionImpl {
 		public ActiveDerivedCollection(ActiveCollectionManager<E, ?, T> flow, Observable<?> until) {
 			theFlow = flow;
 			theDerivedElements = new BetterTreeSet<>(false, (e1, e2) -> e1.element.compareTo(e2.element));
-			theListeners = new BetterTreeList<>(true);
+			theListeners = new ListenerList<>();
 			theListenerCount = new AtomicInteger();
 			theEquivalence = flow.equivalence();
 			theModCount = new AtomicLong();
@@ -1333,8 +1388,8 @@ public final class ObservableCollectionImpl {
 					public void update(T oldValue, T newValue, Object elCause) {
 						BinaryTreeNode<DerivedElementHolder<T>> left = holder.treeNode.getClosest(true);
 						BinaryTreeNode<DerivedElementHolder<T>> right = holder.treeNode.getClosest(false);
-						if ((left != null && left.compareTo(holder.treeNode) > 0)
-							|| (right != null && right.compareTo(holder.treeNode) < 0)) {
+						if ((left != null && left.get().element.compareTo(holder.element) > 0)
+							|| (right != null && right.get().element.compareTo(holder.element) < 0)) {
 							theStructureStamp.incrementAndGet();
 							// Remove the element and re-add at the new position.
 							int index = holder.treeNode.getNodesBefore();
@@ -1373,9 +1428,9 @@ public final class ObservableCollectionImpl {
 			return theDerivedElements;
 		}
 
-		private void fireListeners(ObservableCollectionEvent<T> event) {
-			for (Consumer<? super ObservableCollectionEvent<? extends T>> listener : theListeners)
-				listener.accept(event);
+		void fireListeners(ObservableCollectionEvent<T> event) {
+			theListeners.forEach(//
+				listener -> listener.accept(event));
 		}
 
 		@Override
@@ -1390,13 +1445,13 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends T>> observer) {
-			theListeners.add(observer);
+			Runnable remove = theListeners.add(observer);
 			// Add a strong reference to this collection while we have listeners.
 			// Otherwise, this collection could be GC'd and listeners (which may not reference this collection) would just be left hanging
 			if (theListenerCount.getAndIncrement() == 0)
 				STRONG_REFS.add(this);
 			return () -> {
-				theListeners.remove(observer);
+				remove.run();
 				if (theListenerCount.decrementAndGet() == 0)
 					STRONG_REFS.remove(this);
 			};

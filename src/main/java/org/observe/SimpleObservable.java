@@ -9,9 +9,9 @@ import java.util.function.Consumer;
  * @param <T> The type of values from this observable
  */
 public class SimpleObservable<T> implements Observable<T>, Observer<T> {
-	private Consumer<? super Observer<? super T>> theOnSubscribe;
-	private AtomicBoolean isAlive = new AtomicBoolean(true);
-	private org.qommons.collect.ListenerList<Observer<? super T>> theListeners;
+	private final Consumer<? super Observer<? super T>> theOnSubscribe;
+	private final AtomicBoolean isAlive = new AtomicBoolean(true);
+	private final org.qommons.collect.ListenerList<Observer<? super T>> theListeners;
 
 	/** Creates a simple observable */
 	public SimpleObservable() {
@@ -51,14 +51,15 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 	public <V extends T> void onNext(V value) {
 		if (!isAlive.get())
 			throw new IllegalStateException("Firing a value on a completed observable");
-		// This allows listeners to be added by listeners. Those new listeners will be fired last.
-		theListeners.forEach(observer -> observer.onNext(value));
+		theListeners.forEach(//
+			observer -> observer.onNext(value));
 	}
 
 	@Override
 	public <V extends T> void onCompleted(V value) {
 		if (isAlive.getAndSet(false)) {
-			theListeners.forEach(observer -> observer.onCompleted(value));
+			theListeners.forEach(//
+				observer -> observer.onCompleted(value));
 			theListeners.clear();
 		}
 	}
