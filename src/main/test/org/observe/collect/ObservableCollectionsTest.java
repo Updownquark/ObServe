@@ -5,18 +5,22 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.qommons.QommonsTestUtils.collectionsEqual;
+import static org.qommons.debug.Debug.d;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.function.BinaryOperator;
 import java.util.function.Consumer;
@@ -35,10 +39,13 @@ import org.observe.SimpleObservable;
 import org.observe.SimpleSettableValue;
 import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap;
+import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.qommons.Causable;
 import org.qommons.QommonsTestUtils;
 import org.qommons.Ternian;
+import org.qommons.TestHelper;
+import org.qommons.TestHelper.Testable;
 import org.qommons.Transaction;
 import org.qommons.collect.CircularArrayList;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
@@ -51,9 +58,240 @@ import com.google.common.reflect.TypeToken;
 
 
 /** Tests observable collections and their default implementations */
-public class ObservableCollectionsTest {
+public class ObservableCollectionsTest implements Testable {
 	/** The primitive integer type, for re-use */
 	public static final TypeToken<Integer> intType = TypeToken.of(int.class);
+
+	interface CollectionAdjuster {
+		boolean add(List<Integer> values, int index, Integer value);
+
+		boolean remove(List<Integer> values, int index, Integer value);
+
+		boolean set(List<Integer> values, int index, Integer oldValue, Integer newValue);
+
+		void refresh(List<Integer> src, List<Integer> values);
+	}
+
+	@Override
+	public void accept(TestHelper helper) {
+		ObservableCollection<Integer> source = ObservableCollection.create(intType);
+		CollectionAdjuster refresh;
+		CollectionDataFlow<Integer, ?, Integer> derivedFlow;
+		int methods = 3;
+		int modifier1, modifier2;
+		int range = 1000;
+		switch (helper.getInt(0, methods)) {
+		case 0:
+			Function<Integer, Integer> map;
+			switch (helper.getInt(0, 5)) {
+			case 0:
+				modifier1 = helper.getInt(0, 100);
+				map = v -> v + modifier1;
+				break;
+			case 1:
+				modifier1 = helper.getInt(0, 100);
+				map = v -> v - modifier1;
+				break;
+			case 2:
+				modifier1 = helper.getInt(0, 100);
+				map = v -> v * modifier1;
+				break;
+			case 3:
+				modifier1 = helper.getInt(1, 10);
+				map = v -> v / modifier1;
+				break;
+			default:
+				modifier1 = helper.getInt(1, 10);
+				map = v -> v % modifier1;
+				break;
+			}
+			derivedFlow = source.flow().map(intType, map);
+			refresh = new CollectionAdjuster() {
+				@Override
+				public boolean add(List<Integer> values, int index, Integer value) {
+					if (index >= 0)
+						values.add(index, map.apply(value));
+					else
+						values.add(map.apply(value));
+					return true;
+				}
+
+				@Override
+				public boolean remove(List<Integer> values, int index, Integer value) {
+					if (index >= 0)
+						assertEquals(map.apply(value), values.remove(index));
+					else
+						values.remove(value);
+					return true;
+				}
+
+				@Override
+				public boolean set(List<Integer> values, int index, Integer oldValue, Integer newValue) {
+					assertEquals(map.apply(oldValue), values.set(index, newValue));
+					return true;
+				}
+
+				@Override
+				public void refresh(List<Integer> src, List<Integer> values) {}
+			};
+			break;
+		case 1:
+			Predicate<Integer> filter;
+			switch (helper.getInt(0, 3)) {
+			case 0:
+				modifier1 = helper.getInt(0, range);
+				filter = v -> v < modifier1;
+				break;
+			case 1:
+				modifier1 = helper.getInt(0, range);
+				filter = v -> v > modifier1;
+				break;
+			default:
+				modifier1 = helper.getInt(0, 10);
+				modifier2 = helper.getInt(0, 10);
+				filter = v -> (v % modifier1) == modifier2;
+				break;
+			}
+			derivedFlow = source.flow().filter(v -> filter.test(v) ? null : StdMsg.ILLEGAL_ELEMENT);
+			refresh = new CollectionAdjuster() {
+				@Override
+				public boolean add(List<Integer> values, int index, Integer value) {
+					if (index >= 0)
+						return false;
+					if (!filter.test(value))
+						return true;
+					values.add(value);
+					return true;
+				}
+
+				@Override
+				public boolean remove(List<Integer> values, int index, Integer value) {
+					if (!filter.test(value))
+						return true;
+					if (index >= 0)
+						return false;
+					values.remove(value);
+					return true;
+				}
+
+				@Override
+				public boolean set(List<Integer> values, int index, Integer oldValue, Integer newValue) {
+					return filter.test(oldValue) == filter.test(newValue);
+				}
+
+				@Override
+				public void refresh(List<Integer> src, List<Integer> values) {
+					src.stream().filter(filter).forEach(values::add);
+				}
+			};
+			break;
+		default:
+			Comparator<Integer> compare = helper.getBoolean() ? Integer::compareTo : (i1, i2) -> -Integer.compare(i1, i2);
+			derivedFlow = source.flow().sorted(compare);
+			refresh = new CollectionAdjuster() {
+				@Override
+				public boolean add(List<Integer> values, int index, Integer value) {
+					index = Collections.binarySearch(values, value, compare);
+					if (index < 0)
+						index = -index - 1;
+					values.add(index, value);
+					return true;
+				}
+
+				@Override
+				public boolean remove(List<Integer> values, int index, Integer value) {
+					index = Collections.binarySearch(values, value, compare);
+					if (index < 0)
+						return true;
+					values.remove(index);
+					return true;
+				}
+
+				@Override
+				public boolean set(List<Integer> values, int index, Integer oldValue, Integer newValue) {
+					values.remove(oldValue);
+					index = Collections.binarySearch(values, newValue, compare);
+					if (index < 0)
+						index = -index - 1;
+					values.add(index, newValue);
+					return true;
+				}
+
+				@Override
+				public void refresh(List<Integer> src, List<Integer> values) {}
+			};
+			break;
+		}
+		ObservableCollection<Integer> derived;
+		if (derivedFlow.supportsPassive() && helper.getBoolean())
+			derived = derivedFlow.collectPassive();
+		else
+			derived = derivedFlow.collectActive(Observable.empty);
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(derived);
+
+		for (int i = 0; i < 500; i++) {
+			int index;
+			Integer value;
+			boolean adjusted;
+			switch (helper.getInt(0, 10)) {
+			case 0:
+			case 1:
+			case 2:
+			case 3:
+			case 4: // More adds than other ops
+				value = helper.getInt(0, range);
+				source.add(value);
+				adjusted = refresh.add(tester.getExpected(), -1, value);
+				break;
+			case 5:
+				index = helper.getInt(0, source.size() + 1);
+				value = helper.getInt(0, range);
+				source.add(index, value);
+				adjusted = refresh.add(tester.getExpected(), index, value);
+				break;
+			case 6:
+			case 7: // Set
+				value = helper.getInt(0, range);
+				if (source.isEmpty()) {
+					source.add(value);
+					adjusted = refresh.add(tester.getExpected(), -1, value);
+				} else {
+					index = helper.getInt(0, source.size());
+					Integer oldValue = source.set(index, value);
+					adjusted = refresh.set(tester.getExpected(), index, oldValue, value);
+				}
+				break;
+			case 8: // Remove by value
+				value = helper.getInt(0, range);
+				if (source.isEmpty()) {
+					source.add(value);
+					adjusted = refresh.add(tester.getExpected(), -1, value);
+				} else {
+					source.remove(value);
+					adjusted = refresh.remove(tester.getExpected(), -1, value);
+				}
+				break;
+			case 9: // Remove by index
+				if (source.isEmpty()) {
+					value = helper.getInt(0, range);
+					source.add(value);
+					adjusted = refresh.add(tester.getExpected(), -1, value);
+				} else {
+					index = helper.getInt(0, source.size());
+					value = source.remove(index);
+					adjusted = refresh.remove(tester.getExpected(), index, value);
+				}
+				break;
+			default:
+				throw new IllegalStateException("Bad int");
+			}
+			if (!adjusted) {
+				tester.clear();
+				refresh.refresh(source, tester.getExpected());
+			}
+			tester.check();
+		}
+	}
 
 	/**
 	 * A predicate interface that helps with testing observable structures
