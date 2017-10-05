@@ -20,12 +20,14 @@ import org.qommons.QommonsTestUtils;
 public class ObservableCollectionTester<E> extends AbstractObservableTester<Collection<E>> {
 	private final ObservableCollection<E> theCollection;
 	private final ArrayList<E> theSyncedCopy;
+	private final ArrayList<E> theBatchSyncedCopy;
 	private final ArrayList<E> theExpected;
 
 	/** @param collect The observable collection to test */
 	public ObservableCollectionTester(ObservableCollection<E> collect) {
 		theCollection = collect;
 		theSyncedCopy=new ArrayList<>();
+		theBatchSyncedCopy = new ArrayList<>();
 		setSynced(true);
 		theExpected = new ArrayList<>();
 		theExpected.addAll(collect);
@@ -149,17 +151,18 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 	@Override
 	public void checkValue(Collection<E> expected) {
 		assertThat(theSyncedCopy, QommonsTestUtils.collectionsEqual(expected, true));
+		assertThat(theBatchSyncedCopy, QommonsTestUtils.collectionsEqual(expected, true));
 	}
 
 	@Override
 	public void checkSynced() {
 		assertThat(theSyncedCopy, QommonsTestUtils.collectionsEqual(theCollection, true));
+		assertThat(theBatchSyncedCopy, QommonsTestUtils.collectionsEqual(theCollection, true));
 	}
 
 	@Override
 	protected Subscription sync() {
-		return theCollection.subscribe(evt -> {
-			op();
+		Subscription singleSub = theCollection.subscribe(evt -> {
 			switch (evt.getType()) {
 			case add:
 				theSyncedCopy.add(evt.getIndex(), evt.getNewValue());
@@ -172,5 +175,27 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 				break;
 			}
 		}, true);
+		theBatchSyncedCopy.addAll(theCollection); // The changes observable doesn't populate initial values
+		Subscription batchSub = theCollection.changes().act(evt -> {
+			op();
+			switch (evt.type) {
+			case add:
+				for (CollectionChangeEvent.ElementChange<E> change : evt.elements)
+					theBatchSyncedCopy.add(change.index, change.newValue);
+				break;
+			case remove:
+				for (CollectionChangeEvent.ElementChange<E> change : evt.getElementsReversed())
+					assertEquals(change.oldValue, theBatchSyncedCopy.remove(change.index));
+				break;
+			case set:
+				for (CollectionChangeEvent.ElementChange<E> change : evt.elements)
+					assertEquals(change.oldValue, theBatchSyncedCopy.set(change.index, change.newValue));
+				break;
+			}
+		});
+		return () -> {
+			singleSub.unsubscribe();
+			batchSub.unsubscribe();
+		};
 	}
 }
