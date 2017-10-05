@@ -103,17 +103,26 @@ public class ObservableCollectionsTest {
 		Function<Integer, Integer> reverseMapFn = v -> v - 1000;
 		ObservableCollection<Integer> mappedOL = coll.flow().map(intType, mapFn, options -> options.cache(false).withReverse(reverseMapFn))
 			.collectPassive();
+		d().set("mapped@" + depth, mappedOL);
 		ObservableCollectionTester<Integer> mappedTester = new ObservableCollectionTester<>(mappedOL);
 
 		Function<Integer, String> filterFn1 = v -> v % 3 == 0 ? null : "no";
 		ObservableCollection<Integer> filteredOL1 = coll.flow().filter(filterFn1).collect();
+		d().set("filtered@" + depth, filteredOL1);
 		ObservableCollectionTester<Integer> filterTester1 = new ObservableCollectionTester<>(filteredOL1);
 
 		Function<Integer, Integer> groupFn = v -> v % 3;
 		ObservableMultiMap<Integer, Integer> grouped = coll.flow()
 			.groupBy(intType, groupFn, options -> options.useFirst(true).withStaticCategories(true)).collect();
+		d().set("grouped@" + depth, grouped);
 		Map<Integer, List<Integer>> groupedSynced = new LinkedHashMap<>();
 		ObservableCollectionsTest.sync(grouped, groupedSynced, () -> new ArrayList<>());
+
+		ObservableSortedMultiMap<Integer, Integer> groupedSorted = coll.flow()
+			.groupBy(intType, groupFn, Integer::compareTo, options -> options.useFirst(true).withStaticCategories(true)).collect();
+		d().set("groupedSorted@" + depth, groupedSorted);
+		NavigableMap<Integer, List<Integer>> groupedSortedSynced = new TreeMap<>();
+		ObservableCollectionsTest.sync(groupedSorted, groupedSortedSynced, () -> new ArrayList<>());
 
 		BinaryOperator<Integer> combineFn = (v1, v2) -> v1 + v2;
 		BinaryOperator<Integer> reverseCombineFn = (v1, v2) -> v1 - v2;
@@ -122,6 +131,7 @@ public class ObservableCollectionsTest {
 		ObservableCollection<Integer> combinedOL = coll.flow().combine(intType, combine -> {
 			return combine.with(combineVar).withReverse(reverseCombineFn).build(combineFn);
 		}).collect();
+		d().set("combined@" + depth, combinedOL);
 		ObservableCollectionTester<Integer> combinedTester = new ObservableCollectionTester<>(combinedOL);
 
 		// TODO Test reversed observable collections
@@ -219,6 +229,16 @@ public class ObservableCollectionsTest {
 						.collect(Collectors.toList());
 					assertThat(grouped.get(groupKey), collectionsEqual(values, true));
 					assertThat(groupedSynced.get(groupKey), collectionsEqual(values, true));
+				}
+
+				Set<Integer> groupSortedKeySet = tester.getSyncedCopy().stream().map(groupFn).sorted().collect(Collectors.toSet());
+				assertThat(groupedSorted.keySet(), collectionsEqual(groupSortedKeySet, false));
+				assertThat(groupedSynced.keySet(), collectionsEqual(groupSortedKeySet, false));
+				for (Integer groupKey : groupSortedKeySet) {
+					List<Integer> values = tester.getSyncedCopy().stream().filter(v -> Objects.equals(groupFn.apply(v), groupKey))
+						.collect(Collectors.toList());
+					assertThat(groupedSorted.get(groupKey), collectionsEqual(values, true));
+					assertThat(groupedSortedSynced.get(groupKey), collectionsEqual(values, true));
 				}
 
 				combinedTester.set(coll.stream().map(v -> v + combineVar.get()).collect(Collectors.toList()));
