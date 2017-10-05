@@ -681,7 +681,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 
 		@Override
 		public T get() {
-			if (theObservers.isUsed())
+			if (theOptions.isCached() && theObservers.isUsed())
 				return theValue;
 			else {
 				Object[] composed = new Object[theComposed.size()];

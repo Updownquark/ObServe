@@ -1367,7 +1367,7 @@ public final class ObservableCollectionImpl {
 		public ActiveDerivedCollection(ActiveCollectionManager<E, ?, T> flow, Observable<?> until) {
 			theFlow = flow;
 			theDerivedElements = new BetterTreeSet<>(false, (e1, e2) -> e1.element.compareTo(e2.element));
-			theListeners = new ListenerList<>();
+			theListeners = new ListenerList<>(null);
 			theListenerCount = new AtomicInteger();
 			theEquivalence = flow.equivalence();
 			theModCount = new AtomicLong();

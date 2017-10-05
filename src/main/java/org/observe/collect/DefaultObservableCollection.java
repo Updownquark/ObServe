@@ -38,7 +38,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			throw new UnsupportedOperationException("ObservableCollection is not supported here");
 		theTransactionCauses = new LinkedList<>();
 		theValues = list;
-		theObservers = new org.qommons.collect.ListenerList<>();
+		theObservers = new org.qommons.collect.ListenerList<>("A collection may not be modified as a result of a change event");
 	}
 
 	@Override
@@ -160,7 +160,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 
 	@Override
 	public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-		return theObservers.add(observer)::run;
+		return theObservers.add(observer, true)::run;
 	}
 
 	@Override

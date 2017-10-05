@@ -24,7 +24,7 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 	 * @param nullable Whether null can be assigned to the value
 	 */
 	public SimpleSettableValue(TypeToken<T> type, boolean nullable) {
-		theEventer = new SimpleObservable<>(observer -> fireInitial(observer));
+		theEventer = new SimpleObservable<>(observer -> fireInitial(observer), true);
 		theType = type;
 		isNullable = nullable && !type.isPrimitive();
 		theLock = new ReentrantLock();
