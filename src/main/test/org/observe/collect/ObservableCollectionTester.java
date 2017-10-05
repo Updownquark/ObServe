@@ -148,7 +148,7 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 
 	@Override
 	public void checkValue(Collection<E> expected) {
-		assertThat(theSyncedCopy, QommonsTestUtils.collectionsEqual(theExpected, true));
+		assertThat(theSyncedCopy, QommonsTestUtils.collectionsEqual(expected, true));
 	}
 
 	@Override

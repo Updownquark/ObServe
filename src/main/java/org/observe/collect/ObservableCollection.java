@@ -335,9 +335,11 @@ public interface ObservableCollection<E> extends BetterList<E> {
 					int[] index = new int[] { forward ? 0 : size() - 1 };
 					SubscriptionCause.doWith(new SubscriptionCause(), c -> spliterator(forward).forEachElement(el -> {
 						E value = el.get();
-						ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(), index[0]++,
+						ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(), index[0],
 							CollectionChangeType.remove, value, value, c);
 						observer.accept(event);
+						if (!forward)
+							index[0]--;
 					}, forward));
 				}
 			}
@@ -968,7 +970,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 					// Allow setting elements via the wrapped settable value
 					if (!(ov instanceof SettableValue))
 						return MutableCollectionElement.StdMsg.UNSUPPORTED_OPERATION;
-					else if (newValue != null && !ov.getType().getRawType().isInstance(newValue))
+						else if (newValue != null && !ov.getType().wrap().getRawType().isInstance(newValue))
 						return MutableCollectionElement.StdMsg.BAD_TYPE;
 					String msg = ((SettableValue<X>) ov).isAcceptable(newValue);
 					if (msg != null)

@@ -359,8 +359,8 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 
 	static <K, V> MultiMapFlow<?, K, V> create(TypeToken<K> keyType, TypeToken<V> valueType, Equivalence<? super K> keyEquivalence,
 		BetterList<Map.Entry<K, V>> entryCollection) {
-		TypeToken<Map.Entry<K, V>> entryType=new TypeToken<Map.Entry<K, V>>(){}.where(new TypeParameter<K>(){}, keyType).
-			where(new TypeParameter<V>(){}, valueType);
+		TypeToken<Map.Entry<K, V>> entryType = new TypeToken<Map.Entry<K, V>>() {}.where(new TypeParameter<K>() {}, keyType.wrap())
+			.where(new TypeParameter<V>() {}, valueType.wrap());
 		class MapEntry implements Map.Entry<K, V> {
 			private final K theKey;
 			private V theValue;
@@ -567,7 +567,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			theUntil = until;
 			isLightWeight = lightWeight;
 			theEntryType = buildEntryType(keyFlow.getTargetType(), valueType);
-			theValueCollectionType = new TypeToken<ObservableCollection<V>>() {}.where(new TypeParameter<V>() {}, theValueType);
+			theValueCollectionType = new TypeToken<ObservableCollection<V>>() {}.where(new TypeParameter<V>() {}, theValueType.wrap());
 
 			theKeyManager = keyFlow.manageActive();
 
@@ -688,6 +688,11 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		protected class DerivedEntrySet extends ObservableSetImpl.ActiveDerivedSet<OK, K> {
 			DerivedEntrySet(ActiveCollectionManager<OK, ?, K> flow, Observable<?> until) {
 				super(flow, until);
+			}
+
+			@Override
+			protected DerivedElementHolder<K> createHolder(DerivedCollectionElement<K> el) {
+				return new DerivedEntryElement(el);
 			}
 
 			protected class DerivedEntryElement extends ObservableCollectionImpl.ActiveDerivedCollection.DerivedElementHolder<K> {

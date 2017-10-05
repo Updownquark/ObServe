@@ -1371,6 +1371,39 @@ public class ObservableCollectionsTest {
 		assertEquals(Integer.valueOf(9), received[0]);
 	}
 
+	/** Tests {@link ObservableCollection#flattenValue(ObservableValue)} */
+	@Test
+	public void flattenListValue() {
+		SimpleSettableValue<ObservableCollection<Integer>> listVal = new SimpleSettableValue<>(
+			new TypeToken<ObservableCollection<Integer>>() {}, true);
+		ObservableCollection<Integer> firstList = ObservableCollection.create(TypeToken.of(Integer.TYPE));
+		ObservableCollection<Integer> secondList = ObservableCollection.create(TypeToken.of(Integer.TYPE));
+		listVal.set(firstList, null);
+
+		firstList.with(10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
+		secondList.with(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(ObservableCollection.flattenValue(listVal));
+		tester.check(firstList);
+		firstList.with(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+		tester.check(firstList);
+		listVal.set(null, null);
+		tester.check(ObservableCollection.of(TypeToken.of(Integer.TYPE)));
+		listVal.set(firstList, null);
+		tester.check(firstList);
+		listVal.set(secondList, null);
+		tester.check(secondList);
+		try (Transaction t = firstList.lock(true, null)) {
+			for (int i = firstList.size() - 1; i > 10; i--)
+				firstList.remove(i);
+		}
+		tester.check(secondList, 0);
+		listVal.set(firstList, null);
+		tester.check(firstList);
+		secondList.clear();
+		tester.check(firstList, 0);
+	}
+
 	/** Tests {@link CollectionDataFlow#sorted(java.util.Comparator)} */
 	@Test
 	public void sortedObservableList() {
@@ -1634,8 +1667,9 @@ public class ObservableCollectionsTest {
 					assertEquals(correct, new ArrayList<>(observable));
 				}
 				assertEquals(correctChanges[0], changeCount[0]);
-			} catch (Exception | Error e) {
+			} catch (RuntimeException | Error e) {
 				error[0] = true;
+				throw e;
 			}
 		});
 		correctChanges[0]++;

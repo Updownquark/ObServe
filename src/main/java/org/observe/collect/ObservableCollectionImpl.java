@@ -9,9 +9,7 @@ import java.util.Set;
 import java.util.Spliterator;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -1152,7 +1150,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public CollectionElement<T> getElement(T value, boolean first) {
-			if (!getType().getRawType().isInstance(value))
+			if (!getType().wrap().getRawType().isInstance(value))
 				return null;
 			FilterMapResult<T, E> reversed = theFlow.reverse(value, false);
 			if (reversed.isError()) {
@@ -1374,12 +1372,11 @@ public final class ObservableCollectionImpl {
 			theEquivalence = flow.equivalence();
 			theModCount = new AtomicLong();
 			theStructureStamp = new AtomicLong();
-			// Must maintain a strong reference to the event listener so it is not GC'd while the collection is still alive
 
 			// Begin listening
 			ElementAccepter<T> onElement = (el, cause) -> {
 				theStructureStamp.incrementAndGet();
-				DerivedElementHolder<T> holder = new DerivedElementHolder<>(el);
+				DerivedElementHolder<T> holder = createHolder(el);
 				holder.treeNode = theDerivedElements.addElement(holder, false);
 				fireListeners(new ObservableCollectionEvent<>(holder, theFlow.getTargetType(), holder.treeNode.getNodesBefore(),
 					CollectionChangeType.add, null, el.get(), cause));
@@ -1412,12 +1409,17 @@ public final class ObservableCollectionImpl {
 						int index = holder.treeNode.getNodesBefore();
 						theDerivedElements.mutableElement(holder.treeNode.getElementId()).remove();
 						fireListeners(new ObservableCollectionEvent<>(holder, theFlow.getTargetType(), index, CollectionChangeType.remove,
-							value, null, elCause));
+							value, value, elCause));
 					}
 				});
 			};
+			// Must maintain a strong reference to the event listening so it is not GC'd while the collection is still alive
 			theWeakListening = WeakListening.build().withUntil(r -> until.act(v -> r.run()));
 			theFlow.begin(onElement, theWeakListening.getListening());
+		}
+
+		protected DerivedElementHolder<T> createHolder(DerivedCollectionElement<T> el) {
+			return new DerivedElementHolder<>(el);
 		}
 
 		protected ActiveCollectionManager<E, ?, T> getFlow() {
@@ -1943,13 +1945,11 @@ public final class ObservableCollectionImpl {
 	 */
 	public static class FlattenedValueCollection<E> implements ObservableCollection<E> {
 		private final ObservableValue<? extends ObservableCollection<? extends E>> theCollectionObservable;
-		private final ReentrantReadWriteLock theLock;
 		private final TypeToken<E> theType;
 
 		/** @param collectionObservable The value to present as a static collection */
 		protected FlattenedValueCollection(ObservableValue<? extends ObservableCollection<? extends E>> collectionObservable) {
 			theCollectionObservable = collectionObservable;
-			theLock = new ReentrantReadWriteLock();
 			theType = (TypeToken<E>) theCollectionObservable.getType().resolveType(ObservableCollection.class.getTypeParameters()[0]);
 		}
 
@@ -1970,26 +1970,26 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Transaction lock(boolean write, boolean structural, Object cause) {
-			Lock lock = write ? theLock.writeLock() : theLock.readLock();
-			lock.lock();
+			Transaction valueLock = theCollectionObservable.lock();
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			Transaction t = coll == null ? Transaction.NONE : coll.lock(write, structural, cause);
 			return () -> {
 				t.close();
-				lock.unlock();
+				valueLock.close();
 			};
 		}
 
 		@Override
 		public long getStamp(boolean structuralOnly) {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
+			// TODO Add stamps to ObservableValue?
 			return coll == null ? -1 : coll.getStamp(structuralOnly);
 		}
 
 		@Override
 		public boolean belongs(Object o) {
 			// This collection's equivalence may change (ugh), so we need to be more inclusive than the default
-			return o == null || theType.getRawType().isInstance(o);
+			return o == null || theType.wrap().getRawType().isInstance(o);
 		}
 
 		@Override
@@ -2071,7 +2071,7 @@ public final class ObservableCollectionImpl {
 			ObservableCollection<? extends E> current = theCollectionObservable.get();
 			if (current == null)
 				return MutableCollectionElement.StdMsg.UNSUPPORTED_OPERATION;
-			else if (value != null && !current.getType().getRawType().isInstance(value))
+			else if (value != null && !current.getType().wrap().getRawType().isInstance(value))
 				return MutableCollectionElement.StdMsg.BAD_TYPE;
 			return ((ObservableCollection<E>) current).canAdd(value);
 		}
@@ -2081,7 +2081,7 @@ public final class ObservableCollectionImpl {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			if (coll == null)
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			if (e != null && !coll.getType().getRawType().isInstance(e))
+			if (e != null && !coll.getType().wrap().getRawType().isInstance(e))
 				throw new IllegalArgumentException(MutableCollectionElement.StdMsg.BAD_TYPE);
 			return ((ObservableCollection<E>) coll).addElement(e, first);
 		}
@@ -2112,6 +2112,42 @@ public final class ObservableCollectionImpl {
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
 			return ObservableCollectionImpl.defaultOnChange(this, observer);
+		}
+
+		@Override
+		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer, boolean forward) {
+			CollectionSubscription[] collectSub = new CollectionSubscription[1];
+			Subscription valueSub = theCollectionObservable.changes()
+				.subscribe(new Observer<ObservableValueEvent<? extends ObservableCollection<? extends E>>>() {
+					@Override
+					public <V extends ObservableValueEvent<? extends ObservableCollection<? extends E>>> void onNext(V value) {
+						if (!value.isInitial() && value.getOldValue() == value.getNewValue())
+							return;
+						if (collectSub[0] != null) {
+							collectSub[0].unsubscribe(true);
+							collectSub[0] = null;
+						}
+						if (value.getNewValue() != null)
+							collectSub[0] = value.getNewValue().subscribe(observer, forward);
+					}
+
+					@Override
+					public <V extends ObservableValueEvent<? extends ObservableCollection<? extends E>>> void onCompleted(V value) {
+						if (collectSub[0] != null) {
+							collectSub[0].unsubscribe(true);
+							collectSub[0] = null;
+						}
+					}
+				});
+			return removeAll -> {
+				try (Transaction t = theCollectionObservable.lock()) {
+					if (collectSub[0] != null) {
+						collectSub[0].unsubscribe(removeAll);
+						collectSub[0] = null;
+					}
+					valueSub.unsubscribe();
+				}
+			};
 		}
 
 		@Override

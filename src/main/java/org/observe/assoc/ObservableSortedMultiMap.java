@@ -200,7 +200,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 
 			@Override
 			public boolean equals(Object obj) {
-				return (obj == null || keyType.getRawType().isInstance(obj)) && keyCompare.compare(theKey, (K) obj) == 0;
+				return (obj == null || keyType.wrap().getRawType().isInstance(obj)) && keyCompare.compare(theKey, (K) obj) == 0;
 			}
 
 			@Override

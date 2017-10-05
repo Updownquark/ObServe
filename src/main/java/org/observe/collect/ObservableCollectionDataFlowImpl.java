@@ -3432,7 +3432,8 @@ public class ObservableCollectionDataFlowImpl {
 				for (FlattenedHolder holder : theOuterElements) {
 					if (holder.manager == null)
 						continue;
-					if (holder.manager.getTargetType().getRawType().isInstance(toAdd) && holder.manager.equivalence().isElement(toAdd))
+					if (holder.manager.getTargetType().wrap().getRawType().isInstance(toAdd)
+						&& holder.manager.equivalence().isElement(toAdd))
 						msg = ((ActiveCollectionManager<?, ?, T>) holder.manager).canAdd(toAdd);
 					else
 						msg = StdMsg.ILLEGAL_ELEMENT;
@@ -3454,7 +3455,8 @@ public class ObservableCollectionDataFlowImpl {
 					String msg_i;
 					if (holder.manager == null)
 						continue;
-					if (holder.manager.getTargetType().getRawType().isInstance(value) && holder.manager.equivalence().isElement(value))
+					if (holder.manager.getTargetType().wrap().getRawType().isInstance(value)
+						&& holder.manager.equivalence().isElement(value))
 						msg_i = ((ActiveCollectionManager<?, ?, T>) holder.manager).canAdd(value);
 					else
 						msg_i = StdMsg.ILLEGAL_ELEMENT;
@@ -3591,14 +3593,14 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public String isAcceptable(T value) {
-				if (value != null && !theHolder.manager.getTargetType().getRawType().isInstance(value))
+				if (value != null && !theHolder.manager.getTargetType().wrap().getRawType().isInstance(value))
 					return StdMsg.BAD_TYPE;
 				return ((DerivedCollectionElement<T>) theParentEl).isAcceptable(value);
 			}
 
 			@Override
 			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
-				if (value != null && !theHolder.manager.getTargetType().getRawType().isInstance(value))
+				if (value != null && !theHolder.manager.getTargetType().wrap().getRawType().isInstance(value))
 					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
 				((DerivedCollectionElement<T>) theParentEl).set(value);
 			}
@@ -3615,14 +3617,14 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public String canAdd(T value, boolean before) {
-				if (value != null && !theHolder.manager.getTargetType().getRawType().isInstance(value))
+				if (value != null && !theHolder.manager.getTargetType().wrap().getRawType().isInstance(value))
 					return StdMsg.BAD_TYPE;
 				return ((DerivedCollectionElement<T>) theParentEl).canAdd(value, before);
 			}
 
 			@Override
 			public DerivedCollectionElement<T> add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-				if (value != null && !theHolder.manager.getTargetType().getRawType().isInstance(value))
+				if (value != null && !theHolder.manager.getTargetType().wrap().getRawType().isInstance(value))
 					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
 				DerivedCollectionElement<? extends T> parentEl = ((DerivedCollectionElement<T>) theParentEl).add(value, before);
 				return parentEl == null ? null : new FlattenedElement(theHolder, parentEl, true);
