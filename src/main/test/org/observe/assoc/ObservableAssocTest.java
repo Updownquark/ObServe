@@ -28,6 +28,8 @@ public class ObservableAssocTest {
 		for (int i = 0; i < 99; i++) {
 			int key = i % 9;
 			map.add(key, i);
+			if (i < 9)
+				keyTester.add(i);
 			keyTester.check(i < 9 ? 1 : 0);
 			valueTesters.get(key).add(i).check(1);
 			for (int j = 0; j < 10; j++) {
@@ -65,6 +67,8 @@ public class ObservableAssocTest {
 		for (int i = 0; i < 99; i++) {
 			list.add(i);
 			int key = i % 9;
+			if (i < 9)
+				keyTester.add(i);
 			keyTester.check(i < 9 ? 1 : 0);
 			valueTesters.get(key).add(i).check(1);
 			for (int j = 0; j < 10; j++) {

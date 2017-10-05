@@ -32,6 +32,7 @@ import org.qommons.collect.BetterList;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.TransactableMultiMap;
+import org.qommons.debug.Debug;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -581,6 +582,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			// Need to create the entries last because the constructor will cause all the initial entries to be created, and those entries
 			// need access to this class's initialized fields
 			theEntries = createEntrySet();
+			Debug.d().debug(this, true).setReference("keySet", theEntries);
 		}
 
 		protected UniqueDataFlow<OK, ?, K> getKeyFlow() {
@@ -662,7 +664,9 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 				if (values == null) {
 					// We'll make the value collection (which should be empty initially) that may allow adding values
 					CollectionDataFlow<?, ?, V> valueFlow = theValueMaker.apply(key);
-					values = isLightWeight ? valueFlow.collect() : valueFlow.collectActive(theUntil);
+					values = (isLightWeight && valueFlow.supportsPassive()) ? valueFlow.collectPassive()
+						: valueFlow.collectActive(theUntil);
+					Debug.d().debug(this, true).setReference("[" + key + "]", values);
 					// We'll cache these values and re-use them in case the user adds values to them, which presumably
 					// will propagate into adding a key for the entry and making it pop up in the key/entry set.
 					theTransientValues.put(key, new WeakReference<>(values, theGCdTransientValues));
@@ -696,19 +700,20 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			}
 
 			protected class DerivedEntryElement extends ObservableCollectionImpl.ActiveDerivedCollection.DerivedElementHolder<K> {
-				private final ObservableCollection<V> theValues;
+				private ObservableCollection<V> theValues;
 
 				public DerivedEntryElement(DerivedCollectionElement<K> manager) {
 					super(manager);
+				}
+
+				protected ObservableCollection<V> getValues() {
 					// Note: Here we have to assume that the value flow is itself aware of changes to the keys.
 					// If this key was replaced with a non-equivalent key, for example, the values will not change unless the value flow
 					// does this.
 					// Similarly for an key update--if the underlying flow doesn't know about updates to the keys, the values won't
 					// be updated.
-					theValues = valuesFor(manager.get());
-				}
-
-				protected ObservableCollection<V> getValues() {
+					if (theValues == null)
+						theValues = valuesFor(get());
 					return theValues;
 				}
 			}
