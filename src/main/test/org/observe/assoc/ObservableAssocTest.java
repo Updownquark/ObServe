@@ -1,12 +1,15 @@
 package org.observe.assoc;
 
 import static java.util.Arrays.asList;
+import static org.observe.collect.ObservableCollectionsTest.intType;
 
 import java.util.List;
+import java.util.Map;
 
 import org.junit.Test;
 import org.observe.ObservableValue;
 import org.observe.SimpleSettableValue;
+import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionTester;
 
@@ -15,6 +18,78 @@ import com.google.common.reflect.TypeToken;
 
 /** Runs tests on the data structures built on top of observable collections. */
 public class ObservableAssocTest {
+	@Test
+	public void testDefaultMultiMap() {
+		ObservableMultiMap<Integer, Integer> map = ObservableMultiMap.create(intType, intType, Equivalence.DEFAULT).collect();
+		ObservableCollectionTester<Integer> keyTester = new ObservableCollectionTester<>(map.keySet());
+		Map<Integer, ObservableCollectionTester<Integer>> valueTesters = new java.util.LinkedHashMap<>();
+		for (int i = 0; i < 10; i++)
+			valueTesters.put(i, new ObservableCollectionTester<>(map.get(i)));
+		for (int i = 0; i < 99; i++) {
+			int key = i % 9;
+			map.add(key, i);
+			keyTester.check(i < 9 ? 1 : 0);
+			valueTesters.get(key).add(i).check(1);
+			for (int j = 0; j < 10; j++) {
+				if (j != key)
+					valueTesters.get(j).check(0);
+			}
+		}
+		for (int i = 0; i < 99; i += 2) {
+			int key = i % 9;
+			map.remove(key, i);
+			keyTester.check(0);
+			valueTesters.get(key).remove(Integer.valueOf(i)).check(1);
+			for (int j = 0; j < 10; j++) {
+				if (j != key)
+					valueTesters.get(j).check(0);
+			}
+		}
+		map.get(5).clear();
+		valueTesters.get(5).clear().check(1);
+		for (int j = 0; j < 10; j++) {
+			if (j != 5)
+				valueTesters.get(j).check(0);
+		}
+	}
+
+	@Test
+	public void testGroupedMultiMap() {
+		ObservableCollection<Integer> list = ObservableCollection.create(intType);
+		ObservableMultiMap<Integer, Integer> map = list.flow().groupBy(intType, v -> v % 9).collect();
+
+		ObservableCollectionTester<Integer> keyTester = new ObservableCollectionTester<>(map.keySet());
+		Map<Integer, ObservableCollectionTester<Integer>> valueTesters = new java.util.LinkedHashMap<>();
+		for (int i = 0; i < 10; i++)
+			valueTesters.put(i, new ObservableCollectionTester<>(map.get(i)));
+		for (int i = 0; i < 99; i++) {
+			list.add(i);
+			int key = i % 9;
+			keyTester.check(i < 9 ? 1 : 0);
+			valueTesters.get(key).add(i).check(1);
+			for (int j = 0; j < 10; j++) {
+				if (j != key)
+					valueTesters.get(j).check(0);
+			}
+		}
+		for (int i = 0; i < 99; i += 2) {
+			list.remove(Integer.valueOf(i));
+			int key = i % 9;
+			keyTester.check(0);
+			valueTesters.get(key).remove(Integer.valueOf(i)).check(1);
+			for (int j = 0; j < 10; j++) {
+				if (j != key)
+					valueTesters.get(j).check(0);
+			}
+		}
+		list.removeIf(v -> v % 9 == 5);
+		valueTesters.get(5).clear().check(1);
+		for (int j = 0; j < 10; j++) {
+			if (j != 5)
+				valueTesters.get(j).check(0);
+		}
+	}
+
 	// TODO Add tests for maps, multi-maps, and graphs and more tests for trees
 
 	class TreeNode<T> {
