@@ -80,6 +80,10 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 		};
 	}
 
+	Causable getCurrentCause() {
+		return theTransactionCauses.peekFirst();
+	}
+
 	@Override
 	public long getStamp(boolean structuralOnly) {
 		return theValues.getStamp(structuralOnly);
@@ -152,7 +156,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			if (el == null)
 				return null;
 			ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(),
-				theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, null, e, theTransactionCauses.peekLast());
+				theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, null, e, getCurrentCause());
 			fire(event);
 			return el;
 		}
@@ -169,7 +173,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			int[] index = new int[] { size() - 1 };
 			theValues.spliterator(false).forEachElementM(el -> {
 				ObservableCollectionEvent<E> evt = new ObservableCollectionEvent<>(el.getElementId(), getType(), index[0]--,
-					CollectionChangeType.remove, el.get(), el.get(), theTransactionCauses.peekLast());
+					CollectionChangeType.remove, el.get(), el.get(), getCurrentCause());
 				el.remove();
 				fire(evt);
 			}, false);
@@ -214,7 +218,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 				E old = get();
 				valueEl.set(value);
 				fire(new ObservableCollectionEvent<>(getElementId(), getType(), getElementsBefore(getElementId()), CollectionChangeType.set,
-					old, value, theTransactionCauses.peekLast()));
+					old, value, getCurrentCause()));
 			}
 
 			@Override
@@ -228,7 +232,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 					E old = get();
 					valueEl.remove();
 					fire(new ObservableCollectionEvent<>(getElementId(), getType(), getElementsBefore(getElementId()),
-						CollectionChangeType.remove, old, old, theTransactionCauses.peekLast()));
+						CollectionChangeType.remove, old, old, getCurrentCause()));
 				}
 			}
 
@@ -242,7 +246,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 				try (Transaction t = lock(true, null)) {
 					ElementId newId = valueEl.add(value, before);
 					fire(new ObservableCollectionEvent<>(newId, getType(), getElementsBefore(newId), CollectionChangeType.add, null, value,
-						theTransactionCauses.peekLast()));
+						getCurrentCause()));
 					return newId;
 				}
 			}

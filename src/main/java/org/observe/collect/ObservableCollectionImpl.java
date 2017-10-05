@@ -45,6 +45,7 @@ import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.MutableElementSpliterator;
+import org.qommons.collect.SimpleCause;
 import org.qommons.tree.BetterTreeSet;
 import org.qommons.tree.BinaryTreeNode;
 
@@ -1346,7 +1347,7 @@ public final class ObservableCollectionImpl {
 			@Override
 			public boolean equals(Object obj) {
 				// This type collection does not produce duplicate Element IDs, so we can compare by identity
-				return this == obj;
+				return treeNode.equals(((DerivedElementHolder<T>) obj).treeNode);
 			}
 
 			@Override
@@ -1431,8 +1432,10 @@ public final class ObservableCollectionImpl {
 		}
 
 		void fireListeners(ObservableCollectionEvent<T> event) {
-			theListeners.forEach(//
-				listener -> listener.accept(event));
+			ObservableCollectionEvent.doWith(event, evt -> {
+				theListeners.forEach(//
+					listener -> listener.accept(evt));
+			});
 		}
 
 		@Override
@@ -1447,7 +1450,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends T>> observer) {
-			Runnable remove = theListeners.add(observer);
+			Runnable remove = theListeners.add(observer, true);
 			// Add a strong reference to this collection while we have listeners.
 			// Otherwise, this collection could be GC'd and listeners (which may not reference this collection) would just be left hanging
 			if (theListenerCount.getAndIncrement() == 0)
@@ -1543,7 +1546,7 @@ public final class ObservableCollectionImpl {
 				if (finder != null) {
 					BinaryTreeNode<DerivedElementHolder<T>> found = theDerivedElements.search(holder -> finder.compareTo(holder.element), //
 						SortedSearchFilter.of(first, false));
-					if (found == null)
+					if (found == null || !equivalence().elementEquals(found.get().element.get(), value))
 						return null;
 					while (found.getChild(first) != null && equivalence().elementEquals(found.getChild(first).get().element.get(), value))
 						found = found.getChild(first);
@@ -1661,12 +1664,18 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public void clear() {
-			if (!theFlow.clear()) {
-				new ArrayList<>(theDerivedElements).forEach(el -> {
-					if (el.element.canRemove() == null)
-						el.element.remove();
-				});
-			}
+			if (isEmpty())
+				return;
+			SimpleCause.doWith(new SimpleCause(), c -> {
+				try (Transaction t = lock(true, c)) {
+					if (!theFlow.clear()) {
+						new ArrayList<>(theDerivedElements).forEach(el -> {
+							if (el.element.canRemove() == null)
+								el.element.remove();
+						});
+					}
+				}
+			});
 		}
 
 		@Override

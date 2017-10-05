@@ -592,6 +592,8 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 			@Override
 			protected T update(T oldValue, ObservableCollectionEvent<? extends E> change) {
+				if (oldValue == RECALC)
+					return oldValue;
 				switch (change.getType()) {
 				case add:
 					oldValue = add.apply(oldValue, change.getNewValue());
@@ -970,7 +972,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 					// Allow setting elements via the wrapped settable value
 					if (!(ov instanceof SettableValue))
 						return MutableCollectionElement.StdMsg.UNSUPPORTED_OPERATION;
-						else if (newValue != null && !ov.getType().wrap().getRawType().isInstance(newValue))
+					else if (newValue != null && !ov.getType().wrap().getRawType().isInstance(newValue))
 						return MutableCollectionElement.StdMsg.BAD_TYPE;
 					String msg = ((SettableValue<X>) ov).isAcceptable(newValue);
 					if (msg != null)
