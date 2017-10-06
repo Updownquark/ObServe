@@ -139,18 +139,6 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 	 * @return The new observable whose value is a function of this observable's value
 	 */
 	default <R> ObservableValue<R> map(Function<? super T, R> function) {
-		return map(null, function);
-	}
-
-	/**
-	 * Composes this observable into another observable that depends on this one
-	 *
-	 * @param <R> The type of the new observable
-	 * @param function The function to apply to this observable's value
-	 * @param filterNull Whether to apply the filter to null values or simply preserve the null
-	 * @return The new observable whose value is a function of this observable's value
-	 */
-	default <R> ObservableValue<R> map(Function<? super T, R> function, boolean filterNull) {
 		return map(null, function, options -> {});
 	}
 

@@ -75,6 +75,21 @@ public class CollectionChangeEvent<E> extends AbstractCausable {
 		};
 	}
 
+	/** @return A list of the old values of this change's {@link #elements} */
+	public List<E> getOldValues() {
+		return new AbstractList<E>() {
+			@Override
+			public int size() {
+				return elements.size();
+			}
+
+			@Override
+			public E get(int index) {
+				return elements.get(index).oldValue;
+			}
+		};
+	}
+
 	/** @return a list of this change's {@link #elements}, ordered by descending index */
 	public List<ElementChange<E>> getElementsReversed() {
 		return new AbstractList<ElementChange<E>>() {

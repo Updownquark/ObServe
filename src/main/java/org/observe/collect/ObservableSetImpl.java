@@ -295,6 +295,11 @@ public class ObservableSetImpl {
 		}
 
 		@Override
+		public boolean isContentControlled() {
+			return true;
+		}
+
+		@Override
 		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
 			UniqueElement2 element = theElementsByValue.get(value);
 			return element == null ? el -> -1 : element;

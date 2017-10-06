@@ -1,5 +1,6 @@
 package org.observe.collect;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 
@@ -7,6 +8,8 @@ import org.observe.ObservableValue;
 import org.qommons.Transaction;
 import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.collect.TransactableSet;
+
+import com.google.common.reflect.TypeToken;
 
 /**
  * A set whose content can be observed
@@ -73,6 +76,58 @@ public interface ObservableSet<E> extends ObservableCollection<E>, TransactableS
 	@Override
 	default <T> UniqueDataFlow<E, E, E> flow() {
 		return new ObservableSetImpl.UniqueBaseFlow<>(this);
+	}
+
+	/**
+	 * @param <E> The type for the set
+	 * @param type The type for the set
+	 * @param values The values to be in the immutable set
+	 * @return An immutable set with the given values
+	 */
+	static <E> ObservableSet<E> of(TypeToken<E> type, E... values) {
+		return of(type, Arrays.asList(values));
+	}
+
+	/**
+	 * @param <E> The type for the set
+	 * @param type The type for the set
+	 * @param values The values to be in the immutable set
+	 * @return An immutable set with the given values
+	 */
+	static <E> ObservableSet<E> of(TypeToken<E> type, Collection<? extends E> values) {
+		return of(type, Equivalence.DEFAULT, values);
+	}
+
+	/**
+	 * @param <E> The type for the set
+	 * @param type The type for the set
+	 * @param equivalence The equivalence set to distinguish the values
+	 * @param values The values to be in the immutable set
+	 * @return An immutable set with the given values
+	 */
+	static <E> ObservableSet<E> of(TypeToken<E> type, Equivalence<? super E> equivalence, Collection<? extends E> values) {
+		ObservableSet<E> set = create(type, equivalence);
+		set.addAll(values);
+		return set.flow().immutable().collect();
+	}
+
+	/**
+	 * @param <E> The type for the set
+	 * @param type The type for the set
+	 * @return A new observable set with the given type
+	 */
+	static <E> ObservableSet<E> create(TypeToken<E> type) {
+		return create(type, Equivalence.DEFAULT);
+	}
+
+	/**
+	 * @param <E> The type for the set
+	 * @param type The type for the set
+	 * @param equivalence The equivalence set to distinguish the set's values
+	 * @return A new observable set with the given type and equivalence
+	 */
+	static <E> ObservableSet<E> create(TypeToken<E> type, Equivalence<? super E> equivalence) {
+		return ObservableCollection.create(type).flow().withEquivalence(equivalence).distinct().collect();
 	}
 
 	/**

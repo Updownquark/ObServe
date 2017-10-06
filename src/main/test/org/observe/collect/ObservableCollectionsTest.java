@@ -1722,17 +1722,41 @@ public class ObservableCollectionsTest {
 		list.addAll(java.util.Arrays.asList(value1, value2, value3, value4));
 
 		Integer [] received = new Integer[1];
-		list.flow().flatMapV(intType, v -> v).collect().observeFind(value -> value % 3 == 0, () -> null, Ternian.NONE).value()
+		ObservableCollection<Integer> flattened = list.flow().flatMapV(intType, v -> v).collect();
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(flattened);
+		flattened.observeFind(value -> value % 3 == 0, () -> null, Ternian.NONE).value()
 		.act(value -> received[0] = value);
 		assertEquals(Integer.valueOf(3), received[0]);
 		value3.set(4, null);
+		tester.getExpected().set(2, 4);
+		tester.check();
 		assertEquals(null, received[0]);
 		value4.set(6, null);
+		tester.getExpected().set(3, 6);
+		tester.check();
 		assertEquals(Integer.valueOf(6), received[0]);
 		list.remove(value4);
+		tester.getExpected().remove(3);
+		tester.check();
 		assertEquals(null, received[0]);
 		list.add(value5);
+		tester.add(value5.get());
+		tester.check();
 		assertEquals(Integer.valueOf(9), received[0]);
+		list.add(3, value4);
+		tester.getExpected().add(3, value4.get());
+		tester.check();
+
+		// Test list modification
+		flattened.set(4, 10);
+		tester.getExpected().set(4, 10);
+		assertEquals(Integer.valueOf(10), value5.get());
+		tester.check();
+		assertTrue(list.contains(value3));
+		flattened.remove(2);
+		tester.getExpected().remove(2);
+		assertFalse(list.contains(value3));
+		tester.check();
 	}
 
 	/** Tests {@link ObservableCollection#flattenValue(ObservableValue)} */

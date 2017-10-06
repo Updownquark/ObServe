@@ -665,13 +665,22 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	}
 
 	/**
+	 * @param <E> The type for the collection
+	 * @param type The type for the collection
+	 * @param values The values to be in the immutable collection
+	 * @return An immutable collection with the given values
+	 */
+	static <E> ObservableCollection<E> of(TypeToken<E> type, E... values) {
+		return of(type, BetterList.of(values));
+	}
+
+	/**
 	 * @param <E> The type for the root collection
 	 * @param type The type for the root collection
 	 * @param values The values to be in the immutable collection
-	 * @return A {@link CollectionDataFlow} that can be used to create an immutable collection with the given values and any characteristics
-	 *         supported by the flow API.
+	 * @return An immutable collection with the given values
 	 */
-	static <E> ObservableCollection<E> of(TypeToken<E> type, E... values) {
+	static <E> ObservableCollection<E> of(TypeToken<E> type, Collection<? extends E> values) {
 		return of(type, BetterList.of(values));
 	}
 

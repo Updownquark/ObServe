@@ -1765,7 +1765,7 @@ public final class ObservableCollectionImpl {
 		private final TypeToken<E> theType;
 		private final BetterList<? extends E> theValues;
 
-		public ConstantCollection(TypeToken<E> type, BetterList<? extends E> values) {
+		ConstantCollection(TypeToken<E> type, BetterList<? extends E> values) {
 			theType = type;
 			theValues = values;
 		}
