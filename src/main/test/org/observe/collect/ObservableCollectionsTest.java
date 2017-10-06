@@ -83,26 +83,32 @@ public class ObservableCollectionsTest implements Testable {
 		switch (helper.getInt(0, methods)) {
 		case 0:
 			Function<Integer, Integer> map;
+			boolean adjustable;
 			switch (helper.getInt(0, 5)) {
 			case 0:
 				modifier1 = helper.getInt(0, 100);
 				map = v -> v + modifier1;
+				adjustable = true;
 				break;
 			case 1:
 				modifier1 = helper.getInt(0, 100);
 				map = v -> v - modifier1;
+				adjustable = true;
 				break;
 			case 2:
 				modifier1 = helper.getInt(0, 100);
 				map = v -> v * modifier1;
+				adjustable = modifier1 > 0;
 				break;
 			case 3:
 				modifier1 = helper.getInt(1, 10);
 				map = v -> v / modifier1;
+				adjustable = false;
 				break;
 			default:
 				modifier1 = helper.getInt(1, 10);
 				map = v -> v % modifier1;
+				adjustable = false;
 				break;
 			}
 			derivedFlow = source.flow().map(intType, map);
@@ -120,19 +126,23 @@ public class ObservableCollectionsTest implements Testable {
 				public boolean remove(List<Integer> values, int index, Integer value) {
 					if (index >= 0)
 						assertEquals(map.apply(value), values.remove(index));
+					else if (adjustable)
+						values.remove(map.apply(value));
 					else
-						values.remove(value);
+						return false;
 					return true;
 				}
 
 				@Override
 				public boolean set(List<Integer> values, int index, Integer oldValue, Integer newValue) {
-					assertEquals(map.apply(oldValue), values.set(index, newValue));
+					assertEquals(map.apply(oldValue), values.set(index, map.apply(newValue)));
 					return true;
 				}
 
 				@Override
-				public void refresh(List<Integer> src, List<Integer> values) {}
+				public void refresh(List<Integer> src, List<Integer> values) {
+					src.stream().map(map).forEach(v -> values.add(v));
+				}
 			};
 			break;
 		case 1:
@@ -147,8 +157,8 @@ public class ObservableCollectionsTest implements Testable {
 				filter = v -> v > modifier1;
 				break;
 			default:
-				modifier1 = helper.getInt(0, 10);
-				modifier2 = helper.getInt(0, 10);
+				modifier1 = helper.getInt(2, 10);
+				modifier2 = helper.getInt(0, modifier1);
 				filter = v -> (v % modifier1) == modifier2;
 				break;
 			}
@@ -176,7 +186,7 @@ public class ObservableCollectionsTest implements Testable {
 
 				@Override
 				public boolean set(List<Integer> values, int index, Integer oldValue, Integer newValue) {
-					return filter.test(oldValue) == filter.test(newValue);
+					return !filter.test(oldValue) && !filter.test(newValue);
 				}
 
 				@Override
@@ -233,6 +243,7 @@ public class ObservableCollectionsTest implements Testable {
 			int index;
 			Integer value;
 			boolean adjusted;
+			helper.placemark();
 			switch (helper.getInt(0, 10)) {
 			case 0:
 			case 1:
