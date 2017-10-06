@@ -214,7 +214,7 @@ public interface XformOptions {
 		 */
 		public BiTuple<T, T> handleChange(E oldSource, E newSource) {
 			Ternian update = isUpdate(oldSource, newSource);
-			if (update == null)
+			if (update.value == null)
 				return null; // No change, no event
 			try (Transaction t = theIntf.lock()) {
 				return handleChange(oldSource, newSource, update.value);

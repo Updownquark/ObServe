@@ -90,6 +90,11 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	}
 
 	@Override
+	public boolean isContentControlled() {
+		return theValues.isContentControlled();
+	}
+
+	@Override
 	public TypeToken<E> getType() {
 		return theType;
 	}

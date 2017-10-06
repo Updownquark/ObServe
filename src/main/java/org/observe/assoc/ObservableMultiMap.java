@@ -30,6 +30,7 @@ import org.observe.collect.ObservableSortedSet;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.MultiMap;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.TransactableMultiMap;
 import org.qommons.debug.Debug;
@@ -412,6 +413,18 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			.map(valueType, Map.Entry::getValue, options -> options.cache(false).withReverse(value -> new MapEntry(key, value))));
 	}
 
+	public static String toString(ObservableMultiMap<?, ?> map) {
+		StringBuilder str = new StringBuilder();
+		boolean first = true;
+		for (MultiMap.MultiEntry<?, ?> entry : map.entrySet()) {
+			if (!first)
+				str.append('\n');
+			first = false;
+			str.append(entry.getKey()).append('=').append(entry.getValues());
+		}
+		return str.toString();
+	}
+
 	/**
 	 * Implements {@link ObservableMultiMap#unique()}
 	 *
@@ -717,6 +730,11 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 					return theValues;
 				}
 			}
+		}
+
+		@Override
+		public String toString() {
+			return ObservableMultiMap.toString(this);
 		}
 	}
 }

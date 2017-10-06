@@ -31,6 +31,8 @@ public class CollectionChangeEvent<E> extends AbstractCausable {
 		 * @param index The index of the element in the collection
 		 */
 		public ElementChange(E value, E oldValue, int index) {
+			if (index < 0)
+				throw new IndexOutOfBoundsException("" + index);
 			this.newValue = value;
 			this.oldValue = oldValue;
 			this.index = index;

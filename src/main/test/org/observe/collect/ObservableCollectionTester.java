@@ -21,15 +21,23 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 	private final ObservableCollection<E> theCollection;
 	private final ArrayList<E> theSyncedCopy;
 	private final ArrayList<E> theBatchSyncedCopy;
-	private final ArrayList<E> theExpected;
+	private final List<E> theExpected;
 
 	/** @param collect The observable collection to test */
 	public ObservableCollectionTester(ObservableCollection<E> collect) {
+		this(collect, new ArrayList<>());
+	}
+
+	/**
+	 * @param collect The observable collection to test
+	 * @param expected The collection to use for the expected value
+	 */
+	public ObservableCollectionTester(ObservableCollection<E> collect, List<E> expected) {
 		theCollection = collect;
 		theSyncedCopy=new ArrayList<>();
 		theBatchSyncedCopy = new ArrayList<>();
 		setSynced(true);
-		theExpected = new ArrayList<>();
+		theExpected = expected;
 		theExpected.addAll(collect);
 	}
 

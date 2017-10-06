@@ -103,6 +103,11 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 			public ObservableSortedMultiMap<K, V> reverse() {
 				return outer;
 			}
+
+			@Override
+			public String toString() {
+				return ObservableMultiMap.toString(ObservableSortedMultiMap.this);
+			}
 		};
 	}
 
@@ -377,6 +382,11 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 			if (!keySet().belongs(key))
 				return ObservableCollection.of(getValueType());
 			return theOuter.get(key);
+		}
+
+		@Override
+		public String toString() {
+			return ObservableMultiMap.toString(this);
 		}
 	};
 

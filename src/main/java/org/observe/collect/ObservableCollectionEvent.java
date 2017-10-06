@@ -27,6 +27,8 @@ public class ObservableCollectionEvent<E> extends ObservableValueEvent<E> {
 	public ObservableCollectionEvent(ElementId elementId, TypeToken<E> valueType, int index, CollectionChangeType type, E oldValue,
 		E newValue, Object cause) {
 		super(valueType, type == CollectionChangeType.add, oldValue, newValue, cause);
+		if (index < 0)
+			throw new IndexOutOfBoundsException("" + index);
 		theElementId = elementId;
 		theIndex = index;
 		theType = type;

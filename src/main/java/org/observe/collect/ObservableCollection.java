@@ -171,6 +171,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 			try (Transaction ct = Transactable.lock(c, false, null)) {
 				if (isEmpty() || c.isEmpty())
 					return false;
+				// TODO Change to removeIf
 				return findAll(v -> c.contains(v), el -> el.remove(), true) > 0;
 			}
 		});

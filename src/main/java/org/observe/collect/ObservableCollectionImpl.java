@@ -116,6 +116,16 @@ public final class ObservableCollectionImpl {
 				type = typ;
 				elements = new ArrayList<>();
 			}
+
+			@Override
+			public String toString() {
+				StringBuilder str = new StringBuilder(type.toString()).append('\n');
+				for (ChangeValue<E> el : elements)
+					str.append('\t').append(el).append('\n');
+				if (str.length() > 0)
+					str.deleteCharAt(str.length() - 1);
+				return str.toString();
+			}
 		}
 
 		private static class ChangeValue<E> {
@@ -256,6 +266,8 @@ public final class ObservableCollectionImpl {
 
 		private SessionChangeTracker<E> insertAddition(SessionChangeTracker<E> tracker, ObservableCollectionEvent<? extends E> event) {
 			int changeIndex = indexForAdd(tracker, event.getIndex());
+			if (changeIndex < tracker.elements.size() && tracker.elements.get(changeIndex).index == event.getIndex())
+				tracker.elements.get(changeIndex).index++;
 			for (int i = changeIndex + 1; i < tracker.elements.size(); i++)
 				tracker.elements.get(i).index++;
 			tracker.elements.add(changeIndex, new ChangeValue<>(null, event.getNewValue(), event.getIndex()));
@@ -1002,8 +1014,9 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-			return getWrapped().onChange(evt -> observer.accept(new ObservableCollectionEvent<>(evt.getElementId().reverse(), getType(),
-				size() - evt.getIndex() - 1, evt.getType(), evt.getOldValue(), evt.getNewValue(), evt)));
+			try (Transaction t = lock(false, null)) {
+				return getWrapped().onChange(new ReversedSubscriber(observer, size()));
+			}
 		}
 
 		@Override
@@ -1013,22 +1026,21 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public E[] toArray() {
-			try (Transaction t = lock(false, null)) {
-				return ObservableCollection.super.toArray();
-			}
+			return ObservableCollection.super.toArray();
 		}
 
 		@Override
 		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer, boolean forward) {
-			return getWrapped().subscribe(new ReversedSubscriber(observer), !forward);
+			return getWrapped().subscribe(new ReversedSubscriber(observer, 0), !forward);
 		}
 
 		private class ReversedSubscriber implements Consumer<ObservableCollectionEvent<? extends E>> {
 			private final Consumer<? super ObservableCollectionEvent<? extends E>> theObserver;
 			private int theSize;
 
-			ReversedSubscriber(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
+			ReversedSubscriber(Consumer<? super ObservableCollectionEvent<? extends E>> observer, int size) {
 				theObserver = observer;
+				theSize = size;
 			}
 
 			@Override
@@ -1037,7 +1049,7 @@ public final class ObservableCollectionImpl {
 					theSize++;
 				int index = theSize - evt.getIndex() - 1;
 				if (evt.getType() == CollectionChangeType.remove)
-					theSize++;
+					theSize--;
 				ObservableCollectionEvent.doWith(new ObservableCollectionEvent<>(evt.getElementId().reverse(), getType(), index,
 					evt.getType(), evt.getOldValue(), evt.getNewValue(), evt), theObserver);
 			}
@@ -1061,6 +1073,11 @@ public final class ObservableCollectionImpl {
 
 		protected PassiveCollectionManager<E, ?, T> getFlow() {
 			return theFlow;
+		}
+
+		@Override
+		public boolean isContentControlled() {
+			return theSource.isContentControlled();
 		}
 
 		@Override
@@ -1432,10 +1449,14 @@ public final class ObservableCollectionImpl {
 		}
 
 		void fireListeners(ObservableCollectionEvent<T> event) {
-			ObservableCollectionEvent.doWith(event, evt -> {
-				theListeners.forEach(//
-					listener -> listener.accept(evt));
-			});
+			ObservableCollectionEvent.doWith(event, //
+				evt -> theListeners.forEach(//
+					listener -> listener.accept(evt)));
+		}
+
+		@Override
+		public boolean isContentControlled() {
+			return theFlow.isContentControlled();
 		}
 
 		@Override
@@ -1775,6 +1796,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public boolean isContentControlled() {
+			return true;
+		}
+
+		@Override
 		public int size() {
 			return theValues.size();
 		}
@@ -1993,6 +2019,12 @@ public final class ObservableCollectionImpl {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			// TODO Add stamps to ObservableValue?
 			return coll == null ? -1 : coll.getStamp(structuralOnly);
+		}
+
+		@Override
+		public boolean isContentControlled() {
+			ObservableCollection<? extends E> coll = theCollectionObservable.get();
+			return coll == null || coll.isContentControlled();
 		}
 
 		@Override

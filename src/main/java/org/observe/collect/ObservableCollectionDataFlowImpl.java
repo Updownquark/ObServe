@@ -185,6 +185,8 @@ public class ObservableCollectionDataFlowImpl {
 			return lock(write, write, cause);
 		}
 
+		boolean isContentControlled();
+
 		Comparable<DerivedCollectionElement<T>> getElementFinder(T value);
 
 		String canAdd(T toAdd);
@@ -341,6 +343,11 @@ public class ObservableCollectionDataFlowImpl {
 				msg = theImmutableMessage;
 			if (msg != null)
 				throw new UnsupportedOperationException(msg);
+		}
+
+		public boolean isEmpty() {
+			return theImmutableMessage == null && theAddMessage == null && theRemoveMessage == null && theAddFilter == null
+				&& theRemoveFilter == null;
 		}
 	}
 
@@ -879,6 +886,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isContentControlled() {
+			return theSource.isContentControlled();
+		}
+
+		@Override
 		public Comparable<DerivedCollectionElement<E>> getElementFinder(E value) {
 			return null;
 		}
@@ -982,7 +994,7 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public String toString() {
-				return source.toString();
+				return source.getElementId().toString();
 			}
 		}
 	}
@@ -1014,6 +1026,11 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public boolean clear() {
 			return theParent.clear();
+		}
+
+		@Override
+		public boolean isContentControlled() {
+			return true;
 		}
 
 		@Override
@@ -1096,6 +1113,11 @@ public class ObservableCollectionDataFlowImpl {
 			public DerivedCollectionElement<T> add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
 				return new SortedElement(theParentEl.add(value, before));
 			}
+
+			@Override
+			public String toString() {
+				return theParentEl.toString();
+			}
 		}
 	}
 
@@ -1129,6 +1151,11 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public boolean clear() {
 			return false;
+		}
+
+		@Override
+		public boolean isContentControlled() {
+			return true;
 		}
 
 		@Override
@@ -1270,6 +1297,11 @@ public class ObservableCollectionDataFlowImpl {
 					throw new IllegalArgumentException(msg);
 				DerivedCollectionElement<T> parentEl = theParentEl.add(value, before);
 				return parentEl == null ? null : new FilteredElement(parentEl, true, true);
+			}
+
+			@Override
+			public String toString() {
+				return theParentEl.toString();
 			}
 		}
 	}
@@ -1481,6 +1513,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isContentControlled() {
+			return true;
+		}
+
+		@Override
 		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
 			return theParent.getElementFinder(value);
 		}
@@ -1641,6 +1678,11 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public boolean clear() {
 			return theParent.clear();
+		}
+
+		@Override
+		public boolean isContentControlled() {
+			return theParent.isContentControlled();
 		}
 
 		@Override
@@ -1859,6 +1901,11 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public boolean clear() {
 			return theParent.clear();
+		}
+
+		@Override
+		public boolean isContentControlled() {
+			return theOptions.getReverse() == null || theParent.isContentControlled();
 		}
 
 		@Override
@@ -2454,6 +2501,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isContentControlled() {
+			return theDef.getReverse() == null || theParent.isContentControlled();
+		}
+
+		@Override
 		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
 			if (theDef.getReverse() == null)
 				return null;
@@ -2687,6 +2739,11 @@ public class ObservableCollectionDataFlowImpl {
 				DerivedCollectionElement<I> parentEl = theParentEl.add(reverseValue(value), before);
 				return parentEl == null ? null : new CombinedElement(parentEl, true);
 			}
+
+			@Override
+			public String toString() {
+				return theParentEl.toString();
+			}
 		}
 	}
 
@@ -2798,6 +2855,11 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public boolean clear() {
 			return theParent.clear();
+		}
+
+		@Override
+		public boolean isContentControlled() {
+			return theParent.isContentControlled();
 		}
 
 		@Override
@@ -2952,6 +3014,11 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public Transaction lock(boolean write, boolean structural, Object cause) {
 			return theParent.lock(write, structural, cause);
+		}
+
+		@Override
+		public boolean isContentControlled() {
+			return theParent.isContentControlled();
 		}
 
 		@Override
@@ -3272,6 +3339,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isContentControlled() {
+			return !theFilter.isEmpty() || theParent.isContentControlled();
+		}
+
+		@Override
 		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
 			return theParent.getElementFinder(value);
 		}
@@ -3405,6 +3477,19 @@ public class ObservableCollectionDataFlowImpl {
 					innerLock.close();
 				outerLock.close();
 			};
+		}
+
+		@Override
+		public boolean isContentControlled() {
+			try (Transaction t = theParent.lock(true, false, null)) {
+				boolean anyControlled = false;
+				for (FlattenedHolder outerEl : theOuterElements) {
+					if (outerEl.manager == null)
+						continue;
+					anyControlled |= outerEl.manager.isContentControlled();
+				}
+				return anyControlled;
+			}
 		}
 
 		@Override
@@ -3628,6 +3713,11 @@ public class ObservableCollectionDataFlowImpl {
 					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
 				DerivedCollectionElement<? extends T> parentEl = ((DerivedCollectionElement<T>) theParentEl).add(value, before);
 				return parentEl == null ? null : new FlattenedElement(theHolder, parentEl, true);
+			}
+
+			@Override
+			public String toString() {
+				return theHolder.theParentEl.toString() + "/" + theParentEl.toString();
 			}
 		}
 	}
