@@ -4,15 +4,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Function;
 
-import org.observe.ObservableValue;
 import org.observe.assoc.ObservableGraph;
-import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
-import org.observe.collect.ObservableList;
-import org.observe.collect.impl.ObservableArrayList;
-import org.observe.util.DefaultTransactable;
 import org.qommons.Transaction;
 import org.qommons.collect.Graph;
 import org.qommons.collect.MutableGraph;
@@ -29,14 +24,16 @@ import com.google.common.reflect.TypeToken;
 public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, MutableGraph<N, E> {
 	private class DefaultNode implements ObservableGraph.Node<N, E> {
 		private final N theValue;
+		private final ObservableCollection<ObservableGraph.Edge<N, E>> theEdges;
 
-		DefaultNode(N value) {
+		DefaultNode(N value, ObservableCollection<ObservableGraph.Edge<N, E>> edges) {
 			theValue = value;
+			theEdges = edges;
 		}
 
 		@Override
-		public ObservableCollection<? extends ObservableGraph.Edge<N, E>> getEdges() {
-			return DefaultObservableGraph.this.getEdges().filter(edge -> edge.getStart() == this || edge.getEnd() == this);
+		public ObservableCollection<ObservableGraph.Edge<N, E>> getEdges() {
+			return theEdges;
 		}
 
 		@Override
@@ -82,24 +79,18 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 		}
 	}
 
-	private ReentrantReadWriteLock theLock;
+	private final ObservableCollection<ObservableGraph.Node<N, E>> theNodes;
+	private final ObservableCollection<ObservableGraph.Node<N, E>> theExposedNodes;
 
-	private DefaultTransactable theSessionController;
-
-	private ObservableList<ObservableGraph.Node<N, E>> theNodes;
-
-	private ObservableList<ObservableGraph.Edge<N, E>> theEdges;
-
-	private ObservableList<ObservableGraph.Node<N, E>> theNodeController;
-
-	private ObservableList<ObservableGraph.Edge<N, E>> theEdgeController;
+	private final Function<TypeToken<ObservableGraph.Edge<N, E>>, ? extends ObservableCollection<ObservableGraph.Edge<N, E>>> theEdgeCreator;
+	private final ObservableCollection<ObservableGraph.Edge<N, E>> theEdges;
 
 	/**
 	 * @param nodeType The type of values associated with nodes
 	 * @param edgeType The type of value associated with edges
 	 */
 	public DefaultObservableGraph(TypeToken<N> nodeType, TypeToken<E> edgeType) {
-		this(nodeType, edgeType, ObservableArrayList::new, ObservableArrayList::new);
+		this(nodeType, edgeType, ObservableCollection::create, ObservableCollection::create);
 	}
 
 	/**
@@ -109,29 +100,25 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 	 * @param edgeList Creates the list of edges
 	 */
 	public DefaultObservableGraph(TypeToken<N> nodeType, TypeToken<E> edgeType,
-		CollectionCreator<ObservableGraph.Node<N, E>, ObservableList<ObservableGraph.Node<N, E>>> nodeList,
-		CollectionCreator<ObservableGraph.Edge<N, E>, ObservableList<ObservableGraph.Edge<N, E>>> edgeList) {
-		theLock = new ReentrantReadWriteLock();
+		Function<TypeToken<ObservableGraph.Node<N, E>>, ? extends ObservableCollection<ObservableGraph.Node<N, E>>> nodeList,
+		Function<TypeToken<ObservableGraph.Edge<N, E>>, ? extends ObservableCollection<ObservableGraph.Edge<N, E>>> edgeList) {
 
-		theSessionController = new DefaultTransactable(theLock);
+		TypeToken<ObservableGraph.Node<N, E>> nodesType = new TypeToken<ObservableGraph.Node<N, E>>() {}//
+		.where(new TypeParameter<N>() {}, nodeType)//
+		.where(new TypeParameter<E>() {}, edgeType);
+		TypeToken<ObservableGraph.Edge<N, E>> edgesType = new TypeToken<ObservableGraph.Edge<N, E>>() {}//
+		.where(new TypeParameter<N>() {}, nodeType)//
+		.where(new TypeParameter<E>() {}, edgeType);
 
-		theNodeController = nodeList.create(
-			new TypeToken<ObservableGraph.Node<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType).where(new TypeParameter<E>() {},
-				edgeType),
-			theLock,
-			theSessionController.getSession(), theSessionController);
-		theNodes = theNodeController.immutable();
-		theEdgeController = edgeList.create(
-			new TypeToken<ObservableGraph.Edge<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType).where(new TypeParameter<E>() {},
-				edgeType),
-			theLock,
-			theSessionController.getSession(), theSessionController);
-		theEdges = theEdgeController.immutable();
+		theNodes = nodeList.apply(nodesType);
+		theExposedNodes = theNodes.flow().immutable().collect();
+		theEdgeCreator = edgeList;
+		theEdges = theNodes.flow().flatMapC(edgesType, n -> n.getEdges()).collect();
 	}
 
 	@Override
 	public ObservableCollection<ObservableGraph.Node<N, E>> getNodes() {
-		return theNodes;
+		return theExposedNodes;
 	}
 
 	@Override
@@ -140,24 +127,10 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 	}
 
 	@Override
-	public ObservableValue<CollectionSession> getSession() {
-		return theSessionController.getSession();
-	}
-
-	@Override
-	public Transaction lock(boolean write, Object cause) {
-		return theSessionController.lock(write, cause);
-	}
-
-	@Override
-	public boolean isSafe() {
-		return true;
-	}
-
-	@Override
 	public ObservableGraph.Node<N, E> addNode(N value) {
-		DefaultNode node = new DefaultNode(value);
-		theNodeController.add(node);
+		ObservableCollection<ObservableGraph.Edge<N, E>> nodeEdges = theEdgeCreator.apply(theEdges.getType());
+		DefaultNode node = new DefaultNode(value, nodeEdges);
+		theNodes.add(node);
 		return node;
 	}
 
@@ -171,7 +144,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 
 	@Override
 	public ObservableGraph.Edge<N, E> addEdge(Graph.Node<N, E> start, Graph.Node<N, E> end, boolean directed, E value) {
-		if(!theNodes.contains(start) || !theNodes.contains(end))
+		if (!theExposedNodes.contains(start) || !theExposedNodes.contains(end))
 			throw new IllegalArgumentException("Edges may only be created between nodes already present in the graph");
 		if(start == end)
 			throw new IllegalArgumentException("An edge may not start and end at the same node");
@@ -182,7 +155,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 
 	@Override
 	public boolean removeNode(Graph.Node<N, E> node) {
-		if(!theNodes.contains(node))
+		if (!theExposedNodes.contains(node))
 			return false;
 		try (Transaction trans = lock(true, null)) {
 			java.util.Iterator<ObservableGraph.Edge<N, E>> edgeIter = theEdgeController.iterator();
@@ -191,7 +164,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 				if(edge.getStart() == node || edge.getEnd() == node)
 					edgeIter.remove();
 			}
-			theNodeController.remove(node);
+			theNodes.remove(node);
 			return true;
 		}
 	}
@@ -204,11 +177,11 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 	@Override
 	public ObservableGraph.Node<N, E> replaceNode(Graph.Node<N, E> node, N newValue) {
 		DefaultNode newNode = new DefaultNode(newValue);
-		int index = theNodeController.indexOf(node);
+		int index = theNodes.indexOf(node);
 		if(index < 0)
 			return null;
 		try (Transaction trans = lock(true, null)) {
-			theNodeController.add(index + 1, newNode);
+			theNodes.add(index + 1, newNode);
 			java.util.ListIterator<ObservableGraph.Edge<N, E>> edgeIter = theEdgeController.listIterator();
 			while(edgeIter.hasNext()) {
 				ObservableGraph.Edge<N, E> edge = edgeIter.next();
@@ -217,7 +190,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 				else if(edge.getEnd() == node)
 					edgeIter.set(new DefaultEdge(edge.getStart(), newNode, edge.isDirected(), edge.getValue()));
 			}
-			theNodeController.remove(node);
+			theNodes.remove(node);
 			return newNode;
 		}
 	}
@@ -231,10 +204,10 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 		Lock lock = theLock.writeLock();
 		lock.lock();
 		try {
-			int index = theNodeController.indexOf(node);
+			int index = theNodes.indexOf(node);
 			if(index < 0)
 				return;
-			theNodeController.set(index, node);
+			theNodes.set(index, node);
 		} finally {
 			lock.unlock();
 		}
@@ -262,7 +235,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 	public void clear() {
 		try (Transaction trans = lock(true, null)) {
 			theEdgeController.clear();
-			theNodeController.clear();
+			theNodes.clear();
 		}
 	}
 
