@@ -5,12 +5,15 @@ import java.util.function.Consumer;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
 import org.observe.Observer;
+import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.qommons.Causable;
 import org.qommons.Transaction;
 import org.qommons.collect.Graph;
+import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.TransactableGraph;
 
 import com.google.common.reflect.TypeParameter;
@@ -29,12 +32,79 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 	 * @param <N> The type of values stored in the nodes of the graph
 	 * @param <E> The type of values stored in the edges of the graph
 	 */
-	interface Node<N, E> extends Graph.Node<N, E> {
+	interface Node<N, E> extends Graph.Node<N, E>, SettableValue<N> {
 		@Override
 		ObservableCollection<? extends Edge<N, E>> getEdges();
 
 		@Override
-		N getValue();
+		ObservableCollection<? extends Edge<N, E>> getOutward();
+
+		@Override
+		ObservableCollection<? extends Edge<N, E>> getInward();
+
+		@Override
+		default ObservableGraph.Node<N, E> unsettable() {
+			ObservableGraph.Node<N, E> source = this;
+			return new ObservableGraph.Node<N, E>() {
+				@Override
+				public TypeToken<N> getType() {
+					return source.getType();
+				}
+
+				@Override
+				public N get() {
+					return source.get();
+				}
+
+				@Override
+				public ObservableValue<String> isEnabled() {
+					return ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION);
+				}
+
+				@Override
+				public <V extends N> String isAcceptable(V value) {
+					return StdMsg.UNSUPPORTED_OPERATION;
+				}
+
+				@Override
+				public <V extends N> N set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				}
+
+				@Override
+				public Observable<ObservableValueEvent<N>> changes() {
+					return source.changes();
+				}
+
+				@Override
+				public Transaction lock() {
+					return source.lock();
+				}
+
+				@Override
+				public ObservableCollection<? extends Edge<N, E>> getEdges() {
+					return source.getEdges().flow().map((TypeToken<ObservableGraph.Edge<N, E>>) source.getEdges().getType(),
+						e -> e.unsettable(), options -> options.cache(false)).immutable().collectPassive();
+				}
+
+				@Override
+				public ObservableCollection<? extends Edge<N, E>> getOutward() {
+					return source.getEdges().flow().map((TypeToken<ObservableGraph.Edge<N, E>>) source.getOutward().getType(),
+						e -> e.unsettable(), options -> options.cache(false)).immutable().collectPassive();
+				}
+
+				@Override
+				public ObservableCollection<? extends Edge<N, E>> getInward() {
+					return source.getEdges().flow().map((TypeToken<ObservableGraph.Edge<N, E>>) source.getOutward().getType(),
+						e -> e.unsettable(), options -> options.cache(false)).immutable().collectPassive();
+				}
+
+				@Override
+				public Node<N, E> unsettable() {
+					return this;
+				}
+			};
+		}
 	}
 
 	/**
@@ -43,7 +113,7 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 	 * @param <N> The type of values stored in the nodes of the graph
 	 * @param <E> The type of values stored in the edges of the graph
 	 */
-	interface Edge<N, E> extends Graph.Edge<N, E> {
+	interface Edge<N, E> extends Graph.Edge<N, E>, SettableValue<E> {
 		@Override
 		Node<N, E> getStart();
 
@@ -54,11 +124,72 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 		boolean isDirected();
 
 		@Override
-		E getValue();
+		default ObservableGraph.Edge<N, E> unsettable() {
+			ObservableGraph.Edge<N, E> source = this;
+			return new ObservableGraph.Edge<N, E>() {
+				@Override
+				public TypeToken<E> getType() {
+					return source.getType();
+				}
+
+				@Override
+				public E get() {
+					return source.get();
+				}
+
+				@Override
+				public ObservableValue<String> isEnabled() {
+					return ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION);
+				}
+
+				@Override
+				public <V extends E> String isAcceptable(V value) {
+					return StdMsg.UNSUPPORTED_OPERATION;
+				}
+
+				@Override
+				public <V extends E> E set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				}
+
+				@Override
+				public Observable<ObservableValueEvent<E>> changes() {
+					return source.changes();
+				}
+
+				@Override
+				public Transaction lock() {
+					return source.lock();
+				}
+
+				@Override
+				public Node<N, E> getStart() {
+					return source.getStart().unsettable();
+				}
+
+				@Override
+				public Node<N, E> getEnd() {
+					return source.getEnd().unsettable();
+				}
+
+				@Override
+				public boolean isDirected() {
+					return source.isDirected();
+				}
+
+				@Override
+				public Edge<N, E> unsettable() {
+					return this;
+				}
+			};
+		}
 	}
 
 	@Override
 	ObservableCollection<? extends Node<N, E>> getNodes();
+
+	@Override
+	ObservableCollection<? extends N> getNodeValues();
 
 	@Override
 	ObservableCollection<? extends Edge<N, E>> getEdges();
@@ -66,7 +197,7 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 	@Override
 	default Node<N, E> nodeFor(N value) {
 		for (Node<N, E> node : getNodes())
-			if (Objects.equals(node.getValue(), value))
+			if (Objects.equals(node.get(), value))
 				return node;
 		return null;
 	}
@@ -104,7 +235,39 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 	 * @return An observable value containing the node in this graph whose value is equal to the argument. The value may be null.
 	 */
 	default ObservableValue<? extends Node<N, E>> getNode(N nodeValue) {
-		return getNodes().observeFind(node -> node.getValue().equals(nodeValue), () -> null, true);
+		return getNodes().observeFind(node -> node.get().equals(nodeValue), () -> null, true);
+	}
+
+	/** @return A representation of this graph that is not modifiable */
+	default ObservableGraph<N, E> immutable() {
+		ObservableGraph<N, E> source = this;
+		return new ObservableGraph<N, E>() {
+			@Override
+			public ObservableCollection<? extends ObservableGraph.Node<N, E>> getNodes() {
+				return source.getNodes().flow()
+					.map((TypeToken<ObservableGraph.Node<N, E>>) source.getNodes().getType(), n -> n.unsettable(),
+						options -> options.cache(false))
+					.immutable().collectPassive();
+			}
+
+			@Override
+			public ObservableCollection<? extends N> getNodeValues() {
+				return source.getNodeValues().flow().immutable().collectPassive();
+			}
+
+			@Override
+			public ObservableCollection<? extends ObservableGraph.Edge<N, E>> getEdges() {
+				return source.getEdges().flow()
+					.map((TypeToken<ObservableGraph.Edge<N, E>>) source.getEdges().getType(), e -> e.unsettable(),
+						options -> options.cache(false))
+					.immutable().collectPassive();
+			}
+
+			@Override
+			public ObservableGraph<N, E> immutable() {
+				return this;
+			}
+		};
 	}
 
 	// default <N2, E2> ObservableGraph<N2, E2> map(Function<N, N2> nodeMap, Function<E, E2> edgeMap) {
@@ -133,10 +296,16 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 			.where(new TypeParameter<E>() {}, edgeType);
 		ObservableCollection<Node<N, E>> nodes = ObservableCollection.of(nodeType2);
 		ObservableCollection<Edge<N, E>> edges = ObservableCollection.of(edgeType2);
+		ObservableCollection<N> nodeValues = ObservableCollection.of(nodeType);
 		return new ObservableGraph<N, E>() {
 			@Override
 			public ObservableCollection<Node<N, E>> getNodes() {
 				return nodes;
+			}
+
+			@Override
+			public ObservableCollection<? extends N> getNodeValues() {
+				return nodeValues;
 			}
 
 			@Override
