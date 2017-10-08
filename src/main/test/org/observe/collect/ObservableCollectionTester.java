@@ -18,13 +18,13 @@ import org.qommons.QommonsTestUtils;
  * @param <E> The type of values in the collection
  */
 public class ObservableCollectionTester<E> extends AbstractObservableTester<Collection<E>> {
-	private final ObservableCollection<E> theCollection;
+	private final ObservableCollection<? extends E> theCollection;
 	private final ArrayList<E> theSyncedCopy;
 	private final ArrayList<E> theBatchSyncedCopy;
 	private final List<E> theExpected;
 
 	/** @param collect The observable collection to test */
-	public ObservableCollectionTester(ObservableCollection<E> collect) {
+	public ObservableCollectionTester(ObservableCollection<? extends E> collect) {
 		this(collect, new ArrayList<>());
 	}
 
@@ -32,7 +32,7 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 	 * @param collect The observable collection to test
 	 * @param expected The collection to use for the expected value
 	 */
-	public ObservableCollectionTester(ObservableCollection<E> collect, List<E> expected) {
+	public ObservableCollectionTester(ObservableCollection<? extends E> collect, List<E> expected) {
 		theCollection = collect;
 		theSyncedCopy=new ArrayList<>();
 		theBatchSyncedCopy = new ArrayList<>();
@@ -188,15 +188,15 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 			op();
 			switch (evt.type) {
 			case add:
-				for (CollectionChangeEvent.ElementChange<E> change : evt.elements)
+				for (CollectionChangeEvent.ElementChange<? extends E> change : evt.elements)
 					theBatchSyncedCopy.add(change.index, change.newValue);
 				break;
 			case remove:
-				for (CollectionChangeEvent.ElementChange<E> change : evt.getElementsReversed())
+				for (CollectionChangeEvent.ElementChange<? extends E> change : evt.getElementsReversed())
 					assertEquals(change.oldValue, theBatchSyncedCopy.remove(change.index));
 				break;
 			case set:
-				for (CollectionChangeEvent.ElementChange<E> change : evt.elements)
+				for (CollectionChangeEvent.ElementChange<? extends E> change : evt.elements)
 					assertEquals(change.oldValue, theBatchSyncedCopy.set(change.index, change.newValue));
 				break;
 			}

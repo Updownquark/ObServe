@@ -49,8 +49,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 		@Override
 		public ObservableCollection<ObservableGraph.Edge<N, E>> getEdges() {
 			if (theBiEdges == null)
-				theBiEdges = (ObservableCollection<ObservableGraph.Edge<N, E>>) ObservableCollection.flattenCollections(theEdgeHolderType,
-					theOutgoingEdges, getInward());
+				theBiEdges = ObservableCollection.flattenCollections(theEdgeHolderType, theOutgoingEdges, getInward()).collect();
 			return theBiEdges;
 		}
 	}
@@ -117,11 +116,11 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 		theEdgeType = edgeType;
 
 		TypeToken<ObservableGraph.Node<N, E>> nodesType = new TypeToken<ObservableGraph.Node<N, E>>() {}//
-		.where(new TypeParameter<N>() {}, nodeType)//
-		.where(new TypeParameter<E>() {}, edgeType);
+		.where(new TypeParameter<N>() {}, nodeType.wrap())//
+		.where(new TypeParameter<E>() {}, edgeType.wrap());
 		theEdgeHolderType = new TypeToken<ObservableGraph.Edge<N, E>>() {}//
-		.where(new TypeParameter<N>() {}, nodeType)//
-		.where(new TypeParameter<E>() {}, edgeType);
+		.where(new TypeParameter<N>() {}, nodeType.wrap())//
+		.where(new TypeParameter<E>() {}, edgeType.wrap());
 
 		theNodes = nodeList.apply(nodesType);
 		theExposedNodes = theNodes.flow().filterMod(fm -> fm.noAdd(StdMsg.UNSUPPORTED_OPERATION)).collectPassive();
@@ -136,7 +135,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 	}
 
 	@Override
-	public ObservableCollection<? extends N> getNodeValues() {
+	public ObservableCollection<N> getNodeValues() {
 		if (theNodeValues == null)
 			theNodeValues = theNodes.flow().refreshEach(n -> n.changes().noInit()).map(theNodeType, n -> n.get(), options -> {
 				options.withReverse(this::createNode).withElementSetting((node, nodeValue, replace) -> {

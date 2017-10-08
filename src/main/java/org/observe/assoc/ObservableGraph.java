@@ -189,7 +189,7 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 	ObservableCollection<? extends Node<N, E>> getNodes();
 
 	@Override
-	ObservableCollection<? extends N> getNodeValues();
+	ObservableCollection<N> getNodeValues();
 
 	@Override
 	ObservableCollection<? extends Edge<N, E>> getEdges();
@@ -251,7 +251,7 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 			}
 
 			@Override
-			public ObservableCollection<? extends N> getNodeValues() {
+			public ObservableCollection<N> getNodeValues() {
 				return source.getNodeValues().flow().immutable().collectPassive();
 			}
 
@@ -290,10 +290,10 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 	 * @return An empty graph
 	 */
 	static <N, E> ObservableGraph<N, E> empty(TypeToken<N> nodeType, TypeToken<E> edgeType) {
-		TypeToken<Node<N, E>> nodeType2 = new TypeToken<Node<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType)
-			.where(new TypeParameter<E>() {}, edgeType);
-		TypeToken<Edge<N, E>> edgeType2 = new TypeToken<Edge<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType)
-			.where(new TypeParameter<E>() {}, edgeType);
+		TypeToken<Node<N, E>> nodeType2 = new TypeToken<Node<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType.wrap())
+			.where(new TypeParameter<E>() {}, edgeType.wrap());
+		TypeToken<Edge<N, E>> edgeType2 = new TypeToken<Edge<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType.wrap())
+			.where(new TypeParameter<E>() {}, edgeType.wrap());
 		ObservableCollection<Node<N, E>> nodes = ObservableCollection.of(nodeType2);
 		ObservableCollection<Edge<N, E>> edges = ObservableCollection.of(edgeType2);
 		ObservableCollection<N> nodeValues = ObservableCollection.of(nodeType);
@@ -304,7 +304,7 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 			}
 
 			@Override
-			public ObservableCollection<? extends N> getNodeValues() {
+			public ObservableCollection<N> getNodeValues() {
 				return nodeValues;
 			}
 
