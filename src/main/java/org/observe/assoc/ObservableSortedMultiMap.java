@@ -75,8 +75,8 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 			}
 
 			@Override
-			public Transaction lock(boolean write, Object cause) {
-				return outer.lock(write, cause);
+			public Transaction lock(boolean write, boolean structural, Object cause) {
+				return outer.lock(write, structural, cause);
 			}
 
 			@Override
@@ -368,8 +368,8 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theOuter.lock(write, cause);
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			return theOuter.lock(write, structural, cause);
 		}
 
 		@Override

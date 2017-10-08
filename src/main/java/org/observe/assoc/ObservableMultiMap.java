@@ -465,8 +465,8 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theOuter.lock(write, cause);
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			return theOuter.lock(write, structural, cause);
 		}
 
 		@Override
@@ -620,11 +620,11 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
+		public Transaction lock(boolean write, boolean structural, Object cause) {
 			// We'll assume locking the key set will propagate to the values.
 			// If this is untrue, then the value collections would be unaffected by this, of course;
 			// but if it is true, then iterating through each key and locking the values would be wasted linear time
-			return theEntries.lock(write, cause);
+			return theEntries.lock(write, structural, cause);
 		}
 
 		@Override

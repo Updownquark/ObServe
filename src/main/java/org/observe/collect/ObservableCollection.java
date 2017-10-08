@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Set;
 import java.util.Spliterator;
+import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -1062,6 +1063,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 */
 		CollectionDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options);
 
+		CollectionDataFlow<E, T, T> postMod(Consumer<PostModActions<T>> options);
 		/**
 		 * @param <K> The key type for the map
 		 * @param keyType The key type for the map
@@ -1256,6 +1258,9 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		UniqueDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options);
 
 		@Override
+		UniqueDataFlow<E, T, T> postMod(Consumer<PostModActions<T>> options);
+
+		@Override
 		default ObservableSet<T> collect() {
 			return (ObservableSet<T>) CollectionDataFlow.super.collect();
 		}
@@ -1361,6 +1366,9 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		UniqueSortedDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options);
 
 		@Override
+		UniqueSortedDataFlow<E, T, T> postMod(Consumer<PostModActions<T>> options);
+
+		@Override
 		default ObservableSortedSet<T> collect() {
 			return (ObservableSortedSet<T>) UniqueDataFlow.super.collect();
 		}
@@ -1454,6 +1462,44 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		public ModFilterBuilder<T> filterRemove(Function<? super T, String> messageFn) {
 			theRemoveMsgFn = messageFn;
 			return this;
+		}
+	}
+
+	/**
+	 * Actions to perform on a collection after it is modified
+	 *
+	 * @param <T> The type of values in the collection
+	 */
+	class PostModActions<T> {
+		private Consumer<? super T> theAddAction;
+		private Consumer<? super T> theRemoveAction;
+		private BiConsumer<? super T, ? super T> theSetAction;
+
+		public PostModActions<T> onAdd(Consumer<? super T> addAction) {
+			theAddAction = addAction;
+			return this;
+		}
+
+		public PostModActions<T> onRemove(Consumer<? super T> removeAction) {
+			theRemoveAction = removeAction;
+			return this;
+		}
+
+		public PostModActions<T> onSet(BiConsumer<? super T, ? super T> setAction) {
+			theSetAction = setAction;
+			return this;
+		}
+
+		public Consumer<? super T> getAddAction() {
+			return theAddAction;
+		}
+
+		public Consumer<? super T> getRemoveAction() {
+			return theRemoveAction;
+		}
+
+		public BiConsumer<? super T, ? super T> getSetAction() {
+			return theSetAction;
 		}
 	}
 }

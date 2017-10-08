@@ -2,6 +2,7 @@ package org.observe.assoc;
 
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -16,7 +17,7 @@ import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
 import org.qommons.Transaction;
-import org.qommons.collect.SimpleMapEntry;
+import org.qommons.collect.BetterList;
 import org.qommons.collect.TransactableMap;
 
 import com.google.common.reflect.TypeParameter;
@@ -288,11 +289,78 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 		return create(keyType, valueType, Equivalence.DEFAULT);
 	}
 
-	static <K, V> ObservableMap<K, V> create(TypeToken<K> keyType, TypeToken<V> valueType, Equivalence<? super K> equivalence) {
-		TypeToken<ObservableEntry<K, V>> entryType = buildEntryType(keyType, valueType);
-		ObservableSet<ObservableEntry<K, V>> entrySet=ObservableSet.create(entryType, equivalence.m);
-		ObservableCollection<Map.Entry<K, V>> values = keySet.flow()
-			.map(new TypeToken<Map.Entry<K, V>>() {}, k -> new Object[1], options -> options.cache(true).reEvalOnUpdate(false)).collect();
+	static <K, V> ObservableMap<K, V> create(TypeToken<K> keyType, TypeToken<V> valueType, Equivalence<Object> keyEquivalence) {
+		return create(keyType, valueType, keyEquivalence, ObservableCollection.createDefaultBacking());
+	}
+
+	static <K, V> ObservableMap<K, V> create(TypeToken<K> keyType, TypeToken<V> valueType, Equivalence<? super K> keyEquivalence,
+		BetterList<Map.Entry<K, V>> entryCollection) {
+		TypeToken<Map.Entry<K, V>> entryType = new TypeToken<Map.Entry<K, V>>() {}.where(new TypeParameter<K>() {}, keyType.wrap())
+			.where(new TypeParameter<V>() {}, valueType.wrap());
+		ReentrantLock valueLock = new ReentrantLock();
+		class MapEntry implements ObservableEntry<K, V> {
+			private final K theKey;
+			private V theValue;
+
+			public MapEntry(K key, V value) {
+				theKey = key;
+				theValue = value;
+			}
+
+			@Override
+			public K getKey() {
+				return theKey;
+			}
+
+			@Override
+			public TypeToken<V> getType() {
+				return valueType;
+			}
+
+			@Override
+			public Observable<ObservableValueEvent<V>> changes() {
+
+				// TODO Auto-generated method stub
+				return null;
+			}
+
+			@Override
+			public Transaction lock() {
+				// TODO Auto-generated method stub
+				return null;
+			}
+
+			@Override
+			public V getValue() {
+				return theValue;
+			}
+
+			@Override
+			public V setValue(V value) {
+				V old = theValue;
+				theValue = value;
+				return old;
+			}
+
+			@Override
+			public int hashCode() {
+				return Objects.hashCode(theKey);
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				return keyEquivalence.elementEquals(theKey, obj);
+			}
+
+			@Override
+			public String toString() {
+				return theKey + "=" + theValue;
+			}
+		}
+		ObservableSet<Map.Entry<K, V>> simpleEntryCollection = ObservableCollection.create(entryType, entryCollection).flow().distinct()
+			.collect();
+		ObservableSet<K> keySet = simpleEntryCollection.flow().mapEquivalent(keyType, Map.Entry::getKey, k -> new MapEntry(k, null))
+			.collectPassive();
 		return new ObservableMap<K, V>() {
 			@Override
 			public boolean isLockSupported() {
@@ -331,9 +399,11 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 
 			@Override
 			public ObservableValue<V> observe(Object key) {
-				CollectionElement<Object []> valueEl=
-					// TODO Auto-generated method stub
-					return null;
+			}
+
+			@Override
+			public ObservableSet<java.util.Map.Entry<K, V>> entrySet() {
+				return entrySet;
 			}
 		};
 	}
