@@ -16,6 +16,7 @@ import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
 import org.qommons.Transaction;
+import org.qommons.collect.SimpleMapEntry;
 import org.qommons.collect.TransactableMap;
 
 import com.google.common.reflect.TypeParameter;
@@ -283,6 +284,60 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 		return values().simpleChanges();
 	}
 
+	static <K, V> ObservableMap<K, V> create(TypeToken<K> keyType, TypeToken<V> valueType) {
+		return create(keyType, valueType, Equivalence.DEFAULT);
+	}
+
+	static <K, V> ObservableMap<K, V> create(TypeToken<K> keyType, TypeToken<V> valueType, Equivalence<? super K> equivalence) {
+		TypeToken<ObservableEntry<K, V>> entryType = buildEntryType(keyType, valueType);
+		ObservableSet<ObservableEntry<K, V>> entrySet=ObservableSet.create(entryType, equivalence.m);
+		ObservableCollection<Map.Entry<K, V>> values = keySet.flow()
+			.map(new TypeToken<Map.Entry<K, V>>() {}, k -> new Object[1], options -> options.cache(true).reEvalOnUpdate(false)).collect();
+		return new ObservableMap<K, V>() {
+			@Override
+			public boolean isLockSupported() {
+				return keySet.isLockSupported();
+			}
+
+			@Override
+			public Transaction lock(boolean write, boolean structural, Object cause) {
+				return keySet.lock(write, structural, cause);
+			}
+
+			@Override
+			public TypeToken<K> getKeyType() {
+				return keySet.getType();
+			}
+
+			@Override
+			public TypeToken<V> getValueType() {
+				return valueType;
+			}
+
+			@Override
+			public TypeToken<ObservableEntry<K, V>> getEntryType() {
+				return entryType;
+			}
+
+			@Override
+			public Equivalence<? super V> equivalence() {
+				return Equivalence.DEFAULT;
+			}
+
+			@Override
+			public ObservableSet<K> keySet() {
+				return keySet;
+			}
+
+			@Override
+			public ObservableValue<V> observe(Object key) {
+				CollectionElement<Object []> valueEl=
+					// TODO Auto-generated method stub
+					return null;
+			}
+		};
+	}
+
 	/**
 	 * @param <K> The key type for the map
 	 * @param <V> The value type for the map
@@ -315,7 +370,7 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 			}
 
 			@Override
-			public Transaction lock(boolean write, Object cause) {
+			public Transaction lock(boolean write, boolean structural, Object cause) {
 				return Transaction.NONE;
 			}
 
