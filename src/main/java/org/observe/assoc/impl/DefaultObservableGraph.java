@@ -7,6 +7,7 @@ import java.util.function.Function;
 
 import org.observe.SimpleSettableValue;
 import org.observe.assoc.ObservableGraph;
+import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
 import org.qommons.Transaction;
 import org.qommons.collect.Graph;
@@ -52,6 +53,11 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 				theBiEdges = ObservableCollection.flattenCollections(theEdgeHolderType, theOutgoingEdges, getInward()).collect();
 			return theBiEdges;
 		}
+
+		@Override
+		public String toString() {
+			return "Graph Node " + get();
+		}
 	}
 
 	private class DefaultEdge extends SimpleSettableValue<E> implements ObservableGraph.Edge<N, E> {
@@ -81,6 +87,11 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 		@Override
 		public boolean isDirected() {
 			return isDirected;
+		}
+
+		@Override
+		public String toString() {
+			return theStart + "->" + theEnd + ": " + get();
 		}
 	}
 
@@ -127,6 +138,14 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 		theEdgeCreator = edgeList;
 		theEdges = theNodes.flow().flatMapC(theEdgeHolderType, n -> n.getOutward()).collect();
 		theExposedEdges = theEdges.flow().filterMod(fm -> fm.noAdd(StdMsg.UNSUPPORTED_OPERATION)).collectPassive();
+		theNodes.onChange(evt -> {
+			if (evt.getType() == CollectionChangeType.remove) {
+				try (Transaction t = theEdges.lock(true, evt)) {
+					evt.getOldValue().getOutward().clear();
+					evt.getOldValue().getInward().clear();
+				}
+			}
+		});
 	}
 
 	@Override
@@ -196,10 +215,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 
 	@Override
 	public boolean removeNode(Graph.Node<N, E> node) {
-		boolean found = theNodes.remove(node);
-		if (found)
-			((DefaultNode) node).getOutward().clear();
-		return found;
+		return theNodes.remove(node);
 	}
 
 	@Override

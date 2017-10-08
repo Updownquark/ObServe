@@ -159,7 +159,7 @@ public class ObservableAssocTest {
 		node0OutChecker.getExpected().remove(0);
 		node0InChecker.getExpected().remove(0);
 		node0AllChecker.getExpected().remove(0);
-		node0AllChecker.getExpected().remove(0);
+		node0AllChecker.getExpected().remove(1);
 		node1OutChecker.clear();
 		node1InChecker.clear();
 		node1AllChecker.clear();
