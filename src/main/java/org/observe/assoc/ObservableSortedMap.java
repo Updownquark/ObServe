@@ -1,17 +1,18 @@
 package org.observe.assoc;
 
-import static org.observe.assoc.ObservableMap.ObservableEntry.constEntry;
-
 import java.util.Comparator;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.function.Consumer;
 
-import org.observe.ObservableValue;
+import org.observe.Subscription;
+import org.observe.collect.CollectionChangeType;
 import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedSet;
 import org.qommons.Transaction;
+import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.SimpleMapEntry;
 
 import com.google.common.reflect.TypeToken;
@@ -27,7 +28,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, Navigabl
 	ObservableSortedSet<K> keySet();
 
 	@Override
-	default ObservableSortedSet<ObservableEntry<K, V>> observeEntries() {
+	default ObservableSortedSet<Map.Entry<K, V>> observeEntries() {
 		return keySet().flow().mapEquivalent(getEntryType(), this::entryFor, entry -> entry.getKey(), options -> options.cache(false))
 			.collect();
 	}
@@ -59,7 +60,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, Navigabl
 
 	@Override
 	default Entry<K, V> lowerEntry(K key) {
-		return entrySet().lower(constEntry(getValueType(), key, (V) null));
+		return entrySet().lower(new SimpleMapEntry<>(key, (V) null));
 	}
 
 	@Override
@@ -69,7 +70,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, Navigabl
 
 	@Override
 	default Entry<K, V> floorEntry(K key) {
-		return entrySet().floor(constEntry(getValueType(), key, (V) null));
+		return entrySet().floor(new SimpleMapEntry<>(key, (V) null));
 	}
 
 	@Override
@@ -79,7 +80,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, Navigabl
 
 	@Override
 	default Entry<K, V> ceilingEntry(K key) {
-		return entrySet().ceiling(constEntry(getValueType(), key, (V) null));
+		return entrySet().ceiling(new SimpleMapEntry<>(key, (V) null));
 	}
 
 	@Override
@@ -122,6 +123,16 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, Navigabl
 		ObservableSortedMap<K, V> outer = this;
 		return new ObservableSortedMap<K, V>() {
 			@Override
+			public boolean isLockSupported() {
+				return outer.isLockSupported();
+			}
+
+			@Override
+			public Transaction lock(boolean write, boolean structural, Object cause) {
+				return outer.lock(write, structural, cause);
+			}
+
+			@Override
 			public TypeToken<K> getKeyType() {
 				return outer.getKeyType();
 			}
@@ -132,18 +143,8 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, Navigabl
 			}
 
 			@Override
-			public TypeToken<ObservableEntry<K, V>> getEntryType() {
+			public TypeToken<Map.Entry<K, V>> getEntryType() {
 				return outer.getEntryType();
-			}
-
-			@Override
-			public boolean isLockSupported() {
-				return outer.isLockSupported();
-			}
-
-			@Override
-			public Transaction lock(boolean write, Object cause) {
-				return outer.lock(write, cause);
 			}
 
 			@Override
@@ -157,18 +158,26 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, Navigabl
 			}
 
 			@Override
-			public ObservableValue<V> observe(Object key) {
-				return outer.observe(key);
-			}
-
-			@Override
-			public ObservableCollection<V> values() {
-				return outer.values();
-			}
-
-			@Override
-			public ObservableSortedSet<ObservableEntry<K, V>> observeEntries() {
+			public ObservableSortedSet<Map.Entry<K, V>> observeEntries() {
 				return outer.observeEntries().descendingSet();
+			}
+
+			@Override
+			public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
+				try (Transaction t = lock(false, null)) {
+					int[] size = new int[] { size() };
+					return outer.onChange(evt -> {
+						if (evt.getType() == CollectionChangeType.add)
+							size[0]++;
+						int index = size[0] - evt.getIndex() - 1;
+						if (evt.getType() == CollectionChangeType.remove)
+							size[0]--;
+						ObservableMapEvent.doWith(
+							new ObservableMapEvent<>(evt.getKeyElement().reverse(), evt.getElementId().reverse(), outer.getKeyType(),
+								outer.getValueType(), index, index, evt.getType(), evt.getKey(), evt.getOldValue(), evt.getNewValue(), evt),
+							action);
+					});
+				}
 			}
 
 			@Override
@@ -177,13 +186,13 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, Navigabl
 			}
 
 			@Override
-			public V remove(Object key) {
-				return outer.remove(key);
+			public void putAll(Map<? extends K, ? extends V> m) {
+				outer.putAll(m);
 			}
 
 			@Override
-			public void putAll(Map<? extends K, ? extends V> m) {
-				outer.putAll(m);
+			public V remove(Object key) {
+				return outer.remove(key);
 			}
 
 			@Override
@@ -213,6 +222,11 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, Navigabl
 		return keySet().descendingSet();
 	}
 
+	/**
+	 * @param from Determines the minimum key to use
+	 * @param to Determines the maximum key to use
+	 * @return A sorted sub-map containing only the specified range of keys
+	 */
 	default ObservableSortedMap<K, V> subMap(Comparable<? super K> from, Comparable<? super K> to) {
 		return new ObservableSubMap<>(this, from, to);
 	}
@@ -285,6 +299,16 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, Navigabl
 		}
 
 		@Override
+		public boolean isLockSupported() {
+			return theOuter.isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			return theOuter.lock(write, structural, cause);
+		}
+
+		@Override
 		public TypeToken<K> getKeyType() {
 			return theOuter.getKeyType();
 		}
@@ -295,18 +319,8 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, Navigabl
 		}
 
 		@Override
-		public TypeToken<ObservableEntry<K, V>> getEntryType() {
+		public TypeToken<Map.Entry<K, V>> getEntryType() {
 			return theOuter.getEntryType();
-		}
-
-		@Override
-		public boolean isLockSupported() {
-			return theOuter.isLockSupported();
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theOuter.lock(write, cause);
 		}
 
 		@Override
@@ -320,10 +334,21 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, Navigabl
 		}
 
 		@Override
-		public ObservableValue<V> observe(Object key) {
+		public V put(K key, V value) {
 			if (!keySet().belongs(key))
-				return ObservableValue.of(getValueType(), null);
-			return theOuter.observe(key);
+				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+			return theOuter.put(key, value);
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
+			return theOuter.onChange(evt -> {
+				if (!keySet().belongs(evt.getKey()))
+					return;
+				int index = keySet().getElementsBefore(evt.getKeyElement());
+				ObservableMapEvent.doWith(new ObservableMapEvent<>(evt.getKeyElement(), evt.getElementId(), theOuter.getKeyType(),
+					theOuter.getValueType(), index, index, evt.getType(), evt.getKey(), evt.getOldValue(), evt.getNewValue(), evt), action);
+			});
 		}
 	};
 }

@@ -14,11 +14,13 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Observable;
-import org.observe.ObservableValue;
+import org.observe.Subscription;
+import org.observe.collect.CollectionChangeType;
 import org.observe.collect.CollectionSubscription;
 import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
+import org.observe.collect.ObservableCollection.SubscriptionCause;
 import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.DerivedCollectionElement;
@@ -169,53 +171,69 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	ObservableCollection<V> get(Object key);
 
 	/**
-	 * @param action The action to perform on map events
+	 * @param action The action to perform on changes to this map
+	 * @return The collection subscription to terminate listening
+	 */
+	Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action);
+
+	/**
+	 * @param action The action to perform on initial map values and changes
 	 * @param keyForward Whether to subscribe to the key set in forward or reverse order
 	 * @param valueForward Whether to subscribe to the value collections for each key in forward or reverse order
 	 * @return The collection subscription to terminate listening
 	 */
 	default CollectionSubscription subscribe(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action, boolean keyForward,
 		boolean valueForward) {
-		Map<ElementId, CollectionSubscription> valueSubs = new TreeMap<>();
-		class ValueSubscriber implements Consumer<ObservableCollectionEvent<? extends V>> {
-			private final ElementId theKeyElement;
-			private final K theKey;
-
-			ValueSubscriber(ElementId keyElement, K key) {
-				theKeyElement = keyElement;
-				theKey = key;
-			}
-
-			@Override
-			public void accept(ObservableCollectionEvent<? extends V> valueEvent) {
-				action.accept(new ObservableMapEvent<>(theKeyElement, valueEvent.getElementId(), getKeyType(), getValueType(),
-					keySet().getElementsBefore(theKeyElement), valueEvent.getIndex(), valueEvent.getType(), theKey,
-					valueEvent.getOldValue(), valueEvent.getNewValue(), valueEvent));
-			}
-		}
-		CollectionSubscription keySub = keySet().subscribe(keyEvent -> {
-			switch (keyEvent.getType()) {
-			case add:
-				valueSubs.put(keyEvent.getElementId(), get(keyEvent.getNewValue())
-					.subscribe(new ValueSubscriber(keyEvent.getElementId(), keyEvent.getNewValue()), valueForward));
-				break;
-			case remove:
-				valueSubs.remove(keyEvent.getElementId()).unsubscribe(true);
-				break;
-			case set:
-				break; // Value changes for key updates should be handled by the map itself
-			}
-		}, keyForward);
-
-		return removeAll -> {
-			try (Transaction t = keySet().lock(false, null)) {
-				keySub.unsubscribe(removeAll);
+		try (Transaction t = lock(false, null)) {
+			Subscription sub = onChange(action);
+			SubscriptionCause.doWith(new SubscriptionCause(), c -> {
+				int[] keyIndex = new int[] { keyForward ? 0 : keySet().size() - 1 };
+				entrySet().spliterator(keyForward).forEachElement(entryEl -> {
+					ObservableCollection<V> values = entryEl.get().getValues();
+					int[] valueIndex = new int[] { valueForward ? 0 : values.size() - 1 };
+					values.spliterator(valueForward).forEachElement(valueEl -> {
+						ObservableMapEvent.doWith(
+							new ObservableMapEvent<>(entryEl.getElementId(), valueEl.getElementId(), getKeyType(), getValueType(),
+								keyIndex[0], valueIndex[0], CollectionChangeType.add, entryEl.get().getKey(), null, valueEl.get(), c),
+							action);
+						if (valueForward)
+							valueIndex[0]++;
+						else
+							valueIndex[0]--;
+					}, valueForward);
+					if (keyForward)
+						keyIndex[0]++;
+					else
+						keyIndex[0]--;
+				}, keyForward);
+			});
+			return removeAll -> {
 				if (!removeAll) {
-					for (CollectionSubscription valueSub : valueSubs.values())
-						valueSub.unsubscribe(false);
+					sub.unsubscribe();
+					return;
 				}
-			}
-		};
+				try (Transaction unsubT = lock(false, null)) {
+					sub.unsubscribe();
+					SubscriptionCause.doWith(new SubscriptionCause(), c -> {
+						int[] keyIndex = new int[] { keyForward ? 0 : keySet().size() - 1 };
+						entrySet().spliterator(keyForward).forEachElement(entryEl -> {
+							ObservableCollection<V> values = entryEl.get().getValues();
+							int[] valueIndex = new int[] { valueForward ? 0 : values.size() - 1 };
+							values.spliterator(valueForward).forEachElement(valueEl -> {
+								ObservableMapEvent
+								.doWith(new ObservableMapEvent<>(entryEl.getElementId(), valueEl.getElementId(), getKeyType(),
+									getValueType(), keyIndex[0], valueIndex[0], CollectionChangeType.remove, entryEl.get().getKey(), null,
+									valueEl.get(), c), action);
+								if (!valueForward)
+									valueIndex[0]--;
+							}, valueForward);
+							if (!keyForward)
+								keyIndex[0]--;
+						}, keyForward);
+					});
+				}
+			};
+		}
 	}
 
 	/**
@@ -433,7 +451,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	 */
 	class UniqueMap<K, V> implements ObservableMap<K, V> {
 		private final ObservableMultiMap<K, V> theOuter;
-		private final TypeToken<ObservableEntry<K, V>> theEntryType;
+		private final TypeToken<Map.Entry<K, V>> theEntryType;
 
 		public UniqueMap(ObservableMultiMap<K, V> outer) {
 			theOuter = outer;
@@ -455,7 +473,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		}
 
 		@Override
-		public TypeToken<ObservableEntry<K, V>> getEntryType() {
+		public TypeToken<Map.Entry<K, V>> getEntryType() {
 			return theEntryType;
 		}
 
@@ -480,8 +498,23 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		}
 
 		@Override
-		public ObservableValue<V> observe(Object key) {
-			return theOuter.get(key).observeFind(value -> true, () -> null, true);
+		public V put(K key, V value) {
+			try (Transaction t = theOuter.lock(true, true, null)) {
+				ObservableCollection<V> values = theOuter.get(key);
+				if (values.isEmpty()) {
+					values.add(value);
+					return null;
+				} else
+					return values.set(0, value);
+			}
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
+			return theOuter.onChange(evt -> {
+				switch (evt.getType()) {
+				}
+			});
 		}
 
 		@Override
@@ -659,6 +692,49 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 				else
 					return ((DerivedEntrySet.DerivedEntryElement) el.getElementId()).getValues();
 			}));
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
+			// TODO This is typically inefficient, requiring listeners proportional to the keySet size
+			// This could be optimized, especially for the typical case of a map grouped from a collection
+			Map<ElementId, Subscription> valueSubs = new TreeMap<>();
+			class ValueSubscriber implements Consumer<ObservableCollectionEvent<? extends V>> {
+				private final ElementId theKeyElement;
+				private final K theKey;
+
+				ValueSubscriber(ElementId keyElement, K key) {
+					theKeyElement = keyElement;
+					theKey = key;
+				}
+
+				@Override
+				public void accept(ObservableCollectionEvent<? extends V> valueEvent) {
+					action.accept(new ObservableMapEvent<>(theKeyElement, valueEvent.getElementId(), getKeyType(), getValueType(),
+						keySet().getElementsBefore(theKeyElement), valueEvent.getIndex(), valueEvent.getType(), theKey,
+						valueEvent.getOldValue(), valueEvent.getNewValue(), valueEvent));
+				}
+			}
+			Subscription keySub = keySet().subscribe(keyEvent -> {
+				switch (keyEvent.getType()) {
+				case add:
+					valueSubs.put(keyEvent.getElementId(),
+						get(keyEvent.getNewValue()).onChange(new ValueSubscriber(keyEvent.getElementId(), keyEvent.getNewValue())));
+					break;
+				case remove:
+					valueSubs.remove(keyEvent.getElementId()).unsubscribe();
+					break;
+				case set:
+					break; // Value changes for key updates should be handled by the map itself
+				}
+			}, true);
+			return () -> {
+				try (Transaction t = lock(false, null)) {
+					keySub.unsubscribe();
+					valueSubs.values().forEach(sub -> sub.unsubscribe());
+					valueSubs.clear();
+				}
+			};
 		}
 
 		protected ObservableCollection<V> valuesFor(K key) {

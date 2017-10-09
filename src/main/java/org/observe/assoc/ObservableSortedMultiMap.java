@@ -3,9 +3,11 @@ package org.observe.assoc;
 import java.util.Comparator;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Observable;
+import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
@@ -97,6 +99,25 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 			@Override
 			public ObservableSortedSet<ObservableMultiEntry<K, V>> entrySet() {
 				return outer.entrySet().reverse();
+			}
+
+			@Override
+			public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
+				try (Transaction t = lock(false, null)) {
+					return outer.onChange(evt -> {
+						int keySize = keySet().size();
+						if (keySize == 0)
+							keySize++; // May have just been removed
+						int keyIndex = keySize - evt.getKeyIndex() - 1;
+						int valueSize = get(evt.getKey()).size();
+						if (valueSize == 0)
+							valueSize++; // May have just been removed
+						int valueIndex = valueSize - evt.getIndex() - 1;
+						ObservableMapEvent.doWith(new ObservableMapEvent<>(evt.getKeyElement().reverse(), evt.getElementId().reverse(),
+							outer.getKeyType(), outer.getValueType(), keyIndex, valueIndex, evt.getType(), evt.getKey(), evt.getOldValue(),
+							evt.getNewValue(), evt), action);
+					});
+				}
 			}
 
 			@Override
@@ -382,6 +403,19 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 			if (!keySet().belongs(key))
 				return ObservableCollection.of(getValueType());
 			return theOuter.get(key);
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
+			return theOuter.onChange(evt -> {
+				if (!keySet().belongs(evt.getKey()))
+					return;
+				int keyIndex = keySet().getElementsBefore(evt.getKeyElement());
+				int valueIndex = get(evt.getKey()).getElementsBefore(evt.getElementId());
+				ObservableMapEvent.doWith(new ObservableMapEvent<>(evt.getKeyElement(), evt.getElementId(), theOuter.getKeyType(),
+					theOuter.getValueType(), keyIndex, valueIndex, evt.getType(), evt.getKey(), evt.getOldValue(), evt.getNewValue(), evt),
+					action);
+			});
 		}
 
 		@Override
