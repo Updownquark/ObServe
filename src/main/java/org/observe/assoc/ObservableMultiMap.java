@@ -18,6 +18,7 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.CollectionSubscription;
 import org.observe.collect.Equivalence;
+import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.SubscriptionCause;
@@ -521,6 +522,27 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		public String toString() {
 			return entrySet().toString();
 		}
+	}
+
+	interface MultiMapFlow2<K, V> {
+		<K2> MultiMapFlow2<K2, V> withKeys(TypeToken<K2> keyType, Function<UniqueDataFlow<?, ?, K>, UniqueDataFlow<?, ?, K2>> keyMap);
+
+		<V2> MultiMapFlow2<K, V2> withValues(TypeToken<V2> type,
+			Function<CollectionDataFlow<?, ?, V>, CollectionDataFlow<?, ?, V2>> valueMap);
+
+		boolean supportsPassive();
+
+		default boolean prefersPassive() {
+			return supportsPassive();
+		}
+
+		ObservableMultiMap<K, V> gather();
+	}
+
+	interface GroupedMultiMapFlow<K, V> extends MultiMapFlow2<K, V> {
+		GroupedMultiMapFlow<K, V> distinctForMap();
+
+		GroupedMultiMapFlow<K, V> distinctForMap(Consumer<UniqueOptions> options);
 	}
 
 	interface MultiMapFlow<OK, K, V> {
