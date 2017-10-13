@@ -6,6 +6,7 @@ import java.lang.ref.WeakReference;
 import java.util.Collection;
 import java.util.IdentityHashMap;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.TreeMap;
 import java.util.concurrent.locks.Lock;
@@ -558,6 +559,55 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			return collect(Observable.empty);
 		}
 		ObservableMultiMap<K, V> collect(Observable<?> until);
+	}
+
+	class DefaultGroupedMultiMapFlow<K, V> implements GroupedMultiMapFlow<K, V> {
+		private final CollectionDataFlow<?, ?, Map.Entry<K, V>> theEntryFlow;
+
+		public DefaultGroupedMultiMapFlow(CollectionDataFlow<?, ?, Entry<K, V>> entryFlow) {
+			theEntryFlow = entryFlow;
+		}
+
+		@Override
+		public <K2> MultiMapFlow2<K2, V> withKeys(TypeToken<K2> keyType,
+			Function<UniqueDataFlow<?, ?, K>, UniqueDataFlow<?, ?, K2>> keyMap) {
+			TypeToken<Map.Entry<K, V>> entryType = theEntryFlow.getTargetType();
+			TypeToken<Map.Entry<K2, V>> newEntryType = ObservableMap.buildEntryType(keyType,
+				(TypeToken<V>) entryType.resolveType(Map.Entry.class.getTypeParameters()[1]));
+			TypeToken<K> oldKeyType = (TypeToken<K>) entryType.resolveType(Map.Entry.class.getTypeParameters()[0]);
+
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public <V2> MultiMapFlow2<K, V2> withValues(TypeToken<V2> type,
+			Function<CollectionDataFlow<?, ?, V>, CollectionDataFlow<?, ?, V2>> valueMap) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public GroupedMultiMapFlow<K, V> distinctForMap() {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public GroupedMultiMapFlow<K, V> distinctForMap(Consumer<UniqueOptions> options) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public boolean supportsPassive() {
+			return false;
+		}
+
+		@Override
+		public ObservableMultiMap<K, V> gather() {
+			return new DefaultGroupedMultiMap<>(theEntryFlow);
+		}
 	}
 
 	class DefaultMultiMapFlow<OK, K, V> implements MultiMapFlow<OK, K, V> {
