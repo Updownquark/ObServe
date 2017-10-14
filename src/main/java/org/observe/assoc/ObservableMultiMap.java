@@ -300,7 +300,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	/** @return All values stored in this map */
 	@Override
 	default ObservableCollection<V> values() {
-		return entrySet().flow().flatMapC(getValueType(), entry -> entry.getValues()).collect();
+		return entrySet().flow().flatMap(getValueType(), entry -> entry.getValues().flow()).collect();
 	}
 
 	/** @return A collection of plain (non-observable) {@link java.util.Map.Entry entries}, one for each value in this map */
@@ -349,7 +349,7 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		.where(new TypeParameter<K>() {}, getKeyType()).where(new TypeParameter<V>() {}, getValueType());
 
 		return entrySet().flow()
-			.flatMapF(entryType, //
+			.flatMap(entryType, //
 				entry -> entry.getValues().flow().map(entryType, value -> new DefaultMapEntry(entry.getKey(), value),
 					options -> options.cache(false))//
 				).collect();
@@ -563,9 +563,11 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 
 	class DefaultGroupedMultiMapFlow<K, V> implements GroupedMultiMapFlow<K, V> {
 		private final CollectionDataFlow<?, ?, Map.Entry<K, V>> theEntryFlow;
+		private final Equivalence<? super K> theKeyEquivalence;
 
-		public DefaultGroupedMultiMapFlow(CollectionDataFlow<?, ?, Entry<K, V>> entryFlow) {
+		public DefaultGroupedMultiMapFlow(CollectionDataFlow<?, ?, Entry<K, V>> entryFlow, Equivalence<? super K> keyEquivalence) {
 			theEntryFlow = entryFlow;
+			theKeyEquivalence = keyEquivalence;
 		}
 
 		@Override
@@ -575,7 +577,9 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 			TypeToken<Map.Entry<K2, V>> newEntryType = ObservableMap.buildEntryType(keyType,
 				(TypeToken<V>) entryType.resolveType(Map.Entry.class.getTypeParameters()[1]));
 			TypeToken<K> oldKeyType = (TypeToken<K>) entryType.resolveType(Map.Entry.class.getTypeParameters()[0]);
-
+			CollectionDataFlow<Object, ?, Map.Entry<K, V>> castFlow = (CollectionDataFlow<Object, ?, Map.Entry<K, V>>) theEntryFlow;
+			ObservableMultiMapImpl.KeyFlow<Object, K, K2, V> keyFlow = new ObservableMultiMapImpl.KeyFlow<>(castFlow, keyType,
+				theKeyEquivalence);
 			// TODO Auto-generated method stub
 			return null;
 		}

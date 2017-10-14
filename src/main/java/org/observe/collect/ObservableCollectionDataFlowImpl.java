@@ -386,7 +386,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public <X> CollectionDataFlow<E, T, T> whereContained(ObservableCollection<X> other, boolean include) {
+		public <X> CollectionDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
 			return new IntersectionFlow<>(theSource, this, other, !include);
 		}
 
@@ -421,7 +421,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public <X> CollectionDataFlow<E, ?, X> flatMapF(TypeToken<X> target,
+		public <X> CollectionDataFlow<E, ?, X> flatMap(TypeToken<X> target,
 			Function<? super T, ? extends CollectionDataFlow<?, ?, ? extends X>> map) {
 			return new FlattenedOp<>(theSource, this, target, map);
 		}
@@ -582,10 +582,10 @@ public class ObservableCollectionDataFlowImpl {
 	}
 
 	private static class IntersectionFlow<E, T, X> extends AbstractDataFlow<E, T, T> {
-		private final ObservableCollection<X> theFilter;
+		private final CollectionDataFlow<?, ?, X> theFilter;
 		private final boolean isExclude;
 
-		IntersectionFlow(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, ObservableCollection<X> filter,
+		IntersectionFlow(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, CollectionDataFlow<?, ?, X> filter,
 			boolean exclude) {
 			super(source, parent, parent.getTargetType());
 			theFilter = filter;
@@ -1479,7 +1479,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		private final ActiveCollectionManager<E, ?, T> theParent;
-		private final ObservableCollection<X> theFilter;
+		private final CollectionDataFlow<?, ?, X> theFilter;
 		private final Equivalence<? super T> theEquivalence; // Make this a field since we'll need it often
 		/** Whether a value's presence in the right causes the value in the left to be present (true) or absent (false) in the result */
 		private final boolean isExclude;
@@ -1489,7 +1489,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		private ElementAccepter<T> theAccepter;
 
-		IntersectionManager(ActiveCollectionManager<E, ?, T> parent, ObservableCollection<X> filter, boolean exclude) {
+		IntersectionManager(ActiveCollectionManager<E, ?, T> parent, CollectionDataFlow<?, ?, X> filter, boolean exclude) {
 			theParent = parent;
 			theFilter = filter;
 			theEquivalence = parent.equivalence();

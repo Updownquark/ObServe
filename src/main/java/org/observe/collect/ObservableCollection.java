@@ -743,7 +743,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @return A collection containing all elements of the given collections
 	 */
 	static <E> CollectionDataFlow<?, ?, E> flattenCollections(TypeToken<E> innerType, ObservableCollection<? extends E>... colls) {
-		return of(new TypeToken<ObservableCollection<? extends E>>() {}, colls).flow().flatMapC(innerType, c -> c);
+		return of(new TypeToken<ObservableCollection<? extends E>>() {}, colls).flow().flatMap(innerType, c -> c.flow());
 	}
 
 	/**
@@ -908,7 +908,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 *        this flow that are <b>NOT</b> included in the other collection.
 		 * @return The filtered data flow
 		 */
-		<X> CollectionDataFlow<E, T, T> whereContained(ObservableCollection<X> other, boolean include);
+		<X> CollectionDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include);
 
 		/**
 		 * @param equivalence The new {@link ObservableCollection#equivalence() equivalence} scheme for the derived collection to use
@@ -941,8 +941,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * @return The mapped flow
 		 */
 		default <X> CollectionDataFlow<E, T, X> map(TypeToken<X> target, Function<? super T, ? extends X> map) {
-			return map(target, map, options -> {
-			});
+			return map(target, map, options -> {});
 		}
 
 		/**
@@ -976,7 +975,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * @return A {@link #supportsPassive() active} flow capable of producing a collection that is the value of the observable values mapped to
 		 *         each element of the source.
 		 */
-		default <X> CollectionDataFlow<E, ?, X> flatMapV(TypeToken<X> target,
+		default <X> CollectionDataFlow<E, ?, X> flattenValues(TypeToken<X> target,
 			Function<? super T, ? extends ObservableValue<? extends X>> map) {
 			TypeToken<ObservableValue<? extends X>> valueType = new TypeToken<ObservableValue<? extends X>>() {}
 			.where(new TypeParameter<X>() {}, target.wrap());
@@ -999,23 +998,10 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 		/**
 		 * @param target The type of values in the flattened result
-		 * @param map The function to produce {@link ObservableCollection collections} from each element in this flow
-		 * @return A flow containing each element in the collection produced by the map of each element in this flow
-		 */
-		default <X> CollectionDataFlow<E, ?, X> flatMapC(TypeToken<X> target,
-			Function<? super T, ? extends ObservableCollection<? extends X>> map) {
-			return flatMapF(target, v -> {
-				ObservableCollection<? extends X> coll = map.apply(v);
-				return coll == null ? null : coll.flow();
-			});
-		}
-
-		/**
-		 * @param target The type of values in the flattened result
 		 * @param map The function to produce {@link ObservableCollection.CollectionDataFlow data flows} from each element in this flow
 		 * @return A flow containing each element in the data flow produced by the map of each element in this flow
 		 */
-		<X> CollectionDataFlow<E, ?, X> flatMapF(TypeToken<X> target,
+		<X> CollectionDataFlow<E, ?, X> flatMap(TypeToken<X> target,
 			Function<? super T, ? extends CollectionDataFlow<?, ?, ? extends X>> map);
 
 		/**
@@ -1206,7 +1192,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		}
 
 		@Override
-		<X> UniqueDataFlow<E, T, T> whereContained(ObservableCollection<X> other, boolean include);
+		<X> UniqueDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include);
 
 		@Override
 		UniqueDataFlow<E, T, T> refresh(Observable<?> refresh);
@@ -1214,8 +1200,13 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		@Override
 		UniqueDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh);
 
+		default <X> UniqueDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+			Equivalence<? super X> equivalence) {
+			return mapEquivalent(target, map, equivalence, options -> {});
+		}
+
 		<X> UniqueDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
-			Equivalence<? super X> equivalence);
+			Equivalence<? super X> equivalence, Consumer<MapOptions<T, X>> options);
 
 		/**
 		 * @param <X> The type for the mapped flow
@@ -1227,8 +1218,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 */
 		default <X> UniqueDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
 			Function<? super X, ? extends T> reverse) {
-			return mapEquivalent(target, map, reverse, options -> {
-			});
+			return mapEquivalent(target, map, reverse, options -> {});
 		}
 
 		/**
@@ -1301,7 +1291,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		}
 
 		@Override
-		<X> UniqueSortedDataFlow<E, T, T> whereContained(ObservableCollection<X> other, boolean include);
+		<X> UniqueSortedDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include);
 
 		@Override
 		UniqueSortedDataFlow<E, T, T> refresh(Observable<?> refresh);

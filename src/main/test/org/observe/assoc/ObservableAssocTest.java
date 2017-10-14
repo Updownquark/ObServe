@@ -106,7 +106,7 @@ public class ObservableAssocTest {
 		DefaultObservableGraph<Integer, Integer> graph = new DefaultObservableGraph<>(intType, intType);
 		ObservableCollectionTester<Integer> nodeChecker = new ObservableCollectionTester<>(graph.getNodeValues());
 		ObservableCollectionTester<Integer> edgeChecker = new ObservableCollectionTester<>(
-			graph.getEdges().flow().flatMapV(intType, e -> e).collect());
+			graph.getEdges().flow().flattenValues(intType, e -> e).collect());
 		Node<Integer, Integer> node0 = graph.addNode(0);
 		nodeChecker.add(0);
 		nodeChecker.check();

@@ -1219,7 +1219,7 @@ public class ObservableCollectionsTest {
 		ObservableCollection<ObservableSet<Integer>> outer = ObservableCollection.create(new TypeToken<ObservableSet<Integer>>() {});
 		outer.add(set1);
 		outer.add(set2);
-		CollectionDataFlow<?, ?, Integer> flat = outer.flow().flatMapC(intType, s -> s);
+		CollectionDataFlow<?, ?, Integer> flat = outer.flow().flatMap(intType, s -> s.flow());
 		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(flat.collect());
 		ObservableCollectionTester<Integer> filterTester = new ObservableCollectionTester<>(//
 			flat.filter(value -> value != null && value % 3 == 0 ? null : StdMsg.ILLEGAL_ELEMENT).collect());
@@ -1579,7 +1579,7 @@ public class ObservableCollectionsTest {
 		}
 	}
 
-	/** Tests {@link CollectionDataFlow#flatMapC(TypeToken, Function)} */
+	/** Tests {@link CollectionDataFlow#flatMap(TypeToken, Function)} */
 	@Test
 	public void observableListFlatten() {
 		ObservableCollection<Integer> set1 = ObservableCollection.create(intType);
@@ -1589,7 +1589,7 @@ public class ObservableCollectionsTest {
 			.create(new TypeToken<ObservableCollection<Integer>>() {});
 		outer.add(set1);
 		outer.add(set2);
-		ObservableCollection<Integer> flat = outer.flow().flatMapC(intType, s -> s).collect();
+		ObservableCollection<Integer> flat = outer.flow().flatMap(intType, s -> s.flow()).collect();
 		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(flat);
 		ObservableCollectionTester<Integer> filteredTester = new ObservableCollectionTester<>(//
 			flat.flow().filter(value -> value != null && value % 3 == 0 ? null : StdMsg.ILLEGAL_ELEMENT).collect());
@@ -1705,7 +1705,7 @@ public class ObservableCollectionsTest {
 		}
 	}
 
-	/** Tests {@link CollectionDataFlow#flatMapV(TypeToken, Function)} */
+	/** Tests {@link CollectionDataFlow#flattenValues(TypeToken, Function)} */
 	@Test
 	public void flattenListValues() {
 		ObservableCollection<ObservableValue<Integer>> list = ObservableCollection.create(new TypeToken<ObservableValue<Integer>>() {});
@@ -1722,7 +1722,7 @@ public class ObservableCollectionsTest {
 		list.addAll(java.util.Arrays.asList(value1, value2, value3, value4));
 
 		Integer [] received = new Integer[1];
-		ObservableCollection<Integer> flattened = list.flow().flatMapV(intType, v -> v).collect();
+		ObservableCollection<Integer> flattened = list.flow().flattenValues(intType, v -> v).collect();
 		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(flattened);
 		flattened.observeFind(value -> value % 3 == 0, () -> null, Ternian.NONE).value()
 		.act(value -> received[0] = value);
@@ -1860,7 +1860,7 @@ public class ObservableCollectionsTest {
 			}
 		}
 
-		CollectionDataFlow<?, ?, Integer> flow = outer.flow().flatMapC(intType, c -> c);
+		CollectionDataFlow<?, ?, Integer> flow = outer.flow().flatMap(intType, c -> c.flow());
 		if (comparator != null)
 			flow = flow.sorted(comparator);
 		SimpleObservable<Void> unsub = new SimpleObservable<>();
@@ -1965,8 +1965,8 @@ public class ObservableCollectionsTest {
 		ObservableCollection<Integer> list1 = ObservableCollection.create(intType);
 		ObservableCollection<Integer> list2 = ObservableCollection.create(intType);
 		TypeToken<ObservableCollection<Integer>> outerType = new TypeToken<ObservableCollection<Integer>>() {};
-		ObservableCollection<Integer> flat = ObservableCollection.create(outerType).with(list1, list2).flow().flatMapC(intType, c -> c)
-			.collect();
+		ObservableCollection<Integer> flat = ObservableCollection.create(outerType).with(list1, list2).flow()
+			.flatMap(intType, c -> c.flow()).collect();
 		list1.add(50);
 
 		testTransactionsByFind(flat, list2);

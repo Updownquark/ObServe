@@ -197,7 +197,7 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 	/** @return An observable collection of all the values stored in this map */
 	@Override
 	default ObservableCollection<V> values() {
-		return keySet().flow().flatMapV(getValueType(), k -> observe(k, k2 -> null)).collect();
+		return keySet().flow().flattenValues(getValueType(), k -> observe(k, k2 -> null)).collect();
 	}
 
 	@Override

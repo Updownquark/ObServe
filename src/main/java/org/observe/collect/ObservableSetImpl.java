@@ -70,7 +70,7 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public <X> UniqueDataFlow<E, T, T> whereContained(ObservableCollection<X> other, boolean include) {
+		public <X> UniqueDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
 			return new UniqueDataFlowWrapper<>(getSource(), getParent().whereContained(other, include));
 		}
 
@@ -167,7 +167,7 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public <X> UniqueDataFlow<E, T, T> whereContained(ObservableCollection<X> other, boolean include) {
+		public <X> UniqueDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
 			return new UniqueDataFlowWrapper<>(getSource(), super.whereContained(other, include));
 		}
 
@@ -232,7 +232,7 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public <X> UniqueDataFlow<E, T, T> whereContained(ObservableCollection<X> other, boolean include) {
+		public <X> UniqueDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
 			return new UniqueDataFlowWrapper<>(getSource(), super.whereContained(other, include));
 		}
 
@@ -558,7 +558,7 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public <X> UniqueDataFlow<E, E, E> whereContained(ObservableCollection<X> other, boolean include) {
+		public <X> UniqueDataFlow<E, E, E> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
 			return new UniqueDataFlowWrapper<>(getSource(), super.whereContained(other, include));
 		}
 

@@ -274,7 +274,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public <X> UniqueSortedDataFlow<E, T, T> whereContained(ObservableCollection<X> other, boolean include) {
+		public <X> UniqueSortedDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), getParent().whereContained(other, include), theCompare);
 		}
 
@@ -373,7 +373,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public <X> UniqueSortedDataFlow<E, T, T> whereContained(ObservableCollection<X> other, boolean include) {
+		public <X> UniqueSortedDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), super.whereContained(other, include), theCompare);
 		}
 
@@ -446,7 +446,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public <X> UniqueSortedDataFlow<E, T, T> whereContained(ObservableCollection<X> other, boolean include) {
+		public <X> UniqueSortedDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), super.whereContained(other, include), comparator());
 		}
 
@@ -523,7 +523,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public <X> UniqueSortedDataFlow<E, E, E> whereContained(ObservableCollection<X> other, boolean include) {
+		public <X> UniqueSortedDataFlow<E, E, E> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), super.whereContained(other, include), comparator());
 		}
 

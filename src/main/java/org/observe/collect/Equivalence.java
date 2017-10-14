@@ -1,12 +1,24 @@
 package org.observe.collect;
 
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.Objects;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Predicate;
 
+import org.qommons.Transactable;
+import org.qommons.Transaction;
 import org.qommons.collect.BetterHashMap;
 import org.qommons.collect.BetterHashSet;
 import org.qommons.collect.BetterMap;
 import org.qommons.collect.BetterSet;
+import org.qommons.collect.CollectionElement;
+import org.qommons.collect.ElementId;
+import org.qommons.collect.MapEntryHandle;
+import org.qommons.collect.MutableCollectionElement;
+import org.qommons.collect.MutableElementSpliterator;
+import org.qommons.collect.MutableMapEntryHandle;
 import org.qommons.tree.BetterTreeMap;
 import org.qommons.tree.BetterTreeSet;
 
@@ -172,10 +184,6 @@ public interface Equivalence<E> {
 		}
 	}
 
-	/* Had a use for this at one point.  I went another direction.  Consequently, this code hasn't been tested, so I don't want to leave
-	 * it in here to blow up when someone decides to use it, but I'm not 100% sure I'll never want it.
-	 *
-
 	/**
 	 * @param <T> The type of values in the mapped set
 	 * @param type The type of values in the mapped set
@@ -183,21 +191,21 @@ public interface Equivalence<E> {
 	 * @param map The mapping function of this equivalence set's values to the mapped set value
 	 * @param reverse The mapping function of the mapped set's values to this set's value
 	 * @return An equivalence set of objects that are the result of a mapping function applied to values in this equivalence set
-	 * /
-	default <T> Equivalence<T> map(Class<T> type, Predicate<? super T> filter, Function<? super E, ? extends T> map,
-		Function<? super T, ? extends E> reverse) {
+	 */
+	default <E2 extends E, T> Equivalence<T> map(Class<T> type, Predicate<? super T> filter, Function<? super E2, ? extends T> map,
+		Function<? super T, ? extends E2> reverse) {
 		return new MappedEquivalence<>(this, type, filter, map, reverse);
 	}
 
-	class MappedEquivalence<E, T> implements Equivalence<T> {
+	class MappedEquivalence<E, E2 extends E, T> implements Equivalence<T> {
 		private final Equivalence<E> theWrapped;
 		private final Class<T> theType;
 		private final Predicate<? super T> theFilter;
-		private final Function<? super E, ? extends T> theMap;
-		private final Function<? super T, ? extends E> theReverse;
+		private final Function<? super E2, ? extends T> theMap;
+		private final Function<? super T, ? extends E2> theReverse;
 
-		public MappedEquivalence(Equivalence<E> wrapped, Class<T> type, Predicate<? super T> filter, Function<? super E, ? extends T> map,
-			Function<? super T, ? extends E> reverse) {
+		public MappedEquivalence(Equivalence<E> wrapped, Class<T> type, Predicate<? super T> filter, Function<? super E2, ? extends T> map,
+			Function<? super T, ? extends E2> reverse) {
 			theWrapped = wrapped;
 			theType = type;
 			theFilter = filter;
@@ -224,12 +232,12 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public <E2 extends T> BetterSet<E2> createSet() {
+		public <E3 extends T> BetterSet<E3> createSet() {
 			return new MappedSet<>(this, theWrapped.createSet(), theMap, theReverse);
 		}
 
 		@Override
-		public <E2 extends T, V> BetterMap<E2, V> createMap() {
+		public <E3 extends T, V> BetterMap<E3, V> createMap() {
 			return new MappedMap<>(this, theWrapped.createMap(), theMap, theReverse);
 		}
 
@@ -237,20 +245,20 @@ public interface Equivalence<E> {
 		public boolean equals(Object o) {
 			if (!(o instanceof MappedEquivalence))
 				return false;
-			MappedEquivalence<?, ?> equiv = (MappedEquivalence<?, ?>) o;
+			MappedEquivalence<?, ?, ?> equiv = (MappedEquivalence<?, ?, ?>) o;
 			return equiv.theWrapped.equals(theWrapped) && equiv.theType.equals(theType) && Objects.equals(equiv.theFilter, theFilter)
 				&& equiv.theReverse.equals(theReverse);
 		}
 	}
 
-	class MappedSet<E, T, T2 extends T> implements BetterSet<T2> {
-		private final MappedEquivalence<E, T> theEquivalence;
+	class MappedSet<E, E2 extends E, T, T2 extends T> implements BetterSet<T2> {
+		private final MappedEquivalence<E, E2, T> theEquivalence;
 		private final BetterSet<E> theWrapped;
-		private final Function<? super E, ? extends T> theMap;
-		private final Function<? super T, ? extends E> theReverse;
+		private final Function<? super E2, ? extends T> theMap;
+		private final Function<? super T, ? extends E2> theReverse;
 
-		public MappedSet(MappedEquivalence<E, T> equiv, BetterSet<E> wrapped, Function<? super E, ? extends T> map,
-			Function<? super T, ? extends E> reverse) {
+		public MappedSet(MappedEquivalence<E, E2, T> equiv, BetterSet<E> wrapped, Function<? super E2, ? extends T> map,
+			Function<? super T, ? extends E2> reverse) {
 			theEquivalence = equiv;
 			theWrapped = wrapped;
 			theMap = map;
@@ -306,7 +314,7 @@ public interface Equivalence<E> {
 
 				@Override
 				public T2 get() {
-					return (T2) theMap.apply(el.get());
+					return (T2) theMap.apply((E2) el.get());
 				}
 			};
 		}
@@ -320,7 +328,7 @@ public interface Equivalence<E> {
 
 				@Override
 				public T2 get() {
-					return (T2) theMap.apply(el.get());
+					return (T2) theMap.apply((E2) el.get());
 				}
 
 				@Override
@@ -459,14 +467,14 @@ public interface Equivalence<E> {
 		}
 	}
 
-	class MappedMap<E, T, T2 extends T, V> implements BetterMap<T2, V> {
-		private final MappedEquivalence<E, T> theEquivalence;
+	class MappedMap<E, E2 extends E, T, T2 extends T, V> implements BetterMap<T2, V> {
+		private final MappedEquivalence<E, E2, T> theEquivalence;
 		private final BetterMap<E, V> theWrapped;
-		private final Function<? super E, ? extends T> theMap;
-		private final Function<? super T, ? extends E> theReverse;
+		private final Function<? super E2, ? extends T> theMap;
+		private final Function<? super T, ? extends E2> theReverse;
 
-		public MappedMap(MappedEquivalence<E, T> equiv, BetterMap<E, V> wrapped, Function<? super E, ? extends T> map,
-			Function<? super T, ? extends E> reverse) {
+		public MappedMap(MappedEquivalence<E, E2, T> equiv, BetterMap<E, V> wrapped, Function<? super E2, ? extends T> map,
+			Function<? super T, ? extends E2> reverse) {
 			theEquivalence = equiv;
 			theWrapped = wrapped;
 			theMap = map;
@@ -497,7 +505,7 @@ public interface Equivalence<E> {
 
 				@Override
 				public T2 getKey() {
-					return (T2) theMap.apply(entry.getKey());
+					return (T2) theMap.apply((E2) entry.getKey());
 				}
 			};
 		}
@@ -516,7 +524,7 @@ public interface Equivalence<E> {
 
 				@Override
 				public T2 getKey() {
-					return (T2) theMap.apply(entry.getKey());
+					return (T2) theMap.apply((E2) entry.getKey());
 				}
 
 				@Override
@@ -571,5 +579,5 @@ public interface Equivalence<E> {
 		public MutableMapEntryHandle<T2, V> mutableEntry(ElementId entryId) {
 			return mutableHandleFor(theWrapped.mutableEntry(entryId));
 		}
-	}*/
+	}
 }
