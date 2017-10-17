@@ -26,10 +26,12 @@ import org.observe.collect.ObservableCollectionImpl.ReversedObservableCollection
 import org.observe.util.WeakListening;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterMap;
+import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.tree.BetterTreeSet;
 import org.qommons.tree.BinaryTreeNode;
+import org.qommons.tree.MutableBinaryTreeNode;
 
 import com.google.common.reflect.TypeToken;
 
@@ -266,8 +268,7 @@ public class ObservableSetImpl {
 
 	public static class UniqueManager<E, T> implements ActiveCollectionManager<E, T, T> {
 		private final ActiveCollectionManager<E, ?, T> theParent;
-		// private final BetterMap<T, BetterTreeSet<UniqueElement>> theElementsByValue;
-		private final BetterMap<T, UniqueElement2> theElementsByValue;
+		private final BetterMap<T, UniqueElement> theElementsByValue;
 		private final boolean isAlwaysUsingFirst;
 		private final boolean isPreservingSourceOrder;
 		private ElementAccepter<T> theAccepter;
@@ -301,7 +302,7 @@ public class ObservableSetImpl {
 
 		@Override
 		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
-			UniqueElement2 element = theElementsByValue.get(value);
+			UniqueElement element = theElementsByValue.get(value);
 			return element == null ? el -> -1 : element;
 		}
 
@@ -335,24 +336,32 @@ public class ObservableSetImpl {
 			theAccepter = onElement;
 			theParent.begin((parentEl, cause) -> {
 				T value = parentEl.get();
-				theElementsByValue.computeIfAbsent(value, v -> new UniqueElement2(v)).addParent(parentEl, cause);
+				theElementsByValue.computeIfAbsent(value, v -> createUniqueElement(v)).addParent(parentEl, cause);
 			}, listening);
 		}
 
-		class UniqueElement2 implements DerivedCollectionElement<T> {
+		protected UniqueElement createUniqueElement(T value) {
+			return new UniqueElement(value);
+		}
+
+		protected class UniqueElement implements DerivedCollectionElement<T> {
 			private final ElementId theValueId;
 			private final BetterTreeSet<DerivedCollectionElement<T>> theParentElements;
 			private DerivedCollectionElement<T> theActiveElement;
 			private CollectionElementListener<T> theListener;
 
-			UniqueElement2(T value) {
+			protected UniqueElement(T value) {
 				theValueId = theElementsByValue.putEntry(value, this).getElementId();
 				theParentElements = new BetterTreeSet<>(false, DerivedCollectionElement::compareTo);
 			}
 
-			void addParent(DerivedCollectionElement<T> parentEl, Object cause) {
+			protected BetterTreeSet<DerivedCollectionElement<T>> getParentElements() {
+				return theParentElements;
+			}
+
+			protected void addParent(DerivedCollectionElement<T> parentEl, Object cause) {
 				boolean only = theParentElements.isEmpty();
-				BinaryTreeNode<DerivedCollectionElement<T>> node = theParentElements.addElement(parentEl, false); // Order is ignored
+				BinaryTreeNode<DerivedCollectionElement<T>> node = theParentElements.addElement(parentEl, false);
 				if (only) {
 					// The parent is the first representing this element
 					theActiveElement = parentEl;
@@ -369,21 +378,24 @@ public class ObservableSetImpl {
 				parentEl.setListener(new CollectionElementListener<T>() {
 					@Override
 					public void update(T oldValue, T newValue, Object innerCause) {
-						UniqueElement2 ue = theElementsByValue.computeIfAbsent(newValue, v -> new UniqueElement2(v));
-						if (ue == UniqueElement2.this) {
+						UniqueElement ue = theElementsByValue.computeIfAbsent(newValue, v -> createUniqueElement(v));
+						if (ue == UniqueElement.this) {
 							if (theActiveElement == parentEl)
 								ObservableCollectionDataFlowImpl.update(theListener, oldValue, newValue, innerCause);
+							parentUpdated(node, oldValue, newValue, innerCause);
 						} else {
 							theParentElements.mutableElement(node.getElementId()).remove();
 							if (theParentElements.isEmpty()) {
 								// This element is no longer represented
 								theElementsByValue.mutableEntry(theValueId).remove();
 								ObservableCollectionDataFlowImpl.removed(theListener, oldValue, innerCause);
+								parentRemoved(node, oldValue, innerCause);
 							} else if (theActiveElement == parentEl) {
 								theActiveElement = theParentElements.first();
 								T newActiveValue = theActiveElement.get();
 								if (oldValue != newActiveValue)
 									ObservableCollectionDataFlowImpl.update(theListener, oldValue, newActiveValue, innerCause);
+								parentUpdated(node, oldValue, newValue, innerCause);
 							}
 							// The new UniqueElement will call setListener and we won't get its events anymore
 							ue.addParent(parentEl, innerCause);
@@ -392,7 +404,9 @@ public class ObservableSetImpl {
 
 					@Override
 					public void removed(T value, Object innerCause) {
-						theParentElements.mutableElement(node.getElementId()).remove();
+						MutableBinaryTreeNode<DerivedCollectionElement<T>> parentNode = theParentElements
+							.mutableElement(node.getElementId());
+						parentNode.remove();
 						if (theParentElements.isEmpty()) {
 							// This element is no longer represented
 							theElementsByValue.mutableEntry(theValueId).remove();
@@ -407,12 +421,16 @@ public class ObservableSetImpl {
 				});
 			}
 
+			protected void parentUpdated(CollectionElement<DerivedCollectionElement<T>> parentEl, T oldValue, T newValue, Object cause) {}
+
+			protected void parentRemoved(CollectionElement<DerivedCollectionElement<T>> parentEl, T value, Object cause) {}
+
 			@Override
 			public int compareTo(DerivedCollectionElement<T> o) {
 				if (isPreservingSourceOrder)
-					return theActiveElement.compareTo(((UniqueElement2) o).theActiveElement);
+					return theActiveElement.compareTo(((UniqueElement) o).theActiveElement);
 				else
-					return theValueId.compareTo(((UniqueElement2) o).theValueId);
+					return theValueId.compareTo(((UniqueElement) o).theValueId);
 			}
 
 			@Override
@@ -442,7 +460,7 @@ public class ObservableSetImpl {
 				String msg = isEnabled();
 				if (msg != null)
 					return msg;
-				UniqueElement2 ue = theElementsByValue.get(value);
+				UniqueElement ue = theElementsByValue.get(value);
 				if (ue != null && ue != this) {
 					// If the value already exists, then replacing the underlying values would just remove the unique element
 					return StdMsg.ELEMENT_EXISTS;
@@ -461,7 +479,7 @@ public class ObservableSetImpl {
 				String msg = isEnabled();
 				if (msg != null)
 					throw new UnsupportedOperationException(msg);
-				UniqueElement2 ue = theElementsByValue.get(value);
+				UniqueElement ue = theElementsByValue.get(value);
 				if (ue != null && ue != this) {
 					// If the value already exists, then replacing the underlying values would just remove the unique element
 					throw new IllegalArgumentException(StdMsg.ELEMENT_EXISTS);

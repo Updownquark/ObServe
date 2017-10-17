@@ -54,6 +54,7 @@ public interface FlowOptions {
 	class MapOptions<E, T> extends XformOptions.SimpleXformOptions {
 		private Function<? super T, ? extends E> theReverse;
 		private ElementSetter<? super E, ? super T> theElementReverse;
+		private Equivalence<? super T> theEquivalence;
 
 		@Override
 		public MapOptions<E, T> reEvalOnUpdate(boolean reEval) {
@@ -70,6 +71,15 @@ public interface FlowOptions {
 		@Override
 		public MapOptions<E, T> cache(boolean cache) {
 			super.cache(cache);
+			return this;
+		}
+
+		/**
+		 * @param equivalence The equivalence set to use for the mapped values
+		 * @return This builder
+		 */
+		public MapOptions<E, T> withEquivalence(Equivalence<? super T> equivalence) {
+			theEquivalence = equivalence;
 			return this;
 		}
 
@@ -94,6 +104,11 @@ public interface FlowOptions {
 		public MapOptions<E, T> withElementSetting(ElementSetter<? super E, ? super T> reverse) {
 			theElementReverse = reverse;
 			return this;
+		}
+
+		/** @return The equivalence set to use for the mapped values */
+		public Equivalence<? super T> getEquivalence() {
+			return theEquivalence;
 		}
 
 		/** @return The reverse function, if set */
@@ -213,11 +228,18 @@ public interface FlowOptions {
 	class MapDef<E, T> extends XformOptions.XformDef {
 		private final Function<? super T, ? extends E> theReverse;
 		private final ElementSetter<? super E, ? super T> theElementReverse;
+		private final Equivalence<? super T> theEquivalence;
 
 		public MapDef(MapOptions<E, T> options) {
 			super(options);
 			theReverse = options.getReverse();
 			theElementReverse = options.getElementReverse();
+			theEquivalence = options.getEquivalence();
+		}
+
+		/** @return The equivalence set to use for the mapped values */
+		public Equivalence<? super T> getEquivalence() {
+			return theEquivalence;
 		}
 
 		/** @return The element reverse function, if set */
@@ -228,6 +250,30 @@ public interface FlowOptions {
 		/** @return The reverse function, if set */
 		public Function<? super T, ? extends E> getReverse() {
 			return theReverse;
+		}
+	}
+
+	class GroupingDef {
+		private final boolean isStaticCategories;
+		private final boolean isUsingFirst;
+		private final boolean isPreservingSourceOrder;
+
+		public GroupingDef(GroupingOptions options) {
+			isStaticCategories = options.isStaticCategories();
+			isUsingFirst = options.isUseFirst();
+			isPreservingSourceOrder = options.isPreservingSourceOrder();
+		}
+
+		public boolean isStaticCategories() {
+			return isStaticCategories;
+		}
+
+		public boolean isUsingFirst() {
+			return isUsingFirst;
+		}
+
+		public boolean isPreservingSourceOrder() {
+			return isPreservingSourceOrder;
 		}
 	}
 }

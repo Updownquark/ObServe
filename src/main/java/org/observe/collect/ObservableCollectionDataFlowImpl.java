@@ -1866,13 +1866,13 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
-	private static class ActiveMappedCollectionManager<E, I, T> implements ActiveCollectionManager<E, I, T> {
+	public static class ActiveMappedCollectionManager<E, I, T> implements ActiveCollectionManager<E, I, T> {
 		private final ActiveCollectionManager<E, ?, I> theParent;
 		private final TypeToken<T> theTargetType;
 		private final Function<? super I, ? extends T> theMap;
 		private final MapDef<I, T> theOptions;
 
-		ActiveMappedCollectionManager(ActiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
+		public ActiveMappedCollectionManager(ActiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
 			Function<? super I, ? extends T> map, MapDef<I, T> options) {
 			theParent = parent;
 			theTargetType = targetType;
@@ -1887,7 +1887,9 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public Equivalence<? super T> equivalence() {
-			if (theParent.getTargetType().equals(theTargetType))
+			if (theOptions.getEquivalence() != null)
+				return theOptions.getEquivalence();
+			else if (theParent.getTargetType().equals(theTargetType))
 				return (Equivalence<? super T>) theParent.equivalence();
 			else
 				return Equivalence.DEFAULT;
@@ -1940,7 +1942,7 @@ public class ObservableCollectionDataFlowImpl {
 			}, listening);
 		}
 
-		private class MappedElement implements DerivedCollectionElement<T> {
+		public class MappedElement implements DerivedCollectionElement<T> {
 			private final DerivedCollectionElement<I> theParentEl;
 			private CollectionElementListener<T> theListener;
 			private T theValue;
@@ -1997,6 +1999,10 @@ public class ObservableCollectionDataFlowImpl {
 					}
 				} else
 					theCacheHandler = null;
+			}
+
+			public DerivedCollectionElement<I> getParentEl() {
+				return theParentEl;
 			}
 
 			@Override
