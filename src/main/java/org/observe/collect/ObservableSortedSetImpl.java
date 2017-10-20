@@ -620,10 +620,10 @@ public class ObservableSortedSetImpl {
 		}
 	}
 
-	public static class ActiveDerivedSortedSet<E, T> extends ObservableSetImpl.ActiveDerivedSet<E, T> implements ObservableSortedSet<T> {
+	public static class ActiveDerivedSortedSet<T> extends ObservableSetImpl.ActiveDerivedSet<T> implements ObservableSortedSet<T> {
 		private final Comparator<? super T> theCompare;
 
-		public ActiveDerivedSortedSet(ActiveCollectionManager<E, ?, T> flow, Comparator<? super T> compare,
+		public ActiveDerivedSortedSet(ActiveCollectionManager<?, ?, T> flow, Comparator<? super T> compare,
 			Observable<?> until) {
 			super(flow, until);
 			theCompare = compare;

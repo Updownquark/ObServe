@@ -1325,9 +1325,9 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
-	private static final Set<ActiveDerivedCollection<?, ?>> STRONG_REFS = new ConcurrentHashSet<>();
+	private static final Set<ActiveDerivedCollection<?>> STRONG_REFS = new ConcurrentHashSet<>();
 
-	public static class ActiveDerivedCollection<E, T> implements ObservableCollection<T> {
+	public static class ActiveDerivedCollection<T> implements ObservableCollection<T> {
 		protected static class DerivedElementHolder<T> implements ElementId {
 			final DerivedCollectionElement<T> element;
 			BinaryTreeNode<DerivedElementHolder<T>> treeNode;
@@ -1373,7 +1373,7 @@ public final class ObservableCollectionImpl {
 			}
 		}
 
-		private final ActiveCollectionManager<E, ?, T> theFlow;
+		private final ActiveCollectionManager<?, ?, T> theFlow;
 		private final BetterTreeSet<DerivedElementHolder<T>> theDerivedElements;
 		private final ListenerList<Consumer<? super ObservableCollectionEvent<? extends T>>> theListeners;
 		private final AtomicInteger theListenerCount;
@@ -1382,7 +1382,7 @@ public final class ObservableCollectionImpl {
 		private final AtomicLong theStructureStamp;
 		private final WeakListening.Builder theWeakListening;
 
-		public ActiveDerivedCollection(ActiveCollectionManager<E, ?, T> flow, Observable<?> until) {
+		public ActiveDerivedCollection(ActiveCollectionManager<?, ?, T> flow, Observable<?> until) {
 			theFlow = flow;
 			theDerivedElements = new BetterTreeSet<>(false, (e1, e2) -> e1.element.compareTo(e2.element));
 			theListeners = new ListenerList<>(null);
@@ -1440,7 +1440,7 @@ public final class ObservableCollectionImpl {
 			return new DerivedElementHolder<>(el);
 		}
 
-		protected ActiveCollectionManager<E, ?, T> getFlow() {
+		protected ActiveCollectionManager<?, ?, T> getFlow() {
 			return theFlow;
 		}
 

@@ -3,14 +3,14 @@ package org.observe.assoc;
 import java.util.Comparator;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.NavigableMap;
-import java.util.TreeMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Observable;
+import org.observe.Subscription;
 import org.observe.assoc.ObservableMultiMap.MultiMapFlow;
 import org.observe.assoc.ObservableSortedMultiMap.SortedMultiMapFlow;
+import org.observe.collect.CollectionChangeType;
 import org.observe.collect.Combination.CombinationPrecursor;
 import org.observe.collect.Combination.CombinedFlowDef;
 import org.observe.collect.Equivalence;
@@ -18,27 +18,28 @@ import org.observe.collect.FlowOptions;
 import org.observe.collect.FlowOptions.GroupingOptions;
 import org.observe.collect.FlowOptions.MapOptions;
 import org.observe.collect.FlowOptions.UniqueOptions;
+import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
-import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionElementListener;
 import org.observe.collect.ObservableCollectionDataFlowImpl.DerivedCollectionElement;
-import org.observe.collect.ObservableCollectionDataFlowImpl.ElementAccepter;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
+import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection.DerivedElementHolder;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSetImpl;
 import org.observe.collect.ObservableSetImpl.UniqueManager;
-import org.observe.util.WeakListening;
+import org.observe.collect.ObservableSortedSetImpl;
 import org.qommons.Transaction;
-import org.qommons.collect.BetterSortedSet;
+import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.SimpleMapEntry;
-import org.qommons.tree.BinaryTreeNode;
+import org.qommons.tree.BetterTreeSet;
 
 import com.google.common.reflect.TypeToken;
 
@@ -226,190 +227,183 @@ public class ObservableMultiMapImpl {
 		}
 	}
 
-	static class GroupingManager<E, K, V> extends ObservableSetImpl.UniqueManager<E, K> {
+	static class GroupingManager<E, K, V> extends ObservableSetImpl.UniqueManager<E, Map.Entry<K, V>> {
 		private final ActiveCollectionManager<E, ?, Map.Entry<K, V>> theParent;
+		private final TypeToken<K> theKeyType;
 		private final TypeToken<V> theValueType;
-		private final Equivalence<? super K> theKeyEquivalence;
-		private final Equivalence<? super V> theValueEquivalence;
-		private final FlowOptions.GroupingDef theOptions;
+		private final Consumer<ObservableMapEvent<K, V>> theEventListener;
+
+		private BetterList<K> theAssembledKeys;
 
 		public GroupingManager(ActiveCollectionManager<E, ?, Map.Entry<K, V>> parent, //
 			TypeToken<K> keyType, TypeToken<V> valueType, //
-			Equivalence<? super K> keyEquivalence, Equivalence<? super V> valueEquivalence, //
-			FlowOptions.GroupingDef options) {
-			super(map(parent, keyType, options), options.isUsingFirst(), options.isPreservingSourceOrder());
+			FlowOptions.GroupingDef options, Consumer<ObservableMapEvent<K, V>> listener) {
+			super(parent, options.isUsingFirst(), options.isPreservingSourceOrder());
 
 			theParent = parent;
+			theKeyType = keyType;
 			theValueType = valueType;
-			theKeyEquivalence = keyEquivalence;
-			theValueEquivalence = valueEquivalence;
-			theOptions = options;
+			theEventListener = listener;
 		}
 
-		private static <E, K, V> ActiveCollectionManager<E, ?, K> map(ActiveCollectionManager<E, ?, Map.Entry<K, V>> parent,
-			TypeToken<K> keyType, FlowOptions.GroupingDef options) {
-			FlowOptions.MapOptions<Map.Entry<K, V>, K> mapOptions = new FlowOptions.MapOptions<Map.Entry<K, V>, K>()//
-				.cache(!options.isStaticCategories())// Don't cache if the keys are static
-				.reEvalOnUpdate(!options.isStaticCategories());
-			return new ObservableCollectionDataFlowImpl.ActiveMappedCollectionManager<>(parent, keyType, Map.Entry::getKey, //
-				new FlowOptions.MapDef<>(mapOptions));
+		void setAssembledKeys(BetterList<K> assembledKeys) {
+			theAssembledKeys = assembledKeys;
+		}
+
+		void withHolder(K key, ElementId holder) {
+			getElement(new SimpleMapEntry)
+			// TODO Auto-generated method stub
+
 		}
 
 		@Override
-		protected UniqueManager<E, K>.UniqueElement createUniqueElement(K value) {
+		protected UniqueManager<E, Map.Entry<K, V>>.UniqueElement createUniqueElement(Map.Entry<K, V> value) {
 			return new GroupedElement(value);
 		}
 
-		protected class GroupedElement extends UniqueElement implements ActiveCollectionManager<E, Object, V> {
-			private ElementAccepter<V> theValueElAccepter;
-			private final NavigableMap<ElementId, ValueElement> theValueElements;
+		protected class GroupedElement extends UniqueElement {
+			private ElementId theKeyId;
 
-			protected GroupedElement(K key) {
+			protected GroupedElement(Map.Entry<K, V> key) {
 				super(key);
-				theValueElements = new TreeMap<>();
+			}
+
+			protected void setKeyId(ElementId keyId) {
+				theKeyId = keyId;
 			}
 
 			@Override
-			protected void addParent(DerivedCollectionElement<K> parentEl, Object cause) {
-				super.addParent(parentEl, cause);
+			protected CollectionElement<DerivedCollectionElement<Map.Entry<K, V>>> addParent(
+				DerivedCollectionElement<Map.Entry<K, V>> parentEl, Object cause) {
+				CollectionElement<DerivedCollectionElement<Map.Entry<K, V>>> node = super.addParent(parentEl, cause);
+				if (theKeyId != null) {
+					int keyIndex = theAssembledKeys.getElementsBefore(theKeyId);
+					int valueIndex = getParentElements().getElementsBefore(node.getElementId());
+					theEventListener.accept(new ObservableMapEvent<>(theKeyId, node.getElementId(), theKeyType, theValueType, //
+						keyIndex, valueIndex, CollectionChangeType.add, parentEl.get().getKey(), null, parentEl.get().getValue(), cause));
+				}
+				return node;
 			}
 
 			@Override
-			protected void parentUpdated(CollectionElement<DerivedCollectionElement<K>> parentEl, K oldValue, K newValue, Object cause) {
+			protected void parentUpdated(CollectionElement<DerivedCollectionElement<Map.Entry<K, V>>> parentEl, Map.Entry<K, V> oldValue,
+				Map.Entry<K, V> newValue, Object cause) {
 				super.parentUpdated(parentEl, oldValue, newValue, cause);
+				int keyIndex = theAssembledKeys.getElementsBefore(theKeyId);
+				int valueIndex = getParentElements().getElementsBefore(parentEl.getElementId());
+				DerivedCollectionElement<Map.Entry<K, V>> active = getActiveElement();
+				theEventListener.accept(new ObservableMapEvent<>(theKeyId, parentEl.getElementId(), theKeyType, theValueType, //
+					keyIndex, valueIndex, CollectionChangeType.set, active.get().getKey(), oldValue.getValue(), newValue.getValue(),
+					cause));
 			}
 
 			@Override
-			protected void parentRemoved(CollectionElement<DerivedCollectionElement<K>> parentEl, K value, Object cause) {
+			protected void parentRemoved(CollectionElement<DerivedCollectionElement<Map.Entry<K, V>>> parentEl, Map.Entry<K, V> value,
+				Object cause) {
 				super.parentRemoved(parentEl, value, cause);
+				int keyIndex = theAssembledKeys.getElementsBefore(theKeyId);
+				int valueIndex = getParentElements().getElementsBefore(parentEl.getElementId());
+				DerivedCollectionElement<Map.Entry<K, V>> active = getActiveElement();
+				theEventListener.accept(new ObservableMapEvent<>(theKeyId, parentEl.getElementId(), theKeyType, theValueType, //
+					keyIndex, valueIndex, CollectionChangeType.remove, active.get().getKey(), value.getValue(), value.getValue(), cause));
 			}
+		}
+	}
 
-			@Override
-			public TypeToken<V> getTargetType() {
-				return theValueType;
-			}
+	static class DerivedObservableMultiMap<E, K, V> implements ObservableMultiMap<K, V> {
+		private final TypeToken<K> theKeyType;
+		private final TypeToken<V> theValueType;
+		private TypeToken<ObservableMultiEntry<K, V>> theEntryType;
+		private final Equivalence<? super K> theKeyEquivalence;
+		private final Equivalence<? super V> theValueEquivalence;
 
-			@Override
-			public Equivalence<? super V> equivalence() {
-				return theValueEquivalence;
-			}
+		private final ListenerList<Consumer<? super ObservableMapEvent<? extends K, ? extends V>>> theEventListeners;
+		private final GroupingManager<E, K, V> theGrouping;
+		private final ObservableSet<K> theKeySet;
 
-			@Override
-			public Transaction lock(boolean write, boolean structural, Object cause) {
-				return GroupingManager.this.lock(write, structural, cause);
-			}
+		public DerivedObservableMultiMap(CollectionDataFlow<E, ?, Map.Entry<K, V>> entryFlow, //
+			TypeToken<K> keyType, TypeToken<V> valueType, //
+			Equivalence<? super K> keyEquivalence, Equivalence<? super V> valueEquivalence, //
+			Comparator<? super K> keySorting, boolean uniqueValues, Comparator<? super V> valueSorting, //
+			FlowOptions.GroupingDef options, Observable<?> until) {
+			theKeyType = keyType;
+			theValueType = valueType;
+			theKeyEquivalence = keyEquivalence;
+			theValueEquivalence = valueEquivalence;
 
-			@Override
-			public boolean isContentControlled() {
-				return true;
-			}
+			theEventListeners = new ListenerList<>(null);
+			theGrouping = new GroupingManager<>(entryFlow, keyType, valueType, options, //
+				event -> theEventListeners.forEach(listener -> listener.accept(event)));
+			FlowOptions.MapOptions<Map.Entry<K, V>, K> keyMapOptions = new FlowOptions.MapOptions<>();
+			keyMapOptions.withReverse(k -> new SimpleMapEntry<>(k, null)).reEvalOnUpdate(!options.isStaticCategories());
+			ActiveCollectionManager<E, Map.Entry<K, V>, K> keyFlow;
+			keyFlow = new ObservableCollectionDataFlowImpl.ActiveMappedCollectionManager<>(theGrouping, theKeyType, Map.Entry::getKey, //
+				new FlowOptions.MapDef<>(keyMapOptions));
 
-			@Override
-			public Comparable<DerivedCollectionElement<V>> getElementFinder(V value) {
-				// TODO Auto-generated method stub
-			}
-
-			@Override
-			public String canAdd(V toAdd) {
-				return GroupingManager.this.theParent.canAdd(new SimpleMapEntry<>(get(), toAdd));
-			}
-
-			@Override
-			public DerivedCollectionElement<V> addElement(V value, boolean first) {
-				DerivedCollectionElement<Map.Entry<K, V>> addedEl = GroupingManager.this.theParent
-					.addElement(new SimpleMapEntry<>(get(), value), first);
-				return valueElement(addedEl);
-			}
-
-			@Override
-			public boolean clear() {
-				if (canRemove() == null) {
-					remove();
-					return true;
-				} else
-					return false;
-			}
-
-			@Override
-			public void begin(ElementAccepter<V> onElement, WeakListening listening) {
-				theValueElAccepter = onElement;
-				for (ValueElement valueEl : theValueElements.values())
-					onElement.accept(valueEl, null);
-			}
-
-			private ValueElement valueElement(DerivedCollectionElement<Map.Entry<K, V>> entryEl) {
-				if (entryEl == null)
-					return null;
-				BinaryTreeNode<DerivedCollectionElement<K>> found = getParentElements().search(keyEl -> {
-					ObservableCollectionDataFlowImpl.ActiveMappedCollectionManager<E, Map.Entry<K, V>, K>.MappedElement mappedEl;
-					mappedEl = (ObservableCollectionDataFlowImpl.ActiveMappedCollectionManager<E, Map.Entry<K, V>, K>.MappedElement) keyEl;
-					return entryEl.compareTo(mappedEl.getParentEl());
-				}, BetterSortedSet.SortedSearchFilter.OnlyMatch);
-				if (found == null)
-					return null;
-				return theValueElements.get(found.getElementId());
-			}
-
-			private class ValueElement implements DerivedCollectionElement<V> {
-				private final DerivedCollectionElement<Map.Entry<K, V>> theParentEl;
-
-				ValueElement(DerivedCollectionElement<Entry<K, V>> parentEl) {
-					theParentEl = parentEl;
-				}
-
+			if (keySorting != null)
+				theKeySet = new ObservableSortedSetImpl.ActiveDerivedSortedSet<K>(keyFlow, keySorting, until) {
 				@Override
-				public int compareTo(DerivedCollectionElement<V> o) {
-					return theParentEl.compareTo(((ValueElement) o).theParentEl);
+				protected DerivedElementHolder<K> createHolder(DerivedCollectionElement<K> el) {
+					DerivedElementHolder<K> holder = super.createHolder(el);
+					theGrouping.withHolder(el.get(), holder);
 				}
+				};
+			else
+				theKeySet = new ObservableSetImpl.ActiveDerivedSet<>(keyFlow, until);
+			theGrouping.setAssembledKeys(theKeySet);
+		}
 
-				@Override
-				public void setListener(CollectionElementListener<V> listener) {
-					// TODO Auto-generated method stub
+		@Override
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			return theGrouping.lock(write, structural, cause);
+		}
 
-				}
+		@Override
+		public TypeToken<K> getKeyType() {
+			return theKeyType;
+		}
 
-				@Override
-				public V get() {
-					return theParentEl.get().getValue();
-				}
+		@Override
+		public TypeToken<V> getValueType() {
+			return theValueType;
+		}
 
-				@Override
-				public String isEnabled() {
-					return theParentEl.isEnabled();
-				}
+		@Override
+		public TypeToken<ObservableMultiEntry<K, V>> getEntryType() {
+			if (theEntryType == null)
+				theEntryType = ObservableMultiMap.buildEntryType(theKeyType, theValueType);
+			return theEntryType;
+		}
 
-				@Override
-				public String isAcceptable(V value) {
-					return theParentEl.isAcceptable(new SimpleMapEntry<>(GroupedElement.this.get(), value));
-				}
+		@Override
+		public boolean isLockSupported() {
+			return theGrouping.isLockSupported();
+		}
 
-				@Override
-				public void set(V value) throws UnsupportedOperationException, IllegalArgumentException {
-					theParentEl.set(new SimpleMapEntry<>(GroupedElement.this.get(), value));
-				}
+		@Override
+		public ObservableSet<K> keySet() {
+			return theKeySet;
+		}
 
-				@Override
-				public String canRemove() {
-					return theParentEl.canRemove();
-				}
+		@Override
+		public ObservableCollection<V> get(Object key) {
+			if (key == null && !theKeyType.getRawType().isInstance(key))
+				return ObservableCollection.of(theValueType);
+			if (!theKeyEquivalence.isElement(key))
+				return ObservableCollection.of(theValueType);
+			return new Values((K) key);
+		}
 
-				@Override
-				public void remove() throws UnsupportedOperationException {
-					theParentEl.remove();
-				}
+		@Override
+		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
+			return theEventListeners.add(action, true)::run;
+		}
 
-				@Override
-				public String canAdd(V value, boolean before) {
-					return theParentEl.canAdd(new SimpleMapEntry<>(GroupedElement.this.get(), value), before);
-				}
+		private class Values implements ObservableCollection<V> {
+			private final K theKey;
 
-				@Override
-				public DerivedCollectionElement<V> add(V value, boolean before)
-					throws UnsupportedOperationException, IllegalArgumentException {
-					DerivedCollectionElement<Map.Entry<K, V>> addedEl = theParentEl
-						.add(new SimpleMapEntry<>(GroupedElement.this.get(), value), before);
-					return valueElement(addedEl);
-				}
+			public Values(K key) {
+				theKey = key;
 			}
 		}
 	}

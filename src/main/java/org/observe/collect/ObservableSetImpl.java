@@ -306,6 +306,10 @@ public class ObservableSetImpl {
 			return element == null ? el -> -1 : element;
 		}
 
+		protected UniqueElement getElement(T value) {
+			return theElementsByValue.get(value);
+		}
+
 		@Override
 		public String canAdd(T toAdd) {
 			if (theElementsByValue.containsKey(toAdd))
@@ -355,11 +359,15 @@ public class ObservableSetImpl {
 				theParentElements = new BetterTreeSet<>(false, DerivedCollectionElement::compareTo);
 			}
 
+			protected DerivedCollectionElement<T> getActiveElement() {
+				return theActiveElement;
+			}
+
 			protected BetterTreeSet<DerivedCollectionElement<T>> getParentElements() {
 				return theParentElements;
 			}
 
-			protected void addParent(DerivedCollectionElement<T> parentEl, Object cause) {
+			protected CollectionElement<DerivedCollectionElement<T>> addParent(DerivedCollectionElement<T> parentEl, Object cause) {
 				boolean only = theParentElements.isEmpty();
 				BinaryTreeNode<DerivedCollectionElement<T>> node = theParentElements.addElement(parentEl, false);
 				if (only) {
@@ -419,6 +427,7 @@ public class ObservableSetImpl {
 						}
 					}
 				});
+				return node;
 			}
 
 			protected void parentUpdated(CollectionElement<DerivedCollectionElement<T>> parentEl, T oldValue, T newValue, Object cause) {}
@@ -636,8 +645,8 @@ public class ObservableSetImpl {
 		}
 	}
 
-	public static class ActiveDerivedSet<E, T> extends ActiveDerivedCollection<E, T> implements ObservableSet<T> {
-		protected ActiveDerivedSet(ActiveCollectionManager<E, ?, T> flow, Observable<?> until) {
+	public static class ActiveDerivedSet<T> extends ActiveDerivedCollection<T> implements ObservableSet<T> {
+		public ActiveDerivedSet(ActiveCollectionManager<?, ?, T> flow, Observable<?> until) {
 			super(flow, until);
 		}
 	}
