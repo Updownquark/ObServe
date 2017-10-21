@@ -27,17 +27,20 @@ import org.observe.collect.ObservableCollectionDataFlowImpl;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.DerivedCollectionElement;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
-import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection.DerivedElementHolder;
+import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSetImpl;
 import org.observe.collect.ObservableSetImpl.UniqueManager;
 import org.observe.collect.ObservableSortedSetImpl;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
+import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.collect.SimpleMapEntry;
 import org.qommons.tree.BetterTreeSet;
 
@@ -250,10 +253,9 @@ public class ObservableMultiMapImpl {
 			theAssembledKeys = assembledKeys;
 		}
 
-		void withHolder(K key, ElementId holder) {
-			getElement(new SimpleMapEntry)
-			// TODO Auto-generated method stub
-
+		@Override
+		protected CollectionElement<UniqueManager<E, Entry<K, V>>.UniqueElement> getElement(Entry<K, V> value) {
+			return super.getElement(value);
 		}
 
 		@Override
@@ -270,6 +272,11 @@ public class ObservableMultiMapImpl {
 
 			protected void setKeyId(ElementId keyId) {
 				theKeyId = keyId;
+			}
+
+			@Override
+			protected BetterTreeSet<DerivedCollectionElement<Entry<K, V>>> getParentElements() {
+				return super.getParentElements();
 			}
 
 			@Override
@@ -316,12 +323,13 @@ public class ObservableMultiMapImpl {
 		private TypeToken<ObservableMultiEntry<K, V>> theEntryType;
 		private final Equivalence<? super K> theKeyEquivalence;
 		private final Equivalence<? super V> theValueEquivalence;
+		private final ActiveCollectionManager<E, ?, Entry<K, V>> theEntries;
 
 		private final ListenerList<Consumer<? super ObservableMapEvent<? extends K, ? extends V>>> theEventListeners;
 		private final GroupingManager<E, K, V> theGrouping;
 		private final ObservableSet<K> theKeySet;
 
-		public DerivedObservableMultiMap(CollectionDataFlow<E, ?, Map.Entry<K, V>> entryFlow, //
+		public DerivedObservableMultiMap(ActiveCollectionManager<E, ?, Map.Entry<K, V>> entryFlow, //
 			TypeToken<K> keyType, TypeToken<V> valueType, //
 			Equivalence<? super K> keyEquivalence, Equivalence<? super V> valueEquivalence, //
 			Comparator<? super K> keySorting, boolean uniqueValues, Comparator<? super V> valueSorting, //
@@ -330,6 +338,7 @@ public class ObservableMultiMapImpl {
 			theValueType = valueType;
 			theKeyEquivalence = keyEquivalence;
 			theValueEquivalence = valueEquivalence;
+			theEntries = entryFlow;
 
 			theEventListeners = new ListenerList<>(null);
 			theGrouping = new GroupingManager<>(entryFlow, keyType, valueType, options, //
@@ -340,16 +349,25 @@ public class ObservableMultiMapImpl {
 			keyFlow = new ObservableCollectionDataFlowImpl.ActiveMappedCollectionManager<>(theGrouping, theKeyType, Map.Entry::getKey, //
 				new FlowOptions.MapDef<>(keyMapOptions));
 
-			if (keySorting != null)
+			if (keySorting != null) {
 				theKeySet = new ObservableSortedSetImpl.ActiveDerivedSortedSet<K>(keyFlow, keySorting, until) {
-				@Override
-				protected DerivedElementHolder<K> createHolder(DerivedCollectionElement<K> el) {
-					DerivedElementHolder<K> holder = super.createHolder(el);
-					theGrouping.withHolder(el.get(), holder);
-				}
+					@Override
+					protected DerivedElementHolder<K> createHolder(DerivedCollectionElement<K> el) {
+						DerivedElementHolder<K> holder = super.createHolder(el);
+						((GroupingManager<E, K, V>.GroupedElement) el).setKeyId(holder);
+						return holder;
+					}
 				};
-			else
-				theKeySet = new ObservableSetImpl.ActiveDerivedSet<>(keyFlow, until);
+			} else {
+				theKeySet = new ObservableSetImpl.ActiveDerivedSet<K>(keyFlow, until) {
+					@Override
+					protected DerivedElementHolder<K> createHolder(DerivedCollectionElement<K> el) {
+						DerivedElementHolder<K> holder = super.createHolder(el);
+						((GroupingManager<E, K, V>.GroupedElement) el).setKeyId(holder);
+						return holder;
+					}
+				};
+			}
 			theGrouping.setAssembledKeys(theKeySet);
 		}
 
@@ -401,9 +419,325 @@ public class ObservableMultiMapImpl {
 
 		private class Values implements ObservableCollection<V> {
 			private final K theKey;
+			private CollectionElement<GroupingManager<E, K, V>.GroupedElement> theElement;
 
 			public Values(K key) {
 				theKey = key;
+			}
+
+			protected BetterSortedSet<DerivedCollectionElement<Map.Entry<K, V>>> getValues(boolean retry) {
+				if (retry && (theElement == null || !theElement.getElementId().isPresent())) {
+					CollectionElement<?> uniqueEl = theGrouping.getElement(new SimpleMapEntry<>(theKey, null));
+					theElement = (CollectionElement<GroupingManager<E, K, V>.GroupedElement>) uniqueEl;
+				}
+				if (theElement == null)
+					return null;
+				else
+					return theElement.get().getParentElements();
+			}
+
+			@Override
+			public TypeToken<V> getType() {
+				return theValueType;
+			}
+
+			@Override
+			public Equivalence<? super V> equivalence() {
+				return theValueEquivalence;
+			}
+
+			@Override
+			public boolean isLockSupported() {
+				return theGrouping.isLockSupported();
+			}
+
+			@Override
+			public Transaction lock(boolean write, boolean structural, Object cause) {
+				return theGrouping.lock(write, structural, cause);
+			}
+
+			@Override
+			public boolean isContentControlled() {
+				return true;
+			}
+
+			@Override
+			public int size() {
+				try (Transaction t = lock(false, false, null)) {
+					BetterSortedSet<DerivedCollectionElement<Map.Entry<K, V>>> values = getValues(true);
+					if (values == null)
+						return 0;
+					else
+						return values.size();
+				}
+			}
+
+			@Override
+			public boolean isEmpty() {
+				try (Transaction t = lock(false, false, null)) {
+					BetterSortedSet<DerivedCollectionElement<Map.Entry<K, V>>> values = getValues(true);
+					if (values == null)
+						return true;
+					else
+						return values.isEmpty();
+				}
+			}
+
+			@Override
+			public int getElementsBefore(ElementId id) {
+				try (Transaction t = lock(false, false, null)) {
+					BetterSortedSet<DerivedCollectionElement<Map.Entry<K, V>>> values = getValues(false);
+					if (values == null)
+						throw new IllegalArgumentException("No such element");
+					else
+						return values.getElementsBefore(id);
+				}
+			}
+
+			@Override
+			public int getElementsAfter(ElementId id) {
+				try (Transaction t = lock(false, false, null)) {
+					BetterSortedSet<DerivedCollectionElement<Map.Entry<K, V>>> values = getValues(false);
+					if (values == null)
+						throw new IllegalArgumentException("No such element");
+					else
+						return values.getElementsAfter(id);
+				}
+			}
+
+			@Override
+			public long getStamp(boolean structuralOnly) {
+				return theKeySet.getStamp(false);
+			}
+
+			@Override
+			public CollectionElement<V> getElement(V value, boolean first) {
+				try (Transaction t = lock(false, false, null)) {
+					BetterSortedSet<DerivedCollectionElement<Map.Entry<K, V>>> values = getValues(true);
+					if (values == null)
+						return null;
+					Comparable<DerivedCollectionElement<Map.Entry<K, V>>> finder = theEntries
+						.getElementFinder(new SimpleMapEntry<>(theKey, value));
+					if (finder != null) {
+						return elementFor(values.search(finder, BetterSortedSet.SortedSearchFilter.OnlyMatch));
+					} else {
+						ElementId[] id = new ElementId[1];
+						MutableElementSpliterator<DerivedCollectionElement<Map.Entry<K, V>>> spliter = values.spliterator(first);
+						while (id[0] == null && spliter.forElement(el -> {
+							if (theValueEquivalence.elementEquals(el.get().get().getValue(), value))
+								id[0] = el.getElementId();
+						}, first)) {}
+						if (id[0] == null)
+							return null;
+						else
+							return elementFor(values.getElement(id[0]));
+					}
+				}
+			}
+
+			@Override
+			public CollectionElement<V> getElement(int index) {
+				try (Transaction t = lock(false, false, null)) {
+					BetterSortedSet<DerivedCollectionElement<Map.Entry<K, V>>> values = getValues(true);
+					if (values == null)
+						return null;
+					else
+						return elementFor(values.getElement(index));
+				}
+			}
+
+			@Override
+			public CollectionElement<V> getElement(ElementId id) {
+				try (Transaction t = lock(false, false, null)) {
+					BetterSortedSet<DerivedCollectionElement<Map.Entry<K, V>>> values = getValues(true);
+					if (values == null)
+						throw new IllegalArgumentException("No such element");
+					else
+						return elementFor(values.getElement(id));
+				}
+			}
+
+			@Override
+			public MutableCollectionElement<V> mutableElement(ElementId id) {
+				try (Transaction t = lock(false, false, null)) {
+					BetterSortedSet<DerivedCollectionElement<Map.Entry<K, V>>> values = getValues(true);
+					if (values == null)
+						throw new IllegalArgumentException("No such element");
+					else
+						return mutableElementFor(values.getElement(id));
+				}
+			}
+
+			protected CollectionElement<V> elementFor(CollectionElement<DerivedCollectionElement<Map.Entry<K, V>>> entryEl) {
+				if (entryEl == null)
+					return null;
+				return new CollectionElement<V>() {
+					@Override
+					public ElementId getElementId() {
+						return entryEl.getElementId();
+					}
+
+					@Override
+					public V get() {
+						return entryEl.get().get().getValue();
+					}
+				};
+			}
+
+			protected MutableCollectionElement<V> mutableElementFor(CollectionElement<DerivedCollectionElement<Map.Entry<K, V>>> entryEl) {
+				if (entryEl == null)
+					return null;
+				return new MutableCollectionElement<V>() {
+					@Override
+					public ElementId getElementId() {
+						return entryEl.getElementId();
+					}
+
+					@Override
+					public V get() {
+						return entryEl.get().get().getValue();
+					}
+
+					@Override
+					public String isEnabled() {
+						return entryEl.get().isEnabled();
+					}
+
+					@Override
+					public String isAcceptable(V value) {
+						return entryEl.get().isAcceptable(new SimpleMapEntry<>(theKey, value));
+					}
+
+					@Override
+					public void set(V value) throws UnsupportedOperationException, IllegalArgumentException {
+						entryEl.get().set(new SimpleMapEntry<>(theKey, value));
+					}
+
+					@Override
+					public String canRemove() {
+						return entryEl.get().canRemove();
+					}
+
+					@Override
+					public void remove() throws UnsupportedOperationException {
+						entryEl.get().remove();
+					}
+
+					@Override
+					public String canAdd(V value, boolean before) {
+						return entryEl.get().canAdd(new SimpleMapEntry<>(theKey, value), before);
+					}
+
+					@Override
+					public ElementId add(V value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
+						DerivedCollectionElement<Map.Entry<K, V>> el = entryEl.get().add(new SimpleMapEntry<>(theKey, value), before);
+						// TODO Auto-generated method stub
+					}
+				};
+			}
+
+			@Override
+			public String canAdd(V value) {
+				return theEntries.canAdd(new SimpleMapEntry<>(theKey, value));
+			}
+
+			@Override
+			public CollectionElement<V> addElement(V value, boolean first) {
+				try (Transaction t = lock(true, true, null)) {
+					DerivedCollectionElement<Map.Entry<K, V>> el = theEntries.addElement(new SimpleMapEntry<>(theKey, value), first);
+					if (el == null)
+						return null;
+					BetterSortedSet<DerivedCollectionElement<Map.Entry<K, V>>> values = getValues(true);
+					if (values == null)
+						throw new IllegalStateException("No element added");
+					CollectionElement<DerivedCollectionElement<Map.Entry<K, V>>> entryEl = values.getElement(el, first);
+					return elementFor(entryEl);
+				}
+			}
+
+			@Override
+			public void clear() {
+				spliterator(false).forEachElementM(el -> {
+					if (el.canRemove() == null)
+						el.remove();
+				}, false);
+			}
+
+			@Override
+			public MutableElementSpliterator<V> spliterator(boolean fromStart) {
+				try (Transaction t = lock(false, false, null)) {
+					BetterSortedSet<DerivedCollectionElement<Map.Entry<K, V>>> values = getValues(true);
+					if (values == null)
+						return MutableElementSpliterator.empty();
+					else
+						return spliteratorFor(values.spliterator(fromStart));
+				}
+			}
+
+			@Override
+			public MutableElementSpliterator<V> spliterator(ElementId element, boolean asNext) {
+				try (Transaction t = lock(false, false, null)) {
+					BetterSortedSet<DerivedCollectionElement<Map.Entry<K, V>>> values = getValues(true);
+					if (values == null)
+						return MutableElementSpliterator.empty();
+					else
+						return spliteratorFor(values.spliterator(element, asNext));
+				}
+			}
+
+			private MutableElementSpliterator<V> spliteratorFor(
+				MutableElementSpliterator<DerivedCollectionElement<Entry<K, V>>> spliterator) {
+				return new MutableElementSpliterator<V>() {
+					@Override
+					public int characteristics() {
+						return spliterator.characteristics() & (~SORTED);
+					}
+
+					@Override
+					public long estimateSize() {
+						return spliterator.estimateSize();
+					}
+
+					@Override
+					public long getExactSizeIfKnown() {
+						return spliterator.getExactSizeIfKnown();
+					}
+
+					@Override
+					public boolean forElement(Consumer<? super CollectionElement<V>> action, boolean forward) {
+						return spliterator.forElement(el -> action.accept(elementFor(el)), forward);
+					}
+
+					@Override
+					public void forEachElement(Consumer<? super CollectionElement<V>> action, boolean forward) {
+						spliterator.forEachElement(el -> action.accept(elementFor(el)), forward);
+					}
+
+					@Override
+					public boolean forElementM(Consumer<? super MutableCollectionElement<V>> action, boolean forward) {
+						return spliterator.forElementM(el -> action.accept(mutableElementFor(el)), forward);
+					}
+
+					@Override
+					public void forEachElementM(Consumer<? super MutableCollectionElement<V>> action, boolean forward) {
+						spliterator.forEachElementM(el -> action.accept(mutableElementFor(el)), forward);
+					}
+
+					@Override
+					public MutableElementSpliterator<V> trySplit() {
+						MutableElementSpliterator<DerivedCollectionElement<Entry<K, V>>> split = spliterator.trySplit();
+						return split == null ? null : spliteratorFor(split);
+					}
+				};
+			}
+
+			@Override
+			public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends V>> observer) {
+				return DerivedObservableMultiMap.this.onChange(mapEvent -> {
+					if (!theKeyEquivalence.elementEquals(theKey, mapEvent.getKey()))
+						return;
+					observer.accept(mapEvent);
+				});
 			}
 		}
 	}

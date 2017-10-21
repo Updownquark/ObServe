@@ -306,8 +306,8 @@ public class ObservableSetImpl {
 			return element == null ? el -> -1 : element;
 		}
 
-		protected UniqueElement getElement(T value) {
-			return theElementsByValue.get(value);
+		protected CollectionElement<UniqueElement> getElement(T value) {
+			return theElementsByValue.getEntry(value);
 		}
 
 		@Override
