@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 import org.observe.Observable;
 import org.observe.Subscription;
@@ -50,19 +51,27 @@ public class ObservableMultiMapImpl {
 	private ObservableMultiMapImpl() {}
 
 	static class KeyFlow<E, I, K, V> implements UniqueDataFlow<E, I, K> {
-		private final CollectionDataFlow<?, Map.Entry<I, V>, Map.Entry<K, V>> theEntryFlow;
+		private final CollectionDataFlow<?, ?, Map.Entry<K, V>> theEntryFlow;
 		private final TypeToken<K> theKeyType;
 		private final Equivalence<? super K> theKeyEquivalence;
 
-		KeyFlow(CollectionDataFlow<?, Entry<I, V>, Entry<K, V>> entryFlow, TypeToken<K> keyType, Equivalence<? super K> keyEquivalence) {
+		KeyFlow(CollectionDataFlow<?, ?, Entry<K, V>> entryFlow, TypeToken<K> keyType, Equivalence<? super K> keyEquivalence) {
 			theEntryFlow = entryFlow;
 			theKeyType = keyType;
 			theKeyEquivalence = keyEquivalence;
 		}
 
+		public CollectionDataFlow<?, ?, Map.Entry<K, V>> getEntries() {
+			return theEntryFlow;
+		}
+
 		@Override
 		public TypeToken<K> getTargetType() {
 			return theKeyType;
+		}
+
+		public Equivalence<? super K> equivalence() {
+			return theKeyEquivalence;
 		}
 
 		@Override
@@ -122,59 +131,47 @@ public class ObservableMultiMapImpl {
 		}
 
 		@Override
-		public <X> UniqueDataFlow<E, K, X> mapEquivalent(TypeToken<X> target, Function<? super K, ? extends X> map,
-			Equivalence<? super X> equivalence, Consumer<MapOptions<K, X>> options) {
-			TypeToken<Map.Entry<X, V>> mappedEntryType = ObservableMap.buildEntryType(target,
-				(TypeToken<V>) theEntryFlow.getTargetType().resolveType(Map.Entry.class.getTypeParameters()[1]));
-			Function<Map.Entry<K, V>, Map.Entry<X, V>> entryMap = entry -> new SimpleMapEntry<>(map.apply(entry.getKey()),
-				entry.getValue());
-			MapOptions<K, X> keyOptions = new MapOptions<>();
-			options.accept(keyOptions);
-			if (keyOptions.getElementReverse() != null)
-				throw new UnsupportedOperationException("Element setting unsupported");
-			Function<Map.Entry<X, V>, Map.Entry<K, V>> entryReverse;
-			if (keyOptions.getReverse() != null)
-				entryReverse = entry -> new SimpleMapEntry<>(keyOptions.getReverse().apply(entry.getKey()), entry.getValue());
-				else
-					entryReverse = null;
-			CollectionDataFlow<?, Map.Entry<K, V>, Map.Entry<X, V>> mappedEntries = theEntryFlow.map(mappedEntryType, //
-				entryMap, //
-				mapOptions -> {
-					mapOptions.cache(keyOptions.isCached())//
-					.fireIfUnchanged(mapOptions.isFireIfUnchanged())//
-					.reEvalOnUpdate(keyOptions.isReEvalOnUpdate())//
-					.withReverse(entryReverse);
-				});
-			return new KeyFlow<>(mappedEntries, target, equivalence);
-		}
-
-		@Override
 		public UniqueDataFlow<E, K, K> filterMod(Consumer<ModFilterBuilder<K>> options) {
-			// ModFilterBuilder<Map.Entry<K, V>
-			// TODO Auto-generated method stub
+			ModFilterBuilder<K> keyOptions=new ModFilterBuilder<>();
+			options.accept(keyOptions);
+			if (keyOptions.getImmutableMsg() != null)
+				throw new UnsupportedOperationException("Key set immutability is not supported");
+			CollectionDataFlow<?, Map.Entry<K, V>, Map.Entry<K, V>> modFilteredEntries=theEntryFlow.filterMod(entryOptions->{
+				if (keyOptions.getAddMsg() != null)
+					entryOptions.noAdd(keyOptions.getAddMsg());
+				Function<? super K, String> addMsgFn = keyOptions.getAddMsgFn();
+				if (addMsgFn != null)
+					entryOptions.filterAdd(entry -> addMsgFn.apply(entry.getKey()));
+				if (keyOptions.getRemoveMsg() != null)
+					entryOptions.noRemove(keyOptions.getRemoveMsg());
+				Function<? super K, String> removeMsgFn = keyOptions.getRemoveMsgFn();
+				if (removeMsgFn != null)
+					entryOptions.filterRemove(entry -> removeMsgFn.apply(entry.getKey()));
+			});
+			return new KeyFlow<>(modFilteredEntries, theKeyType, theKeyEquivalence);
 		}
 
 		@Override
 		public CollectionDataFlow<E, K, K> withEquivalence(Equivalence<? super K> equivalence) {
-			throw new IllegalStateException("Only equivalent unique operations are permitted");
+			throw new UnsupportedOperationException("Only equivalent unique operations are permitted");
 		}
 
 		@Override
 		public <X> CollectionDataFlow<E, K, X> map(TypeToken<X> target, Function<? super K, ? extends X> map,
 			Consumer<MapOptions<K, X>> options) {
-			throw new IllegalStateException("Only equivalent unique operations are permitted");
+			throw new UnsupportedOperationException("Only equivalent unique operations are permitted");
 		}
 
 		@Override
 		public <X> CollectionDataFlow<E, K, X> combine(TypeToken<X> targetType,
 			Function<CombinationPrecursor<K, X>, CombinedFlowDef<K, X>> combination) {
-			throw new IllegalStateException("Only equivalent unique operations are permitted");
+			throw new UnsupportedOperationException("Only equivalent unique operations are permitted");
 		}
 
 		@Override
 		public <X> CollectionDataFlow<E, ?, X> flatMap(TypeToken<X> target,
 			Function<? super K, ? extends CollectionDataFlow<?, ?, ? extends X>> map) {
-			throw new IllegalStateException("Only equivalent unique operations are permitted");
+			throw new UnsupportedOperationException("Only equivalent unique operations are permitted");
 		}
 
 		@Override
@@ -189,19 +186,19 @@ public class ObservableMultiMapImpl {
 
 		@Override
 		public UniqueSortedDataFlow<E, K, K> distinctSorted(Comparator<? super K> compare, boolean alwaysUseFirst) {
-			throw new IllegalStateException("Only equivalent unique operations are permitted");
+			throw new UnsupportedOperationException("Only equivalent unique operations are permitted");
 		}
 
 		@Override
 		public <K2> MultiMapFlow<E, K2, K> groupBy(TypeToken<K2> keyType, Function<? super K, ? extends K2> keyMap,
 			Consumer<GroupingOptions> options) {
-			throw new IllegalStateException("Only equivalent unique operations are permitted");
+			throw new UnsupportedOperationException("Group by unsupported");
 		}
 
 		@Override
 		public <K2> SortedMultiMapFlow<E, K2, K> groupBy(TypeToken<K2> keyType, Function<? super K, ? extends K2> keyMap,
 			Comparator<? super K2> keyCompare, Consumer<GroupingOptions> options) {
-			throw new IllegalStateException("Only equivalent unique operations are permitted");
+			throw new UnsupportedOperationException("Group by unsupported");
 		}
 
 		@Override
@@ -230,6 +227,167 @@ public class ObservableMultiMapImpl {
 		}
 	}
 
+	static class SortedKeyFlow<E, I, K, V> extends KeyFlow<E, I, K, V> implements UniqueSortedDataFlow<E, I, K> {
+		private final Comparator<? super K> theKeyCompare;
+
+		SortedKeyFlow(CollectionDataFlow<?, Entry<I, V>, Entry<K, V>> entryFlow, TypeToken<K> keyType, Comparator<? super K> keyCompare) {
+			super(entryFlow, keyType, Equivalence.of((Class<K>) keyType.getRawType(), keyCompare, true));
+			theKeyCompare = keyCompare;
+		}
+
+		@Override
+		public Comparator<? super K> comparator() {
+			return theKeyCompare;
+		}
+
+		@Override
+		public <X> UniqueSortedDataFlow<E, K, X> mapEquivalent(TypeToken<X> target, Function<? super K, ? extends X> map,
+			Comparator<? super X> compare, Consumer<MapOptions<K, X>> options) {
+			// TODO Auto-generated method stub
+		}
+	}
+
+	static class ValueFlow<E, K, I, V> implements CollectionDataFlow<E, I, V> {
+		private final CollectionDataFlow<?, ?, Map.Entry<K, V>> theEntryFlow;
+		private final TypeToken<V> theValueType;
+		private final Equivalence<? super V> theValueEquivalence;
+
+		ValueFlow(CollectionDataFlow<?, ?, Entry<K, V>> entryFlow, TypeToken<V> valueType,
+			Equivalence<? super V> valueEquivalence) {
+			theEntryFlow = entryFlow;
+			theValueType = valueType;
+			theValueEquivalence = valueEquivalence;
+		}
+
+		public CollectionDataFlow<?, ?, Map.Entry<K, V>> getEntries() {
+			return theEntryFlow;
+		}
+
+		@Override
+		public TypeToken<V> getTargetType() {
+			return theValueType;
+		}
+
+		public Equivalence<? super V> equivalence() {
+			return theValueEquivalence;
+		}
+
+		@Override
+		public CollectionDataFlow<E, V, V> filter(Function<? super V, String> filter) {
+			return new ValueFlow<>(theEntryFlow.filter(entry -> filter.apply(entry.getValue())), theValueType, theValueEquivalence);
+		}
+
+		@Override
+		public CollectionDataFlow<E, V, V> filterStatic(Function<? super V, String> filter) {
+			return new ValueFlow<>(theEntryFlow.filterStatic(entry -> filter.apply(entry.getValue())), theValueType, theValueEquivalence);
+		}
+
+		@Override
+		public <X> CollectionDataFlow<E, V, V> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public CollectionDataFlow<E, V, V> withEquivalence(Equivalence<? super V> equivalence) {
+			// Intermediate type doesn't matter here
+			return new ValueFlow<>((CollectionDataFlow<E, Map.Entry<K, V>, Map.Entry<K, V>>) (CollectionDataFlow<?, ?, ?>) theEntryFlow,
+				theValueType, equivalence);
+		}
+
+		@Override
+		public CollectionDataFlow<E, V, V> refresh(Observable<?> refresh) {
+			return new ValueFlow<>(theEntryFlow.refresh(refresh), theValueType, theValueEquivalence);
+		}
+
+		@Override
+		public CollectionDataFlow<E, V, V> refreshEach(Function<? super V, ? extends Observable<?>> refresh) {
+			return new ValueFlow<>(theEntryFlow.refreshEach(entry -> refresh.apply(entry.getValue())), theValueType, theValueEquivalence);
+		}
+
+		@Override
+		public <X> CollectionDataFlow<E, V, X> map(TypeToken<X> target, Function<? super V, ? extends X> map,
+			Consumer<MapOptions<V, X>> options) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public <X> CollectionDataFlow<E, V, X> combine(TypeToken<X> targetType,
+			Function<CombinationPrecursor<V, X>, CombinedFlowDef<V, X>> combination) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public <X> CollectionDataFlow<E, ?, X> flatMap(TypeToken<X> target,
+			Function<? super V, ? extends CollectionDataFlow<?, ?, ? extends X>> map) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public CollectionDataFlow<E, V, V> sorted(Comparator<? super V> compare) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public UniqueDataFlow<E, V, V> distinct(Consumer<UniqueOptions> options) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public UniqueSortedDataFlow<E, V, V> distinctSorted(Comparator<? super V> compare, boolean alwaysUseFirst) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public CollectionDataFlow<E, V, V> filterMod(Consumer<ModFilterBuilder<V>> options) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public <K2> MultiMapFlow<E, K2, V> groupBy(TypeToken<K2> keyType, Function<? super V, ? extends K2> keyMap,
+			Consumer<GroupingOptions> options) {
+			throw new UnsupportedOperationException("Group by unsupported");
+		}
+
+		@Override
+		public <K2> SortedMultiMapFlow<E, K2, V> groupBy(TypeToken<K2> keyType, Function<? super V, ? extends K2> keyMap,
+			Comparator<? super K2> keyCompare, Consumer<GroupingOptions> options) {
+			throw new UnsupportedOperationException("Group by unsupported");
+		}
+
+		@Override
+		public boolean supportsPassive() {
+			return theEntryFlow.supportsPassive();
+		}
+
+		@Override
+		public ActiveCollectionManager<E, ?, V> manageActive() {
+			throw new UnsupportedOperationException("Materialization not supported");
+		}
+
+		@Override
+		public PassiveCollectionManager<E, ?, V> managePassive() {
+			throw new UnsupportedOperationException("Materialization not supported");
+		}
+
+		@Override
+		public ObservableCollection<V> collectPassive() {
+			throw new UnsupportedOperationException("Materialization not supported");
+		}
+
+		@Override
+		public ObservableCollection<V> collectActive(Observable<?> until) {
+			throw new UnsupportedOperationException("Materialization not supported");
+		}
+	}
+
 	static class GroupingManager<E, K, V> extends ObservableSetImpl.UniqueManager<E, Map.Entry<K, V>> {
 		private final ActiveCollectionManager<E, ?, Map.Entry<K, V>> theParent;
 		private final TypeToken<K> theKeyType;
@@ -251,6 +409,10 @@ public class ObservableMultiMapImpl {
 
 		void setAssembledKeys(BetterList<K> assembledKeys) {
 			theAssembledKeys = assembledKeys;
+		}
+
+		ActiveCollectionManager<E, ?, Map.Entry<K, V>> getParent() {
+			return theParent;
 		}
 
 		@Override
@@ -329,27 +491,36 @@ public class ObservableMultiMapImpl {
 		private final GroupingManager<E, K, V> theGrouping;
 		private final ObservableSet<K> theKeySet;
 
-		public DerivedObservableMultiMap(ActiveCollectionManager<E, ?, Map.Entry<K, V>> entryFlow, //
+		public DerivedObservableMultiMap(CollectionDataFlow<E, ?, Map.Entry<K, V>> entryFlow, //
 			TypeToken<K> keyType, TypeToken<V> valueType, //
-			Equivalence<? super K> keyEquivalence, Equivalence<? super V> valueEquivalence, //
-			Comparator<? super K> keySorting, boolean uniqueValues, Comparator<? super V> valueSorting, //
+			Equivalence<? super K> keyEquivalence, Equivalence<? super V> valueEquivalence, boolean uniqueValues, //
 			FlowOptions.GroupingDef options, Observable<?> until) {
 			theKeyType = keyType;
 			theValueType = valueType;
 			theKeyEquivalence = keyEquivalence;
 			theValueEquivalence = valueEquivalence;
-			theEntries = entryFlow;
 
 			theEventListeners = new ListenerList<>(null);
-			theGrouping = new GroupingManager<>(entryFlow, keyType, valueType, options, //
+			Predicate<Map.Entry<K, ?>> entryFilter = entry -> {
+				if (entry == null || !theKeyEquivalence.isElement(entry.getKey()))
+					return false;
+				if (entry.getKey() != null && !theKeyType.getRawType().isInstance(entry.getKey()))
+					return false;
+				return true;
+			};
+			Equivalence<Map.Entry<K, ?>> entryEquivalence = theKeyEquivalence.map((Class<Map.Entry<K, ?>>) (Class<?>) Map.Entry.class, //
+				entryFilter, key -> new SimpleMapEntry<>(key, null), Map.Entry::getKey);
+			theGrouping = new GroupingManager<>(entryFlow.withEquivalence(entryEquivalence).manageActive(), keyType, valueType, options, //
 				event -> theEventListeners.forEach(listener -> listener.accept(event)));
+			theEntries = theGrouping.getParent();
 			FlowOptions.MapOptions<Map.Entry<K, V>, K> keyMapOptions = new FlowOptions.MapOptions<>();
 			keyMapOptions.withReverse(k -> new SimpleMapEntry<>(k, null)).reEvalOnUpdate(!options.isStaticCategories());
 			ActiveCollectionManager<E, Map.Entry<K, V>, K> keyFlow;
 			keyFlow = new ObservableCollectionDataFlowImpl.ActiveMappedCollectionManager<>(theGrouping, theKeyType, Map.Entry::getKey, //
 				new FlowOptions.MapDef<>(keyMapOptions));
 
-			if (keySorting != null) {
+			if (theKeyEquivalence instanceof Equivalence.ComparatorEquivalence) {
+				Comparator<? super K> keySorting = ((Equivalence.ComparatorEquivalence<? super K>) theKeyEquivalence).comparator();
 				theKeySet = new ObservableSortedSetImpl.ActiveDerivedSortedSet<K>(keyFlow, keySorting, until) {
 					@Override
 					protected DerivedElementHolder<K> createHolder(DerivedCollectionElement<K> el) {
@@ -630,8 +801,16 @@ public class ObservableMultiMapImpl {
 
 					@Override
 					public ElementId add(V value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-						DerivedCollectionElement<Map.Entry<K, V>> el = entryEl.get().add(new SimpleMapEntry<>(theKey, value), before);
-						// TODO Auto-generated method stub
+						try (Transaction t = lock(true, true, null)) {
+							DerivedCollectionElement<Map.Entry<K, V>> el = entryEl.get().add(new SimpleMapEntry<>(theKey, value), before);
+							if (el == null)
+								return null;
+							BetterSortedSet<DerivedCollectionElement<Map.Entry<K, V>>> values = getValues(true);
+							if (values == null)
+								throw new IllegalStateException("No element added");
+							CollectionElement<DerivedCollectionElement<Map.Entry<K, V>>> entryEl2 = values.getElement(el, true);
+							return entryEl2 == null ? null : entryEl2.getElementId();
+						}
 					}
 				};
 			}

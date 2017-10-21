@@ -16,6 +16,7 @@ import java.util.function.Function;
 
 import org.observe.Observable;
 import org.observe.Subscription;
+import org.observe.assoc.ObservableMultiMap.DerivedMultiMap.DerivedEntrySet;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.CollectionSubscription;
 import org.observe.collect.Equivalence;
@@ -28,6 +29,7 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionMana
 import org.observe.collect.ObservableCollectionDataFlowImpl.DerivedCollectionElement;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableCollectionImpl;
+import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection.DerivedElementHolder;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSetImpl;
 import org.observe.collect.ObservableSortedSet;
@@ -564,31 +566,37 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	class DefaultGroupedMultiMapFlow<K, V> implements GroupedMultiMapFlow<K, V> {
 		private final CollectionDataFlow<?, ?, Map.Entry<K, V>> theEntryFlow;
 		private final Equivalence<? super K> theKeyEquivalence;
+		private final Equivalence<? super V> theValueEquivalence;
 
-		public DefaultGroupedMultiMapFlow(CollectionDataFlow<?, ?, Entry<K, V>> entryFlow, Equivalence<? super K> keyEquivalence) {
+		public DefaultGroupedMultiMapFlow(CollectionDataFlow<?, ?, Entry<K, V>> entryFlow, Equivalence<? super K> keyEquivalence,
+			Equivalence<? super V> valueEquivalence) {
 			theEntryFlow = entryFlow;
 			theKeyEquivalence = keyEquivalence;
+			theValueEquivalence = valueEquivalence;
 		}
 
 		@Override
 		public <K2> MultiMapFlow2<K2, V> withKeys(TypeToken<K2> keyType,
 			Function<UniqueDataFlow<?, ?, K>, UniqueDataFlow<?, ?, K2>> keyMap) {
 			TypeToken<Map.Entry<K, V>> entryType = theEntryFlow.getTargetType();
-			TypeToken<Map.Entry<K2, V>> newEntryType = ObservableMap.buildEntryType(keyType,
-				(TypeToken<V>) entryType.resolveType(Map.Entry.class.getTypeParameters()[1]));
 			TypeToken<K> oldKeyType = (TypeToken<K>) entryType.resolveType(Map.Entry.class.getTypeParameters()[0]);
-			CollectionDataFlow<Object, ?, Map.Entry<K, V>> castFlow = (CollectionDataFlow<Object, ?, Map.Entry<K, V>>) theEntryFlow;
-			ObservableMultiMapImpl.KeyFlow<Object, K, K2, V> keyFlow = new ObservableMultiMapImpl.KeyFlow<>(castFlow, keyType,
+			ObservableMultiMapImpl.KeyFlow<?, ?, K, V> keyFlow = new ObservableMultiMapImpl.KeyFlow<>(theEntryFlow, oldKeyType,
 				theKeyEquivalence);
-			// TODO Auto-generated method stub
-			return null;
+			ObservableMultiMapImpl.KeyFlow<?, ?, K2, V> derivedKeyFlow;
+			derivedKeyFlow = (ObservableMultiMapImpl.KeyFlow<?, ?, K2, V>) keyMap.apply(keyFlow);
+			return new DefaultGroupedMultiMapFlow<>(derivedKeyFlow.getEntries(), derivedKeyFlow.equivalence(), theValueEquivalence);
 		}
 
 		@Override
 		public <V2> MultiMapFlow2<K, V2> withValues(TypeToken<V2> type,
 			Function<CollectionDataFlow<?, ?, V>, CollectionDataFlow<?, ?, V2>> valueMap) {
-			// TODO Auto-generated method stub
-			return null;
+			TypeToken<Map.Entry<K, V>> entryType = theEntryFlow.getTargetType();
+			TypeToken<V> oldValueType = (TypeToken<V>) entryType.resolveType(Map.Entry.class.getTypeParameters()[1]);
+			ObservableMultiMapImpl.ValueFlow<?, K, ?, V> keyFlow = new ObservableMultiMapImpl.ValueFlow<>(theEntryFlow, oldValueType,
+				theValueEquivalence);
+			ObservableMultiMapImpl.ValueFlow<?, K, ?, V2> derivedValueFlow;
+			derivedValueFlow = (ObservableMultiMapImpl.ValueFlow<?, K, ?, V2>) valueMap.apply(keyFlow);
+			return new DefaultGroupedMultiMapFlow<>(derivedValueFlow.getEntries(), theKeyEquivalence, derivedValueFlow.equivalence());
 		}
 
 		@Override
@@ -610,7 +618,11 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 
 		@Override
 		public ObservableMultiMap<K, V> gather() {
-			return new DefaultGroupedMultiMap<>(theEntryFlow);
+			TypeToken<Map.Entry<K, V>> entryType = theEntryFlow.getTargetType();
+			TypeToken<K> keyType = (TypeToken<K>) entryType.resolveType(Map.Entry.class.getTypeParameters()[0]);
+			TypeToken<V> valueType = (TypeToken<V>) entryType.resolveType(Map.Entry.class.getTypeParameters()[1]);
+			return new ObservableMultiMapImpl.DerivedObservableMultiMap<>(theEntryFlow, keyType, valueType, //
+				theKeyEquivalence, theValueEquivalence, uniqueValues, theOptions, until);
 		}
 	}
 

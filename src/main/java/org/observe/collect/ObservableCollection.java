@@ -1200,14 +1200,6 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		@Override
 		UniqueDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh);
 
-		default <X> UniqueDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
-			Equivalence<? super X> equivalence) {
-			return mapEquivalent(target, map, equivalence, options -> {});
-		}
-
-		<X> UniqueDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
-			Equivalence<? super X> equivalence, Consumer<MapOptions<T, X>> options);
-
 		/**
 		 * @param <X> The type for the mapped flow
 		 * @param target The type for the mapped flow

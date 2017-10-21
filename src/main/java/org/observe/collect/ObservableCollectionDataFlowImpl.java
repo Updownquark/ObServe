@@ -1548,6 +1548,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public void begin(ElementAccepter<T> onElement, WeakListening listening) {
+			ObservableCollection<X> collectedFilter = theFilter.collect();
 			listening.withConsumer((ObservableCollectionEvent<? extends X> evt) -> {
 				// We're not modifying, but we want to obtain an exclusive lock
 				// to ensure that nothing above or below us is firing events at the same time.
@@ -1585,7 +1586,7 @@ public class ObservableCollectionDataFlowImpl {
 						break;
 					}
 				}
-			}, action -> theFilter.subscribe(action, true).removeAll());
+			}, action -> collectedFilter.subscribe(action, true).removeAll());
 			theParent.begin((parentEl, cause) -> {
 				IntersectionElement element = theValues.computeIfAbsent(parentEl.get(), v -> new IntersectionElement(v));
 				IntersectedCollectionElement el = new IntersectedCollectionElement(parentEl, element, false);
