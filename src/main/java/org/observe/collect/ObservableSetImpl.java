@@ -58,7 +58,12 @@ public class ObservableSetImpl {
 	public static class UniqueDataFlowWrapper<E, T> extends ObservableCollectionDataFlowImpl.AbstractDataFlow<E, T, T>
 	implements UniqueDataFlow<E, T, T> {
 		protected UniqueDataFlowWrapper(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent) {
-			super(source, parent, parent.getTargetType());
+			super(source, parent, parent.getTargetType(), parent.equivalence());
+		}
+
+		@Override
+		public UniqueDataFlow<E, T, T> reverse() {
+			return new UniqueDataFlowWrapper<>(getSource(), getParent().reverse());
 		}
 
 		@Override
@@ -159,6 +164,11 @@ public class ObservableSetImpl {
 		}
 
 		@Override
+		public UniqueDataFlow<E, T, T> reverse() {
+			return new UniqueDataFlowWrapper<>(getSource(), super.reverse());
+		}
+
+		@Override
 		public UniqueDataFlow<E, T, T> filter(Function<? super T, String> filter) {
 			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter));
 		}
@@ -213,6 +223,11 @@ public class ObservableSetImpl {
 	implements UniqueDataFlow<E, T, T> {
 		public UniqueModFilteredOp(ObservableCollection<E> source, UniqueDataFlow<E, ?, T> parent, ModFilterer<T> options) {
 			super(source, parent, options);
+		}
+
+		@Override
+		public UniqueDataFlow<E, T, T> reverse() {
+			return new UniqueDataFlowWrapper<>(getSource(), super.reverse());
 		}
 
 		@Override
@@ -336,9 +351,9 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public void begin(ElementAccepter<T> onElement, WeakListening listening) {
+		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
 			theAccepter = onElement;
-			theParent.begin((parentEl, cause) -> {
+			theParent.begin(fromStart, (parentEl, cause) -> {
 				T value = parentEl.get();
 				theElementsByValue.computeIfAbsent(value, v -> createUniqueElement(v)).addParent(parentEl, cause);
 			}, listening);
@@ -572,6 +587,11 @@ public class ObservableSetImpl {
 		@Override
 		protected ObservableSet<E> getSource() {
 			return (ObservableSet<E>) super.getSource();
+		}
+
+		@Override
+		public UniqueDataFlow<E, E, E> reverse() {
+			return new UniqueDataFlowWrapper<>(getSource(), super.reverse());
 		}
 
 		@Override

@@ -1062,7 +1062,7 @@ public final class ObservableCollectionImpl {
 		private final Equivalence<? super T> theEquivalence;
 
 		public PassiveDerivedCollection(ObservableCollection<E> source, PassiveCollectionManager<E, ?, T> flow) {
-			theSource = source;
+			theSource = flow.isReversed() ? source.reverse() : source;
 			theFlow = flow;
 			theEquivalence = theFlow.equivalence();
 		}
@@ -1433,7 +1433,7 @@ public final class ObservableCollectionImpl {
 			};
 			// Must maintain a strong reference to the event listening so it is not GC'd while the collection is still alive
 			theWeakListening = WeakListening.build().withUntil(r -> until.act(v -> r.run()));
-			theFlow.begin(onElement, theWeakListening.getListening());
+			theFlow.begin(true, onElement, theWeakListening.getListening());
 		}
 
 		protected DerivedElementHolder<T> createHolder(DerivedCollectionElement<T> el) {

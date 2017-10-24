@@ -264,6 +264,11 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
+		public UniqueSortedDataFlow<E, T, T> reverse() {
+			return new UniqueSortedDataFlowWrapper<>(getSource(), getParent().reverse(), theCompare.reversed());
+		}
+
+		@Override
 		public UniqueSortedDataFlow<E, T, T> filter(Function<? super T, String> filter) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), getParent().filter(filter), theCompare);
 		}
@@ -363,6 +368,11 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
+		public UniqueSortedDataFlow<E, T, T> reverse() {
+			return new UniqueSortedDataFlowWrapper<>(getSource(), super.reverse(), theCompare.reversed());
+		}
+
+		@Override
 		public UniqueSortedDataFlow<E, T, T> filter(Function<? super T, String> filter) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), super.filter(filter), comparator());
 		}
@@ -433,6 +443,11 @@ public class ObservableSortedSetImpl {
 		@Override
 		public Comparator<? super T> comparator() {
 			return ((UniqueSortedDataFlow<E, ?, T>) getParent()).comparator();
+		}
+
+		@Override
+		public UniqueSortedDataFlow<E, T, T> reverse() {
+			return new UniqueSortedDataFlowWrapper<>(getSource(), super.reverse(), comparator().reversed());
 		}
 
 		@Override
@@ -510,6 +525,11 @@ public class ObservableSortedSetImpl {
 		@Override
 		public Comparator<? super E> comparator() {
 			return getSource().comparator();
+		}
+
+		@Override
+		public UniqueSortedDataFlow<E, E, E> reverse() {
+			return new UniqueSortedDataFlowWrapper<>(getSource(), super.reverse(), comparator().reversed());
 		}
 
 		@Override

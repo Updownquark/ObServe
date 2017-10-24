@@ -6,7 +6,6 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -18,13 +17,12 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.XformOptions;
-import org.observe.assoc.ObservableMultiMap;
+import org.observe.assoc.ObservableMap;
 import org.observe.assoc.ObservableMultiMap.MultiMapFlow;
-import org.observe.assoc.ObservableSortedMultiMap;
+import org.observe.assoc.ObservableMultiMapImpl;
 import org.observe.assoc.ObservableSortedMultiMap.SortedMultiMapFlow;
 import org.observe.collect.Combination.CombinationPrecursor;
 import org.observe.collect.Combination.CombinedFlowDef;
-import org.observe.collect.FlowOptions.GroupingOptions;
 import org.observe.collect.FlowOptions.MapDef;
 import org.observe.collect.FlowOptions.MapOptions;
 import org.observe.collect.FlowOptions.SimpleUniqueOptions;
@@ -130,6 +128,10 @@ public class ObservableCollectionDataFlowImpl {
 	}
 
 	public static interface PassiveCollectionManager<E, I, T> extends CollectionOperation<E, I, T> {
+		default boolean isReversed() {
+			return false;
+		}
+
 		ObservableValue<? extends Function<? super E, ? extends T>> map();
 
 		String canReverse();
@@ -200,7 +202,7 @@ public class ObservableCollectionDataFlowImpl {
 		 */
 		boolean clear();
 
-		void begin(ElementAccepter<T> onElement, WeakListening listening);
+		void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening);
 	}
 
 	public static interface ElementAccepter<E> {
@@ -225,6 +227,68 @@ public class ObservableCollectionDataFlowImpl {
 		String canAdd(E value, boolean before);
 
 		DerivedCollectionElement<E> add(E value, boolean before) throws UnsupportedOperationException, IllegalArgumentException;
+
+		default DerivedCollectionElement<E> reverse() {
+			DerivedCollectionElement<E> outer = this;
+			return new DerivedCollectionElement<E>() {
+				@Override
+				public int compareTo(DerivedCollectionElement<E> o) {
+					return -outer.compareTo(o.reverse());
+				}
+
+				@Override
+				public void setListener(CollectionElementListener<E> listener) {
+					outer.setListener(listener);
+				}
+
+				@Override
+				public E get() {
+					return outer.get();
+				}
+
+				@Override
+				public String isEnabled() {
+					return outer.isEnabled();
+				}
+
+				@Override
+				public String isAcceptable(E value) {
+					return outer.isAcceptable(value);
+				}
+
+				@Override
+				public void set(E value) throws UnsupportedOperationException, IllegalArgumentException {
+					outer.set(value);
+				}
+
+				@Override
+				public String canRemove() {
+					return outer.canRemove();
+				}
+
+				@Override
+				public void remove() throws UnsupportedOperationException {
+					outer.remove();
+				}
+
+				@Override
+				public String canAdd(E value, boolean before) {
+					return outer.canAdd(value, !before);
+				}
+
+				@Override
+				public DerivedCollectionElement<E> add(E value, boolean before)
+					throws UnsupportedOperationException, IllegalArgumentException {
+					DerivedCollectionElement<E> parentEl = outer.add(value, !before);
+					return parentEl == null ? null : parentEl.reverse();
+				}
+
+				@Override
+				public DerivedCollectionElement<E> reverse() {
+					return outer;
+				}
+			};
+		}
 	}
 
 	public static interface CollectionElementListener<E> {
@@ -351,15 +415,43 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
+	private static class GroupedEntry<K, T> implements Map.Entry<K, T> {
+		private final T theValue;
+		private final Function<? super T, ? extends K> theKeyMap;
+
+		GroupedEntry(T value, Function<? super T, ? extends K> keyMap) {
+			theValue = value;
+			theKeyMap = keyMap;
+		}
+
+		@Override
+		public K getKey() {
+			return theKeyMap.apply(theValue);
+		}
+
+		@Override
+		public T getValue() {
+			return theValue;
+		}
+
+		@Override
+		public T setValue(T value) {
+			throw new UnsupportedOperationException();
+		}
+	}
+
 	public static abstract class AbstractDataFlow<E, I, T> implements CollectionDataFlow<E, I, T> {
 		private final ObservableCollection<E> theSource;
 		private final CollectionDataFlow<E, ?, I> theParent;
 		private final TypeToken<T> theTargetType;
+		private final Equivalence<? super T> theEquivalence;
 
-		protected AbstractDataFlow(ObservableCollection<E> source, CollectionDataFlow<E, ?, I> parent, TypeToken<T> targetType) {
+		protected AbstractDataFlow(ObservableCollection<E> source, CollectionDataFlow<E, ?, I> parent, TypeToken<T> targetType,
+			Equivalence<? super T> equivalence) {
 			theSource = source;
 			theParent = parent;
 			theTargetType = targetType;
+			theEquivalence = equivalence;
 		}
 
 		protected ObservableCollection<E> getSource() {
@@ -373,6 +465,16 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public TypeToken<T> getTargetType() {
 			return theTargetType;
+		}
+
+		@Override
+		public Equivalence<? super T> equivalence() {
+			return theEquivalence;
+		}
+
+		@Override
+		public CollectionDataFlow<E, T, T> reverse() {
+			return new ReverseOp<>(theSource, this);
 		}
 
 		@Override
@@ -451,35 +553,19 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public <K> MultiMapFlow<E, K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap,
-			Consumer<GroupingOptions> options) {
-			GroupingOptions groupOptions = new GroupingOptions(false);
-			options.accept(groupOptions);
-			UniqueDataFlow<E, ?, K> keyFlow = map(keyType, keyMap, mapOptions -> {}).distinct(go -> //
-			go.useFirst(groupOptions.isUseFirst()).preserveSourceOrder(go.isPreservingSourceOrder()));
-			Function<K, CollectionDataFlow<E, ?, T>> valueMap;
-			if (groupOptions.isStaticCategories()) {
-				valueMap = key -> this.filterStatic(v -> Objects.equals(key, keyMap.apply(v)) ? null : StdMsg.WRONG_GROUP);
-			} else{
-				valueMap = key -> this.filter(v -> Objects.equals(key, keyMap.apply(v)) ? null : StdMsg.WRONG_GROUP);
-			}
-			return new ObservableMultiMap.DefaultMultiMapFlow<>(keyFlow, theTargetType, valueMap);
+		public <K> MultiMapFlow<K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap,
+			Equivalence<? super K> keyEquivalence) {
+			TypeToken<Map.Entry<K, T>> entryType = ObservableMap.buildEntryType(keyType, getTargetType());
+			return new ObservableMultiMapImpl.DefaultMultiMapFlow<>(map(entryType, v -> new GroupedEntry<>(v, keyMap)), keyEquivalence,
+				equivalence(), this instanceof UniqueDataFlow);
 		}
 
 		@Override
-		public <K> SortedMultiMapFlow<E, K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap,
-			Comparator<? super K> keyCompare, Consumer<GroupingOptions> options) {
-			GroupingOptions groupOptions = new GroupingOptions(true);
-			options.accept(groupOptions);
-			UniqueSortedDataFlow<E, ?, K> keyFlow = map(keyType, keyMap, mapOptions -> {}).distinctSorted(keyCompare,
-				groupOptions.isUseFirst());
-			Function<K, CollectionDataFlow<E, ?, T>> valueMap;
-			if (groupOptions.isStaticCategories()) {
-				valueMap = key -> this.filterStatic(v -> Objects.equals(key, keyMap.apply(v)) ? null : StdMsg.WRONG_GROUP);
-			} else {
-				valueMap = key -> this.filter(v -> Objects.equals(key, keyMap.apply(v)) ? null : StdMsg.WRONG_GROUP);
-			}
-			return new ObservableSortedMultiMap.DefaultSortedMultiMapFlow<>(keyFlow, theTargetType, valueMap);
+		public <K> SortedMultiMapFlow<K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap,
+			Comparator<? super K> keyCompare) {
+			TypeToken<Map.Entry<K, T>> entryType = ObservableMap.buildEntryType(keyType, getTargetType());
+			return new ObservableMultiMapImpl.DefaultSortedMultiMapFlow<>(map(entryType, v -> new GroupedEntry<>(v, keyMap)),
+				Equivalence.of((Class<K>) keyType.getRawType(), keyCompare, true), equivalence(), this instanceof UniqueDataFlow);
 		}
 
 		@Override
@@ -499,7 +585,7 @@ public class ObservableCollectionDataFlowImpl {
 		private final Comparator<? super T> theCompare;
 
 		SortedDataFlow(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, Comparator<? super T> compare) {
-			super(source, parent, parent.getTargetType());
+			super(source, parent, parent.getTargetType(), Equivalence.of((Class<T>) parent.getTargetType().getRawType(), compare, true));
 			theCompare = compare;
 		}
 
@@ -530,7 +616,7 @@ public class ObservableCollectionDataFlowImpl {
 	 */
 	public static class BaseCollectionDataFlow<E> extends AbstractDataFlow<E, E, E> {
 		protected BaseCollectionDataFlow(ObservableCollection<E> source) {
-			super(source, null, source.getType());
+			super(source, null, source.getType(), source.equivalence());
 		}
 
 		@Override
@@ -554,13 +640,34 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
+	private static class ReverseOp<E, T> extends AbstractDataFlow<E, T, T> {
+		ReverseOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent) {
+			super(source, parent, parent.getTargetType(), parent.equivalence());
+		}
+
+		@Override
+		public boolean supportsPassive() {
+			return getParent().supportsPassive();
+		}
+
+		@Override
+		public PassiveCollectionManager<E, ?, T> managePassive() {
+			return new PassiveReversedManager<E, T>(getParent().managePassive());
+		}
+
+		@Override
+		public ActiveCollectionManager<E, ?, T> manageActive() {
+			return new ActiveReversedManager<>(getParent().manageActive());
+		}
+	}
+
 	private static class FilterOp<E, T> extends AbstractDataFlow<E, T, T> {
 		private final Function<? super T, String> theFilter;
 		private final boolean isStaticFilter;
 
 		FilterOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, Function<? super T, String> filter,
 			boolean staticFilter) {
-			super(source, parent, parent.getTargetType());
+			super(source, parent, parent.getTargetType(), parent.equivalence());
 			theFilter = filter;
 			isStaticFilter = staticFilter;
 		}
@@ -587,7 +694,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		IntersectionFlow(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, CollectionDataFlow<?, ?, X> filter,
 			boolean exclude) {
-			super(source, parent, parent.getTargetType());
+			super(source, parent, parent.getTargetType(), parent.equivalence());
 			theFilter = filter;
 			isExclude = exclude;
 		}
@@ -609,12 +716,9 @@ public class ObservableCollectionDataFlowImpl {
 	}
 
 	private static class EquivalenceSwitchOp<E, T> extends AbstractDataFlow<E, T, T> {
-		private final Equivalence<? super T> theEquivalence;
-
 		EquivalenceSwitchOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent,
 			Equivalence<? super T> equivalence) {
-			super(source, parent, parent.getTargetType());
-			theEquivalence = equivalence;
+			super(source, parent, parent.getTargetType(), equivalence);
 		}
 
 		@Override
@@ -624,12 +728,12 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public PassiveCollectionManager<E, ?, T> managePassive() {
-			return new PassiveEquivalenceSwitchedManager(getParent().managePassive(), theEquivalence);
+			return new PassiveEquivalenceSwitchedManager<>(getParent().managePassive(), equivalence());
 		}
 
 		@Override
 		public ActiveCollectionManager<E, ?, T> manageActive() {
-			return new ActiveEquivalenceSwitchedManager(getParent().manageActive(), theEquivalence);
+			return new ActiveEquivalenceSwitchedManager<>(getParent().manageActive(), equivalence());
 		}
 	}
 
@@ -646,7 +750,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		protected MapOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, I> parent, TypeToken<T> target,
 			Function<? super I, ? extends T> map, MapDef<I, T> options) {
-			super(source, parent, target);
+			super(source, parent, target, mapEquivalence(parent.getTargetType(), parent.equivalence(), target, map, options));
 			theMap = map;
 			theOptions = options;
 		}
@@ -660,13 +764,23 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public PassiveCollectionManager<E, ?, T> managePassive() {
-			return new PassiveMappedCollectionManager<>(getParent().managePassive(), getTargetType(), theMap, theOptions);
+			return new PassiveMappedCollectionManager<>(getParent().managePassive(), getTargetType(), theMap, equivalence(), theOptions);
 		}
 
 		@Override
 		public ActiveCollectionManager<E, ?, T> manageActive() {
-			return new ActiveMappedCollectionManager<>(getParent().manageActive(), getTargetType(), theMap, theOptions);
+			return new ActiveMappedCollectionManager<>(getParent().manageActive(), getTargetType(), theMap, equivalence(), theOptions);
 		}
+	}
+
+	private static <I, T> Equivalence<? super T> mapEquivalence(TypeToken<I> srcType, Equivalence<? super I> equivalence,
+		TypeToken<T> targetType, Function<? super I, ? extends T> map, MapDef<I, T> options) {
+		if (options.getEquivalence() != null)
+			return options.getEquivalence();
+		else if (srcType.equals(targetType))
+			return (Equivalence<? super T>) equivalence;
+		else
+			return Equivalence.DEFAULT;
 	}
 
 	/**
@@ -681,7 +795,8 @@ public class ObservableCollectionDataFlowImpl {
 
 		protected CombinedCollectionOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, I> parent, TypeToken<T> target,
 			CombinedFlowDef<I, T> def) {
-			super(source, parent, target);
+			super(source, parent, target,
+				parent.getTargetType().equals(target) ? (Equivalence<? super T>) parent.equivalence() : Equivalence.DEFAULT);
 			theDef = def;
 		}
 
@@ -712,7 +827,7 @@ public class ObservableCollectionDataFlowImpl {
 		private final Observable<?> theRefresh;
 
 		RefreshOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, Observable<?> refresh) {
-			super(source, parent, parent.getTargetType());
+			super(source, parent, parent.getTargetType(), parent.equivalence());
 			theRefresh = refresh;
 		}
 
@@ -737,7 +852,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		ElementRefreshOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent,
 			Function<? super T, ? extends Observable<?>> elementRefresh) {
-			super(source, parent, parent.getTargetType());
+			super(source, parent, parent.getTargetType(), parent.equivalence());
 			theElementRefresh = elementRefresh;
 		}
 
@@ -761,7 +876,7 @@ public class ObservableCollectionDataFlowImpl {
 		private final ModFilterer<T> theOptions;
 
 		protected ModFilteredOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, ModFilterer<T> options) {
-			super(source, parent, parent.getTargetType());
+			super(source, parent, parent.getTargetType(), parent.equivalence());
 			theOptions = options;
 		}
 
@@ -786,7 +901,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		FlattenedOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, I> parent, TypeToken<T> targetType,
 			Function<? super I, ? extends CollectionDataFlow<?, ?, ? extends T>> map) {
-			super(source, parent, targetType);
+			super(source, parent, targetType, Equivalence.DEFAULT);
 			theMap = map;
 		}
 
@@ -913,7 +1028,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public void begin(ElementAccepter<E> onElement, WeakListening listening) {
+		public void begin(boolean fromStart, ElementAccepter<E> onElement, WeakListening listening) {
 			listening.withConsumer((ObservableCollectionEvent<? extends E> evt) -> {
 				switch (evt.getType()) {
 				case add:
@@ -931,7 +1046,7 @@ public class ObservableCollectionDataFlowImpl {
 						listener.update(evt.getOldValue(), evt.getNewValue(), evt);
 					break;
 				}
-			}, action -> theSource.subscribe(action, true).removeAll());
+			}, action -> theSource.subscribe(action, fromStart).removeAll());
 		}
 
 		class BaseDerivedElement implements DerivedCollectionElement<E> {
@@ -999,6 +1114,121 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
+	private static class PassiveReversedManager<E, T> implements PassiveCollectionManager<E, T, T> {
+		private final PassiveCollectionManager<E, ?, T> theParent;
+
+		PassiveReversedManager(PassiveCollectionManager<E, ?, T> parent) {
+			theParent = parent;
+		}
+
+		@Override
+		public TypeToken<T> getTargetType() {
+			return theParent.getTargetType();
+		}
+
+		@Override
+		public Equivalence<? super T> equivalence() {
+			return theParent.equivalence();
+		}
+
+		@Override
+		public Transaction lock(boolean write, Object cause) {
+			return theParent.lock(write, cause);
+		}
+
+		@Override
+		public boolean isReversed() {
+			return !theParent.isReversed();
+		}
+
+		@Override
+		public ObservableValue<? extends Function<? super E, ? extends T>> map() {
+			return theParent.map();
+		}
+
+		@Override
+		public String canReverse() {
+			return theParent.canReverse();
+		}
+
+		@Override
+		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest, boolean forAdd) {
+			return theParent.reverse(dest, forAdd);
+		}
+
+		@Override
+		public boolean isRemoveFiltered() {
+			return theParent.isRemoveFiltered();
+		}
+
+		@Override
+		public MutableCollectionElement<T> map(MutableCollectionElement<E> element, Function<? super E, ? extends T> map) {
+			return theParent.map(element, map).reverse();
+		}
+
+		@Override
+		public BiTuple<T, T> map(E oldSource, E newSource, Function<? super E, ? extends T> map) {
+			return theParent.map(oldSource, newSource, map);
+		}
+	}
+
+	private static class ActiveReversedManager<E, T> implements ActiveCollectionManager<E, T, T> {
+		private final ActiveCollectionManager<E, ?, T> theParent;
+
+		ActiveReversedManager(ActiveCollectionManager<E, ?, T> parent) {
+			theParent = parent;
+		}
+
+		@Override
+		public TypeToken<T> getTargetType() {
+			return theParent.getTargetType();
+		}
+
+		@Override
+		public Equivalence<? super T> equivalence() {
+			return theParent.equivalence();
+		}
+
+		@Override
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			return theParent.lock(write, structural, cause);
+		}
+
+		@Override
+		public boolean isContentControlled() {
+			return theParent.isContentControlled();
+		}
+
+		@Override
+		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
+			Comparable<DerivedCollectionElement<T>> parentFinder = theParent.getElementFinder(value);
+			if (parentFinder == null)
+				return null;
+			return el -> -parentFinder.compareTo(el.reverse());
+		}
+
+		@Override
+		public String canAdd(T toAdd) {
+			return theParent.canAdd(toAdd);
+		}
+
+		@Override
+		public DerivedCollectionElement<T> addElement(T value, boolean first) {
+			DerivedCollectionElement<T> parentEl = theParent.addElement(value, !first);
+			return parentEl == null ? null : parentEl.reverse();
+		}
+
+		@Override
+		public boolean clear() {
+			return theParent.clear();
+		}
+
+		@Override
+		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
+			theParent.begin(!fromStart, (el, cause) -> onElement.accept(el.reverse(), cause), listening);
+		}
+	}
+
 	protected static class SortedManager<E, T> implements ActiveCollectionManager<E, T, T> {
 		private final ActiveCollectionManager<E, ?, T> theParent;
 		private final Comparator<? super T> theCompare;
@@ -1050,8 +1280,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public void begin(ElementAccepter<T> onElement, WeakListening listening) {
-			theParent.begin((parentEl, cause) -> onElement.accept(new SortedElement(parentEl), cause), listening);
+		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
+			theParent.begin(fromStart, (parentEl, cause) -> onElement.accept(new SortedElement(parentEl), cause), listening);
 		}
 
 		class SortedElement implements DerivedCollectionElement<T> {
@@ -1183,9 +1413,9 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public void begin(ElementAccepter<T> onElement, WeakListening listening) {
+		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
 			theElementAccepter = onElement;
-			theParent.begin((parentEl, cause) -> {
+			theParent.begin(fromStart, (parentEl, cause) -> {
 				String msg = theFilter.apply(parentEl.get());
 				if (msg == null)
 					onElement.accept(new FilteredElement(parentEl, false, true), cause);
@@ -1547,7 +1777,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public void begin(ElementAccepter<T> onElement, WeakListening listening) {
+		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
 			ObservableCollection<X> collectedFilter = theFilter.collect();
 			listening.withConsumer((ObservableCollectionEvent<? extends X> evt) -> {
 				// We're not modifying, but we want to obtain an exclusive lock
@@ -1586,8 +1816,8 @@ public class ObservableCollectionDataFlowImpl {
 						break;
 					}
 				}
-			}, action -> collectedFilter.subscribe(action, true).removeAll());
-			theParent.begin((parentEl, cause) -> {
+			}, action -> collectedFilter.subscribe(action, fromStart).removeAll());
+			theParent.begin(fromStart, (parentEl, cause) -> {
 				IntersectionElement element = theValues.computeIfAbsent(parentEl.get(), v -> new IntersectionElement(v));
 				IntersectedCollectionElement el = new IntersectedCollectionElement(parentEl, element, false);
 				element.addLeft(el);
@@ -1702,8 +1932,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public void begin(ElementAccepter<T> onElement, WeakListening listening) {
-			theParent.begin(onElement, listening);
+		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
+			theParent.begin(fromStart, onElement, listening);
 		}
 	}
 
@@ -1711,13 +1941,15 @@ public class ObservableCollectionDataFlowImpl {
 		private final PassiveCollectionManager<E, ?, I> theParent;
 		private final TypeToken<T> theTargetType;
 		private final Function<? super I, ? extends T> theMap;
+		private final Equivalence<? super T> theEquivalence;
 		private final MapDef<I, T> theOptions;
 
 		PassiveMappedCollectionManager(PassiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
-			Function<? super I, ? extends T> map, MapDef<I, T> options) {
+			Function<? super I, ? extends T> map, Equivalence<? super T> equivalence, MapDef<I, T> options) {
 			theParent = parent;
 			theTargetType = targetType;
 			theMap = map;
+			theEquivalence = equivalence;
 			theOptions = options;
 		}
 
@@ -1728,10 +1960,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public Equivalence<? super T> equivalence() {
-			if (theParent.getTargetType().equals(theTargetType))
-				return (Equivalence<? super T>) theParent.equivalence();
-			else
-				return Equivalence.DEFAULT;
+			return theEquivalence;
 		}
 
 		@Override
@@ -1871,13 +2100,15 @@ public class ObservableCollectionDataFlowImpl {
 		private final ActiveCollectionManager<E, ?, I> theParent;
 		private final TypeToken<T> theTargetType;
 		private final Function<? super I, ? extends T> theMap;
+		private final Equivalence<? super T> theEquivalence;
 		private final MapDef<I, T> theOptions;
 
 		public ActiveMappedCollectionManager(ActiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
-			Function<? super I, ? extends T> map, MapDef<I, T> options) {
+			Function<? super I, ? extends T> map, Equivalence<? super T> equivalence, MapDef<I, T> options) {
 			theParent = parent;
 			theTargetType = targetType;
 			theMap = map;
+			theEquivalence = equivalence;
 			theOptions = options;
 		}
 
@@ -1888,12 +2119,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public Equivalence<? super T> equivalence() {
-			if (theOptions.getEquivalence() != null)
-				return theOptions.getEquivalence();
-			else if (theParent.getTargetType().equals(theTargetType))
-				return (Equivalence<? super T>) theParent.equivalence();
-			else
-				return Equivalence.DEFAULT;
+			return theEquivalence;
 		}
 
 		@Override
@@ -1937,8 +2163,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public void begin(ElementAccepter<T> onElement, WeakListening listening) {
-			theParent.begin((parentEl, cause) -> {
+		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
+			theParent.begin(fromStart, (parentEl, cause) -> {
 				onElement.accept(new MappedElement(parentEl, false), cause);
 			}, listening);
 		}
@@ -2534,7 +2760,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public void begin(ElementAccepter<T> onElement, WeakListening listening) {
+		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
 			for (Map.Entry<ObservableValue<?>, XformOptions.XformCacheHandler<Object, Void>> arg : theArgs.entrySet()) {
 				XformOptions.XformCacheHandler<Object, Void> holder = arg.getValue();
 				listening.withConsumer((ObservableValueEvent<?> evt) -> {
@@ -2561,7 +2787,7 @@ public class ObservableCollectionDataFlowImpl {
 					}
 				}, action -> arg.getKey().changes().act(action));
 			}
-			theParent.begin((parentEl, cause) -> {
+			theParent.begin(fromStart, (parentEl, cause) -> {
 				try (Transaction t = lockArgs()) {
 					CombinedElement el = new CombinedElement(parentEl, false);
 					theElements.add(el);
@@ -2876,8 +3102,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public void begin(ElementAccepter<T> onElement, WeakListening listening) {
-			theParent.begin((parentEl, cause) -> {
+		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
+			theParent.begin(fromStart, (parentEl, cause) -> {
 				onElement.accept(new RefreshingElement(parentEl, false), listening);
 			}, listening);
 			listening.withConsumer((Object r) -> {
@@ -3053,9 +3279,9 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public void begin(ElementAccepter<T> onElement, WeakListening listening) {
+		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
 			theListening = listening;
-			theParent.begin((parentEl, cause) -> {
+			theParent.begin(fromStart, (parentEl, cause) -> {
 				onElement.accept(new RefreshingElement(parentEl), cause);
 			}, listening);
 		}
@@ -3368,8 +3594,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public void begin(ElementAccepter<T> onElement, WeakListening listening) {
-			theParent.begin((parentEl, cause) -> onElement.accept(new ModFilteredElement(parentEl), cause), listening);
+		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
+			theParent.begin(fromStart, (parentEl, cause) -> onElement.accept(new ModFilteredElement(parentEl), cause), listening);
 		}
 
 		private class ModFilteredElement implements DerivedCollectionElement<T> {
@@ -3569,11 +3795,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public void begin(ElementAccepter<T> onElement, WeakListening listening) {
+		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
 			theAccepter = onElement;
 			theListening = listening;
-			theParent.begin((parentEl, cause) -> {
-				theOuterElements.add(new FlattenedHolder(parentEl, listening, cause));
+			theParent.begin(fromStart, (parentEl, cause) -> {
+				theOuterElements.add(new FlattenedHolder(parentEl, listening, cause, fromStart));
 			}, listening);
 		}
 
@@ -3581,12 +3807,14 @@ public class ObservableCollectionDataFlowImpl {
 			private final DerivedCollectionElement<I> theParentEl;
 			private final BetterCollection<FlattenedElement> theElements;
 			private final WeakListening.Builder theChildListening = theListening.child();
+			private final boolean isFromStart;
 			private CollectionDataFlow<?, ?, ? extends T> theFlow;
 			ActiveCollectionManager<?, ?, ? extends T> manager;
 
-			FlattenedHolder(DerivedCollectionElement<I> parentEl, WeakListening listening, Object cause) {
+			FlattenedHolder(DerivedCollectionElement<I> parentEl, WeakListening listening, Object cause, boolean fromStart) {
 				theParentEl = parentEl;
 				theElements = new BetterTreeList<>(false);
+				isFromStart = fromStart;
 				updated(theParentEl.get(), cause);
 				theParentEl.setListener(new CollectionElementListener<I>() {
 					@Override
@@ -3609,7 +3837,7 @@ public class ObservableCollectionDataFlowImpl {
 					clearSubElements(cause);
 					theFlow = newFlow;
 					manager = newFlow.manageActive();
-					manager.begin((childEl, innerCause) -> {
+					manager.begin(isFromStart, (childEl, innerCause) -> {
 						FlattenedElement flatEl = new FlattenedElement(this, childEl, false);
 						theAccepter.accept(flatEl, innerCause);
 					}, theChildListening.getListening());

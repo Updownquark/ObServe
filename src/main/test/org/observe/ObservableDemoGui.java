@@ -138,9 +138,8 @@ public class ObservableDemoGui extends JPanel {
 				ObservableCollection<Integer> values = ObservableCollection.flattenValue(theSelectedCategory.map(cat -> cat.values));
 				theMap = values.flow()
 					.groupBy(TypeToken.of(Long.class), //
-						v -> Long.valueOf(v % 5), //
-						options -> options.useFirst(true))
-					.collect();
+						v -> Long.valueOf(v % 5))
+					.gather(options -> options.useFirst(true));
 			}
 
 			@Override

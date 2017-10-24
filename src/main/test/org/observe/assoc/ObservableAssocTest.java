@@ -25,7 +25,7 @@ import com.google.common.reflect.TypeToken;
 public class ObservableAssocTest {
 	@Test
 	public void testDefaultMultiMap() {
-		ObservableMultiMap<Integer, Integer> map = ObservableMultiMap.create(intType, intType, Equivalence.DEFAULT).collect();
+		ObservableMultiMap<Integer, Integer> map = ObservableMultiMap.create(intType, intType, Equivalence.DEFAULT).gather();
 		ObservableCollectionTester<Integer> keyTester = new ObservableCollectionTester<>(map.keySet());
 		Map<Integer, ObservableCollectionTester<Integer>> valueTesters = new java.util.LinkedHashMap<>();
 		for (int i = 0; i < 10; i++)
@@ -63,7 +63,7 @@ public class ObservableAssocTest {
 	@Test
 	public void testGroupedMultiMap() {
 		ObservableCollection<Integer> list = ObservableCollection.create(intType);
-		ObservableMultiMap<Integer, Integer> map = list.flow().groupBy(intType, v -> v % 9).collect();
+		ObservableMultiMap<Integer, Integer> map = list.flow().groupBy(intType, v -> v % 9).gather();
 
 		ObservableCollectionTester<Integer> keyTester = new ObservableCollectionTester<>(map.keySet());
 		Map<Integer, ObservableCollectionTester<Integer>> valueTesters = new java.util.LinkedHashMap<>();

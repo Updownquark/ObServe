@@ -22,7 +22,6 @@ import org.observe.assoc.ObservableMultiMap;
 import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.collect.Combination.CombinationPrecursor;
 import org.observe.collect.Combination.CombinedFlowDef;
-import org.observe.collect.FlowOptions.GroupingOptions;
 import org.observe.collect.FlowOptions.MapOptions;
 import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
@@ -859,7 +858,12 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		/** @return The type of collection this flow may build */
 		TypeToken<T> getTargetType();
 
+		Equivalence<? super T> equivalence();
+
 		// Flow operations
+
+		/** @return a {@link #supportsPassive() passive} flow consisting of this flow's elements, reversed */
+		CollectionDataFlow<E, T, T> reverse();
 
 		/**
 		 * Filters some elements from the collection by value. The filtering is done dynamically, such that a change to an element may cause
@@ -1058,9 +1062,19 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * @param keyMap The function to produce keys from this flow's values
 		 * @return A multi-map flow that may be used to produce a multi-map of this flow's values, categorized by the given key mapping
 		 */
-		default <K> ObservableMultiMap.MultiMapFlow<E, K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap) {
-			return groupBy(keyType, keyMap, options -> {});
+		default <K> ObservableMultiMap.MultiMapFlow<K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap) {
+			return groupBy(keyType, keyMap, Equivalence.DEFAULT);
 		}
+
+		/**
+		 * @param <K> The key type for the map
+		 * @param keyType The key type for the map
+		 * @param keyMap The function to produce keys from this flow's values
+		 * @param keyEquivalence The equivalence set to be used for the key set's uniqueness
+		 * @return A multi-map flow that may be used to produce a multi-map of this flow's values, categorized by the given key mapping
+		 */
+		<K> ObservableMultiMap.MultiMapFlow<K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap,
+			Equivalence<? super K> keyEquivalence);
 
 		/**
 		 * @param <K> The key type for the map
@@ -1070,32 +1084,8 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * @return A sorted multi-map flow that may be used to produce a sorted multi-map of this flow's values, categorized by the given
 		 *         key mapping
 		 */
-		default <K> ObservableSortedMultiMap.SortedMultiMapFlow<E, K, T> groupBy(TypeToken<K> keyType,
-			Function<? super T, ? extends K> keyMap, Comparator<? super K> keyCompare) {
-			return groupBy(keyType, keyMap, keyCompare, options -> {});
-		}
-
-		/**
-		 * @param <K> The key type for the map
-		 * @param keyType The key type for the map
-		 * @param keyMap The function to produce keys from this flow's values
-		 * @param options Allows some customization of the behavior of the resulting map
-		 * @return A multi-map flow that may be used to produce a multi-map of this flow's values, categorized by the given key mapping
-		 */
-		<K> ObservableMultiMap.MultiMapFlow<E, K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap,
-			Consumer<GroupingOptions> options);
-
-		/**
-		 * @param <K> The key type for the map
-		 * @param keyType The key type for the map
-		 * @param keyMap The function to produce keys from this flow's values
-		 * @param keyCompare The comparator to sort the key values with
-		 * @param options Allows some customization of the behavior of the resulting map
-		 * @return A sorted multi-map flow that may be used to produce a sorted multi-map of this flow's values, categorized by the given
-		 *         key mapping
-		 */
-		<K> ObservableSortedMultiMap.SortedMultiMapFlow<E, K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap,
-			Comparator<? super K> keyCompare, Consumer<GroupingOptions> options);
+		<K> ObservableSortedMultiMap.SortedMultiMapFlow<K, T> groupBy(TypeToken<K> keyType, Function<? super T, ? extends K> keyMap,
+			Comparator<? super K> keyCompare);
 
 		// Terminal operations
 
@@ -1175,6 +1165,9 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @param <T> The type of collection this flow may build
 	 */
 	interface UniqueDataFlow<E, I, T> extends CollectionDataFlow<E, I, T> {
+		@Override
+		UniqueDataFlow<E, T, T> reverse();
+
 		@Override
 		UniqueDataFlow<E, T, T> filter(Function<? super T, String> filter);
 
@@ -1265,6 +1258,9 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 */
 	interface UniqueSortedDataFlow<E, I, T> extends UniqueDataFlow<E, I, T> {
 		Comparator<? super T> comparator();
+
+		@Override
+		UniqueSortedDataFlow<E, T, T> reverse();
 
 		@Override
 		UniqueSortedDataFlow<E, T, T> filter(Function<? super T, String> filter);

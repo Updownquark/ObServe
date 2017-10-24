@@ -125,7 +125,7 @@ public interface Equivalence<E> {
 	 * @param nullable Whether null values are allowed in the set
 	 * @return The comparator-based equivalence
 	 */
-	static <E> Equivalence<E> of(Class<E> type, Comparator<? super E> compare, boolean nullable) {
+	static <E> ComparatorEquivalence<E> of(Class<E> type, Comparator<? super E> compare, boolean nullable) {
 		return new ComparatorEquivalence<>(type, nullable, compare);
 	}
 
@@ -181,6 +181,10 @@ public interface Equivalence<E> {
 		@Override
 		public <E2 extends E, V> BetterMap<E2, V> createMap() {
 			return new BetterTreeMap<>(false, compare);
+		}
+
+		public ComparatorEquivalence<E> reverse() {
+			return new ComparatorEquivalence<>(type, nullable, compare.reversed());
 		}
 	}
 
