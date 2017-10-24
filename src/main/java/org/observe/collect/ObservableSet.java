@@ -6,8 +6,8 @@ import java.util.Iterator;
 
 import org.observe.ObservableValue;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterSet;
 import org.qommons.collect.MutableElementSpliterator;
-import org.qommons.collect.TransactableSet;
 
 import com.google.common.reflect.TypeToken;
 
@@ -16,7 +16,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <E> The type of element in the set
  */
-public interface ObservableSet<E> extends ObservableCollection<E>, TransactableSet<E> {
+public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> {
 	@Override
 	default Iterator<E> iterator() {
 		return ObservableCollection.super.iterator();

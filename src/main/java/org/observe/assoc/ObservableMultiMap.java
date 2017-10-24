@@ -1,12 +1,14 @@
 package org.observe.assoc;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Observable;
+import org.observe.ObservableValue;
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.CollectionSubscription;
@@ -21,8 +23,10 @@ import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedSet;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterMultiMap;
+import org.qommons.collect.ElementId;
+import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MultiMap;
-import org.qommons.collect.TransactableMultiMap;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -33,7 +37,7 @@ import com.google.common.reflect.TypeToken;
  * @param <K> The type of key used by this map
  * @param <V> The type of values stored in this map
  */
-public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
+public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 	/**
 	 * A {@link java.util.Map.Entry} with observable capabilities
 	 *
@@ -156,6 +160,14 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	 */
 	@Override
 	ObservableCollection<V> get(Object key);
+
+	@Override
+	MapEntryHandle<K, ? extends ObservableCollection<V>> getElement(ElementId keyId);
+
+	@Override
+	default MapEntryHandle<K, ? extends ObservableCollection<V>> getElement(K key) {
+		return (MapEntryHandle<K, ? extends ObservableCollection<V>>) BetterMultiMap.super.getElement(key);
+	}
 
 	/**
 	 * @param action The action to perform on changes to this map
@@ -340,11 +352,8 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 				).collect();
 	}
 
-	/**
-	 * @return An observable map with the same key set as this map and whose values are one of the elements in this multi-map for each key
-	 */
-	default ObservableMap<K, V> unique() {
-		return new UniqueMap<>(this);
+	default ObservableMap<K, V> single(Function<ObservableCollection<V>, ObservableValue<V>> value) {
+		return new SingleMap<>(this, value);
 	}
 
 	/**
@@ -388,17 +397,19 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	}
 
 	/**
-	 * Implements {@link ObservableMultiMap#unique()}
+	 * Implements {@link ObservableMultiMap#single(Function)}
 	 *
 	 * @param <K> The key-type of the map
 	 * @param <V> The value-type of the map
 	 */
-	class UniqueMap<K, V> implements ObservableMap<K, V> {
+	class SingleMap<K, V> implements ObservableMap<K, V> {
 		private final ObservableMultiMap<K, V> theOuter;
+		private final Function<ObservableCollection<V>, ObservableValue<V>> theValueMap;
 		private final TypeToken<Map.Entry<K, V>> theEntryType;
 
-		public UniqueMap(ObservableMultiMap<K, V> outer) {
+		public SingleMap(ObservableMultiMap<K, V> outer, Function<ObservableCollection<V>, ObservableValue<V>> valueMap) {
 			theOuter = outer;
+			theValueMap = valueMap;
 			theEntryType = ObservableMap.buildEntryType(getKeyType(), getValueType());
 		}
 
@@ -455,11 +466,26 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
-			return theOuter.onChange(evt -> {
-				switch (evt.getType()) {
-				// TODO
-				}
-			});
+			boolean[] init = new boolean[1];
+			CollectionSubscription sub = subscribe(evt -> {
+				if (init[0])
+					action.accept(evt);
+			}, true);
+			init[0] = true;
+			return sub;
+		}
+
+		@Override
+		public CollectionSubscription subscribe(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action, boolean forward) {
+			Map<K, Subscription> valueSubs = new HashMap<>();
+			try (Transaction t = lock(false, null)) {
+				Subscription outerSub = theOuter.keySet().subscribe(evt -> {
+					switch (evt.getType()) {
+					case add:
+						// ObservableValue<V> value=theValueMap.apply(theOuter.get
+					}
+				}, forward);
+			}
 		}
 
 		@Override
