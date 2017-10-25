@@ -3,6 +3,7 @@ package org.observe.assoc;
 import java.util.Comparator;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.NoSuchElementException;
 import java.util.function.Consumer;
 
 import org.observe.Subscription;
@@ -12,7 +13,10 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedSet;
 import org.qommons.Transaction;
+import org.qommons.collect.ElementId;
+import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.collect.MutableMapEntryHandle;
 import org.qommons.collect.SimpleMapEntry;
 
 import com.google.common.reflect.TypeToken;
@@ -163,21 +167,23 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, Navigabl
 			}
 
 			@Override
-			public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
-				try (Transaction t = lock(false, null)) {
-					int[] size = new int[] { size() };
-					return outer.onChange(evt -> {
-						if (evt.getType() == CollectionChangeType.add)
-							size[0]++;
-						int index = size[0] - evt.getIndex() - 1;
-						if (evt.getType() == CollectionChangeType.remove)
-							size[0]--;
-						ObservableMapEvent.doWith(
-							new ObservableMapEvent<>(evt.getKeyElement().reverse(), evt.getElementId().reverse(), outer.getKeyType(),
-								outer.getValueType(), index, index, evt.getType(), evt.getKey(), evt.getOldValue(), evt.getNewValue(), evt),
-							action);
-					});
-				}
+			public MapEntryHandle<K, V> putEntry(K key, V value) {
+				return MapEntryHandle.reverse(outer.putEntry(key, value));
+			}
+
+			@Override
+			public MapEntryHandle<K, V> getEntry(K key) {
+				return MapEntryHandle.reverse(outer.getEntry(key));
+			}
+
+			@Override
+			public MapEntryHandle<K, V> getEntry(ElementId entryId) {
+				return MapEntryHandle.reverse(outer.getEntry(entryId.reverse()));
+			}
+
+			@Override
+			public MutableMapEntryHandle<K, V> mutableEntry(ElementId entryId) {
+				return MutableMapEntryHandle.reverse(outer.mutableEntry(entryId.reverse()));
 			}
 
 			@Override
@@ -198,6 +204,24 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, Navigabl
 			@Override
 			public void clear() {
 				outer.clear();
+			}
+
+			@Override
+			public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
+				try (Transaction t = lock(false, null)) {
+					int[] size = new int[] { size() };
+					return outer.onChange(evt -> {
+						if (evt.getType() == CollectionChangeType.add)
+							size[0]++;
+						int index = size[0] - evt.getIndex() - 1;
+						if (evt.getType() == CollectionChangeType.remove)
+							size[0]--;
+						ObservableMapEvent.doWith(
+							new ObservableMapEvent<>(evt.getKeyElement().reverse(), evt.getElementId().reverse(), outer.getKeyType(),
+								outer.getValueType(), index, index, evt.getType(), evt.getKey(), evt.getOldValue(), evt.getNewValue(), evt),
+							action);
+					});
+				}
 			}
 
 			@Override
@@ -334,10 +358,33 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, Navigabl
 		}
 
 		@Override
-		public V put(K key, V value) {
+		public MapEntryHandle<K, V> putEntry(K key, V value) {
 			if (!keySet().belongs(key))
 				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
-			return theOuter.put(key, value);
+			return theOuter.putEntry(key, value);
+		}
+
+		@Override
+		public MapEntryHandle<K, V> getEntry(K key) {
+			if (!keySet().belongs(key))
+				return null;
+			return theOuter.getEntry(key);
+		}
+
+		@Override
+		public MapEntryHandle<K, V> getEntry(ElementId entryId) {
+			MapEntryHandle<K, V> entry = theOuter.getEntry(entryId);
+			if (!keySet().belongs(entry.getKey()))
+				throw new NoSuchElementException();
+			return entry;
+		}
+
+		@Override
+		public MutableMapEntryHandle<K, V> mutableEntry(ElementId entryId) {
+			MutableMapEntryHandle<K, V> entry = theOuter.mutableEntry(entryId);
+			if (!keySet().belongs(entry.getKey()))
+				throw new NoSuchElementException();
+			return entry;
 		}
 
 		@Override

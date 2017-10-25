@@ -1,6 +1,7 @@
 package org.observe.assoc;
 
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -18,12 +19,15 @@ import org.observe.collect.ObservableCollection.SubscriptionCause;
 import org.observe.collect.ObservableSet;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterMap;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
+import org.qommons.collect.MapEntryHandle;
+import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.collect.MutableMapEntryHandle;
 import org.qommons.collect.SimpleMapEntry;
-import org.qommons.collect.TransactableMap;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -34,7 +38,7 @@ import com.google.common.reflect.TypeToken;
  * @param <K> The type of keys this map uses
  * @param <V> The type of values this map stores
  */
-public interface ObservableMap<K, V> extends TransactableMap<K, V> {
+public interface ObservableMap<K, V> extends BetterMap<K, V> {
 	/** @return The type of keys this map uses */
 	TypeToken<K> getKeyType();
 
@@ -369,16 +373,113 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 			}
 
 			@Override
-			public V put(K key, V value) {
-				try (Transaction t = entrySet.lock(true, true, null)) {
+			public MapEntryHandle<K, V> getEntry(K key) {
+				CollectionElement<Map.Entry<K, V>> entryEl = entrySet.getElement(new SimpleMapEntry<>(key, null), true);
+				return entryEl == null ? null : handleFor(entryEl);
+			}
+
+			@Override
+			public MapEntryHandle<K, V> getEntry(ElementId entryId) {
+				CollectionElement<Map.Entry<K, V>> entryEl = entrySet.getElement(entryId);
+				return entryEl == null ? null : handleFor(entryEl);
+			}
+
+			@Override
+			public MapEntryHandle<K, V> putEntry(K key, V value) {
+				try (Transaction t = lock(true, true, null)) {
 					CollectionElement<Map.Entry<K, V>> entryEl = entrySet.getElement(new SimpleMapEntry<>(key, null), true);
-					if (entryEl != null)
-						return entryEl.get().setValue(value);
+					if (entryEl != null) {
+						entryEl.get().setValue(value);
+						return handleFor(entryEl);
+					}
 					MapEntry newEntry = new MapEntry(key, value);
 					entryEl = entrySet.addElement(newEntry, false);
 					newEntry.theElementId = entryEl.getElementId();
-					return null;
+					return handleFor(entryEl);
 				}
+			}
+
+			@Override
+			public MutableMapEntryHandle<K, V> mutableEntry(ElementId entryId) {
+				MutableCollectionElement<Map.Entry<K, V>> entryEl = entrySet.mutableElement(entryId);
+				return entryEl == null ? null : mutableHandleFor(entryEl);
+			}
+
+			private MapEntryHandle<K, V> handleFor(CollectionElement<Map.Entry<K, V>> entryEl) {
+				return new MapEntryHandle<K, V>() {
+					@Override
+					public ElementId getElementId() {
+						return entryEl.getElementId();
+					}
+
+					@Override
+					public V get() {
+						return entryEl.get().getValue();
+					}
+
+					@Override
+					public K getKey() {
+						return entryEl.get().getKey();
+					}
+				};
+			}
+
+			private MutableMapEntryHandle<K, V> mutableHandleFor(MutableCollectionElement<Map.Entry<K, V>> entryEl) {
+				return new MutableMapEntryHandle<K, V>() {
+					@Override
+					public K getKey() {
+						return entryEl.get().getKey();
+					}
+
+					@Override
+					public ElementId getElementId() {
+						return entryEl.getElementId();
+					}
+
+					@Override
+					public V get() {
+						return entryEl.get().getValue();
+					}
+
+					@Override
+					public String isEnabled() {
+						return null;
+					}
+
+					@Override
+					public String isAcceptable(V value) {
+						if (value != null && !valueType.getRawType().isInstance(value))
+							return StdMsg.BAD_TYPE;
+						return null;
+					}
+
+					@Override
+					public void set(V value) throws UnsupportedOperationException, IllegalArgumentException {
+						if (value != null && !valueType.getRawType().isInstance(value))
+							throw new IllegalArgumentException(StdMsg.BAD_TYPE);
+						entryEl.get().setValue(value);
+					}
+
+					@Override
+					public String canRemove() {
+						return entryEl.canRemove();
+					}
+
+					@Override
+					public void remove() throws UnsupportedOperationException {
+						entryEl.remove();
+					}
+
+					@Override
+					public String canAdd(V value, boolean before) {
+						return StdMsg.UNSUPPORTED_OPERATION;
+					}
+
+					@Override
+					public ElementId add(V value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
+						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+					}
+				};
 			}
 
 			@Override
@@ -386,10 +487,10 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 				Subscription entrySub = entrySet.onChange(evt -> {
 					V oldValue = evt.getType() == CollectionChangeType.add ? null : evt.getNewValue().getValue();
 					ObservableMapEvent
-						.doWith(
-							new ObservableMapEvent<>(evt.getElementId(), evt.getElementId(), keyType, valueType, evt.getIndex(),
-								evt.getIndex(), evt.getType(), evt.getNewValue().getKey(), oldValue, evt.getNewValue().getValue(), evt),
-							action);
+					.doWith(
+						new ObservableMapEvent<>(evt.getElementId(), evt.getElementId(), keyType, valueType, evt.getIndex(),
+							evt.getIndex(), evt.getType(), evt.getNewValue().getKey(), oldValue, evt.getNewValue().getValue(), evt),
+						action);
 				});
 				Runnable valueSet = valueListeners.add(action, false);
 				return () -> {
@@ -452,8 +553,23 @@ public interface ObservableMap<K, V> extends TransactableMap<K, V> {
 			}
 
 			@Override
-			public V put(K key, V value) {
+			public MapEntryHandle<K, V> putEntry(K key, V value) {
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			}
+
+			@Override
+			public MapEntryHandle<K, V> getEntry(K key) {
+				return null;
+			}
+
+			@Override
+			public MapEntryHandle<K, V> getEntry(ElementId entryId) {
+				throw new NoSuchElementException();
+			}
+
+			@Override
+			public MutableMapEntryHandle<K, V> mutableEntry(ElementId entryId) {
+				throw new NoSuchElementException();
 			}
 
 			@Override
