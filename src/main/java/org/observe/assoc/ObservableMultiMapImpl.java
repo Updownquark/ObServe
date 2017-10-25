@@ -3,6 +3,7 @@ package org.observe.assoc;
 import java.util.Comparator;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -29,6 +30,7 @@ import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.DerivedCollectionElement;
+import org.observe.collect.ObservableCollectionDataFlowImpl.ElementAccepter;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableSet;
@@ -36,6 +38,7 @@ import org.observe.collect.ObservableSetImpl;
 import org.observe.collect.ObservableSetImpl.UniqueManager;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.collect.ObservableSortedSetImpl;
+import org.observe.util.WeakListening;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedSet;
@@ -43,6 +46,7 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MapEntryHandle;
+import org.qommons.collect.MultiMapEntryHandle;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.MutableElementSpliterator;
@@ -132,8 +136,7 @@ public class ObservableMultiMapImpl {
 
 		@Override
 		public ObservableMultiMap<K, V> gather(Observable<?> until, Consumer<FlowOptions.GroupingOptions> options) {
-			FlowOptions.GroupingOptions gOptions = new FlowOptions.GroupingOptions(
-				theKeyEquivalence instanceof ComparatorEquivalence);
+			FlowOptions.GroupingOptions gOptions = new FlowOptions.GroupingOptions(theKeyEquivalence instanceof ComparatorEquivalence);
 			options.accept(gOptions);
 			TypeToken<Map.Entry<K, V>> entryType = theEntryFlow.getTargetType();
 			TypeToken<K> keyType = (TypeToken<K>) entryType.resolveType(Map.Entry.class.getTypeParameters()[0]);
@@ -277,11 +280,11 @@ public class ObservableMultiMapImpl {
 
 		@Override
 		public UniqueDataFlow<E, K, K> filterMod(Consumer<ModFilterBuilder<K>> options) {
-			ModFilterBuilder<K> keyOptions=new ModFilterBuilder<>();
+			ModFilterBuilder<K> keyOptions = new ModFilterBuilder<>();
 			options.accept(keyOptions);
 			if (keyOptions.getImmutableMsg() != null)
 				throw new UnsupportedOperationException("Key set immutability is not supported");
-			CollectionDataFlow<?, Map.Entry<K, V>, Map.Entry<K, V>> modFilteredEntries=theEntryFlow.filterMod(entryOptions->{
+			CollectionDataFlow<?, Map.Entry<K, V>, Map.Entry<K, V>> modFilteredEntries = theEntryFlow.filterMod(entryOptions -> {
 				if (keyOptions.getAddMsg() != null)
 					entryOptions.noAdd(keyOptions.getAddMsg());
 				Function<? super K, String> addMsgFn = keyOptions.getAddMsgFn();
@@ -298,7 +301,7 @@ public class ObservableMultiMapImpl {
 
 		@Override
 		public CollectionDataFlow<E, K, K> withEquivalence(Equivalence<? super K> equivalence) {
-			throw new UnsupportedOperationException("Only equivalent unique operations are permitted");
+			// throw new UnsupportedOperationException("Only equivalent unique operations are permitted");
 		}
 
 		@Override
@@ -375,8 +378,7 @@ public class ObservableMultiMapImpl {
 	static class SortedKeyFlow<E, I, K, V> extends KeyFlow<E, I, K, V> implements UniqueSortedDataFlow<E, I, K> {
 		private final Comparator<? super K> theKeyCompare;
 
-		SortedKeyFlow(CollectionDataFlow<?, ?, Entry<K, V>> entryFlow, TypeToken<K> keyType,
-			ComparatorEquivalence<? super K> keyCompare) {
+		SortedKeyFlow(CollectionDataFlow<?, ?, Entry<K, V>> entryFlow, TypeToken<K> keyType, ComparatorEquivalence<? super K> keyCompare) {
 			super(entryFlow, keyType, keyCompare);
 			theKeyCompare = keyCompare.comparator();
 		}
@@ -451,8 +453,7 @@ public class ObservableMultiMapImpl {
 		private final TypeToken<V> theValueType;
 		private final Equivalence<? super V> theValueEquivalence;
 
-		ValueFlow(CollectionDataFlow<?, ?, Entry<K, V>> entryFlow, TypeToken<V> valueType,
-			Equivalence<? super V> valueEquivalence) {
+		ValueFlow(CollectionDataFlow<?, ?, Entry<K, V>> entryFlow, TypeToken<V> valueType, Equivalence<? super V> valueEquivalence) {
 			theEntryFlow = entryFlow;
 			theValueType = valueType;
 			theValueEquivalence = valueEquivalence;
@@ -721,6 +722,9 @@ public class ObservableMultiMapImpl {
 		private final TypeToken<K> theKeyType;
 		private final TypeToken<V> theValueType;
 		private final Consumer<ObservableMapEvent<K, V>> theEventListener;
+		private final AtomicLong theStructuralStamp;
+		private final AtomicLong theChangeStamp;
+		private boolean isBegun;
 
 		private BetterList<K> theAssembledKeys;
 
@@ -733,6 +737,8 @@ public class ObservableMultiMapImpl {
 			theKeyType = keyType;
 			theValueType = valueType;
 			theEventListener = listener;
+			theStructuralStamp = new AtomicLong();
+			theChangeStamp = new AtomicLong();
 		}
 
 		void setAssembledKeys(BetterList<K> assembledKeys) {
@@ -743,9 +749,18 @@ public class ObservableMultiMapImpl {
 			return theParent;
 		}
 
+		long getStamp(boolean structural) {
+			return (structural ? theStructuralStamp : theChangeStamp).get();
+		}
+
 		@Override
-		protected CollectionElement<UniqueManager<E, Entry<K, V>>.UniqueElement> getElement(Entry<K, V> value) {
+		protected MapEntryHandle<Map.Entry<K, V>, UniqueManager<E, Entry<K, V>>.UniqueElement> getElement(Entry<K, V> value) {
 			return super.getElement(value);
+		}
+
+		@Override
+		protected MapEntryHandle<Map.Entry<K, V>, UniqueManager<E, Entry<K, V>>.UniqueElement> getElement(ElementId valueId) {
+			return super.getElement(valueId);
 		}
 
 		@Override
@@ -753,15 +768,31 @@ public class ObservableMultiMapImpl {
 			return new GroupedElement(value);
 		}
 
+		@Override
+		public void begin(boolean fromStart, ElementAccepter<Entry<K, V>> onElement, WeakListening listening) {
+			super.begin(fromStart, onElement, listening);
+			isBegun = true;
+		}
+
 		protected class GroupedElement extends UniqueElement {
 			private ElementId theKeyId;
+			private final ListenerList<Consumer<ObservableCollectionEvent<V>>> theListeners;
 
 			protected GroupedElement(Map.Entry<K, V> key) {
 				super(key);
+				theListeners = new ListenerList<>("Illegal listener state");
+			}
+
+			protected ElementId getKeyId() {
+				return theKeyId;
 			}
 
 			protected void setKeyId(ElementId keyId) {
 				theKeyId = keyId;
+			}
+
+			Runnable onChange(Consumer<ObservableCollectionEvent<V>> listener) {
+				return theListeners.add(listener, true);
 			}
 
 			@Override
@@ -773,10 +804,14 @@ public class ObservableMultiMapImpl {
 			protected CollectionElement<DerivedCollectionElement<Map.Entry<K, V>>> addParent(
 				DerivedCollectionElement<Map.Entry<K, V>> parentEl, Object cause) {
 				CollectionElement<DerivedCollectionElement<Map.Entry<K, V>>> node = super.addParent(parentEl, cause);
+				if (isBegun) {
+					theStructuralStamp.incrementAndGet();
+					theChangeStamp.incrementAndGet();
+				}
 				if (theKeyId != null) {
 					int keyIndex = theAssembledKeys.getElementsBefore(theKeyId);
 					int valueIndex = getParentElements().getElementsBefore(node.getElementId());
-					theEventListener.accept(new ObservableMapEvent<>(theKeyId, node.getElementId(), theKeyType, theValueType, //
+					fireEvent(new ObservableMapEvent<>(theKeyId, node.getElementId(), theKeyType, theValueType, //
 						keyIndex, valueIndex, CollectionChangeType.add, parentEl.get().getKey(), null, parentEl.get().getValue(), cause));
 				}
 				return node;
@@ -786,10 +821,12 @@ public class ObservableMultiMapImpl {
 			protected void parentUpdated(CollectionElement<DerivedCollectionElement<Map.Entry<K, V>>> parentEl, Map.Entry<K, V> oldValue,
 				Map.Entry<K, V> newValue, Object cause) {
 				super.parentUpdated(parentEl, oldValue, newValue, cause);
+				if (isBegun)
+					theChangeStamp.incrementAndGet();
 				int keyIndex = theAssembledKeys.getElementsBefore(theKeyId);
 				int valueIndex = getParentElements().getElementsBefore(parentEl.getElementId());
 				DerivedCollectionElement<Map.Entry<K, V>> active = getActiveElement();
-				theEventListener.accept(new ObservableMapEvent<>(theKeyId, parentEl.getElementId(), theKeyType, theValueType, //
+				fireEvent(new ObservableMapEvent<>(theKeyId, parentEl.getElementId(), theKeyType, theValueType, //
 					keyIndex, valueIndex, CollectionChangeType.set, active.get().getKey(), oldValue.getValue(), newValue.getValue(),
 					cause));
 			}
@@ -798,23 +835,32 @@ public class ObservableMultiMapImpl {
 			protected void parentRemoved(CollectionElement<DerivedCollectionElement<Map.Entry<K, V>>> parentEl, Map.Entry<K, V> value,
 				Object cause) {
 				super.parentRemoved(parentEl, value, cause);
+				if (isBegun) {
+					theStructuralStamp.incrementAndGet();
+					theChangeStamp.incrementAndGet();
+				}
 				int keyIndex = theAssembledKeys.getElementsBefore(theKeyId);
 				int valueIndex = getParentElements().getElementsBefore(parentEl.getElementId());
 				DerivedCollectionElement<Map.Entry<K, V>> active = getActiveElement();
-				theEventListener.accept(new ObservableMapEvent<>(theKeyId, parentEl.getElementId(), theKeyType, theValueType, //
+				fireEvent(new ObservableMapEvent<>(theKeyId, parentEl.getElementId(), theKeyType, theValueType, //
 					keyIndex, valueIndex, CollectionChangeType.remove, active.get().getKey(), value.getValue(), value.getValue(), cause));
+			}
+
+			private void fireEvent(ObservableMapEvent<K, V> event) {
+				theEventListener.accept(event);
+				theListeners.forEach(listener -> listener.accept(event));
 			}
 		}
 	}
 
 	static class DerivedObservableMultiMap<K, V> implements ObservableMultiMap<K, V> {
-		private final CollectionDataFlow<?, ?, Map.Entry<K, V>> theEntryFlow;
+		protected final CollectionDataFlow<?, ?, Map.Entry<K, V>> theEntryFlow;
 		private final TypeToken<K> theKeyType;
 		private final TypeToken<V> theValueType;
 		private TypeToken<ObservableMultiEntry<K, V>> theEntryType;
-		private final Equivalence<? super K> theKeyEquivalence;
-		private final Equivalence<? super V> theValueEquivalence;
-		private final boolean uniqueValues;
+		protected final Equivalence<? super K> theKeyEquivalence;
+		protected final Equivalence<? super V> theValueEquivalence;
+		protected final boolean uniqueValues;
 		private final ActiveCollectionManager<?, ?, Entry<K, V>> theEntries;
 
 		private final ListenerList<Consumer<? super ObservableMapEvent<? extends K, ? extends V>>> theEventListeners;
@@ -825,12 +871,12 @@ public class ObservableMultiMapImpl {
 			TypeToken<K> keyType, TypeToken<V> valueType, //
 			Equivalence<? super K> keyEquivalence, Equivalence<? super V> valueEquivalence, boolean uniqueValues, //
 			FlowOptions.GroupingDef options, Observable<?> until) {
-			theEntryFlow=entryFlow;
+			theEntryFlow = entryFlow;
 			theKeyType = keyType;
 			theValueType = valueType;
 			theKeyEquivalence = keyEquivalence;
 			theValueEquivalence = valueEquivalence;
-			this.uniqueValues=uniqueValues;
+			this.uniqueValues = uniqueValues;
 
 			theEventListeners = new ListenerList<>(null);
 			Predicate<Map.Entry<K, ?>> entryFilter = entry -> {
@@ -856,7 +902,17 @@ public class ObservableMultiMapImpl {
 				theKeySet = new ObservableSortedSetImpl.ActiveDerivedSortedSet<K>(keyFlow, keySorting, until) {
 					@Override
 					protected DerivedElementHolder<K> createHolder(DerivedCollectionElement<K> el) {
-						DerivedElementHolder<K> holder = super.createHolder(el);
+						class GroupedElementHolder extends DerivedElementHolder<K> implements GroupedElementId<K, V> {
+							protected GroupedElementHolder(DerivedCollectionElement<K> manager) {
+								super(manager);
+							}
+
+							@Override
+							public GroupingManager<?, K, V>.GroupedElement getGroupedElement() {
+								return (GroupingManager<?, K, V>.GroupedElement) element;
+							}
+						}
+						DerivedElementHolder<K> holder = new GroupedElementHolder(el);
 						((GroupingManager<?, K, V>.GroupedElement) el).setKeyId(holder);
 						return holder;
 					}
@@ -865,7 +921,17 @@ public class ObservableMultiMapImpl {
 				theKeySet = new ObservableSetImpl.ActiveDerivedSet<K>(keyFlow, until) {
 					@Override
 					protected DerivedElementHolder<K> createHolder(DerivedCollectionElement<K> el) {
-						DerivedElementHolder<K> holder = super.createHolder(el);
+						class GroupedElementHolder extends DerivedElementHolder<K> implements GroupedElementId<K, V> {
+							protected GroupedElementHolder(DerivedCollectionElement<K> manager) {
+								super(manager);
+							}
+
+							@Override
+							public GroupingManager<?, K, V>.GroupedElement getGroupedElement() {
+								return (GroupingManager<?, K, V>.GroupedElement) element;
+							}
+						}
+						DerivedElementHolder<K> holder = new GroupedElementHolder(el);
 						((GroupingManager<?, K, V>.GroupedElement) el).setKeyId(holder);
 						return holder;
 					}
@@ -903,12 +969,60 @@ public class ObservableMultiMapImpl {
 
 		@Override
 		public long getStamp(boolean structuralOnly) {
-			// TODO Auto-generated method stub
+			return theGrouping.getStamp(structuralOnly);
 		}
 
 		@Override
-		public MapEntryHandle<K, ? extends ObservableCollection<V>> getElement(ElementId keyId) {
-			// TODO Auto-generated method stub
+		public MapEntryHandle<K, ? extends ObservableCollection<V>> getEntry(ElementId keyId) {
+			Values values = new Values(keyId);
+			return new MapEntryHandle<K, ObservableCollection<V>>() {
+				@Override
+				public ElementId getElementId() {
+					return keyId;
+				}
+
+				@Override
+				public K getKey() {
+					return values.getKey();
+				}
+
+				@Override
+				public ObservableCollection<V> get() {
+					return values;
+				}
+			};
+		}
+
+		@Override
+		public MultiMapEntryHandle<K, V> putEntry(K key, V value, boolean first) {
+			Values values = new Values(key);
+			try (Transaction t = lock(true, true, null)) {
+				CollectionElement<V> valueEl = values.addElement(value, first);
+				if (valueEl == null)
+					return null;
+				ElementId keyId = values.getKeyId();
+				return new MultiMapEntryHandle<K, V>() {
+					@Override
+					public ElementId getKeyId() {
+						return keyId;
+					}
+
+					@Override
+					public K getKey() {
+						return values.getKey();
+					}
+
+					@Override
+					public ElementId getElementId() {
+						return valueEl.getElementId();
+					}
+
+					@Override
+					public V get() {
+						return valueEl.get();
+					}
+				};
+			}
 		}
 
 		@Override
@@ -935,23 +1049,43 @@ public class ObservableMultiMapImpl {
 			return theEventListeners.add(action, true)::run;
 		}
 
+		private interface GroupedElementId<K, V> extends ElementId {
+			GroupingManager<?, K, V>.GroupedElement getGroupedElement();
+		}
+
 		private class Values implements ObservableCollection<V> {
 			private final K theKey;
-			private CollectionElement<GroupingManager<?, K, V>.GroupedElement> theElement;
+			private MapEntryHandle<Map.Entry<K, V>, GroupingManager<?, K, V>.GroupedElement> theElement;
 
-			public Values(K key) {
+			Values(K key) {
 				theKey = key;
 			}
 
-			protected BetterSortedSet<DerivedCollectionElement<Map.Entry<K, V>>> getValues(boolean retry) {
-				if (retry && (theElement == null || !theElement.getElementId().isPresent())) {
-					CollectionElement<?> uniqueEl = theGrouping.getElement(new SimpleMapEntry<>(theKey, null));
-					theElement = (CollectionElement<GroupingManager<?, K, V>.GroupedElement>) uniqueEl;
-				}
+			Values(ElementId element) {
+				theElement = grouped(theGrouping.getElement(element));
+				theKey = theElement.getKey().getKey();
+			}
+
+			ElementId getKeyId() {
+				GroupingManager<?, K, V>.GroupedElement group = getGroup(true);
+				return group == null ? null : group.getKeyId();
+			}
+
+			private MapEntryHandle<Entry<K, V>, GroupingManager<?, K, V>.GroupedElement> grouped(MapEntryHandle<Entry<K, V>, ?> element) {
+				return (MapEntryHandle<Entry<K, V>, GroupingManager<?, K, V>.GroupedElement>) element;
+			}
+
+			protected GroupingManager<?, K, V>.GroupedElement getGroup(boolean retry) {
+				if (retry && (theElement == null || !theElement.getElementId().isPresent()))
+					theElement = grouped(theGrouping.getElement(new SimpleMapEntry<>(theKey, null)));
 				if (theElement == null)
 					return null;
 				else
-					return theElement.get().getParentElements();
+					return theElement.get();
+			}
+
+			K getKey() {
+				return theKey;
 			}
 
 			@Override
@@ -982,44 +1116,44 @@ public class ObservableMultiMapImpl {
 			@Override
 			public int size() {
 				try (Transaction t = lock(false, false, null)) {
-					BetterSortedSet<DerivedCollectionElement<Map.Entry<K, V>>> values = getValues(true);
-					if (values == null)
+					GroupingManager<?, K, V>.GroupedElement group = getGroup(true);
+					if (group == null)
 						return 0;
 					else
-						return values.size();
+						return group.getParentElements().size();
 				}
 			}
 
 			@Override
 			public boolean isEmpty() {
 				try (Transaction t = lock(false, false, null)) {
-					BetterSortedSet<DerivedCollectionElement<Map.Entry<K, V>>> values = getValues(true);
-					if (values == null)
+					GroupingManager<?, K, V>.GroupedElement group = getGroup(true);
+					if (group == null)
 						return true;
 					else
-						return values.isEmpty();
+						return group.getParentElements().isEmpty();
 				}
 			}
 
 			@Override
 			public int getElementsBefore(ElementId id) {
 				try (Transaction t = lock(false, false, null)) {
-					BetterSortedSet<DerivedCollectionElement<Map.Entry<K, V>>> values = getValues(false);
-					if (values == null)
+					GroupingManager<?, K, V>.GroupedElement group = getGroup(true);
+					if (group == null)
 						throw new IllegalArgumentException("No such element");
 					else
-						return values.getElementsBefore(id);
+						return group.getParentElements().getElementsBefore(id);
 				}
 			}
 
 			@Override
 			public int getElementsAfter(ElementId id) {
 				try (Transaction t = lock(false, false, null)) {
-					BetterSortedSet<DerivedCollectionElement<Map.Entry<K, V>>> values = getValues(false);
-					if (values == null)
+					GroupingManager<?, K, V>.GroupedElement group = getGroup(true);
+					if (group == null)
 						throw new IllegalArgumentException("No such element");
 					else
-						return values.getElementsAfter(id);
+						return group.getParentElements().getElementsAfter(id);
 				}
 			}
 
@@ -1031,16 +1165,17 @@ public class ObservableMultiMapImpl {
 			@Override
 			public CollectionElement<V> getElement(V value, boolean first) {
 				try (Transaction t = lock(false, false, null)) {
-					BetterSortedSet<DerivedCollectionElement<Map.Entry<K, V>>> values = getValues(true);
-					if (values == null)
+					GroupingManager<?, K, V>.GroupedElement group = getGroup(true);
+					if (group == null)
 						return null;
 					Comparable<DerivedCollectionElement<Map.Entry<K, V>>> finder = theEntries
 						.getElementFinder(new SimpleMapEntry<>(theKey, value));
 					if (finder != null) {
-						return elementFor(values.search(finder, BetterSortedSet.SortedSearchFilter.OnlyMatch));
+						return elementFor(group.getParentElements().search(finder, BetterSortedSet.SortedSearchFilter.OnlyMatch));
 					} else {
 						ElementId[] id = new ElementId[1];
-						MutableElementSpliterator<DerivedCollectionElement<Map.Entry<K, V>>> spliter = values.spliterator(first);
+						MutableElementSpliterator<DerivedCollectionElement<Map.Entry<K, V>>> spliter = group.getParentElements()
+							.spliterator(first);
 						while (id[0] == null && spliter.forElement(el -> {
 							if (theValueEquivalence.elementEquals(el.get().get().getValue(), value))
 								id[0] = el.getElementId();
@@ -1048,7 +1183,7 @@ public class ObservableMultiMapImpl {
 						if (id[0] == null)
 							return null;
 						else
-							return elementFor(values.getElement(id[0]));
+							return elementFor(group.getParentElements().getElement(id[0]));
 					}
 				}
 			}
@@ -1056,33 +1191,33 @@ public class ObservableMultiMapImpl {
 			@Override
 			public CollectionElement<V> getElement(int index) {
 				try (Transaction t = lock(false, false, null)) {
-					BetterSortedSet<DerivedCollectionElement<Map.Entry<K, V>>> values = getValues(true);
-					if (values == null)
+					GroupingManager<?, K, V>.GroupedElement group = getGroup(true);
+					if (group == null)
 						return null;
 					else
-						return elementFor(values.getElement(index));
+						return elementFor(group.getParentElements().getElement(index));
 				}
 			}
 
 			@Override
 			public CollectionElement<V> getElement(ElementId id) {
 				try (Transaction t = lock(false, false, null)) {
-					BetterSortedSet<DerivedCollectionElement<Map.Entry<K, V>>> values = getValues(true);
-					if (values == null)
+					GroupingManager<?, K, V>.GroupedElement group = getGroup(true);
+					if (group == null)
 						throw new IllegalArgumentException("No such element");
 					else
-						return elementFor(values.getElement(id));
+						return elementFor(group.getParentElements().getElement(id));
 				}
 			}
 
 			@Override
 			public MutableCollectionElement<V> mutableElement(ElementId id) {
 				try (Transaction t = lock(false, false, null)) {
-					BetterSortedSet<DerivedCollectionElement<Map.Entry<K, V>>> values = getValues(true);
-					if (values == null)
+					GroupingManager<?, K, V>.GroupedElement group = getGroup(true);
+					if (group == null)
 						throw new IllegalArgumentException("No such element");
 					else
-						return mutableElementFor(values.getElement(id));
+						return mutableElementFor(group.getParentElements().getElement(id));
 				}
 			}
 
@@ -1152,10 +1287,11 @@ public class ObservableMultiMapImpl {
 							DerivedCollectionElement<Map.Entry<K, V>> el = entryEl.get().add(new SimpleMapEntry<>(theKey, value), before);
 							if (el == null)
 								return null;
-							BetterSortedSet<DerivedCollectionElement<Map.Entry<K, V>>> values = getValues(true);
-							if (values == null)
+							GroupingManager<?, K, V>.GroupedElement group = getGroup(true);
+							if (group == null)
 								throw new IllegalStateException("No element added");
-							CollectionElement<DerivedCollectionElement<Map.Entry<K, V>>> entryEl2 = values.getElement(el, true);
+							CollectionElement<DerivedCollectionElement<Map.Entry<K, V>>> entryEl2 = group.getParentElements().getElement(el,
+								true);
 							return entryEl2 == null ? null : entryEl2.getElementId();
 						}
 					}
@@ -1173,10 +1309,10 @@ public class ObservableMultiMapImpl {
 					DerivedCollectionElement<Map.Entry<K, V>> el = theEntries.addElement(new SimpleMapEntry<>(theKey, value), first);
 					if (el == null)
 						return null;
-					BetterSortedSet<DerivedCollectionElement<Map.Entry<K, V>>> values = getValues(true);
-					if (values == null)
+					GroupingManager<?, K, V>.GroupedElement group = getGroup(true);
+					if (group == null)
 						throw new IllegalStateException("No element added");
-					CollectionElement<DerivedCollectionElement<Map.Entry<K, V>>> entryEl = values.getElement(el, first);
+					CollectionElement<DerivedCollectionElement<Map.Entry<K, V>>> entryEl = group.getParentElements().getElement(el, first);
 					return elementFor(entryEl);
 				}
 			}
@@ -1192,22 +1328,22 @@ public class ObservableMultiMapImpl {
 			@Override
 			public MutableElementSpliterator<V> spliterator(boolean fromStart) {
 				try (Transaction t = lock(false, false, null)) {
-					BetterSortedSet<DerivedCollectionElement<Map.Entry<K, V>>> values = getValues(true);
-					if (values == null)
+					GroupingManager<?, K, V>.GroupedElement group = getGroup(true);
+					if (group == null)
 						return MutableElementSpliterator.empty();
 					else
-						return spliteratorFor(values.spliterator(fromStart));
+						return spliteratorFor(group.getParentElements().spliterator(fromStart));
 				}
 			}
 
 			@Override
 			public MutableElementSpliterator<V> spliterator(ElementId element, boolean asNext) {
 				try (Transaction t = lock(false, false, null)) {
-					BetterSortedSet<DerivedCollectionElement<Map.Entry<K, V>>> values = getValues(true);
-					if (values == null)
+					GroupingManager<?, K, V>.GroupedElement group = getGroup(true);
+					if (group == null)
 						return MutableElementSpliterator.empty();
 					else
-						return spliteratorFor(values.spliterator(element, asNext));
+						return spliteratorFor(group.getParentElements().spliterator(element, asNext));
 				}
 			}
 
@@ -1259,10 +1395,35 @@ public class ObservableMultiMapImpl {
 
 			@Override
 			public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends V>> observer) {
+				// When values exist for the key, subscribe to the grouped element. Otherwise, listen to the map.
+				// Could just always listen to the map, but doing it this way is better for performance, because the listener list for the
+				// map doesn't get clogged with listeners for each key
+				GroupingManager<?, K, V>.GroupedElement group = getGroup(true);
+				Subscription[] sub = new Subscription[1];
+				if (group == null) {
+					sub[0] = subscribeGroup(sub, theElement, observer);
+				} else
+					sub[0] = subscribeMap(sub, observer);
+				return Subscription.forAll(sub);
+			}
+
+			private Subscription subscribeGroup(Subscription[] sub, CollectionElement<GroupingManager<?, K, V>.GroupedElement> group,
+				Consumer<? super ObservableCollectionEvent<? extends V>> observer) {
+				return group.get().onChange(evt -> {
+					observer.accept(evt);
+					if (!group.getElementId().isPresent())
+						sub[0] = subscribeMap(sub, observer);
+				})::run;
+			}
+
+			private Subscription subscribeMap(Subscription[] sub, Consumer<? super ObservableCollectionEvent<? extends V>> observer) {
 				return DerivedObservableMultiMap.this.onChange(mapEvent -> {
 					if (!theKeyEquivalence.elementEquals(theKey, mapEvent.getKey()))
 						return;
 					observer.accept(mapEvent);
+					sub[0].unsubscribe();
+					getGroup(true);
+					sub[0] = subscribeGroup(sub, theElement, observer);
 				});
 			}
 		}
@@ -1276,6 +1437,22 @@ public class ObservableMultiMapImpl {
 			boolean uniqueValues, GroupingDef options, Observable<?> until) {
 			super(entryFlow, keyType, valueType, keyEquivalence, valueEquivalence, uniqueValues, options, until);
 			theKeyCompare = keyEquivalence.comparator();
+		}
+
+		@Override
+		public Comparator<? super K> comparator() {
+			return theKeyCompare;
+		}
+
+		@Override
+		public ObservableSortedSet<K> keySet() {
+			return (ObservableSortedSet<K>) super.keySet();
+		}
+
+		@Override
+		public SortedMultiMapFlow<K, V> flow() {
+			return new DefaultSortedMultiMapFlow<>(theEntryFlow, (ComparatorEquivalence<? super K>) theKeyEquivalence, theValueEquivalence,
+				uniqueValues);
 		}
 	}
 }

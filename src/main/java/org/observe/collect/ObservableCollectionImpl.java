@@ -1329,7 +1329,7 @@ public final class ObservableCollectionImpl {
 
 	public static class ActiveDerivedCollection<T> implements ObservableCollection<T> {
 		protected static class DerivedElementHolder<T> implements ElementId {
-			final DerivedCollectionElement<T> element;
+			protected final DerivedCollectionElement<T> element;
 			BinaryTreeNode<DerivedElementHolder<T>> treeNode;
 
 			protected DerivedElementHolder(DerivedCollectionElement<T> manager) {

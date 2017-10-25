@@ -28,6 +28,7 @@ import org.qommons.Transaction;
 import org.qommons.collect.BetterMap;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.tree.BetterTreeSet;
 import org.qommons.tree.BinaryTreeNode;
@@ -321,8 +322,12 @@ public class ObservableSetImpl {
 			return element == null ? el -> -1 : element;
 		}
 
-		protected CollectionElement<UniqueElement> getElement(T value) {
+		protected MapEntryHandle<T, UniqueElement> getElement(T value) {
 			return theElementsByValue.getEntry(value);
+		}
+
+		protected MapEntryHandle<T, UniqueElement> getElement(ElementId valueId) {
+			return theElementsByValue.getEntry(valueId);
 		}
 
 		@Override
@@ -448,6 +453,10 @@ public class ObservableSetImpl {
 			protected void parentUpdated(CollectionElement<DerivedCollectionElement<T>> parentEl, T oldValue, T newValue, Object cause) {}
 
 			protected void parentRemoved(CollectionElement<DerivedCollectionElement<T>> parentEl, T value, Object cause) {}
+
+			protected ElementId getValueElement() {
+				return theValueId;
+			}
 
 			@Override
 			public int compareTo(DerivedCollectionElement<T> o) {

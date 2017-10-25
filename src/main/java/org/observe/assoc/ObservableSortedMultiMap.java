@@ -2,10 +2,13 @@ package org.observe.assoc;
 
 import java.util.Comparator;
 import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Observable;
+import org.observe.ObservableValue;
 import org.observe.Subscription;
 import org.observe.collect.Equivalence;
 import org.observe.collect.FlowOptions.GroupingOptions;
@@ -16,6 +19,9 @@ import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
 import org.observe.collect.ObservableSortedSet;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.ElementId;
+import org.qommons.collect.MapEntryHandle;
+import org.qommons.collect.MultiMapEntryHandle;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
 import com.google.common.reflect.TypeToken;
@@ -27,6 +33,8 @@ import com.google.common.reflect.TypeToken;
  * @param <V> The value type of the map
  */
 public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V> {
+	Comparator<? super K> comparator();
+
 	@Override
 	ObservableSortedSet<K> keySet();
 
@@ -52,9 +60,15 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		return entrySet().higher(ObservableMultiEntry.empty(getKeyType(), getValueType(), key, keySet().equivalence()));
 	}
 
+	@Override
 	default ObservableSortedMultiMap<K, V> reverse() {
 		ObservableSortedMultiMap<K, V> outer = this;
 		return new ObservableSortedMultiMap<K, V>() {
+			@Override
+			public Comparator<? super K> comparator() {
+				return outer.comparator().reversed();
+			}
+
 			@Override
 			public TypeToken<K> getKeyType() {
 				return outer.getKeyType();
@@ -81,6 +95,11 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 			}
 
 			@Override
+			public long getStamp(boolean structuralOnly) {
+				return outer.getStamp(structuralOnly);
+			}
+
+			@Override
 			public ObservableSortedSet<K> keySet() {
 				return outer.keySet().reverse();
 			}
@@ -98,6 +117,16 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 			@Override
 			public ObservableSortedSet<ObservableMultiEntry<K, V>> entrySet() {
 				return outer.entrySet().reverse();
+			}
+
+			@Override
+			public MapEntryHandle<K, ? extends ObservableCollection<V>> getEntry(ElementId keyId) {
+				return outer.getEntry(keyId.reverse()).reverse();
+			}
+
+			@Override
+			public MultiMapEntryHandle<K, V> putEntry(K key, V value, boolean first) {
+				return MultiMapEntryHandle.reverse(outer.putEntry(key, value, !first));
 			}
 
 			@Override
@@ -188,8 +217,8 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 	SortedMultiMapFlow<K, V> flow();
 
 	@Override
-	default ObservableSortedMap<K, V> unique(){
-		return new UniqueSortedMap<>(this);
+	default ObservableSortedMap<K, V> single(BiFunction<K, ObservableCollection<V>, ObservableValue<V>> value) {
+		return new SortedSingleMap<>(this, value);
 	}
 
 	static <K, V> SortedMultiMapFlow<K, V> create(TypeToken<K> keyType, TypeToken<V> valueType, Comparator<? super K> keyCompare) {
@@ -214,6 +243,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		@Override
 		SortedMultiMapFlow<K, V> distinctForMap(Consumer<UniqueOptions> options);
 
+		@Override
 		SortedMultiMapFlow<K, V> reverse();
 
 		@Override
@@ -235,6 +265,17 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		ObservableSortedMultiMap<K, V> gather(Observable<?> until, Consumer<GroupingOptions> options);
 	}
 
+	class SortedSingleMap<K, V> extends SingleMap<K, V> implements ObservableSortedMap<K, V> {
+		public SortedSingleMap(ObservableSortedMultiMap<K, V> outer, BiFunction<K, ObservableCollection<V>, ObservableValue<V>> valueMap) {
+			super(outer, valueMap);
+		}
+
+		@Override
+		public ObservableSortedSet<K> keySet() {
+			return (ObservableSortedSet<K>) super.keySet();
+		}
+	}
+
 	/**
 	 * Implements {@link ObservableSortedMap#subMap(Object, boolean, Object, boolean)}
 	 *
@@ -250,6 +291,11 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 			theOuter = outer;
 			theLower = lower;
 			theUpper = upper;
+		}
+
+		@Override
+		public Comparator<? super K> comparator() {
+			return theOuter.comparator();
 		}
 
 		@Override
@@ -278,6 +324,11 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		}
 
 		@Override
+		public long getStamp(boolean structuralOnly) {
+			return theOuter.getStamp(structuralOnly);
+		}
+
+		@Override
 		public ObservableSortedSet<K> keySet() {
 			return theOuter.keySet().subSet(theLower, theUpper);
 		}
@@ -287,6 +338,21 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 			if (!keySet().belongs(key))
 				return ObservableCollection.of(getValueType());
 			return theOuter.get(key);
+		}
+
+		@Override
+		public MapEntryHandle<K, ? extends ObservableCollection<V>> getEntry(ElementId keyId) {
+			MapEntryHandle<K, ? extends ObservableCollection<V>> outerEntry = theOuter.getEntry(keyId);
+			if (!keySet().belongs(outerEntry.getKey()))
+				throw new NoSuchElementException();
+			return outerEntry;
+		}
+
+		@Override
+		public MultiMapEntryHandle<K, V> putEntry(K key, V value, boolean first) {
+			if (!keySet().belongs(key))
+				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+			return theOuter.putEntry(key, value, first);
 		}
 
 		@Override
@@ -316,22 +382,6 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		@Override
 		public String toString() {
 			return ObservableMultiMap.toString(this);
-		}
-	}
-
-	class UniqueSortedMap<K, V> extends UniqueMap<K, V> implements ObservableSortedMap<K, V> {
-		public UniqueSortedMap(ObservableSortedMultiMap<K, V> outer) {
-			super(outer);
-		}
-
-		@Override
-		protected ObservableSortedMultiMap<K, V> getOuter() {
-			return (ObservableSortedMultiMap<K, V>) super.getOuter();
-		}
-
-		@Override
-		public ObservableSortedSet<K> keySet() {
-			return (ObservableSortedSet<K>) super.keySet();
 		}
 	}
 }
