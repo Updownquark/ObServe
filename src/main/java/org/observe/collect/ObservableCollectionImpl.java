@@ -1971,6 +1971,21 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public void clear() {}
+
+		@Override
+		public int hashCode() {
+			return ObservableCollection.hashCode(this);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return ObservableCollection.equals(this, obj);
+		}
+
+		@Override
+		public String toString() {
+			return ObservableCollection.toString(this);
+		}
 	}
 
 	/**

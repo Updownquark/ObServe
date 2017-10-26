@@ -22,6 +22,8 @@ import org.qommons.collect.MutableMapEntryHandle;
 import org.qommons.tree.BetterTreeMap;
 import org.qommons.tree.BetterTreeSet;
 
+import com.google.common.reflect.TypeToken;
+
 /**
  * Defines an equality scheme for comparing values for equivalence
  *
@@ -126,6 +128,8 @@ public interface Equivalence<E> {
 	 * @return The comparator-based equivalence
 	 */
 	static <E> ComparatorEquivalence<E> of(Class<E> type, Comparator<? super E> compare, boolean nullable) {
+		if (type.isPrimitive())
+			type = (Class<E>) TypeToken.of(type).wrap().getRawType(); // Better way to do this?
 		return new ComparatorEquivalence<>(type, nullable, compare);
 	}
 
@@ -140,6 +144,8 @@ public interface Equivalence<E> {
 		private final Comparator<? super E> compare;
 
 		ComparatorEquivalence(Class<E> type, boolean nullable, Comparator<? super E> compare) {
+			if (type.isPrimitive())
+				type = (Class<E>) TypeToken.of(type).wrap().getRawType(); // Better way to do this?
 			this.type = type;
 			this.nullable = nullable;
 			this.compare = compare;
@@ -210,6 +216,8 @@ public interface Equivalence<E> {
 
 		public MappedEquivalence(Equivalence<E> wrapped, Class<T> type, Predicate<? super T> filter, Function<? super E2, ? extends T> map,
 			Function<? super T, ? extends E2> reverse) {
+			if (type.isPrimitive())
+				type = (Class<T>) TypeToken.of(type).wrap().getRawType(); // Better way to do this?
 			theWrapped = wrapped;
 			theType = type;
 			theFilter = filter;

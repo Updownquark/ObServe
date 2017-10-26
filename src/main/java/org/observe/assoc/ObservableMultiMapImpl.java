@@ -29,6 +29,7 @@ import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveMappedCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.DerivedCollectionElement;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ElementAccepter;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
@@ -902,6 +903,10 @@ public class ObservableMultiMapImpl {
 				theKeySet = new ObservableSortedSetImpl.ActiveDerivedSortedSet<K>(keyFlow, keySorting, until) {
 					@Override
 					protected DerivedElementHolder<K> createHolder(DerivedCollectionElement<K> el) {
+						ActiveMappedCollectionManager<?, Map.Entry<K, V>, K>.MappedElement mappedEl;
+						mappedEl = (ActiveMappedCollectionManager<?, Map.Entry<K, V>, K>.MappedElement) el;
+						GroupingManager<?, K, V>.GroupedElement groupedEl = (GroupingManager<?, K, V>.GroupedElement) mappedEl
+							.getParentEl();
 						class GroupedElementHolder extends DerivedElementHolder<K> implements GroupedElementId<K, V> {
 							protected GroupedElementHolder(DerivedCollectionElement<K> manager) {
 								super(manager);
@@ -909,11 +914,11 @@ public class ObservableMultiMapImpl {
 
 							@Override
 							public GroupingManager<?, K, V>.GroupedElement getGroupedElement() {
-								return (GroupingManager<?, K, V>.GroupedElement) element;
+								return groupedEl;
 							}
 						}
 						DerivedElementHolder<K> holder = new GroupedElementHolder(el);
-						((GroupingManager<?, K, V>.GroupedElement) el).setKeyId(holder);
+						groupedEl.setKeyId(holder);
 						return holder;
 					}
 				};
@@ -921,6 +926,10 @@ public class ObservableMultiMapImpl {
 				theKeySet = new ObservableSetImpl.ActiveDerivedSet<K>(keyFlow, until) {
 					@Override
 					protected DerivedElementHolder<K> createHolder(DerivedCollectionElement<K> el) {
+						ActiveMappedCollectionManager<?, Map.Entry<K, V>, K>.MappedElement mappedEl;
+						mappedEl = (ActiveMappedCollectionManager<?, Map.Entry<K, V>, K>.MappedElement) el;
+						GroupingManager<?, K, V>.GroupedElement groupedEl = (GroupingManager<?, K, V>.GroupedElement) mappedEl
+							.getParentEl();
 						class GroupedElementHolder extends DerivedElementHolder<K> implements GroupedElementId<K, V> {
 							protected GroupedElementHolder(DerivedCollectionElement<K> manager) {
 								super(manager);
@@ -928,11 +937,11 @@ public class ObservableMultiMapImpl {
 
 							@Override
 							public GroupingManager<?, K, V>.GroupedElement getGroupedElement() {
-								return (GroupingManager<?, K, V>.GroupedElement) element;
+								return groupedEl;
 							}
 						}
 						DerivedElementHolder<K> holder = new GroupedElementHolder(el);
-						((GroupingManager<?, K, V>.GroupedElement) el).setKeyId(holder);
+						groupedEl.setKeyId(holder);
 						return holder;
 					}
 				};
@@ -1032,7 +1041,7 @@ public class ObservableMultiMapImpl {
 
 		@Override
 		public ObservableCollection<V> get(Object key) {
-			if (key == null && !theKeyType.getRawType().isInstance(key))
+			if (key != null && !theKeyType.getRawType().isInstance(key))
 				return ObservableCollection.of(theValueType);
 			if (!theKeyEquivalence.isElement(key))
 				return ObservableCollection.of(theValueType);
@@ -1400,7 +1409,7 @@ public class ObservableMultiMapImpl {
 				// map doesn't get clogged with listeners for each key
 				GroupingManager<?, K, V>.GroupedElement group = getGroup(true);
 				Subscription[] sub = new Subscription[1];
-				if (group == null) {
+				if (group != null) {
 					sub[0] = subscribeGroup(sub, theElement, observer);
 				} else
 					sub[0] = subscribeMap(sub, observer);
@@ -1425,6 +1434,21 @@ public class ObservableMultiMapImpl {
 					getGroup(true);
 					sub[0] = subscribeGroup(sub, theElement, observer);
 				});
+			}
+
+			@Override
+			public int hashCode() {
+				return ObservableCollection.hashCode(this);
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				return ObservableCollection.equals(this, obj);
+			}
+
+			@Override
+			public String toString() {
+				return ObservableCollection.toString(this);
 			}
 		}
 	}

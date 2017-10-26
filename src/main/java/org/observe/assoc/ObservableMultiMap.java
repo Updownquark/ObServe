@@ -33,6 +33,7 @@ import org.qommons.collect.MultiMapEntryHandle;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.collect.MutableMapEntryHandle;
+import org.qommons.collect.SimpleCause;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -459,6 +460,13 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		}
 
 		@Override
+		public <K2> ObservableValue<V> observe(K2 key) {
+			if (!theOuter.keySet().belongs(key))
+				return ObservableValue.of(getValueType(), null);
+			return theValueMap.apply((K) key, theOuter.get(key));
+		}
+
+		@Override
 		public MapEntryHandle<K, V> getEntry(K key) {
 			MapEntryHandle<K, ? extends ObservableCollection<V>> outerHandle = theOuter.getEntry(key);
 			return outerHandle == null ? null : entryFor(outerHandle);
@@ -634,27 +642,68 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 
 		@Override
 		public CollectionSubscription subscribe(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action, boolean forward) {
-			Map<ElementId, Subscription> valueSubs = new HashMap<>();
+			class EntrySubscription {
+				final K key;
+				Subscription sub;
+				V value;
+
+				EntrySubscription(K key) {
+					this.key = key;
+				}
+			}
+			Map<ElementId, EntrySubscription> valueSubs = new HashMap<>();
 			try (Transaction t = lock(false, null)) {
 				Subscription outerSub = theOuter.keySet().subscribe(evt -> {
 					switch (evt.getType()) {
 					case add:
 						ObservableValue<V> value = theValueMap.apply(evt.getNewValue(), theOuter.get(evt.getNewValue()));
-						valueSubs.put(evt.getElementId(), value.changes().act(valueEvt -> {
-							// TODO
-						}));
+						EntrySubscription entrySub = new EntrySubscription(evt.getNewValue());
+						entrySub.sub = value.changes().act(valueEvt -> {
+							CollectionChangeType mapEvtType;
+							int index;
+							if (valueEvt.isInitial()) {
+								mapEvtType = CollectionChangeType.add;
+								index = evt.getIndex();
+							} else {
+								mapEvtType = CollectionChangeType.set;
+								index = theOuter.keySet().getElementsBefore(evt.getElementId());
+							}
+							entrySub.value = valueEvt.getNewValue();
+							action.accept(new ObservableMapEvent<>(evt.getElementId(), evt.getElementId(), //
+								getKeyType(), getValueType(), index, 0, //
+								mapEvtType, evt.getNewValue(), null, valueEvt.getNewValue(), valueEvt));
+						});
+						valueSubs.put(evt.getElementId(), entrySub);
 						break;
 					case remove:
-						valueSubs.remove(evt.getElementId()).unsubscribe();
-						// TODO
+						entrySub = valueSubs.remove(evt.getElementId());
+						entrySub.sub.unsubscribe();
+						action.accept(new ObservableMapEvent<>(evt.getElementId(), evt.getElementId(), //
+							getKeyType(), getValueType(), evt.getIndex(), 0, //
+							CollectionChangeType.remove, evt.getNewValue(), entrySub.value, entrySub.value, evt));
 						break;
 					case set:
 						break;
 					}
 				}, forward);
 				return removeAll -> {
-					outerSub.unsubscribe();
-					// TODO
+					try (Transaction t2 = lock(false, false, null)) {
+						outerSub.unsubscribe();
+						for (EntrySubscription sub : valueSubs.values())
+							sub.sub.unsubscribe();
+						if (removeAll) {
+							SimpleCause.doWith(new SimpleCause(), c -> {
+								for (Map.Entry<ElementId, EntrySubscription> entry : valueSubs.entrySet()) {
+									EntrySubscription sub = entry.getValue();
+									entry.getValue().sub.unsubscribe();
+									int index = theOuter.keySet().getElementsBefore(entry.getKey());
+									action.accept(new ObservableMapEvent<>(entry.getKey(), entry.getKey(), //
+										getKeyType(), getValueType(), index, 0, //
+										CollectionChangeType.remove, sub.key, sub.value, sub.value, c));
+								}
+							});
+						}
+					}
 				};
 			}
 		}

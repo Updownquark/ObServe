@@ -136,7 +136,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 		theNodes = nodeList.apply(nodesType);
 		theExposedNodes = theNodes.flow().filterMod(fm -> fm.noAdd(StdMsg.UNSUPPORTED_OPERATION)).collectPassive();
 		theEdgeCreator = edgeList;
-		theEdges = theNodes.flow().flatMapC(theEdgeHolderType, n -> n.getOutward()).collect();
+		theEdges = theNodes.flow().flatMap(theEdgeHolderType, n -> n.getOutward().flow()).collect();
 		theExposedEdges = theEdges.flow().filterMod(fm -> fm.noAdd(StdMsg.UNSUPPORTED_OPERATION)).collectPassive();
 		theNodes.onChange(evt -> {
 			if (evt.getType() == CollectionChangeType.remove) {

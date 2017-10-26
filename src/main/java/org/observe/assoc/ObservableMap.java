@@ -4,7 +4,6 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -121,12 +120,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 
 	/**
 	 * @param key The key to get the value for
-	 * @param defValue A function producing a value to use for the given key in the case that the key is not present in this map
 	 * @return An observable value that changes whenever the value for the given key changes in this map
 	 */
-	default <K2> ObservableValue<V> observe(K2 key, Function<? super K2, ? extends V> defValue) {
+	default <K2> ObservableValue<V> observe(K2 key) {
 		if (!keySet().belongs(key))
-			return ObservableValue.of(getValueType(), defValue.apply(key));
+			return ObservableValue.of(getValueType(), null);
 		return new ObservableValue<V>() {
 			@Override
 			public TypeToken<V> getType() {
@@ -144,7 +142,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 				if (entryEl != null)
 					return entryEl.get().getValue();
 				else
-					return defValue.apply(key);
+					return null;
 			}
 
 			@Override
@@ -162,14 +160,14 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 									newExists = true;
 								else
 									newExists = keySet().contains(key);
-								V oldValue = exists[0] ? evt.getOldValue() : defValue.apply(key);
-								V newValue = newExists ? evt.getNewValue() : defValue.apply(key);
+								V oldValue = exists[0] ? evt.getOldValue() : null;
+								V newValue = newExists ? evt.getNewValue() : null;
 								exists[0] = newExists;
 								observer.onNext(createChangeEvent(oldValue, newValue, evt));
 							});
 							CollectionElement<Map.Entry<K, V>> entryEl = entrySet().getElement(new SimpleMapEntry<>((K) key, null), true);
 							exists[0] = entryEl != null;
-							observer.onNext(createInitialEvent(exists[0] ? entryEl.get().getValue() : defValue.apply(key), null));
+							observer.onNext(createInitialEvent(exists[0] ? entryEl.get().getValue() : null, null));
 							return sub;
 						}
 					}
@@ -201,7 +199,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 	/** @return An observable collection of all the values stored in this map */
 	@Override
 	default ObservableCollection<V> values() {
-		return keySet().flow().flattenValues(getValueType(), k -> observe(k, k2 -> null)).collect();
+		return keySet().flow().flattenValues(getValueType(), k -> observe(k)).collect();
 	}
 
 	@Override
@@ -226,7 +224,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 
 	@Override
 	default V get(Object key) {
-		return observe(key, k -> null).get();
+		return observe(key).get();
 	}
 
 	@Override
