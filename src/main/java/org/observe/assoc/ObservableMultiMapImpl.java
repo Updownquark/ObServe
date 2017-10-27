@@ -932,17 +932,7 @@ public class ObservableMultiMapImpl {
 						mappedEl = (ActiveMappedCollectionManager<?, Map.Entry<K, V>, K>.MappedElement) el;
 						GroupingManager<?, K, V>.GroupedElement groupedEl = (GroupingManager<?, K, V>.GroupedElement) mappedEl
 							.getParentEl();
-						class GroupedElementHolder extends DerivedElementHolder<K> implements GroupedElementId<K, V> {
-							protected GroupedElementHolder(DerivedCollectionElement<K> manager) {
-								super(manager);
-							}
-
-							@Override
-							public GroupingManager<?, K, V>.GroupedElement getGroupedElement() {
-								return groupedEl;
-							}
-						}
-						DerivedElementHolder<K> holder = new GroupedElementHolder(el);
+						DerivedElementHolder<K> holder = super.createHolder(el);
 						groupedEl.setKeyId(holder);
 						return holder;
 					}
@@ -955,17 +945,7 @@ public class ObservableMultiMapImpl {
 						mappedEl = (ActiveMappedCollectionManager<?, Map.Entry<K, V>, K>.MappedElement) el;
 						GroupingManager<?, K, V>.GroupedElement groupedEl = (GroupingManager<?, K, V>.GroupedElement) mappedEl
 							.getParentEl();
-						class GroupedElementHolder extends DerivedElementHolder<K> implements GroupedElementId<K, V> {
-							protected GroupedElementHolder(DerivedCollectionElement<K> manager) {
-								super(manager);
-							}
-
-							@Override
-							public GroupingManager<?, K, V>.GroupedElement getGroupedElement() {
-								return groupedEl;
-							}
-						}
-						DerivedElementHolder<K> holder = new GroupedElementHolder(el);
+						DerivedElementHolder<K> holder = super.createHolder(el);
 						groupedEl.setKeyId(holder);
 						return holder;
 					}
@@ -1066,10 +1046,6 @@ public class ObservableMultiMapImpl {
 		@Override
 		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
 			return theEventListeners.add(action, true)::run;
-		}
-
-		private interface GroupedElementId<K, V> extends ElementId {
-			GroupingManager<?, K, V>.GroupedElement getGroupedElement();
 		}
 
 		private class Values implements ObservableCollection<V> {
