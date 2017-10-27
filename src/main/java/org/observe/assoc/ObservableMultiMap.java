@@ -22,12 +22,12 @@ import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.SubscriptionCause;
 import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableSet;
-import org.observe.collect.ObservableSortedSet;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterMultiMap;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
+import org.qommons.collect.MultiEntryHandle;
 import org.qommons.collect.MultiMap;
 import org.qommons.collect.MultiMapEntryHandle;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
@@ -51,7 +51,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 	 * @param <K> The type of key this entry uses
 	 * @param <V> The type of value this entry stores
 	 */
-	public interface ObservableMultiEntry<K, V> extends MultiEntry<K, V> {
+	public interface ObservableMultiEntry<K, V> extends MultiEntryHandle<K, V> {
 		/** @return The key type of this entry's map */
 		TypeToken<K> getKeyType();
 
@@ -67,12 +67,17 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		 * @param values The values for the entry
 		 * @return The new entry
 		 */
-		static <K, V> ObservableMultiEntry<K, V> create(TypeToken<K> keyType, K key, Equivalence<? super K> keyEquivalence,
+		static <K, V> ObservableMultiEntry<K, V> create(TypeToken<K> keyType, ElementId keyId, K key, Equivalence<? super K> keyEquivalence,
 			ObservableCollection<V> values) {
 			return new ObservableMultiEntry<K, V>() {
 				@Override
 				public TypeToken<K> getKeyType() {
 					return keyType;
+				}
+
+				@Override
+				public ElementId getElementId() {
+					return keyId;
 				}
 
 				@Override
@@ -107,30 +112,43 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 			};
 		}
 
+		@Override
+		default ObservableMultiEntry<K, V> reverse() {
+			return new ReversedObservableMultiEntry<>(this);
+		}
+
 		/**
-		 * Creates an empty multi-entry
-		 *
-		 * @param <K> The key type for the entry
-		 * @param <V> The value type for the entry
-		 * @param keyType The key type for the entry
-		 * @param valueType The value type for the entry's values
-		 * @param key The key for the entry
-		 * @param keyEquivalence The key equivalence for the entry
-		 * @return The new entry
+		 * A reversed observable multi-map entry
+		 * 
+		 * @param <K> The key type of the multi-map
+		 * @param <V> The value type of the multi-map
 		 */
-		static <K, V> ObservableMultiEntry<K, V> empty(TypeToken<K> keyType, TypeToken<V> valueType, K key,
-			Equivalence<? super K> keyEquivalence) {
-			return create(keyType, key, keyEquivalence, ObservableCollection.of(valueType));
+		class ReversedObservableMultiEntry<K, V> extends ReversedMultiEntryHandle<K, V> implements ObservableMultiEntry<K, V> {
+			public ReversedObservableMultiEntry(ObservableMultiEntry<K, V> wrapped) {
+				super(wrapped);
+			}
+
+			@Override
+			protected ObservableMultiEntry<K, V> getSource() {
+				return (ObservableMultiEntry<K, V>) super.getSource();
+			}
+
+			@Override
+			public TypeToken<K> getKeyType() {
+				return getSource().getKeyType();
+			}
+
+			@Override
+			public ObservableCollection<V> getValues() {
+				return (ObservableCollection<V>) super.getValues();
+			}
+
+			@Override
+			public ObservableMultiEntry<K, V> reverse() {
+				return getSource();
+			}
 		}
 	}
-
-	/**
-	 * A {@link ObservableMultiMap.ObservableMultiEntry} whose values are sorted
-	 *
-	 * @param <K> The type of key this entry uses
-	 * @param <V> The type of value this entry stores
-	 */
-	public interface ValueSortedMultiEntry<K, V> extends ObservableMultiEntry<K, V>, ObservableSortedSet<V> {}
 
 	/** @return The type of keys this map uses */
 	TypeToken<K> getKeyType();
@@ -169,11 +187,11 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 	ObservableCollection<V> get(Object key);
 
 	@Override
-	MapEntryHandle<K, ? extends ObservableCollection<V>> getEntry(ElementId keyId);
+	ObservableMultiEntry<K, V> getEntry(ElementId keyId);
 
 	@Override
-	default MapEntryHandle<K, ? extends ObservableCollection<V>> getEntry(K key) {
-		return (MapEntryHandle<K, ? extends ObservableCollection<V>>) BetterMultiMap.super.getEntry(key);
+	default ObservableMultiEntry<K, V> getEntry(K key) {
+		return (ObservableMultiEntry<K, V>) BetterMultiMap.super.getEntry(key);
 	}
 
 	/**
@@ -243,19 +261,11 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 	}
 
 	/**
-	 * @param key The key to get the entry for
-	 * @return A multi-entry that represents the given key's presence in this map. Never null.
-	 */
-	default ObservableMultiEntry<K, V> entryFor(K key) {
-		return ObservableMultiEntry.create(getKeyType(), key, keySet().equivalence(), get(key));
-	}
-
-	/**
 	 * @return An observable collection of {@link ObservableMultiEntry observable entries} of all the key-value set pairs stored in this map
 	 */
 	@Override
-	default ObservableSet<ObservableMultiEntry<K, V>> entrySet() {
-		return keySet().flow().mapEquivalent(getEntryType(), this::entryFor, entry -> entry.getKey(), options -> //
+	default ObservableSet<? extends ObservableMultiEntry<K, V>> entrySet() {
+		return keySet().flow().mapEquivalent(getEntryType(), this::getEntry, entry -> entry.getKey(), options -> //
 		options.cache(false)).collect();
 	}
 
@@ -299,12 +309,6 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		boolean ret = !values.isEmpty();
 		values.clear();
 		return ret;
-	}
-
-	/** @return All values stored in this map */
-	@Override
-	default ObservableCollection<V> values() {
-		return entrySet().flow().flatMap(getValueType(), entry -> entry.getValues().flow()).collect();
 	}
 
 	/** @return A collection of plain (non-observable) {@link java.util.Map.Entry entries}, one for each value in this map */
@@ -368,7 +372,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 	 *         transaction.
 	 */
 	default Observable<Object> changes() {
-		return values().simpleChanges();
+		return entrySet().simpleChanges();
 	}
 
 	/** @return A multi-map data flow that may be used to produce derived maps whose data is based on this map's */
@@ -468,12 +472,12 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 
 		@Override
 		public MapEntryHandle<K, V> getEntry(K key) {
-			MapEntryHandle<K, ? extends ObservableCollection<V>> outerHandle = theOuter.getEntry(key);
+			ObservableMultiEntry<K, V> outerHandle = theOuter.getEntry(key);
 			return outerHandle == null ? null : entryFor(outerHandle);
 		}
 
-		private MapEntryHandle<K, V> entryFor(MapEntryHandle<K, ? extends ObservableCollection<V>> outerHandle) {
-			ObservableValue<V> value = theValueMap.apply(outerHandle.getKey(), outerHandle.get());
+		private MapEntryHandle<K, V> entryFor(ObservableMultiEntry<K, V> outerHandle) {
+			ObservableValue<V> value = theValueMap.apply(outerHandle.getKey(), outerHandle.getValues());
 			return new MapEntryHandle<K, V>() {
 				@Override
 				public ElementId getElementId() {
@@ -502,8 +506,8 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 			return mutableEntryFor(theOuter.getEntry(entryId));
 		}
 
-		private MutableMapEntryHandle<K, V> mutableEntryFor(MapEntryHandle<K, ? extends ObservableCollection<V>> outerHandle) {
-			ObservableValue<V> mappedValue = theValueMap.apply(outerHandle.getKey(), outerHandle.get());
+		private MutableMapEntryHandle<K, V> mutableEntryFor(ObservableMultiEntry<K, V> outerHandle) {
+			ObservableValue<V> mappedValue = theValueMap.apply(outerHandle.getKey(), outerHandle.getValues());
 			return new MutableMapEntryHandle<K, V>() {
 				@Override
 				public K getKey() {
@@ -524,10 +528,10 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 				public String isEnabled() {
 					if (mappedValue instanceof SettableValue)
 						return ((SettableValue<V>) mappedValue).isEnabled().get();
-					else if (outerHandle.get().isEmpty())
+					else if (outerHandle.getValues().isEmpty())
 						return null; // Unfortunately, there's no canAdd() method with no argument
-					else if (outerHandle.get().size() == 1)
-						return outerHandle.get().mutableElement(outerHandle.get().getElement(0).getElementId()).isEnabled();
+					else if (outerHandle.getValues().size() == 1)
+						return outerHandle.getValues().mutableElement(outerHandle.getValues().getElement(0).getElementId()).isEnabled();
 					else
 						return StdMsg.ELEMENT_EXISTS;
 				}
@@ -536,10 +540,11 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 				public String isAcceptable(V value) {
 					if (mappedValue instanceof SettableValue)
 						return ((SettableValue<V>) value).isAcceptable(value);
-					else if (outerHandle.get().isEmpty())
-						return outerHandle.get().canAdd(value);
-					else if (outerHandle.get().size() == 1)
-						return outerHandle.get().mutableElement(outerHandle.get().getElement(0).getElementId()).isAcceptable(value);
+					else if (outerHandle.getValues().isEmpty())
+						return outerHandle.getValues().canAdd(value);
+					else if (outerHandle.getValues().size() == 1)
+						return outerHandle.getValues().mutableElement(outerHandle.getValues().getElement(0).getElementId())
+							.isAcceptable(value);
 					else
 						return StdMsg.ELEMENT_EXISTS;
 				}
@@ -548,19 +553,19 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 				public void set(V value) throws UnsupportedOperationException, IllegalArgumentException {
 					if (mappedValue instanceof SettableValue)
 						((SettableValue<V>) mappedValue).set(value, null);
-					else if (outerHandle.get().isEmpty())
-						outerHandle.get().add(value);
-					else if (outerHandle.get().size() == 1)
-						outerHandle.get().set(0, value);
+					else if (outerHandle.getValues().isEmpty())
+						outerHandle.getValues().add(value);
+					else if (outerHandle.getValues().size() == 1)
+						outerHandle.getValues().set(0, value);
 					else
 						throw new UnsupportedOperationException(StdMsg.ELEMENT_EXISTS);
 				}
 
 				@Override
 				public String canRemove() {
-					if (outerHandle.get().isEmpty())
+					if (outerHandle.getValues().isEmpty())
 						return StdMsg.UNSUPPORTED_OPERATION;
-					MutableElementSpliterator<V> spliter = outerHandle.get().spliterator();
+					MutableElementSpliterator<V> spliter = outerHandle.getValues().spliterator();
 					String[] msg = new String[1];
 					while (msg[0] == null && spliter.forElementM(el -> msg[0] = el.canRemove(), true)) {}
 					return msg[0];
@@ -571,7 +576,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 					String msg = canRemove();
 					if (msg != null)
 						throw new UnsupportedOperationException(msg);
-					MutableElementSpliterator<V> spliter = outerHandle.get().spliterator();
+					MutableElementSpliterator<V> spliter = outerHandle.getValues().spliterator();
 					while (spliter.forElementM(el -> el.remove(), true)) {}
 				}
 
@@ -590,15 +595,15 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		@Override
 		public MapEntryHandle<K, V> putEntry(K key, V value) {
 			try (Transaction t = lock(true, true, null)) {
-				MapEntryHandle<K, ? extends ObservableCollection<V>> outerHandle = theOuter.getEntry(key);
+				ObservableMultiEntry<K, V> outerHandle = theOuter.getEntry(key);
 				if (outerHandle != null) {
-					ObservableValue<V> mappedValue = theValueMap.apply(outerHandle.getKey(), outerHandle.get());
+					ObservableValue<V> mappedValue = theValueMap.apply(outerHandle.getKey(), outerHandle.getValues());
 					if (mappedValue instanceof SettableValue)
 						((SettableValue<V>) mappedValue).set(value, null);
-					else if (outerHandle.get().isEmpty())
-						outerHandle.get().add(value);
-					else if (outerHandle.get().size() == 1) {
-						outerHandle.get().set(0, value);
+					else if (outerHandle.getValues().isEmpty())
+						outerHandle.getValues().add(value);
+					else if (outerHandle.getValues().size() == 1) {
+						outerHandle.getValues().set(0, value);
 					} else {
 						// Here we can't be sure that anything we do will result in the correct value being populated,
 						// short of clearing the collection and adding the value, which seems like overkill

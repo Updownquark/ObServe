@@ -1007,24 +1007,9 @@ public class ObservableMultiMapImpl {
 		}
 
 		@Override
-		public MapEntryHandle<K, ? extends ObservableCollection<V>> getEntry(ElementId keyId) {
+		public ObservableMultiEntry<K, V> getEntry(ElementId keyId) {
 			Values values = new Values(keyId);
-			return new MapEntryHandle<K, ObservableCollection<V>>() {
-				@Override
-				public ElementId getElementId() {
-					return keyId;
-				}
-
-				@Override
-				public K getKey() {
-					return values.getKey();
-				}
-
-				@Override
-				public ObservableCollection<V> get() {
-					return values;
-				}
-			};
+			return ObservableMultiEntry.create(theKeyType, keyId, values.getKey(), theKeyEquivalence, values);
 		}
 
 		@Override
