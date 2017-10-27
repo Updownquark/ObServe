@@ -22,6 +22,7 @@ import org.qommons.collect.BetterSortedMultiMap;
 import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
 import com.google.common.reflect.TypeToken;
@@ -200,6 +201,30 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		@Override
 		public ObservableSortedSet<K> keySet() {
 			return (ObservableSortedSet<K>) super.keySet();
+		}
+
+		@Override
+		public MapEntryHandle<K, V> search(Comparable<? super K> search, SortedSearchFilter filter) {
+			CollectionElement<K> keyEntry = keySet().search(search, filter);
+			if (keyEntry == null)
+				return null;
+			ObservableValue<V> value = getValueMap().apply(keyEntry.get(), getSource().get(keyEntry.get()));
+			return new MapEntryHandle<K, V>() {
+				@Override
+				public ElementId getElementId() {
+					return keyEntry.getElementId();
+				}
+
+				@Override
+				public K getKey() {
+					return keyEntry.get();
+				}
+
+				@Override
+				public V get() {
+					return value.get();
+				}
+			};
 		}
 	}
 

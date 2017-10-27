@@ -119,7 +119,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 
 		/**
 		 * A reversed observable multi-map entry
-		 * 
+		 *
 		 * @param <K> The key type of the multi-map
 		 * @param <V> The value type of the multi-map
 		 */
@@ -414,28 +414,32 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 	 * @param <V> The value-type of the map
 	 */
 	class SingleMap<K, V> implements ObservableMap<K, V> {
-		private final ObservableMultiMap<K, V> theOuter;
+		private final ObservableMultiMap<K, V> theSource;
 		private final BiFunction<K, ObservableCollection<V>, ObservableValue<V>> theValueMap;
 		private final TypeToken<Map.Entry<K, V>> theEntryType;
 
 		public SingleMap(ObservableMultiMap<K, V> outer, BiFunction<K, ObservableCollection<V>, ObservableValue<V>> valueMap) {
-			theOuter = outer;
+			theSource = outer;
 			theValueMap = valueMap;
 			theEntryType = ObservableMap.buildEntryType(getKeyType(), getValueType());
 		}
 
-		protected ObservableMultiMap<K, V> getOuter() {
-			return theOuter;
+		protected ObservableMultiMap<K, V> getSource() {
+			return theSource;
+		}
+
+		protected BiFunction<K, ObservableCollection<V>, ObservableValue<V>> getValueMap() {
+			return theValueMap;
 		}
 
 		@Override
 		public TypeToken<K> getKeyType() {
-			return theOuter.getKeyType();
+			return theSource.getKeyType();
 		}
 
 		@Override
 		public TypeToken<V> getValueType() {
-			return theOuter.getValueType();
+			return theSource.getValueType();
 		}
 
 		@Override
@@ -445,12 +449,12 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 
 		@Override
 		public boolean isLockSupported() {
-			return theOuter.isLockSupported();
+			return theSource.isLockSupported();
 		}
 
 		@Override
 		public Transaction lock(boolean write, boolean structural, Object cause) {
-			return theOuter.lock(write, structural, cause);
+			return theSource.lock(write, structural, cause);
 		}
 
 		@Override
@@ -460,19 +464,19 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 
 		@Override
 		public ObservableSet<K> keySet() {
-			return theOuter.keySet();
+			return theSource.keySet();
 		}
 
 		@Override
 		public <K2> ObservableValue<V> observe(K2 key) {
-			if (!theOuter.keySet().belongs(key))
+			if (!theSource.keySet().belongs(key))
 				return ObservableValue.of(getValueType(), null);
-			return theValueMap.apply((K) key, theOuter.get(key));
+			return theValueMap.apply((K) key, theSource.get(key));
 		}
 
 		@Override
 		public MapEntryHandle<K, V> getEntry(K key) {
-			ObservableMultiEntry<K, V> outerHandle = theOuter.getEntry(key);
+			ObservableMultiEntry<K, V> outerHandle = theSource.getEntry(key);
 			return outerHandle == null ? null : entryFor(outerHandle);
 		}
 
@@ -498,12 +502,12 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 
 		@Override
 		public MapEntryHandle<K, V> getEntry(ElementId entryId) {
-			return entryFor(theOuter.getEntry(entryId));
+			return entryFor(theSource.getEntry(entryId));
 		}
 
 		@Override
 		public MutableMapEntryHandle<K, V> mutableEntry(ElementId entryId) {
-			return mutableEntryFor(theOuter.getEntry(entryId));
+			return mutableEntryFor(theSource.getEntry(entryId));
 		}
 
 		private MutableMapEntryHandle<K, V> mutableEntryFor(ObservableMultiEntry<K, V> outerHandle) {
@@ -595,7 +599,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		@Override
 		public MapEntryHandle<K, V> putEntry(K key, V value) {
 			try (Transaction t = lock(true, true, null)) {
-				ObservableMultiEntry<K, V> outerHandle = theOuter.getEntry(key);
+				ObservableMultiEntry<K, V> outerHandle = theSource.getEntry(key);
 				if (outerHandle != null) {
 					ObservableValue<V> mappedValue = theValueMap.apply(outerHandle.getKey(), outerHandle.getValues());
 					if (mappedValue instanceof SettableValue)
@@ -611,21 +615,21 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 					}
 					return entryFor(outerHandle);
 				}
-				ObservableValue<V> mappedValue = theValueMap.apply(key, theOuter.get(key));
+				ObservableValue<V> mappedValue = theValueMap.apply(key, theSource.get(key));
 				if (mappedValue instanceof SettableValue)
 					((SettableValue<V>) mappedValue).set(value, null);
-				MultiMapEntryHandle<K, V> handle2 = theOuter.putEntry(key, value, true);
+				MultiMapEntryHandle<K, V> handle2 = theSource.putEntry(key, value, true);
 				if (handle2 == null)
 					return null;
-				outerHandle = theOuter.getEntry(handle2.getKeyId());
+				outerHandle = theSource.getEntry(handle2.getKeyId());
 				return entryFor(outerHandle);
 			}
 		}
 
 		@Override
 		public V put(K key, V value) {
-			try (Transaction t = theOuter.lock(true, true, null)) {
-				ObservableCollection<V> values = theOuter.get(key);
+			try (Transaction t = theSource.lock(true, true, null)) {
+				ObservableCollection<V> values = theSource.get(key);
 				if (values.isEmpty()) {
 					values.add(value);
 					return null;
@@ -658,10 +662,10 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 			}
 			Map<ElementId, EntrySubscription> valueSubs = new HashMap<>();
 			try (Transaction t = lock(false, null)) {
-				Subscription outerSub = theOuter.keySet().subscribe(evt -> {
+				Subscription outerSub = theSource.keySet().subscribe(evt -> {
 					switch (evt.getType()) {
 					case add:
-						ObservableValue<V> value = theValueMap.apply(evt.getNewValue(), theOuter.get(evt.getNewValue()));
+						ObservableValue<V> value = theValueMap.apply(evt.getNewValue(), theSource.get(evt.getNewValue()));
 						EntrySubscription entrySub = new EntrySubscription(evt.getNewValue());
 						entrySub.sub = value.changes().act(valueEvt -> {
 							CollectionChangeType mapEvtType;
@@ -671,7 +675,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 								index = evt.getIndex();
 							} else {
 								mapEvtType = CollectionChangeType.set;
-								index = theOuter.keySet().getElementsBefore(evt.getElementId());
+								index = theSource.keySet().getElementsBefore(evt.getElementId());
 							}
 							entrySub.value = valueEvt.getNewValue();
 							action.accept(new ObservableMapEvent<>(evt.getElementId(), evt.getElementId(), //
@@ -701,7 +705,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 								for (Map.Entry<ElementId, EntrySubscription> entry : valueSubs.entrySet()) {
 									EntrySubscription sub = entry.getValue();
 									entry.getValue().sub.unsubscribe();
-									int index = theOuter.keySet().getElementsBefore(entry.getKey());
+									int index = theSource.keySet().getElementsBefore(entry.getKey());
 									action.accept(new ObservableMapEvent<>(entry.getKey(), entry.getKey(), //
 										getKeyType(), getValueType(), index, 0, //
 										CollectionChangeType.remove, sub.key, sub.value, sub.value, c));
