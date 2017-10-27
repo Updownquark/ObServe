@@ -723,6 +723,7 @@ public class ObservableMultiMapImpl {
 		private final TypeToken<K> theKeyType;
 		private final TypeToken<V> theValueType;
 		private final Consumer<ObservableMapEvent<K, V>> theEventListener;
+		private final Map<Map.Entry<K, V>, ListenerList<Consumer<? super ObservableCollectionEvent<? extends V>>>> theValueListeners;
 		private final AtomicLong theStructuralStamp;
 		private final AtomicLong theChangeStamp;
 		private boolean isBegun;
@@ -740,6 +741,7 @@ public class ObservableMultiMapImpl {
 			theEventListener = listener;
 			theStructuralStamp = new AtomicLong();
 			theChangeStamp = new AtomicLong();
+			theValueListeners = parent.equivalence().createMap();
 		}
 
 		void setAssembledKeys(BetterList<K> assembledKeys) {
@@ -748,6 +750,26 @@ public class ObservableMultiMapImpl {
 
 		ActiveCollectionManager<E, ?, Map.Entry<K, V>> getParent() {
 			return theParent;
+		}
+
+		Subscription onChange(K key, Consumer<? super ObservableCollectionEvent<? extends V>> action) {
+			Map.Entry<K, V> keyEntry = new SimpleMapEntry<>(key, null);
+			try (Transaction t = lock(false, null)) {
+				MapEntryHandle<Map.Entry<K, V>, UniqueManager<E, Entry<K, V>>.UniqueElement> element = getElement(keyEntry);
+				ListenerList<Consumer<? super ObservableCollectionEvent<? extends V>>> listeners;
+				if (element != null)
+					listeners = ((GroupedElement) element.get()).theListeners;
+				else
+					listeners = theValueListeners.computeIfAbsent(keyEntry, e -> new ListenerList<>("Illegal listener state"));
+				Runnable listenerRemove = listeners.add(action, false);
+				return () -> {
+					try (Transaction t2 = lock(false, null)) {
+						listenerRemove.run();
+						if (listeners.isEmtpy())
+							theValueListeners.remove(keyEntry);
+					}
+				};
+			}
 		}
 
 		long getStamp(boolean structural) {
@@ -766,7 +788,10 @@ public class ObservableMultiMapImpl {
 
 		@Override
 		protected UniqueManager<E, Map.Entry<K, V>>.UniqueElement createUniqueElement(Map.Entry<K, V> value) {
-			return new GroupedElement(value);
+			ListenerList<Consumer<? super ObservableCollectionEvent<? extends V>>> listeners = theValueListeners.remove(value);
+			if (listeners == null)
+				listeners = new ListenerList<>("Illegal listener state");
+			return new GroupedElement(value, listeners);
 		}
 
 		@Override
@@ -777,11 +802,12 @@ public class ObservableMultiMapImpl {
 
 		protected class GroupedElement extends UniqueElement {
 			private ElementId theKeyId;
-			private final ListenerList<Consumer<ObservableCollectionEvent<V>>> theListeners;
+			final ListenerList<Consumer<? super ObservableCollectionEvent<? extends V>>> theListeners;
 
-			protected GroupedElement(Map.Entry<K, V> key) {
+			protected GroupedElement(Map.Entry<K, V> key,
+				ListenerList<Consumer<? super ObservableCollectionEvent<? extends V>>> listeners) {
 				super(key);
-				theListeners = new ListenerList<>("Illegal listener state");
+				theListeners = listeners;
 			}
 
 			protected ElementId getKeyId() {
@@ -790,10 +816,6 @@ public class ObservableMultiMapImpl {
 
 			protected void setKeyId(ElementId keyId) {
 				theKeyId = keyId;
-			}
-
-			Runnable onChange(Consumer<ObservableCollectionEvent<V>> listener) {
-				return theListeners.add(listener, true);
 			}
 
 			@Override
@@ -845,6 +867,9 @@ public class ObservableMultiMapImpl {
 				DerivedCollectionElement<Map.Entry<K, V>> active = getActiveElement();
 				fireEvent(new ObservableMapEvent<>(theKeyId, parentEl.getElementId(), theKeyType, theValueType, //
 					keyIndex, valueIndex, CollectionChangeType.remove, active.get().getKey(), value.getValue(), value.getValue(), cause));
+				// If someone's listening to this, preserve the listeners in case the key appears in the map again
+				if (getParentElements().isEmpty() && !theListeners.isEmtpy())
+					theValueListeners.put(new SimpleMapEntry<>(active.get().getKey(), null), theListeners);
 			}
 
 			private void fireEvent(ObservableMapEvent<K, V> event) {
@@ -1404,36 +1429,7 @@ public class ObservableMultiMapImpl {
 
 			@Override
 			public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends V>> observer) {
-				// When values exist for the key, subscribe to the grouped element. Otherwise, listen to the map.
-				// Could just always listen to the map, but doing it this way is better for performance, because the listener list for the
-				// map doesn't get clogged with listeners for each key
-				GroupingManager<?, K, V>.GroupedElement group = getGroup(true);
-				Subscription[] sub = new Subscription[1];
-				if (group != null) {
-					sub[0] = subscribeGroup(sub, theElement, observer);
-				} else
-					sub[0] = subscribeMap(sub, observer);
-				return Subscription.forAll(sub);
-			}
-
-			private Subscription subscribeGroup(Subscription[] sub, CollectionElement<GroupingManager<?, K, V>.GroupedElement> group,
-				Consumer<? super ObservableCollectionEvent<? extends V>> observer) {
-				return group.get().onChange(evt -> {
-					observer.accept(evt);
-					if (!group.getElementId().isPresent())
-						sub[0] = subscribeMap(sub, observer);
-				})::run;
-			}
-
-			private Subscription subscribeMap(Subscription[] sub, Consumer<? super ObservableCollectionEvent<? extends V>> observer) {
-				return DerivedObservableMultiMap.this.onChange(mapEvent -> {
-					if (!theKeyEquivalence.elementEquals(theKey, mapEvent.getKey()))
-						return;
-					observer.accept(mapEvent);
-					sub[0].unsubscribe();
-					getGroup(true);
-					sub[0] = subscribeGroup(sub, theElement, observer);
-				});
+				return theGrouping.onChange(theKey, observer);
 			}
 
 			@Override
