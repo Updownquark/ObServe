@@ -406,73 +406,26 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 	 * @return The new observable value
 	 */
 	public static <T> ObservableValue<T> assemble(TypeToken<T> type, Supplier<T> value, ObservableValue<?>... components) {
+		return assemble(type, value, options -> {}, components);
+	}
+
+	/**
+	 * Assembles an observable value, with changes occurring on the basis of changes to a set of components
+	 *
+	 * @param <T> The type of the value to produce
+	 * @param type The type of the new value
+	 * @param value The function to get the new value on demand
+	 * @param options The transform options for the assembly
+	 * @param components The components whose changes require a new value to be produced
+	 * @return The new observable value
+	 */
+	public static <T> ObservableValue<T> assemble(TypeToken<T> type, Supplier<T> value, Consumer<XformOptions> options,
+		ObservableValue<?>... components) {
 		TypeToken<T> t = type == null ? (TypeToken<T>) TypeToken.of(value.getClass()).resolveType(Supplier.class.getTypeParameters()[0])
 			: type;
-		return new ObservableValue<T>() {
-			@Override
-			public TypeToken<T> getType() {
-				return t;
-			}
-
-			@Override
-			public T get() {
-				return value.get();
-			}
-
-			@Override
-			public Observable<ObservableValueEvent<T>> changes() {
-				ObservableValue<T> outer = this;
-				return new Observable<ObservableValueEvent<T>>() {
-					@Override
-					public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-						Subscription[] subSubs = new Subscription[components.length];
-						Object[] oldValue = new Object[1];
-						for (int i = 0; i < subSubs.length; i++)
-							subSubs[i] = components[i].changes().subscribe(new Observer<ObservableValueEvent<?>>() {
-								@Override
-								public <V extends ObservableValueEvent<?>> void onNext(V value2) {
-									T newVal = value.get();
-									T oldVal = (T) oldValue[0];
-									oldValue[0] = newVal;
-									if (value2.isInitial())
-										ObservableValueEvent.doWith(outer.createInitialEvent(newVal, value2.getCause()), observer::onNext);
-									else
-										ObservableValueEvent.doWith(outer.createChangeEvent(oldVal, newVal, value2.getCause()),
-											observer::onNext);
-								}
-
-								@Override
-								public <V extends ObservableValueEvent<?>> void onCompleted(V value2) {}
-							});
-						return () -> {
-							for (Subscription sub : subSubs)
-								sub.unsubscribe();
-						};
-					}
-
-					@Override
-					public boolean isSafe() {
-						return false;
-					}
-				};
-			}
-
-			@Override
-			public Transaction lock() {
-				Transaction[] locks = new Transaction[components.length];
-				for (int i = 0; i < locks.length; i++)
-					locks[i] = components[i].lock();
-				return () -> {
-					for (int i = 0; i < locks.length; i++)
-						locks[i].close();
-				};
-			}
-
-			@Override
-			public String toString() {
-				return "Assembled " + type;
-			}
-		};
+		XformOptions.SimpleXformOptions opts = new XformOptions.SimpleXformOptions();
+		options.accept(opts);
+		return new ComposedObservableValue<>(t, c -> value.get(), new XformOptions.XformDef(opts), components);
 	}
 
 	/**
