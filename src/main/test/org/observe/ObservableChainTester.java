@@ -44,6 +44,13 @@ public class ObservableChainTester implements Testable {
 		int index;
 	}
 
+	private interface ObservableChainLink {
+		void tryModify(TestHelper helper);
+		void check();
+
+		ObservableChainLink derive(TestHelper helper);
+	}
+
 	private interface ObservableChainLinkTester<E, T> {
 		int size();
 
@@ -229,7 +236,7 @@ public class ObservableChainTester implements Testable {
 	}
 	private static final int MAX_CHAIN_LENGTH = 15;
 
-	private final List<ObservableChainLinkTester<?, ?>> theChain = new ArrayList<>();
+	private final List<ObservableChainLink> theChain = new ArrayList<>();
 
 	@Override
 	public void accept(TestHelper helper) {
@@ -240,14 +247,13 @@ public class ObservableChainTester implements Testable {
 	private <E> void assemble(TestHelper helper) {
 		//Tend toward smaller chain lengths, but allow longer ones occasionally
 		int chainLength=helper.getInt(1, helper.getInt(1, MAX_CHAIN_LENGTH));
-		TestValueType initType = nextType(helper);
-		ObservableChainLinkTester<E, E> initLink = createInitialLink(initType, helper);
+		ObservableChainLink initLink = createInitialLink(helper);
 		theChain.add(initLink);
 		while (theChain.size() < chainLength)
-			theChain.add(theChain.get(theChain.size() - 1).derive(nextType(helper), theChain.size() == chainLength - 1, helper));
+			theChain.add(theChain.get(theChain.size() - 1).derive(helper));
 	}
 
-	private <E> ObservableChainLinkTester<E, E> createInitialLink(TestValueType type, TestHelper helper) {
+	private <E> ObservableChainLink createInitialLink(TestHelper helper) {
 		int linkTypes = 3;
 		switch (helper.getInt(0, linkTypes)) {
 		case 0:
