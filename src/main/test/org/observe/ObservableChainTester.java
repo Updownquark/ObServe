@@ -51,12 +51,10 @@ public class ObservableChainTester implements Testable {
 		ObservableChainLink derive(TestHelper helper);
 	}
 
-	private interface ObservableChainLinkTester<E, T> {
+	private interface ObservableChainLinkTester<E, T> extends ObservableChainLink {
 		int size();
 
 		boolean canModify();
-
-		void tryModify(TestHelper helper);
 
 		void addFromTop(AddOp<T> add, TestHelper helper);
 
@@ -69,10 +67,6 @@ public class ObservableChainTester implements Testable {
 		void removedFromBelow(int index);
 
 		void setFromBelow(int index, E value);
-
-		<X> ObservableChainLinkTester<T, X> derive(TestValueType type, boolean assertModifiable, TestHelper helper);
-
-		void check();
 	}
 
 	private interface TypeTransformation<E, T> {
@@ -234,7 +228,7 @@ public class ObservableChainTester implements Testable {
 		List<Comparator<E>> typeCompares = (List<Comparator<E>>) COMPARATORS.get(type);
 		return typeCompares.get(helper.getInt(0, typeCompares.size()));
 	}
-	private static final int MAX_CHAIN_LENGTH = 15;
+	private static final int MAX_CHAIN_LENGTH = 5;
 
 	private final List<ObservableChainLink> theChain = new ArrayList<>();
 
@@ -246,7 +240,7 @@ public class ObservableChainTester implements Testable {
 
 	private <E> void assemble(TestHelper helper) {
 		//Tend toward smaller chain lengths, but allow longer ones occasionally
-		int chainLength=helper.getInt(1, helper.getInt(1, MAX_CHAIN_LENGTH));
+		int chainLength = helper.getInt(2, helper.getInt(2, MAX_CHAIN_LENGTH));
 		ObservableChainLink initLink = createInitialLink(helper);
 		theChain.add(initLink);
 		while (theChain.size() < chainLength)
@@ -434,7 +428,7 @@ public class ObservableChainTester implements Testable {
 		}
 
 		@Override
-		public <X> ObservableChainLinkTester<E, X> derive(TestValueType type, boolean assertModifiable, TestHelper helper) {
+		public ObservableChainLink derive(TestHelper helper) {
 			return deriveFromFlow(this, theCollection.flow(), type, assertModifiable, helper);
 		}
 
