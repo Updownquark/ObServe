@@ -115,16 +115,6 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 	}
 
 	@Override
-	default E pollLast() {
-		return ObservableSet.super.pollLast();
-	}
-
-	@Override
-	default E pollFirst() {
-		return ObservableSet.super.pollFirst();
-	}
-
-	@Override
 	default ObservableSortedSet<E> reverse() {
 		return new ObservableSortedSetImpl.ReversedSortedSet<>(this);
 	}
