@@ -36,12 +36,18 @@ public class ObservableChainTester implements Testable {
 		}
 	}
 
-	private static class AddOp<E> {
+	private static class ModOp<E> {
 		E source;
+		int index;
+
 		E result;
 		String message;
 		boolean isError;
-		int index;
+
+		ModOp(E source, int index) {
+			this.source = source;
+			this.index = index;
+		}
 	}
 
 	private interface ObservableChainLink {
@@ -51,16 +57,12 @@ public class ObservableChainTester implements Testable {
 		ObservableChainLink derive(TestHelper helper);
 	}
 
-	private interface ObservableChainLinkTester<E, T> extends ObservableChainLink {
-		int size();
+	private interface ObservableCollectionChainLink<E, T> extends ObservableChainLink {
+		void checkAddFromAbove(ModOp<T> add);
 
-		boolean canModify();
+		void checkRemoveFromAbove(ModOp<T> remove);
 
-		void addFromTop(AddOp<T> add, TestHelper helper);
-
-		String removeFromTop(int index);
-
-		AddOp<T> setFromTop(AddOp<T> value);
+		void checkSetFromAbove(ModOp<T> value);
 
 		void addedFromBelow(int index, E value);
 
@@ -136,19 +138,25 @@ public class ObservableChainTester implements Testable {
 		}
 		return new String(c);
 	}
+	private static final int MAX_VALUE = 1000;
+	private static final Map<TestValueType, Function<TestHelper, ?>> SUPPLIERS;
 	private static final Map<TestValueType, List<? extends Comparator<?>>> COMPARATORS;
 	private static final Map<BiTuple<TestValueType, TestValueType>, List<? extends TypeTransformation<?, ?>>> TYPE_TRANSFORMATIONS;
 	static {
+		SUPPLIERS = new HashMap<>();
 		COMPARATORS = new HashMap<>();
 		for (TestValueType type : TestValueType.values()) {
 			switch (type) {
 			case INT:
+				SUPPLIERS.put(type, helper -> helper.getInt(0, MAX_VALUE));
 				COMPARATORS.put(type, Arrays.asList(Integer::compareTo, ((Comparator<Integer>) Integer::compareTo).reversed()));
 				break;
 			case DOUBLE:
+				SUPPLIERS.put(type, helper -> helper.getDouble(0, MAX_VALUE));
 				COMPARATORS.put(type, Arrays.asList(Double::compareTo, ((Comparator<Double>) Double::compareTo).reversed()));
 				break;
 			case STRING:
+				SUPPLIERS.put(type, helper -> String.valueOf(helper.getInt(0, MAX_VALUE)));
 				COMPARATORS.put(type, Arrays.asList(String::compareTo, ((Comparator<String>) String::compareTo).reversed()));
 			}
 		}
@@ -269,59 +277,104 @@ public class ObservableChainTester implements Testable {
 		throw new IllegalStateException();
 	}
 
-	private static class ObservableCollectionLinkTester<E> implements ObservableChainLinkTester<E, E> {
-		private final ObservableChainLinkTester<?, E> theParent;
+	private static abstract class AbstractObservableCollectionLink<E> implements ObservableCollectionChainLink<E, E> {
+		private final ObservableCollectionChainLink<?, E> theParent;
 		private final ObservableCollection<E> theCollection;
 		private final ObservableCollectionTester<E> theTester;
-		private ObservableChainLinkTester<E, ?> theChild;
+		private ObservableCollectionChainLink<E, ?> theChild;
+		private final Function<TestHelper, E> theSupplier;
 
-		ObservableCollectionLinkTester(ObservableChainLinkTester<?, E> parent, ObservableCollection<E> collection) {
+		AbstractObservableCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type,
+			ObservableCollection<E> collection) {
 			theParent = parent;
 			theCollection = collection;
 			theTester = new ObservableCollectionTester<>(collection);
-		}
-
-		@Override
-		public int size() {
-			return theCollection.size();
-		}
-
-		@Override
-		public boolean canModify() {
-			return true;
+			theSupplier = (Function<TestHelper, E>) SUPPLIERS.get(type);
 		}
 
 		@Override
 		public void tryModify(TestHelper helper) {
-			// TODO Auto-generated method stub
-
-		}
-
-		@Override
-		public void addFromTop(AddOp<E> add, TestHelper helper) {
-			if(theParent!=null){
-				theParent.addFromTop(add, helper);
+			ModOp<E> op;
+			List<ModOp<E>> ops;
+			int subListStart;
+			List<E> modify;
+			if (helper.getBoolean(.05)) {
+				subListStart = helper.getInt(0, theCollection.size());
+				modify = theCollection.subList(subListStart, subListStart + helper.getInt(0, theCollection.size() - subListStart));
 			} else {
-				// We must be the root
-				addToCollection(add, helper);
+				subListStart = 0;
+				modify = theCollection;
 			}
-			if (add.message == null)
-				theTester.getExpected().add(add.index, add.result);
-		}
-
-		@Override
-		public String removeFromTop(int index) {
+			switch (helper.getInt(0, 15)) {
+			case 0:
+			case 1:
+			case 2:
+			case 3:
+			case 4: // More position-less adds than other ops
+				op = new ModOp<>(theSupplier.apply(helper), -1);
+				checkAddFromAbove(op);
+				addToCollection(op, helper);
+				break;
+			case 5: // Add by index
+				op = new ModOp<>(theSupplier.apply(helper), subListStart + (modify.isEmpty() ? -1 : helper.getInt(0, modify.size() + 1)));
+				checkAddFromAbove(op);
+				addToCollection(op, helper);
+				break;
+			case 6: // addAll
+				int length = helper.getInt(0, helper.getInt(0, helper.getInt(0, 1000))); // Aggressively tend smaller
+				ops = new ArrayList<>(length);
+				for (int i = 0; i < length; i++)
+					ops.add(new ModOp<>(theSupplier.apply(helper), -1));
+				int index = subListStart + ((theCollection.isEmpty() || helper.getBoolean()) ? -1 : helper.getInt(0, modify.size() + 1));
+				checkAddAll(index, ops);
+				addAllToCollection(index, ops);
+				break;
+			case 7:
+			case 8: // Set
+				if (theCollection.isEmpty())
+					return;
+				op = new ModOp<>(theSupplier.apply(helper), helper.getInt(0, modify.size()));
+				checkSetFromAbove(op);
+				setInCollection(op);
+				break;
+			case 9:
+				op = new ModOp<>(theSupplier.apply(helper), -1);
+				checkRemoveFromAbove(op);
+				removeFromCollection(op);
+				break;
+			case 10:
+				if (theCollection.isEmpty())
+					return;
+				op = new ModOp<>(null, helper.getInt(0, modify.size()));
+				checkRemoveFromAbove(op);
+				removeFromCollection(op);
+				break;
+			case 11: // removeAll
+				length = helper.getInt(0, helper.getInt(0, helper.getInt(0, 1000))); // Aggressively tend smaller
+				ops = new ArrayList<>(length);
+				for (int i = 0; i < length; i++)
+					ops.add(new ModOp<>(theSupplier.apply(helper), -1));
+				checkRemoveAll(ops);
+				removeAllFromCollection(ops);
+				break;
+			case 12: // retainAll
+				length = helper.getInt(0, 1000);
+				ops = new ArrayList<>(length);
+				for (int i = 0; i < length; i++)
+					ops.add(new ModOp<>(theSupplier.apply(helper), -1));
+				checkRetainAll(ops);
+				retainAllFromCollection(ops);
+				break;
+			case 13:
+				testBounds(helper);
+				break;
+				// TODO
+			}
 			// TODO Auto-generated method stub
-			return null;
+
 		}
 
-		@Override
-		public AddOp<E> setFromTop(AddOp<E> value) {
-			// TODO Auto-generated method stub
-			return null;
-		}
-
-		private void addToCollection(AddOp<E> add, TestHelper helper) {
+		private void addToCollection(ModOp<E> add, TestHelper helper) {
 			int preSize = theCollection.size();
 			add.message = theCollection.canAdd(add.source);
 			if (add.index < 0) {
@@ -406,6 +459,41 @@ public class ObservableChainTester implements Testable {
 
 		private E setInCollection(int index, E value) {}
 
+		private void testBounds(TestHelper helper) {
+			try {
+				theCollection.get(-1);
+				Assert.assertFalse("Should have errored", true);
+			} catch (IndexOutOfBoundsException e) {}
+			try {
+				theCollection.get(theCollection.size());
+				Assert.assertFalse("Should have errored", true);
+			} catch (IndexOutOfBoundsException e) {}
+			try {
+				theCollection.remove(-1);
+				Assert.assertFalse("Should have errored", true);
+			} catch (IndexOutOfBoundsException e) {}
+			try {
+				theCollection.remove(theCollection.size());
+				Assert.assertFalse("Should have errored", true);
+			} catch (IndexOutOfBoundsException e) {}
+			try {
+				theCollection.add(-1, theSupplier.apply(helper));
+				Assert.assertFalse("Should have errored", true);
+			} catch (IndexOutOfBoundsException e) {}
+			try {
+				theCollection.add(theCollection.size() + 1, theSupplier.apply(helper));
+				Assert.assertFalse("Should have errored", true);
+			} catch (IndexOutOfBoundsException e) {}
+			try {
+				theCollection.set(-1, theSupplier.apply(helper));
+				Assert.assertFalse("Should have errored", true);
+			} catch (IndexOutOfBoundsException e) {}
+			try {
+				theCollection.set(theCollection.size() + 1, theSupplier.apply(helper));
+				Assert.assertFalse("Should have errored", true);
+			} catch (IndexOutOfBoundsException e) {}
+		}
+
 		@Override
 		public void addedFromBelow(int index, E value) {
 			theTester.add(index, value);
@@ -438,7 +526,7 @@ public class ObservableChainTester implements Testable {
 		}
 	}
 
-	private static <E, X> ObservableChainLinkTester<E, X> deriveFromFlow(ObservableChainLinkTester<?, E> parent,
+	private static <E, X> ObservableCollectionChainLink<E, X> deriveFromFlow(ObservableCollectionChainLink<?, E> parent,
 		CollectionDataFlow<?, ?, E> flow, TestValueType type, boolean assertModifiable, TestHelper helper) {
 		// TODO Auto-generated method stub
 	}
