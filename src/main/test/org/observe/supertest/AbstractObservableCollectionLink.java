@@ -7,10 +7,9 @@ import java.util.function.Function;
 import org.junit.Assert;
 import org.observe.Observable;
 import org.observe.collect.ObservableCollection;
-import org.observe.collect.ObservableCollectionTester;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
+import org.observe.collect.ObservableCollectionTester;
 import org.observe.supertest.ObservableChainTester.TestValueType;
-import org.observe.supertest.ObservableCollectionChainLink.CollectionOp;
 import org.qommons.TestHelper;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
@@ -264,7 +263,7 @@ abstract class AbstractObservableCollectionLink<E> implements ObservableCollecti
 	}
 
 	@Override
-	public ObservableChainLink derive(TestHelper helper) {
+	public ObservableChainLink<?> derive(TestHelper helper) {
 		return ObservableChainTester.deriveFromFlow(this, theFlow, helper);
 	}
 
