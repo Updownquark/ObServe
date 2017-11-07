@@ -83,19 +83,22 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 	default CollectionSubscription subscribe(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action, boolean forward) {
 		try (Transaction t = lock(false, null)) {
 			Subscription sub = onChange(action);
-			SubscriptionCause.doWith(new SubscriptionCause(), c -> {
+			SubscriptionCause subCause = new SubscriptionCause();
+			try (Transaction ct = SubscriptionCause.use(subCause)) {
 				int[] index = new int[] { forward ? 0 : size() - 1 };
 				entrySet().spliterator(forward).forEachElement(entryEl -> {
-					ObservableMapEvent.doWith(
-						new ObservableMapEvent<>(entryEl.getElementId(), entryEl.getElementId(), getKeyType(), getValueType(), index[0],
-							index[0], CollectionChangeType.add, entryEl.get().getKey(), null, entryEl.get().getValue(), c),
-						action);
+					ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(entryEl.getElementId(), entryEl.getElementId(),
+						getKeyType(), getValueType(), index[0], index[0], CollectionChangeType.add, entryEl.get().getKey(), null,
+						entryEl.get().getValue(), subCause);
+					try (Transaction mt = ObservableMapEvent.use(mapEvent)) {
+						action.accept(mapEvent);
+					}
 					if (forward)
 						index[0]++;
 					else
 						index[0]--;
 				}, forward);
-			});
+			}
 			return removeAll -> {
 				if (!removeAll) {
 					sub.unsubscribe();
@@ -103,16 +106,21 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 				}
 				try (Transaction unsubT = lock(false, null)) {
 					sub.unsubscribe();
-					SubscriptionCause.doWith(new SubscriptionCause(), c -> {
+					SubscriptionCause unsubCause = new SubscriptionCause();
+					try (Transaction ct = SubscriptionCause.use(unsubCause)) {
 						int[] index = new int[] { forward ? 0 : size() - 1 };
 						entrySet().spliterator(forward).forEachElement(entryEl -> {
-							ObservableMapEvent.doWith(new ObservableMapEvent<>(entryEl.getElementId(), entryEl.getElementId(), getKeyType(),
+							ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(entryEl.getElementId(), entryEl.getElementId(),
+								getKeyType(),
 								getValueType(), index[0], index[0], CollectionChangeType.remove, entryEl.get().getKey(),
-								entryEl.get().getValue(), entryEl.get().getValue(), c), action);
+								entryEl.get().getValue(), entryEl.get().getValue(), unsubCause);
+							try (Transaction mt = ObservableMapEvent.use(mapEvent)) {
+								action.accept(mapEvent);
+							}
 							if (!forward)
 								index[0]--;
 						}, forward);
-					});
+					}
 				}
 			};
 		}
@@ -309,11 +317,12 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 					V oldValue = theValue;
 					theValue = value;
 					int index = entrySet.getElementsBefore(theElementId);
-					ObservableMapEvent.doWith(
-						new ObservableMapEvent<>(theElementId, theElementId, keyType, valueType, index, index, CollectionChangeType.set,
-							theKey, oldValue, value, firstCause[0]), //
-						evt -> valueListeners.forEach(//
-							listener -> listener.accept(evt)));
+					ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(theElementId, theElementId, keyType, valueType, index,
+						index, CollectionChangeType.set, theKey, oldValue, value, firstCause[0]);
+					try (Transaction t = ObservableMapEvent.use(mapEvent)) {
+						valueListeners.forEach(//
+							listener -> listener.accept(mapEvent));
+					}
 					return oldValue;
 				} finally {
 					valueLock.unlock();
@@ -484,11 +493,12 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 			public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
 				Subscription entrySub = entrySet.onChange(evt -> {
 					V oldValue = evt.getType() == CollectionChangeType.add ? null : evt.getNewValue().getValue();
-					ObservableMapEvent
-					.doWith(
-						new ObservableMapEvent<>(evt.getElementId(), evt.getElementId(), keyType, valueType, evt.getIndex(),
-							evt.getIndex(), evt.getType(), evt.getNewValue().getKey(), oldValue, evt.getNewValue().getValue(), evt),
-						action);
+					ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(evt.getElementId(), evt.getElementId(), keyType, valueType,
+						evt.getIndex(), evt.getIndex(), evt.getType(), evt.getNewValue().getKey(), oldValue, evt.getNewValue().getValue(),
+						evt);
+					try (Transaction t = ObservableMapEvent.use(mapEvent)) {
+						action.accept(mapEvent);
+					}
 				});
 				Runnable valueSet = valueListeners.add(action, false);
 				return () -> {

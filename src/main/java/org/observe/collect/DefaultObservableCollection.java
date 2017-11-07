@@ -5,7 +5,6 @@ import java.util.LinkedList;
 import java.util.function.Consumer;
 
 import org.observe.Subscription;
-import org.qommons.AbstractCausable;
 import org.qommons.Causable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
@@ -50,16 +49,16 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	public Transaction lock(boolean write, boolean structural, Object cause) {
 		Transaction t = theValues.lock(write, structural, cause);
 		Causable tCause;
-		boolean createdCause;
+		Transaction causeFinish;
 		if (cause == null && !theTransactionCauses.isEmpty()) {
-			createdCause = false;
+			causeFinish = null;
 			tCause = null;
 		} else if (cause instanceof Causable) {
-			createdCause = false;
+			causeFinish = null;
 			tCause = (Causable) cause;
 		} else {
-			createdCause = true;
 			tCause = new SimpleCause(cause);
+			causeFinish = SimpleCause.use(tCause);
 		}
 		if (write && tCause != null)
 			theTransactionCauses.add(tCause);
@@ -71,8 +70,8 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 				if (isClosed)
 					return;
 				isClosed = true;
-				if (createdCause)
-					AbstractCausable.finish((AbstractCausable) tCause);
+				if (causeFinish != null)
+					causeFinish.close();
 				if (write && tCause != null)
 					theTransactionCauses.removeLastOccurrence(tCause);
 				t.close();
@@ -186,9 +185,10 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	}
 
 	void fire(ObservableCollectionEvent<E> evt) {
-		ObservableCollectionEvent.doWith(evt, //
-			e -> theObservers.forEach(//
-				listener -> listener.accept(e)));
+		try (Transaction t = ObservableCollectionEvent.use(evt)) {
+			theObservers.forEach(//
+				listener -> listener.accept(evt));
+		}
 	}
 
 	@Override

@@ -313,7 +313,10 @@ public final class ObservableCollectionImpl {
 			List<CollectionChangeEvent.ElementChange<E>> elements = new ArrayList<>(tracker.elements.size());
 			for (ChangeValue<E> elChange : tracker.elements)
 				elements.add(new CollectionChangeEvent.ElementChange<>(elChange.newValue, elChange.oldValue, elChange.index));
-			CollectionChangeEvent.doWith(new CollectionChangeEvent<>(tracker.type, elements, cause), observer::onNext);
+			CollectionChangeEvent<E> evt = new CollectionChangeEvent<>(tracker.type, elements, cause);
+			try (Transaction t = CollectionChangeEvent.use(evt)) {
+				observer.onNext(evt);
+			}
 		}
 
 		@Override
@@ -904,7 +907,10 @@ public final class ObservableCollectionImpl {
 						}
 					};
 					return counts.init(theLeft, theRight, null, false, c -> {
-						ObservableValueEvent.doWith(createInitialEvent(theSatisfiedCheck.test(counts), null), observer::onNext);
+						ObservableValueEvent<Boolean> evt = createInitialEvent(theSatisfiedCheck.test(counts), null);
+						try (Transaction t = ObservableValueEvent.use(evt)) {
+							observer.onNext(evt);
+						}
 					});
 				}
 			};
@@ -1050,8 +1056,11 @@ public final class ObservableCollectionImpl {
 				int index = theSize - evt.getIndex() - 1;
 				if (evt.getType() == CollectionChangeType.remove)
 					theSize--;
-				ObservableCollectionEvent.doWith(new ObservableCollectionEvent<>(evt.getElementId().reverse(), getType(), index,
-					evt.getType(), evt.getOldValue(), evt.getNewValue(), evt), theObserver);
+				ObservableCollectionEvent<E> reversed = new ObservableCollectionEvent<>(evt.getElementId().reverse(), getType(), index,
+					evt.getType(), evt.getOldValue(), evt.getNewValue(), evt);
+				try (Transaction t = ObservableCollectionEvent.use(reversed)) {
+					theObserver.accept(reversed);
+				}
 			}
 		}
 	}
@@ -1449,9 +1458,10 @@ public final class ObservableCollectionImpl {
 		}
 
 		void fireListeners(ObservableCollectionEvent<T> event) {
-			ObservableCollectionEvent.doWith(event, //
-				evt -> theListeners.forEach(//
-					listener -> listener.accept(evt)));
+			try (Transaction t = ObservableCollectionEvent.use(event)) {
+				theListeners.forEach(//
+					listener -> listener.accept(event));
+			}
 		}
 
 		@Override
@@ -1481,36 +1491,6 @@ public final class ObservableCollectionImpl {
 				if (theListenerCount.decrementAndGet() == 0)
 					STRONG_REFS.remove(this);
 			};
-		}
-
-		@Override
-		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends T>> observer, boolean forward) {
-			try (Transaction t = lock(false, null)) {
-				SubscriptionCause.doWith(new SubscriptionCause(), c -> {
-					int index = 0;
-					for (DerivedElementHolder<T> element : theDerivedElements) {
-						observer.accept(
-							new ObservableCollectionEvent<>(element, getType(), index++, CollectionChangeType.add, null, element.get(), c));
-					}
-				});
-				Subscription changeSub = onChange(observer);
-				return removeAll -> {
-					if (!removeAll) {
-						changeSub.unsubscribe();
-						return;
-					}
-					try (Transaction closeT = lock(false, null)) {
-						changeSub.unsubscribe();
-						SubscriptionCause.doWith(new SubscriptionCause(), c -> {
-							int index = 0;
-							for (DerivedElementHolder<T> element : theDerivedElements) {
-								observer.accept(new ObservableCollectionEvent<>(element, getType(), index++, CollectionChangeType.remove,
-									element.get(), element.get(), c));
-							}
-						});
-					}
-				};
-			}
 		}
 
 		@Override
@@ -1687,16 +1667,15 @@ public final class ObservableCollectionImpl {
 		public void clear() {
 			if (isEmpty())
 				return;
-			SimpleCause.doWith(new SimpleCause(), c -> {
-				try (Transaction t = lock(true, c)) {
-					if (!theFlow.clear()) {
-						new ArrayList<>(theDerivedElements).forEach(el -> {
-							if (el.element.canRemove() == null)
-								el.element.remove();
-						});
-					}
+			SimpleCause cause = new SimpleCause();
+			try (Transaction cst = SimpleCause.use(cause); Transaction t = lock(true, cause)) {
+				if (!theFlow.clear()) {
+					new ArrayList<>(theDerivedElements).forEach(el -> {
+						if (el.element.canRemove() == null)
+							el.element.remove();
+					});
 				}
-			});
+			}
 		}
 
 		@Override

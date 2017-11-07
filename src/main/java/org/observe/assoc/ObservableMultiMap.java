@@ -210,16 +210,19 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		boolean valueForward) {
 		try (Transaction t = lock(false, null)) {
 			Subscription sub = onChange(action);
-			SubscriptionCause.doWith(new SubscriptionCause(), c -> {
+			SubscriptionCause subCause = new SubscriptionCause();
+			try (Transaction ct = SubscriptionCause.use(subCause)) {
 				int[] keyIndex = new int[] { keyForward ? 0 : keySet().size() - 1 };
 				entrySet().spliterator(keyForward).forEachElement(entryEl -> {
 					ObservableCollection<V> values = entryEl.get().getValues();
 					int[] valueIndex = new int[] { valueForward ? 0 : values.size() - 1 };
 					values.spliterator(valueForward).forEachElement(valueEl -> {
-						ObservableMapEvent.doWith(
-							new ObservableMapEvent<>(entryEl.getElementId(), valueEl.getElementId(), getKeyType(), getValueType(),
-								keyIndex[0], valueIndex[0], CollectionChangeType.add, entryEl.get().getKey(), null, valueEl.get(), c),
-							action);
+						ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(entryEl.getElementId(), valueEl.getElementId(),
+							getKeyType(), getValueType(), keyIndex[0], valueIndex[0], CollectionChangeType.add, entryEl.get().getKey(),
+							null, valueEl.get(), subCause);
+						try (Transaction mt = ObservableMapEvent.use(mapEvent)) {
+							action.accept(mapEvent);
+						}
 						if (valueForward)
 							valueIndex[0]++;
 						else
@@ -230,7 +233,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 					else
 						keyIndex[0]--;
 				}, keyForward);
-			});
+			}
 			return removeAll -> {
 				if (!removeAll) {
 					sub.unsubscribe();
@@ -238,23 +241,26 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 				}
 				try (Transaction unsubT = lock(false, null)) {
 					sub.unsubscribe();
-					SubscriptionCause.doWith(new SubscriptionCause(), c -> {
+					SubscriptionCause unsubCause = new SubscriptionCause();
+					try (Transaction ct = SubscriptionCause.use(unsubCause)) {
 						int[] keyIndex = new int[] { keyForward ? 0 : keySet().size() - 1 };
 						entrySet().spliterator(keyForward).forEachElement(entryEl -> {
 							ObservableCollection<V> values = entryEl.get().getValues();
 							int[] valueIndex = new int[] { valueForward ? 0 : values.size() - 1 };
 							values.spliterator(valueForward).forEachElement(valueEl -> {
-								ObservableMapEvent
-								.doWith(new ObservableMapEvent<>(entryEl.getElementId(), valueEl.getElementId(), getKeyType(),
-									getValueType(), keyIndex[0], valueIndex[0], CollectionChangeType.remove, entryEl.get().getKey(), null,
-									valueEl.get(), c), action);
+								ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(entryEl.getElementId(), valueEl.getElementId(),
+									getKeyType(), getValueType(), keyIndex[0], valueIndex[0], CollectionChangeType.remove,
+									entryEl.get().getKey(), null, valueEl.get(), unsubCause);
+								try (Transaction mt = ObservableMapEvent.use(mapEvent)) {
+									action.accept(mapEvent);
+								}
 								if (!valueForward)
 									valueIndex[0]--;
 							}, valueForward);
 							if (!keyForward)
 								keyIndex[0]--;
 						}, keyForward);
-					});
+					}
 				}
 			};
 		}
@@ -701,16 +707,20 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 						for (EntrySubscription sub : valueSubs.values())
 							sub.sub.unsubscribe();
 						if (removeAll) {
-							SimpleCause.doWith(new SimpleCause(), c -> {
+							SimpleCause cause = new SimpleCause();
+							try (Transaction ct = SimpleCause.use(cause)) {
 								for (Map.Entry<ElementId, EntrySubscription> entry : valueSubs.entrySet()) {
 									EntrySubscription sub = entry.getValue();
 									entry.getValue().sub.unsubscribe();
 									int index = theSource.keySet().getElementsBefore(entry.getKey());
-									action.accept(new ObservableMapEvent<>(entry.getKey(), entry.getKey(), //
+									ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(entry.getKey(), entry.getKey(), //
 										getKeyType(), getValueType(), index, 0, //
-										CollectionChangeType.remove, sub.key, sub.value, sub.value, c));
+										CollectionChangeType.remove, sub.key, sub.value, sub.value, cause);
+									try (Transaction mt = ObservableMapEvent.use(mapEvent)) {
+										action.accept(mapEvent);
+									}
 								}
-							});
+							}
 						}
 					}
 				};

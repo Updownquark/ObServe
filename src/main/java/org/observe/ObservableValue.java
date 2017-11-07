@@ -84,7 +84,10 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 	 * @param action The action to perform on the event
 	 */
 	default void fireInitialEvent(T value, Object cause, Consumer<? super ObservableValueEvent<T>> action) {
-		ObservableValueEvent.doWith(createInitialEvent(value, cause), action);
+		ObservableValueEvent<T> evt = createInitialEvent(value, cause);
+		try (Transaction t = ObservableValueEvent.use(evt)) {
+			action.accept(evt);
+		}
 	}
 
 	/**
@@ -94,7 +97,10 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 	 * @param action The action to perform on the event
 	 */
 	default void fireChangeEvent(T oldVal, T newVal, Object cause, Consumer<? super ObservableValueEvent<T>> action) {
-		ObservableValueEvent.doWith(createChangeEvent(oldVal, newVal, cause), action);
+		ObservableValueEvent<T> evt = createChangeEvent(oldVal, newVal, cause);
+		try (Transaction t = ObservableValueEvent.use(evt)) {
+			action.accept(evt);
+		}
 	}
 
 	/**
@@ -550,14 +556,16 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 								}
 
 								private void fireNext(ObservableValueEvent<T> next) {
-									ObservableValueEvent.doWith(next, evt -> theObservers.forEach(listener -> listener.onNext(evt)));
+									try (Transaction t = ObservableValueEvent.use(next)) {
+										theObservers.forEach(listener -> listener.onNext(next));
+									}
 								}
 
 								private void fireCompleted(ObservableValueEvent<T> next) {
-									ObservableValueEvent.doWith(next, evt -> {
-										theObservers.forEach(listener -> listener.onCompleted(evt));
+									try (Transaction t = ObservableValueEvent.use(next)) {
+										theObservers.forEach(listener -> listener.onCompleted(next));
 										Subscription.forAll(composedSubs).unsubscribe();
-									});
+									}
 								}
 							});
 							if (completed[0])
@@ -593,10 +601,13 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 				}
 			});
 			theObservers.setOnSubscribe(observer -> {
-				if (completed[0])
-					ObservableValueEvent.doWith(createInitialEvent(theValue, null), observer::onCompleted);
-				else
-					ObservableValueEvent.doWith(createInitialEvent(theValue, null), observer::onNext);
+				ObservableValueEvent<T> evt = createInitialEvent(theValue, null);
+				try (Transaction t = ObservableValueEvent.use(evt)) {
+					if (completed[0])
+						observer.onCompleted(evt);
+					else
+						observer.onNext(evt);
+				}
 			});
 		}
 
@@ -775,7 +786,10 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 					}
 					refireSub[0] = theRefresh.act(evt -> {
 						T value = get();
-						ObservableValueEvent.doWith(createChangeEvent(value, value, evt), observer::onNext);
+						ObservableValueEvent<T> evt2 = createChangeEvent(value, value, evt);
+						try (Transaction t = ObservableValueEvent.use(evt2)) {
+							observer.onNext(evt2);
+						}
 					});
 					return () -> {
 						outerSub.unsubscribe();
@@ -825,7 +839,10 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 			return new Observable<ObservableValueEvent<T>>() {
 				@Override
 				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-					ObservableValueEvent.doWith(createInitialEvent(theValue, null), observer::onNext);
+					ObservableValueEvent<T> evt = createInitialEvent(theValue, null);
+					try (Transaction t = ObservableValueEvent.use(evt)) {
+						observer.onNext(evt);
+					}
 					return () -> {};
 				}
 
@@ -993,14 +1010,15 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 															innerOld = (T) old[0];
 														else
 															old[0] = innerOld = event2.getOldValue();
+														ObservableValueEvent<T> toFire;
 														if (event.isInitial() && event2.isInitial())
-															ObservableValueEvent.doWith(
-																retObs.createInitialEvent(event2.getNewValue(), event2.getCause()),
-																observer::onNext);
+															toFire = retObs.createInitialEvent(event2.getNewValue(), event2.getCause());
 														else
-															ObservableValueEvent.doWith(
-																retObs.createChangeEvent(innerOld, event2.getNewValue(), event2.getCause()),
-																observer::onNext);
+															toFire = retObs.createChangeEvent(innerOld, event2.getNewValue(),
+																event2.getCause());
+														try (Transaction t = ObservableValueEvent.use(toFire)) {
+															observer.onNext(toFire);
+														}
 													} finally {
 														theLock.unlock();
 													}
@@ -1011,12 +1029,16 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 											})));
 										if (!firedInit2[0])
 											throw new IllegalStateException(innerObs + " did not fire an initial value");
-									} else if (event.isInitial())
-										ObservableValueEvent.doWith(retObs.createInitialEvent(get(null), event.getCause()),
-											observer::onNext);
-									else if (old[0] != null)
-										ObservableValueEvent.doWith(retObs.createChangeEvent((T) old[0], get(null), event.getCause()),
-											observer::onNext);
+									} else {
+										ObservableValueEvent<T> toFire;
+										if (event.isInitial())
+											toFire = retObs.createInitialEvent(get(null), event.getCause());
+										else
+											toFire = retObs.createChangeEvent((T) old[0], get(null), event.getCause());
+										try (Transaction t = ObservableValueEvent.use(toFire)) {
+											observer.onNext(toFire);
+										}
+									}
 								} finally {
 									theLock.unlock();
 								}
@@ -1028,9 +1050,11 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 								Subscription.unsubscribe(innerSub.getAndSet(null));
 								theLock.lock();
 								try {
-									ObservableValueEvent.doWith(
-										retObs.createChangeEvent(get(event.getOldValue()), get(event.getNewValue()), event.getCause()),
-										observer::onCompleted);
+									ObservableValueEvent<T> toFire = retObs.createChangeEvent(get(event.getOldValue()),
+										get(event.getNewValue()), event.getCause());
+									try (Transaction t = ObservableValueEvent.use(toFire)) {
+										observer.onCompleted(toFire);
+									}
 								} finally {
 									theLock.unlock();
 								}
@@ -1109,7 +1133,10 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 				@Override
 				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 					if (theValues.length == 0) {
-						ObservableValueEvent.doWith(createInitialEvent(null, null), observer::onNext);
+						ObservableValueEvent<T> evt = createInitialEvent(null, null);
+						try (Transaction t = ObservableValueEvent.use(evt)) {
+							observer.onNext(evt);
+						}
 						return () -> {};
 					}
 					Subscription[] valueSubs = new Subscription[theValues.length];
@@ -1165,7 +1192,9 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 								}
 								if (toFire != null) {
 									hasFiredInit[0] = true;
-									ObservableValueEvent.doWith(toFire, observer::onNext);
+									try (Transaction t = ObservableValueEvent.use(toFire)) {
+										observer.onNext(toFire);
+									}
 								}
 								if (found != isFound) {
 									isFound = found;

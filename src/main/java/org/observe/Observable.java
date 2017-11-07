@@ -10,6 +10,7 @@ import java.util.function.Supplier;
 
 import org.qommons.AbstractCausable;
 import org.qommons.ListenerSet;
+import org.qommons.Transaction;
 
 /**
  * A stream of values that can be filtered, mapped, composed, etc. and evaluated on
@@ -707,10 +708,9 @@ public interface Observable<T> {
 					outerSub.unsubscribe();
 					if (isTerminating) {
 						T defValue = theDefaultValue.get();
-						if (defValue instanceof AbstractCausable)
-							AbstractCausable.doWith((AbstractCausable) defValue, v -> observer.onCompleted((T) v));
-						else
+						try (Transaction t = AbstractCausable.use(defValue)) {
 							observer.onCompleted(defValue);
+						}
 					}
 				}
 			});

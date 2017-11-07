@@ -165,45 +165,6 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	}
 
 	@Override
-	default boolean removeAll(Collection<?> c) {
-		return SimpleCause.doWithF(new SimpleCause(), cause -> {
-			try (Transaction ct = Transactable.lock(c, false, null)) {
-				if (isEmpty() || c.isEmpty())
-					return false;
-				// TODO Change to removeIf
-				return findAll(v -> c.contains(v), el -> el.remove(), true) > 0;
-			}
-		});
-	}
-
-	@Override
-	default boolean retainAll(Collection<?> c) {
-		return SimpleCause.doWithF(new SimpleCause(), cause -> {
-			try (Transaction t = lock(true, cause); Transaction ct = Transactable.lock(c, false, null)) {
-				if (isEmpty())
-					return false;
-				if (c.isEmpty()) {
-					clear();
-					return true;
-				}
-				return findAll(v -> !c.contains(v), el -> el.remove(), true) > 0;
-			}
-		});
-	}
-
-	@Override
-	default boolean addAll(Collection<? extends E> c) {
-		return SimpleCause.doWithF(new SimpleCause(), cause -> {
-			boolean mod = false;
-			try (Transaction t = lock(true, cause); Transaction t2 = Transactable.lock(c, false, cause)) {
-				for (E o : c)
-					mod |= add(o);
-			}
-			return mod;
-		});
-	}
-
-	@Override
 	void clear();
 
 	/**
@@ -221,15 +182,18 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		try (Transaction t = lock(false, null)) {
 			// Initial events
 			int[] index = new int[] { forward ? 0 : size() - 1 };
-			SubscriptionCause.doWith(new SubscriptionCause(), c -> spliterator(forward).forEachElement(el -> {
-				ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(), index[0],
-					CollectionChangeType.add, null, el.get(), c);
-				observer.accept(event);
-				if (forward)
-					index[0]++;
-				else
-					index[0]--;
-			}, forward));
+			SubscriptionCause cause = new SubscriptionCause();
+			try (Transaction ct = SubscriptionCause.use(cause)) {
+				spliterator(forward).forEachElement(el -> {
+					ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(), index[0],
+						CollectionChangeType.add, null, el.get(), cause);
+					observer.accept(event);
+					if (forward)
+						index[0]++;
+					else
+						index[0]--;
+				}, forward);
+			}
 			// Subscribe changes
 			changeSub = onChange(observer);
 		}
@@ -240,14 +204,17 @@ public interface ObservableCollection<E> extends BetterList<E> {
 				if (removeAll) {
 					// Remove events
 					int[] index = new int[] { forward ? 0 : size() - 1 };
-					SubscriptionCause.doWith(new SubscriptionCause(), c -> spliterator(forward).forEachElement(el -> {
-						E value = el.get();
-						ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(), index[0],
-							CollectionChangeType.remove, value, value, c);
-						observer.accept(event);
-						if (!forward)
-							index[0]--;
-					}, forward));
+					SubscriptionCause cause = new SubscriptionCause();
+					try (Transaction ct = SubscriptionCause.use(cause)) {
+						spliterator(forward).forEachElement(el -> {
+							E value = el.get();
+							ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(), index[0],
+								CollectionChangeType.remove, value, value, cause);
+							observer.accept(event);
+							if (!forward)
+								index[0]--;
+						}, forward);
+					}
 				}
 			}
 		};

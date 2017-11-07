@@ -78,7 +78,10 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 		try {
 			T old = theValue;
 			theValue = value;
-			ObservableValueEvent.doWith(createChangeEvent(old, value, cause), theEventer::onNext);
+			ObservableValueEvent<T> evt = createChangeEvent(old, value, cause);
+			try (Transaction t = ObservableValueEvent.use(evt)) {
+				theEventer.onNext(evt);
+			}
 			return old;
 		} finally {
 			theLock.unlock();
