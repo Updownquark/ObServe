@@ -10,10 +10,13 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollectionTester;
 import org.observe.supertest.ObservableChainTester.TestValueType;
+import org.qommons.BiTuple;
 import org.qommons.TestHelper;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
+
+import com.google.common.reflect.TypeToken;
 
 abstract class AbstractObservableCollectionLink<E> implements ObservableCollectionChainLink<E, E> {
 	private final ObservableCollectionChainLink<?, E> theParent;
@@ -264,11 +267,31 @@ abstract class AbstractObservableCollectionLink<E> implements ObservableCollecti
 
 	@Override
 	public ObservableChainLink<?> derive(TestHelper helper) {
-		return ObservableChainTester.deriveFromFlow(this, theFlow, helper);
+		return deriveFromFlow(this, theFlow, helper);
 	}
 
 	@Override
 	public void check() {
 		theTester.check();
+	}
+
+	static <E, X> ObservableCollectionChainLink<E, X> deriveFromFlow(ObservableCollectionChainLink<?, E> parent,
+		CollectionDataFlow<?, ?, E> flow, TestHelper helper) {
+		CollectionDataFlow<?, ?, X> derivedFlow;
+		switch (helper.getInt(0, 5)) {
+		case 0:
+			TestValueType mapType = TestValueType.values()[helper.getInt(0, TestValueType.values().length)];
+			List<? extends TypeTransformation<E, X>> transforms = (List<? extends TypeTransformation<E, X>>) TYPE_TRANSFORMATIONS
+				.get(new BiTuple<>(parent.getType(), mapType));
+			TypeTransformation<E, X> transform = transforms.get(helper.getInt(0, transforms.size()));
+			derivedFlow = flow.map((TypeToken<X>) mapType.type, transform::map, options -> {
+				options.withReverse(transform::reverse).cache(helper.getBoolean()).fireIfUnchanged(helper.getBoolean())
+					.reEvalOnUpdate(helper.getBoolean());
+			});
+			return new AbstractObservableCollectionLink<E, X>(parent, mapType, todo) {};
+		case 1:
+
+		}
+		// TODO Auto-generated method stub
 	}
 }

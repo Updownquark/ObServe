@@ -10,7 +10,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.observe.collect.DefaultObservableCollection;
-import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.qommons.BiTuple;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.Testable;
@@ -213,7 +212,7 @@ public class ObservableChainTester implements Testable {
 		List<Comparator<E>> typeCompares = (List<Comparator<E>>) COMPARATORS.get(type);
 		return typeCompares.get(helper.getInt(0, typeCompares.size()));
 	}
-	private static final int MAX_CHAIN_LENGTH = 5;
+	private static final int MAX_CHAIN_LENGTH = 15;
 
 	private final List<ObservableChainLink<?>> theChain = new ArrayList<>();
 
@@ -254,23 +253,13 @@ public class ObservableChainTester implements Testable {
 		throw new IllegalStateException();
 	}
 
-	static <E, X> ObservableCollectionChainLink<E, X> deriveFromFlow(ObservableCollectionChainLink<?, E> parent,
-		CollectionDataFlow<?, ?, E> flow, TestHelper helper) {
-		CollectionDataFlow<?, ?, X> derivedFlow;
-		switch (helper.getInt(0, 5)) {
-		case 0:
-			TestValueType mapType = TestValueType.values()[helper.getInt(0, TestValueType.values().length)];
-			List<? extends TypeTransformation<E, X>> transforms = (List<? extends TypeTransformation<E, X>>) TYPE_TRANSFORMATIONS
-				.get(new BiTuple<>(parent.getType(), mapType));
-			TypeTransformation<E, X> transform = transforms.get(helper.getInt(0, transforms.size()));
-			derivedFlow = flow.map((TypeToken<X>) mapType.type, transform::map, options -> {
-				options.withReverse(transform::reverse).cache(helper.getBoolean()).fireIfUnchanged(helper.getBoolean())
-				.reEvalOnUpdate(helper.getBoolean());
-			});
-			return new AbstractObservableCollectionLink<E, X>(parent, mapType, todo) {};
-		case 1:
-
+	private void test(TestHelper helper) {
+		int tries = 1000;
+		for (int tri = 0; tri < tries; tri++) {
+			int linkIndex = helper.getInt(0, theChain.size());
+			theChain.get(linkIndex).tryModify(helper);
+			for (ObservableChainLink<?> link : theChain)
+				link.check();
 		}
-		// TODO Auto-generated method stub
 	}
 }
