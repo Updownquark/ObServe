@@ -10,16 +10,15 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollectionTester;
 import org.observe.supertest.ObservableChainTester.TestValueType;
-import org.qommons.BiTuple;
 import org.qommons.TestHelper;
+import org.qommons.collect.BetterSet;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 
-import com.google.common.reflect.TypeToken;
-
 abstract class AbstractObservableCollectionLink<E> implements ObservableCollectionChainLink<E, E> {
 	private final ObservableCollectionChainLink<?, E> theParent;
+	private final TestValueType theType;
 	private final CollectionDataFlow<?, ?, E> theFlow;
 	private final ObservableCollection<E> theCollection;
 	private final ObservableCollectionTester<E> theTester;
@@ -29,6 +28,7 @@ abstract class AbstractObservableCollectionLink<E> implements ObservableCollecti
 	AbstractObservableCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type,
 		CollectionDataFlow<?, ?, E> flow, TestHelper helper) {
 		theParent = parent;
+		theType = type;
 		if (flow.supportsPassive() && helper.getBoolean())
 			theCollection = flow.collectPassive();
 		else
@@ -44,6 +44,7 @@ abstract class AbstractObservableCollectionLink<E> implements ObservableCollecti
 	@Override
 	public void tryModify(TestHelper helper) {
 		CollectionOp<E> op;
+		CollectionOp<E> copyOp;
 		List<CollectionOp<E>> ops;
 		int subListStart;
 		List<E> modify;
@@ -60,58 +61,84 @@ abstract class AbstractObservableCollectionLink<E> implements ObservableCollecti
 		case 2:
 		case 3:
 		case 4: // More position-less adds than other ops
-			op = new CollectionOp<>(theSupplier.apply(helper), -1);
+			op = new CollectionOp<>(theCollection.equivalence(), theSupplier.apply(helper), -1);
+			copyOp = op.clone();
 			checkAddFromAbove(op);
+			Assert.assertEquals(op, checkAddable(copyOp));
 			addToCollection(op, helper);
 			break;
 		case 5: // Add by index
-			op = new CollectionOp<>(theSupplier.apply(helper),
+			op = new CollectionOp<>(theCollection.equivalence(), theSupplier.apply(helper),
 				subListStart + (modify.isEmpty() ? -1 : helper.getInt(0, modify.size() + 1)));
+			copyOp = op.clone();
 			checkAddFromAbove(op);
+			Assert.assertEquals(op, checkAddable(copyOp));
 			addToCollection(op, helper);
 			break;
 		case 6: // addAll
 			int length = helper.getInt(0, helper.getInt(0, helper.getInt(0, 1000))); // Aggressively tend smaller
 			ops = new ArrayList<>(length);
 			for (int i = 0; i < length; i++)
-				ops.add(new CollectionOp<>(theSupplier.apply(helper), -1));
+				ops.add(new CollectionOp<>(theCollection.equivalence(), theSupplier.apply(helper), -1));
 			int index = subListStart + ((theCollection.isEmpty() || helper.getBoolean()) ? -1 : helper.getInt(0, modify.size() + 1));
-			checkAddAll(index, ops);
+			for (int i = 0; i < length; i++) {
+				copyOp = ops.get(i).clone();
+				checkAddFromAbove(ops.get(i));
+				Assert.assertEquals(ops.get(i), checkAddable(copyOp));
+			}
 			addAllToCollection(index, ops);
 			break;
 		case 7:
 		case 8: // Set
 			if (theCollection.isEmpty())
 				return;
-			op = new CollectionOp<>(theSupplier.apply(helper), helper.getInt(0, modify.size()));
+			op = new CollectionOp<>(theCollection.equivalence(), theSupplier.apply(helper), helper.getInt(0, modify.size()));
+			copyOp = op.clone();
 			checkSetFromAbove(op);
+			Assert.assertEquals(op, checkSettable(copyOp));
 			setInCollection(op);
 			break;
 		case 9:
-			op = new CollectionOp<>(theSupplier.apply(helper), -1);
+			op = new CollectionOp<>(theCollection.equivalence(), theSupplier.apply(helper), -1);
+			copyOp = op.clone();
 			checkRemoveFromAbove(op);
+			Assert.assertEquals(op, checkRemovable(copyOp));
 			removeFromCollection(op);
 			break;
 		case 10:
 			if (theCollection.isEmpty())
 				return;
-			op = new CollectionOp<>(null, helper.getInt(0, modify.size()));
+			op = new CollectionOp<>(theCollection.equivalence(), null, helper.getInt(0, modify.size()));
+			copyOp = op.clone();
 			checkRemoveFromAbove(op);
+			Assert.assertEquals(op, checkRemovable(copyOp));
 			removeFromCollection(op);
 			break;
 		case 11: // removeAll
 			length = helper.getInt(0, helper.getInt(0, helper.getInt(0, 1000))); // Aggressively tend smaller
 			ops = new ArrayList<>(length);
 			for (int i = 0; i < length; i++)
-				ops.add(new CollectionOp<>(theSupplier.apply(helper), -1));
-			checkRemoveAll(ops);
+				ops.add(new CollectionOp<>(theCollection.equivalence(), theSupplier.apply(helper), -1));
+			for (int i = 0; i < length; i++) {
+				copyOp = ops.get(i).clone();
+				checkRemoveFromAbove(ops.get(i));
+				Assert.assertEquals(ops.get(i), checkRemove(copyOp));
+			}
 			removeAllFromCollection(ops);
 			break;
 		case 12: // retainAll
 			length = helper.getInt(0, 1000);
-			ops = new ArrayList<>(length);
-			for (int i = 0; i < length; i++)
-				ops.add(new CollectionOp<>(theSupplier.apply(helper), -1));
+			BetterSet<E> set=theCollection.equivalence().createSet();
+			for(int i=0;i<length;i++)
+				set.add(theSupplier.apply(helper));
+			ops = new ArrayList<>();
+			for(int i=0;i<theCollection.size();i++){
+				E value=theCollection.get(i);
+				if(!set.contains(value)){
+					ops.add(new CollectionOp<>(theCollection.equivalence(), value, i));
+				}
+			}
+			// TODO Wrong
 			checkRetainAll(ops);
 			retainAllFromCollection(ops);
 			break;
@@ -123,6 +150,12 @@ abstract class AbstractObservableCollectionLink<E> implements ObservableCollecti
 		// TODO Auto-generated method stub
 
 	}
+
+	protected abstract CollectionOp<E> checkAddable(CollectionOp<E> op);
+
+	protected abstract CollectionOp<E> checkRemovable(CollectionOp<E> op);
+
+	protected abstract CollectionOp<E> checkSettable(CollectionOp<E> op);
 
 	private void addToCollection(CollectionOp<E> add, TestHelper helper) {
 		int preSize = theCollection.size();
@@ -205,9 +238,9 @@ abstract class AbstractObservableCollectionLink<E> implements ObservableCollecti
 			add.result = add.source; // No mapping if we're the root
 	}
 
-	private E removeFromCollection(int index) {}
+	private void removeFromCollection(CollectionOp<E> op) {}
 
-	private E setInCollection(int index, E value) {}
+	private void setInCollection(CollectionOp<E> op) {}
 
 	private void testBounds(TestHelper helper) {
 		try {
@@ -266,32 +299,43 @@ abstract class AbstractObservableCollectionLink<E> implements ObservableCollecti
 	}
 
 	@Override
-	public ObservableChainLink<?> derive(TestHelper helper) {
-		return deriveFromFlow(this, theFlow, helper);
-	}
-
-	@Override
 	public void check() {
 		theTester.check();
 	}
 
-	static <E, X> ObservableCollectionChainLink<E, X> deriveFromFlow(ObservableCollectionChainLink<?, E> parent,
-		CollectionDataFlow<?, ?, E> flow, TestHelper helper) {
-		CollectionDataFlow<?, ?, X> derivedFlow;
-		switch (helper.getInt(0, 5)) {
+	@Override
+	public ObservableChainLink<?> derive(TestHelper helper) {
+		switch (helper.getInt(0, 1)) {
 		case 0:
-			TestValueType mapType = TestValueType.values()[helper.getInt(0, TestValueType.values().length)];
-			List<? extends TypeTransformation<E, X>> transforms = (List<? extends TypeTransformation<E, X>>) TYPE_TRANSFORMATIONS
-				.get(new BiTuple<>(parent.getType(), mapType));
-			TypeTransformation<E, X> transform = transforms.get(helper.getInt(0, transforms.size()));
-			derivedFlow = flow.map((TypeToken<X>) mapType.type, transform::map, options -> {
-				options.withReverse(transform::reverse).cache(helper.getBoolean()).fireIfUnchanged(helper.getBoolean())
-					.reEvalOnUpdate(helper.getBoolean());
-			});
-			return new AbstractObservableCollectionLink<E, X>(parent, mapType, todo) {};
-		case 1:
-
+			// TODO mapEquivalent
+			theChild = new MappedCollectionLink<>(this, theType, theFlow, helper);
+			break;
+			// TODO reverse
+			// TODO size
+			// TODO find
+			// TODO contains
+			// TODO containsAny
+			// TODO containsAll
+			// TODO only
+			// TODO reduce
+			// TODO subset
+			// TODO observeRelative
+			// TODO flow reverse
+			// TODO filter
+			// TODO filterStatic
+			// TODO whereContained
+			// TODO withEquivalence
+			// TODO refresh
+			// TODO refreshEach
+			// TODO combine
+			// TODO flattenValues
+			// TODO flatMap
+			// TODO sorted
+			// TODO distinct
+			// TODO distinctSorted
+			// TODO filterMod
+			// TODO groupBy
+			// TODO groupBy(Sorted)
 		}
-		// TODO Auto-generated method stub
 	}
 }
