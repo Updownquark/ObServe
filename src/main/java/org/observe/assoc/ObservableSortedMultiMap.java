@@ -304,7 +304,9 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 					ObservableMapEvent<K, V> event = new ObservableMapEvent<>(//
 						evt.getKeyElement().reverse(), evt.getElementId().reverse(), getSource().getKeyType(), getSource().getValueType(), //
 						keyIndex, valueIndex, evt.getType(), evt.getKey(), evt.getOldValue(), evt.getNewValue(), evt);
-					ObservableMapEvent.doWith(event, action);
+					try (Transaction mt = ObservableMapEvent.use(event)) {
+						action.accept(event);
+					}
 				});
 			}
 		}
@@ -411,9 +413,13 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 					return;
 				int keyIndex = keySet().getElementsBefore(evt.getKeyElement());
 				int valueIndex = get(evt.getKey()).getElementsBefore(evt.getElementId());
-				ObservableMapEvent.doWith(new ObservableMapEvent<>(evt.getKeyElement(), evt.getElementId(), getWrapped().getKeyType(),
+				ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(evt.getKeyElement(), evt.getElementId(),
+					getWrapped().getKeyType(),
 					getWrapped().getValueType(), keyIndex, valueIndex, evt.getType(), evt.getKey(), evt.getOldValue(), evt.getNewValue(),
-					evt), action);
+					evt);
+				try (Transaction mt = ObservableMapEvent.use(mapEvent)) {
+					action.accept(mapEvent);
+				}
 			});
 		}
 

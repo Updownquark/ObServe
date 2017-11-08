@@ -1984,13 +1984,14 @@ public class ObservableCollectionsTest {
 		tester.checkOps(0);
 		controller.add(9);
 		tester.check(9, 1);
-		SimpleCause.doWith(new SimpleCause(), c -> {
-			Transaction trans = controller.lock(true, c);
+		SimpleCause cause = new SimpleCause();
+		try (Transaction t = SimpleCause.use(cause)) {
+			Transaction trans = controller.lock(true, cause);
 			tester.checkOps(0);
 			controller.add(0, 4);
 			tester.checkOps(0);
 			trans.close();
-		});
+		}
 		tester.check(4, 1);
 
 		tester.setSynced(false);
@@ -2038,28 +2039,27 @@ public class ObservableCollectionsTest {
 		}
 		assertEquals(correctChanges[0], changeCount[0]);
 
-		SimpleCause.doWith(new SimpleCause(), c -> {
-			try (Transaction trans = controller.lock(true, c)) {
-				controller.clear();
-				correct.clear();
-				correct.addAll(observable);
-				correctChanges[0]++;
-				// Depending on the nature of the observable collection, the event for the clear may have been fired immediately, or it may
-				// be fired at the next add, so don't check it until after that add
-				for (int i = 0; i < 30; i++) {
-					int toAdd = (int) (Math.random() * 2000000) - 1000000;
-					controller.add(toAdd);
-					if (i == 0)
-						assertEquals(correctChanges[0], changeCount[0]);
-					correct.add(toAdd);
-					assertEquals(correct, new ArrayList<>(observable));
-				}
-				assertEquals(correctChanges[0], changeCount[0]);
-			} catch (RuntimeException | Error e) {
-				error[0] = true;
-				throw e;
+		SimpleCause cause = new SimpleCause();
+		try (Transaction t = SimpleCause.use(cause); Transaction trans = controller.lock(true, cause)) {
+			controller.clear();
+			correct.clear();
+			correct.addAll(observable);
+			correctChanges[0]++;
+			// Depending on the nature of the observable collection, the event for the clear may have been fired immediately, or it may
+			// be fired at the next add, so don't check it until after that add
+			for (int i = 0; i < 30; i++) {
+				int toAdd = (int) (Math.random() * 2000000) - 1000000;
+				controller.add(toAdd);
+				if (i == 0)
+					assertEquals(correctChanges[0], changeCount[0]);
+				correct.add(toAdd);
+				assertEquals(correct, new ArrayList<>(observable));
 			}
-		});
+			assertEquals(correctChanges[0], changeCount[0]);
+		} catch (RuntimeException | Error e) {
+			error[0] = true;
+			throw e;
+		}
 		correctChanges[0]++;
 		assertEquals(correctChanges[0], changeCount[0]);
 		assertEquals(correct, compare);
@@ -2084,21 +2084,23 @@ public class ObservableCollectionsTest {
 		refresh.onNext(null);
 		tester.checkOps(1);
 
-		SimpleCause.doWith(new SimpleCause(), c -> {
-			Transaction trans = list.lock(true, c);
-			refresh.onNext(c);
-			refresh.onNext(c);
+		SimpleCause cause = new SimpleCause();
+		try (Transaction t = SimpleCause.use(cause)) {
+			Transaction trans = list.lock(true, cause);
+			refresh.onNext(cause);
+			refresh.onNext(cause);
 			trans.close();
-		});
+		}
 		tester.checkOps(1);
 
-		SimpleCause.doWith(new SimpleCause(), c -> {
-			Transaction trans = list.lock(true, c);
+		cause = new SimpleCause();
+		try (Transaction t = SimpleCause.use(cause)) {
+			Transaction trans = list.lock(true, cause);
 			for (int i = 0; i < 30; i++)
 				list.set(i, i + 1);
-			refresh.onNext(c);
+			refresh.onNext(cause);
 			trans.close();
-		});
+		}
 		tester.checkOps(1);
 
 		list.clear();
@@ -2142,22 +2144,24 @@ public class ObservableCollectionsTest {
 		correctChanges++;
 		assertEquals(correctChanges, changes[0]);
 
-		SimpleCause.doWith(new SimpleCause(), c -> {
-			Transaction trans = list.lock(true, c);
-			mult.set(3, c);
-			mult.set(4, c);
+		SimpleCause cause = new SimpleCause();
+		try (Transaction t = SimpleCause.use(cause)) {
+			Transaction trans = list.lock(true, cause);
+			mult.set(3, cause);
+			mult.set(4, cause);
 			trans.close();
-		});
+		}
 		correctChanges++;
 		assertEquals(correctChanges, changes[0]);
 
-		SimpleCause.doWith(new SimpleCause(), c -> {
-			Transaction trans = list.lock(true, c);
+		cause = new SimpleCause();
+		try (Transaction t = SimpleCause.use(cause)) {
+			Transaction trans = list.lock(true, cause);
 			for (int i = 0; i < 30; i++)
 				list.set(i, i + 1);
-			mult.set(5, c);
+			mult.set(5, cause);
 			trans.close();
-		});
+		}
 		correctChanges++;
 		assertEquals(correctChanges, changes[0]);
 
