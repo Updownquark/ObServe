@@ -1206,6 +1206,17 @@ public class ObservableMultiMapImpl {
 			}
 
 			@Override
+			public CollectionElement<V> getAdjacentElement(ElementId elementId, boolean next) {
+				try (Transaction t = lock(false, false, null)) {
+					GroupingManager<?, K, V>.GroupedElement group = getGroup(true);
+					if (group == null)
+						return null;
+					else
+						return elementFor(group.getParentElements().getAdjacentElement(elementId, next));
+				}
+			}
+
+			@Override
 			public MutableCollectionElement<V> mutableElement(ElementId id) {
 				try (Transaction t = lock(false, false, null)) {
 					GroupingManager<?, K, V>.GroupedElement group = getGroup(true);

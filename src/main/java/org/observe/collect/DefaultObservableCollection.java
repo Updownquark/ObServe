@@ -139,6 +139,11 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	}
 
 	@Override
+	public CollectionElement<E> getAdjacentElement(ElementId elementId, boolean next) {
+		return theValues.getAdjacentElement(elementId, next);
+	}
+
+	@Override
 	public MutableCollectionElement<E> mutableElement(ElementId id) {
 		return mutableElementFor(theValues.mutableElement(id));
 	}

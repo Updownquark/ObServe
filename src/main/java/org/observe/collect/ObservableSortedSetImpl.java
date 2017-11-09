@@ -1,5 +1,6 @@
 package org.observe.collect;
 
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -696,6 +697,16 @@ public class ObservableSortedSetImpl {
 		public Comparator<? super E> comparator() {
 			ObservableSortedSet<E> set = getWrapped().get();
 			return set == null ? (o1, o2) -> -1 : (Comparator<? super E>) set.comparator();
+		}
+
+		@Override
+		public boolean addAll(Collection<? extends E> c) {
+			return ObservableSortedSet.super.addAll(c);
+		}
+
+		@Override
+		public boolean addAll(int index, Collection<? extends E> c) {
+			return ObservableSortedSet.super.addAll(index, c);
 		}
 
 		@Override

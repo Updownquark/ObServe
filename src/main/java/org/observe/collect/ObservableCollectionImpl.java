@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.Spliterator;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -1203,6 +1204,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public CollectionElement<T> getAdjacentElement(ElementId elementId, boolean next) {
+			return elementFor(theSource.getAdjacentElement(elementId, next), null);
+		}
+
+		@Override
 		public MutableCollectionElement<T> mutableElement(ElementId id) {
 			return mutableElementFor(theSource.mutableElement(id), null);
 		}
@@ -1566,6 +1572,13 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public CollectionElement<T> getAdjacentElement(ElementId elementId, boolean next) {
+			DerivedElementHolder<T> holder = (DerivedElementHolder<T>) elementId;
+			BinaryTreeNode<DerivedElementHolder<T>> adjacentNode = holder.treeNode.getClosest(!next);
+			return adjacentNode == null ? null : getElement(adjacentNode.get());
+		}
+
+		@Override
 		public MutableCollectionElement<T> mutableElement(ElementId id) {
 			DerivedElementHolder<T> el = (DerivedElementHolder<T>) id;
 			class DerivedMutableCollectionElement implements MutableCollectionElement<T> {
@@ -1814,6 +1827,11 @@ public final class ObservableCollectionImpl {
 		@Override
 		public CollectionElement<E> getElement(ElementId id) {
 			return (CollectionElement<E>) theValues.getElement(id);
+		}
+
+		@Override
+		public CollectionElement<E> getAdjacentElement(ElementId elementId, boolean next) {
+			return (CollectionElement<E>) theValues.getAdjacentElement(elementId, next);
 		}
 
 		@Override
@@ -2089,15 +2107,23 @@ public final class ObservableCollectionImpl {
 		public CollectionElement<E> getElement(ElementId id) {
 			ObservableCollection<? extends E> current = getWrapped().get();
 			if (current == null)
-				throw new IllegalArgumentException(StdMsg.NOT_FOUND);
+				throw new NoSuchElementException();
 			return ((ObservableCollection<E>) current).getElement(id);
+		}
+
+		@Override
+		public CollectionElement<E> getAdjacentElement(ElementId elementId, boolean next) {
+			ObservableCollection<? extends E> current = getWrapped().get();
+			if (current == null)
+				throw new NoSuchElementException();
+			return ((ObservableCollection<E>) current).getAdjacentElement(elementId, next);
 		}
 
 		@Override
 		public MutableCollectionElement<E> mutableElement(ElementId id) {
 			ObservableCollection<? extends E> current = getWrapped().get();
 			if (current == null)
-				throw new IllegalArgumentException(StdMsg.NOT_FOUND);
+				throw new NoSuchElementException();
 			return ((ObservableCollection<E>) current).mutableElement(id);
 		}
 
@@ -2140,7 +2166,7 @@ public final class ObservableCollectionImpl {
 		public MutableElementSpliterator<E> spliterator(ElementId id, boolean asNext) {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			if (coll == null)
-				throw new IllegalArgumentException(StdMsg.NOT_FOUND);
+				throw new NoSuchElementException();
 			return ((ObservableCollection<E>) coll).spliterator(id, asNext);
 		}
 
