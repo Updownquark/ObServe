@@ -583,8 +583,8 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public MapEntryHandle<T2, V> getEntry(ElementId entryId) {
-			return handleFor(theWrapped.getEntry(entryId));
+		public MapEntryHandle<T2, V> getEntryById(ElementId entryId) {
+			return handleFor(theWrapped.getEntryById(entryId));
 		}
 
 		@Override

@@ -327,7 +327,7 @@ public class ObservableSetImpl {
 		}
 
 		protected MapEntryHandle<T, UniqueElement> getElement(ElementId valueId) {
-			return theElementsByValue.getEntry(valueId);
+			return theElementsByValue.getEntryById(valueId);
 		}
 
 		@Override

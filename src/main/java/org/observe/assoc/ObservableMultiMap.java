@@ -507,7 +507,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		}
 
 		@Override
-		public MapEntryHandle<K, V> getEntry(ElementId entryId) {
+		public MapEntryHandle<K, V> getEntryById(ElementId entryId) {
 			return entryFor(theSource.getEntry(entryId));
 		}
 

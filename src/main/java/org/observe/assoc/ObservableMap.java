@@ -386,7 +386,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 			}
 
 			@Override
-			public MapEntryHandle<K, V> getEntry(ElementId entryId) {
+			public MapEntryHandle<K, V> getEntryById(ElementId entryId) {
 				CollectionElement<Map.Entry<K, V>> entryEl = entrySet.getElement(entryId);
 				return entryEl == null ? null : handleFor(entryEl);
 			}
@@ -571,7 +571,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 			}
 
 			@Override
-			public MapEntryHandle<K, V> getEntry(ElementId entryId) {
+			public MapEntryHandle<K, V> getEntryById(ElementId entryId) {
 				throw new NoSuchElementException();
 			}
 

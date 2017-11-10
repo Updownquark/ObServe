@@ -177,8 +177,8 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 			}
 
 			@Override
-			public MapEntryHandle<K, V> getEntry(ElementId entryId) {
-				return MapEntryHandle.reverse(outer.getEntry(entryId.reverse()));
+			public MapEntryHandle<K, V> getEntryById(ElementId entryId) {
+				return MapEntryHandle.reverse(outer.getEntryById(entryId.reverse()));
 			}
 
 			@Override
