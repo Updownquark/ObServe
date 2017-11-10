@@ -10,9 +10,11 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.observe.collect.DefaultObservableCollection;
+import org.observe.collect.FlowOptions;
 import org.qommons.BiTuple;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.Testable;
+import org.qommons.collect.BetterList;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeSet;
 
@@ -21,11 +23,16 @@ import com.google.common.reflect.TypeToken;
 public class ObservableChainTester implements Testable {
 	static enum TestValueType {
 		INT(TypeToken.of(int.class)), DOUBLE(TypeToken.of(double.class)), STRING(TypeToken.of(String.class));
+		// TODO Add an array type for each
 
 		private final TypeToken<?> type;
 
 		private TestValueType(TypeToken<?> type) {
 			this.type = type;
+		}
+
+		public TypeToken<?> getType() {
+			return type;
 		}
 	}
 
@@ -239,11 +246,18 @@ public class ObservableChainTester implements Testable {
 			// return new ObservableCollectionLinkTester<>(null, new DefaultObservableCollection<>((TypeToken<E>) type.type,
 			// CircularArrayList.build().build()));
 		case 1:
-			return new ObservableCollectionLinkTester<>(null,
-				new DefaultObservableCollection<>((TypeToken<E>) type.type, new BetterTreeList<>(true)));
+			TestValueType type = TestValueType.values()[helper.getInt(0, TestValueType.values().length)];
+			BetterList<E> backing = new BetterTreeList<>(true);
+			DefaultObservableCollection<E> base = new DefaultObservableCollection<>((TypeToken<E>) type.getType(), backing);
+			return new SimpleCollectionLink<>(null, type, base.flow(), helper);
 		case 2:
-			return new ObservableCollectionLinkTester<>(null,
-				new DefaultObservableCollection<>((TypeToken<E>) type.type, new BetterTreeSet<>(true, randomComparator(type, helper))));
+			type = TestValueType.values()[helper.getInt(0, TestValueType.values().length)];
+			Comparator<? super E> compare = randomComparator(type, helper);
+			backing = new BetterTreeSet<>(false, compare);
+			base = new DefaultObservableCollection<>((TypeToken<E>) type.getType(), backing);
+			SimpleCollectionLink<E> simple = new SimpleCollectionLink<>(null, type, base.flow(), helper);
+			return new SortedDistinctCollectionLink<>(simple, type, base.flow(), helper, compare,
+				new FlowOptions.GroupingDef(new FlowOptions.GroupingOptions(true)));
 			// TODO ObservableValue
 			// TODO ObservableMultiMap
 			// TODO ObservableMap

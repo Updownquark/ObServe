@@ -1,12 +1,13 @@
 package org.observe.supertest;
 
 import org.observe.collect.Equivalence;
+import org.qommons.TestHelper;
 
 interface ObservableCollectionChainLink<E, T> extends ObservableChainLink<T> {
 	static class CollectionOp<E> implements Cloneable {
 		final Equivalence<? super E> equivalence;
-		E source;
-		int index;
+		final E source;
+		final int index;
 
 		E result;
 		String message;
@@ -37,15 +38,21 @@ interface ObservableCollectionChainLink<E, T> extends ObservableChainLink<T> {
 		}
 	}
 
-	void checkAddFromAbove(ObservableCollectionChainLink.CollectionOp<T> add);
+	void checkAddable(CollectionOp<T> add, TestHelper helper);
 
-	void checkRemoveFromAbove(ObservableCollectionChainLink.CollectionOp<T> remove);
+	void checkRemovable(CollectionOp<T> remove, TestHelper helper);
 
-	void checkSetFromAbove(ObservableCollectionChainLink.CollectionOp<T> value);
+	void checkSettable(CollectionOp<T> set, TestHelper helper);
 
-	void addedFromBelow(int index, E value);
+	void addedFromBelow(int index, E value, TestHelper helper);
 
-	void removedFromBelow(int index);
+	void removedFromBelow(int index, TestHelper helper);
 
-	void setFromBelow(int index, E value);
+	void setFromBelow(int index, E value, TestHelper helper);
+
+	void addedFromAbove(int index, T value, TestHelper helper);
+
+	int removedFromAbove(int index, T value, TestHelper helper);
+
+	void setFromAbove(int index, T value, TestHelper helper);
 }
