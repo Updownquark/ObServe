@@ -38,11 +38,11 @@ interface ObservableCollectionChainLink<E, T> extends ObservableChainLink<T> {
 		}
 	}
 
-	void checkAddable(CollectionOp<T> add, TestHelper helper);
+	void checkAddable(CollectionOp<T> add, int subListStart, int subListEnd, TestHelper helper);
 
-	void checkRemovable(CollectionOp<T> remove, TestHelper helper);
+	void checkRemovable(CollectionOp<T> remove, int subListStart, int subListEnd, TestHelper helper);
 
-	void checkSettable(CollectionOp<T> set, TestHelper helper);
+	void checkSettable(CollectionOp<T> set, int subListStart, int subListEnd, TestHelper helper);
 
 	void addedFromBelow(int index, E value, TestHelper helper);
 

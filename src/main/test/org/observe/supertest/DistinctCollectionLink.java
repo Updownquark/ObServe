@@ -46,7 +46,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	}
 
 	@Override
-	public void checkAddable(CollectionOp<E> add, TestHelper helper) {
+	public void checkAddable(CollectionOp<E> add, int subListStart, int subListEnd, TestHelper helper) {
 		MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueEntry = theValues.getEntry(add.source);
 		if (valueEntry != null) {
 			add.message = StdMsg.ELEMENT_EXISTS;
@@ -54,11 +54,11 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			add.message = StdMsg.UNSUPPORTED_OPERATION;
 			add.isError = true;
 		} else
-			getParent().checkAddable(add, helper);
+			getParent().checkAddable(add, subListStart, subListEnd, helper);
 	}
 
 	@Override
-	public void checkRemovable(CollectionOp<E> remove, TestHelper helper) {
+	public void checkRemovable(CollectionOp<E> remove, int subListStart, int subListEnd, TestHelper helper) {
 		MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueEntry;
 		if (remove.index < 0)
 			valueEntry = theValues.getEntry(remove.source);
@@ -66,10 +66,15 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			valueEntry = getValueHandle(remove.index);
 		if (valueEntry == null) {
 			remove.message = StdMsg.NOT_FOUND;
-		} else if (getParent() != null) {
+		} else if (subListStart > 0 || subListEnd < theValues.size()) {
+			int index = getElementIndex(valueEntry.getElementId());
+			if (index < subListStart || index >= subListEnd)
+				remove.message = StdMsg.NOT_FOUND;
+		}
+		if (remove.message == null && getParent() != null) {
 			for (ElementId srcId : valueEntry.get().keySet()) {
 				CollectionOp<E> parentRemove = new CollectionOp<>(remove.equivalence, null, theSourceValues.getElementsBefore(srcId));
-				getParent().checkRemovable(parentRemove, helper);
+				getParent().checkRemovable(parentRemove, subListStart, subListEnd, helper);
 				if (parentRemove.message != null) {
 					remove.message = parentRemove.message;
 					remove.isError = parentRemove.isError;
@@ -96,8 +101,23 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		}
 	}
 
+	private int getElementIndex(ElementId id) {
+		if (theValues.keySet() instanceof BetterList)
+			return ((BetterList<?>) theValues.keySet()).getElementsBefore(id);
+		else {
+			// No choice but to iterate
+			ValueHolder<ElementId> elId = new ValueHolder<>();
+			ElementSpliterator<E> spliter = theValues.keySet().spliterator();
+			int index = 0;
+			while (spliter.forElement(el -> elId.accept(el.getElementId()), true) && !elId.get().equals(id)) {
+				index++;
+			}
+			return index; // Assume the element was found
+		}
+	}
+
 	@Override
-	public void checkSettable(CollectionOp<E> set, TestHelper helper) {
+	public void checkSettable(CollectionOp<E> set, int subListStart, int subListEnd, TestHelper helper) {
 		MapEntryHandle<E, BetterSortedMap<ElementId, E>> oldValueEntry = getValueHandle(set.index);
 		MapEntryHandle<E, BetterSortedMap<ElementId, E>> newValueEntry = theValues.getEntry(set.source);
 		if (newValueEntry != null && !newValueEntry.getElementId().equals(oldValueEntry.getElementId())) {
