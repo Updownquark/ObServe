@@ -556,7 +556,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		ObservableChainLink<?> derived;
 		switch (helper.getInt(0, 1)) {
 		case 0:
-			derived = theChild = new MappedCollectionLink<>(this, theType, theFlow, helper);
+			// TODO derived = theChild = new MappedCollectionLink<>(this, theType, theFlow, helper);
 			// TODO mapEquivalent
 			break;
 			// TODO reverse

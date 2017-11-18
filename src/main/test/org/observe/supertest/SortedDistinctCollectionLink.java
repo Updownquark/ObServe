@@ -24,19 +24,20 @@ public class SortedDistinctCollectionLink<E> extends DistinctCollectionLink<E> {
 	}
 
 	@Override
-	public void checkAddable(CollectionOp<E> add, TestHelper helper) {
-		// TODO Auto-generated method stub
+	public void checkAddable(CollectionOp<E> add, int subListStart, int subListEnd, TestHelper helper) {
+		int todo = todo;// TODO Check for order
+		super.checkAddable(add, subListStart, subListEnd, helper);
 	}
 
 	@Override
-	public void checkRemovable(CollectionOp<E> remove, TestHelper helper) {
-		// TODO Auto-generated method stub
-
+	public void checkRemovable(CollectionOp<E> remove, int subListStart, int subListEnd, TestHelper helper) {
+		int todo = todo;// TODO Check for order
+		super.checkRemovable(remove, subListStart, subListEnd, helper);
 	}
 
 	@Override
-	public void checkSettable(CollectionOp<E> set, TestHelper helper) {
-		// TODO Auto-generated method stub
-
+	public void checkSettable(CollectionOp<E> set, int subListStart, int subListEnd, TestHelper helper) {
+		int todo = todo;// TODO Check for order
+		super.checkSettable(set, subListStart, subListEnd, helper);
 	}
 }

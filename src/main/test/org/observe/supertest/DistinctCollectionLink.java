@@ -23,11 +23,17 @@ import org.qommons.tree.BetterTreeSet;
 
 public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<E, E> {
 	private final FlowOptions.GroupingDef theOptions;
+	/** A map of value to equivalent values, grouped by source ID */
 	private final BetterMap<E, BetterSortedMap<ElementId, E>> theValues;
 
+	/** A parallel representation of the values in the source (parent) collection */
 	private final BetterList<E> theSourceValues;
-	/** A map of value element to source element */
+	/** A map of value element (in {@link #theValues}) to the source element representing the value (in {@link #theSourceValues}) */
 	private final BetterMap<ElementId, ElementId> theRepresentativeElements;
+	/**
+	 * The sorted set of elements for the distinct-ified collection. If {@link FlowOptions.GroupingDef#isPreservingSourceOrder() source
+	 * order} is preserved, then these elements are from {@link #theSourceValues}. Otherwise, they are from {@link #theValues}.
+	 */
 	private final BetterSortedSet<ElementId> theSortedRepresentatives;
 
 	public DistinctCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type, CollectionDataFlow<?, ?, E> flow,
@@ -123,8 +129,16 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		if (newValueEntry != null && !newValueEntry.getElementId().equals(oldValueEntry.getElementId())) {
 			set.message = StdMsg.ELEMENT_EXISTS;
 			set.isError = true;
-		} else {
-			// TODO
+		} else if (getParent() != null) {
+			for (ElementId srcId : oldValueEntry.get().keySet()) {
+				CollectionOp<E> parentSet = new CollectionOp<>(set.equivalence, null, theSourceValues.getElementsBefore(srcId));
+				getParent().checkSettable(parentSet, subListStart, subListEnd, helper);
+				if (parentSet.message != null) {
+					set.message = parentSet.message;
+					set.isError = parentSet.isError;
+					break;
+				}
+			}
 		}
 	}
 
@@ -233,5 +247,45 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			removedFromBelow(index, helper);
 			addedFromBelow(index, value, helper);
 		}
+	}
+
+	@Override
+	public void addedFromAbove(int index, E value, TestHelper helper) {
+		if (theSourceValues.isEmpty() || index < 0) {
+			addedFromBelow(-1, value, helper);
+		} else if (index >= 0) {
+			boolean addBefore = index > 0;
+			ElementId addRep = theRepresentativeElements.get(getValueHandle(addBefore ? index : index - 1).getElementId());
+			addedFromBelow(theSourceValues.getElementsBefore(addRep) + (addBefore ? 0 : 1), value, helper);
+		}
+	}
+
+	@Override
+	public int removedFromAbove(int index, E value, TestHelper helper) {
+		ElementId valueEl = theValues.getEntry(value).getElementId();
+		ElementId repEl = theRepresentativeElements.remove(valueEl);
+		int srcIndex = theSourceValues.getElementsBefore(repEl);
+		if (theOptions.isPreservingSourceOrder())
+			theSortedRepresentatives.remove(repEl);
+		else
+			theSortedRepresentatives.remove(valueEl);
+		for (ElementId srcEl : theValues.getEntryById(valueEl).get().keySet())
+			theSourceValues.mutableElement(srcEl).remove();
+		theValues.mutableEntry(valueEl).remove();
+		return srcIndex;
+	}
+
+	@Override
+	public void setFromAbove(int index, E value, TestHelper helper) {
+		MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueEntry = getValueHandle(index);
+		BetterSortedMap<ElementId, E> values = valueEntry.get();
+		if (!theOptions.isPreservingSourceOrder())
+			theSortedRepresentatives.remove(valueEntry.getElementId());
+		theValues.mutableEntry(valueEntry.getElementId()).remove();
+		ElementId newEntry = theValues.putEntry(value, values).getElementId();
+		for (Map.Entry<ElementId, E> entry : values.entrySet())
+			theSourceValues.mutableElement(entry.getKey()).set(value);
+		if (!theOptions.isPreservingSourceOrder())
+			theSortedRepresentatives.add(newEntry);
 	}
 }
