@@ -21,7 +21,7 @@ import org.qommons.tree.BetterTreeSet;
 import com.google.common.reflect.TypeToken;
 
 public class ObservableChainTester implements Testable {
-	static enum TestValueType {
+	public static enum TestValueType {
 		INT(TypeToken.of(int.class)), DOUBLE(TypeToken.of(double.class)), STRING(TypeToken.of(String.class));
 		// TODO Add an array type for each
 
@@ -36,7 +36,7 @@ public class ObservableChainTester implements Testable {
 		}
 	}
 
-	private interface TypeTransformation<E, T> {
+	public interface TypeTransformation<E, T> {
 		T map(E source);
 
 		E reverse(T mapped);
@@ -64,9 +64,11 @@ public class ObservableChainTester implements Testable {
 		}
 	}
 
-	private static TestValueType nextType(TestHelper helper) {
+	public static TestValueType nextType(TestHelper helper) {
 		return TestValueType.values()[helper.getInt(0, TestValueType.values().length)];
 	}
+
+	public static <E, T> TypeTransformation<E, T> transform(TestValueType type1, TestValueType type2, TestHelper helper) {}
 
 	private static <E> TypeTransformation<E, E> identity() {
 		return new TypeTransformation<E, E>() {

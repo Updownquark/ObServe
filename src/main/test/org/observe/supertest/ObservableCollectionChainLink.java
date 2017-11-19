@@ -1,42 +1,23 @@
 package org.observe.supertest;
 
-import org.observe.collect.Equivalence;
+import org.observe.collect.ObservableCollection;
 import org.qommons.TestHelper;
 
 interface ObservableCollectionChainLink<E, T> extends ObservableChainLink<T> {
 	static class CollectionOp<E> implements Cloneable {
-		final Equivalence<? super E> equivalence;
 		final E source;
 		final int index;
 
-		E result;
 		String message;
 		boolean isError;
 
-		CollectionOp(Equivalence<? super E> equivalence, E source, int index) {
-			this.equivalence = equivalence;
+		CollectionOp(E source, int index) {
 			this.source = source;
 			this.index = index;
 		}
-
-		@Override
-		public boolean equals(Object obj) {
-			if (!(obj instanceof CollectionOp))
-				return false;
-			CollectionOp<?> other = (CollectionOp<?>) obj;
-			return equivalence.elementEquals(result, other.result) && index == other.index && isError == other.isError
-				&& (message == null) == (other.message == null);
-		}
-
-		@Override
-		public CollectionOp<E> clone() {
-			try {
-				return (CollectionOp<E>) super.clone();
-			} catch (CloneNotSupportedException e) {
-				throw new IllegalStateException(e);
-			}
-		}
 	}
+
+	ObservableCollection<T> getCollection();
 
 	void checkAddable(CollectionOp<T> add, int subListStart, int subListEnd, TestHelper helper);
 

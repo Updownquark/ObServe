@@ -10,5 +10,5 @@ interface ObservableChainLink<T> {
 	void tryModify(TestHelper helper);
 	void check();
 
-	ObservableChainLink<?> derive(TestHelper helper);
+	<X> ObservableChainLink<X> derive(TestHelper helper);
 }
