@@ -35,7 +35,10 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 	@Override
 	public void checkRemovable(CollectionOp<T> remove, int subListStart, int subListEnd, TestHelper helper) {
 		if (remove.index < 0) {
-			if (theOptions.getReverse() == null) {
+			if (!getCollection().contains(remove.source)) {
+				remove.message = StdMsg.NOT_FOUND;
+				return;
+			} else if (theOptions.getReverse() == null) {
 				remove.message = StdMsg.UNSUPPORTED_OPERATION;
 				remove.isError = true;
 				return;
