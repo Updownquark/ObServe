@@ -243,7 +243,11 @@ public class ObservableChainTester implements Testable {
 	 */
 	@Test
 	public void superTest() {
-		TestHelper.testRandom(getClass(), true, -1, 1, Duration.ofMinutes(5), true, true, true);
+		TestHelper.createTester(getClass())//
+		.withRandomCases(-1).withMaxTotalDuration(Duration.ofMinutes(5))//
+		.withMaxFailures(10)//
+		.withDebug(false)//
+		.execute();
 	}
 
 	private <E> void assemble(TestHelper helper) {
