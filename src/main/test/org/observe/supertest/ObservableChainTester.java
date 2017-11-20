@@ -246,7 +246,7 @@ public class ObservableChainTester implements Testable {
 		TestHelper.createTester(getClass())//
 		.withRandomCases(-1).withMaxTotalDuration(Duration.ofMinutes(5))//
 		.withMaxFailures(10)//
-		.withDebug(false)//
+		.withDebug(true)//
 		.execute();
 	}
 
@@ -294,8 +294,12 @@ public class ObservableChainTester implements Testable {
 		for (int tri = 0; tri < tries; tri++) {
 			int linkIndex = helper.getInt(0, theChain.size());
 			ObservableChainLink<?> targetLink = theChain.get(linkIndex);
+			boolean finished = false;
 			try (Transaction t = helper.getBoolean(.75) ? targetLink.lock() : Transaction.NONE) {
-				int transactionMods = helper.getInt(0, helper.getInt(1, 25));
+				// Want the probability of zero transactions to be very small, but non-zero
+				int transactionMods = helper.getInt(1, helper.getInt(1, 27));
+				if (transactionMods == 25)
+					transactionMods = 0;
 				System.out.println("Modification set " + (tri + 1) + ": " + transactionMods);
 				for (int transactionTri = 0; transactionTri < transactionMods; transactionTri++) {
 					helper.placemark();
@@ -308,12 +312,18 @@ public class ObservableChainTester implements Testable {
 					}
 				}
 				modifications += transactionMods;
+				finished = true;
+			} catch (RuntimeException | Error e) {
+				if (finished)
+					System.err.println("Error closing transaction after " + modifications + " successful modifications");
+				throw e;
 			}
 			try {
 				for (ObservableChainLink<?> link : theChain)
 					link.check();
 			} catch (Error e) {
 				System.err.println("Integrity check failure after " + modifications + " modifications");
+				throw e;
 			}
 		}
 	}
