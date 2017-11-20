@@ -1,5 +1,6 @@
 package org.observe.supertest;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -9,11 +10,13 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.junit.Test;
 import org.observe.collect.DefaultObservableCollection;
 import org.observe.collect.FlowOptions;
 import org.qommons.BiTuple;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.Testable;
+import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeSet;
@@ -68,7 +71,10 @@ public class ObservableChainTester implements Testable {
 		return TestValueType.values()[helper.getInt(0, TestValueType.values().length)];
 	}
 
-	public static <E, T> TypeTransformation<E, T> transform(TestValueType type1, TestValueType type2, TestHelper helper) {}
+	public static <E, T> TypeTransformation<E, T> transform(TestValueType type1, TestValueType type2, TestHelper helper) {
+		List<? extends TypeTransformation<?, ?>> transforms = TYPE_TRANSFORMATIONS.get(new BiTuple<>(type1, type2));
+		return (TypeTransformation<E, T>) transforms.get(helper.getInt(0, transforms.size()));
+	}
 
 	private static <E> TypeTransformation<E, E> identity() {
 		return new TypeTransformation<E, E>() {
@@ -231,6 +237,15 @@ public class ObservableChainTester implements Testable {
 		test(helper);
 	}
 
+	/**
+	 * Generates a set of random test cases to test ObServe functionality. If there are previous known failures, this method will execute
+	 * them first. The first failure will be persisted and the test will end.
+	 */
+	@Test
+	public void superTest() {
+		TestHelper.testRandom(getClass(), true, -1, 1, Duration.ofMinutes(5), true, true, true);
+	}
+
 	private <E> void assemble(TestHelper helper) {
 		//Tend toward smaller chain lengths, but allow longer ones occasionally
 		int chainLength = helper.getInt(2, helper.getInt(2, MAX_CHAIN_LENGTH));
@@ -241,7 +256,7 @@ public class ObservableChainTester implements Testable {
 	}
 
 	private <E> ObservableChainLink<?> createInitialLink(TestHelper helper) {
-		int linkTypes = 3;
+		int linkTypes = 2;
 		switch (helper.getInt(0, linkTypes)) {
 		case 0:
 			// TODO Uncomment this when CircularArrayList is working
@@ -271,11 +286,31 @@ public class ObservableChainTester implements Testable {
 
 	private void test(TestHelper helper) {
 		int tries = 1000;
+		long modifications = 0;
 		for (int tri = 0; tri < tries; tri++) {
 			int linkIndex = helper.getInt(0, theChain.size());
-			theChain.get(linkIndex).tryModify(helper);
-			for (ObservableChainLink<?> link : theChain)
-				link.check();
+			ObservableChainLink<?> targetLink = theChain.get(linkIndex);
+			try (Transaction t = helper.getBoolean(.75) ? targetLink.lock() : Transaction.NONE) {
+				int transactionMods = helper.getInt(0, helper.getInt(1, 25));
+				System.out.println("Modification set " + (tri + 1) + ": " + transactionMods);
+				for (int transactionTri = 0; transactionTri < transactionMods; transactionTri++) {
+					helper.placemark();
+					try {
+						targetLink.tryModify(helper);
+					} catch (RuntimeException | Error e) {
+						System.err.println("Error on try " + (transactionTri + 1) + " after " + (modifications + transactionTri)
+							+ " successful modifications");
+						throw e;
+					}
+				}
+				modifications += transactionMods;
+			}
+			try {
+				for (ObservableChainLink<?> link : theChain)
+					link.check();
+			} catch (Error e) {
+				System.err.println("Integrity check failure after " + modifications + " modifications");
+			}
 		}
 	}
 }

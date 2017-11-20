@@ -15,6 +15,7 @@ import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollectionTester;
 import org.observe.supertest.ObservableChainTester.TestValueType;
 import org.qommons.TestHelper;
+import org.qommons.Transaction;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSet;
@@ -61,6 +62,11 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 	@Override
 	public TypeToken<T> getType() {
 		return (TypeToken<T>) theType.getType();
+	}
+
+	@Override
+	public Transaction lock() {
+		return theCollection.lock(true, null);
 	}
 
 	@Override
@@ -301,12 +307,14 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				}
 				if (removed) {
 					Assert.assertNull(op.message);
-					Assert.assertFalse(element.getElementId().isPresent());
+					if (element != null)
+						Assert.assertFalse(element.getElementId().isPresent());
 					Assert.assertEquals(preModSize - 1, modify.size());
 					Assert.assertEquals(preSize - 1, theCollection.size());
 				} else {
 					Assert.assertNotNull(op.message);
-					Assert.assertTrue(element.getElementId().isPresent());
+					if (element != null)
+						Assert.assertTrue(element.getElementId().isPresent());
 					Assert.assertEquals(preModSize, modify.size());
 					Assert.assertEquals(preSize, theCollection.size());
 				}
@@ -437,7 +445,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		int removed = 0;
 		for (CollectionOp<T> op : ops) {
 			if (op.isError)
-				Assert.assertNull(modified);
+				Assert.assertNull(op.message, modified);
 			else if (op.message != null)
 				continue;
 			if (theCollection instanceof Set)
@@ -474,18 +482,24 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 	}
 
 	private void updateForAdd(CollectionOp<T> add, int subListStart, TestHelper helper) {
+		if (add.message != null)
+			return;
 		addedFromAbove(add.index <= 0 ? -1 : subListStart + add.index, add.source, helper);
 		if (theChild != null)
 			theChild.addedFromBelow(add.index, add.source, helper);
 	}
 
 	private void updateForRemove(CollectionOp<T> remove, int subListStart, TestHelper helper) {
+		if (remove.message != null)
+			return;
 		int index = removedFromAbove(remove.index <= 0 ? -1 : subListStart + remove.index, remove.source, helper);
 		if (theChild != null)
 			theChild.removedFromBelow(index, helper);
 	}
 
 	private void updateForSet(CollectionOp<T> set, int subListStart, TestHelper helper) {
+		if (set.message != null)
+			return;
 		setFromAbove(set.index <= 0 ? -1 : subListStart + set.index, set.source, helper);
 		if (theChild != null)
 			theChild.setFromBelow(set.index, set.source, helper);
@@ -527,12 +541,17 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 	}
 
 	protected void added(int index, T value, TestHelper helper) {
-		theTester.add(index, value);
+		if (index >= 0)
+			theTester.add(index, value);
+		else
+			theTester.add(value);
 		if (theChild != null)
 			theChild.addedFromBelow(index, value, helper);
 	}
 
 	protected void removed(int index, TestHelper helper) {
+		if (index < 0)
+			return;
 		theTester.getExpected().remove(index);
 		if (theChild != null)
 			theChild.removedFromBelow(index, helper);
@@ -551,7 +570,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 
 	@Override
 	public <X> ObservableChainLink<X> derive(TestHelper helper) {
-		ObservableChainLink<?> derived;
+		ObservableChainLink<X> derived;
 		org.observe.collect.ObservableCollection.CollectionDataFlow<?, ?, X> derivedFlow;
 		switch (helper.getInt(0, 1)) {
 		case 0:
@@ -561,8 +580,9 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			derivedFlow = theFlow.map((TypeToken<X>) nextType.getType(), transform::map, o -> {
 				options.accept(o.cache(helper.getBoolean()).fireIfUnchanged(helper.getBoolean()).reEvalOnUpdate(helper.getBoolean()));
 			});
-			derived = theChild = new MappedCollectionLink<>(this, nextType, derivedFlow, helper, transform::map,
+			theChild = new MappedCollectionLink<>(this, nextType, derivedFlow, helper, transform::map,
 				new FlowOptions.MapDef<>(options.get()));
+			derived = (ObservableChainLink<X>) theChild;
 			// TODO mapEquivalent
 			break;
 			// TODO reverse
@@ -591,6 +611,8 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			// TODO filterMod
 			// TODO groupBy
 			// TODO groupBy(Sorted)
+		default:
+			throw new IllegalStateException("Bad random number");
 		}
 		return derived;
 	}
