@@ -15,6 +15,19 @@ interface ObservableCollectionChainLink<E, T> extends ObservableChainLink<T> {
 			this.source = source;
 			this.index = index;
 		}
+
+		@Override
+		public String toString() {
+			StringBuilder str = new StringBuilder();
+			if (index >= 0)
+				str.append('[').append(index).append(']');
+			if (source != null) {
+				if (str.length() > 0)
+					str.append(": ");
+				str.append(source);
+			}
+			return str.toString();
+		}
 	}
 
 	ObservableCollection<T> getCollection();

@@ -1,5 +1,6 @@
 package org.observe.supertest;
 
+import java.io.File;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -46,6 +47,8 @@ public class ObservableChainTester implements Testable {
 
 		boolean isEquivalent();
 
+		String reverseName();
+
 		default TypeTransformation<T, E> reverse() {
 			TypeTransformation<E, T> outer = this;
 			return new TypeTransformation<T, E>() {
@@ -62,6 +65,16 @@ public class ObservableChainTester implements Testable {
 				@Override
 				public boolean isEquivalent() {
 					return outer.isEquivalent();
+				}
+
+				@Override
+				public String reverseName() {
+					return outer.toString();
+				}
+
+				@Override
+				public String toString() {
+					return outer.reverseName();
 				}
 			};
 		}
@@ -92,10 +105,21 @@ public class ObservableChainTester implements Testable {
 			public boolean isEquivalent() {
 				return true;
 			}
+
+			@Override
+			public String reverseName() {
+				return "identity";
+			}
+
+			@Override
+			public String toString() {
+				return "identity";
+			}
 		};
 	}
 
-	private static <E, T> TypeTransformation<E, T> transform(Function<E, T> map, Function<T, E> reverse, boolean equivalent) {
+	private static <E, T> TypeTransformation<E, T> transform(Function<E, T> map, Function<T, E> reverse, boolean equivalent, String name,
+		String reverseName) {
 		return new TypeTransformation<E, T>() {
 			@Override
 			public T map(E source) {
@@ -110,6 +134,16 @@ public class ObservableChainTester implements Testable {
 			@Override
 			public boolean isEquivalent() {
 				return equivalent;
+			}
+
+			@Override
+			public String reverseName() {
+				return reverseName;
+			}
+
+			@Override
+			public String toString() {
+				return name;
 			}
 		};
 	}
@@ -160,16 +194,16 @@ public class ObservableChainTester implements Testable {
 					case INT: {
 						List<TypeTransformation<Integer, Integer>> transforms = asList(//
 							identity(), //
-							transform(i -> i + 5, i -> i - 5, true), transform(i -> i - 5, i -> i + 5, true), //
-							transform(i -> i * 5, i -> i / 5, false), transform(i -> i / 5, i -> i * 5, false));
+							transform(i -> i + 5, i -> i - 5, true, "+5", "-5"), transform(i -> i - 5, i -> i + 5, true, "-5", "+5"), //
+							transform(i -> -i, i -> -i, true, "-", "-"));
 						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type1, type2), transforms);
 						break;
 					}
 					case DOUBLE: {
 						List<TypeTransformation<Integer, Double>> transforms = asList(//
-							transform(i -> i * 1.0, d -> (int) Math.round(d), false), //
-							transform(i -> i * 5.0, d -> (int) Math.round(d / 5), false),
-							transform(i -> i / 5.0, d -> (int) Math.round(d * 5), false));
+							transform(i -> i * 1.0, d -> (int) Math.round(d), false, "*1.0", "round()"), //
+							transform(i -> i * 5.0, d -> (int) Math.round(d / 5), false, "*5.0", "/5,round"),
+							transform(i -> i / 5.0, d -> (int) Math.round(d * 5), false, "/5.0", "*5,round"));
 						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type1, type2), transforms);
 						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type2, type1),
 							transforms.stream().map(t -> t.reverse()).collect(Collectors.toList()));
@@ -177,7 +211,7 @@ public class ObservableChainTester implements Testable {
 					}
 					case STRING: {
 						List<TypeTransformation<Integer, String>> transforms = asList(//
-							transform(i -> String.valueOf(i), s -> Integer.valueOf(s), true));
+							transform(i -> String.valueOf(i), s -> Integer.valueOf(s), true, "toString()", "parseInt"));
 						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type1, type2), transforms);
 						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type2, type1),
 							transforms.stream().map(t -> t.reverse()).collect(Collectors.toList()));
@@ -191,14 +225,15 @@ public class ObservableChainTester implements Testable {
 					case DOUBLE: {
 						List<TypeTransformation<Double, Double>> transforms = asList(//
 							identity(), //
-							transform(d -> d + 5, d -> d - 5, true), transform(d -> d - 5, d -> d + 5, true), //
-							transform(d -> d * 5, d -> d / 5, true), transform(d -> d / 5, d -> d * 5, true));
+							transform(d -> d + 5, d -> d - 5, true, "+5", "-5"), transform(d -> d - 5, d -> d + 5, true, "-5", "+5"), //
+							transform(d -> d * 5, d -> d / 5, true, "*5", "/5"), transform(d -> d / 5, d -> d * 5, true, "/5", "*5"), //
+							transform(d -> -d, d -> -d, true, "-", "-"));
 						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type1, type2), transforms);
 						break;
 					}
 					case STRING: {
 						List<TypeTransformation<Double, String>> transforms = asList(//
-							transform(d -> String.valueOf(d), s -> Double.valueOf(s), true));
+							transform(d -> String.valueOf(d), s -> Double.valueOf(s), true, "toString()", "parseDouble"));
 						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type1, type2), transforms);
 						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type2, type1),
 							transforms.stream().map(t -> t.reverse()).collect(Collectors.toList()));
@@ -213,7 +248,7 @@ public class ObservableChainTester implements Testable {
 						break;
 					case STRING: {
 						List<TypeTransformation<String, String>> transforms = asList(//
-							identity(), transform(s -> reverse(s), s -> reverse(s), true));
+							identity(), transform(s -> reverse(s), s -> reverse(s), true, "reverse", "reverse"));
 						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type1, type2), transforms);
 						break;
 					}
@@ -228,6 +263,7 @@ public class ObservableChainTester implements Testable {
 		return typeCompares.get(helper.getInt(0, typeCompares.size()));
 	}
 	private static final int MAX_CHAIN_LENGTH = 15;
+	public static boolean DEBUG_PRINT = true;
 
 	private final List<ObservableChainLink<?>> theChain = new ArrayList<>();
 
@@ -245,8 +281,9 @@ public class ObservableChainTester implements Testable {
 	public void superTest() {
 		TestHelper.createTester(getClass())//
 		.withRandomCases(-1).withMaxTotalDuration(Duration.ofMinutes(5))//
-		.withMaxFailures(10)//
-		.withDebug(true)//
+		.withMaxFailures(1)//
+		.withPersistenceDir(new File("src/main/test/org/observe/supertest"), false)//
+		.withDebug(false)//
 		.execute();
 	}
 
@@ -257,6 +294,8 @@ public class ObservableChainTester implements Testable {
 		theChain.add(initLink);
 		while (theChain.size() < chainLength)
 			theChain.add(theChain.get(theChain.size() - 1).derive(helper));
+		if (DEBUG_PRINT)
+			System.out.println("Assembled [" + theChain.size() + "]: " + theChain);
 	}
 
 	private <E> ObservableChainLink<?> createInitialLink(TestHelper helper) {
@@ -318,6 +357,8 @@ public class ObservableChainTester implements Testable {
 					System.err.println("Error closing transaction after " + modifications + " successful modifications");
 				throw e;
 			}
+			if (DEBUG_PRINT)
+				System.out.println("Value: " + this);
 			try {
 				for (ObservableChainLink<?> link : theChain)
 					link.check();
@@ -326,5 +367,10 @@ public class ObservableChainTester implements Testable {
 				throw e;
 			}
 		}
+	}
+
+	@Override
+	public String toString() {
+		return theChain.get(0).printValue();
 	}
 }

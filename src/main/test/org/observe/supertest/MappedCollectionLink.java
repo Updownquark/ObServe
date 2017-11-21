@@ -1,19 +1,18 @@
 package org.observe.supertest;
 
-import java.util.function.Function;
-
 import org.observe.collect.FlowOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ObservableChainTester.TestValueType;
+import org.observe.supertest.ObservableChainTester.TypeTransformation;
 import org.qommons.TestHelper;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
 public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink<E, T> {
-	private final Function<? super E, ? extends T> theMap;
+	private final TypeTransformation<E, T> theMap;
 	private final FlowOptions.MapDef<E, T> theOptions;
 
 	public MappedCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type, CollectionDataFlow<?, ?, T> flow,
-		TestHelper helper, Function<? super E, ? extends T> map, FlowOptions.MapDef<E, T> options) {
+		TestHelper helper, TypeTransformation<E, T> map, FlowOptions.MapDef<E, T> options) {
 		super(parent, type, flow, helper);
 		theMap = map;
 		theOptions = options;
@@ -76,7 +75,7 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 
 	@Override
 	public void addedFromBelow(int index, E value, TestHelper helper) {
-		added(index, theMap.apply(value), helper);
+		added(index, theMap.map(value), helper);
 	}
 
 	@Override
@@ -88,7 +87,7 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 	public void setFromBelow(int index, E value, TestHelper helper) {
 		// TODO Need to cache (if options allow) to detect whether the change is an update, which may not result in an event for some
 		// options
-		set(index, theMap.apply(value), helper);
+		set(index, theMap.map(value), helper);
 	}
 
 	@Override
@@ -108,5 +107,10 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 				return;
 		}
 		getParent().setFromAbove(index, theOptions.getReverse().apply(value), helper);
+	}
+
+	@Override
+	public String toString() {
+		return "mapped(" + theMap + ")";
 	}
 }

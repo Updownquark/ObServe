@@ -50,13 +50,19 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		theSupplier = (Function<TestHelper, T>) ObservableChainTester.SUPPLIERS.get(type);
 	}
 
-	protected ObservableCollectionChainLink<?, E> getParent() {
+	@Override
+	public ObservableCollectionChainLink<?, E> getParent() {
 		return theParent;
 	}
 
 	@Override
 	public ObservableCollection<T> getCollection() {
 		return theCollection;
+	}
+
+	@Override
+	public String printValue() {
+		return theCollection.toString();
 	}
 
 	@Override
@@ -79,6 +85,8 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			subListStart = helper.getInt(0, theCollection.size());
 			subListEnd = subListStart + helper.getInt(0, theCollection.size() - subListStart);
 			modify = theCollection.subList(subListStart, subListEnd);
+			if(ObservableChainTester.DEBUG_PRINT)
+				System.out.println("subList(" + subListStart + ", " + subListEnd + ")");
 		} else {
 			subListStart = 0;
 			subListEnd = theCollection.size();
@@ -91,6 +99,8 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		case 3:
 		case 4: // More position-less adds than other ops
 			op = new CollectionOp<>(theSupplier.apply(helper), -1);
+			if (ObservableChainTester.DEBUG_PRINT)
+				System.out.println("[" + getLinkIndex() + "]: Add " + op);
 			checkAddable(op, subListStart, subListEnd, helper);
 			addToCollection(op, modify, helper);
 			if (op.message == null)
@@ -99,6 +109,8 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		case 5: // Add by index
 			op = new CollectionOp<>(theSupplier.apply(helper),
 				subListStart + (modify.isEmpty() ? -1 : helper.getInt(0, modify.size() + 1)));
+			if (ObservableChainTester.DEBUG_PRINT)
+				System.out.println("[" + getLinkIndex() + "]: Add " + op);
 			checkAddable(op, subListStart, subListEnd, helper);
 			addToCollection(op, modify, helper);
 			if (op.message == null)
@@ -112,6 +124,8 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			int index = subListStart + ((theCollection.isEmpty() || helper.getBoolean()) ? -1 : helper.getInt(0, modify.size() + 1));
 			for (int i = 0; i < length; i++)
 				checkAddable(ops.get(i), subListStart, subListEnd, helper);
+			if (ObservableChainTester.DEBUG_PRINT)
+				System.out.println("[" + getLinkIndex() + "]: Add all " + ops.size() + (index < 0 ? "" : "" + index) + ops);
 			addAllToCollection(index, ops, modify, helper);
 			for (CollectionOp<T> o : ops)
 				if (o.message == null)
@@ -123,6 +137,8 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			if (theCollection.isEmpty())
 				return;
 			op = new CollectionOp<>(theSupplier.apply(helper), helper.getInt(0, modify.size()));
+			if (ObservableChainTester.DEBUG_PRINT)
+				System.out.println("[" + getLinkIndex() + "]: Set " + op);
 			checkSettable(op, subListStart, subListEnd, helper);
 			setInCollection(op, modify, helper);
 			if (op.message == null)
@@ -131,6 +147,8 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		case 9:
 			// Remove by value
 			op = new CollectionOp<>(theSupplier.apply(helper), -1);
+			if (ObservableChainTester.DEBUG_PRINT)
+				System.out.println("[" + getLinkIndex() + "]: Remove " + op);
 			checkRemovable(op, subListStart, subListEnd, helper);
 			removeFromCollection(op, modify, helper);
 			if (op.message == null)
@@ -141,6 +159,8 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			if (theCollection.isEmpty())
 				return;
 			op = new CollectionOp<>(null, helper.getInt(0, modify.size()));
+			if (ObservableChainTester.DEBUG_PRINT)
+				System.out.println("[" + getLinkIndex() + "]: Remove " + op);
 			checkRemovable(op, subListStart, subListEnd, helper);
 			removeFromCollection(op, modify, helper);
 			if (op.message == null)
@@ -153,6 +173,8 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				ops.add(new CollectionOp<>(theSupplier.apply(helper), -1));
 			for (int i = 0; i < length; i++)
 				checkRemovable(ops.get(i), subListStart, subListEnd, helper);
+			if (ObservableChainTester.DEBUG_PRINT)
+				System.out.println("[" + getLinkIndex() + "]: Remove all " + ops.size() + ops);
 			removeAllFromCollection(ops, modify, helper);
 			for (CollectionOp<T> o : ops)
 				if (o.message == null)
@@ -169,6 +191,8 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				values.add(value);
 				set.add(value);
 			}
+			if (ObservableChainTester.DEBUG_PRINT)
+				System.out.println("[" + getLinkIndex() + "]: Retain all " + values.size() + values);
 			ops = new ArrayList<>();
 			for(int i=0;i<theCollection.size();i++){
 				T value = theCollection.get(i);
@@ -184,10 +208,22 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 					updateForRemove(o, subListStart, helper);
 			break;
 		case 13:
+			if (ObservableChainTester.DEBUG_PRINT)
+				System.out.println("[" + getLinkIndex() + "]: Check bounds");
 			testBounds(helper);
 			break;
 			// TODO
 		}
+	}
+
+	protected int getLinkIndex() {
+		ObservableChainLink<?> link = getParent();
+		int index = 0;
+		while (link != null) {
+			index++;
+			link = link.getParent();
+		}
+		return index;
 	}
 
 	private void addToCollection(CollectionOp<T> add, BetterList<T> modify, TestHelper helper) {
@@ -578,9 +614,11 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			ObservableChainTester.TypeTransformation<T, X> transform = ObservableChainTester.transform(theType, nextType, helper);
 			ValueHolder<FlowOptions.MapOptions<T, X>> options = new ValueHolder<>();
 			derivedFlow = theFlow.map((TypeToken<X>) nextType.getType(), transform::map, o -> {
+				if (helper.getBoolean(.95))
+					o.withReverse(transform::reverse);
 				options.accept(o.cache(helper.getBoolean()).fireIfUnchanged(helper.getBoolean()).reEvalOnUpdate(helper.getBoolean()));
 			});
-			theChild = new MappedCollectionLink<>(this, nextType, derivedFlow, helper, transform::map,
+			theChild = new MappedCollectionLink<>(this, nextType, derivedFlow, helper, transform,
 				new FlowOptions.MapDef<>(options.get()));
 			derived = (ObservableChainLink<X>) theChild;
 			// TODO mapEquivalent

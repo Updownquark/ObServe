@@ -67,4 +67,12 @@ public class SimpleCollectionLink<E> extends AbstractObservableCollectionLink<E,
 
 	@Override
 	public void setFromAbove(int index, E value, TestHelper helper) {}
+
+	@Override
+	public String toString() {
+		if (getParent() != null)
+			return "simple";
+		else
+			return "base(" + getType() + ")";
+	}
 }
