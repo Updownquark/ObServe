@@ -194,7 +194,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			if (ObservableChainTester.DEBUG_PRINT)
 				System.out.println("[" + getLinkIndex() + "]: Retain all " + values.size() + values);
 			ops = new ArrayList<>();
-			for(int i=0;i<theCollection.size();i++){
+			for (int i = 0; i < theCollection.size(); i++) {
 				T value = theCollection.get(i);
 				if(!set.contains(value)){
 					op = new CollectionOp<>(value, i);
@@ -498,7 +498,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		int preSize = theCollection.size();
 		Boolean modified;
 		try {
-			modified = modify.removeAll(values);
+			modified = modify.retainAll(values);
 		} catch (UnsupportedOperationException | IllegalArgumentException e) {
 			modified = null;
 		}
@@ -508,6 +508,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				Assert.assertNull(modified);
 			else if (op.message != null)
 				continue;
+			removed++;
 			if (theCollection instanceof Set)
 				Assert.assertNull(modify.getElement(op.source, true));
 		}

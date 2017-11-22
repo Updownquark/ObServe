@@ -48,7 +48,9 @@ public class SimpleCollectionLink<E> extends AbstractObservableCollectionLink<E,
 	}
 
 	@Override
-	public void addedFromAbove(int index, E value, TestHelper helper) {}
+	public void addedFromAbove(int index, E value, TestHelper helper) {
+		added(index, value, helper);
+	}
 
 	@Override
 	public int removedFromAbove(int index, E value, TestHelper helper) {
@@ -57,16 +59,15 @@ public class SimpleCollectionLink<E> extends AbstractObservableCollectionLink<E,
 			if (el == null)
 				return -1;
 			index = getCollection().getElementsBefore(el.getElementId());
-			getCollection().remove(value);
-			return index;
-		} else {
-			getCollection().remove(index);
-			return index;
 		}
+		removed(index, helper);
+		return index;
 	}
 
 	@Override
-	public void setFromAbove(int index, E value, TestHelper helper) {}
+	public void setFromAbove(int index, E value, TestHelper helper) {
+		set(index, value, helper);
+	}
 
 	@Override
 	public String toString() {

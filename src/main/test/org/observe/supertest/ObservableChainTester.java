@@ -280,11 +280,11 @@ public class ObservableChainTester implements Testable {
 	@Test
 	public void superTest() {
 		TestHelper.createTester(getClass())//
-		.withRandomCases(-1).withMaxTotalDuration(Duration.ofMinutes(5))//
-		.withMaxFailures(1)//
-		.withPersistenceDir(new File("src/main/test/org/observe/supertest"), false)//
-		.withDebug(false)//
-		.execute();
+		/**/.withRandomCases(-1).withMaxTotalDuration(Duration.ofMinutes(5))//
+		/**/.withMaxFailures(1)//
+		/**/.withPersistenceDir(new File("src/main/test/org/observe/supertest"), false)//
+		/**/.withDebug(true)//
+		/**/.execute();
 	}
 
 	private <E> void assemble(TestHelper helper) {
@@ -335,13 +335,13 @@ public class ObservableChainTester implements Testable {
 			ObservableChainLink<?> targetLink = theChain.get(linkIndex);
 			boolean finished = false;
 			try (Transaction t = helper.getBoolean(.75) ? targetLink.lock() : Transaction.NONE) {
-				// Want the probability of zero transactions to be very small, but non-zero
+				// Want the probability of zero-modification transactions to be very small, but non-zero
 				int transactionMods = helper.getInt(1, helper.getInt(1, 27));
 				if (transactionMods == 25)
 					transactionMods = 0;
 				System.out.println("Modification set " + (tri + 1) + ": " + transactionMods);
+				helper.placemark();
 				for (int transactionTri = 0; transactionTri < transactionMods; transactionTri++) {
-					helper.placemark();
 					try {
 						targetLink.tryModify(helper);
 					} catch (RuntimeException | Error e) {
