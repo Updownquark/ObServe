@@ -2,6 +2,8 @@ package org.observe.supertest;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Function;
@@ -246,24 +248,22 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				Assert.assertNotNull(modify.canAdd(add.source));
 			else
 				Assert.assertNull(modify.canAdd(add.source));
-			if (helper.getBoolean()) {
-				// Test simple add value
-				CollectionElement<T> element;
-				try {
-					element = modify.addElement(add.source, helper.getBoolean());
-				} catch (UnsupportedOperationException | IllegalArgumentException e) {
-					element = null;
-				}
-				if (element != null) {
-					Assert.assertTrue(element.getElementId().isPresent());
-					Assert.assertNull(add.message);
-					Assert.assertEquals(preModSize + 1, modify.size());
-					Assert.assertEquals(preSize + 1, theCollection.size());
-				} else {
-					Assert.assertNotNull(add.message);
-					Assert.assertEquals(preModSize, modify.size());
-					Assert.assertEquals(preSize, theCollection.size());
-				}
+			// Test simple add value
+			CollectionElement<T> element;
+			try {
+				element = modify.addElement(add.source, helper.getBoolean());
+			} catch (UnsupportedOperationException | IllegalArgumentException e) {
+				element = null;
+			}
+			if (element != null) {
+				Assert.assertTrue(element.getElementId().isPresent());
+				Assert.assertNull(add.message);
+				Assert.assertEquals(preModSize + 1, modify.size());
+				Assert.assertEquals(preSize + 1, theCollection.size());
+			} else {
+				Assert.assertNotNull(add.message);
+				Assert.assertEquals(preModSize, modify.size());
+				Assert.assertEquals(preSize, theCollection.size());
 			}
 		} else {
 			if (modify.isEmpty() || helper.getBoolean()) {
@@ -468,9 +468,13 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			return;
 		}
 		int added = 0;
-		for (CollectionOp<T> op : ops) {
-			if (op.message != null)
+		for (int i = 0; i < ops.size(); i++) {
+			CollectionOp<T> op = ops.get(i);
+			if (op.message != null) {
+				ops.remove(i);
+				i--;
 				continue;
+			}
 			Assert.assertNotNull(modify.getElement(op.source, true));
 			Assert.assertNotNull(theCollection.getElement(op.source, true));
 			added++;
@@ -478,6 +482,31 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		Assert.assertEquals(modified, added > 0);
 		Assert.assertEquals(modify.size(), preModSize + added);
 		Assert.assertEquals(theCollection.size(), preSize + added);
+		if (!ops.isEmpty()) {
+			// Need to replace the indexes in the operations with the index at which the values were added in the collection (or sub-list)
+			Set<Integer> indexes = new HashSet<>();
+			for (int i = 0; i < ops.size(); i++) {
+				CollectionOp<T> op = ops.get(i);
+				CollectionElement<T> el = modify.getElement(op.source, true);
+				int elIndex = modify.getElementsBefore(el.getElementId());
+				// If the found element is a duplicate that was either already present or whose index has previously been used, find a new
+				// element
+				while (el != null && //
+					(elIndex < index || !indexes.add(elIndex))) {
+					el = modify.subList(elIndex + 1, modify.size()).getElement(op.source, true);
+					elIndex = modify.getElementsBefore(el.getElementId());
+				}
+				Assert.assertNotNull(el);
+				Assert.assertTrue(elIndex + ">" + index + "+" + added, elIndex < (index < 0 ? 0 : index) + added);
+				ops.set(i, new CollectionOp<>(op.source, elIndex));
+			}
+			Collections.sort(ops, (op1, op2) -> op1.index - op2.index);
+			if (index >= 0) {
+				// Ensures that all new elements were added in the right position range
+				Assert.assertEquals(ops.get(0).index, index);
+				Assert.assertEquals(ops.get(ops.size() - 1).index, index + added - 1);
+			}
+		}
 	}
 
 	private void removeAllFromCollection(List<CollectionOp<T>> ops, BetterList<T> modify, TestHelper helper) {

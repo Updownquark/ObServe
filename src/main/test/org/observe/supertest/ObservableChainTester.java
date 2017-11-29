@@ -41,8 +41,10 @@ public class ObservableChainTester implements Testable {
 	}
 
 	public interface TypeTransformation<E, T> {
+		String isAcceptable(E source);
 		T map(E source);
 
+		String isAcceptableReverse(T mapped);
 		E reverse(T mapped);
 
 		boolean isEquivalent();
@@ -53,8 +55,18 @@ public class ObservableChainTester implements Testable {
 			TypeTransformation<E, T> outer = this;
 			return new TypeTransformation<T, E>() {
 				@Override
+				public String isAcceptable(T source) {
+					return outer.isAcceptableReverse(source);
+				}
+
+				@Override
 				public E map(T source) {
 					return outer.reverse(source);
+				}
+
+				@Override
+				public String isAcceptableReverse(E mapped) {
+					return outer.isAcceptable(mapped);
 				}
 
 				@Override
@@ -92,6 +104,16 @@ public class ObservableChainTester implements Testable {
 	private static <E> TypeTransformation<E, E> identity() {
 		return new TypeTransformation<E, E>() {
 			@Override
+			public String isAcceptable(E source) {
+				return null;
+			}
+
+			@Override
+			public String isAcceptableReverse(E mapped) {
+				return null;
+			}
+
+			@Override
 			public E map(E source) {
 				return source;
 			}
@@ -118,9 +140,24 @@ public class ObservableChainTester implements Testable {
 		};
 	}
 
-	private static <E, T> TypeTransformation<E, T> transform(Function<E, T> map, Function<T, E> reverse, boolean equivalent, String name,
+	private static <E, T> TypeTransformation<E, T> transform(Function<E, String> accept, Function<E, T> map, //
+		Function<T, String> acceptReverse, Function<T, E> reverse, boolean equivalent, String name,
 		String reverseName) {
 		return new TypeTransformation<E, T>() {
+			@Override
+			public String isAcceptable(E source) {
+				if (accept == null)
+					return null;
+				return accept.apply(source);
+			}
+
+			@Override
+			public String isAcceptableReverse(T mapped) {
+				if (acceptReverse == null)
+					return null;
+				return acceptReverse.apply(mapped);
+			}
+
 			@Override
 			public T map(E source) {
 				return map.apply(source);
@@ -194,8 +231,9 @@ public class ObservableChainTester implements Testable {
 					case INT: {
 						List<TypeTransformation<Integer, Integer>> transforms = asList(//
 							identity(), //
-							transform(i -> i + 5, i -> i - 5, true, "+5", "-5"), transform(i -> i - 5, i -> i + 5, true, "-5", "+5"), //
-							transform(i -> -i, i -> -i, true, "-", "-"));
+							transform(null, i -> i + 5, null, i -> i - 5, true, "+5", "-5"), //
+							transform(null, i -> i - 5, null, i -> i + 5, true, "-5", "+5"), //
+							transform(null, i -> -i, null, i -> -i, true, "-", "-"));
 						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type1, type2), transforms);
 						break;
 					}
@@ -211,7 +249,7 @@ public class ObservableChainTester implements Testable {
 					}
 					case STRING: {
 						List<TypeTransformation<Integer, String>> transforms = asList(//
-							transform(i -> String.valueOf(i), s -> Integer.valueOf(s), true, "toString()", "parseInt"));
+							transform(i -> String.valueOf(i), s -> (int) Integer.valueOf(s), true, "toString()", "parseInt"));
 						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type1, type2), transforms);
 						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type2, type1),
 							transforms.stream().map(t -> t.reverse()).collect(Collectors.toList()));
