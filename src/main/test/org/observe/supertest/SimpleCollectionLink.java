@@ -1,9 +1,10 @@
 package org.observe.supertest;
 
+import java.util.List;
+
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ObservableChainTester.TestValueType;
 import org.qommons.TestHelper;
-import org.qommons.collect.CollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
 public class SimpleCollectionLink<E> extends AbstractObservableCollectionLink<E, E> {
@@ -55,10 +56,13 @@ public class SimpleCollectionLink<E> extends AbstractObservableCollectionLink<E,
 	@Override
 	public int removedFromAbove(int index, E value, TestHelper helper) {
 		if (index < 0) {
-			CollectionElement<E> el = getCollection().getElement(value, true);
-			if (el == null)
-				return -1;
-			index = getCollection().getElementsBefore(el.getElementId());
+			List<E> expected = getExpected();
+			for (int i = 0; i < expected.size(); i++) {
+				if (getCollection().equivalence().elementEquals(expected.get(i), value)) {
+					index = i;
+					break;
+				}
+			}
 		}
 		removed(index, helper);
 		return index;

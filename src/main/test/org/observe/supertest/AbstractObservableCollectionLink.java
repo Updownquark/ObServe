@@ -62,6 +62,10 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		return theCollection;
 	}
 
+	protected List<T> getExpected() {
+		return theTester.getExpected();
+	}
+
 	@Override
 	public String printValue() {
 		return theCollection.size() + theCollection.toString();
@@ -187,9 +191,10 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			if (ObservableChainTester.DEBUG_PRINT)
 				System.out.println("[" + getLinkIndex() + "]: Remove all " + ops.size() + ops);
 			removeAllFromCollection(ops, modify, helper);
-			for (CollectionOp<T> o : ops)
+			for (CollectionOp<T> o : ops) {
 				if (o.message == null)
-					updateForRemove(o, subListStart, helper);
+					while (updateForRemove(o, subListStart, helper)) {}
+			}
 			break;
 		case 12: // retainAll
 			// Allow for larger, because the smaller the generated collection,
@@ -522,23 +527,16 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		int preModSize = modify.size();
 		int preSize = theCollection.size();
 		List<T> values = ops.stream().map(op -> op.source).collect(Collectors.toList());
-		Boolean modified;
-		try {
-			modified = modify.removeAll(values);
-		} catch (UnsupportedOperationException | IllegalArgumentException e) {
-			modified = null;
-		}
+		boolean modified = modify.removeAll(values);
 		int removed = 0;
 		for (CollectionOp<T> op : ops) {
-			if (op.isError)
-				Assert.assertNull(op.message, modified);
-			else if (op.message != null)
+			if (op.message != null)
 				continue;
+			removed++;
 			if (theCollection instanceof Set)
 				Assert.assertNull(modify.getElement(op.source, true));
 		}
-		if (modified != null)
-			Assert.assertEquals(modified.booleanValue(), removed > 0);
+		Assert.assertEquals(modified, removed > 0);
 		Assert.assertEquals(modify.size(), preModSize - removed);
 		Assert.assertEquals(theCollection.size(), preSize - removed);
 	}
@@ -546,24 +544,16 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 	private void retainAllInCollection(Collection<T> values, List<CollectionOp<T>> ops, BetterList<T> modify, TestHelper helper) {
 		int preModSize = modify.size();
 		int preSize = theCollection.size();
-		Boolean modified;
-		try {
-			modified = modify.retainAll(values);
-		} catch (UnsupportedOperationException | IllegalArgumentException e) {
-			modified = null;
-		}
+		boolean modified = modify.retainAll(values);
 		int removed = 0;
 		for (CollectionOp<T> op : ops) {
-			if (op.isError)
-				Assert.assertNull(modified);
-			else if (op.message != null)
+			if (op.message != null)
 				continue;
 			removed++;
 			if (theCollection instanceof Set)
 				Assert.assertNull(modify.getElement(op.source, true));
 		}
-		if (modified != null)
-			Assert.assertEquals(modified.booleanValue(), removed > 0);
+		Assert.assertEquals(modified, removed > 0);
 		Assert.assertEquals(modify.size(), preModSize - removed);
 		Assert.assertEquals(theCollection.size(), preSize - removed);
 	}
@@ -574,10 +564,10 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		addedFromAbove(add.index < 0 ? -1 : subListStart + add.index, add.source, helper);
 	}
 
-	private void updateForRemove(CollectionOp<T> remove, int subListStart, TestHelper helper) {
+	private boolean updateForRemove(CollectionOp<T> remove, int subListStart, TestHelper helper) {
 		if (remove.message != null)
-			return;
-		removedFromAbove(remove.index < 0 ? -1 : subListStart + remove.index, remove.source, helper);
+			return false;
+		return removedFromAbove(remove.index < 0 ? -1 : subListStart + remove.index, remove.source, helper) >= 0;
 	}
 
 	private void updateForSet(CollectionOp<T> set, int subListStart, TestHelper helper) {
