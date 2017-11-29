@@ -11,7 +11,7 @@ interface ObservableChainLink<T> {
 	ObservableChainLink<?> getParent();
 	Transaction lock();
 	void tryModify(TestHelper helper);
-	void check();
+	void check(boolean transComplete);
 
 	<X> ObservableChainLink<X> derive(TestHelper helper);
 

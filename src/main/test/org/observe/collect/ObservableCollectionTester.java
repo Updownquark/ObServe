@@ -168,6 +168,21 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 		assertThat(theBatchSyncedCopy, QommonsTestUtils.collectionsEqual(theCollection, true));
 	}
 
+	/** Checks the non-batched synchronized collection against the source collection and the internal expected values */
+	public void checkNonBatchSynced() {
+		checkNonBatchSynced(theExpected);
+	}
+
+	/**
+	 * Checks the non-batched synchronized collection against the source collection and the given expected values
+	 * 
+	 * @param expected The expected values
+	 */
+	public void checkNonBatchSynced(Collection<E> expected) {
+		assertThat(theSyncedCopy, QommonsTestUtils.collectionsEqual(theCollection, true));
+		assertThat(theSyncedCopy, QommonsTestUtils.collectionsEqual(expected, true));
+	}
+
 	@Override
 	protected Subscription sync() {
 		Subscription singleSub = theCollection.subscribe(evt -> {

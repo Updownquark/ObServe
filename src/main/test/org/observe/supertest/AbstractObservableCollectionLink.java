@@ -124,13 +124,20 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			int index = subListStart + ((theCollection.isEmpty() || helper.getBoolean()) ? -1 : helper.getInt(0, modify.size() + 1));
 			for (int i = 0; i < length; i++)
 				checkAddable(ops.get(i), subListStart, subListEnd, helper);
-			if (ObservableChainTester.DEBUG_PRINT)
-				System.out.println("[" + getLinkIndex() + "]: Add all " + ops.size() + (index < 0 ? "" : "" + index) + ops);
+			if (ObservableChainTester.DEBUG_PRINT) {
+				String msg = "[" + getLinkIndex() + "]: Add all " + ops.size();
+				if (index >= 0) {
+					msg += "@" + index;
+					if (index > 0)
+						msg += ", after " + modify.get(index - 1);
+				}
+				System.out.println(msg + ops);
+			}
 			addAllToCollection(index, ops, modify, helper);
-			for (CollectionOp<T> o : ops)
+			for (CollectionOp<T> o : ops){
 				if (o.message == null)
 					updateForAdd(o, subListStart, helper);
-
+			}
 			break;
 		case 7:
 		case 8: // Set
@@ -202,10 +209,15 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 					ops.add(op);
 				}
 			}
+			if (ObservableChainTester.DEBUG_PRINT)
+				System.out.println("\tShould remove " + ops.size() + ops);
 			retainAllInCollection(values, ops, modify, helper);
-			for (CollectionOp<T> o : ops)
+			// Do this in reverse, so the indexes are right
+			for (int i = ops.size() - 1; i >= 0; i--) {
+				CollectionOp<T> o = ops.get(i);
 				if (o.message == null)
 					updateForRemove(o, subListStart, helper);
+			}
 			break;
 		case 13:
 			if (ObservableChainTester.DEBUG_PRINT)
@@ -522,24 +534,18 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		if (add.message != null)
 			return;
 		addedFromAbove(add.index <= 0 ? -1 : subListStart + add.index, add.source, helper);
-		if (theChild != null)
-			theChild.addedFromBelow(add.index, add.source, helper);
 	}
 
 	private void updateForRemove(CollectionOp<T> remove, int subListStart, TestHelper helper) {
 		if (remove.message != null)
 			return;
-		int index = removedFromAbove(remove.index <= 0 ? -1 : subListStart + remove.index, remove.source, helper);
-		if (theChild != null)
-			theChild.removedFromBelow(index, helper);
+		removedFromAbove(remove.index <= 0 ? -1 : subListStart + remove.index, remove.source, helper);
 	}
 
 	private void updateForSet(CollectionOp<T> set, int subListStart, TestHelper helper) {
 		if (set.message != null)
 			return;
 		setFromAbove(set.index <= 0 ? -1 : subListStart + set.index, set.source, helper);
-		if (theChild != null)
-			theChild.setFromBelow(set.index, set.source, helper);
 	}
 
 	private void testBounds(TestHelper helper) {
@@ -601,8 +607,11 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 	}
 
 	@Override
-	public void check() {
-		theTester.check();
+	public void check(boolean transComplete) {
+		if (transComplete)
+			theTester.check();
+		else
+			theTester.checkNonBatchSynced();
 	}
 
 	@Override

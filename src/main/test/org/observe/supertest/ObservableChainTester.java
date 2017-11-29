@@ -334,12 +334,13 @@ public class ObservableChainTester implements Testable {
 			int linkIndex = helper.getInt(0, theChain.size());
 			ObservableChainLink<?> targetLink = theChain.get(linkIndex);
 			boolean finished = false;
+			int failedLink = 0;
 			try (Transaction t = helper.getBoolean(.75) ? targetLink.lock() : Transaction.NONE) {
 				// Want the probability of zero-modification transactions to be very small, but non-zero
 				int transactionMods = helper.getInt(1, helper.getInt(1, 27));
 				if (transactionMods == 25)
 					transactionMods = 0;
-				System.out.println("Modification set " + (tri + 1) + ": " + transactionMods);
+				System.out.println("Modification set " + (tri + 1) + ": " + transactionMods + " modifications on link " + linkIndex);
 				helper.placemark();
 				for (int transactionTri = 0; transactionTri < transactionMods; transactionTri++) {
 					try {
@@ -347,6 +348,14 @@ public class ObservableChainTester implements Testable {
 					} catch (RuntimeException | Error e) {
 						System.err.println("Error on try " + (transactionTri + 1) + " after " + (modifications + transactionTri)
 							+ " successful modifications");
+						throw e;
+					}
+					try {
+						for (failedLink = 0; failedLink < theChain.size(); failedLink++)
+							theChain.get(failedLink).check(false);
+					} catch (Error e) {
+						System.err.println("Integrity check failure on link " + failedLink + " after " + (modifications + transactionTri)
+							+ " modifications");
 						throw e;
 					}
 				}
@@ -360,10 +369,10 @@ public class ObservableChainTester implements Testable {
 			if (DEBUG_PRINT)
 				System.out.println("Value: " + this);
 			try {
-				for (ObservableChainLink<?> link : theChain)
-					link.check();
+				for (failedLink = 0; failedLink < theChain.size(); failedLink++)
+					theChain.get(failedLink).check(true);
 			} catch (Error e) {
-				System.err.println("Integrity check failure after " + modifications + " modifications");
+				System.err.println("Integrity check failure on link " + failedLink + " after " + modifications + " modifications");
 				throw e;
 			}
 		}
