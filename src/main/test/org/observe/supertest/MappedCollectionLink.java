@@ -25,7 +25,13 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 			add.isError = true;
 			return;
 		}
-		CollectionOp<E> sourceAdd = new CollectionOp<>(theOptions.getReverse().apply(add.source), add.index);
+		E reversed = theOptions.getReverse().apply(add.source);
+		if (!getCollection().equivalence().elementEquals(theMap.map(reversed), add.source)) {
+			add.message = StdMsg.ILLEGAL_ELEMENT;
+			add.isError = true;
+			return;
+		}
+		CollectionOp<E> sourceAdd = new CollectionOp<>(reversed, add.index);
 		getParent().checkAddable(sourceAdd, subListStart, subListEnd, helper);
 		add.message = sourceAdd.message;
 		add.isError = sourceAdd.isError;
@@ -67,8 +73,14 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 			set.isError = true;
 			return;
 		}
-		CollectionOp<E> sourceSet = new CollectionOp<>(theOptions.getReverse().apply(set.source), set.index);
-		getParent().checkRemovable(sourceSet, subListStart, subListEnd, helper);
+		E reversed = theOptions.getReverse().apply(set.source);
+		if (!getCollection().equivalence().elementEquals(theMap.map(reversed), set.source)) {
+			set.message = StdMsg.ILLEGAL_ELEMENT;
+			set.isError = true;
+			return;
+		}
+		CollectionOp<E> sourceSet = new CollectionOp<>(reversed, set.index);
+		getParent().checkSettable(sourceSet, subListStart, subListEnd, helper);
 		set.message = sourceSet.message;
 		set.isError = sourceSet.isError;
 	}

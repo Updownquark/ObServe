@@ -64,7 +64,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 
 	@Override
 	public String printValue() {
-		return theCollection.toString();
+		return theCollection.size() + theCollection.toString();
 	}
 
 	@Override
@@ -104,9 +104,11 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			if (ObservableChainTester.DEBUG_PRINT)
 				System.out.println("[" + getLinkIndex() + "]: Add " + op);
 			checkAddable(op, subListStart, subListEnd, helper);
-			addToCollection(op, modify, helper);
-			if (op.message == null)
+			int index = addToCollection(op, modify, helper);
+			if (op.message == null) {
+				op = new CollectionOp<>(op.source, index);
 				updateForAdd(op, subListStart, helper);
+			}
 			break;
 		case 5: // Add by index
 			op = new CollectionOp<>(theSupplier.apply(helper),
@@ -123,7 +125,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			ops = new ArrayList<>(length);
 			for (int i = 0; i < length; i++)
 				ops.add(new CollectionOp<>(theSupplier.apply(helper), -1));
-			int index = subListStart + ((theCollection.isEmpty() || helper.getBoolean()) ? -1 : helper.getInt(0, modify.size() + 1));
+			index = subListStart + ((theCollection.isEmpty() || helper.getBoolean()) ? -1 : helper.getInt(0, modify.size() + 1));
 			for (int i = 0; i < length; i++)
 				checkAddable(ops.get(i), subListStart, subListEnd, helper);
 			if (ObservableChainTester.DEBUG_PRINT) {
@@ -240,7 +242,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		return index;
 	}
 
-	private void addToCollection(CollectionOp<T> add, BetterList<T> modify, TestHelper helper) {
+	private int addToCollection(CollectionOp<T> add, BetterList<T> modify, TestHelper helper) {
 		int preModSize = modify.size();
 		int preSize = theCollection.size();
 		if (add.index < 0) {
@@ -261,10 +263,12 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				Assert.assertTrue(theCollection.equivalence().elementEquals(add.source, element.get()));
 				Assert.assertEquals(preModSize + 1, modify.size());
 				Assert.assertEquals(preSize + 1, theCollection.size());
+				return modify.getElementsBefore(element.getElementId());
 			} else {
 				Assert.assertNotNull(add.message);
 				Assert.assertEquals(preModSize, modify.size());
 				Assert.assertEquals(preSize, theCollection.size());
+				return -1;
 			}
 		} else {
 			if (modify.isEmpty() || helper.getBoolean()) {
@@ -275,7 +279,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 						Assert.assertNotNull(add.message);
 						Assert.assertEquals(preModSize, modify.size());
 						add.message = "";
-						return;
+						return -1;
 					} else {
 						Assert.assertNull(add.message);
 						Assert.assertTrue(theCollection.equivalence().elementEquals(add.source, element.get()));
@@ -284,10 +288,11 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 					Assert.assertEquals(preSize + 1, theCollection.size());
 					int index = modify.getElementsBefore(element.getElementId());
 					Assert.assertTrue(index >= 0 && index <= preModSize);
+					return index;
 				} catch (UnsupportedOperationException | IllegalArgumentException e) {
 					Assert.assertNotNull(add.message);
 					add.isError = true;
-					return;
+					return -1;
 				}
 			} else {
 				// Test add by element
@@ -316,6 +321,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 					}
 					Assert.assertEquals(preModSize, modify.size());
 					Assert.assertEquals(preSize, theCollection.size());
+					return -1;
 				} else {
 					ElementId newElement = element.add(add.source, addLeft);
 					Assert.assertNotNull(newElement);
@@ -324,6 +330,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 					Assert.assertTrue(theCollection.equivalence().elementEquals(modify.getElement(newElement).get(), add.source));
 					int index = modify.getElementsBefore(newElement);
 					Assert.assertTrue(index >= 0 && index <= preModSize);
+					return index;
 				}
 			}
 		}
@@ -446,7 +453,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			try {
 				element.set(op.source);
 				Assert.assertNull(op.message);
-			} catch (UnsupportedOperationException e) {
+			} catch (UnsupportedOperationException | IllegalArgumentException e) {
 				Assert.assertNotNull(op.message);
 			}
 		}
@@ -564,19 +571,19 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 	private void updateForAdd(CollectionOp<T> add, int subListStart, TestHelper helper) {
 		if (add.message != null)
 			return;
-		addedFromAbove(add.index <= 0 ? -1 : subListStart + add.index, add.source, helper);
+		addedFromAbove(add.index < 0 ? -1 : subListStart + add.index, add.source, helper);
 	}
 
 	private void updateForRemove(CollectionOp<T> remove, int subListStart, TestHelper helper) {
 		if (remove.message != null)
 			return;
-		removedFromAbove(remove.index <= 0 ? -1 : subListStart + remove.index, remove.source, helper);
+		removedFromAbove(remove.index < 0 ? -1 : subListStart + remove.index, remove.source, helper);
 	}
 
 	private void updateForSet(CollectionOp<T> set, int subListStart, TestHelper helper) {
 		if (set.message != null)
 			return;
-		setFromAbove(set.index <= 0 ? -1 : subListStart + set.index, set.source, helper);
+		setFromAbove(subListStart + set.index, set.source, helper);
 	}
 
 	private void testBounds(TestHelper helper) {
