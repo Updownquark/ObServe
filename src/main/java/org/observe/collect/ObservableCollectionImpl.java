@@ -41,7 +41,6 @@ import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
-import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
@@ -1440,7 +1439,8 @@ public final class ObservableCollectionImpl {
 					public void removed(T value, Object elCause) {
 						theStructureStamp.incrementAndGet();
 						int index = holder.treeNode.getNodesBefore();
-						theDerivedElements.mutableElement(holder.treeNode.getElementId()).remove();
+						if (holder.treeNode.getElementId().isPresent()) // May have been removed already
+							theDerivedElements.mutableElement(holder.treeNode.getElementId()).remove();
 						fireListeners(new ObservableCollectionEvent<>(holder, theFlow.getTargetType(), index, CollectionChangeType.remove,
 							value, value, elCause));
 					}
@@ -1580,6 +1580,10 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public MutableCollectionElement<T> mutableElement(ElementId id) {
+			return mutableElement(id, null);
+		}
+
+		private MutableCollectionElement<T> mutableElement(ElementId id, MutableCollectionElement<DerivedElementHolder<T>> spliterElement) {
 			DerivedElementHolder<T> el = (DerivedElementHolder<T>) id;
 			class DerivedMutableCollectionElement implements MutableCollectionElement<T> {
 				@Override
@@ -1614,6 +1618,8 @@ public final class ObservableCollectionImpl {
 
 				@Override
 				public void remove() throws UnsupportedOperationException {
+					if (spliterElement != null)
+						spliterElement.remove();
 					el.element.remove();
 				}
 
@@ -1657,7 +1663,7 @@ public final class ObservableCollectionImpl {
 			return new MutableDerivedSpliterator(theDerivedElements.spliterator(fromStart));
 		}
 
-		protected MutableElementSpliterator<T> spliterator(ElementSpliterator<DerivedElementHolder<T>> elementSpliter) {
+		protected MutableElementSpliterator<T> spliterator(MutableElementSpliterator<DerivedElementHolder<T>> elementSpliter) {
 			return new MutableDerivedSpliterator(elementSpliter);
 		}
 
@@ -1713,9 +1719,9 @@ public final class ObservableCollectionImpl {
 		}
 
 		private class MutableDerivedSpliterator extends MutableElementSpliterator.SimpleMutableSpliterator<T> {
-			private final ElementSpliterator<DerivedElementHolder<T>> theElementSpliter;
+			private final MutableElementSpliterator<DerivedElementHolder<T>> theElementSpliter;
 
-			MutableDerivedSpliterator(ElementSpliterator<DerivedElementHolder<T>> elementSpliter) {
+			MutableDerivedSpliterator(MutableElementSpliterator<DerivedElementHolder<T>> elementSpliter) {
 				super(ActiveDerivedCollection.this);
 				theElementSpliter = elementSpliter;
 			}
@@ -1742,12 +1748,12 @@ public final class ObservableCollectionImpl {
 
 			@Override
 			protected boolean internalForElementM(Consumer<? super MutableCollectionElement<T>> action, boolean forward) {
-				return theElementSpliter.forValue(element -> action.accept(mutableElement(element)), forward);
+				return theElementSpliter.forElementM(element -> action.accept(mutableElement(element.get(), element)), forward);
 			}
 
 			@Override
 			public MutableElementSpliterator<T> trySplit() {
-				ElementSpliterator<DerivedElementHolder<T>> split = theElementSpliter.trySplit();
+				MutableElementSpliterator<DerivedElementHolder<T>> split = theElementSpliter.trySplit();
 				return split == null ? null : new MutableDerivedSpliterator(split);
 			}
 		}
