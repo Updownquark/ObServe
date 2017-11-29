@@ -258,6 +258,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			if (element != null) {
 				Assert.assertTrue(element.getElementId().isPresent());
 				Assert.assertNull(add.message);
+				Assert.assertTrue(theCollection.equivalence().elementEquals(add.source, element.get()));
 				Assert.assertEquals(preModSize + 1, modify.size());
 				Assert.assertEquals(preSize + 1, theCollection.size());
 			} else {
@@ -277,6 +278,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 						return;
 					} else {
 						Assert.assertNull(add.message);
+						Assert.assertTrue(theCollection.equivalence().elementEquals(add.source, element.get()));
 					}
 					Assert.assertEquals(preModSize + 1, modify.size());
 					Assert.assertEquals(preSize + 1, theCollection.size());
