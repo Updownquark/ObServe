@@ -1985,6 +1985,8 @@ public class ObservableCollectionDataFlowImpl {
 			if (theOptions.getReverse() == null)
 				return dest.reject(StdMsg.UNSUPPORTED_OPERATION, true);
 			FilterMapResult<I, E> intermediate = dest.map(theOptions.getReverse());
+			if (intermediate.isAccepted() && !theEquivalence.elementEquals(theMap.apply(intermediate.source), dest.source))
+				return dest.reject(StdMsg.ILLEGAL_ELEMENT, true);
 			return (FilterMapResult<T, E>) theParent.reverse(intermediate, forAdd);
 		}
 
@@ -2026,7 +2028,10 @@ public class ObservableCollectionDataFlowImpl {
 					}
 					if (theOptions.getReverse() == null)
 						return StdMsg.UNSUPPORTED_OPERATION;
-					String setMsg = parentMap.isAcceptable(theOptions.getReverse().apply(value));
+					I reversed = theOptions.getReverse().apply(value);
+					if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
+						return StdMsg.ILLEGAL_ELEMENT;
+					String setMsg = parentMap.isAcceptable(reversed);
 					// If the element reverse is set, it should get the final word on the error message if
 					if (setMsg == null || msg == null)
 						return setMsg;
@@ -2041,7 +2046,10 @@ public class ObservableCollectionDataFlowImpl {
 					}
 					if (theOptions.getReverse() == null)
 						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-					parentMap.set(theOptions.getReverse().apply(value));
+					I reversed = theOptions.getReverse().apply(value);
+					if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
+						throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+					parentMap.set(reversed);
 				}
 
 				@Override
@@ -2058,14 +2066,20 @@ public class ObservableCollectionDataFlowImpl {
 				public String canAdd(T value, boolean before) {
 					if (theOptions.getReverse() == null)
 						return StdMsg.UNSUPPORTED_OPERATION;
-					return parentMap.canAdd(theOptions.getReverse().apply(value), before);
+					I reversed = theOptions.getReverse().apply(value);
+					if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
+						return StdMsg.ILLEGAL_ELEMENT;
+					return parentMap.canAdd(reversed, before);
 				}
 
 				@Override
 				public ElementId add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
 					if (theOptions.getReverse() == null)
 						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-					return parentMap.add(theOptions.getReverse().apply(value), before);
+					I reversed = theOptions.getReverse().apply(value);
+					if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
+						throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+					return parentMap.add(reversed, before);
 				}
 			};
 		}
@@ -2151,13 +2165,19 @@ public class ObservableCollectionDataFlowImpl {
 		public String canAdd(T toAdd) {
 			if (theOptions.getReverse() == null)
 				return StdMsg.UNSUPPORTED_OPERATION;
-			return theParent.canAdd(theOptions.getReverse().apply(toAdd));
+			I reversed = theOptions.getReverse().apply(toAdd);
+			if (!theEquivalence.elementEquals(theMap.apply(reversed), toAdd))
+				return StdMsg.ILLEGAL_ELEMENT;
+			return theParent.canAdd(reversed);
 		}
 
 		@Override
 		public DerivedCollectionElement<T> addElement(T value, boolean first) {
 			if (theOptions.getReverse() == null)
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			I reversed = theOptions.getReverse().apply(value);
+			if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
+				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 			DerivedCollectionElement<I> parentEl = theParent.addElement(theOptions.getReverse().apply(value), first);
 			return parentEl == null ? null : new MappedElement(parentEl, true);
 		}
@@ -2266,7 +2286,10 @@ public class ObservableCollectionDataFlowImpl {
 				}
 				if (theOptions.getReverse() == null)
 					return StdMsg.UNSUPPORTED_OPERATION;
-				String setMsg = theParentEl.isAcceptable(theOptions.getReverse().apply(value));
+				I reversed = theOptions.getReverse().apply(value);
+				if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
+					return StdMsg.ILLEGAL_ELEMENT;
+				String setMsg = theParentEl.isAcceptable(reversed);
 				// If the element reverse is set, it should get the final word on the error message if
 				if (setMsg == null || msg == null)
 					return setMsg;
@@ -2281,7 +2304,10 @@ public class ObservableCollectionDataFlowImpl {
 				}
 				if (theOptions.getReverse() == null)
 					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-				theParentEl.set(theOptions.getReverse().apply(value));
+				I reversed = theOptions.getReverse().apply(value);
+				if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
+					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+				theParentEl.set(reversed);
 			}
 
 			@Override
@@ -2298,14 +2324,20 @@ public class ObservableCollectionDataFlowImpl {
 			public String canAdd(T value, boolean before) {
 				if (theOptions.getReverse() == null)
 					return StdMsg.UNSUPPORTED_OPERATION;
-				return theParentEl.canAdd(theOptions.getReverse().apply(value), before);
+				I reversed = theOptions.getReverse().apply(value);
+				if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
+					return StdMsg.ILLEGAL_ELEMENT;
+				return theParentEl.canAdd(reversed, before);
 			}
 
 			@Override
 			public DerivedCollectionElement<T> add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
 				if (theOptions.getReverse() == null)
 					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-				DerivedCollectionElement<I> parentEl = theParentEl.add(theOptions.getReverse().apply(value), before);
+				I reversed = theOptions.getReverse().apply(value);
+				if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
+					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+				DerivedCollectionElement<I> parentEl = theParentEl.add(reversed, before);
 				return parentEl == null ? null : new MappedElement(parentEl, true);
 			}
 
