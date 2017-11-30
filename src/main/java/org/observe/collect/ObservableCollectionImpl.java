@@ -266,7 +266,7 @@ public final class ObservableCollectionImpl {
 
 		private SessionChangeTracker<E> insertAddition(SessionChangeTracker<E> tracker, ObservableCollectionEvent<? extends E> event) {
 			int changeIndex = indexForAdd(tracker, event.getIndex());
-			if (changeIndex < tracker.elements.size() && tracker.elements.get(changeIndex).index == event.getIndex())
+			if (changeIndex < tracker.elements.size() && tracker.elements.get(changeIndex).index >= event.getIndex())
 				tracker.elements.get(changeIndex).index++;
 			for (int i = changeIndex + 1; i < tracker.elements.size(); i++)
 				tracker.elements.get(i).index++;
