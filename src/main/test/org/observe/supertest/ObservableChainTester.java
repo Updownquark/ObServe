@@ -284,6 +284,7 @@ public class ObservableChainTester implements Testable {
 		/**/.withRandomCases(-1).withMaxTotalDuration(Duration.ofMinutes(5))//
 		/**/.withMaxFailures(1)//
 		/**/.withPersistenceDir(new File("src/main/test/org/observe/supertest"), false)//
+		/**/.withPlacemarks("Transaction", "Modification")
 		/**/.withDebug(true)//
 		/**/.execute();
 	}
@@ -336,14 +337,17 @@ public class ObservableChainTester implements Testable {
 			ObservableChainLink<?> targetLink = theChain.get(linkIndex);
 			boolean finished = false;
 			int failedLink = 0;
-			try (Transaction t = helper.getBoolean(.75) ? targetLink.lock() : Transaction.NONE) {
+			boolean useTransaction = helper.getBoolean(.75);
+			try (Transaction t = useTransaction ? targetLink.lock() : Transaction.NONE) {
 				// Want the probability of zero-modification transactions to be very small, but non-zero
 				int transactionMods = helper.getInt(1, helper.getInt(1, 27));
 				if (transactionMods == 25)
 					transactionMods = 0;
 				System.out.println("Modification set " + (tri + 1) + ": " + transactionMods + " modifications on link " + linkIndex);
-				helper.placemark();
+				helper.placemark("Transaction");
 				for (int transactionTri = 0; transactionTri < transactionMods; transactionTri++) {
+					helper.placemark("Modification");
+					System.out.print("\tMod " + (transactionTri + 1) + ": ");
 					try {
 						targetLink.tryModify(helper);
 					} catch (RuntimeException | Error e) {
@@ -353,7 +357,7 @@ public class ObservableChainTester implements Testable {
 					}
 					try {
 						for (failedLink = 0; failedLink < theChain.size(); failedLink++)
-							theChain.get(failedLink).check(false);
+							theChain.get(failedLink).check(useTransaction);
 					} catch (Error e) {
 						System.err.println("Integrity check failure on link " + failedLink + " after " + (modifications + transactionTri)
 							+ " modifications");
@@ -373,7 +377,8 @@ public class ObservableChainTester implements Testable {
 				for (failedLink = 0; failedLink < theChain.size(); failedLink++)
 					theChain.get(failedLink).check(true);
 			} catch (Error e) {
-				System.err.println("Integrity check failure on link " + failedLink + " after " + modifications + " modifications");
+				System.err.println(
+					"Integrity check failure on transaction close on link " + failedLink + " after " + modifications + " modifications");
 				throw e;
 			}
 		}

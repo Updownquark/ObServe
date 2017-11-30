@@ -210,8 +210,8 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			if (ObservableChainTester.DEBUG_PRINT)
 				System.out.println("[" + getLinkIndex() + "]: Retain all " + values.size() + values);
 			ops = new ArrayList<>();
-			for (int i = 0; i < theCollection.size(); i++) {
-				T value = theCollection.get(i);
+			for (int i = 0; i < modify.size(); i++) {
+				T value = modify.get(i);
 				if(!set.contains(value)){
 					op = new CollectionOp<>(value, i);
 					checkRemovable(op, subListStart, subListEnd, helper);
@@ -496,6 +496,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		Assert.assertEquals(modified, added > 0);
 		Assert.assertEquals(modify.size(), preModSize + added);
 		Assert.assertEquals(theCollection.size(), preSize + added);
+		List<T> expected = theTester.getExpected();
 		if (!ops.isEmpty()) {
 			// Need to replace the indexes in the operations with the index at which the values were added in the collection (or sub-list)
 			Set<Integer> indexes = new HashSet<>();
@@ -506,12 +507,13 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				// If the found element is a duplicate that was either already present or whose index has previously been used, find a new
 				// element
 				while (el != null && //
-					(elIndex < index || !indexes.add(elIndex))) {
+					(elIndex < index || !indexes.add(elIndex)
+						|| (elIndex < expected.size() && theCollection.equivalence().elementEquals(expected.get(elIndex), op.source)))) {
 					el = modify.subList(elIndex + 1, modify.size()).getElement(op.source, true);
 					elIndex = modify.getElementsBefore(el.getElementId());
 				}
 				Assert.assertNotNull(el);
-				Assert.assertTrue(elIndex + ">" + index + "+" + added, elIndex < (index < 0 ? 0 : index) + added);
+				Assert.assertTrue(elIndex + ">=" + index + "+" + added, elIndex < (index < 0 ? preModSize : index) + added);
 				ops.set(i, new CollectionOp<>(op.source, elIndex));
 			}
 			Collections.sort(ops, (op1, op2) -> op1.index - op2.index);
@@ -526,15 +528,25 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 	private void removeAllFromCollection(List<CollectionOp<T>> ops, BetterList<T> modify, TestHelper helper) {
 		int preModSize = modify.size();
 		int preSize = theCollection.size();
-		List<T> values = ops.stream().map(op -> op.source).collect(Collectors.toList());
-		boolean modified = modify.removeAll(values);
+		List<T> values = new ArrayList<>();
+		Set<T> valueSet = theCollection.equivalence().createSet();
 		int removed = 0;
 		for (CollectionOp<T> op : ops) {
-			if (op.message != null)
-				continue;
-			removed++;
-			if (theCollection instanceof Set)
-				Assert.assertNull(modify.getElement(op.source, true));
+			values.add(op.source);
+			if (op.message == null && valueSet.add(op.source)) {
+				CollectionElement<T> el = modify.getElement(op.source, true);
+				while (el != null) {
+					removed++;
+					el = theCollection.subList(modify.getElementsBefore(el.getElementId()) + 1, modify.size()).getElement(op.source, true);
+				}
+			}
+		}
+		boolean modified = modify.removeAll(values);
+		if (theCollection instanceof Set) {
+			for (CollectionOp<T> op : ops) {
+				if (op.message == null)
+					Assert.assertNull(modify.getElement(op.source, true));
+			}
 		}
 		Assert.assertEquals(modified, removed > 0);
 		Assert.assertEquals(modify.size(), preModSize - removed);
