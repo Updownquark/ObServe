@@ -108,8 +108,8 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 	}
 
 	@Override
-	public int removedFromAbove(int index, T value, TestHelper helper) {
-		return getParent().removedFromAbove(index, index < 0 ? theOptions.getReverse().apply(value) : null, helper);
+	public void removedFromAbove(int index, T value, TestHelper helper) {
+		getParent().removedFromAbove(index, null, helper); // TODO Is null ok here?
 	}
 
 	@Override

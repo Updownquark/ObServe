@@ -357,7 +357,7 @@ public class ObservableChainTester implements Testable {
 					}
 					try {
 						for (failedLink = 0; failedLink < theChain.size(); failedLink++)
-							theChain.get(failedLink).check(useTransaction);
+							theChain.get(failedLink).check(!useTransaction);
 					} catch (Error e) {
 						System.err.println("Integrity check failure on link " + failedLink + " after " + (modifications + transactionTri)
 							+ " modifications");

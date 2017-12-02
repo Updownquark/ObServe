@@ -236,7 +236,12 @@ public final class ObservableCollectionImpl {
 					break;
 				case remove:
 					if (tracker.elements.size() == 1 && tracker.elements.get(0).index == event.getIndex()) {
-						return replace(null, event, observer);
+						// The single element that was set is now being removed.
+						// Replace the tracker with one that removes the old element, not the new one
+						SessionChangeTracker<E> newTracker = new SessionChangeTracker<>(CollectionChangeType.remove);
+						E oldValue = tracker.elements.get(0).oldValue;
+						newTracker.elements.add(new ChangeValue<>(oldValue, oldValue, event.getIndex()));
+						return newTracker;
 					}
 					changeIndex = indexForAdd(tracker, collIndex);
 					if (changeIndex < tracker.elements.size() && tracker.elements.get(changeIndex).index == collIndex)

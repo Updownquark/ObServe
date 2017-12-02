@@ -1,7 +1,5 @@
 package org.observe.supertest;
 
-import java.util.List;
-
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ObservableChainTester.TestValueType;
 import org.qommons.TestHelper;
@@ -54,18 +52,8 @@ public class SimpleCollectionLink<E> extends AbstractObservableCollectionLink<E,
 	}
 
 	@Override
-	public int removedFromAbove(int index, E value, TestHelper helper) {
-		if (index < 0) {
-			List<E> expected = getExpected();
-			for (int i = 0; i < expected.size(); i++) {
-				if (getCollection().equivalence().elementEquals(expected.get(i), value)) {
-					index = i;
-					break;
-				}
-			}
-		}
+	public void removedFromAbove(int index, E value, TestHelper helper) {
 		removed(index, helper);
-		return index;
 	}
 
 	@Override
