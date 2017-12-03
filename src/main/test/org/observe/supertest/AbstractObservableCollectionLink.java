@@ -3,9 +3,10 @@ package org.observe.supertest;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
+import java.util.NavigableSet;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -132,15 +133,16 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			for (int i = 0; i < length; i++)
 				checkAddable(ops.get(i), subListStart, subListEnd, helper);
 			if (ObservableChainTester.DEBUG_PRINT) {
-				String msg = "Add all " + ops.size();
+				String msg = "Add all ";
 				if (index >= 0) {
 					msg += "@" + index;
 					if (index > 0)
 						msg += ", after " + modify.get(index - 1);
+					msg += " ";
 				}
-				System.out.println(msg + ops);
+				System.out.println(msg + ops.size() + ops);
 			}
-			addAllToCollection(index, ops, modify, helper);
+			addAllToCollection(index, ops, modify, subListStart, helper);
 			for (CollectionOp<T> o : ops){
 				if (o.message == null)
 					updateForAdd(o, subListStart, helper);
@@ -511,7 +513,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		Assert.assertEquals(preSize, theCollection.size());
 	}
 
-	private void addAllToCollection(int index, List<CollectionOp<T>> ops, BetterList<T> modify, TestHelper helper) {
+	private void addAllToCollection(int index, List<CollectionOp<T>> ops, BetterList<T> modify, int subListStart, TestHelper helper) {
 		int preModSize = modify.size();
 		int preSize = theCollection.size();
 		List<T> values = ops.stream().map(op -> op.source).collect(Collectors.toList());
@@ -543,22 +545,38 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		List<T> expected = theTester.getExpected();
 		if (!ops.isEmpty()) {
 			// Need to replace the indexes in the operations with the index at which the values were added in the collection (or sub-list)
-			Set<Integer> indexes = new HashSet<>();
+			NavigableSet<Integer> indexes = new TreeSet<>();
+			BetterList<T> addedList = index >= 0 ? modify.subList(index, index + added) : modify;
+			int addedListStart = index >= 0 ? index : 0;
 			for (int i = 0; i < ops.size(); i++) {
 				CollectionOp<T> op = ops.get(i);
-				CollectionElement<T> el = modify.getElement(op.source, true);
-				int elIndex = modify.getElementsBefore(el.getElementId());
+				CollectionElement<T> el = addedList.getElement(op.source, true);
+				int elIndex = addedList.getElementsBefore(el.getElementId());
 				// If the found element is a duplicate that was either already present or whose index has previously been used, find a new
 				// element
-				while (el != null && //
-					(elIndex < index || !indexes.add(elIndex)
-						|| (elIndex < expected.size() && theCollection.equivalence().elementEquals(expected.get(elIndex), op.source)))) {
-					el = modify.subList(elIndex + 1, modify.size()).getElement(op.source, true);
-					elIndex = modify.getElementsBefore(el.getElementId());
+				while (el != null) {
+					if (indexes.contains(elIndex)) {
+						el = addedList.subList(elIndex + 1, addedList.size()).getElement(op.source, true);
+						elIndex = addedList.getElementsBefore(el.getElementId());
+						continue;
+					}
+					if (index < 0) {
+						int expectedIndex = subListStart + addedListStart + elIndex - indexes.headSet(elIndex).size();
+						if (expectedIndex >= 0 && expectedIndex < expected.size()
+							&& theCollection.equivalence().elementEquals(expected.get(expectedIndex), op.source)) {
+							el = addedList.subList(elIndex + 1, addedList.size()).getElement(op.source, true);
+							elIndex = addedList.getElementsBefore(el.getElementId());
+							continue;
+						}
+					}
+					indexes.add(elIndex);
+					break;
 				}
 				Assert.assertNotNull(el);
-				Assert.assertTrue(elIndex + ">=" + index + "+" + added, elIndex < (index < 0 ? preModSize : index) + added);
-				ops.set(i, new CollectionOp<>(op.source, elIndex));
+				if (index >= 0)
+					Assert.assertTrue((addedListStart + elIndex) + ">=" + index + "+" + added,
+						addedListStart + elIndex < (index < 0 ? preModSize : index) + added);
+				ops.set(i, new CollectionOp<>(op.source, addedListStart + elIndex));
 			}
 			Collections.sort(ops, (op1, op2) -> op1.index - op2.index);
 			if (index >= 0) {
