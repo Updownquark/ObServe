@@ -7,6 +7,7 @@ import static org.junit.Assert.assertTrue;
 import static org.qommons.QommonsTestUtils.collectionsEqual;
 import static org.qommons.debug.Debug.d;
 
+import java.io.File;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -476,41 +477,46 @@ public class ObservableCollectionsTest {
 		}, true, true);
 	}
 
+	static class ArrayListTester implements TestHelper.Testable {
+		@Override
+		public void accept(TestHelper helper) {
+			CircularArrayList<Integer> backing = CircularArrayList.build().unsafe().build();
+			testCollection(ObservableCollection.create(TypeToken.of(Integer.class), backing), set -> backing.checkValid(), helper);
+		}
+	}
+
 	/** Runs a barrage of tests on a {@link DefaultObservableCollection} backed by a {@link CircularArrayList} */
 	@Test
 	public void testObservableArrayList() {
-		long debugAt = -1; // -1 for no debug
-		CircularArrayList<Integer> backing = CircularArrayList.build().unsafe().build();
-		TestHelper.testSingle(//
-			helper -> testCollection(ObservableCollection.create(TypeToken.of(Integer.class), backing), set -> backing.checkValid(),
-				helper), //
-			1, debugAt);
+		TestHelper.createTester(ArrayListTester.class).withDebug(false).withFailurePersistence(false).withRandomCases(1).execute();
+	}
+
+	static class TreeListTester implements TestHelper.Testable {
+		@Override
+		public void accept(TestHelper helper) {
+			BetterTreeList<Integer> backing = new BetterTreeList<>(false);
+			testCollection(ObservableCollection.create(TypeToken.of(Integer.class), backing), set -> backing.checkValid(), helper);
+		}
 	}
 
 	/** Runs a barrage of tests on a {@link DefaultObservableCollection} backed by a {@link BetterTreeList} */
 	@Test
 	public void testObservableTreeList() {
-		long debugAt = -1; // -1 for no debug
-		BetterTreeList<Integer> backing = new BetterTreeList<>(false);
-		d().start();
-		try {
-			TestHelper.testSingle(//
-				helper -> testCollection(ObservableCollection.create(TypeToken.of(Integer.class), backing), set -> backing.checkValid(),
-					helper), //
-				1, debugAt);
-		} finally {
-			d().end();
+		TestHelper.createTester(TreeListTester.class).withDebug(false).withFailurePersistence(false).withRandomCases(1).execute();
+	}
+
+	static class TreeSetTester implements TestHelper.Testable {
+		@Override
+		public void accept(TestHelper helper) {
+			BetterTreeSet<Integer> backing = new BetterTreeSet<>(false, Integer::compareTo);
+			testCollection(ObservableCollection.create(TypeToken.of(Integer.class), backing), set -> backing.checkValid(), helper);
 		}
 	}
 
 	/** Runs a barrage of tests on a {@link DefaultObservableCollection} backed by a {@link BetterTreeSet} */
 	@Test
 	public void testObservableTreeSet() {
-		BetterTreeSet<Integer> backing = new BetterTreeSet<>(false, Integer::compareTo);
-		TestHelper.testSingle(//
-			helper -> testCollection(ObservableCollection.create(TypeToken.of(Integer.class), backing), set -> backing.checkValid(),
-				helper), //
-			1, -1);
+		TestHelper.createTester(TreeSetTester.class).withDebug(false).withFailurePersistence(false).withRandomCases(1).execute();
 	}
 
 	// Random test generation
@@ -777,12 +783,9 @@ public class ObservableCollectionsTest {
 	@SuppressWarnings("unused")
 	@Test
 	public void randomSimple() {
-		String reproHash = null;
-		long debugAt = -1;
-		if (reproHash == null)
-			TestHelper.testRandom(SimpleRandomTester.class, -1, 5, RANDOM_TEST_TIME, false, true, true);
-		else
-			TestHelper.testReproduce(SimpleRandomTester.class, reproHash, debugAt, false, false, true);
+		TestHelper.createTester(SimpleRandomTester.class).withMaxTotalDuration(Duration.ofSeconds(5))//
+			/**/.withPersistenceDir(new File("src/main/test/org/observe/collect"), false)//
+			.execute();
 	}
 
 	// Older, more specific tests
@@ -981,39 +984,6 @@ public class ObservableCollectionsTest {
 		for(int i = 0; i < 30; i++) {
 			set.remove(Integer.valueOf(i));
 			if(i % 2 == 0)
-				correct.remove(i);
-			assertEquals(correct, compare1);
-		}
-	}
-
-	/** Tests {@link CollectionDataFlow#filterStatic(Function)} */
-	@Test
-	public void observableSetFilterStatic() {
-		ObservableSet<Integer> set = ObservableCollection.create(intType).flow().distinct().collect();
-		Set<Integer> compare1 = new TreeSet<>();
-		Set<Integer> correct = new TreeSet<>();
-		set.flow().filterStatic(value -> (value != null && value % 2 == 0) ? null : StdMsg.ILLEGAL_ELEMENT).collect().subscribe(evt -> {
-			switch (evt.getType()) {
-			case add:
-				assertTrue(compare1.add(evt.getNewValue()));
-				break;
-			case remove:
-				assertTrue(compare1.remove(evt.getOldValue()));
-				break;
-			case set:
-				throw new IllegalStateException("No sets on sets");
-			}
-		}, true);
-
-		for (int i = 0; i < 30; i++) {
-			set.add(i);
-			if (i % 2 == 0)
-				correct.add(i);
-			assertEquals(correct, compare1);
-		}
-		for (int i = 0; i < 30; i++) {
-			set.remove(Integer.valueOf(i));
-			if (i % 2 == 0)
 				correct.remove(i);
 			assertEquals(correct, compare1);
 		}
@@ -1392,33 +1362,6 @@ public class ObservableCollectionsTest {
 		for(int i = 0; i < 30; i++) {
 			list.remove(Integer.valueOf(i));
 			if(i % 2 == 0)
-				tester.remove(i);
-			tester.check(i % 2 == 0 ? 1 : 0);
-		}
-	}
-
-	/** Tests {@link CollectionDataFlow#filterStatic(Function)} */
-	@Test
-	public void observableListFilterStatic() {
-		ObservableCollection<Integer> list = ObservableCollection.create(intType);
-		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(//
-			list.flow().filterStatic(value -> value != null && value % 2 == 0 ? null : StdMsg.ILLEGAL_ELEMENT).collect());
-
-		for (int i = 0; i < 30; i++) {
-			list.add(i);
-			if (i % 2 == 0)
-				tester.add(i);
-			tester.check(i % 2 == 0 ? 1 : 0);
-		}
-		for (int i = 0; i < 30; i++) {
-			list.add(i);
-			if (i % 2 == 0)
-				tester.add(i);
-			tester.check(i % 2 == 0 ? 1 : 0);
-		}
-		for (int i = 0; i < 30; i++) {
-			list.remove(Integer.valueOf(i));
-			if (i % 2 == 0)
 				tester.remove(i);
 			tester.check(i % 2 == 0 ? 1 : 0);
 		}
