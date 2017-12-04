@@ -479,12 +479,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public CollectionDataFlow<E, T, T> filter(Function<? super T, String> filter) {
-			return new FilterOp<>(theSource, this, filter, false);
-		}
-
-		@Override
-		public CollectionDataFlow<E, T, T> filterStatic(Function<? super T, String> filter) {
-			return new FilterOp<>(theSource, this, filter, true);
+			return new FilterOp<>(theSource, this, filter);
 		}
 
 		@Override
@@ -663,13 +658,10 @@ public class ObservableCollectionDataFlowImpl {
 
 	private static class FilterOp<E, T> extends AbstractDataFlow<E, T, T> {
 		private final Function<? super T, String> theFilter;
-		private final boolean isStaticFilter;
 
-		FilterOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, Function<? super T, String> filter,
-			boolean staticFilter) {
+		FilterOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, Function<? super T, String> filter) {
 			super(source, parent, parent.getTargetType(), parent.equivalence());
 			theFilter = filter;
-			isStaticFilter = staticFilter;
 		}
 
 		@Override
@@ -684,7 +676,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public ActiveCollectionManager<E, ?, T> manageActive() {
-			return new FilteredCollectionManager<>(getParent().manageActive(), theFilter, isStaticFilter);
+			return new FilteredCollectionManager<>(getParent().manageActive(), theFilter);
 		}
 	}
 
@@ -1354,13 +1346,11 @@ public class ObservableCollectionDataFlowImpl {
 	private static class FilteredCollectionManager<E, T> implements ActiveCollectionManager<E, T, T> {
 		private final ActiveCollectionManager<E, ?, T> theParent;
 		private final Function<? super T, String> theFilter;
-		private final boolean isStatic;
 		private ElementAccepter<T> theElementAccepter;
 
-		FilteredCollectionManager(ActiveCollectionManager<E, ?, T> parent, Function<? super T, String> filter, boolean isStatic) {
+		FilteredCollectionManager(ActiveCollectionManager<E, ?, T> parent, Function<? super T, String> filter) {
 			theParent = parent;
 			theFilter = filter;
-			this.isStatic = isStatic;
 		}
 
 		@Override
@@ -1419,9 +1409,7 @@ public class ObservableCollectionDataFlowImpl {
 				String msg = theFilter.apply(parentEl.get());
 				if (msg == null)
 					onElement.accept(new FilteredElement(parentEl, false, true), cause);
-				else if (isStatic) {
-					return;
-				} else
+				else
 					new FilteredElement(parentEl, false, false);
 			}, listening);
 		}
@@ -1436,7 +1424,7 @@ public class ObservableCollectionDataFlowImpl {
 				theParentEl = parentEl;
 				isSynthetic = synthetic;
 				this.included = included;
-				if (!isSynthetic && !isStatic) {
+				if (!isSynthetic) {
 					theParentEl.setListener(new CollectionElementListener<T>() {
 						@Override
 						public void update(T oldValue, T newValue, Object cause) {
@@ -1470,10 +1458,7 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public void setListener(CollectionElementListener<T> listener) {
-				if (isStatic)
-					theParentEl.setListener(listener);
-				else
-					theListener = listener;
+				theListener = listener;
 			}
 
 			@Override

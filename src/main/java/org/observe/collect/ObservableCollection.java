@@ -746,16 +746,6 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		CollectionDataFlow<E, T, T> filter(Function<? super T, String> filter);
 
 		/**
-		 * Filters some elements from the collection by value. The filtering is done statically, such that the initial value of the element
-		 * determines whether it is excluded or included in the collection and cannot be re-included or excluded afterward.
-		 *
-		 * @param filter A filter function that returns null for elements to maintain in the collection, or a message indicating why the
-		 *        element is excluded
-		 * @return A {@link #supportsPassive() active} data flow capable of producing a collection that excludes certain elements from the input
-		 */
-		CollectionDataFlow<E, T, T> filterStatic(Function<? super T, String> filter);
-
-		/**
 		 * Filters elements from this flow by type. The filtering is done {@link #filterStatic(Function) statically}.
 		 *
 		 * @param <X> The type for the new collection
@@ -764,7 +754,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 *         given class
 		 */
 		default <X> CollectionDataFlow<E, ?, X> filter(Class<X> type) {
-			return filterStatic(value -> {
+			return filter(value -> {
 				if (type == null || type.isInstance(value))
 					return null;
 				else
@@ -1042,19 +1032,6 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		UniqueDataFlow<E, T, T> filter(Function<? super T, String> filter);
 
 		@Override
-		UniqueDataFlow<E, T, T> filterStatic(Function<? super T, String> filter);
-
-		@Override
-		default <X> UniqueDataFlow<E, T, X> filter(Class<X> type) {
-			return filterStatic(value -> {
-				if (type == null || type.isInstance(value))
-					return null;
-				else
-					return MutableCollectionElement.StdMsg.BAD_TYPE;
-			}).mapEquivalent(TypeToken.of(type), v -> (X) v, v -> (T) v);
-		}
-
-		@Override
 		<X> UniqueDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include);
 
 		@Override
@@ -1134,19 +1111,6 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 		@Override
 		UniqueSortedDataFlow<E, T, T> filter(Function<? super T, String> filter);
-
-		@Override
-		UniqueSortedDataFlow<E, T, T> filterStatic(Function<? super T, String> filter);
-
-		@Override
-		default <X> UniqueSortedDataFlow<E, T, X> filter(Class<X> type) {
-			return filterStatic(value -> {
-				if (type == null || type.isInstance(value))
-					return null;
-				else
-					return MutableCollectionElement.StdMsg.BAD_TYPE;
-			}).mapEquivalent(TypeToken.of(type), v -> (X) v, v -> (T) v);
-		}
 
 		@Override
 		<X> UniqueSortedDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include);
