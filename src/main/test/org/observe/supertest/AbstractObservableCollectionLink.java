@@ -739,7 +739,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			// distinct
 			ValueHolder<FlowOptions.UniqueOptions> options = new ValueHolder<>();
 			derivedFlow.accept((CollectionDataFlow<?, ?, X>) theFlow.distinct(opts -> {
-				opts.useFirst(helper.getBoolean()).preserveSourceOrder(opts.canPreserveSourceOrder() && helper.getBoolean());
+					// opts.useFirst(helper.getBoolean()).preserveSourceOrder(opts.canPreserveSourceOrder() && helper.getBoolean());
 				options.accept(opts);
 			}));
 			theChild = new DistinctCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), helper,
