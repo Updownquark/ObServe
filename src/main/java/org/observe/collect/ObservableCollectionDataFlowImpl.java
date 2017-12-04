@@ -1984,8 +1984,9 @@ public class ObservableCollectionDataFlowImpl {
 		public FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest, boolean forAdd) {
 			if (theOptions.getReverse() == null)
 				return dest.reject(StdMsg.UNSUPPORTED_OPERATION, true);
+			T value = dest.source;
 			FilterMapResult<I, E> intermediate = dest.map(theOptions.getReverse());
-			if (intermediate.isAccepted() && !theEquivalence.elementEquals(theMap.apply(intermediate.source), dest.source))
+			if (intermediate.isAccepted() && !theEquivalence.elementEquals(theMap.apply(intermediate.source), value))
 				return dest.reject(StdMsg.ILLEGAL_ELEMENT, true);
 			return (FilterMapResult<T, E>) theParent.reverse(intermediate, forAdd);
 		}

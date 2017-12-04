@@ -1238,7 +1238,8 @@ public final class ObservableCollectionImpl {
 		}
 
 		protected MutableCollectionElement<T> mutableElementFor(MutableCollectionElement<E> el, Function<? super E, ? extends T> map) {
-			return theFlow.map(el, map);
+			Function<? super E, ? extends T> fMap = map == null ? theFlow.map().get() : map;
+			return theFlow.map(el, fMap);
 		}
 
 		@Override
