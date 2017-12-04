@@ -22,7 +22,7 @@ import org.qommons.tree.BetterTreeMap;
 import org.qommons.tree.BetterTreeSet;
 
 public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<E, E> {
-	private final FlowOptions.GroupingDef theOptions;
+	private final FlowOptions.UniqueOptions theOptions;
 	/** A map of value to equivalent values, grouped by source ID */
 	private final BetterMap<E, BetterSortedMap<ElementId, E>> theValues;
 
@@ -37,7 +37,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	private final BetterSortedSet<ElementId> theSortedRepresentatives;
 
 	public DistinctCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type, CollectionDataFlow<?, ?, E> flow,
-		TestHelper helper, FlowOptions.GroupingDef options) {
+		TestHelper helper, FlowOptions.UniqueOptions options) {
 		super(parent, type, flow, helper);
 		theOptions = options;
 		theValues = flow.equivalence().createMap();
@@ -79,7 +79,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		}
 		if (remove.message == null && getParent() != null) {
 			for (ElementId srcId : valueEntry.get().keySet()) {
-				CollectionOp<E> parentRemove = new CollectionOp<>(remove.equivalence, null, theSourceValues.getElementsBefore(srcId));
+				CollectionOp<E> parentRemove = new CollectionOp<>(null, theSourceValues.getElementsBefore(srcId));
 				getParent().checkRemovable(parentRemove, subListStart, subListEnd, helper);
 				if (parentRemove.message != null) {
 					remove.message = parentRemove.message;
@@ -131,7 +131,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			set.isError = true;
 		} else if (getParent() != null) {
 			for (ElementId srcId : oldValueEntry.get().keySet()) {
-				CollectionOp<E> parentSet = new CollectionOp<>(set.equivalence, null, theSourceValues.getElementsBefore(srcId));
+				CollectionOp<E> parentSet = new CollectionOp<>(null, theSourceValues.getElementsBefore(srcId));
 				getParent().checkSettable(parentSet, subListStart, subListEnd, helper);
 				if (parentSet.message != null) {
 					set.message = parentSet.message;
@@ -148,7 +148,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueEntry = theValues.getEntry(value);
 		if (valueEntry != null) {
 			MapEntryHandle<ElementId, E> valueSoruceEntry = valueEntry.get().putEntry(srcEl, value);
-			if (theOptions.isUsingFirst() && valueEntry.get().keySet().getElementsBefore(valueSoruceEntry.getElementId()) == 0) {
+			if (theOptions.isUseFirst() && valueEntry.get().keySet().getElementsBefore(valueSoruceEntry.getElementId()) == 0) {
 				// The new value is replacing the old value as the representative element
 				ElementId oldRep = theRepresentativeElements.put(valueEntry.getElementId(), srcEl);
 				if (theOptions.isPreservingSourceOrder()) {
@@ -230,7 +230,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		E oldValue = srcEl.get();
 		MapEntryHandle<E, BetterSortedMap<ElementId, E>> oldValueEntry = theValues.getEntry(oldValue);
 		MapEntryHandle<E, BetterSortedMap<ElementId, E>> newValueEntry = theValues.getEntry(value);
-		if (oldValueEntry.getElementId().equals(newValueEntry.getElementId())) {
+		if (newValueEntry != null && oldValueEntry.getElementId().equals(newValueEntry.getElementId())) {
 			theSourceValues.mutableElement(srcEl.getElementId()).set(value);
 			newValueEntry.get().put(srcEl.getElementId(), value);
 			// Category is unchanged
@@ -261,10 +261,9 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	}
 
 	@Override
-	public int removedFromAbove(int index, E value, TestHelper helper) {
+	public void removedFromAbove(int index, E value, TestHelper helper) {
 		ElementId valueEl = theValues.getEntry(value).getElementId();
 		ElementId repEl = theRepresentativeElements.remove(valueEl);
-		int srcIndex = theSourceValues.getElementsBefore(repEl);
 		if (theOptions.isPreservingSourceOrder())
 			theSortedRepresentatives.remove(repEl);
 		else
@@ -272,7 +271,6 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		for (ElementId srcEl : theValues.getEntryById(valueEl).get().keySet())
 			theSourceValues.mutableElement(srcEl).remove();
 		theValues.mutableEntry(valueEl).remove();
-		return srcIndex;
 	}
 
 	@Override
@@ -287,5 +285,10 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			theSourceValues.mutableElement(entry.getKey()).set(value);
 		if (!theOptions.isPreservingSourceOrder())
 			theSortedRepresentatives.add(newEntry);
+	}
+
+	@Override
+	public String toString() {
+		return "distinct()";
 	}
 }

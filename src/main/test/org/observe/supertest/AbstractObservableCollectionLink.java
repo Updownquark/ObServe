@@ -699,52 +699,58 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 
 	@Override
 	public <X> ObservableChainLink<X> derive(TestHelper helper) {
-		ObservableChainLink<X> derived;
-		org.observe.collect.ObservableCollection.CollectionDataFlow<?, ?, X> derivedFlow;
-		switch (helper.getInt(0, 1)) {
-		case 0:
+		ValueHolder<ObservableChainLink<X>> derived = new ValueHolder<>();
+		ValueHolder<CollectionDataFlow<?, ?, X>> derivedFlow = new ValueHolder<>();
+		helper.doAction(1, () -> { // map
 			ObservableChainTester.TestValueType nextType = ObservableChainTester.nextType(helper);
 			ObservableChainTester.TypeTransformation<T, X> transform = ObservableChainTester.transform(theType, nextType, helper);
 			ValueHolder<FlowOptions.MapOptions<T, X>> options = new ValueHolder<>();
-			derivedFlow = theFlow.map((TypeToken<X>) nextType.getType(), transform::map, o -> {
+			derivedFlow.accept(theFlow.map((TypeToken<X>) nextType.getType(), transform::map, o -> {
 				if (helper.getBoolean(.95))
 					o.withReverse(transform::reverse);
 				options.accept(o.cache(helper.getBoolean()).fireIfUnchanged(helper.getBoolean()).reEvalOnUpdate(helper.getBoolean()));
-			});
-			theChild = new MappedCollectionLink<>(this, nextType, derivedFlow, helper, transform,
+			}));
+			theChild = new MappedCollectionLink<>(this, nextType, derivedFlow.get(), helper, transform,
 				new FlowOptions.MapDef<>(options.get()));
-			derived = (ObservableChainLink<X>) theChild;
+			derived.accept((ObservableChainLink<X>) theChild);
 			// TODO mapEquivalent
-			break;
-			// TODO reverse
-			// TODO size
-			// TODO find
-			// TODO contains
-			// TODO containsAny
-			// TODO containsAll
-			// TODO only
-			// TODO reduce
-			// TODO subset
-			// TODO observeRelative
-			// TODO flow reverse
-			// TODO filter
-			// TODO filterStatic
-			// TODO whereContained
-			// TODO withEquivalence
-			// TODO refresh
-			// TODO refreshEach
-			// TODO combine
-			// TODO flattenValues
-			// TODO flatMap
-			// TODO sorted
-			// TODO distinct
-			// TODO distinctSorted
-			// TODO filterMod
-			// TODO groupBy
-			// TODO groupBy(Sorted)
-		default:
-			throw new IllegalStateException("Bad random number");
-		}
-		return derived;
+		})//
+		// TODO reverse
+		// TODO size
+		// TODO find
+		// TODO contains
+		// TODO containsAny
+		// TODO containsAll
+		// TODO only
+		// TODO reduce
+		// TODO subset
+		// TODO observeRelative
+		// TODO flow reverse
+		// TODO filter
+		// TODO whereContained
+		// TODO withEquivalence
+		// TODO refresh
+		// TODO refreshEach
+		// TODO combine
+		// TODO flattenValues
+		// TODO flatMap
+		// TODO sorted
+		.or(1, () -> {
+			// distinct
+			ValueHolder<FlowOptions.UniqueOptions> options = new ValueHolder<>();
+			derivedFlow.accept((CollectionDataFlow<?, ?, X>) theFlow.distinct(opts -> {
+				opts.useFirst(helper.getBoolean()).preserveSourceOrder(opts.canPreserveSourceOrder() && helper.getBoolean());
+				options.accept(opts);
+			}));
+			theChild = new DistinctCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), helper,
+				options.get());
+			derived.accept((ObservableChainLink<X>) theChild);
+		})
+		// TODO distinctSorted
+		// TODO filterMod
+		// TODO groupBy
+		// TODO groupBy(Sorted)
+		.execute();
+		return derived.get();
 	}
 }
