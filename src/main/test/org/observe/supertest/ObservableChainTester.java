@@ -330,19 +330,28 @@ public class ObservableChainTester implements Testable {
 	}
 
 	private void test(TestHelper helper) {
-		int tries = 1000;
+		if (DEBUG_PRINT)
+			System.out.println("Value: " + this);
+		int failedLink = 0;
+		try {
+			for (failedLink = 0; failedLink < theChain.size(); failedLink++)
+				theChain.get(failedLink).check(true);
+		} catch (Error e) {
+			System.err.println("Integrity check failure on initial values on link " + failedLink);
+			throw e;
+		}
+
+		int tries = 50;
 		long modifications = 0;
 		for (int tri = 0; tri < tries; tri++) {
 			int linkIndex = helper.getInt(0, theChain.size());
 			ObservableChainLink<?> targetLink = theChain.get(linkIndex);
 			boolean finished = false;
-			int failedLink = 0;
 			boolean useTransaction = helper.getBoolean(.75);
 			try (Transaction t = useTransaction ? targetLink.lock() : Transaction.NONE) {
-				// Want the probability of zero-modification transactions to be very small, but non-zero
-				int transactionMods = helper.getInt(1, helper.getInt(1, 27));
+				int transactionMods = (int) helper.getDouble(1, 10, 26);
 				if (transactionMods == 25)
-					transactionMods = 0;
+					transactionMods = 0; // Want the probability of no-op transactions to be small but present
 				System.out.println("Modification set " + (tri + 1) + ": " + transactionMods + " modifications on link " + linkIndex);
 				helper.placemark("Transaction");
 				for (int transactionTri = 0; transactionTri < transactionMods; transactionTri++) {
@@ -351,7 +360,7 @@ public class ObservableChainTester implements Testable {
 					try {
 						targetLink.tryModify(helper);
 					} catch (RuntimeException | Error e) {
-						System.err.println("Error on try " + (transactionTri + 1) + " after " + (modifications + transactionTri)
+						System.err.println("Error on transaction " + (transactionTri + 1) + " after " + (modifications + transactionTri)
 							+ " successful modifications");
 						throw e;
 					}
@@ -360,7 +369,7 @@ public class ObservableChainTester implements Testable {
 							theChain.get(failedLink).check(!useTransaction);
 					} catch (Error e) {
 						System.err.println("Integrity check failure on link " + failedLink + " after " + (modifications + transactionTri)
-							+ " modifications");
+							+ " modifications in " + (tri + 1) + " transactions");
 						throw e;
 					}
 				}
@@ -368,7 +377,7 @@ public class ObservableChainTester implements Testable {
 				finished = true;
 			} catch (RuntimeException | Error e) {
 				if (finished)
-					System.err.println("Error closing transaction after " + modifications + " successful modifications");
+					System.err.println("Error closing transaction " + tri + " after " + modifications + " successful modifications");
 				throw e;
 			}
 			if (DEBUG_PRINT)

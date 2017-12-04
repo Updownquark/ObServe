@@ -45,12 +45,23 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			theCollection = flow.collectPassive();
 		else
 			theCollection = flow.collectActive(Observable.empty);
+		theSupplier = (Function<TestHelper, T>) ObservableChainTester.SUPPLIERS.get(type);
+		if (parent == null) {
+			// Populate the base collection with initial values.
+			int length = (int) helper.getDouble(0, 100, 1000); // Aggressively tend smaller
+			List<T> values = new ArrayList<>(length);
+			for (int i = 0; i < length; i++)
+				values.add(theSupplier.apply(helper));
+			// We're not testing add or addAll here, but just initial value handling in the listeners
+			// We're also not concerned with whether any of the values are illegal or duplicates.
+			// The addAll method should not throw exceptions
+			theCollection.addAll(values);
+		}
 		if (helper.getBoolean())
 			theFlow = flow;
 		else
 			theFlow = theCollection.flow();
 		theTester = new ObservableCollectionTester<>(theCollection);
-		theSupplier = (Function<TestHelper, T>) ObservableChainTester.SUPPLIERS.get(type);
 	}
 
 	@Override
@@ -84,8 +95,6 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 
 	@Override
 	public void tryModify(TestHelper helper) {
-		CollectionOp<T> op;
-		List<CollectionOp<T>> ops;
 		int subListStart, subListEnd;
 		BetterList<T> modify;
 		if (helper.getBoolean(.05)) {
@@ -99,13 +108,8 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			subListEnd = theCollection.size();
 			modify = theCollection;
 		}
-		switch (helper.getInt(0, 14)) {
-		case 0:
-		case 1:
-		case 2:
-		case 3:
-		case 4: // More position-less adds than other ops
-			op = new CollectionOp<>(theSupplier.apply(helper), -1);
+		helper.doAction(5, () -> { // More position-less adds than other ops
+			CollectionOp<T> op = new CollectionOp<>(theSupplier.apply(helper), -1);
 			if (ObservableChainTester.DEBUG_PRINT)
 				System.out.println("Add " + op);
 			checkAddable(op, subListStart, subListEnd, helper);
@@ -114,22 +118,20 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				op = new CollectionOp<>(op.source, index);
 				updateForAdd(op, subListStart, helper);
 			}
-			break;
-		case 5: // Add by index
-			op = new CollectionOp<>(theSupplier.apply(helper), helper.getInt(0, modify.size() + 1));
+		}).or(1, () -> { // Add by index
+			CollectionOp<T> op = new CollectionOp<>(theSupplier.apply(helper), helper.getInt(0, modify.size() + 1));
 			if (ObservableChainTester.DEBUG_PRINT)
 				System.out.println("Add " + op);
 			checkAddable(op, subListStart, subListEnd, helper);
 			addToCollection(op, modify, helper);
 			if (op.message == null)
 				updateForAdd(op, subListStart, helper);
-			break;
-		case 6: // addAll
-			int length = helper.getInt(0, helper.getInt(0, helper.getInt(0, 1000))); // Aggressively tend smaller
-			ops = new ArrayList<>(length);
+		}).or(1, () -> { // addAll
+			int length = (int) helper.getDouble(0, 100, 1000); // Aggressively tend smaller
+			List<CollectionOp<T>> ops = new ArrayList<>(length);
 			for (int i = 0; i < length; i++)
 				ops.add(new CollectionOp<>(theSupplier.apply(helper), -1));
-			index = helper.getBoolean() ? -1 : helper.getInt(0, modify.size() + 1);
+			int index = helper.getBoolean() ? -1 : helper.getInt(0, modify.size() + 1);
 			for (int i = 0; i < length; i++)
 				checkAddable(ops.get(i), subListStart, subListEnd, helper);
 			if (ObservableChainTester.DEBUG_PRINT) {
@@ -147,28 +149,24 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				if (o.message == null)
 					updateForAdd(o, subListStart, helper);
 			}
-			break;
-		case 7:
-		case 8: // Set
+		}).or(2, () -> { // Set
 			if (modify.isEmpty()) {
 				if (ObservableChainTester.DEBUG_PRINT)
 					System.out.println("Set, but empty");
 				return;
 			}
-			op = new CollectionOp<>(theSupplier.apply(helper), helper.getInt(0, modify.size()));
+			CollectionOp<T> op = new CollectionOp<>(theSupplier.apply(helper), helper.getInt(0, modify.size()));
 			if (ObservableChainTester.DEBUG_PRINT)
 				System.out.println("Set " + op);
 			checkSettable(op, subListStart, subListEnd, helper);
 			setInCollection(op, modify, helper);
 			if (op.message == null)
 				updateForSet(op, subListStart, helper);
-			break;
-		case 9:
-			// Remove by value
+		}).or(1, () -> {// Remove by value
 			T value = theSupplier.apply(helper);
 			if (ObservableChainTester.DEBUG_PRINT)
 				System.out.println("Remove " + value);
-			op = null;
+			CollectionOp<T> op = null;
 			for (int i = 0; i < modify.size(); i++) {
 				if (theCollection.equivalence().elementEquals(modify.get(i), value)) {
 					if (ObservableChainTester.DEBUG_PRINT)
@@ -181,38 +179,35 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			removeFromCollection(value, op, modify, helper);
 			if (op != null && op.message == null)
 				updateForRemove(op, subListStart, helper);
-			break;
-		case 10:
-			// Remove by index
+		}).or(1, () -> {// Remove by index
 			if (modify.isEmpty()) {
 				if (ObservableChainTester.DEBUG_PRINT)
 					System.out.println("Remove, but empty");
 				return;
 			}
-			op = new CollectionOp<>(null, helper.getInt(0, modify.size()));
+			CollectionOp<T> op = new CollectionOp<>(null, helper.getInt(0, modify.size()));
 			if (ObservableChainTester.DEBUG_PRINT)
 				System.out.println("Remove " + op);
 			checkRemovable(op, subListStart, subListEnd, helper);
 			removeFromCollection(op, modify, helper);
 			if (op.message == null)
 				updateForRemove(op, subListStart, helper);
-			break;
-		case 11: // removeAll
-			length = helper.getInt(0, helper.getInt(0, 1000)); // Tend smaller
+		}).or(1, () -> { // removeAll
+			int length = (int) helper.getDouble(0, 250, 1000); // Tend smaller
 			List<T> values = new ArrayList<>(length);
 			BetterSet<T> set = theCollection.equivalence().createSet();
 			for (int i = 0; i < length; i++) {
-				value = theSupplier.apply(helper);
+				T value = theSupplier.apply(helper);
 				values.add(value);
 				set.add(value);
 			}
 			if (ObservableChainTester.DEBUG_PRINT)
 				System.out.println("Remove all " + values.size() + values);
-			ops = new ArrayList<>(length);
+			List<CollectionOp<T>> ops = new ArrayList<>(length);
 			for (int i = 0; i < modify.size(); i++) {
-				value = modify.get(i);
+				T value = modify.get(i);
 				if (set.contains(value)) {
-					op = new CollectionOp<>(value, i);
+					CollectionOp<T> op = new CollectionOp<>(value, i);
 					checkRemovable(op, subListStart, subListEnd, helper);
 					ops.add(op);
 				}
@@ -226,25 +221,24 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				if (o.message == null)
 					updateForRemove(o, subListStart, helper);
 			}
-			break;
-		case 12: // retainAll
+		}).or(1, () -> { // retainAll
 			// Allow for larger, because the smaller the generated collection,
 			// the more elements will be removed from the collection
-			length = helper.getInt(0, 5000);
-			values = new ArrayList<>(length);
-			set = theCollection.equivalence().createSet();
+			int length = helper.getInt(0, 5000);
+			List<T> values = new ArrayList<>(length);
+			Set<T> set = theCollection.equivalence().createSet();
 			for (int i = 0; i < length; i++) {
-				value = theSupplier.apply(helper);
+				T value = theSupplier.apply(helper);
 				values.add(value);
 				set.add(value);
 			}
 			if (ObservableChainTester.DEBUG_PRINT)
 				System.out.println("Retain all " + values.size() + values);
-			ops = new ArrayList<>();
+			List<CollectionOp<T>> ops = new ArrayList<>();
 			for (int i = 0; i < modify.size(); i++) {
-				value = modify.get(i);
+				T value = modify.get(i);
 				if(!set.contains(value)){
-					op = new CollectionOp<>(value, i);
+					CollectionOp<T> op = new CollectionOp<>(value, i);
 					checkRemovable(op, subListStart, subListEnd, helper);
 					ops.add(op);
 				}
@@ -258,14 +252,12 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				if (o.message == null)
 					updateForRemove(o, subListStart, helper);
 			}
-			break;
-		case 13:
+		}).or(1, () -> {
 			if (ObservableChainTester.DEBUG_PRINT)
 				System.out.println("[" + getLinkIndex() + "]: Check bounds");
 			testBounds(helper);
-			break;
-			// TODO
-		}
+		})//
+		.execute();
 	}
 
 	protected int getLinkIndex() {
