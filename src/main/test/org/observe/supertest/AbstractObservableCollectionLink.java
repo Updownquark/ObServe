@@ -144,7 +144,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				}
 				System.out.println(msg + ops.size() + ops);
 			}
-			addAllToCollection(index, ops, modify, subListStart, helper);
+			addAllToCollection(index, ops, modify, subListStart, subListEnd, helper);
 			for (CollectionOp<T> o : ops){
 				if (o.message == null)
 					updateForAdd(o, subListStart, helper);
@@ -505,7 +505,8 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		Assert.assertEquals(preSize, theCollection.size());
 	}
 
-	private void addAllToCollection(int index, List<CollectionOp<T>> ops, BetterList<T> modify, int subListStart, TestHelper helper) {
+	private void addAllToCollection(int index, List<CollectionOp<T>> ops, BetterList<T> modify, int subListStart, int subListEnd,
+		TestHelper helper) {
 		int preModSize = modify.size();
 		int preSize = theCollection.size();
 		List<T> values = ops.stream().map(op -> op.source).collect(Collectors.toList());
@@ -551,10 +552,9 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 						el = addedList.subList(elIndex + 1, addedList.size()).getElement(op.source, true);
 						elIndex = addedList.getElementsBefore(el.getElementId());
 						continue;
-					}
-					if (index < 0) {
+					} else if (index < 0) {
 						int expectedIndex = subListStart + addedListStart + elIndex - indexes.headSet(elIndex).size();
-						if (expectedIndex >= 0 && expectedIndex < expected.size()
+						if (expectedIndex >= subListStart && expectedIndex < subListEnd
 							&& theCollection.equivalence().elementEquals(expected.get(expectedIndex), op.source)) {
 							el = addedList.subList(elIndex + 1, addedList.size()).getElement(op.source, true);
 							elIndex = addedList.getElementsBefore(el.getElementId());
@@ -564,11 +564,11 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 					indexes.add(elIndex);
 					break;
 				}
+				elIndex += addedListStart;
 				Assert.assertNotNull(el);
 				if (index >= 0)
-					Assert.assertTrue((addedListStart + elIndex) + ">=" + index + "+" + added,
-						addedListStart + elIndex < (index < 0 ? preModSize : index) + added);
-				ops.set(i, new CollectionOp<>(op.source, addedListStart + elIndex));
+					Assert.assertTrue(elIndex + ">=" + index + "+" + added, elIndex < (index < 0 ? preModSize : index) + added);
+				ops.set(i, new CollectionOp<>(op.source, elIndex));
 			}
 			Collections.sort(ops, (op1, op2) -> op1.index - op2.index);
 			if (index >= 0) {

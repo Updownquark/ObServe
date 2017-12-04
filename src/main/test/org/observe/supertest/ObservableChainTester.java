@@ -154,7 +154,10 @@ public class ObservableChainTester implements Testable {
 
 	private static String reverse(String s) {
 		char[] c = s.toCharArray();
-		for (int i = 0; i <= c.length / 2; i++) {
+		int start = 0;
+		if (c.length > 0 && c[start] == '-')
+			start++;
+		for (int i = start; i <= c.length / 2; i++) {
 			char temp = c[i];
 			int opposite = c.length - i - 1;
 			c[i] = c[opposite];
@@ -280,13 +283,16 @@ public class ObservableChainTester implements Testable {
 	 */
 	@Test
 	public void superTest() {
-		TestHelper.createTester(getClass())//
-		/**/.withRandomCases(-1).withMaxTotalDuration(Duration.ofMinutes(5))//
-		/**/.withMaxFailures(1)//
-		/**/.withPersistenceDir(new File("src/main/test/org/observe/supertest"), false)//
-		/**/.withPlacemarks("Transaction", "Modification")
-		/**/.withDebug(true)//
-		/**/.execute();
+		long start = System.currentTimeMillis();
+		int failures = TestHelper.createTester(getClass())//
+			/**/.withRandomCases(-1).withMaxTotalDuration(Duration.ofMinutes(5))//
+			/**/.withMaxFailures(1)//
+			/**/.withPersistenceDir(new File("src/main/test/org/observe/supertest"), false)//
+			/**/.withPlacemarks("Transaction", "Modification")
+			/**/.withDebug(true)//
+			/**/.execute();
+		System.out
+			.println("Found " + failures + " failures in " + org.qommons.QommonsUtils.printTimeLength(System.currentTimeMillis() - start));
 	}
 
 	private <E> void assemble(TestHelper helper) {
