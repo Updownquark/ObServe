@@ -73,11 +73,6 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public UniqueDataFlow<E, T, T> filterStatic(Function<? super T, String> filter) {
-			return new UniqueDataFlowWrapper<>(getSource(), getParent().filterStatic(filter));
-		}
-
-		@Override
 		public <X> UniqueDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
 			return new UniqueDataFlowWrapper<>(getSource(), getParent().whereContained(other, include));
 		}
@@ -175,11 +170,6 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public UniqueDataFlow<E, T, T> filterStatic(Function<? super T, String> filter) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.filterStatic(filter));
-		}
-
-		@Override
 		public <X> UniqueDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
 			return new UniqueDataFlowWrapper<>(getSource(), super.whereContained(other, include));
 		}
@@ -234,11 +224,6 @@ public class ObservableSetImpl {
 		@Override
 		public UniqueDataFlow<E, T, T> filter(Function<? super T, String> filter) {
 			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter));
-		}
-
-		@Override
-		public UniqueDataFlow<E, T, T> filterStatic(Function<? super T, String> filter) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.filterStatic(filter));
 		}
 
 		@Override
@@ -606,11 +591,6 @@ public class ObservableSetImpl {
 		@Override
 		public UniqueDataFlow<E, E, E> filter(Function<? super E, String> filter) {
 			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter));
-		}
-
-		@Override
-		public UniqueDataFlow<E, E, E> filterStatic(Function<? super E, String> filter) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.filterStatic(filter));
 		}
 
 		@Override

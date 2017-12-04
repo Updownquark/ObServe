@@ -275,11 +275,6 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, T, T> filterStatic(Function<? super T, String> filter) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), getParent().filterStatic(filter), theCompare);
-		}
-
-		@Override
 		public <X> UniqueSortedDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), getParent().whereContained(other, include), theCompare);
 		}
@@ -379,11 +374,6 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, T, T> filterStatic(Function<? super T, String> filter) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), super.filterStatic(filter), comparator());
-		}
-
-		@Override
 		public <X> UniqueSortedDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), super.whereContained(other, include), theCompare);
 		}
@@ -454,11 +444,6 @@ public class ObservableSortedSetImpl {
 		@Override
 		public UniqueSortedDataFlow<E, T, T> filter(Function<? super T, String> filter) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), getParent().filter(filter), comparator());
-		}
-
-		@Override
-		public UniqueSortedDataFlow<E, T, T> filterStatic(Function<? super T, String> filter) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), getParent().filterStatic(filter), comparator());
 		}
 
 		@Override
@@ -536,11 +521,6 @@ public class ObservableSortedSetImpl {
 		@Override
 		public UniqueSortedDataFlow<E, E, E> filter(Function<? super E, String> filter) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), super.filter(filter), getSource().comparator());
-		}
-
-		@Override
-		public UniqueSortedDataFlow<E, E, E> filterStatic(Function<? super E, String> filter) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), super.filterStatic(filter), getSource().comparator());
 		}
 
 		@Override
