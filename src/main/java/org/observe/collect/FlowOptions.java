@@ -43,6 +43,9 @@ public interface FlowOptions {
 
 		/** @return Whether {@link #preserveSourceOrder(boolean) preserving source order} is set */
 		boolean isPreservingSourceOrder();
+
+		/** @return Whether {@link #preserveSourceOrder(boolean)} is allowable for this option set */
+		boolean canPreserveSourceOrder();
 	}
 
 	/**
@@ -124,13 +127,23 @@ public interface FlowOptions {
 
 	/** Simple {@link UniqueOptions} implementation */
 	class SimpleUniqueOptions implements UniqueOptions {
+		private final boolean isSorted;
 		private boolean isUsingFirst = false;
 		private boolean isPreservingSourceOrder = false;
+
+		public SimpleUniqueOptions(boolean sorted) {
+			isSorted = sorted;
+		}
 
 		@Override
 		public SimpleUniqueOptions useFirst(boolean useFirst) {
 			this.isUsingFirst = useFirst;
 			return this;
+		}
+
+		@Override
+		public boolean canPreserveSourceOrder() {
+			return !isSorted;
 		}
 
 		@Override
@@ -148,7 +161,6 @@ public interface FlowOptions {
 		public boolean isPreservingSourceOrder() {
 			return isPreservingSourceOrder;
 		}
-
 	}
 
 	/** Options used by {@link ObservableCollection.CollectionDataFlow#groupBy(TypeToken, Function, Consumer)} */
@@ -193,6 +205,16 @@ public interface FlowOptions {
 		}
 
 		@Override
+		public boolean isUseFirst() {
+			return isUsingFirst;
+		}
+
+		@Override
+		public boolean canPreserveSourceOrder() {
+			return !isSorted;
+		}
+
+		@Override
 		public GroupingOptions preserveSourceOrder(boolean preserveOrder) {
 			if (isSorted && preserveOrder) {
 				System.err.println(
@@ -201,11 +223,6 @@ public interface FlowOptions {
 			}
 			isPreservingSourceOrder = preserveOrder;
 			return this;
-		}
-
-		@Override
-		public boolean isUseFirst() {
-			return isUsingFirst;
 		}
 
 		@Override

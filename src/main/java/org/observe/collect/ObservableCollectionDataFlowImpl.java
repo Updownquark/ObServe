@@ -537,7 +537,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public UniqueDataFlow<E, T, T> distinct(Consumer<UniqueOptions> options) {
-			SimpleUniqueOptions uo = new SimpleUniqueOptions();
+			SimpleUniqueOptions uo = new SimpleUniqueOptions(equivalence() instanceof Equivalence.ComparatorEquivalence);
 			options.accept(uo);
 			return new ObservableSetImpl.UniqueOp<>(theSource, this, uo.isUseFirst(), uo.isPreservingSourceOrder());
 		}
