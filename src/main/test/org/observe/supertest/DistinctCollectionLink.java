@@ -252,11 +252,14 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	@Override
 	public void addedFromAbove(int index, E value, TestHelper helper) {
 		if (theSourceValues.isEmpty() || index < 0) {
+			getParent().addedFromAbove(-1, value, helper);
 			addedFromBelow(-1, value, helper);
 		} else if (index >= 0) {
-			boolean addBefore = index > 0;
+			boolean addBefore = index < theRepresentativeElements.size();
 			ElementId addRep = theRepresentativeElements.get(getValueHandle(addBefore ? index : index - 1).getElementId());
-			addedFromBelow(theSourceValues.getElementsBefore(addRep) + (addBefore ? 0 : 1), value, helper);
+			int sourceIndex = theSourceValues.getElementsBefore(addRep) + (addBefore ? 0 : 1);
+			getParent().addedFromAbove(sourceIndex, value, helper);
+			addedFromBelow(sourceIndex, value, helper);
 		}
 	}
 
