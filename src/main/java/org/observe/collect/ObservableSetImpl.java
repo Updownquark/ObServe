@@ -539,26 +539,48 @@ public class ObservableSetImpl {
 
 			@Override
 			public String canAdd(T value, boolean before) {
-				if (!isPreservingSourceOrder)
-					return StdMsg.UNSUPPORTED_OPERATION;
 				if (theElementsByValue.containsKey(value))
 					return StdMsg.ELEMENT_EXISTS;
-				return theActiveElement.canAdd(value, before);
+				if (isPreservingSourceOrder)
+					return theActiveElement.canAdd(value, before);
+				else {
+					String msg = theParent.canAdd(value);
+					if (msg == null)
+						msg = theElementsByValue.mutableEntry(theValueId).canAdd(createUniqueElement(value), before);
+					return msg;
+				}
 			}
 
 			@Override
 			public DerivedCollectionElement<T> add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-				if (!isPreservingSourceOrder)
-					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-				if (theElementsByValue.containsKey(value))
-					return null;
-				DerivedCollectionElement<T> parentEl = theActiveElement.add(value, before);
-				if (parentEl == null)
-					return null;
-				// Look the element up.
-				// If it's not there, here I'm returning null, implying that the element was not added to the unique set
-				// This would probably be a bug though.
-				return theElementsByValue.get(value);
+				try (Transaction t = lock(true, null)) {
+					if (theElementsByValue.containsKey(value))
+						return null;
+					if (isPreservingSourceOrder) {
+						DerivedCollectionElement<T> parentEl = theActiveElement.add(value, before);
+						if (parentEl == null)
+							return null;
+						// Look the element up.
+						// If it's not there, here I'm returning null, implying that the element was not added to the unique set
+						// This would probably be a bug though.
+						return theElementsByValue.get(value);
+					} else {
+						// Since the element map is determining order, we have to make sure it supports the new element in the correct
+						// position
+						UniqueElement element = createUniqueElement(value);
+						// First, install the (currently empty) unique element in the element map so that the position is correct
+						ElementId elementHandle = theElementsByValue.mutableEntry(theValueId).add(element, before);
+						try {
+							if (theParent.addElement(value, before) == null) // Doesn't really matter where we add it
+								theElementsByValue.mutableEntry(elementHandle).remove();
+						} catch (RuntimeException e) {
+							theElementsByValue.mutableEntry(elementHandle).remove();
+							throw e;
+						}
+						// Now, the parent element should have been added to the previously-installed unique element
+						return element;
+					}
+				}
 			}
 
 			@Override
