@@ -392,7 +392,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 			}
 
 			@Override
-			public MapEntryHandle<K, V> putEntry(K key, V value) {
+			public MapEntryHandle<K, V> putEntry(K key, V value, boolean first) {
 				try (Transaction t = lock(true, true, null)) {
 					CollectionElement<Map.Entry<K, V>> entryEl = entrySet.getElement(new SimpleMapEntry<>(key, null), true);
 					if (entryEl != null) {
@@ -400,7 +400,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 						return handleFor(entryEl);
 					}
 					MapEntry newEntry = new MapEntry(key, value);
-					entryEl = entrySet.addElement(newEntry, false);
+					entryEl = entrySet.addElement(newEntry, first);
 					newEntry.theElementId = entryEl.getElementId();
 					return handleFor(entryEl);
 				}
@@ -561,7 +561,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 			}
 
 			@Override
-			public MapEntryHandle<K, V> putEntry(K key, V value) {
+			public MapEntryHandle<K, V> putEntry(K key, V value, boolean first) {
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			}
 

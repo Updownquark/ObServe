@@ -3222,7 +3222,7 @@ public class ObservableCollectionDataFlowImpl {
 			final BetterCollection<RefreshingElement> elements;
 
 			RefreshHolder(Observable<?> refresh) {
-				theElementId = theRefreshObservables.putEntry(refresh, this).getElementId();
+				theElementId = theRefreshObservables.putEntry(refresh, this, false).getElementId();
 				elements = new BetterTreeList<>(false);
 				theSub = theListening.withConsumer(r -> {
 					try (Transaction t = lock(true, false, r)) {

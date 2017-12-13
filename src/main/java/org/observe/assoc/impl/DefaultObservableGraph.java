@@ -43,7 +43,7 @@ public class DefaultObservableGraph<N, E> implements ObservableGraph<N, E>, Muta
 		@Override
 		public ObservableCollection<? extends ObservableGraph.Edge<N, E>> getInward() {
 			if (theIncomingEdges == null)
-				theIncomingEdges = theEdges.flow().filterStatic(edge -> edge.getEnd() == this ? null : StdMsg.WRONG_GROUP).collect();
+				theIncomingEdges = theEdges.flow().filter(edge -> edge.getEnd() == this ? null : StdMsg.WRONG_GROUP).collect();
 			return theIncomingEdges;
 		}
 

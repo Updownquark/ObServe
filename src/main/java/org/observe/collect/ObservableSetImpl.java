@@ -324,15 +324,36 @@ public class ObservableSetImpl {
 
 		@Override
 		public DerivedCollectionElement<T> addElement(T value, boolean first) {
-			if (theElementsByValue.containsKey(value))
-				return null;
-			DerivedCollectionElement<T> parentEl = theParent.addElement(value, first);
-			if (parentEl == null)
-				return null;
-			// Look the element up.
-			// If it's not there, here I'm returning null, implying that the element was not added to the unique set
-			// This would probably be a bug though.
-			return theElementsByValue.get(value);
+			try (Transaction t = lock(true, null)) {
+				if (theElementsByValue.containsKey(value))
+					return null;
+				UniqueElement element = null;
+				if (!isPreservingSourceOrder) {
+					// Since the element map is determining order, we forward the endian request (first or last) to the unique map
+					element = createUniqueElement(value);
+					// First, install the (currently empty) unique element in the element map so that the position is correct
+					theElementsByValue.putEntry(value, element, first);
+				}
+				try {
+					DerivedCollectionElement<T> parentEl = theParent.addElement(value, first);
+					if (parentEl == null) {
+						if (element != null)
+							theElementsByValue.mutableEntry(element.theValueId).remove();
+						return null;
+					}
+				} catch (RuntimeException e) {
+					if (element != null)
+						theElementsByValue.mutableEntry(element.theValueId).remove();
+					throw e;
+				}
+				if (element == null) {
+					// Look the element up.
+					// If it's not there, here I'm returning null, implying that the element was not added to the unique set
+					// This would probably be a bug though.
+					element = theElementsByValue.get(value);
+				}
+				return element;
+			}
 		}
 
 		@Override
@@ -354,13 +375,14 @@ public class ObservableSetImpl {
 		}
 
 		protected class UniqueElement implements DerivedCollectionElement<T> {
-			private final ElementId theValueId;
+			private final T theValue;
 			private final BetterTreeSet<DerivedCollectionElement<T>> theParentElements;
+			private ElementId theValueId;
 			private DerivedCollectionElement<T> theActiveElement;
 			private CollectionElementListener<T> theListener;
 
 			protected UniqueElement(T value) {
-				theValueId = theElementsByValue.putEntry(value, this).getElementId();
+				theValue = value;
 				theParentElements = new BetterTreeSet<>(false, DerivedCollectionElement::compareTo);
 			}
 
@@ -373,6 +395,8 @@ public class ObservableSetImpl {
 			}
 
 			protected CollectionElement<DerivedCollectionElement<T>> addParent(DerivedCollectionElement<T> parentEl, Object cause) {
+				if (theValueId == null)
+					theValueId = theElementsByValue.getEntry(theValue).getElementId();
 				boolean only = theParentElements.isEmpty();
 				BinaryTreeNode<DerivedCollectionElement<T>> node = theParentElements.addElement(parentEl, false);
 				if (only) {
@@ -440,6 +464,8 @@ public class ObservableSetImpl {
 			protected void parentRemoved(CollectionElement<DerivedCollectionElement<T>> parentEl, T value, Object cause) {}
 
 			protected ElementId getValueElement() {
+				if (theValueId == null)
+					theValueId = theElementsByValue.getEntry(theActiveElement.get()).getElementId();
 				return theValueId;
 			}
 

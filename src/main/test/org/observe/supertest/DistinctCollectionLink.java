@@ -147,7 +147,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		ElementId srcEl = theSourceValues.addElement(index, value).getElementId();
 		MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueEntry = theValues.getEntry(value);
 		if (valueEntry != null) {
-			MapEntryHandle<ElementId, E> valueSoruceEntry = valueEntry.get().putEntry(srcEl, value);
+			MapEntryHandle<ElementId, E> valueSoruceEntry = valueEntry.get().putEntry(srcEl, value, false);
 			if (theOptions.isUseFirst() && valueEntry.get().keySet().getElementsBefore(valueSoruceEntry.getElementId()) == 0) {
 				// The new value is replacing the old value as the representative element
 				ElementId oldRep = theRepresentativeElements.put(valueEntry.getElementId(), srcEl);
@@ -170,7 +170,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		} else {
 			// The new value is the first in its category
 			valueEntry = theValues.putEntry(value,
-				new BetterTreeMap<>(false, ElementId::compareTo));
+				new BetterTreeMap<>(false, ElementId::compareTo), false);
 			valueEntry.get().put(srcEl, value);
 			theRepresentativeElements.put(valueEntry.getElementId(), srcEl);
 			ElementId orderEl;
@@ -283,7 +283,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		if (!theOptions.isPreservingSourceOrder())
 			theSortedRepresentatives.remove(valueEntry.getElementId());
 		theValues.mutableEntry(valueEntry.getElementId()).remove();
-		ElementId newEntry = theValues.putEntry(value, values).getElementId();
+		ElementId newEntry = theValues.putEntry(value, values, false).getElementId();
 		for (Map.Entry<ElementId, E> entry : values.entrySet())
 			theSourceValues.mutableElement(entry.getKey()).set(value);
 		if (!theOptions.isPreservingSourceOrder())

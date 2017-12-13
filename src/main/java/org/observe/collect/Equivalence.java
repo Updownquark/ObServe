@@ -499,8 +499,8 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public MapEntryHandle<T2, V> putEntry(T2 key, V value) {
-			return handleFor(theWrapped.putEntry(theReverse.apply(key), value));
+		public MapEntryHandle<T2, V> putEntry(T2 key, V value, boolean first) {
+			return handleFor(theWrapped.putEntry(theReverse.apply(key), value, first));
 		}
 
 		private MapEntryHandle<T2, V> handleFor(MapEntryHandle<E, V> entry) {
