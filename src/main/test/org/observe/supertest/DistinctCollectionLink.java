@@ -170,10 +170,10 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 					orderEl = theSortedRepresentatives.addElement(srcEl, true);
 					int newIndex = theSortedRepresentatives.getElementsBefore(orderEl.getElementId());
 					if (oldIndex != newIndex) {
-						removed(oldIndex, helper);
-						added(newIndex, value, helper);
+						removed(oldIndex, helper, true);
+						added(newIndex, value, helper, true);
 					} else
-						set(oldIndex, value, helper);
+						set(oldIndex, value, helper, true);
 				} else {
 					// The order in the derived collection cannot have been changed
 				}
@@ -190,7 +190,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			else
 				orderEl = theSortedRepresentatives.addElement(valueEntry.getElementId(), true).getElementId();
 			int repIndex = theSortedRepresentatives.getElementsBefore(orderEl);
-			added(repIndex, value, helper);
+			added(repIndex, value, helper, true);
 		}
 	}
 
@@ -214,7 +214,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 				// No more elements in the category.The element will be removed from the derived collection.
 				theRepresentativeElements.mutableEntry(repEntry.getElementId()).remove();
 				theValues.mutableEntry(valueEntry.getElementId()).remove();
-				removed(oldIndex, helper);
+				removed(oldIndex, helper, true);
 			} else {
 				// Need to transition to the new first element in the category
 				Map.Entry<ElementId, E> newFirstSrcEntry = valueEntry.get().firstEntry();
@@ -222,11 +222,10 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 				orderEl = theSortedRepresentatives.addElement(newFirstSrcEntry.getKey(), true);
 				int newIndex = theSortedRepresentatives.getElementsBefore(orderEl.getElementId());
 				if (oldIndex != newIndex) {
-					removed(oldIndex, helper);
-					added(newIndex, newFirstSrcEntry.getValue(), helper);
-				} else {
-					set(oldIndex, newFirstSrcEntry.getValue(), helper);
-				}
+					removed(oldIndex, helper, true);
+					added(newIndex, newFirstSrcEntry.getValue(), helper, true);
+				} else
+					set(oldIndex, newFirstSrcEntry.getValue(), helper, true);
 			}
 		} else {
 			// The removed element was not the representative for its category. No change to the derived collection.
@@ -249,7 +248,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 				// The updated value is the representative for its category. Fire the update event.
 				int repIndex = theSortedRepresentatives
 					.getElementsBefore(theSortedRepresentatives.getElement(srcEl.getElementId()).getElementId());
-				set(repIndex, value, helper);
+				set(repIndex, value, helper, true);
 			} else {
 				// The update value is not the representative for its category. No change to the derived collection.
 			}
@@ -261,9 +260,9 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	}
 
 	@Override
-	public void addedFromAbove(int index, E value, TestHelper helper) {
+	public void addedFromAbove(int index, E value, TestHelper helper, boolean above) {
 		if (theSourceValues.isEmpty() || index < 0) {
-			getParent().addedFromAbove(-1, value, helper);
+			getParent().addedFromAbove(-1, value, helper, true);
 			addedFromBelow(-1, value, helper);
 		} else if (index >= 0) {
 			boolean addBefore = index < theRepresentativeElements.size();
@@ -271,32 +270,36 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			if (theOptions.isPreservingSourceOrder()) {
 				ElementId addRep = theRepresentativeElements.get(valueHandle);
 				int sourceIndex = theSourceValues.getElementsBefore(addRep) + (addBefore ? 0 : 1);
-				getParent().addedFromAbove(sourceIndex, value, helper);
+				getParent().addedFromAbove(sourceIndex, value, helper, true);
 				addedFromBelow(sourceIndex, value, helper);
 			} else {
 				// Add the value to the distinct map in the correct position
 				theValues.putEntry(value, new BetterTreeMap<>(false, ElementId::compareTo), index == 0);
-				getParent().addedFromAbove(-1, value, helper);
+				getParent().addedFromAbove(-1, value, helper, true);
 				addedFromBelow(-1, value, helper);
 			}
 		}
 	}
 
 	@Override
-	public void removedFromAbove(int index, E value, TestHelper helper) {
+	public void removedFromAbove(int index, E value, TestHelper helper, boolean above) {
 		ElementId valueEl = theValues.getEntry(value).getElementId();
 		ElementId repEl = theRepresentativeElements.remove(valueEl);
 		if (theOptions.isPreservingSourceOrder())
 			theSortedRepresentatives.remove(repEl);
 		else
 			theSortedRepresentatives.remove(valueEl);
-		for (ElementId srcEl : theValues.getEntryById(valueEl).get().keySet())
+		for (ElementId srcEl : theValues.getEntryById(valueEl).get().keySet()){
+			int srcIndex=theSourceValues.getElementsBefore(srcEl);
+			getParent().removedFromAbove(srcIndex, theSourceValues.getElement(srcEl).get(), helper, true);
 			theSourceValues.mutableElement(srcEl).remove();
+		}
 		theValues.mutableEntry(valueEl).remove();
+		removed(index, helper, !above);
 	}
 
 	@Override
-	public void setFromAbove(int index, E value, TestHelper helper) {
+	public void setFromAbove(int index, E value, TestHelper helper, boolean above) {
 		MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueEntry = getValueHandle(index);
 		BetterSortedMap<ElementId, E> values = valueEntry.get();
 		if (!theOptions.isPreservingSourceOrder())

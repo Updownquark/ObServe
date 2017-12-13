@@ -33,32 +33,32 @@ public class SimpleCollectionLink<E> extends AbstractObservableCollectionLink<E,
 
 	@Override
 	public void addedFromBelow(int index, E value, TestHelper helper) {
-		added(index, value, helper);
+		added(index, value, helper, true);
 	}
 
 	@Override
 	public void removedFromBelow(int index, TestHelper helper) {
-		removed(index, helper);
+		removed(index, helper, true);
 	}
 
 	@Override
 	public void setFromBelow(int index, E value, TestHelper helper) {
-		set(index, value, helper);
+		set(index, value, helper, true);
 	}
 
 	@Override
-	public void addedFromAbove(int index, E value, TestHelper helper) {
-		added(index, value, helper);
+	public void addedFromAbove(int index, E value, TestHelper helper, boolean above) {
+		added(index, value, helper, !above);
 	}
 
 	@Override
-	public void removedFromAbove(int index, E value, TestHelper helper) {
-		removed(index, helper);
+	public void removedFromAbove(int index, E value, TestHelper helper, boolean above) {
+		removed(index, helper, !above);
 	}
 
 	@Override
-	public void setFromAbove(int index, E value, TestHelper helper) {
-		set(index, value, helper);
+	public void setFromAbove(int index, E value, TestHelper helper, boolean above) {
+		set(index, value, helper, !above);
 	}
 
 	@Override

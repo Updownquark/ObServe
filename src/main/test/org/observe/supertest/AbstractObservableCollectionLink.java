@@ -185,7 +185,8 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 					System.out.println("Remove, but empty");
 				return;
 			}
-			CollectionOp<T> op = new CollectionOp<>(null, helper.getInt(0, modify.size()));
+			int index = helper.getInt(0, modify.size());
+			CollectionOp<T> op = new CollectionOp<>(modify.get(index), index);
 			if (ObservableChainTester.DEBUG_PRINT)
 				System.out.println("Remove " + op);
 			checkRemovable(op, subListStart, subListEnd, helper);
@@ -616,19 +617,19 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 	private void updateForAdd(CollectionOp<T> add, int subListStart, TestHelper helper) {
 		if (add.message != null)
 			return;
-		addedFromAbove(add.index < 0 ? -1 : subListStart + add.index, add.source, helper);
+		addedFromAbove(add.index < 0 ? -1 : subListStart + add.index, add.source, helper, false);
 	}
 
 	private void updateForRemove(CollectionOp<T> remove, int subListStart, TestHelper helper) {
 		if (remove.message != null)
 			return;
-		removedFromAbove(subListStart + remove.index, remove.source, helper);
+		removedFromAbove(subListStart + remove.index, remove.source, helper, false);
 	}
 
 	private void updateForSet(CollectionOp<T> set, int subListStart, TestHelper helper) {
 		if (set.message != null)
 			return;
-		setFromAbove(subListStart + set.index, set.source, helper);
+		setFromAbove(subListStart + set.index, set.source, helper, false);
 	}
 
 	private void testBounds(TestHelper helper) {
@@ -666,26 +667,26 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		} catch (IndexOutOfBoundsException e) {}
 	}
 
-	protected void added(int index, T value, TestHelper helper) {
+	protected void added(int index, T value, TestHelper helper, boolean propagateUp) {
 		if (index >= 0)
 			theTester.add(index, value);
 		else
 			theTester.add(value);
-		if (theChild != null)
+		if (propagateUp && theChild != null)
 			theChild.addedFromBelow(index, value, helper);
 	}
 
-	protected void removed(int index, TestHelper helper) {
+	protected void removed(int index, TestHelper helper, boolean propagateUp) {
 		if (index < 0)
 			return;
 		theTester.getExpected().remove(index);
-		if (theChild != null)
+		if (propagateUp && theChild != null)
 			theChild.removedFromBelow(index, helper);
 	}
 
-	protected void set(int index, T value, TestHelper helper) {
+	protected void set(int index, T value, TestHelper helper, boolean propagateUp) {
 		theTester.getExpected().set(index, value);
-		if (theChild != null)
+		if (propagateUp && theChild != null)
 			theChild.setFromBelow(index, value, helper);
 	}
 
@@ -739,7 +740,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			// distinct
 			ValueHolder<FlowOptions.UniqueOptions> options = new ValueHolder<>();
 			derivedFlow.accept((CollectionDataFlow<?, ?, X>) theFlow.distinct(opts -> {
-					// opts.useFirst(helper.getBoolean()).preserveSourceOrder(opts.canPreserveSourceOrder() && helper.getBoolean());
+				// opts.useFirst(helper.getBoolean()).preserveSourceOrder(opts.canPreserveSourceOrder() && helper.getBoolean());
 				options.accept(opts);
 			}));
 			theChild = new DistinctCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), helper,

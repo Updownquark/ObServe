@@ -87,38 +87,38 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 
 	@Override
 	public void addedFromBelow(int index, E value, TestHelper helper) {
-		added(index, theMap.map(value), helper);
+		added(index, theMap.map(value), helper, true);
 	}
 
 	@Override
 	public void removedFromBelow(int index, TestHelper helper) {
-		removed(index, helper);
+		removed(index, helper, true);
 	}
 
 	@Override
 	public void setFromBelow(int index, E value, TestHelper helper) {
 		// TODO Need to cache (if options allow) to detect whether the change is an update, which may not result in an event for some
 		// options
-		set(index, theMap.map(value), helper);
+		set(index, theMap.map(value), helper, true);
 	}
 
 	@Override
-	public void addedFromAbove(int index, T value, TestHelper helper) {
-		getParent().addedFromAbove(index, theOptions.getReverse().apply(value), helper);
+	public void addedFromAbove(int index, T value, TestHelper helper, boolean above) {
+		getParent().addedFromAbove(index, theOptions.getReverse().apply(value), helper, !above);
 	}
 
 	@Override
-	public void removedFromAbove(int index, T value, TestHelper helper) {
-		getParent().removedFromAbove(index, null, helper); // TODO Is null ok here?
+	public void removedFromAbove(int index, T value, TestHelper helper, boolean above) {
+		getParent().removedFromAbove(index, null, helper, !above); // TODO Is null ok here?
 	}
 
 	@Override
-	public void setFromAbove(int index, T value, TestHelper helper) {
+	public void setFromAbove(int index, T value, TestHelper helper, boolean above) {
 		if (theOptions.getElementReverse() != null) {
 			if (theOptions.getElementReverse().setElement(getParent().getCollection().get(index), value, true) == null)
 				return;
 		}
-		getParent().setFromAbove(index, theOptions.getReverse().apply(value), helper);
+		getParent().setFromAbove(index, theOptions.getReverse().apply(value), helper, !above);
 	}
 
 	@Override
