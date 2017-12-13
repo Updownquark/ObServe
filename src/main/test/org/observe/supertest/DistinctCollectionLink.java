@@ -129,7 +129,14 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		if (newValueEntry != null && !newValueEntry.getElementId().equals(oldValueEntry.getElementId())) {
 			set.message = StdMsg.ELEMENT_EXISTS;
 			set.isError = true;
-		} else if (getParent() != null) {
+			return;
+		}
+		if (!theOptions.isPreservingSourceOrder() && !getCollection().equivalence().elementEquals(oldValueEntry.getKey(), set.source)) {
+			set.message = StdMsg.UNSUPPORTED_OPERATION;
+			set.isError = true;
+			return;
+		}
+		if (getParent() != null) {
 			for (ElementId srcId : oldValueEntry.get().keySet()) {
 				CollectionOp<E> parentSet = new CollectionOp<>(null, theSourceValues.getElementsBefore(srcId));
 				getParent().checkSettable(parentSet, subListStart, subListEnd, helper);
@@ -144,9 +151,13 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 
 	@Override
 	public void addedFromBelow(int index, E value, TestHelper helper) {
-		ElementId srcEl = theSourceValues.addElement(index, value).getElementId();
+		ElementId srcEl;
+		if (index >= 0)
+			srcEl = theSourceValues.addElement(index, value).getElementId();
+		else
+			srcEl = theSourceValues.addElement(value, false).getElementId();
 		MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueEntry = theValues.getEntry(value);
-		if (valueEntry != null) {
+		if (valueEntry != null && !valueEntry.getValue().isEmpty()) {
 			MapEntryHandle<ElementId, E> valueSoruceEntry = valueEntry.get().putEntry(srcEl, value, false);
 			if (theOptions.isUseFirst() && valueEntry.get().keySet().getElementsBefore(valueSoruceEntry.getElementId()) == 0) {
 				// The new value is replacing the old value as the representative element
@@ -169,8 +180,8 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			}
 		} else {
 			// The new value is the first in its category
-			valueEntry = theValues.putEntry(value,
-				new BetterTreeMap<>(false, ElementId::compareTo), false);
+			if (valueEntry == null)
+				valueEntry = theValues.putEntry(value, new BetterTreeMap<>(false, ElementId::compareTo), false);
 			valueEntry.get().put(srcEl, value);
 			theRepresentativeElements.put(valueEntry.getElementId(), srcEl);
 			ElementId orderEl;
@@ -256,10 +267,18 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			addedFromBelow(-1, value, helper);
 		} else if (index >= 0) {
 			boolean addBefore = index < theRepresentativeElements.size();
-			ElementId addRep = theRepresentativeElements.get(getValueHandle(addBefore ? index : index - 1).getElementId());
-			int sourceIndex = theSourceValues.getElementsBefore(addRep) + (addBefore ? 0 : 1);
-			getParent().addedFromAbove(sourceIndex, value, helper);
-			addedFromBelow(sourceIndex, value, helper);
+			ElementId valueHandle = getValueHandle(addBefore ? index : index - 1).getElementId();
+			if (theOptions.isPreservingSourceOrder()) {
+				ElementId addRep = theRepresentativeElements.get(valueHandle);
+				int sourceIndex = theSourceValues.getElementsBefore(addRep) + (addBefore ? 0 : 1);
+				getParent().addedFromAbove(sourceIndex, value, helper);
+				addedFromBelow(sourceIndex, value, helper);
+			} else {
+				// Add the value to the distinct map in the correct position
+				theValues.putEntry(value, new BetterTreeMap<>(false, ElementId::compareTo), index == 0);
+				getParent().addedFromAbove(-1, value, helper);
+				addedFromBelow(-1, value, helper);
+			}
 		}
 	}
 
