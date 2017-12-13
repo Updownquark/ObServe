@@ -335,7 +335,9 @@ public class ObservableSetImpl {
 					theElementsByValue.putEntry(value, element, first);
 				}
 				try {
-					DerivedCollectionElement<T> parentEl = theParent.addElement(value, first);
+					// Parent collection order does not matter, so the first boolean does not apply here.
+					// Just add it to the end.
+					DerivedCollectionElement<T> parentEl = theParent.addElement(value, false);
 					if (parentEl == null) {
 						if (element != null)
 							theElementsByValue.mutableEntry(element.theValueId).remove();
@@ -375,11 +377,13 @@ public class ObservableSetImpl {
 		}
 
 		protected class UniqueElement implements DerivedCollectionElement<T> {
-			private final T theValue;
 			private final BetterTreeSet<DerivedCollectionElement<T>> theParentElements;
+			private T theValue;
 			private ElementId theValueId;
 			private DerivedCollectionElement<T> theActiveElement;
 			private CollectionElementListener<T> theListener;
+			private boolean isInternallySetting;
+			private T theTransitionValue;
 
 			protected UniqueElement(T value) {
 				theValue = value;
@@ -415,6 +419,13 @@ public class ObservableSetImpl {
 				parentEl.setListener(new CollectionElementListener<T>() {
 					@Override
 					public void update(T oldValue, T newValue, Object innerCause) {
+						if (isInternallySetting && equivalence().elementEquals(theTransitionValue, newValue)) {
+							// If this element's set method is being called, the only thing we need to do is fire the update
+							// for the active element
+							if (theActiveElement == parentEl)
+								ObservableCollectionDataFlowImpl.update(theListener, oldValue, newValue, innerCause);
+							return;
+						}
 						UniqueElement ue = theElementsByValue.computeIfAbsent(newValue, v -> createUniqueElement(v));
 						if (ue == UniqueElement.this) {
 							if (theActiveElement == parentEl)
@@ -509,34 +520,54 @@ public class ObservableSetImpl {
 					// If the value already exists, then replacing the underlying values would just remove the unique element
 					return StdMsg.ELEMENT_EXISTS;
 				}
+				if (!isPreservingSourceOrder && !equivalence().elementEquals(theValue, value))
+					return StdMsg.UNSUPPORTED_OPERATION;
 				for (DerivedCollectionElement<T> el : theParentElements) {
 					msg = el.isAcceptable(value);
 					if (msg != null)
 						return msg;
 				}
-				return null;
+				return msg;
 			}
 
 			@Override
 			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
 				// A replacement operation involves replacing the values for each element composing this unique element
-				String msg = isEnabled();
-				if (msg != null)
-					throw new UnsupportedOperationException(msg);
-				UniqueElement ue = theElementsByValue.get(value);
-				if (ue != null && ue != this) {
-					// If the value already exists, then replacing the underlying values would just remove the unique element
-					throw new IllegalArgumentException(StdMsg.ELEMENT_EXISTS);
-				}
-				for (DerivedCollectionElement<T> el : theParentElements) {
-					msg = el.isAcceptable(value);
+				try (Transaction t = lock(true, null)) {
+					String msg = isEnabled();
 					if (msg != null)
-						throw new IllegalArgumentException(msg);
+						throw new UnsupportedOperationException(msg);
+					UniqueElement ue = theElementsByValue.get(value);
+					if (ue != null && ue != this) {
+						// If the value already exists, then replacing the underlying values would just remove the unique element
+						throw new IllegalArgumentException(StdMsg.ELEMENT_EXISTS);
+					}
+					boolean equiv = equivalence().elementEquals(theValue, value);
+					if (!isPreservingSourceOrder && !equiv)
+						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+					for (DerivedCollectionElement<T> el : theParentElements) {
+						msg = el.isAcceptable(value);
+						if (msg != null)
+							throw new IllegalArgumentException(msg);
+					}
+					// Make a copy since theValueElements will be modified with each set
+					List<DerivedCollectionElement<T>> elCopies = new ArrayList<>(theParentElements);
+					isInternallySetting = true;
+					theTransitionValue = value;
+					try {
+						for (DerivedCollectionElement<T> el : elCopies)
+							el.set(value);
+					} finally {
+						isInternallySetting = false;
+						theTransitionValue = null;
+					}
+					// Move this element to the new value
+					theValue = value;
+					if (!equiv) {
+						theElementsByValue.mutableEntry(theValueId).remove();
+						theValueId = theElementsByValue.putEntry(value, this, false).getElementId();
+					}
 				}
-				// Make a copy since theValueElements will be modified with each set
-				List<DerivedCollectionElement<T>> elCopies = new ArrayList<>(theParentElements);
-				for (DerivedCollectionElement<T> el : elCopies)
-					el.set(value);
 			}
 
 			@Override
