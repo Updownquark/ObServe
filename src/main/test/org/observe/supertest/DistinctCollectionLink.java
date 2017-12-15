@@ -57,10 +57,22 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		if (valueEntry != null) {
 			add.message = StdMsg.ELEMENT_EXISTS;
 		} else if (add.index >= 0) {
-			add.message = StdMsg.UNSUPPORTED_OPERATION;
+			if (add.index == 0)
+				add.message = theValues.keySet().mutableElement(getValueHandle(subListStart + add.index).getElementId()).canAdd(add.source,
+					true);
+			else
+				add.message = theValues.keySet().mutableElement(getValueHandle(subListStart + add.index - 1).getElementId())
+					.canAdd(add.source, false);
+		} else if (subListStart > 0 || subListEnd < theValues.size()) {
+			add.message = theValues.keySet().mutableElement(getValueHandle(subListStart).getElementId()).canAdd(add.source, true);
+			if (add.message != null)
+				add.message = theValues.keySet().mutableElement(getValueHandle(subListEnd - 1).getElementId()).canAdd(add.source, false);
+		}
+		if (add.message != null) {
 			add.isError = true;
-		} else
-			getParent().checkAddable(add, subListStart, subListEnd, helper);
+			return;
+		}
+		getParent().checkAddable(add, subListStart, subListEnd, helper);
 	}
 
 	@Override
