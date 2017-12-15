@@ -600,12 +600,10 @@ public class ObservableSetImpl {
 					return StdMsg.ELEMENT_EXISTS;
 				if (isPreservingSourceOrder)
 					return theActiveElement.canAdd(value, before);
-				else {
-					String msg = theParent.canAdd(value);
-					if (msg == null)
-						msg = theElementsByValue.mutableEntry(theValueId).canAdd(createUniqueElement(value), before);
-					return msg;
-				}
+				String msg = theParent.canAdd(value);
+				if (msg == null)
+					msg = theElementsByValue.keySet().mutableElement(theValueId).canAdd(value, before);
+				return msg;
 			}
 
 			@Override
@@ -626,9 +624,14 @@ public class ObservableSetImpl {
 						// position
 						UniqueElement element = createUniqueElement(value);
 						// First, install the (currently empty) unique element in the element map so that the position is correct
-						ElementId elementHandle = theElementsByValue.mutableEntry(theValueId).add(element, before);
+						ElementId elementHandle = theElementsByValue.keySet().mutableElement(theValueId).add(value, before);
+						theElementsByValue.mutableEntry(elementHandle).set(element);
 						try {
-							if (theParent.addElement(value, before) == null) // Doesn't really matter where we add it
+							// Doesn't really matter where we add it in the parent collection, but we'll try to add it adjacent to this
+							// element if we can
+							if (theActiveElement.canAdd(value, before) == null)
+								theActiveElement.add(value, before);
+							else if (theParent.addElement(value, before) == null)
 								theElementsByValue.mutableEntry(elementHandle).remove();
 						} catch (RuntimeException e) {
 							theElementsByValue.mutableEntry(elementHandle).remove();
