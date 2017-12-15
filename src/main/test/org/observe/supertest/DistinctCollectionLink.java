@@ -54,25 +54,52 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	@Override
 	public void checkAddable(CollectionOp<E> add, int subListStart, int subListEnd, TestHelper helper) {
 		MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueEntry = theValues.getEntry(add.source);
+		CollectionOp<E> parentAdd = null;
+		MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueHandle;
+		// TODO All the index adding here is for isPreservingSourceOrder=false. Rewrite for true.
 		if (valueEntry != null) {
 			add.message = StdMsg.ELEMENT_EXISTS;
 		} else if (add.index >= 0) {
-			if (add.index == 0)
-				add.message = theValues.keySet().mutableElement(getValueHandle(subListStart + add.index).getElementId()).canAdd(add.source,
-					true);
-			else
-				add.message = theValues.keySet().mutableElement(getValueHandle(subListStart + add.index - 1).getElementId())
-					.canAdd(add.source, false);
+			if (theOptions.isPreservingSourceOrder()) {
+				throw new IllegalStateException("Not implemented");
+			} else {
+				boolean addBefore = add.index == 0;
+				if (addBefore)
+					valueHandle = getValueHandle(subListStart + add.index);
+				else
+					valueHandle = getValueHandle(subListStart + add.index - 1);
+				add.message = theValues.keySet().mutableElement(valueHandle.getElementId()).canAdd(add.source, addBefore);
+				if (add.message == null) {
+					int parentIndex = theSourceValues.getElementsBefore(theRepresentativeElements.get(valueHandle.getElementId()));
+					if (!addBefore)
+						parentIndex++;
+					parentAdd = new CollectionOp<>(add.source, parentIndex);
+				}
+			}
 		} else if (subListStart > 0 || subListEnd < theValues.size()) {
-			add.message = theValues.keySet().mutableElement(getValueHandle(subListStart).getElementId()).canAdd(add.source, true);
-			if (add.message != null)
-				add.message = theValues.keySet().mutableElement(getValueHandle(subListEnd - 1).getElementId()).canAdd(add.source, false);
+			if (theOptions.isPreservingSourceOrder()) {
+				throw new IllegalStateException("Not implemented");
+			} else {
+				valueHandle = getValueHandle(subListStart);
+				add.message = theValues.keySet().mutableElement(valueHandle.getElementId()).canAdd(add.source, true);
+				if (add.message != null) {
+					valueHandle = getValueHandle(subListEnd - 1);
+					add.message = theValues.keySet().mutableElement(valueHandle.getElementId()).canAdd(add.source, false);
+					if (add.message == null) {
+						int parentIndex = theSourceValues.getElementsBefore(theRepresentativeElements.get(valueHandle.getElementId())) + 1;
+						parentAdd = new CollectionOp<>(add.source, parentIndex);
+					}
+				} else {
+					int parentIndex = theSourceValues.getElementsBefore(theRepresentativeElements.get(valueHandle.getElementId()));
+					parentAdd = new CollectionOp<>(add.source, parentIndex);
+				}
+			}
 		}
 		if (add.message != null) {
 			add.isError = true;
 			return;
 		}
-		getParent().checkAddable(add, subListStart, subListEnd, helper);
+		getParent().checkAddable(parentAdd, 0, theSourceValues.size(), helper);
 	}
 
 	@Override
@@ -273,10 +300,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 
 	@Override
 	public void addedFromAbove(int index, E value, TestHelper helper, boolean above) {
-		if (theSourceValues.isEmpty() || index < 0) {
-			getParent().addedFromAbove(-1, value, helper, true);
-			addedFromBelow(-1, value, helper);
-		} else if (index >= 0) {
+		if (index >= 0 && !theSourceValues.isEmpty()) {
 			boolean addBefore = index < theRepresentativeElements.size();
 			ElementId valueHandle = getValueHandle(addBefore ? index : index - 1).getElementId();
 			if (theOptions.isPreservingSourceOrder()) {
@@ -290,6 +314,11 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 				getParent().addedFromAbove(-1, value, helper, true);
 				addedFromBelow(-1, value, helper);
 			}
+		} else if (subListStart > 0 || subListEnd < theValues.size()) {
+			// TODO
+		} else {
+			getParent().addedFromAbove(-1, value, helper, true);
+			addedFromBelow(-1, value, helper);
 		}
 	}
 
