@@ -529,8 +529,10 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				i--;
 				continue;
 			}
-			Assert.assertNotNull(modify.getElement(op.source, true));
-			Assert.assertNotNull(theCollection.getElement(op.source, true));
+			if (modify.getElement(op.source, true) == null)
+				Assert.assertTrue(i + ": " + op, false);
+			if (theCollection.getElement(op.source, true) == null)
+				Assert.assertTrue(i + ": " + op, false);
 			added++;
 		}
 		Assert.assertEquals(modified, added > 0);

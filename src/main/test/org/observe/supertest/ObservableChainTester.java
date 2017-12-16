@@ -292,7 +292,7 @@ public class ObservableChainTester implements Testable {
 			/**/.withDebug(true)//
 			/**/.execute();
 		System.out
-			.println("Found " + failures + " failures in " + org.qommons.QommonsUtils.printTimeLength(System.currentTimeMillis() - start));
+		.println("Found " + failures + " failures in " + org.qommons.QommonsUtils.printTimeLength(System.currentTimeMillis() - start));
 	}
 
 	private <E> void assemble(TestHelper helper) {
@@ -337,7 +337,7 @@ public class ObservableChainTester implements Testable {
 
 	private void test(TestHelper helper) {
 		if (DEBUG_PRINT)
-			System.out.println("Value: " + this);
+			System.out.println("Base Value: " + this);
 		int failedLink = 0;
 		try {
 			for (failedLink = 0; failedLink < theChain.size(); failedLink++)
@@ -387,7 +387,7 @@ public class ObservableChainTester implements Testable {
 				throw e;
 			}
 			if (DEBUG_PRINT)
-				System.out.println("Value: " + this);
+				System.out.println("Base Value: " + this);
 			try {
 				for (failedLink = 0; failedLink < theChain.size(); failedLink++)
 					theChain.get(failedLink).check(true);
