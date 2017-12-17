@@ -1,6 +1,8 @@
 package org.observe.supertest;
 
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.junit.Assert;
 import org.observe.collect.FlowOptions;
@@ -59,6 +61,19 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 
 	protected BetterMap<E, BetterSortedMap<ElementId, E>> getValues() {
 		return theValues;
+	}
+
+	@Override
+	public void checkAddable(List<CollectionOp<E>> add, int subListStart, int subListEnd, TestHelper helper) {
+		Set<E> duplicates = getCollection().equivalence().createSet();
+		add.stream().forEach(a -> {
+			if (duplicates.add(a.source))
+				checkAddable(a, subListStart, subListEnd, helper);
+			else {
+				a.message = StdMsg.ELEMENT_EXISTS;
+				a.isError = true;
+			}
+		});
 	}
 
 	@Override

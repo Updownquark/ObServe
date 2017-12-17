@@ -128,12 +128,11 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				updateForAdd(op, subListStart, helper);
 		}).or(1, () -> { // addAll
 			int length = (int) helper.getDouble(0, 100, 1000); // Aggressively tend smaller
+			int index = helper.getBoolean() ? -1 : helper.getInt(0, modify.size() + 1);
 			List<CollectionOp<T>> ops = new ArrayList<>(length);
 			for (int i = 0; i < length; i++)
-				ops.add(new CollectionOp<>(theSupplier.apply(helper), -1));
-			int index = helper.getBoolean() ? -1 : helper.getInt(0, modify.size() + 1);
-			for (int i = 0; i < length; i++)
-				checkAddable(ops.get(i), subListStart, subListEnd, helper);
+				ops.add(new CollectionOp<>(theSupplier.apply(helper), index));
+			checkAddable(ops, subListStart, subListEnd, helper);
 			if (ObservableChainTester.DEBUG_PRINT) {
 				String msg = "Add all ";
 				if (index >= 0) {

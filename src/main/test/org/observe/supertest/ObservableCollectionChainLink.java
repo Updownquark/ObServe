@@ -1,5 +1,7 @@
 package org.observe.supertest;
 
+import java.util.List;
+
 import org.observe.collect.ObservableCollection;
 import org.qommons.TestHelper;
 
@@ -31,6 +33,10 @@ interface ObservableCollectionChainLink<E, T> extends ObservableChainLink<T> {
 	}
 
 	ObservableCollection<T> getCollection();
+
+	default void checkAddable(List<CollectionOp<T>> add, int subListStart, int subListEnd, TestHelper helper) {
+		add.stream().forEach(a -> checkAddable(a, subListStart, subListEnd, helper));
+	}
 
 	void checkAddable(CollectionOp<T> add, int subListStart, int subListEnd, TestHelper helper);
 
