@@ -50,6 +50,11 @@ interface ObservableCollectionChainLink<E, T> extends ObservableChainLink<T> {
 
 	void setFromBelow(int index, E value, TestHelper helper);
 
+	default void addedAll(int index, List<T> values, TestHelper helper) {
+		for (int i = 0; i < values.size(); i++)
+			addedFromAbove(index >= 0 ? index + i : -1, values.get(i), helper, false);
+	}
+
 	void addedFromAbove(int index, T value, TestHelper helper, boolean above);
 
 	void removedFromAbove(int index, T value, TestHelper helper, boolean above);

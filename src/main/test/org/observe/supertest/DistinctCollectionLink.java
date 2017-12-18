@@ -119,7 +119,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		if (remove.index < 0)
 			valueEntry = theValues.getEntry(remove.source);
 		else
-			valueEntry = getValueHandle(remove.index);
+			valueEntry = getValueHandle(subListStart + remove.index);
 		if (valueEntry == null) {
 			remove.message = StdMsg.NOT_FOUND;
 		} else if (subListStart > 0 || subListEnd < theValues.size()) {
@@ -203,11 +203,17 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	public void addedFromBelow(int index, E value, TestHelper helper) {
 		ElementId srcEl;
 		if (index >= 0) {
-			CollectionElement<ElementId> newElementId = theNewSourceValues.search(id -> {
-				int idIndex = theSourceValues.headMap(id).size();
-				return idIndex - index;
-			}, BetterSortedSet.SortedSearchFilter.OnlyMatch);
+			CollectionElement<ElementId> newElementId;
+			if (theSourceValues.isEmpty())
+				newElementId = theNewSourceValues.getElement(0);
+			else if (index == 0)
+				newElementId = theNewSourceValues.search(theSourceValues.firstKey(), BetterSortedSet.SortedSearchFilter.Less);
+			else
+				newElementId = theNewSourceValues.search(theSourceValues.keySet().get(index - 1),
+					BetterSortedSet.SortedSearchFilter.Greater);
 			srcEl = newElementId.get();
+			while (!getCollection().equivalence().elementEquals(getCollection().getElement(srcEl).get(), value))
+				newElementId = theNewSourceValues.getAdjacentElement(newElementId.getElementId(), true);
 			theNewSourceValues.mutableElement(newElementId.getElementId()).remove();
 		} else {
 			ValueHolder<ElementId> newElementId = new ValueHolder<>();
@@ -338,6 +344,15 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			removedFromBelow(index, helper);
 			addedFromBelow(index, value, helper);
 		}
+	}
+
+	@Override
+	public void addedAll(int index, List<E> values, TestHelper helper) {
+		if (index == 0) {
+			for (int i = values.size() - 1; i >= 0; i--)
+				addedFromAbove(index, values.get(i), helper, false);
+		} else
+			super.addedAll(index, values, helper);
 	}
 
 	@Override

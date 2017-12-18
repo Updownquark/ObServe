@@ -144,10 +144,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				System.out.println(msg + ops.size() + ops);
 			}
 			addAllToCollection(index, ops, modify, subListStart, subListEnd, helper);
-			for (CollectionOp<T> o : ops){
-				if (o.message == null)
-					updateForAdd(o, subListStart, helper);
-			}
+			addedAll(index + subListStart, ops.stream().map(op -> op.source).collect(Collectors.toList()), helper);
 		}).or(2, () -> { // Set
 			if (modify.isEmpty()) {
 				if (ObservableChainTester.DEBUG_PRINT)
@@ -517,6 +514,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			else
 				modified = modify.addAll(values);
 		} catch (UnsupportedOperationException | IllegalArgumentException e) {
+			e.printStackTrace();
 			Assert.assertFalse("Should not throw exceptions", true);
 			return;
 		}
