@@ -254,7 +254,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				System.out.println("[" + getLinkIndex() + "]: Check bounds");
 			testBounds(helper);
 		})//
-		.execute();
+		.execute("Modification");
 	}
 
 	protected int getLinkIndex() {
@@ -750,7 +750,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		// TODO filterMod
 		// TODO groupBy
 		// TODO groupBy(Sorted)
-		.execute();
+			.execute(null);
 		return derived.get();
 	}
 }

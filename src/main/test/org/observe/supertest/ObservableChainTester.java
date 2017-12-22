@@ -363,7 +363,6 @@ public class ObservableChainTester implements Testable {
 				for (int transactionTri = 0; transactionTri < transactionMods; transactionTri++) {
 					String preBaseValue = toString();
 					String preLinkValue = linkIndex == 0 ? null : targetLink.printValue();
-					helper.placemark("Modification");
 					System.out.print("\tMod " + (transactionTri + 1) + ": ");
 					try {
 						targetLink.tryModify(helper);
@@ -379,8 +378,10 @@ public class ObservableChainTester implements Testable {
 						System.err.println("Integrity check failure on link " + failedLink + " after " + (modifications + transactionTri)
 							+ " modifications in " + (tri + 1) + " transactions");
 						System.err.println("Pre-faiure base value: " + preBaseValue);
-						if (linkIndex > 0)
+						if (linkIndex > 0) {
 							System.err.println("Pre-faiure link value: " + preLinkValue);
+							System.err.println("Post-faiure link value: " + targetLink.printValue());
+						}
 						throw e;
 					}
 				}
