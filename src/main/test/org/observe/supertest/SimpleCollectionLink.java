@@ -9,6 +9,8 @@ public class SimpleCollectionLink<E> extends AbstractObservableCollectionLink<E,
 	public SimpleCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type, CollectionDataFlow<?, ?, E> flow,
 		TestHelper helper) {
 		super(parent, type, flow, helper);
+		for (E src : getCollection())
+			getExpected().add(src);
 	}
 
 	@Override

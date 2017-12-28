@@ -59,6 +59,20 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			default:
 			}
 		});
+		for (E src : getParent().getCollection()) {
+			ElementId srcId = theSourceValues.addElement(src, false).getElementId();
+			MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueEntry = theValues.getEntry(src);
+			if (valueEntry == null) {
+				getExpected().add(src);
+				valueEntry = theValues.putEntry(src, new BetterTreeMap<>(false, ElementId::compareTo), false);
+				theRepresentativeElements.put(valueEntry.getElementId(), srcId);
+				if (theOptions.isPreservingSourceOrder())
+					theSortedRepresentatives.add(srcId);
+				else
+					theSortedRepresentatives.add(valueEntry.getElementId());
+			}
+			valueEntry.get().put(srcId, src);
+		}
 	}
 
 	protected BetterMap<E, BetterSortedMap<ElementId, E>> getValues() {
@@ -289,9 +303,9 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			else
 				orderEl = theSortedRepresentatives.getElement(valueEntry.getElementId(), true);
 			int oldIndex = theSortedRepresentatives.getElementsBefore(orderEl.getElementId());
-			theSortedRepresentatives.mutableElement(orderEl.getElementId()).remove();
 			if (valueEntry.get().isEmpty()) {
 				// No more elements in the category.The element will be removed from the derived collection.
+				theSortedRepresentatives.mutableElement(orderEl.getElementId()).remove();
 				theRepresentativeElements.mutableEntry(repEntry.getElementId()).remove();
 				theValues.mutableEntry(valueEntry.getElementId()).remove();
 				removed(oldIndex, helper, true);
@@ -299,8 +313,13 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 				// Need to transition to the new first element in the category
 				Map.Entry<ElementId, E> newFirstSrcEntry = valueEntry.get().firstEntry();
 				theRepresentativeElements.mutableEntry(repEntry.getElementId()).set(newFirstSrcEntry.getKey());
-				orderEl = theSortedRepresentatives.addElement(newFirstSrcEntry.getKey(), true);
-				int newIndex = theSortedRepresentatives.getElementsBefore(orderEl.getElementId());
+				int newIndex;
+				if (theOptions.isPreservingSourceOrder()) {
+					theSortedRepresentatives.mutableElement(orderEl.getElementId()).remove();
+					orderEl = theSortedRepresentatives.addElement(newFirstSrcEntry.getKey(), true);
+					newIndex = theSortedRepresentatives.getElementsBefore(orderEl.getElementId());
+				} else
+					newIndex = oldIndex;
 				if (oldIndex != newIndex) {
 					removed(oldIndex, helper, true);
 					added(newIndex, newFirstSrcEntry.getValue(), helper, true);

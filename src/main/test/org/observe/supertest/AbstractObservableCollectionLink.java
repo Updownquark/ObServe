@@ -62,6 +62,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		else
 			theFlow = theCollection.flow();
 		theTester = new ObservableCollectionTester<>(theCollection);
+		theTester.getExpected().clear();
 	}
 
 	@Override

@@ -16,6 +16,9 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 		super(parent, type, flow, helper);
 		theMap = map;
 		theOptions = options;
+
+		for (E src : getParent().getCollection())
+			getExpected().add(theMap.map(src));
 	}
 
 	@Override
