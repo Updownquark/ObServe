@@ -219,7 +219,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			else
 				passed++;
 		}
-		add(srcIndex, value, index, helper);
+		add(srcIndex, value, -1, helper);
 	}
 
 	private void add(int srcIndex, E value, int destIndex, TestHelper helper) {
@@ -350,7 +350,6 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 
 	@Override
 	public void addedFromAbove(int index, E value, TestHelper helper, boolean above) {
-		ValueHolder<ElementId> newSourceEl = new ValueHolder<>();
 		BetterSortedSet<ElementId> subSet;
 		if (theOptions.isPreservingSourceOrder()) {
 			// The inserted element must be between the representatives at index-1 and index in the parent collection
@@ -367,17 +366,16 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			// If source order is not preserved, we don't care where the new value was inserted
 			subSet = theNewSourceValues;
 		}
+		int[] sourceIndex = new int[1];
 		subSet.spliterator().forEachElementM(el -> {
 			if (getParent().getCollection().equivalence().elementEquals(getParent().getCollection().getElement(el.get()).get(), value)) {
-				newSourceEl.accept(el.get());
+				sourceIndex[0] = getParent().getCollection().getElementsBefore(el.get())
+					- theNewSourceValues.getElementsBefore(el.getElementId());
 				el.remove();
 			}
 		}, true);
-		Assert.assertTrue(newSourceEl.isPresent());
-		int sourceIndex = theSourceValues.keySet()
-			.getElementsBefore(theSourceValues.putEntry(newSourceEl.get(), value, false).getElementId());
-		getParent().addedFromAbove(sourceIndex, value, helper, true);
-		add(newSourceEl.get(), value, index, helper);
+		getParent().addedFromAbove(sourceIndex[0], value, helper, true);
+		add(sourceIndex[0], value, index, helper);
 	}
 
 	@Override
@@ -389,10 +387,10 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		else
 			theSortedRepresentatives.remove(valueEl);
 		for (ElementId srcEl : theValues.getEntryById(valueEl).get().keySet()){
-			MapEntryHandle<ElementId, E> srcValEntry = theSourceValues.getEntry(srcEl);
-			int srcIndex = theSourceValues.keySet().getElementsBefore(srcValEntry.getElementId());
-			getParent().removedFromAbove(srcIndex, srcValEntry.getValue(), helper, true);
-			theSourceValues.mutableEntry(srcValEntry.getElementId()).remove();
+			CollectionElement<E> srcValEntry = theSourceValues.getElement(srcEl);
+			int srcIndex = theSourceValues.getElementsBefore(srcValEntry.getElementId());
+			getParent().removedFromAbove(srcIndex, srcValEntry.get(), helper, true);
+			theSourceValues.mutableElement(srcValEntry.getElementId()).remove();
 		}
 		theValues.mutableEntry(valueEl).remove();
 		removed(index, helper, !above);
@@ -407,7 +405,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		theValues.mutableEntry(valueEntry.getElementId()).remove();
 		ElementId newEntry = theValues.putEntry(value, values, false).getElementId();
 		for (Map.Entry<ElementId, E> entry : values.entrySet())
-			theSourceValues.put(entry.getKey(), value);
+			theSourceValues.mutableElement(entry.getKey()).set(value);
 		if (!theOptions.isPreservingSourceOrder())
 			theSortedRepresentatives.add(newEntry);
 	}
