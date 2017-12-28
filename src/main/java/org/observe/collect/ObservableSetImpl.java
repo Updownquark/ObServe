@@ -610,11 +610,9 @@ public class ObservableSetImpl {
 			public DerivedCollectionElement<T> add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
 				try (Transaction t = lock(true, null)) {
 					if (theElementsByValue.containsKey(value))
-						return null;
+						throw new IllegalArgumentException(StdMsg.ELEMENT_EXISTS);
 					if (isPreservingSourceOrder) {
-						DerivedCollectionElement<T> parentEl = theActiveElement.add(value, before);
-						if (parentEl == null)
-							return null;
+						theActiveElement.add(value, before);
 						// Look the element up.
 						// If it's not there, here I'm returning null, implying that the element was not added to the unique set
 						// This would probably be a bug though.
