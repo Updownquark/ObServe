@@ -277,8 +277,10 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				Assert.assertNull(modify.canAdd(add.source));
 			// Test simple add value
 			CollectionElement<T> element;
+			boolean first = helper.getBoolean();
+			System.out.println("\t\tfirst=" + first);
 			try {
-				element = modify.addElement(add.source, helper.getBoolean());
+				element = modify.addElement(add.source, first);
 			} catch (UnsupportedOperationException | IllegalArgumentException e) {
 				element = null;
 			}
@@ -750,7 +752,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		// TODO filterMod
 		// TODO groupBy
 		// TODO groupBy(Sorted)
-			.execute(null);
+		.execute(null);
 		return derived.get();
 	}
 }
