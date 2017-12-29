@@ -100,7 +100,9 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		if (valueEntry != null) {
 			add.message = StdMsg.ELEMENT_EXISTS;
 		} else if (add.index >= 0) {
-			if (theOptions.isPreservingSourceOrder()) {
+			if ((subListStart + add.index) == 0 && theValues.isEmpty()) {
+				add.message = theValues.keySet().canAdd(add.source);
+			} else if (theOptions.isPreservingSourceOrder()) {
 				throw new IllegalStateException("Not implemented");
 			} else {
 				boolean addBefore = add.index == 0;
@@ -126,7 +128,10 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			add.isError = true;
 			return;
 		}
-		getParent().checkAddable(new CollectionOp<>(add.source, -1), 0, theSourceValues.size(), helper);
+		CollectionOp<E> parentOp = new CollectionOp<>(add.source, -1);
+		getParent().checkAddable(parentOp, 0, theSourceValues.size(), helper);
+		add.message = parentOp.message;
+		add.isError = parentOp.isError;
 	}
 
 	@Override
@@ -344,8 +349,9 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			newValueEntry.get().put(srcEl.getElementId(), value);
 			// Category is unchanged
 			if (theRepresentativeElements.get(newValueEntry.getElementId()).equals(srcEl.getElementId())) {
+				ElementId repId = theOptions.isPreservingSourceOrder() ? srcEl.getElementId() : newValueEntry.getElementId();
 				// The updated value is the representative for its category. Fire the update event.
-				int repIndex = theSortedRepresentatives.indexOf(srcEl.getElementId());
+				int repIndex = theSortedRepresentatives.indexOf(repId);
 				set(repIndex, value, helper, true);
 			} else {
 				// The update value is not the representative for its category. No change to the derived collection.

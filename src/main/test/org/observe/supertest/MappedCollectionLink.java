@@ -107,12 +107,14 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 
 	@Override
 	public void addedFromAbove(int index, T value, TestHelper helper, boolean above) {
-		getParent().addedFromAbove(index, theOptions.getReverse().apply(value), helper, !above);
+		getParent().addedFromAbove(index, theOptions.getReverse().apply(value), helper, true);
+		added(index, value, helper, !above);
 	}
 
 	@Override
 	public void removedFromAbove(int index, T value, TestHelper helper, boolean above) {
-		getParent().removedFromAbove(index, null, helper, !above); // TODO Is null ok here?
+		getParent().removedFromAbove(index, theMap.reverse(value), helper, true); // TODO Is null ok here?
+		removed(index, helper, !above);
 	}
 
 	@Override
@@ -121,7 +123,8 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 			if (theOptions.getElementReverse().setElement(getParent().getCollection().get(index), value, true) == null)
 				return;
 		}
-		getParent().setFromAbove(index, theOptions.getReverse().apply(value), helper, !above);
+		getParent().setFromAbove(index, theOptions.getReverse().apply(value), helper, true);
+		set(index, value, helper, !above);
 	}
 
 	@Override
