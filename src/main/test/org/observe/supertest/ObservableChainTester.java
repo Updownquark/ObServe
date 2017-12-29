@@ -204,9 +204,18 @@ public class ObservableChainTester implements Testable {
 					}
 					case DOUBLE: {
 						List<TypeTransformation<Integer, Double>> transforms = asList(//
-							transform(i -> i * 1.0, d -> (int) Math.round(d), false, "*1.0", "round()"), //
-							transform(i -> i * 5.0, d -> (int) Math.round(d / 5), false, "*5.0", "/5,round"),
-							transform(i -> i / 5.0, d -> (int) Math.round(d * 5), false, "/5.0", "*5,round"));
+							transform(//
+								i -> i * 1.0, //
+								d -> (int) Math.round(d), //
+								false, "*1.0", "round()"), //
+							transform(//
+								i -> i * 5.0, //
+								d -> (int) Math.round(d / 5), //
+								false, "*5.0", "/5,round"),
+							transform(//
+								i -> i / 5.0, //
+								d -> (int) Math.round(d * 5), //
+								false, "/5.0", "*5,round"));
 						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type1, type2), transforms);
 						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type2, type1),
 							transforms.stream().map(t -> t.reverse()).collect(Collectors.toList()));

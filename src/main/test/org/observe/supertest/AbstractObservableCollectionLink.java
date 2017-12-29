@@ -145,7 +145,21 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				System.out.println(msg + ops.size() + ops);
 			}
 			addAllToCollection(index, ops, modify, subListStart, subListEnd, helper);
-			addedAll(index + subListStart, ops.stream().map(op -> op.source).collect(Collectors.toList()), helper);
+			if (!ops.isEmpty()) {
+				boolean continuous = true;
+				for (int i = 1; i < ops.size(); i++) {
+					if (ops.get(i).index != ops.get(i - 1).index + 1) {
+						continuous = false;
+						break;
+					}
+				}
+				if (continuous)
+					addedAll(ops.get(0).index + subListStart, ops.stream().map(op -> op.source).collect(Collectors.toList()), helper);
+				else {
+					for (CollectionOp<T> op : ops)
+						addedFromAbove(subListStart + op.index, op.source, helper, false);
+				}
+			}
 		}).or(2, () -> { // Set
 			if (modify.isEmpty()) {
 				if (ObservableChainTester.DEBUG_PRINT)

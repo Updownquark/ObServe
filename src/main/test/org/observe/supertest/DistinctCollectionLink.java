@@ -209,7 +209,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		}
 		if (getParent() != null) {
 			for (ElementId srcId : oldValueEntry.get().keySet()) {
-				CollectionOp<E> parentSet = new CollectionOp<>(null, theSourceValues.getElementsBefore(srcId));
+				CollectionOp<E> parentSet = new CollectionOp<>(set.source, theSourceValues.getElementsBefore(srcId));
 				getParent().checkSettable(parentSet, subListStart, subListEnd, helper);
 				if (parentSet.message != null) {
 					set.message = parentSet.message;
