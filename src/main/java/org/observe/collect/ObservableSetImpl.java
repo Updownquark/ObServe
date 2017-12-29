@@ -332,7 +332,7 @@ public class ObservableSetImpl {
 					// Since the element map is determining order, we forward the endian request (first or last) to the unique map
 					element = createUniqueElement(value);
 					// First, install the (currently empty) unique element in the element map so that the position is correct
-					theElementsByValue.putEntry(value, element, first);
+					element.theValueId = theElementsByValue.putEntry(value, element, first).getElementId();
 				}
 				try {
 					// Parent collection order does not matter, so the first boolean does not apply here.
