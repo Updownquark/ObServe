@@ -246,7 +246,7 @@ public class ObservableChainTester implements Testable {
 					}
 					case STRING: {
 						List<TypeTransformation<Double, String>> transforms = asList(//
-							transform(d -> String.valueOf(d), s -> Double.valueOf(s), true, "toString()", "parseDouble"));
+							transform(d -> stringValueOf(d), s -> Double.valueOf(s), true, "toString()", "parseDouble"));
 						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type1, type2), transforms);
 						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type2, type1),
 							transforms.stream().map(t -> t.reverse()).collect(Collectors.toList()));
@@ -269,6 +269,13 @@ public class ObservableChainTester implements Testable {
 				}
 			}
 		}
+	}
+
+	private static String stringValueOf(double d) {
+		String str = String.valueOf(d);
+		if (str.endsWith(".0"))
+			str = str.substring(0, str.length() - 2);
+		return str;
 	}
 
 	private static <E> Comparator<E> randomComparator(TestValueType type, TestHelper helper) {

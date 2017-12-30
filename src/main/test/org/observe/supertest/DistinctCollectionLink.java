@@ -150,8 +150,9 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		}
 		if (remove.message == null && getParent() != null) {
 			for (ElementId srcId : valueEntry.get().keySet()) {
-				CollectionOp<E> parentRemove = new CollectionOp<>(null, theSourceValues.getElementsBefore(srcId));
-				getParent().checkRemovable(parentRemove, subListStart, subListEnd, helper);
+				CollectionOp<E> parentRemove = new CollectionOp<>(theSourceValues.getElement(srcId).get(),
+					theSourceValues.getElementsBefore(srcId));
+				getParent().checkRemovable(parentRemove, 0, theSourceValues.size(), helper);
 				if (parentRemove.message != null) {
 					remove.message = parentRemove.message;
 					remove.isError = parentRemove.isError;
@@ -165,15 +166,18 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		if (theValues.keySet() instanceof BetterList) // True for sorted
 			return theValues.getEntryById(((BetterList<?>) theValues.keySet()).getElement(index).getElementId());
 		else {
+			int valSize = theValues.size();
+			if (index < 0 || index >= valSize)
+				throw new IndexOutOfBoundsException(index + " of " + valSize);
 			// No choice but to iterate
-			boolean fromStart = index <= theValues.size() / 2;
-			int i = fromStart ? -1 : theValues.size();
+			boolean fromStart = index <= valSize / 2;
+			int i = fromStart ? -1 : valSize;
 			ElementSpliterator<?> spliter = theValues.keySet().spliterator(fromStart);
 			ValueHolder<ElementId> valueEl = new ValueHolder<>();
-			while (i != index) {
+			do {
 				spliter.forElement(el -> valueEl.accept(el.getElementId()), fromStart);
 				i += fromStart ? 1 : -1;
-			}
+			} while (i != index);
 			return theValues.getEntryById(valueEl.get());
 		}
 	}
@@ -189,6 +193,8 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			while (spliter.forElement(el -> elId.accept(el.getElementId()), true) && !elId.get().equals(id)) {
 				index++;
 			}
+			if (!elId.get().equals(id))
+				throw new IllegalStateException();
 			return index; // Assume the element was found
 		}
 	}
@@ -238,10 +244,10 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			else
 				passed++;
 		}
-		add(srcIndex, value, -1, helper);
+		add(srcIndex, value, -1, helper, true);
 	}
 
-	private void add(int srcIndex, E value, int destIndex, TestHelper helper) {
+	private void add(int srcIndex, E value, int destIndex, TestHelper helper, boolean propagateUp) {
 		ElementId srcEl = theSourceValues.addElement(srcIndex, value).getElementId();
 		MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueEntry = theValues.getEntry(value);
 		if (valueEntry != null && !valueEntry.getValue().isEmpty()) {
@@ -257,10 +263,10 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 					orderEl = theSortedRepresentatives.addElement(srcEl, true);
 					int newIndex = theSortedRepresentatives.getElementsBefore(orderEl.getElementId());
 					if (oldIndex != newIndex) {
-						removed(oldIndex, helper, true);
-						added(newIndex, value, helper, true);
+						removed(oldIndex, helper, propagateUp);
+						added(newIndex, value, helper, propagateUp);
 					} else
-						set(oldIndex, value, helper, true);
+						set(oldIndex, value, helper, propagateUp);
 				} else {
 					// The order in the derived collection cannot have been changed
 				}
@@ -289,7 +295,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			else
 				orderEl = theSortedRepresentatives.addElement(valueEntry.getElementId(), true).getElementId();
 			int repIndex = theSortedRepresentatives.getElementsBefore(orderEl);
-			added(repIndex, value, helper, true);
+			added(repIndex, value, helper, propagateUp);
 		}
 	}
 
@@ -400,7 +406,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			}
 		}, true);
 		getParent().addedFromAbove(sourceIndex[0], value, helper, true);
-		add(sourceIndex[0], value, index, helper);
+		add(sourceIndex[0], value, index, helper, !above);
 	}
 
 	@Override
