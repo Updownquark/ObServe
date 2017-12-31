@@ -154,7 +154,8 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 					}
 				}
 				if (continuous)
-					addedAll(ops.get(0).index + subListStart, ops.stream().map(op -> op.source).collect(Collectors.toList()), helper);
+					addedAll(ops.get(0).index + subListStart, //
+						ops.stream().map(op -> op.source).collect(Collectors.toList()), helper);
 				else {
 					for (CollectionOp<T> op : ops)
 						addedFromAbove(subListStart + op.index, op.source, helper, false);

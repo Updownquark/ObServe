@@ -371,15 +371,6 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	}
 
 	@Override
-	public void addedAll(int index, List<E> values, TestHelper helper) {
-		if (index == 0) {
-			for (int i = values.size() - 1; i >= 0; i--)
-				addedFromAbove(index, values.get(i), helper, false);
-		} else
-			super.addedAll(index, values, helper);
-	}
-
-	@Override
 	public void addedFromAbove(int index, E value, TestHelper helper, boolean above) {
 		BetterSortedSet<ElementId> subSet;
 		if (theOptions.isPreservingSourceOrder()) {
@@ -397,9 +388,10 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			// If source order is not preserved, we don't care where the new value was inserted
 			subSet = theNewSourceValues;
 		}
-		int[] sourceIndex = new int[1];
+		int[] sourceIndex = new int[] { -1 };
 		subSet.spliterator().forEachElementM(el -> {
-			if (getParent().getCollection().equivalence().elementEquals(getParent().getCollection().getElement(el.get()).get(), value)) {
+			if (sourceIndex[0] < 0
+				&& getParent().getCollection().equivalence().elementEquals(getParent().getCollection().getElement(el.get()).get(), value)) {
 				sourceIndex[0] = getParent().getCollection().getElementsBefore(el.get())
 					- theNewSourceValues.getElementsBefore(el.getElementId());
 				el.remove();
