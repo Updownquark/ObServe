@@ -57,12 +57,16 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			// The addAll method should not throw exceptions
 			theCollection.addAll(values);
 		}
-		if (helper.getBoolean())
+		if (!isRebasedFlowRequired() && helper.getBoolean())
 			theFlow = flow;
 		else
 			theFlow = theCollection.flow();
 		theTester = new ObservableCollectionTester<>(theCollection);
 		theTester.getExpected().clear();
+	}
+
+	protected boolean isRebasedFlowRequired() {
+		return false;
 	}
 
 	@Override
@@ -551,8 +555,8 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			added++;
 		}
 		Assert.assertEquals(modified, added > 0);
-		Assert.assertEquals(modify.size(), preModSize + added);
-		Assert.assertEquals(theCollection.size(), preSize + added);
+		Assert.assertEquals(preModSize + added, modify.size());
+		Assert.assertEquals(preSize + added, theCollection.size());
 		List<T> expected = theTester.getExpected();
 		if (!ops.isEmpty()) {
 			// Need to replace the indexes in the operations with the index at which the values were added in the collection (or sub-list)

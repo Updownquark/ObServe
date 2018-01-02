@@ -75,6 +75,17 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		}
 	}
 
+	/**
+	 * This is a hack. If the flow is not rebased for hash-based distinctness, the order for different collections off of the same distinct
+	 * flow may not be consistent.
+	 * 
+	 * @see org.observe.supertest.AbstractObservableCollectionLink#isRebasedFlowRequired()
+	 */
+	@Override
+	protected boolean isRebasedFlowRequired() {
+		return !(getCollection().equivalence() instanceof org.observe.collect.Equivalence.ComparatorEquivalence);
+	}
+
 	protected BetterMap<E, BetterSortedMap<ElementId, E>> getValues() {
 		return theValues;
 	}
