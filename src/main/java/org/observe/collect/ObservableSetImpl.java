@@ -149,7 +149,7 @@ public class ObservableSetImpl {
 
 		@Override
 		public ActiveCollectionManager<E, ?, T> manageActive() {
-			return new UniqueManager<E, T>(getParent().manageActive(), isAlwaysUsingFirst, isPreservingSourceOrder);
+			return new UniqueManager<>(getParent().manageActive(), isAlwaysUsingFirst, isPreservingSourceOrder);
 		}
 	}
 

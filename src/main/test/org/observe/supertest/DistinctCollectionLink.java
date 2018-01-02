@@ -234,11 +234,11 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		int srcIndex = 0;
 		while (!found) {
 			CollectionElement<E> el = getParent().getCollection().getElement(nsvIter.next());
-			srcIndex = getParent().getCollection().getElementsBefore(el.getElementId()) - passed;
-			if (index >= 0 && index == srcIndex)
-				found = true;
-			else if (index < 0 && getCollection().equivalence().elementEquals(el.get(), value))
-				found = true;
+			if (getCollection().equivalence().elementEquals(el.get(), value)) {
+				srcIndex = getParent().getCollection().getElementsBefore(el.getElementId()) - passed;
+				if (index < 0 || index == srcIndex)
+					found = true;
+			}
 			if (found)
 				nsvIter.remove();
 			else
