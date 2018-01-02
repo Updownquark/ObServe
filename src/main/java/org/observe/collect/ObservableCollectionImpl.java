@@ -1149,7 +1149,8 @@ public final class ObservableCollectionImpl {
 				FilterMapResult<T, E> reversed = theFlow.reverse(e, true);
 				if (reversed.throwIfError(IllegalArgumentException::new) != null)
 					return null;
-				return elementFor(theSource.addElement(reversed.result, first), null);
+				CollectionElement<E> srcEl = theSource.addElement(reversed.result, first);
+				return srcEl == null ? null : elementFor(srcEl, null);
 			}
 		}
 
@@ -1300,6 +1301,11 @@ public final class ObservableCollectionImpl {
 				});
 			}
 			return Subscription.forAll(sourceSub, mapSub);
+		}
+
+		@Override
+		public String toString() {
+			return ObservableCollection.toString(this);
 		}
 
 		protected class PassiveDerivedMutableSpliterator extends MutableElementSpliterator.SimpleMutableSpliterator<T> {

@@ -1,5 +1,7 @@
 package org.observe.supertest;
 
+import java.util.List;
+
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ObservableChainTester.TestValueType;
 import org.qommons.TestHelper;
@@ -14,9 +16,9 @@ public class SimpleCollectionLink<E> extends AbstractObservableCollectionLink<E,
 	}
 
 	@Override
-	public void checkAddable(CollectionOp<E> add, int subListStart, int subListEnd, TestHelper helper) {
+	public void checkAddable(CollectionOp<E> add, List<E> preAdded, int subListStart, int subListEnd, TestHelper helper) {
 		if (getParent() != null)
-			getParent().checkAddable(add, subListStart, subListEnd, helper);
+			getParent().checkAddable(add, preAdded, subListStart, subListEnd, helper);
 	}
 
 	@Override

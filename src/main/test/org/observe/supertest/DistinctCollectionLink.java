@@ -78,7 +78,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	/**
 	 * This is a hack. If the flow is not rebased for hash-based distinctness, the order for different collections off of the same distinct
 	 * flow may not be consistent.
-	 * 
+	 *
 	 * @see org.observe.supertest.AbstractObservableCollectionLink#isRebasedFlowRequired()
 	 */
 	@Override
@@ -91,20 +91,16 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	}
 
 	@Override
-	public void checkAddable(List<CollectionOp<E>> add, int subListStart, int subListEnd, TestHelper helper) {
-		Set<E> duplicates = getCollection().equivalence().createSet();
-		add.stream().forEach(a -> {
-			if (duplicates.add(a.source))
-				checkAddable(a, subListStart, subListEnd, helper);
-			else {
-				a.message = StdMsg.ELEMENT_EXISTS;
-				a.isError = true;
+	public void checkAddable(CollectionOp<E> add, List<E> preAdded, int subListStart, int subListEnd, TestHelper helper) {
+		if (!preAdded.isEmpty()) {
+			Set<E> preAddedSet = getCollection().equivalence().createSet();
+			preAddedSet.addAll(preAdded);
+			if (preAddedSet.contains(add.source)) {
+				add.message = StdMsg.ELEMENT_EXISTS;
+				add.isError = true;
+				return;
 			}
-		});
-	}
-
-	@Override
-	public void checkAddable(CollectionOp<E> add, int subListStart, int subListEnd, TestHelper helper) {
+		}
 		MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueEntry = theValues.getEntry(add.source);
 		MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueHandle;
 		// TODO All the index adding here is for isPreservingSourceOrder=false. Rewrite for true.
@@ -140,7 +136,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			return;
 		}
 		CollectionOp<E> parentOp = new CollectionOp<>(add.source, -1);
-		getParent().checkAddable(parentOp, 0, theSourceValues.size(), helper);
+		getParent().checkAddable(parentOp, preAdded, 0, theSourceValues.size(), helper);
 		add.message = parentOp.message;
 		add.isError = parentOp.isError;
 	}

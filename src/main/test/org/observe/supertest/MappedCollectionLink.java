@@ -1,5 +1,8 @@
 package org.observe.supertest;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 import org.observe.collect.FlowOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ObservableChainTester.TestValueType;
@@ -22,7 +25,7 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 	}
 
 	@Override
-	public void checkAddable(CollectionOp<T> add, int subListStart, int subListEnd, TestHelper helper) {
+	public void checkAddable(CollectionOp<T> add, List<T> preAdded, int subListStart, int subListEnd, TestHelper helper) {
 		if (theOptions.getReverse() == null) {
 			add.message = StdMsg.UNSUPPORTED_OPERATION;
 			add.isError = true;
@@ -35,7 +38,9 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 			return;
 		}
 		CollectionOp<E> sourceAdd = new CollectionOp<>(reversed, add.index);
-		getParent().checkAddable(sourceAdd, subListStart, subListEnd, helper);
+		getParent().checkAddable(sourceAdd, //
+			preAdded.stream().map(theMap::reverse).collect(Collectors.toList()), //
+			subListStart, subListEnd, helper);
 		add.message = sourceAdd.message;
 		add.isError = sourceAdd.isError;
 	}
@@ -113,7 +118,7 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 
 	@Override
 	public void removedFromAbove(int index, T value, TestHelper helper, boolean above) {
-		getParent().removedFromAbove(index, theMap.reverse(value), helper, true); // TODO Is null ok here?
+		getParent().removedFromAbove(index, getParent().getExpected().get(index), helper, true);
 		removed(index, helper, !above);
 	}
 

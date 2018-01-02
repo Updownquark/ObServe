@@ -79,7 +79,8 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		return theCollection;
 	}
 
-	protected List<T> getExpected() {
+	@Override
+	public List<T> getExpected() {
 		return theTester.getExpected();
 	}
 
@@ -117,7 +118,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			CollectionOp<T> op = new CollectionOp<>(theSupplier.apply(helper), -1);
 			if (ObservableChainTester.DEBUG_PRINT)
 				System.out.println("Add " + op);
-			checkAddable(op, subListStart, subListEnd, helper);
+			checkAddable(op, Collections.emptyList(), subListStart, subListEnd, helper);
 			int index = addToCollection(op, modify, helper);
 			if (op.message == null) {
 				op = new CollectionOp<>(op.source, index);
@@ -127,7 +128,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			CollectionOp<T> op = new CollectionOp<>(theSupplier.apply(helper), helper.getInt(0, modify.size() + 1));
 			if (ObservableChainTester.DEBUG_PRINT)
 				System.out.println("Add " + op);
-			checkAddable(op, subListStart, subListEnd, helper);
+			checkAddable(op, Collections.emptyList(), subListStart, subListEnd, helper);
 			addToCollection(op, modify, helper);
 			if (op.message == null)
 				updateForAdd(op, subListStart, helper);
@@ -135,9 +136,13 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			int length = (int) helper.getDouble(0, 100, 1000); // Aggressively tend smaller
 			int index = helper.getBoolean() ? -1 : helper.getInt(0, modify.size() + 1);
 			List<CollectionOp<T>> ops = new ArrayList<>(length);
-			for (int i = 0; i < length; i++)
-				ops.add(new CollectionOp<>(theSupplier.apply(helper), index));
-			checkAddable(ops, subListStart, subListEnd, helper);
+			List<T> values = new ArrayList<>();
+			for (int i = 0; i < length; i++) {
+				CollectionOp<T> op = new CollectionOp<>(theSupplier.apply(helper), index);
+				ops.add(op);
+				checkAddable(op, values, subListStart, subListEnd, helper);
+				values.add(op.source);
+			}
 			if (ObservableChainTester.DEBUG_PRINT) {
 				String msg = "Add all ";
 				if (index >= 0) {

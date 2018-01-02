@@ -34,11 +34,9 @@ interface ObservableCollectionChainLink<E, T> extends ObservableChainLink<T> {
 
 	ObservableCollection<T> getCollection();
 
-	default void checkAddable(List<CollectionOp<T>> add, int subListStart, int subListEnd, TestHelper helper) {
-		add.stream().forEach(a -> checkAddable(a, subListStart, subListEnd, helper));
-	}
+	List<T> getExpected();
 
-	void checkAddable(CollectionOp<T> add, int subListStart, int subListEnd, TestHelper helper);
+	void checkAddable(CollectionOp<T> add, List<T> preAdded, int subListStart, int subListEnd, TestHelper helper);
 
 	void checkRemovable(CollectionOp<T> remove, int subListStart, int subListEnd, TestHelper helper);
 
