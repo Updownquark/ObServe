@@ -1,5 +1,7 @@
 package org.observe.supertest;
 
+import java.util.List;
+
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ObservableChainTester.TestValueType;
 import org.qommons.TestHelper;
@@ -8,34 +10,37 @@ import org.qommons.collect.MutableCollectionElement.StdMsg;
 public class SimpleCollectionLink<E> extends AbstractObservableCollectionLink<E, E> {
 	public SimpleCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type, CollectionDataFlow<?, ?, E> flow,
 		TestHelper helper) {
-		super(parent, type, flow, helper);
+		super(parent, type, flow, helper, false);
 		for (E src : getCollection())
 			getExpected().add(src);
 	}
 
 	@Override
-	public void checkAddable(CollectionOp<E> add, ModTransaction transaction, int subListStart, int subListEnd, TestHelper helper) {
+	public void checkAddable(List<CollectionOp<E>> adds, int subListStart, int subListEnd, TestHelper helper) {
 		if (getParent() != null)
-			getParent().checkAddable(add, transaction.getParent(), subListStart, subListEnd, helper);
+			getParent().checkAddable(adds, subListStart, subListEnd, helper);
 	}
 
 	@Override
-	public void checkRemovable(CollectionOp<E> remove, ModTransaction transaction, int subListStart, int subListEnd, TestHelper helper) {
+	public void checkRemovable(List<CollectionOp<E>> removes, int subListStart, int subListEnd, TestHelper helper) {
 		if (getParent() != null)
-			getParent().checkRemovable(remove, transaction.getParent(), subListStart, subListEnd, helper);
-		else if (remove.index < 0 && !getCollection().contains(remove.source))
-			remove.message = StdMsg.NOT_FOUND;
+			getParent().checkRemovable(removes, subListStart, subListEnd, helper);
+		else {
+			for (CollectionOp<E> remove : removes)
+				if (remove.index < 0 && !getCollection().contains(remove.source))
+					remove.reject(StdMsg.NOT_FOUND, false);
+		}
 	}
 
 	@Override
-	public void checkSettable(CollectionOp<E> set, int subListStart, int subListEnd, TestHelper helper) {
+	public void checkSettable(List<CollectionOp<E>> sets, int subListStart, int subListEnd, TestHelper helper) {
 		if (getParent() != null)
-			getParent().checkSettable(set, subListStart, subListEnd, helper);
+			getParent().checkSettable(sets, subListStart, subListEnd, helper);
 	}
 
 	@Override
-	public void addedFromBelow(int index, E value, TestHelper helper) {
-		added(index, value, helper, true);
+	public void addedFromBelow(List<CollectionOp<E>> adds, TestHelper helper) {
+		added(adds, helper, true);
 	}
 
 	@Override
@@ -49,8 +54,8 @@ public class SimpleCollectionLink<E> extends AbstractObservableCollectionLink<E,
 	}
 
 	@Override
-	public void addedFromAbove(int index, E value, TestHelper helper, boolean above) {
-		added(index, value, helper, !above);
+	public void addedFromAbove(List<CollectionOp<E>> adds, TestHelper helper, boolean above) {
+		added(adds, helper, !above);
 	}
 
 	@Override

@@ -7,15 +7,38 @@ import org.qommons.TestHelper;
 
 interface ObservableCollectionChainLink<E, T> extends ObservableChainLink<T> {
 	static class CollectionOp<E> implements Cloneable {
+		final CollectionOp<?> theRoot;
 		final E source;
 		final int index;
 
-		String message;
-		boolean isError;
+		private String theMessage;
+		private boolean isError;
 
-		CollectionOp(E source, int index) {
+		CollectionOp(CollectionOp<?> root, E source, int index) {
+			theRoot = root == null ? null : root.getRoot();
 			this.source = source;
 			this.index = index;
+		}
+
+		public CollectionOp<?> getRoot() {
+			return theRoot == null ? this : theRoot;
+		}
+
+		public void reject(String message, boolean error) {
+			if (theRoot != null)
+				theRoot.reject(message, error);
+			else {
+				theMessage = message;
+				isError = message != null && error;
+			}
+		}
+
+		public String getMessage() {
+			return theRoot == null ? theMessage : theRoot.getMessage();
+		}
+
+		public boolean isError() {
+			return isError;
 		}
 
 		@Override
@@ -39,29 +62,19 @@ interface ObservableCollectionChainLink<E, T> extends ObservableChainLink<T> {
 
 	List<T> getExpected();
 
-	void checkAddable(CollectionOp<T> add, ModTransaction transaction, int subListStart, int subListEnd, TestHelper helper);
+	void checkAddable(List<CollectionOp<T>> adds, int subListStart, int subListEnd, TestHelper helper);
 
-	void checkRemovable(CollectionOp<T> remove, ModTransaction transaction, int subListStart, int subListEnd, TestHelper helper);
+	void checkRemovable(List<CollectionOp<T>> removes, int subListStart, int subListEnd, TestHelper helper);
 
-	void checkSettable(CollectionOp<T> set, int subListStart, int subListEnd, TestHelper helper);
+	void checkSettable(List<CollectionOp<T>> sets, int subListStart, int subListEnd, TestHelper helper);
 
-	void addedFromBelow(int index, E value, TestHelper helper);
+	void addedFromBelow(List<CollectionOp<E>> adds, TestHelper helper);
 
 	void removedFromBelow(int index, TestHelper helper);
 
 	void setFromBelow(int index, E value, TestHelper helper);
 
-	default void addedAll(int index, List<T> values, TestHelper helper) {
-		if (index == 0) {
-			for (int i = values.size() - 1; i >= 0; i--)
-				addedFromAbove(index, values.get(i), helper, false);
-		} else {
-			for (int i = 0; i < values.size(); i++)
-				addedFromAbove(index >= 0 ? index + i : -1, values.get(i), helper, false);
-		}
-	}
-
-	void addedFromAbove(int index, T value, TestHelper helper, boolean above);
+	void addedFromAbove(List<CollectionOp<T>> adds, TestHelper helper, boolean above);
 
 	void removedFromAbove(int index, T value, TestHelper helper, boolean above);
 

@@ -18,21 +18,23 @@ import org.qommons.QommonsTestUtils;
  * @param <E> The type of values in the collection
  */
 public class ObservableCollectionTester<E> extends AbstractObservableTester<Collection<E>> {
+	private final String theName;
 	private final ObservableCollection<? extends E> theCollection;
 	private final ArrayList<E> theSyncedCopy;
 	private final ArrayList<E> theBatchSyncedCopy;
 	private final List<E> theExpected;
 
 	/** @param collect The observable collection to test */
-	public ObservableCollectionTester(ObservableCollection<? extends E> collect) {
-		this(collect, new ArrayList<>());
+	public ObservableCollectionTester(String name, ObservableCollection<? extends E> collect) {
+		this(name, collect, new ArrayList<>());
 	}
 
 	/**
 	 * @param collect The observable collection to test
 	 * @param expected The collection to use for the expected value
 	 */
-	public ObservableCollectionTester(ObservableCollection<? extends E> collect, List<E> expected) {
+	public ObservableCollectionTester(String name, ObservableCollection<? extends E> collect, List<E> expected) {
+		theName = name;
 		theCollection = collect;
 		theSyncedCopy=new ArrayList<>();
 		theBatchSyncedCopy = new ArrayList<>();
@@ -175,7 +177,7 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 
 	/**
 	 * Checks the non-batched synchronized collection against the source collection and the given expected values
-	 * 
+	 *
 	 * @param expected The expected values
 	 */
 	public void checkNonBatchSynced(Collection<E> expected) {
@@ -191,15 +193,16 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 				theSyncedCopy.add(evt.getIndex(), evt.getNewValue());
 				break;
 			case remove:
-				assertEquals(evt.getOldValue(), theSyncedCopy.remove(evt.getIndex()));
+				assertEquals(theName, evt.getOldValue(), theSyncedCopy.remove(evt.getIndex()));
 				break;
 			case set:
-				assertEquals(evt.getOldValue(), theSyncedCopy.set(evt.getIndex(), evt.getNewValue()));
+				assertEquals(theName, evt.getOldValue(), theSyncedCopy.set(evt.getIndex(), evt.getNewValue()));
 				break;
 			}
 		}, true);
 		theBatchSyncedCopy.addAll(theCollection); // The changes observable doesn't populate initial values
 		Subscription batchSub = theCollection.changes().act(evt -> {
+			System.out.println(theName + ": " + evt);
 			op();
 			switch (evt.type) {
 			case add:
@@ -208,11 +211,11 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 				break;
 			case remove:
 				for (CollectionChangeEvent.ElementChange<? extends E> change : evt.getElementsReversed())
-					assertEquals(change.oldValue, theBatchSyncedCopy.remove(change.index));
+					assertEquals(theName, change.oldValue, theBatchSyncedCopy.remove(change.index));
 				break;
 			case set:
 				for (CollectionChangeEvent.ElementChange<? extends E> change : evt.elements)
-					assertEquals(change.oldValue, theBatchSyncedCopy.set(change.index, change.newValue));
+					assertEquals(theName, change.oldValue, theBatchSyncedCopy.set(change.index, change.newValue));
 				break;
 			}
 		});

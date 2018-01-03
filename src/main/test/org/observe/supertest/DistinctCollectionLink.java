@@ -1,10 +1,13 @@
 package org.observe.supertest;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import org.junit.Assert;
+import org.observe.collect.Equivalence;
 import org.observe.collect.FlowOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ObservableChainTester.TestValueType;
@@ -12,6 +15,7 @@ import org.qommons.TestHelper;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterMap;
+import org.qommons.collect.BetterSet;
 import org.qommons.collect.BetterSortedMap;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionElement;
@@ -41,7 +45,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 
 	public DistinctCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type, CollectionDataFlow<?, ?, E> flow,
 		TestHelper helper, FlowOptions.UniqueOptions options) {
-		super(parent, type, flow, helper);
+		super(parent, type, flow, helper, isRebasedFlowRequired(options, flow.equivalence()));
 		theOptions = options;
 		theValues = flow.equivalence().createMap();
 		theSourceValues = new BetterTreeList<>(false);
@@ -80,9 +84,8 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	 *
 	 * @see org.observe.supertest.AbstractObservableCollectionLink#isRebasedFlowRequired()
 	 */
-	@Override
-	protected boolean isRebasedFlowRequired() {
-		return !(getCollection().equivalence() instanceof org.observe.collect.Equivalence.ComparatorEquivalence);
+	private static boolean isRebasedFlowRequired(FlowOptions.UniqueOptions options, Equivalence<?> equivalence) {
+		return !options.isPreservingSourceOrder() && !(equivalence instanceof org.observe.collect.Equivalence.ComparatorEquivalence);
 	}
 
 	protected BetterMap<E, BetterSortedMap<ElementId, E>> getValues() {
@@ -90,79 +93,79 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	}
 
 	@Override
-	public void checkAddable(CollectionOp<E> add, ModTransaction transaction, int subListStart, int subListEnd, TestHelper helper) {
-		Set<E> preAddedSet = transaction.get("preAdded", () -> getCollection().equivalence().createSet());
-		if (!preAddedSet.add(add.source)) {
-			add.message = StdMsg.ELEMENT_EXISTS;
-			add.isError = true;
+	public void checkAddable(List<CollectionOp<E>> adds, int subListStart, int subListEnd, TestHelper helper) {
+		if (adds.isEmpty())
 			return;
-		}
-		MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueEntry = theValues.getEntry(add.source);
-		MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueHandle;
-		// TODO All the index adding here is for isPreservingSourceOrder=false. Rewrite for true.
-		if (valueEntry != null) {
-			add.message = StdMsg.ELEMENT_EXISTS;
-		} else if (add.index >= 0) {
-			if ((subListStart + add.index) == 0 && theValues.isEmpty()) {
-				add.message = theValues.keySet().canAdd(add.source);
-			} else if (theOptions.isPreservingSourceOrder()) {
-				throw new IllegalStateException("Not implemented");
-			} else {
-				boolean addBefore = add.index == 0;
-				if (addBefore)
-					valueHandle = getValueHandle(subListStart + add.index);
-				else
-					valueHandle = getValueHandle(subListStart + add.index - 1);
-				add.message = theValues.keySet().mutableElement(valueHandle.getElementId()).canAdd(add.source, addBefore);
+		// Check the parent first, since if the parent rejects an add, that op shouldn't interfere with future adds
+		if(getParent()!=null)
+			getParent().checkAddable(adds, 0, theSourceValues.size(), helper);
+		BetterSet<E> addedSet = getCollection().equivalence().createSet();
+		for (CollectionOp<E> add : adds) {
+			if (add.getMessage() != null)
+				continue;
+			if (!addedSet.add(add.source)) {
+				add.reject(StdMsg.ELEMENT_EXISTS, true);
+				continue;
 			}
-		} else if (subListStart > 0 || subListEnd < theValues.size()) {
-			if (theOptions.isPreservingSourceOrder()) {
-				throw new IllegalStateException("Not implemented");
-			} else {
-				valueHandle = getValueHandle(subListStart);
-				add.message = theValues.keySet().mutableElement(valueHandle.getElementId()).canAdd(add.source, true);
-				if (add.message != null) {
-					valueHandle = getValueHandle(subListEnd - 1);
-					add.message = theValues.keySet().mutableElement(valueHandle.getElementId()).canAdd(add.source, false);
+
+			MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueEntry = theValues.getEntry(add.source);
+			MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueHandle;
+			// TODO All the index adding here is for isPreservingSourceOrder=false. Rewrite for true.
+			if (valueEntry != null) {
+				add.reject(StdMsg.ELEMENT_EXISTS, false);
+			} else if (add.index >= 0) {
+				if ((subListStart + add.index) == 0 && theValues.isEmpty()) {
+					add.reject(theValues.keySet().canAdd(add.source), true);
+				} else if (theOptions.isPreservingSourceOrder()) {
+					throw new IllegalStateException("Not implemented");
+				} else {
+					boolean addBefore = add.index == 0;
+					if (addBefore)
+						valueHandle = getValueHandle(subListStart + add.index);
+					else
+						valueHandle = getValueHandle(subListStart + add.index - 1);
+					add.reject(theValues.keySet().mutableElement(valueHandle.getElementId()).canAdd(add.source, addBefore), true);
+				}
+			} else if (subListStart > 0 || subListEnd < theValues.size()) {
+				if (theOptions.isPreservingSourceOrder()) {
+					throw new IllegalStateException("Not implemented");
+				} else {
+					valueHandle = getValueHandle(subListStart);
+
+					add.reject(theValues.keySet().mutableElement(valueHandle.getElementId()).canAdd(add.source, true), true);
+					if (add.getMessage() != null) {
+						valueHandle = getValueHandle(subListEnd - 1);
+						add.reject(theValues.keySet().mutableElement(valueHandle.getElementId()).canAdd(add.source, false), true);
+					}
 				}
 			}
 		}
-		if (add.message != null) {
-			add.isError = true;
-			return;
-		}
-		CollectionOp<E> parentOp = new CollectionOp<>(add.source, -1);
-		getParent().checkAddable(parentOp, transaction.getParent(), 0, theSourceValues.size(), helper);
-		add.message = parentOp.message;
-		add.isError = parentOp.isError;
 	}
 
 	@Override
-	public void checkRemovable(CollectionOp<E> remove, ModTransaction transaction, int subListStart, int subListEnd, TestHelper helper) {
-		MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueEntry;
-		if (remove.index < 0)
-			valueEntry = theValues.getEntry(remove.source);
-		else
-			valueEntry = getValueHandle(subListStart + remove.index);
-		if (valueEntry == null) {
-			remove.message = StdMsg.NOT_FOUND;
-		} else if (subListStart > 0 || subListEnd < theValues.size()) {
-			int index = getElementIndex(valueEntry.getElementId());
-			if (index < subListStart || index >= subListEnd)
-				remove.message = StdMsg.NOT_FOUND;
-		}
-		if (remove.message == null && getParent() != null) {
-			for (ElementId srcId : valueEntry.get().keySet()) {
-				CollectionOp<E> parentRemove = new CollectionOp<>(theSourceValues.getElement(srcId).get(),
-					theSourceValues.getElementsBefore(srcId));
-				getParent().checkRemovable(parentRemove, transaction.getParent(), 0, theSourceValues.size(), helper);
-				if (parentRemove.message != null) {
-					remove.message = parentRemove.message;
-					remove.isError = parentRemove.isError;
-					break;
+	public void checkRemovable(List<CollectionOp<E>> removes, int subListStart, int subListEnd, TestHelper helper) {
+		List<CollectionOp<E>> parentRemoves=getParent()==null ? null :  new ArrayList<>(removes.size());
+		for(CollectionOp<E> remove : removes){
+			MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueEntry;
+			if (remove.index < 0)
+				valueEntry = theValues.getEntry(remove.source);
+			else
+				valueEntry = getValueHandle(subListStart + remove.index);
+			if (valueEntry == null) {
+				remove.reject(StdMsg.NOT_FOUND, false);
+			} else if (subListStart > 0 || subListEnd < theValues.size()) {
+				int index = getElementIndex(valueEntry.getElementId());
+				if (index < subListStart || index >= subListEnd)
+					remove.reject(StdMsg.NOT_FOUND, false);
+			}
+			if (remove.getMessage() == null && getParent() != null) {
+				for (ElementId srcId : valueEntry.get().keySet()) {
+					parentRemoves.add(new CollectionOp<>(remove, theSourceValues.getElement(srcId).get(),
+						theSourceValues.getElementsBefore(srcId)));
 				}
 			}
 		}
+		getParent().checkRemovable(parentRemoves, 0, theSourceValues.size(), helper);
 	}
 
 	private MapEntryHandle<E, BetterSortedMap<ElementId, E>> getValueHandle(int index) {
@@ -203,77 +206,86 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	}
 
 	@Override
-	public void checkSettable(CollectionOp<E> set, int subListStart, int subListEnd, TestHelper helper) {
-		MapEntryHandle<E, BetterSortedMap<ElementId, E>> oldValueEntry = getValueHandle(set.index);
-		MapEntryHandle<E, BetterSortedMap<ElementId, E>> newValueEntry = theValues.getEntry(set.source);
-		if (newValueEntry != null && !newValueEntry.getElementId().equals(oldValueEntry.getElementId())) {
-			set.message = StdMsg.ELEMENT_EXISTS;
-			set.isError = true;
-			return;
-		}
-		if (!theOptions.isPreservingSourceOrder() && !getCollection().equivalence().elementEquals(oldValueEntry.getKey(), set.source)) {
-			set.message = StdMsg.UNSUPPORTED_OPERATION;
-			set.isError = true;
-			return;
-		}
-		if (getParent() != null) {
-			for (ElementId srcId : oldValueEntry.get().keySet()) {
-				CollectionOp<E> parentSet = new CollectionOp<>(set.source, theSourceValues.getElementsBefore(srcId));
-				getParent().checkSettable(parentSet, subListStart, subListEnd, helper);
-				if (parentSet.message != null) {
-					set.message = parentSet.message;
-					set.isError = parentSet.isError;
-					break;
+	public void checkSettable(List<CollectionOp<E>> sets, int subListStart, int subListEnd, TestHelper helper) {
+		List<CollectionOp<E>> parentSets = getParent() == null ? null : new ArrayList<>();
+		for (CollectionOp<E> set : sets) {
+			MapEntryHandle<E, BetterSortedMap<ElementId, E>> oldValueEntry = getValueHandle(set.index);
+			MapEntryHandle<E, BetterSortedMap<ElementId, E>> newValueEntry = theValues.getEntry(set.source);
+			if (newValueEntry != null && !newValueEntry.getElementId().equals(oldValueEntry.getElementId())) {
+				set.reject(StdMsg.ELEMENT_EXISTS, true);
+				continue;
+			}
+			if (!theOptions.isPreservingSourceOrder() && !getCollection().equivalence().elementEquals(oldValueEntry.getKey(), set.source)) {
+				set.reject(StdMsg.UNSUPPORTED_OPERATION, true);
+				continue;
+			}
+			if (parentSets != null) {
+				for (ElementId srcId : oldValueEntry.get().keySet()) {
+					CollectionOp<E> parentSet = new CollectionOp<>(set, set.source, theSourceValues.getElementsBefore(srcId));
+					parentSets.add(parentSet);
 				}
 			}
 		}
+		if (parentSets != null)
+			getParent().checkSettable(parentSets, subListStart, subListEnd, helper);
 	}
 
 	@Override
-	public void addedFromBelow(int index, E value, TestHelper helper) {
-		Iterator<ElementId> nsvIter = theNewSourceValues.iterator();
-		boolean found = false;
-		int passed = 0;
-		int srcIndex = 0;
-		while (!found) {
-			CollectionElement<E> el = getParent().getCollection().getElement(nsvIter.next());
-			if (getCollection().equivalence().elementEquals(el.get(), value)) {
-				srcIndex = getParent().getCollection().getElementsBefore(el.getElementId()) - passed;
-				if (index < 0 || index == srcIndex)
-					found = true;
+	public void addedFromBelow(List<CollectionOp<E>> adds, TestHelper helper) {
+		List<CollectionOp<E>> distinctAdds = new ArrayList<>();
+		for (CollectionOp<E> add : adds) {
+			Iterator<ElementId> nsvIter = theNewSourceValues.iterator();
+			boolean found = false;
+			int passed = 0;
+			int srcIndex = 0;
+			while (!found) {
+				CollectionElement<E> el = getParent().getCollection().getElement(nsvIter.next());
+				if (getCollection().equivalence().elementEquals(el.get(), add.source)) {
+					srcIndex = getParent().getCollection().getElementsBefore(el.getElementId()) - passed;
+					if (add.index < 0 || add.index == srcIndex)
+						found = true;
+				}
+				if (found)
+					nsvIter.remove();
+				else
+					passed++;
 			}
-			if (found)
-				nsvIter.remove();
-			else
-				passed++;
+			CollectionOp<E> da = add(srcIndex, add.source, -1, helper, true);
+			if (da != null)
+				distinctAdds.add(da);
 		}
-		add(srcIndex, value, -1, helper, true);
+		added(distinctAdds, helper, true);
 	}
 
-	private void add(int srcIndex, E value, int destIndex, TestHelper helper, boolean propagateUp) {
+	private CollectionOp<E> add(int srcIndex, E value, int destIndex, TestHelper helper, boolean propagateUp) {
 		ElementId srcEl = theSourceValues.addElement(srcIndex, value).getElementId();
 		MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueEntry = theValues.getEntry(value);
 		if (valueEntry != null && !valueEntry.getValue().isEmpty()) {
-			MapEntryHandle<ElementId, E> valueSoruceEntry = valueEntry.get().putEntry(srcEl, value, false);
-			if (theOptions.isUseFirst() && valueEntry.get().keySet().getElementsBefore(valueSoruceEntry.getElementId()) == 0) {
+			MapEntryHandle<ElementId, E> valueSourceEntry = valueEntry.get().putEntry(srcEl, value, false);
+			if (theOptions.isUseFirst() && valueEntry.get().keySet().getElementsBefore(valueSourceEntry.getElementId()) == 0) {
 				// The new value is replacing the old value as the representative element
 				ElementId oldRep = theRepresentativeElements.put(valueEntry.getElementId(), srcEl);
+				int oldIndex, newIndex;
 				if (theOptions.isPreservingSourceOrder()) {
 					// The order of the representative element may have changed
 					CollectionElement<ElementId> orderEl = theSortedRepresentatives.getElement(oldRep, true); // Get by value, not element
-					int oldIndex = theSortedRepresentatives.getElementsBefore(orderEl.getElementId());
+					oldIndex = theSortedRepresentatives.getElementsBefore(orderEl.getElementId());
 					theSortedRepresentatives.mutableElement(orderEl.getElementId()).remove();
 					orderEl = theSortedRepresentatives.addElement(srcEl, true);
-					int newIndex = theSortedRepresentatives.getElementsBefore(orderEl.getElementId());
-					if (oldIndex != newIndex) {
-						removed(oldIndex, helper, propagateUp);
-						added(newIndex, value, helper, propagateUp);
-					} else
-						set(oldIndex, value, helper, propagateUp);
+					newIndex = theSortedRepresentatives.getElementsBefore(orderEl.getElementId());
 				} else {
 					// The order in the derived collection cannot have been changed
+					oldIndex = newIndex = getElementIndex(valueEntry.getElementId());
 				}
-			}
+				if (oldIndex != newIndex) {
+					removed(oldIndex, helper, propagateUp);
+					return new CollectionOp<>(null, value, newIndex);
+				} else {
+					set(oldIndex, value, helper, propagateUp);
+					return null;
+				}
+			} else
+				return null;
 		} else {
 			// The new value is the first in its category
 			if (valueEntry == null) {
@@ -298,7 +310,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			else
 				orderEl = theSortedRepresentatives.addElement(valueEntry.getElementId(), true).getElementId();
 			int repIndex = theSortedRepresentatives.getElementsBefore(orderEl);
-			added(repIndex, value, helper, propagateUp);
+			return new CollectionOp<>(null, value, repIndex);
 		}
 	}
 
@@ -336,7 +348,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 					newIndex = oldIndex;
 				if (oldIndex != newIndex) {
 					removed(oldIndex, helper, true);
-					added(newIndex, newFirstSrcEntry.getValue(), helper, true);
+					added(Arrays.asList(new CollectionOp<>(null, newFirstSrcEntry.getValue(), newIndex)), helper, true);
 				} else
 					set(oldIndex, newFirstSrcEntry.getValue(), helper, true);
 			}
@@ -369,39 +381,47 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			// Category has been changed. Same as a remove, then an add.
 			theNewSourceValues.add(getParent().getCollection().getElement(index).getElementId());
 			removedFromBelow(index, helper);
-			addedFromBelow(index, value, helper);
+			addedFromBelow(Arrays.asList(new CollectionOp<>(null, value, index)), helper);
 		}
 	}
 
 	@Override
-	public void addedFromAbove(int index, E value, TestHelper helper, boolean above) {
-		BetterSortedSet<ElementId> subSet;
-		if (theOptions.isPreservingSourceOrder()) {
-			// The inserted element must be between the representatives at index-1 and index in the parent collection
-			if (theSortedRepresentatives.isEmpty())
+	public void addedFromAbove(List<CollectionOp<E>> adds, TestHelper helper, boolean above) {
+		List<CollectionOp<E>> parentAdds = getParent() == null ? null : new ArrayList<>(adds.size());
+		List<CollectionOp<E>> distinctAdds = new ArrayList<>(adds.size());
+		for (CollectionOp<E> add : adds) {
+			BetterSortedSet<ElementId> subSet;
+			if (theOptions.isPreservingSourceOrder()) {
+				// The inserted element must be between the representatives at index-1 and index in the parent collection
+				if (theSortedRepresentatives.isEmpty())
+					subSet = theNewSourceValues;
+				else if (add.index > 0 && add.index < theSortedRepresentatives.size())
+					subSet = theNewSourceValues.subSet(theSortedRepresentatives.get(add.index - 1), false,
+						theSortedRepresentatives.get(add.index), false);
+				else if (add.index > 0)
+					subSet = theNewSourceValues.tailSet(theSortedRepresentatives.get(add.index - 1), false);
+				else
+					subSet = theNewSourceValues.headSet(theSortedRepresentatives.get(add.index), false);
+			} else {
+				// If source order is not preserved, we don't care where the new value was inserted
 				subSet = theNewSourceValues;
-			else if (index > 0 && index < theSortedRepresentatives.size())
-				subSet = theNewSourceValues.subSet(theSortedRepresentatives.get(index - 1), false, theSortedRepresentatives.get(index),
-					false);
-			else if (index > 0)
-				subSet = theNewSourceValues.tailSet(theSortedRepresentatives.get(index - 1), false);
-			else
-				subSet = theNewSourceValues.headSet(theSortedRepresentatives.get(index), false);
-		} else {
-			// If source order is not preserved, we don't care where the new value was inserted
-			subSet = theNewSourceValues;
-		}
-		int[] sourceIndex = new int[] { -1 };
-		subSet.spliterator().forEachElementM(el -> {
-			if (sourceIndex[0] < 0
-				&& getParent().getCollection().equivalence().elementEquals(getParent().getCollection().getElement(el.get()).get(), value)) {
-				sourceIndex[0] = getParent().getCollection().getElementsBefore(el.get())
-					- theNewSourceValues.getElementsBefore(el.getElementId());
-				el.remove();
 			}
-		}, true);
-		getParent().addedFromAbove(sourceIndex[0], value, helper, true);
-		add(sourceIndex[0], value, index, helper, !above);
+			int[] sourceIndex = new int[] { -1 };
+			subSet.spliterator().forEachElementM(el -> {
+				if (sourceIndex[0] < 0 && getParent().getCollection().equivalence()
+					.elementEquals(getParent().getCollection().getElement(el.get()).get(), add.source)) {
+					sourceIndex[0] = getParent().getCollection().getElementsBefore(el.get())
+						- theNewSourceValues.getElementsBefore(el.getElementId());
+					el.remove();
+				}
+			}, true);
+			parentAdds.add(new CollectionOp<>(null, add.source, sourceIndex[0]));
+			CollectionOp<E> da = add(sourceIndex[0], add.source, add.index, helper, !above);
+			if (da != null)
+				distinctAdds.add(da);
+		}
+		getParent().addedFromAbove(parentAdds, helper, true);
+		added(distinctAdds, helper, !above);
 	}
 
 	@Override

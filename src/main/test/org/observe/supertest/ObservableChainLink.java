@@ -11,14 +11,6 @@ interface ObservableChainLink<T> {
 	ObservableChainLink<?> getParent();
 	ObservableChainLink<?> getChild();
 
-	default ModTransaction createTransaction(ModTransaction parent) {
-		ObservableChainLink<?> parentLink = getParent();
-		if (parent == null && parentLink != null)
-			parent = parentLink.createTransaction(null);
-		ObservableChainLink<?> childLink = getChild();
-		return new ModTransaction(parent, pt -> childLink == null ? null : childLink.createTransaction(pt));
-	}
-
 	Transaction lock();
 	void tryModify(TestHelper helper);
 	void check(boolean transComplete);

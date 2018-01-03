@@ -383,8 +383,14 @@ public class ObservableChainTester implements Testable {
 					try {
 						targetLink.tryModify(helper);
 					} catch (RuntimeException | Error e) {
-						System.err.println("Error on transaction " + (transactionTri + 1) + " after " + (modifications + transactionTri)
+						System.err.println("Error on transaction " + (tri + 1) + " after " + (modifications + transactionTri)
 							+ " successful modifications");
+						System.err.println("Pre-faiure base value: " + preBaseValue);
+						System.err.println("Post-faiure base value: " + toString());
+						if (linkIndex > 0) {
+							System.err.println("Pre-faiure link value: " + preLinkValue);
+							System.err.println("Post-faiure link value: " + targetLink.printValue());
+						}
 						throw e;
 					}
 					try {

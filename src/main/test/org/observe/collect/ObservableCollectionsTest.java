@@ -106,7 +106,7 @@ public class ObservableCollectionsTest {
 	private static <T extends ObservableCollection<Integer>> Checker<ObservableCollection<Integer>> testingObservableCollection(T coll,
 		Consumer<? super T> check, int depth, TestHelper helper) {
 
-		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(coll);
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("base", coll);
 
 		// Quick test first
 		coll.addAll(QommonsTestUtils.sequence(50, null, true));
@@ -125,7 +125,7 @@ public class ObservableCollectionsTest {
 		if (BARRAGE_USE_MAP) {
 			mappedOL = coll.flow().map(intType, mapFn, options -> options.cache(false).withReverse(reverseMapFn)).collectPassive();
 			d().set("mapped@" + depth, mappedOL);
-			mappedTester = new ObservableCollectionTester<>(mappedOL);
+			mappedTester = new ObservableCollectionTester<>("mapped", mappedOL);
 		} else {
 			mappedOL = null;
 			mappedTester = null;
@@ -137,7 +137,7 @@ public class ObservableCollectionsTest {
 		if (BARRAGE_USE_FILTER) {
 			filteredOL1 = coll.flow().filter(filterFn1).collect();
 			d().set("filtered@" + depth, filteredOL1);
-			filterTester1 = new ObservableCollectionTester<>(filteredOL1);
+			filterTester1 = new ObservableCollectionTester<>("filtered", filteredOL1);
 		} else {
 			filteredOL1 = null;
 			filterTester1 = null;
@@ -176,7 +176,7 @@ public class ObservableCollectionsTest {
 				return combine.with(combineVar).withReverse(reverseCombineFn).build(combineFn);
 			}).collect();
 			d().set("combined@" + depth, combinedOL);
-			combinedTester = new ObservableCollectionTester<>(combinedOL);
+			combinedTester = new ObservableCollectionTester<>("combined", combinedOL);
 		} else {
 			combinedOL = null;
 			combinedTester = null;
@@ -709,9 +709,9 @@ public class ObservableCollectionsTest {
 			BetterList<Integer> expected = new BetterTreeList<>(false);
 			if (helper.getBoolean()) {
 				derived = derived.reverse();
-				tester = new ObservableCollectionTester<>(derived, expected.reverse());
+				tester = new ObservableCollectionTester<>("reversed", derived, expected.reverse());
 			} else
-				tester = new ObservableCollectionTester<>(derived, expected);
+				tester = new ObservableCollectionTester<>("base", derived, expected);
 
 			for (int i = 0; i < 500; i++) {
 				int index;
@@ -784,8 +784,8 @@ public class ObservableCollectionsTest {
 	@Test
 	public void randomSimple() {
 		TestHelper.createTester(SimpleRandomTester.class).withMaxTotalDuration(Duration.ofSeconds(5))//
-			/**/.withPersistenceDir(new File("src/main/test/org/observe/collect"), false)//
-			.execute();
+		/**/.withPersistenceDir(new File("src/main/test/org/observe/collect"), false)//
+		.execute();
 	}
 
 	// Older, more specific tests
@@ -794,7 +794,7 @@ public class ObservableCollectionsTest {
 	@Test
 	public void observableCollection() {
 		ObservableCollection<Integer> list = ObservableCollection.create(intType);
-		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(list);
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("", list);
 
 		for (int i = 0; i < 30; i++) {
 			list.add(i);
@@ -1190,8 +1190,8 @@ public class ObservableCollectionsTest {
 		outer.add(set1);
 		outer.add(set2);
 		CollectionDataFlow<?, ?, Integer> flat = outer.flow().flatMap(intType, s -> s.flow());
-		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(flat.collect());
-		ObservableCollectionTester<Integer> filterTester = new ObservableCollectionTester<>(//
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("flat", flat.collect());
+		ObservableCollectionTester<Integer> filterTester = new ObservableCollectionTester<>("filter", //
 			flat.filter(value -> value != null && value % 3 == 0 ? null : StdMsg.ILLEGAL_ELEMENT).collect());
 
 		List<Integer> correct1 = new ArrayList<>();

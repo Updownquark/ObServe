@@ -26,10 +26,10 @@ public class ObservableAssocTest {
 	@Test
 	public void testDefaultMultiMap() {
 		ObservableMultiMap<Integer, Integer> map = ObservableMultiMap.create(intType, intType, Equivalence.DEFAULT).gather();
-		ObservableCollectionTester<Integer> keyTester = new ObservableCollectionTester<>(map.keySet());
+		ObservableCollectionTester<Integer> keyTester = new ObservableCollectionTester<>("keys", map.keySet());
 		Map<Integer, ObservableCollectionTester<Integer>> valueTesters = new java.util.LinkedHashMap<>();
 		for (int i = 0; i < 10; i++)
-			valueTesters.put(i, new ObservableCollectionTester<>(map.get(i)));
+			valueTesters.put(i, new ObservableCollectionTester<>("value@" + i, map.get(i)));
 		for (int i = 0; i < 99; i++) {
 			int key = i % 9;
 			map.add(key, i);
@@ -65,10 +65,10 @@ public class ObservableAssocTest {
 		ObservableCollection<Integer> list = ObservableCollection.create(intType);
 		ObservableMultiMap<Integer, Integer> map = list.flow().groupBy(intType, v -> v % 9).gather();
 
-		ObservableCollectionTester<Integer> keyTester = new ObservableCollectionTester<>(map.keySet());
+		ObservableCollectionTester<Integer> keyTester = new ObservableCollectionTester<>("keys", map.keySet());
 		Map<Integer, ObservableCollectionTester<Integer>> valueTesters = new java.util.LinkedHashMap<>();
 		for (int i = 0; i < 10; i++)
-			valueTesters.put(i, new ObservableCollectionTester<>(map.get(i)));
+			valueTesters.put(i, new ObservableCollectionTester<>("value@" + i, map.get(i)));
 		for (int i = 0; i < 99; i++) {
 			list.add(i);
 			int key = i % 9;
@@ -104,8 +104,8 @@ public class ObservableAssocTest {
 	@Test
 	public void testGraph() {
 		DefaultObservableGraph<Integer, Integer> graph = new DefaultObservableGraph<>(intType, intType);
-		ObservableCollectionTester<Integer> nodeChecker = new ObservableCollectionTester<>(graph.getNodeValues());
-		ObservableCollectionTester<Integer> edgeChecker = new ObservableCollectionTester<>(
+		ObservableCollectionTester<Integer> nodeChecker = new ObservableCollectionTester<>("nodes", graph.getNodeValues());
+		ObservableCollectionTester<Integer> edgeChecker = new ObservableCollectionTester<>("edges",
 			graph.getEdges().flow().flattenValues(intType, e -> e).collect());
 		Node<Integer, Integer> node0 = graph.addNode(0);
 		nodeChecker.add(0);
@@ -114,12 +114,16 @@ public class ObservableAssocTest {
 		nodeChecker.add(1);
 		nodeChecker.check();
 		List<ObservableCollectionTester<Edge<Integer, Integer>>> edgeCheckers = new ArrayList<>();
-		ObservableCollectionTester<Edge<Integer, Integer>> node0OutChecker = new ObservableCollectionTester<>(node0.getOutward());
-		ObservableCollectionTester<Edge<Integer, Integer>> node0InChecker = new ObservableCollectionTester<>(node0.getInward());
-		ObservableCollectionTester<Edge<Integer, Integer>> node0AllChecker = new ObservableCollectionTester<>(node0.getEdges());
-		ObservableCollectionTester<Edge<Integer, Integer>> node1OutChecker = new ObservableCollectionTester<>(node1.getOutward());
-		ObservableCollectionTester<Edge<Integer, Integer>> node1InChecker = new ObservableCollectionTester<>(node1.getInward());
-		ObservableCollectionTester<Edge<Integer, Integer>> node1AllChecker = new ObservableCollectionTester<>(node1.getEdges());
+		ObservableCollectionTester<Edge<Integer, Integer>> node0OutChecker = new ObservableCollectionTester<>("node0out",
+			node0.getOutward());
+		ObservableCollectionTester<Edge<Integer, Integer>> node0InChecker = new ObservableCollectionTester<>("node0in", node0.getInward());
+		ObservableCollectionTester<Edge<Integer, Integer>> node0AllChecker = new ObservableCollectionTester<>("node0edges",
+			node0.getEdges());
+		ObservableCollectionTester<Edge<Integer, Integer>> node1OutChecker = new ObservableCollectionTester<>("node1out",
+			node1.getOutward());
+		ObservableCollectionTester<Edge<Integer, Integer>> node1InChecker = new ObservableCollectionTester<>("node1in", node1.getInward());
+		ObservableCollectionTester<Edge<Integer, Integer>> node1AllChecker = new ObservableCollectionTester<>("node1edges",
+			node1.getEdges());
 		edgeCheckers.addAll(Arrays.asList(node0OutChecker, node0InChecker, node0AllChecker, //
 			node1OutChecker, node1InChecker, node1AllChecker));
 		Edge<Integer, Integer> edge = graph.addEdge(node0, node1, true, 0);
@@ -203,8 +207,8 @@ public class ObservableAssocTest {
 
 		ObservableCollection<List<Integer>> allPaths = ObservableTree.valuePathsOf(tree, false);
 		ObservableCollection<List<Integer>> terminalPaths = ObservableTree.valuePathsOf(tree, true);
-		ObservableCollectionTester<List<Integer>> allPathsTester = new ObservableCollectionTester<>(allPaths);
-		ObservableCollectionTester<List<Integer>> terminalPathsTester = new ObservableCollectionTester<>(terminalPaths);
+		ObservableCollectionTester<List<Integer>> allPathsTester = new ObservableCollectionTester<>("allPaths", allPaths);
+		ObservableCollectionTester<List<Integer>> terminalPathsTester = new ObservableCollectionTester<>("terminalPaths", terminalPaths);
 
 		allPathsTester.set(//
 			asList(0), //

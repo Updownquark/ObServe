@@ -1,5 +1,9 @@
 package org.observe.supertest;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+
 import org.observe.collect.FlowOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ObservableChainTester.TestValueType;
@@ -13,7 +17,7 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 
 	public MappedCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type, CollectionDataFlow<?, ?, T> flow,
 		TestHelper helper, TypeTransformation<E, T> map, FlowOptions.MapDef<E, T> options) {
-		super(parent, type, flow, helper);
+		super(parent, type, flow, helper, false);
 		theMap = map;
 		theOptions = options;
 
@@ -22,75 +26,75 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 	}
 
 	@Override
-	public void checkAddable(CollectionOp<T> add, ModTransaction transaction, int subListStart, int subListEnd, TestHelper helper) {
-		if (theOptions.getReverse() == null) {
-			add.message = StdMsg.UNSUPPORTED_OPERATION;
-			add.isError = true;
-			return;
-		}
-		E reversed = theOptions.getReverse().apply(add.source);
-		if (!getCollection().equivalence().elementEquals(theMap.map(reversed), add.source)) {
-			add.message = StdMsg.ILLEGAL_ELEMENT;
-			add.isError = true;
-			return;
-		}
-		CollectionOp<E> sourceAdd = new CollectionOp<>(reversed, add.index);
-		getParent().checkAddable(sourceAdd, transaction.getParent(), subListStart, subListEnd, helper);
-		add.message = sourceAdd.message;
-		add.isError = sourceAdd.isError;
-	}
-
-	@Override
-	public void checkRemovable(CollectionOp<T> remove, ModTransaction transaction, int subListStart, int subListEnd, TestHelper helper) {
-		if (remove.index < 0) {
-			if (!getCollection().contains(remove.source)) {
-				remove.message = StdMsg.NOT_FOUND;
-				return;
-			} else if (theOptions.getReverse() == null) {
-				remove.message = StdMsg.UNSUPPORTED_OPERATION;
-				remove.isError = true;
-				return;
-			}
-			CollectionOp<E> sourceRemove = new CollectionOp<>(theOptions.getReverse().apply(remove.source), remove.index);
-			getParent().checkRemovable(sourceRemove, transaction.getParent(), subListStart, subListEnd, helper);
-			remove.message = sourceRemove.message;
-			remove.isError = sourceRemove.isError;
-		} else
-			getParent().checkRemovable((CollectionOp<E>) remove, transaction.getParent(), subListStart, subListEnd, helper);
-	}
-
-	@Override
-	public void checkSettable(CollectionOp<T> set, int subListStart, int subListEnd, TestHelper helper) {
-		if (theOptions.getElementReverse() != null) {
-			String message = theOptions.getElementReverse().setElement(getParent().getCollection().get(set.index), set.source, false);
-			if (message == null)
-				return;
+	public void checkAddable(List<CollectionOp<T>> adds, int subListStart, int subListEnd, TestHelper helper) {
+		List<CollectionOp<E>> parentAdds = new ArrayList<>(adds.size());
+		for (CollectionOp<T> add : adds) {
 			if (theOptions.getReverse() == null) {
-				set.message = message;
-				set.isError = true;
-				return;
+				add.reject(StdMsg.UNSUPPORTED_OPERATION, true);
+				continue;
 			}
+			E reversed = theOptions.getReverse().apply(add.source);
+			if (!getCollection().equivalence().elementEquals(theMap.map(reversed), add.source)) {
+				add.reject(StdMsg.ILLEGAL_ELEMENT, true);
+				continue;
+			}
+			CollectionOp<E> parentAdd = new CollectionOp<>(add, reversed, add.index);
+			parentAdds.add(parentAdd);
 		}
-		if (theOptions.getReverse() == null) {
-			set.message = StdMsg.UNSUPPORTED_OPERATION;
-			set.isError = true;
-			return;
-		}
-		E reversed = theOptions.getReverse().apply(set.source);
-		if (!getCollection().equivalence().elementEquals(theMap.map(reversed), set.source)) {
-			set.message = StdMsg.ILLEGAL_ELEMENT;
-			set.isError = true;
-			return;
-		}
-		CollectionOp<E> sourceSet = new CollectionOp<>(reversed, set.index);
-		getParent().checkSettable(sourceSet, subListStart, subListEnd, helper);
-		set.message = sourceSet.message;
-		set.isError = sourceSet.isError;
+		getParent().checkAddable(parentAdds, subListStart, subListEnd, helper);
 	}
 
 	@Override
-	public void addedFromBelow(int index, E value, TestHelper helper) {
-		added(index, theMap.map(value), helper, true);
+	public void checkRemovable(List<CollectionOp<T>> removes, int subListStart, int subListEnd,
+		TestHelper helper) {
+		List<CollectionOp<E>> parentRemoves = new ArrayList<>(removes.size());
+		for (CollectionOp<T> remove : removes) {
+			if (remove.index < 0) {
+				if (!getCollection().contains(remove.source)) {
+					remove.reject(StdMsg.NOT_FOUND, false);
+					continue;
+				} else if (theOptions.getReverse() == null) {
+					remove.reject(StdMsg.UNSUPPORTED_OPERATION, true);
+					continue;
+				}
+				parentRemoves.add(new CollectionOp<>(remove, theOptions.getReverse().apply(remove.source), remove.index));
+			} else
+				parentRemoves.add(new CollectionOp<>(remove, theOptions.getReverse().apply(remove.source), remove.index));
+		}
+		getParent().checkRemovable(parentRemoves, subListStart, subListEnd, helper);
+	}
+
+	@Override
+	public void checkSettable(List<CollectionOp<T>> sets, int subListStart, int subListEnd, TestHelper helper) {
+		List<CollectionOp<E>> parentSets = new ArrayList<>(sets.size());
+		for (CollectionOp<T> set : sets) {
+			if (theOptions.getElementReverse() != null) {
+				String message = theOptions.getElementReverse().setElement(getParent().getCollection().get(set.index), set.source, false);
+				if (message == null)
+					continue; // Don't even need to consult the parent for this
+				if (theOptions.getReverse() == null) {
+					set.reject(message, true);
+					continue;
+				}
+			}
+			if (theOptions.getReverse() == null) {
+				set.reject(StdMsg.UNSUPPORTED_OPERATION, true);
+				continue;
+			}
+			E reversed = theOptions.getReverse().apply(set.source);
+			if (!getCollection().equivalence().elementEquals(theMap.map(reversed), set.source)) {
+				set.reject(StdMsg.ILLEGAL_ELEMENT, true);
+				return;
+			}
+			parentSets.add(new CollectionOp<>(set, reversed, set.index));
+		}
+		getParent().checkSettable(parentSets, subListStart, subListEnd, helper);
+	}
+
+	@Override
+	public void addedFromBelow(List<CollectionOp<E>> adds, TestHelper helper) {
+		added(adds.stream().map(add -> new CollectionOp<>(add, theMap.map(add.source), add.index)).collect(Collectors.toList()), helper,
+			true);
 	}
 
 	@Override
@@ -106,9 +110,12 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 	}
 
 	@Override
-	public void addedFromAbove(int index, T value, TestHelper helper, boolean above) {
-		getParent().addedFromAbove(index, theOptions.getReverse().apply(value), helper, true);
-		added(index, value, helper, !above);
+	public void addedFromAbove(List<CollectionOp<T>> adds, TestHelper helper, boolean above) {
+		getParent().addedFromAbove(//
+			adds.stream().<CollectionOp<E>> map(add -> new CollectionOp<>(add, theOptions.getReverse().apply(add.source), add.index))
+			.collect(Collectors.toList()),
+			helper, true);
+		added(adds, helper, !above);
 	}
 
 	@Override
