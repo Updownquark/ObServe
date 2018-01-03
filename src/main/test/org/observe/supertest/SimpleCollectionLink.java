@@ -1,7 +1,5 @@
 package org.observe.supertest;
 
-import java.util.List;
-
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ObservableChainTester.TestValueType;
 import org.qommons.TestHelper;
@@ -16,15 +14,15 @@ public class SimpleCollectionLink<E> extends AbstractObservableCollectionLink<E,
 	}
 
 	@Override
-	public void checkAddable(CollectionOp<E> add, List<E> preAdded, int subListStart, int subListEnd, TestHelper helper) {
+	public void checkAddable(CollectionOp<E> add, ModTransaction transaction, int subListStart, int subListEnd, TestHelper helper) {
 		if (getParent() != null)
-			getParent().checkAddable(add, preAdded, subListStart, subListEnd, helper);
+			getParent().checkAddable(add, transaction.getParent(), subListStart, subListEnd, helper);
 	}
 
 	@Override
-	public void checkRemovable(CollectionOp<E> remove, int subListStart, int subListEnd, TestHelper helper) {
+	public void checkRemovable(CollectionOp<E> remove, ModTransaction transaction, int subListStart, int subListEnd, TestHelper helper) {
 		if (getParent() != null)
-			getParent().checkRemovable(remove, subListStart, subListEnd, helper);
+			getParent().checkRemovable(remove, transaction.getParent(), subListStart, subListEnd, helper);
 		else if (remove.index < 0 && !getCollection().contains(remove.source))
 			remove.message = StdMsg.NOT_FOUND;
 	}

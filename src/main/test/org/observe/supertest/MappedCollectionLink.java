@@ -1,8 +1,5 @@
 package org.observe.supertest;
 
-import java.util.List;
-import java.util.stream.Collectors;
-
 import org.observe.collect.FlowOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ObservableChainTester.TestValueType;
@@ -25,7 +22,7 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 	}
 
 	@Override
-	public void checkAddable(CollectionOp<T> add, List<T> preAdded, int subListStart, int subListEnd, TestHelper helper) {
+	public void checkAddable(CollectionOp<T> add, ModTransaction transaction, int subListStart, int subListEnd, TestHelper helper) {
 		if (theOptions.getReverse() == null) {
 			add.message = StdMsg.UNSUPPORTED_OPERATION;
 			add.isError = true;
@@ -38,15 +35,13 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 			return;
 		}
 		CollectionOp<E> sourceAdd = new CollectionOp<>(reversed, add.index);
-		getParent().checkAddable(sourceAdd, //
-			preAdded.stream().map(theMap::reverse).collect(Collectors.toList()), //
-			subListStart, subListEnd, helper);
+		getParent().checkAddable(sourceAdd, transaction.getParent(), subListStart, subListEnd, helper);
 		add.message = sourceAdd.message;
 		add.isError = sourceAdd.isError;
 	}
 
 	@Override
-	public void checkRemovable(CollectionOp<T> remove, int subListStart, int subListEnd, TestHelper helper) {
+	public void checkRemovable(CollectionOp<T> remove, ModTransaction transaction, int subListStart, int subListEnd, TestHelper helper) {
 		if (remove.index < 0) {
 			if (!getCollection().contains(remove.source)) {
 				remove.message = StdMsg.NOT_FOUND;
@@ -57,11 +52,11 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 				return;
 			}
 			CollectionOp<E> sourceRemove = new CollectionOp<>(theOptions.getReverse().apply(remove.source), remove.index);
-			getParent().checkRemovable(sourceRemove, subListStart, subListEnd, helper);
+			getParent().checkRemovable(sourceRemove, transaction.getParent(), subListStart, subListEnd, helper);
 			remove.message = sourceRemove.message;
 			remove.isError = sourceRemove.isError;
 		} else
-			getParent().checkRemovable((CollectionOp<E>) remove, subListStart, subListEnd, helper);
+			getParent().checkRemovable((CollectionOp<E>) remove, transaction.getParent(), subListStart, subListEnd, helper);
 	}
 
 	@Override

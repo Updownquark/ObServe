@@ -75,6 +75,11 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 	}
 
 	@Override
+	public ObservableCollectionChainLink<T, ?> getChild() {
+		return theChild;
+	}
+
+	@Override
 	public ObservableCollection<T> getCollection() {
 		return theCollection;
 	}
@@ -118,7 +123,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			CollectionOp<T> op = new CollectionOp<>(theSupplier.apply(helper), -1);
 			if (ObservableChainTester.DEBUG_PRINT)
 				System.out.println("Add " + op);
-			checkAddable(op, Collections.emptyList(), subListStart, subListEnd, helper);
+			checkAddable(op, createTransaction(null), subListStart, subListEnd, helper);
 			int index = addToCollection(op, modify, helper);
 			if (op.message == null) {
 				op = new CollectionOp<>(op.source, index);
@@ -128,7 +133,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			CollectionOp<T> op = new CollectionOp<>(theSupplier.apply(helper), helper.getInt(0, modify.size() + 1));
 			if (ObservableChainTester.DEBUG_PRINT)
 				System.out.println("Add " + op);
-			checkAddable(op, Collections.emptyList(), subListStart, subListEnd, helper);
+			checkAddable(op, createTransaction(null), subListStart, subListEnd, helper);
 			addToCollection(op, modify, helper);
 			if (op.message == null)
 				updateForAdd(op, subListStart, helper);
@@ -136,12 +141,11 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			int length = (int) helper.getDouble(0, 100, 1000); // Aggressively tend smaller
 			int index = helper.getBoolean() ? -1 : helper.getInt(0, modify.size() + 1);
 			List<CollectionOp<T>> ops = new ArrayList<>(length);
-			List<T> values = new ArrayList<>();
+			ModTransaction transaction = createTransaction(null);
 			for (int i = 0; i < length; i++) {
 				CollectionOp<T> op = new CollectionOp<>(theSupplier.apply(helper), index);
 				ops.add(op);
-				checkAddable(op, values, subListStart, subListEnd, helper);
-				values.add(op.source);
+				checkAddable(op, transaction, subListStart, subListEnd, helper);
 			}
 			if (ObservableChainTester.DEBUG_PRINT) {
 				String msg = "Add all ";
@@ -188,12 +192,13 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			if (ObservableChainTester.DEBUG_PRINT)
 				System.out.println("Remove " + value);
 			CollectionOp<T> op = null;
+			ModTransaction trans = createTransaction(null);
 			for (int i = 0; i < modify.size(); i++) {
 				if (theCollection.equivalence().elementEquals(modify.get(i), value)) {
 					if (ObservableChainTester.DEBUG_PRINT)
 						System.out.println("\t\tIndex " + i);
 					op = new CollectionOp<>(value, i);
-					checkRemovable(op, subListStart, subListEnd, helper);
+					checkRemovable(op, trans, subListStart, subListEnd, helper);
 					break;
 				}
 			}
@@ -210,7 +215,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			CollectionOp<T> op = new CollectionOp<>(modify.get(index), index);
 			if (ObservableChainTester.DEBUG_PRINT)
 				System.out.println("Remove " + op);
-			checkRemovable(op, subListStart, subListEnd, helper);
+			checkRemovable(op, createTransaction(null), subListStart, subListEnd, helper);
 			removeFromCollection(op, modify, helper);
 			if (op.message == null)
 				updateForRemove(op, subListStart, helper);
@@ -226,11 +231,12 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			if (ObservableChainTester.DEBUG_PRINT)
 				System.out.println("Remove all " + values.size() + values);
 			List<CollectionOp<T>> ops = new ArrayList<>(length);
+			ModTransaction trans = createTransaction(null);
 			for (int i = 0; i < modify.size(); i++) {
 				T value = modify.get(i);
 				if (set.contains(value)) {
 					CollectionOp<T> op = new CollectionOp<>(value, i);
-					checkRemovable(op, subListStart, subListEnd, helper);
+					checkRemovable(op, trans, subListStart, subListEnd, helper);
 					ops.add(op);
 				}
 			}
@@ -257,11 +263,12 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			if (ObservableChainTester.DEBUG_PRINT)
 				System.out.println("Retain all " + values.size() + values);
 			List<CollectionOp<T>> ops = new ArrayList<>();
+			ModTransaction trans = createTransaction(null);
 			for (int i = 0; i < modify.size(); i++) {
 				T value = modify.get(i);
 				if(!set.contains(value)){
 					CollectionOp<T> op = new CollectionOp<>(value, i);
-					checkRemovable(op, subListStart, subListEnd, helper);
+					checkRemovable(op, trans, subListStart, subListEnd, helper);
 					ops.add(op);
 				}
 			}

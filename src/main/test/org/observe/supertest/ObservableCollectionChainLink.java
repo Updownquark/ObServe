@@ -32,13 +32,16 @@ interface ObservableCollectionChainLink<E, T> extends ObservableChainLink<T> {
 		}
 	}
 
+	@Override
+	ObservableCollectionChainLink<T, ?> getChild();
+
 	ObservableCollection<T> getCollection();
 
 	List<T> getExpected();
 
-	void checkAddable(CollectionOp<T> add, List<T> preAdded, int subListStart, int subListEnd, TestHelper helper);
+	void checkAddable(CollectionOp<T> add, ModTransaction transaction, int subListStart, int subListEnd, TestHelper helper);
 
-	void checkRemovable(CollectionOp<T> remove, int subListStart, int subListEnd, TestHelper helper);
+	void checkRemovable(CollectionOp<T> remove, ModTransaction transaction, int subListStart, int subListEnd, TestHelper helper);
 
 	void checkSettable(CollectionOp<T> set, int subListStart, int subListEnd, TestHelper helper);
 

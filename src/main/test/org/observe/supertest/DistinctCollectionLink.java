@@ -1,7 +1,6 @@
 package org.observe.supertest;
 
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -91,15 +90,12 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	}
 
 	@Override
-	public void checkAddable(CollectionOp<E> add, List<E> preAdded, int subListStart, int subListEnd, TestHelper helper) {
-		if (!preAdded.isEmpty()) {
-			Set<E> preAddedSet = getCollection().equivalence().createSet();
-			preAddedSet.addAll(preAdded);
-			if (preAddedSet.contains(add.source)) {
-				add.message = StdMsg.ELEMENT_EXISTS;
-				add.isError = true;
-				return;
-			}
+	public void checkAddable(CollectionOp<E> add, ModTransaction transaction, int subListStart, int subListEnd, TestHelper helper) {
+		Set<E> preAddedSet = transaction.get("preAdded", () -> getCollection().equivalence().createSet());
+		if (!preAddedSet.add(add.source)) {
+			add.message = StdMsg.ELEMENT_EXISTS;
+			add.isError = true;
+			return;
 		}
 		MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueEntry = theValues.getEntry(add.source);
 		MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueHandle;
@@ -136,13 +132,13 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			return;
 		}
 		CollectionOp<E> parentOp = new CollectionOp<>(add.source, -1);
-		getParent().checkAddable(parentOp, preAdded, 0, theSourceValues.size(), helper);
+		getParent().checkAddable(parentOp, transaction.getParent(), 0, theSourceValues.size(), helper);
 		add.message = parentOp.message;
 		add.isError = parentOp.isError;
 	}
 
 	@Override
-	public void checkRemovable(CollectionOp<E> remove, int subListStart, int subListEnd, TestHelper helper) {
+	public void checkRemovable(CollectionOp<E> remove, ModTransaction transaction, int subListStart, int subListEnd, TestHelper helper) {
 		MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueEntry;
 		if (remove.index < 0)
 			valueEntry = theValues.getEntry(remove.source);
@@ -159,7 +155,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			for (ElementId srcId : valueEntry.get().keySet()) {
 				CollectionOp<E> parentRemove = new CollectionOp<>(theSourceValues.getElement(srcId).get(),
 					theSourceValues.getElementsBefore(srcId));
-				getParent().checkRemovable(parentRemove, 0, theSourceValues.size(), helper);
+				getParent().checkRemovable(parentRemove, transaction.getParent(), 0, theSourceValues.size(), helper);
 				if (parentRemove.message != null) {
 					remove.message = parentRemove.message;
 					remove.isError = parentRemove.isError;
