@@ -202,7 +202,6 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 		}, true);
 		theBatchSyncedCopy.addAll(theCollection); // The changes observable doesn't populate initial values
 		Subscription batchSub = theCollection.changes().act(evt -> {
-			System.out.println(theName + ": " + evt);
 			op();
 			switch (evt.type) {
 			case add:
