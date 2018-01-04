@@ -130,8 +130,8 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 			if (theOptions.getElementReverse().setElement(getParent().getCollection().get(index), value, true) == null)
 				return;
 		}
-		getParent().setFromAbove(index, theOptions.getReverse().apply(value), helper, true);
 		set(index, value, helper, !above);
+		getParent().setFromAbove(index, theOptions.getReverse().apply(value), helper, true);
 	}
 
 	@Override

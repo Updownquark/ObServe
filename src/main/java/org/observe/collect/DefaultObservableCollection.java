@@ -1,5 +1,6 @@
 package org.observe.collect;
 
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.function.Consumer;
@@ -187,6 +188,12 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 				fire(evt);
 			}, false);
 		}
+	}
+
+	@Override
+	public void setValue(Collection<ElementId> elements, E value) {
+		for (ElementId el : elements)
+			mutableElement(el).set(value);
 	}
 
 	void fire(ObservableCollectionEvent<E> evt) {

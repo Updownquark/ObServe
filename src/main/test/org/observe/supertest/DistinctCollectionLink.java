@@ -215,9 +215,10 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 				set.reject(StdMsg.ELEMENT_EXISTS, true);
 				continue;
 			}
-			if (!theOptions.isPreservingSourceOrder() && !getCollection().equivalence().elementEquals(oldValueEntry.getKey(), set.source)) {
-				set.reject(StdMsg.UNSUPPORTED_OPERATION, true);
-				continue;
+			if (!theOptions.isPreservingSourceOrder()) {
+				set.reject(theValues.keySet().mutableElement(oldValueEntry.getElementId()).isAcceptable(set.source), true);
+				if (set.getMessage() != null)
+					continue;
 			}
 			if (parentSets != null) {
 				for (ElementId srcId : oldValueEntry.get().keySet()) {
@@ -378,10 +379,21 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 				// The update value is not the representative for its category. No change to the derived collection.
 			}
 		} else {
-			// Category has been changed. Same as a remove, then an add.
-			theNewSourceValues.add(getParent().getCollection().getElement(index).getElementId());
-			removedFromBelow(index, helper);
-			addedFromBelow(Arrays.asList(new CollectionOp<>(null, value, index)), helper);
+			// Category has been changed.
+			if (oldValueEntry.get().size() == 1
+				&& theValues.keySet().mutableElement(oldValueEntry.getElementId()).isAcceptable(value) == null) {
+				theSourceValues.mutableElement(srcEl.getElementId()).set(value);
+				theValues.keySet().mutableElement(oldValueEntry.getElementId()).set(value);
+				ElementId repId = theOptions.isPreservingSourceOrder() ? srcEl.getElementId() : oldValueEntry.getElementId();
+				// The updated value is the representative for its category. Fire the update event.
+				int repIndex = theSortedRepresentatives.indexOf(repId);
+				set(repIndex, value, helper, true);
+			} else {
+				// Same as a remove, then an add.
+				theNewSourceValues.add(getParent().getCollection().getElement(index).getElementId());
+				removedFromBelow(index, helper);
+				addedFromBelow(Arrays.asList(new CollectionOp<>(null, value, index)), helper);
+			}
 		}
 	}
 
@@ -446,14 +458,46 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	public void setFromAbove(int index, E value, TestHelper helper, boolean above) {
 		MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueEntry = getValueHandle(index);
 		BetterSortedMap<ElementId, E> values = valueEntry.get();
-		if (!theOptions.isPreservingSourceOrder())
-			theSortedRepresentatives.remove(valueEntry.getElementId());
-		theValues.mutableEntry(valueEntry.getElementId()).remove();
-		ElementId newEntry = theValues.putEntry(value, values, false).getElementId();
-		for (Map.Entry<ElementId, E> entry : values.entrySet())
+		MapEntryHandle<E, BetterSortedMap<ElementId, E>> newValueEntry = theValues.getEntry(value);
+		if (newValueEntry != null && !newValueEntry.getElementId().equals(valueEntry.getElementId())) {
+			if (!above)
+				Assert.assertTrue("This should not happen", false);
+			// It is permissible for a set operation from a derived collection to result in an element in a distinct collection being
+			// merged with another (i.e. disappearing)
+			ElementId srcId = theRepresentativeElements.remove(valueEntry.getElementId());
+			if (theOptions.isPreservingSourceOrder())
+				theSortedRepresentatives.remove(srcId);
+			else
+				theSortedRepresentatives.remove(valueEntry.getElementId());
+			theValues.mutableEntry(valueEntry.getElementId()).remove();
+			removed(index, helper, true);
+			for (Map.Entry<ElementId, E> entry : values.entrySet()) {
+				int sourceIndex = theSourceValues.getElementsBefore(entry.getKey());
+				theSourceValues.mutableElement(entry.getKey()).remove();
+				add(sourceIndex, value, -1, helper, true);
+				getParent().setFromAbove(sourceIndex, value, helper, true);
+			}
+			return;
+		}
+		if (theOptions.isPreservingSourceOrder()) {
+			if (theValues.keySet().mutableElement(valueEntry.getElementId()).isAcceptable(value) == null)
+				theValues.keySet().mutableElement(valueEntry.getElementId()).set(value);
+			else {
+				theValues.mutableEntry(valueEntry.getElementId()).remove();
+				theValues.putEntry(value, values, false).getElementId();
+			}
+		} else {
+			theValues.keySet().mutableElement(valueEntry.getElementId()).set(value);
+			Assert.assertEquals(index, getElementIndex(valueEntry.getElementId())); // Set operations are not allowed to modify order
+		}
+		set(index, value, helper, !above);
+		// Need to copy the entries, because set operations from above can cause unintended side effects (e.g. removal)
+		for (Map.Entry<ElementId, E> entry : new ArrayList<>(values.entrySet())) {
 			theSourceValues.mutableElement(entry.getKey()).set(value);
-		if (!theOptions.isPreservingSourceOrder())
-			theSortedRepresentatives.add(newEntry);
+			entry.setValue(value);
+			getParent().setFromAbove(//
+				theSourceValues.getElementsBefore(entry.getKey()), value, helper, true);
+		}
 	}
 
 	@Override

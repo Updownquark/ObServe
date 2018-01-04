@@ -59,20 +59,23 @@ public class Combination {
 		private final Set<ObservableValue<?>> theArgs;
 		private final Function<? super CombinedValues<? extends E>, ? extends T> theCombination;
 		private final Function<? super CombinedValues<T>, ? extends E> theReverse;
+		private final boolean isManyToOne;
 
 		/**
 		 * @param builder The builder containing the option data
 		 * @param args The observable values to combine with each source element
 		 * @param combination The combination function to combine the source and argument values
 		 * @param reverse The reverse function to map from result values to source values, for adding values to the result, etc.
+		 * @param manyToOne Whether the mapping may produce the same output from different source (collection) values
 		 */
 		public CombinedFlowDef(CombinedCollectionBuilder<E, T> builder, Set<ObservableValue<?>> args,
 			Function<? super CombinedValues<? extends E>, ? extends T> combination,
-			Function<? super CombinedValues<T>, ? extends E> reverse) {
+			Function<? super CombinedValues<T>, ? extends E> reverse, boolean manyToOne) {
 			super(builder);
 			theArgs = args;
 			theCombination = combination;
 			theReverse = reverse;
+			isManyToOne = manyToOne;
 		}
 
 		/** @return The observable values to combine with each source element */
@@ -88,6 +91,11 @@ public class Combination {
 		/** @return The reverse function to map from result values to source values, for adding values to the result, etc. */
 		public Function<? super CombinedValues<T>, ? extends E> getReverse() {
 			return theReverse;
+		}
+
+		/** @return Whether the mapping may produce the same output from different source (collection) values */
+		public boolean isManyToOne() {
+			return isManyToOne;
 		}
 	}
 
@@ -147,6 +155,7 @@ public class Combination {
 
 		/** @param arg2 The argument to combine with the flow values */
 		protected CombinedCollectionBuilder2(ObservableValue<V> arg2) {
+			super(null);
 			theArg2 = arg2;
 			addArg(arg2);
 		}
@@ -199,7 +208,7 @@ public class Combination {
 		public <U> CombinedCollectionBuilder3<E, V, U, T> with(ObservableValue<U> arg3) {
 			if (getReverse() != null)
 				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
-			return new CombinedCollectionBuilder3<>(theArg2, arg3);
+			return new CombinedCollectionBuilder3<>(this, theArg2, arg3);
 		}
 	}
 
@@ -219,10 +228,13 @@ public class Combination {
 		private final ObservableValue<V2> theArg3;
 
 		/**
+		 * @param template The 2-argument combination that this is based on
 		 * @param arg2 The first argument to combine with the flow values
 		 * @param arg3 The second argument to combine with the flow values
 		 */
-		protected CombinedCollectionBuilder3(ObservableValue<V1> arg2, ObservableValue<V2> arg3) {
+		protected CombinedCollectionBuilder3(CombinedCollectionBuilder2<E, V1, T> template, ObservableValue<V1> arg2,
+			ObservableValue<V2> arg3) {
+			super(template);
 			theArg2 = arg2;
 			theArg3 = arg3;
 			addArg(arg2);
@@ -283,7 +295,7 @@ public class Combination {
 		public <T2> CombinedCollectionBuilder<E, T> with(ObservableValue<T2> arg) {
 			if (getReverse() != null)
 				throw new IllegalStateException("Reverse cannot be applied to a collection builder that will be AND-ed");
-			return new CombinedCollectionBuilderN<>(theArg2, theArg3, arg);
+			return new CombinedCollectionBuilderN<>(this, theArg2, theArg3, arg);
 		}
 	}
 
@@ -298,11 +310,14 @@ public class Combination {
 	 */
 	public static class CombinedCollectionBuilderN<E, T> extends Combination.AbstractCombinedCollectionBuilder<E, T> {
 		/**
+		 * @param template The 3-argument combination that this is based on
 		 * @param arg2 The first argument value
 		 * @param arg3 The second argument value
 		 * @param arg4 The third argument value
 		 */
-		protected CombinedCollectionBuilderN(ObservableValue<?> arg2, ObservableValue<?> arg3, ObservableValue<?> arg4) {
+		protected CombinedCollectionBuilderN(CombinedCollectionBuilder3<E, ?, ?, T> template, ObservableValue<?> arg2,
+			ObservableValue<?> arg3, ObservableValue<?> arg4) {
+			super(template);
 			addArg(arg2);
 			addArg(arg3);
 			addArg(arg4);
@@ -357,8 +372,16 @@ public class Combination {
 	implements CombinedCollectionBuilder<E, R> {
 		private final BetterHashSet<ObservableValue<?>> theArgs;
 		private Function<? super CombinedValues<? extends R>, ? extends E> theReverse;
+		private final boolean isManyToOne;
 
-		protected AbstractCombinedCollectionBuilder() {
+		protected AbstractCombinedCollectionBuilder(AbstractCombinedCollectionBuilder<E, R> template) {
+			if (template != null) {
+				cache(template.isCached());
+				reEvalOnUpdate(template.isReEvalOnUpdate());
+				fireIfUnchanged(template.isFireIfUnchanged());
+				isManyToOne = template.isManyToOne;
+			} else
+				isManyToOne = false;
 			theArgs = BetterHashSet.build().identity().unsafe().buildSet();
 		}
 
@@ -399,7 +422,7 @@ public class Combination {
 		@Override
 		public CombinedFlowDef<E, R> build(Function<? super CombinedValues<? extends E>, ? extends R> combination) {
 			Set<ObservableValue<?>> args = Collections.unmodifiableSet(BetterHashSet.build().identity().unsafe().buildSet(theArgs));
-			return new CombinedFlowDef<>(this, args, combination, theReverse);
+			return new CombinedFlowDef<>(this, args, combination, theReverse, isManyToOne);
 		}
 	}
 }

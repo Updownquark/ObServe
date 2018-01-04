@@ -165,7 +165,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			}
 			CollectionOp<T> op = new CollectionOp<>(null, theSupplier.apply(helper), helper.getInt(0, modify.size()));
 			if (ObservableChainTester.DEBUG_PRINT)
-				System.out.println("Set " + op);
+				System.out.println("Set [" + op.index + "]: " + modify.get(op.index) + "->" + op.source);
 			checkSettable(Arrays.asList(op), subListStart, subListEnd, helper);
 			setInCollection(op, modify, helper);
 			if (op.getMessage() == null)
@@ -721,6 +721,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			ObservableChainTester.TypeTransformation<T, X> transform = ObservableChainTester.transform(theType, nextType, helper);
 			ValueHolder<FlowOptions.MapOptions<T, X>> options = new ValueHolder<>();
 			derivedFlow.accept(theFlow.map((TypeToken<X>) nextType.getType(), transform::map, o -> {
+				o.manyToOne(transform.isManyToOne());
 				if (helper.getBoolean(.95))
 					o.withReverse(transform::reverse);
 				options.accept(o.cache(helper.getBoolean()).fireIfUnchanged(helper.getBoolean()).reEvalOnUpdate(helper.getBoolean()));

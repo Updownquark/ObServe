@@ -15,10 +15,12 @@ import org.junit.Test;
 import org.observe.collect.DefaultObservableCollection;
 import org.observe.collect.FlowOptions;
 import org.qommons.BiTuple;
+import org.qommons.QommonsUtils;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.Testable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
+import org.qommons.debug.Debug;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeSet;
 
@@ -45,7 +47,9 @@ public class ObservableChainTester implements Testable {
 
 		E reverse(T mapped);
 
-		boolean isEquivalent();
+		boolean isManyToOne();
+
+		boolean isOneToMany();
 
 		String reverseName();
 
@@ -63,8 +67,18 @@ public class ObservableChainTester implements Testable {
 				}
 
 				@Override
-				public boolean isEquivalent() {
-					return outer.isEquivalent();
+				public boolean isManyToOne() {
+					return outer.isOneToMany();
+				}
+
+				@Override
+				public boolean isOneToMany() {
+					return outer.isManyToOne();
+				}
+
+				@Override
+				public TypeTransformation<E, T> reverse() {
+					return outer;
 				}
 
 				@Override
@@ -102,8 +116,13 @@ public class ObservableChainTester implements Testable {
 			}
 
 			@Override
-			public boolean isEquivalent() {
-				return true;
+			public boolean isManyToOne() {
+				return false;
+			}
+
+			@Override
+			public boolean isOneToMany() {
+				return false;
 			}
 
 			@Override
@@ -118,8 +137,8 @@ public class ObservableChainTester implements Testable {
 		};
 	}
 
-	private static <E, T> TypeTransformation<E, T> transform(Function<E, T> map, Function<T, E> reverse, boolean equivalent, String name,
-		String reverseName) {
+	private static <E, T> TypeTransformation<E, T> transform(Function<E, T> map, Function<T, E> reverse, boolean manyToOne,
+		boolean oneToMany, String name, String reverseName) {
 		return new TypeTransformation<E, T>() {
 			@Override
 			public T map(E source) {
@@ -132,8 +151,13 @@ public class ObservableChainTester implements Testable {
 			}
 
 			@Override
-			public boolean isEquivalent() {
-				return equivalent;
+			public boolean isManyToOne() {
+				return manyToOne;
+			}
+
+			@Override
+			public boolean isOneToMany() {
+				return oneToMany;
 			}
 
 			@Override
@@ -197,8 +221,9 @@ public class ObservableChainTester implements Testable {
 					case INT: {
 						List<TypeTransformation<Integer, Integer>> transforms = asList(//
 							identity(), //
-							transform(i -> i + 5, i -> i - 5, true, "+5", "-5"), transform(i -> i - 5, i -> i + 5, true, "-5", "+5"), //
-							transform(i -> -i, i -> -i, true, "-", "-"));
+							transform(i -> i + 5, i -> i - 5, false, false, "+5", "-5"), //
+							transform(i -> i - 5, i -> i + 5, false, false, "-5", "+5"), //
+							transform(i -> -i, i -> -i, false, false, "-", "-"));
 						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type1, type2), transforms);
 						break;
 					}
@@ -207,15 +232,15 @@ public class ObservableChainTester implements Testable {
 							transform(//
 								i -> i * 1.0, //
 								d -> (int) Math.round(d), //
-								false, "*1.0", "round()"), //
+								false, true, "*1.0", "round()"), //
 							transform(//
 								i -> i * 5.0, //
 								d -> (int) Math.round(d / 5), //
-								false, "*5.0", "/5,round"),
+								false, true, "*5.0", "/5,round"),
 							transform(//
 								i -> i / 5.0, //
 								d -> (int) Math.round(d * 5), //
-								false, "/5.0", "*5,round"));
+								false, true, "/5.0", "*5,round"));
 						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type1, type2), transforms);
 						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type2, type1),
 							transforms.stream().map(t -> t.reverse()).collect(Collectors.toList()));
@@ -223,7 +248,7 @@ public class ObservableChainTester implements Testable {
 					}
 					case STRING: {
 						List<TypeTransformation<Integer, String>> transforms = asList(//
-							transform(i -> String.valueOf(i), s -> (int) Math.round(Double.parseDouble(s)), true, "toString()",
+							transform(i -> String.valueOf(i), s -> (int) Math.round(Double.parseDouble(s)), false, false, "toString()",
 								"parseInt"));
 						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type1, type2), transforms);
 						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type2, type1),
@@ -238,15 +263,17 @@ public class ObservableChainTester implements Testable {
 					case DOUBLE: {
 						List<TypeTransformation<Double, Double>> transforms = asList(//
 							identity(), //
-							transform(d -> d + 5, d -> d - 5, true, "+5", "-5"), transform(d -> d - 5, d -> d + 5, true, "-5", "+5"), //
-							transform(d -> d * 5, d -> d / 5, true, "*5", "/5"), transform(d -> d / 5, d -> d * 5, true, "/5", "*5"), //
-							transform(d -> -d, d -> -d, true, "-", "-"));
+							transform(d -> d + 5, d -> d - 5, false, false, "+5", "-5"), //
+							transform(d -> d - 5, d -> d + 5, false, false, "-5", "+5"), //
+							transform(d -> d * 5, d -> d / 5, false, false, "*5", "/5"), //
+							transform(d -> d / 5, d -> d * 5, false, false, "/5", "*5"), //
+							transform(d -> -d, d -> -d, false, false, "-", "-"));
 						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type1, type2), transforms);
 						break;
 					}
 					case STRING: {
 						List<TypeTransformation<Double, String>> transforms = asList(//
-							transform(d -> stringValueOf(d), s -> Double.valueOf(s), true, "toString()", "parseDouble"));
+							transform(d -> stringValueOf(d), s -> Double.valueOf(s), false, false, "toString()", "parseDouble"));
 						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type1, type2), transforms);
 						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type2, type1),
 							transforms.stream().map(t -> t.reverse()).collect(Collectors.toList()));
@@ -261,7 +288,7 @@ public class ObservableChainTester implements Testable {
 						break;
 					case STRING: {
 						List<TypeTransformation<String, String>> transforms = asList(//
-							identity(), transform(s -> reverse(s), s -> reverse(s), true, "reverse", "reverse"));
+							identity(), transform(s -> reverse(s), s -> reverse(s), false, false, "reverse", "reverse"));
 						TYPE_TRANSFORMATIONS.put(new BiTuple<>(type1, type2), transforms);
 						break;
 					}
@@ -299,16 +326,19 @@ public class ObservableChainTester implements Testable {
 	 */
 	@Test
 	public void superTest() {
-		long start = System.currentTimeMillis();
-		int failures = TestHelper.createTester(getClass())//
-			/**/.withRandomCases(-1).withMaxTotalDuration(Duration.ofMinutes(5))//
-			/**/.withMaxFailures(1)//
+		Duration testDuration = Duration.ofMinutes(5);
+		int maxFailures = 1;
+		System.out.println(
+			"Executing up to " + QommonsUtils.printTimeLength(testDuration.toMillis()) + " of tests with max " + maxFailures + " failures");
+		TestHelper.TestSummary summary = TestHelper.createTester(getClass())//
+			/**/.withRandomCases(-1).withMaxTotalDuration(testDuration)//
+			/**/.withMaxFailures(maxFailures)//
 			/**/.withPersistenceDir(new File("src/main/test/org/observe/supertest"), false)//
 			/**/.withPlacemarks("Transaction", "Modification")
 			/**/.withDebug(true)//
 			/**/.execute();
-		System.out
-		.println("Found " + failures + " failures in " + org.qommons.QommonsUtils.printTimeLength(System.currentTimeMillis() - start));
+		System.out.println("Summary: " + summary);
+		summary.throwErrorIfFailed();
 	}
 
 	private <E> void assemble(TestHelper helper) {
@@ -380,6 +410,7 @@ public class ObservableChainTester implements Testable {
 					String preBaseValue = toString();
 					String preLinkValue = linkIndex == 0 ? null : targetLink.printValue();
 					System.out.print("\tMod " + (transactionTri + 1) + ": ");
+					Debug.d().debugIf(tri == 31 && transactionTri == 3);
 					try {
 						targetLink.tryModify(helper);
 					} catch (RuntimeException | Error e) {
@@ -400,6 +431,7 @@ public class ObservableChainTester implements Testable {
 						System.err.println("Integrity check failure on link " + failedLink + " after " + (modifications + transactionTri)
 							+ " modifications in " + (tri + 1) + " transactions");
 						System.err.println("Pre-faiure base value: " + preBaseValue);
+						System.err.println("Post-faiure base value: " + toString());
 						if (linkIndex > 0) {
 							System.err.println("Pre-faiure link value: " + preLinkValue);
 							System.err.println("Post-faiure link value: " + targetLink.printValue());

@@ -277,6 +277,12 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		return this;
 	}
 
+	/**
+	 * @param elements The IDs of the elements to modify
+	 * @param value The value to set for each specified element
+	 */
+	void setValue(Collection<ElementId> elements, E value);
+
 	// Derived observable changes
 
 	/** @return An observable value for the size of this collection */

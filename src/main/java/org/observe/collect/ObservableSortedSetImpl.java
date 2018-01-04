@@ -24,6 +24,7 @@ import org.qommons.Transaction;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
+import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
 import com.google.common.reflect.TypeParameter;
@@ -126,6 +127,11 @@ public class ObservableSortedSetImpl {
 		@Override
 		public E[] toArray() {
 			return ObservableSortedSet.super.toArray();
+		}
+
+		@Override
+		public void setValue(Collection<ElementId> elements, E value) {
+			getWrapped().setValue(elements, value);
 		}
 
 		@Override

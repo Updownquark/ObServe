@@ -1,9 +1,12 @@
 package org.observe.collect;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -364,6 +367,25 @@ public class ObservableSetImpl {
 		}
 
 		@Override
+		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			if (elements.isEmpty())
+				return;
+			UniqueElement uniqueEl = theElementsByValue.get(newValue);
+			if (uniqueEl != null && elements.stream().anyMatch(el -> uniqueEl != el))
+				throw new IllegalArgumentException(StdMsg.ELEMENT_EXISTS);
+			// Change the first element to be the element at the new value
+			UniqueElement first = (UniqueElement) elements.iterator().next();
+			first.moveTo(newValue);
+			theParent.setValues(//
+				elements.stream().flatMap(el -> {
+					UniqueElement uel = (UniqueElement) el;
+					return Stream.concat(Stream.of(uel.theActiveElement), //
+						uel.theParentElements.stream().filter(pe -> pe != uel.theActiveElement));
+				}).collect(Collectors.toList()), newValue);
+		}
+
+		@Override
 		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
 			theAccepter = onElement;
 			theParent.begin(fromStart, (parentEl, cause) -> {
@@ -383,7 +405,6 @@ public class ObservableSetImpl {
 			private DerivedCollectionElement<T> theActiveElement;
 			private CollectionElementListener<T> theListener;
 			private boolean isInternallySetting;
-			private T theTransitionValue;
 
 			protected UniqueElement(T value) {
 				theValue = value;
@@ -419,19 +440,31 @@ public class ObservableSetImpl {
 				parentEl.setListener(new CollectionElementListener<T>() {
 					@Override
 					public void update(T oldValue, T newValue, Object innerCause) {
-						if (isInternallySetting && equivalence().elementEquals(theTransitionValue, newValue)) {
-							// If this element's set method is being called, the only thing we need to do is fire the update
-							// for the active element
+						if (isInternallySetting) {
 							if (theActiveElement == parentEl)
 								ObservableCollectionDataFlowImpl.update(theListener, oldValue, newValue, innerCause);
+							parentUpdated(node, oldValue, newValue, innerCause);
 							return;
 						}
-						UniqueElement ue = theElementsByValue.computeIfAbsent(newValue, v -> createUniqueElement(v));
+						UniqueElement ue = theElementsByValue.get(newValue);
 						if (ue == UniqueElement.this) {
 							if (theActiveElement == parentEl)
 								ObservableCollectionDataFlowImpl.update(theListener, oldValue, newValue, innerCause);
 							parentUpdated(node, oldValue, newValue, innerCause);
 						} else {
+							if (ue == null && theParentElements.size() == 1
+								&& theElementsByValue.keySet().mutableElement(theValueId).isAcceptable(newValue) == null) {
+								// If we can just fire an update instead of an add/remove, let's do that
+								T old = theValue;
+								moveTo(newValue);
+								ObservableCollectionDataFlowImpl.update(theListener, old, newValue, innerCause);
+								parentUpdated(node, oldValue, newValue, innerCause);
+								return;
+							}
+							if (ue == null) {
+								ue = createUniqueElement(newValue);
+								theElementsByValue.put(newValue, ue);
+							}
 							theParentElements.mutableElement(node.getElementId()).remove();
 							if (theParentElements.isEmpty()) {
 								// This element is no longer represented
@@ -520,8 +553,11 @@ public class ObservableSetImpl {
 					// If the value already exists, then replacing the underlying values would just remove the unique element
 					return StdMsg.ELEMENT_EXISTS;
 				}
-				if (!isPreservingSourceOrder && !equivalence().elementEquals(theValue, value))
-					return StdMsg.UNSUPPORTED_OPERATION;
+				if (!isPreservingSourceOrder) {
+					msg = theElementsByValue.keySet().mutableElement(theValueId).isAcceptable(value);
+					if (msg != null)
+						return msg;
+				}
 				for (DerivedCollectionElement<T> el : theParentElements) {
 					msg = el.isAcceptable(value);
 					if (msg != null)
@@ -542,31 +578,42 @@ public class ObservableSetImpl {
 						// If the value already exists, then replacing the underlying values would just remove the unique element
 						throw new IllegalArgumentException(StdMsg.ELEMENT_EXISTS);
 					}
-					boolean equiv = equivalence().elementEquals(theValue, value);
-					if (!isPreservingSourceOrder && !equiv)
-						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+					String valueSetMsg = theElementsByValue.keySet().mutableElement(theValueId).isAcceptable(value);
+					if (!isPreservingSourceOrder && valueSetMsg != null)
+						throw new IllegalArgumentException(valueSetMsg);
 					for (DerivedCollectionElement<T> el : theParentElements) {
 						msg = el.isAcceptable(value);
 						if (msg != null)
 							throw new IllegalArgumentException(msg);
 					}
-					// Make a copy since theValueElements will be modified with each set
-					List<DerivedCollectionElement<T>> elCopies = new ArrayList<>(theParentElements);
-					isInternallySetting = true;
-					theTransitionValue = value;
-					try {
-						for (DerivedCollectionElement<T> el : elCopies)
-							el.set(value);
-					} finally {
-						isInternallySetting = false;
-						theTransitionValue = null;
-					}
+					T oldValue = theValue;
 					// Move this element to the new value
-					theValue = value;
-					if (!equiv) {
-						theElementsByValue.mutableEntry(theValueId).remove();
-						theValueId = theElementsByValue.putEntry(value, this, false).getElementId();
+					moveTo(value);
+					isInternallySetting = true;
+					// Make the active element the first element that gets updated. This will ensure a set operation instead of a remove/add
+					List<DerivedCollectionElement<T>> parentEls = new ArrayList<>(theParentElements.size());
+					parentEls.add(theActiveElement);
+					theParentElements.stream().filter(pe -> pe != theActiveElement).forEach(parentEls::add);
+					try {
+						theParent.setValues(parentEls, value);
+						isInternallySetting = false;
+					} finally {
+						if (isInternallySetting) {
+							// An exception was thrown from a parent set operation. Need to reset the key back to the old value.
+							isInternallySetting = false;
+							moveTo(oldValue);
+						}
 					}
+				}
+			}
+
+			void moveTo(T newValue) {
+				theValue = newValue;
+				if (theElementsByValue.keySet().mutableElement(theValueId).isAcceptable(newValue) == null)
+					theElementsByValue.keySet().mutableElement(theValueId).set(newValue);
+				else {
+					theElementsByValue.mutableEntry(theValueId).remove();
+					theValueId = theElementsByValue.putEntry(newValue, this, false).getElementId();
 				}
 			}
 

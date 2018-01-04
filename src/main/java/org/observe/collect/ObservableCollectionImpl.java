@@ -1047,6 +1047,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public void setValue(Collection<ElementId> elements, E value) {
+			getWrapped().setValue(elements.stream().map(el -> el.reverse()).collect(Collectors.toList()), value);
+		}
+
+		@Override
 		public CollectionSubscription subscribe(Consumer<? super ObservableCollectionEvent<? extends E>> observer, boolean forward) {
 			return getWrapped().subscribe(new ReversedSubscriber(observer, 0), !forward);
 		}
@@ -1173,6 +1178,15 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public void setValue(Collection<ElementId> elements, T value) {
+			try (Transaction t = lock(true, false, null)) {
+				Function<? super E, ? extends T> map = theFlow.map().get();
+				theFlow.setValue(//
+					elements.stream().map(el -> mutableElementFor(theSource.mutableElement(el), map)).collect(Collectors.toList()), value);
+			}
+		}
+
+		@Override
 		public int getElementsBefore(ElementId id) {
 			return theSource.getElementsBefore(id);
 		}
@@ -1191,22 +1205,24 @@ public final class ObservableCollectionImpl {
 		public CollectionElement<T> getElement(T value, boolean first) {
 			if (!getType().wrap().getRawType().isInstance(value))
 				return null;
-			FilterMapResult<T, E> reversed = theFlow.reverse(value, false);
-			if (reversed.isError()) {
-				ElementId[] match = new ElementId[1];
-				MutableElementSpliterator<E> spliter = theSource.spliterator(first);
-				Function<? super E, ? extends T> map = theFlow.map().get();
-				while (match[0] == null && spliter.forElement(el -> {
-					if (equivalence().elementEquals(map.apply(el.get()), value))
-						match[0] = el.getElementId();
-				}, first)) {}
-				if (match[0] == null)
-					return null;
-				return elementFor(theSource.getElement(match[0]), map);
-			} else {
-				CollectionElement<E> srcEl = theSource.getElement(reversed.result, first);
-				return srcEl == null ? null : elementFor(srcEl, null);
+			if (!theFlow.isManyToOne()) {
+				// If the flow is one-to-one, we can use any search optimizations the source collection may be capable of
+				FilterMapResult<T, E> reversed = theFlow.reverse(value, false);
+				if (!reversed.isError()) {
+					CollectionElement<E> srcEl = theSource.getElement(reversed.result, first);
+					return srcEl == null ? null : elementFor(srcEl, null);
+				}
 			}
+			ElementId[] match = new ElementId[1];
+			MutableElementSpliterator<E> spliter = theSource.spliterator(first);
+			Function<? super E, ? extends T> map = theFlow.map().get();
+			while (match[0] == null && spliter.forElement(el -> {
+				if (equivalence().elementEquals(map.apply(el.get()), value))
+					match[0] = el.getElementId();
+			}, first)) {}
+			if (match[0] == null)
+				return null;
+			return elementFor(theSource.getElement(match[0]), map);
 		}
 
 		@Override
@@ -1716,6 +1732,12 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public void setValue(Collection<ElementId> elements, T value) {
+			theFlow.setValues(//
+				elements.stream().map(el -> ((DerivedElementHolder<T>) el).element).collect(Collectors.toList()), value);
+		}
+
+		@Override
 		public int hashCode() {
 			return ObservableCollection.hashCode(this);
 		}
@@ -1994,6 +2016,12 @@ public final class ObservableCollectionImpl {
 		public void clear() {}
 
 		@Override
+		public void setValue(Collection<ElementId> elements, E value) {
+			if (!elements.isEmpty())
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
 		public int hashCode() {
 			return ObservableCollection.hashCode(this);
 		}
@@ -2176,6 +2204,15 @@ public final class ObservableCollectionImpl {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			if (coll != null)
 				coll.clear();
+		}
+
+		@Override
+		public void setValue(Collection<ElementId> elements, E value) {
+			ObservableCollection<? extends E> coll = theCollectionObservable.get();
+			if (coll != null)
+				coll.setValue(elements, null);
+			else if (!elements.isEmpty())
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 		}
 
 		@Override

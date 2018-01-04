@@ -1,6 +1,7 @@
 package org.observe.collect;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -10,6 +11,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -48,6 +50,7 @@ import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeMap;
+import org.qommons.tree.BinaryTreeNode;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -147,6 +150,10 @@ public class ObservableCollectionDataFlowImpl {
 		MutableCollectionElement<T> map(MutableCollectionElement<E> element, Function<? super E, ? extends T> map);
 
 		BiTuple<T, T> map(E oldSource, E newSource, Function<? super E, ? extends T> map);
+
+		boolean isManyToOne();
+
+		void setValue(Collection<MutableCollectionElement<T>> elements, T value);
 	}
 
 	public static <E, T> TypeToken<Function<? super E, T>> functionType(TypeToken<E> srcType, TypeToken<T> destType) {
@@ -201,6 +208,9 @@ public class ObservableCollectionDataFlowImpl {
 		 * @return Whether this method removed all elements. If false, the derived collection may need to remove elements itself.
 		 */
 		boolean clear();
+
+		void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
+			throws UnsupportedOperationException, IllegalArgumentException;
 
 		void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening);
 	}
@@ -966,6 +976,17 @@ public class ObservableCollectionDataFlowImpl {
 		public BiTuple<E, E> map(E oldSource, E newSource, Function<? super E, ? extends E> map) {
 			return new BiTuple<>(oldSource, newSource);
 		}
+
+		@Override
+		public boolean isManyToOne() {
+			return false;
+		}
+
+		@Override
+		public void setValue(Collection<MutableCollectionElement<E>> elements, E value) {
+			theSource.setValue(//
+				elements.stream().map(el -> el.getElementId()).collect(Collectors.toList()), value);
+		}
 	}
 
 	private static class BaseCollectionManager<E> implements ActiveCollectionManager<E, E, E> {
@@ -1017,6 +1038,13 @@ public class ObservableCollectionDataFlowImpl {
 		public DerivedCollectionElement<E> addElement(E value, boolean first) {
 			CollectionElement<E> srcEl = theSource.addElement(value, first);
 			return srcEl == null ? null : new BaseDerivedElement(theSource.mutableElement(srcEl.getElementId()));
+		}
+
+		@Override
+		public void setValues(Collection<DerivedCollectionElement<E>> elements, E newValue)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			theSource.setValue(//
+				elements.stream().map(el -> ((BaseDerivedElement) el).source.getElementId()).collect(Collectors.toList()), newValue);
 		}
 
 		@Override
@@ -1162,6 +1190,17 @@ public class ObservableCollectionDataFlowImpl {
 		public BiTuple<T, T> map(E oldSource, E newSource, Function<? super E, ? extends T> map) {
 			return theParent.map(oldSource, newSource, map);
 		}
+
+		@Override
+		public boolean isManyToOne() {
+			return theParent.isManyToOne();
+		}
+
+		@Override
+		public void setValue(Collection<MutableCollectionElement<T>> elements, T value) {
+			theParent.setValue(//
+				elements.stream().map(el -> el.reverse()).collect(Collectors.toList()), value);
+		}
 	}
 
 	private static class ActiveReversedManager<E, T> implements ActiveCollectionManager<E, T, T> {
@@ -1216,6 +1255,12 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			theParent.setValues(elements.stream().map(el -> el.reverse()).collect(Collectors.toList()), newValue);
+		}
+
+		@Override
 		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
 			theParent.begin(!fromStart, (el, cause) -> onElement.accept(el.reverse(), cause), listening);
 		}
@@ -1224,10 +1269,13 @@ public class ObservableCollectionDataFlowImpl {
 	protected static class SortedManager<E, T> implements ActiveCollectionManager<E, T, T> {
 		private final ActiveCollectionManager<E, ?, T> theParent;
 		private final Comparator<? super T> theCompare;
+		// Need to keep track of the values to enforce the set-does-not-reorder policy
+		private final BetterTreeList<T> theValues;
 
 		protected SortedManager(ActiveCollectionManager<E, ?, T> parent, Comparator<? super T> compare) {
 			theParent = parent;
 			theCompare = compare;
+			theValues = new BetterTreeList<>(false);
 		}
 
 		@Override
@@ -1268,19 +1316,66 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public DerivedCollectionElement<T> addElement(T value, boolean first) {
 			DerivedCollectionElement<T> parentEl = theParent.addElement(value, first);
-			return parentEl == null ? null : new SortedElement(parentEl);
+			return parentEl == null ? null : new SortedElement(parentEl, true);
+		}
+
+		@Override
+		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			theParent.setValues(elements.stream().map(el -> ((SortedElement) el).theParentEl).collect(Collectors.toList()), newValue);
 		}
 
 		@Override
 		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
-			theParent.begin(fromStart, (parentEl, cause) -> onElement.accept(new SortedElement(parentEl), cause), listening);
+			theParent.begin(fromStart, (parentEl, cause) -> onElement.accept(new SortedElement(parentEl, false), cause), listening);
+		}
+
+		private BinaryTreeNode<T> insertIntoValues(T value) {
+			BinaryTreeNode<T> node = theValues.getRoot();
+			if (node == null)
+				return theValues.addElement(value, false);
+			else {
+				node = node.findClosest(n -> {
+					return theCompare.compare(n.get(), value);
+				}, true, false);
+				return theValues.getElement(theValues.mutableNodeFor(node).add(value, theCompare.compare(node.get(), value) > 0));
+			}
 		}
 
 		class SortedElement implements DerivedCollectionElement<T> {
 			private final DerivedCollectionElement<T> theParentEl;
+			private BinaryTreeNode<T> theValueNode;
+			private CollectionElementListener<T> theListener;
 
-			SortedElement(DerivedCollectionElement<T> parentEl) {
+			SortedElement(DerivedCollectionElement<T> parentEl, boolean synthetic) {
 				theParentEl = parentEl;
+				if (!synthetic) {
+					theValueNode = insertIntoValues(parentEl.get());
+					theParentEl.setListener(new CollectionElementListener<T>() {
+						@Override
+						public void update(T oldValue, T newValue, Object cause) {
+							if (!isInCorrectOrder(newValue)) {
+								// The order of this element has changed
+								theValues.mutableNodeFor(theValueNode).remove();
+								theValueNode = insertIntoValues(newValue);
+							}
+							ObservableCollectionDataFlowImpl.update(theListener, oldValue, newValue, cause);
+						}
+
+						@Override
+						public void removed(T value, Object cause) {
+							theValues.mutableNodeFor(theValueNode).remove();
+							ObservableCollectionDataFlowImpl.removed(theListener, value, cause);
+						}
+					});
+				}
+			}
+
+			private boolean isInCorrectOrder(T newValue) {
+				BinaryTreeNode<T> left = theValueNode.getClosest(true);
+				BinaryTreeNode<T> right = theValueNode.getClosest(false);
+				return (left == null || theCompare.compare(left.get(), newValue) <= 0)//
+					&& (right == null || theCompare.compare(newValue, right.get()) <= 0);
 			}
 
 			@Override
@@ -1293,7 +1388,7 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public void setListener(CollectionElementListener<T> listener) {
-				theParentEl.setListener(listener);
+				theListener = listener;
 			}
 
 			@Override
@@ -1308,11 +1403,18 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public String isAcceptable(T value) {
+				if (theCompare.compare(theParentEl.get(), value) != 0 && !isInCorrectOrder(value))
+					return StdMsg.ILLEGAL_ELEMENT;
 				return theParentEl.isAcceptable(value);
 			}
 
 			@Override
 			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
+				// It is not allowed to change the order of an element via set
+				// However, if the order has already been changed (e.g. due to changes in the value or the comparator),
+				// it is permitted (and required) to use set to notify the collection of the change
+				if (theCompare.compare(theParentEl.get(), value) != 0 && !isInCorrectOrder(value))
+					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 				theParentEl.set(value);
 			}
 
@@ -1333,7 +1435,7 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public DerivedCollectionElement<T> add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-				return new SortedElement(theParentEl.add(value, before));
+				return new SortedElement(theParentEl.add(value, before), true);
 			}
 
 			@Override
@@ -1400,6 +1502,15 @@ public class ObservableCollectionDataFlowImpl {
 			if (parentEl == null || theFilter.apply(parentEl.get()) != null)
 				return null;
 			return new FilteredElement(parentEl, true, true);
+		}
+
+		@Override
+		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			String msg = theFilter.apply(newValue);
+			if (msg != null)
+				throw new IllegalArgumentException(msg);
+			theParent.setValues(elements.stream().map(el -> ((FilteredElement) el).theParentEl).collect(Collectors.toList()), newValue);
 		}
 
 		@Override
@@ -1762,6 +1873,17 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			IntersectionElement intersect = theValues.get(newValue);
+			boolean filterHas = intersect == null ? false : intersect.rightCount > 0;
+			if (filterHas == isExclude)
+				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+			theParent.setValues(elements.stream().map(el -> ((IntersectedCollectionElement) el).theParentEl).collect(Collectors.toList()),
+				newValue);
+		}
+
+		@Override
 		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
 			ObservableCollection<X> collectedFilter = theFilter.collect();
 			listening.withConsumer((ObservableCollectionEvent<? extends X> evt) -> {
@@ -1865,6 +1987,16 @@ public class ObservableCollectionDataFlowImpl {
 		public BiTuple<T, T> map(E oldSource, E newSource, Function<? super E, ? extends T> map) {
 			return theParent.map(oldSource, newSource, map);
 		}
+
+		@Override
+		public boolean isManyToOne() {
+			return theParent.isManyToOne();
+		}
+
+		@Override
+		public void setValue(Collection<MutableCollectionElement<T>> elements, T value) {
+			theParent.setValue(elements, value);
+		}
 	}
 
 	private static class ActiveEquivalenceSwitchedManager<E, T> implements ActiveCollectionManager<E, T, T> {
@@ -1914,6 +2046,12 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public DerivedCollectionElement<T> addElement(T value, boolean first) {
 			return theParent.addElement(value, first);
+		}
+
+		@Override
+		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			theParent.setValues(elements, newValue);
 		}
 
 		@Override
@@ -1983,91 +2121,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public MutableCollectionElement<T> map(MutableCollectionElement<E> source, Function<? super E, ? extends T> map) {
-			MutableCollectionElement<I> parentMap = theParent.map(source, ((MapWithParent<E, I, I>) map).getParentMap());
-			return new MutableCollectionElement<T>() {
-				@Override
-				public ElementId getElementId() {
-					return parentMap.getElementId();
-				}
-
-				@Override
-				public T get() {
-					return theMap.apply(parentMap.get());
-				}
-
-				@Override
-				public String isEnabled() {
-					if (theOptions.getElementReverse() != null)
-						return null;
-					if (theOptions.getReverse() == null)
-						return StdMsg.UNSUPPORTED_OPERATION;
-					return parentMap.isEnabled();
-				}
-
-				@Override
-				public String isAcceptable(T value) {
-					String msg = null;
-					if (theOptions.getElementReverse() != null) {
-						msg = theOptions.getElementReverse().setElement(parentMap.get(), value, false);
-						if (msg == null)
-							return null;
-					}
-					if (theOptions.getReverse() == null)
-						return StdMsg.UNSUPPORTED_OPERATION;
-					I reversed = theOptions.getReverse().apply(value);
-					if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
-						return StdMsg.ILLEGAL_ELEMENT;
-					String setMsg = parentMap.isAcceptable(reversed);
-					// If the element reverse is set, it should get the final word on the error message if
-					if (setMsg == null || msg == null)
-						return setMsg;
-					return msg;
-				}
-
-				@Override
-				public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
-					if (theOptions.getElementReverse() != null) {
-						if (theOptions.getElementReverse().setElement(parentMap.get(), value, true) == null)
-							return;
-					}
-					if (theOptions.getReverse() == null)
-						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-					I reversed = theOptions.getReverse().apply(value);
-					if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
-						throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
-					parentMap.set(reversed);
-				}
-
-				@Override
-				public String canRemove() {
-					return source.canRemove();
-				}
-
-				@Override
-				public void remove() throws UnsupportedOperationException {
-					source.remove();
-				}
-
-				@Override
-				public String canAdd(T value, boolean before) {
-					if (theOptions.getReverse() == null)
-						return StdMsg.UNSUPPORTED_OPERATION;
-					I reversed = theOptions.getReverse().apply(value);
-					if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
-						return StdMsg.ILLEGAL_ELEMENT;
-					return parentMap.canAdd(reversed, before);
-				}
-
-				@Override
-				public ElementId add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-					if (theOptions.getReverse() == null)
-						throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-					I reversed = theOptions.getReverse().apply(value);
-					if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
-						throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
-					return parentMap.add(reversed, before);
-				}
-			};
+			return new MappedElement(source, map);
 		}
 
 		@Override
@@ -2093,6 +2147,125 @@ public class ObservableCollectionDataFlowImpl {
 				}
 			}
 			return new BiTuple<>(mwp.getChildMap().apply(interm.getValue1()), mwp.getChildMap().apply(interm.getValue2()));
+		}
+
+		@Override
+		public boolean isManyToOne() {
+			return theOptions.isManyToOne() || theParent.isManyToOne();
+		}
+
+		@Override
+		public void setValue(Collection<MutableCollectionElement<T>> elements, T value) {
+			Collection<MutableCollectionElement<I>> remaining;
+			if (theOptions.getElementReverse() != null) {
+				remaining = new ArrayList<>();
+				for (MutableCollectionElement<T> el : elements) {
+					if (theOptions.getElementReverse().setElement(((MappedElement) el).theParentMap.get(), value, true) == null)
+						remaining.add(((MappedElement) el).theParentMap);
+				}
+			} else
+				remaining = elements.stream().map(el -> ((MappedElement) el).theParentMap).collect(Collectors.toList());
+			if (remaining.isEmpty())
+				return;
+			if (theOptions.getReverse() == null)
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			I reversed = theOptions.getReverse().apply(value);
+			if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
+				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+			theParent.setValue(remaining, reversed);
+		}
+
+		class MappedElement implements MutableCollectionElement<T> {
+			private final MutableCollectionElement<E> theSource;
+			private final MutableCollectionElement<I> theParentMap;
+
+			MappedElement(MutableCollectionElement<E> source, Function<? super E, ? extends T> map) {
+				theSource = source;
+				theParentMap = theParent.map(source, ((MapWithParent<E, I, I>) map).getParentMap());
+			}
+
+			@Override
+			public ElementId getElementId() {
+				return theParentMap.getElementId();
+			}
+
+			@Override
+			public T get() {
+				return theMap.apply(theParentMap.get());
+			}
+
+			@Override
+			public String isEnabled() {
+				if (theOptions.getElementReverse() != null)
+					return null;
+				if (theOptions.getReverse() == null)
+					return StdMsg.UNSUPPORTED_OPERATION;
+				return theParentMap.isEnabled();
+			}
+
+			@Override
+			public String isAcceptable(T value) {
+				String msg = null;
+				if (theOptions.getElementReverse() != null) {
+					msg = theOptions.getElementReverse().setElement(theParentMap.get(), value, false);
+					if (msg == null)
+						return null;
+				}
+				if (theOptions.getReverse() == null)
+					return StdMsg.UNSUPPORTED_OPERATION;
+				I reversed = theOptions.getReverse().apply(value);
+				if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
+					return StdMsg.ILLEGAL_ELEMENT;
+				String setMsg = theParentMap.isAcceptable(reversed);
+				// If the element reverse is set, it should get the final word on the error message if
+				if (setMsg == null || msg == null)
+					return setMsg;
+				return msg;
+			}
+
+			@Override
+			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
+				if (theOptions.getElementReverse() != null) {
+					if (theOptions.getElementReverse().setElement(theParentMap.get(), value, true) == null)
+						return;
+				}
+				if (theOptions.getReverse() == null)
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				I reversed = theOptions.getReverse().apply(value);
+				if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
+					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+				theParentMap.set(reversed);
+			}
+
+			@Override
+			public String canRemove() {
+				return theSource.canRemove();
+			}
+
+			@Override
+			public void remove() throws UnsupportedOperationException {
+				theSource.remove();
+			}
+
+			@Override
+			public String canAdd(T value, boolean before) {
+				if (theOptions.getReverse() == null)
+					return StdMsg.UNSUPPORTED_OPERATION;
+				I reversed = theOptions.getReverse().apply(value);
+				if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
+					return StdMsg.ILLEGAL_ELEMENT;
+				return theParentMap.canAdd(reversed, before);
+			}
+
+			@Override
+			public ElementId add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
+				if (theOptions.getReverse() == null)
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				I reversed = theOptions.getReverse().apply(value);
+				if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
+					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+				return theParentMap.add(reversed, before);
+			}
 		}
 	}
 
@@ -2166,6 +2339,28 @@ public class ObservableCollectionDataFlowImpl {
 				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 			DerivedCollectionElement<I> parentEl = theParent.addElement(theOptions.getReverse().apply(value), first);
 			return parentEl == null ? null : new MappedElement(parentEl, true);
+		}
+
+		@Override
+		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			Collection<DerivedCollectionElement<I>> remaining;
+			if (theOptions.getElementReverse() != null) {
+				remaining = new ArrayList<>();
+				for (DerivedCollectionElement<T> el : elements) {
+					if (theOptions.getElementReverse().setElement(((MappedElement) el).theParentEl.get(), newValue, true) == null)
+						remaining.add(((MappedElement) el).theParentEl);
+				}
+			} else
+				remaining = elements.stream().map(el -> ((MappedElement) el).theParentEl).collect(Collectors.toList());
+			if (remaining.isEmpty())
+				return;
+			if (theOptions.getReverse() == null)
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			I reversed = theOptions.getReverse().apply(newValue);
+			if (!theEquivalence.elementEquals(theMap.apply(reversed), newValue))
+				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+			theParent.setValues(remaining, reversed);
 		}
 
 		@Override
@@ -2514,73 +2709,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public MutableCollectionElement<T> map(MutableCollectionElement<E> element, Function<? super E, ? extends T> map) {
-			CombinedMap combinedMap = (CombinedMap) map;
-			MutableCollectionElement<I> interm = theParent.map(element, combinedMap.getParentMap());
-			return new MutableCollectionElement<T>() {
-				@Override
-				public ElementId getElementId() {
-					return element.getElementId();
-				}
-
-				@Override
-				public T get() {
-					return combinedMap.map(interm.get());
-				}
-
-				@Override
-				public String isEnabled() {
-					String msg = canReverse();
-					if (msg != null)
-						return msg;
-					return interm.isEnabled();
-				}
-
-				@Override
-				public String isAcceptable(T value) {
-					String msg = canReverse();
-					if (msg != null)
-						return msg;
-					I intermVal = combinedMap.reverse(value);
-					return interm.isAcceptable(intermVal);
-				}
-
-				@Override
-				public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
-					String msg = canReverse();
-					if (msg != null)
-						throw new UnsupportedOperationException(msg);
-					I intermVal = combinedMap.reverse(value);
-					interm.set(intermVal);
-				}
-
-				@Override
-				public String canRemove() {
-					return interm.canRemove();
-				}
-
-				@Override
-				public void remove() throws UnsupportedOperationException {
-					interm.remove();
-				}
-
-				@Override
-				public String canAdd(T value, boolean before) {
-					String msg = canReverse();
-					if (msg != null)
-						return msg;
-					I intermVal = combinedMap.reverse(value);
-					return interm.canAdd(intermVal, before);
-				}
-
-				@Override
-				public ElementId add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-					String msg = canReverse();
-					if (msg != null)
-						throw new UnsupportedOperationException(msg);
-					I intermVal = combinedMap.reverse(value);
-					return interm.add(intermVal, before);
-				}
-			};
+			return new CombinedElement(element, map);
 		}
 
 		@Override
@@ -2608,6 +2737,19 @@ public class ObservableCollectionDataFlowImpl {
 			return new BiTuple<>(combinedMap.map(interm.getValue1()), combinedMap.map(interm.getValue2()));
 		}
 
+		@Override
+		public boolean isManyToOne() {
+			return theDef.isManyToOne() || theParent.isManyToOne();
+		}
+
+		@Override
+		public void setValue(Collection<MutableCollectionElement<T>> elements, T value) {
+			if (elements.isEmpty())
+				return;
+			theParent.setValue(elements.stream().map(el -> ((CombinedElement) el).theInterm).collect(Collectors.toList()),
+				((CombinedElement) elements.iterator().next()).theCombinedMap.reverse(value));
+		}
+
 		class SimpleSupplier implements Supplier<Object> {
 			final Object value;
 
@@ -2618,6 +2760,82 @@ public class ObservableCollectionDataFlowImpl {
 			@Override
 			public Object get() {
 				return value;
+			}
+		}
+
+		class CombinedElement implements MutableCollectionElement<T> {
+			private final MutableCollectionElement<E> theSource;
+			private final MutableCollectionElement<I> theInterm;
+			private final CombinedMap theCombinedMap;
+
+			CombinedElement(MutableCollectionElement<E> source, Function<? super E, ? extends T> map) {
+				theSource = source;
+				theCombinedMap = (CombinedMap) map;
+				theInterm = theParent.map(theSource, theCombinedMap.getParentMap());
+			}
+
+			@Override
+			public ElementId getElementId() {
+				return theSource.getElementId();
+			}
+
+			@Override
+			public T get() {
+				return theCombinedMap.map(theInterm.get());
+			}
+
+			@Override
+			public String isEnabled() {
+				String msg = canReverse();
+				if (msg != null)
+					return msg;
+				return theInterm.isEnabled();
+			}
+
+			@Override
+			public String isAcceptable(T value) {
+				String msg = canReverse();
+				if (msg != null)
+					return msg;
+				I intermVal = theCombinedMap.reverse(value);
+				return theInterm.isAcceptable(intermVal);
+			}
+
+			@Override
+			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
+				String msg = canReverse();
+				if (msg != null)
+					throw new UnsupportedOperationException(msg);
+				I intermVal = theCombinedMap.reverse(value);
+				theInterm.set(intermVal);
+			}
+
+			@Override
+			public String canRemove() {
+				return theInterm.canRemove();
+			}
+
+			@Override
+			public void remove() throws UnsupportedOperationException {
+				theInterm.remove();
+			}
+
+			@Override
+			public String canAdd(T value, boolean before) {
+				String msg = canReverse();
+				if (msg != null)
+					return msg;
+				I intermVal = theCombinedMap.reverse(value);
+				return theInterm.canAdd(intermVal, before);
+			}
+
+			@Override
+			public ElementId add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
+				String msg = canReverse();
+				if (msg != null)
+					throw new UnsupportedOperationException(msg);
+				I intermVal = theCombinedMap.reverse(value);
+				return theInterm.add(intermVal, before);
 			}
 		}
 
@@ -2775,6 +2993,13 @@ public class ObservableCollectionDataFlowImpl {
 		public DerivedCollectionElement<T> addElement(T value, boolean first) {
 			DerivedCollectionElement<I> parentEl = theParent.addElement(reverseValue(value), first);
 			return parentEl == null ? null : new CombinedElement(parentEl, true);
+		}
+
+		@Override
+		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			theParent.setValues(elements.stream().map(el -> ((CombinedElement) el).theParentEl).collect(Collectors.toList()),
+				reverseValue(newValue));
 		}
 
 		@Override
@@ -3062,6 +3287,16 @@ public class ObservableCollectionDataFlowImpl {
 		public BiTuple<T, T> map(E oldSource, E newSource, Function<? super E, ? extends T> map) {
 			return theParent.map(oldSource, newSource, map);
 		}
+
+		@Override
+		public boolean isManyToOne() {
+			return theParent.isManyToOne();
+		}
+
+		@Override
+		public void setValue(Collection<MutableCollectionElement<T>> elements, T value) {
+			theParent.setValue(elements, value);
+		}
 	}
 
 	private static class ActiveRefreshingCollectionManager<E, T> implements ActiveCollectionManager<E, T, T> {
@@ -3117,6 +3352,12 @@ public class ObservableCollectionDataFlowImpl {
 		public DerivedCollectionElement<T> addElement(T value, boolean first) {
 			DerivedCollectionElement<T> parentEl = theParent.addElement(value, first);
 			return parentEl == null ? null : new RefreshingElement(parentEl, true);
+		}
+
+		@Override
+		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			theParent.setValues(elements.stream().map(el -> ((RefreshingElement) el).theParentEl).collect(Collectors.toList()), newValue);
 		}
 
 		@Override
@@ -3294,6 +3535,12 @@ public class ObservableCollectionDataFlowImpl {
 		public DerivedCollectionElement<T> addElement(T value, boolean first) {
 			DerivedCollectionElement<T> parentEl = theParent.addElement(value, first);
 			return parentEl == null ? null : new RefreshingElement(parentEl);
+		}
+
+		@Override
+		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			theParent.setValues(elements.stream().map(el -> ((RefreshingElement) el).theParentEl).collect(Collectors.toList()), newValue);
 		}
 
 		@Override
@@ -3488,69 +3735,86 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public MutableCollectionElement<T> map(MutableCollectionElement<E> element, Function<? super E, ? extends T> map) {
-			MutableCollectionElement<T> parentMapped = theParent.map(element, map);
-			return new MutableCollectionElement<T>() {
-				@Override
-				public ElementId getElementId() {
-					return parentMapped.getElementId();
-				}
-
-				@Override
-				public T get() {
-					return parentMapped.get();
-				}
-
-				@Override
-				public String isEnabled() {
-					return theFilter.isEnabled();
-				}
-
-				@Override
-				public String isAcceptable(T value) {
-					String msg = theFilter.isAcceptable(value, this::get);
-					if (msg == null)
-						msg = parentMapped.isAcceptable(value);
-					return msg;
-				}
-
-				@Override
-				public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
-					theFilter.assertSet(value, this::get);
-					parentMapped.set(value);
-				}
-
-				@Override
-				public String canRemove() {
-					return theFilter.canRemove(this::get);
-				}
-
-				@Override
-				public void remove() throws UnsupportedOperationException {
-					String msg = theFilter.canRemove(this::get);
-					if (msg != null)
-						throw new UnsupportedOperationException(msg);
-					parentMapped.remove();
-				}
-
-				@Override
-				public String canAdd(T value, boolean before) {
-					String msg = theFilter.canAdd(value);
-					if (msg == null)
-						msg = parentMapped.canAdd(value, before);
-					return msg;
-				}
-
-				@Override
-				public ElementId add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-					theFilter.assertAdd(value);
-					return parentMapped.add(value, before);
-				}
-			};
+			return new ModFilteredElement(element, map);
 		}
 
 		@Override
 		public BiTuple<T, T> map(E oldSource, E newSource, Function<? super E, ? extends T> map) {
 			return theParent.map(oldSource, newSource, map);
+		}
+
+		@Override
+		public boolean isManyToOne() {
+			return theParent.isManyToOne();
+		}
+
+		@Override
+		public void setValue(Collection<MutableCollectionElement<T>> elements, T value) {
+			theParent.setValue(elements.stream().map(el -> ((ModFilteredElement) el).theParentMapped).collect(Collectors.toList()), value);
+		}
+
+		private class ModFilteredElement implements MutableCollectionElement<T> {
+			private final MutableCollectionElement<T> theParentMapped;
+
+			ModFilteredElement(MutableCollectionElement<E> element, Function<? super E, ? extends T> map) {
+				theParentMapped = theParent.map(element, map);
+			}
+
+			@Override
+			public ElementId getElementId() {
+				return theParentMapped.getElementId();
+			}
+
+			@Override
+			public T get() {
+				return theParentMapped.get();
+			}
+
+			@Override
+			public String isEnabled() {
+				return theFilter.isEnabled();
+			}
+
+			@Override
+			public String isAcceptable(T value) {
+				String msg = theFilter.isAcceptable(value, this::get);
+				if (msg == null)
+					msg = theParentMapped.isAcceptable(value);
+				return msg;
+			}
+
+			@Override
+			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
+				theFilter.assertSet(value, this::get);
+				theParentMapped.set(value);
+			}
+
+			@Override
+			public String canRemove() {
+				return theFilter.canRemove(this::get);
+			}
+
+			@Override
+			public void remove() throws UnsupportedOperationException {
+				String msg = theFilter.canRemove(this::get);
+				if (msg != null)
+					throw new UnsupportedOperationException(msg);
+				theParentMapped.remove();
+			}
+
+			@Override
+			public String canAdd(T value, boolean before) {
+				String msg = theFilter.canAdd(value);
+				if (msg == null)
+					msg = theParentMapped.canAdd(value, before);
+				return msg;
+			}
+
+			@Override
+			public ElementId add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
+				theFilter.assertAdd(value);
+				return theParentMapped.add(value, before);
+			}
 		}
 	}
 
@@ -3609,6 +3873,12 @@ public class ObservableCollectionDataFlowImpl {
 			theFilter.assertAdd(value);
 			DerivedCollectionElement<T> parentEl = theParent.addElement(value, first);
 			return parentEl == null ? null : new ModFilteredElement(parentEl);
+		}
+
+		@Override
+		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			theParent.setValues(elements.stream().map(el -> ((ModFilteredElement) el).theParentEl).collect(Collectors.toList()), newValue);
 		}
 
 		@Override
@@ -3810,6 +4080,21 @@ public class ObservableCollectionDataFlowImpl {
 			if (msg == null)
 				msg = StdMsg.UNSUPPORTED_OPERATION;
 			throw new UnsupportedOperationException(msg);
+		}
+
+		@Override
+		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			// Group by collection
+			BetterMap<ActiveCollectionManager<?, ?, T>, List<DerivedCollectionElement<T>>> grouped = BetterHashMap.build().identity()
+				.unsafe().buildMap();
+			for (DerivedCollectionElement<T> el : elements)
+				grouped
+				.computeIfAbsent((ActiveCollectionManager<?, ?, T>) ((FlattenedElement) el).theHolder.manager, h -> new ArrayList<>())
+				.add((DerivedCollectionElement<T>) ((FlattenedElement) el).theParentEl);
+
+			for (Map.Entry<ActiveCollectionManager<?, ?, T>, List<DerivedCollectionElement<T>>> entry : grouped.entrySet())
+				entry.getKey().setValues(entry.getValue(), newValue);
 		}
 
 		@Override

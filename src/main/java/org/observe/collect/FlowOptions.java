@@ -58,6 +58,7 @@ public interface FlowOptions {
 		private Function<? super T, ? extends E> theReverse;
 		private ElementSetter<? super E, ? super T> theElementReverse;
 		private Equivalence<? super T> theEquivalence;
+		private boolean isManyToOne;
 
 		@Override
 		public MapOptions<E, T> reEvalOnUpdate(boolean reEval) {
@@ -109,6 +110,15 @@ public interface FlowOptions {
 			return this;
 		}
 
+		/**
+		 * @param manyToOne Whether the mapping may produce the same output from different source values
+		 * @return This builder
+		 */
+		public MapOptions<E, T> manyToOne(boolean manyToOne) {
+			isManyToOne = manyToOne;
+			return this;
+		}
+
 		/** @return The equivalence set to use for the mapped values */
 		public Equivalence<? super T> getEquivalence() {
 			return theEquivalence;
@@ -122,6 +132,11 @@ public interface FlowOptions {
 		/** @return The element reverse function, if set */
 		public ElementSetter<? super E, ? super T> getElementReverse() {
 			return theElementReverse;
+		}
+
+		/** @return Whether the mapping may produce the same output from different source values */
+		public boolean isManyToOne() {
+			return isManyToOne;
 		}
 	}
 
@@ -246,12 +261,14 @@ public interface FlowOptions {
 		private final Function<? super T, ? extends E> theReverse;
 		private final ElementSetter<? super E, ? super T> theElementReverse;
 		private final Equivalence<? super T> theEquivalence;
+		private final boolean isManyToOne;
 
 		public MapDef(MapOptions<E, T> options) {
 			super(options);
 			theReverse = options.getReverse();
 			theElementReverse = options.getElementReverse();
 			theEquivalence = options.getEquivalence();
+			isManyToOne = options.isManyToOne;
 		}
 
 		/** @return The equivalence set to use for the mapped values */
@@ -267,6 +284,11 @@ public interface FlowOptions {
 		/** @return The reverse function, if set */
 		public Function<? super T, ? extends E> getReverse() {
 			return theReverse;
+		}
+
+		/** @return Whether the mapping may produce the same output from different source values */
+		public boolean isManyToOne() {
+			return isManyToOne;
 		}
 	}
 
