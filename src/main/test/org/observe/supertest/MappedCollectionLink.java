@@ -59,7 +59,7 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 				}
 				parentRemoves.add(new CollectionOp<>(remove, theOptions.getReverse().apply(remove.source), remove.index));
 			} else
-				parentRemoves.add(new CollectionOp<>(remove, theOptions.getReverse().apply(remove.source), remove.index));
+				parentRemoves.add(new CollectionOp<>(remove, getParent().getCollection().get(remove.index), remove.index));
 		}
 		getParent().checkRemovable(parentRemoves, subListStart, subListEnd, helper);
 	}
