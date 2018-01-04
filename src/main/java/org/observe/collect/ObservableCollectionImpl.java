@@ -130,7 +130,7 @@ public final class ObservableCollectionImpl {
 
 		private static class ChangeValue<E> {
 			E newValue;
-			E oldValue;
+			final E oldValue;
 			int index;
 
 			ChangeValue(E oldValue, E newValue, int index) {
@@ -188,9 +188,9 @@ public final class ObservableCollectionImpl {
 					break;
 				case remove:
 					changeIndex = indexForAdd(tracker, collIndex);
-					if (changeIndex < tracker.elements.size() && tracker.elements.get(changeIndex).index == collIndex) {
+					if (changeIndex < tracker.elements.size() && tracker.elements.get(changeIndex).index == collIndex)
 						removeAddition(tracker, changeIndex);
-					} else
+					else
 						tracker = replace(tracker, event, observer);
 					break;
 				case set:
@@ -244,16 +244,22 @@ public final class ObservableCollectionImpl {
 						return newTracker;
 					}
 					changeIndex = indexForAdd(tracker, collIndex);
-					if (changeIndex < tracker.elements.size() && tracker.elements.get(changeIndex).index == collIndex)
+					if (changeIndex < tracker.elements.size() && tracker.elements.get(changeIndex).index == collIndex) {
+						SessionChangeTracker<E> newTracker = new SessionChangeTracker<>(CollectionChangeType.remove);
+						E oldValue = tracker.elements.get(changeIndex).oldValue;
+						newTracker.elements.add(new ChangeValue<>(oldValue, oldValue, event.getIndex()));
 						tracker.elements.remove(changeIndex);
-					tracker = replace(tracker, event, observer);
+						fireEventsFromSessionData(tracker, event, observer);
+						return newTracker;
+					} else
+						tracker = replace(tracker, event, observer);
 					break;
 				case set:
 					changeIndex = indexForAdd(tracker, collIndex);
 					if (changeIndex < tracker.elements.size() && tracker.elements.get(changeIndex).index == collIndex)
 						tracker.elements.get(changeIndex).newValue = event.getNewValue();
 					else
-						tracker.elements.add(new ChangeValue<>(event.getOldValue(), event.getNewValue(), collIndex));
+						tracker.elements.add(changeIndex, new ChangeValue<>(event.getOldValue(), event.getNewValue(), collIndex));
 					break;
 				}
 				break;
