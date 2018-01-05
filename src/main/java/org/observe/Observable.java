@@ -45,6 +45,11 @@ public interface Observable<T> {
 			@Override
 			public <V extends T> void onCompleted(V value) {
 			}
+
+			@Override
+			public String toString() {
+				return action.toString();
+			}
 		});
 	}
 
