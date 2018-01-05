@@ -13,6 +13,7 @@ import java.util.stream.Collectors;
 
 import org.junit.Assert;
 import org.observe.Observable;
+import org.observe.SimpleSettableValue;
 import org.observe.collect.FlowOptions;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
@@ -90,6 +91,10 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 	@Override
 	public String printValue() {
 		return theCollection.size() + theCollection.toString();
+	}
+
+	public TestValueType getTestType() {
+		return theType;
 	}
 
 	@Override
@@ -267,8 +272,11 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				System.out.println("[" + getLinkIndex() + "]: Check bounds");
 			testBounds(helper);
 		});
+		addExtraActions(action);
 		action.execute("Modification");
 	}
+
+	protected void addExtraActions(TestHelper.RandomAction action) {}
 
 	protected int getLinkIndex() {
 		ObservableChainLink<?> link = getParent();
@@ -744,15 +752,23 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		// TODO subset
 		// TODO observeRelative
 		// TODO flow reverse
-		.or(1, ()->{ //filter
-			Function<T, String> filter = FilteredCollectionLink.filterFor(theType, helper);
-			derivedFlow.accept((CollectionDataFlow<?, ?, X>) theFlow.filter(filter));
-			theChild = new FilteredCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), helper, filter);
+		.or(1, () -> { // filter/refresh
+			// Getting a java.lang.InternalError: Enclosing method not found when I try to do the TypeToken right.
+			// It doesn't matter here anyway
+			SimpleSettableValue<Function<T, String>> filterValue = new SimpleSettableValue<>(
+				(TypeToken<Function<T, String>>) (TypeToken<?>) new TypeToken<Object>() {}, false);
+			filterValue.set(FilteredCollectionLink.filterFor(theType, helper), null);
+			boolean variableFilter = helper.getBoolean();
+			CollectionDataFlow<?, ?, T> flow = theFlow;
+			if (variableFilter)
+				flow = flow.refresh(filterValue.changes().noInit()); // The refresh has to be UNDER the filter
+			derivedFlow.accept((CollectionDataFlow<?, ?, X>) flow.filter(v -> filterValue.get().apply(v)));
+			theChild = new FilteredCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), helper, filterValue,
+				variableFilter);
 			derived.accept((ObservableChainLink<X>) theChild);
 		})//
 		// TODO whereContained
 		// TODO withEquivalence
-		// TODO refresh
 		// TODO refreshEach
 		// TODO combine
 		// TODO flattenValues
