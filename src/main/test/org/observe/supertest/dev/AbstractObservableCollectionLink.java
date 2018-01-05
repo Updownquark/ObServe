@@ -744,7 +744,12 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		// TODO subset
 		// TODO observeRelative
 		// TODO flow reverse
-		// TODO filter
+		.or(1, ()->{ //filter
+			Function<T, String> filter = FilteredCollectionLink.filterFor(theType, helper);
+			derivedFlow.accept((CollectionDataFlow<?, ?, X>) theFlow.filter(filter));
+			theChild = new FilteredCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), helper, filter);
+			derived.accept((ObservableChainLink<X>) theChild);
+		})//
 		// TODO whereContained
 		// TODO withEquivalence
 		// TODO refresh
@@ -774,11 +779,11 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 					if (helper.getBoolean(.25))
 						f.noAdd("No adds");
 					else if (helper.getBoolean(.15))
-						f.filterAdd(ModFilteredCollectionLink.filterFor(theType, helper));
+						f.filterAdd(FilteredCollectionLink.filterFor(theType, helper));
 					if (helper.getBoolean(.25))
 						f.noRemove("No removes");
 					else if (helper.getBoolean(.15))
-						f.filterRemove(ModFilteredCollectionLink.filterFor(theType, helper));
+						f.filterRemove(FilteredCollectionLink.filterFor(theType, helper));
 				}
 				filter.accept(f);
 			}));
