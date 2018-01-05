@@ -752,12 +752,12 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		CollectionDataFlow<E, T, T> filter(Function<? super T, String> filter);
 
 		/**
-		 * Filters elements from this flow by type. The filtering is done {@link #filterStatic(Function) statically}.
+		 * Filters elements from this flow by type
 		 *
 		 * @param <X> The type for the new collection
 		 * @param type The type to filter this collection by
-		 * @return A {@link #supportsPassive() active} collection consisting only of elements in the source whose values are instances of the
-		 *         given class
+		 * @return A {@link #supportsPassive() active} collection consisting only of elements in the source whose values are instances of
+		 *         the given class
 		 */
 		default <X> CollectionDataFlow<E, ?, X> filter(Class<X> type) {
 			return filter(value -> {
