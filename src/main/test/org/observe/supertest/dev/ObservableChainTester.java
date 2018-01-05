@@ -414,8 +414,8 @@ public class ObservableChainTester implements Testable {
 					try {
 						targetLink.tryModify(helper);
 					} catch (RuntimeException | Error e) {
-						System.err.println("Error on transaction " + (tri + 1) + " after " + (modifications + transactionTri)
-							+ " successful modifications");
+						System.err.println("Error on transaction " + (tri + 1) + ", mod " + transactionTri + " after "
+							+ (modifications + transactionTri) + " successful modifications");
 						System.err.println("Pre-faiure base value: " + preBaseValue);
 						System.err.println("Post-faiure base value: " + toString());
 						if (linkIndex > 0) {
@@ -428,8 +428,8 @@ public class ObservableChainTester implements Testable {
 						for (failedLink = 0; failedLink < theChain.size(); failedLink++)
 							theChain.get(failedLink).check(!useTransaction);
 					} catch (Error e) {
-						System.err.println("Integrity check failure on link " + failedLink + " after " + (modifications + transactionTri)
-							+ " modifications in " + (tri + 1) + " transactions");
+						System.err.println("Integrity check failure on link " + failedLink + " after "
+							+ (modifications + transactionTri + 1) + " modifications in " + (tri + 1) + " transactions");
 						System.err.println("Pre-faiure base value: " + preBaseValue);
 						System.err.println("Post-faiure base value: " + toString());
 						if (linkIndex > 0) {
