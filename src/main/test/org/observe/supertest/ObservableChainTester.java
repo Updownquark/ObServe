@@ -363,13 +363,13 @@ public class ObservableChainTester implements Testable {
 			TestValueType type = TestValueType.values()[helper.getInt(0, TestValueType.values().length)];
 			BetterList<E> backing = new BetterTreeList<>(true);
 			DefaultObservableCollection<E> base = new DefaultObservableCollection<>((TypeToken<E>) type.getType(), backing);
-			return new SimpleCollectionLink<>(null, type, base.flow(), helper);
+			return new SimpleCollectionLink<>(type, base.flow(), helper);
 		case 2:
 			type = TestValueType.values()[helper.getInt(0, TestValueType.values().length)];
 			Comparator<? super E> compare = randomComparator(type, helper);
 			backing = new BetterTreeSet<>(false, compare);
 			base = new DefaultObservableCollection<>((TypeToken<E>) type.getType(), backing);
-			SimpleCollectionLink<E> simple = new SimpleCollectionLink<>(null, type, base.flow(), helper);
+			SimpleCollectionLink<E> simple = new SimpleCollectionLink<>(type, base.flow(), helper);
 			return new SortedDistinctCollectionLink<>(simple, type, base.flow(), helper, compare,
 				new FlowOptions.GroupingDef(new FlowOptions.GroupingOptions(true)));
 			// TODO ObservableValue
