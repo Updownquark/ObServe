@@ -16,6 +16,7 @@ import org.observe.Observable;
 import org.observe.collect.FlowOptions;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
+import org.observe.collect.ObservableCollectionDataFlowImpl;
 import org.observe.collect.ObservableCollectionTester;
 import org.observe.supertest.ObservableChainTester.TestValueType;
 import org.qommons.TestHelper;
@@ -764,7 +765,27 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			derived.accept((ObservableChainLink<X>) theChild);
 		})
 		// TODO distinctSorted
-		// TODO filterMod
+		.or(1, () -> {// filterMod
+			ValueHolder<ObservableCollection.ModFilterBuilder<T>> filter = new ValueHolder<>();
+			derivedFlow.accept((CollectionDataFlow<?, ?, X>) theFlow.filterMod(f -> {
+				if (helper.getBoolean(.1))
+					f.immutable("Immutable", helper.getBoolean(.75));
+				else {
+					if (helper.getBoolean(.25))
+						f.noAdd("No adds");
+					else if (helper.getBoolean(.15))
+						f.filterAdd(ModFilteredCollectionLink.filterFor(theType, helper));
+					if (helper.getBoolean(.25))
+						f.noRemove("No removes");
+					else if (helper.getBoolean(.15))
+						f.filterRemove(ModFilteredCollectionLink.filterFor(theType, helper));
+				}
+				filter.accept(f);
+			}));
+			theChild = new ModFilteredCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), helper,
+				new ObservableCollectionDataFlowImpl.ModFilterer<>(filter.get()));
+			derived.accept((ObservableChainLink<X>) theChild);
+		})//
 		// TODO groupBy
 		// TODO groupBy(Sorted)
 		.execute(null);
