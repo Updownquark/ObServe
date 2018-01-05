@@ -334,41 +334,97 @@ public class ObservableCollectionDataFlowImpl {
 			theRemoveFilter = options.getRemoveMsgFn();
 		}
 
+		public String getImmutableMessage() {
+			return theImmutableMessage;
+		}
+
+		public boolean areUpdatesAllowed() {
+			return areUpdatesAllowed;
+		}
+
+		public String getAddMessage() {
+			return theAddMessage;
+		}
+
+		public String getRemoveMessage() {
+			return theRemoveMessage;
+		}
+
+		public Function<? super T, String> getAddFilter() {
+			return theAddFilter;
+		}
+
+		public Function<? super T, String> getRemoveFilter() {
+			return theRemoveFilter;
+		}
+
 		public String isEnabled() {
+			if (areUpdatesAllowed)
+				return null;
 			return theImmutableMessage;
 		}
 
 		public String isAcceptable(T value, Supplier<T> oldValue) {
 			String msg = null;
-			if (theAddFilter != null)
-				msg = theAddFilter.apply(value);
-			if (msg == null) {
-				if (value != oldValue.get()) {
-					msg = theAddMessage;
+			if (isAddFiltered() || isRemoveFiltered() || (theImmutableMessage != null && areUpdatesAllowed)) {
+				T old = oldValue.get();
+				if (old == value) {
+					// An update. These are treated differently. These can only be prevented explicitly.
+				} else {
+					// Non-updates are treated
+					if (theRemoveFilter != null)
+						msg = theRemoveFilter.apply(old);
+					if (msg == null)
+						msg = theRemoveMessage;
+					if (msg == null && theAddFilter != null)
+						msg = theAddFilter.apply(value);
+					if (msg == null)
+						msg = theAddMessage;
 					if (msg == null)
 						msg = theImmutableMessage;
-				} else if (!areUpdatesAllowed)
-					msg = theImmutableMessage;
+				}
+			} else {
+				// Not add- or remove-filtered, and don't care about updates, so no need to get the old value. Possibly immutable.
+				msg = theImmutableMessage;
 			}
 			return msg;
 		}
 
 		public void assertSet(T value, Supplier<T> oldValue) {
 			String msg = null;
-			if (theAddFilter != null)
-				msg = theAddFilter.apply(value);
-			if (msg != null)
-				throw new IllegalArgumentException(msg);
-			if (msg == null) {
-				if (value != oldValue.get()) {
+			if (isAddFiltered() || isRemoveFiltered() || (theImmutableMessage != null && areUpdatesAllowed)) {
+				T old = oldValue.get();
+				if (old == value) {
+					// An update. These are treated differently. These can only be prevented explicitly.
+				} else {
+					// Non-updates are treated
+					if (theRemoveFilter != null)
+						msg = theRemoveFilter.apply(old);
+					if (msg != null)
+						throw new IllegalArgumentException(msg);
+					msg = theRemoveMessage;
+					if (msg != null)
+						throw new UnsupportedOperationException(msg);
+					if (msg == null && theAddFilter != null)
+						msg = theAddFilter.apply(value);
+					if (msg != null)
+						throw new IllegalArgumentException(msg);
 					msg = theAddMessage;
 					if (msg == null)
 						msg = theImmutableMessage;
-				} else if (!areUpdatesAllowed)
-					msg = theImmutableMessage;
+					if (msg != null)
+						throw new UnsupportedOperationException(msg);
+				}
+			} else {
+				// Not add- or remove-filtered, and don't care about updates, so no need to get the old value. Possibly immutable.
+				msg = theImmutableMessage;
+				if (msg != null)
+					throw new UnsupportedOperationException(msg);
 			}
-			if (msg != null)
-				throw new UnsupportedOperationException(msg);
+		}
+
+		public boolean isAddFiltered() {
+			return theAddFilter != null || theAddMessage != null || theImmutableMessage != null;
 		}
 
 		public boolean isRemoveFiltered() {
@@ -384,6 +440,18 @@ public class ObservableCollectionDataFlowImpl {
 			if (msg == null)
 				msg = theImmutableMessage;
 			return msg;
+		}
+
+		public void assertRemove(Supplier<T> oldValue) {
+			String msg = null;
+			if (theRemoveFilter != null)
+				msg = theRemoveFilter.apply(oldValue.get());
+			if (msg == null)
+				msg = theRemoveMessage;
+			if (msg == null)
+				msg = theImmutableMessage;
+			if (msg != null)
+				throw new UnsupportedOperationException(msg);
 		}
 
 		public String canAdd() {
@@ -422,6 +490,27 @@ public class ObservableCollectionDataFlowImpl {
 		public boolean isEmpty() {
 			return theImmutableMessage == null && theAddMessage == null && theRemoveMessage == null && theAddFilter == null
 				&& theRemoveFilter == null;
+		}
+
+		@Override
+		public String toString() {
+			StringBuilder s = new StringBuilder();
+			if (theAddFilter != null)
+				s.append("addFilter:").append(theAddFilter).append(' ');
+			if (theAddMessage != null)
+				s.append("noAdd:").append(theAddMessage).append(' ');
+			if (theRemoveFilter != null)
+				s.append("removeFilter:").append(theRemoveFilter).append(' ');
+			if (theRemoveMessage != null)
+				s.append("noRemove:").append(theRemoveMessage).append(' ');
+			if (theImmutableMessage != null)
+				s.append("immutable:").append(theImmutableMessage).append('(').append(areUpdatesAllowed ? "" : "not ").append("updatable)")
+				.append(' ');
+			if (s.length() > 0)
+				s.deleteCharAt(s.length() - 1);
+			else
+				s.append("not filtered");
+			return s.toString();
 		}
 	}
 
@@ -3772,7 +3861,10 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public String isEnabled() {
-				return theFilter.isEnabled();
+				String msg = theFilter.isEnabled();
+				if (msg == null)
+					msg = theParentMapped.isEnabled();
+				return msg;
 			}
 
 			@Override
@@ -3791,14 +3883,15 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public String canRemove() {
-				return theFilter.canRemove(this::get);
+				String msg = theFilter.canRemove(this::get);
+				if (msg == null)
+					msg = theParentMapped.canRemove();
+				return msg;
 			}
 
 			@Override
 			public void remove() throws UnsupportedOperationException {
-				String msg = theFilter.canRemove(this::get);
-				if (msg != null)
-					throw new UnsupportedOperationException(msg);
+				theFilter.assertRemove(this::get);
 				theParentMapped.remove();
 			}
 
@@ -3865,7 +3958,10 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public String canAdd(T toAdd) {
-			return theFilter.canAdd(toAdd);
+			String msg = theFilter.canAdd(toAdd);
+			if (msg == null)
+				msg = theParent.canAdd(toAdd);
+			return msg;
 		}
 
 		@Override
@@ -3878,6 +3974,8 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
 			throws UnsupportedOperationException, IllegalArgumentException {
+			for (DerivedCollectionElement<T> el : elements)
+				theFilter.assertSet(newValue, el::get);
 			theParent.setValues(elements.stream().map(el -> ((ModFilteredElement) el).theParentEl).collect(Collectors.toList()), newValue);
 		}
 
@@ -3910,7 +4008,10 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public String isEnabled() {
-				return theFilter.isEnabled();
+				String msg = theFilter.isEnabled();
+				if (msg == null)
+					msg = theParentEl.isEnabled();
+				return msg;
 			}
 
 			@Override
@@ -3929,14 +4030,15 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public String canRemove() {
-				return theFilter.canRemove(this::get);
+				String msg = theFilter.canRemove(this::get);
+				if (msg == null)
+					msg = theParentEl.canRemove();
+				return msg;
 			}
 
 			@Override
 			public void remove() throws UnsupportedOperationException {
-				String msg = theFilter.canRemove(this::get);
-				if (msg != null)
-					throw new UnsupportedOperationException(msg);
+				theFilter.assertRemove(this::get);
 				theParentEl.remove();
 			}
 
