@@ -447,7 +447,9 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				boolean removed;
 				try {
 					removed = modify.remove(value);
+					Assert.assertFalse(op.isError());
 				} catch (UnsupportedOperationException e) {
+					Assert.assertTrue(op.isError());
 					removed = false;
 				}
 				if (removed) {
@@ -458,7 +460,6 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 					Assert.assertEquals(preSize - 1, theCollection.size());
 				} else {
 					Assert.assertNotNull(op.getMessage());
-					Assert.assertFalse(op.isError());
 					if (element != null)
 						Assert.assertTrue(element.getElementId().isPresent());
 					Assert.assertEquals(preModSize, modify.size());
