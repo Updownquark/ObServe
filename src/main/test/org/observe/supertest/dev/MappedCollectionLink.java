@@ -65,7 +65,7 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 	}
 
 	@Override
-	public void checkSettable(List<CollectionOp<T>> sets, int subListStart, int subListEnd, TestHelper helper) {
+	public void checkSettable(List<CollectionOp<T>> sets, int subListStart, TestHelper helper) {
 		List<CollectionOp<E>> parentSets = new ArrayList<>(sets.size());
 		for (CollectionOp<T> set : sets) {
 			if (theOptions.getElementReverse() != null) {
@@ -88,7 +88,7 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 			}
 			parentSets.add(new CollectionOp<>(set, reversed, set.index));
 		}
-		getParent().checkSettable(parentSets, subListStart, subListEnd, helper);
+		getParent().checkSettable(parentSets, subListStart, helper);
 	}
 
 	@Override

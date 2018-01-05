@@ -206,7 +206,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	}
 
 	@Override
-	public void checkSettable(List<CollectionOp<E>> sets, int subListStart, int subListEnd, TestHelper helper) {
+	public void checkSettable(List<CollectionOp<E>> sets, int subListStart, TestHelper helper) {
 		List<CollectionOp<E>> parentSets = getParent() == null ? null : new ArrayList<>();
 		for (CollectionOp<E> set : sets) {
 			MapEntryHandle<E, BetterSortedMap<ElementId, E>> oldValueEntry = getValueHandle(set.index);
@@ -228,7 +228,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			}
 		}
 		if (parentSets != null)
-			getParent().checkSettable(parentSets, subListStart, subListEnd, helper);
+			getParent().checkSettable(parentSets, 0, helper);
 	}
 
 	@Override

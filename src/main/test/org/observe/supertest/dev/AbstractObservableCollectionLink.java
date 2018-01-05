@@ -166,7 +166,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			CollectionOp<T> op = new CollectionOp<>(null, theSupplier.apply(helper), helper.getInt(0, modify.size()));
 			if (ObservableChainTester.DEBUG_PRINT)
 				System.out.println("Set [" + op.index + "]: " + modify.get(op.index) + "->" + op.source);
-			checkSettable(Arrays.asList(op), subListStart, subListEnd, helper);
+			checkSettable(Arrays.asList(op), subListStart, helper);
 			setInCollection(op, modify, helper);
 			if (op.getMessage() == null)
 				updateForSet(op, subListStart, helper);

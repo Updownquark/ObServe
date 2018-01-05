@@ -33,9 +33,9 @@ public class SimpleCollectionLink<E> extends AbstractObservableCollectionLink<E,
 	}
 
 	@Override
-	public void checkSettable(List<CollectionOp<E>> sets, int subListStart, int subListEnd, TestHelper helper) {
+	public void checkSettable(List<CollectionOp<E>> sets, int subListStart, TestHelper helper) {
 		if (getParent() != null)
-			getParent().checkSettable(sets, subListStart, subListEnd, helper);
+			getParent().checkSettable(sets, subListStart, helper);
 	}
 
 	@Override
