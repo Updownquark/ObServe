@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.function.Consumer;
 
 import org.observe.AbstractObservableTester;
 import org.observe.Subscription;
@@ -201,21 +202,29 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 			}
 		}, true);
 		theBatchSyncedCopy.addAll(theCollection); // The changes observable doesn't populate initial values
-		Subscription batchSub = theCollection.changes().act(evt -> {
-			op();
-			switch (evt.type) {
-			case add:
-				for (CollectionChangeEvent.ElementChange<? extends E> change : evt.elements)
-					theBatchSyncedCopy.add(change.index, change.newValue);
-				break;
-			case remove:
-				for (CollectionChangeEvent.ElementChange<? extends E> change : evt.getElementsReversed())
-					assertEquals(theName, change.oldValue, theBatchSyncedCopy.remove(change.index));
-				break;
-			case set:
-				for (CollectionChangeEvent.ElementChange<? extends E> change : evt.elements)
-					assertEquals(theName, change.oldValue, theBatchSyncedCopy.set(change.index, change.newValue));
-				break;
+		Subscription batchSub = theCollection.changes().act(new Consumer<CollectionChangeEvent<? extends E>>() {
+			@Override
+			public void accept(CollectionChangeEvent<? extends E> evt) {
+				op();
+				switch (evt.type) {
+				case add:
+					for (CollectionChangeEvent.ElementChange<? extends E> change : evt.elements)
+						theBatchSyncedCopy.add(change.index, change.newValue);
+					break;
+				case remove:
+					for (CollectionChangeEvent.ElementChange<? extends E> change : evt.getElementsReversed())
+						assertEquals(theName, change.oldValue, theBatchSyncedCopy.remove(change.index));
+					break;
+				case set:
+					for (CollectionChangeEvent.ElementChange<? extends E> change : evt.elements)
+						assertEquals(theName, change.oldValue, theBatchSyncedCopy.set(change.index, change.newValue));
+					break;
+				}
+			}
+
+			@Override
+			public String toString() {
+				return theName;
 			}
 		});
 		return () -> {
