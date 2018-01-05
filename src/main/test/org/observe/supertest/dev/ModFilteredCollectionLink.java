@@ -28,7 +28,7 @@ public class ModFilteredCollectionLink<E> extends AbstractObservableCollectionLi
 	@Override
 	public void checkAddable(List<CollectionOp<E>> adds, int subListStart, int subListEnd, TestHelper helper) {
 		List<CollectionOp<E>> parentAdds = new ArrayList<>(adds.size());
-		adds.stream().forEach(op -> {
+		for (CollectionOp<E> op : adds) {
 			if (theFilter.getImmutableMessage() != null)
 				op.reject(theFilter.getImmutableMessage(), true);
 			else if (theFilter.getAddMessage() != null)
@@ -37,14 +37,14 @@ public class ModFilteredCollectionLink<E> extends AbstractObservableCollectionLi
 				op.reject(theFilter.getAddFilter().apply(op.source), true);
 			else
 				parentAdds.add(op);
-		});
+		}
 		getParent().checkAddable(parentAdds, subListStart, subListEnd, helper);
 	}
 
 	@Override
 	public void checkRemovable(List<CollectionOp<E>> removes, int subListStart, int subListEnd, TestHelper helper) {
 		List<CollectionOp<E>> parentRemoves = new ArrayList<>(removes.size());
-		removes.stream().forEach(op -> {
+		for (CollectionOp<E> op : removes) {
 			if (theFilter.getImmutableMessage() != null)
 				op.reject(theFilter.getImmutableMessage(), true);
 			else if (theFilter.getRemoveMessage() != null)
@@ -53,14 +53,14 @@ public class ModFilteredCollectionLink<E> extends AbstractObservableCollectionLi
 				op.reject(theFilter.getRemoveFilter().apply(op.source), true); // Relying on the modification supplying the value
 			else
 				parentRemoves.add(op);
-		});
+		}
 		getParent().checkRemovable(parentRemoves, subListStart, subListEnd, helper);
 	}
 
 	@Override
 	public void checkSettable(List<CollectionOp<E>> sets, int subListStart, TestHelper helper) {
 		List<CollectionOp<E>> parentSets = new ArrayList<>(sets.size());
-		sets.stream().forEach(op -> {
+		for (CollectionOp<E> op : sets) {
 			E oldValue = getExpected().get(subListStart + op.index);
 			if (oldValue == op.source) {
 				// Updates are treated more leniently, since the content of the collection is not changing
@@ -79,7 +79,7 @@ public class ModFilteredCollectionLink<E> extends AbstractObservableCollectionLi
 				op.reject(theFilter.getAddFilter().apply(op.source), true);
 			else
 				parentSets.add(op);
-		});
+		}
 		getParent().checkSettable(parentSets, subListStart, helper);
 	}
 

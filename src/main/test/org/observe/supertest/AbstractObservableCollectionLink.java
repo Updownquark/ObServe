@@ -117,7 +117,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			subListEnd = theCollection.size();
 			modify = theCollection;
 		}
-		helper.doAction(5, () -> { // More position-less adds than other ops
+		TestHelper.RandomAction action=helper.doAction(5, () -> { // More position-less adds than other ops
 			CollectionOp<T> op = new CollectionOp<>(null, theSupplier.apply(helper), -1);
 			if (ObservableChainTester.DEBUG_PRINT)
 				System.out.println("Add " + op);
@@ -266,8 +266,8 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			if (ObservableChainTester.DEBUG_PRINT)
 				System.out.println("[" + getLinkIndex() + "]: Check bounds");
 			testBounds(helper);
-		})//
-		.execute("Modification");
+		});
+		action.execute("Modification");
 	}
 
 	protected int getLinkIndex() {
@@ -608,9 +608,9 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			if (theCollection instanceof Set)
 				Assert.assertNull(modify.getElement(op.source, true));
 		}
-		Assert.assertEquals(modified, removed > 0);
-		Assert.assertEquals(modify.size(), preModSize - removed);
-		Assert.assertEquals(theCollection.size(), preSize - removed);
+		Assert.assertEquals(removed > 0, modified);
+		Assert.assertEquals(preModSize - removed, modify.size());
+		Assert.assertEquals(preSize - removed, theCollection.size());
 	}
 
 	private void retainAllInCollection(Collection<T> values, List<CollectionOp<T>> ops, BetterList<T> modify, TestHelper helper) {
@@ -625,9 +625,9 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			if (theCollection instanceof Set)
 				Assert.assertNull(modify.getElement(op.source, true));
 		}
-		Assert.assertEquals(modified, removed > 0);
-		Assert.assertEquals(modify.size(), preModSize - removed);
-		Assert.assertEquals(theCollection.size(), preSize - removed);
+		Assert.assertEquals(removed > 0, modified);
+		Assert.assertEquals(preModSize - removed, modify.size());
+		Assert.assertEquals(preSize - removed, theCollection.size());
 	}
 
 	private void updateForAdd(List<CollectionOp<T>> adds, int subListStart, TestHelper helper) {
@@ -763,7 +763,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			theChild = new DistinctCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), helper,
 				options.get());
 			derived.accept((ObservableChainLink<X>) theChild);
-		})
+		})//
 		// TODO distinctSorted
 		.or(1, () -> {// filterMod
 			ValueHolder<ObservableCollection.ModFilterBuilder<T>> filter = new ValueHolder<>();

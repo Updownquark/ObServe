@@ -119,7 +119,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 				} else if (theOptions.isPreservingSourceOrder()) {
 					throw new IllegalStateException("Not implemented");
 				} else {
-					boolean addBefore = add.index == 0;
+					boolean addBefore = subListStart + add.index == 0;
 					if (addBefore)
 						valueHandle = getValueHandle(subListStart + add.index);
 					else
@@ -209,7 +209,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	public void checkSettable(List<CollectionOp<E>> sets, int subListStart, TestHelper helper) {
 		List<CollectionOp<E>> parentSets = getParent() == null ? null : new ArrayList<>();
 		for (CollectionOp<E> set : sets) {
-			MapEntryHandle<E, BetterSortedMap<ElementId, E>> oldValueEntry = getValueHandle(set.index);
+			MapEntryHandle<E, BetterSortedMap<ElementId, E>> oldValueEntry = getValueHandle(subListStart + set.index);
 			MapEntryHandle<E, BetterSortedMap<ElementId, E>> newValueEntry = theValues.getEntry(set.source);
 			if (newValueEntry != null && !newValueEntry.getElementId().equals(oldValueEntry.getElementId())) {
 				set.reject(StdMsg.ELEMENT_EXISTS, true);

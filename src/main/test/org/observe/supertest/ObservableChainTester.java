@@ -326,7 +326,7 @@ public class ObservableChainTester implements Testable {
 	 */
 	@Test
 	public void superTest() {
-		Duration testDuration = Duration.ofMinutes(5);
+		Duration testDuration = Duration.ofMinutes(15);
 		int maxFailures = 1;
 		System.out.println(
 			"Executing up to " + QommonsUtils.printTimeLength(testDuration.toMillis()) + " of tests with max " + maxFailures + " failures");
@@ -414,7 +414,7 @@ public class ObservableChainTester implements Testable {
 					try {
 						targetLink.tryModify(helper);
 					} catch (RuntimeException | Error e) {
-						System.err.println("Error on transaction " + (tri + 1) + ", mod " + transactionTri + " after "
+						System.err.println("Error on transaction " + (tri + 1) + ", mod " + (transactionTri + 1) + " after "
 							+ (modifications + transactionTri) + " successful modifications");
 						System.err.println("Pre-faiure base value: " + preBaseValue);
 						System.err.println("Post-faiure base value: " + toString());
