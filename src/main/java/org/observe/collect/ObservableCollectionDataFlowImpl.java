@@ -1588,7 +1588,7 @@ public class ObservableCollectionDataFlowImpl {
 			if (msg != null)
 				throw new IllegalArgumentException(msg);
 			DerivedCollectionElement<T> parentEl = theParent.addElement(value, first);
-			if (parentEl == null || theFilter.apply(parentEl.get()) != null)
+			if (parentEl == null)
 				return null;
 			return new FilteredElement(parentEl, true, true);
 		}
@@ -2265,11 +2265,9 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		class MappedElement implements MutableCollectionElement<T> {
-			private final MutableCollectionElement<E> theSource;
 			private final MutableCollectionElement<I> theParentMap;
 
 			MappedElement(MutableCollectionElement<E> source, Function<? super E, ? extends T> map) {
-				theSource = source;
 				theParentMap = theParent.map(source, ((MapWithParent<E, I, I>) map).getParentMap());
 			}
 
@@ -2328,12 +2326,12 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public String canRemove() {
-				return theSource.canRemove();
+				return theParentMap.canRemove();
 			}
 
 			@Override
 			public void remove() throws UnsupportedOperationException {
-				theSource.remove();
+				theParentMap.remove();
 			}
 
 			@Override
@@ -2426,7 +2424,7 @@ public class ObservableCollectionDataFlowImpl {
 			I reversed = theOptions.getReverse().apply(value);
 			if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
 				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
-			DerivedCollectionElement<I> parentEl = theParent.addElement(theOptions.getReverse().apply(value), first);
+			DerivedCollectionElement<I> parentEl = theParent.addElement(reversed, first);
 			return parentEl == null ? null : new MappedElement(parentEl, true);
 		}
 
@@ -2490,6 +2488,13 @@ public class ObservableCollectionDataFlowImpl {
 							theValue = value;
 						}
 					});
+					// Populate the initial values if these are needed
+					if (theOptions.isCached() || !theOptions.isFireIfUnchanged()) {
+						I srcVal = parentEl.get();
+						theCacheHandler.initialize(srcVal);
+						if (theOptions.isCached())
+							theValue = theMap.apply(srcVal);
+					}
 					theParentEl.setListener(new CollectionElementListener<I>() {
 						@Override
 						public void update(I oldSource, I newSource, Object cause) {
@@ -2507,13 +2512,6 @@ public class ObservableCollectionDataFlowImpl {
 							theValue = null;
 						}
 					});
-					// Populate the initial values if these are needed
-					if (theOptions.isCached() || !theOptions.isFireIfUnchanged()) {
-						I srcVal = parentEl.get();
-						theCacheHandler.initialize(srcVal);
-						if (theOptions.isCached())
-							theValue = theMap.apply(srcVal);
-					}
 				} else
 					theCacheHandler = null;
 			}
@@ -4030,7 +4028,8 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public String canRemove() {
-				String msg = theFilter.canRemove(this::get);
+				String msg = theFilter.canRemove(//
+					this::get);
 				if (msg == null)
 					msg = theParentEl.canRemove();
 				return msg;
