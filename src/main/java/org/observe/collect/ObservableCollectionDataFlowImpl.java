@@ -3450,7 +3450,7 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
 			theParent.begin(fromStart, (parentEl, cause) -> {
-				onElement.accept(new RefreshingElement(parentEl, false), listening);
+				onElement.accept(new RefreshingElement(parentEl, false), cause);
 			}, listening);
 			listening.withConsumer((Object r) -> {
 				try (Transaction t = lock(true, false, r)) {
