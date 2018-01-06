@@ -258,7 +258,7 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 				break;
 			case STRING:
 				typeFilters.add(filter((String s) -> s.length() <= 4, "length<=4 only"));
-				typeFilters.add(filter((String s) -> s.hashCode() % 5 != 1, "hashCode%5!=1"));
+				typeFilters.add(filter((String s) -> s.length() == 0 ? false : s.charAt(0) % 2 == 0, "even first char only"));
 				break;
 			}
 		}
