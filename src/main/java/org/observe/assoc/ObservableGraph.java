@@ -217,9 +217,10 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 
 			@Override
 			public Subscription subscribe(Observer<? super Object> observer) {
+				Causable.CausableKey key = Causable.key((cause, data) -> observer.onNext(cause));
 				Consumer<Object> action = v -> {
 					if (v instanceof Causable)
-						((Causable) v).getRootCausable().onFinish(this, (cause, data) -> observer.onNext(cause));
+						((Causable) v).getRootCausable().onFinish(key);
 					else
 						observer.onNext(v);
 				};

@@ -35,7 +35,6 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-import org.qommons.collect.SimpleCause;
 import org.qommons.tree.BetterTreeList;
 
 import com.google.common.reflect.TypeParameter;
@@ -85,7 +84,12 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * The {@link ObservableCollectionEvent#getCause() cause} for events fired for extant elements in the collection upon
 	 * {@link #subscribe(Consumer, boolean) subscription}
 	 */
-	public static class SubscriptionCause extends SimpleCause {}
+	public static class SubscriptionCause extends Causable {
+		/** Creates a subscription cause */
+		public SubscriptionCause() {
+			super(null);
+		}
+	}
 
 	// Additional contract methods
 
@@ -306,9 +310,10 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		return new Observable<Object>() {
 			@Override
 			public Subscription subscribe(Observer<Object> observer) {
-				Object key = new Object();
-				Subscription sub = ObservableCollection.this
-					.onChange(evt -> evt.getRootCausable().onFinish(key, (root, values) -> observer.onNext(root)));
+				Causable.CausableKey key = Causable.key(//
+					(root, values) -> observer.onNext(root));
+				Subscription sub = ObservableCollection.this.onChange(//
+					evt -> evt.getRootCausable().onFinish(key));
 				return sub;
 			}
 

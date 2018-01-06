@@ -32,10 +32,12 @@ import org.observe.util.WeakListening;
 import org.qommons.ArrayUtils;
 import org.qommons.BiTuple;
 import org.qommons.Causable;
+import org.qommons.Causable.CausableKey;
 import org.qommons.ConcurrentHashSet;
 import org.qommons.Ternian;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
+import org.qommons.ValueHolder;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
@@ -45,7 +47,6 @@ import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.MutableElementSpliterator;
-import org.qommons.collect.SimpleCause;
 import org.qommons.tree.BetterTreeSet;
 import org.qommons.tree.BinaryTreeNode;
 
@@ -157,12 +158,13 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Subscription subscribe(Observer<? super CollectionChangeEvent<E>> observer) {
-			Object key = new Object();
+			Causable.CausableKey key = Causable.key((cause, data) -> {
+				fireEventsFromSessionData((SessionChangeTracker<E>) data.get(SESSION_TRACKER_PROPERTY), cause, observer);
+				data.remove(SESSION_TRACKER_PROPERTY);
+			});
 			return collection.onChange(evt -> {
-				evt.getRootCausable().onFinish(key, (cause, data) -> {
-					fireEventsFromSessionData((SessionChangeTracker<E>) data.get(SESSION_TRACKER_PROPERTY), cause, observer);
-					data.remove(SESSION_TRACKER_PROPERTY);
-				}).compute(SESSION_TRACKER_PROPERTY, (k, tracker) -> accumulate((SessionChangeTracker<E>) tracker, evt, observer));
+				evt.getRootCausable().onFinish(key).compute(SESSION_TRACKER_PROPERTY,
+					(k, tracker) -> accumulate((SessionChangeTracker<E>) tracker, evt, observer));
 			});
 		}
 
@@ -386,6 +388,21 @@ public final class ObservableCollectionImpl {
 					try (Transaction t = theCollection.lock(false, null)) {
 						class FinderListener implements Consumer<ObservableCollectionEvent<? extends E>> {
 							private SimpleElement theCurrentElement;
+							private final Causable.CausableKey theCauseKey;
+
+							{
+								theCauseKey = Causable.key((cause, data) -> {
+									SimpleElement oldElement = theCurrentElement;
+									if (data.get("replacement") == null) {
+										// Means we need to find the new value in the collection
+										if (!find(//
+											el -> theCurrentElement = new SimpleElement(el.getElementId(), el.get())))
+											theCurrentElement = null;
+									} else
+										theCurrentElement = (SimpleElement) data.get("replacement");
+									observer.onNext(createChangeEvent(oldElement, theCurrentElement, cause));
+								});
+							}
 
 							@Override
 							public void accept(ObservableCollectionEvent<? extends E> evt) {
@@ -405,17 +422,7 @@ public final class ObservableCollectionImpl {
 									return; // If the new value doesn't match and it's not the current element, we don't care
 
 								// At this point we know that we will have to do something
-								Map<Object, Object> causeData = evt.getRootCausable().onFinish(this, (cause, data) -> {
-									SimpleElement oldElement = theCurrentElement;
-									if (data.get("replacement") == null) {
-										// Means we need to find the new value in the collection
-										if (!find(//
-											el -> theCurrentElement = new SimpleElement(el.getElementId(), el.get())))
-											theCurrentElement = null;
-									} else
-										theCurrentElement = (SimpleElement) data.get("replacement");
-									observer.onNext(createChangeEvent(oldElement, theCurrentElement, cause));
-								});
+								Map<Object, Object> causeData = evt.getRootCausable().onFinish(theCauseKey);
 								if (!matches) {
 									// The current element's value no longer matches
 									// We need to search for the new value if we don't already know of a better match.
@@ -600,19 +607,21 @@ public final class ObservableCollectionImpl {
 
 				@Override
 				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-					Object key = new Object();
-					Object[] x = new Object[] { init() };
-					Object[] v = new Object[] { getValue((X) x[0]) };
+					ValueHolder<X> x = new ValueHolder<>();
+					ValueHolder<T> value = new ValueHolder<>();
+					Causable.CausableKey key = Causable
+						.key((root, values) -> fireChangeEvent((T) values.get("oldValue"), value.get(), root, observer::onNext));
+					x.accept(init());
+					value.accept(getValue(x.get()));
 					Subscription sub = theCollection.onChange(evt -> {
-						T oldV = (T) v[0];
-						X newX = update((X) x[0], evt);
-						x[0] = newX;
-						v[0] = getValue(newX);
-						evt.getRootCausable()
-						.onFinish(key, (root, values) -> fireChangeEvent((T) values.get("oldValue"), (T) v[0], root, observer::onNext))
+						T oldV = value.get();
+						X newX = update(x.get(), evt);
+						x.accept(newX);
+						value.accept(getValue(newX));
+						evt.getRootCausable().onFinish(key)
 						.computeIfAbsent("oldValue", k -> oldV);
 					});
-					fireInitialEvent((T) v[0], null, observer::onNext);
+					fireInitialEvent(value.get(), null, observer::onNext);
 					return sub;
 				}
 			};
@@ -906,15 +915,17 @@ public final class ObservableCollectionImpl {
 					boolean[] initialized = new boolean[1];
 					boolean[] satisfied = new boolean[1];
 					ValueCounts<E, X> counts = new ValueCounts<E, X>(theLeft.equivalence()) {
+						private final CausableKey theKey = Causable.key((c, data) -> {
+							boolean wasSatisfied = satisfied[0];
+							satisfied[0] = theSatisfiedCheck.test(this);
+							if (!initialized[0] && wasSatisfied != satisfied[0])
+								fireChangeEvent(wasSatisfied, satisfied[0], c, observer::onNext);
+						});
+
 						@Override
 						protected void changed(ValueCount<?> count, Object oldValue, CollectionChangeType type, boolean onLeft,
 							boolean containmentChange, Causable cause) {
-							cause.getRootCausable().onFinish(this, (c, data) -> {
-								boolean wasSatisfied = satisfied[0];
-								satisfied[0] = theSatisfiedCheck.test(this);
-								if (!initialized[0] && wasSatisfied != satisfied[0])
-									fireChangeEvent(wasSatisfied, satisfied[0], cause, observer::onNext);
-							});
+							cause.getRootCausable().onFinish(theKey);
 						}
 					};
 					return counts.init(theLeft, theRight, null, false, c -> {
@@ -1720,8 +1731,8 @@ public final class ObservableCollectionImpl {
 		public void clear() {
 			if (isEmpty())
 				return;
-			SimpleCause cause = new SimpleCause();
-			try (Transaction cst = SimpleCause.use(cause); Transaction t = lock(true, cause)) {
+			Causable cause = Causable.simpleCause(null);
+			try (Transaction cst = Causable.use(cause); Transaction t = lock(true, cause)) {
 				if (!theFlow.clear()) {
 					new ArrayList<>(theDerivedElements).forEach(el -> {
 						if (el.element.canRemove() == null)

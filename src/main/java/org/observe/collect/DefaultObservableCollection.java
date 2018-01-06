@@ -13,7 +13,6 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableElementSpliterator;
-import org.qommons.collect.SimpleCause;
 
 import com.google.common.reflect.TypeToken;
 
@@ -58,8 +57,8 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			causeFinish = null;
 			tCause = (Causable) cause;
 		} else {
-			tCause = new SimpleCause(cause);
-			causeFinish = SimpleCause.use(tCause);
+			tCause = Causable.simpleCause(cause);
+			causeFinish = Causable.use(tCause);
 		}
 		if (write && tCause != null)
 			theTransactionCauses.add(tCause);

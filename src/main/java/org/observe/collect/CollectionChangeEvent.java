@@ -4,14 +4,14 @@ import java.util.AbstractList;
 import java.util.Collections;
 import java.util.List;
 
-import org.qommons.AbstractCausable;
+import org.qommons.Causable;
 
 /**
  * Represents a set of changes to a collection with a common {@link CollectionChangeType type}.
  *
  * @param <E> The type of element in the changed collection
  */
-public class CollectionChangeEvent<E> extends AbstractCausable {
+public class CollectionChangeEvent<E> extends Causable {
 	/**
 	 * Represents a change to a single element in a collection
 	 *

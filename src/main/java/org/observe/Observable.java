@@ -8,7 +8,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-import org.qommons.AbstractCausable;
+import org.qommons.Causable;
 import org.qommons.ListenerSet;
 import org.qommons.Transaction;
 
@@ -713,7 +713,7 @@ public interface Observable<T> {
 					outerSub.unsubscribe();
 					if (isTerminating) {
 						T defValue = theDefaultValue.get();
-						try (Transaction t = AbstractCausable.use(defValue)) {
+						try (Transaction t = Causable.use(defValue)) {
 							observer.onCompleted(defValue);
 						}
 					}
