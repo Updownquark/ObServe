@@ -94,7 +94,7 @@ public class ObservableChainTester implements Testable {
 	@Test
 	public void superTest() {
 		Duration testDuration = Duration.ofMinutes(5);
-		int maxFailures = 1;
+		int maxFailures = 10;
 		System.out.println(
 			"Executing up to " + QommonsUtils.printTimeLength(testDuration.toMillis()) + " of tests with max " + maxFailures + " failures");
 		TestHelper.TestSummary summary = TestHelper.createTester(getClass())//

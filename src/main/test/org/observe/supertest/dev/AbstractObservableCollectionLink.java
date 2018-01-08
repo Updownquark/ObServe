@@ -740,22 +740,16 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			CollectionDataFlow<?, ?, T> flow = theFlow;
 			if (variableMap)
 				flow = flow.refresh(txValue.changes().noInit()); // The refresh has to be UNDER the map
+			boolean needsUpdateReeval = !theTester.isCheckingRemovedValues() || variableMap;
 			ValueHolder<FlowOptions.MapOptions<T, X>> options = new ValueHolder<>();
 			derivedFlow.accept(flow.map((TypeToken<X>) nextType.getType(), src -> txValue.get().map(src), o -> {
 				o.manyToOne(txValue.get().isManyToOne());
 				if (helper.getBoolean(.95))
 					o.withReverse(x -> txValue.get().reverse(x));
-				options.accept(o.cache(helper.getBoolean()).fireIfUnchanged(variableMap || helper.getBoolean())
-					.reEvalOnUpdate(variableMap || helper.getBoolean()));
+				options.accept(o.cache(helper.getBoolean()).fireIfUnchanged(needsUpdateReeval || helper.getBoolean())
+					.reEvalOnUpdate(needsUpdateReeval || helper.getBoolean()));
 			}));
-			boolean checkRemovedValues;
-			if (!theTester.isCheckingRemovedValues())
-				checkRemovedValues = false;
-			else if (options.get().isCached())
-				checkRemovedValues = true;
-			else
-				checkRemovedValues = !variableMap;
-			theChild = new MappedCollectionLink<>(this, nextType, derivedFlow.get(), helper, checkRemovedValues, txValue,
+			theChild = new MappedCollectionLink<>(this, nextType, derivedFlow.get(), helper, !needsUpdateReeval, txValue,
 				variableMap, new FlowOptions.MapDef<>(options.get()));
 			derived.accept((ObservableChainLink<X>) theChild);
 			// TODO mapEquivalent
@@ -809,7 +803,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			ValueHolder<ObservableCollection.ModFilterBuilder<T>> filter = new ValueHolder<>();
 			derivedFlow.accept((CollectionDataFlow<?, ?, X>) theFlow.filterMod(f -> {
 				if (helper.getBoolean(.1))
-						f.unmodifiable("Unmodifiable", helper.getBoolean(.75));
+					f.unmodifiable("Unmodifiable", helper.getBoolean(.75));
 				else {
 					if (helper.getBoolean(.25))
 						f.noAdd("No adds");

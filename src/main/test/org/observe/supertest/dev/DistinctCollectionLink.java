@@ -397,9 +397,10 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 				set(repIndex, value, helper, true);
 			} else {
 				// Same as a remove, then an add.
-				theNewSourceValues.add(getParent().getCollection().getElement(index).getElementId());
 				removedFromBelow(index, helper);
-				addedFromBelow(Arrays.asList(new CollectionOp<>(null, value, index)), helper);
+				CollectionOp<E> distinctAdd = add(index, value, -1, helper, true);
+				if (distinctAdd != null)
+					added(Arrays.asList(distinctAdd), helper, true);
 			}
 		}
 	}
