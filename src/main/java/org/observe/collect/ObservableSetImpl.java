@@ -428,7 +428,7 @@ public class ObservableSetImpl {
 					// The parent is the first representing this element
 					theActiveElement = parentEl;
 					theAccepter.accept(this, cause);
-				} else if (isAlwaysUsingFirst && node.getChild(true) == null) {
+				} else if (isAlwaysUsingFirst && node.getClosest(true) == null) {
 					// The new element takes precedence over the current one
 					T oldValue = theActiveElement.get();
 					T newActiveValue = parentEl.get();
