@@ -2,6 +2,7 @@ package org.observe.collect;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -3389,7 +3390,7 @@ public class ObservableCollectionDataFlowImpl {
 	private static class ActiveRefreshingCollectionManager<E, T> implements ActiveCollectionManager<E, T, T> {
 		private final ActiveCollectionManager<E, ?, T> theParent;
 		private final Observable<?> theRefresh;
-		private final BetterCollection<RefreshingElement> theElements;
+		private final BetterList<RefreshingElement> theElements;
 
 		ActiveRefreshingCollectionManager(ActiveCollectionManager<E, ?, T> parent, Observable<?> refresh) {
 			theParent = parent;
@@ -3454,15 +3455,22 @@ public class ObservableCollectionDataFlowImpl {
 			}, listening);
 			listening.withConsumer((Object r) -> {
 				try (Transaction t = lock(true, false, r)) {
-					for (RefreshingElement el : theElements)
-						el.refresh(r);
+					// Refreshing should be done in element order
+					Collections.sort(theElements);
+					CollectionElement<RefreshingElement> el = theElements.getTerminalElement(true);
+					while (el != null) {
+						// But now need to re-set the correct element ID for each element
+						el.get().theElementId = el.getElementId();
+						el.get().refresh(r);
+						el = theElements.getAdjacentElement(el.getElementId(), true);
+					}
 				}
 			}, theRefresh::act);
 		}
 
 		private class RefreshingElement implements DerivedCollectionElement<T> {
 			private final DerivedCollectionElement<T> theParentEl;
-			private final ElementId theElementId;
+			private ElementId theElementId;
 			private CollectionElementListener<T> theListener;
 
 			RefreshingElement(DerivedCollectionElement<T> parent, boolean synthetic) {
