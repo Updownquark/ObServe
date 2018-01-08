@@ -67,11 +67,27 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 		if (isFilterVariable) {
 			action.or(1, () -> {
 				Function<E, String> newFilter = filterFor(getTestType(), action.getHelper());
-				System.out.println("Filter change from " + theFilter + " to " + newFilter);
+				Function<E, String> oldFilter = theFilter;
+				if (action.getHelper().isReproducing())
+					System.out.println("Filter change from " + oldFilter + " to " + newFilter);
 				theFilter = newFilter;
 				theFilterValue.set(theFilter, null);
-				for (int i = 0; i < theSourceValues.size(); i++)
-					setFromBelow(i, theSourceValues.get(i), action.getHelper()); // This method will sort out the changes to inclusion
+				List<CollectionOp<E>> adds = new ArrayList<>();
+				for (int i = 0; i < theSourceValues.size(); i++) {
+					CollectionElement<E> srcEl = theSourceValues.getElement(i);
+					CollectionElement<ElementId> presentElement = thePresentSourceElements.getElement(srcEl.getElementId(), true); // value
+					boolean isIncluded = newFilter.apply(srcEl.get()) == null;
+					if (presentElement != null && !isIncluded) {
+						int presentIndex = thePresentSourceElements.getElementsBefore(presentElement.getElementId()) - adds.size();
+						thePresentSourceElements.mutableElement(presentElement.getElementId()).remove();
+						removed(presentIndex, action.getHelper(), true);
+					} else if (presentElement == null && isIncluded) {
+						presentElement = thePresentSourceElements.addElement(srcEl.getElementId(), true);
+						int presentIndex = thePresentSourceElements.getElementsBefore(presentElement.getElementId());
+						adds.add(new CollectionOp<>(null, srcEl.get(), presentIndex));
+					}
+				}
+				added(adds, action.getHelper(), true);
 			});
 		}
 	}
