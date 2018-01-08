@@ -310,7 +310,6 @@ public class ObservableChainTester implements Testable {
 		return typeCompares.get(helper.getInt(0, typeCompares.size()));
 	}
 	private static final int MAX_CHAIN_LENGTH = 15;
-	public static boolean DEBUG_PRINT = true;
 
 	private final List<ObservableChainLink<?>> theChain = new ArrayList<>();
 
@@ -348,8 +347,6 @@ public class ObservableChainTester implements Testable {
 		theChain.add(initLink);
 		while (theChain.size() < chainLength)
 			theChain.add(theChain.get(theChain.size() - 1).derive(helper));
-		if (DEBUG_PRINT)
-			System.out.println("Assembled [" + theChain.size() + "]: " + theChain);
 	}
 
 	private <E> ObservableChainLink<?> createInitialLink(TestHelper helper) {
@@ -382,8 +379,11 @@ public class ObservableChainTester implements Testable {
 	}
 
 	private void test(TestHelper helper) {
-		if (DEBUG_PRINT)
-			System.out.println("Base Value: " + this);
+		System.out.println("Assembled " + printChain());
+		if (helper.isReproducing()) {
+			System.out.println("Initial Values:");
+			System.out.println(this);
+		}
 		int failedLink = 0;
 		try {
 			for (failedLink = 0; failedLink < theChain.size(); failedLink++)
@@ -404,54 +404,56 @@ public class ObservableChainTester implements Testable {
 				int transactionMods = (int) helper.getDouble(1, 10, 26);
 				if (transactionMods == 25)
 					transactionMods = 0; // Want the probability of no-op transactions to be small but present
+				if (helper.isReproducing())
 				System.out.println("Modification set " + (tri + 1) + ": " + transactionMods + " modifications on link " + linkIndex);
+				else {
+					System.out.print('.');
+					System.out.flush();
+				}
 				helper.placemark("Transaction");
 				for (int transactionTri = 0; transactionTri < transactionMods; transactionTri++) {
-					String preBaseValue = toString();
-					String preLinkValue = linkIndex == 0 ? null : targetLink.printValue();
+					String preValue = toString();
+					if (helper.isReproducing())
 					System.out.print("\tMod " + (transactionTri + 1) + ": ");
 					Debug.d().debugIf(tri == 31 && transactionTri == 3);
 					try {
 						targetLink.tryModify(helper);
 					} catch (RuntimeException | Error e) {
+						System.err.println("Chain is " + printChain());
 						System.err.println("Error on transaction " + (tri + 1) + ", mod " + (transactionTri + 1) + " after "
 							+ (modifications + transactionTri) + " successful modifications");
-						System.err.println("Pre-faiure base value: " + preBaseValue);
-						System.err.println("Post-faiure base value: " + toString());
-						if (linkIndex > 0) {
-							System.err.println("Pre-faiure link value: " + preLinkValue);
-							System.err.println("Post-faiure link value: " + targetLink.printValue());
-						}
+						System.err.println("Pre-faiure values:\n" + preValue);
+						System.err.println("Post-faiure values:\n" + toString());
 						throw e;
 					}
 					try {
 						for (failedLink = 0; failedLink < theChain.size(); failedLink++)
 							theChain.get(failedLink).check(!useTransaction);
 					} catch (Error e) {
+						System.err.println("Chain is " + printChain());
 						System.err.println("Integrity check failure on link " + failedLink + " after "
 							+ (modifications + transactionTri + 1) + " modifications in " + (tri + 1) + " transactions");
-						System.err.println("Pre-faiure base value: " + preBaseValue);
-						System.err.println("Post-faiure base value: " + toString());
-						if (linkIndex > 0) {
-							System.err.println("Pre-faiure link value: " + preLinkValue);
-							System.err.println("Post-faiure link value: " + targetLink.printValue());
-						}
+						System.err.println("Pre-faiure values:\n" + preValue);
+						System.err.println("Post-faiure values:\n" + toString());
 						throw e;
 					}
 				}
 				modifications += transactionMods;
 				finished = true;
 			} catch (RuntimeException | Error e) {
-				if (finished)
+				if (finished) {
+					System.err.println("Chain is " + printChain());
 					System.err.println("Error closing transaction " + tri + " after " + modifications + " successful modifications");
+				}
 				throw e;
 			}
-			if (DEBUG_PRINT)
-				System.out.println("Base Value: " + this);
+			if (helper.isReproducing())
+				System.out.println("Values:\n" + this);
 			try {
 				for (failedLink = 0; failedLink < theChain.size(); failedLink++)
 					theChain.get(failedLink).check(true);
 			} catch (Error e) {
+				System.err.println("Chain is " + printChain());
 				System.err.println(
 					"Integrity check failure on transaction close on link " + failedLink + " after " + modifications + " modifications");
 				throw e;
@@ -459,8 +461,24 @@ public class ObservableChainTester implements Testable {
 		}
 	}
 
+	public String printChain() {
+		StringBuilder s = new StringBuilder(theChain.size()).append(':');
+		for (int i = 0; i < theChain.size(); i++) {
+			if (i > 0)
+				s.append("->");
+			s.append('[').append(i).append(']').append(theChain.get(i));
+		}
+		return s.toString();
+	}
+
 	@Override
 	public String toString() {
-		return theChain.get(0).printValue();
+		StringBuilder s = new StringBuilder();
+		for (int i = 0; i < theChain.size(); i++) {
+			if (i > 0)
+				s.append('\n');
+			s.append('[').append(i).append(']').append(theChain.get(i).printValue());
+		}
+		return s.toString();
 	}
 }
