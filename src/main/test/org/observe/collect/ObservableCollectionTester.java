@@ -24,6 +24,7 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 	private final ArrayList<E> theSyncedCopy;
 	private final ArrayList<E> theBatchSyncedCopy;
 	private final List<E> theExpected;
+	private boolean checkRemovedValues;
 
 	/** @param collect The observable collection to test */
 	public ObservableCollectionTester(String name, ObservableCollection<? extends E> collect) {
@@ -42,11 +43,21 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 		setSynced(true);
 		theExpected = expected;
 		theExpected.addAll(collect);
+		checkRemovedValues = true;
+	}
+
+	public ObservableCollectionTester<E> checkRemovedValues(boolean check) {
+		checkRemovedValues = check;
+		return this;
 	}
 
 	/** @return The expected values for the collection */
 	public List<E> getExpected() {
 		return theExpected;
+	}
+
+	public boolean isCheckingRemovedValues() {
+		return checkRemovedValues;
 	}
 
 	/**
@@ -194,10 +205,14 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 				theSyncedCopy.add(evt.getIndex(), evt.getNewValue());
 				break;
 			case remove:
-				assertEquals(theName, evt.getOldValue(), theSyncedCopy.remove(evt.getIndex()));
+				E oldValue = theSyncedCopy.remove(evt.getIndex());
+				if (checkRemovedValues)
+					assertEquals(theName, evt.getOldValue(), oldValue);
 				break;
 			case set:
-				assertEquals(theName, evt.getOldValue(), theSyncedCopy.set(evt.getIndex(), evt.getNewValue()));
+				oldValue = theSyncedCopy.set(evt.getIndex(), evt.getNewValue());
+				if (checkRemovedValues)
+					assertEquals(theName, evt.getOldValue(), oldValue);
 				break;
 			}
 		}, true);
@@ -212,12 +227,18 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 						theBatchSyncedCopy.add(change.index, change.newValue);
 					break;
 				case remove:
-					for (CollectionChangeEvent.ElementChange<? extends E> change : evt.getElementsReversed())
-						assertEquals(theName, change.oldValue, theBatchSyncedCopy.remove(change.index));
+					for (CollectionChangeEvent.ElementChange<? extends E> change : evt.getElementsReversed()) {
+						E oldValue = theBatchSyncedCopy.remove(change.index);
+						if (checkRemovedValues)
+							assertEquals(theName, change.oldValue, oldValue);
+					}
 					break;
 				case set:
-					for (CollectionChangeEvent.ElementChange<? extends E> change : evt.elements)
-						assertEquals(theName, change.oldValue, theBatchSyncedCopy.set(change.index, change.newValue));
+					for (CollectionChangeEvent.ElementChange<? extends E> change : evt.elements) {
+						E oldValue = theBatchSyncedCopy.set(change.index, change.newValue);
+						if (checkRemovedValues)
+							assertEquals(theName, change.oldValue, oldValue);
+					}
 					break;
 				}
 			}
