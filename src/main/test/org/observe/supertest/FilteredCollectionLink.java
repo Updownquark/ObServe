@@ -11,9 +11,11 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 
 import org.junit.Assert;
+import org.observe.SimpleSettableValue;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ObservableChainTester.TestValueType;
 import org.qommons.TestHelper;
+import org.qommons.TestHelper.RandomAction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionElement;
@@ -22,7 +24,9 @@ import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeSet;
 
 public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<E, E> {
-	private final Function<? super E, String> theFilter;
+	private final SimpleSettableValue<Function<E, String>> theFilterValue;
+	private final boolean isFilterVariable;
+	private Function<E, String> theFilter;
 
 	private final BetterList<E> theSourceValues;
 	private final BetterSortedSet<ElementId> thePresentSourceElements;
@@ -30,9 +34,11 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 	private final BetterSortedSet<ElementId> theNewSourceValues;
 
 	public FilteredCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type, CollectionDataFlow<?, ?, E> flow,
-		TestHelper helper, Function<? super E, String> filter) {
+		TestHelper helper, SimpleSettableValue<Function<E, String>> filter, boolean variableFilter) {
 		super(parent, type, flow, helper, false);
-		theFilter = filter;
+		theFilterValue = filter;
+		isFilterVariable = variableFilter;
+		theFilter = filter.get();
 
 		theSourceValues = new BetterTreeList<>(false);
 		thePresentSourceElements = new BetterTreeSet<>(false, ElementId::compareTo);
@@ -53,6 +59,37 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 			default:
 			}
 		});
+	}
+
+	@Override
+	protected void addExtraActions(RandomAction action) {
+		super.addExtraActions(action);
+		if (isFilterVariable) {
+			action.or(1, () -> {
+				Function<E, String> newFilter = filterFor(getTestType(), action.getHelper());
+				Function<E, String> oldFilter = theFilter;
+				if (action.getHelper().isReproducing())
+					System.out.println("Filter change from " + oldFilter + " to " + newFilter);
+				theFilter = newFilter;
+				theFilterValue.set(theFilter, null);
+				List<CollectionOp<E>> adds = new ArrayList<>();
+				for (int i = 0; i < theSourceValues.size(); i++) {
+					CollectionElement<E> srcEl = theSourceValues.getElement(i);
+					CollectionElement<ElementId> presentElement = thePresentSourceElements.getElement(srcEl.getElementId(), true); // value
+					boolean isIncluded = newFilter.apply(srcEl.get()) == null;
+					if (presentElement != null && !isIncluded) {
+						int presentIndex = thePresentSourceElements.getElementsBefore(presentElement.getElementId()) - adds.size();
+						thePresentSourceElements.mutableElement(presentElement.getElementId()).remove();
+						removed(presentIndex, action.getHelper(), true);
+					} else if (presentElement == null && isIncluded) {
+						presentElement = thePresentSourceElements.addElement(srcEl.getElementId(), true);
+						int presentIndex = thePresentSourceElements.getElementsBefore(presentElement.getElementId());
+						adds.add(new CollectionOp<>(null, srcEl.get(), presentIndex));
+					}
+				}
+				added(adds, action.getHelper(), true);
+			});
+		}
 	}
 
 	@Override
@@ -206,7 +243,11 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 
 	@Override
 	public String toString() {
-		return "filtered(" + theFilter + ")";
+		String s = "filtered(" + theFilter;
+		if (isFilterVariable)
+			s += ", variable";
+		s += ")";
+		return s;
 	}
 
 	public static <T> Function<T, String> filterFor(TestValueType type, TestHelper helper) {
@@ -233,7 +274,7 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 				break;
 			case STRING:
 				typeFilters.add(filter((String s) -> s.length() <= 4, "length<=4 only"));
-				typeFilters.add(filter((String s) -> s.hashCode() % 5 != 1, "!hashCode x5"));
+				typeFilters.add(filter((String s) -> s.length() == 0 ? false : s.charAt(0) % 2 == 0, "even first char only"));
 				break;
 			}
 		}
