@@ -108,7 +108,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> 
 	static <E> ObservableSet<E> of(TypeToken<E> type, Equivalence<? super E> equivalence, Collection<? extends E> values) {
 		ObservableSet<E> set = create(type, equivalence);
 		set.addAll(values);
-		return set.flow().immutable().collect();
+		return set.flow().unmodifiable().collect();
 	}
 
 	/**

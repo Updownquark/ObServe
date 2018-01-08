@@ -283,7 +283,7 @@ public class ObservableMultiMapImpl {
 		public UniqueDataFlow<E, K, K> filterMod(Consumer<ModFilterBuilder<K>> options) {
 			ModFilterBuilder<K> keyOptions = new ModFilterBuilder<>();
 			options.accept(keyOptions);
-			if (keyOptions.getImmutableMsg() != null)
+			if (keyOptions.getUnmodifiableMsg() != null)
 				throw new UnsupportedOperationException("Key set immutability is not supported");
 			CollectionDataFlow<?, Map.Entry<K, V>, Map.Entry<K, V>> modFilteredEntries = theEntryFlow.filterMod(entryOptions -> {
 				if (keyOptions.getAddMsg() != null)

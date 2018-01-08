@@ -914,8 +914,8 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		UniqueSortedDataFlow<E, T, T> distinctSorted(Comparator<? super T> compare, boolean alwaysUseFirst);
 
 		/** @return A flow with the same data and properties as this flow, but whose collected results cannot be modified externally */
-		default CollectionDataFlow<E, T, T> immutable() {
-			return filterMod(options -> options.immutable(StdMsg.UNSUPPORTED_OPERATION, true));
+		default CollectionDataFlow<E, T, T> unmodifiable() {
+			return filterMod(options -> options.unmodifiable(StdMsg.UNSUPPORTED_OPERATION, true));
 		}
 
 		/**
@@ -1088,8 +1088,8 @@ public interface ObservableCollection<E> extends BetterList<E> {
 			Function<? super X, ? extends T> reverse, Consumer<MapOptions<T, X>> options);
 
 		@Override
-		default UniqueDataFlow<E, T, T> immutable() {
-			return filterMod(options -> options.immutable(StdMsg.UNSUPPORTED_OPERATION, true));
+		default UniqueDataFlow<E, T, T> unmodifiable() {
+			return filterMod(options -> options.unmodifiable(StdMsg.UNSUPPORTED_OPERATION, true));
 		}
 
 		@Override
@@ -1183,8 +1183,8 @@ public interface ObservableCollection<E> extends BetterList<E> {
 			Comparator<? super X> compare, Consumer<MapOptions<T, X>> options);
 
 		@Override
-		default UniqueSortedDataFlow<E, T, T> immutable() {
-			return filterMod(options -> options.immutable(StdMsg.UNSUPPORTED_OPERATION, true));
+		default UniqueSortedDataFlow<E, T, T> unmodifiable() {
+			return filterMod(options -> options.unmodifiable(StdMsg.UNSUPPORTED_OPERATION, true));
 		}
 
 		@Override
@@ -1226,7 +1226,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @param <T> The type of the collection to filter modification on
 	 */
 	class ModFilterBuilder<T> {
-		private String theImmutableMsg;
+		private String theUnmodifiableMsg;
 		private boolean areUpdatesAllowed;
 		private String theAddMsg;
 		private String theRemoveMsg;
@@ -1236,8 +1236,8 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		public ModFilterBuilder() {
 		}
 
-		public String getImmutableMsg() {
-			return theImmutableMsg;
+		public String getUnmodifiableMsg() {
+			return theUnmodifiableMsg;
 		}
 
 		public boolean areUpdatesAllowed() {
@@ -1260,8 +1260,8 @@ public interface ObservableCollection<E> extends BetterList<E> {
 			return theRemoveMsgFn;
 		}
 
-		public ModFilterBuilder<T> immutable(String modMsg, boolean allowUpdates) {
-			theImmutableMsg = modMsg;
+		public ModFilterBuilder<T> unmodifiable(String modMsg, boolean allowUpdates) {
+			theUnmodifiableMsg = modMsg;
 			areUpdatesAllowed = allowUpdates;
 			return this;
 		}

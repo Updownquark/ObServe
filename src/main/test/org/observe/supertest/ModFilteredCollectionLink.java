@@ -25,8 +25,8 @@ public class ModFilteredCollectionLink<E> extends AbstractObservableCollectionLi
 	public void checkAddable(List<CollectionOp<E>> adds, int subListStart, int subListEnd, TestHelper helper) {
 		List<CollectionOp<E>> parentAdds = new ArrayList<>(adds.size());
 		for (CollectionOp<E> op : adds) {
-			if (theFilter.getImmutableMessage() != null)
-				op.reject(theFilter.getImmutableMessage(), true);
+			if (theFilter.getUnmodifiableMessage() != null)
+				op.reject(theFilter.getUnmodifiableMessage(), true);
 			else if (theFilter.getAddMessage() != null)
 				op.reject(theFilter.getAddMessage(), true);
 			else if (theFilter.getAddFilter() != null && theFilter.getAddFilter().apply(op.source) != null)
@@ -41,8 +41,8 @@ public class ModFilteredCollectionLink<E> extends AbstractObservableCollectionLi
 	public void checkRemovable(List<CollectionOp<E>> removes, int subListStart, int subListEnd, TestHelper helper) {
 		List<CollectionOp<E>> parentRemoves = new ArrayList<>(removes.size());
 		for (CollectionOp<E> op : removes) {
-			if (theFilter.getImmutableMessage() != null)
-				op.reject(theFilter.getImmutableMessage(), true);
+			if (theFilter.getUnmodifiableMessage() != null)
+				op.reject(theFilter.getUnmodifiableMessage(), true);
 			else if (theFilter.getRemoveMessage() != null)
 				op.reject(theFilter.getRemoveMessage(), true);
 			else if (theFilter.getRemoveFilter() != null && theFilter.getRemoveFilter().apply(op.source) != null)
@@ -61,10 +61,10 @@ public class ModFilteredCollectionLink<E> extends AbstractObservableCollectionLi
 			if (oldValue == op.source) {
 				// Updates are treated more leniently, since the content of the collection is not changing
 				// Updates can only be prevented explicitly
-				if (!theFilter.areUpdatesAllowed() && theFilter.getImmutableMessage() != null)
-					op.reject(theFilter.getImmutableMessage(), true);
-			} else if (theFilter.getImmutableMessage() != null)
-				op.reject(theFilter.getImmutableMessage(), true);
+				if (!theFilter.areUpdatesAllowed() && theFilter.getUnmodifiableMessage() != null)
+					op.reject(theFilter.getUnmodifiableMessage(), true);
+			} else if (theFilter.getUnmodifiableMessage() != null)
+				op.reject(theFilter.getUnmodifiableMessage(), true);
 			else if (theFilter.getRemoveMessage() != null)
 				op.reject(theFilter.getRemoveMessage(), true);
 			else if (theFilter.getAddMessage() != null)

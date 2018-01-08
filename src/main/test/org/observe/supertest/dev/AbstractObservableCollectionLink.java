@@ -801,7 +801,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				options.accept(opts);
 			}));
 			theChild = new DistinctCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), helper,
-					theTester.isCheckingRemovedValues(), options.get());
+				theTester.isCheckingRemovedValues(), options.get());
 			derived.accept((ObservableChainLink<X>) theChild);
 		})//
 		// TODO distinctSorted
@@ -809,7 +809,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			ValueHolder<ObservableCollection.ModFilterBuilder<T>> filter = new ValueHolder<>();
 			derivedFlow.accept((CollectionDataFlow<?, ?, X>) theFlow.filterMod(f -> {
 				if (helper.getBoolean(.1))
-					f.immutable("Immutable", helper.getBoolean(.75));
+						f.unmodifiable("Unmodifiable", helper.getBoolean(.75));
 				else {
 					if (helper.getBoolean(.25))
 						f.noAdd("No adds");

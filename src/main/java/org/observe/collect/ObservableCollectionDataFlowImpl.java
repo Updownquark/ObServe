@@ -319,7 +319,7 @@ public class ObservableCollectionDataFlowImpl {
 	}
 
 	public static class ModFilterer<T> {
-		private final String theImmutableMessage;
+		private final String theUnmodifiableMessage;
 		private final boolean areUpdatesAllowed;
 		private final String theAddMessage;
 		private final String theRemoveMessage;
@@ -327,7 +327,7 @@ public class ObservableCollectionDataFlowImpl {
 		private final Function<? super T, String> theRemoveFilter;
 
 		public ModFilterer(ModFilterBuilder<T> options) {
-			theImmutableMessage = options.getImmutableMsg();
+			theUnmodifiableMessage = options.getUnmodifiableMsg();
 			this.areUpdatesAllowed = options.areUpdatesAllowed();
 			theAddMessage = options.getAddMsg();
 			theRemoveMessage = options.getRemoveMsg();
@@ -335,8 +335,8 @@ public class ObservableCollectionDataFlowImpl {
 			theRemoveFilter = options.getRemoveMsgFn();
 		}
 
-		public String getImmutableMessage() {
-			return theImmutableMessage;
+		public String getUnmodifiableMessage() {
+			return theUnmodifiableMessage;
 		}
 
 		public boolean areUpdatesAllowed() {
@@ -362,12 +362,12 @@ public class ObservableCollectionDataFlowImpl {
 		public String isEnabled() {
 			if (areUpdatesAllowed)
 				return null;
-			return theImmutableMessage;
+			return theUnmodifiableMessage;
 		}
 
 		public String isAcceptable(T value, Supplier<T> oldValue) {
 			String msg = null;
-			if (isAddFiltered() || isRemoveFiltered() || (theImmutableMessage != null && areUpdatesAllowed)) {
+			if (isAddFiltered() || isRemoveFiltered() || (theUnmodifiableMessage != null && areUpdatesAllowed)) {
 				T old = oldValue.get();
 				if (old == value) {
 					// An update. These are treated differently. These can only be prevented explicitly.
@@ -382,18 +382,18 @@ public class ObservableCollectionDataFlowImpl {
 					if (msg == null)
 						msg = theAddMessage;
 					if (msg == null)
-						msg = theImmutableMessage;
+						msg = theUnmodifiableMessage;
 				}
 			} else {
-				// Not add- or remove-filtered, and don't care about updates, so no need to get the old value. Possibly immutable.
-				msg = theImmutableMessage;
+				// Not add- or remove-filtered, and don't care about updates, so no need to get the old value. Possibly unmodifiable.
+				msg = theUnmodifiableMessage;
 			}
 			return msg;
 		}
 
 		public void assertSet(T value, Supplier<T> oldValue) {
 			String msg = null;
-			if (isAddFiltered() || isRemoveFiltered() || (theImmutableMessage != null && areUpdatesAllowed)) {
+			if (isAddFiltered() || isRemoveFiltered() || (theUnmodifiableMessage != null && areUpdatesAllowed)) {
 				T old = oldValue.get();
 				if (old == value) {
 					// An update. These are treated differently. These can only be prevented explicitly.
@@ -412,24 +412,24 @@ public class ObservableCollectionDataFlowImpl {
 						throw new IllegalArgumentException(msg);
 					msg = theAddMessage;
 					if (msg == null)
-						msg = theImmutableMessage;
+						msg = theUnmodifiableMessage;
 					if (msg != null)
 						throw new UnsupportedOperationException(msg);
 				}
 			} else {
-				// Not add- or remove-filtered, and don't care about updates, so no need to get the old value. Possibly immutable.
-				msg = theImmutableMessage;
+				// Not add- or remove-filtered, and don't care about updates, so no need to get the old value. Possibly unmodifiable.
+				msg = theUnmodifiableMessage;
 				if (msg != null)
 					throw new UnsupportedOperationException(msg);
 			}
 		}
 
 		public boolean isAddFiltered() {
-			return theAddFilter != null || theAddMessage != null || theImmutableMessage != null;
+			return theAddFilter != null || theAddMessage != null || theUnmodifiableMessage != null;
 		}
 
 		public boolean isRemoveFiltered() {
-			return theRemoveFilter != null || theRemoveMessage != null || theImmutableMessage != null;
+			return theRemoveFilter != null || theRemoveMessage != null || theUnmodifiableMessage != null;
 		}
 
 		public String canRemove(Supplier<T> oldValue) {
@@ -439,7 +439,7 @@ public class ObservableCollectionDataFlowImpl {
 			if (msg == null)
 				msg = theRemoveMessage;
 			if (msg == null)
-				msg = theImmutableMessage;
+				msg = theUnmodifiableMessage;
 			return msg;
 		}
 
@@ -450,7 +450,7 @@ public class ObservableCollectionDataFlowImpl {
 			if (msg == null)
 				msg = theRemoveMessage;
 			if (msg == null)
-				msg = theImmutableMessage;
+				msg = theUnmodifiableMessage;
 			if (msg != null)
 				throw new UnsupportedOperationException(msg);
 		}
@@ -458,8 +458,8 @@ public class ObservableCollectionDataFlowImpl {
 		public String canAdd() {
 			if (theAddMessage != null)
 				return theAddMessage;
-			if (theImmutableMessage != null)
-				return theImmutableMessage;
+			if (theUnmodifiableMessage != null)
+				return theUnmodifiableMessage;
 			return null;
 		}
 
@@ -469,8 +469,8 @@ public class ObservableCollectionDataFlowImpl {
 				msg = theAddFilter.apply(value);
 			if (msg == null && theAddMessage != null)
 				msg = theAddMessage;
-			if (msg == null && theImmutableMessage != null)
-				msg = theImmutableMessage;
+			if (msg == null && theUnmodifiableMessage != null)
+				msg = theUnmodifiableMessage;
 			return msg;
 		}
 
@@ -482,14 +482,14 @@ public class ObservableCollectionDataFlowImpl {
 				throw new IllegalArgumentException(msg);
 			if (msg == null && theAddMessage != null)
 				msg = theAddMessage;
-			if (msg == null && theImmutableMessage != null)
-				msg = theImmutableMessage;
+			if (msg == null && theUnmodifiableMessage != null)
+				msg = theUnmodifiableMessage;
 			if (msg != null)
 				throw new UnsupportedOperationException(msg);
 		}
 
 		public boolean isEmpty() {
-			return theImmutableMessage == null && theAddMessage == null && theRemoveMessage == null && theAddFilter == null
+			return theUnmodifiableMessage == null && theAddMessage == null && theRemoveMessage == null && theAddFilter == null
 				&& theRemoveFilter == null;
 		}
 
@@ -504,9 +504,9 @@ public class ObservableCollectionDataFlowImpl {
 				s.append("removeFilter:").append(theRemoveFilter).append(',');
 			if (theRemoveMessage != null)
 				s.append("noRemove:").append(theRemoveMessage).append(',');
-			if (theImmutableMessage != null)
-				s.append("immutable:").append(theImmutableMessage).append('(').append(areUpdatesAllowed ? "" : "not ").append("updatable)")
-				.append(',');
+			if (theUnmodifiableMessage != null)
+				s.append("unmodifiable:").append(theUnmodifiableMessage).append('(').append(areUpdatesAllowed ? "" : "not ")
+				.append("updatable)").append(',');
 			if (s.length() > 0)
 				s.deleteCharAt(s.length() - 1);
 			else
@@ -3947,7 +3947,7 @@ public class ObservableCollectionDataFlowImpl {
 		public boolean clear() {
 			if (!theFilter.isRemoveFiltered())
 				return theParent.clear();
-			if (theFilter.theImmutableMessage != null || theFilter.theRemoveMessage != null)
+			if (theFilter.theUnmodifiableMessage != null || theFilter.theRemoveMessage != null)
 				return true;
 			else
 				return false;

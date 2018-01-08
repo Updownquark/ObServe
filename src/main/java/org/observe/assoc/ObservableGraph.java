@@ -84,19 +84,19 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 				@Override
 				public ObservableCollection<? extends Edge<N, E>> getEdges() {
 					return source.getEdges().flow().map((TypeToken<ObservableGraph.Edge<N, E>>) source.getEdges().getType(),
-						e -> e.unsettable(), options -> options.cache(false)).immutable().collectPassive();
+						e -> e.unsettable(), options -> options.cache(false)).unmodifiable().collectPassive();
 				}
 
 				@Override
 				public ObservableCollection<? extends Edge<N, E>> getOutward() {
 					return source.getEdges().flow().map((TypeToken<ObservableGraph.Edge<N, E>>) source.getOutward().getType(),
-						e -> e.unsettable(), options -> options.cache(false)).immutable().collectPassive();
+						e -> e.unsettable(), options -> options.cache(false)).unmodifiable().collectPassive();
 				}
 
 				@Override
 				public ObservableCollection<? extends Edge<N, E>> getInward() {
 					return source.getEdges().flow().map((TypeToken<ObservableGraph.Edge<N, E>>) source.getOutward().getType(),
-						e -> e.unsettable(), options -> options.cache(false)).immutable().collectPassive();
+						e -> e.unsettable(), options -> options.cache(false)).unmodifiable().collectPassive();
 				}
 
 				@Override
@@ -240,7 +240,7 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 	}
 
 	/** @return A representation of this graph that is not modifiable */
-	default ObservableGraph<N, E> immutable() {
+	default ObservableGraph<N, E> unmodifiable() {
 		ObservableGraph<N, E> source = this;
 		return new ObservableGraph<N, E>() {
 			@Override
@@ -248,12 +248,12 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 				return source.getNodes().flow()
 					.map((TypeToken<ObservableGraph.Node<N, E>>) source.getNodes().getType(), n -> n.unsettable(),
 						options -> options.cache(false))
-					.immutable().collectPassive();
+					.unmodifiable().collectPassive();
 			}
 
 			@Override
 			public ObservableCollection<N> getNodeValues() {
-				return source.getNodeValues().flow().immutable().collectPassive();
+				return source.getNodeValues().flow().unmodifiable().collectPassive();
 			}
 
 			@Override
@@ -261,11 +261,11 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 				return source.getEdges().flow()
 					.map((TypeToken<ObservableGraph.Edge<N, E>>) source.getEdges().getType(), e -> e.unsettable(),
 						options -> options.cache(false))
-					.immutable().collectPassive();
+					.unmodifiable().collectPassive();
 			}
 
 			@Override
-			public ObservableGraph<N, E> immutable() {
+			public ObservableGraph<N, E> unmodifiable() {
 				return this;
 			}
 		};
