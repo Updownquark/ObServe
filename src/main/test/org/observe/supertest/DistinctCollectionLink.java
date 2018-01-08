@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 
 import org.junit.Assert;
 import org.observe.collect.Equivalence;
@@ -44,8 +45,8 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	private final BetterSortedSet<ElementId> theSortedRepresentatives;
 
 	public DistinctCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type, CollectionDataFlow<?, ?, E> flow,
-		TestHelper helper, FlowOptions.UniqueOptions options) {
-		super(parent, type, flow, helper, isRebasedFlowRequired(options, flow.equivalence()));
+		TestHelper helper, boolean checkRemovedValues, FlowOptions.UniqueOptions options) {
+		super(parent, type, flow, helper, isRebasedFlowRequired(options, flow.equivalence()), checkRemovedValues);
 		theOptions = options;
 		theValues = flow.equivalence().createMap();
 		theSourceValues = new BetterTreeList<>(false);
@@ -240,7 +241,13 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			int passed = 0;
 			int srcIndex = 0;
 			while (!found) {
-				CollectionElement<E> el = getParent().getCollection().getElement(nsvIter.next());
+				CollectionElement<E> el;
+				try {
+					el = getParent().getCollection().getElement(nsvIter.next());
+				} catch (NoSuchElementException e) {
+					System.err.println("On Link " + getLinkIndex() + " for " + add);
+					throw e;
+				}
 				if (getCollection().equivalence().elementEquals(el.get(), add.source)) {
 					srcIndex = getParent().getCollection().getElementsBefore(el.getElementId()) - passed;
 					if (add.index < 0 || add.index == srcIndex)
@@ -492,11 +499,16 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		}
 		set(index, value, helper, !above);
 		// Need to copy the entries, because set operations from above can cause unintended side effects (e.g. removal)
+		// Representative element goes first
+		ElementId repId = theRepresentativeElements.get(valueEntry.getElementId());
+		getParent().setFromAbove(//
+			theSourceValues.getElementsBefore(repId), value, helper, true);
 		for (Map.Entry<ElementId, E> entry : new ArrayList<>(values.entrySet())) {
 			theSourceValues.mutableElement(entry.getKey()).set(value);
 			entry.setValue(value);
-			getParent().setFromAbove(//
-				theSourceValues.getElementsBefore(entry.getKey()), value, helper, true);
+			if (!entry.getKey().equals(repId))
+				getParent().setFromAbove(//
+					theSourceValues.getElementsBefore(entry.getKey()), value, helper, true);
 		}
 	}
 

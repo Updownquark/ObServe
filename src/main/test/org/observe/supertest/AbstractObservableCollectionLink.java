@@ -19,6 +19,7 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl;
 import org.observe.collect.ObservableCollectionTester;
+import org.observe.supertest.MappedCollectionLink.TypeTransformation;
 import org.observe.supertest.ObservableChainTester.TestValueType;
 import org.qommons.TestHelper;
 import org.qommons.Transaction;
@@ -41,10 +42,11 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 	private final Function<TestHelper, T> theSupplier;
 
 	AbstractObservableCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type,
-		CollectionDataFlow<?, ?, T> flow, TestHelper helper, boolean rebasedFlowRequired) {
+		CollectionDataFlow<?, ?, T> flow, TestHelper helper, boolean rebasedFlowRequired, boolean checkRemovedValues) {
 		theParent = parent;
 		theType = type;
-		if (flow.supportsPassive() && helper.getBoolean())
+		boolean passive = flow.supportsPassive() && helper.getBoolean();
+		if (passive)
 			theCollection = flow.collectPassive();
 		else
 			theCollection = flow.collectActive(Observable.empty);
@@ -65,6 +67,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		else
 			theFlow = theCollection.flow();
 		theTester = new ObservableCollectionTester<>("Link " + getLinkIndex(), theCollection);
+		theTester.checkRemovedValues(checkRemovedValues);
 		theTester.getExpected().clear();
 	}
 
@@ -93,6 +96,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		return theCollection.size() + theCollection.toString();
 	}
 
+	@Override
 	public TestValueType getTestType() {
 		return theType;
 	}
@@ -729,16 +733,30 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		ValueHolder<CollectionDataFlow<?, ?, X>> derivedFlow = new ValueHolder<>();
 		helper.doAction(1, () -> { // map
 			ObservableChainTester.TestValueType nextType = ObservableChainTester.nextType(helper);
-			ObservableChainTester.TypeTransformation<T, X> transform = ObservableChainTester.transform(theType, nextType, helper);
+			SimpleSettableValue<TypeTransformation<T, X>> txValue = new SimpleSettableValue<>(
+				(TypeToken<TypeTransformation<T, X>>) (TypeToken<?>) new TypeToken<Object>() {}, false);
+			txValue.set(MappedCollectionLink.transform(theType, nextType, helper), null);
+			boolean variableMap = helper.getBoolean();
+			CollectionDataFlow<?, ?, T> flow = theFlow;
+			if (variableMap)
+				flow = flow.refresh(txValue.changes().noInit()); // The refresh has to be UNDER the map
 			ValueHolder<FlowOptions.MapOptions<T, X>> options = new ValueHolder<>();
-			derivedFlow.accept(theFlow.map((TypeToken<X>) nextType.getType(), transform::map, o -> {
-				o.manyToOne(transform.isManyToOne());
+			derivedFlow.accept(flow.map((TypeToken<X>) nextType.getType(), src -> txValue.get().map(src), o -> {
+				o.manyToOne(txValue.get().isManyToOne());
 				if (helper.getBoolean(.95))
-					o.withReverse(transform::reverse);
-				options.accept(o.cache(helper.getBoolean()).fireIfUnchanged(helper.getBoolean()).reEvalOnUpdate(helper.getBoolean()));
+					o.withReverse(x -> txValue.get().reverse(x));
+				options.accept(o.cache(helper.getBoolean()).fireIfUnchanged(variableMap || helper.getBoolean())
+					.reEvalOnUpdate(variableMap || helper.getBoolean()));
 			}));
-			theChild = new MappedCollectionLink<>(this, nextType, derivedFlow.get(), helper, transform,
-				new FlowOptions.MapDef<>(options.get()));
+			boolean checkRemovedValues;
+			if (!theTester.isCheckingRemovedValues())
+				checkRemovedValues = false;
+			else if (options.get().isCached())
+				checkRemovedValues = true;
+			else
+				checkRemovedValues = !variableMap;
+			theChild = new MappedCollectionLink<>(this, nextType, derivedFlow.get(), helper, checkRemovedValues, txValue,
+				variableMap, new FlowOptions.MapDef<>(options.get()));
 			derived.accept((ObservableChainLink<X>) theChild);
 			// TODO mapEquivalent
 		})//
@@ -764,8 +782,8 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			if (variableFilter)
 				flow = flow.refresh(filterValue.changes().noInit()); // The refresh has to be UNDER the filter
 			derivedFlow.accept((CollectionDataFlow<?, ?, X>) flow.filter(v -> filterValue.get().apply(v)));
-			theChild = new FilteredCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), helper, filterValue,
-				variableFilter);
+			theChild = new FilteredCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), helper,
+				theTester.isCheckingRemovedValues(), filterValue, variableFilter);
 			derived.accept((ObservableChainLink<X>) theChild);
 		})//
 		// TODO whereContained
@@ -783,7 +801,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				options.accept(opts);
 			}));
 			theChild = new DistinctCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), helper,
-				options.get());
+					theTester.isCheckingRemovedValues(), options.get());
 			derived.accept((ObservableChainLink<X>) theChild);
 		})//
 		// TODO distinctSorted
@@ -805,7 +823,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				filter.accept(f);
 			}));
 			theChild = new ModFilteredCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), helper,
-				new ObservableCollectionDataFlowImpl.ModFilterer<>(filter.get()));
+				new ObservableCollectionDataFlowImpl.ModFilterer<>(filter.get()), theTester.isCheckingRemovedValues());
 			derived.accept((ObservableChainLink<X>) theChild);
 		})//
 		// TODO groupBy

@@ -34,8 +34,8 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 	private final BetterSortedSet<ElementId> theNewSourceValues;
 
 	public FilteredCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type, CollectionDataFlow<?, ?, E> flow,
-		TestHelper helper, SimpleSettableValue<Function<E, String>> filter, boolean variableFilter) {
-		super(parent, type, flow, helper, false);
+		TestHelper helper, boolean checkRemovedValues, SimpleSettableValue<Function<E, String>> filter, boolean variableFilter) {
+		super(parent, type, flow, helper, false, checkRemovedValues);
 		theFilterValue = filter;
 		isFilterVariable = variableFilter;
 		theFilter = filter.get();

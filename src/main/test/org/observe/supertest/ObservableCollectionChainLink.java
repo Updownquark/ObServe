@@ -3,6 +3,7 @@ package org.observe.supertest;
 import java.util.List;
 
 import org.observe.collect.ObservableCollection;
+import org.observe.supertest.ObservableChainTester.TestValueType;
 import org.qommons.TestHelper;
 
 interface ObservableCollectionChainLink<E, T> extends ObservableChainLink<T> {
@@ -54,6 +55,8 @@ interface ObservableCollectionChainLink<E, T> extends ObservableChainLink<T> {
 			return str.toString();
 		}
 	}
+
+	TestValueType getTestType();
 
 	@Override
 	ObservableCollectionChainLink<T, ?> getChild();
