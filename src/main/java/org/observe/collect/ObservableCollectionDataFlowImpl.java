@@ -497,16 +497,16 @@ public class ObservableCollectionDataFlowImpl {
 		public String toString() {
 			StringBuilder s = new StringBuilder();
 			if (theAddFilter != null)
-				s.append("addFilter:").append(theAddFilter).append(' ');
+				s.append("addFilter:").append(theAddFilter).append(',');
 			if (theAddMessage != null)
-				s.append("noAdd:").append(theAddMessage).append(' ');
+				s.append("noAdd:").append(theAddMessage).append(',');
 			if (theRemoveFilter != null)
-				s.append("removeFilter:").append(theRemoveFilter).append(' ');
+				s.append("removeFilter:").append(theRemoveFilter).append(',');
 			if (theRemoveMessage != null)
-				s.append("noRemove:").append(theRemoveMessage).append(' ');
+				s.append("noRemove:").append(theRemoveMessage).append(',');
 			if (theImmutableMessage != null)
 				s.append("immutable:").append(theImmutableMessage).append('(').append(areUpdatesAllowed ? "" : "not ").append("updatable)")
-				.append(' ');
+				.append(',');
 			if (s.length() > 0)
 				s.deleteCharAt(s.length() - 1);
 			else
@@ -3445,7 +3445,8 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
 			throws UnsupportedOperationException, IllegalArgumentException {
-			theParent.setValues(elements.stream().map(el -> ((RefreshingElement) el).theParentEl).collect(Collectors.toList()), newValue);
+			theParent.setValues(//
+				elements.stream().map(el -> ((RefreshingElement) el).theParentEl).collect(Collectors.toList()), newValue);
 		}
 
 		@Override
@@ -3982,7 +3983,8 @@ public class ObservableCollectionDataFlowImpl {
 			throws UnsupportedOperationException, IllegalArgumentException {
 			for (DerivedCollectionElement<T> el : elements)
 				theFilter.assertSet(newValue, el::get);
-			theParent.setValues(elements.stream().map(el -> ((ModFilteredElement) el).theParentEl).collect(Collectors.toList()), newValue);
+			theParent.setValues(//
+				elements.stream().map(el -> ((ModFilteredElement) el).theParentEl).collect(Collectors.toList()), newValue);
 		}
 
 		@Override
