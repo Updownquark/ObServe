@@ -238,6 +238,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			if (helper.isReproducing())
 				System.out.println("\tShould remove " + ops.size() + ops);
 			removeAllFromCollection(values, ops, modify, helper);
+			Collections.reverse(ops); // Indices need to be descending
 			postModify(ops, subListStart, helper);
 		}).or(1, () -> { // retainAll
 			// Allow for larger, because the smaller the generated collection,
@@ -264,6 +265,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			if (helper.isReproducing())
 				System.out.println("\tShould remove " + ops.size() + ops);
 			retainAllInCollection(values, ops, modify, helper);
+			Collections.reverse(ops); // Indices need to be descending
 			postModify(ops, subListStart, helper);
 		}).or(1, () -> {
 			if (helper.isReproducing())
@@ -638,9 +640,10 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 	}
 
 	private void postModify(List<CollectionOp<T>> ops, int subListStart, TestHelper helper) {
-		if (ops.stream().anyMatch(op -> op.getMessage() != null))
+		if (subListStart > 0 || ops.stream().anyMatch(op -> op.getMessage() != null))
 			ops = ops.stream().filter(op -> op.getMessage() == null)//
-			.map(op -> subListStart > 0 ? new CollectionOp<>(null, op.type, op.source, op.index) : op).collect(Collectors.toList());
+			.map(op -> subListStart > 0 ? new CollectionOp<>(null, op.type, op.source, subListStart + op.index) : op)
+			.collect(Collectors.toList());
 		fromAbove(ops, helper, false);
 	}
 
@@ -680,25 +683,21 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 	}
 
 	protected void modified(List<CollectionOp<T>> ops, TestHelper helper, boolean propagateUp) {
-		// TODO How to address the remove indexes needing to be descended?
-		for (CollectionOp<T> add : ops)
-			theTester.add(add.index, add.source);
+		for (CollectionOp<T> op : ops) {
+			switch (op.type) {
+			case add:
+				theTester.add(op.index, op.source);
+				break;
+			case remove:
+				theTester.getExpected().remove(op.index);
+				break;
+			case set:
+				theTester.getExpected().set(op.index, op.source);
+				break;
+			}
+		}
 		if (propagateUp && theChild != null)
-			theChild.fromBelow(adds, helper);
-	}
-
-	protected void removed(int index, TestHelper helper, boolean propagateUp) {
-		if (index < 0)
-			return;
-		theTester.getExpected().remove(index);
-		if (propagateUp && theChild != null)
-			theChild.removedFromBelow(index, helper);
-	}
-
-	protected void set(int index, T value, TestHelper helper, boolean propagateUp) {
-		theTester.getExpected().set(index, value);
-		if (propagateUp && theChild != null)
-			theChild.setFromBelow(index, value, helper);
+			theChild.fromBelow(ops, helper);
 	}
 
 	@Override

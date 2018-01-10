@@ -16,6 +16,13 @@ interface ObservableCollectionChainLink<E, T> extends ObservableChainLink<T> {
 
 		private String theMessage;
 		private boolean isError;
+		
+		CollectionOp(CollectionChangeType type, E source, int index){
+			theRoot=null;
+			this.type = type;
+			this.source = source;
+			this.index = index;
+		}
 
 		CollectionOp(CollectionOp<?> root, CollectionChangeType type, E source, int index) {
 			theRoot = root == null ? null : root.getRoot();
@@ -70,7 +77,7 @@ interface ObservableCollectionChainLink<E, T> extends ObservableChainLink<T> {
 
 	void checkModifiable(List<CollectionOp<T>> ops, int subListStart, int subListEnd, TestHelper helper);
 
-	void fromBelow(List<CollectionOp<T>> ops, TestHelper helper);
+	void fromBelow(List<CollectionOp<E>> ops, TestHelper helper);
 
 	void fromAbove(List<CollectionOp<T>> ops, TestHelper helper, boolean above);
 }
