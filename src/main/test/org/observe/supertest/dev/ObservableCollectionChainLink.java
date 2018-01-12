@@ -11,7 +11,7 @@ interface ObservableCollectionChainLink<E, T> extends ObservableChainLink<T> {
 	static class CollectionOp<E> {
 		final CollectionOp<?> theRoot;
 		final CollectionChangeType type;
-		final E source;
+		final E value;
 		final int index;
 
 		private String theMessage;
@@ -20,14 +20,14 @@ interface ObservableCollectionChainLink<E, T> extends ObservableChainLink<T> {
 		CollectionOp(CollectionChangeType type, E source, int index){
 			theRoot=null;
 			this.type = type;
-			this.source = source;
+			this.value = source;
 			this.index = index;
 		}
 
 		CollectionOp(CollectionOp<?> root, CollectionChangeType type, E source, int index) {
 			theRoot = root == null ? null : root.getRoot();
 			this.type = type;
-			this.source = source;
+			this.value = source;
 			this.index = index;
 		}
 
@@ -57,10 +57,10 @@ interface ObservableCollectionChainLink<E, T> extends ObservableChainLink<T> {
 			StringBuilder str = new StringBuilder();
 			if (index >= 0)
 				str.append('[').append(index).append(']');
-			if (source != null) {
+			if (value != null) {
 				if (str.length() > 0)
 					str.append(": ");
-				str.append(source);
+				str.append(value);
 			}
 			return str.toString();
 		}

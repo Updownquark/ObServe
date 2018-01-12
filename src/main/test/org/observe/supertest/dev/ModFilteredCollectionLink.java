@@ -30,8 +30,8 @@ public class ModFilteredCollectionLink<E> extends AbstractObservableCollectionLi
 					op.reject(theFilter.getUnmodifiableMessage(), true);
 				else if (theFilter.getAddMessage() != null)
 					op.reject(theFilter.getAddMessage(), true);
-				else if (theFilter.getAddFilter() != null && theFilter.getAddFilter().apply(op.source) != null)
-					op.reject(theFilter.getAddFilter().apply(op.source), true);
+				else if (theFilter.getAddFilter() != null && theFilter.getAddFilter().apply(op.value) != null)
+					op.reject(theFilter.getAddFilter().apply(op.value), true);
 				else
 					parentOps.add(op);
 				break;
@@ -40,14 +40,14 @@ public class ModFilteredCollectionLink<E> extends AbstractObservableCollectionLi
 					op.reject(theFilter.getUnmodifiableMessage(), true);
 				else if (theFilter.getRemoveMessage() != null)
 					op.reject(theFilter.getRemoveMessage(), true);
-				else if (theFilter.getRemoveFilter() != null && theFilter.getRemoveFilter().apply(op.source) != null)
-					op.reject(theFilter.getRemoveFilter().apply(op.source), true); // Relying on the modification supplying the value
+				else if (theFilter.getRemoveFilter() != null && theFilter.getRemoveFilter().apply(op.value) != null)
+					op.reject(theFilter.getRemoveFilter().apply(op.value), true); // Relying on the modification supplying the value
 				else
 					parentOps.add(op);
 				break;
 			case set:
 				E oldValue = getExpected().get(subListStart + op.index);
-				if (oldValue == op.source) {
+				if (oldValue == op.value) {
 					// Updates are treated more leniently, since the content of the collection is not changing
 					// Updates can only be prevented explicitly
 					if (!theFilter.areUpdatesAllowed() && theFilter.getUnmodifiableMessage() != null)
@@ -60,8 +60,8 @@ public class ModFilteredCollectionLink<E> extends AbstractObservableCollectionLi
 					op.reject(theFilter.getAddMessage(), true);
 				else if (theFilter.getRemoveFilter() != null && theFilter.getRemoveFilter().apply(oldValue) != null)
 					op.reject(theFilter.getRemoveFilter().apply(oldValue), true);
-				else if (theFilter.getAddFilter() != null && theFilter.getAddFilter().apply(op.source) != null)
-					op.reject(theFilter.getAddFilter().apply(op.source), true);
+				else if (theFilter.getAddFilter() != null && theFilter.getAddFilter().apply(op.value) != null)
+					op.reject(theFilter.getAddFilter().apply(op.value), true);
 				else
 					parentOps.add(op);
 				break;

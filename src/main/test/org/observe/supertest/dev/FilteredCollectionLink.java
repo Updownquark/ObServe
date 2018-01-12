@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.function.Function;
+import java.util.function.IntUnaryOperator;
 import java.util.function.Predicate;
 
 import org.junit.Assert;
@@ -93,28 +94,41 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 	@Override
 	public void checkModifiable(List<CollectionOp<E>> ops, int subListStart, int subListEnd, TestHelper helper) {
 		List<CollectionOp<E>> parentOps = new ArrayList<>(ops.size());
+		int parentSLS = getParentSubListStart(subListStart);
+		int parentSLE = getParentSubListEnd(subListEnd);
+		IntUnaryOperator idxMap = idx -> {
+			if (idx < 0)
+				return idx;
+			return getSourceIndex(idx) - parentSLS;
+		};
 		for (CollectionOp<E> op : ops) {
 			switch (op.type) {
 			case add:
-				String msg = theFilter.apply(op.source);
+				String msg = theFilter.apply(op.value);
 				if (msg != null)
 					op.reject(msg, true);
 				else
-					parentOps.add(op);
+					parentOps.add(new CollectionOp<>(op, op.type, op.value, idxMap.applyAsInt(op.index)));
 				break;
 			case remove:
-				parentOps.add(op);
+				parentOps.add(new CollectionOp<>(op, op.type, op.value, idxMap.applyAsInt(op.index)));
 				break;
 			case set:
-				msg = theFilter.apply(op.source);
+				msg = theFilter.apply(op.value);
 				if (msg != null)
 					op.reject(msg, true);
 				else
-					parentOps.add(op);
+					parentOps.add(new CollectionOp<>(op, op.type, op.value, idxMap.applyAsInt(op.index)));
 				break;
 			}
 		}
-		getParent().checkModifiable(parentOps, getParentSubListStart(subListStart), getParentSubListEnd(subListEnd), helper);
+		getParent().checkModifiable(parentOps, parentSLS, parentSLE, helper);
+	}
+
+	private int getSourceIndex(int index) {
+		if (index == thePresentSourceElements.size())
+			return theSourceValues.size();
+		return theSourceValues.getElementsBefore(thePresentSourceElements.get(index));
 	}
 
 	@Override
@@ -123,10 +137,10 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 		for (CollectionOp<E> op : ops) {
 			switch (op.type) {
 			case add:
-				ElementId srcId = theSourceValues.addElement(op.index, op.source).getElementId();
-				if (theFilter.apply(op.source) == null) {
+				ElementId srcId = theSourceValues.addElement(op.index, op.value).getElementId();
+				if (theFilter.apply(op.value) == null) {
 					ElementId presentId = thePresentSourceElements.addElement(srcId, false).getElementId();
-					filterOps.add(new CollectionOp<>(op.type, op.source, thePresentSourceElements.getElementsBefore(presentId)));
+					filterOps.add(new CollectionOp<>(op.type, op.value, thePresentSourceElements.getElementsBefore(presentId)));
 				}
 				break;
 			case remove:
@@ -134,28 +148,28 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 				CollectionElement<ElementId> presentEl = thePresentSourceElements.getElement(srcId, true); // By value, not by element ID
 				if (presentEl != null) {
 					filterOps
-					.add(new CollectionOp<>(op.type, op.source, thePresentSourceElements.getElementsBefore(presentEl.getElementId())));
+					.add(new CollectionOp<>(op.type, op.value, thePresentSourceElements.getElementsBefore(presentEl.getElementId())));
 					thePresentSourceElements.mutableElement(presentEl.getElementId()).remove();
 				}
 				theSourceValues.mutableElement(srcId).remove();
 				break;
 			case set:
 				srcId = theSourceValues.getElement(op.index).getElementId();
-				theSourceValues.mutableElement(srcId).set(op.source);
+				theSourceValues.mutableElement(srcId).set(op.value);
 				presentEl = thePresentSourceElements.getElement(srcId, true); // By value, not by element ID
 				if (presentEl != null) {
 					int presentIndex = thePresentSourceElements.getElementsBefore(presentEl.getElementId());
-					if (theFilter.apply(op.source) == null)
-						filterOps.add(new CollectionOp<>(CollectionChangeType.set, op.source, presentIndex));
+					if (theFilter.apply(op.value) == null)
+						filterOps.add(new CollectionOp<>(CollectionChangeType.set, op.value, presentIndex));
 					else {
-						filterOps.add(new CollectionOp<>(CollectionChangeType.remove, op.source, presentIndex));
+						filterOps.add(new CollectionOp<>(CollectionChangeType.remove, op.value, presentIndex));
 						thePresentSourceElements.mutableElement(presentEl.getElementId()).remove();
 					}
 				} else {
-					if (theFilter.apply(op.source) == null) {
+					if (theFilter.apply(op.value) == null) {
 						ElementId presentId = thePresentSourceElements.addElement(srcId, false).getElementId();
 						filterOps.add(
-							new CollectionOp<>(CollectionChangeType.add, op.source, thePresentSourceElements.getElementsBefore(presentId)));
+							new CollectionOp<>(CollectionChangeType.add, op.value, thePresentSourceElements.getElementsBefore(presentId)));
 					}
 				}
 			}
@@ -171,8 +185,8 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 			case add:
 				// Assuming that the added elements were added in the same order as the list of operations. Valid?
 				int srcIndex = theNewSourceValues.removeFirst();
-				parentOps.add(new CollectionOp<>(CollectionChangeType.add, op.source, srcIndex));
-				ElementId srcId = theSourceValues.addElement(srcIndex, op.source).getElementId();
+				parentOps.add(new CollectionOp<>(CollectionChangeType.add, op.value, srcIndex));
+				ElementId srcId = theSourceValues.addElement(srcIndex, op.value).getElementId();
 				ElementId presentId = thePresentSourceElements.addElement(srcId, false).getElementId();
 				Assert.assertEquals(op.index, thePresentSourceElements.getElementsBefore(presentId));
 				break;
@@ -180,13 +194,13 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 				srcId = thePresentSourceElements.remove(op.index);
 				srcIndex = theSourceValues.getElementsBefore(srcId);
 				theSourceValues.mutableElement(srcId).remove();
-				parentOps.add(new CollectionOp<>(CollectionChangeType.remove, op.source, srcIndex));
+				parentOps.add(new CollectionOp<>(CollectionChangeType.remove, op.value, srcIndex));
 				break;
 			case set:
-				srcId = thePresentSourceElements.remove(op.index);
+				srcId = thePresentSourceElements.get(op.index);
 				srcIndex = theSourceValues.getElementsBefore(srcId);
-				theSourceValues.mutableElement(srcId).set(op.source);
-				parentOps.add(new CollectionOp<>(CollectionChangeType.set, op.source, srcIndex));
+				theSourceValues.mutableElement(srcId).set(op.value);
+				parentOps.add(new CollectionOp<>(CollectionChangeType.set, op.value, srcIndex));
 				break;
 			}
 		}

@@ -103,7 +103,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		if (ops.get(0).type == CollectionChangeType.add) {
 			addedSet = getCollection().equivalence().createSet();
 			getParent().checkModifiable(//
-				ops.stream().map(op -> new CollectionOp<>(op, op.type, op.source, -1)).collect(Collectors.toList()), 0,
+				ops.stream().map(op -> new CollectionOp<>(op, op.type, op.value, -1)).collect(Collectors.toList()), 0,
 				theSourceValues.size(), helper);
 			parentOps = null;
 		} else {
@@ -115,19 +115,19 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			case add:
 				if (op.getMessage() != null)
 					continue;
-				if (!addedSet.add(op.source)) {
+				if (!addedSet.add(op.value)) {
 					op.reject(StdMsg.ELEMENT_EXISTS, false);
 					continue;
 				}
 
-				MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueEntry = theValues.getEntry(op.source);
+				MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueEntry = theValues.getEntry(op.value);
 				MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueHandle;
 				// TODO All the index adding here is for isPreservingSourceOrder=false. Rewrite for true.
 				if (valueEntry != null) {
 					op.reject(StdMsg.ELEMENT_EXISTS, false);
 				} else if (op.index >= 0) {
 					if ((subListStart + op.index) == 0 && theValues.isEmpty()) {
-						op.reject(theValues.keySet().canAdd(op.source), true);
+						op.reject(theValues.keySet().canAdd(op.value), true);
 					} else if (theOptions.isPreservingSourceOrder()) {
 						throw new IllegalStateException("Not implemented");
 					} else {
@@ -136,7 +136,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 							valueHandle = getValueHandle(subListStart + op.index);
 						else
 							valueHandle = getValueHandle(subListStart + op.index - 1);
-						op.reject(theValues.keySet().mutableElement(valueHandle.getElementId()).canAdd(op.source, addBefore), true);
+						op.reject(theValues.keySet().mutableElement(valueHandle.getElementId()).canAdd(op.value, addBefore), true);
 					}
 				} else if (subListStart > 0 || subListEnd < theValues.size()) {
 					if (theOptions.isPreservingSourceOrder()) {
@@ -144,17 +144,17 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 					} else {
 						valueHandle = getValueHandle(subListStart);
 
-						op.reject(theValues.keySet().mutableElement(valueHandle.getElementId()).canAdd(op.source, true), true);
+						op.reject(theValues.keySet().mutableElement(valueHandle.getElementId()).canAdd(op.value, true), true);
 						if (op.getMessage() != null) {
 							valueHandle = getValueHandle(subListEnd - 1);
-							op.reject(theValues.keySet().mutableElement(valueHandle.getElementId()).canAdd(op.source, false), true);
+							op.reject(theValues.keySet().mutableElement(valueHandle.getElementId()).canAdd(op.value, false), true);
 						}
 					}
 				}
 				break;
 			case remove:
 				if (op.index < 0)
-					valueEntry = theValues.getEntry(op.source);
+					valueEntry = theValues.getEntry(op.value);
 				else
 					valueEntry = getValueHandle(subListStart + op.index);
 				if (valueEntry == null) {
@@ -173,18 +173,18 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 				break;
 			case set:
 				MapEntryHandle<E, BetterSortedMap<ElementId, E>> oldValueEntry = getValueHandle(subListStart + op.index);
-				MapEntryHandle<E, BetterSortedMap<ElementId, E>> newValueEntry = theValues.getEntry(op.source);
+				MapEntryHandle<E, BetterSortedMap<ElementId, E>> newValueEntry = theValues.getEntry(op.value);
 				if (newValueEntry != null && !newValueEntry.getElementId().equals(oldValueEntry.getElementId())) {
 					op.reject(StdMsg.ELEMENT_EXISTS, true);
 					continue;
 				}
 				if (!theOptions.isPreservingSourceOrder()) {
-					op.reject(theValues.keySet().mutableElement(oldValueEntry.getElementId()).isAcceptable(op.source), true);
+					op.reject(theValues.keySet().mutableElement(oldValueEntry.getElementId()).isAcceptable(op.value), true);
 					if (op.getMessage() != null)
 						continue;
 				}
 				for (ElementId srcId : oldValueEntry.get().keySet()) {
-					CollectionOp<E> parentSet = new CollectionOp<>(op, op.type, op.source, theSourceValues.getElementsBefore(srcId));
+					CollectionOp<E> parentSet = new CollectionOp<>(op, op.type, op.value, theSourceValues.getElementsBefore(srcId));
 					parentOps.add(parentSet);
 				}
 				break;
@@ -200,7 +200,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		for (CollectionOp<E> op : ops) {
 			switch (op.type) {
 			case add:
-				add(op.index, op.source, -1, distinctOps);
+				add(op.index, op.value, -1, distinctOps);
 				break;
 			case remove:
 				remove(op.index, distinctOps);
@@ -209,33 +209,33 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 				CollectionElement<E> srcEl = theSourceValues.getElement(op.index);
 				E oldValue = srcEl.get();
 				MapEntryHandle<E, BetterSortedMap<ElementId, E>> oldValueEntry = theValues.getEntry(oldValue);
-				MapEntryHandle<E, BetterSortedMap<ElementId, E>> newValueEntry = theValues.getEntry(op.source);
+				MapEntryHandle<E, BetterSortedMap<ElementId, E>> newValueEntry = theValues.getEntry(op.value);
 				if (newValueEntry != null && oldValueEntry.getElementId().equals(newValueEntry.getElementId())) {
-					theSourceValues.mutableElement(srcEl.getElementId()).set(op.source);
-					newValueEntry.get().put(srcEl.getElementId(), op.source);
+					theSourceValues.mutableElement(srcEl.getElementId()).set(op.value);
+					newValueEntry.get().put(srcEl.getElementId(), op.value);
 					// Category is unchanged
 					if (theRepresentativeElements.get(newValueEntry.getElementId()).equals(srcEl.getElementId())) {
 						ElementId repId = theOptions.isPreservingSourceOrder() ? srcEl.getElementId() : newValueEntry.getElementId();
 						// The updated value is the representative for its category. Fire the update event.
 						int repIndex = theSortedRepresentatives.indexOf(repId);
-						distinctOps.add(new CollectionOp<>(CollectionChangeType.set, op.source, repIndex));
+						distinctOps.add(new CollectionOp<>(CollectionChangeType.set, op.value, repIndex));
 					} else {
 						// The update value is not the representative for its category. No change to the derived collection.
 					}
 				} else {
 					// Category has been changed.
 					if (oldValueEntry.get().size() == 1
-						&& theValues.keySet().mutableElement(oldValueEntry.getElementId()).isAcceptable(op.source) == null) {
-						theSourceValues.mutableElement(srcEl.getElementId()).set(op.source);
-						theValues.keySet().mutableElement(oldValueEntry.getElementId()).set(op.source);
+						&& theValues.keySet().mutableElement(oldValueEntry.getElementId()).isAcceptable(op.value) == null) {
+						theSourceValues.mutableElement(srcEl.getElementId()).set(op.value);
+						theValues.keySet().mutableElement(oldValueEntry.getElementId()).set(op.value);
 						ElementId repId = theOptions.isPreservingSourceOrder() ? srcEl.getElementId() : oldValueEntry.getElementId();
 						// The updated value is the representative for its category. Fire the update event.
 						int repIndex = theSortedRepresentatives.indexOf(repId);
-						distinctOps.add(new CollectionOp<>(CollectionChangeType.set, op.source, repIndex));
+						distinctOps.add(new CollectionOp<>(CollectionChangeType.set, op.value, repIndex));
 					} else {
 						// Same as a remove, then an add.
 						remove(op.index, distinctOps);
-						add(op.index, op.source, -1, distinctOps);
+						add(op.index, op.value, -1, distinctOps);
 					}
 				}
 			}
@@ -251,11 +251,11 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			switch (op.type) {
 			case add:
 				int srcIndex = theNewSourceValues.removeFirst();
-				parentOps.add(new CollectionOp<>(CollectionChangeType.add, op.source, srcIndex));
-				add(srcIndex, op.source, op.index, distinctOps);
+				parentOps.add(new CollectionOp<>(CollectionChangeType.add, op.value, srcIndex));
+				add(srcIndex, op.value, op.index, distinctOps);
 				break;
 			case remove:
-				ElementId valueEl = theValues.getEntry(op.source).getElementId();
+				ElementId valueEl = getValueHandle(op.index).getElementId();
 				ElementId repEl = theRepresentativeElements.remove(valueEl);
 				if (theOptions.isPreservingSourceOrder())
 					theSortedRepresentatives.remove(repEl);
@@ -273,7 +273,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			case set:
 				MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueEntry = getValueHandle(op.index);
 				BetterSortedMap<ElementId, E> values = valueEntry.get();
-				MapEntryHandle<E, BetterSortedMap<ElementId, E>> newValueEntry = theValues.getEntry(op.source);
+				MapEntryHandle<E, BetterSortedMap<ElementId, E>> newValueEntry = theValues.getEntry(op.value);
 				if (newValueEntry != null && !newValueEntry.getElementId().equals(valueEntry.getElementId())) {
 					if (!above)
 						Assert.assertTrue("This should not happen", false);
@@ -284,31 +284,31 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 					for (ElementId srcId : srcIds) {
 						srcIndex = theSourceValues.getElementsBefore(srcId);
 						remove(srcIndex, distinctOps);
-						add(srcIndex, op.source, -1, distinctOps);
+						add(srcIndex, op.value, -1, distinctOps);
 					}
 				} else {
 					if (theOptions.isPreservingSourceOrder()) {
-						if (theValues.keySet().mutableElement(valueEntry.getElementId()).isAcceptable(op.source) == null)
-							theValues.keySet().mutableElement(valueEntry.getElementId()).set(op.source);
+						if (theValues.keySet().mutableElement(valueEntry.getElementId()).isAcceptable(op.value) == null)
+							theValues.keySet().mutableElement(valueEntry.getElementId()).set(op.value);
 						else {
 							theValues.mutableEntry(valueEntry.getElementId()).remove();
-							theValues.putEntry(op.source, values, false).getElementId();
+							theValues.putEntry(op.value, values, false).getElementId();
 						}
 					} else {
-						theValues.keySet().mutableElement(valueEntry.getElementId()).set(op.source);
+						theValues.keySet().mutableElement(valueEntry.getElementId()).set(op.value);
 						Assert.assertEquals(op.index, getElementIndex(valueEntry.getElementId())); // Set operations are not allowed to
-																									// modify order
+						// modify order
 					}
 					// Need to copy the entries, because set operations from above can cause unintended side effects (e.g. removal)
 					// Representative element goes first
 					ElementId repId = theRepresentativeElements.get(valueEntry.getElementId());
-					parentOps.add(new CollectionOp<>(CollectionChangeType.set, op.source, theSourceValues.getElementsBefore(repId)));
+					parentOps.add(new CollectionOp<>(CollectionChangeType.set, op.value, theSourceValues.getElementsBefore(repId)));
 					for (Map.Entry<ElementId, E> entry : new ArrayList<>(values.entrySet())) {
-						theSourceValues.mutableElement(entry.getKey()).set(op.source);
-						entry.setValue(op.source);
+						theSourceValues.mutableElement(entry.getKey()).set(op.value);
+						entry.setValue(op.value);
 						if (!entry.getKey().equals(repId))
 							parentOps.add(
-								new CollectionOp<>(CollectionChangeType.set, op.source, theSourceValues.getElementsBefore(entry.getKey())));
+								new CollectionOp<>(CollectionChangeType.set, op.value, theSourceValues.getElementsBefore(entry.getKey())));
 					}
 					distinctOps.add(op);
 				}
