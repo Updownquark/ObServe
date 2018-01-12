@@ -1,17 +1,17 @@
 package org.observe.supertest;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.function.Function;
+import java.util.function.IntUnaryOperator;
 import java.util.function.Predicate;
 
 import org.junit.Assert;
 import org.observe.SimpleSettableValue;
+import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ObservableChainTester.TestValueType;
 import org.qommons.TestHelper;
@@ -30,8 +30,7 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 
 	private final BetterList<E> theSourceValues;
 	private final BetterSortedSet<ElementId> thePresentSourceElements;
-
-	private final BetterSortedSet<ElementId> theNewSourceValues;
+	private final BetterList<Integer> theNewSourceValues;
 
 	public FilteredCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type, CollectionDataFlow<?, ?, E> flow,
 		TestHelper helper, boolean checkRemovedValues, SimpleSettableValue<Function<E, String>> filter, boolean variableFilter) {
@@ -50,11 +49,11 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 			}
 		}
 
-		theNewSourceValues = new BetterTreeSet<>(false, ElementId::compareTo);
+		theNewSourceValues = new BetterTreeList<>(false);
 		getParent().getCollection().onChange(evt -> {
 			switch (evt.getType()) {
 			case add:
-				theNewSourceValues.add(evt.getElementId());
+				theNewSourceValues.add(evt.getIndex());
 				break;
 			default:
 			}
@@ -72,37 +71,141 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 					System.out.println("Filter change from " + oldFilter + " to " + newFilter);
 				theFilter = newFilter;
 				theFilterValue.set(theFilter, null);
-				List<CollectionOp<E>> adds = new ArrayList<>();
+				List<CollectionOp<E>> ops = new ArrayList<>();
 				for (int i = 0; i < theSourceValues.size(); i++) {
 					CollectionElement<E> srcEl = theSourceValues.getElement(i);
 					CollectionElement<ElementId> presentElement = thePresentSourceElements.getElement(srcEl.getElementId(), true); // value
 					boolean isIncluded = newFilter.apply(srcEl.get()) == null;
 					if (presentElement != null && !isIncluded) {
-						int presentIndex = thePresentSourceElements.getElementsBefore(presentElement.getElementId()) - adds.size();
+						int presentIndex = thePresentSourceElements.getElementsBefore(presentElement.getElementId());
 						thePresentSourceElements.mutableElement(presentElement.getElementId()).remove();
-						removed(presentIndex, action.getHelper(), true);
+						ops.add(new CollectionOp<>(CollectionChangeType.remove, srcEl.get(), presentIndex));
 					} else if (presentElement == null && isIncluded) {
 						presentElement = thePresentSourceElements.addElement(srcEl.getElementId(), true);
 						int presentIndex = thePresentSourceElements.getElementsBefore(presentElement.getElementId());
-						adds.add(new CollectionOp<>(null, srcEl.get(), presentIndex));
+						ops.add(new CollectionOp<>(CollectionChangeType.add, srcEl.get(), presentIndex));
 					}
 				}
-				added(adds, action.getHelper(), true);
+				modified(ops, action.getHelper(), true);
 			});
 		}
 	}
 
 	@Override
-	public void checkAddable(List<CollectionOp<E>> adds, int subListStart, int subListEnd, TestHelper helper) {
-		List<CollectionOp<E>> parentAdds = new ArrayList<>();
-		for (CollectionOp<E> op : adds) {
-			String msg = theFilter.apply(op.source);
-			if (msg != null)
-				op.reject(msg, true);
-			else
-				parentAdds.add(op);
+	public void checkModifiable(List<CollectionOp<E>> ops, int subListStart, int subListEnd, TestHelper helper) {
+		List<CollectionOp<E>> parentOps = new ArrayList<>(ops.size());
+		int parentSLS = getParentSubListStart(subListStart);
+		int parentSLE = getParentSubListEnd(subListEnd);
+		IntUnaryOperator idxMap = idx -> {
+			if (idx < 0)
+				return idx;
+			return getSourceIndex(idx) - parentSLS;
+		};
+		for (CollectionOp<E> op : ops) {
+			switch (op.type) {
+			case add:
+				String msg = theFilter.apply(op.value);
+				if (msg != null)
+					op.reject(msg, true);
+				else
+					parentOps.add(new CollectionOp<>(op, op.type, op.value, idxMap.applyAsInt(op.index)));
+				break;
+			case remove:
+				parentOps.add(new CollectionOp<>(op, op.type, op.value, idxMap.applyAsInt(op.index)));
+				break;
+			case set:
+				msg = theFilter.apply(op.value);
+				if (msg != null)
+					op.reject(msg, true);
+				else
+					parentOps.add(new CollectionOp<>(op, op.type, op.value, idxMap.applyAsInt(op.index)));
+				break;
+			}
 		}
-		getParent().checkAddable(parentAdds, getParentSubListStart(subListStart), getParentSubListEnd(subListEnd), helper);
+		getParent().checkModifiable(parentOps, parentSLS, parentSLE, helper);
+	}
+
+	private int getSourceIndex(int index) {
+		if (index == thePresentSourceElements.size())
+			return theSourceValues.size();
+		return theSourceValues.getElementsBefore(thePresentSourceElements.get(index));
+	}
+
+	@Override
+	public void fromBelow(List<CollectionOp<E>> ops, TestHelper helper) {
+		List<CollectionOp<E>> filterOps = new ArrayList<>();
+		for (CollectionOp<E> op : ops) {
+			switch (op.type) {
+			case add:
+				ElementId srcId = theSourceValues.addElement(op.index, op.value).getElementId();
+				if (theFilter.apply(op.value) == null) {
+					ElementId presentId = thePresentSourceElements.addElement(srcId, false).getElementId();
+					filterOps.add(new CollectionOp<>(op.type, op.value, thePresentSourceElements.getElementsBefore(presentId)));
+				}
+				break;
+			case remove:
+				srcId = theSourceValues.getElement(op.index).getElementId();
+				CollectionElement<ElementId> presentEl = thePresentSourceElements.getElement(srcId, true); // By value, not by element ID
+				if (presentEl != null) {
+					filterOps
+					.add(new CollectionOp<>(op.type, op.value, thePresentSourceElements.getElementsBefore(presentEl.getElementId())));
+					thePresentSourceElements.mutableElement(presentEl.getElementId()).remove();
+				}
+				theSourceValues.mutableElement(srcId).remove();
+				break;
+			case set:
+				srcId = theSourceValues.getElement(op.index).getElementId();
+				theSourceValues.mutableElement(srcId).set(op.value);
+				presentEl = thePresentSourceElements.getElement(srcId, true); // By value, not by element ID
+				if (presentEl != null) {
+					int presentIndex = thePresentSourceElements.getElementsBefore(presentEl.getElementId());
+					if (theFilter.apply(op.value) == null)
+						filterOps.add(new CollectionOp<>(CollectionChangeType.set, op.value, presentIndex));
+					else {
+						filterOps.add(new CollectionOp<>(CollectionChangeType.remove, op.value, presentIndex));
+						thePresentSourceElements.mutableElement(presentEl.getElementId()).remove();
+					}
+				} else {
+					if (theFilter.apply(op.value) == null) {
+						ElementId presentId = thePresentSourceElements.addElement(srcId, false).getElementId();
+						filterOps.add(
+							new CollectionOp<>(CollectionChangeType.add, op.value, thePresentSourceElements.getElementsBefore(presentId)));
+					}
+				}
+			}
+		}
+		modified(filterOps, helper, true);
+	}
+
+	@Override
+	public void fromAbove(List<CollectionOp<E>> ops, TestHelper helper, boolean above) {
+		List<CollectionOp<E>> parentOps = new ArrayList<>();
+		for (CollectionOp<E> op : ops) {
+			switch (op.type) {
+			case add:
+				// Assuming that the added elements were added in the same order as the list of operations. Valid?
+				int srcIndex = theNewSourceValues.removeFirst();
+				parentOps.add(new CollectionOp<>(CollectionChangeType.add, op.value, srcIndex));
+				ElementId srcId = theSourceValues.addElement(srcIndex, op.value).getElementId();
+				ElementId presentId = thePresentSourceElements.addElement(srcId, false).getElementId();
+				Assert.assertEquals(op.index, thePresentSourceElements.getElementsBefore(presentId));
+				break;
+			case remove:
+				srcId = thePresentSourceElements.remove(op.index);
+				srcIndex = theSourceValues.getElementsBefore(srcId);
+				theSourceValues.mutableElement(srcId).remove();
+				parentOps.add(new CollectionOp<>(CollectionChangeType.remove, op.value, srcIndex));
+				break;
+			case set:
+				srcId = thePresentSourceElements.get(op.index);
+				srcIndex = theSourceValues.getElementsBefore(srcId);
+				theSourceValues.mutableElement(srcId).set(op.value);
+				parentOps.add(new CollectionOp<>(CollectionChangeType.set, op.value, srcIndex));
+				break;
+			}
+		}
+		modified(ops, helper, !above);
+		getParent().fromAbove(parentOps, helper, true);
 	}
 
 	private int getParentSubListStart(int subListStart) {
@@ -121,118 +224,6 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 			return theSourceValues.getElementsBefore(srcId);
 		}
 		return parentSubListEnd;
-	}
-
-	@Override
-	public void checkRemovable(List<CollectionOp<E>> removes, int subListStart, int subListEnd, TestHelper helper) {
-		getParent().checkRemovable(removes, getParentSubListStart(subListStart), getParentSubListEnd(subListEnd), helper);
-	}
-
-	@Override
-	public void checkSettable(List<CollectionOp<E>> sets, int subListStart, TestHelper helper) {
-		List<CollectionOp<E>> parentSets = new ArrayList<>();
-		for (CollectionOp<E> op : sets) {
-			String msg = theFilter.apply(op.source);
-			if (msg != null)
-				op.reject(msg, true);
-			else
-				parentSets.add(op);
-		}
-		getParent().checkSettable(parentSets, getParentSubListStart(subListStart), helper);
-	}
-
-	@Override
-	public void addedFromBelow(List<CollectionOp<E>> adds, TestHelper helper) {
-		List<CollectionOp<E>> filterAdds = new ArrayList<>();
-		for (CollectionOp<E> op : adds) {
-			ElementId srcId = theSourceValues.addElement(op.index, op.source).getElementId();
-			if (theFilter.apply(op.source) == null) {
-				ElementId presentId = thePresentSourceElements.addElement(srcId, false).getElementId();
-				filterAdds.add(new CollectionOp<>(null, op.source, thePresentSourceElements.getElementsBefore(presentId)));
-			}
-		}
-		added(filterAdds, helper, true);
-	}
-
-	@Override
-	public void removedFromBelow(int index, TestHelper helper) {
-		ElementId srcId = theSourceValues.getElement(index).getElementId();
-		CollectionElement<ElementId> presentEl = thePresentSourceElements.getElement(srcId, true); // By value, not by element ID
-		if (presentEl != null) {
-			removed(thePresentSourceElements.getElementsBefore(presentEl.getElementId()), helper, true);
-			thePresentSourceElements.mutableElement(presentEl.getElementId()).remove();
-		}
-		theSourceValues.mutableElement(srcId).remove();
-	}
-
-	@Override
-	public void setFromBelow(int index, E value, TestHelper helper) {
-		ElementId srcId = theSourceValues.getElement(index).getElementId();
-		theSourceValues.mutableElement(srcId).set(value);
-		CollectionElement<ElementId> presentEl = thePresentSourceElements.getElement(srcId, true); // By value, not by element ID
-		if (presentEl != null) {
-			int presentIndex = thePresentSourceElements.getElementsBefore(presentEl.getElementId());
-			if (theFilter.apply(value) == null)
-				set(presentIndex, value, helper, true);
-			else {
-				removed(presentIndex, helper, true);
-				thePresentSourceElements.mutableElement(presentEl.getElementId()).remove();
-			}
-		} else {
-			if (theFilter.apply(value) == null) {
-				ElementId presentId = thePresentSourceElements.addElement(srcId, false).getElementId();
-				added(Arrays.asList(new CollectionOp<>(null, value, thePresentSourceElements.getElementsBefore(presentId))), helper, true);
-			}
-		}
-	}
-
-	@Override
-	public void addedFromAbove(List<CollectionOp<E>> adds, TestHelper helper, boolean above) {
-		List<CollectionOp<E>> parentAdds = new ArrayList<>();
-		for (CollectionOp<E> op : adds) {
-			int subListStart = getParentSubListStart(op.index);
-			int subListEnd = getParentSubListEnd(op.index);
-			Iterator<ElementId> nsvIter = theNewSourceValues.iterator();
-			boolean found = false;
-			int passed = 0;
-			int srcIndex = 0;
-			while (!found) {
-				CollectionElement<E> el = getParent().getCollection().getElement(nsvIter.next());
-				if (getCollection().equivalence().elementEquals(el.get(), op.source)) {
-					srcIndex = getParent().getCollection().getElementsBefore(el.getElementId()) - passed;
-					if (srcIndex >= subListStart && srcIndex <= subListEnd)
-						found = true;
-				}
-				if (found)
-					nsvIter.remove();
-				else
-					passed++;
-			}
-			parentAdds.add(new CollectionOp<>(null, op.source, srcIndex));
-			ElementId srcId = theSourceValues.addElement(srcIndex, op.source).getElementId();
-			ElementId presentId = thePresentSourceElements.addElement(srcId, false).getElementId();
-			Assert.assertEquals(op.index, thePresentSourceElements.getElementsBefore(presentId));
-		}
-		added(adds, helper, !above);
-		getParent().addedFromAbove(parentAdds, helper, true);
-	}
-
-	@Override
-	public void removedFromAbove(int index, E value, TestHelper helper, boolean above) {
-		ElementId srcId = thePresentSourceElements.remove(index);
-		int srcIndex = theSourceValues.getElementsBefore(srcId);
-		theSourceValues.mutableElement(srcId).remove();
-		getParent().removedFromAbove(srcIndex, value, helper, true);
-		removed(index, helper, !above);
-	}
-
-	@Override
-	public void setFromAbove(int index, E value, TestHelper helper, boolean above) {
-		ElementId srcId = thePresentSourceElements.get(index);
-		int srcIndex = theSourceValues.getElementsBefore(srcId);
-		theSourceValues.mutableElement(srcId).set(value);
-		getParent().setFromAbove(srcIndex, value, helper, true);
-		set(index, value, helper, !above);
 	}
 
 	@Override

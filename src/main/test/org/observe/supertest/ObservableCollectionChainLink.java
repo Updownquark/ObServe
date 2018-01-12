@@ -2,22 +2,32 @@ package org.observe.supertest;
 
 import java.util.List;
 
+import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
 import org.observe.supertest.ObservableChainTester.TestValueType;
 import org.qommons.TestHelper;
 
 interface ObservableCollectionChainLink<E, T> extends ObservableChainLink<T> {
-	static class CollectionOp<E> implements Cloneable {
+	static class CollectionOp<E> {
 		final CollectionOp<?> theRoot;
-		final E source;
+		final CollectionChangeType type;
+		final E value;
 		final int index;
 
 		private String theMessage;
 		private boolean isError;
+		
+		CollectionOp(CollectionChangeType type, E source, int index){
+			theRoot=null;
+			this.type = type;
+			this.value = source;
+			this.index = index;
+		}
 
-		CollectionOp(CollectionOp<?> root, E source, int index) {
+		CollectionOp(CollectionOp<?> root, CollectionChangeType type, E source, int index) {
 			theRoot = root == null ? null : root.getRoot();
-			this.source = source;
+			this.type = type;
+			this.value = source;
 			this.index = index;
 		}
 
@@ -47,10 +57,10 @@ interface ObservableCollectionChainLink<E, T> extends ObservableChainLink<T> {
 			StringBuilder str = new StringBuilder();
 			if (index >= 0)
 				str.append('[').append(index).append(']');
-			if (source != null) {
+			if (value != null) {
 				if (str.length() > 0)
 					str.append(": ");
-				str.append(source);
+				str.append(value);
 			}
 			return str.toString();
 		}
@@ -65,21 +75,9 @@ interface ObservableCollectionChainLink<E, T> extends ObservableChainLink<T> {
 
 	List<T> getExpected();
 
-	void checkAddable(List<CollectionOp<T>> adds, int subListStart, int subListEnd, TestHelper helper);
+	void checkModifiable(List<CollectionOp<T>> ops, int subListStart, int subListEnd, TestHelper helper);
 
-	void checkRemovable(List<CollectionOp<T>> removes, int subListStart, int subListEnd, TestHelper helper);
+	void fromBelow(List<CollectionOp<E>> ops, TestHelper helper);
 
-	void checkSettable(List<CollectionOp<T>> sets, int subListStart, TestHelper helper);
-
-	void addedFromBelow(List<CollectionOp<E>> adds, TestHelper helper);
-
-	void removedFromBelow(int index, TestHelper helper);
-
-	void setFromBelow(int index, E value, TestHelper helper);
-
-	void addedFromAbove(List<CollectionOp<T>> adds, TestHelper helper, boolean above);
-
-	void removedFromAbove(int index, T value, TestHelper helper, boolean above);
-
-	void setFromAbove(int index, T value, TestHelper helper, boolean above);
+	void fromAbove(List<CollectionOp<T>> ops, TestHelper helper, boolean above);
 }

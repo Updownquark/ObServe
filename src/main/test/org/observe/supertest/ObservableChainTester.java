@@ -64,7 +64,7 @@ public class ObservableChainTester implements Testable {
 				COMPARATORS.put(type, Arrays.asList(String::compareTo, ((Comparator<String>) String::compareTo).reversed()));
 			}
 		}
-					}
+	}
 
 	private static String stringValueOf(double d) {
 		String str = String.valueOf(d);
@@ -173,7 +173,7 @@ public class ObservableChainTester implements Testable {
 				if (transactionMods == 25)
 					transactionMods = 0; // Want the probability of no-op transactions to be small but present
 				if (helper.isReproducing())
-				System.out.println("Modification set " + (tri + 1) + ": " + transactionMods + " modifications on link " + linkIndex);
+					System.out.println("Modification set " + (tri + 1) + ": " + transactionMods + " modifications on link " + linkIndex);
 				else {
 					System.out.print('.');
 					System.out.flush();
@@ -182,7 +182,7 @@ public class ObservableChainTester implements Testable {
 				for (int transactionTri = 0; transactionTri < transactionMods; transactionTri++) {
 					String preValue = toString();
 					if (helper.isReproducing())
-					System.out.print("\tMod " + (transactionTri + 1) + ": ");
+						System.out.print("\tMod " + (transactionTri + 1) + ": ");
 					try {
 						targetLink.tryModify(helper);
 					} catch (RuntimeException | Error e) {
