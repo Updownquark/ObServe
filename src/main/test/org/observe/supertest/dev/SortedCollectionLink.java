@@ -1,9 +1,13 @@
 package org.observe.supertest.dev;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
+import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.dev.ObservableChainTester.TestValueType;
 import org.qommons.TestHelper;
@@ -17,17 +21,24 @@ public class SortedCollectionLink<E> extends AbstractObservableCollectionLink<E,
 	private class SortedElement {
 		E value;
 		final ElementId sourceId;
+		final ElementId sortedId;
 
-		SortedElement(E value, ElementId sourceId) {
+		SortedElement(E value, ElementId sourceId, ElementId sortedId) {
 			this.value = value;
 			this.sourceId = sourceId;
+			this.sortedId = sortedId;
+		}
+
+		@Override
+		public String toString() {
+			return String.valueOf(value);
 		}
 	}
 
 	private final Comparator<? super E> theCompare;
 
-	private final BetterList<E> theSourceValues;
-	private final BetterTreeList<SortedElement> thePresentSourceElements;
+	private final BetterList<SortedElement> theSourceElements;
+	private final BetterTreeList<SortedElement> theSortedElements;
 	private final BetterList<Integer> theNewSourceValues;
 
 	public SortedCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type, CollectionDataFlow<?, ?, E> flow,
@@ -35,12 +46,12 @@ public class SortedCollectionLink<E> extends AbstractObservableCollectionLink<E,
 		super(parent, type, flow, helper, false, checkRemovedValues);
 		theCompare = compare;
 
-		theSourceValues = new BetterTreeList<>(false);
-		thePresentSourceElements = new BetterTreeList<>(false);
+		theSourceElements = new BetterTreeList<>(false);
+		theSortedElements = new BetterTreeList<>(false);
 		for (E value : getParent().getCollection()) {
-			ElementId srcId = theSourceValues.addElement(value, false).getElementId();
+			ElementId srcId = theSourceElements.addElement(null, false).getElementId();
 			ElementId sortedEl = insert(value, srcId);
-			getExpected().add(thePresentSourceElements.getElementsBefore(sortedEl), value);
+			getExpected().add(theSortedElements.getElementsBefore(sortedEl), value);
 		}
 
 		theNewSourceValues = new BetterTreeList<>(false);
@@ -55,17 +66,44 @@ public class SortedCollectionLink<E> extends AbstractObservableCollectionLink<E,
 	}
 
 	private ElementId insert(E value, ElementId srcId) {
-		BinaryTreeNode<SortedElement> node = thePresentSourceElements.getRoot();
-		if (node == null)
-			return thePresentSourceElements.addElement(new SortedElement(value, srcId), false).getElementId();
+		BinaryTreeNode<SortedElement> node = theSortedElements.getRoot();
+		if (node == null) {
+			ElementId sortedId = theSortedElements.addElement(null, false).getElementId();
+			SortedElement element = new SortedElement(value, srcId, sortedId);
+			theSourceElements.mutableElement(srcId).set(element);
+			theSortedElements.mutableElement(sortedId).set(element);
+			return sortedId;
+		}
 		int nodeCompare = theCompare.compare(node.get().value, value);
-		BinaryTreeNode<SortedElement> next = nodeCompare <= 0 ? node.getLeft() : node.getRight();
+		BinaryTreeNode<SortedElement> next = nodeCompare <= 0 ? node.getRight() : node.getLeft();
 		while (next != null) {
 			node = next;
 			nodeCompare = theCompare.compare(node.get().value, value);
-			next = nodeCompare <= 0 ? node.getLeft() : node.getRight();
+			next = nodeCompare <= 0 ? node.getRight() : node.getLeft();
 		}
-		return thePresentSourceElements.mutableNodeFor(node).add(new SortedElement(value, srcId), nodeCompare > 0);
+		ElementId sortedId = theSortedElements.mutableNodeFor(node).add(null, nodeCompare > 0);
+		SortedElement element = new SortedElement(value, srcId, sortedId);
+		theSourceElements.mutableElement(srcId).set(element);
+		theSortedElements.mutableElement(sortedId).set(element);
+		return sortedId;
+	}
+
+	private ElementId search(E value) {
+		BinaryTreeNode<SortedElement> node = theSortedElements.getRoot();
+		if (node == null)
+			return null;
+		int nodeCompare = theCompare.compare(node.get().value, value);
+		BinaryTreeNode<SortedElement> next = nodeCompare < 0 ? node.getRight() : node.getLeft();
+		while (next != null) {
+			node = next;
+			nodeCompare = theCompare.compare(node.get().value, value);
+			next = nodeCompare < 0 ? node.getRight() : node.getLeft();
+		}
+		return nodeCompare == 0 ? node.getElementId() : null;
+	}
+
+	private int compareAt(E value, int index) {
+		return theCompare.compare(theSortedElements.get(index).value, value);
 	}
 
 	@Override
@@ -74,29 +112,161 @@ public class SortedCollectionLink<E> extends AbstractObservableCollectionLink<E,
 		for (CollectionOp<E> op : ops) {
 			switch (op.type) {
 			case add:
-				if (op.index > 0) {
-					if (op.index > 0 && theCompare.compare(thePresentSourceElements.get(0).value, op.value) > 0)
+				if (op.index >= 0) {
+					int idx = op.index + subListStart;
+					if (idx > 0 && compareAt(op.value, idx - 1) > 0)
 						op.reject(StdMsg.ILLEGAL_ELEMENT, true);
-				}
+					else if (idx < theSortedElements.size() && compareAt(op.value, idx) < 0)
+						op.reject(StdMsg.ILLEGAL_ELEMENT, true);
+					else
+						parentOps.add(new CollectionOp<>(op, CollectionChangeType.add, op.value, -1));
+				} else if (subListStart > 0 || subListEnd < theSortedElements.size()) {
+					if (subListStart > 0 && compareAt(op.value, subListStart - 1) > 0)
+						op.reject(StdMsg.ILLEGAL_ELEMENT, true);
+					else if (subListEnd < theSortedElements.size() && compareAt(op.value, subListEnd) < 0)
+						op.reject(StdMsg.ILLEGAL_ELEMENT, true);
+					// At the moment, adding into a sub-list is somewhat gimped.
+					// The sub list class will only attempt to add the value at the beginning and end of the sub-list
+					else if (subListStart < theSortedElements.size() && compareAt(op.value, subListStart) < 0)
+						op.reject(StdMsg.ILLEGAL_ELEMENT, true);
+					else if (subListEnd > 0 && compareAt(op.value, subListEnd - 1) > 0)
+						op.reject(StdMsg.ILLEGAL_ELEMENT, true);
+					else
+						parentOps.add(op);
+				} else
+					parentOps.add(op);
 				break;
 			case remove:
+				if (op.index >= 0) {
+					int srcIndex = theSourceElements.getElementsBefore(theSortedElements.get(subListStart + op.index).sourceId);
+					parentOps.add(new CollectionOp<>(op, CollectionChangeType.remove, op.value, srcIndex));
+				} else {
+					ElementId found = search(op.value);
+					if (found == null)
+						op.reject(StdMsg.NOT_FOUND, false);
+					else {
+						int srcIdx = theSourceElements.getElementsBefore(theSortedElements.getElement(found).get().sourceId);
+						parentOps.add(new CollectionOp<>(op, CollectionChangeType.remove, op.value, srcIdx));
+					}
+				}
 				break;
 			case set:
+				int idx = op.index + subListStart;
+				if (idx > 0 && compareAt(op.value, idx - 1) > 0)
+					op.reject(StdMsg.ILLEGAL_ELEMENT, true);
+				else if (idx < theSortedElements.size() && compareAt(op.value, idx + 1) < 0)
+					op.reject(StdMsg.ILLEGAL_ELEMENT, true);
+				else {
+					int srcIndex = theSourceElements.getElementsBefore(theSortedElements.get(idx).sourceId);
+					parentOps.add(new CollectionOp<>(op, CollectionChangeType.set, op.value, srcIndex));
+				}
 				break;
 			}
 		}
-		getParent().checkModifiable(parentOps, 0, theSourceValues.size(), helper);
+		getParent().checkModifiable(parentOps, 0, theSourceElements.size(), helper);
 	}
 
 	@Override
 	public void fromBelow(List<CollectionOp<E>> ops, TestHelper helper) {
-		// TODO Auto-generated method stub
-
+		List<CollectionOp<E>> sortedOps = new ArrayList<>(ops.size());
+		for (CollectionOp<E> op : ops) {
+			switch (op.type) {
+			case add:
+				ElementId srcId = theSourceElements.addElement(op.index, null).getElementId();
+				ElementId sortedId = insert(op.value, srcId);
+				sortedOps
+				.add(new CollectionOp<>(CollectionChangeType.add, op.value, theSortedElements.getElementsBefore(sortedId)));
+				break;
+			case remove:
+				SortedElement element = theSourceElements.remove(op.index);
+				int sortedIndex = theSortedElements.getElementsBefore(element.sortedId);
+				theSortedElements.mutableElement(element.sortedId).remove();
+				sortedOps.add(new CollectionOp<>(CollectionChangeType.remove, op.value, sortedIndex));
+				break;
+			case set:
+				element = theSourceElements.get(op.index);
+				int sortedIdx = theSortedElements.getElementsBefore(element.sortedId);
+				boolean move = (sortedIdx > 0 && compareAt(op.value, sortedIdx - 1) > 0)//
+					|| (sortedIdx < theSortedElements.size() - 1 && compareAt(op.value, sortedIdx + 1) < 0);
+				if (move) {
+					theSortedElements.mutableElement(element.sortedId).remove();
+					sortedId = insert(op.value, element.sourceId);
+					sortedOps.add(new CollectionOp<>(CollectionChangeType.remove, element.value, sortedIdx));
+					sortedIdx = theSortedElements.getElementsBefore(sortedId);
+					sortedOps.add(new CollectionOp<>(CollectionChangeType.add, op.value, sortedIdx));
+				} else {
+					element.value = op.value;
+					sortedOps.add(new CollectionOp<>(CollectionChangeType.set, op.value, sortedIdx));
+				}
+				break;
+			}
+		}
+		modified(sortedOps, helper, true);
 	}
 
 	@Override
 	public void fromAbove(List<CollectionOp<E>> ops, TestHelper helper, boolean above) {
-		// TODO Auto-generated method stub
+		List<CollectionOp<E>> parentOps = new ArrayList<>(ops.size());
+		for (CollectionOp<E> op : ops) {
+			switch (op.type) {
+			case add:
+				ElementId sortedId = theSortedElements.addElement(op.index, null).getElementId();
+				int sourceIdx = theNewSourceValues.removeFirst();
+				ElementId srcId = theSourceElements.addElement(sourceIdx, null).getElementId();
+				SortedElement element = new SortedElement(op.value, srcId, sortedId);
+				theSortedElements.mutableElement(sortedId).set(element);
+				theSourceElements.mutableElement(srcId).set(element);
+				parentOps.add(new CollectionOp<>(CollectionChangeType.add, op.value, sourceIdx));
+				break;
+			case remove:
+				element = theSortedElements.remove(op.index);
+				sourceIdx = theSourceElements.getElementsBefore(element.sourceId);
+				theSourceElements.mutableElement(element.sourceId).remove();
+				parentOps.add(new CollectionOp<>(CollectionChangeType.remove, op.value, sourceIdx));
+				break;
+			case set:
+				element = theSortedElements.get(op.index);
+				element.value = op.value;
+				sourceIdx = theSourceElements.getElementsBefore(element.sourceId);
+				parentOps.add(new CollectionOp<>(CollectionChangeType.set, op.value, sourceIdx));
+				break;
+			}
+		}
+		modified(ops, helper, !above);
+		getParent().fromAbove(parentOps, helper, true);
+	}
 
+	@Override
+	public void check(boolean transComplete) {
+		super.check(transComplete);
+		theNewSourceValues.clear();
+	}
+
+	@Override
+	public String toString() {
+		return "sorted";
+	}
+
+	private static final Map<TestValueType, List<? extends Comparator<?>>> COMPARATORS;
+
+	static {
+		COMPARATORS = new HashMap<>();
+		for (TestValueType type : TestValueType.values()) {
+			switch (type) {
+			case INT:
+				COMPARATORS.put(type, Arrays.asList((Comparator<Integer>) Integer::compareTo));
+				break;
+			case DOUBLE:
+				COMPARATORS.put(type, Arrays.asList((Comparator<Double>) Double::compareTo));
+				break;
+			case STRING:
+				COMPARATORS.put(type, Arrays.asList((Comparator<String>) String::compareTo));
+			}
+		}
+	}
+
+	public static <E> Comparator<E> compare(TestValueType type, TestHelper helper) {
+		List<Comparator<E>> typeCompares = (List<Comparator<E>>) COMPARATORS.get(type);
+		return typeCompares.get(helper.getInt(0, typeCompares.size()));
 	}
 }
