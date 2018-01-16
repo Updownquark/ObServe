@@ -49,10 +49,10 @@ import org.qommons.collect.ListenerList;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MultiMapEntryHandle;
 import org.qommons.collect.MutableCollectionElement;
-import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.collect.SimpleMapEntry;
-import org.qommons.tree.BetterTreeSet;
+import org.qommons.tree.BetterTreeMap;
+import org.qommons.tree.BinaryTreeEntry;
 
 import com.google.common.reflect.TypeToken;
 
@@ -819,21 +819,21 @@ public class ObservableMultiMapImpl {
 			}
 
 			@Override
-			protected BetterTreeSet<DerivedCollectionElement<Entry<K, V>>> getParentElements() {
+			protected BetterTreeMap<DerivedCollectionElement<Entry<K, V>>, Entry<K, V>> getParentElements() {
 				return super.getParentElements();
 			}
 
 			@Override
-			protected CollectionElement<DerivedCollectionElement<Map.Entry<K, V>>> addParent(
+			protected BinaryTreeEntry<DerivedCollectionElement<Map.Entry<K, V>>, Map.Entry<K, V>> addParent(
 				DerivedCollectionElement<Map.Entry<K, V>> parentEl, Object cause) {
-				CollectionElement<DerivedCollectionElement<Map.Entry<K, V>>> node = super.addParent(parentEl, cause);
+				BinaryTreeEntry<DerivedCollectionElement<Map.Entry<K, V>>, Map.Entry<K, V>> node = super.addParent(parentEl, cause);
 				if (isBegun) {
 					theStructuralStamp.incrementAndGet();
 					theChangeStamp.incrementAndGet();
 				}
 				if (theKeyId != null) {
 					int keyIndex = theAssembledKeys.getElementsBefore(theKeyId);
-					int valueIndex = getParentElements().getElementsBefore(node.getElementId());
+					int valueIndex = getParentElements().keySet().getElementsBefore(node.getElementId());
 					fireEvent(new ObservableMapEvent<>(theKeyId, node.getElementId(), theKeyType, theValueType, //
 						keyIndex, valueIndex, CollectionChangeType.add, parentEl.get().getKey(), null, parentEl.get().getValue(), cause));
 				}
@@ -841,13 +841,13 @@ public class ObservableMultiMapImpl {
 			}
 
 			@Override
-			protected void parentUpdated(CollectionElement<DerivedCollectionElement<Map.Entry<K, V>>> parentEl, Map.Entry<K, V> oldValue,
-				Map.Entry<K, V> newValue, Object cause) {
+			protected void parentUpdated(BinaryTreeEntry<DerivedCollectionElement<Map.Entry<K, V>>, Map.Entry<K, V>> parentEl,
+				Map.Entry<K, V> oldValue, Map.Entry<K, V> newValue, Object cause) {
 				super.parentUpdated(parentEl, oldValue, newValue, cause);
 				if (isBegun)
 					theChangeStamp.incrementAndGet();
 				int keyIndex = theAssembledKeys.getElementsBefore(theKeyId);
-				int valueIndex = getParentElements().getElementsBefore(parentEl.getElementId());
+				int valueIndex = getParentElements().keySet().getElementsBefore(parentEl.getElementId());
 				DerivedCollectionElement<Map.Entry<K, V>> active = getActiveElement();
 				fireEvent(new ObservableMapEvent<>(theKeyId, parentEl.getElementId(), theKeyType, theValueType, //
 					keyIndex, valueIndex, CollectionChangeType.set, active.get().getKey(), oldValue.getValue(), newValue.getValue(),
@@ -855,15 +855,15 @@ public class ObservableMultiMapImpl {
 			}
 
 			@Override
-			protected void parentRemoved(CollectionElement<DerivedCollectionElement<Map.Entry<K, V>>> parentEl, Map.Entry<K, V> value,
-				Object cause) {
+			protected void parentRemoved(BinaryTreeEntry<DerivedCollectionElement<Map.Entry<K, V>>, Map.Entry<K, V>> parentEl,
+				Map.Entry<K, V> value, Object cause) {
 				super.parentRemoved(parentEl, value, cause);
 				if (isBegun) {
 					theStructuralStamp.incrementAndGet();
 					theChangeStamp.incrementAndGet();
 				}
 				int keyIndex = theAssembledKeys.getElementsBefore(theKeyId);
-				int valueIndex = getParentElements().getElementsBefore(parentEl.getElementId());
+				int valueIndex = getParentElements().keySet().getElementsBefore(parentEl.getElementId());
 				DerivedCollectionElement<Map.Entry<K, V>> active = getActiveElement();
 				fireEvent(new ObservableMapEvent<>(theKeyId, parentEl.getElementId(), theKeyType, theValueType, //
 					keyIndex, valueIndex, CollectionChangeType.remove, active.get().getKey(), value.getValue(), value.getValue(), cause));
