@@ -16,7 +16,7 @@ interface ObservableCollectionChainLink<E, T> extends ObservableChainLink<T> {
 
 		private String theMessage;
 		private boolean isError;
-		
+
 		CollectionOp(CollectionChangeType type, E source, int index){
 			theRoot=null;
 			this.type = type;
@@ -54,7 +54,7 @@ interface ObservableCollectionChainLink<E, T> extends ObservableChainLink<T> {
 
 		@Override
 		public String toString() {
-			StringBuilder str = new StringBuilder();
+			StringBuilder str = new StringBuilder(type.name());
 			if (index >= 0)
 				str.append('[').append(index).append(']');
 			if (value != null) {

@@ -86,13 +86,15 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 						op.reject(StdMsg.UNSUPPORTED_OPERATION, true);
 						continue;
 					}
-					parentOps.add(new CollectionOp<>(op, op.type, theOptions.getReverse().apply(op.value), op.index));
+					parentOps.add(new CollectionOp<>(op, op.type, theOptions.getReverse().apply(op.value), -1));
 				} else
-					parentOps.add(new CollectionOp<>(op, op.type, getParent().getCollection().get(op.index), op.index));
+					parentOps.add(
+						new CollectionOp<>(op, op.type, getParent().getCollection().get(subListStart + op.index), op.index));
 				break;
 			case set:
 				if (theOptions.getElementReverse() != null) {
-					String message = theOptions.getElementReverse().setElement(getParent().getCollection().get(op.index), op.value, false);
+					String message = theOptions.getElementReverse().setElement(getParent().getCollection().get(subListStart + op.index),
+						op.value, false);
 					if (message == null)
 						continue; // Don't even need to consult the parent for this
 					if (theOptions.getReverse() == null) {
