@@ -3915,6 +3915,11 @@ public class ObservableCollectionDataFlowImpl {
 				theFilter.assertAdd(value);
 				return theParentMapped.add(value, before);
 			}
+
+			@Override
+			public String toString() {
+				return theParentMapped.toString();
+			}
 		}
 	}
 
@@ -4064,6 +4069,11 @@ public class ObservableCollectionDataFlowImpl {
 				theFilter.assertAdd(value);
 				DerivedCollectionElement<T> parentEl = theParentEl.add(value, before);
 				return parentEl == null ? null : new ModFilteredElement(parentEl);
+			}
+
+			@Override
+			public String toString() {
+				return theParentEl.toString();
 			}
 		}
 	}
