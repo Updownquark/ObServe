@@ -1360,12 +1360,19 @@ public class ObservableCollectionDataFlowImpl {
 		private final ActiveCollectionManager<E, ?, T> theParent;
 		private final Comparator<? super T> theCompare;
 		// Need to keep track of the values to enforce the set-does-not-reorder policy
-		private final BetterTreeList<T> theValues;
+		private final BetterTreeList<BiTuple<T, DerivedCollectionElement<T>>> theValues;
+		private final Comparator<BiTuple<T, DerivedCollectionElement<T>>> theTupleCompare;
 
 		protected SortedManager(ActiveCollectionManager<E, ?, T> parent, Comparator<? super T> compare) {
 			theParent = parent;
 			theCompare = compare;
 			theValues = new BetterTreeList<>(false);
+			theTupleCompare = (t1, t2) -> {
+				int comp = theCompare.compare(t1.getValue1(), t2.getValue1());
+				if (comp == 0)
+					comp = t1.getValue2().compareTo(t2.getValue2());
+				return comp;
+			};
 		}
 
 		@Override
@@ -1395,6 +1402,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
+			//TODO Why can't we find it?
 			return null; // Even if the parent could've found it, the order will be mixed up now
 		}
 
@@ -1420,34 +1428,33 @@ public class ObservableCollectionDataFlowImpl {
 			theParent.begin(fromStart, (parentEl, cause) -> onElement.accept(new SortedElement(parentEl, false), cause), listening);
 		}
 
-		private BinaryTreeNode<T> insertIntoValues(T value) {
-			BinaryTreeNode<T> node = theValues.getRoot();
+		private BinaryTreeNode<BiTuple<T, DerivedCollectionElement<T>>> insertIntoValues(T value, DerivedCollectionElement<T> parentEl) {
+			BiTuple<T, DerivedCollectionElement<T>> tuple = new BiTuple<>(value, parentEl);
+			BinaryTreeNode<BiTuple<T, DerivedCollectionElement<T>>> node = theValues.getRoot();
 			if (node == null)
-				return theValues.addElement(value, false);
+				return theValues.addElement(tuple, false);
 			else {
-				node = node.findClosest(n -> {
-					return theCompare.compare(value, n.get());
-				}, true, false);
-				return theValues.getElement(theValues.mutableNodeFor(node).add(value, theCompare.compare(node.get(), value) > 0));
+				node = node.findClosest(n -> theTupleCompare.compare(tuple, n.get()), true, false);
+				return theValues.getElement(theValues.mutableNodeFor(node).add(tuple, theTupleCompare.compare(node.get(), tuple) > 0));
 			}
 		}
 
 		class SortedElement implements DerivedCollectionElement<T> {
 			private final DerivedCollectionElement<T> theParentEl;
-			private BinaryTreeNode<T> theValueNode;
+			private BinaryTreeNode<BiTuple<T, DerivedCollectionElement<T>>> theValueNode;
 			private CollectionElementListener<T> theListener;
 
 			SortedElement(DerivedCollectionElement<T> parentEl, boolean synthetic) {
 				theParentEl = parentEl;
 				if (!synthetic) {
-					theValueNode = insertIntoValues(parentEl.get());
+					theValueNode = insertIntoValues(parentEl.get(), parentEl);
 					theParentEl.setListener(new CollectionElementListener<T>() {
 						@Override
 						public void update(T oldValue, T newValue, Object cause) {
-							if (!isInCorrectOrder(newValue)) {
+							if (!isInCorrectOrder(newValue, theParentEl)) {
 								// The order of this element has changed
 								theValues.mutableNodeFor(theValueNode).remove();
-								theValueNode = insertIntoValues(newValue);
+								theValueNode = insertIntoValues(newValue, theParentEl);
 							}
 							ObservableCollectionDataFlowImpl.update(theListener, oldValue, newValue, cause);
 						}
@@ -1461,19 +1468,26 @@ public class ObservableCollectionDataFlowImpl {
 				}
 			}
 
-			private boolean isInCorrectOrder(T newValue) {
-				BinaryTreeNode<T> left = theValueNode.getClosest(true);
-				BinaryTreeNode<T> right = theValueNode.getClosest(false);
-				return (left == null || theCompare.compare(left.get(), newValue) <= 0)//
-					&& (right == null || theCompare.compare(newValue, right.get()) <= 0);
+			private boolean isInCorrectOrder(T newValue, DerivedCollectionElement<T> parentEl) {
+				BiTuple<T, DerivedCollectionElement<T>> tuple = new BiTuple<>(newValue, parentEl);
+				BinaryTreeNode<BiTuple<T, DerivedCollectionElement<T>>> left = theValueNode.getClosest(true);
+				BinaryTreeNode<BiTuple<T, DerivedCollectionElement<T>>> right = theValueNode.getClosest(false);
+				return (left == null || theTupleCompare.compare(left.get(), tuple) <= 0)//
+					&& (right == null || theTupleCompare.compare(tuple, right.get()) <= 0);
 			}
 
 			@Override
 			public int compareTo(DerivedCollectionElement<T> o) {
-				int comp = theCompare.compare(get(), o.get());
-				if (comp == 0)
-					comp = theParentEl.compareTo(((SortedElement) o).theParentEl);
-				return comp;
+				SortedElement sorted = (SortedElement) o;
+				if (theValueNode != null && sorted.theValueNode != null)
+					return theValueNode.compareTo(sorted.theValueNode);
+				else {
+					BiTuple<T, DerivedCollectionElement<T>> tuple1 = theValueNode != null ? theValueNode.get()
+						: new BiTuple<>(theParentEl.get(), theParentEl);
+					BiTuple<T, DerivedCollectionElement<T>> tuple2 = sorted.theValueNode != null ? sorted.theValueNode.get()
+						: new BiTuple<>(sorted.theParentEl.get(), sorted.theParentEl);
+					return theTupleCompare.compare(tuple1, tuple2);
+				}
 			}
 
 			@Override
@@ -1493,7 +1507,7 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public String isAcceptable(T value) {
-				if (theCompare.compare(theParentEl.get(), value) != 0 && !isInCorrectOrder(value))
+				if (theCompare.compare(theParentEl.get(), value) != 0 && !isInCorrectOrder(value, theParentEl))
 					return StdMsg.ILLEGAL_ELEMENT;
 				return theParentEl.isAcceptable(value);
 			}
@@ -1503,7 +1517,7 @@ public class ObservableCollectionDataFlowImpl {
 				// It is not allowed to change the order of an element via set
 				// However, if the order has already been changed (e.g. due to changes in the value or the comparator),
 				// it is permitted (and required) to use set to notify the collection of the change
-				if (theCompare.compare(theParentEl.get(), value) != 0 && !isInCorrectOrder(value))
+				if (theCompare.compare(theParentEl.get(), value) != 0 && !isInCorrectOrder(value, theParentEl))
 					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 				theParentEl.set(value);
 			}
@@ -1520,20 +1534,20 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public String canAdd(T value, boolean before) {
-				BinaryTreeNode<T> left = before ? theValueNode.getClosest(true) : theValueNode;
-				BinaryTreeNode<T> right = before ? theValueNode : theValueNode.getClosest(false);
-				if ((left != null && theCompare.compare(left.get(), value) > 0)//
-					|| (right != null && theCompare.compare(value, right.get()) > 0))
+				BinaryTreeNode<BiTuple<T, DerivedCollectionElement<T>>> left = before ? theValueNode.getClosest(true) : theValueNode;
+				BinaryTreeNode<BiTuple<T, DerivedCollectionElement<T>>> right = before ? theValueNode : theValueNode.getClosest(false);
+				if ((left != null && theCompare.compare(left.get().getValue1(), value) > 0)//
+					|| (right != null && theCompare.compare(value, right.get().getValue1()) > 0))
 					return StdMsg.ILLEGAL_ELEMENT;
 				return theParentEl.canAdd(value, before);
 			}
 
 			@Override
 			public DerivedCollectionElement<T> add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-				BinaryTreeNode<T> left = before ? theValueNode.getClosest(true) : theValueNode;
-				BinaryTreeNode<T> right = before ? theValueNode : theValueNode.getClosest(false);
-				if ((left != null && theCompare.compare(left.get(), value) > 0)//
-					|| (right != null && theCompare.compare(value, right.get()) > 0))
+				BinaryTreeNode<BiTuple<T, DerivedCollectionElement<T>>> left = before ? theValueNode.getClosest(true) : theValueNode;
+				BinaryTreeNode<BiTuple<T, DerivedCollectionElement<T>>> right = before ? theValueNode : theValueNode.getClosest(false);
+				if ((left != null && theCompare.compare(left.get().getValue1(), value) > 0)//
+					|| (right != null && theCompare.compare(value, right.get().getValue1()) > 0))
 					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 				return new SortedElement(theParentEl.add(value, before), true);
 			}
