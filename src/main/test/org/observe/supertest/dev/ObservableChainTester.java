@@ -190,8 +190,8 @@ public class ObservableChainTester implements Testable {
 						System.err.println("Link " + linkIndex);
 						System.err.println("Error on transaction " + (tri + 1) + ", mod " + (transactionTri + 1) + " after "
 							+ (modifications + transactionTri) + " successful modifications");
-						System.err.println("Pre-faiure values:\n" + preValue);
-						System.err.println("Post-faiure values:\n" + toString());
+						System.err.println("Pre-failure values:\n" + preValue);
+						System.err.println("Post-failure values:\n" + toString());
 						throw e;
 					}
 					try {
@@ -202,8 +202,8 @@ public class ObservableChainTester implements Testable {
 						System.err.println("Link " + linkIndex);
 						System.err.println("Integrity check failure on link " + failedLink + " after "
 							+ (modifications + transactionTri + 1) + " modifications in " + (tri + 1) + " transactions");
-						System.err.println("Pre-faiure values:\n" + preValue);
-						System.err.println("Post-faiure values:\n" + toString());
+						System.err.println("Pre-failure values:\n" + preValue);
+						System.err.println("Post-failure values:\n" + toString());
 						throw e;
 					}
 				}

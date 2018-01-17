@@ -133,7 +133,11 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 
 	@Override
 	public String toString() {
-		return "mapped(" + theMap + ")";
+		String s = "mapped(" + theMap;
+		if (isMapVariable)
+			s += ", variable";
+		s += ")";
+		return s;
 	}
 
 	public interface TypeTransformation<E, T> {
