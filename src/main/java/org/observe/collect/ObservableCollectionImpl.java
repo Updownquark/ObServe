@@ -1678,6 +1678,11 @@ public final class ObservableCollectionImpl {
 					DerivedCollectionElement<T> derived = el.element.add(value, before);
 					return idFromSynthetic(derived);
 				}
+
+				@Override
+				public String toString() {
+					return el.element.toString();
+				}
 			}
 			return new DerivedMutableCollectionElement();
 		}

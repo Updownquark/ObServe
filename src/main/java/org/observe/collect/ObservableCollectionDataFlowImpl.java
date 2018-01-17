@@ -632,7 +632,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public CollectionDataFlow<E, T, T> sorted(Comparator<? super T> compare) {
-			return new SortedDataFlow<>(theSource, this, compare);
+			return new SortedDataFlow<>(theSource, this, theEquivalence, compare);
 		}
 
 		@Override
@@ -679,8 +679,9 @@ public class ObservableCollectionDataFlowImpl {
 	private static class SortedDataFlow<E, T> extends AbstractDataFlow<E, T, T> {
 		private final Comparator<? super T> theCompare;
 
-		SortedDataFlow(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, Comparator<? super T> compare) {
-			super(source, parent, parent.getTargetType(), Equivalence.of((Class<T>) parent.getTargetType().getRawType(), compare, true));
+		SortedDataFlow(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, Equivalence<? super T> equivalence,
+			Comparator<? super T> compare) {
+			super(source, parent, parent.getTargetType(), equivalence);
 			theCompare = compare;
 		}
 
@@ -1362,6 +1363,7 @@ public class ObservableCollectionDataFlowImpl {
 		// Need to keep track of the values to enforce the set-does-not-reorder policy
 		private final BetterTreeList<BiTuple<T, DerivedCollectionElement<T>>> theValues;
 		private final Comparator<BiTuple<T, DerivedCollectionElement<T>>> theTupleCompare;
+		private ElementAccepter<T> theAccepter;
 
 		protected SortedManager(ActiveCollectionManager<E, ?, T> parent, Comparator<? super T> compare) {
 			theParent = parent;
@@ -1425,6 +1427,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
+			theAccepter = onElement;
 			theParent.begin(fromStart, (parentEl, cause) -> onElement.accept(new SortedElement(parentEl, false), cause), listening);
 		}
 
@@ -1435,7 +1438,7 @@ public class ObservableCollectionDataFlowImpl {
 				return theValues.addElement(tuple, false);
 			else {
 				node = node.findClosest(n -> theTupleCompare.compare(tuple, n.get()), true, false);
-				return theValues.getElement(theValues.mutableNodeFor(node).add(tuple, theTupleCompare.compare(node.get(), tuple) > 0));
+				return theValues.getElement(theValues.mutableNodeFor(node).add(tuple, theTupleCompare.compare(tuple, node.get()) < 0));
 			}
 		}
 
@@ -1451,18 +1454,35 @@ public class ObservableCollectionDataFlowImpl {
 					theParentEl.setListener(new CollectionElementListener<T>() {
 						@Override
 						public void update(T oldValue, T newValue, Object cause) {
+							T realOldValue = theValueNode.get().getValue1();
 							if (!isInCorrectOrder(newValue, theParentEl)) {
 								// The order of this element has changed
 								theValues.mutableNodeFor(theValueNode).remove();
 								theValueNode = insertIntoValues(newValue, theParentEl);
+								/* We could just do an update here and let the derived collection do the re-order.
+								 * But this would potentially be inconsistent in the case of child flows that also affect order.
+								 * E.g. the update could be swallowed by the derived flow and the element not reordered,
+								 * resulting in just an update in the terminal collection.
+								 * But the same flow order, collected in between, would yield different ordering
+								 * for the same set of operations.
+								 * The use case of such a situation is probably minuscule, since why would anyone apply a sorted flow
+								 * and then apply another order-governing flow on top of it.
+								 * In such situations the benefit of just firing an update
+								 * instead of a remove/add is probably negligible.
+								 * So, to summarize, we'll fire an add/remove combo here instead of just an update. */
+								ObservableCollectionDataFlowImpl.removed(theListener, realOldValue, cause);
+								theAccepter.accept(SortedElement.this, cause);
+							} else {
+								theValues.mutableNodeFor(theValueNode).set(new BiTuple<>(newValue, theParentEl));
+								ObservableCollectionDataFlowImpl.update(theListener, realOldValue, newValue, cause);
 							}
-							ObservableCollectionDataFlowImpl.update(theListener, oldValue, newValue, cause);
 						}
 
 						@Override
 						public void removed(T value, Object cause) {
+							T realOldValue = theValueNode.get().getValue1();
 							theValues.mutableNodeFor(theValueNode).remove();
-							ObservableCollectionDataFlowImpl.removed(theListener, value, cause);
+							ObservableCollectionDataFlowImpl.removed(theListener, realOldValue, cause);
 						}
 					});
 				}
@@ -1481,7 +1501,7 @@ public class ObservableCollectionDataFlowImpl {
 				SortedElement sorted = (SortedElement) o;
 				if (theValueNode != null && sorted.theValueNode != null)
 					return theValueNode.compareTo(sorted.theValueNode);
-				else {
+				else { // Synthetic
 					BiTuple<T, DerivedCollectionElement<T>> tuple1 = theValueNode != null ? theValueNode.get()
 						: new BiTuple<>(theParentEl.get(), theParentEl);
 					BiTuple<T, DerivedCollectionElement<T>> tuple2 = sorted.theValueNode != null ? sorted.theValueNode.get()
@@ -1497,7 +1517,10 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public T get() {
-				return theParentEl.get();
+				if (theValueNode != null)
+					return theValueNode.get().getValue1();
+				else
+					return theParentEl.get(); // Synthetic
 			}
 
 			@Override
@@ -1507,8 +1530,8 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public String isAcceptable(T value) {
-				if (theCompare.compare(theParentEl.get(), value) != 0 && !isInCorrectOrder(value, theParentEl))
-					return StdMsg.ILLEGAL_ELEMENT;
+				if (theCompare.compare(theValueNode.get().getValue1(), value) != 0 && !isInCorrectOrder(value, theParentEl))
+					return StdMsg.ILLEGAL_ELEMENT_POSITION;
 				return theParentEl.isAcceptable(value);
 			}
 
@@ -1517,9 +1540,10 @@ public class ObservableCollectionDataFlowImpl {
 				// It is not allowed to change the order of an element via set
 				// However, if the order has already been changed (e.g. due to changes in the value or the comparator),
 				// it is permitted (and required) to use set to notify the collection of the change
-				if (theCompare.compare(theParentEl.get(), value) != 0 && !isInCorrectOrder(value, theParentEl))
+				if (theCompare.compare(theValueNode.get().getValue1(), value) != 0 && !isInCorrectOrder(value, theParentEl))
 					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 				theParentEl.set(value);
+				theValues.mutableNodeFor(theValueNode).set(new BiTuple<>(value, theParentEl));
 			}
 
 			@Override
@@ -1538,8 +1562,8 @@ public class ObservableCollectionDataFlowImpl {
 				BinaryTreeNode<BiTuple<T, DerivedCollectionElement<T>>> right = before ? theValueNode : theValueNode.getClosest(false);
 				if ((left != null && theCompare.compare(left.get().getValue1(), value) > 0)//
 					|| (right != null && theCompare.compare(value, right.get().getValue1()) > 0))
-					return StdMsg.ILLEGAL_ELEMENT;
-				return theParentEl.canAdd(value, before);
+					return StdMsg.ILLEGAL_ELEMENT_POSITION;
+				return theParent.canAdd(value);
 			}
 
 			@Override
@@ -1548,8 +1572,17 @@ public class ObservableCollectionDataFlowImpl {
 				BinaryTreeNode<BiTuple<T, DerivedCollectionElement<T>>> right = before ? theValueNode : theValueNode.getClosest(false);
 				if ((left != null && theCompare.compare(left.get().getValue1(), value) > 0)//
 					|| (right != null && theCompare.compare(value, right.get().getValue1()) > 0))
-					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
-				return new SortedElement(theParentEl.add(value, before), true);
+					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT_POSITION);
+				DerivedCollectionElement<T> parentAdd;
+				// If the element can be added in the same relation to the parent, do that
+				if (theParentEl.canAdd(value, before) == null)
+					parentAdd = theParentEl.add(value, before);
+				else {
+					// But if such a positional add is unsupported, it doesn't matter.
+					// The position in the sorted collection will be correct.
+					parentAdd = theParent.addElement(value, before);
+				}
+				return new SortedElement(parentAdd, true);
 			}
 
 			@Override
@@ -3572,6 +3605,11 @@ public class ObservableCollectionDataFlowImpl {
 			public DerivedCollectionElement<T> add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
 				DerivedCollectionElement<T> parent = theParentEl.add(value, before);
 				return parent == null ? null : new RefreshingElement(parent, true);
+			}
+
+			@Override
+			public String toString() {
+				return theParentEl.toString();
 			}
 		}
 	}
