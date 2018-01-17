@@ -6,6 +6,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
@@ -109,61 +110,103 @@ public class SortedCollectionLink<E> extends AbstractObservableCollectionLink<E,
 	@Override
 	public void checkModifiable(List<CollectionOp<E>> ops, int subListStart, int subListEnd, TestHelper helper) {
 		List<CollectionOp<E>> parentOps = new ArrayList<>(ops.size());
-		for (CollectionOp<E> op : ops) {
-			switch (op.type) {
-			case add:
-				if (op.index >= 0) {
+		if (ops.size() > 0 && ops.get(0).type == CollectionChangeType.add && ops.get(0).index >= 0 && isSameIndex(ops)) {
+			// addAll(index, values) is implemented as subList(index, index).addAll(values)
+			// At the moment, adding into a sub-list is somewhat gimped.
+			// The sub list class will only attempt to add the value at the beginning and end of the sub-list
+			// So I need to keep a notional running sub list composed of the values that have been addable so far
+			// But I only care about the values before and after the beginning and end of the sub list
+			int index = subListStart + ops.get(0).index;
+			final Optional<E> preSubListStart = index == 0 ? Optional.empty() : Optional.of(theSortedElements.get(index - 1).value);
+			final Optional<E> postSubListEnd = index == theSortedElements.size() ? Optional.empty()
+				: Optional.of(theSortedElements.get(index).value);
+			Optional<E> postSubListStart = postSubListEnd;
+			Optional<E> preSubListEnd = preSubListStart;
+			for (CollectionOp<E> op : ops) {
+				boolean canAddAtStart = true;
+				if (preSubListStart.isPresent() && theCompare.compare(preSubListStart.get(), op.value) > 0)
+					canAddAtStart = false;
+				else if (postSubListStart.isPresent() && theCompare.compare(postSubListStart.get(), op.value) < 0)
+					canAddAtStart = false;
+				boolean canAddAtEnd = true;
+				if (postSubListEnd.isPresent() && theCompare.compare(postSubListEnd.get(), op.value) < 0)
+					canAddAtEnd = false;
+				else if (preSubListEnd.isPresent() && theCompare.compare(preSubListEnd.get(), op.value) > 0)
+					canAddAtEnd = false;
+				if (canAddAtStart || canAddAtEnd) {
+					parentOps.add(new CollectionOp<>(op, op.type, op.value, -1));
+					if (canAddAtStart)
+						postSubListStart = Optional.of(op.value);
+					if (canAddAtEnd)
+						preSubListEnd = Optional.of(op.value);
+				} else
+					op.reject(StdMsg.ILLEGAL_ELEMENT, true);
+			}
+		} else {
+			for (CollectionOp<E> op : ops) {
+				switch (op.type) {
+				case add:
+					if (op.index >= 0) {
+						int idx = op.index + subListStart;
+						if (idx > 0 && compareAt(op.value, idx - 1) > 0)
+							op.reject(StdMsg.ILLEGAL_ELEMENT, true);
+						else if (idx < theSortedElements.size() && compareAt(op.value, idx) < 0)
+							op.reject(StdMsg.ILLEGAL_ELEMENT, true);
+						else
+							parentOps.add(new CollectionOp<>(op, CollectionChangeType.add, op.value, -1));
+					} else if (subListStart > 0 || subListEnd < theSortedElements.size()) {
+						if (subListStart > 0 && compareAt(op.value, subListStart - 1) > 0)
+							op.reject(StdMsg.ILLEGAL_ELEMENT, true);
+						else if (subListEnd < theSortedElements.size() && compareAt(op.value, subListEnd) < 0)
+							op.reject(StdMsg.ILLEGAL_ELEMENT, true);
+						// At the moment, adding into a sub-list is somewhat gimped.
+						// The sub list class will only attempt to add the value at the beginning and end of the sub-list
+						else if (subListStart < theSortedElements.size() && compareAt(op.value, subListStart) < 0)
+							op.reject(StdMsg.ILLEGAL_ELEMENT, true);
+						else if (subListEnd > 0 && compareAt(op.value, subListEnd - 1) > 0)
+							op.reject(StdMsg.ILLEGAL_ELEMENT, true);
+						else
+							parentOps.add(op);
+					} else
+						parentOps.add(op);
+					break;
+				case remove:
+					if (op.index >= 0) {
+						int srcIndex = theSourceElements.getElementsBefore(theSortedElements.get(subListStart + op.index).sourceId);
+						parentOps.add(new CollectionOp<>(op, CollectionChangeType.remove, op.value, srcIndex));
+					} else {
+						ElementId found = search(op.value);
+						if (found == null)
+							op.reject(StdMsg.NOT_FOUND, false);
+						else {
+							int srcIdx = theSourceElements.getElementsBefore(theSortedElements.getElement(found).get().sourceId);
+							parentOps.add(new CollectionOp<>(op, CollectionChangeType.remove, op.value, srcIdx));
+						}
+					}
+					break;
+				case set:
 					int idx = op.index + subListStart;
 					if (idx > 0 && compareAt(op.value, idx - 1) > 0)
 						op.reject(StdMsg.ILLEGAL_ELEMENT, true);
-					else if (idx < theSortedElements.size() && compareAt(op.value, idx) < 0)
+					else if (idx < theSortedElements.size() && compareAt(op.value, idx + 1) < 0)
 						op.reject(StdMsg.ILLEGAL_ELEMENT, true);
-					else
-						parentOps.add(new CollectionOp<>(op, CollectionChangeType.add, op.value, -1));
-				} else if (subListStart > 0 || subListEnd < theSortedElements.size()) {
-					if (subListStart > 0 && compareAt(op.value, subListStart - 1) > 0)
-						op.reject(StdMsg.ILLEGAL_ELEMENT, true);
-					else if (subListEnd < theSortedElements.size() && compareAt(op.value, subListEnd) < 0)
-						op.reject(StdMsg.ILLEGAL_ELEMENT, true);
-					// At the moment, adding into a sub-list is somewhat gimped.
-					// The sub list class will only attempt to add the value at the beginning and end of the sub-list
-					else if (subListStart < theSortedElements.size() && compareAt(op.value, subListStart) < 0)
-						op.reject(StdMsg.ILLEGAL_ELEMENT, true);
-					else if (subListEnd > 0 && compareAt(op.value, subListEnd - 1) > 0)
-						op.reject(StdMsg.ILLEGAL_ELEMENT, true);
-					else
-						parentOps.add(op);
-				} else
-					parentOps.add(op);
-				break;
-			case remove:
-				if (op.index >= 0) {
-					int srcIndex = theSourceElements.getElementsBefore(theSortedElements.get(subListStart + op.index).sourceId);
-					parentOps.add(new CollectionOp<>(op, CollectionChangeType.remove, op.value, srcIndex));
-				} else {
-					ElementId found = search(op.value);
-					if (found == null)
-						op.reject(StdMsg.NOT_FOUND, false);
 					else {
-						int srcIdx = theSourceElements.getElementsBefore(theSortedElements.getElement(found).get().sourceId);
-						parentOps.add(new CollectionOp<>(op, CollectionChangeType.remove, op.value, srcIdx));
+						int srcIndex = theSourceElements.getElementsBefore(theSortedElements.get(idx).sourceId);
+						parentOps.add(new CollectionOp<>(op, CollectionChangeType.set, op.value, srcIndex));
 					}
+					break;
 				}
-				break;
-			case set:
-				int idx = op.index + subListStart;
-				if (idx > 0 && compareAt(op.value, idx - 1) > 0)
-					op.reject(StdMsg.ILLEGAL_ELEMENT, true);
-				else if (idx < theSortedElements.size() && compareAt(op.value, idx + 1) < 0)
-					op.reject(StdMsg.ILLEGAL_ELEMENT, true);
-				else {
-					int srcIndex = theSourceElements.getElementsBefore(theSortedElements.get(idx).sourceId);
-					parentOps.add(new CollectionOp<>(op, CollectionChangeType.set, op.value, srcIndex));
-				}
-				break;
 			}
 		}
 		getParent().checkModifiable(parentOps, 0, theSourceElements.size(), helper);
+	}
+
+	private boolean isSameIndex(List<CollectionOp<E>> ops) {
+		int idx = ops.get(0).index;
+		for (int i = 1; i < ops.size(); i++)
+			if (ops.get(i).index != idx)
+				return false;
+		return true;
 	}
 
 	@Override
