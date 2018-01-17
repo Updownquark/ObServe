@@ -1426,7 +1426,7 @@ public class ObservableCollectionDataFlowImpl {
 				return theValues.addElement(value, false);
 			else {
 				node = node.findClosest(n -> {
-					return theCompare.compare(n.get(), value);
+					return theCompare.compare(value, n.get());
 				}, true, false);
 				return theValues.getElement(theValues.mutableNodeFor(node).add(value, theCompare.compare(node.get(), value) > 0));
 			}
@@ -1520,11 +1520,21 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public String canAdd(T value, boolean before) {
+				BinaryTreeNode<T> left = before ? theValueNode.getClosest(true) : theValueNode;
+				BinaryTreeNode<T> right = before ? theValueNode : theValueNode.getClosest(false);
+				if ((left != null && theCompare.compare(left.get(), value) > 0)//
+					|| (right != null && theCompare.compare(value, right.get()) > 0))
+					return StdMsg.ILLEGAL_ELEMENT;
 				return theParentEl.canAdd(value, before);
 			}
 
 			@Override
 			public DerivedCollectionElement<T> add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
+				BinaryTreeNode<T> left = before ? theValueNode.getClosest(true) : theValueNode;
+				BinaryTreeNode<T> right = before ? theValueNode : theValueNode.getClosest(false);
+				if ((left != null && theCompare.compare(left.get(), value) > 0)//
+					|| (right != null && theCompare.compare(value, right.get()) > 0))
+					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 				return new SortedElement(theParentEl.add(value, before), true);
 			}
 
@@ -3915,6 +3925,11 @@ public class ObservableCollectionDataFlowImpl {
 				theFilter.assertAdd(value);
 				return theParentMapped.add(value, before);
 			}
+
+			@Override
+			public String toString() {
+				return theParentMapped.toString();
+			}
 		}
 	}
 
@@ -4064,6 +4079,11 @@ public class ObservableCollectionDataFlowImpl {
 				theFilter.assertAdd(value);
 				DerivedCollectionElement<T> parentEl = theParentEl.add(value, before);
 				return parentEl == null ? null : new ModFilteredElement(parentEl);
+			}
+
+			@Override
+			public String toString() {
+				return theParentEl.toString();
 			}
 		}
 	}

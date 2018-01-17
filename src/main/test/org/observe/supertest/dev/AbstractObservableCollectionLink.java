@@ -8,16 +8,16 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
-import java.util.NavigableSet;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.junit.Assert;
 import org.observe.Observable;
 import org.observe.SimpleSettableValue;
+import org.observe.collect.CollectionChangeType;
 import org.observe.collect.FlowOptions;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
@@ -25,6 +25,7 @@ import org.observe.collect.ObservableCollectionDataFlowImpl;
 import org.observe.collect.ObservableCollectionTester;
 import org.observe.supertest.dev.MappedCollectionLink.TypeTransformation;
 import org.observe.supertest.dev.ObservableChainTester.TestValueType;
+import org.qommons.BiTuple;
 import org.qommons.TestHelper;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
@@ -33,6 +34,7 @@ import org.qommons.collect.BetterSet;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
+import org.qommons.tree.BetterTreeList;
 
 import com.google.common.reflect.TypeToken;
 
@@ -44,6 +46,8 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 	private final ObservableCollectionTester<T> theTester;
 	private ObservableCollectionChainLink<T, ?> theChild;
 	private final Function<TestHelper, T> theSupplier;
+
+	private final BetterList<BiTuple<Integer, T>> theNewValues;
 
 	AbstractObservableCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type,
 		CollectionDataFlow<?, ?, T> flow, TestHelper helper, boolean rebasedFlowRequired, boolean checkRemovedValues) {
@@ -73,6 +77,16 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		theTester = new ObservableCollectionTester<>("Link " + getLinkIndex(), theCollection);
 		theTester.checkRemovedValues(checkRemovedValues);
 		theTester.getExpected().clear();
+
+		theNewValues = new BetterTreeList<>(false);
+		getCollection().onChange(evt -> {
+			switch (evt.getType()) {
+			case add:
+				theNewValues.add(new BiTuple<>(evt.getIndex(), evt.getNewValue()));
+				break;
+			default:
+			}
+		});
 	}
 
 	@Override
@@ -108,6 +122,10 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 	@Override
 	public TypeToken<T> getType() {
 		return (TypeToken<T>) theType.getType();
+	}
+
+	BiTuple<Integer, T> getNextAddition() {
+		return theNewValues.pollFirst();
 	}
 
 	@Override
@@ -561,46 +579,21 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		Assert.assertEquals(modified, added > 0);
 		Assert.assertEquals(preModSize + added, modify.size());
 		Assert.assertEquals(preSize + added, theCollection.size());
-		List<T> expected = theTester.getExpected();
 		if (!ops.isEmpty()) {
 			// Need to replace the indexes in the operations with the index at which the values were added in the collection (or sub-list)
-			NavigableSet<Integer> indexes = new TreeSet<>();
-			BetterList<T> addedList = index >= 0 ? modify.subList(index, index + added) : modify;
-			int addedListStart = index >= 0 ? index : 0;
 			for (int i = 0; i < ops.size(); i++) {
-				CollectionOp<T> op = ops.get(i);
-				CollectionElement<T> el = addedList.getElement(op.value, true);
-				int elIndex = addedList.getElementsBefore(el.getElementId());
-				// If the found element is a duplicate that was either already present or whose index has previously been used, find a new
-				// element
-				while (el != null) {
-					if (indexes.contains(elIndex)) {
-						el = addedList.subList(elIndex + 1, addedList.size()).getElement(op.value, true);
-						elIndex = addedList.getElementsBefore(el.getElementId());
-						continue;
-					} else if (index < 0) {
-						int expectedIndex = subListStart + addedListStart + elIndex - indexes.headSet(elIndex).size();
-						if (expectedIndex >= subListStart && expectedIndex < subListEnd
-							&& theCollection.equivalence().elementEquals(expected.get(expectedIndex), op.value)) {
-							el = addedList.subList(elIndex + 1, addedList.size()).getElement(op.value, true);
-							elIndex = addedList.getElementsBefore(el.getElementId());
-							continue;
-						}
+				BiTuple<Integer, T> addition = getNextAddition();
+				boolean found = false;
+				for (int j = i; !found && j < ops.size(); j++) {
+					if (theCollection.equivalence().elementEquals(addition.getValue2(), ops.get(j).value)) {
+						CollectionOp<T> op_i = ops.get(i);
+						ops.set(i, new CollectionOp<>(CollectionChangeType.add, ops.get(j).value, addition.getValue1()));
+						if (j != i)
+							ops.set(j, op_i);
+						found = true;
 					}
-					indexes.add(elIndex);
-					break;
 				}
-				elIndex += addedListStart;
-				Assert.assertNotNull(el);
-				if (index >= 0)
-					Assert.assertTrue(elIndex + ">=" + index + "+" + added, elIndex < (index < 0 ? preModSize : index) + added);
-				ops.set(i, new CollectionOp<>(null, op.type, op.value, subListStart + elIndex));
-			}
-			Collections.sort(ops, (op1, op2) -> op1.index - op2.index);
-			if (index >= 0) {
-				// Ensures that all new elements were added in the right position range
-				Assert.assertEquals(ops.get(0).index, subListStart + index);
-				Assert.assertEquals(ops.get(ops.size() - 1).index, subListStart + index + added - 1);
+				Assert.assertTrue(found);
 			}
 		}
 	}
@@ -706,6 +699,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			theTester.check();
 		else
 			theTester.checkNonBatchSynced();
+		theNewValues.clear();
 	}
 
 	@Override
@@ -767,7 +761,13 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		// TODO combine
 		// TODO flattenValues
 		// TODO flatMap
-		// TODO sorted
+		.or(1, () -> { // sorted
+			Comparator<T> compare = SortedCollectionLink.compare(theType, helper);
+			derivedFlow.accept((CollectionDataFlow<?, ?, X>) theFlow.sorted(compare));
+			theChild = new SortedCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), helper,
+				theTester.isCheckingRemovedValues(), compare);
+			derived.accept((ObservableChainLink<X>) theChild);
+		})//
 		.or(1, () -> {
 			// distinct
 			ValueHolder<FlowOptions.UniqueOptions> options = new ValueHolder<>();

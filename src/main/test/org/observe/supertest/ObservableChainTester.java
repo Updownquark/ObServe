@@ -83,8 +83,13 @@ public class ObservableChainTester implements Testable {
 
 	@Override
 	public void accept(TestHelper helper) {
+		boolean debugging = helper.isReproducing();
+		if (debugging)
+			Debug.d().start().watchFor(new Debugging());
 		assemble(helper);
 		test(helper);
+		if (debugging)
+			Debug.d().end();
 	}
 
 	/**

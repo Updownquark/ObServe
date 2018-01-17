@@ -22,6 +22,7 @@ import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.SubscriptionCause;
 import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableSet;
+import org.qommons.Causable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterMultiMap;
@@ -33,7 +34,6 @@ import org.qommons.collect.MultiMapEntryHandle;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.collect.MutableMapEntryHandle;
-import org.qommons.collect.SimpleCause;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -707,8 +707,8 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 						for (EntrySubscription sub : valueSubs.values())
 							sub.sub.unsubscribe();
 						if (removeAll) {
-							SimpleCause cause = new SimpleCause();
-							try (Transaction ct = SimpleCause.use(cause)) {
+							Causable cause = Causable.simpleCause(null);
+							try (Transaction ct = Causable.use(cause)) {
 								for (Map.Entry<ElementId, EntrySubscription> entry : valueSubs.entrySet()) {
 									EntrySubscription sub = entry.getValue();
 									entry.getValue().sub.unsubscribe();

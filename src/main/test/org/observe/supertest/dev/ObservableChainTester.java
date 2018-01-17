@@ -3,8 +3,6 @@ package org.observe.supertest.dev;
 import java.io.File;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -12,14 +10,13 @@ import java.util.function.Function;
 
 import org.junit.Test;
 import org.observe.collect.DefaultObservableCollection;
-import org.observe.collect.FlowOptions;
 import org.qommons.QommonsUtils;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.Testable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
+import org.qommons.debug.Debug;
 import org.qommons.tree.BetterTreeList;
-import org.qommons.tree.BetterTreeSet;
 
 import com.google.common.reflect.TypeToken;
 
@@ -45,23 +42,18 @@ public class ObservableChainTester implements Testable {
 
 	private static final int MAX_VALUE = 1000;
 	static final Map<TestValueType, Function<TestHelper, ?>> SUPPLIERS;
-	private static final Map<TestValueType, List<? extends Comparator<?>>> COMPARATORS;
 	static {
 		SUPPLIERS = new HashMap<>();
-		COMPARATORS = new HashMap<>();
 		for (TestValueType type : TestValueType.values()) {
 			switch (type) {
 			case INT:
 				SUPPLIERS.put(type, helper -> helper.getInt(0, MAX_VALUE));
-				COMPARATORS.put(type, Arrays.asList(Integer::compareTo, ((Comparator<Integer>) Integer::compareTo).reversed()));
 				break;
 			case DOUBLE:
 				SUPPLIERS.put(type, helper -> helper.getDouble(0, MAX_VALUE));
-				COMPARATORS.put(type, Arrays.asList(Double::compareTo, ((Comparator<Double>) Double::compareTo).reversed()));
 				break;
 			case STRING:
 				SUPPLIERS.put(type, helper -> String.valueOf(helper.getInt(0, MAX_VALUE)));
-				COMPARATORS.put(type, Arrays.asList(String::compareTo, ((Comparator<String>) String::compareTo).reversed()));
 			}
 		}
 	}
@@ -73,18 +65,19 @@ public class ObservableChainTester implements Testable {
 		return str;
 	}
 
-	private static <E> Comparator<E> randomComparator(TestValueType type, TestHelper helper) {
-		List<Comparator<E>> typeCompares = (List<Comparator<E>>) COMPARATORS.get(type);
-		return typeCompares.get(helper.getInt(0, typeCompares.size()));
-	}
 	private static final int MAX_CHAIN_LENGTH = 15;
 
 	private final List<ObservableChainLink<?>> theChain = new ArrayList<>();
 
 	@Override
 	public void accept(TestHelper helper) {
+		boolean debugging = helper.isReproducing();
+		if (debugging)
+			Debug.d().start().watchFor(new Debugging());
 		assemble(helper);
 		test(helper);
+		if (debugging)
+			Debug.d().end();
 	}
 
 	/**
@@ -129,14 +122,14 @@ public class ObservableChainTester implements Testable {
 			BetterList<E> backing = new BetterTreeList<>(true);
 			DefaultObservableCollection<E> base = new DefaultObservableCollection<>((TypeToken<E>) type.getType(), backing);
 			return new SimpleCollectionLink<>(type, base.flow(), helper);
-		case 2:
-			type = TestValueType.values()[helper.getInt(0, TestValueType.values().length)];
-			Comparator<? super E> compare = randomComparator(type, helper);
-			backing = new BetterTreeSet<>(false, compare);
-			base = new DefaultObservableCollection<>((TypeToken<E>) type.getType(), backing);
-			SimpleCollectionLink<E> simple = new SimpleCollectionLink<>(type, base.flow(), helper);
-			return new SortedDistinctCollectionLink<>(simple, type, base.flow(), helper, compare,
-				new FlowOptions.GroupingDef(new FlowOptions.GroupingOptions(true)));
+		// case 2:
+		// type = TestValueType.values()[helper.getInt(0, TestValueType.values().length)];
+		// Comparator<? super E> compare = randomComparator(type, helper);
+		// backing = new BetterTreeSet<>(false, compare);
+		// base = new DefaultObservableCollection<>((TypeToken<E>) type.getType(), backing);
+		// SimpleCollectionLink<E> simple = new SimpleCollectionLink<>(type, base.flow(), helper);
+		// return new SortedDistinctCollectionLink<>(simple, type, base.flow(), helper, compare,
+		// new FlowOptions.GroupingDef(new FlowOptions.GroupingOptions(true)));
 			// TODO ObservableValue
 			// TODO ObservableMultiMap
 			// TODO ObservableMap
