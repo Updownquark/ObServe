@@ -94,32 +94,46 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 	@Override
 	public void checkModifiable(List<CollectionOp<E>> ops, int subListStart, int subListEnd, TestHelper helper) {
 		List<CollectionOp<E>> parentOps = new ArrayList<>(ops.size());
-		int parentSLS = getParentSubListStart(subListStart);
-		int parentSLE = getParentSubListEnd(subListEnd);
-		IntUnaryOperator idxMap = idx -> {
-			if (idx < 0)
-				return idx;
-			return getSourceIndex(idx) - parentSLS;
-		};
-		for (CollectionOp<E> op : ops) {
-			switch (op.type) {
-			case add:
+		int parentSLS, parentSLE;
+		if (CollectionOp.isAddAllIndex(ops)) {
+			parentSLS = getParentSubListStart(subListStart + ops.get(0).index);
+			parentSLE = getParentSubListEnd(subListStart + ops.get(0).index);
+			for (CollectionOp<E> op : ops) {
 				String msg = theFilter.apply(op.value);
 				if (msg != null)
 					op.reject(msg, true);
 				else
-					parentOps.add(new CollectionOp<>(op, op.type, op.value, idxMap.applyAsInt(op.index)));
-				break;
-			case remove:
-				parentOps.add(new CollectionOp<>(op, op.type, op.value, idxMap.applyAsInt(op.index)));
-				break;
-			case set:
-				msg = theFilter.apply(op.value);
-				if (msg != null)
-					op.reject(msg, true);
-				else
-					parentOps.add(new CollectionOp<>(op, op.type, op.value, idxMap.applyAsInt(op.index)));
-				break;
+					parentOps.add(new CollectionOp<>(op, op.type, op.value, -1));
+			}
+		} else {
+			parentSLS = getParentSubListStart(subListStart);
+			parentSLE = getParentSubListEnd(subListEnd);
+			IntUnaryOperator idxMap = idx -> {
+				if (idx < 0)
+					return idx;
+				return getSourceIndex(subListStart + idx) - parentSLS;
+			};
+			for (CollectionOp<E> op : ops) {
+				switch (op.type) {
+				case add:
+					String msg = theFilter.apply(op.value);
+					if (msg != null)
+						op.reject(msg, true);
+					else
+						parentOps.add(new CollectionOp<>(op, op.type, op.value, idxMap.applyAsInt(op.index)));
+					break;
+				case remove:
+					if (op.index >= 0 || theFilter.apply(op.value) == null)
+						parentOps.add(new CollectionOp<>(op, op.type, op.value, idxMap.applyAsInt(op.index)));
+					break;
+				case set:
+					msg = theFilter.apply(op.value);
+					if (msg != null)
+						op.reject(msg, true);
+					else
+						parentOps.add(new CollectionOp<>(op, op.type, op.value, idxMap.applyAsInt(op.index)));
+					break;
+				}
 			}
 		}
 		getParent().checkModifiable(parentOps, parentSLS, parentSLE, helper);

@@ -151,7 +151,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		TestHelper.RandomAction action=helper.doAction(5, () -> { // More position-less adds than other ops
 			CollectionOp<T> op = new CollectionOp<>(null, add, theSupplier.apply(helper), -1);
 			if (helper.isReproducing())
-				System.out.println("Add " + op);
+				System.out.println(op);
 			checkModifiable(Arrays.asList(op), subListStart, subListEnd, helper);
 			int index = addToCollection(op, modify, helper);
 			if (op.getMessage() == null) {
@@ -161,7 +161,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		}).or(1, () -> { // Add by index
 			CollectionOp<T> op = new CollectionOp<>(null, add, theSupplier.apply(helper), helper.getInt(0, modify.size() + 1));
 			if (helper.isReproducing())
-				System.out.println("Add " + op);
+				System.out.println(op);
 			List<CollectionOp<T>> ops = Arrays.asList(op);
 			checkModifiable(ops, subListStart, subListEnd, helper);
 			addToCollection(op, modify, helper);
@@ -183,7 +183,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 						msg += ", after " + modify.get(index - 1);
 					msg += " ";
 				}
-				System.out.println(msg + ops.size() + ops);
+				System.out.println(msg + ops.size() + ops.stream().map(op -> op.value).collect(Collectors.toList()));
 			}
 			checkModifiable(ops, subListStart, subListEnd, helper);
 			addAllToCollection(index, ops, modify, subListStart, subListEnd, helper);
@@ -197,7 +197,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			}
 			CollectionOp<T> op = new CollectionOp<>(null, set, theSupplier.apply(helper), helper.getInt(0, modify.size()));
 			if (helper.isReproducing())
-				System.out.println("Set [" + op.index + "]: " + modify.get(op.index) + "->" + op.value);
+				System.out.println("Set @" + op.index + " " + modify.get(op.index) + "->" + op.value);
 			checkModifiable(Arrays.asList(op), subListStart, subListEnd, helper);
 			setInCollection(op, modify, helper);
 			if (op.getMessage() == null)
@@ -228,7 +228,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			int index = helper.getInt(0, modify.size());
 			CollectionOp<T> op = new CollectionOp<>(null, remove, modify.get(index), index);
 			if (helper.isReproducing())
-				System.out.println("Remove " + op);
+				System.out.println(op);
 			checkModifiable(Arrays.asList(op), subListStart, subListEnd, helper);
 			removeFromCollection(op, modify, helper);
 			if (op.getMessage() == null)
@@ -254,7 +254,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			}
 			checkModifiable(ops, subListStart, subListEnd, helper);
 			if (helper.isReproducing())
-				System.out.println("\tShould remove " + ops.size() + ops);
+				System.out.println("\tShould remove " + ops.size() + " " + CollectionOp.print(ops));
 			removeAllFromCollection(values, ops, modify, helper);
 			Collections.reverse(ops); // Indices need to be descending
 			postModify(ops, subListStart, helper);
@@ -281,7 +281,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			}
 			checkModifiable(ops, subListStart, subListEnd, helper);
 			if (helper.isReproducing())
-				System.out.println("\tShould remove " + ops.size() + ops);
+				System.out.println("\tShould remove " + ops.size() + " " + CollectionOp.print(ops));
 			retainAllInCollection(values, ops, modify, helper);
 			Collections.reverse(ops); // Indices need to be descending
 			postModify(ops, subListStart, helper);
@@ -775,7 +775,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				// opts.useFirst(helper.getBoolean()).preserveSourceOrder(opts.canPreserveSourceOrder() && helper.getBoolean());
 				options.accept(opts);
 			}));
-			theChild = new DistinctCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), helper,
+			theChild = new DistinctCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), theFlow, helper,
 				theTester.isCheckingRemovedValues(), options.get());
 			derived.accept((ObservableChainLink<X>) theChild);
 		})//
