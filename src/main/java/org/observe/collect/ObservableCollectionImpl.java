@@ -1453,29 +1453,31 @@ public final class ObservableCollectionImpl {
 			// Begin listening
 			ElementAccepter<T> onElement = (el, cause) -> {
 				theStructureStamp.incrementAndGet();
-				DerivedElementHolder<T> holder = createHolder(el);
-				holder.treeNode = theDerivedElements.addElement(holder, false);
-				fireListeners(new ObservableCollectionEvent<>(holder, theFlow.getTargetType(), holder.treeNode.getNodesBefore(),
+				DerivedElementHolder<T>[] holder = new DerivedElementHolder[] { createHolder(el) };
+				holder[0].treeNode = theDerivedElements.addElement(holder[0], false);
+				fireListeners(new ObservableCollectionEvent<>(holder[0], theFlow.getTargetType(), holder[0].treeNode.getNodesBefore(),
 					CollectionChangeType.add, null, el.get(), cause));
 				el.setListener(new CollectionElementListener<T>() {
 					@Override
 					public void update(T oldValue, T newValue, Object elCause) {
-						BinaryTreeNode<DerivedElementHolder<T>> left = holder.treeNode.getClosest(true);
-						BinaryTreeNode<DerivedElementHolder<T>> right = holder.treeNode.getClosest(false);
-						if ((left != null && left.get().element.compareTo(holder.element) > 0)
-							|| (right != null && right.get().element.compareTo(holder.element) < 0)) {
+						BinaryTreeNode<DerivedElementHolder<T>> left = holder[0].treeNode.getClosest(true);
+						BinaryTreeNode<DerivedElementHolder<T>> right = holder[0].treeNode.getClosest(false);
+						if ((left != null && left.get().element.compareTo(holder[0].element) > 0)
+							|| (right != null && right.get().element.compareTo(holder[0].element) < 0)) {
 							theStructureStamp.incrementAndGet();
 							// Remove the element and re-add at the new position.
-							int index = holder.treeNode.getNodesBefore();
-							theDerivedElements.mutableElement(holder.treeNode.getElementId()).remove();
-							fireListeners(new ObservableCollectionEvent<>(holder, theFlow.getTargetType(), index,
+							int index = holder[0].treeNode.getNodesBefore();
+							theDerivedElements.mutableElement(holder[0].treeNode.getElementId()).remove();
+							fireListeners(new ObservableCollectionEvent<>(holder[0], theFlow.getTargetType(), index,
 								CollectionChangeType.remove, oldValue, null, elCause));
-							holder.treeNode = theDerivedElements.addElement(holder, false);
-							fireListeners(new ObservableCollectionEvent<>(holder, theFlow.getTargetType(), holder.treeNode.getNodesBefore(),
-								CollectionChangeType.add, null, newValue, elCause));
+							// Don't re-use elements
+							holder[0] = createHolder(el);
+							holder[0].treeNode = theDerivedElements.addElement(holder[0], false);
+							fireListeners(new ObservableCollectionEvent<>(holder[0], theFlow.getTargetType(),
+								holder[0].treeNode.getNodesBefore(), CollectionChangeType.add, null, newValue, elCause));
 						} else {
 							theModCount.incrementAndGet();
-							fireListeners(new ObservableCollectionEvent<>(holder, getType(), holder.treeNode.getNodesBefore(),
+							fireListeners(new ObservableCollectionEvent<>(holder[0], getType(), holder[0].treeNode.getNodesBefore(),
 								CollectionChangeType.set, oldValue, newValue, elCause));
 						}
 					}
@@ -1483,11 +1485,11 @@ public final class ObservableCollectionImpl {
 					@Override
 					public void removed(T value, Object elCause) {
 						theStructureStamp.incrementAndGet();
-						int index = holder.treeNode.getNodesBefore();
-						if (holder.treeNode.getElementId().isPresent()) // May have been removed already
-							theDerivedElements.mutableElement(holder.treeNode.getElementId()).remove();
-						fireListeners(new ObservableCollectionEvent<>(holder, theFlow.getTargetType(), index, CollectionChangeType.remove,
-							value, value, elCause));
+						int index = holder[0].treeNode.getNodesBefore();
+						if (holder[0].treeNode.getElementId().isPresent()) // May have been removed already
+							theDerivedElements.mutableElement(holder[0].treeNode.getElementId()).remove();
+						fireListeners(new ObservableCollectionEvent<>(holder[0], theFlow.getTargetType(), index,
+							CollectionChangeType.remove, value, value, elCause));
 					}
 				});
 			};
