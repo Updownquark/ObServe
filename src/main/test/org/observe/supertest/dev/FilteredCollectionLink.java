@@ -93,47 +93,42 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 
 	@Override
 	public void checkModifiable(List<CollectionOp<E>> ops, int subListStart, int subListEnd, TestHelper helper) {
+		if (ops.isEmpty())
+			return;
 		List<CollectionOp<E>> parentOps = new ArrayList<>(ops.size());
 		int parentSLS, parentSLE;
 		if (CollectionOp.isAddAllIndex(ops)) {
 			parentSLS = getParentSubListStart(subListStart + ops.get(0).index);
 			parentSLE = getParentSubListEnd(subListStart + ops.get(0).index);
-			for (CollectionOp<E> op : ops) {
+		} else {
+			parentSLS = getParentSubListStart(subListStart);
+			parentSLE = getParentSubListEnd(subListEnd);
+		}
+		IntUnaryOperator idxMap = idx -> {
+			if (idx < 0)
+				return idx;
+			return getSourceIndex(subListStart + idx) - parentSLS;
+		};
+		for (CollectionOp<E> op : ops) {
+			switch (op.type) {
+			case add:
 				String msg = theFilter.apply(op.value);
 				if (msg != null)
 					op.reject(msg, true);
 				else
 					parentOps.add(new CollectionOp<>(op, op.type, op.value, -1));
-			}
-		} else {
-			parentSLS = getParentSubListStart(subListStart);
-			parentSLE = getParentSubListEnd(subListEnd);
-			IntUnaryOperator idxMap = idx -> {
-				if (idx < 0)
-					return idx;
-				return getSourceIndex(subListStart + idx) - parentSLS;
-			};
-			for (CollectionOp<E> op : ops) {
-				switch (op.type) {
-				case add:
-					String msg = theFilter.apply(op.value);
-					if (msg != null)
-						op.reject(msg, true);
-					else
-						parentOps.add(new CollectionOp<>(op, op.type, op.value, idxMap.applyAsInt(op.index)));
-					break;
-				case remove:
-					if (op.index >= 0 || theFilter.apply(op.value) == null)
-						parentOps.add(new CollectionOp<>(op, op.type, op.value, idxMap.applyAsInt(op.index)));
-					break;
-				case set:
-					msg = theFilter.apply(op.value);
-					if (msg != null)
-						op.reject(msg, true);
-					else
-						parentOps.add(new CollectionOp<>(op, op.type, op.value, idxMap.applyAsInt(op.index)));
-					break;
-				}
+				break;
+			case remove:
+				if (op.index >= 0 || theFilter.apply(op.value) == null)
+					parentOps.add(new CollectionOp<>(op, op.type, op.value, idxMap.applyAsInt(op.index)));
+				break;
+			case set:
+				msg = theFilter.apply(op.value);
+				if (msg != null)
+					op.reject(msg, true);
+				else
+					parentOps.add(new CollectionOp<>(op, op.type, op.value, idxMap.applyAsInt(op.index)));
+				break;
 			}
 		}
 		getParent().checkModifiable(parentOps, parentSLS, parentSLE, helper);
@@ -223,21 +218,21 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 	}
 
 	private int getParentSubListStart(int subListStart) {
+		if (thePresentSourceElements.isEmpty())
+			return 0;
 		if (subListStart == 0)
 			return 0; // Easy
-		ElementId srcId = thePresentSourceElements.get(subListStart - 1);
-		return theSourceValues.getElementsBefore(srcId) + 1;
+		else
+			return Math.min(theSourceValues.size(), getSourceIndex(subListStart - 1) + 1);
 	}
 
 	private int getParentSubListEnd(int subListEnd) {
-		int parentSubListEnd;
+		if (thePresentSourceElements.isEmpty())
+			return theSourceValues.size();
 		if (subListEnd == thePresentSourceElements.size())
-			parentSubListEnd = theSourceValues.size();
-		else {
-			ElementId srcId = thePresentSourceElements.get(subListEnd);
-			return theSourceValues.getElementsBefore(srcId);
-		}
-		return parentSubListEnd;
+			return theSourceValues.size();
+		else
+			return getSourceIndex(subListEnd);
 	}
 
 	@Override

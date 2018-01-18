@@ -122,14 +122,14 @@ public class ObservableChainTester implements Testable {
 			BetterList<E> backing = new BetterTreeList<>(true);
 			DefaultObservableCollection<E> base = new DefaultObservableCollection<>((TypeToken<E>) type.getType(), backing);
 			return new SimpleCollectionLink<>(type, base.flow(), helper);
-		// case 2:
-		// type = TestValueType.values()[helper.getInt(0, TestValueType.values().length)];
-		// Comparator<? super E> compare = randomComparator(type, helper);
-		// backing = new BetterTreeSet<>(false, compare);
-		// base = new DefaultObservableCollection<>((TypeToken<E>) type.getType(), backing);
-		// SimpleCollectionLink<E> simple = new SimpleCollectionLink<>(type, base.flow(), helper);
-		// return new SortedDistinctCollectionLink<>(simple, type, base.flow(), helper, compare,
-		// new FlowOptions.GroupingDef(new FlowOptions.GroupingOptions(true)));
+			// case 2:
+			// type = TestValueType.values()[helper.getInt(0, TestValueType.values().length)];
+			// Comparator<? super E> compare = randomComparator(type, helper);
+			// backing = new BetterTreeSet<>(false, compare);
+			// base = new DefaultObservableCollection<>((TypeToken<E>) type.getType(), backing);
+			// SimpleCollectionLink<E> simple = new SimpleCollectionLink<>(type, base.flow(), helper);
+			// return new SortedDistinctCollectionLink<>(simple, type, base.flow(), helper, compare,
+			// new FlowOptions.GroupingDef(new FlowOptions.GroupingOptions(true)));
 			// TODO ObservableValue
 			// TODO ObservableMultiMap
 			// TODO ObservableMap
@@ -167,10 +167,6 @@ public class ObservableChainTester implements Testable {
 					transactionMods = 0; // Want the probability of no-op transactions to be small but present
 				if (helper.isReproducing())
 					System.out.println("Modification set " + (tri + 1) + ": " + transactionMods + " modifications on link " + linkIndex);
-				else {
-					System.out.print('.');
-					System.out.flush();
-				}
 				helper.placemark("Transaction");
 				for (int transactionTri = 0; transactionTri < transactionMods; transactionTri++) {
 					String preValue = toString();
@@ -201,6 +197,13 @@ public class ObservableChainTester implements Testable {
 					}
 				}
 				modifications += transactionMods;
+				if (!helper.isReproducing()) {
+					if (tri % 10 == 9)
+						System.out.print('|');
+					else
+						System.out.print('.');
+					System.out.flush();
+				}
 				finished = true;
 			} catch (RuntimeException | Error e) {
 				if (finished) {

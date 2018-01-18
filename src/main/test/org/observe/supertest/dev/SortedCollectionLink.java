@@ -6,7 +6,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
@@ -122,28 +121,14 @@ public class SortedCollectionLink<E> extends AbstractObservableCollectionLink<E,
 			return;
 		List<CollectionOp<E>> parentOps = new ArrayList<>(ops.size());
 		boolean addAll = CollectionOp.isAddAllIndex(ops);
+		E preStart, postEnd;
 		if (addAll) {
 			// addAll(index, values) is implemented as subList(index, index).addAll(values)
 			int index = subListStart + ops.get(0).index;
 			subListStart = subListEnd = index;
 		}
-		// At the moment, adding into a sub-list is somewhat gimped (for performance).
-		// The sub list class will only attempt to add the value at the beginning and end of the sub-list
-		// So I need to keep a notional running sub list composed of the values that have been addable so far
-		// But I only care about the values before and after the beginning and end of the sub list
-		boolean isSubListAdd = (subListStart > 0 || subListEnd < theSortedElements.size()) && ops.get(0).type == CollectionChangeType.add
-			&& CollectionOp.isSameType(ops);
-		final Optional<E> preSubListStart, postSubListEnd;
-		Optional<E> postSubListStart, preSubListEnd;
-		if (isSubListAdd) {
-			preSubListStart = subListStart == 0 ? Optional.empty() : Optional.of(theSortedElements.get(subListStart - 1).value);
-			postSubListEnd = subListEnd == theSortedElements.size() ? Optional.empty()
-				: Optional.of(theSortedElements.get(subListEnd).value);
-			postSubListStart = subListStart == theSortedElements.size() ? Optional.empty()
-				: Optional.of(theSortedElements.get(subListStart).value);
-			preSubListEnd = subListEnd == 0 ? Optional.empty() : Optional.of(theSortedElements.get(subListEnd - 1).value);
-		} else
-			preSubListStart = postSubListStart = preSubListEnd = postSubListEnd = null;
+		preStart = subListStart == 0 ? null : theSortedElements.get(subListStart - 1).value;
+		postEnd = subListEnd == theSortedElements.size() ? null : theSortedElements.get(subListEnd).value;
 		for (CollectionOp<E> op : ops) {
 			switch (op.type) {
 			case add:
@@ -155,37 +140,14 @@ public class SortedCollectionLink<E> extends AbstractObservableCollectionLink<E,
 						op.reject(StdMsg.ILLEGAL_ELEMENT, true);
 					else
 						parentOps.add(new CollectionOp<>(op, CollectionChangeType.add, op.value, -1));
-				} else if (isSubListAdd) {
-					boolean canAddAtStart = true;
-					if (preSubListStart.isPresent() && theCompare.compare(preSubListStart.get(), op.value) > 0)
-						canAddAtStart = false;
-					else if (postSubListStart.isPresent() && theCompare.compare(postSubListStart.get(), op.value) < 0)
-						canAddAtStart = false;
-					boolean canAddAtEnd = true;
-					if (postSubListEnd.isPresent() && theCompare.compare(postSubListEnd.get(), op.value) < 0)
-						canAddAtEnd = false;
-					else if (preSubListEnd.isPresent() && theCompare.compare(preSubListEnd.get(), op.value) > 0)
-						canAddAtEnd = false;
-					if (canAddAtStart || canAddAtEnd) {
-						CollectionOp<E> parentOp = op.index < 0 ? op : new CollectionOp<>(op, op.type, op.value, -1);
-						parentOps.add(parentOp);
-						// We don't want to mess with the notional sub list if the parent would actually forbid this operation,
-						// So we have to call the parent each time here
-						// The performance on this may be terrible, but I can't think of a way to not do this
-						// since checkModifiable can't have side effects
-						getParent().checkModifiable(parentOps, 0, theSourceElements.size(), helper);
-						if (parentOp.getMessage() != null)
-							parentOps.remove(parentOps.size() - 1);
-						else {
-							if (canAddAtStart)
-								postSubListStart = Optional.of(op.value);
-							if (canAddAtEnd)
-								preSubListEnd = Optional.of(op.value);
-						}
-					} else
-						op.reject(StdMsg.ILLEGAL_ELEMENT, true);
-				} else
-					parentOps.add(op);
+				} else {
+					if (preStart != null && theCompare.compare(preStart, op.value) > 0)
+						op.reject(StdMsg.ILLEGAL_ELEMENT_POSITION, true);
+					else if (postEnd != null && theCompare.compare(postEnd, op.value) < 0)
+						op.reject(StdMsg.ILLEGAL_ELEMENT_POSITION, true);
+					else
+						parentOps.add(op.index < 0 ? op : new CollectionOp<>(op, op.type, op.value, -1));
+				}
 				break;
 			case remove:
 				if (op.index >= 0) {
@@ -207,8 +169,7 @@ public class SortedCollectionLink<E> extends AbstractObservableCollectionLink<E,
 				break;
 			}
 		}
-		if (!isSubListAdd) // For the sub-list case, we're already done
-			getParent().checkModifiable(parentOps, 0, theSourceElements.size(), helper);
+		getParent().checkModifiable(parentOps, 0, theSourceElements.size(), helper);
 	}
 
 	@Override
