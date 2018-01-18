@@ -1157,21 +1157,22 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public String canAdd(T value) {
+		public String canAdd(T value, ElementId after, ElementId before) {
 			FilterMapResult<T, E> reversed = theFlow.reverse(value, true);
 			if (!reversed.isAccepted())
 				return reversed.getRejectReason();
-			return theSource.canAdd(reversed.result);
+			return theSource.canAdd(reversed.result, after, before);
 		}
 
 		@Override
-		public CollectionElement<T> addElement(T e, boolean first) {
+		public CollectionElement<T> addElement(T value, ElementId after, ElementId before, boolean first)
+			throws UnsupportedOperationException, IllegalArgumentException {
 			try (Transaction t = lock(true, null)) {
 				// Lock so the reversed value is consistent until it is added
-				FilterMapResult<T, E> reversed = theFlow.reverse(e, true);
+				FilterMapResult<T, E> reversed = theFlow.reverse(value, true);
 				if (reversed.throwIfError(IllegalArgumentException::new) != null)
 					return null;
-				CollectionElement<E> srcEl = theSource.addElement(reversed.result, first);
+				CollectionElement<E> srcEl = theSource.addElement(reversed.result, after, before, first);
 				return srcEl == null ? null : elementFor(srcEl, null);
 			}
 		}
@@ -1720,18 +1721,25 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public String canAdd(T value) {
-			return theFlow.canAdd(value);
+		public String canAdd(T value, ElementId after, ElementId before) {
+			return theFlow.canAdd(value, strip(after), strip(before));
 		}
 
 		@Override
-		public CollectionElement<T> addElement(T e, boolean first) {
-			DerivedCollectionElement<T> derived = theFlow.addElement(e, first);
+		public CollectionElement<T> addElement(T value, ElementId after, ElementId before, boolean first)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			DerivedCollectionElement<T> derived = theFlow.addElement(value, strip(after), strip(before), first);
 			return derived == null ? null : elementFor(idFromSynthetic(derived));
 		}
 
 		private DerivedElementHolder<T> idFromSynthetic(DerivedCollectionElement<T> added) {
-			return theDerivedElements.search(holder -> added.compareTo(holder.element), SortedSearchFilter.OnlyMatch).get();
+			BinaryTreeNode<DerivedElementHolder<T>> found = theDerivedElements.search(//
+				holder -> added.compareTo(holder.element), SortedSearchFilter.OnlyMatch);
+			return found.get();
+		}
+
+		private DerivedCollectionElement<T> strip(ElementId id) {
+			return id == null ? null : ((DerivedElementHolder<T>) id).element;
 		}
 
 		@Override
@@ -1960,6 +1968,17 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public CollectionElement<E> addElement(E value, boolean first) {
+			return null;
+		}
+
+		@Override
+		public String canAdd(E value, ElementId after, ElementId before) {
+			return StdMsg.UNSUPPORTED_OPERATION;
+		}
+
+		@Override
+		public CollectionElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
+			throws UnsupportedOperationException, IllegalArgumentException {
 			return null;
 		}
 
@@ -2215,6 +2234,27 @@ public final class ObservableCollectionImpl {
 			if (e != null && !coll.getType().wrap().getRawType().isInstance(e))
 				throw new IllegalArgumentException(MutableCollectionElement.StdMsg.BAD_TYPE);
 			return ((ObservableCollection<E>) coll).addElement(e, first);
+		}
+
+		@Override
+		public String canAdd(E value, ElementId after, ElementId before) {
+			ObservableCollection<? extends E> current = theCollectionObservable.get();
+			if (current == null)
+				return MutableCollectionElement.StdMsg.UNSUPPORTED_OPERATION;
+			else if (value != null && !current.getType().wrap().getRawType().isInstance(value))
+				return MutableCollectionElement.StdMsg.BAD_TYPE;
+			return ((ObservableCollection<E>) current).canAdd(value, after, before);
+		}
+
+		@Override
+		public CollectionElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			ObservableCollection<? extends E> coll = theCollectionObservable.get();
+			if (coll == null)
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			if (value != null && !coll.getType().wrap().getRawType().isInstance(value))
+				throw new IllegalArgumentException(MutableCollectionElement.StdMsg.BAD_TYPE);
+			return ((ObservableCollection<E>) coll).addElement(value, after, before, first);
 		}
 
 		@Override

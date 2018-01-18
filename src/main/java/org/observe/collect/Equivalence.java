@@ -417,6 +417,17 @@ public interface Equivalence<E> {
 		}
 
 		@Override
+		public String canAdd(T2 value, ElementId after, ElementId before) {
+			return theWrapped.canAdd(theReverse.apply(value), after, before);
+		}
+
+		@Override
+		public CollectionElement<T2> addElement(T2 value, ElementId after, ElementId before, boolean first)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			return handleFor(theWrapped.addElement(theReverse.apply(value), after, before, first));
+		}
+
+		@Override
 		public boolean addAll(Collection<? extends T2> c) {
 			try (Transaction t = lock(true, null); Transaction ct = Transactable.lock(c, false, null)) {
 				for (T2 e : c)
@@ -501,6 +512,11 @@ public interface Equivalence<E> {
 		@Override
 		public MapEntryHandle<T2, V> putEntry(T2 key, V value, boolean first) {
 			return handleFor(theWrapped.putEntry(theReverse.apply(key), value, first));
+		}
+
+		@Override
+		public MapEntryHandle<T2, V> putEntry(T2 key, V value, ElementId after, ElementId before, boolean first) {
+			return handleFor(theWrapped.putEntry(theReverse.apply(key), value, after, before, first));
 		}
 
 		private MapEntryHandle<T2, V> handleFor(MapEntryHandle<E, V> entry) {

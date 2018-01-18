@@ -324,28 +324,42 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public String canAdd(T toAdd) {
-			if (theElementsByValue.containsKey(toAdd))
-				return StdMsg.ELEMENT_EXISTS;
-			return theParent.canAdd(toAdd);
+		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			if (isPreservingSourceOrder) {
+				if (theElementsByValue.containsKey(toAdd))
+					return StdMsg.ELEMENT_EXISTS;
+				return theParent.canAdd(toAdd, parent(after), parent(before));
+			} else {
+				String msg = theElementsByValue.keySet().canAdd(toAdd, valueElement(after), valueElement(before));
+				if (msg != null)
+					return msg;
+				return theParent.canAdd(toAdd, null, null);
+			}
 		}
 
 		@Override
-		public DerivedCollectionElement<T> addElement(T value, boolean first) {
+		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
+			boolean first) {
 			try (Transaction t = lock(true, null)) {
 				if (theElementsByValue.containsKey(value))
 					return null;
 				UniqueElement element = null;
-				if (!isPreservingSourceOrder) {
+				DerivedCollectionElement<T> parentAfter, parentBefore;
+				if (isPreservingSourceOrder) {
+					parentAfter = parent(after);
+					parentBefore = parent(before);
+				} else {
 					// Since the element map is determining order, we forward the endian request (first or last) to the unique map
 					element = createUniqueElement(value);
 					// First, install the (currently empty) unique element in the element map so that the position is correct
-					element.theValueId = theElementsByValue.putEntry(value, element, first).getElementId();
+					element.theValueId = theElementsByValue.putEntry(value, element, valueElement(after), valueElement(before), first)
+						.getElementId();
+					parentAfter = parentBefore = null;
 				}
 				try {
 					// Parent collection order does not matter, so the first boolean does not apply here.
 					// Just add it to the end.
-					DerivedCollectionElement<T> parentEl = theParent.addElement(value, false);
+					DerivedCollectionElement<T> parentEl = theParent.addElement(value, parentAfter, parentBefore, false);
 					if (parentEl == null) {
 						if (element != null)
 							theElementsByValue.mutableEntry(element.theValueId).remove();
@@ -364,6 +378,14 @@ public class ObservableSetImpl {
 				}
 				return element;
 			}
+		}
+
+		private ElementId valueElement(DerivedCollectionElement<T> el) {
+			return el == null ? null : ((UniqueElement) el).theValueId;
+		}
+
+		private DerivedCollectionElement<T> parent(DerivedCollectionElement<T> el) {
+			return el == null ? null : ((UniqueElement) el).theActiveElement;
 		}
 
 		@Override
@@ -673,14 +695,16 @@ public class ObservableSetImpl {
 
 			@Override
 			public String canAdd(T value, boolean before) {
-				if (theElementsByValue.containsKey(value))
-					return StdMsg.ELEMENT_EXISTS;
-				if (isPreservingSourceOrder)
-					return theActiveElement.canAdd(value, before);
-				String msg = theParent.canAdd(value);
-				if (msg == null)
-					msg = theElementsByValue.keySet().mutableElement(theValueId).canAdd(value, before);
-				return msg;
+				if (isPreservingSourceOrder) {
+					if (theElementsByValue.containsKey(value))
+						return StdMsg.ELEMENT_EXISTS;
+					return theParent.canAdd(value, before ? null : theActiveElement, before ? theActiveElement : null);
+				} else {
+					String msg = theParent.canAdd(value, null, null);
+					if (msg == null)
+						msg = theElementsByValue.keySet().mutableElement(theValueId).canAdd(value, before);
+					return msg;
+				}
 			}
 
 			@Override
@@ -689,7 +713,7 @@ public class ObservableSetImpl {
 					if (theElementsByValue.containsKey(value))
 						throw new IllegalArgumentException(StdMsg.ELEMENT_EXISTS);
 					if (isPreservingSourceOrder) {
-						theActiveElement.add(value, before);
+						theParent.addElement(value, before ? null : theActiveElement, before ? theActiveElement : null, !before);
 						// Look the element up.
 						// If it's not there, here I'm returning null, implying that the element was not added to the unique set
 						// This would probably be a bug though.
@@ -706,7 +730,7 @@ public class ObservableSetImpl {
 							// element if we can
 							if (theActiveElement.canAdd(value, before) == null)
 								theActiveElement.add(value, before);
-							else if (theParent.addElement(value, before) == null)
+							else if (theParent.addElement(value, null, null, before) == null)
 								theElementsByValue.mutableEntry(elementHandle).remove();
 						} catch (RuntimeException e) {
 							theElementsByValue.mutableEntry(elementHandle).remove();

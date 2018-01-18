@@ -603,7 +603,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		}
 
 		@Override
-		public MapEntryHandle<K, V> putEntry(K key, V value, boolean first) {
+		public MapEntryHandle<K, V> putEntry(K key, V value, ElementId after, ElementId before, boolean first) {
 			try (Transaction t = lock(true, true, null)) {
 				ObservableMultiEntry<K, V> outerHandle = theSource.getEntry(key);
 				if (outerHandle != null) {
@@ -624,7 +624,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 				ObservableValue<V> mappedValue = theValueMap.apply(key, theSource.get(key));
 				if (mappedValue instanceof SettableValue)
 					((SettableValue<V>) mappedValue).set(value, null);
-				MultiMapEntryHandle<K, V> handle2 = theSource.putEntry(key, value, first);
+				MultiMapEntryHandle<K, V> handle2 = theSource.putEntry(key, value, after, before, first);
 				if (handle2 == null)
 					return null;
 				outerHandle = theSource.getEntry(handle2.getKeyId());

@@ -172,6 +172,25 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	}
 
 	@Override
+	public String canAdd(E value, ElementId after, ElementId before) {
+		return theValues.canAdd(value, after, before);
+	}
+
+	@Override
+	public CollectionElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
+		throws UnsupportedOperationException, IllegalArgumentException {
+		try (Transaction t = lock(true, null)) {
+			CollectionElement<E> el = theValues.addElement(value, after, before, first);
+			if (el == null)
+				return null;
+			ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(),
+				theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, null, value, getCurrentCause());
+			fire(event);
+			return el;
+		}
+	}
+
+	@Override
 	public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
 		return theObservers.add(observer, true)::run;
 	}

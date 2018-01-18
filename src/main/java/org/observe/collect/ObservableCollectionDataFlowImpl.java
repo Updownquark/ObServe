@@ -41,12 +41,14 @@ import org.qommons.BiTuple;
 import org.qommons.Ternian;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
+import org.qommons.ValueHolder;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterHashMap;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterMap;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.tree.BetterTreeList;
@@ -199,9 +201,10 @@ public class ObservableCollectionDataFlowImpl {
 
 		Comparable<DerivedCollectionElement<T>> getElementFinder(T value);
 
-		String canAdd(T toAdd);
+		String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before);
 
-		DerivedCollectionElement<T> addElement(T value, boolean first);
+		DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
+			boolean first);
 
 		/**
 		 * Removes all elements in this manager, if possible
@@ -299,6 +302,10 @@ public class ObservableCollectionDataFlowImpl {
 					return outer;
 				}
 			};
+		}
+
+		public static <E> DerivedCollectionElement<E> reverse(DerivedCollectionElement<E> el) {
+			return el == null ? null : el.reverse();
 		}
 	}
 
@@ -1121,14 +1128,19 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public String canAdd(E toAdd) {
-			return theSource.canAdd(toAdd);
+		public String canAdd(E toAdd, DerivedCollectionElement<E> after, DerivedCollectionElement<E> before) {
+			return theSource.canAdd(toAdd, strip(after), strip(before));
 		}
 
 		@Override
-		public DerivedCollectionElement<E> addElement(E value, boolean first) {
-			CollectionElement<E> srcEl = theSource.addElement(value, first);
+		public DerivedCollectionElement<E> addElement(E value, DerivedCollectionElement<E> after, DerivedCollectionElement<E> before,
+			boolean first) {
+			CollectionElement<E> srcEl = theSource.addElement(value, strip(after), strip(before), first);
 			return srcEl == null ? null : new BaseDerivedElement(theSource.mutableElement(srcEl.getElementId()));
+		}
+
+		private ElementId strip(DerivedCollectionElement<E> el) {
+			return el == null ? null : ((BaseDerivedElement) el).source.getElementId();
 		}
 
 		@Override
@@ -1330,13 +1342,15 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public String canAdd(T toAdd) {
-			return theParent.canAdd(toAdd);
+		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			return theParent.canAdd(toAdd, DerivedCollectionElement.reverse(before), DerivedCollectionElement.reverse(after));
 		}
 
 		@Override
-		public DerivedCollectionElement<T> addElement(T value, boolean first) {
-			DerivedCollectionElement<T> parentEl = theParent.addElement(value, !first);
+		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
+			boolean first) {
+			DerivedCollectionElement<T> parentEl = theParent.addElement(value, DerivedCollectionElement.reverse(before),
+				DerivedCollectionElement.reverse(after), !first);
 			return parentEl == null ? null : parentEl.reverse();
 		}
 
@@ -1409,13 +1423,33 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public String canAdd(T toAdd) {
-			return theParent.canAdd(toAdd);
+		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			if (after != null && theCompare.compare(after.get(), toAdd) > 0)
+				return StdMsg.ILLEGAL_ELEMENT_POSITION;
+			if (before != null && theCompare.compare(before.get(), toAdd) < 0)
+				return StdMsg.ILLEGAL_ELEMENT_POSITION;
+			return theParent.canAdd(toAdd, null, null);
 		}
 
 		@Override
-		public DerivedCollectionElement<T> addElement(T value, boolean first) {
-			DerivedCollectionElement<T> parentEl = theParent.addElement(value, first);
+		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
+			boolean first) {
+			int afterComp = after == null ? 0 : theCompare.compare(after.get(), value);
+			if (afterComp > 0)
+				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT_POSITION);
+			int beforeComp = before == null ? 0 : theCompare.compare(before.get(), value);
+			if (beforeComp < 0)
+				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT_POSITION);
+			// Try to add relative to the specified elements if possible
+			if (first && after != null && after.canAdd(value, false) == null)
+				return after.add(value, false);
+			if (!first && before != null && before.canAdd(value, true) == null)
+				return before.add(value, true);
+			// If such a positional add is unsupported by the parent, we need to ensure
+			// that a position-less add will insert the new element in the right spot
+			DerivedCollectionElement<T> afterParent = (after != null && afterComp == 0) ? ((SortedElement) after).theParentEl : null;
+			DerivedCollectionElement<T> beforeParent = (before != null && beforeComp == 0) ? ((SortedElement) before).theParentEl : null;
+			DerivedCollectionElement<T> parentEl = theParent.addElement(value, afterParent, beforeParent, first);
 			return parentEl == null ? null : new SortedElement(parentEl, true);
 		}
 
@@ -1563,7 +1597,14 @@ public class ObservableCollectionDataFlowImpl {
 				if ((left != null && theCompare.compare(left.get().getValue1(), value) > 0)//
 					|| (right != null && theCompare.compare(value, right.get().getValue1()) > 0))
 					return StdMsg.ILLEGAL_ELEMENT_POSITION;
-				return theParent.canAdd(value);
+				DerivedCollectionElement<T> afterParent, beforeParent;
+				if (theCompare.compare(get(), value) != 0)
+					afterParent = beforeParent = null; // The element will be positioned correctly regardless of the source order
+				else { // The source order will determine where the new element is placed relative to this element
+					afterParent = before ? null : theParentEl;
+					beforeParent = before ? theParentEl : null;
+				}
+				return theParent.canAdd(value, afterParent, beforeParent);
 			}
 
 			@Override
@@ -1578,9 +1619,14 @@ public class ObservableCollectionDataFlowImpl {
 				if (theParentEl.canAdd(value, before) == null)
 					parentAdd = theParentEl.add(value, before);
 				else {
-					// But if such a positional add is unsupported, it doesn't matter.
-					// The position in the sorted collection will be correct.
-					parentAdd = theParent.addElement(value, before);
+					DerivedCollectionElement<T> afterParent, beforeParent;
+					if (theCompare.compare(get(), value) != 0)
+						afterParent = beforeParent = null; // The element will be positioned correctly regardless of the source order
+					else { // The source order will determine where the new element is placed relative to this element
+						afterParent = before ? null : theParentEl;
+						beforeParent = before ? theParentEl : null;
+					}
+					parentAdd = theParent.addElement(value, afterParent, beforeParent, !before); // Add as close to this element as possible
 				}
 				return new SortedElement(parentAdd, true);
 			}
@@ -1633,22 +1679,27 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public String canAdd(T toAdd) {
+		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
 			String msg = theFilter.apply(toAdd);
 			if (msg == null)
-				msg = theParent.canAdd(toAdd);
+				msg = theParent.canAdd(toAdd, strip(after), strip(before));
 			return msg;
 		}
 
 		@Override
-		public DerivedCollectionElement<T> addElement(T value, boolean first) {
+		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
+			boolean first) {
 			String msg = theFilter.apply(value);
 			if (msg != null)
 				throw new IllegalArgumentException(msg);
-			DerivedCollectionElement<T> parentEl = theParent.addElement(value, first);
+			DerivedCollectionElement<T> parentEl = theParent.addElement(value, strip(after), strip(before), first);
 			if (parentEl == null)
 				return null;
 			return new FilteredElement(parentEl, true, true);
+		}
+
+		private DerivedCollectionElement<T> strip(DerivedCollectionElement<T> el) {
+			return el == null ? null : ((FilteredElement) el).theParentEl;
 		}
 
 		@Override
@@ -1996,22 +2047,27 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public String canAdd(T toAdd) {
+		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
 			IntersectionElement intersect = theValues.get(toAdd);
 			boolean filterHas = intersect == null ? false : intersect.rightCount > 0;
 			if (filterHas == isExclude)
 				return StdMsg.ILLEGAL_ELEMENT;
-			return theParent.canAdd(toAdd);
+			return theParent.canAdd(toAdd, strip(after), strip(before));
 		}
 
 		@Override
-		public DerivedCollectionElement<T> addElement(T value, boolean first) {
+		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
+			boolean first) {
 			IntersectionElement intersect = theValues.get(value);
 			boolean filterHas = intersect == null ? false : intersect.rightCount > 0;
 			if (filterHas == isExclude)
 				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
-			DerivedCollectionElement<T> parentEl = theParent.addElement(value, first);
+			DerivedCollectionElement<T> parentEl = theParent.addElement(value, strip(after), strip(before), first);
 			return parentEl == null ? null : new IntersectedCollectionElement(parentEl, null, true);
+		}
+
+		private DerivedCollectionElement<T> strip(DerivedCollectionElement<T> el) {
+			return el == null ? null : ((IntersectedCollectionElement) el).theParentEl;
 		}
 
 		@Override
@@ -2186,13 +2242,14 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public String canAdd(T toAdd) {
-			return theParent.canAdd(toAdd);
+		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			return theParent.canAdd(toAdd, after, before);
 		}
 
 		@Override
-		public DerivedCollectionElement<T> addElement(T value, boolean first) {
-			return theParent.addElement(value, first);
+		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
+			boolean first) {
+			return theParent.addElement(value, after, before, first);
 		}
 
 		@Override
@@ -2466,24 +2523,29 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public String canAdd(T toAdd) {
+		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
 			if (theOptions.getReverse() == null)
 				return StdMsg.UNSUPPORTED_OPERATION;
 			I reversed = theOptions.getReverse().apply(toAdd);
 			if (!theEquivalence.elementEquals(theMap.apply(reversed), toAdd))
 				return StdMsg.ILLEGAL_ELEMENT;
-			return theParent.canAdd(reversed);
+			return theParent.canAdd(reversed, strip(after), strip(before));
 		}
 
 		@Override
-		public DerivedCollectionElement<T> addElement(T value, boolean first) {
+		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
+			boolean first) {
 			if (theOptions.getReverse() == null)
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			I reversed = theOptions.getReverse().apply(value);
 			if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
 				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
-			DerivedCollectionElement<I> parentEl = theParent.addElement(reversed, first);
+			DerivedCollectionElement<I> parentEl = theParent.addElement(reversed, strip(after), strip(before), first);
 			return parentEl == null ? null : new MappedElement(parentEl, true);
+		}
+
+		private DerivedCollectionElement<I> strip(DerivedCollectionElement<T> el) {
+			return el == null ? null : ((MappedElement) el).theParentEl;
 		}
 
 		@Override
@@ -2570,8 +2632,11 @@ public class ObservableCollectionDataFlowImpl {
 							theValue = null;
 						}
 					});
-				} else
+				} else {
 					theCacheHandler = null;
+					if (theOptions.isCached())
+						theValue = theMap.apply(parentEl.get());
+				}
 			}
 
 			public DerivedCollectionElement<I> getParentEl() {
@@ -3130,14 +3195,19 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public String canAdd(T toAdd) {
-			return theParent.canAdd(reverseValue(toAdd));
+		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			return theParent.canAdd(reverseValue(toAdd), strip(after), strip(before));
 		}
 
 		@Override
-		public DerivedCollectionElement<T> addElement(T value, boolean first) {
-			DerivedCollectionElement<I> parentEl = theParent.addElement(reverseValue(value), first);
+		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
+			boolean first) {
+			DerivedCollectionElement<I> parentEl = theParent.addElement(reverseValue(value), strip(after), strip(before), first);
 			return parentEl == null ? null : new CombinedElement(parentEl, true);
+		}
+
+		private DerivedCollectionElement<I> strip(DerivedCollectionElement<T> el) {
+			return el == null ? null : ((CombinedElement) el).theParentEl;
 		}
 
 		@Override
@@ -3479,8 +3549,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public String canAdd(T toAdd) {
-			return theParent.canAdd(toAdd);
+		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			return theParent.canAdd(toAdd, strip(after), strip(before));
 		}
 
 		@Override
@@ -3494,9 +3564,14 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public DerivedCollectionElement<T> addElement(T value, boolean first) {
-			DerivedCollectionElement<T> parentEl = theParent.addElement(value, first);
+		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
+			boolean first) {
+			DerivedCollectionElement<T> parentEl = theParent.addElement(value, strip(after), strip(before), first);
 			return parentEl == null ? null : new RefreshingElement(parentEl, true);
+		}
+
+		private DerivedCollectionElement<T> strip(DerivedCollectionElement<T> el) {
+			return el == null ? null : ((RefreshingElement) el).theParentEl;
 		}
 
 		@Override
@@ -3680,8 +3755,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public String canAdd(T toAdd) {
-			return theParent.canAdd(toAdd);
+		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			return theParent.canAdd(toAdd, strip(after), strip(before));
 		}
 
 		@Override
@@ -3690,9 +3765,14 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public DerivedCollectionElement<T> addElement(T value, boolean first) {
-			DerivedCollectionElement<T> parentEl = theParent.addElement(value, first);
+		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
+			boolean first) {
+			DerivedCollectionElement<T> parentEl = theParent.addElement(value, strip(after), strip(before), first);
 			return parentEl == null ? null : new RefreshingElement(parentEl);
+		}
+
+		private DerivedCollectionElement<T> strip(DerivedCollectionElement<T> el) {
+			return el == null ? null : ((RefreshingElement) el).theParentEl;
 		}
 
 		@Override
@@ -4031,18 +4111,23 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public String canAdd(T toAdd) {
+		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
 			String msg = theFilter.canAdd(toAdd);
 			if (msg == null)
-				msg = theParent.canAdd(toAdd);
+				msg = theParent.canAdd(toAdd, strip(after), strip(before));
 			return msg;
 		}
 
 		@Override
-		public DerivedCollectionElement<T> addElement(T value, boolean first) {
+		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
+			boolean first) {
 			theFilter.assertAdd(value);
-			DerivedCollectionElement<T> parentEl = theParent.addElement(value, first);
+			DerivedCollectionElement<T> parentEl = theParent.addElement(value, strip(after), strip(before), first);
 			return parentEl == null ? null : new ModFilteredElement(parentEl);
+		}
+
+		private DerivedCollectionElement<T> strip(DerivedCollectionElement<T> el) {
+			return el == null ? null : ((ModFilteredElement) el).theParentEl;
 		}
 
 		@Override
@@ -4215,54 +4300,108 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public String canAdd(T toAdd) {
-			String msg = null;
+		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			String[] msg = new String[1];
 			try (Transaction t = theParent.lock(true, false, null)) {
-				for (FlattenedHolder holder : theOuterElements) {
+				ElementSpliterator<FlattenedHolder> outerSpliter;
+				if (after != null)
+					outerSpliter = theOuterElements.spliterator(((FlattenedElement) after).theHolder.holderElement, true);
+				else
+					outerSpliter = theOuterElements.spliterator();
+
+				boolean[] addable = new boolean[1];
+				boolean[] firstOuter = new boolean[1];
+				boolean[] lastOuter = new boolean[1];
+				while (!addable[0] && !lastOuter[0] && outerSpliter.forElement(holderEl -> {
+					FlattenedHolder holder = holderEl.get();
+					lastOuter[0] = before != null && ((FlattenedElement) before).theHolder.holderElement.equals(holderEl.getElementId());
 					if (holder.manager == null)
-						continue;
-					if (holder.manager.getTargetType().wrap().getRawType().isInstance(toAdd)
-						&& holder.manager.equivalence().isElement(toAdd))
-						msg = ((ActiveCollectionManager<?, ?, T>) holder.manager).canAdd(toAdd);
+						return;
+					if (!holder.manager.getTargetType().wrap().getRawType().isInstance(toAdd)
+						|| !holder.manager.equivalence().isElement(toAdd)) {
+						msg[0] = StdMsg.ILLEGAL_ELEMENT;
+						return;
+					}
+					DerivedCollectionElement<T> innerAfter, innerBefore;
+					if (after != null && firstOuter[0])
+						innerAfter = (DerivedCollectionElement<T>) ((FlattenedElement) after).theParentEl;
 					else
-						msg = StdMsg.ILLEGAL_ELEMENT;
-					if (msg == null)
-						return null;
+						innerAfter = null;
+					if (before != null && lastOuter[0])
+						innerBefore = (DerivedCollectionElement<T>) ((FlattenedElement) before).theParentEl;
+					else
+						innerBefore = null;
+					msg[0] = ((ActiveCollectionManager<?, ?, T>) holder.manager).canAdd(toAdd, innerAfter, innerBefore);
+					addable[0] = msg[0] == null;
+				}, true)) {
+					firstOuter[0] = false;
 				}
+				if (addable[0])
+					return null;
 			}
-			if (msg == null)
-				msg = StdMsg.UNSUPPORTED_OPERATION;
-			return msg;
+			if (msg[0] == null)
+				msg[0] = StdMsg.UNSUPPORTED_OPERATION;
+			return msg[0];
 		}
 
 		@Override
-		public DerivedCollectionElement<T> addElement(T value, boolean first) {
-			String msg = null;
-			boolean tried = false;
+		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
+			boolean first) {
+			String[] msg = new String[1];
+			ValueHolder<DerivedCollectionElement<T>> added = new ValueHolder<>();
 			try (Transaction t = theParent.lock(true, false, null)) {
-				for (FlattenedHolder holder : (first ? theOuterElements : theOuterElements.reverse())) {
-					String msg_i;
-					if (holder.manager == null)
-						continue;
-					if (holder.manager.getTargetType().wrap().getRawType().isInstance(value)
-						&& holder.manager.equivalence().isElement(value))
-						msg_i = ((ActiveCollectionManager<?, ?, T>) holder.manager).canAdd(value);
+				ElementSpliterator<FlattenedHolder> outerSpliter;
+				if (first) {
+					if (before != null)
+						outerSpliter = theOuterElements.spliterator(((FlattenedElement) before).theHolder.holderElement, false);
 					else
-						msg_i = StdMsg.ILLEGAL_ELEMENT;
-					if (msg == null) {
-						tried = true;
-						DerivedCollectionElement<T> el = ((ActiveCollectionManager<?, ?, T>) holder.manager).addElement(value, first);
-						if (el != null)
-							return new FlattenedElement(holder, el, true);
-					} else
-						msg = msg_i;
+						outerSpliter = theOuterElements.spliterator(false);
+				} else {
+					if (after != null)
+						outerSpliter = theOuterElements.spliterator(((FlattenedElement) after).theHolder.holderElement, true);
+					else
+						outerSpliter = theOuterElements.spliterator();
+				}
+
+				boolean[] firstOuter = new boolean[] { first };
+				boolean[] lastOuter = new boolean[] { !first };
+				boolean[] reachedEnd = first ? lastOuter : firstOuter;
+				while (added.get() == null && !reachedEnd[0] && outerSpliter.forElement(holderEl -> {
+					FlattenedHolder holder = holderEl.get();
+					if (!lastOuter[0] && first)
+						lastOuter[0] = before != null
+						&& ((FlattenedElement) before).theHolder.holderElement.equals(holderEl.getElementId());
+					if (!firstOuter[0] && !first)
+						firstOuter[0] = after != null && ((FlattenedElement) after).theHolder.holderElement.equals(holderEl.getElementId());
+					if (holder.manager == null)
+						return;
+					if (!holder.manager.getTargetType().wrap().getRawType().isInstance(value)
+						|| !holder.manager.equivalence().isElement(value)) {
+						msg[0] = StdMsg.ILLEGAL_ELEMENT;
+						return;
+					}
+					DerivedCollectionElement<T> innerAfter, innerBefore;
+					if (after != null && firstOuter[0])
+						innerAfter = (DerivedCollectionElement<T>) ((FlattenedElement) after).theParentEl;
+					else
+						innerAfter = null;
+					if (before != null && lastOuter[0])
+						innerBefore = (DerivedCollectionElement<T>) ((FlattenedElement) before).theParentEl;
+					else
+						innerBefore = null;
+					msg[0] = ((ActiveCollectionManager<?, ?, T>) holder.manager).canAdd(value, innerAfter, innerBefore);
+					if (msg[0] == null)
+						added.accept(((ActiveCollectionManager<?, ?, T>) holder.manager).addElement(value, innerAfter, innerBefore, first));
+				}, true)) {
+					firstOuter[0] = false;
 				}
 			}
-			if (tried)
-				return null;
-			if (msg == null)
-				msg = StdMsg.UNSUPPORTED_OPERATION;
-			throw new UnsupportedOperationException(msg);
+			if (added.get() != null)
+				return added.get();
+			if (msg[0] == null || msg[0].equals(StdMsg.UNSUPPORTED_OPERATION))
+				throw new UnsupportedOperationException(msg[0]);
+			else
+				throw new IllegalArgumentException(msg[0]);
 		}
 
 		@Override
@@ -4285,7 +4424,8 @@ public class ObservableCollectionDataFlowImpl {
 			theAccepter = onElement;
 			theListening = listening;
 			theParent.begin(fromStart, (parentEl, cause) -> {
-				theOuterElements.add(new FlattenedHolder(parentEl, listening, cause, fromStart));
+				FlattenedHolder holder = new FlattenedHolder(parentEl, listening, cause, fromStart);
+				holder.holderElement = theOuterElements.addElement(holder, false).getElementId();
 			}, listening);
 		}
 
@@ -4294,6 +4434,7 @@ public class ObservableCollectionDataFlowImpl {
 			private final BetterCollection<FlattenedElement> theElements;
 			private final WeakListening.Builder theChildListening = theListening.child();
 			private final boolean isFromStart;
+			ElementId holderElement;
 			private CollectionDataFlow<?, ?, ? extends T> theFlow;
 			ActiveCollectionManager<?, ?, ? extends T> manager;
 

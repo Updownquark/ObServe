@@ -1137,7 +1137,7 @@ public class ObservableMultiMapImpl {
 					if (group == null)
 						throw new IllegalArgumentException("No such element");
 					else
-						return group.getParentElements().getElementsBefore(id);
+						return group.getParentElements().keySet().getElementsBefore(id);
 				}
 			}
 
@@ -1148,7 +1148,7 @@ public class ObservableMultiMapImpl {
 					if (group == null)
 						throw new IllegalArgumentException("No such element");
 					else
-						return group.getParentElements().getElementsAfter(id);
+						return group.getParentElements().keySet().getElementsAfter(id);
 				}
 			}
 
@@ -1166,10 +1166,10 @@ public class ObservableMultiMapImpl {
 					Comparable<DerivedCollectionElement<Map.Entry<K, V>>> finder = theEntries
 						.getElementFinder(new SimpleMapEntry<>(theKey, value));
 					if (finder != null) {
-						return elementFor(group.getParentElements().search(finder, BetterSortedSet.SortedSearchFilter.OnlyMatch));
+						return elementFor(group.getParentElements().keySet().search(finder, BetterSortedSet.SortedSearchFilter.OnlyMatch));
 					} else {
 						ElementId[] id = new ElementId[1];
-						MutableElementSpliterator<DerivedCollectionElement<Map.Entry<K, V>>> spliter = group.getParentElements()
+						MutableElementSpliterator<DerivedCollectionElement<Map.Entry<K, V>>> spliter = group.getParentElements().keySet()
 							.spliterator(first);
 						while (id[0] == null && spliter.forElement(el -> {
 							if (theValueEquivalence.elementEquals(el.get().get().getValue(), value))
@@ -1178,7 +1178,7 @@ public class ObservableMultiMapImpl {
 						if (id[0] == null)
 							return null;
 						else
-							return elementFor(group.getParentElements().getElement(id[0]));
+							return elementFor(group.getParentElements().keySet().getElement(id[0]));
 					}
 				}
 			}
@@ -1190,7 +1190,7 @@ public class ObservableMultiMapImpl {
 					if (group == null)
 						return null;
 					else
-						return elementFor(group.getParentElements().getElement(index));
+						return elementFor(group.getParentElements().keySet().getElement(index));
 				}
 			}
 
@@ -1201,7 +1201,7 @@ public class ObservableMultiMapImpl {
 					if (group == null)
 						throw new IllegalArgumentException("No such element");
 					else
-						return elementFor(group.getParentElements().getElement(id));
+						return elementFor(group.getParentElements().keySet().getElement(id));
 				}
 			}
 
@@ -1212,7 +1212,7 @@ public class ObservableMultiMapImpl {
 					if (group == null)
 						return null;
 					else
-						return elementFor(group.getParentElements().getAdjacentElement(elementId, next));
+						return elementFor(group.getParentElements().keySet().getAdjacentElement(elementId, next));
 				}
 			}
 
@@ -1223,7 +1223,7 @@ public class ObservableMultiMapImpl {
 					if (group == null)
 						throw new IllegalArgumentException("No such element");
 					else
-						return mutableElementFor(group.getParentElements().getElement(id));
+						return mutableElementFor(group.getParentElements().keySet().getElement(id));
 				}
 			}
 
@@ -1296,8 +1296,8 @@ public class ObservableMultiMapImpl {
 							GroupingManager<?, K, V>.GroupedElement group = getGroup(true);
 							if (group == null)
 								throw new IllegalStateException("No element added");
-							CollectionElement<DerivedCollectionElement<Map.Entry<K, V>>> entryEl2 = group.getParentElements().getElement(el,
-								true);
+							CollectionElement<DerivedCollectionElement<Map.Entry<K, V>>> entryEl2 = group.getParentElements().keySet()
+								.getElement(el, true);
 							return entryEl2 == null ? null : entryEl2.getElementId();
 						}
 					}
@@ -1318,7 +1318,30 @@ public class ObservableMultiMapImpl {
 					GroupingManager<?, K, V>.GroupedElement group = getGroup(true);
 					if (group == null)
 						throw new IllegalStateException("No element added");
-					CollectionElement<DerivedCollectionElement<Map.Entry<K, V>>> entryEl = group.getParentElements().getElement(el, first);
+					CollectionElement<DerivedCollectionElement<Map.Entry<K, V>>> entryEl = group.getParentElements().keySet().getElement(el,
+						first);
+					return elementFor(entryEl);
+				}
+			}
+
+			@Override
+			public String canAdd(V value, ElementId after, ElementId before) {
+				return theEntries.canAdd(new SimpleMapEntry<>(theKey, value), after, before);
+			}
+
+			@Override
+			public CollectionElement<V> addElement(V value, ElementId after, ElementId before, boolean first)
+				throws UnsupportedOperationException, IllegalArgumentException {
+				try (Transaction t = lock(true, true, null)) {
+					DerivedCollectionElement<Map.Entry<K, V>> el = theEntries.addElement(new SimpleMapEntry<>(theKey, value), after, before,
+						first);
+					if (el == null)
+						return null;
+					GroupingManager<?, K, V>.GroupedElement group = getGroup(true);
+					if (group == null)
+						throw new IllegalStateException("No element added");
+					CollectionElement<DerivedCollectionElement<Map.Entry<K, V>>> entryEl = group.getParentElements().keySet().getElement(el,
+						first);
 					return elementFor(entryEl);
 				}
 			}
@@ -1338,7 +1361,7 @@ public class ObservableMultiMapImpl {
 					if (group == null)
 						return MutableElementSpliterator.empty();
 					else
-						return spliteratorFor(group.getParentElements().spliterator(fromStart));
+						return spliteratorFor(group.getParentElements().keySet().spliterator(fromStart));
 				}
 			}
 
@@ -1349,7 +1372,7 @@ public class ObservableMultiMapImpl {
 					if (group == null)
 						return MutableElementSpliterator.empty();
 					else
-						return spliteratorFor(group.getParentElements().spliterator(element, asNext));
+						return spliteratorFor(group.getParentElements().keySet().spliterator(element, asNext));
 				}
 			}
 
