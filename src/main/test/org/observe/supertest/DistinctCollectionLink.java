@@ -10,7 +10,9 @@ import org.observe.collect.CollectionChangeType;
 import org.observe.collect.Equivalence;
 import org.observe.collect.FlowOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
+import org.observe.collect.ObservableCollectionDataFlowImpl;
 import org.observe.supertest.ObservableChainTester.TestValueType;
+import org.observe.util.WeakListening;
 import org.qommons.TestHelper;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
@@ -48,7 +50,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	private final DebugData theDebug;
 
 	public DistinctCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type, CollectionDataFlow<?, ?, E> flow,
-		TestHelper helper, boolean checkRemovedValues, FlowOptions.UniqueOptions options) {
+		CollectionDataFlow<?, ?, E> parentFlow, TestHelper helper, boolean checkRemovedValues, FlowOptions.UniqueOptions options) {
 		super(parent, type, flow, helper, isRebasedFlowRequired(options, flow.equivalence()), checkRemovedValues);
 		theOptions = options;
 		theValues = flow.equivalence().createMap();
@@ -66,8 +68,19 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			default:
 			}
 		});
-		for (E src : getParent().getCollection()) {
-			ElementId srcId = theSourceValues.addElement(src, false).getElementId();
+		/*The order of distinct collections *may* depend on the temporal order in which the elements are encountered
+		 * The temporal order may be the same as the parent collection's order or the source collection's order, or any ancestor in between,
+		 * depending on when the last collection interrupt was.
+		 * Hence it's not correct to simply iterate through the parent collection's values like most links can.
+		 * The result here is pretty dirty though. */
+		WeakListening.Builder listening = WeakListening.build();
+		BetterSortedSet<ObservableCollectionDataFlowImpl.DerivedCollectionElement<E>> srcEls = new BetterTreeSet<>(false,
+			Comparable::compareTo);
+		parentFlow.manageActive().begin(true, (el, cause) -> {
+			E src = el.get();
+			ElementId srcElId = srcEls.addElement(el, false).getElementId();
+			int srcIndex = srcEls.getElementsBefore(srcElId);
+			ElementId srcId = theSourceValues.addElement(srcIndex, src).getElementId();
 			MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueEntry = theValues.getEntry(src);
 			if (valueEntry == null) {
 				getExpected().add(src);
@@ -79,8 +92,9 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 					theSortedRepresentatives.add(valueEntry.getElementId());
 			}
 			valueEntry.get().put(srcId, src);
-		}
-
+		}, listening.getListening());
+		listening.unsubscribe();
+		srcEls.clear();
 		theDebug = Debug.d().add("distinctLink");
 	}
 
@@ -148,10 +162,11 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 					if (theOptions.isPreservingSourceOrder()) {
 						throw new IllegalStateException("Not implemented");
 					} else {
-						valueHandle = getValueHandle(subListStart);
-
-						op.reject(theValues.keySet().mutableElement(valueHandle.getElementId()).canAdd(op.value, true), true);
-						if (op.getMessage() != null) {
+						if (subListStart < theValues.size()) {
+							valueHandle = getValueHandle(subListStart);
+							op.reject(theValues.keySet().mutableElement(valueHandle.getElementId()).canAdd(op.value, true), true);
+						}
+						if (op.getMessage() != null && subListEnd > 0) {
 							valueHandle = getValueHandle(subListEnd - 1);
 							op.reject(theValues.keySet().mutableElement(valueHandle.getElementId()).canAdd(op.value, false), true);
 						}
@@ -264,6 +279,8 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		for (CollectionOp<E> op : ops) {
 			switch (op.type) {
 			case add:
+				Debug.DebugData debug = Debug.d().debug(helper, true);
+				debug.debugIf(debug.is("break") && op.value.equals("958")).breakpoint();
 				int srcIndex = theNewSourceValues.removeFirst();
 				parentOps.add(new CollectionOp<>(CollectionChangeType.add, op.value, srcIndex));
 				add(srcIndex, op.value, op.index, distinctOps);

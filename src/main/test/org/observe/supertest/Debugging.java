@@ -1,4 +1,4 @@
-package org.observe.supertest.dev;
+package org.observe.supertest;
 
 import java.util.function.Consumer;
 

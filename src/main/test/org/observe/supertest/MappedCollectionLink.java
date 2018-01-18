@@ -135,7 +135,11 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 
 	@Override
 	public String toString() {
-		return "mapped(" + theMap + ")";
+		String s = "mapped(" + theMap;
+		if (isMapVariable)
+			s += ", variable";
+		s += ")";
+		return s;
 	}
 
 	public interface TypeTransformation<E, T> {
@@ -281,7 +285,7 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 		int start = 0;
 		if (c.length > 0 && c[start] == '-')
 			start++;
-		for (int i = start; i <= c.length / 2; i++) {
+		for (int i = start; i < c.length / 2; i++) {
 			char temp = c[i];
 			int opposite = c.length - i - 1;
 			c[i] = c[opposite];

@@ -54,15 +54,61 @@ interface ObservableCollectionChainLink<E, T> extends ObservableChainLink<T> {
 
 		@Override
 		public String toString() {
-			StringBuilder str = new StringBuilder(type.name());
-			if (index >= 0)
-				str.append('[').append(index).append(']');
-			if (value != null) {
-				if (str.length() > 0)
-					str.append(": ");
+			StringBuilder str = new StringBuilder(type.name()).append(' ');
+			if (value != null)
 				str.append(value);
-			}
+			if (index >= 0)
+				str.append('@').append(index);
 			return str.toString();
+		}
+
+		public static boolean isSameIndex(List<? extends CollectionOp<?>> ops) {
+			int idx = ops.get(0).index;
+			for (int i = 1; i < ops.size(); i++)
+				if (ops.get(i).index != idx)
+					return false;
+			return true;
+		}
+
+		public static boolean isSameType(List<? extends CollectionOp<?>> ops) {
+			CollectionChangeType type = ops.get(0).type;
+			for (int i = 1; i < ops.size(); i++)
+				if (ops.get(i).type != type)
+					return false;
+			return true;
+		}
+
+		public static String print(List<? extends CollectionOp<?>> ops) {
+			if (ops.isEmpty())
+				return "[]";
+			StringBuilder str = new StringBuilder();
+			boolean separateTypes = !isSameType(ops);
+			if (!separateTypes)
+				str.append(ops.get(0).type);
+			boolean separateIndexes = isSameIndex(ops);
+			if (ops.get(0).index >= 0 && !separateIndexes)
+				str.append('@').append(ops.get(0).index);
+			str.append('[');
+			boolean first = true;
+			for (CollectionOp<?> op : ops) {
+				if (!first)
+					str.append(", ");
+				first = false;
+				if (separateTypes)
+					str.append(op.type);
+				if (op.value != null)
+					str.append(op.value);
+				if (separateIndexes && op.index >= 0)
+					str.append('@').append(op.index);
+			}
+			str.append(']');
+			return str.toString();
+		}
+
+		public static boolean isAddAllIndex(List<? extends CollectionOp<?>> ops) {
+			return !ops.isEmpty()//
+				&& ops.get(0).type == CollectionChangeType.add && ops.get(0).index >= 0//
+				&& CollectionOp.isSameType(ops) && CollectionOp.isSameIndex(ops);
 		}
 	}
 
