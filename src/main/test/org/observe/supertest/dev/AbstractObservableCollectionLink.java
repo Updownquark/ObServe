@@ -18,6 +18,7 @@ import org.junit.Assert;
 import org.observe.Observable;
 import org.observe.SimpleSettableValue;
 import org.observe.collect.CollectionChangeType;
+import org.observe.collect.Equivalence;
 import org.observe.collect.FlowOptions;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
@@ -769,9 +770,14 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			derived.accept((ObservableChainLink<X>) theChild);
 		})//
 		.or(1, () -> {
-			// distinct
+				// distinct/distinct sorted
 			ValueHolder<FlowOptions.UniqueOptions> options = new ValueHolder<>();
-			derivedFlow.accept((CollectionDataFlow<?, ?, X>) theFlow.distinct(opts -> {
+				CollectionDataFlow<?, ?, T> flow = theFlow;
+			if (helper.getBoolean()) {
+				Comparator<T> compare = SortedCollectionLink.compare(theType, helper);
+				flow = flow.withEquivalence(Equivalence.of((Class<T>) getType().getRawType(), compare, false));
+			}
+			derivedFlow.accept((CollectionDataFlow<?, ?, X>) flow.distinct(opts -> {
 				// opts.useFirst(helper.getBoolean()).preserveSourceOrder(opts.canPreserveSourceOrder() && helper.getBoolean());
 				options.accept(opts);
 			}));
@@ -779,7 +785,6 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				theTester.isCheckingRemovedValues(), options.get());
 			derived.accept((ObservableChainLink<X>) theChild);
 		})//
-		// TODO distinctSorted
 		.or(1, () -> {// filterMod
 			ValueHolder<ObservableCollection.ModFilterBuilder<T>> filter = new ValueHolder<>();
 			derivedFlow.accept((CollectionDataFlow<?, ?, X>) theFlow.filterMod(f -> {
