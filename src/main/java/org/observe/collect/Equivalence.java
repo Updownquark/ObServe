@@ -9,6 +9,7 @@ import java.util.function.Predicate;
 
 import org.qommons.Transactable;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterHashMap;
 import org.qommons.collect.BetterHashSet;
 import org.qommons.collect.BetterMap;
@@ -334,6 +335,11 @@ public interface Equivalence<E> {
 		private MutableCollectionElement<T2> mutableHandleFor(MutableCollectionElement<? extends E> el) {
 			return new MutableCollectionElement<T2>() {
 				@Override
+				public BetterCollection<T2> getCollection() {
+					return MappedSet.this;
+				}
+
+				@Override
 				public ElementId getElementId() {
 					return el.getElementId();
 				}
@@ -378,6 +384,18 @@ public interface Equivalence<E> {
 					return ((MutableCollectionElement<E>) el).add(theReverse.apply(value), before);
 				}
 			};
+		}
+
+		@Override
+		public CollectionElement<T2> getTerminalElement(boolean first) {
+			CollectionElement<E> wrapEl = theWrapped.getTerminalElement(first);
+			return wrapEl == null ? null : handleFor(wrapEl);
+		}
+
+		@Override
+		public CollectionElement<T2> getAdjacentElement(ElementId elementId, boolean next) {
+			CollectionElement<E> wrapEl = theWrapped.getAdjacentElement(elementId, next);
+			return wrapEl == null ? null : handleFor(wrapEl);
 		}
 
 		@Override
@@ -540,6 +558,11 @@ public interface Equivalence<E> {
 
 		private MutableMapEntryHandle<T2, V> mutableHandleFor(MutableMapEntryHandle<E, V> entry) {
 			return new MutableMapEntryHandle<T2, V>() {
+				@Override
+				public BetterCollection<V> getCollection() {
+					return MappedMap.this.values();
+				}
+
 				@Override
 				public ElementId getElementId() {
 					return entry.getElementId();
