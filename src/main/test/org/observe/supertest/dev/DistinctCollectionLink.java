@@ -13,6 +13,7 @@ import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl;
 import org.observe.supertest.dev.ObservableChainTester.TestValueType;
 import org.observe.util.WeakListening;
+import org.qommons.BreakpointHere;
 import org.qommons.TestHelper;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
@@ -255,6 +256,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 						&& theValues.keySet().mutableElement(oldValueEntry.getElementId()).isAcceptable(op.value) == null) {
 						theDebug.act("update:move").exec();
 						theSourceValues.mutableElement(srcEl.getElementId()).set(op.value);
+						oldValueEntry.get().put(srcEl.getElementId(), op.value);
 						theValues.keySet().mutableElement(oldValueEntry.getElementId()).set(op.value);
 						ElementId repId = theOptions.isPreservingSourceOrder() ? srcEl.getElementId() : oldValueEntry.getElementId();
 						// The updated value is the representative for its category. Fire the update event.
@@ -528,6 +530,8 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 
 	@Override
 	public String toString() {
-		return "distinct()";
+		return "distinct("//
+			+ (getCollection().equivalence() instanceof Equivalence.ComparatorEquivalence ? "sorted" : "hash")//
+			+ ")";
 	}
 }
