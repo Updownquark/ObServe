@@ -13,6 +13,7 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.collect.FlowOptions.MapDef;
 import org.observe.collect.FlowOptions.MapOptions;
+import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollection.UniqueDataFlow;
@@ -62,23 +63,24 @@ public class ObservableSetImpl {
 
 	public static class UniqueDataFlowWrapper<E, T> extends ObservableCollectionDataFlowImpl.AbstractDataFlow<E, T, T>
 	implements UniqueDataFlow<E, T, T> {
-		protected UniqueDataFlowWrapper(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent) {
-			super(source, parent, parent.getTargetType(), parent.equivalence());
+		protected UniqueDataFlowWrapper(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent,
+			Equivalence<? super T> equivalence) {
+			super(source, parent, parent.getTargetType(), equivalence);
 		}
 
 		@Override
 		public UniqueDataFlow<E, T, T> reverse() {
-			return new UniqueDataFlowWrapper<>(getSource(), super.reverse());
+			return new UniqueDataFlowWrapper<>(getSource(), super.reverse(), equivalence());
 		}
 
 		@Override
 		public UniqueDataFlow<E, T, T> filter(Function<? super T, String> filter) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter));
+			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter), equivalence());
 		}
 
 		@Override
 		public <X> UniqueDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.whereContained(other, include));
+			return new UniqueDataFlowWrapper<>(getSource(), super.whereContained(other, include), equivalence());
 		}
 
 		@Override
@@ -91,13 +93,19 @@ public class ObservableSetImpl {
 		}
 
 		@Override
+		public UniqueDataFlow<E, T, T> distinct(Consumer<UniqueOptions> options) {
+			options.accept(new FlowOptions.SimpleUniqueOptions(equivalence() instanceof Equivalence.ComparatorEquivalence));
+			return this; // No-op
+		}
+
+		@Override
 		public UniqueDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.refresh(refresh));
+			return new UniqueDataFlowWrapper<>(getSource(), super.refresh(refresh), equivalence());
 		}
 
 		@Override
 		public UniqueDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.refreshEach(refresh));
+			return new UniqueDataFlowWrapper<>(getSource(), super.refreshEach(refresh), equivalence());
 		}
 
 		@Override
@@ -139,9 +147,9 @@ public class ObservableSetImpl {
 		private final boolean isAlwaysUsingFirst;
 		private final boolean isPreservingSourceOrder;
 
-		protected UniqueOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, boolean alwaysUseFirst,
-			boolean preserveSourceOrder) {
-			super(source, parent);
+		protected UniqueOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, Equivalence<? super T> equivalence,
+			boolean alwaysUseFirst, boolean preserveSourceOrder) {
+			super(source, parent, equivalence);
 			isAlwaysUsingFirst = alwaysUseFirst;
 			isPreservingSourceOrder = preserveSourceOrder;
 		}
@@ -153,7 +161,7 @@ public class ObservableSetImpl {
 
 		@Override
 		public ActiveCollectionManager<E, ?, T> manageActive() {
-			return new UniqueManager<>(getParent().manageActive(), isAlwaysUsingFirst, isPreservingSourceOrder);
+			return new UniqueManager<>(getParent().manageActive(), equivalence(), isAlwaysUsingFirst, isPreservingSourceOrder);
 		}
 	}
 
@@ -165,17 +173,17 @@ public class ObservableSetImpl {
 
 		@Override
 		public UniqueDataFlow<E, T, T> reverse() {
-			return new UniqueDataFlowWrapper<>(getSource(), super.reverse());
+			return new UniqueDataFlowWrapper<>(getSource(), super.reverse(), equivalence());
 		}
 
 		@Override
 		public UniqueDataFlow<E, T, T> filter(Function<? super T, String> filter) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter));
+			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter), equivalence());
 		}
 
 		@Override
 		public <X> UniqueDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.whereContained(other, include));
+			return new UniqueDataFlowWrapper<>(getSource(), super.whereContained(other, include), equivalence());
 		}
 
 		@Override
@@ -188,12 +196,12 @@ public class ObservableSetImpl {
 
 		@Override
 		public UniqueDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.refresh(refresh));
+			return new UniqueDataFlowWrapper<>(getSource(), super.refresh(refresh), equivalence());
 		}
 
 		@Override
 		public UniqueDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.refreshEach(refresh));
+			return new UniqueDataFlowWrapper<>(getSource(), super.refreshEach(refresh), equivalence());
 		}
 
 		@Override
@@ -222,12 +230,12 @@ public class ObservableSetImpl {
 
 		@Override
 		public UniqueDataFlow<E, T, T> reverse() {
-			return new UniqueDataFlowWrapper<>(getSource(), super.reverse());
+			return new UniqueDataFlowWrapper<>(getSource(), super.reverse(), equivalence());
 		}
 
 		@Override
 		public UniqueDataFlow<E, T, T> filter(Function<? super T, String> filter) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter));
+			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter), equivalence());
 		}
 
 		@Override
@@ -240,17 +248,17 @@ public class ObservableSetImpl {
 
 		@Override
 		public <X> UniqueDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.whereContained(other, include));
+			return new UniqueDataFlowWrapper<>(getSource(), super.whereContained(other, include), equivalence());
 		}
 
 		@Override
 		public UniqueDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.refresh(refresh));
+			return new UniqueDataFlowWrapper<>(getSource(), super.refresh(refresh), equivalence());
 		}
 
 		@Override
 		public UniqueDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.refreshEach(refresh));
+			return new UniqueDataFlowWrapper<>(getSource(), super.refreshEach(refresh), equivalence());
 		}
 
 		@Override
@@ -274,14 +282,17 @@ public class ObservableSetImpl {
 	public static class UniqueManager<E, T> implements ActiveCollectionManager<E, T, T> {
 		private final ActiveCollectionManager<E, ?, T> theParent;
 		private final BetterMap<T, UniqueElement> theElementsByValue;
+		private final Equivalence<? super T> theEquivalence;
 		private final boolean isAlwaysUsingFirst;
 		private final boolean isPreservingSourceOrder;
 		private ElementAccepter<T> theAccepter;
 
 		private DebugData theDebug;
 
-		protected UniqueManager(ActiveCollectionManager<E, ?, T> parent, boolean alwaysUseFirst, boolean preserveSourceOrder) {
+		protected UniqueManager(ActiveCollectionManager<E, ?, T> parent, Equivalence<? super T> equivalence, boolean alwaysUseFirst,
+			boolean preserveSourceOrder) {
 			theParent = parent;
+			theEquivalence = equivalence;
 			theElementsByValue = parent.equivalence().createMap();
 			isAlwaysUsingFirst = alwaysUseFirst;
 			isPreservingSourceOrder = preserveSourceOrder;
@@ -296,7 +307,7 @@ public class ObservableSetImpl {
 
 		@Override
 		public Equivalence<? super T> equivalence() {
-			return theParent.equivalence();
+			return theEquivalence;
 		}
 
 		@Override
@@ -717,17 +728,17 @@ public class ObservableSetImpl {
 
 		@Override
 		public UniqueDataFlow<E, E, E> reverse() {
-			return new UniqueDataFlowWrapper<>(getSource(), super.reverse());
+			return new UniqueDataFlowWrapper<>(getSource(), super.reverse(), equivalence());
 		}
 
 		@Override
 		public UniqueDataFlow<E, E, E> filter(Function<? super E, String> filter) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter));
+			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter), equivalence());
 		}
 
 		@Override
 		public <X> UniqueDataFlow<E, E, E> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.whereContained(other, include));
+			return new UniqueDataFlowWrapper<>(getSource(), super.whereContained(other, include), equivalence());
 		}
 
 		@Override
@@ -740,12 +751,12 @@ public class ObservableSetImpl {
 
 		@Override
 		public UniqueDataFlow<E, E, E> refresh(Observable<?> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.refresh(refresh));
+			return new UniqueDataFlowWrapper<>(getSource(), super.refresh(refresh), equivalence());
 		}
 
 		@Override
 		public UniqueDataFlow<E, E, E> refreshEach(Function<? super E, ? extends Observable<?>> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.refreshEach(refresh));
+			return new UniqueDataFlowWrapper<>(getSource(), super.refreshEach(refresh), equivalence());
 		}
 
 		@Override

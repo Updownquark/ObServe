@@ -11,6 +11,7 @@ import org.observe.ObservableValue;
 import org.observe.Subscription;
 import org.observe.collect.FlowOptions.MapDef;
 import org.observe.collect.FlowOptions.MapOptions;
+import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollection.UniqueDataFlow;
@@ -18,7 +19,6 @@ import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ModFilterer;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
-import org.observe.collect.ObservableCollectionDataFlowImpl.SortedManager;
 import org.observe.collect.ObservableSetImpl.UniqueBaseFlow;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterSortedSet;
@@ -261,8 +261,13 @@ public class ObservableSortedSetImpl {
 
 		protected UniqueSortedDataFlowWrapper(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent,
 			Comparator<? super T> compare) {
-			super(source, parent);
+			super(source, parent, Equivalence.of((Class<T>) parent.getTargetType().getRawType(), compare, true));
 			theCompare = compare;
+		}
+
+		@Override
+		public Equivalence.ComparatorEquivalence<? super T> equivalence() {
+			return (Equivalence.ComparatorEquivalence<? super T>) super.equivalence();
 		}
 
 		@Override
@@ -302,6 +307,12 @@ public class ObservableSortedSetImpl {
 			MapOptions<T, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);
 			return new UniqueSortedMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions), compare);
+		}
+
+		@Override
+		public UniqueSortedDataFlow<E, T, T> distinct(Consumer<UniqueOptions> options) {
+			options.accept(new FlowOptions.SimpleUniqueOptions(true));
+			return this; // No-op
 		}
 
 		@Override
@@ -350,8 +361,9 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public ActiveCollectionManager<E, ?, T> manageActive() {
-			return new ObservableSetImpl.UniqueManager<>(new SortedManager<>(getParent().manageActive(), comparator()), isAlwaysUsingFirst,
-				false);
+			return new ObservableSetImpl.UniqueManager<>(
+				new ObservableCollectionDataFlowImpl.ActiveEquivalenceSwitchedManager<>(getParent().manageActive(), equivalence()),
+				equivalence(), isAlwaysUsingFirst, false);
 		}
 	}
 

@@ -1478,6 +1478,8 @@ public final class ObservableCollectionImpl {
 			@Override
 			public boolean equals(Object obj) {
 				// This type collection does not produce duplicate Element IDs, so we can compare by identity
+				if (!(obj instanceof DerivedElementHolder))
+					return false;
 				return treeNode.equals(((DerivedElementHolder<T>) obj).treeNode);
 			}
 

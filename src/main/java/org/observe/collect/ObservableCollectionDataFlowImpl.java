@@ -630,7 +630,7 @@ public class ObservableCollectionDataFlowImpl {
 		public UniqueDataFlow<E, T, T> distinct(Consumer<UniqueOptions> options) {
 			SimpleUniqueOptions uo = new SimpleUniqueOptions(equivalence() instanceof Equivalence.ComparatorEquivalence);
 			options.accept(uo);
-			return new ObservableSetImpl.UniqueOp<>(theSource, this, uo.isUseFirst(), uo.isPreservingSourceOrder());
+			return new ObservableSetImpl.UniqueOp<>(theSource, this, equivalence(), uo.isUseFirst(), uo.isPreservingSourceOrder());
 		}
 
 		@Override
@@ -2099,7 +2099,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
-	private static class ActiveEquivalenceSwitchedManager<E, T> implements ActiveCollectionManager<E, T, T> {
+	static class ActiveEquivalenceSwitchedManager<E, T> implements ActiveCollectionManager<E, T, T> {
 		private final ActiveCollectionManager<E, ?, T> theParent;
 		private final Equivalence<? super T> theEquivalence;
 
