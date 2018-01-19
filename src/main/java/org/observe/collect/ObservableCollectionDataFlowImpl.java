@@ -238,10 +238,6 @@ public class ObservableCollectionDataFlowImpl {
 
 		void remove() throws UnsupportedOperationException;
 
-		String canAdd(E value, boolean before);
-
-		DerivedCollectionElement<E> add(E value, boolean before) throws UnsupportedOperationException, IllegalArgumentException;
-
 		default DerivedCollectionElement<E> reverse() {
 			DerivedCollectionElement<E> outer = this;
 			return new DerivedCollectionElement<E>() {
@@ -283,18 +279,6 @@ public class ObservableCollectionDataFlowImpl {
 				@Override
 				public void remove() throws UnsupportedOperationException {
 					outer.remove();
-				}
-
-				@Override
-				public String canAdd(E value, boolean before) {
-					return outer.canAdd(value, !before);
-				}
-
-				@Override
-				public DerivedCollectionElement<E> add(E value, boolean before)
-					throws UnsupportedOperationException, IllegalArgumentException {
-					DerivedCollectionElement<E> parentEl = outer.add(value, !before);
-					return parentEl == null ? null : parentEl.reverse();
 				}
 
 				@Override
@@ -1220,17 +1204,6 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			@Override
-			public String canAdd(E value, boolean before) {
-				return source.canAdd(value, before);
-			}
-
-			@Override
-			public DerivedCollectionElement<E> add(E value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-				ElementId newId = source.add(value, before);
-				return new BaseDerivedElement(theSource.mutableElement(newId));
-			}
-
-			@Override
 			public String toString() {
 				return source.getElementId().toString();
 			}
@@ -1441,15 +1414,19 @@ public class ObservableCollectionDataFlowImpl {
 			if (beforeComp < 0)
 				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT_POSITION);
 			// Try to add relative to the specified elements if possible
-			if (first && after != null && after.canAdd(value, false) == null)
-				return after.add(value, false);
-			if (!first && before != null && before.canAdd(value, true) == null)
-				return before.add(value, true);
-			// If such a positional add is unsupported by the parent, we need to ensure
-			// that a position-less add will insert the new element in the right spot
-			DerivedCollectionElement<T> afterParent = (after != null && afterComp == 0) ? ((SortedElement) after).theParentEl : null;
-			DerivedCollectionElement<T> beforeParent = (before != null && beforeComp == 0) ? ((SortedElement) before).theParentEl : null;
-			DerivedCollectionElement<T> parentEl = theParent.addElement(value, afterParent, beforeParent, first);
+			DerivedCollectionElement<T> parentEl;
+			if (first && after != null && theParent.canAdd(value, ((SortedElement) after).theParentEl, null) == null)
+				parentEl = theParent.addElement(value, ((SortedElement) after).theParentEl, null, true);
+			else if (!first && before != null && theParent.canAdd(value, null, ((SortedElement) before).theParentEl) == null)
+				parentEl = theParent.addElement(value, null, ((SortedElement) before).theParentEl, false);
+			else {
+				// If such a positional add is unsupported by the parent, we need to ensure
+				// that a position-less add will insert the new element in the right spot
+				DerivedCollectionElement<T> afterParent = (after != null && afterComp == 0) ? ((SortedElement) after).theParentEl : null;
+				DerivedCollectionElement<T> beforeParent = (before != null && beforeComp == 0) ? ((SortedElement) before).theParentEl
+					: null;
+				parentEl = theParent.addElement(value, afterParent, beforeParent, first);
+			}
 			return parentEl == null ? null : new SortedElement(parentEl, true);
 		}
 
@@ -1588,47 +1565,6 @@ public class ObservableCollectionDataFlowImpl {
 			@Override
 			public void remove() throws UnsupportedOperationException {
 				theParentEl.remove();
-			}
-
-			@Override
-			public String canAdd(T value, boolean before) {
-				BinaryTreeNode<BiTuple<T, DerivedCollectionElement<T>>> left = before ? theValueNode.getClosest(true) : theValueNode;
-				BinaryTreeNode<BiTuple<T, DerivedCollectionElement<T>>> right = before ? theValueNode : theValueNode.getClosest(false);
-				if ((left != null && theCompare.compare(left.get().getValue1(), value) > 0)//
-					|| (right != null && theCompare.compare(value, right.get().getValue1()) > 0))
-					return StdMsg.ILLEGAL_ELEMENT_POSITION;
-				DerivedCollectionElement<T> afterParent, beforeParent;
-				if (theCompare.compare(get(), value) != 0)
-					afterParent = beforeParent = null; // The element will be positioned correctly regardless of the source order
-				else { // The source order will determine where the new element is placed relative to this element
-					afterParent = before ? null : theParentEl;
-					beforeParent = before ? theParentEl : null;
-				}
-				return theParent.canAdd(value, afterParent, beforeParent);
-			}
-
-			@Override
-			public DerivedCollectionElement<T> add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-				BinaryTreeNode<BiTuple<T, DerivedCollectionElement<T>>> left = before ? theValueNode.getClosest(true) : theValueNode;
-				BinaryTreeNode<BiTuple<T, DerivedCollectionElement<T>>> right = before ? theValueNode : theValueNode.getClosest(false);
-				if ((left != null && theCompare.compare(left.get().getValue1(), value) > 0)//
-					|| (right != null && theCompare.compare(value, right.get().getValue1()) > 0))
-					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT_POSITION);
-				DerivedCollectionElement<T> parentAdd;
-				// If the element can be added in the same relation to the parent, do that
-				if (theParentEl.canAdd(value, before) == null)
-					parentAdd = theParentEl.add(value, before);
-				else {
-					DerivedCollectionElement<T> afterParent, beforeParent;
-					if (theCompare.compare(get(), value) != 0)
-						afterParent = beforeParent = null; // The element will be positioned correctly regardless of the source order
-					else { // The source order will determine where the new element is placed relative to this element
-						afterParent = before ? null : theParentEl;
-						beforeParent = before ? theParentEl : null;
-					}
-					parentAdd = theParent.addElement(value, afterParent, beforeParent, !before); // Add as close to this element as possible
-				}
-				return new SortedElement(parentAdd, true);
 			}
 
 			@Override
@@ -1807,23 +1743,6 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			@Override
-			public String canAdd(T value, boolean before) {
-				String msg = theFilter.apply(value);
-				if (msg == null)
-					msg = theParentEl.canAdd(value, before);
-				return msg;
-			}
-
-			@Override
-			public DerivedCollectionElement<T> add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-				String msg = theFilter.apply(value);
-				if (msg != null)
-					throw new IllegalArgumentException(msg);
-				DerivedCollectionElement<T> parentEl = theParentEl.add(value, before);
-				return parentEl == null ? null : new FilteredElement(parentEl, true, true);
-			}
-
-			@Override
 			public String toString() {
 				return theParentEl.toString();
 			}
@@ -1977,28 +1896,6 @@ public class ObservableCollectionDataFlowImpl {
 			@Override
 			public void remove() throws UnsupportedOperationException {
 				theParentEl.remove();
-			}
-
-			@Override
-			public String canAdd(T value, boolean before) {
-				String msg = theParentEl.canAdd(value, before);
-				if (msg != null)
-					return msg;
-				IntersectionElement intersect = theValues.get(value);
-				boolean filterHas = intersect == null ? false : intersect.rightCount > 0;
-				if (filterHas == isExclude)
-					return StdMsg.ILLEGAL_ELEMENT;
-				return null;
-			}
-
-			@Override
-			public DerivedCollectionElement<T> add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-				IntersectionElement intersect = theValues.get(value);
-				boolean filterHas = intersect == null ? false : intersect.rightCount > 0;
-				if (filterHas == isExclude)
-					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
-				DerivedCollectionElement<T> parentEl = theParentEl.add(value, before);
-				return parentEl == null ? null : new IntersectedCollectionElement(parentEl, null, true);
 			}
 		}
 
@@ -2387,6 +2284,11 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			@Override
+			public BetterCollection<T> getCollection() {
+				return null;
+			}
+
+			@Override
 			public ElementId getElementId() {
 				return theParentMap.getElementId();
 			}
@@ -2712,27 +2614,6 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			@Override
-			public String canAdd(T value, boolean before) {
-				if (theOptions.getReverse() == null)
-					return StdMsg.UNSUPPORTED_OPERATION;
-				I reversed = theOptions.getReverse().apply(value);
-				if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
-					return StdMsg.ILLEGAL_ELEMENT;
-				return theParentEl.canAdd(reversed, before);
-			}
-
-			@Override
-			public DerivedCollectionElement<T> add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-				if (theOptions.getReverse() == null)
-					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-				I reversed = theOptions.getReverse().apply(value);
-				if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
-					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
-				DerivedCollectionElement<I> parentEl = theParentEl.add(reversed, before);
-				return parentEl == null ? null : new MappedElement(parentEl, true);
-			}
-
-			@Override
 			public String toString() {
 				return String.valueOf(get());
 			}
@@ -2982,6 +2863,11 @@ public class ObservableCollectionDataFlowImpl {
 				theSource = source;
 				theCombinedMap = (CombinedMap) map;
 				theInterm = theParent.map(theSource, theCombinedMap.getParentMap());
+			}
+
+			@Override
+			public BetterCollection<T> getCollection() {
+				return null;
 			}
 
 			@Override
@@ -3421,17 +3307,6 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			@Override
-			public String canAdd(T value, boolean before) {
-				return theParentEl.canAdd(reverseValue(value), before);
-			}
-
-			@Override
-			public DerivedCollectionElement<T> add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-				DerivedCollectionElement<I> parentEl = theParentEl.add(reverseValue(value), before);
-				return parentEl == null ? null : new CombinedElement(parentEl, true);
-			}
-
-			@Override
 			public String toString() {
 				return theParentEl.toString();
 			}
@@ -3672,17 +3547,6 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			@Override
-			public String canAdd(T value, boolean before) {
-				return theParentEl.canAdd(value, before);
-			}
-
-			@Override
-			public DerivedCollectionElement<T> add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-				DerivedCollectionElement<T> parent = theParentEl.add(value, before);
-				return parent == null ? null : new RefreshingElement(parent, true);
-			}
-
-			@Override
 			public String toString() {
 				return theParentEl.toString();
 			}
@@ -3905,17 +3769,6 @@ public class ObservableCollectionDataFlowImpl {
 			public void remove() throws UnsupportedOperationException {
 				theParentEl.remove();
 			}
-
-			@Override
-			public String canAdd(T value, boolean before) {
-				return theParentEl.canAdd(value, before);
-			}
-
-			@Override
-			public DerivedCollectionElement<T> add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-				DerivedCollectionElement<T> parentEl = theParentEl.add(value, before);
-				return parentEl == null ? null : new RefreshingElement(parentEl);
-			}
 		}
 	}
 
@@ -3996,6 +3849,11 @@ public class ObservableCollectionDataFlowImpl {
 
 			ModFilteredElement(MutableCollectionElement<E> element, Function<? super E, ? extends T> map) {
 				theParentMapped = theParent.map(element, map);
+			}
+
+			@Override
+			public BetterCollection<T> getCollection() {
+				return null;
 			}
 
 			@Override
@@ -4201,21 +4059,6 @@ public class ObservableCollectionDataFlowImpl {
 			public void remove() throws UnsupportedOperationException {
 				theFilter.assertRemove(this::get);
 				theParentEl.remove();
-			}
-
-			@Override
-			public String canAdd(T value, boolean before) {
-				String msg = theFilter.canAdd(value);
-				if (msg == null)
-					msg = theParentEl.canAdd(value, before);
-				return msg;
-			}
-
-			@Override
-			public DerivedCollectionElement<T> add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-				theFilter.assertAdd(value);
-				DerivedCollectionElement<T> parentEl = theParentEl.add(value, before);
-				return parentEl == null ? null : new ModFilteredElement(parentEl);
 			}
 
 			@Override
@@ -4560,21 +4403,6 @@ public class ObservableCollectionDataFlowImpl {
 			@Override
 			public void remove() throws UnsupportedOperationException {
 				theParentEl.remove();
-			}
-
-			@Override
-			public String canAdd(T value, boolean before) {
-				if (value != null && !theHolder.manager.getTargetType().wrap().getRawType().isInstance(value))
-					return StdMsg.BAD_TYPE;
-				return ((DerivedCollectionElement<T>) theParentEl).canAdd(value, before);
-			}
-
-			@Override
-			public DerivedCollectionElement<T> add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-				if (value != null && !theHolder.manager.getTargetType().wrap().getRawType().isInstance(value))
-					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
-				DerivedCollectionElement<? extends T> parentEl = ((DerivedCollectionElement<T>) theParentEl).add(value, before);
-				return parentEl == null ? null : new FlattenedElement(theHolder, parentEl, true);
 			}
 
 			@Override

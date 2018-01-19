@@ -68,17 +68,17 @@ public class ObservableSetImpl {
 
 		@Override
 		public UniqueDataFlow<E, T, T> reverse() {
-			return new UniqueDataFlowWrapper<>(getSource(), getParent().reverse());
+			return new UniqueDataFlowWrapper<>(getSource(), super.reverse());
 		}
 
 		@Override
 		public UniqueDataFlow<E, T, T> filter(Function<? super T, String> filter) {
-			return new UniqueDataFlowWrapper<>(getSource(), getParent().filter(filter));
+			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter));
 		}
 
 		@Override
 		public <X> UniqueDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
-			return new UniqueDataFlowWrapper<>(getSource(), getParent().whereContained(other, include));
+			return new UniqueDataFlowWrapper<>(getSource(), super.whereContained(other, include));
 		}
 
 		@Override
@@ -92,12 +92,12 @@ public class ObservableSetImpl {
 
 		@Override
 		public UniqueDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), getParent().refresh(refresh));
+			return new UniqueDataFlowWrapper<>(getSource(), super.refresh(refresh));
 		}
 
 		@Override
 		public UniqueDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), getParent().refreshEach(refresh));
+			return new UniqueDataFlowWrapper<>(getSource(), super.refreshEach(refresh));
 		}
 
 		@Override
@@ -690,55 +690,6 @@ public class ObservableSetImpl {
 				List<DerivedCollectionElement<T>> elCopies = new ArrayList<>(theParentElements.keySet());
 				for (DerivedCollectionElement<T> el : elCopies) {
 					el.remove();
-				}
-			}
-
-			@Override
-			public String canAdd(T value, boolean before) {
-				if (isPreservingSourceOrder) {
-					if (theElementsByValue.containsKey(value))
-						return StdMsg.ELEMENT_EXISTS;
-					return theParent.canAdd(value, before ? null : theActiveElement, before ? theActiveElement : null);
-				} else {
-					String msg = theParent.canAdd(value, null, null);
-					if (msg == null)
-						msg = theElementsByValue.keySet().mutableElement(theValueId).canAdd(value, before);
-					return msg;
-				}
-			}
-
-			@Override
-			public DerivedCollectionElement<T> add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-				try (Transaction t = lock(true, null)) {
-					if (theElementsByValue.containsKey(value))
-						throw new IllegalArgumentException(StdMsg.ELEMENT_EXISTS);
-					if (isPreservingSourceOrder) {
-						theParent.addElement(value, before ? null : theActiveElement, before ? theActiveElement : null, !before);
-						// Look the element up.
-						// If it's not there, here I'm returning null, implying that the element was not added to the unique set
-						// This would probably be a bug though.
-						return theElementsByValue.get(value);
-					} else {
-						// Since the element map is determining order, we have to make sure it supports the new element in the correct
-						// position
-						UniqueElement element = createUniqueElement(value);
-						// First, install the (currently empty) unique element in the element map so that the position is correct
-						ElementId elementHandle = theElementsByValue.keySet().mutableElement(theValueId).add(value, before);
-						theElementsByValue.mutableEntry(elementHandle).set(element);
-						try {
-							// Doesn't really matter where we add it in the parent collection, but we'll try to add it adjacent to this
-							// element if we can
-							if (theActiveElement.canAdd(value, before) == null)
-								theActiveElement.add(value, before);
-							else if (theParent.addElement(value, null, null, before) == null)
-								theElementsByValue.mutableEntry(elementHandle).remove();
-						} catch (RuntimeException e) {
-							theElementsByValue.mutableEntry(elementHandle).remove();
-							throw e;
-						}
-						// Now, the parent element should have been added to the previously-installed unique element
-						return element;
-					}
 				}
 			}
 

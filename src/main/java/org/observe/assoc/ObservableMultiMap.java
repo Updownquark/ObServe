@@ -24,6 +24,7 @@ import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableSet;
 import org.qommons.Causable;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterMultiMap;
 import org.qommons.collect.ElementId;
@@ -525,6 +526,11 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 				}
 
 				@Override
+				public BetterCollection<V> getCollection() {
+					return outerHandle.getValues();
+				}
+
+				@Override
 				public ElementId getElementId() {
 					return outerHandle.getElementId();
 				}
@@ -588,16 +594,6 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 						throw new UnsupportedOperationException(msg);
 					MutableElementSpliterator<V> spliter = outerHandle.getValues().spliterator();
 					while (spliter.forElementM(el -> el.remove(), true)) {}
-				}
-
-				@Override
-				public String canAdd(V value, boolean before) {
-					return StdMsg.UNSUPPORTED_OPERATION;
-				}
-
-				@Override
-				public ElementId add(V value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 				}
 			};
 		}

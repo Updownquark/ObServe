@@ -1194,7 +1194,7 @@ public final class ObservableCollectionImpl {
 			try (Transaction t = lock(true, false, null)) {
 				Function<? super E, ? extends T> map = theFlow.map().get();
 				theFlow.setValue(//
-					elements.stream().map(el -> mutableElementFor(theSource.mutableElement(el), map)).collect(Collectors.toList()), value);
+					elements.stream().map(el -> theFlow.map(theSource.mutableElement(el), map)).collect(Collectors.toList()), value);
 			}
 		}
 
@@ -1243,8 +1243,15 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public CollectionElement<T> getTerminalElement(boolean first) {
+			CollectionElement<E> t = theSource.getTerminalElement(first);
+			return t == null ? null : elementFor(t, null);
+		}
+
+		@Override
 		public CollectionElement<T> getAdjacentElement(ElementId elementId, boolean next) {
-			return elementFor(theSource.getAdjacentElement(elementId, next), null);
+			CollectionElement<E> adj = theSource.getAdjacentElement(elementId, next);
+			return adj == null ? null : elementFor(adj, null);
 		}
 
 		@Override
@@ -1274,7 +1281,54 @@ public final class ObservableCollectionImpl {
 
 		protected MutableCollectionElement<T> mutableElementFor(MutableCollectionElement<E> el, Function<? super E, ? extends T> map) {
 			Function<? super E, ? extends T> fMap = map == null ? theFlow.map().get() : map;
-			return theFlow.map(el, fMap);
+			MutableCollectionElement<T> flowEl = theFlow.map(el, fMap);
+			class PassiveMutableElement implements MutableCollectionElement<T> {
+				@Override
+				public BetterCollection<T> getCollection() {
+					return PassiveDerivedCollection.this;
+				}
+
+				@Override
+				public ElementId getElementId() {
+					return el.getElementId();
+				}
+
+				@Override
+				public T get() {
+					return flowEl.get();
+				}
+
+				@Override
+				public String isEnabled() {
+					return flowEl.isEnabled();
+				}
+
+				@Override
+				public String isAcceptable(T value) {
+					return flowEl.isAcceptable(value);
+				}
+
+				@Override
+				public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
+					flowEl.set(value);
+				}
+
+				@Override
+				public String canRemove() {
+					return flowEl.canRemove();
+				}
+
+				@Override
+				public void remove() throws UnsupportedOperationException {
+					flowEl.remove();
+				}
+
+				@Override
+				public String toString() {
+					return flowEl.toString();
+				}
+			}
+			return new PassiveMutableElement();
 		}
 
 		@Override
@@ -1620,6 +1674,12 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public CollectionElement<T> getTerminalElement(boolean first) {
+			DerivedElementHolder<T> holder = theDerivedElements.peekFirst();
+			return holder == null ? null : getElement(holder);
+		}
+
+		@Override
 		public CollectionElement<T> getAdjacentElement(ElementId elementId, boolean next) {
 			DerivedElementHolder<T> holder = (DerivedElementHolder<T>) elementId;
 			BinaryTreeNode<DerivedElementHolder<T>> adjacentNode = holder.treeNode.getClosest(!next);
@@ -1634,6 +1694,11 @@ public final class ObservableCollectionImpl {
 		private MutableCollectionElement<T> mutableElement(ElementId id, MutableCollectionElement<DerivedElementHolder<T>> spliterElement) {
 			DerivedElementHolder<T> el = (DerivedElementHolder<T>) id;
 			class DerivedMutableCollectionElement implements MutableCollectionElement<T> {
+				@Override
+				public BetterCollection<T> getCollection() {
+					return ActiveDerivedCollection.this;
+				}
+
 				@Override
 				public ElementId getElementId() {
 					return el;
@@ -1669,17 +1734,6 @@ public final class ObservableCollectionImpl {
 					if (spliterElement != null)
 						spliterElement.remove();
 					el.element.remove();
-				}
-
-				@Override
-				public String canAdd(T value, boolean before) {
-					return el.element.canAdd(value, before);
-				}
-
-				@Override
-				public ElementId add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-					DerivedCollectionElement<T> derived = el.element.add(value, before);
-					return idFromSynthetic(derived);
 				}
 
 				@Override
@@ -1902,6 +1956,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public CollectionElement<E> getTerminalElement(boolean first) {
+			return (CollectionElement<E>) theValues.getTerminalElement(first);
+		}
+
+		@Override
 		public CollectionElement<E> getAdjacentElement(ElementId elementId, boolean next) {
 			return (CollectionElement<E>) theValues.getAdjacentElement(elementId, next);
 		}
@@ -1914,6 +1973,11 @@ public final class ObservableCollectionImpl {
 
 		private MutableCollectionElement<E> mutableElement(MutableCollectionElement<? extends E> el) {
 			return new MutableCollectionElement<E>() {
+				@Override
+				public BetterCollection<E> getCollection() {
+					return ConstantCollection.this;
+				}
+
 				@Override
 				public ElementId getElementId() {
 					return el.getElementId();
@@ -2198,6 +2262,14 @@ public final class ObservableCollectionImpl {
 			if (current == null)
 				throw new NoSuchElementException();
 			return ((ObservableCollection<E>) current).getElement(id);
+		}
+
+		@Override
+		public CollectionElement<E> getTerminalElement(boolean first) {
+			ObservableCollection<? extends E> current = getWrapped().get();
+			if (current == null)
+				return null;
+			return ((ObservableCollection<E>) current).getTerminalElement(first);
 		}
 
 		@Override

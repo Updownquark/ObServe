@@ -17,6 +17,7 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.SubscriptionCause;
 import org.observe.collect.ObservableSet;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterMap;
 import org.qommons.collect.CollectionElement;
@@ -436,6 +437,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 					@Override
 					public K getKey() {
 						return entryEl.get().getKey();
+					}
+
+					@Override
+					public BetterCollection<V> getCollection() {
+						return values();
 					}
 
 					@Override
