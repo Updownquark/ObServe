@@ -269,8 +269,8 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 				typeFilters.add(filter((Integer i) -> i % 2 == 1, "odd only"));
 				break;
 			case DOUBLE:
-				typeFilters.add(filter((Double d) -> d % 1 == 0, "round numbers only"));
-				typeFilters.add(filter((Double d) -> d % 1 != 0, "decimal numbers only"));
+				typeFilters.add(filter((Double d) -> d == Math.floor(d), "round numbers only"));
+				typeFilters.add(filter((Double d) -> d != Math.floor(d), "decimal numbers only"));
 				break;
 			case STRING:
 				typeFilters.add(filter((String s) -> s.length() <= 4, "length<=4 only"));

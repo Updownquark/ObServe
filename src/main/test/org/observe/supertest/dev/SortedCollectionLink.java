@@ -158,12 +158,29 @@ public class SortedCollectionLink<E> extends AbstractObservableCollectionLink<E,
 				break;
 			case set:
 				int idx = op.index + subListStart;
-				if (idx > 0 && compareAt(op.value, idx - 1) > 0)
-					op.reject(StdMsg.ILLEGAL_ELEMENT, true);
-				else if (idx < theSortedElements.size() - 1 && compareAt(op.value, idx + 1) < 0)
-					op.reject(StdMsg.ILLEGAL_ELEMENT, true);
-				else {
-					int srcIndex = theSourceElements.getElementsBefore(theSortedElements.get(idx).sourceId);
+				SortedElement element = theSortedElements.get(idx);
+				if (idx > 0) {
+					SortedElement adjElement = theSortedElements.get(idx - 1);
+					int comp = theCompare.compare(adjElement.value, op.value);
+					if (comp > 0)
+						op.reject(StdMsg.ILLEGAL_ELEMENT, true);
+					else if (comp == 0 && adjElement.sourceId.compareTo(element.sourceId) > 0) {
+						// Replacement would move the element due to source order
+						op.reject(StdMsg.ILLEGAL_ELEMENT, true);
+					}
+				}
+				if (idx < theSortedElements.size() - 1) {
+					SortedElement adjElement = theSortedElements.get(idx + 1);
+					int comp = theCompare.compare(adjElement.value, op.value);
+					if (comp < 0)
+						op.reject(StdMsg.ILLEGAL_ELEMENT, true);
+					else if (comp == 0 && adjElement.sourceId.compareTo(element.sourceId) < 0) {
+						// Replacement would move the element due to source order
+						op.reject(StdMsg.ILLEGAL_ELEMENT, true);
+					}
+				}
+				if (op.getMessage() == null) {
+					int srcIndex = theSourceElements.getElementsBefore(element.sourceId);
 					parentOps.add(new CollectionOp<>(op, CollectionChangeType.set, op.value, srcIndex));
 				}
 				break;
