@@ -769,10 +769,9 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				theTester.isCheckingRemovedValues(), compare);
 			derived.accept((ObservableChainLink<X>) theChild);
 		})//
-		.or(1, () -> {
-				// distinct/distinct sorted
+		.or(1, () -> { // distinct
 			ValueHolder<FlowOptions.UniqueOptions> options = new ValueHolder<>();
-				CollectionDataFlow<?, ?, T> flow = theFlow;
+			CollectionDataFlow<?, ?, T> flow = theFlow;
 			if (helper.getBoolean()) {
 				Comparator<T> compare = SortedCollectionLink.compare(theType, helper);
 				flow = flow.withEquivalence(Equivalence.of((Class<T>) getType().getRawType(), compare, false));
@@ -783,6 +782,16 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			}));
 			theChild = new DistinctCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), theFlow, helper,
 				theTester.isCheckingRemovedValues(), options.get());
+			derived.accept((ObservableChainLink<X>) theChild);
+		})//
+		.or(1, () -> { // distinct sorted
+			FlowOptions.UniqueOptions options = new FlowOptions.SimpleUniqueOptions(true);
+			CollectionDataFlow<?, ?, T> flow = theFlow;
+			Comparator<T> compare = SortedCollectionLink.compare(theType, helper);
+			options.useFirst(/*TODO helper.getBoolean()*/ false);
+			derivedFlow.accept((CollectionDataFlow<?, ?, X>) flow.distinctSorted(compare, options.isUseFirst()));
+			theChild = new DistinctCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), theFlow, helper,
+				theTester.isCheckingRemovedValues(), options);
 			derived.accept((ObservableChainLink<X>) theChild);
 		})//
 		.or(1, () -> {// filterMod

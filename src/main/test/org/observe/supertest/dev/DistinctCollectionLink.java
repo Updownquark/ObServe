@@ -3,6 +3,7 @@ package org.observe.supertest.dev;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.SortedSet;
 import java.util.stream.Collectors;
 
 import org.junit.Assert;
@@ -13,7 +14,6 @@ import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl;
 import org.observe.supertest.dev.ObservableChainTester.TestValueType;
 import org.observe.util.WeakListening;
-import org.qommons.BreakpointHere;
 import org.qommons.TestHelper;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
@@ -84,7 +84,6 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			ElementId srcId = theSourceValues.addElement(srcIndex, src).getElementId();
 			MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueEntry = theValues.getEntry(src);
 			if (valueEntry == null) {
-				getExpected().add(src);
 				valueEntry = theValues.putEntry(src, new BetterTreeMap<>(false, ElementId::compareTo), false);
 				theRepresentativeElements.put(valueEntry.getElementId(), srcId);
 				if (theOptions.isPreservingSourceOrder())
@@ -94,6 +93,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			}
 			valueEntry.get().put(srcId, src);
 		}, listening.getListening());
+		getExpected().addAll(theValues.keySet());
 		listening.unsubscribe();
 		srcEls.clear();
 		theDebug = Debug.d().add("distinctLink");
@@ -150,7 +150,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 					if ((subListStart + op.index) == 0 && theValues.isEmpty()) {
 						op.reject(theValues.keySet().canAdd(op.value), true);
 					} else if (theOptions.isPreservingSourceOrder()) {
-						throw new IllegalStateException("Not implemented");
+						throw new IllegalStateException("Not implemented"); // TODO
 					} else {
 						boolean addBefore = subListStart + op.index == 0;
 						if (addBefore)
@@ -161,16 +161,11 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 					}
 				} else if (subListStart > 0 || subListEnd < theValues.size()) {
 					if (theOptions.isPreservingSourceOrder()) {
-						throw new IllegalStateException("Not implemented");
-					} else {
-						if (subListStart < theValues.size()) {
-							valueHandle = getValueHandle(subListStart);
-							op.reject(theValues.keySet().mutableElement(valueHandle.getElementId()).canAdd(op.value, true), true);
-						}
-						if (op.getMessage() != null && subListEnd > 0) {
-							valueHandle = getValueHandle(subListEnd - 1);
-							op.reject(theValues.keySet().mutableElement(valueHandle.getElementId()).canAdd(op.value, false), true);
-						}
+						throw new IllegalStateException("Not implemented"); // TODO
+					} else if (subListStart > 0 || subListEnd < theValues.size()) {
+						ElementId after = subListStart == 0 ? null : getValueHandle(subListStart - 1).getElementId();
+						ElementId before = subListEnd == theValues.size() ? null : getValueHandle(subListEnd).getElementId();
+						op.reject(theValues.keySet().canAdd(op.value, after, before), true);
 					}
 				}
 				break;
@@ -532,6 +527,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	public String toString() {
 		return "distinct("//
 			+ (getCollection().equivalence() instanceof Equivalence.ComparatorEquivalence ? "sorted" : "hash")//
+			+ (getCollection() instanceof SortedSet ? " set" : "")
 			+ ")";
 	}
 }
