@@ -3,7 +3,6 @@ package org.observe.supertest.dev;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.SortedSet;
 import java.util.stream.Collectors;
 
 import org.junit.Assert;
@@ -48,12 +47,15 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	 */
 	private final BetterSortedSet<ElementId> theSortedRepresentatives;
 
+	private final boolean isRoot;
 	private final DebugData theDebug;
 
 	public DistinctCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type, CollectionDataFlow<?, ?, E> flow,
-		CollectionDataFlow<?, ?, E> parentFlow, TestHelper helper, boolean checkRemovedValues, FlowOptions.UniqueOptions options) {
+		CollectionDataFlow<?, ?, E> parentFlow, TestHelper helper, boolean checkRemovedValues, FlowOptions.UniqueOptions options,
+		boolean root) {
 		super(parent, type, flow, helper, isRebasedFlowRequired(options, flow.equivalence()), checkRemovedValues);
 		theOptions = options;
+		isRoot = root;
 		theValues = flow.equivalence().createMap();
 		theSourceValues = new BetterTreeList<>(false);
 		theNewSourceValues = new BetterTreeList<>(false);
@@ -525,9 +527,11 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 
 	@Override
 	public String toString() {
-		return "distinct("//
-			+ (getCollection().equivalence() instanceof Equivalence.ComparatorEquivalence ? "sorted" : "hash")//
-			+ (getCollection() instanceof SortedSet ? " set" : "")
-			+ ")";
+		StringBuilder str = new StringBuilder("distinct(");
+		str.append(getCollection().equivalence() instanceof Equivalence.ComparatorEquivalence ? "sorted" : "hash");
+		if (isRoot)
+			str.append(getTestType());
+		str.append(")");
+		return str.toString();
 	}
 }
