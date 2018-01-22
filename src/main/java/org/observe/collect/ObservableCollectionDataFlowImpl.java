@@ -1611,7 +1611,10 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
-			return theParent.getElementFinder(value);
+			Comparable<DerivedCollectionElement<T>> parentFinder = theParent.getElementFinder(value);
+			if (parentFinder == null)
+				return null;
+			return el -> parentFinder.compareTo(((FilteredElement) el).theParentEl);
 		}
 
 		@Override
@@ -1940,7 +1943,10 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
-			return theParent.getElementFinder(value);
+			Comparable<DerivedCollectionElement<T>> parentFinder = theParent.getElementFinder(value);
+			if (parentFinder == null)
+				return null;
+			return el -> parentFinder.compareTo(((IntersectedCollectionElement) el).theParentEl);
 		}
 
 		@Override
@@ -3418,9 +3424,9 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
 			Comparable<DerivedCollectionElement<T>> parentFinder = theParent.getElementFinder(value);
-			if (parentFinder != null)
-				return el -> parentFinder.compareTo(((RefreshingElement) el).theParentEl);
+			if (parentFinder == null)
 				return null;
+			return el -> parentFinder.compareTo(((RefreshingElement) el).theParentEl);
 		}
 
 		@Override
@@ -3613,9 +3619,9 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
 			Comparable<DerivedCollectionElement<T>> parentFinder = theParent.getElementFinder(value);
-			if (parentFinder != null)
-				return el -> parentFinder.compareTo(((RefreshingElement) el).theParentEl);
+			if (parentFinder == null)
 				return null;
+			return el -> parentFinder.compareTo(((RefreshingElement) el).theParentEl);
 		}
 
 		@Override
@@ -3965,7 +3971,10 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
-			return theParent.getElementFinder(value);
+			Comparable<DerivedCollectionElement<T>> parentFinder = theParent.getElementFinder(value);
+			if (parentFinder == null)
+				return null;
+			return el -> parentFinder.compareTo(((ModFilteredElement) el).theParentEl);
 		}
 
 		@Override

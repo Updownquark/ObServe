@@ -140,17 +140,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 	 */
 	@Override
 	default ObservableSortedSet<E> subSet(E fromElement, boolean fromInclusive, E toElement, boolean toInclusive) {
-		return subSet(v -> {
-			int compare = comparator().compare(fromElement, v);
-			if (!fromInclusive && compare == 0)
-				compare = 1;
-			return compare;
-		}, v -> {
-			int compare = comparator().compare(toElement, v);
-			if (!toInclusive && compare == 0)
-				compare = -1;
-			return compare;
-		});
+		return (ObservableSortedSet<E>) BetterSortedSet.super.subSet(fromElement, fromInclusive, toElement, toInclusive);
 	}
 
 	@Override
@@ -181,6 +171,11 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 	@Override
 	default ObservableSortedSet<E> tailSet(E fromElement) {
 		return (ObservableSortedSet<E>) BetterSortedSet.super.tailSet(fromElement);
+	}
+
+	@Override
+	default ObservableSortedSet<E> subList(int fromIndex, int toIndex) {
+		return (ObservableSortedSet<E>) BetterSortedSet.super.subList(fromIndex, toIndex);
 	}
 
 	@Override

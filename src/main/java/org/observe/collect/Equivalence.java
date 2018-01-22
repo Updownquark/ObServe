@@ -373,16 +373,6 @@ public interface Equivalence<E> {
 				public void remove() throws UnsupportedOperationException {
 					el.remove();
 				}
-
-				@Override
-				public String canAdd(T2 value, boolean before) {
-					return ((MutableCollectionElement<E>) el).canAdd(theReverse.apply(value), before);
-				}
-
-				@Override
-				public ElementId add(T2 value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-					return ((MutableCollectionElement<E>) el).add(theReverse.apply(value), before);
-				}
 			};
 		}
 
@@ -601,16 +591,6 @@ public interface Equivalence<E> {
 				@Override
 				public void remove() throws UnsupportedOperationException {
 					entry.remove();
-				}
-
-				@Override
-				public String canAdd(V value, boolean before) {
-					return StdMsg.UNSUPPORTED_OPERATION;
-				}
-
-				@Override
-				public ElementId add(V value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 				}
 			};
 		}

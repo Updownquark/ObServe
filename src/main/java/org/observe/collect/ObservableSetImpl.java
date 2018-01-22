@@ -31,6 +31,7 @@ import org.observe.collect.ObservableCollectionImpl.ReversedObservableCollection
 import org.observe.util.WeakListening;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterMap;
+import org.qommons.collect.BetterSet;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
@@ -58,6 +59,11 @@ public class ObservableSetImpl {
 		@Override
 		public ObservableSet<E> reverse() {
 			return getWrapped();
+		}
+
+		@Override
+		public String toString() {
+			return BetterSet.toString(this);
 		}
 	}
 
@@ -795,11 +801,21 @@ public class ObservableSetImpl {
 		protected ObservableSet<E> getSource() {
 			return (ObservableSet<E>) super.getSource();
 		}
+
+		@Override
+		public String toString() {
+			return BetterSet.toString(this);
+		}
 	}
 
 	public static class ActiveDerivedSet<T> extends ActiveDerivedCollection<T> implements ObservableSet<T> {
 		public ActiveDerivedSet(ActiveCollectionManager<?, ?, T> flow, Observable<?> until) {
 			super(flow, until);
+		}
+
+		@Override
+		public String toString() {
+			return BetterSet.toString(this);
 		}
 	}
 

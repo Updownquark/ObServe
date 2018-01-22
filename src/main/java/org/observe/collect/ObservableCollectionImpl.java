@@ -1733,6 +1733,9 @@ public final class ObservableCollectionImpl {
 
 				@Override
 				public void remove() throws UnsupportedOperationException {
+					String msg = el.element.canRemove();
+					if (msg != null)
+						throw new UnsupportedOperationException(msg);
 					if (spliterElement != null)
 						spliterElement.remove();
 					el.element.remove();
@@ -1763,6 +1766,11 @@ public final class ObservableCollectionImpl {
 				@Override
 				public ElementId getElementId() {
 					return el;
+				}
+
+				@Override
+				public String toString() {
+					return el.element.toString();
 				}
 			};
 		}

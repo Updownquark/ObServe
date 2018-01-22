@@ -5,7 +5,6 @@ import java.util.Collection;
 import java.util.Iterator;
 
 import org.observe.ObservableValue;
-import org.qommons.Transaction;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.MutableElementSpliterator;
 
@@ -138,27 +137,5 @@ public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> 
 	 */
 	public static <E> ObservableSet<E> flattenValue(ObservableValue<? extends ObservableSet<E>> collectionObservable) {
 		return new ObservableSetImpl.FlattenedValueSet<>(collectionObservable);
-	}
-
-	/**
-	 * A default toString() method for set implementations to use
-	 *
-	 * @param set The set to print
-	 * @return The string representation of the set
-	 */
-	public static String toString(ObservableSet<?> set) {
-		StringBuilder ret = new StringBuilder("{");
-		boolean first = true;
-		try (Transaction t = set.lock(false, null)) {
-			for(Object value : set) {
-				if(!first) {
-					ret.append(", ");
-				} else
-					first = false;
-				ret.append(value);
-			}
-		}
-		ret.append('}');
-		return ret.toString();
 	}
 }

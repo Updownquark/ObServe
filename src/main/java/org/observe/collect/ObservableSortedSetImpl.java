@@ -21,11 +21,11 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.ModFilterer;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
 import org.observe.collect.ObservableSetImpl.UniqueBaseFlow;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterSet;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
-import org.qommons.collect.MutableCollectionElement.StdMsg;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -201,7 +201,7 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public String toString() {
-			return ObservableSet.toString(this);
+			return BetterSet.toString(this);
 		}
 	}
 
@@ -245,11 +245,6 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public CollectionElement<E> addIfEmpty(E value) throws IllegalStateException {
-			return getWrapped().addIfEmpty(value).reverse();
-		}
-
-		@Override
 		public ObservableSortedSet<E> reverse() {
 			return (ObservableSortedSet<E>) super.reverse();
 		}
@@ -277,17 +272,17 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> reverse() {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), getParent().reverse(), theCompare.reversed());
+			return new UniqueSortedDataFlowWrapper<>(getSource(), super.reverse(), theCompare.reversed());
 		}
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> filter(Function<? super T, String> filter) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), getParent().filter(filter), theCompare);
+			return new UniqueSortedDataFlowWrapper<>(getSource(), super.filter(filter), theCompare);
 		}
 
 		@Override
 		public <X> UniqueSortedDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), getParent().whereContained(other, include), theCompare);
+			return new UniqueSortedDataFlowWrapper<>(getSource(), super.whereContained(other, include), theCompare);
 		}
 
 		@Override
@@ -317,12 +312,12 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), getParent().refresh(refresh), theCompare);
+			return new UniqueSortedDataFlowWrapper<>(getSource(), super.refresh(refresh), theCompare);
 		}
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), getParent().refreshEach(refresh), theCompare);
+			return new UniqueSortedDataFlowWrapper<>(getSource(), super.refreshEach(refresh), theCompare);
 		}
 
 		@Override
@@ -490,12 +485,12 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), getParent().refresh(refresh), comparator());
+			return new UniqueSortedDataFlowWrapper<>(getSource(), super.refresh(refresh), comparator());
 		}
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), getParent().refreshEach(refresh), comparator());
+			return new UniqueSortedDataFlowWrapper<>(getSource(), super.refreshEach(refresh), comparator());
 		}
 
 		@Override
@@ -632,11 +627,6 @@ public class ObservableSortedSetImpl {
 			CollectionElement<E> srcEl = getSource().search(mappedSearch(search), filter);
 			return srcEl == null ? null : elementFor(srcEl, null);
 		}
-
-		@Override
-		public CollectionElement<T> addIfEmpty(T value) throws IllegalStateException {
-			return elementFor(getSource().addIfEmpty(getFlow().reverse(value, true).result), null);
-		}
 	}
 
 	public static class ActiveDerivedSortedSet<T> extends ObservableSetImpl.ActiveDerivedSet<T> implements ObservableSortedSet<T> {
@@ -663,15 +653,6 @@ public class ObservableSortedSetImpl {
 			CollectionElement<DerivedElementHolder<T>> presentEl = getPresentElements().search(el -> search.compareTo(el.get()),
 				filter);
 			return presentEl == null ? null : elementFor(presentEl.get());
-		}
-
-		@Override
-		public CollectionElement<T> addIfEmpty(T value) throws IllegalStateException {
-			try (Transaction t = lock(true, null)) {
-				if (!isEmpty())
-					throw new IllegalStateException("Set is not empty");
-				return super.addElement(value, true);
-			}
 		}
 	}
 
@@ -728,14 +709,6 @@ public class ObservableSortedSetImpl {
 			return ObservableValue
 				.flatten(getWrapped().map(new TypeToken<ObservableValue<E>>() {}.where(new TypeParameter<E>() {}, getType()),
 					v -> v == null ? null : v.observeRelative(value, filter, def)));
-		}
-
-		@Override
-		public CollectionElement<E> addIfEmpty(E value) throws IllegalStateException {
-			ObservableSortedSet<E> wrapped = getWrapped().get();
-			if (wrapped == null)
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			return wrapped.addIfEmpty(value);
 		}
 	}
 }
