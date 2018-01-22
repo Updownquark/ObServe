@@ -85,8 +85,8 @@ interface ObservableCollectionChainLink<E, T> extends ObservableChainLink<T> {
 			boolean separateTypes = !isSameType(ops);
 			if (!separateTypes)
 				str.append(ops.get(0).type);
-			boolean separateIndexes = isSameIndex(ops);
-			if (ops.get(0).index >= 0 && !separateIndexes)
+			boolean sameIndexes = isSameIndex(ops);
+			if (ops.get(0).index >= 0 && sameIndexes)
 				str.append('@').append(ops.get(0).index);
 			str.append('[');
 			boolean first = true;
@@ -98,7 +98,7 @@ interface ObservableCollectionChainLink<E, T> extends ObservableChainLink<T> {
 					str.append(op.type);
 				if (op.value != null)
 					str.append(op.value);
-				if (separateIndexes && op.index >= 0)
+				if (!sameIndexes && op.index >= 0)
 					str.append('@').append(op.index);
 			}
 			str.append(']');
