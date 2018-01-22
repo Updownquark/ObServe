@@ -530,7 +530,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		StringBuilder str = new StringBuilder("distinct(");
 		str.append(getCollection().equivalence() instanceof Equivalence.ComparatorEquivalence ? "sorted" : "hash");
 		if (isRoot)
-			str.append(getTestType());
+			str.append(" ").append(getTestType());
 		str.append(")");
 		return str.toString();
 	}
