@@ -781,7 +781,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				options.accept(opts);
 			}));
 			theChild = new DistinctCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), theFlow, helper,
-				theTester.isCheckingRemovedValues(), options.get());
+				theTester.isCheckingRemovedValues(), options.get(), false);
 			derived.accept((ObservableChainLink<X>) theChild);
 		})//
 		.or(1, () -> { // distinct sorted
@@ -791,7 +791,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			options.useFirst(/*TODO helper.getBoolean()*/ false);
 			derivedFlow.accept((CollectionDataFlow<?, ?, X>) flow.distinctSorted(compare, options.isUseFirst()));
 			theChild = new DistinctCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), theFlow, helper,
-				theTester.isCheckingRemovedValues(), options);
+				theTester.isCheckingRemovedValues(), options, false);
 			derived.accept((ObservableChainLink<X>) theChild);
 		})//
 		.or(1, () -> {// filterMod

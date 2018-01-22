@@ -3,6 +3,7 @@ package org.observe.supertest;
 import java.io.File;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -10,13 +11,17 @@ import java.util.function.Function;
 
 import org.junit.Test;
 import org.observe.collect.DefaultObservableCollection;
+import org.observe.collect.DefaultObservableSortedSet;
+import org.observe.collect.FlowOptions;
 import org.qommons.QommonsUtils;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.Testable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterSortedSet;
 import org.qommons.debug.Debug;
 import org.qommons.tree.BetterTreeList;
+import org.qommons.tree.BetterTreeSet;
 
 import com.google.common.reflect.TypeToken;
 
@@ -111,7 +116,7 @@ public class ObservableChainTester implements Testable {
 	}
 
 	private <E> ObservableChainLink<?> createInitialLink(TestHelper helper) {
-		int linkTypes = 2;
+		int linkTypes = 3;
 		switch (helper.getInt(0, linkTypes)) {
 		case 0:
 			// TODO Uncomment this when CircularArrayList is working
@@ -122,14 +127,14 @@ public class ObservableChainTester implements Testable {
 			BetterList<E> backing = new BetterTreeList<>(true);
 			DefaultObservableCollection<E> base = new DefaultObservableCollection<>((TypeToken<E>) type.getType(), backing);
 			return new SimpleCollectionLink<>(type, base.flow(), helper);
-			// case 2:
-			// type = TestValueType.values()[helper.getInt(0, TestValueType.values().length)];
-			// Comparator<? super E> compare = randomComparator(type, helper);
-			// backing = new BetterTreeSet<>(false, compare);
-			// base = new DefaultObservableCollection<>((TypeToken<E>) type.getType(), backing);
-			// SimpleCollectionLink<E> simple = new SimpleCollectionLink<>(type, base.flow(), helper);
-			// return new SortedDistinctCollectionLink<>(simple, type, base.flow(), helper, compare,
-			// new FlowOptions.GroupingDef(new FlowOptions.GroupingOptions(true)));
+		case 2:
+			type = TestValueType.values()[helper.getInt(0, TestValueType.values().length)];
+			Comparator<? super E> compare = SortedCollectionLink.compare(type, helper);
+			backing = new BetterTreeSet<>(true, compare);
+			base = new DefaultObservableSortedSet<>((TypeToken<E>) type.getType(), (BetterSortedSet<E>) backing);
+			SimpleCollectionLink<E> simple = new SimpleCollectionLink<>(type, base.flow(), helper);
+			return new DistinctCollectionLink<>(simple, type, base.flow(), base.flow(), helper, true,
+				new FlowOptions.SimpleUniqueOptions(true), true);
 			// TODO ObservableValue
 			// TODO ObservableMultiMap
 			// TODO ObservableMap
