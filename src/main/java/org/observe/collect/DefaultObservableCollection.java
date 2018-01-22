@@ -41,6 +41,11 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 		theObservers = new org.qommons.collect.ListenerList<>("A collection may not be modified as a result of a change event");
 	}
 
+	/** @return This collection's backing values */
+	protected BetterList<E> getValues() {
+		return theValues;
+	}
+
 	@Override
 	public boolean isLockSupported() {
 		return theValues.isLockSupported();

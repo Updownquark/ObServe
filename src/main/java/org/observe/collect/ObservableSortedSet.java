@@ -1,12 +1,16 @@
 package org.observe.collect;
 
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.function.Supplier;
 
 import org.observe.ObservableValue;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.MutableElementSpliterator;
+import org.qommons.tree.BetterTreeSet;
+
+import com.google.common.reflect.TypeToken;
 
 /**
  * A sorted set whose content can be observed
@@ -187,6 +191,36 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 	@Override
 	default <T> UniqueSortedDataFlow<E, E, E> flow() {
 		return new ObservableSortedSetImpl.UniqueSortedBaseFlow<>(this);
+	}
+
+	/**
+	 * @param <E> The type for the set
+	 * @param type The type for the set
+	 * @param compare The comparator to use to sort the set's values
+	 * @return A new, empty, mutable observable sorted set
+	 */
+	static <E> ObservableSortedSet<E> create(TypeToken<E> type, Comparator<? super E> compare) {
+		return create(type, createDefaultBacking(compare));
+	}
+
+	/**
+	 * @param <E> The type for the set
+	 * @param compare The comparator to use to sort the set's values
+	 * @return A new sorted set to back a collection created by {@link #create(TypeToken, Comparator)}
+	 */
+	static <E> BetterSortedSet<E> createDefaultBacking(Comparator<? super E> compare) {
+		return new BetterTreeSet<>(true, compare);
+	}
+
+	/**
+	 * @param <E> The type for the set
+	 * @param type The type for the set
+	 * @param backing The sorted set to hold the observable set's data
+	 * @return A new, empty, mutable observable sorted set whose performance and storage characteristics are determined by
+	 *         <code>backing</code>
+	 */
+	static <E> ObservableSortedSet<E> create(TypeToken<E> type, BetterSortedSet<E> backing) {
+		return new DefaultObservableSortedSet<>(type, backing);
 	}
 
 	/**
