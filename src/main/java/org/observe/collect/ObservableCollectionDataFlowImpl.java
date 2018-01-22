@@ -2422,9 +2422,12 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
-			if (theOptions.getReverse() == null)
+			if (theOptions.getReverse() == null || theOptions.isManyToOne())
 				return null;
-			Comparable<DerivedCollectionElement<I>> pef = theParent.getElementFinder(theOptions.getReverse().apply(value));
+			I reversed = theOptions.getReverse().apply(value);
+			if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
+				return null;
+			Comparable<DerivedCollectionElement<I>> pef = theParent.getElementFinder(reversed);
 			if (pef == null)
 				return null;
 			return el -> pef.compareTo(((MappedElement) el).theParentEl);

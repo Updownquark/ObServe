@@ -1215,26 +1215,28 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public CollectionElement<T> getElement(T value, boolean first) {
-			if (!getType().wrap().getRawType().isInstance(value))
+			if (!belongs(value))
 				return null;
-			if (!theFlow.isManyToOne()) {
-				// If the flow is one-to-one, we can use any search optimizations the source collection may be capable of
-				FilterMapResult<T, E> reversed = theFlow.reverse(value, false);
-				if (!reversed.isError()) {
-					CollectionElement<E> srcEl = theSource.getElement(reversed.result, first);
-					return srcEl == null ? null : elementFor(srcEl, null);
+			try (Transaction t = lock(false, null)) {
+				Function<? super E, ? extends T> map = theFlow.map().get();
+				if (!theFlow.isManyToOne()) {
+					// If the flow is one-to-one, we can use any search optimizations the source collection may be capable of
+					FilterMapResult<T, E> reversed = theFlow.reverse(value, false);
+					if (!reversed.isError() && equivalence().elementEquals(map.apply(reversed.result), value)) {
+						CollectionElement<E> srcEl = theSource.getElement(reversed.result, first);
+						return srcEl == null ? null : elementFor(srcEl, null);
+					}
 				}
+				ElementId[] match = new ElementId[1];
+				MutableElementSpliterator<E> spliter = theSource.spliterator(first);
+				while (match[0] == null && spliter.forElement(el -> {
+					if (equivalence().elementEquals(map.apply(el.get()), value))
+						match[0] = el.getElementId();
+				}, first)) {}
+				if (match[0] == null)
+					return null;
+				return elementFor(theSource.getElement(match[0]), map);
 			}
-			ElementId[] match = new ElementId[1];
-			MutableElementSpliterator<E> spliter = theSource.spliterator(first);
-			Function<? super E, ? extends T> map = theFlow.map().get();
-			while (match[0] == null && spliter.forElement(el -> {
-				if (equivalence().elementEquals(map.apply(el.get()), value))
-					match[0] = el.getElementId();
-			}, first)) {}
-			if (match[0] == null)
-				return null;
-			return elementFor(theSource.getElement(match[0]), map);
 		}
 
 		@Override
