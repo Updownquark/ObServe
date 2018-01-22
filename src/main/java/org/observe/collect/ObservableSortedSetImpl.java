@@ -141,62 +141,71 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-			return getWrapped().onChange(new Consumer<ObservableCollectionEvent<? extends E>>() {
-				private int startIndex;
+			try (Transaction t = lock(false, null)) {
+				return getWrapped().onChange(new Consumer<ObservableCollectionEvent<? extends E>>() {
+					private int startIndex;
 
-				@Override
-				public void accept(ObservableCollectionEvent<? extends E> evt) {
-					int inRange = isInRange(evt.getNewValue());
-					int oldInRange = evt.getType() == CollectionChangeType.set ? isInRange(evt.getOldValue()) : 0;
-					if (inRange < 0) {
-						switch (evt.getType()) {
-						case add:
-							startIndex++;
-							break;
-						case remove:
-							startIndex--;
-							break;
-						case set:
-							if (oldInRange > 0)
+					{
+						startIndex = getMinIndex();
+					}
+
+					@Override
+					public void accept(ObservableCollectionEvent<? extends E> evt) {
+						int inRange = isInRange(evt.getNewValue());
+						int oldInRange = evt.getType() == CollectionChangeType.set ? isInRange(evt.getOldValue()) : 0;
+						if (inRange < 0) {
+							switch (evt.getType()) {
+							case add:
 								startIndex++;
-							else if (oldInRange == 0)
-								fire(evt, CollectionChangeType.remove, evt.getOldValue(), evt.getOldValue());
-						}
-					} else if (inRange > 0) {
-						switch (evt.getType()) {
-						case set:
-							if (oldInRange < 0)
+								break;
+							case remove:
 								startIndex--;
-							else if (oldInRange == 0)
-								fire(evt, CollectionChangeType.remove, evt.getOldValue(), evt.getOldValue());
-							break;
-						default:
-						}
-					} else {
-						switch (evt.getType()) {
-						case add:
-							fire(evt, evt.getType(), null, evt.getNewValue());
-							break;
-						case remove:
-							fire(evt, evt.getType(), evt.getOldValue(), evt.getNewValue());
-							break;
-						case set:
-							if (oldInRange < 0) {
-								startIndex--;
-								fire(evt, CollectionChangeType.add, null, evt.getNewValue());
-							} else if (oldInRange == 0)
-								fire(evt, CollectionChangeType.set, evt.getOldValue(), evt.getNewValue());
-							else
-								fire(evt, CollectionChangeType.add, null, evt.getNewValue());
+								break;
+							case set:
+								if (oldInRange > 0)
+									startIndex++;
+								else if (oldInRange == 0)
+									fire(evt, CollectionChangeType.remove, evt.getOldValue(), evt.getOldValue());
+							}
+						} else if (inRange > 0) {
+							switch (evt.getType()) {
+							case set:
+								if (oldInRange < 0)
+									startIndex--;
+								else if (oldInRange == 0)
+									fire(evt, CollectionChangeType.remove, evt.getOldValue(), evt.getOldValue());
+								break;
+							default:
+							}
+						} else {
+							switch (evt.getType()) {
+							case add:
+								fire(evt, evt.getType(), null, evt.getNewValue());
+								break;
+							case remove:
+								fire(evt, evt.getType(), evt.getOldValue(), evt.getNewValue());
+								break;
+							case set:
+								// TODO This does not account for multi-value changes, i.e. when the entire collection changes in a single
+								// operation that must then be communicated in pieces.
+								// This is possible e.g. with a refresh/mapEquivalent combo
+								if (oldInRange < 0) {
+									startIndex--;
+									fire(evt, CollectionChangeType.add, null, evt.getNewValue());
+								} else if (oldInRange == 0)
+									fire(evt, CollectionChangeType.set, evt.getOldValue(), evt.getNewValue());
+								else
+									fire(evt, CollectionChangeType.add, null, evt.getNewValue());
+							}
 						}
 					}
-				}
 
-				void fire(ObservableCollectionEvent<? extends E> evt, CollectionChangeType type, E oldValue, E newValue) {
-					observer.accept(new ObservableCollectionEvent<>(evt.getElementId(), getType(), evt.getIndex() - startIndex,
-						evt.getType(), evt.getOldValue(), evt.getNewValue(), evt));
-				}
-			});
+					void fire(ObservableCollectionEvent<? extends E> evt, CollectionChangeType type, E oldValue, E newValue) {
+						observer.accept(new ObservableCollectionEvent<>(evt.getElementId(), getType(), evt.getIndex() - startIndex,
+							evt.getType(), evt.getOldValue(), evt.getNewValue(), evt));
+					}
+				});
+			}
 		}
 
 		@Override
