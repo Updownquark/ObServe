@@ -456,7 +456,7 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> filter(Function<? super T, String> filter) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), getParent().filter(filter), comparator());
+			return new UniqueSortedDataFlowWrapper<>(getSource(), super.filter(filter), comparator());
 		}
 
 		@Override
