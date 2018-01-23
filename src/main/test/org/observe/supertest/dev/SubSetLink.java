@@ -5,16 +5,16 @@ import java.util.Comparator;
 import java.util.List;
 
 import org.junit.Assert;
+import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
-import org.observe.supertest.dev.AbstractObservableCollectionLink;
-import org.observe.supertest.dev.ObservableChainTester;
-import org.observe.supertest.dev.ObservableCollectionChainLink;
 import org.observe.supertest.dev.ObservableChainTester.TestValueType;
-import org.observe.supertest.dev.ObservableCollectionChainLink.CollectionOp;
 import org.qommons.TestHelper;
-import org.qommons.collect.BetterSortedSet;
+import org.qommons.collect.BetterSortedMap;
+import org.qommons.collect.ElementId;
+import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-import org.qommons.tree.BetterTreeSet;
+import org.qommons.tree.BetterTreeList;
+import org.qommons.tree.BetterTreeMap;
 
 public class SubSetLink<E> extends AbstractObservableCollectionLink<E, E> {
 	private final Comparator<? super E> theCompare;
@@ -23,7 +23,8 @@ public class SubSetLink<E> extends AbstractObservableCollectionLink<E, E> {
 	private final E theMax;
 	private final boolean isMaxIncluded;
 
-	private final BetterSortedSet<E> theIncludedValues;
+	private final BetterTreeList<E> theSourceValues;
+	private final BetterSortedMap<ElementId, E> theIncludedValues;
 	private int theStartIndex;
 
 	public SubSetLink(ObservableCollectionChainLink<?, E> parent, TestValueType type,
@@ -35,10 +36,13 @@ public class SubSetLink<E> extends AbstractObservableCollectionLink<E, E> {
 		isMinIncluded = includeMin;
 		theMax = max;
 		isMaxIncluded = includeMax;
-		theIncludedValues = new BetterTreeSet<>(false, theCompare);
+
+		theSourceValues = new BetterTreeList<>(false);
+		theIncludedValues = new BetterTreeMap<>(false, ElementId::compareTo);
 
 		boolean pastMin = theMin == null;
 		for (E value : getParent().getCollection()) {
+			ElementId srcId = theSourceValues.addElement(value, false).getElementId();
 			if (!pastMin) {
 				int comp = theCompare.compare(theMin, value);
 				if (comp > 0 || (!isMinIncluded && comp == 0)) {
@@ -49,26 +53,26 @@ public class SubSetLink<E> extends AbstractObservableCollectionLink<E, E> {
 			}
 			if (theMax != null) {
 				int comp = theCompare.compare(theMax, value);
-				if (comp < 0 || (isMaxIncluded && comp == 0))
-					break;
+				if (comp < 0 || (!isMaxIncluded && comp == 0))
+					continue;
 			}
-			theIncludedValues.add(value);
+			theIncludedValues.put(srcId, value);
 			getExpected().add(value);
 		}
 	}
 
-	private boolean isValueValid(E value) {
+	private int isValueValid(E value) {
 		if (theMin != null) {
 			int comp = theCompare.compare(theMin, value);
 			if (comp > 0 || (!isMinIncluded && comp == 0))
-				return false;
+				return -1;
 		}
 		if (theMax != null) {
 			int comp = theCompare.compare(theMax, value);
 			if (comp < 0 || (!isMaxIncluded && comp == 0))
-				return false;
+				return 1;
 		}
-		return true;
+		return 0;
 	}
 
 	@Override
@@ -77,22 +81,22 @@ public class SubSetLink<E> extends AbstractObservableCollectionLink<E, E> {
 		for (CollectionOp<E> op : ops) {
 			switch (op.type) {
 			case add:
-				if (!isValueValid(op.value))
+				if (isValueValid(op.value) != 0)
 					op.reject(StdMsg.ILLEGAL_ELEMENT, true);
 				else
-					parentOps.add(op.index < 0 ? op : new CollectionOp<>(op, op.type, op.value, op.index + theStartIndex));
+					parentOps.add(op.index < 0 ? op : new CollectionOp<>(op, op.type, op.value, op.index));
 				break;
 			case remove:
-				if (!isValueValid(op.value))
+				if (isValueValid(op.value) != 0)
 					op.reject(StdMsg.NOT_FOUND, false);
 				else
-					parentOps.add(op.index < 0 ? op : new CollectionOp<>(op, op.type, op.value, op.index + theStartIndex));
+					parentOps.add(op.index < 0 ? op : new CollectionOp<>(op, op.type, op.value, op.index));
 				break;
 			case set:
-				if (!isValueValid(op.value))
+				if (isValueValid(op.value) != 0)
 					op.reject(StdMsg.ILLEGAL_ELEMENT, true);
 				else
-					parentOps.add(op.index < 0 ? op : new CollectionOp<>(op, op.type, op.value, op.index + theStartIndex));
+					parentOps.add(op.index < 0 ? op : new CollectionOp<>(op, op.type, op.value, op.index));
 				break;
 			}
 		}
@@ -102,32 +106,59 @@ public class SubSetLink<E> extends AbstractObservableCollectionLink<E, E> {
 	@Override
 	public void fromBelow(List<CollectionOp<E>> ops, TestHelper helper) {
 		List<CollectionOp<E>> subSetOps = new ArrayList<>(ops.size());
+		// We need to update theStartIndex as we go, but we can't actually use it here because of multi-element operations like map switches
 		for (CollectionOp<E> op : ops) {
+			int valid = isValueValid(op.value);
 			switch (op.type) {
 			case add:
-				if (isValueValid(op.value)){
-					int addedAt=theIncludedValues.getElementsBefore(theIncludedValues.addElement(op.value, false).getElementId());
+				ElementId srcId=theSourceValues.addElement(op.index, op.value).getElementId();
+				if (valid == 0) {
+					int addedAt=theIncludedValues.keySet().getElementsBefore(theIncludedValues.putEntry(srcId, op.value, false).getElementId());
 					Assert.assertEquals(addedAt, op.index-theStartIndex);
 					subSetOps.add(new CollectionOp<>(op.type, op.value, addedAt));
-				}
-				else if (op.index <= theStartIndex)
+				} else if (valid < 0)
 					theStartIndex++;
 				break;
 			case remove:
-				if (op.index < theStartIndex)
+				srcId=theSourceValues.getElement(op.index).getElementId();
+				MapEntryHandle<ElementId, E> includedEntry=theIncludedValues.getEntry(srcId);
+				Assert.assertEquals(valid == 0, includedEntry != null);
+				if(includedEntry!=null){
+					int includedIndex=theIncludedValues.keySet().getElementsBefore(includedEntry.getElementId());
+					Assert.assertEquals(op.index-theStartIndex, includedIndex);
+					Assert.assertEquals(op.value, includedEntry.getValue());
+					subSetOps.add(new CollectionOp<>(op.type, op.value, includedIndex));
+					theIncludedValues.mutableEntry(includedEntry.getElementId()).remove();
+				} else if (valid < 0)
 					theStartIndex--;
-				else if (op.index < theStartIndex+theIncludedValues.size()){
-					Assert.assertEquals(theIncludedValues.remove(op.index-theStartIndex), op.value);
-					subSetOps.add(new CollectionOp<>(op.type, op.value, op.index - theStartIndex));
-				}
+				theSourceValues.mutableElement(srcId).remove();
 				break;
 			case set:
-				if (isValueValid(op.value)) {
-					if(op.index<theStartIndex){
-						int addedAt=theIncludedValues.getElementsBefore(theIncludedValues.addElement(op.value, false).getElementId());
-						subSetOps.add(new CollectionOp<>
+				srcId=theSourceValues.getElement(op.index).getElementId();
+				int oldValid = isValueValid(theSourceValues.getElement(srcId).get());
+				theSourceValues.mutableElement(srcId).set(op.value);
+				includedEntry = theIncludedValues.getEntry(srcId);
+				Assert.assertEquals(oldValid == 0, includedEntry != null);
+				if (valid == 0) {
+					if (oldValid == 0) {
+						theIncludedValues.mutableEntry(includedEntry.getElementId()).set(op.value);
+						subSetOps.add(new CollectionOp<>(op.type, op.value,
+							theIncludedValues.keySet().getElementsBefore(includedEntry.getElementId())));
+					} else {
+						includedEntry = theIncludedValues.putEntry(srcId, op.value, false);
+						subSetOps.add(new CollectionOp<>(CollectionChangeType.add, op.value,
+							theIncludedValues.keySet().getElementsBefore(includedEntry.getElementId())));
+						if (oldValid < 0)
+							theStartIndex--;
 					}
-				} else {}
+				} else if (oldValid == 0) {
+					subSetOps.add(new CollectionOp<>(CollectionChangeType.remove, includedEntry.getValue(),
+						theIncludedValues.keySet().getElementsBefore(includedEntry.getElementId())));
+					theIncludedValues.mutableEntry(includedEntry.getElementId()).remove();
+					if (valid < 0)
+						theStartIndex++;
+				} else if (oldValid > 0 && valid < 0)
+					theStartIndex++;
 			}
 		}
 		modified(subSetOps, helper, true);
@@ -135,18 +166,46 @@ public class SubSetLink<E> extends AbstractObservableCollectionLink<E, E> {
 
 	@Override
 	public void fromAbove(List<CollectionOp<E>> ops, TestHelper helper, boolean above) {
-		List<CollectionOp<E>> subSetOps = new ArrayList<>(ops.size());
+		List<CollectionOp<E>> parentOps = new ArrayList<>(ops.size());
 		for (CollectionOp<E> op : ops) {
+			ElementId srcId;
+			int srcIndex = theStartIndex + op.index;
 			switch (op.type) {
 			case add:
-
+				srcId = theSourceValues.addElement(srcIndex, op.value).getElementId();
+				theIncludedValues.put(srcId, op.value);
+				parentOps.add(new CollectionOp<>(op.type, op.value, srcIndex));
 				break;
 			case remove:
+				srcId = theSourceValues.getElement(srcIndex).getElementId();
+				Assert.assertNotNull(theIncludedValues.remove(srcId));
+				parentOps.add(new CollectionOp<>(op.type, op.value, srcIndex));
+				theSourceValues.mutableElement(srcId).remove();
 				break;
 			case set:
+				srcId = theSourceValues.getElement(srcIndex).getElementId();
+				theSourceValues.mutableElement(srcId).set(op.value);
+				Assert.assertNotNull(theIncludedValues.put(srcId, op.value));
+				parentOps.add(new CollectionOp<>(op.type, op.value, srcIndex));
 				break;
 			}
 		}
-		modified(subSetOps, helper, !above);
+		modified(ops, helper, !above);
+		getParent().fromAbove(parentOps, helper, true);
+	}
+
+	@Override
+	public String toString() {
+		StringBuilder str = new StringBuilder("subSet");
+		if (theMin != null) {
+			str.append(isMinIncluded ? '(' : '[').append(theMin);
+		} else
+			str.append("(?");
+		str.append(", ");
+		if (theMax != null)
+			str.append(theMax).append(isMaxIncluded ? ')' : ']');
+		else
+			str.append("?)");
+		return str.toString();
 	}
 }

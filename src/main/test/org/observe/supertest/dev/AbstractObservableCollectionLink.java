@@ -662,19 +662,23 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		try {
 			theCollection.add(-1, theSupplier.apply(helper));
 			Assert.assertFalse("Should have errored", true);
-		} catch (IndexOutOfBoundsException e) {}
+		} catch (IndexOutOfBoundsException | IllegalArgumentException e) { // We'll allow either exception
+		}
 		try {
 			theCollection.add(theCollection.size() + 1, theSupplier.apply(helper));
 			Assert.assertFalse("Should have errored", true);
-		} catch (IndexOutOfBoundsException e) {}
+		} catch (IndexOutOfBoundsException | IllegalArgumentException e) { // We'll allow either exception
+		}
 		try {
 			theCollection.set(-1, theSupplier.apply(helper));
 			Assert.assertFalse("Should have errored", true);
-		} catch (IndexOutOfBoundsException e) {}
+		} catch (IndexOutOfBoundsException | IllegalArgumentException e) { // We'll allow either exception
+		}
 		try {
 			theCollection.set(theCollection.size() + 1, theSupplier.apply(helper));
 			Assert.assertFalse("Should have errored", true);
-		} catch (IndexOutOfBoundsException e) {}
+		} catch (IndexOutOfBoundsException | IllegalArgumentException e) { // We'll allow either exception
+		}
 	}
 
 	protected void modified(List<CollectionOp<T>> ops, TestHelper helper, boolean propagateUp) {
