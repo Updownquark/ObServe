@@ -246,6 +246,7 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 		String s = "filtered(" + theFilter;
 		if (isFilterVariable)
 			s += ", variable";
+		s += getExtras();
 		s += ")";
 		return s;
 	}

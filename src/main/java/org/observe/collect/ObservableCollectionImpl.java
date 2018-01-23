@@ -442,41 +442,57 @@ public final class ObservableCollectionImpl {
 							@Override
 							public void accept(ObservableCollectionEvent<? extends E> evt) {
 								boolean mayReplace;
-								if (theCurrentElement == null)
+								Map<Object, Object> causeData = evt.getRootCausable().onFinish(theCauseKey, true);
+								SimpleElement current = causeData != null ? (SimpleElement) causeData.get("replacement")
+									: theCurrentElement;
+								if (causeData != null && current == null)
+									return; // We've lost track of the current best and will need to find it again later
+								boolean sameElement;
+								if (current == null) {
+									sameElement = false;
 									mayReplace = true;
-								else if (theCurrentElement.getElementId().equals(evt.getElementId()))
+								} else if (current.getElementId().equals(evt.getElementId())) {
+									sameElement = true;
 									mayReplace = true;
-								else {
-									mayReplace = theElementCompare.compare(theCurrentElement,
-										new SimpleElement(evt.getElementId(), evt.getNewValue())) > 0;
+								} else {
+									sameElement = false;
+									mayReplace = theElementCompare.compare(new SimpleElement(evt.getElementId(), evt.getNewValue()),
+										current) < 0;
 								}
 								if (!mayReplace)
 									return; // Even if the new element's value matches, it wouldn't replace the current value
 								boolean matches = test(evt.isFinal() ? evt.getOldValue() : evt.getNewValue());
-								if (!matches && (theCurrentElement == null || !theCurrentElement.getElementId().equals(evt.getElementId())))
-									return; // If the new value doesn't match and it's not the current element, we don't care
+								if (!matches && (current == null || !sameElement))
+									return;// If the new value doesn't match and it's not the current element, we don't care
 
 								// At this point we know that we will have to do something
-								Map<Object, Object> causeData = evt.getRootCausable().onFinish(theCauseKey);
+								if (causeData == null)
+									causeData = evt.getRootCausable().onFinish(theCauseKey);
 								if (!matches) {
 									// The current element's value no longer matches
 									// We need to search for the new value if we don't already know of a better match.
-									// The signal for this is a null replacement, so nothing to do here.
+									// The signal for this is a null replacement
+									causeData.remove("replacement");
 								} else {
 									if (evt.isFinal()) {
 										// The current element has been removed
 										// We need to search for the new value if we don't already know of a better match.
-										// The signal for this is a null replacement, so nothing to do here.
+										// The signal for this is a null replacement
+										causeData.remove("replacement");
 									} else {
 										// Either:
 										// There is no current element and the new element matches
 										// --use it unless we already know of a better match
 										// Or there the new value is in a better position than the current element
-										SimpleElement replacement = (SimpleElement) causeData.get("replacement");
 										// If we already know of a replacement element even better-positioned than the new element,
 										// ignore the new one
-										if (replacement == null || evt.getElementId().compareTo(replacement.getElementId()) <= 0)
+										if (current == null//
+											|| theElementCompare.compare(theCollection.getElement(evt.getElementId()), current) < 0)
 											causeData.put("replacement", new SimpleElement(evt.getElementId(), evt.getNewValue()));
+										else if (sameElement) {
+											// The current best element is replaced with an inferior value. Need to re-search.
+											causeData.remove("replacement");
+										}
 									}
 								}
 							}
@@ -536,6 +552,11 @@ public final class ObservableCollectionImpl {
 			@Override
 			public E get() {
 				return theValue;
+			}
+
+			@Override
+			public String toString() {
+				return String.valueOf(theValue);
 			}
 		}
 	}
@@ -656,14 +677,15 @@ public final class ObservableCollectionImpl {
 				if (!best.isPresent())
 					best.accept(el);
 				else {
-					int comp = theCompare.compare(best.get().get(), el.get());
+					int comp = theCompare.compare(el.get(), best.get().get());
 					if (comp < 0)
 						best.accept(el);
 					else if (last && comp == 0)
 						best.accept(el);
 				}
 			}, true);
-			onElement.accept(best.get());
+			if (best.isPresent())
+				onElement.accept(best.get());
 			return best.isPresent();
 		}
 
@@ -1624,7 +1646,6 @@ public final class ObservableCollectionImpl {
 
 			@Override
 			public boolean equals(Object obj) {
-				// This type collection does not produce duplicate Element IDs, so we can compare by identity
 				if (!(obj instanceof DerivedElementHolder))
 					return false;
 				return treeNode.equals(((DerivedElementHolder<T>) obj).treeNode);
@@ -1824,7 +1845,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public CollectionElement<T> getTerminalElement(boolean first) {
-			DerivedElementHolder<T> holder = theDerivedElements.peekFirst();
+			DerivedElementHolder<T> holder = first ? theDerivedElements.peekFirst() : theDerivedElements.peekLast();
 			return holder == null ? null : getElement(holder);
 		}
 

@@ -205,6 +205,7 @@ public class SubSetLink<E> extends AbstractObservableCollectionLink<E, E> {
 			str.append(theMax).append(isMaxIncluded ? ')' : ']');
 		else
 			str.append("?)");
+		str.append(getExtras());
 		return str.toString();
 	}
 }

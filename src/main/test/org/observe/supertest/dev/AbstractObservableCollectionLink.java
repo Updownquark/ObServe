@@ -12,6 +12,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import org.junit.Assert;
@@ -24,10 +25,13 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl;
 import org.observe.collect.ObservableCollectionTester;
+import org.observe.collect.ObservableElement;
+import org.observe.collect.ObservableElementTester;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.supertest.dev.MappedCollectionLink.TypeTransformation;
 import org.observe.supertest.dev.ObservableChainTester.TestValueType;
 import org.qommons.BiTuple;
+import org.qommons.Ternian;
 import org.qommons.TestHelper;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
@@ -35,6 +39,7 @@ import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.tree.BetterTreeList;
 
@@ -50,6 +55,13 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 	private final Function<TestHelper, T> theSupplier;
 
 	private final BetterList<BiTuple<Integer, T>> theNewValues;
+
+	// Extras
+	private ObservableElement<T> theMonitoredElement;
+	private Supplier<CollectionElement<T>> theCorrectMonitoredElement;
+	private ObservableElementTester<T> theMonitoredElementTester;
+
+	private String theExtras;
 
 	AbstractObservableCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type,
 		CollectionDataFlow<?, ?, T> flow, TestHelper helper, boolean rebasedFlowRequired, boolean checkRemovedValues) {
@@ -89,6 +101,66 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			default:
 			}
 		});
+
+		// Extras
+		theExtras = "";
+		// TODO This might be better as another link in the chain when value testing is implemented
+		TestHelper.RandomAction extraAction = helper.doAction(10, () -> {
+			// Usually, do nothing
+		}).or(1, () -> {
+			// observeElement
+			T value = theSupplier.apply(helper);
+			boolean first = helper.getBoolean();
+			/*theExtras = ", equivalent(" + value + ", " + (first ? "first" : "last") + ")";
+			theMonitoredElement = theCollection.observeElement(value, first);
+			theCorrectMonitoredElement = () -> {
+				ValueHolder<CollectionElement<T>> el = new ValueHolder<>();
+				ElementSpliterator<T> spliter = theCollection.spliterator();
+				while (el.get() == null && spliter.forElement(e -> {
+					if (theCollection.equivalence().elementEquals(e.get(), value))
+						el.accept(e);
+				}, true)) {}
+				return el.get();
+			};*/
+		}).or(1, () -> {
+			// min/max
+			Comparator<T> compare = SortedCollectionLink.compare(type, helper);
+			boolean min = helper.getBoolean();
+			boolean first = helper.getBoolean();
+			if (min || !first)
+				return;
+			theExtras = ", " + (min ? "min" : "max") + "(" + (first ? "first" : "last") + ")";
+			theMonitoredElement = min ? theCollection.minBy(compare, () -> null, Ternian.of(first))
+				: theCollection.maxBy(compare, () -> null, Ternian.of(first));
+			theCorrectMonitoredElement = () -> {
+				ValueHolder<CollectionElement<T>> el = new ValueHolder<>();
+				ElementSpliterator<T> spliter = theCollection.spliterator();
+				while (spliter.forElement(e -> {
+					boolean better = el.get() == null;
+					if (!better) {
+						int comp = compare.compare(e.get(), el.get().get());
+						if (comp == 0)
+							better = !first;
+						else if ((comp < 0) == min)
+							better = true;
+					}
+					if (better) {
+						el.accept(e);
+						return;
+					}
+				}, true)) {}
+				return el.get();
+			};
+		}).or(1, () -> {
+			// First/last
+			boolean first = helper.getBoolean();
+			/*theExtras = ", " + (first ? "first" : "last");
+			theMonitoredElement = theCollection.observeFind(v -> true, () -> null, first);
+			theCorrectMonitoredElement = () -> theCollection.getTerminalElement(first);*/
+		});
+		extraAction.execute(null);
+		if (theMonitoredElement != null)
+			theMonitoredElementTester = new ObservableElementTester<>(theMonitoredElement);
 	}
 
 	@Override
@@ -128,6 +200,10 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 
 	BiTuple<Integer, T> getNextAddition() {
 		return theNewValues.pollFirst();
+	}
+
+	protected String getExtras() {
+		return theExtras;
 	}
 
 	@Override
@@ -705,6 +781,12 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			theTester.check();
 		else
 			theTester.checkNonBatchSynced();
+
+		if (transComplete && theMonitoredElement != null) {
+			CollectionElement<T> correct = theCorrectMonitoredElement.get();
+			theMonitoredElementTester.check(correct == null ? null : correct.getElementId(), correct == null ? null : correct.get());
+		}
+
 		theNewValues.clear();
 	}
 
@@ -714,89 +796,89 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		ValueHolder<CollectionDataFlow<?, ?, X>> derivedFlow = new ValueHolder<>();
 		TestHelper.RandomAction action=helper//
 			.doAction(1, () -> { // map
-			ObservableChainTester.TestValueType nextType = ObservableChainTester.nextType(helper);
-			SimpleSettableValue<TypeTransformation<T, X>> txValue = new SimpleSettableValue<>(
-				(TypeToken<TypeTransformation<T, X>>) (TypeToken<?>) new TypeToken<Object>() {}, false);
-			txValue.set(MappedCollectionLink.transform(theType, nextType, helper), null);
-			boolean variableMap = helper.getBoolean();
-			CollectionDataFlow<?, ?, T> flow = theFlow;
-			if (variableMap)
-				flow = flow.refresh(txValue.changes().noInit()); // The refresh has to be UNDER the map
-			boolean needsUpdateReeval = !theTester.isCheckingRemovedValues() || variableMap;
-			ValueHolder<FlowOptions.MapOptions<T, X>> options = new ValueHolder<>();
-			derivedFlow.accept(flow.map((TypeToken<X>) nextType.getType(), src -> txValue.get().map(src), o -> {
-				o.manyToOne(txValue.get().isManyToOne());
-				if (helper.getBoolean(.95))
-					o.withReverse(x -> txValue.get().reverse(x));
-				options.accept(o.cache(helper.getBoolean()).fireIfUnchanged(needsUpdateReeval || helper.getBoolean())
-					.reEvalOnUpdate(needsUpdateReeval || helper.getBoolean()));
-			}));
-			theChild = new MappedCollectionLink<>(this, nextType, derivedFlow.get(), helper, !needsUpdateReeval, txValue,
-				variableMap, new FlowOptions.MapDef<>(options.get()));
-			derived.accept((ObservableChainLink<X>) theChild);
-			// TODO mapEquivalent
-		})//
-		// TODO reverse
-		// TODO size
-		// TODO find
-		// TODO contains
-		// TODO containsAny
-		// TODO containsAll
-		// TODO only
-		// TODO reduce
-		// TODO flow reverse
-		.or(1, () -> { // filter/refresh
-			// Getting a java.lang.InternalError: Enclosing method not found when I try to do the TypeToken right.
-			// It doesn't matter here anyway
-			SimpleSettableValue<Function<T, String>> filterValue = new SimpleSettableValue<>(
-				(TypeToken<Function<T, String>>) (TypeToken<?>) new TypeToken<Object>() {}, false);
-			filterValue.set(FilteredCollectionLink.filterFor(theType, helper), null);
-			boolean variableFilter = helper.getBoolean();
-			CollectionDataFlow<?, ?, T> flow = theFlow;
-			if (variableFilter)
-				flow = flow.refresh(filterValue.changes().noInit()); // The refresh has to be UNDER the filter
-			derivedFlow.accept((CollectionDataFlow<?, ?, X>) flow.filter(v -> filterValue.get().apply(v)));
-			theChild = new FilteredCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), helper,
-				theTester.isCheckingRemovedValues(), filterValue, variableFilter);
-			derived.accept((ObservableChainLink<X>) theChild);
-		})//
-		// TODO whereContained
-		// TODO refreshEach
-		// TODO combine
-		// TODO flattenValues
-		// TODO flatMap
-		.or(1, () -> { // sorted
-			Comparator<T> compare = SortedCollectionLink.compare(theType, helper);
-			derivedFlow.accept((CollectionDataFlow<?, ?, X>) theFlow.sorted(compare));
-			theChild = new SortedCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), helper,
-				theTester.isCheckingRemovedValues(), compare);
-			derived.accept((ObservableChainLink<X>) theChild);
-		})//
-		.or(1, () -> { // distinct
-			ValueHolder<FlowOptions.UniqueOptions> options = new ValueHolder<>();
-			CollectionDataFlow<?, ?, T> flow = theFlow;
-			if (helper.getBoolean()) {
+				ObservableChainTester.TestValueType nextType = ObservableChainTester.nextType(helper);
+				SimpleSettableValue<TypeTransformation<T, X>> txValue = new SimpleSettableValue<>(
+					(TypeToken<TypeTransformation<T, X>>) (TypeToken<?>) new TypeToken<Object>() {}, false);
+				txValue.set(MappedCollectionLink.transform(theType, nextType, helper), null);
+				boolean variableMap = helper.getBoolean();
+				CollectionDataFlow<?, ?, T> flow = theFlow;
+				if (variableMap)
+					flow = flow.refresh(txValue.changes().noInit()); // The refresh has to be UNDER the map
+				boolean needsUpdateReeval = !theTester.isCheckingRemovedValues() || variableMap;
+				ValueHolder<FlowOptions.MapOptions<T, X>> options = new ValueHolder<>();
+				derivedFlow.accept(flow.map((TypeToken<X>) nextType.getType(), src -> txValue.get().map(src), o -> {
+					o.manyToOne(txValue.get().isManyToOne());
+					if (helper.getBoolean(.95))
+						o.withReverse(x -> txValue.get().reverse(x));
+					options.accept(o.cache(helper.getBoolean()).fireIfUnchanged(needsUpdateReeval || helper.getBoolean())
+						.reEvalOnUpdate(needsUpdateReeval || helper.getBoolean()));
+				}));
+				theChild = new MappedCollectionLink<>(this, nextType, derivedFlow.get(), helper, !needsUpdateReeval, txValue,
+					variableMap, new FlowOptions.MapDef<>(options.get()));
+				derived.accept((ObservableChainLink<X>) theChild);
+				// TODO mapEquivalent
+			})//
+			// TODO reverse
+			// TODO size
+			// TODO find
+			// TODO contains
+			// TODO containsAny
+			// TODO containsAll
+			// TODO only
+			// TODO reduce
+			// TODO flow reverse
+			.or(1, () -> { // filter/refresh
+				// Getting a java.lang.InternalError: Enclosing method not found when I try to do the TypeToken right.
+				// It doesn't matter here anyway
+				SimpleSettableValue<Function<T, String>> filterValue = new SimpleSettableValue<>(
+					(TypeToken<Function<T, String>>) (TypeToken<?>) new TypeToken<Object>() {}, false);
+				filterValue.set(FilteredCollectionLink.filterFor(theType, helper), null);
+				boolean variableFilter = helper.getBoolean();
+				CollectionDataFlow<?, ?, T> flow = theFlow;
+				if (variableFilter)
+					flow = flow.refresh(filterValue.changes().noInit()); // The refresh has to be UNDER the filter
+				derivedFlow.accept((CollectionDataFlow<?, ?, X>) flow.filter(v -> filterValue.get().apply(v)));
+				theChild = new FilteredCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), helper,
+					theTester.isCheckingRemovedValues(), filterValue, variableFilter);
+				derived.accept((ObservableChainLink<X>) theChild);
+			})//
+			// TODO whereContained
+			// TODO refreshEach
+			// TODO combine
+			// TODO flattenValues
+			// TODO flatMap
+			.or(1, () -> { // sorted
 				Comparator<T> compare = SortedCollectionLink.compare(theType, helper);
-				flow = flow.withEquivalence(Equivalence.of((Class<T>) getType().getRawType(), compare, false));
-			}
-			derivedFlow.accept((CollectionDataFlow<?, ?, X>) flow.distinct(opts -> {
-				// opts.useFirst(helper.getBoolean()).preserveSourceOrder(opts.canPreserveSourceOrder() && helper.getBoolean()); TODO
-				options.accept(opts);
-			}));
-			theChild = new DistinctCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), theFlow, helper,
-				theTester.isCheckingRemovedValues(), options.get(), false);
-			derived.accept((ObservableChainLink<X>) theChild);
-		})//
-		.or(1, () -> { // distinct sorted
-			FlowOptions.UniqueOptions options = new FlowOptions.SimpleUniqueOptions(true);
-			CollectionDataFlow<?, ?, T> flow = theFlow;
-			Comparator<T> compare = SortedCollectionLink.compare(theType, helper);
-			options.useFirst(/*TODO helper.getBoolean()*/ false);
-			derivedFlow.accept((CollectionDataFlow<?, ?, X>) flow.distinctSorted(compare, options.isUseFirst()));
-			theChild = new DistinctCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), theFlow, helper,
-				theTester.isCheckingRemovedValues(), options, false);
-			derived.accept((ObservableChainLink<X>) theChild);
-		});//
+				derivedFlow.accept((CollectionDataFlow<?, ?, X>) theFlow.sorted(compare));
+				theChild = new SortedCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), helper,
+					theTester.isCheckingRemovedValues(), compare);
+				derived.accept((ObservableChainLink<X>) theChild);
+			})//
+			.or(1, () -> { // distinct
+				ValueHolder<FlowOptions.UniqueOptions> options = new ValueHolder<>();
+				CollectionDataFlow<?, ?, T> flow = theFlow;
+				if (helper.getBoolean()) {
+					Comparator<T> compare = SortedCollectionLink.compare(theType, helper);
+					flow = flow.withEquivalence(Equivalence.of((Class<T>) getType().getRawType(), compare, false));
+				}
+				derivedFlow.accept((CollectionDataFlow<?, ?, X>) flow.distinct(opts -> {
+					// opts.useFirst(helper.getBoolean()).preserveSourceOrder(opts.canPreserveSourceOrder() && helper.getBoolean()); TODO
+					options.accept(opts);
+				}));
+				theChild = new DistinctCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), theFlow, helper,
+					theTester.isCheckingRemovedValues(), options.get(), false);
+				derived.accept((ObservableChainLink<X>) theChild);
+			})//
+			.or(1, () -> { // distinct sorted
+				FlowOptions.UniqueOptions options = new FlowOptions.SimpleUniqueOptions(true);
+				CollectionDataFlow<?, ?, T> flow = theFlow;
+				Comparator<T> compare = SortedCollectionLink.compare(theType, helper);
+				options.useFirst(/*TODO helper.getBoolean()*/ false);
+				derivedFlow.accept((CollectionDataFlow<?, ?, X>) flow.distinctSorted(compare, options.isUseFirst()));
+				theChild = new DistinctCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), theFlow, helper,
+					theTester.isCheckingRemovedValues(), options, false);
+				derived.accept((ObservableChainLink<X>) theChild);
+			});//
 		if(theCollection instanceof ObservableSortedSet){
 			ObservableSortedSet<T> sortedSet = (ObservableSortedSet<T>) theCollection;
 			action.or(1, () -> { // subSet

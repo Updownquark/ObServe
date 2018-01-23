@@ -268,7 +268,7 @@ public class SortedCollectionLink<E> extends AbstractObservableCollectionLink<E,
 
 	@Override
 	public String toString() {
-		return "sorted()";
+		return "sorted(" + getExtras() + ")";
 	}
 
 	private static final Map<TestValueType, List<? extends Comparator<?>>> COMPARATORS;
