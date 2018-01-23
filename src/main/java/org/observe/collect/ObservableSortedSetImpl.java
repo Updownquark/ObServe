@@ -26,6 +26,7 @@ import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
+import org.qommons.tree.BetterTreeSet;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -143,66 +144,69 @@ public class ObservableSortedSetImpl {
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
 			try (Transaction t = lock(false, null)) {
 				return getWrapped().onChange(new Consumer<ObservableCollectionEvent<? extends E>>() {
-					private int startIndex;
-
-					{
-						startIndex = getMinIndex();
-					}
+					private final BetterSortedSet<ElementId> thePresentElements = new BetterTreeSet<>(false, ElementId::compareTo);
 
 					@Override
 					public void accept(ObservableCollectionEvent<? extends E> evt) {
 						int inRange = isInRange(evt.getNewValue());
 						int oldInRange = evt.getType() == CollectionChangeType.set ? isInRange(evt.getOldValue()) : 0;
+						CollectionElement<ElementId> presentEl;
 						if (inRange < 0) {
 							switch (evt.getType()) {
 							case add:
-								startIndex++;
 								break;
 							case remove:
-								startIndex--;
 								break;
 							case set:
-								if (oldInRange > 0)
-									startIndex++;
-								else if (oldInRange == 0)
-									fire(evt, CollectionChangeType.remove, evt.getOldValue(), evt.getOldValue());
+								if (oldInRange == 0) {
+									presentEl = thePresentElements.getElement(evt.getElementId(), true);// Get by value
+									int index = thePresentElements.getElementsBefore(presentEl.getElementId());
+									thePresentElements.mutableElement(presentEl.getElementId()).remove();
+									fire(evt, CollectionChangeType.remove, index, evt.getOldValue(), evt.getOldValue());
+								}
 							}
 						} else if (inRange > 0) {
 							switch (evt.getType()) {
 							case set:
-								if (oldInRange < 0)
-									startIndex--;
-								else if (oldInRange == 0)
-									fire(evt, CollectionChangeType.remove, evt.getOldValue(), evt.getOldValue());
+								if (oldInRange == 0) {
+									presentEl = thePresentElements.getElement(evt.getElementId(), true);// Get by value
+									int index = thePresentElements.getElementsBefore(presentEl.getElementId());
+									thePresentElements.mutableElement(presentEl.getElementId()).remove();
+									fire(evt, CollectionChangeType.remove, index, evt.getOldValue(), evt.getOldValue());
+								}
 								break;
 							default:
 							}
 						} else {
 							switch (evt.getType()) {
 							case add:
-								fire(evt, evt.getType(), null, evt.getNewValue());
+								presentEl = thePresentElements.addElement(evt.getElementId(), false);
+								int index = thePresentElements.getElementsBefore(presentEl.getElementId());
+								fire(evt, evt.getType(), index, null, evt.getNewValue());
 								break;
 							case remove:
-								fire(evt, evt.getType(), evt.getOldValue(), evt.getNewValue());
+								presentEl = thePresentElements.getElement(evt.getElementId(), true);// Get by value
+								index = thePresentElements.getElementsBefore(presentEl.getElementId());
+								thePresentElements.mutableElement(presentEl.getElementId()).remove();
+								fire(evt, evt.getType(), index, evt.getOldValue(), evt.getNewValue());
 								break;
 							case set:
-								// TODO This does not account for multi-value changes, i.e. when the entire collection changes in a single
-								// operation that must then be communicated in pieces.
-								// This is possible e.g. with a refresh/mapEquivalent combo
-								if (oldInRange < 0) {
-									startIndex--;
-									fire(evt, CollectionChangeType.add, null, evt.getNewValue());
-								} else if (oldInRange == 0)
-									fire(evt, CollectionChangeType.set, evt.getOldValue(), evt.getNewValue());
-								else
-									fire(evt, CollectionChangeType.add, null, evt.getNewValue());
+								if (oldInRange != 0) {
+									presentEl = thePresentElements.addElement(evt.getElementId(), false);
+									index = thePresentElements.getElementsBefore(presentEl.getElementId());
+									fire(evt, CollectionChangeType.add, index, null, evt.getNewValue());
+								} else {
+									presentEl = thePresentElements.getElement(evt.getElementId(), true);// Get by value
+									index = thePresentElements.getElementsBefore(presentEl.getElementId());
+									fire(evt, CollectionChangeType.set, index, evt.getOldValue(), evt.getNewValue());
+								}
 							}
 						}
 					}
 
-					void fire(ObservableCollectionEvent<? extends E> evt, CollectionChangeType type, E oldValue, E newValue) {
-						observer.accept(new ObservableCollectionEvent<>(evt.getElementId(), getType(), evt.getIndex() - startIndex,
-							evt.getType(), evt.getOldValue(), evt.getNewValue(), evt));
+					void fire(ObservableCollectionEvent<? extends E> evt, CollectionChangeType type, int index, E oldValue, E newValue) {
+						observer.accept(new ObservableCollectionEvent<>(evt.getElementId(), getType(), index, evt.getType(),
+							evt.getOldValue(), evt.getNewValue(), evt));
 					}
 				});
 			}
