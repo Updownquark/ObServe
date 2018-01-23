@@ -502,36 +502,22 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 	/**
 	 * @param compare The comparator to use to compare this collection's values
+	 * @param def The default value to use with an empty collection
+	 * @param first Whether to choose the first (Ternian#TRUE TRUE), last (Ternian#FALSE FALSE), or any (Ternian#NONE NONE) element in a tie
 	 * @return An observable value containing the minimum of the values, by the given comparator
 	 */
-	default ObservableValue<E> minBy(Comparator<? super E> compare) {
-		return reduce(getType(), null, (v1, v2) -> {
-			if (v1 == null)
-				return v2;
-			else if (v2 == null)
-				return v1;
-			else if (compare.compare(v1, v2) <= 0)
-				return v1;
-			else
-				return v2;
-		}, null);
+	default ObservableElement<E> minBy(Comparator<? super E> compare, Supplier<? extends E> def, Ternian first) {
+		return new ObservableCollectionImpl.BestCollectionElement<>(this, compare, def, first);
 	}
 
 	/**
 	 * @param compare The comparator to use to compare this collection's values
+	 * @param def The default value to use with an empty collection
+	 * @param first Whether to choose the first (Ternian#TRUE TRUE), last (Ternian#FALSE FALSE), or any (Ternian#NONE NONE) element in a tie
 	 * @return An observable value containing the maximum of the values, by the given comparator
 	 */
-	default ObservableValue<E> maxBy(Comparator<? super E> compare) {
-		return reduce(getType(), null, (v1, v2) -> {
-			if (v1 == null)
-				return v2;
-			else if (v2 == null)
-				return v1;
-			else if (compare.compare(v1, v2) >= 0)
-				return v1;
-			else
-				return v2;
-		}, null);
+	default ObservableElement<E> maxBy(Comparator<? super E> compare, Supplier<? extends E> def, Ternian first) {
+		return minBy(compare.reversed(), def, first);
 	}
 
 	/**

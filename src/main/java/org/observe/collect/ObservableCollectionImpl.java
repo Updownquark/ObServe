@@ -61,6 +61,8 @@ public final class ObservableCollectionImpl {
 
 	/**
 	 * @param <E> The type for the set
+	 * @param collection The collection to create the value set for (whose {@link ObservableCollection#equivalence() equivalence} will be
+	 *        used)
 	 * @param equiv The equivalence set to make a set of
 	 * @param c The collection whose values to add to the set
 	 * @return The set
@@ -342,6 +344,11 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
+	/**
+	 * An {@link ObservableElement} whose state reflects the value of an element within a collection whose value matches some condition
+	 *
+	 * @param <E> The type of the element
+	 */
 	public static abstract class AbstractObservableElementFinder<E> implements ObservableElement<E> {
 		private final ObservableCollection<E> theCollection;
 		private final Comparator<CollectionElement<? extends E>> theElementCompare;
@@ -351,6 +358,7 @@ public final class ObservableCollectionImpl {
 		 * @param collection The collection to find elements in
 		 * @param elementCompare A comparator to determine whether to prefer one {@link #test(Object) matching} element over another. When
 		 *        <code>elementCompare{@link Comparable#compareTo(Object) compareTo}(el1, el2)<0</code>, el1 will replace el2.
+		 * @param def The default value to use when no element matches this finder's condition
 		 */
 		public AbstractObservableElementFinder(ObservableCollection<E> collection,
 			Comparator<CollectionElement<? extends E>> elementCompare, Supplier<? extends E> def) {
@@ -359,6 +367,7 @@ public final class ObservableCollectionImpl {
 			theDefault = def;
 		}
 
+		/** @return The collection that this finder searches elements in */
 		protected ObservableCollection<E> getCollection() {
 			return theCollection;
 		}
@@ -388,8 +397,18 @@ public final class ObservableCollectionImpl {
 				return theDefault.get();
 		}
 
+		/**
+		 * Finds the value ad-hoc (stateless) from the concrete class
+		 *
+		 * @param onElement The consumer to give the element to when found
+		 * @return Whether an element matching this finder's condition was found
+		 */
 		protected abstract boolean find(Consumer<? super CollectionElement<? extends E>> onElement);
 
+		/**
+		 * @param value The value to test
+		 * @return Whether the value matches this finder's condition
+		 */
 		protected abstract boolean test(E value);
 
 		@Override
@@ -561,10 +580,20 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
+	/**
+	 * Finds an element in a collection with a value equivalent to a given value
+	 *
+	 * @param <E> The type of the element
+	 */
 	public static class ObservableEquivalentFinder<E> extends AbstractObservableElementFinder<E> {
 		private final E theValue;
 		private final boolean isFirst;
 
+		/**
+		 * @param collection The collection to find the element within
+		 * @param value The value to find
+		 * @param first Whether to search for the first, last, or any equivalent element
+		 */
 		public ObservableEquivalentFinder(ObservableCollection<E> collection, E value, boolean first) {
 			super(collection, (el1, el2) -> {
 				int compare = el1.getElementId().compareTo(el2.getElementId());
@@ -586,6 +615,61 @@ public final class ObservableCollectionImpl {
 		@Override
 		protected boolean test(E value) {
 			return getCollection().equivalence().elementEquals(theValue, value);
+		}
+	}
+
+	/**
+	 * Searches all the elements in a collection for the best by some measure
+	 *
+	 * @param <E> The type of the element
+	 */
+	public static class BestCollectionElement<E> extends AbstractObservableElementFinder<E> {
+		private final Comparator<? super E> theCompare;
+		private final Ternian isFirst;
+
+		/**
+		 * @param collection The collection to search within
+		 * @param compare The comparator for element values
+		 * @param def The default value for an empty collection
+		 * @param first Whether to use the first, last, or any element in a tie
+		 */
+		public BestCollectionElement(ObservableCollection<E> collection, Comparator<? super E> compare, Supplier<? extends E> def,
+			Ternian first) {
+			super(collection, (el1, el2) -> {
+				int comp = compare.compare(el1.get(), el2.get());
+				if (comp == 0 && first.value != null) {
+					comp = el1.getElementId().compareTo(el2.getElementId());
+					if (!first.value)
+						comp = -comp;
+				}
+				return comp;
+			}, def);
+			theCompare = compare;
+			isFirst = first;
+		}
+
+		@Override
+		protected boolean find(Consumer<? super CollectionElement<? extends E>> onElement) {
+			ValueHolder<CollectionElement<E>> best = new ValueHolder<>();
+			boolean last = !isFirst.withDefault(true);
+			getCollection().spliterator().forEachElement(el -> {
+				if (!best.isPresent())
+					best.accept(el);
+				else {
+					int comp = theCompare.compare(best.get().get(), el.get());
+					if (comp < 0)
+						best.accept(el);
+					else if (last && comp == 0)
+						best.accept(el);
+				}
+			}, true);
+			onElement.accept(best.get());
+			return best.isPresent();
+		}
+
+		@Override
+		protected boolean test(E value) {
+			return true;
 		}
 	}
 
@@ -673,27 +757,37 @@ public final class ObservableCollectionImpl {
 		protected abstract T getValue(X updated);
 	}
 
+	/**
+	 * A structure to keeps track of the number of occurrences of a particular value in two collections
+	 * 
+	 * @param <E> The type of the value to track
+	 */
 	public static class ValueCount<E> {
 		E value;
 		int left;
 		int right;
 
+		/** @param val The value to track */
 		public ValueCount(E val) {
 			value = val;
 		}
 
+		/** @return The value being tracked */
 		public E getValue() {
 			return value;
 		}
 
+		/** @return The number of occurrences of this value in the left collection */
 		public int getLeftCount() {
 			return left;
 		}
 
+		/** @return The number of occurrences of this value in the right collection */
 		public int getRightCount() {
 			return right;
 		}
 
+		/** @return Whether this value occurs at allin either collection */
 		public boolean isEmpty() {
 			return left == 0 && right == 0;
 		}
@@ -1042,7 +1136,13 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
+	/**
+	 * An {@link ObservableCollection} whose elements are reversed from its parent
+	 * 
+	 * @param <E> The type of values in the collection
+	 */
 	public static class ReversedObservableCollection<E> extends BetterList.ReversedList<E> implements ObservableCollection<E> {
+		/** @param wrapped The collection whose elements to reverse */
 		public ReversedObservableCollection(ObservableCollection<E> wrapped) {
 			super(wrapped);
 		}
@@ -1114,6 +1214,17 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
+	/**
+	 * A derived collection, {@link ObservableCollection.CollectionDataFlow#collect() collected} from a
+	 * {@link ObservableCollection.CollectionDataFlow}. A passive collection maintains no information about its sources (either the source
+	 * collection or any external sources from its flow), but relies on the state of the collection. Each listener to the collection
+	 * maintains its own state which is released when the listener is {@link Subscription#unsubscribe() unsubscribed}. This stateless
+	 * behavior cannot accommodate some categories of operations, but may be much more efficient for those it does support in many
+	 * situations.
+	 *
+	 * @param <E> The type of the source collection
+	 * @param <T> The type of values in the collection
+	 */
 	public static class PassiveDerivedCollection<E, T> implements ObservableCollection<T> {
 		private final ObservableCollection<E> theSource;
 		private final PassiveCollectionManager<E, ?, T> theFlow;
@@ -1463,8 +1574,20 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
+	/**
+	 * Stores strong references to actively-derived collections on which listeners are installed, preventing the garbage-collection of these
+	 * collections since the listeners only contain weak references to their data sources.
+	 */
 	private static final Set<ActiveDerivedCollection<?>> STRONG_REFS = new ConcurrentHashSet<>();
 
+	/**
+	 * A derived collection, {@link ObservableCollection.CollectionDataFlow#collect() collected} from a
+	 * {@link ObservableCollection.CollectionDataFlow}. An active collection maintains a sorted collection of derived elements, enabling
+	 * complex and order-affecting operations like {@link ObservableCollection.CollectionDataFlow#sorted(Comparator) sort} and
+	 * {@link ObservableCollection.CollectionDataFlow#distinct() distinct}.
+	 *
+	 * @param <T> The type of values in the collection
+	 */
 	public static class ActiveDerivedCollection<T> implements ObservableCollection<T> {
 		protected static class DerivedElementHolder<T> implements ElementId {
 			protected final DerivedCollectionElement<T> element;
@@ -1913,6 +2036,11 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
+	/**
+	 * An {@link ObservableCollection} whose contents are fixed
+	 *
+	 * @param <E> The type of values in the collection
+	 */
 	public static class ConstantCollection<E> implements ObservableCollection<E> {
 		private final TypeToken<E> theType;
 		private final BetterList<? extends E> theValues;
