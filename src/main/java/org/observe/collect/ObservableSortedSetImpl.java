@@ -63,7 +63,7 @@ public class ObservableSortedSetImpl {
 					else
 						return el1.getElementId().compareTo(el2.getElementId());// Both greater, so take the lesser of the two
 				}
-			});
+			}, () -> null);
 			theSearch = search;
 			theFilter = filter;
 		}

@@ -50,7 +50,6 @@ import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.tree.BetterTreeSet;
 import org.qommons.tree.BinaryTreeNode;
 
-import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 /** Holds default implementation methods and classes for {@link ObservableCollection} */
@@ -343,10 +342,10 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
-	public static abstract class AbstractObservableElementFinder<E> implements ObservableValue<CollectionElement<? extends E>> {
+	public static abstract class AbstractObservableElementFinder<E> implements ObservableElement<E> {
 		private final ObservableCollection<E> theCollection;
 		private final Comparator<CollectionElement<? extends E>> theElementCompare;
-		private final TypeToken<CollectionElement<? extends E>> theType;
+		private final Supplier<? extends E> theDefault;
 
 		/**
 		 * @param collection The collection to find elements in
@@ -354,10 +353,10 @@ public final class ObservableCollectionImpl {
 		 *        <code>elementCompare{@link Comparable#compareTo(Object) compareTo}(el1, el2)<0</code>, el1 will replace el2.
 		 */
 		public AbstractObservableElementFinder(ObservableCollection<E> collection,
-			Comparator<CollectionElement<? extends E>> elementCompare) {
+			Comparator<CollectionElement<? extends E>> elementCompare, Supplier<? extends E> def) {
 			theCollection = collection;
 			theElementCompare = elementCompare;
-			theType = new TypeToken<CollectionElement<? extends E>>() {}.where(new TypeParameter<E>() {}, collection.getType().wrap());
+			theDefault = def;
 		}
 
 		protected ObservableCollection<E> getCollection() {
@@ -365,15 +364,28 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public TypeToken<CollectionElement<? extends E>> getType() {
-			return theType;
+		public TypeToken<E> getType() {
+			return theCollection.getType();
 		}
 
 		@Override
-		public CollectionElement<? extends E> get() {
-			CollectionElement<? extends E>[] element = new CollectionElement[1];
-			find(el -> element[0] = new SimpleElement(el.getElementId(), el.get()));
-			return element[0];
+		public ElementId getElementId() {
+			ValueHolder<CollectionElement<E>> element = new ValueHolder<>();
+			find(el -> element.accept(new SimpleElement(el.getElementId(), el.get())));
+			if (element.get() != null)
+				return element.get().getElementId();
+			else
+				return null;
+		}
+
+		@Override
+		public E get() {
+			ValueHolder<CollectionElement<E>> element = new ValueHolder<>();
+			find(el -> element.accept(new SimpleElement(el.getElementId(), el.get())));
+			if (element.get() != null)
+				return element.get().get();
+			else
+				return theDefault.get();
 		}
 
 		protected abstract boolean find(Consumer<? super CollectionElement<? extends E>> onElement);
@@ -381,10 +393,10 @@ public final class ObservableCollectionImpl {
 		protected abstract boolean test(E value);
 
 		@Override
-		public Observable<ObservableValueEvent<CollectionElement<? extends E>>> changes() {
-			return new Observable<ObservableValueEvent<CollectionElement<? extends E>>>() {
+		public Observable<ObservableElementEvent<E>> elementChanges() {
+			return new Observable<ObservableElementEvent<E>>() {
 				@Override
-				public Subscription subscribe(Observer<? super ObservableValueEvent<CollectionElement<? extends E>>> observer) {
+				public Subscription subscribe(Observer<? super ObservableElementEvent<E>> observer) {
 					try (Transaction t = theCollection.lock(false, null)) {
 						class FinderListener implements Consumer<ObservableCollectionEvent<? extends E>> {
 							private SimpleElement theCurrentElement;
@@ -400,7 +412,11 @@ public final class ObservableCollectionImpl {
 											theCurrentElement = null;
 									} else
 										theCurrentElement = (SimpleElement) data.get("replacement");
-									observer.onNext(createChangeEvent(oldElement, theCurrentElement, cause));
+									ElementId oldId = oldElement == null ? null : oldElement.getElementId();
+									ElementId newId = theCurrentElement == null ? null : theCurrentElement.getElementId();
+									E oldVal = oldElement == null ? theDefault.get() : oldElement.get();
+									E newVal = theCurrentElement == null ? theDefault.get() : theCurrentElement.get();
+									observer.onNext(createChangeEvent(oldId, oldVal, newId, newVal, cause));
 								});
 							}
 
@@ -452,7 +468,9 @@ public final class ObservableCollectionImpl {
 						}))
 							listener.theCurrentElement = null;
 						Subscription collSub = theCollection.onChange(listener);
-						observer.onNext(createInitialEvent(listener.theCurrentElement, null));
+						ElementId initId = listener.theCurrentElement == null ? null : listener.theCurrentElement.getElementId();
+						E initVal = listener.theCurrentElement == null ? theDefault.get() : listener.theCurrentElement.get();
+						observer.onNext(createInitialEvent(initId, initVal, null));
 						return new Subscription() {
 							private boolean isDone;
 
@@ -462,7 +480,9 @@ public final class ObservableCollectionImpl {
 									return;
 								isDone = true;
 								collSub.unsubscribe();
-								observer.onCompleted(createChangeEvent(listener.theCurrentElement, listener.theCurrentElement, null));
+								ElementId endId = listener.theCurrentElement == null ? null : listener.theCurrentElement.getElementId();
+								E endVal = listener.theCurrentElement == null ? theDefault.get() : listener.theCurrentElement.get();
+								observer.onCompleted(createChangeEvent(endId, endVal, endId, endVal, null));
 							}
 						};
 					}
@@ -513,9 +533,11 @@ public final class ObservableCollectionImpl {
 		/**
 		 * @param collection The collection to find elements in
 		 * @param test The test to find elements that pass
+		 * @param def The default value to use when no passing element is found in the collection
 		 * @param first Whether to get the first value in the collection that passes, the last value, or any passing value
 		 */
-		protected ObservableCollectionFinder(ObservableCollection<E> collection, Predicate<? super E> test, Ternian first) {
+		protected ObservableCollectionFinder(ObservableCollection<E> collection, Predicate<? super E> test, Supplier<? extends E> def,
+			Ternian first) {
 			super(collection, (el1, el2) -> {
 				if (first == Ternian.NONE)
 					return 0;
@@ -523,7 +545,7 @@ public final class ObservableCollectionImpl {
 				if (!first.value)
 					compare = -compare;
 				return compare;
-			});
+			}, def);
 			theTest = test;
 			isFirst = first;
 		}
@@ -549,7 +571,7 @@ public final class ObservableCollectionImpl {
 				if (!first)
 					compare = -compare;
 				return compare;
-			});
+			}, () -> null);
 			if (!collection.belongs(value))
 				throw new IllegalArgumentException("Illegal value for collection: " + value);
 			theValue = value;

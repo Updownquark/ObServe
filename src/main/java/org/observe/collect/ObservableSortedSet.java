@@ -115,7 +115,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 	 * @return An observable value with the result of the operation
 	 */
 	default ObservableValue<E> observeRelative(Comparable<? super E> search, SortedSearchFilter filter, Supplier<? extends E> def) {
-		return new ObservableSortedSetImpl.RelativeFinder<>(this, search, filter).map(getType(), el -> el != null ? el.get() : def.get());
+		return new ObservableSortedSetImpl.RelativeFinder<>(this, search, filter);
 	}
 
 	@Override
