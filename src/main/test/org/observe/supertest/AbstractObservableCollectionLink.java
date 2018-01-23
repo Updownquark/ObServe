@@ -24,6 +24,7 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl;
 import org.observe.collect.ObservableCollectionTester;
+import org.observe.collect.ObservableSortedSet;
 import org.observe.supertest.MappedCollectionLink.TypeTransformation;
 import org.observe.supertest.ObservableChainTester.TestValueType;
 import org.qommons.BiTuple;
@@ -661,19 +662,23 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		try {
 			theCollection.add(-1, theSupplier.apply(helper));
 			Assert.assertFalse("Should have errored", true);
-		} catch (IndexOutOfBoundsException e) {}
+		} catch (IndexOutOfBoundsException | IllegalArgumentException e) { // We'll allow either exception
+		}
 		try {
 			theCollection.add(theCollection.size() + 1, theSupplier.apply(helper));
 			Assert.assertFalse("Should have errored", true);
-		} catch (IndexOutOfBoundsException e) {}
+		} catch (IndexOutOfBoundsException | IllegalArgumentException e) { // We'll allow either exception
+		}
 		try {
 			theCollection.set(-1, theSupplier.apply(helper));
 			Assert.assertFalse("Should have errored", true);
-		} catch (IndexOutOfBoundsException e) {}
+		} catch (IndexOutOfBoundsException | IllegalArgumentException e) { // We'll allow either exception
+		}
 		try {
 			theCollection.set(theCollection.size() + 1, theSupplier.apply(helper));
 			Assert.assertFalse("Should have errored", true);
-		} catch (IndexOutOfBoundsException e) {}
+		} catch (IndexOutOfBoundsException | IllegalArgumentException e) { // We'll allow either exception
+		}
 	}
 
 	protected void modified(List<CollectionOp<T>> ops, TestHelper helper, boolean propagateUp) {
@@ -707,7 +712,8 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 	public <X> ObservableChainLink<X> derive(TestHelper helper) {
 		ValueHolder<ObservableChainLink<X>> derived = new ValueHolder<>();
 		ValueHolder<CollectionDataFlow<?, ?, X>> derivedFlow = new ValueHolder<>();
-		helper.doAction(1, () -> { // map
+		TestHelper.RandomAction action=helper//
+			.doAction(1, () -> { // map
 			ObservableChainTester.TestValueType nextType = ObservableChainTester.nextType(helper);
 			SimpleSettableValue<TypeTransformation<T, X>> txValue = new SimpleSettableValue<>(
 				(TypeToken<TypeTransformation<T, X>>) (TypeToken<?>) new TypeToken<Object>() {}, false);
@@ -738,8 +744,6 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		// TODO containsAll
 		// TODO only
 		// TODO reduce
-		// TODO subset
-		// TODO observeRelative
 		// TODO flow reverse
 		.or(1, () -> { // filter/refresh
 			// Getting a java.lang.InternalError: Enclosing method not found when I try to do the TypeToken right.
@@ -757,7 +761,6 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			derived.accept((ObservableChainLink<X>) theChild);
 		})//
 		// TODO whereContained
-		// TODO withEquivalence
 		// TODO refreshEach
 		// TODO combine
 		// TODO flattenValues
@@ -777,7 +780,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				flow = flow.withEquivalence(Equivalence.of((Class<T>) getType().getRawType(), compare, false));
 			}
 			derivedFlow.accept((CollectionDataFlow<?, ?, X>) flow.distinct(opts -> {
-				// opts.useFirst(helper.getBoolean()).preserveSourceOrder(opts.canPreserveSourceOrder() && helper.getBoolean());
+				// opts.useFirst(helper.getBoolean()).preserveSourceOrder(opts.canPreserveSourceOrder() && helper.getBoolean()); TODO
 				options.accept(opts);
 			}));
 			theChild = new DistinctCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), theFlow, helper,
@@ -793,8 +796,47 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			theChild = new DistinctCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), theFlow, helper,
 				theTester.isCheckingRemovedValues(), options, false);
 			derived.accept((ObservableChainLink<X>) theChild);
-		})//
-		.or(1, () -> {// filterMod
+		});//
+		if(theCollection instanceof ObservableSortedSet){
+			ObservableSortedSet<T> sortedSet = (ObservableSortedSet<T>) theCollection;
+			action.or(1, () -> { // subSet
+				T min, max;
+				boolean includeMin, includeMax;
+				ObservableSortedSet<T> subSet;
+				if (helper.getBoolean(.33)) {
+					min = theSupplier.apply(helper);
+					includeMin = helper.getBoolean();
+					max = null;
+					includeMax = true;
+					subSet = sortedSet.tailSet(min, includeMin);
+				} else if (helper.getBoolean()) {
+					max = theSupplier.apply(helper);
+					includeMax = helper.getBoolean();
+					min = null;
+					includeMin = true;
+					subSet = sortedSet.headSet(max, includeMax);
+				} else {
+					T v1 = theSupplier.apply(helper);
+					T v2 = theSupplier.apply(helper);
+					if (sortedSet.comparator().compare(v1, v2) <= 0) {
+						min = v1;
+						max = v2;
+					} else {
+						min = v2;
+						max = v1;
+					}
+					includeMin = helper.getBoolean();
+					includeMax = helper.getBoolean();
+					subSet = sortedSet.subSet(min, includeMin, max, includeMax);
+				}
+				derivedFlow.accept((CollectionDataFlow<?, ?, X>) subSet.flow());
+				theChild = new SubSetLink<>(this, theType, (ObservableCollection.UniqueSortedDataFlow<?, ?, T>) derivedFlow.get(), helper,
+					false, true, min, includeMin, max, includeMax);
+				derived.accept((ObservableChainLink<X>) theChild);
+			});
+			// TODO observeRelative
+		}
+		action.or(1, () -> {// filterMod
 			ValueHolder<ObservableCollection.ModFilterBuilder<T>> filter = new ValueHolder<>();
 			derivedFlow.accept((CollectionDataFlow<?, ?, X>) theFlow.filterMod(f -> {
 				if (helper.getBoolean(.1))
@@ -817,7 +859,8 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		})//
 		// TODO groupBy
 		// TODO groupBy(Sorted)
-		.execute(null);
+		;
+		action.execute(null);
 		return derived.get();
 	}
 }
