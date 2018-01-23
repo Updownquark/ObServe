@@ -148,16 +148,15 @@ public class SubSetLink<E> extends AbstractObservableCollectionLink<E, E> {
 						includedEntry = theIncludedValues.putEntry(srcId, op.value, false);
 						subSetOps.add(new CollectionOp<>(CollectionChangeType.add, op.value,
 							theIncludedValues.keySet().getElementsBefore(includedEntry.getElementId())));
-						if (oldValid < 0)
-							theStartIndex--;
 					}
 				} else if (oldValid == 0) {
 					subSetOps.add(new CollectionOp<>(CollectionChangeType.remove, includedEntry.getValue(),
 						theIncludedValues.keySet().getElementsBefore(includedEntry.getElementId())));
 					theIncludedValues.mutableEntry(includedEntry.getElementId()).remove();
-					if (valid < 0)
-						theStartIndex++;
-				} else if (oldValid > 0 && valid < 0)
+				}
+				if (oldValid < 0 && valid >= 0)
+					theStartIndex--;
+				else if (valid < 0 && oldValid >= 0)
 					theStartIndex++;
 			}
 		}
