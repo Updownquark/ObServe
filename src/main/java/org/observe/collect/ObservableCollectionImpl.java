@@ -759,7 +759,7 @@ public final class ObservableCollectionImpl {
 
 	/**
 	 * A structure to keeps track of the number of occurrences of a particular value in two collections
-	 * 
+	 *
 	 * @param <E> The type of the value to track
 	 */
 	public static class ValueCount<E> {
@@ -787,7 +787,7 @@ public final class ObservableCollectionImpl {
 			return right;
 		}
 
-		/** @return Whether this value occurs at allin either collection */
+		/** @return Whether this value occurs at all in either collection */
 		public boolean isEmpty() {
 			return left == 0 && right == 0;
 		}
@@ -1138,7 +1138,7 @@ public final class ObservableCollectionImpl {
 
 	/**
 	 * An {@link ObservableCollection} whose elements are reversed from its parent
-	 * 
+	 *
 	 * @param <E> The type of values in the collection
 	 */
 	public static class ReversedObservableCollection<E> extends BetterList.ReversedList<E> implements ObservableCollection<E> {

@@ -137,14 +137,18 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public ObservableSortedSet<E> subSet(Comparable<? super E> from, Comparable<? super E> to) {
-			return new ObservableSubSet<>(getWrapped(), boundSearch(from), boundSearch(to));
+			return new ObservableSubSet<>(getWrapped(), and(from, true), and(to, false));
 		}
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
 			try (Transaction t = lock(false, null)) {
 				return getWrapped().onChange(new Consumer<ObservableCollectionEvent<? extends E>>() {
-					private final BetterSortedSet<ElementId> thePresentElements = new BetterTreeSet<>(false, ElementId::compareTo);
+					private final BetterSortedSet<ElementId> thePresentElements;
+					{
+						thePresentElements = new BetterTreeSet<>(false, ElementId::compareTo);
+						spliterator().forEachElement(el -> thePresentElements.add(el.getElementId()), true);
+					}
 
 					@Override
 					public void accept(ObservableCollectionEvent<? extends E> evt) {
@@ -205,8 +209,8 @@ public class ObservableSortedSetImpl {
 					}
 
 					void fire(ObservableCollectionEvent<? extends E> evt, CollectionChangeType type, int index, E oldValue, E newValue) {
-						observer.accept(new ObservableCollectionEvent<>(evt.getElementId(), getType(), index, evt.getType(),
-							evt.getOldValue(), evt.getNewValue(), evt));
+						observer
+						.accept(new ObservableCollectionEvent<>(evt.getElementId(), getType(), index, type, oldValue, newValue, evt));
 					}
 				});
 			}
