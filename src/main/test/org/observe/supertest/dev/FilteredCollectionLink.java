@@ -164,6 +164,7 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 				break;
 			case set:
 				srcId = theSourceValues.getElement(op.index).getElementId();
+				E oldValue = theSourceValues.getElement(srcId).get();
 				theSourceValues.mutableElement(srcId).set(op.value);
 				presentEl = thePresentSourceElements.getElement(srcId, true); // By value, not by element ID
 				if (presentEl != null) {
@@ -171,7 +172,7 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 					if (theFilter.apply(op.value) == null)
 						filterOps.add(new CollectionOp<>(CollectionChangeType.set, op.value, presentIndex));
 					else {
-						filterOps.add(new CollectionOp<>(CollectionChangeType.remove, op.value, presentIndex));
+						filterOps.add(new CollectionOp<>(CollectionChangeType.remove, oldValue, presentIndex));
 						thePresentSourceElements.mutableElement(presentEl.getElementId()).remove();
 					}
 				} else {
