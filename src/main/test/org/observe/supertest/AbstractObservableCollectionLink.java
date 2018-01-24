@@ -12,6 +12,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import org.junit.Assert;
@@ -24,17 +25,22 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl;
 import org.observe.collect.ObservableCollectionTester;
+import org.observe.collect.ObservableElement;
+import org.observe.collect.ObservableElementTester;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.supertest.MappedCollectionLink.TypeTransformation;
 import org.observe.supertest.ObservableChainTester.TestValueType;
 import org.qommons.BiTuple;
+import org.qommons.Ternian;
 import org.qommons.TestHelper;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSet;
+import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.tree.BetterTreeList;
 
@@ -50,6 +56,13 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 	private final Function<TestHelper, T> theSupplier;
 
 	private final BetterList<BiTuple<Integer, T>> theNewValues;
+
+	// Extras
+	private ObservableElement<T> theMonitoredElement;
+	private Supplier<CollectionElement<T>> theCorrectMonitoredElement;
+	private ObservableElementTester<T> theMonitoredElementTester;
+
+	private String theExtras;
 
 	AbstractObservableCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type,
 		CollectionDataFlow<?, ?, T> flow, TestHelper helper, boolean rebasedFlowRequired, boolean checkRemovedValues) {
@@ -89,6 +102,103 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			default:
 			}
 		});
+
+		// Extras
+		theExtras = "";
+		// TODO This might be better as another link in the chain when value testing is implemented
+		TestHelper.RandomAction extraAction = helper.doAction(10, () -> {
+			// Usually, do nothing
+		}).or(1, () -> { // observeElement
+			T value = theSupplier.apply(helper);
+			boolean first = helper.getBoolean();
+			theExtras = ", equivalent(" + value + ", " + (first ? "first" : "last") + ")";
+			theMonitoredElement = theCollection.observeElement(value, first);
+			theCorrectMonitoredElement = () -> {
+				ValueHolder<CollectionElement<T>> el = new ValueHolder<>();
+				ElementSpliterator<T> spliter = theCollection.spliterator(first);
+				while (el.get() == null && spliter.forElement(e -> {
+					if (theCollection.equivalence().elementEquals(e.get(), value))
+						el.accept(e);
+				}, first)) {}
+				return el.get();
+			};
+		}).or(1, () -> { // min/max
+			Comparator<T> compare = SortedCollectionLink.compare(type, helper);
+			boolean min = helper.getBoolean();
+			boolean first = helper.getBoolean();
+			if (min || !first)
+				return;
+			theExtras = ", " + (min ? "min" : "max") + "(" + (first ? "first" : "last") + ")";
+			theMonitoredElement = min ? theCollection.minBy(compare, () -> null, Ternian.of(first))
+				: theCollection.maxBy(compare, () -> null, Ternian.of(first));
+			theCorrectMonitoredElement = () -> {
+				ValueHolder<CollectionElement<T>> el = new ValueHolder<>();
+				ElementSpliterator<T> spliter = theCollection.spliterator();
+				while (spliter.forElement(e -> {
+					boolean better = el.get() == null;
+					if (!better) {
+						int comp = compare.compare(e.get(), el.get().get());
+						if (comp == 0)
+							better = !first;
+						else if ((comp < 0) == min)
+							better = true;
+					}
+					if (better) {
+						el.accept(e);
+						return;
+					}
+				}, true)) {}
+				return el.get();
+			};
+		}).or(1, () -> { // First/last
+			boolean first = helper.getBoolean();
+			theExtras = ", " + (first ? "first" : "last");
+			theMonitoredElement = theCollection.observeFind(v -> true, () -> null, first);
+			theCorrectMonitoredElement = () -> theCollection.getTerminalElement(first);
+		});
+		if (theCollection instanceof ObservableSortedSet) {
+			extraAction.or(5, () -> { // observeRelative
+				T value = theSupplier.apply(helper);
+				SortedSearchFilter filter = SortedSearchFilter.values()[helper.getInt(0, SortedSearchFilter.values().length)];
+				theExtras = ", " + filter.getSymbol() + value;
+				ObservableSortedSet<T> ss = (ObservableSortedSet<T>) theCollection;
+				theMonitoredElement = ss.observeRelative(ss.searchFor(value, 0), filter, () -> null);
+				theCorrectMonitoredElement = () -> {
+					ValueHolder<CollectionElement<T>> preEl = new ValueHolder<>();
+					ValueHolder<CollectionElement<T>> exactEl = new ValueHolder<>();
+					ValueHolder<CollectionElement<T>> postEl = new ValueHolder<>();
+					ElementSpliterator<T> spliter = theCollection.spliterator();
+					while (!(exactEl.isPresent() || postEl.isPresent()) && spliter.forElement(e -> {
+						int comp = ss.comparator().compare(e.get(), value);
+						if (comp == 0)
+							exactEl.accept(e);
+						else if (comp > 0)
+							postEl.accept(e);
+						else
+							preEl.accept(e);
+					}, true)) {}
+					if (exactEl.isPresent()) // Exact always satisfies the filter
+						return exactEl.get();
+					switch (filter) {
+					case Less:
+						return preEl.get();
+					case PreferLess:
+						return preEl.isPresent() ? preEl.get() : postEl.get();
+					case OnlyMatch:
+						return null;
+					case PreferGreater:
+						return postEl.isPresent() ? postEl.get() : preEl.get();
+					case Greater:
+						return postEl.get();
+					default:
+						throw new IllegalStateException();
+					}
+				};
+			});
+		}
+		extraAction.execute(null);
+		if (theMonitoredElement != null)
+			theMonitoredElementTester = new ObservableElementTester<>(theMonitoredElement);
 	}
 
 	@Override
@@ -128,6 +238,10 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 
 	BiTuple<Integer, T> getNextAddition() {
 		return theNewValues.pollFirst();
+	}
+
+	protected String getExtras() {
+		return theExtras;
 	}
 
 	@Override
@@ -705,6 +819,12 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			theTester.check();
 		else
 			theTester.checkNonBatchSynced();
+
+		if (transComplete && theMonitoredElement != null) {
+			CollectionElement<T> correct = theCorrectMonitoredElement.get();
+			theMonitoredElementTester.check(correct == null ? null : correct.getElementId(), correct == null ? null : correct.get());
+		}
+
 		theNewValues.clear();
 	}
 

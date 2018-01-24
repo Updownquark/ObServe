@@ -138,6 +138,7 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 		String s = "mapped(" + theMap;
 		if (isMapVariable)
 			s += ", variable";
+		s += getExtras();
 		s += ")";
 		return s;
 	}

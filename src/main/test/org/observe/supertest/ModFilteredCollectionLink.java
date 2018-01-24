@@ -83,6 +83,6 @@ public class ModFilteredCollectionLink<E> extends AbstractObservableCollectionLi
 
 	@Override
 	public String toString() {
-		return "mod-filtered(" + theFilter + ")";
+		return "mod-filtered(" + theFilter + getExtras() + ")";
 	}
 }

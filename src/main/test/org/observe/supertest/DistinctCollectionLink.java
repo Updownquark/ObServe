@@ -531,6 +531,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		str.append(getCollection().equivalence() instanceof Equivalence.ComparatorEquivalence ? "sorted" : "hash");
 		if (isRoot)
 			str.append(" ").append(getTestType());
+		str.append(getExtras());
 		str.append(")");
 		return str.toString();
 	}

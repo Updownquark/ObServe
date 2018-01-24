@@ -39,8 +39,8 @@ public class SimpleCollectionLink<E> extends AbstractObservableCollectionLink<E,
 	@Override
 	public String toString() {
 		if (getParent() != null)
-			return "simple";
+			return "simple(" + getExtras() + ")";
 		else
-			return "base(" + getTestType() + ")";
+			return "base(" + getTestType() + getExtras() + ")";
 	}
 }
