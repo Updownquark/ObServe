@@ -126,8 +126,6 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			Comparator<T> compare = SortedCollectionLink.compare(type, helper);
 			boolean min = helper.getBoolean();
 			boolean first = helper.getBoolean();
-			if (min || !first)
-				return;
 			theExtras = ", " + (min ? "min" : "max") + "(" + (first ? "first" : "last") + ")";
 			theMonitoredElement = min ? theCollection.minBy(compare, () -> null, Ternian.of(first))
 				: theCollection.maxBy(compare, () -> null, Ternian.of(first));
