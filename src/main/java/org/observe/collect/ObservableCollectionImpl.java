@@ -609,19 +609,29 @@ public final class ObservableCollectionImpl {
 				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 					ValueHolder<X> x = new ValueHolder<>();
 					ValueHolder<T> value = new ValueHolder<>();
+					boolean[] init = new boolean[1];
 					Causable.CausableKey key = Causable
-						.key((root, values) -> fireChangeEvent((T) values.get("oldValue"), value.get(), root, observer::onNext));
+						.key((root, values) -> {
+							T oldV = value.get();
+							T v = getValue((X) values.get("x"));
+							value.accept(v);
+							if (!init[0])
+								fireChangeEvent(oldV, v, root, observer::onNext);
+						});
 					x.accept(init());
 					value.accept(getValue(x.get()));
-					Subscription sub = theCollection.onChange(evt -> {
-						T oldV = value.get();
-						X newX = update(x.get(), evt);
-						x.accept(newX);
-						value.accept(getValue(newX));
-						evt.getRootCausable().onFinish(key)
-						.computeIfAbsent("oldValue", k -> oldV);
-					});
-					fireInitialEvent(value.get(), null, observer::onNext);
+					Subscription sub;
+					try (Transaction t = theCollection.lock(false, null)) {
+						sub = theCollection.onChange(evt -> {
+							X newX = update(x.get(), evt);
+							x.accept(newX);
+
+							Map<Object, Object> values = evt.getRootCausable().onFinish(key);
+							values.put("x", newX);
+						});
+						fireInitialEvent(value.get(), null, observer::onNext);
+						init[0] = false;
+					}
 					return sub;
 				}
 			};

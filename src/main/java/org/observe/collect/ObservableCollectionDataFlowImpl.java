@@ -1022,7 +1022,9 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public Transaction lock(boolean write, Object cause) {
-			return theSource.lock(write, cause);
+			// The derived collection takes care of locking the source
+			// return theSource.lock(write, cause);
+			return Transaction.NONE;
 		}
 
 		@Override

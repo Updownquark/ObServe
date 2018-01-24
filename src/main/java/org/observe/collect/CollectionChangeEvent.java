@@ -90,6 +90,16 @@ public class CollectionChangeEvent<E> extends Causable {
 		};
 	}
 
+	/**
+	 * Differs from the {@link #elements} field in that if this change's {@link #type} is {@link CollectionChangeType#remove}, the element
+	 * list is {@link #getElementsReversed() reversed}, since this is generally the order elements should be processed.
+	 * 
+	 * @return The (possibly reversed) list of elements in this change
+	 */
+	public List<ElementChange<E>> getElements() {
+		return type == CollectionChangeType.remove ? getElementsReversed() : elements;
+	}
+
 	/** @return a list of this change's {@link #elements}, ordered by descending index */
 	public List<ElementChange<E>> getElementsReversed() {
 		return new AbstractList<ElementChange<E>>() {
