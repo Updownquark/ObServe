@@ -4,7 +4,6 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -28,7 +27,6 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.tree.BetterTreeSet;
 
-import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 public class ObservableSortedSetImpl {
@@ -52,13 +50,14 @@ public class ObservableSortedSetImpl {
 				// Neither are a perfect match.
 				// From here on, it's safe to assume filter.less.value is non-null because otherwise one or the other element
 				// would not have passed the test method.
-				else if (comp1 < 0) {
-					if (comp2 < 0)
+				// Keep in mind that the comparisons were based on the search value first, so the signs here are a bit counterintuitive
+				else if (comp1 > 0) {
+					if (comp2 > 0)
 						return -el1.getElementId().compareTo(el2.getElementId());// Both less, so take the greater of the two
 					else
 						return filter.less.value ? -1 : 1;
 				} else {
-					if (comp2 < 0)
+					if (comp2 > 0)
 						return filter.less.value ? 1 : -1;
 					else
 						return el1.getElementId().compareTo(el2.getElementId());// Both greater, so take the lesser of the two
@@ -84,9 +83,17 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		protected boolean test(E value) {
-			if (theFilter == SortedSearchFilter.OnlyMatch && theSearch.compareTo(value) != 0)
-				return false;
-			return true;
+			// Keep in mind that the comparisons were based on the search value first, so the signs here are a bit counterintuitive
+			switch (theFilter) {
+			case Less:
+				return theSearch.compareTo(value) >= 0;
+			case OnlyMatch:
+				return theSearch.compareTo(value) == 0;
+			case Greater:
+				return theSearch.compareTo(value) <= 0;
+			default:
+				return true;
+			}
 		}
 	}
 
@@ -719,13 +726,6 @@ public class ObservableSortedSetImpl {
 			if (wrapped == null)
 				return null;
 			return wrapped.search(search, filter);
-		}
-
-		@Override
-		public ObservableValue<E> observeRelative(Comparable<? super E> value, SortedSearchFilter filter, Supplier<? extends E> def) {
-			return ObservableValue
-				.flatten(getWrapped().map(new TypeToken<ObservableValue<E>>() {}.where(new TypeParameter<E>() {}, getType()),
-					v -> v == null ? null : v.observeRelative(value, filter, def)));
 		}
 	}
 }
