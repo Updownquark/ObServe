@@ -1030,11 +1030,13 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 										if (!firedInit2[0])
 											throw new IllegalStateException(innerObs + " did not fire an initial value");
 									} else {
+										T newValue = get(event.getNewValue());
 										ObservableValueEvent<T> toFire;
 										if (event.isInitial())
-											toFire = retObs.createInitialEvent(get(null), event.getCause());
+											toFire = retObs.createInitialEvent(newValue, event.getCause());
 										else
-											toFire = retObs.createChangeEvent((T) old[0], get(null), event.getCause());
+											toFire = retObs.createChangeEvent((T) old[0], newValue, event.getCause());
+										old[0] = newValue;
 										try (Transaction t = ObservableValueEvent.use(toFire)) {
 											observer.onNext(toFire);
 										}
