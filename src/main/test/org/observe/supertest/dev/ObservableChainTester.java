@@ -226,8 +226,8 @@ public class ObservableChainTester implements Testable {
 			} catch (Error e) {
 				System.err.println("Chain is " + printChain());
 				System.err.println("Link " + linkIndex);
-				System.err.println(
-					"Integrity check failure on transaction close on link " + failedLink + " after " + modifications + " modifications");
+				System.err.println("Integrity check failure after transaction " + (tri + 1) + " close on link " + failedLink + " after "
+					+ modifications + " modifications");
 				throw e;
 			}
 		}
