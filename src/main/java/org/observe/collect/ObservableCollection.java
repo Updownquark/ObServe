@@ -184,7 +184,8 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		Subscription changeSub;
 		try (Transaction t = lock(false, null)) {
 			// Initial events
-			int[] index = new int[] { forward ? 0 : size() - 1 };
+//			int[] index = new int[] { forward ? 0 : size() - 1 };
+			int [] index=new int[]{0};
 			SubscriptionCause cause = new SubscriptionCause();
 			try (Transaction ct = SubscriptionCause.use(cause)) {
 				spliterator(forward).forEachElement(el -> {
@@ -193,8 +194,8 @@ public interface ObservableCollection<E> extends BetterList<E> {
 					observer.accept(event);
 					if (forward)
 						index[0]++;
-					else
-						index[0]--;
+//					else
+//						index[0]--;
 				}, forward);
 			}
 			// Subscribe changes
@@ -206,7 +207,8 @@ public interface ObservableCollection<E> extends BetterList<E> {
 				changeSub.unsubscribe();
 				if (removeAll) {
 					// Remove events
-					int[] index = new int[] { forward ? 0 : size() - 1 };
+//					int[] index = new int[] { forward ? 0 : size() - 1 };
+					int [] index=new int []{0};
 					SubscriptionCause cause = new SubscriptionCause();
 					try (Transaction ct = SubscriptionCause.use(cause)) {
 						spliterator(forward).forEachElement(el -> {
@@ -214,8 +216,8 @@ public interface ObservableCollection<E> extends BetterList<E> {
 							ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(), index[0],
 								CollectionChangeType.remove, value, value, cause);
 							observer.accept(event);
-							if (!forward)
-								index[0]--;
+//							if (!forward)
+//								index[0]--;
 						}, forward);
 					}
 				}

@@ -420,13 +420,18 @@ public class ObservableSetImpl {
 				throw new IllegalArgumentException(StdMsg.ELEMENT_EXISTS);
 			// Change the first element to be the element at the new value
 			UniqueElement first = (UniqueElement) elements.iterator().next();
+			T oldValue = first.theValue;
 			first.moveTo(newValue);
-			theParent.setValues(//
-				elements.stream().flatMap(el -> {
-					UniqueElement uel = (UniqueElement) el;
-					return Stream.concat(Stream.of(uel.theActiveElement), //
-						uel.theParentElements.keySet().stream().filter(pe -> pe != uel.theActiveElement));
-				}).collect(Collectors.toList()), newValue);
+			try {
+				theParent.setValues(//
+					elements.stream().flatMap(el -> {
+						UniqueElement uel = (UniqueElement) el;
+						return Stream.concat(Stream.of(uel.theActiveElement), //
+							uel.theParentElements.keySet().stream().filter(pe -> pe != uel.theActiveElement));
+					}).collect(Collectors.toList()), newValue);
+			} catch (RuntimeException e) {
+				first.moveTo(oldValue);
+			}
 		}
 
 		@Override

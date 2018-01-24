@@ -1216,7 +1216,8 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public void setValue(Collection<ElementId> elements, E value) {
-			getWrapped().setValue(elements.stream().map(el -> el.reverse()).collect(Collectors.toList()), value);
+			getWrapped().setValue(//
+				elements.stream().map(el -> el.reverse()).collect(Collectors.toList()), value);
 		}
 
 		@Override
