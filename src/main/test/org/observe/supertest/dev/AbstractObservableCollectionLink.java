@@ -401,6 +401,20 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			retainAllInCollection(values, ops, modify, helper);
 			Collections.reverse(ops); // Indices need to be descending
 			postModify(ops, subListStart, helper);
+		}).or(.1, () -> { // clear
+			if (helper.isReproducing())
+				System.out.println("clear()");
+			List<CollectionOp<T>> ops = new ArrayList<>();
+			for (int i = 0; i < modify.size(); i++) {
+				CollectionOp<T> op = new CollectionOp<>(null, remove, modify.get(i), i);
+				ops.add(op);
+			}
+			checkModifiable(ops, subListStart, subListEnd, helper);
+			if (helper.isReproducing())
+				System.out.println("\tShould remove " + ops.size() + " " + CollectionOp.print(ops));
+			clearCollection(ops, modify, helper);
+			Collections.reverse(ops); // Indices need to be descending
+			postModify(ops, subListStart, helper);
 		}).or(1, () -> {
 			if (helper.isReproducing())
 				System.out.println("[" + getLinkIndex() + "]: Check bounds");
@@ -744,6 +758,22 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				Assert.assertNull(modify.getElement(op.value, true));
 		}
 		Assert.assertEquals(removed > 0, modified);
+		Assert.assertEquals(preModSize - removed, modify.size());
+		Assert.assertEquals(preSize - removed, theCollection.size());
+	}
+
+	private void clearCollection(List<CollectionOp<T>> ops, BetterList<T> modify, TestHelper helper) {
+		int preModSize = modify.size();
+		int preSize = theCollection.size();
+		modify.clear();
+		int removed = 0;
+		for (CollectionOp<T> op : ops) {
+			if (op.getMessage() != null)
+				continue;
+			removed++;
+			if (theCollection instanceof Set)
+				Assert.assertNull(modify.getElement(op.value, true));
+		}
 		Assert.assertEquals(preModSize - removed, modify.size());
 		Assert.assertEquals(preSize - removed, theCollection.size());
 	}
