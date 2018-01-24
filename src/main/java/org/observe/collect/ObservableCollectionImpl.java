@@ -424,7 +424,7 @@ public final class ObservableCollectionImpl {
 							{
 								theCauseKey = Causable.key((cause, data) -> {
 									SimpleElement oldElement = theCurrentElement;
-									if (data.get("replacement") == null) {
+									if (data.containsKey("re-search")) {
 										// Means we need to find the new value in the collection
 										if (!find(//
 											el -> theCurrentElement = new SimpleElement(el.getElementId(), el.get())))
@@ -441,57 +441,62 @@ public final class ObservableCollectionImpl {
 
 							@Override
 							public void accept(ObservableCollectionEvent<? extends E> evt) {
-								boolean mayReplace;
-								Map<Object, Object> causeData = evt.getRootCausable().onFinish(theCauseKey, true);
-								SimpleElement current = causeData != null ? (SimpleElement) causeData.get("replacement")
-									: theCurrentElement;
-								if (causeData != null && current == null)
+								Map<Object, Object> causeData = theCauseKey.getData();
+								if (causeData.containsKey("re-search"))
 									return; // We've lost track of the current best and will need to find it again later
+								SimpleElement current = (SimpleElement) causeData.getOrDefault("replacement", theCurrentElement);
+								boolean mayReplace;
 								boolean sameElement;
+								boolean better;
 								if (current == null) {
 									sameElement = false;
-									mayReplace = true;
+									mayReplace = better = true;
 								} else if (current.getElementId().equals(evt.getElementId())) {
 									sameElement = true;
 									mayReplace = true;
+									better = evt.getType() == CollectionChangeType.set//
+										? theElementCompare.compare(new SimpleElement(evt.getElementId(), evt.getNewValue()), current) <= 0
+										: false;
 								} else {
 									sameElement = false;
-									mayReplace = theElementCompare.compare(new SimpleElement(evt.getElementId(), evt.getNewValue()),
-										current) < 0;
+									mayReplace = better = theElementCompare
+										.compare(new SimpleElement(evt.getElementId(), evt.getNewValue()), current) < 0;
 								}
 								if (!mayReplace)
 									return; // Even if the new element's value matches, it wouldn't replace the current value
 								boolean matches = test(evt.isFinal() ? evt.getOldValue() : evt.getNewValue());
-								if (!matches && (current == null || !sameElement))
+								if (!matches && !sameElement)
 									return;// If the new value doesn't match and it's not the current element, we don't care
 
 								// At this point we know that we will have to do something
-								if (causeData == null)
-									causeData = evt.getRootCausable().onFinish(theCauseKey);
+								// If causeData!=null, then it's unmodifiable, so we need to grab the modifiable form using the cause
+								causeData = evt.getRootCausable().onFinish(theCauseKey);
 								if (!matches) {
 									// The current element's value no longer matches
 									// We need to search for the new value if we don't already know of a better match.
-									// The signal for this is a null replacement
 									causeData.remove("replacement");
+									causeData.put("re-search", true);
 								} else {
 									if (evt.isFinal()) {
 										// The current element has been removed
 										// We need to search for the new value if we don't already know of a better match.
 										// The signal for this is a null replacement
 										causeData.remove("replacement");
+										causeData.put("re-search", true);
 									} else {
 										// Either:
-										// There is no current element and the new element matches
-										// --use it unless we already know of a better match
-										// Or there the new value is in a better position than the current element
+										// * There is no current element and the new element matches
+										// ** --use it unless we already know of a better match
+										// * The new value is better than the current element
 										// If we already know of a replacement element even better-positioned than the new element,
 										// ignore the new one
-										if (current == null//
-											|| theElementCompare.compare(theCollection.getElement(evt.getElementId()), current) < 0)
+										if (current == null || better) {
 											causeData.put("replacement", new SimpleElement(evt.getElementId(), evt.getNewValue()));
-										else if (sameElement) {
-											// The current best element is replaced with an inferior value. Need to re-search.
+											causeData.remove("re-search");
+										} else if (sameElement) {
+											// The current best element is removed or replaced with an inferior value. Need to re-search.
 											causeData.remove("replacement");
+											causeData.put("re-search", true);
 										}
 									}
 								}
