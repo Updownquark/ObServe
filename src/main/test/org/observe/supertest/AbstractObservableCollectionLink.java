@@ -925,7 +925,9 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		.or(1, () -> { // distinct
 			ValueHolder<FlowOptions.UniqueOptions> options = new ValueHolder<>();
 			CollectionDataFlow<?, ?, T> flow = theFlow;
-			if (helper.getBoolean()) {
+			// distinct() is a no-op for a distinct flow, so unless we change the equivalence, this is pointless
+			// plus, hash distinct() can affect ordering, so this could cause failures
+			if (flow instanceof ObservableCollection.UniqueDataFlow || helper.getBoolean()) {
 				Comparator<T> compare = SortedCollectionLink.compare(theType, helper);
 				flow = flow.withEquivalence(Equivalence.of((Class<T>) getType().getRawType(), compare, false));
 			}

@@ -925,7 +925,9 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		.or(1, () -> { // distinct
 			ValueHolder<FlowOptions.UniqueOptions> options = new ValueHolder<>();
 			CollectionDataFlow<?, ?, T> flow = theFlow;
-			if (helper.getBoolean()) {
+			// distinct() is a no-op for a distinct flow, so unless we change the equivalence, this is pointless
+			// plus, hash distinct() can affect ordering, so this could cause failures
+			if (flow instanceof ObservableCollection.UniqueDataFlow || helper.getBoolean()) {
 				Comparator<T> compare = SortedCollectionLink.compare(theType, helper);
 				flow = flow.withEquivalence(Equivalence.of((Class<T>) getType().getRawType(), compare, false));
 			}
@@ -941,12 +943,12 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			FlowOptions.UniqueOptions options = new FlowOptions.SimpleUniqueOptions(true);
 			CollectionDataFlow<?, ?, T> flow = theFlow;
 			Comparator<T> compare = SortedCollectionLink.compare(theType, helper);
-				options.useFirst(/*TODO helper.getBoolean()*/ false);
-				derivedFlow.accept((CollectionDataFlow<?, ?, X>) flow.distinctSorted(compare, options.isUseFirst()));
-				theChild = new DistinctCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), theFlow, helper,
-					theTester.isCheckingRemovedValues(), options, false);
-				derived.accept((ObservableChainLink<X>) theChild);
-			});//
+			options.useFirst(/*TODO helper.getBoolean()*/ false);
+			derivedFlow.accept((CollectionDataFlow<?, ?, X>) flow.distinctSorted(compare, options.isUseFirst()));
+			theChild = new DistinctCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), theFlow, helper,
+				theTester.isCheckingRemovedValues(), options, false);
+			derived.accept((ObservableChainLink<X>) theChild);
+		});//
 		if(theCollection instanceof ObservableSortedSet){
 			ObservableSortedSet<T> sortedSet = (ObservableSortedSet<T>) theCollection;
 			action.or(1, () -> { // subSet
@@ -984,7 +986,6 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 					false, true, min, includeMin, max, includeMax);
 				derived.accept((ObservableChainLink<X>) theChild);
 			});
-			// TODO observeRelative
 		}
 		action.or(1, () -> {// filterMod
 			ValueHolder<ObservableCollection.ModFilterBuilder<T>> filter = new ValueHolder<>();
