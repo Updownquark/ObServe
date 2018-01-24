@@ -622,8 +622,6 @@ public final class ObservableCollectionImpl {
 					compare = -compare;
 				return compare;
 			}, () -> null);
-			if (!collection.belongs(value))
-				throw new IllegalArgumentException("Illegal value for collection: " + value);
 			theValue = value;
 			isFirst = first;
 		}

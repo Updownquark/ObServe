@@ -351,6 +351,14 @@ public interface Observable<T> {
 	};
 
 	/**
+	 * @param <T> The type of the observable
+	 * @return An observable that never does anything
+	 */
+	static <T> Observable<T> empty() {
+		return (Observable<T>) empty;
+	}
+
+	/**
 	 * Implements {@link #chain()}
 	 *
 	 * @param <T> The type of the observable

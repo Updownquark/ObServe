@@ -3,6 +3,7 @@ package org.observe.collect;
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
+import org.qommons.Transaction;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 
@@ -55,7 +56,7 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 
 	/**
 	 * Creates an event to alert a consumer to this element's initial state upon listening
-	 * 
+	 *
 	 * @param element The ID of the current state's element
 	 * @param value The value of the current state
 	 * @param cause The initial cause (usually null)
@@ -67,7 +68,7 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 
 	/**
 	 * Creates an event to alert a consumer to a change in this element's state
-	 * 
+	 *
 	 * @param oldElement The ID of the previous state's element
 	 * @param oldVal The value of the previous state
 	 * @param newElement The ID of the current state's element
@@ -77,5 +78,40 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 	 */
 	default ObservableElementEvent<T> createChangeEvent(ElementId oldElement, T oldVal, ElementId newElement, T newVal, Object cause) {
 		return new ObservableElementEvent<>(getType(), false, oldElement, newElement, oldVal, newVal, cause);
+	}
+
+	/**
+	 * @param <T> The type of the element
+	 * @param type The type of the element
+	 * @return An element that is always empty ({@link #get() value}==null, {@link #getElementId() element}==null)
+	 */
+	static <T> ObservableElement<T> empty(TypeToken<T> type) {
+		class EmptyElement implements ObservableElement<T> {
+			@Override
+			public TypeToken<T> getType() {
+				return type;
+			}
+
+			@Override
+			public T get() {
+				return null;
+			}
+
+			@Override
+			public Transaction lock() {
+				return Transaction.NONE;
+			}
+
+			@Override
+			public ElementId getElementId() {
+				return null;
+			}
+
+			@Override
+			public Observable<ObservableElementEvent<T>> elementChanges() {
+				return Observable.empty();
+			}
+		}
+		return new EmptyElement();
 	}
 }

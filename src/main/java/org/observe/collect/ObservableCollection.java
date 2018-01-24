@@ -334,6 +334,8 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @throws IllegalArgumentException If the given value may not be an element of this collection
 	 */
 	default ObservableElement<E> observeElement(E value, boolean first) {
+		if (!belongs(value))
+			return ObservableElement.empty(getType());
 		return new ObservableCollectionImpl.ObservableEquivalentFinder<>(this, value, first);
 	}
 
