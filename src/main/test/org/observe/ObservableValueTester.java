@@ -2,6 +2,8 @@ package org.observe;
 
 import static org.junit.Assert.assertEquals;
 
+import org.junit.Assert;
+
 import com.google.common.reflect.TypeToken;
 
 /**
@@ -31,6 +33,10 @@ public class ObservableValueTester<T> extends AbstractObservableTester<T> {
 		setSynced(true);
 	}
 
+	protected ObservableValue<? extends T> getValue() {
+		return theValue;
+	}
+
 	@Override
 	public void checkSynced() {
 		if (Double.isNaN(theTolerance) || theSynced == null)
@@ -50,8 +56,13 @@ public class ObservableValueTester<T> extends AbstractObservableTester<T> {
 	@Override
 	protected Subscription sync() {
 		return theValue.changes().act(evt -> {
-			op();
-			theSynced = evt.getNewValue();
+			event(evt);
 		});
+	}
+
+	protected void event(ObservableValueEvent<? extends T> evt) {
+		op();
+		Assert.assertEquals(theSynced, evt.getOldValue());
+		theSynced = evt.getNewValue();
 	}
 }

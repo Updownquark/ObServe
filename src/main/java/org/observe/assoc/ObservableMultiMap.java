@@ -22,7 +22,9 @@ import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.SubscriptionCause;
 import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableSet;
+import org.qommons.Causable;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterMultiMap;
 import org.qommons.collect.ElementId;
@@ -33,7 +35,6 @@ import org.qommons.collect.MultiMapEntryHandle;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.collect.MutableMapEntryHandle;
-import org.qommons.collect.SimpleCause;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -525,6 +526,11 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 				}
 
 				@Override
+				public BetterCollection<V> getCollection() {
+					return outerHandle.getValues();
+				}
+
+				@Override
 				public ElementId getElementId() {
 					return outerHandle.getElementId();
 				}
@@ -589,21 +595,11 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 					MutableElementSpliterator<V> spliter = outerHandle.getValues().spliterator();
 					while (spliter.forElementM(el -> el.remove(), true)) {}
 				}
-
-				@Override
-				public String canAdd(V value, boolean before) {
-					return StdMsg.UNSUPPORTED_OPERATION;
-				}
-
-				@Override
-				public ElementId add(V value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-				}
 			};
 		}
 
 		@Override
-		public MapEntryHandle<K, V> putEntry(K key, V value, boolean first) {
+		public MapEntryHandle<K, V> putEntry(K key, V value, ElementId after, ElementId before, boolean first) {
 			try (Transaction t = lock(true, true, null)) {
 				ObservableMultiEntry<K, V> outerHandle = theSource.getEntry(key);
 				if (outerHandle != null) {
@@ -624,7 +620,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 				ObservableValue<V> mappedValue = theValueMap.apply(key, theSource.get(key));
 				if (mappedValue instanceof SettableValue)
 					((SettableValue<V>) mappedValue).set(value, null);
-				MultiMapEntryHandle<K, V> handle2 = theSource.putEntry(key, value, first);
+				MultiMapEntryHandle<K, V> handle2 = theSource.putEntry(key, value, after, before, first);
 				if (handle2 == null)
 					return null;
 				outerHandle = theSource.getEntry(handle2.getKeyId());
@@ -707,8 +703,8 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 						for (EntrySubscription sub : valueSubs.values())
 							sub.sub.unsubscribe();
 						if (removeAll) {
-							SimpleCause cause = new SimpleCause();
-							try (Transaction ct = SimpleCause.use(cause)) {
+							Causable cause = Causable.simpleCause(null);
+							try (Transaction ct = Causable.use(cause)) {
 								for (Map.Entry<ElementId, EntrySubscription> entry : valueSubs.entrySet()) {
 									EntrySubscription sub = entry.getValue();
 									entry.getValue().sub.unsubscribe();

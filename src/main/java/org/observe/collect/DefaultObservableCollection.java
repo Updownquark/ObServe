@@ -8,6 +8,7 @@ import java.util.function.Consumer;
 import org.observe.Subscription;
 import org.qommons.Causable;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
@@ -38,6 +39,11 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 		theTransactionCauses = new LinkedList<>();
 		theValues = list;
 		theObservers = new org.qommons.collect.ListenerList<>("A collection may not be modified as a result of a change event");
+	}
+
+	/** @return This collection's backing values */
+	protected BetterList<E> getValues() {
+		return theValues;
 	}
 
 	@Override
@@ -139,6 +145,11 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	}
 
 	@Override
+	public CollectionElement<E> getTerminalElement(boolean first) {
+		return theValues.getTerminalElement(first);
+	}
+
+	@Override
 	public CollectionElement<E> getAdjacentElement(ElementId elementId, boolean next) {
 		return theValues.getAdjacentElement(elementId, next);
 	}
@@ -154,18 +165,19 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	}
 
 	@Override
-	public String canAdd(E value) {
-		return theValues.canAdd(value);
+	public String canAdd(E value, ElementId after, ElementId before) {
+		return theValues.canAdd(value, after, before);
 	}
 
 	@Override
-	public CollectionElement<E> addElement(E e, boolean first) {
+	public CollectionElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
+		throws UnsupportedOperationException, IllegalArgumentException {
 		try (Transaction t = lock(true, null)) {
-			CollectionElement<E> el = theValues.addElement(e, first);
+			CollectionElement<E> el = theValues.addElement(value, after, before, first);
 			if (el == null)
 				return null;
 			ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(),
-				theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, null, e, getCurrentCause());
+				theValues.getElementsBefore(el.getElementId()), CollectionChangeType.add, null, value, getCurrentCause());
 			fire(event);
 			return el;
 		}
@@ -210,6 +222,11 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	private MutableCollectionElement<E> mutableElementFor(MutableCollectionElement<E> valueEl) {
 		return new MutableCollectionElement<E>() {
 			@Override
+			public BetterCollection<E> getCollection() {
+				return DefaultObservableCollection.this;
+			}
+
+			@Override
 			public ElementId getElementId() {
 				return valueEl.getElementId();
 			}
@@ -249,21 +266,6 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 					valueEl.remove();
 					fire(new ObservableCollectionEvent<>(getElementId(), getType(), getElementsBefore(getElementId()),
 						CollectionChangeType.remove, old, old, getCurrentCause()));
-				}
-			}
-
-			@Override
-			public String canAdd(E value, boolean before) {
-				return valueEl.canAdd(value, before);
-			}
-
-			@Override
-			public ElementId add(E value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-				try (Transaction t = lock(true, null)) {
-					ElementId newId = valueEl.add(value, before);
-					fire(new ObservableCollectionEvent<>(newId, getType(), getElementsBefore(newId), CollectionChangeType.add, null, value,
-						getCurrentCause()));
-					return newId;
 				}
 			}
 

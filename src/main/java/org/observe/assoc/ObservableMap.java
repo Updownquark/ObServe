@@ -17,6 +17,7 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.SubscriptionCause;
 import org.observe.collect.ObservableSet;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterMap;
 import org.qommons.collect.CollectionElement;
@@ -392,7 +393,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 			}
 
 			@Override
-			public MapEntryHandle<K, V> putEntry(K key, V value, boolean first) {
+			public MapEntryHandle<K, V> putEntry(K key, V value, ElementId after, ElementId before, boolean first) {
 				try (Transaction t = lock(true, true, null)) {
 					CollectionElement<Map.Entry<K, V>> entryEl = entrySet.getElement(new SimpleMapEntry<>(key, null), true);
 					if (entryEl != null) {
@@ -400,7 +401,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 						return handleFor(entryEl);
 					}
 					MapEntry newEntry = new MapEntry(key, value);
-					entryEl = entrySet.addElement(newEntry, first);
+					entryEl = entrySet.addElement(newEntry, after, before, first);
 					newEntry.theElementId = entryEl.getElementId();
 					return handleFor(entryEl);
 				}
@@ -436,6 +437,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 					@Override
 					public K getKey() {
 						return entryEl.get().getKey();
+					}
+
+					@Override
+					public BetterCollection<V> getCollection() {
+						return values();
 					}
 
 					@Override
@@ -561,7 +567,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 			}
 
 			@Override
-			public MapEntryHandle<K, V> putEntry(K key, V value, boolean first) {
+			public MapEntryHandle<K, V> putEntry(K key, V value, ElementId after, ElementId before, boolean first) {
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			}
 

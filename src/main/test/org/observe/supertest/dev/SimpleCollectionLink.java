@@ -20,7 +20,7 @@ public class SimpleCollectionLink<E> extends AbstractObservableCollectionLink<E,
 	public void checkModifiable(List<CollectionOp<E>> ops, int subListStart, int subListEnd, TestHelper helper) {
 		for (CollectionOp<E> op : ops) {
 			if (op.type == CollectionChangeType.remove) {
-				if (op.index < 0 && !getCollection().contains(op.source))
+				if (op.index < 0 && !getCollection().contains(op.value))
 					op.reject(StdMsg.NOT_FOUND, false);
 			}
 		}
@@ -39,8 +39,8 @@ public class SimpleCollectionLink<E> extends AbstractObservableCollectionLink<E,
 	@Override
 	public String toString() {
 		if (getParent() != null)
-			return "simple";
+			return "simple(" + getExtras() + ")";
 		else
-			return "base(" + getType() + ")";
+			return "base(" + getTestType() + getExtras() + ")";
 	}
 }

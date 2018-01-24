@@ -50,7 +50,6 @@ import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.tree.BetterTreeSet;
 import org.qommons.tree.BinaryTreeNode;
 
-import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 /** Holds default implementation methods and classes for {@link ObservableCollection} */
@@ -62,6 +61,8 @@ public final class ObservableCollectionImpl {
 
 	/**
 	 * @param <E> The type for the set
+	 * @param collection The collection to create the value set for (whose {@link ObservableCollection#equivalence() equivalence} will be
+	 *        used)
 	 * @param equiv The equivalence set to make a set of
 	 * @param c The collection whose values to add to the set
 	 * @return The set
@@ -343,48 +344,78 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
-	public static abstract class AbstractObservableElementFinder<E> implements ObservableValue<CollectionElement<? extends E>> {
+	/**
+	 * An {@link ObservableElement} whose state reflects the value of an element within a collection whose value matches some condition
+	 *
+	 * @param <E> The type of the element
+	 */
+	public static abstract class AbstractObservableElementFinder<E> implements ObservableElement<E> {
 		private final ObservableCollection<E> theCollection;
 		private final Comparator<CollectionElement<? extends E>> theElementCompare;
-		private final TypeToken<CollectionElement<? extends E>> theType;
+		private final Supplier<? extends E> theDefault;
 
 		/**
 		 * @param collection The collection to find elements in
 		 * @param elementCompare A comparator to determine whether to prefer one {@link #test(Object) matching} element over another. When
 		 *        <code>elementCompare{@link Comparable#compareTo(Object) compareTo}(el1, el2)<0</code>, el1 will replace el2.
+		 * @param def The default value to use when no element matches this finder's condition
 		 */
 		public AbstractObservableElementFinder(ObservableCollection<E> collection,
-			Comparator<CollectionElement<? extends E>> elementCompare) {
+			Comparator<CollectionElement<? extends E>> elementCompare, Supplier<? extends E> def) {
 			theCollection = collection;
 			theElementCompare = elementCompare;
-			theType = new TypeToken<CollectionElement<? extends E>>() {}.where(new TypeParameter<E>() {}, collection.getType().wrap());
+			theDefault = def;
 		}
 
+		/** @return The collection that this finder searches elements in */
 		protected ObservableCollection<E> getCollection() {
 			return theCollection;
 		}
 
 		@Override
-		public TypeToken<CollectionElement<? extends E>> getType() {
-			return theType;
+		public TypeToken<E> getType() {
+			return theCollection.getType();
 		}
 
 		@Override
-		public CollectionElement<? extends E> get() {
-			CollectionElement<? extends E>[] element = new CollectionElement[1];
-			find(el -> element[0] = new SimpleElement(el.getElementId(), el.get()));
-			return element[0];
+		public ElementId getElementId() {
+			ValueHolder<CollectionElement<E>> element = new ValueHolder<>();
+			find(el -> element.accept(new SimpleElement(el.getElementId(), el.get())));
+			if (element.get() != null)
+				return element.get().getElementId();
+			else
+				return null;
 		}
 
+		@Override
+		public E get() {
+			ValueHolder<CollectionElement<E>> element = new ValueHolder<>();
+			find(el -> element.accept(new SimpleElement(el.getElementId(), el.get())));
+			if (element.get() != null)
+				return element.get().get();
+			else
+				return theDefault.get();
+		}
+
+		/**
+		 * Finds the value ad-hoc (stateless) from the concrete class
+		 *
+		 * @param onElement The consumer to give the element to when found
+		 * @return Whether an element matching this finder's condition was found
+		 */
 		protected abstract boolean find(Consumer<? super CollectionElement<? extends E>> onElement);
 
+		/**
+		 * @param value The value to test
+		 * @return Whether the value matches this finder's condition
+		 */
 		protected abstract boolean test(E value);
 
 		@Override
-		public Observable<ObservableValueEvent<CollectionElement<? extends E>>> changes() {
-			return new Observable<ObservableValueEvent<CollectionElement<? extends E>>>() {
+		public Observable<ObservableElementEvent<E>> elementChanges() {
+			return new Observable<ObservableElementEvent<E>>() {
 				@Override
-				public Subscription subscribe(Observer<? super ObservableValueEvent<CollectionElement<? extends E>>> observer) {
+				public Subscription subscribe(Observer<? super ObservableElementEvent<E>> observer) {
 					try (Transaction t = theCollection.lock(false, null)) {
 						class FinderListener implements Consumer<ObservableCollectionEvent<? extends E>> {
 							private SimpleElement theCurrentElement;
@@ -393,55 +424,80 @@ public final class ObservableCollectionImpl {
 							{
 								theCauseKey = Causable.key((cause, data) -> {
 									SimpleElement oldElement = theCurrentElement;
-									if (data.get("replacement") == null) {
+									if (data.containsKey("re-search")) {
 										// Means we need to find the new value in the collection
 										if (!find(//
 											el -> theCurrentElement = new SimpleElement(el.getElementId(), el.get())))
 											theCurrentElement = null;
 									} else
 										theCurrentElement = (SimpleElement) data.get("replacement");
-									observer.onNext(createChangeEvent(oldElement, theCurrentElement, cause));
+									ElementId oldId = oldElement == null ? null : oldElement.getElementId();
+									ElementId newId = theCurrentElement == null ? null : theCurrentElement.getElementId();
+									E oldVal = oldElement == null ? theDefault.get() : oldElement.get();
+									E newVal = theCurrentElement == null ? theDefault.get() : theCurrentElement.get();
+									observer.onNext(createChangeEvent(oldId, oldVal, newId, newVal, cause));
 								});
 							}
 
 							@Override
 							public void accept(ObservableCollectionEvent<? extends E> evt) {
+								Map<Object, Object> causeData = theCauseKey.getData();
+								if (causeData.containsKey("re-search"))
+									return; // We've lost track of the current best and will need to find it again later
+								SimpleElement current = (SimpleElement) causeData.getOrDefault("replacement", theCurrentElement);
 								boolean mayReplace;
-								if (theCurrentElement == null)
+								boolean sameElement;
+								boolean better;
+								if (current == null) {
+									sameElement = false;
+									mayReplace = better = true;
+								} else if (current.getElementId().equals(evt.getElementId())) {
+									sameElement = true;
 									mayReplace = true;
-								else if (theCurrentElement.getElementId().equals(evt.getElementId()))
-									mayReplace = true;
-								else {
-									mayReplace = theElementCompare.compare(theCurrentElement,
-										new SimpleElement(evt.getElementId(), evt.getNewValue())) > 0;
+									better = evt.getType() == CollectionChangeType.set//
+										? theElementCompare.compare(new SimpleElement(evt.getElementId(), evt.getNewValue()), current) <= 0
+										: false;
+								} else {
+									sameElement = false;
+									mayReplace = better = theElementCompare
+										.compare(new SimpleElement(evt.getElementId(), evt.getNewValue()), current) < 0;
 								}
 								if (!mayReplace)
 									return; // Even if the new element's value matches, it wouldn't replace the current value
 								boolean matches = test(evt.isFinal() ? evt.getOldValue() : evt.getNewValue());
-								if (!matches && (theCurrentElement == null || !theCurrentElement.getElementId().equals(evt.getElementId())))
-									return; // If the new value doesn't match and it's not the current element, we don't care
+								if (!matches && !sameElement)
+									return;// If the new value doesn't match and it's not the current element, we don't care
 
 								// At this point we know that we will have to do something
-								Map<Object, Object> causeData = evt.getRootCausable().onFinish(theCauseKey);
+								// If causeData!=null, then it's unmodifiable, so we need to grab the modifiable form using the cause
+								causeData = evt.getRootCausable().onFinish(theCauseKey);
 								if (!matches) {
 									// The current element's value no longer matches
 									// We need to search for the new value if we don't already know of a better match.
-									// The signal for this is a null replacement, so nothing to do here.
+									causeData.remove("replacement");
+									causeData.put("re-search", true);
 								} else {
 									if (evt.isFinal()) {
 										// The current element has been removed
 										// We need to search for the new value if we don't already know of a better match.
-										// The signal for this is a null replacement, so nothing to do here.
+										// The signal for this is a null replacement
+										causeData.remove("replacement");
+										causeData.put("re-search", true);
 									} else {
 										// Either:
-										// There is no current element and the new element matches
-										// --use it unless we already know of a better match
-										// Or there the new value is in a better position than the current element
-										SimpleElement replacement = (SimpleElement) causeData.get("replacement");
+										// * There is no current element and the new element matches
+										// ** --use it unless we already know of a better match
+										// * The new value is better than the current element
 										// If we already know of a replacement element even better-positioned than the new element,
 										// ignore the new one
-										if (replacement == null || evt.getElementId().compareTo(replacement.getElementId()) <= 0)
+										if (current == null || better) {
 											causeData.put("replacement", new SimpleElement(evt.getElementId(), evt.getNewValue()));
+											causeData.remove("re-search");
+										} else if (sameElement) {
+											// The current best element is removed or replaced with an inferior value. Need to re-search.
+											causeData.remove("replacement");
+											causeData.put("re-search", true);
+										}
 									}
 								}
 							}
@@ -452,7 +508,9 @@ public final class ObservableCollectionImpl {
 						}))
 							listener.theCurrentElement = null;
 						Subscription collSub = theCollection.onChange(listener);
-						observer.onNext(createInitialEvent(listener.theCurrentElement, null));
+						ElementId initId = listener.theCurrentElement == null ? null : listener.theCurrentElement.getElementId();
+						E initVal = listener.theCurrentElement == null ? theDefault.get() : listener.theCurrentElement.get();
+						observer.onNext(createInitialEvent(initId, initVal, null));
 						return new Subscription() {
 							private boolean isDone;
 
@@ -462,7 +520,9 @@ public final class ObservableCollectionImpl {
 									return;
 								isDone = true;
 								collSub.unsubscribe();
-								observer.onCompleted(createChangeEvent(listener.theCurrentElement, listener.theCurrentElement, null));
+								ElementId endId = listener.theCurrentElement == null ? null : listener.theCurrentElement.getElementId();
+								E endVal = listener.theCurrentElement == null ? theDefault.get() : listener.theCurrentElement.get();
+								observer.onCompleted(createChangeEvent(endId, endVal, endId, endVal, null));
 							}
 						};
 					}
@@ -498,6 +558,11 @@ public final class ObservableCollectionImpl {
 			public E get() {
 				return theValue;
 			}
+
+			@Override
+			public String toString() {
+				return String.valueOf(theValue);
+			}
 		}
 	}
 
@@ -513,9 +578,11 @@ public final class ObservableCollectionImpl {
 		/**
 		 * @param collection The collection to find elements in
 		 * @param test The test to find elements that pass
+		 * @param def The default value to use when no passing element is found in the collection
 		 * @param first Whether to get the first value in the collection that passes, the last value, or any passing value
 		 */
-		protected ObservableCollectionFinder(ObservableCollection<E> collection, Predicate<? super E> test, Ternian first) {
+		protected ObservableCollectionFinder(ObservableCollection<E> collection, Predicate<? super E> test, Supplier<? extends E> def,
+			Ternian first) {
 			super(collection, (el1, el2) -> {
 				if (first == Ternian.NONE)
 					return 0;
@@ -523,7 +590,7 @@ public final class ObservableCollectionImpl {
 				if (!first.value)
 					compare = -compare;
 				return compare;
-			});
+			}, def);
 			theTest = test;
 			isFirst = first;
 		}
@@ -539,19 +606,27 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
+	/**
+	 * Finds an element in a collection with a value equivalent to a given value
+	 *
+	 * @param <E> The type of the element
+	 */
 	public static class ObservableEquivalentFinder<E> extends AbstractObservableElementFinder<E> {
 		private final E theValue;
 		private final boolean isFirst;
 
+		/**
+		 * @param collection The collection to find the element within
+		 * @param value The value to find
+		 * @param first Whether to search for the first, last, or any equivalent element
+		 */
 		public ObservableEquivalentFinder(ObservableCollection<E> collection, E value, boolean first) {
 			super(collection, (el1, el2) -> {
 				int compare = el1.getElementId().compareTo(el2.getElementId());
 				if (!first)
 					compare = -compare;
 				return compare;
-			});
-			if (!collection.belongs(value))
-				throw new IllegalArgumentException("Illegal value for collection: " + value);
+			}, () -> null);
 			theValue = value;
 			isFirst = first;
 		}
@@ -564,6 +639,62 @@ public final class ObservableCollectionImpl {
 		@Override
 		protected boolean test(E value) {
 			return getCollection().equivalence().elementEquals(theValue, value);
+		}
+	}
+
+	/**
+	 * Searches all the elements in a collection for the best by some measure
+	 *
+	 * @param <E> The type of the element
+	 */
+	public static class BestCollectionElement<E> extends AbstractObservableElementFinder<E> {
+		private final Comparator<? super E> theCompare;
+		private final Ternian isFirst;
+
+		/**
+		 * @param collection The collection to search within
+		 * @param compare The comparator for element values
+		 * @param def The default value for an empty collection
+		 * @param first Whether to use the first, last, or any element in a tie
+		 */
+		public BestCollectionElement(ObservableCollection<E> collection, Comparator<? super E> compare, Supplier<? extends E> def,
+			Ternian first) {
+			super(collection, (el1, el2) -> {
+				int comp = compare.compare(el1.get(), el2.get());
+				if (comp == 0 && first.value != null) {
+					comp = el1.getElementId().compareTo(el2.getElementId());
+					if (!first.value)
+						comp = -comp;
+				}
+				return comp;
+			}, def);
+			theCompare = compare;
+			isFirst = first;
+		}
+
+		@Override
+		protected boolean find(Consumer<? super CollectionElement<? extends E>> onElement) {
+			ValueHolder<CollectionElement<E>> best = new ValueHolder<>();
+			boolean last = !isFirst.withDefault(true);
+			getCollection().spliterator().forEachElement(el -> {
+				if (!best.isPresent())
+					best.accept(el);
+				else {
+					int comp = theCompare.compare(el.get(), best.get().get());
+					if (comp < 0)
+						best.accept(el);
+					else if (last && comp == 0)
+						best.accept(el);
+				}
+			}, true);
+			if (best.isPresent())
+				onElement.accept(best.get());
+			return best.isPresent();
+		}
+
+		@Override
+		protected boolean test(E value) {
+			return true;
 		}
 	}
 
@@ -661,27 +792,37 @@ public final class ObservableCollectionImpl {
 		protected abstract T getValue(X updated);
 	}
 
+	/**
+	 * A structure to keeps track of the number of occurrences of a particular value in two collections
+	 *
+	 * @param <E> The type of the value to track
+	 */
 	public static class ValueCount<E> {
 		E value;
 		int left;
 		int right;
 
+		/** @param val The value to track */
 		public ValueCount(E val) {
 			value = val;
 		}
 
+		/** @return The value being tracked */
 		public E getValue() {
 			return value;
 		}
 
+		/** @return The number of occurrences of this value in the left collection */
 		public int getLeftCount() {
 			return left;
 		}
 
+		/** @return The number of occurrences of this value in the right collection */
 		public int getRightCount() {
 			return right;
 		}
 
+		/** @return Whether this value occurs at all in either collection */
 		public boolean isEmpty() {
 			return left == 0 && right == 0;
 		}
@@ -1030,7 +1171,13 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
+	/**
+	 * An {@link ObservableCollection} whose elements are reversed from its parent
+	 *
+	 * @param <E> The type of values in the collection
+	 */
 	public static class ReversedObservableCollection<E> extends BetterList.ReversedList<E> implements ObservableCollection<E> {
+		/** @param wrapped The collection whose elements to reverse */
 		public ReversedObservableCollection(ObservableCollection<E> wrapped) {
 			super(wrapped);
 		}
@@ -1102,6 +1249,17 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
+	/**
+	 * A derived collection, {@link ObservableCollection.CollectionDataFlow#collect() collected} from a
+	 * {@link ObservableCollection.CollectionDataFlow}. A passive collection maintains no information about its sources (either the source
+	 * collection or any external sources from its flow), but relies on the state of the collection. Each listener to the collection
+	 * maintains its own state which is released when the listener is {@link Subscription#unsubscribe() unsubscribed}. This stateless
+	 * behavior cannot accommodate some categories of operations, but may be much more efficient for those it does support in many
+	 * situations.
+	 *
+	 * @param <E> The type of the source collection
+	 * @param <T> The type of values in the collection
+	 */
 	public static class PassiveDerivedCollection<E, T> implements ObservableCollection<T> {
 		private final ObservableCollection<E> theSource;
 		private final PassiveCollectionManager<E, ?, T> theFlow;
@@ -1167,21 +1325,22 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public String canAdd(T value) {
+		public String canAdd(T value, ElementId after, ElementId before) {
 			FilterMapResult<T, E> reversed = theFlow.reverse(value, true);
 			if (!reversed.isAccepted())
 				return reversed.getRejectReason();
-			return theSource.canAdd(reversed.result);
+			return theSource.canAdd(reversed.result, after, before);
 		}
 
 		@Override
-		public CollectionElement<T> addElement(T e, boolean first) {
+		public CollectionElement<T> addElement(T value, ElementId after, ElementId before, boolean first)
+			throws UnsupportedOperationException, IllegalArgumentException {
 			try (Transaction t = lock(true, null)) {
 				// Lock so the reversed value is consistent until it is added
-				FilterMapResult<T, E> reversed = theFlow.reverse(e, true);
+				FilterMapResult<T, E> reversed = theFlow.reverse(value, true);
 				if (reversed.throwIfError(IllegalArgumentException::new) != null)
 					return null;
-				CollectionElement<E> srcEl = theSource.addElement(reversed.result, first);
+				CollectionElement<E> srcEl = theSource.addElement(reversed.result, after, before, first);
 				return srcEl == null ? null : elementFor(srcEl, null);
 			}
 		}
@@ -1203,7 +1362,7 @@ public final class ObservableCollectionImpl {
 			try (Transaction t = lock(true, false, null)) {
 				Function<? super E, ? extends T> map = theFlow.map().get();
 				theFlow.setValue(//
-					elements.stream().map(el -> mutableElementFor(theSource.mutableElement(el), map)).collect(Collectors.toList()), value);
+					elements.stream().map(el -> theFlow.map(theSource.mutableElement(el), map)).collect(Collectors.toList()), value);
 			}
 		}
 
@@ -1224,26 +1383,28 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public CollectionElement<T> getElement(T value, boolean first) {
-			if (!getType().wrap().getRawType().isInstance(value))
+			if (!belongs(value))
 				return null;
-			if (!theFlow.isManyToOne()) {
-				// If the flow is one-to-one, we can use any search optimizations the source collection may be capable of
-				FilterMapResult<T, E> reversed = theFlow.reverse(value, false);
-				if (!reversed.isError()) {
-					CollectionElement<E> srcEl = theSource.getElement(reversed.result, first);
-					return srcEl == null ? null : elementFor(srcEl, null);
+			try (Transaction t = lock(false, null)) {
+				Function<? super E, ? extends T> map = theFlow.map().get();
+				if (!theFlow.isManyToOne()) {
+					// If the flow is one-to-one, we can use any search optimizations the source collection may be capable of
+					FilterMapResult<T, E> reversed = theFlow.reverse(value, false);
+					if (!reversed.isError() && equivalence().elementEquals(map.apply(reversed.result), value)) {
+						CollectionElement<E> srcEl = theSource.getElement(reversed.result, first);
+						return srcEl == null ? null : elementFor(srcEl, null);
+					}
 				}
+				ElementId[] match = new ElementId[1];
+				MutableElementSpliterator<E> spliter = theSource.spliterator(first);
+				while (match[0] == null && spliter.forElement(el -> {
+					if (equivalence().elementEquals(map.apply(el.get()), value))
+						match[0] = el.getElementId();
+				}, first)) {}
+				if (match[0] == null)
+					return null;
+				return elementFor(theSource.getElement(match[0]), map);
 			}
-			ElementId[] match = new ElementId[1];
-			MutableElementSpliterator<E> spliter = theSource.spliterator(first);
-			Function<? super E, ? extends T> map = theFlow.map().get();
-			while (match[0] == null && spliter.forElement(el -> {
-				if (equivalence().elementEquals(map.apply(el.get()), value))
-					match[0] = el.getElementId();
-			}, first)) {}
-			if (match[0] == null)
-				return null;
-			return elementFor(theSource.getElement(match[0]), map);
 		}
 
 		@Override
@@ -1252,8 +1413,15 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public CollectionElement<T> getTerminalElement(boolean first) {
+			CollectionElement<E> t = theSource.getTerminalElement(first);
+			return t == null ? null : elementFor(t, null);
+		}
+
+		@Override
 		public CollectionElement<T> getAdjacentElement(ElementId elementId, boolean next) {
-			return elementFor(theSource.getAdjacentElement(elementId, next), null);
+			CollectionElement<E> adj = theSource.getAdjacentElement(elementId, next);
+			return adj == null ? null : elementFor(adj, null);
 		}
 
 		@Override
@@ -1283,7 +1451,54 @@ public final class ObservableCollectionImpl {
 
 		protected MutableCollectionElement<T> mutableElementFor(MutableCollectionElement<E> el, Function<? super E, ? extends T> map) {
 			Function<? super E, ? extends T> fMap = map == null ? theFlow.map().get() : map;
-			return theFlow.map(el, fMap);
+			MutableCollectionElement<T> flowEl = theFlow.map(el, fMap);
+			class PassiveMutableElement implements MutableCollectionElement<T> {
+				@Override
+				public BetterCollection<T> getCollection() {
+					return PassiveDerivedCollection.this;
+				}
+
+				@Override
+				public ElementId getElementId() {
+					return el.getElementId();
+				}
+
+				@Override
+				public T get() {
+					return flowEl.get();
+				}
+
+				@Override
+				public String isEnabled() {
+					return flowEl.isEnabled();
+				}
+
+				@Override
+				public String isAcceptable(T value) {
+					return flowEl.isAcceptable(value);
+				}
+
+				@Override
+				public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
+					flowEl.set(value);
+				}
+
+				@Override
+				public String canRemove() {
+					return flowEl.canRemove();
+				}
+
+				@Override
+				public void remove() throws UnsupportedOperationException {
+					flowEl.remove();
+				}
+
+				@Override
+				public String toString() {
+					return flowEl.toString();
+				}
+			}
+			return new PassiveMutableElement();
 		}
 
 		@Override
@@ -1394,8 +1609,20 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
+	/**
+	 * Stores strong references to actively-derived collections on which listeners are installed, preventing the garbage-collection of these
+	 * collections since the listeners only contain weak references to their data sources.
+	 */
 	private static final Set<ActiveDerivedCollection<?>> STRONG_REFS = new ConcurrentHashSet<>();
 
+	/**
+	 * A derived collection, {@link ObservableCollection.CollectionDataFlow#collect() collected} from a
+	 * {@link ObservableCollection.CollectionDataFlow}. An active collection maintains a sorted collection of derived elements, enabling
+	 * complex and order-affecting operations like {@link ObservableCollection.CollectionDataFlow#sorted(Comparator) sort} and
+	 * {@link ObservableCollection.CollectionDataFlow#distinct() distinct}.
+	 *
+	 * @param <T> The type of values in the collection
+	 */
 	public static class ActiveDerivedCollection<T> implements ObservableCollection<T> {
 		protected static class DerivedElementHolder<T> implements ElementId {
 			protected final DerivedCollectionElement<T> element;
@@ -1432,7 +1659,8 @@ public final class ObservableCollectionImpl {
 
 			@Override
 			public boolean equals(Object obj) {
-				// This type collection does not produce duplicate Element IDs, so we can compare by identity
+				if (!(obj instanceof DerivedElementHolder))
+					return false;
 				return treeNode.equals(((DerivedElementHolder<T>) obj).treeNode);
 			}
 
@@ -1463,29 +1691,31 @@ public final class ObservableCollectionImpl {
 			// Begin listening
 			ElementAccepter<T> onElement = (el, cause) -> {
 				theStructureStamp.incrementAndGet();
-				DerivedElementHolder<T> holder = createHolder(el);
-				holder.treeNode = theDerivedElements.addElement(holder, false);
-				fireListeners(new ObservableCollectionEvent<>(holder, theFlow.getTargetType(), holder.treeNode.getNodesBefore(),
+				DerivedElementHolder<T>[] holder = new DerivedElementHolder[] { createHolder(el) };
+				holder[0].treeNode = theDerivedElements.addElement(holder[0], false);
+				fireListeners(new ObservableCollectionEvent<>(holder[0], theFlow.getTargetType(), holder[0].treeNode.getNodesBefore(),
 					CollectionChangeType.add, null, el.get(), cause));
 				el.setListener(new CollectionElementListener<T>() {
 					@Override
 					public void update(T oldValue, T newValue, Object elCause) {
-						BinaryTreeNode<DerivedElementHolder<T>> left = holder.treeNode.getClosest(true);
-						BinaryTreeNode<DerivedElementHolder<T>> right = holder.treeNode.getClosest(false);
-						if ((left != null && left.get().element.compareTo(holder.element) > 0)
-							|| (right != null && right.get().element.compareTo(holder.element) < 0)) {
+						BinaryTreeNode<DerivedElementHolder<T>> left = holder[0].treeNode.getClosest(true);
+						BinaryTreeNode<DerivedElementHolder<T>> right = holder[0].treeNode.getClosest(false);
+						if ((left != null && left.get().element.compareTo(holder[0].element) > 0)
+							|| (right != null && right.get().element.compareTo(holder[0].element) < 0)) {
 							theStructureStamp.incrementAndGet();
 							// Remove the element and re-add at the new position.
-							int index = holder.treeNode.getNodesBefore();
-							theDerivedElements.mutableElement(holder.treeNode.getElementId()).remove();
-							fireListeners(new ObservableCollectionEvent<>(holder, theFlow.getTargetType(), index,
+							int index = holder[0].treeNode.getNodesBefore();
+							theDerivedElements.mutableElement(holder[0].treeNode.getElementId()).remove();
+							fireListeners(new ObservableCollectionEvent<>(holder[0], theFlow.getTargetType(), index,
 								CollectionChangeType.remove, oldValue, null, elCause));
-							holder.treeNode = theDerivedElements.addElement(holder, false);
-							fireListeners(new ObservableCollectionEvent<>(holder, theFlow.getTargetType(), holder.treeNode.getNodesBefore(),
-								CollectionChangeType.add, null, newValue, elCause));
+							// Don't re-use elements
+							holder[0] = createHolder(el);
+							holder[0].treeNode = theDerivedElements.addElement(holder[0], false);
+							fireListeners(new ObservableCollectionEvent<>(holder[0], theFlow.getTargetType(),
+								holder[0].treeNode.getNodesBefore(), CollectionChangeType.add, null, newValue, elCause));
 						} else {
 							theModCount.incrementAndGet();
-							fireListeners(new ObservableCollectionEvent<>(holder, getType(), holder.treeNode.getNodesBefore(),
+							fireListeners(new ObservableCollectionEvent<>(holder[0], getType(), holder[0].treeNode.getNodesBefore(),
 								CollectionChangeType.set, oldValue, newValue, elCause));
 						}
 					}
@@ -1493,11 +1723,11 @@ public final class ObservableCollectionImpl {
 					@Override
 					public void removed(T value, Object elCause) {
 						theStructureStamp.incrementAndGet();
-						int index = holder.treeNode.getNodesBefore();
-						if (holder.treeNode.getElementId().isPresent()) // May have been removed already
-							theDerivedElements.mutableElement(holder.treeNode.getElementId()).remove();
-						fireListeners(new ObservableCollectionEvent<>(holder, theFlow.getTargetType(), index, CollectionChangeType.remove,
-							value, value, elCause));
+						int index = holder[0].treeNode.getNodesBefore();
+						if (holder[0].treeNode.getElementId().isPresent()) // May have been removed already
+							theDerivedElements.mutableElement(holder[0].treeNode.getElementId()).remove();
+						fireListeners(new ObservableCollectionEvent<>(holder[0], theFlow.getTargetType(), index,
+							CollectionChangeType.remove, value, value, elCause));
 					}
 				});
 			};
@@ -1627,6 +1857,12 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public CollectionElement<T> getTerminalElement(boolean first) {
+			DerivedElementHolder<T> holder = first ? theDerivedElements.peekFirst() : theDerivedElements.peekLast();
+			return holder == null ? null : getElement(holder);
+		}
+
+		@Override
 		public CollectionElement<T> getAdjacentElement(ElementId elementId, boolean next) {
 			DerivedElementHolder<T> holder = (DerivedElementHolder<T>) elementId;
 			BinaryTreeNode<DerivedElementHolder<T>> adjacentNode = holder.treeNode.getClosest(!next);
@@ -1641,6 +1877,11 @@ public final class ObservableCollectionImpl {
 		private MutableCollectionElement<T> mutableElement(ElementId id, MutableCollectionElement<DerivedElementHolder<T>> spliterElement) {
 			DerivedElementHolder<T> el = (DerivedElementHolder<T>) id;
 			class DerivedMutableCollectionElement implements MutableCollectionElement<T> {
+				@Override
+				public BetterCollection<T> getCollection() {
+					return ActiveDerivedCollection.this;
+				}
+
 				@Override
 				public ElementId getElementId() {
 					return el;
@@ -1673,20 +1914,17 @@ public final class ObservableCollectionImpl {
 
 				@Override
 				public void remove() throws UnsupportedOperationException {
+					String msg = el.element.canRemove();
+					if (msg != null)
+						throw new UnsupportedOperationException(msg);
 					if (spliterElement != null)
 						spliterElement.remove();
 					el.element.remove();
 				}
 
 				@Override
-				public String canAdd(T value, boolean before) {
-					return el.element.canAdd(value, before);
-				}
-
-				@Override
-				public ElementId add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-					DerivedCollectionElement<T> derived = el.element.add(value, before);
-					return idFromSynthetic(derived);
+				public String toString() {
+					return el.element.toString();
 				}
 			}
 			return new DerivedMutableCollectionElement();
@@ -1710,6 +1948,11 @@ public final class ObservableCollectionImpl {
 				public ElementId getElementId() {
 					return el;
 				}
+
+				@Override
+				public String toString() {
+					return el.element.toString();
+				}
 			};
 		}
 
@@ -1723,18 +1966,25 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public String canAdd(T value) {
-			return theFlow.canAdd(value);
+		public String canAdd(T value, ElementId after, ElementId before) {
+			return theFlow.canAdd(value, strip(after), strip(before));
 		}
 
 		@Override
-		public CollectionElement<T> addElement(T e, boolean first) {
-			DerivedCollectionElement<T> derived = theFlow.addElement(e, first);
+		public CollectionElement<T> addElement(T value, ElementId after, ElementId before, boolean first)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			DerivedCollectionElement<T> derived = theFlow.addElement(value, strip(after), strip(before), first);
 			return derived == null ? null : elementFor(idFromSynthetic(derived));
 		}
 
 		private DerivedElementHolder<T> idFromSynthetic(DerivedCollectionElement<T> added) {
-			return theDerivedElements.search(holder -> added.compareTo(holder.element), SortedSearchFilter.OnlyMatch).get();
+			BinaryTreeNode<DerivedElementHolder<T>> found = theDerivedElements.search(//
+				holder -> added.compareTo(holder.element), SortedSearchFilter.OnlyMatch);
+			return found.get();
+		}
+
+		private DerivedCollectionElement<T> strip(ElementId id) {
+			return id == null ? null : ((DerivedElementHolder<T>) id).element;
 		}
 
 		@Override
@@ -1820,6 +2070,11 @@ public final class ObservableCollectionImpl {
 		}
 	}
 
+	/**
+	 * An {@link ObservableCollection} whose contents are fixed
+	 *
+	 * @param <E> The type of values in the collection
+	 */
 	public static class ConstantCollection<E> implements ObservableCollection<E> {
 		private final TypeToken<E> theType;
 		private final BetterList<? extends E> theValues;
@@ -1897,6 +2152,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public CollectionElement<E> getTerminalElement(boolean first) {
+			return (CollectionElement<E>) theValues.getTerminalElement(first);
+		}
+
+		@Override
 		public CollectionElement<E> getAdjacentElement(ElementId elementId, boolean next) {
 			return (CollectionElement<E>) theValues.getAdjacentElement(elementId, next);
 		}
@@ -1909,6 +2169,11 @@ public final class ObservableCollectionImpl {
 
 		private MutableCollectionElement<E> mutableElement(MutableCollectionElement<? extends E> el) {
 			return new MutableCollectionElement<E>() {
+				@Override
+				public BetterCollection<E> getCollection() {
+					return ConstantCollection.this;
+				}
+
 				@Override
 				public ElementId getElementId() {
 					return el.getElementId();
@@ -1963,6 +2228,17 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public CollectionElement<E> addElement(E value, boolean first) {
+			return null;
+		}
+
+		@Override
+		public String canAdd(E value, ElementId after, ElementId before) {
+			return StdMsg.UNSUPPORTED_OPERATION;
+		}
+
+		@Override
+		public CollectionElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
+			throws UnsupportedOperationException, IllegalArgumentException {
 			return null;
 		}
 
@@ -2185,6 +2461,14 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public CollectionElement<E> getTerminalElement(boolean first) {
+			ObservableCollection<? extends E> current = getWrapped().get();
+			if (current == null)
+				return null;
+			return ((ObservableCollection<E>) current).getTerminalElement(first);
+		}
+
+		@Override
 		public CollectionElement<E> getAdjacentElement(ElementId elementId, boolean next) {
 			ObservableCollection<? extends E> current = getWrapped().get();
 			if (current == null)
@@ -2218,6 +2502,27 @@ public final class ObservableCollectionImpl {
 			if (e != null && !coll.getType().wrap().getRawType().isInstance(e))
 				throw new IllegalArgumentException(MutableCollectionElement.StdMsg.BAD_TYPE);
 			return ((ObservableCollection<E>) coll).addElement(e, first);
+		}
+
+		@Override
+		public String canAdd(E value, ElementId after, ElementId before) {
+			ObservableCollection<? extends E> current = theCollectionObservable.get();
+			if (current == null)
+				return MutableCollectionElement.StdMsg.UNSUPPORTED_OPERATION;
+			else if (value != null && !current.getType().wrap().getRawType().isInstance(value))
+				return MutableCollectionElement.StdMsg.BAD_TYPE;
+			return ((ObservableCollection<E>) current).canAdd(value, after, before);
+		}
+
+		@Override
+		public CollectionElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			ObservableCollection<? extends E> coll = theCollectionObservable.get();
+			if (coll == null)
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			if (value != null && !coll.getType().wrap().getRawType().isInstance(value))
+				throw new IllegalArgumentException(MutableCollectionElement.StdMsg.BAD_TYPE);
+			return ((ObservableCollection<E>) coll).addElement(value, after, before, first);
 		}
 
 		@Override

@@ -53,7 +53,6 @@ import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CircularArrayList;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-import org.qommons.collect.SimpleCause;
 import org.qommons.collect.TransactableList;
 import org.qommons.debug.Debug;
 import org.qommons.tree.BetterTreeList;
@@ -68,7 +67,6 @@ public class ObservableCollectionsTest {
 	private static boolean BARRAGE_USE_FILTER = true;
 	private static boolean BARRAGE_USE_COMBINE = true;
 	private static boolean BARRAGE_USE_MULTI_MAP = true;
-	private static final Duration RANDOM_TEST_TIME = Duration.ofSeconds(10);
 
 	/** The primitive integer type, for re-use */
 	public static final TypeToken<Integer> intType = TypeToken.of(int.class);
@@ -488,7 +486,8 @@ public class ObservableCollectionsTest {
 	/** Runs a barrage of tests on a {@link DefaultObservableCollection} backed by a {@link CircularArrayList} */
 	@Test
 	public void testObservableArrayList() {
-		TestHelper.createTester(ArrayListTester.class).withDebug(false).withFailurePersistence(false).withRandomCases(1).execute();
+		TestHelper.createTester(ArrayListTester.class).withDebug(false).withFailurePersistence(false).withRandomCases(1).execute()
+		.throwErrorIfFailed();
 	}
 
 	static class TreeListTester implements TestHelper.Testable {
@@ -502,7 +501,8 @@ public class ObservableCollectionsTest {
 	/** Runs a barrage of tests on a {@link DefaultObservableCollection} backed by a {@link BetterTreeList} */
 	@Test
 	public void testObservableTreeList() {
-		TestHelper.createTester(TreeListTester.class).withDebug(false).withFailurePersistence(false).withRandomCases(1).execute();
+		TestHelper.createTester(TreeListTester.class).withDebug(false).withFailurePersistence(false).withRandomCases(1).execute()
+		.throwErrorIfFailed();
 	}
 
 	static class TreeSetTester implements TestHelper.Testable {
@@ -516,7 +516,8 @@ public class ObservableCollectionsTest {
 	/** Runs a barrage of tests on a {@link DefaultObservableCollection} backed by a {@link BetterTreeSet} */
 	@Test
 	public void testObservableTreeSet() {
-		TestHelper.createTester(TreeSetTester.class).withDebug(false).withFailurePersistence(false).withRandomCases(1).execute();
+		TestHelper.createTester(TreeSetTester.class).withDebug(false).withFailurePersistence(false).withRandomCases(1).execute()
+		.throwErrorIfFailed();
 	}
 
 	// Random test generation
@@ -780,12 +781,11 @@ public class ObservableCollectionsTest {
 	}
 
 	/** Tests some simple {@link ObservableCollection} functionality in a random way */
-	@SuppressWarnings("unused")
 	@Test
 	public void randomSimple() {
 		TestHelper.createTester(SimpleRandomTester.class).withMaxTotalDuration(Duration.ofSeconds(5))//
 		/**/.withPersistenceDir(new File("src/main/test/org/observe/collect"), false)//
-		.execute();
+		.execute().throwErrorIfFailed();
 	}
 
 	// Older, more specific tests
@@ -1312,9 +1312,9 @@ public class ObservableCollectionsTest {
 	@Test
 	public void observableListMap() {
 		ObservableCollection<Integer> list = ObservableCollection.create(intType);
-		ObservableCollectionTester<Integer> lwTester = new ObservableCollectionTester<>(
+		ObservableCollectionTester<Integer> lwTester = new ObservableCollectionTester<>("light",
 			list.flow().map(intType, value -> value * 10, options -> options.cache(false)).collectPassive());
-		ObservableCollectionTester<Integer> hwTester = new ObservableCollectionTester<>(
+		ObservableCollectionTester<Integer> hwTester = new ObservableCollectionTester<>("heavy",
 			list.flow().map(intType, value -> value * 10).collect());
 
 		for(int i = 0; i < 30; i++) {
@@ -1344,7 +1344,7 @@ public class ObservableCollectionsTest {
 	@Test
 	public void observableListFilter() {
 		ObservableCollection<Integer> list = ObservableCollection.create(intType);
-		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(//
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("filtered", //
 			list.flow().filter(value -> value != null && value % 2 == 0 ? null : StdMsg.ILLEGAL_ELEMENT).collect());
 
 		for(int i = 0; i < 30; i++) {
@@ -1372,11 +1372,11 @@ public class ObservableCollectionsTest {
 	public void observableListFilter2() {
 		ObservableCollection<Integer> list = ObservableCollection.create(intType);
 
-		ObservableCollectionTester<Integer> tester0 = new ObservableCollectionTester<>(//
+		ObservableCollectionTester<Integer> tester0 = new ObservableCollectionTester<>("%3==0", //
 			list.flow().filter(value -> value % 3 == 0 ? null : StdMsg.ILLEGAL_ELEMENT).collect());
-		ObservableCollectionTester<Integer> tester1 = new ObservableCollectionTester<>(//
+		ObservableCollectionTester<Integer> tester1 = new ObservableCollectionTester<>("%3==1", //
 			list.flow().filter(value -> value % 3 == 1 ? null : StdMsg.ILLEGAL_ELEMENT).collect());
-		ObservableCollectionTester<Integer> tester2 = new ObservableCollectionTester<>(//
+		ObservableCollectionTester<Integer> tester2 = new ObservableCollectionTester<>("%3==2", //
 			list.flow().filter(value -> value % 3 == 2 ? null : StdMsg.ILLEGAL_ELEMENT).collect());
 
 		int count = 30;
@@ -1450,7 +1450,8 @@ public class ObservableCollectionsTest {
 	@Test
 	public void observableListFilterMap() {
 		ObservableCollection<Integer> list = ObservableCollection.create(intType);
-		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(list.flow()//
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("filterMap",
+			list.flow()//
 			.filter(value -> (value == null || value % 2 != 0) ? StdMsg.ILLEGAL_ELEMENT : null)//
 			.map(intType, value -> value / 2)//
 			.collect());
@@ -1481,7 +1482,7 @@ public class ObservableCollectionsTest {
 		ObservableCollection<Integer> list = ObservableCollection.create(intType);
 		SimpleSettableValue<Integer> value1 = new SimpleSettableValue<>(Integer.TYPE, false);
 		value1.set(1, null);
-		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(list.flow()//
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("combined", list.flow()//
 			.combine(intType, combine -> {
 				return combine.with(value1).build((v1, v2) -> v1 * v2);
 			}).filter(value -> value != null && value % 3 == 0 ? null : StdMsg.ILLEGAL_ELEMENT)//
@@ -1533,8 +1534,8 @@ public class ObservableCollectionsTest {
 		outer.add(set1);
 		outer.add(set2);
 		ObservableCollection<Integer> flat = outer.flow().flatMap(intType, s -> s.flow()).collect();
-		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(flat);
-		ObservableCollectionTester<Integer> filteredTester = new ObservableCollectionTester<>(//
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("flat", flat);
+		ObservableCollectionTester<Integer> filteredTester = new ObservableCollectionTester<>("flatFiltered", //
 			flat.flow().filter(value -> value != null && value % 3 == 0 ? null : StdMsg.ILLEGAL_ELEMENT).collect());
 
 		List<Integer> correct1 = new ArrayList<>();
@@ -1666,7 +1667,7 @@ public class ObservableCollectionsTest {
 
 		Integer [] received = new Integer[1];
 		ObservableCollection<Integer> flattened = list.flow().flattenValues(intType, v -> v).collect();
-		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(flattened);
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("flattened", flattened);
 		flattened.observeFind(value -> value % 3 == 0, () -> null, Ternian.NONE).value()
 		.act(value -> received[0] = value);
 		assertEquals(Integer.valueOf(3), received[0]);
@@ -1714,7 +1715,8 @@ public class ObservableCollectionsTest {
 		firstList.with(10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
 		secondList.with(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
 
-		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(ObservableCollection.flattenValue(listVal));
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("flattened",
+			ObservableCollection.flattenValue(listVal));
 		tester.check(firstList);
 		firstList.with(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
 		tester.check(firstList);
@@ -1740,7 +1742,7 @@ public class ObservableCollectionsTest {
 	public void sortedObservableList() {
 		ObservableCollection<Integer> list = ObservableCollection.create(intType);
 
-		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(//
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("sorted", //
 			list.flow().sorted(Integer::compareTo).collect());
 
 		for(int i = 30; i >= 0; i--) {
@@ -1767,7 +1769,7 @@ public class ObservableCollectionsTest {
 		}
 	}
 
-	/** Tests {@link CollectionDataFlow#flatMapC(TypeToken, Function)} and {@link CollectionDataFlow#sorted(Comparator)} */
+	/** Tests {@link CollectionDataFlow#flatMap(TypeToken, Function)} and {@link CollectionDataFlow#sorted(Comparator)} */
 	@Test
 	public void observableOrderedFlatten() {
 		observableOrderedFlatten(null);
@@ -1808,7 +1810,7 @@ public class ObservableCollectionsTest {
 			flow = flow.sorted(comparator);
 		SimpleObservable<Void> unsub = new SimpleObservable<>();
 		ObservableCollection<Integer> flat = flow.collectActive(unsub);
-		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(flat);
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("flat", flat);
 		tester.set(join(comparator, correct1, correct2)).check();
 
 		outer.add(list3);
@@ -1848,7 +1850,7 @@ public class ObservableCollectionsTest {
 			list.add(el);
 		}
 		ObservableCollection<Integer> values = list.flow().refreshEach(el -> elObservables.get(el)).map(intType, el -> el[0]).collect();
-		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(values);
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("refreshed", values);
 		tester.check();
 
 		for(int i = 0; i < list.size(); i++) {
@@ -1902,7 +1904,7 @@ public class ObservableCollectionsTest {
 		testTransactionsByChanges(list, list);
 	}
 
-	/** Tests transactions in {@link CollectionDataFlow#flatMapC(TypeToken, Function) flattened} collections */
+	/** Tests transactions in {@link CollectionDataFlow#flatMap(TypeToken, Function) flattened} collections */
 	@Test
 	public void testTransactionsFlattened() {
 		ObservableCollection<Integer> list1 = ObservableCollection.create(intType);
@@ -1927,8 +1929,8 @@ public class ObservableCollectionsTest {
 		tester.checkOps(0);
 		controller.add(9);
 		tester.check(9, 1);
-		SimpleCause cause = new SimpleCause();
-		try (Transaction t = SimpleCause.use(cause)) {
+		Causable cause = Causable.simpleCause(null);
+		try (Transaction t = Causable.use(cause)) {
 			Transaction trans = controller.lock(true, cause);
 			tester.checkOps(0);
 			controller.add(0, 4);
@@ -1982,8 +1984,8 @@ public class ObservableCollectionsTest {
 		}
 		assertEquals(correctChanges[0], changeCount[0]);
 
-		SimpleCause cause = new SimpleCause();
-		try (Transaction t = SimpleCause.use(cause); Transaction trans = controller.lock(true, cause)) {
+		Causable cause = Causable.simpleCause(null);
+		try (Transaction t = Causable.use(cause); Transaction trans = controller.lock(true, cause)) {
 			controller.clear();
 			correct.clear();
 			correct.addAll(observable);
@@ -2027,8 +2029,8 @@ public class ObservableCollectionsTest {
 		refresh.onNext(null);
 		tester.checkOps(1);
 
-		SimpleCause cause = new SimpleCause();
-		try (Transaction t = SimpleCause.use(cause)) {
+		Causable cause = Causable.simpleCause(null);
+		try (Transaction t = Causable.use(cause)) {
 			Transaction trans = list.lock(true, cause);
 			refresh.onNext(cause);
 			refresh.onNext(cause);
@@ -2036,8 +2038,8 @@ public class ObservableCollectionsTest {
 		}
 		tester.checkOps(1);
 
-		cause = new SimpleCause();
-		try (Transaction t = SimpleCause.use(cause)) {
+		cause = Causable.simpleCause(null);
+		try (Transaction t = Causable.use(cause)) {
 			Transaction trans = list.lock(true, cause);
 			for (int i = 0; i < 30; i++)
 				list.set(i, i + 1);
@@ -2087,8 +2089,8 @@ public class ObservableCollectionsTest {
 		correctChanges++;
 		assertEquals(correctChanges, changes[0]);
 
-		SimpleCause cause = new SimpleCause();
-		try (Transaction t = SimpleCause.use(cause)) {
+		Causable cause = Causable.simpleCause(null);
+		try (Transaction t = Causable.use(cause)) {
 			Transaction trans = list.lock(true, cause);
 			mult.set(3, cause);
 			mult.set(4, cause);
@@ -2097,8 +2099,8 @@ public class ObservableCollectionsTest {
 		correctChanges++;
 		assertEquals(correctChanges, changes[0]);
 
-		cause = new SimpleCause();
-		try (Transaction t = SimpleCause.use(cause)) {
+		cause = Causable.simpleCause(null);
+		try (Transaction t = Causable.use(cause)) {
 			Transaction trans = list.lock(true, cause);
 			for (int i = 0; i < 30; i++)
 				list.set(i, i + 1);

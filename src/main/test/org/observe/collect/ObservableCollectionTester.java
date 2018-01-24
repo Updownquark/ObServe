@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 import org.observe.AbstractObservableTester;
@@ -206,13 +207,13 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 				break;
 			case remove:
 				E oldValue = theSyncedCopy.remove(evt.getIndex());
-				if (checkRemovedValues)
-					assertEquals(theName, evt.getOldValue(), oldValue);
+				if (checkRemovedValues && !Objects.equals(evt.getOldValue(), oldValue))
+					assertEquals(theName + "[" + evt.getIndex() + "]", evt.getOldValue(), oldValue);
 				break;
 			case set:
 				oldValue = theSyncedCopy.set(evt.getIndex(), evt.getNewValue());
-				if (checkRemovedValues)
-					assertEquals(theName, evt.getOldValue(), oldValue);
+				if (checkRemovedValues && !Objects.equals(evt.getOldValue(), oldValue))
+					assertEquals(theName + "[" + evt.getIndex() + "]", evt.getOldValue(), oldValue);
 				break;
 			}
 		}, true);
@@ -229,8 +230,8 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 				case remove:
 					for (CollectionChangeEvent.ElementChange<? extends E> change : evt.getElementsReversed()) {
 						E oldValue = theBatchSyncedCopy.remove(change.index);
-						if (checkRemovedValues)
-							assertEquals(theName, change.oldValue, oldValue);
+						if (checkRemovedValues && !Objects.equals(change.oldValue, oldValue))
+							assertEquals(theName + "[" + change.index + "]", change.oldValue, oldValue);
 					}
 					break;
 				case set:

@@ -9,6 +9,7 @@ import java.util.function.Predicate;
 
 import org.qommons.Transactable;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterHashMap;
 import org.qommons.collect.BetterHashSet;
 import org.qommons.collect.BetterMap;
@@ -334,6 +335,11 @@ public interface Equivalence<E> {
 		private MutableCollectionElement<T2> mutableHandleFor(MutableCollectionElement<? extends E> el) {
 			return new MutableCollectionElement<T2>() {
 				@Override
+				public BetterCollection<T2> getCollection() {
+					return MappedSet.this;
+				}
+
+				@Override
 				public ElementId getElementId() {
 					return el.getElementId();
 				}
@@ -367,17 +373,19 @@ public interface Equivalence<E> {
 				public void remove() throws UnsupportedOperationException {
 					el.remove();
 				}
-
-				@Override
-				public String canAdd(T2 value, boolean before) {
-					return ((MutableCollectionElement<E>) el).canAdd(theReverse.apply(value), before);
-				}
-
-				@Override
-				public ElementId add(T2 value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-					return ((MutableCollectionElement<E>) el).add(theReverse.apply(value), before);
-				}
 			};
+		}
+
+		@Override
+		public CollectionElement<T2> getTerminalElement(boolean first) {
+			CollectionElement<E> wrapEl = theWrapped.getTerminalElement(first);
+			return wrapEl == null ? null : handleFor(wrapEl);
+		}
+
+		@Override
+		public CollectionElement<T2> getAdjacentElement(ElementId elementId, boolean next) {
+			CollectionElement<E> wrapEl = theWrapped.getAdjacentElement(elementId, next);
+			return wrapEl == null ? null : handleFor(wrapEl);
 		}
 
 		@Override
@@ -414,6 +422,17 @@ public interface Equivalence<E> {
 		@Override
 		public CollectionElement<T2> addElement(T2 value, boolean first) {
 			return handleFor(theWrapped.addElement(theReverse.apply(value), first));
+		}
+
+		@Override
+		public String canAdd(T2 value, ElementId after, ElementId before) {
+			return theWrapped.canAdd(theReverse.apply(value), after, before);
+		}
+
+		@Override
+		public CollectionElement<T2> addElement(T2 value, ElementId after, ElementId before, boolean first)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			return handleFor(theWrapped.addElement(theReverse.apply(value), after, before, first));
 		}
 
 		@Override
@@ -503,6 +522,11 @@ public interface Equivalence<E> {
 			return handleFor(theWrapped.putEntry(theReverse.apply(key), value, first));
 		}
 
+		@Override
+		public MapEntryHandle<T2, V> putEntry(T2 key, V value, ElementId after, ElementId before, boolean first) {
+			return handleFor(theWrapped.putEntry(theReverse.apply(key), value, after, before, first));
+		}
+
 		private MapEntryHandle<T2, V> handleFor(MapEntryHandle<E, V> entry) {
 			return new MapEntryHandle<T2, V>() {
 				@Override
@@ -524,6 +548,11 @@ public interface Equivalence<E> {
 
 		private MutableMapEntryHandle<T2, V> mutableHandleFor(MutableMapEntryHandle<E, V> entry) {
 			return new MutableMapEntryHandle<T2, V>() {
+				@Override
+				public BetterCollection<V> getCollection() {
+					return MappedMap.this.values();
+				}
+
 				@Override
 				public ElementId getElementId() {
 					return entry.getElementId();
@@ -562,16 +591,6 @@ public interface Equivalence<E> {
 				@Override
 				public void remove() throws UnsupportedOperationException {
 					entry.remove();
-				}
-
-				@Override
-				public String canAdd(V value, boolean before) {
-					return StdMsg.UNSUPPORTED_OPERATION;
-				}
-
-				@Override
-				public ElementId add(V value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 				}
 			};
 		}

@@ -3,6 +3,7 @@ package org.observe.collect;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -12,6 +13,7 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.collect.FlowOptions.MapDef;
 import org.observe.collect.FlowOptions.MapOptions;
+import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollection.UniqueDataFlow;
@@ -29,13 +31,14 @@ import org.observe.collect.ObservableCollectionImpl.ReversedObservableCollection
 import org.observe.util.WeakListening;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterMap;
-import org.qommons.collect.CollectionElement;
+import org.qommons.collect.BetterSet;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-import org.qommons.tree.BetterTreeSet;
-import org.qommons.tree.BinaryTreeNode;
-import org.qommons.tree.MutableBinaryTreeNode;
+import org.qommons.debug.Debug;
+import org.qommons.debug.Debug.DebugData;
+import org.qommons.tree.BetterTreeMap;
+import org.qommons.tree.BinaryTreeEntry;
 
 import com.google.common.reflect.TypeToken;
 
@@ -57,27 +60,33 @@ public class ObservableSetImpl {
 		public ObservableSet<E> reverse() {
 			return getWrapped();
 		}
+
+		@Override
+		public String toString() {
+			return BetterSet.toString(this);
+		}
 	}
 
 	public static class UniqueDataFlowWrapper<E, T> extends ObservableCollectionDataFlowImpl.AbstractDataFlow<E, T, T>
 	implements UniqueDataFlow<E, T, T> {
-		protected UniqueDataFlowWrapper(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent) {
-			super(source, parent, parent.getTargetType(), parent.equivalence());
+		protected UniqueDataFlowWrapper(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent,
+			Equivalence<? super T> equivalence) {
+			super(source, parent, parent.getTargetType(), equivalence);
 		}
 
 		@Override
 		public UniqueDataFlow<E, T, T> reverse() {
-			return new UniqueDataFlowWrapper<>(getSource(), getParent().reverse());
+			return new UniqueDataFlowWrapper<>(getSource(), super.reverse(), equivalence());
 		}
 
 		@Override
 		public UniqueDataFlow<E, T, T> filter(Function<? super T, String> filter) {
-			return new UniqueDataFlowWrapper<>(getSource(), getParent().filter(filter));
+			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter), equivalence());
 		}
 
 		@Override
 		public <X> UniqueDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
-			return new UniqueDataFlowWrapper<>(getSource(), getParent().whereContained(other, include));
+			return new UniqueDataFlowWrapper<>(getSource(), super.whereContained(other, include), equivalence());
 		}
 
 		@Override
@@ -90,13 +99,19 @@ public class ObservableSetImpl {
 		}
 
 		@Override
+		public UniqueDataFlow<E, T, T> distinct(Consumer<UniqueOptions> options) {
+			options.accept(new FlowOptions.SimpleUniqueOptions(equivalence() instanceof Equivalence.ComparatorEquivalence));
+			return this; // No-op
+		}
+
+		@Override
 		public UniqueDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), getParent().refresh(refresh));
+			return new UniqueDataFlowWrapper<>(getSource(), super.refresh(refresh), equivalence());
 		}
 
 		@Override
 		public UniqueDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), getParent().refreshEach(refresh));
+			return new UniqueDataFlowWrapper<>(getSource(), super.refreshEach(refresh), equivalence());
 		}
 
 		@Override
@@ -138,9 +153,9 @@ public class ObservableSetImpl {
 		private final boolean isAlwaysUsingFirst;
 		private final boolean isPreservingSourceOrder;
 
-		protected UniqueOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, boolean alwaysUseFirst,
-			boolean preserveSourceOrder) {
-			super(source, parent);
+		protected UniqueOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, Equivalence<? super T> equivalence,
+			boolean alwaysUseFirst, boolean preserveSourceOrder) {
+			super(source, parent, equivalence);
 			isAlwaysUsingFirst = alwaysUseFirst;
 			isPreservingSourceOrder = preserveSourceOrder;
 		}
@@ -152,7 +167,7 @@ public class ObservableSetImpl {
 
 		@Override
 		public ActiveCollectionManager<E, ?, T> manageActive() {
-			return new UniqueManager<>(getParent().manageActive(), isAlwaysUsingFirst, isPreservingSourceOrder);
+			return new UniqueManager<>(getParent().manageActive(), equivalence(), isAlwaysUsingFirst, isPreservingSourceOrder);
 		}
 	}
 
@@ -164,17 +179,17 @@ public class ObservableSetImpl {
 
 		@Override
 		public UniqueDataFlow<E, T, T> reverse() {
-			return new UniqueDataFlowWrapper<>(getSource(), super.reverse());
+			return new UniqueDataFlowWrapper<>(getSource(), super.reverse(), equivalence());
 		}
 
 		@Override
 		public UniqueDataFlow<E, T, T> filter(Function<? super T, String> filter) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter));
+			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter), equivalence());
 		}
 
 		@Override
 		public <X> UniqueDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.whereContained(other, include));
+			return new UniqueDataFlowWrapper<>(getSource(), super.whereContained(other, include), equivalence());
 		}
 
 		@Override
@@ -187,12 +202,12 @@ public class ObservableSetImpl {
 
 		@Override
 		public UniqueDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.refresh(refresh));
+			return new UniqueDataFlowWrapper<>(getSource(), super.refresh(refresh), equivalence());
 		}
 
 		@Override
 		public UniqueDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.refreshEach(refresh));
+			return new UniqueDataFlowWrapper<>(getSource(), super.refreshEach(refresh), equivalence());
 		}
 
 		@Override
@@ -221,12 +236,12 @@ public class ObservableSetImpl {
 
 		@Override
 		public UniqueDataFlow<E, T, T> reverse() {
-			return new UniqueDataFlowWrapper<>(getSource(), super.reverse());
+			return new UniqueDataFlowWrapper<>(getSource(), super.reverse(), equivalence());
 		}
 
 		@Override
 		public UniqueDataFlow<E, T, T> filter(Function<? super T, String> filter) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter));
+			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter), equivalence());
 		}
 
 		@Override
@@ -239,17 +254,17 @@ public class ObservableSetImpl {
 
 		@Override
 		public <X> UniqueDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.whereContained(other, include));
+			return new UniqueDataFlowWrapper<>(getSource(), super.whereContained(other, include), equivalence());
 		}
 
 		@Override
 		public UniqueDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.refresh(refresh));
+			return new UniqueDataFlowWrapper<>(getSource(), super.refresh(refresh), equivalence());
 		}
 
 		@Override
 		public UniqueDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.refreshEach(refresh));
+			return new UniqueDataFlowWrapper<>(getSource(), super.refreshEach(refresh), equivalence());
 		}
 
 		@Override
@@ -273,15 +288,22 @@ public class ObservableSetImpl {
 	public static class UniqueManager<E, T> implements ActiveCollectionManager<E, T, T> {
 		private final ActiveCollectionManager<E, ?, T> theParent;
 		private final BetterMap<T, UniqueElement> theElementsByValue;
+		private final Equivalence<? super T> theEquivalence;
 		private final boolean isAlwaysUsingFirst;
 		private final boolean isPreservingSourceOrder;
 		private ElementAccepter<T> theAccepter;
 
-		protected UniqueManager(ActiveCollectionManager<E, ?, T> parent, boolean alwaysUseFirst, boolean preserveSourceOrder) {
+		private DebugData theDebug;
+
+		protected UniqueManager(ActiveCollectionManager<E, ?, T> parent, Equivalence<? super T> equivalence, boolean alwaysUseFirst,
+			boolean preserveSourceOrder) {
 			theParent = parent;
+			theEquivalence = equivalence;
 			theElementsByValue = parent.equivalence().createMap();
 			isAlwaysUsingFirst = alwaysUseFirst;
 			isPreservingSourceOrder = preserveSourceOrder;
+
+			theDebug = Debug.d().add("distinct");
 		}
 
 		@Override
@@ -291,7 +313,7 @@ public class ObservableSetImpl {
 
 		@Override
 		public Equivalence<? super T> equivalence() {
-			return theParent.equivalence();
+			return theEquivalence;
 		}
 
 		@Override
@@ -319,28 +341,42 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public String canAdd(T toAdd) {
-			if (theElementsByValue.containsKey(toAdd))
-				return StdMsg.ELEMENT_EXISTS;
-			return theParent.canAdd(toAdd);
+		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			if (isPreservingSourceOrder) {
+				if (theElementsByValue.containsKey(toAdd))
+					return StdMsg.ELEMENT_EXISTS;
+				return theParent.canAdd(toAdd, parent(after), parent(before));
+			} else {
+				String msg = theElementsByValue.keySet().canAdd(toAdd, valueElement(after), valueElement(before));
+				if (msg != null)
+					return msg;
+				return theParent.canAdd(toAdd, null, null);
+			}
 		}
 
 		@Override
-		public DerivedCollectionElement<T> addElement(T value, boolean first) {
+		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
+			boolean first) {
 			try (Transaction t = lock(true, null)) {
 				if (theElementsByValue.containsKey(value))
 					return null;
 				UniqueElement element = null;
-				if (!isPreservingSourceOrder) {
+				DerivedCollectionElement<T> parentAfter, parentBefore;
+				if (isPreservingSourceOrder) {
+					parentAfter = parent(after);
+					parentBefore = parent(before);
+				} else {
 					// Since the element map is determining order, we forward the endian request (first or last) to the unique map
 					element = createUniqueElement(value);
 					// First, install the (currently empty) unique element in the element map so that the position is correct
-					element.theValueId = theElementsByValue.putEntry(value, element, first).getElementId();
+					element.theValueId = theElementsByValue.putEntry(value, element, valueElement(after), valueElement(before), first)
+						.getElementId();
+					parentAfter = parentBefore = null;
 				}
 				try {
 					// Parent collection order does not matter, so the first boolean does not apply here.
 					// Just add it to the end.
-					DerivedCollectionElement<T> parentEl = theParent.addElement(value, false);
+					DerivedCollectionElement<T> parentEl = theParent.addElement(value, parentAfter, parentBefore, false);
 					if (parentEl == null) {
 						if (element != null)
 							theElementsByValue.mutableEntry(element.theValueId).remove();
@@ -359,6 +395,14 @@ public class ObservableSetImpl {
 				}
 				return element;
 			}
+		}
+
+		private ElementId valueElement(DerivedCollectionElement<T> el) {
+			return el == null ? null : ((UniqueElement) el).theValueId;
+		}
+
+		private DerivedCollectionElement<T> parent(DerivedCollectionElement<T> el) {
+			return el == null ? null : ((UniqueElement) el).theActiveElement;
 		}
 
 		@Override
@@ -381,7 +425,7 @@ public class ObservableSetImpl {
 				elements.stream().flatMap(el -> {
 					UniqueElement uel = (UniqueElement) el;
 					return Stream.concat(Stream.of(uel.theActiveElement), //
-						uel.theParentElements.stream().filter(pe -> pe != uel.theActiveElement));
+						uel.theParentElements.keySet().stream().filter(pe -> pe != uel.theActiveElement));
 				}).collect(Collectors.toList()), newValue);
 		}
 
@@ -399,7 +443,7 @@ public class ObservableSetImpl {
 		}
 
 		protected class UniqueElement implements DerivedCollectionElement<T> {
-			private final BetterTreeSet<DerivedCollectionElement<T>> theParentElements;
+			private final BetterTreeMap<DerivedCollectionElement<T>, T> theParentElements;
 			private T theValue;
 			private ElementId theValueId;
 			private DerivedCollectionElement<T> theActiveElement;
@@ -408,104 +452,129 @@ public class ObservableSetImpl {
 
 			protected UniqueElement(T value) {
 				theValue = value;
-				theParentElements = new BetterTreeSet<>(false, DerivedCollectionElement::compareTo);
+				theParentElements = new BetterTreeMap<>(false, DerivedCollectionElement::compareTo);
 			}
 
 			protected DerivedCollectionElement<T> getActiveElement() {
 				return theActiveElement;
 			}
 
-			protected BetterTreeSet<DerivedCollectionElement<T>> getParentElements() {
+			protected BetterTreeMap<DerivedCollectionElement<T>, T> getParentElements() {
 				return theParentElements;
 			}
 
-			protected CollectionElement<DerivedCollectionElement<T>> addParent(DerivedCollectionElement<T> parentEl, Object cause) {
+			protected BinaryTreeEntry<DerivedCollectionElement<T>, T> addParent(DerivedCollectionElement<T> parentEl, Object cause) {
 				if (theValueId == null)
 					theValueId = theElementsByValue.getEntry(theValue).getElementId();
 				boolean only = theParentElements.isEmpty();
-				BinaryTreeNode<DerivedCollectionElement<T>> node = theParentElements.addElement(parentEl, false);
+				BinaryTreeEntry<DerivedCollectionElement<T>, T> node = theParentElements.putEntry(parentEl, parentEl.get(), false);
+				theDebug.debugIf(!theDebug.is("internalAdd")).act("addSource").param("@", theValue).exec();
 				if (only) {
 					// The parent is the first representing this element
+					theDebug.act("add:new").param("value", theValue).exec();
 					theActiveElement = parentEl;
 					theAccepter.accept(this, cause);
 				} else if (isAlwaysUsingFirst && node.getClosest(true) == null) {
+					theDebug.act("add:representativeChanged").param("value", theValue).exec();
 					// The new element takes precedence over the current one
 					T oldValue = theActiveElement.get();
 					T newActiveValue = parentEl.get();
 					theActiveElement = parentEl;
 					if (oldValue != newActiveValue)
 						ObservableCollectionDataFlowImpl.update(theListener, oldValue, newActiveValue, cause);
-				}
+				} else
+					theDebug.act("add:no-effect").param("value", theValue).exec();
 
 				parentEl.setListener(new CollectionElementListener<T>() {
 					@Override
 					public void update(T oldValue, T newValue, Object innerCause) {
+						T realOldValue = node.getValue();
+						theDebug.act("update").param("@", theValue).param("newValue", newValue).exec();
 						if (isInternallySetting) {
-							if (theActiveElement == parentEl)
-								ObservableCollectionDataFlowImpl.update(theListener, oldValue, newValue, innerCause);
-							parentUpdated(node, oldValue, newValue, innerCause);
+							if (theActiveElement == parentEl) {
+								theDebug.act("update:trueUpdate").exec();
+								ObservableCollectionDataFlowImpl.update(theListener, realOldValue, newValue, innerCause);
+							} else
+								theDebug.act("update:no-effect").exec();
+							theParentElements.mutableEntry(node.getElementId()).setValue(newValue);
+							parentUpdated(node, realOldValue, newValue, innerCause);
 							return;
 						}
 						UniqueElement ue = theElementsByValue.get(newValue);
 						if (ue == UniqueElement.this) {
-							if (theActiveElement == parentEl)
-								ObservableCollectionDataFlowImpl.update(theListener, oldValue, newValue, innerCause);
-							parentUpdated(node, oldValue, newValue, innerCause);
+							if (theActiveElement == parentEl) {
+								theDebug.act("update:trueUpdate").exec();
+								theValue = newValue;
+								ObservableCollectionDataFlowImpl.update(theListener, realOldValue, newValue, innerCause);
+							} else
+								theDebug.act("update:no-effect").exec();
+							theParentElements.mutableEntry(node.getElementId()).setValue(newValue);
+							parentUpdated(node, realOldValue, newValue, innerCause);
 						} else {
 							if (ue == null && theParentElements.size() == 1
 								&& theElementsByValue.keySet().mutableElement(theValueId).isAcceptable(newValue) == null) {
+								theDebug.act("update:move").exec();
 								// If we can just fire an update instead of an add/remove, let's do that
-								T old = theValue;
 								moveTo(newValue);
-								ObservableCollectionDataFlowImpl.update(theListener, old, newValue, innerCause);
-								parentUpdated(node, oldValue, newValue, innerCause);
+								theParentElements.mutableEntry(node.getElementId()).setValue(newValue);
+								ObservableCollectionDataFlowImpl.update(theListener, realOldValue, newValue, innerCause);
+								parentUpdated(node, realOldValue, newValue, innerCause);
 								return;
 							}
 							if (ue == null) {
 								ue = createUniqueElement(newValue);
 								theElementsByValue.put(newValue, ue);
 							}
-							theParentElements.mutableElement(node.getElementId()).remove();
+							theParentElements.mutableEntry(node.getElementId()).remove();
 							if (theParentElements.isEmpty()) {
+								theDebug.act("remove:remove").param("value", theValue).exec();
 								// This element is no longer represented
 								theElementsByValue.mutableEntry(theValueId).remove();
-								ObservableCollectionDataFlowImpl.removed(theListener, oldValue, innerCause);
-								parentRemoved(node, oldValue, innerCause);
+								ObservableCollectionDataFlowImpl.removed(theListener, realOldValue, innerCause);
+								parentRemoved(node, realOldValue, innerCause);
 							} else if (theActiveElement == parentEl) {
-								theActiveElement = theParentElements.first();
-								T newActiveValue = theActiveElement.get();
-								if (oldValue != newActiveValue)
-									ObservableCollectionDataFlowImpl.update(theListener, oldValue, newActiveValue, innerCause);
-								parentUpdated(node, oldValue, newValue, innerCause);
-							}
+								Map.Entry<DerivedCollectionElement<T>, T> activeEntry = theParentElements.firstEntry();
+								theActiveElement = activeEntry.getKey();
+								theDebug.act("remove:representativeChange").exec();
+								theValue = activeEntry.getValue();
+								if (realOldValue != theValue)
+									ObservableCollectionDataFlowImpl.update(theListener, realOldValue, theValue, innerCause);
+								parentUpdated(node, realOldValue, newValue, innerCause);
+							} else
+								theDebug.act("remove:no-effect").exec();
 							// The new UniqueElement will call setListener and we won't get its events anymore
+							theDebug.setField("internalAdd", true);
 							ue.addParent(parentEl, innerCause);
+							theDebug.setField("internalAdd", null);
 						}
 					}
 
 					@Override
 					public void removed(T value, Object innerCause) {
-						MutableBinaryTreeNode<DerivedCollectionElement<T>> parentNode = theParentElements
-							.mutableElement(node.getElementId());
-						parentNode.remove();
+						theDebug.act("remove").param("@", theValue).exec();
+						theParentElements.mutableEntry(node.getElementId()).remove();
 						if (theParentElements.isEmpty()) {
+							theDebug.act("remove:remove").param("value", theValue).exec();
 							// This element is no longer represented
 							theElementsByValue.mutableEntry(theValueId).remove();
-							ObservableCollectionDataFlowImpl.removed(theListener, value, innerCause);
+							ObservableCollectionDataFlowImpl.removed(theListener, theValue, innerCause);
 						} else if (theActiveElement == parentEl) {
-							theActiveElement = theParentElements.first();
-							T newActiveValue = theActiveElement.get();
-							if (value != newActiveValue)
-								ObservableCollectionDataFlowImpl.update(theListener, value, newActiveValue, innerCause);
+							theDebug.act("remove:representativeChange").exec();
+							Map.Entry<DerivedCollectionElement<T>, T> activeEntry = theParentElements.firstEntry();
+							theActiveElement = activeEntry.getKey();
+							T oldValue = theValue;
+							theValue = activeEntry.getValue();
+							if (oldValue != theValue)
+								ObservableCollectionDataFlowImpl.update(theListener, oldValue, theValue, innerCause);
 						}
 					}
 				});
 				return node;
 			}
 
-			protected void parentUpdated(CollectionElement<DerivedCollectionElement<T>> parentEl, T oldValue, T newValue, Object cause) {}
+			protected void parentUpdated(BinaryTreeEntry<DerivedCollectionElement<T>, T> node, T oldValue, T newValue, Object cause) {}
 
-			protected void parentRemoved(CollectionElement<DerivedCollectionElement<T>> parentEl, T value, Object cause) {}
+			protected void parentRemoved(BinaryTreeEntry<DerivedCollectionElement<T>, T> parentEl, T value, Object cause) {}
 
 			protected ElementId getValueElement() {
 				if (theValueId == null)
@@ -534,7 +603,7 @@ public class ObservableSetImpl {
 			@Override
 			public String isEnabled() {
 				// A replacement operation involves replacing the values for each element composing this unique element
-				for (DerivedCollectionElement<T> el : theParentElements) {
+				for (DerivedCollectionElement<T> el : theParentElements.keySet()) {
 					String msg = el.isEnabled();
 					if (msg != null)
 						return msg;
@@ -558,7 +627,7 @@ public class ObservableSetImpl {
 					if (msg != null)
 						return msg;
 				}
-				for (DerivedCollectionElement<T> el : theParentElements) {
+				for (DerivedCollectionElement<T> el : theParentElements.keySet()) {
 					msg = el.isAcceptable(value);
 					if (msg != null)
 						return msg;
@@ -581,7 +650,7 @@ public class ObservableSetImpl {
 					String valueSetMsg = theElementsByValue.keySet().mutableElement(theValueId).isAcceptable(value);
 					if (!isPreservingSourceOrder && valueSetMsg != null)
 						throw new IllegalArgumentException(valueSetMsg);
-					for (DerivedCollectionElement<T> el : theParentElements) {
+					for (DerivedCollectionElement<T> el : theParentElements.keySet()) {
 						msg = el.isAcceptable(value);
 						if (msg != null)
 							throw new IllegalArgumentException(msg);
@@ -593,7 +662,7 @@ public class ObservableSetImpl {
 					// Make the active element the first element that gets updated. This will ensure a set operation instead of a remove/add
 					List<DerivedCollectionElement<T>> parentEls = new ArrayList<>(theParentElements.size());
 					parentEls.add(theActiveElement);
-					theParentElements.stream().filter(pe -> pe != theActiveElement).forEach(parentEls::add);
+					theParentElements.keySet().stream().filter(pe -> pe != theActiveElement).forEach(parentEls::add);
 					try {
 						theParent.setValues(parentEls, value);
 						isInternallySetting = false;
@@ -620,7 +689,7 @@ public class ObservableSetImpl {
 			@Override
 			public String canRemove() {
 				// A removal operation involves removing each element composing this unique element
-				for (DerivedCollectionElement<T> el : theParentElements) {
+				for (DerivedCollectionElement<T> el : theParentElements.keySet()) {
 					String msg = el.canRemove();
 					if (msg != null)
 						return msg;
@@ -635,56 +704,9 @@ public class ObservableSetImpl {
 				if (msg != null)
 					throw new UnsupportedOperationException(msg);
 				// Make a copy since theValueElements will be modified with each remove
-				List<DerivedCollectionElement<T>> elCopies = new ArrayList<>(theParentElements);
+				List<DerivedCollectionElement<T>> elCopies = new ArrayList<>(theParentElements.keySet());
 				for (DerivedCollectionElement<T> el : elCopies) {
 					el.remove();
-				}
-			}
-
-			@Override
-			public String canAdd(T value, boolean before) {
-				if (theElementsByValue.containsKey(value))
-					return StdMsg.ELEMENT_EXISTS;
-				if (isPreservingSourceOrder)
-					return theActiveElement.canAdd(value, before);
-				String msg = theParent.canAdd(value);
-				if (msg == null)
-					msg = theElementsByValue.keySet().mutableElement(theValueId).canAdd(value, before);
-				return msg;
-			}
-
-			@Override
-			public DerivedCollectionElement<T> add(T value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-				try (Transaction t = lock(true, null)) {
-					if (theElementsByValue.containsKey(value))
-						throw new IllegalArgumentException(StdMsg.ELEMENT_EXISTS);
-					if (isPreservingSourceOrder) {
-						theActiveElement.add(value, before);
-						// Look the element up.
-						// If it's not there, here I'm returning null, implying that the element was not added to the unique set
-						// This would probably be a bug though.
-						return theElementsByValue.get(value);
-					} else {
-						// Since the element map is determining order, we have to make sure it supports the new element in the correct
-						// position
-						UniqueElement element = createUniqueElement(value);
-						// First, install the (currently empty) unique element in the element map so that the position is correct
-						ElementId elementHandle = theElementsByValue.keySet().mutableElement(theValueId).add(value, before);
-						theElementsByValue.mutableEntry(elementHandle).set(element);
-						try {
-							// Doesn't really matter where we add it in the parent collection, but we'll try to add it adjacent to this
-							// element if we can
-							if (theActiveElement.canAdd(value, before) == null)
-								theActiveElement.add(value, before);
-							else if (theParent.addElement(value, before) == null)
-								theElementsByValue.mutableEntry(elementHandle).remove();
-						} catch (RuntimeException e) {
-							theElementsByValue.mutableEntry(elementHandle).remove();
-							throw e;
-						}
-						// Now, the parent element should have been added to the previously-installed unique element
-						return element;
-					}
 				}
 			}
 
@@ -693,7 +715,7 @@ public class ObservableSetImpl {
 				if (theActiveElement != null)
 					return theActiveElement.toString();
 				else if (!theParentElements.isEmpty())
-					return theParentElements.iterator().next().toString();
+					return theParentElements.firstKey().toString();
 				else
 					return "null";
 			}
@@ -712,17 +734,17 @@ public class ObservableSetImpl {
 
 		@Override
 		public UniqueDataFlow<E, E, E> reverse() {
-			return new UniqueDataFlowWrapper<>(getSource(), super.reverse());
+			return new UniqueDataFlowWrapper<>(getSource(), super.reverse(), equivalence());
 		}
 
 		@Override
 		public UniqueDataFlow<E, E, E> filter(Function<? super E, String> filter) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter));
+			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter), equivalence());
 		}
 
 		@Override
 		public <X> UniqueDataFlow<E, E, E> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.whereContained(other, include));
+			return new UniqueDataFlowWrapper<>(getSource(), super.whereContained(other, include), equivalence());
 		}
 
 		@Override
@@ -735,12 +757,12 @@ public class ObservableSetImpl {
 
 		@Override
 		public UniqueDataFlow<E, E, E> refresh(Observable<?> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.refresh(refresh));
+			return new UniqueDataFlowWrapper<>(getSource(), super.refresh(refresh), equivalence());
 		}
 
 		@Override
 		public UniqueDataFlow<E, E, E> refreshEach(Function<? super E, ? extends Observable<?>> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.refreshEach(refresh));
+			return new UniqueDataFlowWrapper<>(getSource(), super.refreshEach(refresh), equivalence());
 		}
 
 		@Override
@@ -779,11 +801,21 @@ public class ObservableSetImpl {
 		protected ObservableSet<E> getSource() {
 			return (ObservableSet<E>) super.getSource();
 		}
+
+		@Override
+		public String toString() {
+			return BetterSet.toString(this);
+		}
 	}
 
 	public static class ActiveDerivedSet<T> extends ActiveDerivedCollection<T> implements ObservableSet<T> {
 		public ActiveDerivedSet(ActiveCollectionManager<?, ?, T> flow, Observable<?> until) {
 			super(flow, until);
+		}
+
+		@Override
+		public String toString() {
+			return BetterSet.toString(this);
 		}
 	}
 

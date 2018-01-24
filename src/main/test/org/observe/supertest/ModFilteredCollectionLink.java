@@ -1,7 +1,6 @@
 package org.observe.supertest;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
@@ -22,99 +21,68 @@ public class ModFilteredCollectionLink<E> extends AbstractObservableCollectionLi
 	}
 
 	@Override
-	public void checkAddable(List<CollectionOp<E>> adds, int subListStart, int subListEnd, TestHelper helper) {
-		List<CollectionOp<E>> parentAdds = new ArrayList<>(adds.size());
-		for (CollectionOp<E> op : adds) {
-			if (theFilter.getUnmodifiableMessage() != null)
-				op.reject(theFilter.getUnmodifiableMessage(), true);
-			else if (theFilter.getAddMessage() != null)
-				op.reject(theFilter.getAddMessage(), true);
-			else if (theFilter.getAddFilter() != null && theFilter.getAddFilter().apply(op.source) != null)
-				op.reject(theFilter.getAddFilter().apply(op.source), true);
-			else
-				parentAdds.add(op);
-		}
-		getParent().checkAddable(parentAdds, subListStart, subListEnd, helper);
-	}
-
-	@Override
-	public void checkRemovable(List<CollectionOp<E>> removes, int subListStart, int subListEnd, TestHelper helper) {
-		List<CollectionOp<E>> parentRemoves = new ArrayList<>(removes.size());
-		for (CollectionOp<E> op : removes) {
-			if (theFilter.getUnmodifiableMessage() != null)
-				op.reject(theFilter.getUnmodifiableMessage(), true);
-			else if (theFilter.getRemoveMessage() != null)
-				op.reject(theFilter.getRemoveMessage(), true);
-			else if (theFilter.getRemoveFilter() != null && theFilter.getRemoveFilter().apply(op.source) != null)
-				op.reject(theFilter.getRemoveFilter().apply(op.source), true); // Relying on the modification supplying the value
-			else
-				parentRemoves.add(op);
-		}
-		getParent().checkRemovable(parentRemoves, subListStart, subListEnd, helper);
-	}
-
-	@Override
-	public void checkSettable(List<CollectionOp<E>> sets, int subListStart, TestHelper helper) {
-		List<CollectionOp<E>> parentSets = new ArrayList<>(sets.size());
-		for (CollectionOp<E> op : sets) {
-			E oldValue = getExpected().get(subListStart + op.index);
-			if (oldValue == op.source) {
-				// Updates are treated more leniently, since the content of the collection is not changing
-				// Updates can only be prevented explicitly
-				if (!theFilter.areUpdatesAllowed() && theFilter.getUnmodifiableMessage() != null)
+	public void checkModifiable(List<CollectionOp<E>> ops, int subListStart, int subListEnd, TestHelper helper) {
+		List<CollectionOp<E>> parentOps = new ArrayList<>();
+		for (CollectionOp<E> op : ops) {
+			switch (op.type) {
+			case add:
+				if (theFilter.getUnmodifiableMessage() != null)
 					op.reject(theFilter.getUnmodifiableMessage(), true);
-			} else if (theFilter.getUnmodifiableMessage() != null)
-				op.reject(theFilter.getUnmodifiableMessage(), true);
-			else if (theFilter.getRemoveMessage() != null)
-				op.reject(theFilter.getRemoveMessage(), true);
-			else if (theFilter.getAddMessage() != null)
-				op.reject(theFilter.getAddMessage(), true);
-			else if (theFilter.getRemoveFilter() != null && theFilter.getRemoveFilter().apply(oldValue) != null)
-				op.reject(theFilter.getRemoveFilter().apply(oldValue), true);
-			else if (theFilter.getAddFilter() != null && theFilter.getAddFilter().apply(op.source) != null)
-				op.reject(theFilter.getAddFilter().apply(op.source), true);
-			else
-				parentSets.add(op);
+				else if (theFilter.getAddMessage() != null)
+					op.reject(theFilter.getAddMessage(), true);
+				else if (theFilter.getAddFilter() != null && theFilter.getAddFilter().apply(op.value) != null)
+					op.reject(theFilter.getAddFilter().apply(op.value), true);
+				else
+					parentOps.add(op);
+				break;
+			case remove:
+				if (theFilter.getUnmodifiableMessage() != null)
+					op.reject(theFilter.getUnmodifiableMessage(), true);
+				else if (theFilter.getRemoveMessage() != null)
+					op.reject(theFilter.getRemoveMessage(), true);
+				else if (theFilter.getRemoveFilter() != null && theFilter.getRemoveFilter().apply(op.value) != null)
+					op.reject(theFilter.getRemoveFilter().apply(op.value), true); // Relying on the modification supplying the value
+				else
+					parentOps.add(op);
+				break;
+			case set:
+				E oldValue = getExpected().get(subListStart + op.index);
+				if (oldValue == op.value) {
+					// Updates are treated more leniently, since the content of the collection is not changing
+					// Updates can only be prevented explicitly
+					if (!theFilter.areUpdatesAllowed() && theFilter.getUnmodifiableMessage() != null)
+						op.reject(theFilter.getUnmodifiableMessage(), true);
+				} else if (theFilter.getUnmodifiableMessage() != null)
+					op.reject(theFilter.getUnmodifiableMessage(), true);
+				else if (theFilter.getRemoveMessage() != null)
+					op.reject(theFilter.getRemoveMessage(), true);
+				else if (theFilter.getAddMessage() != null)
+					op.reject(theFilter.getAddMessage(), true);
+				else if (theFilter.getRemoveFilter() != null && theFilter.getRemoveFilter().apply(oldValue) != null)
+					op.reject(theFilter.getRemoveFilter().apply(oldValue), true);
+				else if (theFilter.getAddFilter() != null && theFilter.getAddFilter().apply(op.value) != null)
+					op.reject(theFilter.getAddFilter().apply(op.value), true);
+				else
+					parentOps.add(op);
+				break;
+			}
 		}
-		getParent().checkSettable(parentSets, subListStart, helper);
+		getParent().checkModifiable(parentOps, subListStart, subListEnd, helper);
 	}
 
 	@Override
-	public void addedFromBelow(List<CollectionOp<E>> adds, TestHelper helper) {
-		added(adds, helper, true);
+	public void fromBelow(List<CollectionOp<E>> ops, TestHelper helper) {
+		modified(ops, helper, true);
 	}
 
 	@Override
-	public void removedFromBelow(int index, TestHelper helper) {
-		removed(index, helper, true);
-	}
-
-	@Override
-	public void setFromBelow(int index, E value, TestHelper helper) {
-		set(index, value, helper, true);
-	}
-
-	@Override
-	public void addedFromAbove(List<CollectionOp<E>> adds, TestHelper helper,
-		boolean above) {
-		getParent().addedFromAbove(adds, helper, true);
-		added(adds, helper, !above);
-	}
-
-	@Override
-	public void removedFromAbove(int index, E value, TestHelper helper, boolean above) {
-		getParent().removedFromAbove(index, value, helper, true);
-		removed(index, helper, !above);
-	}
-
-	@Override
-	public void setFromAbove(int index, E value, TestHelper helper, boolean above) {
-		set(index, value, helper, !above);
-		getParent().setFromAbove(index, value, helper, true);
+	public void fromAbove(List<CollectionOp<E>> ops, TestHelper helper, boolean above) {
+		modified(ops, helper, !above);
+		getParent().fromAbove(ops, helper, true);
 	}
 
 	@Override
 	public String toString() {
-		return "mod-filtered(" + theFilter + ")";
+		return "mod-filtered(" + theFilter + getExtras() + ")";
 	}
 }

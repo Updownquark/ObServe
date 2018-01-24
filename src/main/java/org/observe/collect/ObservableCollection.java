@@ -31,7 +31,6 @@ import org.qommons.Ternian;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
-import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
@@ -334,19 +333,9 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 *         the given value
 	 * @throws IllegalArgumentException If the given value may not be an element of this collection
 	 */
-	default ObservableValue<E> observeEquivalent(E value, Supplier<? extends E> defaultValue, boolean first) {
-		return observeElement(value, first).map(getType(), el -> el != null ? el.get() : defaultValue.get());
-	}
-
-	/**
-	 * @param value The value to observe in the collection
-	 * @param defaultValue The default value for the result when the value is not found in the collection (typically <code>()->null</code>
-	 * @param first Whether to observe the first or the last equivalent value in the collection
-	 * @return An observable value whose content is the first or last value in the collection that is {@link #equivalence() equivalent} to
-	 *         the given value
-	 * @throws IllegalArgumentException If the given value may not be an element of this collection
-	 */
-	default ObservableValue<CollectionElement<? extends E>> observeElement(E value, boolean first) {
+	default ObservableElement<E> observeElement(E value, boolean first) {
+		if (!belongs(value))
+			return ObservableElement.empty(getType());
 		return new ObservableCollectionImpl.ObservableEquivalentFinder<>(this, value, first);
 	}
 
@@ -356,7 +345,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @param first true to always use the first element passing the test, false to always use the last element
 	 * @return An observable value containing a value in this collection passing the given test
 	 */
-	default ObservableValue<E> observeFind(Predicate<? super E> test, Supplier<? extends E> def, boolean first) {
+	default ObservableElement<E> observeFind(Predicate<? super E> test, Supplier<? extends E> def, boolean first) {
 		return observeFind(test, def, Ternian.of(first));
 	}
 
@@ -367,9 +356,8 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 *        element, or {@link Ternian#NONE NONE} to use any passing element
 	 * @return An observable value containing a value in this collection passing the given test
 	 */
-	default ObservableValue<E> observeFind(Predicate<? super E> test, Supplier<? extends E> def, Ternian first) {
-		return new ObservableCollectionImpl.ObservableCollectionFinder<>(this, test, first).map(getType(),
-			el -> el != null ? el.get() : def.get());
+	default ObservableElement<E> observeFind(Predicate<? super E> test, Supplier<? extends E> def, Ternian first) {
+		return new ObservableCollectionImpl.ObservableCollectionFinder<>(this, test, def, first);
 	}
 
 	/**
@@ -516,36 +504,22 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 	/**
 	 * @param compare The comparator to use to compare this collection's values
+	 * @param def The default value to use with an empty collection
+	 * @param first Whether to choose the first (Ternian#TRUE TRUE), last (Ternian#FALSE FALSE), or any (Ternian#NONE NONE) element in a tie
 	 * @return An observable value containing the minimum of the values, by the given comparator
 	 */
-	default ObservableValue<E> minBy(Comparator<? super E> compare) {
-		return reduce(getType(), null, (v1, v2) -> {
-			if (v1 == null)
-				return v2;
-			else if (v2 == null)
-				return v1;
-			else if (compare.compare(v1, v2) <= 0)
-				return v1;
-			else
-				return v2;
-		}, null);
+	default ObservableElement<E> minBy(Comparator<? super E> compare, Supplier<? extends E> def, Ternian first) {
+		return new ObservableCollectionImpl.BestCollectionElement<>(this, compare, def, first);
 	}
 
 	/**
 	 * @param compare The comparator to use to compare this collection's values
+	 * @param def The default value to use with an empty collection
+	 * @param first Whether to choose the first (Ternian#TRUE TRUE), last (Ternian#FALSE FALSE), or any (Ternian#NONE NONE) element in a tie
 	 * @return An observable value containing the maximum of the values, by the given comparator
 	 */
-	default ObservableValue<E> maxBy(Comparator<? super E> compare) {
-		return reduce(getType(), null, (v1, v2) -> {
-			if (v1 == null)
-				return v2;
-			else if (v2 == null)
-				return v1;
-			else if (compare.compare(v1, v2) >= 0)
-				return v1;
-			else
-				return v2;
-		}, null);
+	default ObservableElement<E> maxBy(Comparator<? super E> compare, Supplier<? extends E> def, Ternian first) {
+		return minBy(compare.reversed(), def, first);
 	}
 
 	/**

@@ -4,13 +4,13 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.Subscription;
 import org.observe.collect.FlowOptions.MapDef;
 import org.observe.collect.FlowOptions.MapOptions;
+import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollection.UniqueDataFlow;
@@ -18,16 +18,15 @@ import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ModFilterer;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
-import org.observe.collect.ObservableCollectionDataFlowImpl.SortedManager;
 import org.observe.collect.ObservableSetImpl.UniqueBaseFlow;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterSet;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
-import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.tree.BetterTreeSet;
 
-import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 public class ObservableSortedSetImpl {
@@ -51,18 +50,19 @@ public class ObservableSortedSetImpl {
 				// Neither are a perfect match.
 				// From here on, it's safe to assume filter.less.value is non-null because otherwise one or the other element
 				// would not have passed the test method.
-				else if (comp1 < 0) {
-					if (comp2 < 0)
+				// Keep in mind that the comparisons were based on the search value first, so the signs here are a bit counterintuitive
+				else if (comp1 > 0) {
+					if (comp2 > 0)
 						return -el1.getElementId().compareTo(el2.getElementId());// Both less, so take the greater of the two
 					else
 						return filter.less.value ? -1 : 1;
 				} else {
-					if (comp2 < 0)
+					if (comp2 > 0)
 						return filter.less.value ? 1 : -1;
 					else
 						return el1.getElementId().compareTo(el2.getElementId());// Both greater, so take the lesser of the two
 				}
-			});
+			}, () -> null);
 			theSearch = search;
 			theFilter = filter;
 		}
@@ -83,9 +83,17 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		protected boolean test(E value) {
-			if (theFilter == SortedSearchFilter.OnlyMatch && theSearch.compareTo(value) != 0)
-				return false;
-			return true;
+			// Keep in mind that the comparisons were based on the search value first, so the signs here are a bit counterintuitive
+			switch (theFilter) {
+			case Less:
+				return theSearch.compareTo(value) >= 0;
+			case OnlyMatch:
+				return theSearch.compareTo(value) == 0;
+			case Greater:
+				return theSearch.compareTo(value) <= 0;
+			default:
+				return true;
+			}
 		}
 	}
 
@@ -136,72 +144,88 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public ObservableSortedSet<E> subSet(Comparable<? super E> from, Comparable<? super E> to) {
-			return new ObservableSubSet<>(getWrapped(), boundSearch(from), boundSearch(to));
+			return new ObservableSubSet<>(getWrapped(), and(from, true), and(to, false));
 		}
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-			return getWrapped().onChange(new Consumer<ObservableCollectionEvent<? extends E>>() {
-				private int startIndex;
+			try (Transaction t = lock(false, null)) {
+				return getWrapped().onChange(new Consumer<ObservableCollectionEvent<? extends E>>() {
+					private final BetterSortedSet<ElementId> thePresentElements;
+					{
+						thePresentElements = new BetterTreeSet<>(false, ElementId::compareTo);
+						spliterator().forEachElement(el -> thePresentElements.add(el.getElementId()), true);
+					}
 
-				@Override
-				public void accept(ObservableCollectionEvent<? extends E> evt) {
-					int inRange = isInRange(evt.getNewValue());
-					int oldInRange = evt.getType() == CollectionChangeType.set ? isInRange(evt.getOldValue()) : 0;
-					if (inRange < 0) {
-						switch (evt.getType()) {
-						case add:
-							startIndex++;
-							break;
-						case remove:
-							startIndex--;
-							break;
-						case set:
-							if (oldInRange > 0)
-								startIndex++;
-							else if (oldInRange == 0)
-								fire(evt, CollectionChangeType.remove, evt.getOldValue(), evt.getOldValue());
-						}
-					} else if (inRange > 0) {
-						switch (evt.getType()) {
-						case set:
-							if (oldInRange < 0)
-								startIndex--;
-							else if (oldInRange == 0)
-								fire(evt, CollectionChangeType.remove, evt.getOldValue(), evt.getOldValue());
-							break;
-						default:
-						}
-					} else {
-						switch (evt.getType()) {
-						case add:
-							fire(evt, evt.getType(), null, evt.getNewValue());
-							break;
-						case remove:
-							fire(evt, evt.getType(), evt.getOldValue(), evt.getNewValue());
-							break;
-						case set:
-							if (oldInRange < 0) {
-								startIndex--;
-								fire(evt, CollectionChangeType.add, null, evt.getNewValue());
-							} else if (oldInRange == 0)
-								fire(evt, CollectionChangeType.set, evt.getOldValue(), evt.getNewValue());
-							else
-								fire(evt, CollectionChangeType.add, null, evt.getNewValue());
+					@Override
+					public void accept(ObservableCollectionEvent<? extends E> evt) {
+						int inRange = isInRange(evt.getNewValue());
+						int oldInRange = evt.getType() == CollectionChangeType.set ? isInRange(evt.getOldValue()) : 0;
+						CollectionElement<ElementId> presentEl;
+						if (inRange < 0) {
+							switch (evt.getType()) {
+							case add:
+								break;
+							case remove:
+								break;
+							case set:
+								if (oldInRange == 0) {
+									presentEl = thePresentElements.getElement(evt.getElementId(), true);// Get by value
+									int index = thePresentElements.getElementsBefore(presentEl.getElementId());
+									thePresentElements.mutableElement(presentEl.getElementId()).remove();
+									fire(evt, CollectionChangeType.remove, index, evt.getOldValue(), evt.getOldValue());
+								}
+							}
+						} else if (inRange > 0) {
+							switch (evt.getType()) {
+							case set:
+								if (oldInRange == 0) {
+									presentEl = thePresentElements.getElement(evt.getElementId(), true);// Get by value
+									int index = thePresentElements.getElementsBefore(presentEl.getElementId());
+									thePresentElements.mutableElement(presentEl.getElementId()).remove();
+									fire(evt, CollectionChangeType.remove, index, evt.getOldValue(), evt.getOldValue());
+								}
+								break;
+							default:
+							}
+						} else {
+							switch (evt.getType()) {
+							case add:
+								presentEl = thePresentElements.addElement(evt.getElementId(), false);
+								int index = thePresentElements.getElementsBefore(presentEl.getElementId());
+								fire(evt, evt.getType(), index, null, evt.getNewValue());
+								break;
+							case remove:
+								presentEl = thePresentElements.getElement(evt.getElementId(), true);// Get by value
+								index = thePresentElements.getElementsBefore(presentEl.getElementId());
+								thePresentElements.mutableElement(presentEl.getElementId()).remove();
+								fire(evt, evt.getType(), index, evt.getOldValue(), evt.getNewValue());
+								break;
+							case set:
+								if (oldInRange != 0) {
+									presentEl = thePresentElements.addElement(evt.getElementId(), false);
+									index = thePresentElements.getElementsBefore(presentEl.getElementId());
+									fire(evt, CollectionChangeType.add, index, null, evt.getNewValue());
+								} else {
+									presentEl = thePresentElements.getElement(evt.getElementId(), true);// Get by value
+									index = thePresentElements.getElementsBefore(presentEl.getElementId());
+									fire(evt, CollectionChangeType.set, index, evt.getOldValue(), evt.getNewValue());
+								}
+							}
 						}
 					}
-				}
 
-				void fire(ObservableCollectionEvent<? extends E> evt, CollectionChangeType type, E oldValue, E newValue) {
-					observer.accept(new ObservableCollectionEvent<>(evt.getElementId(), getType(), evt.getIndex() - startIndex,
-						evt.getType(), evt.getOldValue(), evt.getNewValue(), evt));
-				}
-			});
+					void fire(ObservableCollectionEvent<? extends E> evt, CollectionChangeType type, int index, E oldValue, E newValue) {
+						observer
+						.accept(new ObservableCollectionEvent<>(evt.getElementId(), getType(), index, type, oldValue, newValue, evt));
+					}
+				});
+			}
 		}
 
 		@Override
 		public String toString() {
-			return ObservableSet.toString(this);
+			return BetterSet.toString(this);
 		}
 	}
 
@@ -245,11 +269,6 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public CollectionElement<E> addIfEmpty(E value) throws IllegalStateException {
-			return getWrapped().addIfEmpty(value).reverse();
-		}
-
-		@Override
 		public ObservableSortedSet<E> reverse() {
 			return (ObservableSortedSet<E>) super.reverse();
 		}
@@ -261,8 +280,13 @@ public class ObservableSortedSetImpl {
 
 		protected UniqueSortedDataFlowWrapper(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent,
 			Comparator<? super T> compare) {
-			super(source, parent);
+			super(source, parent, Equivalence.of((Class<T>) parent.getTargetType().getRawType(), compare, true));
 			theCompare = compare;
+		}
+
+		@Override
+		public Equivalence.ComparatorEquivalence<? super T> equivalence() {
+			return (Equivalence.ComparatorEquivalence<? super T>) super.equivalence();
 		}
 
 		@Override
@@ -272,17 +296,17 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> reverse() {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), getParent().reverse(), theCompare.reversed());
+			return new UniqueSortedDataFlowWrapper<>(getSource(), super.reverse(), theCompare.reversed());
 		}
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> filter(Function<? super T, String> filter) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), getParent().filter(filter), theCompare);
+			return new UniqueSortedDataFlowWrapper<>(getSource(), super.filter(filter), theCompare);
 		}
 
 		@Override
 		public <X> UniqueSortedDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), getParent().whereContained(other, include), theCompare);
+			return new UniqueSortedDataFlowWrapper<>(getSource(), super.whereContained(other, include), theCompare);
 		}
 
 		@Override
@@ -305,13 +329,19 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
+		public UniqueSortedDataFlow<E, T, T> distinct(Consumer<UniqueOptions> options) {
+			options.accept(new FlowOptions.SimpleUniqueOptions(true));
+			return this; // No-op
+		}
+
+		@Override
 		public UniqueSortedDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), getParent().refresh(refresh), theCompare);
+			return new UniqueSortedDataFlowWrapper<>(getSource(), super.refresh(refresh), theCompare);
 		}
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), getParent().refreshEach(refresh), theCompare);
+			return new UniqueSortedDataFlowWrapper<>(getSource(), super.refreshEach(refresh), theCompare);
 		}
 
 		@Override
@@ -350,8 +380,9 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public ActiveCollectionManager<E, ?, T> manageActive() {
-			return new ObservableSetImpl.UniqueManager<>(new SortedManager<>(getParent().manageActive(), comparator()), isAlwaysUsingFirst,
-				false);
+			return new ObservableSetImpl.UniqueManager<>(
+				new ObservableCollectionDataFlowImpl.ActiveEquivalenceSwitchedManager<>(getParent().manageActive(), equivalence()),
+				equivalence(), isAlwaysUsingFirst, false);
 		}
 	}
 
@@ -449,7 +480,7 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> filter(Function<? super T, String> filter) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), getParent().filter(filter), comparator());
+			return new UniqueSortedDataFlowWrapper<>(getSource(), super.filter(filter), comparator());
 		}
 
 		@Override
@@ -478,12 +509,12 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), getParent().refresh(refresh), comparator());
+			return new UniqueSortedDataFlowWrapper<>(getSource(), super.refresh(refresh), comparator());
 		}
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), getParent().refreshEach(refresh), comparator());
+			return new UniqueSortedDataFlowWrapper<>(getSource(), super.refreshEach(refresh), comparator());
 		}
 
 		@Override
@@ -620,11 +651,6 @@ public class ObservableSortedSetImpl {
 			CollectionElement<E> srcEl = getSource().search(mappedSearch(search), filter);
 			return srcEl == null ? null : elementFor(srcEl, null);
 		}
-
-		@Override
-		public CollectionElement<T> addIfEmpty(T value) throws IllegalStateException {
-			return elementFor(getSource().addIfEmpty(getFlow().reverse(value, true).result), null);
-		}
 	}
 
 	public static class ActiveDerivedSortedSet<T> extends ObservableSetImpl.ActiveDerivedSet<T> implements ObservableSortedSet<T> {
@@ -651,15 +677,6 @@ public class ObservableSortedSetImpl {
 			CollectionElement<DerivedElementHolder<T>> presentEl = getPresentElements().search(el -> search.compareTo(el.get()),
 				filter);
 			return presentEl == null ? null : elementFor(presentEl.get());
-		}
-
-		@Override
-		public CollectionElement<T> addIfEmpty(T value) throws IllegalStateException {
-			try (Transaction t = lock(true, null)) {
-				if (!isEmpty())
-					throw new IllegalStateException("Set is not empty");
-				return super.addElement(value, true);
-			}
 		}
 	}
 
@@ -709,21 +726,6 @@ public class ObservableSortedSetImpl {
 			if (wrapped == null)
 				return null;
 			return wrapped.search(search, filter);
-		}
-
-		@Override
-		public ObservableValue<E> observeRelative(Comparable<? super E> value, SortedSearchFilter filter, Supplier<? extends E> def) {
-			return ObservableValue
-				.flatten(getWrapped().map(new TypeToken<ObservableValue<E>>() {}.where(new TypeParameter<E>() {}, getType()),
-					v -> v == null ? null : v.observeRelative(value, filter, def)));
-		}
-
-		@Override
-		public CollectionElement<E> addIfEmpty(E value) throws IllegalStateException {
-			ObservableSortedSet<E> wrapped = getWrapped().get();
-			if (wrapped == null)
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			return wrapped.addIfEmpty(value);
 		}
 	}
 }

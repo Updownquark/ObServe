@@ -3,7 +3,6 @@ package org.observe.supertest;
 import java.io.File;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -12,12 +11,15 @@ import java.util.function.Function;
 
 import org.junit.Test;
 import org.observe.collect.DefaultObservableCollection;
+import org.observe.collect.DefaultObservableSortedSet;
 import org.observe.collect.FlowOptions;
 import org.qommons.QommonsUtils;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.Testable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterSortedSet;
+import org.qommons.debug.Debug;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeSet;
 
@@ -45,26 +47,21 @@ public class ObservableChainTester implements Testable {
 
 	private static final int MAX_VALUE = 1000;
 	static final Map<TestValueType, Function<TestHelper, ?>> SUPPLIERS;
-	private static final Map<TestValueType, List<? extends Comparator<?>>> COMPARATORS;
 	static {
 		SUPPLIERS = new HashMap<>();
-		COMPARATORS = new HashMap<>();
 		for (TestValueType type : TestValueType.values()) {
 			switch (type) {
 			case INT:
 				SUPPLIERS.put(type, helper -> helper.getInt(0, MAX_VALUE));
-				COMPARATORS.put(type, Arrays.asList(Integer::compareTo, ((Comparator<Integer>) Integer::compareTo).reversed()));
 				break;
 			case DOUBLE:
 				SUPPLIERS.put(type, helper -> helper.getDouble(0, MAX_VALUE));
-				COMPARATORS.put(type, Arrays.asList(Double::compareTo, ((Comparator<Double>) Double::compareTo).reversed()));
 				break;
 			case STRING:
 				SUPPLIERS.put(type, helper -> String.valueOf(helper.getInt(0, MAX_VALUE)));
-				COMPARATORS.put(type, Arrays.asList(String::compareTo, ((Comparator<String>) String::compareTo).reversed()));
 			}
 		}
-					}
+	}
 
 	private static String stringValueOf(double d) {
 		String str = String.valueOf(d);
@@ -73,18 +70,19 @@ public class ObservableChainTester implements Testable {
 		return str;
 	}
 
-	private static <E> Comparator<E> randomComparator(TestValueType type, TestHelper helper) {
-		List<Comparator<E>> typeCompares = (List<Comparator<E>>) COMPARATORS.get(type);
-		return typeCompares.get(helper.getInt(0, typeCompares.size()));
-	}
 	private static final int MAX_CHAIN_LENGTH = 15;
 
 	private final List<ObservableChainLink<?>> theChain = new ArrayList<>();
 
 	@Override
 	public void accept(TestHelper helper) {
+		boolean debugging = helper.isReproducing();
+		if (debugging)
+			Debug.d().start().watchFor(new Debugging());
 		assemble(helper);
 		test(helper);
+		if (debugging)
+			Debug.d().end();
 	}
 
 	/**
@@ -100,7 +98,7 @@ public class ObservableChainTester implements Testable {
 		TestHelper.TestSummary summary = TestHelper.createTester(getClass())//
 			/**/.withRandomCases(-1).withMaxTotalDuration(testDuration)//
 			/**/.withMaxFailures(maxFailures)//
-			/**/.withPersistenceDir(new File("src/main/test/org/observe/supertest"), false)//
+			/**/.withPersistenceDir(new File("src/main/test/org/observe/supertest/dev"), false)//
 			/**/.withPlacemarks("Transaction", "Modification")
 			/**/.withDebug(true)//
 			/**/.execute();
@@ -118,7 +116,7 @@ public class ObservableChainTester implements Testable {
 	}
 
 	private <E> ObservableChainLink<?> createInitialLink(TestHelper helper) {
-		int linkTypes = 2;
+		int linkTypes = 3;
 		switch (helper.getInt(0, linkTypes)) {
 		case 0:
 			// TODO Uncomment this when CircularArrayList is working
@@ -131,12 +129,12 @@ public class ObservableChainTester implements Testable {
 			return new SimpleCollectionLink<>(type, base.flow(), helper);
 		case 2:
 			type = TestValueType.values()[helper.getInt(0, TestValueType.values().length)];
-			Comparator<? super E> compare = randomComparator(type, helper);
-			backing = new BetterTreeSet<>(false, compare);
-			base = new DefaultObservableCollection<>((TypeToken<E>) type.getType(), backing);
+			Comparator<? super E> compare = SortedCollectionLink.compare(type, helper);
+			backing = new BetterTreeSet<>(true, compare);
+			base = new DefaultObservableSortedSet<>((TypeToken<E>) type.getType(), (BetterSortedSet<E>) backing);
 			SimpleCollectionLink<E> simple = new SimpleCollectionLink<>(type, base.flow(), helper);
-			return new SortedDistinctCollectionLink<>(simple, type, base.flow(), helper, compare,
-				new FlowOptions.GroupingDef(new FlowOptions.GroupingOptions(true)));
+			return new DistinctCollectionLink<>(simple, type, base.flow(), base.flow(), helper, true,
+				new FlowOptions.SimpleUniqueOptions(true), true);
 			// TODO ObservableValue
 			// TODO ObservableMultiMap
 			// TODO ObservableMap
@@ -173,16 +171,12 @@ public class ObservableChainTester implements Testable {
 				if (transactionMods == 25)
 					transactionMods = 0; // Want the probability of no-op transactions to be small but present
 				if (helper.isReproducing())
-				System.out.println("Modification set " + (tri + 1) + ": " + transactionMods + " modifications on link " + linkIndex);
-				else {
-					System.out.print('.');
-					System.out.flush();
-				}
+					System.out.println("Modification set " + (tri + 1) + ": " + transactionMods + " modifications on link " + linkIndex);
 				helper.placemark("Transaction");
 				for (int transactionTri = 0; transactionTri < transactionMods; transactionTri++) {
 					String preValue = toString();
 					if (helper.isReproducing())
-					System.out.print("\tMod " + (transactionTri + 1) + ": ");
+						System.out.print("\tMod " + (transactionTri + 1) + ": ");
 					try {
 						targetLink.tryModify(helper);
 					} catch (RuntimeException | Error e) {
@@ -190,8 +184,8 @@ public class ObservableChainTester implements Testable {
 						System.err.println("Link " + linkIndex);
 						System.err.println("Error on transaction " + (tri + 1) + ", mod " + (transactionTri + 1) + " after "
 							+ (modifications + transactionTri) + " successful modifications");
-						System.err.println("Pre-faiure values:\n" + preValue);
-						System.err.println("Post-faiure values:\n" + toString());
+						System.err.println("Pre-failure values:\n" + preValue);
+						System.err.println("Post-failure values:\n" + toString());
 						throw e;
 					}
 					try {
@@ -202,12 +196,19 @@ public class ObservableChainTester implements Testable {
 						System.err.println("Link " + linkIndex);
 						System.err.println("Integrity check failure on link " + failedLink + " after "
 							+ (modifications + transactionTri + 1) + " modifications in " + (tri + 1) + " transactions");
-						System.err.println("Pre-faiure values:\n" + preValue);
-						System.err.println("Post-faiure values:\n" + toString());
+						System.err.println("Pre-failure values:\n" + preValue);
+						System.err.println("Post-failure values:\n" + toString());
 						throw e;
 					}
 				}
 				modifications += transactionMods;
+				if (!helper.isReproducing()) {
+					if (tri % 10 == 9)
+						System.out.print('|');
+					else
+						System.out.print('.');
+					System.out.flush();
+				}
 				finished = true;
 			} catch (RuntimeException | Error e) {
 				if (finished) {

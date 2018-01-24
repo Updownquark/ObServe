@@ -1,12 +1,16 @@
 package org.observe.collect;
 
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.function.Supplier;
 
 import org.observe.ObservableValue;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.MutableElementSpliterator;
+import org.qommons.tree.BetterTreeSet;
+
+import com.google.common.reflect.TypeToken;
 
 /**
  * A sorted set whose content can be observed
@@ -110,8 +114,8 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 	 * @param def Produces a default value in the case that no element of this set matches the given search
 	 * @return An observable value with the result of the operation
 	 */
-	default ObservableValue<E> observeRelative(Comparable<? super E> search, SortedSearchFilter filter, Supplier<? extends E> def) {
-		return new ObservableSortedSetImpl.RelativeFinder<>(this, search, filter).map(getType(), el -> el != null ? el.get() : def.get());
+	default ObservableElement<E> observeRelative(Comparable<? super E> search, SortedSearchFilter filter, Supplier<? extends E> def) {
+		return new ObservableSortedSetImpl.RelativeFinder<>(this, search, filter);
 	}
 
 	@Override
@@ -140,17 +144,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 	 */
 	@Override
 	default ObservableSortedSet<E> subSet(E fromElement, boolean fromInclusive, E toElement, boolean toInclusive) {
-		return subSet(v -> {
-			int compare = comparator().compare(fromElement, v);
-			if (!fromInclusive && compare == 0)
-				compare = 1;
-			return compare;
-		}, v -> {
-			int compare = comparator().compare(toElement, v);
-			if (!toInclusive && compare == 0)
-				compare = -1;
-			return compare;
-		});
+		return (ObservableSortedSet<E>) BetterSortedSet.super.subSet(fromElement, fromInclusive, toElement, toInclusive);
 	}
 
 	@Override
@@ -184,6 +178,11 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 	}
 
 	@Override
+	default ObservableSortedSet<E> subList(int fromIndex, int toIndex) {
+		return (ObservableSortedSet<E>) BetterSortedSet.super.subList(fromIndex, toIndex);
+	}
+
+	@Override
 	default ObservableSortedSet<E> with(E... values) {
 		ObservableSet.super.with(values);
 		return this;
@@ -192,6 +191,36 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 	@Override
 	default <T> UniqueSortedDataFlow<E, E, E> flow() {
 		return new ObservableSortedSetImpl.UniqueSortedBaseFlow<>(this);
+	}
+
+	/**
+	 * @param <E> The type for the set
+	 * @param type The type for the set
+	 * @param compare The comparator to use to sort the set's values
+	 * @return A new, empty, mutable observable sorted set
+	 */
+	static <E> ObservableSortedSet<E> create(TypeToken<E> type, Comparator<? super E> compare) {
+		return create(type, createDefaultBacking(compare));
+	}
+
+	/**
+	 * @param <E> The type for the set
+	 * @param compare The comparator to use to sort the set's values
+	 * @return A new sorted set to back a collection created by {@link #create(TypeToken, Comparator)}
+	 */
+	static <E> BetterSortedSet<E> createDefaultBacking(Comparator<? super E> compare) {
+		return new BetterTreeSet<>(true, compare);
+	}
+
+	/**
+	 * @param <E> The type for the set
+	 * @param type The type for the set
+	 * @param backing The sorted set to hold the observable set's data
+	 * @return A new, empty, mutable observable sorted set whose performance and storage characteristics are determined by
+	 *         <code>backing</code>
+	 */
+	static <E> ObservableSortedSet<E> create(TypeToken<E> type, BetterSortedSet<E> backing) {
+		return new DefaultObservableSortedSet<>(type, backing);
 	}
 
 	/**
