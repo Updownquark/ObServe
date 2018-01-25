@@ -1225,7 +1225,7 @@ public final class ObservableCollectionImpl {
 			return getWrapped().subscribe(new ReversedSubscriber(observer, 0), !forward);
 		}
 
-		private class ReversedSubscriber implements Consumer<ObservableCollectionEvent<? extends E>> {
+		class ReversedSubscriber implements Consumer<ObservableCollectionEvent<? extends E>> {
 			private final Consumer<? super ObservableCollectionEvent<? extends E>> theObserver;
 			private int theSize;
 

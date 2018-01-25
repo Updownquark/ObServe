@@ -181,15 +181,16 @@ public class WeakListening {
 			theSubscription = sub;
 		}
 
-		<A> void doOnAction(Consumer<A> a) {
+		<A> A getAction() {
 			WeakListening listening = theListening.get();
 			if (listening == null) {
 				Subscription sub = theSubscription;
 				theSubscription = null;
 				if (sub != null)
 					sub.unsubscribe();
+				return null;
 			} else
-				a.accept((A) listening.getAction(theActionId));
+				return (A) listening.getAction(theActionId);
 		}
 	}
 
@@ -200,8 +201,9 @@ public class WeakListening {
 
 		@Override
 		public void run() {
-			doOnAction(//
-				(Runnable r) -> r.run());
+			Runnable action = getAction();
+			if (action != null)
+				action.run();
 		}
 	}
 
@@ -212,8 +214,9 @@ public class WeakListening {
 
 		@Override
 		public void accept(E value) {
-			doOnAction(//
-				(Consumer<E> action) -> action.accept(value));
+			Consumer<E> action = getAction();
+			if (action != null)
+				action.accept(value);
 		}
 	}
 
@@ -224,8 +227,9 @@ public class WeakListening {
 
 		@Override
 		public void accept(E value1, F value2) {
-			doOnAction(//
-				(BiConsumer<E, F> action) -> action.accept(value1, value2));
+			BiConsumer<E, F> action = getAction();
+			if (action != null)
+				action.accept(value1, value2);
 		}
 	}
 }
