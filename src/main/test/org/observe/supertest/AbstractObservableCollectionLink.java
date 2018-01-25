@@ -666,7 +666,10 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				element.set(op.value);
 				Assert.assertNull(op.getMessage());
 			} catch (UnsupportedOperationException | IllegalArgumentException e) {
-				Assert.assertNotNull(op.getMessage());
+				if (op.getMessage() == null) {
+					e.printStackTrace();
+					Assert.assertTrue("Should not have thrown exception", false);
+				}
 			}
 		}
 		Assert.assertTrue(element.getElementId().isPresent());
@@ -884,9 +887,16 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			derived.accept((ObservableChainLink<X>) theChild);
 			// TODO mapEquivalent
 		})//
-		// TODO reverse
+		.or(1, () -> { // reverse
+			if (helper.getBoolean())
+				derivedFlow.accept((CollectionDataFlow<?, ?, X>) theFlow.reverse());
+			else
+				derivedFlow.accept((CollectionDataFlow<?, ?, X>) theCollection.reverse().flow());
+			theChild = new ReversedCollectionLink<>(this, theType, (CollectionDataFlow<?, ?, T>) derivedFlow.get(), helper,
+				theTester.isCheckingRemovedValues());
+			derived.accept((ObservableChainLink<X>) theChild);
+		})//
 		// TODO size
-		// TODO find
 		// TODO contains
 		// TODO containsAny
 		// TODO containsAll

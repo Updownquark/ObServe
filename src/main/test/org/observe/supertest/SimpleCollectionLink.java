@@ -9,8 +9,7 @@ import org.qommons.TestHelper;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
 public class SimpleCollectionLink<E> extends AbstractObservableCollectionLink<E, E> {
-	public SimpleCollectionLink(TestValueType type, CollectionDataFlow<?, ?, E> flow,
-		TestHelper helper) {
+	public SimpleCollectionLink(TestValueType type, CollectionDataFlow<?, ?, E> flow, TestHelper helper) {
 		super(null, type, flow, helper, false, true);
 		for (E src : getCollection())
 			getExpected().add(src);
