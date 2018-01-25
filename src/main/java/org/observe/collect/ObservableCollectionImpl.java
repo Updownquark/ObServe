@@ -2537,7 +2537,7 @@ public final class ObservableCollectionImpl {
 		public void setValue(Collection<ElementId> elements, E value) {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			if (coll != null)
-				coll.setValue(elements, null);
+				((ObservableCollection<E>) coll).setValue(elements, value);
 			else if (!elements.isEmpty())
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 		}
