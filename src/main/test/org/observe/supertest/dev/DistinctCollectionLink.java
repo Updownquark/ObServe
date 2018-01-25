@@ -32,6 +32,7 @@ import org.qommons.tree.BetterTreeMap;
 import org.qommons.tree.BetterTreeSet;
 
 public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<E, E> {
+	private final CollectionDataFlow<?, ?, E> theParentFlow;
 	private final FlowOptions.UniqueOptions theOptions;
 	/** A map of value to equivalent values, grouped by source ID */
 	private final BetterMap<E, BetterSortedMap<ElementId, E>> theValues;
@@ -54,6 +55,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		CollectionDataFlow<?, ?, E> parentFlow, TestHelper helper, boolean checkRemovedValues, FlowOptions.UniqueOptions options,
 		boolean root) {
 		super(parent, type, flow, helper, isRebasedFlowRequired(options, flow.equivalence()), checkRemovedValues);
+		theParentFlow = parentFlow;
 		theOptions = options;
 		isRoot = root;
 		theValues = flow.equivalence().createMap();
@@ -71,6 +73,26 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			default:
 			}
 		});
+		theDebug = Debug.d().add("distinctLink");
+	}
+
+	/**
+	 * This is a hack. If the flow is not rebased for hash-based distinctness, the order for different collections off of the same distinct
+	 * flow may not be consistent.
+	 *
+	 * @see org.observe.supertest.AbstractObservableCollectionLink#isRebasedFlowRequired()
+	 */
+	private static boolean isRebasedFlowRequired(FlowOptions.UniqueOptions options, Equivalence<?> equivalence) {
+		return !options.isPreservingSourceOrder() && !(equivalence instanceof org.observe.collect.Equivalence.ComparatorEquivalence);
+	}
+
+	protected BetterMap<E, BetterSortedMap<ElementId, E>> getValues() {
+		return theValues;
+	}
+
+	@Override
+	public void initialize(TestHelper helper) {
+		super.initialize(helper);
 		/*The order of distinct collections *may* depend on the temporal order in which the elements are encountered
 		 * The temporal order may be the same as the parent collection's order or the source collection's order, or any ancestor in between,
 		 * depending on when the last collection interrupt was.
@@ -79,7 +101,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		WeakListening.Builder listening = WeakListening.build();
 		BetterSortedSet<ObservableCollectionDataFlowImpl.DerivedCollectionElement<E>> srcEls = new BetterTreeSet<>(false,
 			Comparable::compareTo);
-		parentFlow.manageActive().begin(true, (el, cause) -> {
+		getFlow().manageActive().begin(true, (el, cause) -> {
 			E src = el.get();
 			ElementId srcElId = srcEls.addElement(el, false).getElementId();
 			int srcIndex = srcEls.getElementsBefore(srcElId);
@@ -98,21 +120,6 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		getExpected().addAll(theValues.keySet());
 		listening.unsubscribe();
 		srcEls.clear();
-		theDebug = Debug.d().add("distinctLink");
-	}
-
-	/**
-	 * This is a hack. If the flow is not rebased for hash-based distinctness, the order for different collections off of the same distinct
-	 * flow may not be consistent.
-	 *
-	 * @see org.observe.supertest.AbstractObservableCollectionLink#isRebasedFlowRequired()
-	 */
-	private static boolean isRebasedFlowRequired(FlowOptions.UniqueOptions options, Equivalence<?> equivalence) {
-		return !options.isPreservingSourceOrder() && !(equivalence instanceof org.observe.collect.Equivalence.ComparatorEquivalence);
-	}
-
-	protected BetterMap<E, BetterSortedMap<ElementId, E>> getValues() {
-		return theValues;
 	}
 
 	@Override

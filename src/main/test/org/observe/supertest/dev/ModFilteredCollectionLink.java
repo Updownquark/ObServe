@@ -15,7 +15,11 @@ public class ModFilteredCollectionLink<E> extends AbstractObservableCollectionLi
 		TestHelper helper, ObservableCollectionDataFlowImpl.ModFilterer<E> filter, boolean checkRemovedValues) {
 		super(parent, type, flow, helper, false, checkRemovedValues);
 		theFilter = filter;
+	}
 
+	@Override
+	public void initialize(TestHelper helper) {
+		super.initialize(helper);
 		for (E src : getParent().getCollection())
 			getExpected().add(src);
 	}

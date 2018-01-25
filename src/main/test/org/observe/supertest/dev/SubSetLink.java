@@ -39,7 +39,11 @@ public class SubSetLink<E> extends AbstractObservableCollectionLink<E, E> {
 
 		theSourceValues = new BetterTreeList<>(false);
 		theIncludedValues = new BetterTreeMap<>(false, ElementId::compareTo);
+	}
 
+	@Override
+	public void initialize(TestHelper helper) {
+		super.initialize(helper);
 		boolean pastMin = theMin == null;
 		for (E value : getParent().getCollection()) {
 			ElementId srcId = theSourceValues.addElement(value, false).getElementId();

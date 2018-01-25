@@ -55,11 +55,6 @@ public class SortedCollectionLink<E> extends AbstractObservableCollectionLink<E,
 
 		theSourceElements = new BetterTreeList<>(false);
 		theSortedElements = new BetterTreeList<>(false);
-		for (E value : getParent().getCollection()) {
-			ElementId srcId = theSourceElements.addElement(null, false).getElementId();
-			ElementId sortedEl = insert(value, srcId);
-			getExpected().add(theSortedElements.getElementsBefore(sortedEl), value);
-		}
 
 		theNewSourceValues = new BetterTreeList<>(false);
 		getParent().getCollection().onChange(evt -> {
@@ -70,6 +65,16 @@ public class SortedCollectionLink<E> extends AbstractObservableCollectionLink<E,
 			default:
 			}
 		});
+	}
+
+	@Override
+	public void initialize(TestHelper helper) {
+		super.initialize(helper);
+		for (E value : getParent().getCollection()) {
+			ElementId srcId = theSourceElements.addElement(null, false).getElementId();
+			ElementId sortedEl = insert(value, srcId);
+			getExpected().add(theSortedElements.getElementsBefore(sortedEl), value);
+		}
 	}
 
 	private ElementId insert(E value, ElementId srcId) {

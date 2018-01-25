@@ -32,7 +32,11 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 		isMapVariable = variableMap;
 		theMap = map.get();
 		theOptions = options;
+	}
 
+	@Override
+	public void initialize(TestHelper helper) {
+		super.initialize(helper);
 		for (E src : getParent().getCollection())
 			getExpected().add(theMap.map(src));
 	}

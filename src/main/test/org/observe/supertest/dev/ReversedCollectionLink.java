@@ -14,7 +14,11 @@ public class ReversedCollectionLink<E> extends AbstractObservableCollectionLink<
 	public ReversedCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type, CollectionDataFlow<?, ?, E> flow,
 		TestHelper helper, boolean checkRemovedValues) {
 		super(parent, type, flow, helper, false, checkRemovedValues);
+	}
 
+	@Override
+	public void initialize(TestHelper helper) {
+		super.initialize(helper);
 		theSize = getParent().getCollection().size();
 		for (E value : getParent().getCollection())
 			getExpected().add(0, value);

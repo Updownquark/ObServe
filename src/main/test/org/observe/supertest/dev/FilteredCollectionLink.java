@@ -41,13 +41,6 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 
 		theSourceValues = new BetterTreeList<>(false);
 		thePresentSourceElements = new BetterTreeSet<>(false, ElementId::compareTo);
-		for (E value : getParent().getCollection()) {
-			ElementId srcId = theSourceValues.addElement(value, false).getElementId();
-			if (theFilter.apply(value) == null) {
-				thePresentSourceElements.add(srcId);
-				getExpected().add(value);
-			}
-		}
 
 		theNewSourceValues = new BetterTreeList<>(false);
 		getParent().getCollection().onChange(evt -> {
@@ -58,6 +51,18 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 			default:
 			}
 		});
+	}
+
+	@Override
+	public void initialize(TestHelper helper) {
+		super.initialize(helper);
+		for (E value : getParent().getCollection()) {
+			ElementId srcId = theSourceValues.addElement(value, false).getElementId();
+			if (theFilter.apply(value) == null) {
+				thePresentSourceElements.add(srcId);
+				getExpected().add(value);
+			}
+		}
 	}
 
 	@Override
