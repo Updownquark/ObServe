@@ -134,9 +134,7 @@ public class ObservableCollectionDataFlowImpl {
 	}
 
 	public static interface PassiveCollectionManager<E, I, T> extends CollectionOperation<E, I, T> {
-		default boolean isReversed() {
-			return false;
-		}
+		boolean isReversed();
 
 		ObservableValue<? extends Function<? super E, ? extends T>> map();
 
@@ -1030,6 +1028,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isReversed() {
+			return false;
+		}
+
+		@Override
 		public ObservableValue<Function<? super E, E>> map() {
 			TypeToken<E> srcType = theSource.getType();
 			return ObservableValue.of(functionType(srcType, srcType), v -> v);
@@ -1261,7 +1264,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public MutableCollectionElement<T> map(MutableCollectionElement<E> element, Function<? super E, ? extends T> map) {
-			return theParent.map(element, map).reverse();
+			return theParent.map(element, map); // Don't reverse here--the passive collection takes care of it
 		}
 
 		@Override
@@ -2067,6 +2070,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isReversed() {
+			return theParent.isReversed();
+		}
+
+		@Override
 		public ObservableValue<? extends Function<? super E, ? extends T>> map() {
 			return theParent.map();
 		}
@@ -2198,6 +2206,11 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public Transaction lock(boolean write, Object cause) {
 			return theParent.lock(write, cause);
+		}
+
+		@Override
+		public boolean isReversed() {
+			return theParent.isReversed();
 		}
 
 		@Override
@@ -2674,6 +2687,11 @@ public class ObservableCollectionDataFlowImpl {
 				for (int a = 0; a < valueLocks.length; a++)
 					valueLocks[a].close();
 			};
+		}
+
+		@Override
+		public boolean isReversed() {
+			return theParent.isReversed();
 		}
 
 		@Override
@@ -3360,6 +3378,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isReversed() {
+			return theParent.isReversed();
+		}
+
+		@Override
 		public ObservableValue<? extends Function<? super E, ? extends T>> map() {
 			return theParent.map().refresh(theRefresh);
 		}
@@ -3805,6 +3828,11 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public Transaction lock(boolean write, Object cause) {
 			return theParent.lock(write, cause);
+		}
+
+		@Override
+		public boolean isReversed() {
+			return theParent.isReversed();
 		}
 
 		@Override

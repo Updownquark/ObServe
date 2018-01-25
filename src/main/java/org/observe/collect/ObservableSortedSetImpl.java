@@ -16,7 +16,6 @@ import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
-import org.observe.collect.ObservableCollectionDataFlowImpl.ModFilterer;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
 import org.observe.collect.ObservableSetImpl.UniqueBaseFlow;
 import org.qommons.Transaction;
@@ -249,10 +248,25 @@ public class ObservableSortedSetImpl {
 			return getWrapped().comparator().reversed();
 		}
 
+		private <X> Comparable<X> reverse(Comparable<X> search) {
+			class ReversedSearch implements Comparable<X> {
+				@Override
+				public int compareTo(X v) {
+					return -search.compareTo(v);
+				}
+
+				@Override
+				public String toString() {
+					return "reverse(" + search + ")";
+				}
+			}
+			return new ReversedSearch();
+		}
+
 		@Override
 		public int indexFor(Comparable<? super E> search) {
 			try (Transaction t = lock(false, null)) {
-				int index = getWrapped().indexFor(search);
+				int index = getWrapped().indexFor(reverse(search));
 				if (index >= 0)
 					return size() - index - 1;
 				else {
@@ -265,7 +279,7 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public CollectionElement<E> search(Comparable<? super E> search, SortedSearchFilter filter) {
-			return getWrapped().search(v -> -search.compareTo(v), filter.opposite());
+			return CollectionElement.reverse(getWrapped().search(v -> -search.compareTo(v), filter.opposite()));
 		}
 
 		@Override
@@ -346,9 +360,7 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
-			ModFilterBuilder<T> filter = new ModFilterBuilder<>();
-			options.accept(filter);
-			return new UniqueSortedModFilteredOp<>(getSource(), this, new ModFilterer<>(filter));
+			return new UniqueSortedDataFlowWrapper<>(getSource(), super.filterMod(options), theCompare);
 		}
 
 		@Override
@@ -446,82 +458,7 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public UniqueSortedDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
-			ModFilterBuilder<T> filter = new ModFilterBuilder<>();
-			options.accept(filter);
-			return new UniqueSortedModFilteredOp<>(getSource(), this, new ModFilterer<>(filter));
-		}
-
-		@Override
-		public ObservableSortedSet<T> collectPassive() {
-			return new PassiveDerivedSortedSet<>((ObservableSortedSet<E>) getSource(), managePassive(), comparator());
-		}
-
-		@Override
-		public ObservableSortedSet<T> collectActive(Observable<?> until) {
-			return new ActiveDerivedSortedSet<>(manageActive(), comparator(), until);
-		}
-	}
-
-	public static class UniqueSortedModFilteredOp<E, T> extends ObservableSetImpl.UniqueModFilteredOp<E, T>
-	implements UniqueSortedDataFlow<E, T, T> {
-		public UniqueSortedModFilteredOp(ObservableCollection<E> source, UniqueDataFlow<E, ?, T> parent, ModFilterer<T> options) {
-			super(source, parent, options);
-		}
-
-		@Override
-		public Comparator<? super T> comparator() {
-			return ((UniqueSortedDataFlow<E, ?, T>) getParent()).comparator();
-		}
-
-		@Override
-		public UniqueSortedDataFlow<E, T, T> reverse() {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), super.reverse(), comparator().reversed());
-		}
-
-		@Override
-		public UniqueSortedDataFlow<E, T, T> filter(Function<? super T, String> filter) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), super.filter(filter), comparator());
-		}
-
-		@Override
-		public <X> UniqueSortedDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), super.whereContained(other, include), comparator());
-		}
-
-		@Override
-		public <X> UniqueSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
-			Function<? super X, ? extends T> reverse, Consumer<MapOptions<T, X>> options) {
-			MapOptions<T, X> mapOptions = new MapOptions<>();
-			options.accept(mapOptions);
-			mapOptions.withReverse(reverse);
-			return new UniqueSortedMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions), (x1, x2) -> {
-				return comparator().compare(reverse.apply(x1), reverse.apply(x2));
-			});
-		}
-
-		@Override
-		public <X> UniqueSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
-			Comparator<? super X> compare, Consumer<MapOptions<T, X>> options) {
-			MapOptions<T, X> mapOptions = new MapOptions<>();
-			options.accept(mapOptions);
-			return new UniqueSortedMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions), compare);
-		}
-
-		@Override
-		public UniqueSortedDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), super.refresh(refresh), comparator());
-		}
-
-		@Override
-		public UniqueSortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), super.refreshEach(refresh), comparator());
-		}
-
-		@Override
-		public UniqueSortedDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
-			ModFilterBuilder<T> filter = new ModFilterBuilder<>();
-			options.accept(filter);
-			return new UniqueSortedModFilteredOp<>(getSource(), this, new ModFilterer<>(filter));
+			return new UniqueSortedDataFlowWrapper<>(getSource(), super.filterMod(options), theCompare);
 		}
 
 		@Override
@@ -596,9 +533,7 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public UniqueSortedDataFlow<E, E, E> filterMod(Consumer<ModFilterBuilder<E>> options) {
-			ModFilterBuilder<E> filter = new ModFilterBuilder<>();
-			options.accept(filter);
-			return new UniqueSortedModFilteredOp<>(getSource(), this, new ModFilterer<>(filter));
+			return new UniqueSortedDataFlowWrapper<>(getSource(), super.filterMod(options), comparator());
 		}
 
 		@Override

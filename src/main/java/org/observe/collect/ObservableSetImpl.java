@@ -22,7 +22,6 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.BaseCollectionDataFl
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionElementListener;
 import org.observe.collect.ObservableCollectionDataFlowImpl.DerivedCollectionElement;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ElementAccepter;
-import org.observe.collect.ObservableCollectionDataFlowImpl.ModFilterer;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
 import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.FlattenedValueCollection;
@@ -116,9 +115,7 @@ public class ObservableSetImpl {
 
 		@Override
 		public UniqueDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
-			ModFilterBuilder<T> filter = new ModFilterBuilder<>();
-			options.accept(filter);
-			return new UniqueModFilteredOp<>(getSource(), this, new ModFilterer<>(filter));
+			return new UniqueDataFlowWrapper<>(getSource(), super.filterMod(options), equivalence());
 		}
 
 		@Override
@@ -212,66 +209,7 @@ public class ObservableSetImpl {
 
 		@Override
 		public UniqueDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
-			ModFilterBuilder<T> filter = new ModFilterBuilder<>();
-			options.accept(filter);
-			return new UniqueModFilteredOp<>(getSource(), this, new ModFilterer<>(filter));
-		}
-
-		@Override
-		public ObservableSet<T> collectPassive() {
-			return new PassiveDerivedSet<>((ObservableSet<E>) getSource(), managePassive());
-		}
-
-		@Override
-		public ObservableSet<T> collectActive(Observable<?> until) {
-			return new ActiveDerivedSet<>(manageActive(), until);
-		}
-	}
-
-	public static class UniqueModFilteredOp<E, T> extends ObservableCollectionDataFlowImpl.ModFilteredOp<E, T>
-	implements UniqueDataFlow<E, T, T> {
-		public UniqueModFilteredOp(ObservableCollection<E> source, UniqueDataFlow<E, ?, T> parent, ModFilterer<T> options) {
-			super(source, parent, options);
-		}
-
-		@Override
-		public UniqueDataFlow<E, T, T> reverse() {
-			return new UniqueDataFlowWrapper<>(getSource(), super.reverse(), equivalence());
-		}
-
-		@Override
-		public UniqueDataFlow<E, T, T> filter(Function<? super T, String> filter) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter), equivalence());
-		}
-
-		@Override
-		public <X> UniqueDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
-			Function<? super X, ? extends T> reverse, Consumer<MapOptions<T, X>> options) {
-			MapOptions<T, X> mapOptions = new MapOptions<>();
-			options.accept(mapOptions);
-			return new UniqueMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions));
-		}
-
-		@Override
-		public <X> UniqueDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.whereContained(other, include), equivalence());
-		}
-
-		@Override
-		public UniqueDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.refresh(refresh), equivalence());
-		}
-
-		@Override
-		public UniqueDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.refreshEach(refresh), equivalence());
-		}
-
-		@Override
-		public UniqueDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
-			ModFilterBuilder<T> filter = new ModFilterBuilder<>();
-			options.accept(filter);
-			return new UniqueModFilteredOp<>(getSource(), this, new ModFilterer<>(filter));
+			return new UniqueDataFlowWrapper<>(getSource(), super.filterMod(options), equivalence());
 		}
 
 		@Override
@@ -431,6 +369,7 @@ public class ObservableSetImpl {
 					}).collect(Collectors.toList()), newValue);
 			} catch (RuntimeException e) {
 				first.moveTo(oldValue);
+				throw e;
 			}
 		}
 
@@ -772,9 +711,7 @@ public class ObservableSetImpl {
 
 		@Override
 		public UniqueDataFlow<E, E, E> filterMod(Consumer<ModFilterBuilder<E>> options) {
-			ModFilterBuilder<E> filter = new ModFilterBuilder<>();
-			options.accept(filter);
-			return new UniqueModFilteredOp<>(getSource(), this, new ModFilterer<>(filter));
+			return new UniqueDataFlowWrapper<>(getSource(), super.filterMod(options), equivalence());
 		}
 
 		@Override
