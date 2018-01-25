@@ -666,7 +666,10 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				element.set(op.value);
 				Assert.assertNull(op.getMessage());
 			} catch (UnsupportedOperationException | IllegalArgumentException e) {
-				Assert.assertNotNull(op.getMessage());
+				if (op.getMessage() == null) {
+					e.printStackTrace();
+					Assert.assertTrue("Should not have thrown exception", false);
+				}
 			}
 		}
 		Assert.assertTrue(element.getElementId().isPresent());
