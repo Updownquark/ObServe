@@ -384,10 +384,9 @@ public class ObservableCollectionDataFlowImpl {
 			String msg = null;
 			if (isAddFiltered() || isRemoveFiltered() || (theUnmodifiableMessage != null && areUpdatesAllowed)) {
 				T old = oldValue.get();
-				if (old == value) {
+				if (old == value && areUpdatesAllowed) {
 					// An update. These are treated differently. These can only be prevented explicitly.
 				} else {
-					// Non-updates are treated
 					if (theRemoveFilter != null)
 						msg = theRemoveFilter.apply(old);
 					if (msg != null)
@@ -414,11 +413,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		public boolean isAddFiltered() {
-			return theAddFilter != null || theAddMessage != null || theUnmodifiableMessage != null;
+			return theAddFilter != null || theAddMessage != null;
 		}
 
 		public boolean isRemoveFiltered() {
-			return theRemoveFilter != null || theRemoveMessage != null || theUnmodifiableMessage != null;
+			return theRemoveFilter != null || theRemoveMessage != null;
 		}
 
 		public String canRemove(Supplier<T> oldValue) {
@@ -3860,7 +3859,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public boolean isRemoveFiltered() {
-			return theFilter.isRemoveFiltered() || theParent.isRemoveFiltered();
+			return theFilter.isRemoveFiltered() || theFilter.getUnmodifiableMessage() != null || theParent.isRemoveFiltered();
 		}
 
 		@Override
@@ -3989,7 +3988,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public boolean clear() {
-			if (!theFilter.isRemoveFiltered())
+			if (!theFilter.isRemoveFiltered() && theFilter.getUnmodifiableMessage() == null)
 				return theParent.clear();
 			if (theFilter.theUnmodifiableMessage != null || theFilter.theRemoveMessage != null)
 				return true;
