@@ -10,9 +10,11 @@ import java.util.function.Function;
 
 import org.junit.Test;
 import org.qommons.QommonsUtils;
+import org.qommons.Ternian;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.Testable;
 import org.qommons.Transaction;
+import org.qommons.ValueHolder;
 import org.qommons.debug.Debug;
 
 import com.google.common.reflect.TypeToken;
@@ -34,7 +36,15 @@ public class ObservableChainTester implements Testable {
 	}
 
 	public static TestValueType nextType(TestHelper helper) {
-		return TestValueType.values()[helper.getInt(0, TestValueType.values().length)];
+		// The DOUBLE type is much less performant. There may be some value, but we'll use it less often.
+		ValueHolder<TestValueType> result = new ValueHolder<>();
+		TestHelper.RandomAction action = helper.createAction();
+		action.or(10, () -> result.accept(TestValueType.INT));
+		action.or(5, () -> result.accept(TestValueType.STRING));
+		action.or(2, () -> result.accept(TestValueType.DOUBLE));
+		action.execute(null);
+		return result.get();
+		// return TestValueType.values()[helper.getInt(0, TestValueType.values().length)];
 	}
 
 	private static final int MAX_VALUE = 1000;
@@ -101,12 +111,14 @@ public class ObservableChainTester implements Testable {
 	private <E> void assemble(TestHelper helper) {
 		//Tend toward smaller chain lengths, but allow longer ones occasionally
 		int chainLength = helper.getInt(2, helper.getInt(2, MAX_CHAIN_LENGTH));
-		ObservableChainLink<?> initLink = SimpleCollectionLink.createInitialLink(null, null, helper);
+		ObservableChainLink<?> initLink = SimpleCollectionLink.createInitialLink(null, null, helper, 0, Ternian.NONE, null);
 		theChain.add(initLink);
-		while (theChain.size() < chainLength)
-			theChain.add(theChain.get(theChain.size() - 1).derive(helper));
-		for (int i = 0; i < theChain.size(); i++)
-			theChain.get(i).initialize(helper);
+		initLink.initialize(helper);
+		while (theChain.size() < chainLength) {
+			ObservableChainLink<?> nextLink = theChain.get(theChain.size() - 1).derive(helper);
+			theChain.add(nextLink);
+			nextLink.initialize(helper);
+		}
 	}
 
 	private void test(TestHelper helper) {

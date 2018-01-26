@@ -10,6 +10,7 @@ import org.observe.collect.DefaultObservableSortedSet;
 import org.observe.collect.FlowOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.dev.ObservableChainTester.TestValueType;
+import org.qommons.Ternian;
 import org.qommons.TestHelper;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
@@ -24,7 +25,7 @@ import com.google.common.reflect.TypeToken;
 public class SimpleCollectionLink<E> extends AbstractObservableCollectionLink<E, E> {
 	public SimpleCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type, CollectionDataFlow<?, ?, E> flow,
 		TestHelper helper) {
-		super(parent, type, flow, helper, false, true);
+		super(parent, type, flow, helper, true);
 	}
 
 	@Override
@@ -38,9 +39,9 @@ public class SimpleCollectionLink<E> extends AbstractObservableCollectionLink<E,
 		// We're also not concerned with whether any of the values are illegal or duplicates.
 		// The addAll method should not throw exceptions
 		getCollection().addAll(values);
-		getExpected().addAll(getCollection());
 
 		super.initialize(helper);
+		getExpected().addAll(getCollection());
 	}
 
 	@Override
@@ -73,34 +74,42 @@ public class SimpleCollectionLink<E> extends AbstractObservableCollectionLink<E,
 
 	@SuppressWarnings("deprecation")
 	public static <E> AbstractObservableCollectionLink<E, E> createInitialLink(ObservableCollectionChainLink<?, E> parent,
-		TestValueType type, TestHelper helper) {
-		TestValueType fType = type != null ? type : TestValueType.values()[helper.getInt(0, TestValueType.values().length)];
+		TestValueType type, TestHelper helper, int depth, Ternian withSorted, Comparator<? super E> compare) {
+		TestValueType fType = type != null ? type : ObservableChainTester.nextType(helper);
 
 		ValueHolder<AbstractObservableCollectionLink<E, E>> holder = new ValueHolder<>();
-		TestHelper.RandomAction action = helper.doAction(1, () -> {
-			// Simple tree-backed list
-			BetterList<E> backing = new BetterTreeList<>(true);
-			DefaultObservableCollection<E> base = new DefaultObservableCollection<>((TypeToken<E>) fType.getType(), backing);
-			holder.accept(new SimpleCollectionLink<>(parent, fType, base.flow(), helper));
-		}).or(.5, () -> {
-			// Tree-backed sorted set
-			Comparator<? super E> compare = SortedCollectionLink.compare(fType, helper);
-			BetterSortedSet<E> backing = new BetterTreeSet<>(true, compare);
-			DefaultObservableSortedSet<E> base = new DefaultObservableSortedSet<>((TypeToken<E>) fType.getType(), backing);
-			SimpleCollectionLink<E> simple = new SimpleCollectionLink<>(parent, fType, base.flow(), helper);
-			holder.accept(new DistinctCollectionLink<>(simple, fType, base.flow(), base.flow(), helper, true,
-				new FlowOptions.SimpleUniqueOptions(true), true));
-		});
-		if (CircularArrayList.class.getAnnotation(Deprecated.class) == null) {
+		TestHelper.RandomAction action = helper.createAction();
+		if (withSorted != Ternian.TRUE) {
 			action.or(1, () -> {
-				BetterList<E> backing = new CircularArrayList<>();
+				// Simple tree-backed list
+				BetterList<E> backing = new BetterTreeList<>(true);
 				DefaultObservableCollection<E> base = new DefaultObservableCollection<>((TypeToken<E>) fType.getType(), backing);
 				holder.accept(new SimpleCollectionLink<>(parent, fType, base.flow(), helper));
 			});
+			if (CircularArrayList.class.getAnnotation(Deprecated.class) == null) {
+				action.or(1, () -> {
+					BetterList<E> backing = new CircularArrayList<>();
+					DefaultObservableCollection<E> base = new DefaultObservableCollection<>((TypeToken<E>) fType.getType(), backing);
+					holder.accept(new SimpleCollectionLink<>(parent, fType, base.flow(), helper));
+				});
+			}
 		}
-		action.or(1.25, () -> { // TODO Change this probability to .25
-			holder.accept(FlattenedValueLink.createFlattenedLink(parent, fType, helper));
-		});
+		if (withSorted != Ternian.FALSE) {
+			action.or(.5, () -> {
+				// Tree-backed sorted set
+				Comparator<? super E> compare2 = compare != null ? compare : SortedCollectionLink.compare(fType, helper);
+				BetterSortedSet<E> backing = new BetterTreeSet<>(true, compare2);
+				DefaultObservableSortedSet<E> base = new DefaultObservableSortedSet<>((TypeToken<E>) fType.getType(), backing);
+				SimpleCollectionLink<E> simple = new SimpleCollectionLink<>(parent, fType, base.flow(), helper);
+				holder.accept(new DistinctCollectionLink<>(simple, fType, base.flow(), base.flow(), helper, true,
+					new FlowOptions.SimpleUniqueOptions(true), true));
+			});
+		}
+		if (depth < 3) { // Don't create so many flattened layers
+			action.or(1.25, () -> { // TODO Change this probability to .25
+				holder.accept(FlattenedValueLink.createFlattenedLink(parent, fType, helper, depth, withSorted, compare));
+			});
+		}
 		// TODO ObservableValue
 		// TODO ObservableMultiMap
 		// TODO ObservableMap

@@ -13,7 +13,7 @@ public class ModFilteredCollectionLink<E> extends AbstractObservableCollectionLi
 
 	public ModFilteredCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type, CollectionDataFlow<?, ?, E> flow,
 		TestHelper helper, ObservableCollectionDataFlowImpl.ModFilterer<E> filter, boolean checkRemovedValues) {
-		super(parent, type, flow, helper, false, checkRemovedValues);
+		super(parent, type, flow, helper, checkRemovedValues);
 		theFilter = filter;
 	}
 

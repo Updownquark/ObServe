@@ -1,6 +1,8 @@
 package org.observe.supertest.dev;
 
 import java.util.ArrayList;
+import java.util.Deque;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -10,9 +12,9 @@ import org.observe.collect.CollectionChangeType;
 import org.observe.collect.Equivalence;
 import org.observe.collect.FlowOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
-import org.observe.collect.ObservableCollectionDataFlowImpl;
 import org.observe.supertest.dev.ObservableChainTester.TestValueType;
-import org.observe.util.WeakListening;
+import org.qommons.BiTuple;
+import org.qommons.Ternian;
 import org.qommons.TestHelper;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
@@ -25,6 +27,7 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.collect.MutableMapEntryHandle;
 import org.qommons.debug.Debug;
 import org.qommons.debug.Debug.DebugData;
 import org.qommons.tree.BetterTreeList;
@@ -39,7 +42,6 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 
 	/** A parallel representation of the values in the source (parent) collection */
 	private final BetterList<E> theSourceValues;
-	private final BetterList<Integer> theNewSourceValues;
 	/** A map of value entry ID (in {@link #theValues}) to the source element representing the value (in {@link #theSourceValues}) */
 	private final BetterMap<ElementId, ElementId> theRepresentativeElements;
 	/**
@@ -54,36 +56,30 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	public DistinctCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type, CollectionDataFlow<?, ?, E> flow,
 		CollectionDataFlow<?, ?, E> parentFlow, TestHelper helper, boolean checkRemovedValues, FlowOptions.UniqueOptions options,
 		boolean root) {
-		super(parent, type, flow, helper, isRebasedFlowRequired(options, flow.equivalence()), checkRemovedValues);
+		super(parent, type, flow, helper, checkRemovedValues, !isOrderImportant(options, flow.equivalence()), Ternian.FALSE);
 		theParentFlow = parentFlow;
 		theOptions = options;
 		isRoot = root;
 		theValues = flow.equivalence().createMap();
 		theSourceValues = new BetterTreeList<>(false);
-		theNewSourceValues = new BetterTreeList<>(false);
 
 		theRepresentativeElements = new BetterTreeMap<>(true, ElementId::compareTo);
 		theSortedRepresentatives = new BetterTreeSet<>(true, ElementId::compareTo);
 
-		getParent().getCollection().onChange(evt -> {
-			switch (evt.getType()) {
-			case add:
-				theNewSourceValues.add(evt.getIndex());
-				break;
-			default:
-			}
-		});
 		theDebug = Debug.d().add("distinctLink");
 	}
 
-	/**
-	 * This is a hack. If the flow is not rebased for hash-based distinctness, the order for different collections off of the same distinct
-	 * flow may not be consistent.
-	 *
-	 * @see org.observe.supertest.AbstractObservableCollectionLink#isRebasedFlowRequired()
-	 */
-	private static boolean isRebasedFlowRequired(FlowOptions.UniqueOptions options, Equivalence<?> equivalence) {
-		return !options.isPreservingSourceOrder() && !(equivalence instanceof org.observe.collect.Equivalence.ComparatorEquivalence);
+	private boolean isOrderImportant() {
+		return isOrderImportant(theOptions, getCollection().equivalence());
+	}
+
+	private static boolean isOrderImportant(FlowOptions.UniqueOptions options, Equivalence<?> equivalence) {
+		/* The order of sets with hash-based distincness is very complicated and depends on the order in which elements are encountered
+		 * This order may be vastly different from the order of the source collection.
+		 * Element encounter order is very difficult to keep track of in the tester and is not important. */
+		if (options.isPreservingSourceOrder())
+			return true;
+		return equivalence instanceof org.observe.collect.Equivalence.ComparatorEquivalence;
 	}
 
 	protected BetterMap<E, BetterSortedMap<ElementId, E>> getValues() {
@@ -92,23 +88,20 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 
 	@Override
 	public void initialize(TestHelper helper) {
+		if (isRoot)
+			getParent().initialize(helper);
 		super.initialize(helper);
-		/*The order of distinct collections *may* depend on the temporal order in which the elements are encountered
-		 * The temporal order may be the same as the parent collection's order or the source collection's order, or any ancestor in between,
-		 * depending on when the last collection interrupt was.
-		 * Hence it's not correct to simply iterate through the parent collection's values like most links can.
-		 * The result here is pretty dirty though. */
-		WeakListening.Builder listening = WeakListening.build();
-		BetterSortedSet<ObservableCollectionDataFlowImpl.DerivedCollectionElement<E>> srcEls = new BetterTreeSet<>(false,
-			Comparable::compareTo);
-		getFlow().manageActive().begin(true, (el, cause) -> {
-			E src = el.get();
-			ElementId srcElId = srcEls.addElement(el, false).getElementId();
-			int srcIndex = srcEls.getElementsBefore(srcElId);
-			ElementId srcId = theSourceValues.addElement(srcIndex, src).getElementId();
-			MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueEntry = theValues.getEntry(src);
-			if (valueEntry == null) {
-				valueEntry = theValues.putEntry(src, new BetterTreeMap<>(false, ElementId::compareTo), false);
+		// This is not completely perfect. Which elements are representative are sometimes based on the temporal order in which
+		// elements are encountered, which is not always the same as the order in the collection, even on initialization
+		// While "equivalent" elements are also equal, this is good enough.
+		// If I ever test other kinds of equivalence, this may cause failure.
+		theValues.keySet().addAll(getCollection());
+		for (E src : getParent().getCollection()) {
+			ElementId srcId = theSourceValues.addElement(src, false).getElementId();
+			MutableMapEntryHandle<E, BetterSortedMap<ElementId, E>> valueEntry = theValues
+				.mutableEntry(theValues.getEntry(src).getElementId());
+			if (valueEntry.get() == null) {
+				valueEntry.set(new BetterTreeMap<>(false, ElementId::compareTo));
 				theRepresentativeElements.put(valueEntry.getElementId(), srcId);
 				if (theOptions.isPreservingSourceOrder())
 					theSortedRepresentatives.add(srcId);
@@ -116,10 +109,8 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 					theSortedRepresentatives.add(valueEntry.getElementId());
 			}
 			valueEntry.get().put(srcId, src);
-		}, listening.getListening());
+		}
 		getExpected().addAll(theValues.keySet());
-		listening.unsubscribe();
-		srcEls.clear();
 	}
 
 	@Override
@@ -224,11 +215,20 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	public void fromBelow(List<CollectionOp<E>> ops, TestHelper helper) {
 		theDebug.act("fromBelow").param("ops", ops).exec();
 		List<CollectionOp<E>> distinctOps = new ArrayList<>(ops.size());
+		Deque<BiTuple<Integer, E>> newValues = new LinkedList<>(getNewValues());
 		for (CollectionOp<E> op : ops) {
 			switch (op.type) {
 			case add:
 				theDebug.act("addSource").param("@", op.value).exec();
-				add(op.index, op.value, -1, distinctOps);
+				int destIndex;
+				if (theValues.containsKey(op.value))
+					destIndex = -1;
+				else {
+					BiTuple<Integer, E> newValue = newValues.removeFirst();
+					Assert.assertEquals("Link " + getLinkIndex(), newValue.getValue2(), op.value);
+					destIndex = newValue.getValue1();
+				}
+				add(op.index, op.value, destIndex, distinctOps);
 				break;
 			case remove:
 				theDebug.act("remove").param("@", op.value).exec();
@@ -269,7 +269,14 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 					} else {
 						// Same as a remove, then an add.
 						remove(op.index, distinctOps);
-						add(op.index, op.value, -1, distinctOps);
+						if (isOrderImportant() || theValues.containsKey(op.value))
+							destIndex = -1;
+						else {
+							BiTuple<Integer, E> newValue = newValues.removeFirst();
+							Assert.assertEquals("Link " + getLinkIndex(), newValue.getValue2(), op.value);
+							destIndex = newValue.getValue1();
+						}
+						add(op.index, op.value, destIndex, distinctOps);
 					}
 				}
 			}
@@ -282,12 +289,16 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		theDebug.act("fromAbove").param("ops", ops).exec();
 		List<CollectionOp<E>> parentOps = new ArrayList<>(ops.size());
 		List<CollectionOp<E>> distinctOps = new ArrayList<>();
+		Deque<BiTuple<Integer, E>> newSourceValues = new LinkedList<>(
+			((AbstractObservableCollectionLink<?, E>) getParent()).getNewValues());
 		for (CollectionOp<E> op : ops) {
 			switch (op.type) {
 			case add:
 				Debug.DebugData debug = Debug.d().debug(helper, true);
 				debug.debugIf(debug.is("break") && op.value.equals("958")).breakpoint();
-				int srcIndex = theNewSourceValues.removeFirst();
+				BiTuple<Integer, E> newSource = newSourceValues.removeFirst();
+				Assert.assertEquals("Link " + getLinkIndex(), newSource.getValue2(), op.value);
+				int srcIndex = newSource.getValue1();
 				parentOps.add(new CollectionOp<>(CollectionChangeType.add, op.value, srcIndex));
 				add(srcIndex, op.value, op.index, distinctOps);
 				break;
@@ -527,9 +538,17 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	}
 
 	@Override
+	protected int getLinkIndex() {
+		if (isRoot)
+			return 0;
+		return super.getLinkIndex();
+	}
+
+	@Override
 	public void check(boolean transComplete) {
+		if (isRoot)
+			getParent().check(transComplete);
 		super.check(transComplete);
-		theNewSourceValues.clear();
 	}
 
 	@Override

@@ -1,6 +1,8 @@
 package org.observe.supertest.dev;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedList;
 import java.util.List;
 
 import org.observe.ObservableValue;
@@ -11,8 +13,8 @@ import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.supertest.dev.ObservableChainTester.TestValueType;
+import org.qommons.Ternian;
 import org.qommons.TestHelper;
-import org.qommons.Transaction;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
 import com.google.common.reflect.TypeToken;
@@ -22,27 +24,30 @@ public class FlattenedValueLink<E> extends AbstractObservableCollectionLink<E, E
 	private final List<AbstractObservableCollectionLink<E, E>> theContents;
 	private final boolean isDistinct;
 	private final boolean isSorted;
+	private final Comparator<? super E> theCompare;
+	private final int theDepth;
 	private int theSelected;
 
 	public FlattenedValueLink(ObservableCollectionChainLink<?, E> parent, TestValueType type,
-		SimpleSettableValue<? extends ObservableCollection<E>> value, boolean distinct, boolean sorted, CollectionDataFlow<?, ?, E> flow,
-			TestHelper helper) {
-		super(parent, type, flow, helper, false, true);
+		SimpleSettableValue<? extends ObservableCollection<E>> value, boolean distinct, boolean sorted, Comparator<? super E> compare,
+			CollectionDataFlow<?, ?, E> flow, TestHelper helper, int depth) {
+		super(parent, type, flow, helper, true);
 		theValue = value;
 		theContents = new ArrayList<>();
 		isDistinct = distinct;
 		isSorted = sorted;
+		theCompare = compare;
+		theDepth = depth;
 	}
 
 	@Override
 	public void initialize(TestHelper helper) {
 		int collections = helper.getInt(2, 5);
 		for (int i = 0; i < collections; i++) {
-			AbstractObservableCollectionLink<E, E> link = SimpleCollectionLink.createInitialLink(null, getTestType(), helper);
-			if (isSorted && !(link.getCollection() instanceof ObservableSortedSet))
-				link = (AbstractObservableCollectionLink<E, E>) link.deriveDistinctSorted(helper);
-			else if (isDistinct && !(link.getCollection() instanceof ObservableSet))
-				link = (AbstractObservableCollectionLink<E, E>) link.deriveDistinct(helper);
+			AbstractObservableCollectionLink<E, E> link = SimpleCollectionLink.createInitialLink(null, getTestType(), helper, theDepth + 1,
+				Ternian.of(isSorted), theCompare);
+			if (isDistinct && !(link.getCollection() instanceof ObservableSet))
+				link = (AbstractObservableCollectionLink<E, E>) link.deriveDistinct(helper, true);
 			link.initialize(helper);
 			theContents.add(link);
 		}
@@ -52,11 +57,11 @@ public class FlattenedValueLink<E> extends AbstractObservableCollectionLink<E, E
 			AbstractObservableCollectionLink<E, E> selected = theContents.get(theSelected);
 			((SimpleSettableValue<ObservableCollection<E>>) theValue).set(selected.getCollection(), null);
 			selected.setChild(this);
-			for (E v : selected.getCollection())
-				getExpected().add(v);
 		}
 
 		super.initialize(helper);
+		if (theSelected < theContents.size())
+			getExpected().addAll(theContents.get(theSelected).getExpected());
 	}
 
 	@Override
@@ -66,20 +71,23 @@ public class FlattenedValueLink<E> extends AbstractObservableCollectionLink<E, E
 				theContents.get(theSelected).tryModify(helper);
 			} else {
 				int random = helper.getInt(0, theContents.size());
+				if (helper.isReproducing() && random != theSelected)
+					System.out.print("In [" + random + "]:" + theContents.get(random) + ": ");
 				theContents.get(random).tryModify(helper);
 			}
 			return;
 		}
+		helper.placemark("Modification");
 		int preSelected = theSelected;
 		theSelected = helper.getInt(0, theContents.size() + 1);
-		if (theSelected < theContents.size())
-			((SimpleSettableValue<ObservableCollection<E>>) theValue).set(theContents.get(theSelected).getCollection(), null);
-		else
-			theValue.set(null, null);
 		AbstractObservableCollectionLink<E, E> pre = preSelected < theContents.size() ? theContents.get(preSelected) : null;
 		AbstractObservableCollectionLink<E, E> post = theSelected < theContents.size() ? theContents.get(theSelected) : null;
 		if (helper.isReproducing())
 			System.out.println("Switching from [" + preSelected + "]:" + pre + " to [" + theSelected + "]:" + post);
+		if (theSelected < theContents.size())
+			((SimpleSettableValue<ObservableCollection<E>>) theValue).set(theContents.get(theSelected).getCollection(), null);
+		else
+			theValue.set(null, null);
 		if (preSelected == theSelected)
 			return;
 		List<CollectionOp<E>> ops = new ArrayList<>();
@@ -125,8 +133,17 @@ public class FlattenedValueLink<E> extends AbstractObservableCollectionLink<E, E
 	@Override
 	public void check(boolean transComplete) {
 		super.check(transComplete);
-		for (int i = 0; i < theContents.size(); i++)
-			theContents.get(i).check(transComplete);
+		LinkedList<ObservableChainLink<?>> chain = new LinkedList<>();
+		for (int i = 0; i < theContents.size(); i++) {
+			ObservableChainLink<?> link = theContents.get(i);
+			while (link != null) {
+				chain.addFirst(link);
+				link = link.getParent();
+			}
+			for (ObservableChainLink<?> lnk : chain)
+				lnk.check(transComplete);
+			chain.clear();
+		}
 	}
 
 	@Override
@@ -135,21 +152,35 @@ public class FlattenedValueLink<E> extends AbstractObservableCollectionLink<E, E
 		if (theSelected == theContents.size())
 			str.append("empty");
 		else
-			str.append(theContents.get(theSelected));
+			str.append('[').append(theSelected).append("]:").append(theContents.get(theSelected));
 		str.append(getExtras()).append(')');
 		return str.toString();
 	}
 
 	public static <E> FlattenedValueLink<E> createFlattenedLink(ObservableCollectionChainLink<?, E> parent, TestValueType type,
-		TestHelper helper) {
-		boolean distinct = helper.getBoolean(.2);
-		boolean sorted = distinct && helper.getBoolean();
+		TestHelper helper, int depth, Ternian withSorted, Comparator<? super E> compare) {
+		boolean distinct, sorted;
+		switch (withSorted) {
+		case FALSE:
+			distinct = helper.getBoolean(.2);
+			sorted = false;
+			break;
+		case TRUE:
+			distinct = sorted = true;
+			break;
+		default:
+			distinct = helper.getBoolean(.2);
+			sorted = distinct && helper.getBoolean();
+			break;
+		}
+		if (sorted && compare == null)
+			compare = SortedCollectionLink.compare(type, helper);
 
 		SimpleSettableValue<? extends ObservableCollection<E>> value;
 		ObservableCollection<E> collection;
 		if (sorted) {
 			value = new SimpleSettableValue<>(new TypeToken<ObservableSortedSet<E>>() {}, true);
-			collection = ObservableSortedSet.flattenValue((ObservableValue<ObservableSortedSet<E>>) value);
+			collection = ObservableSortedSet.flattenValue((ObservableValue<ObservableSortedSet<E>>) value, compare);
 		} else if (distinct) {
 			value = new SimpleSettableValue<>(new TypeToken<ObservableSet<E>>() {}, true);
 			collection = ObservableSet.flattenValue((ObservableValue<ObservableSet<E>>) value);
@@ -157,75 +188,6 @@ public class FlattenedValueLink<E> extends AbstractObservableCollectionLink<E, E
 			value = new SimpleSettableValue<>(new TypeToken<ObservableCollection<E>>() {}, true);
 			collection = ObservableCollection.flattenValue(value);
 		}
-		return new FlattenedValueLink<>(parent, type, value, distinct, sorted, collection.flow(), helper);
-	}
-
-	class FlattenedValueOption extends AbstractObservableCollectionLink<E, E> {
-		final AbstractObservableCollectionLink<E, E> link;
-		final int index;
-
-		FlattenedValueOption(AbstractObservableCollectionLink<E, E> link, int index, TestHelper helper) {
-			super(null, link.getTestType(), ObservableCollection.of(link.getType()).flow(), helper, false, false);
-			this.link = link;
-			this.index = index;
-		}
-
-		@Override
-		public void initialize(TestHelper helper) {}
-
-		@Override
-		public Transaction lock() {
-			return link.lock();
-		}
-
-		@Override
-		public void check(boolean transComplete) {
-			link.check(transComplete);
-		}
-
-		@Override
-		public <X> ObservableChainLink<X> derive(TestHelper helper) {
-			return null;
-		}
-
-		@Override
-		public String printValue() {
-			return link.printValue();
-		}
-
-		@Override
-		public TestValueType getTestType() {
-			return link.getTestType();
-		}
-
-		@Override
-		public ObservableCollectionChainLink<E, ?> getChild() {
-			return null;
-		}
-
-		@Override
-		public ObservableCollection<E> getCollection() {
-			return link.getCollection();
-		}
-
-		@Override
-		public List<E> getExpected() {
-			return link.getExpected();
-		}
-
-		@Override
-		public void checkModifiable(List<CollectionOp<E>> ops, int subListStart, int subListEnd, TestHelper helper) {
-			link.checkModifiable(ops, subListStart, subListEnd, helper);
-		}
-
-		@Override
-		public void fromBelow(List<CollectionOp<E>> ops, TestHelper helper) {}
-
-		@Override
-		public void fromAbove(List<CollectionOp<E>> ops, TestHelper helper, boolean above) {
-			link.fromAbove(ops, helper, above);
-			if (theSelected == index)
-				FlattenedValueLink.this.modified(ops, helper, true);
-		}
+		return new FlattenedValueLink<>(parent, type, value, distinct, sorted, compare, collection.flow(), helper, depth);
 	}
 }

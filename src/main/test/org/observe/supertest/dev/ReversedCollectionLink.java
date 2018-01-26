@@ -13,7 +13,7 @@ public class ReversedCollectionLink<E> extends AbstractObservableCollectionLink<
 
 	public ReversedCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type, CollectionDataFlow<?, ?, E> flow,
 		TestHelper helper, boolean checkRemovedValues) {
-		super(parent, type, flow, helper, false, checkRemovedValues);
+		super(parent, type, flow, helper, checkRemovedValues);
 	}
 
 	@Override
