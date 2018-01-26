@@ -2343,11 +2343,17 @@ public final class ObservableCollectionImpl {
 	public static class FlattenedValueCollection<E> implements ObservableCollection<E> {
 		private final ObservableValue<? extends ObservableCollection<? extends E>> theCollectionObservable;
 		private final TypeToken<E> theType;
+		private final Equivalence<? super E> theEquivalence;
 
-		/** @param collectionObservable The value to present as a static collection */
-		protected FlattenedValueCollection(ObservableValue<? extends ObservableCollection<? extends E>> collectionObservable) {
+		/**
+		 * @param collectionObservable The value to present as a static collection
+		 * @param equivalence The equivalence for the collection
+		 */
+		protected FlattenedValueCollection(ObservableValue<? extends ObservableCollection<? extends E>> collectionObservable,
+			Equivalence<? super E> equivalence) {
 			theCollectionObservable = collectionObservable;
 			theType = (TypeToken<E>) theCollectionObservable.getType().resolveType(ObservableCollection.class.getTypeParameters()[0]);
+			theEquivalence = equivalence;
 		}
 
 		/** @return The value that backs this collection */
@@ -2389,16 +2395,10 @@ public final class ObservableCollectionImpl {
 			return coll == null || coll.isContentControlled();
 		}
 
-		@Override
-		public boolean belongs(Object o) {
-			// This collection's equivalence may change (ugh), so we need to be more inclusive than the default
-			return o == null || theType.wrap().getRawType().isInstance(o);
-		}
 
 		@Override
 		public Equivalence<? super E> equivalence() {
-			ObservableCollection<? extends E> coll = theCollectionObservable.get();
-			return coll == null ? Equivalence.DEFAULT : (Equivalence<? super E>) coll.equivalence();
+			return theEquivalence;
 		}
 
 		@Override
@@ -2486,26 +2486,6 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public String canAdd(E value) {
-			ObservableCollection<? extends E> current = theCollectionObservable.get();
-			if (current == null)
-				return MutableCollectionElement.StdMsg.UNSUPPORTED_OPERATION;
-			else if (value != null && !current.getType().wrap().getRawType().isInstance(value))
-				return MutableCollectionElement.StdMsg.BAD_TYPE;
-			return ((ObservableCollection<E>) current).canAdd(value);
-		}
-
-		@Override
-		public CollectionElement<E> addElement(E e, boolean first) {
-			ObservableCollection<? extends E> coll = theCollectionObservable.get();
-			if (coll == null)
-				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			if (e != null && !coll.getType().wrap().getRawType().isInstance(e))
-				throw new IllegalArgumentException(MutableCollectionElement.StdMsg.BAD_TYPE);
-			return ((ObservableCollection<E>) coll).addElement(e, first);
-		}
-
-		@Override
 		public String canAdd(E value, ElementId after, ElementId before) {
 			ObservableCollection<? extends E> current = theCollectionObservable.get();
 			if (current == null)
@@ -2576,8 +2556,10 @@ public final class ObservableCollectionImpl {
 							collectSub[0].unsubscribe(true);
 							collectSub[0] = null;
 						}
+						// Only honor the forward parameter for the initial value
+						boolean subscribeForward = value.isInitial() ? forward : true;
 						if (value.getNewValue() != null)
-							collectSub[0] = value.getNewValue().subscribe(observer, forward);
+							collectSub[0] = value.getNewValue().subscribe(observer, subscribeForward);
 					}
 
 					@Override
@@ -2589,12 +2571,10 @@ public final class ObservableCollectionImpl {
 					}
 				});
 			return removeAll -> {
-				try (Transaction t = theCollectionObservable.lock()) {
-					if (collectSub[0] != null) {
-						collectSub[0].unsubscribe(removeAll);
-						collectSub[0] = null;
-					}
-					valueSub.unsubscribe();
+				valueSub.unsubscribe();
+				if (collectSub[0] != null) {
+					collectSub[0].unsubscribe(removeAll);
+					collectSub[0] = null;
 				}
 			};
 		}

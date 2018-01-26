@@ -767,9 +767,12 @@ public class ObservableSetImpl {
 	 * @param <E> The type of elements in the set
 	 */
 	public static class FlattenedValueSet<E> extends FlattenedValueCollection<E> implements ObservableSet<E> {
-		/** @param collectionObservable The value containing a set to flatten */
-		protected FlattenedValueSet(ObservableValue<? extends ObservableSet<E>> collectionObservable) {
-			super(collectionObservable);
+		/**
+		 * @param collectionObservable The value containing a set to flatten
+		 * @param equivalence The equivalence for the set
+		 */
+		protected FlattenedValueSet(ObservableValue<? extends ObservableSet<E>> collectionObservable, Equivalence<? super E> equivalence) {
+			super(collectionObservable, equivalence);
 		}
 
 		@Override

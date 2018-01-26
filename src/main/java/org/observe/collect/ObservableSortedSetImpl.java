@@ -622,8 +622,16 @@ public class ObservableSortedSetImpl {
 	 */
 	public static class FlattenedValueSortedSet<E> extends ObservableCollectionImpl.FlattenedValueCollection<E>
 	implements ObservableSortedSet<E> {
-		public FlattenedValueSortedSet(ObservableValue<? extends ObservableSortedSet<E>> collectionObservable) {
-			super(collectionObservable);
+		private final Comparator<? super E> theCompare;
+
+		public FlattenedValueSortedSet(ObservableValue<? extends ObservableSortedSet<E>> collectionObservable,
+			Comparator<? super E> compare) {
+			super(collectionObservable, Equivalence.of(extractElementType(collectionObservable), compare, false));
+			theCompare = compare;
+		}
+
+		private static <E> Class<E> extractElementType(ObservableValue<? extends ObservableSortedSet<E>> collectionObservable) {
+			return (Class<E>) collectionObservable.getType().resolveType(ObservableCollection.class.getTypeParameters()[0]).getRawType();
 		}
 
 		@Override
@@ -633,8 +641,7 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public Comparator<? super E> comparator() {
-			ObservableSortedSet<E> set = getWrapped().get();
-			return set == null ? (o1, o2) -> -1 : (Comparator<? super E>) set.comparator();
+			return theCompare;
 		}
 
 		@Override

@@ -130,12 +130,24 @@ public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> 
 	}
 
 	/**
-	 * Turns an observable value containing an observable collection into the contents of the value
+	 * Turns an observable value containing an observable set into the contents of the value
 	 *
 	 * @param collectionObservable The observable value
-	 * @return A collection representing the contents of the value, or a zero-length collection when null
+	 * @return A set representing the contents of the value, or a zero-length set when null
 	 */
 	public static <E> ObservableSet<E> flattenValue(ObservableValue<? extends ObservableSet<E>> collectionObservable) {
-		return new ObservableSetImpl.FlattenedValueSet<>(collectionObservable);
+		return flattenValue(collectionObservable, Equivalence.DEFAULT);
+	}
+
+	/**
+	 * Turns an observable value containing an observable set into the contents of the value
+	 *
+	 * @param collectionObservable The observable value
+	 * @param equivalence The equivalence for the set
+	 * @return A set representing the contents of the value, or a zero-length set when null
+	 */
+	static <E> ObservableSet<E> flattenValue(ObservableValue<? extends ObservableSet<E>> collectionObservable,
+		Equivalence<Object> equivalence) {
+		return new ObservableSetImpl.FlattenedValueSet<>(collectionObservable, equivalence);
 	}
 }

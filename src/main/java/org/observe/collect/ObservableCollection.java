@@ -184,7 +184,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		Subscription changeSub;
 		try (Transaction t = lock(false, null)) {
 			// Initial events
-//			int[] index = new int[] { forward ? 0 : size() - 1 };
+			//			int[] index = new int[] { forward ? 0 : size() - 1 };
 			int [] index=new int[]{0};
 			SubscriptionCause cause = new SubscriptionCause();
 			try (Transaction ct = SubscriptionCause.use(cause)) {
@@ -194,8 +194,8 @@ public interface ObservableCollection<E> extends BetterList<E> {
 					observer.accept(event);
 					if (forward)
 						index[0]++;
-//					else
-//						index[0]--;
+					//					else
+					//						index[0]--;
 				}, forward);
 			}
 			// Subscribe changes
@@ -207,18 +207,19 @@ public interface ObservableCollection<E> extends BetterList<E> {
 				changeSub.unsubscribe();
 				if (removeAll) {
 					// Remove events
-//					int[] index = new int[] { forward ? 0 : size() - 1 };
-					int [] index=new int []{0};
+					// Remove elements in reverse order
+					int[] index = new int[] { !forward ? 0 : size() - 1 };
+					// int [] index=new int []{0};
 					SubscriptionCause cause = new SubscriptionCause();
 					try (Transaction ct = SubscriptionCause.use(cause)) {
-						spliterator(forward).forEachElement(el -> {
+						spliterator(!forward).forEachElement(el -> {
 							E value = el.get();
 							ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(), index[0],
 								CollectionChangeType.remove, value, value, cause);
 							observer.accept(event);
-//							if (!forward)
-//								index[0]--;
-						}, forward);
+							if (forward)
+								index[0]--;
+						}, !forward);
 					}
 				}
 			}
@@ -589,7 +590,19 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @return A collection representing the contents of the value, or a zero-length collection when null
 	 */
 	static <E> ObservableCollection<E> flattenValue(ObservableValue<? extends ObservableCollection<E>> collectionObservable) {
-		return new ObservableCollectionImpl.FlattenedValueCollection<>(collectionObservable);
+		return flattenValue(collectionObservable, Equivalence.DEFAULT);
+	}
+
+	/**
+	 * Turns an observable value containing an observable collection into the contents of the value
+	 *
+	 * @param collectionObservable The observable value
+	 * @param equivalence The equivalence for the collection
+	 * @return A collection representing the contents of the value, or a zero-length collection when null
+	 */
+	static <E> ObservableCollection<E> flattenValue(ObservableValue<? extends ObservableCollection<E>> collectionObservable,
+		Equivalence<Object> equivalence) {
+		return new ObservableCollectionImpl.FlattenedValueCollection<>(collectionObservable, equivalence);
 	}
 
 	/**

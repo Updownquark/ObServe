@@ -4307,10 +4307,12 @@ public class ObservableCollectionDataFlowImpl {
 		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
 			theAccepter = onElement;
 			theListening = listening;
+			boolean[] init = new boolean[] { true }; // Only honor fromStart for the initial collections
 			theParent.begin(fromStart, (parentEl, cause) -> {
-				FlattenedHolder holder = new FlattenedHolder(parentEl, listening, cause, fromStart);
+				FlattenedHolder holder = new FlattenedHolder(parentEl, listening, cause, !init[0] || fromStart);
 				holder.holderElement = theOuterElements.addElement(holder, false).getElementId();
 			}, listening);
+			init[0] = false;
 		}
 
 		private class FlattenedHolder {
