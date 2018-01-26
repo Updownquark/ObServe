@@ -2,6 +2,8 @@ package org.observe.supertest;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Deque;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -14,6 +16,7 @@ import org.observe.SimpleSettableValue;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ObservableChainTester.TestValueType;
+import org.qommons.BiTuple;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.RandomAction;
 import org.qommons.collect.BetterList;
@@ -30,17 +33,21 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 
 	private final BetterList<E> theSourceValues;
 	private final BetterSortedSet<ElementId> thePresentSourceElements;
-	private final BetterList<Integer> theNewSourceValues;
 
 	public FilteredCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type, CollectionDataFlow<?, ?, E> flow,
 		TestHelper helper, boolean checkRemovedValues, SimpleSettableValue<Function<E, String>> filter, boolean variableFilter) {
-		super(parent, type, flow, helper, false, checkRemovedValues);
+		super(parent, type, flow, helper, checkRemovedValues);
 		theFilterValue = filter;
 		isFilterVariable = variableFilter;
 		theFilter = filter.get();
 
 		theSourceValues = new BetterTreeList<>(false);
 		thePresentSourceElements = new BetterTreeSet<>(false, ElementId::compareTo);
+	}
+
+	@Override
+	public void initialize(TestHelper helper) {
+		super.initialize(helper);
 		for (E value : getParent().getCollection()) {
 			ElementId srcId = theSourceValues.addElement(value, false).getElementId();
 			if (theFilter.apply(value) == null) {
@@ -48,16 +55,6 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 				getExpected().add(value);
 			}
 		}
-
-		theNewSourceValues = new BetterTreeList<>(false);
-		getParent().getCollection().onChange(evt -> {
-			switch (evt.getType()) {
-			case add:
-				theNewSourceValues.add(evt.getIndex());
-				break;
-			default:
-			}
-		});
 	}
 
 	@Override
@@ -190,11 +187,15 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 	@Override
 	public void fromAbove(List<CollectionOp<E>> ops, TestHelper helper, boolean above) {
 		List<CollectionOp<E>> parentOps = new ArrayList<>();
+		Deque<BiTuple<Integer, E>> newSourceValues = new LinkedList<>(
+			((AbstractObservableCollectionLink<?, E>) getParent()).getNewValues());
 		for (CollectionOp<E> op : ops) {
 			switch (op.type) {
 			case add:
 				// Assuming that the added elements were added in the same order as the list of operations. Valid?
-				int srcIndex = theNewSourceValues.removeFirst();
+				BiTuple<Integer, E> newSource = newSourceValues.removeFirst();
+				Assert.assertEquals(newSource.getValue2(), op.value);
+				int srcIndex = newSource.getValue1();
 				parentOps.add(new CollectionOp<>(CollectionChangeType.add, op.value, srcIndex));
 				ElementId srcId = theSourceValues.addElement(srcIndex, op.value).getElementId();
 				ElementId presentId = thePresentSourceElements.addElement(srcId, false).getElementId();
@@ -234,12 +235,6 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 			return theSourceValues.size();
 		else
 			return getSourceIndex(subListEnd);
-	}
-
-	@Override
-	public void check(boolean transComplete) {
-		super.check(transComplete);
-		theNewSourceValues.clear();
 	}
 
 	@Override

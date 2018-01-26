@@ -3,25 +3,19 @@ package org.observe.supertest;
 import java.io.File;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
 import org.junit.Test;
-import org.observe.collect.DefaultObservableCollection;
-import org.observe.collect.DefaultObservableSortedSet;
-import org.observe.collect.FlowOptions;
 import org.qommons.QommonsUtils;
+import org.qommons.Ternian;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.Testable;
 import org.qommons.Transaction;
-import org.qommons.collect.BetterList;
-import org.qommons.collect.BetterSortedSet;
+import org.qommons.ValueHolder;
 import org.qommons.debug.Debug;
-import org.qommons.tree.BetterTreeList;
-import org.qommons.tree.BetterTreeSet;
 
 import com.google.common.reflect.TypeToken;
 
@@ -42,7 +36,15 @@ public class ObservableChainTester implements Testable {
 	}
 
 	public static TestValueType nextType(TestHelper helper) {
-		return TestValueType.values()[helper.getInt(0, TestValueType.values().length)];
+		// The DOUBLE type is much less performant. There may be some value, but we'll use it less often.
+		ValueHolder<TestValueType> result = new ValueHolder<>();
+		TestHelper.RandomAction action = helper.createAction();
+		action.or(10, () -> result.accept(TestValueType.INT));
+		action.or(5, () -> result.accept(TestValueType.STRING));
+		action.or(2, () -> result.accept(TestValueType.DOUBLE));
+		action.execute(null);
+		return result.get();
+		// return TestValueType.values()[helper.getInt(0, TestValueType.values().length)];
 	}
 
 	private static final int MAX_VALUE = 1000;
@@ -109,39 +111,14 @@ public class ObservableChainTester implements Testable {
 	private <E> void assemble(TestHelper helper) {
 		//Tend toward smaller chain lengths, but allow longer ones occasionally
 		int chainLength = helper.getInt(2, helper.getInt(2, MAX_CHAIN_LENGTH));
-		ObservableChainLink<?> initLink = createInitialLink(helper);
+		ObservableChainLink<?> initLink = SimpleCollectionLink.createInitialLink(null, null, helper, 0, Ternian.NONE, null);
 		theChain.add(initLink);
-		while (theChain.size() < chainLength)
-			theChain.add(theChain.get(theChain.size() - 1).derive(helper));
-	}
-
-	private <E> ObservableChainLink<?> createInitialLink(TestHelper helper) {
-		int linkTypes = 3;
-		switch (helper.getInt(0, linkTypes)) {
-		case 0:
-			// TODO Uncomment this when CircularArrayList is working
-			// return new ObservableCollectionLinkTester<>(null, new DefaultObservableCollection<>((TypeToken<E>) type.type,
-			// CircularArrayList.build().build()));
-		case 1:
-			TestValueType type = TestValueType.values()[helper.getInt(0, TestValueType.values().length)];
-			BetterList<E> backing = new BetterTreeList<>(true);
-			DefaultObservableCollection<E> base = new DefaultObservableCollection<>((TypeToken<E>) type.getType(), backing);
-			return new SimpleCollectionLink<>(type, base.flow(), helper);
-		case 2:
-			type = TestValueType.values()[helper.getInt(0, TestValueType.values().length)];
-			Comparator<? super E> compare = SortedCollectionLink.compare(type, helper);
-			backing = new BetterTreeSet<>(true, compare);
-			base = new DefaultObservableSortedSet<>((TypeToken<E>) type.getType(), (BetterSortedSet<E>) backing);
-			SimpleCollectionLink<E> simple = new SimpleCollectionLink<>(type, base.flow(), helper);
-			return new DistinctCollectionLink<>(simple, type, base.flow(), base.flow(), helper, true,
-				new FlowOptions.SimpleUniqueOptions(true), true);
-			// TODO ObservableValue
-			// TODO ObservableMultiMap
-			// TODO ObservableMap
-			// TODO ObservableTree?
-			// TODO ObservableGraph?
+		initLink.initialize(helper);
+		while (theChain.size() < chainLength) {
+			ObservableChainLink<?> nextLink = theChain.get(theChain.size() - 1).derive(helper);
+			theChain.add(nextLink);
+			nextLink.initialize(helper);
 		}
-		throw new IllegalStateException();
 	}
 
 	private void test(TestHelper helper) {

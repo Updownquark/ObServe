@@ -27,12 +27,16 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 	public MappedCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type, CollectionDataFlow<?, ?, T> flow,
 		TestHelper helper, boolean checkRemovedValues, SimpleSettableValue<TypeTransformation<E, T>> map, boolean variableMap,
 		FlowOptions.MapDef<E, T> options) {
-		super(parent, type, flow, helper, false, checkRemovedValues);
+		super(parent, type, flow, helper, checkRemovedValues);
 		theMapValue = map;
 		isMapVariable = variableMap;
 		theMap = map.get();
 		theOptions = options;
+	}
 
+	@Override
+	public void initialize(TestHelper helper) {
+		super.initialize(helper);
 		for (E src : getParent().getCollection())
 			getExpected().add(theMap.map(src));
 	}
