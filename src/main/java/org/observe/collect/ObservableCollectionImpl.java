@@ -1915,11 +1915,12 @@ public final class ObservableCollectionImpl {
 
 				@Override
 				public void remove() throws UnsupportedOperationException {
-					String msg = el.element.canRemove();
-					if (msg != null)
-						throw new UnsupportedOperationException(msg);
-					if (spliterElement != null)
+					if (spliterElement != null) { // Don't remove the spliterator element if the removal is not allowed
+						String msg = el.element.canRemove();
+						if (msg != null)
+							throw new UnsupportedOperationException(msg);
 						spliterElement.remove();
+					}
 					el.element.remove();
 				}
 
