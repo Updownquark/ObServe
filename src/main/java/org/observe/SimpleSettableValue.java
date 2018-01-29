@@ -24,7 +24,7 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 	 * @param nullable Whether null can be assigned to the value
 	 */
 	public SimpleSettableValue(TypeToken<T> type, boolean nullable) {
-		theEventer = new SimpleObservable<>(observer -> fireInitial(observer), true, true);
+		theEventer = createEventer();
 		theType = type;
 		isNullable = nullable && !type.isPrimitive();
 		theLock = new ReentrantLock();
@@ -100,6 +100,11 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 	@Override
 	public ObservableValue<String> isEnabled() {
 		return ObservableValue.of(TypeToken.of(String.class), null);
+	}
+
+	/** @return The observable for this value to use to fire its initial and change events */
+	protected SimpleObservable<ObservableValueEvent<T>> createEventer() {
+		return new SimpleObservable<>(observer -> fireInitial(observer), true, true);
 	}
 
 	@Override
