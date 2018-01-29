@@ -1266,8 +1266,8 @@ public final class ObservableCollectionImpl {
 		private final PassiveCollectionManager<E, ?, T> theFlow;
 		private final Equivalence<? super T> theEquivalence;
 
-		public PassiveDerivedCollection(ObservableCollection<E> source, PassiveCollectionManager<E, ?, T> flow) {
-			theSource = flow.isReversed() ? source.reverse() : source;
+		public PassiveDerivedCollection(PassiveCollectionManager<E, ?, T> flow) {
+			theSource = flow.getSource();
 			theFlow = flow;
 			theEquivalence = theFlow.equivalence();
 		}

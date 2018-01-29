@@ -361,7 +361,7 @@ public class ObservableMultiMapImpl {
 		}
 
 		@Override
-		public PassiveCollectionManager<E, ?, K> managePassive() {
+		public PassiveCollectionManager<E, ?, K> managePassive(boolean forward) {
 			throw new UnsupportedOperationException("Materialization not supported");
 		}
 
@@ -572,7 +572,7 @@ public class ObservableMultiMapImpl {
 		}
 
 		@Override
-		public PassiveCollectionManager<E, ?, V> managePassive() {
+		public PassiveCollectionManager<E, ?, V> managePassive(boolean forward) {
 			throw new UnsupportedOperationException("Materialization not supported");
 		}
 

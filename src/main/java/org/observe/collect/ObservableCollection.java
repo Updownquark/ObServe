@@ -987,10 +987,11 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		ActiveCollectionManager<E, ?, T> manageActive();
 
 		/**
+		 * @param forward Whether the manager should be forward or reversed
 		 * @return A collection manager to be used by the passive derived collection produced by {@link #collectPassive()}. Will be null if
 		 *         this collection is not {@link #supportsPassive() passive}.
 		 */
-		PassiveCollectionManager<E, ?, T> managePassive();
+		PassiveCollectionManager<E, ?, T> managePassive(boolean forward);
 
 		/**
 		 * @return A heavy-weight collection derived via this flow from the source collection

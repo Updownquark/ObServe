@@ -367,7 +367,7 @@ public class ObservableSortedSetImpl {
 		public ObservableSortedSet<T> collectPassive() {
 			if (!supportsPassive())
 				throw new UnsupportedOperationException("Passive collection not supported");
-			return new PassiveDerivedSortedSet<>((ObservableSortedSet<E>) getSource(), managePassive(), comparator());
+			return new PassiveDerivedSortedSet<>(managePassive(true), comparator());
 		}
 
 		@Override
@@ -463,7 +463,7 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public ObservableSortedSet<T> collectPassive() {
-			return new PassiveDerivedSortedSet<>((ObservableSortedSet<E>) getSource(), managePassive(), comparator());
+			return new PassiveDerivedSortedSet<>(managePassive(true), comparator());
 		}
 
 		@Override
@@ -555,9 +555,11 @@ public class ObservableSortedSetImpl {
 	public static class PassiveDerivedSortedSet<E, T> extends ObservableSetImpl.PassiveDerivedSet<E, T> implements ObservableSortedSet<T> {
 		private final Comparator<? super T> theCompare;
 
-		public PassiveDerivedSortedSet(ObservableSortedSet<E> source, PassiveCollectionManager<E, ?, T> flow,
+		public PassiveDerivedSortedSet(PassiveCollectionManager<E, ?, T> flow,
 			Comparator<? super T> compare) {
-			super(source, flow);
+			super(flow);
+			if (!(flow.getSource() instanceof ObservableSortedSet))
+				throw new IllegalArgumentException("The given flow is not distinct sorted");
 			theCompare = compare;
 		}
 
