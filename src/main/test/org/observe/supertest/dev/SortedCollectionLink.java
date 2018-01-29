@@ -94,21 +94,6 @@ public class SortedCollectionLink<E> extends AbstractObservableCollectionLink<E,
 		return sortedId;
 	}
 
-	private ElementId search(E value) {
-		BinaryTreeNode<SortedElement> node = theSortedElements.getRoot();
-		if (node == null)
-			return null;
-		int nodeCompare = theCompare.compare(node.get().value, value);
-		BinaryTreeNode<SortedElement> next = nodeCompare < 0 ? node.getRight() : node.getLeft();
-		while (next != null) {
-			node = next;
-			nodeCompare = theCompare.compare(node.get().value, value);
-			next = nodeCompare < 0 ? node.getRight() : node.getLeft();
-		}
-
-		return nodeCompare == 0 ? node.getElementId() : null;
-	}
-
 	private int compareAt(E value, int index) {
 		return theCompare.compare(theSortedElements.get(index).value, value);
 	}

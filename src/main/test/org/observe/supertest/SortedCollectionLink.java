@@ -14,6 +14,7 @@ import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ObservableChainTester.TestValueType;
 import org.qommons.BiTuple;
+import org.qommons.BreakpointHere;
 import org.qommons.TestHelper;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.ElementId;
@@ -92,21 +93,6 @@ public class SortedCollectionLink<E> extends AbstractObservableCollectionLink<E,
 		theSourceElements.mutableElement(srcId).set(element);
 		theSortedElements.mutableElement(sortedId).set(element);
 		return sortedId;
-	}
-
-	private ElementId search(E value) {
-		BinaryTreeNode<SortedElement> node = theSortedElements.getRoot();
-		if (node == null)
-			return null;
-		int nodeCompare = theCompare.compare(node.get().value, value);
-		BinaryTreeNode<SortedElement> next = nodeCompare < 0 ? node.getRight() : node.getLeft();
-		while (next != null) {
-			node = next;
-			nodeCompare = theCompare.compare(node.get().value, value);
-			next = nodeCompare < 0 ? node.getRight() : node.getLeft();
-		}
-
-		return nodeCompare == 0 ? node.getElementId() : null;
 	}
 
 	private int compareAt(E value, int index) {
