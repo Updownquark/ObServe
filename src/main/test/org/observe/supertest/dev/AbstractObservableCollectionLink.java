@@ -936,7 +936,10 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			// TODO whereContained
 			// TODO refreshEach
 			// TODO combine
-			// TODO flattenValues
+			.or(1, () -> { // flattenValues
+				setChild(FlattenedValuesLink.createFlattenedValuesLink(this, theFlow, helper));
+				derived.accept((ObservableChainLink<X>) theChild);
+			})//
 			// TODO flatMap
 			.or(1, () -> { // sorted
 				Comparator<T> compare = SortedCollectionLink.compare(theType, helper);
