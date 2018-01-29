@@ -74,7 +74,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	}
 
 	private static boolean isOrderImportant(FlowOptions.UniqueOptions options, Equivalence<?> equivalence) {
-		/* The order of sets with hash-based distincness is very complicated and depends on the order in which elements are encountered
+		/* The order of sets with hash-based distinctness is very complicated and depends on the order in which elements are encountered
 		 * This order may be vastly different from the order of the source collection.
 		 * Element encounter order is very difficult to keep track of in the tester and is not important. */
 		if (options.isPreservingSourceOrder())
@@ -269,12 +269,15 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 					} else {
 						// Same as a remove, then an add.
 						remove(op.index, distinctOps);
-						if (isOrderImportant() || theValues.containsKey(op.value))
+						if (newValueEntry != null)
 							destIndex = -1;
 						else {
 							BiTuple<Integer, E> newValue = newValues.removeFirst();
 							Assert.assertEquals("Link " + getLinkIndex(), newValue.getValue2(), op.value);
-							destIndex = newValue.getValue1();
+							if (isOrderImportant() || theValues.containsKey(op.value))
+								destIndex = -1; // If the order is important then figure it out ourselves and test for it
+							else
+								destIndex = newValue.getValue1();
 						}
 						add(op.index, op.value, destIndex, distinctOps);
 					}
@@ -446,17 +449,12 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			// The new value is the first in its category
 			if (valueEntry == null) {
 				// Add at the correct position if specified
+				theDebug.act("add:new").param("value", value)//
+				.exec();
 				if (destIndex < 0 || theValues.isEmpty()) {
 					valueEntry = theValues.putEntry(value, new BetterTreeMap<>(false, ElementId::compareTo), false);
-					ElementId valueEl = valueEntry.getElementId();
-					theDebug.act("add:new").param("value", value)//
-					// .param("srcIndex", srcIndex).param("index", () -> getElementIndex(valueEl))//
-					.exec();
 				} else {
 					ElementId addedEntryId;
-					theDebug.act("add:insert").param("value", value)//
-					// .param("index", destIndex).param("srcIndex", srcIndex)//
-					.exec();
 					if (destIndex == 0)
 						addedEntryId = theValues.keySet().mutableElement(getValueHandle(0).getElementId()).add(value, true);
 					else
