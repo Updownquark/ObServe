@@ -103,8 +103,6 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		getCollection().onChange(evt -> {
 			switch (evt.getType()) {
 			case add:
-				if (getLinkIndex() == 4)
-					System.out.println("Add : " + evt.getIndex() + ": " + evt.getNewValue());
 				theNewValues.add(new BiTuple<>(evt.getIndex(), evt.getNewValue()));
 				break;
 			default:
