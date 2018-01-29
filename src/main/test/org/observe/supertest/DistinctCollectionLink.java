@@ -269,12 +269,16 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 					} else {
 						// Same as a remove, then an add.
 						remove(op.index, distinctOps);
-						BiTuple<Integer, E> newValue = newValues.removeFirst();
-						Assert.assertEquals("Link " + getLinkIndex(), newValue.getValue2(), op.value);
-						if (isOrderImportant() || theValues.containsKey(op.value))
-							destIndex = -1; // If the order is important then figure it out ourselves and test for it
-						else
-							destIndex = newValue.getValue1();
+						if (newValueEntry != null)
+							destIndex = -1;
+						else {
+							BiTuple<Integer, E> newValue = newValues.removeFirst();
+							Assert.assertEquals("Link " + getLinkIndex(), newValue.getValue2(), op.value);
+							if (isOrderImportant() || theValues.containsKey(op.value))
+								destIndex = -1; // If the order is important then figure it out ourselves and test for it
+							else
+								destIndex = newValue.getValue1();
+						}
 						add(op.index, op.value, destIndex, distinctOps);
 					}
 				}
