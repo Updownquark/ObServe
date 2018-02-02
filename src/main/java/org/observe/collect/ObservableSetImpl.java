@@ -129,15 +129,15 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public PassiveCollectionManager<E, ?, T> managePassive(boolean forward) {
-			return getParent().managePassive(forward);
+		public PassiveCollectionManager<E, ?, T> managePassive() {
+			return getParent().managePassive();
 		}
 
 		@Override
 		public ObservableSet<T> collectPassive() {
 			if (!supportsPassive())
 				throw new UnsupportedOperationException("Passive collection not supported");
-			return new PassiveDerivedSet<>(managePassive(true));
+			return new PassiveDerivedSet<>((ObservableSet<E>) getSource(), managePassive());
 		}
 
 		@Override
@@ -214,7 +214,7 @@ public class ObservableSetImpl {
 
 		@Override
 		public ObservableSet<T> collectPassive() {
-			return new PassiveDerivedSet<>(managePassive(true));
+			return new PassiveDerivedSet<>((ObservableSet<E>) getSource(), managePassive());
 		}
 
 		@Override
@@ -731,11 +731,12 @@ public class ObservableSetImpl {
 	}
 
 	static class PassiveDerivedSet<E, T> extends PassiveDerivedCollection<E, T> implements ObservableSet<T> {
-		/** @param flow The data flow used to create the modified collection */
-		protected PassiveDerivedSet(PassiveCollectionManager<E, ?, T> flow) {
-			super(flow);
-			if (!(flow.getSource() instanceof ObservableSet))
-				throw new IllegalArgumentException("The given flow is not distinct");
+		/**
+		 * @param source The source set
+		 * @param flow The data flow used to create the modified collection
+		 */
+		protected PassiveDerivedSet(ObservableSet<E> source, PassiveCollectionManager<E, ?, T> flow) {
+			super(source, flow);
 		}
 
 		@Override

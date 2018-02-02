@@ -134,6 +134,8 @@ public class ObservableCollectionDataFlowImpl {
 	}
 
 	public static interface PassiveCollectionManager<E, I, T> extends CollectionOperation<E, I, T> {
+		boolean isReversed();
+
 		ObservableValue<? extends Function<? super E, ? extends T>> map();
 
 		String canReverse();
@@ -153,8 +155,6 @@ public class ObservableCollectionDataFlowImpl {
 		boolean isManyToOne();
 
 		void setValue(Collection<MutableCollectionElement<T>> elements, T value);
-
-		ObservableCollection<E> getSource();
 	}
 
 	public static <E, T> TypeToken<Function<? super E, T>> functionType(TypeToken<E> srcType, TypeToken<T> destType) {
@@ -655,7 +655,7 @@ public class ObservableCollectionDataFlowImpl {
 		public ObservableCollection<T> collectPassive() {
 			if (!supportsPassive())
 				throw new UnsupportedOperationException("This flow does not support passive collection");
-			return new PassiveDerivedCollection<>(managePassive(true));
+			return new PassiveDerivedCollection<>(getSource(), managePassive());
 		}
 
 		@Override
@@ -683,7 +683,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public PassiveCollectionManager<E, ?, T> managePassive(boolean forward) {
+		public PassiveCollectionManager<E, ?, T> managePassive() {
 			return null;
 		}
 
@@ -709,8 +709,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public PassiveCollectionManager<E, ?, E> managePassive(boolean forward) {
-			return new BaseCollectionPassThrough<>(forward ? getSource() : getSource().reverse());
+		public PassiveCollectionManager<E, ?, E> managePassive() {
+			return new BaseCollectionPassThrough<>(getSource());
 		}
 
 		@Override
@@ -735,8 +735,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public PassiveCollectionManager<E, ?, T> managePassive(boolean forward) {
-			return new PassiveReversedManager<E, T>(getParent().managePassive(!forward));
+		public PassiveCollectionManager<E, ?, T> managePassive() {
+			return new PassiveReversedManager<E, T>(getParent().managePassive());
 		}
 
 		@Override
@@ -759,7 +759,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public PassiveCollectionManager<E, ?, T> managePassive(boolean forward) {
+		public PassiveCollectionManager<E, ?, T> managePassive() {
 			return null;
 		}
 
@@ -786,7 +786,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public PassiveCollectionManager<E, ?, T> managePassive(boolean forward) {
+		public PassiveCollectionManager<E, ?, T> managePassive() {
 			return null;
 		}
 
@@ -808,8 +808,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public PassiveCollectionManager<E, ?, T> managePassive(boolean forward) {
-			return new PassiveEquivalenceSwitchedManager<>(getParent().managePassive(forward), equivalence());
+		public PassiveCollectionManager<E, ?, T> managePassive() {
+			return new PassiveEquivalenceSwitchedManager<>(getParent().managePassive(), equivalence());
 		}
 
 		@Override
@@ -844,8 +844,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public PassiveCollectionManager<E, ?, T> managePassive(boolean forward) {
-			return new PassiveMappedCollectionManager<>(getParent().managePassive(forward), getTargetType(), theMap, equivalence(),
+		public PassiveCollectionManager<E, ?, T> managePassive() {
+			return new PassiveMappedCollectionManager<>(getParent().managePassive(), getTargetType(), theMap, equivalence(),
 				theOptions);
 		}
 
@@ -895,8 +895,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public PassiveCollectionManager<E, ?, T> managePassive(boolean forward) {
-			return new PassiveCombinedCollectionManager<>(getParent().managePassive(forward), getTargetType(), theDef);
+		public PassiveCollectionManager<E, ?, T> managePassive() {
+			return new PassiveCombinedCollectionManager<>(getParent().managePassive(), getTargetType(), theDef);
 		}
 
 		@Override
@@ -919,8 +919,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public PassiveCollectionManager<E, ?, T> managePassive(boolean forward) {
-			return new PassiveRefreshingCollectionManager<>(getParent().managePassive(forward), theRefresh);
+		public PassiveCollectionManager<E, ?, T> managePassive() {
+			return new PassiveRefreshingCollectionManager<>(getParent().managePassive(), theRefresh);
 		}
 
 		@Override
@@ -944,7 +944,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public PassiveCollectionManager<E, ?, T> managePassive(boolean forward) {
+		public PassiveCollectionManager<E, ?, T> managePassive() {
 			return null;
 		}
 
@@ -968,8 +968,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public PassiveCollectionManager<E, ?, T> managePassive(boolean forward) {
-			return new PassiveModFilteredManager<>(getParent().managePassive(forward), theOptions);
+		public PassiveCollectionManager<E, ?, T> managePassive() {
+			return new PassiveModFilteredManager<>(getParent().managePassive(), theOptions);
 		}
 
 		@Override
@@ -993,7 +993,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public PassiveCollectionManager<E, ?, T> managePassive(boolean forward) {
+		public PassiveCollectionManager<E, ?, T> managePassive() {
 			return null;
 		}
 
@@ -1025,6 +1025,11 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public Equivalence<? super E> equivalence() {
 			return theSource.equivalence();
+		}
+
+		@Override
+		public boolean isReversed() {
+			return false;
 		}
 
 		@Override
@@ -1068,11 +1073,6 @@ public class ObservableCollectionDataFlowImpl {
 		public void setValue(Collection<MutableCollectionElement<E>> elements, E value) {
 			theSource.setValue(//
 				elements.stream().map(el -> el.getElementId()).collect(Collectors.toList()), value);
-		}
-
-		@Override
-		public ObservableCollection<E> getSource() {
-			return theSource;
 		}
 	}
 
@@ -1238,6 +1238,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isReversed() {
+			return !theParent.isReversed();
+		}
+
+		@Override
 		public ObservableValue<? extends Function<? super E, ? extends T>> map() {
 			return theParent.map();
 		}
@@ -1277,11 +1282,6 @@ public class ObservableCollectionDataFlowImpl {
 			theParent.setValue(//
 				elements, value);
 			// elements.stream().map(el -> el.reverse()).collect(Collectors.toList()), value);
-		}
-
-		@Override
-		public ObservableCollection<E> getSource() {
-			return theParent.getSource();
 		}
 	}
 
@@ -2072,6 +2072,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isReversed() {
+			return theParent.isReversed();
+		}
+
+		@Override
 		public ObservableValue<? extends Function<? super E, ? extends T>> map() {
 			return theParent.map();
 		}
@@ -2109,11 +2114,6 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public void setValue(Collection<MutableCollectionElement<T>> elements, T value) {
 			theParent.setValue(elements, value);
-		}
-
-		@Override
-		public ObservableCollection<E> getSource() {
-			return theParent.getSource();
 		}
 	}
 
@@ -2211,6 +2211,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isReversed() {
+			return theParent.isReversed();
+		}
+
+		@Override
 		public ObservableValue<Function<? super E, T>> map() {
 			return theParent.map().map(parentMap -> new MapWithParent<>(parentMap, theMap));
 		}
@@ -2292,11 +2297,6 @@ public class ObservableCollectionDataFlowImpl {
 			if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
 				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 			theParent.setValue(remaining, reversed);
-		}
-
-		@Override
-		public ObservableCollection<E> getSource() {
-			return theParent.getSource();
 		}
 
 		class MappedElement implements MutableCollectionElement<T> {
@@ -2692,6 +2692,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isReversed() {
+			return theParent.isReversed();
+		}
+
+		@Override
 		public ObservableValue<? extends Function<? super E, ? extends T>> map() {
 			ObservableValue<? extends Function<? super E, ? extends I>> parentMap = theParent.map();
 			return new ObservableValue<Function<? super E, T>>() {
@@ -2865,11 +2870,6 @@ public class ObservableCollectionDataFlowImpl {
 				return;
 			theParent.setValue(elements.stream().map(el -> ((CombinedElement) el).theInterm).collect(Collectors.toList()),
 				((CombinedElement) elements.iterator().next()).theCombinedMap.reverse(value));
-		}
-
-		@Override
-		public ObservableCollection<E> getSource() {
-			return theParent.getSource();
 		}
 
 		class SimpleSupplier implements Supplier<Object> {
@@ -3380,6 +3380,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isReversed() {
+			return theParent.isReversed();
+		}
+
+		@Override
 		public ObservableValue<? extends Function<? super E, ? extends T>> map() {
 			return theParent.map().refresh(theRefresh);
 		}
@@ -3417,11 +3422,6 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public void setValue(Collection<MutableCollectionElement<T>> elements, T value) {
 			theParent.setValue(elements, value);
-		}
-
-		@Override
-		public ObservableCollection<E> getSource() {
-			return theParent.getSource();
 		}
 	}
 
@@ -3833,6 +3833,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isReversed() {
+			return theParent.isReversed();
+		}
+
+		@Override
 		public ObservableValue<? extends Function<? super E, ? extends T>> map() {
 			return theParent.map();
 		}
@@ -3878,11 +3883,6 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public void setValue(Collection<MutableCollectionElement<T>> elements, T value) {
 			theParent.setValue(elements.stream().map(el -> ((ModFilteredElement) el).theParentMapped).collect(Collectors.toList()), value);
-		}
-
-		@Override
-		public ObservableCollection<E> getSource() {
-			return theParent.getSource();
 		}
 
 		private class ModFilteredElement implements MutableCollectionElement<T> {
