@@ -84,6 +84,7 @@ public class FlattenedValueLink<E> extends AbstractObservableCollectionLink<E, E
 		AbstractObservableCollectionLink<E, E> post = theSelected < theContents.size() ? theContents.get(theSelected) : null;
 		if (helper.isReproducing())
 			System.out.println("Switching from [" + preSelected + "]:" + pre + " to [" + theSelected + "]:" + post);
+		List<LinkElement> linkElCopy = new ArrayList<>(getElements());
 		if (theSelected < theContents.size())
 			((SimpleSettableValue<ObservableCollection<E>>) theValue).set(theContents.get(theSelected).getCollection(), null);
 		else
@@ -95,14 +96,18 @@ public class FlattenedValueLink<E> extends AbstractObservableCollectionLink<E, E
 			theContents.get(preSelected).setChild(null);
 			ObservableCollection<E> c = theContents.get(preSelected).getCollection();
 			int i = c.size() - 1;
-			for (E value : c.reverse())
-				ops.add(new CollectionOp<>(CollectionChangeType.remove, value, i--));
+			for (E value : c.reverse()) {
+				ops.add(new CollectionOp<>(CollectionChangeType.remove, linkElCopy.get(i), i, value));
+				i--;
+			}
 		}
 		if (theSelected < theContents.size()) {
 			ObservableCollection<E> c = theContents.get(theSelected).getCollection();
 			int i = 0;
-			for (E value : c)
-				ops.add(new CollectionOp<>(CollectionChangeType.add, value, i++));
+			for (E value : c) {
+				ops.add(new CollectionOp<>(CollectionChangeType.add, getElements().get(i), i, value));
+				i++;
+			}
 			theContents.get(theSelected).setChild(this);
 		}
 		modified(ops, helper, true);

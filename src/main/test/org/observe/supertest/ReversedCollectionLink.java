@@ -8,7 +8,7 @@ import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ObservableChainTester.TestValueType;
 import org.qommons.TestHelper;
 
-public class ReversedCollectionLink<E> extends AbstractObservableCollectionLink<E, E> {
+public class ReversedCollectionLink<E> extends OneToOneCollectionLink<E, E> {
 	private int theSize;
 
 	public ReversedCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type, CollectionDataFlow<?, ?, E> flow,
@@ -37,11 +37,11 @@ public class ReversedCollectionLink<E> extends AbstractObservableCollectionLink<
 		for (CollectionOp<E> op : ops) {
 			switch (op.type) {
 			case add:
-				parentOps.add(new CollectionOp<>(op, op.type, op.value, convertIndex.applyAsInt(op.index)));
+				parentOps.add(new CollectionOp<>(op, op.type, convertIndex.applyAsInt(op.index), op.value));
 				break;
 			case remove:
 			case set:
-				parentOps.add(new CollectionOp<>(op, op.type, op.value, convertIndex.applyAsInt(op.index) - 1));
+				parentOps.add(new CollectionOp<>(op, op.type, convertIndex.applyAsInt(op.index) - 1, op.value));
 				break;
 			}
 		}
@@ -54,15 +54,15 @@ public class ReversedCollectionLink<E> extends AbstractObservableCollectionLink<
 		for (CollectionOp<E> op : ops) {
 			switch (op.type) {
 			case add:
-				reversedOps.add(new CollectionOp<>(op.type, op.value, theSize - op.index));
+				reversedOps.add(new CollectionOp<>(op.type, getDestElement(op.elementId), theSize - op.index, op.value));
 				theSize++;
 				break;
 			case remove:
-				reversedOps.add(new CollectionOp<>(op.type, op.value, theSize - op.index - 1));
+				reversedOps.add(new CollectionOp<>(op.type, getDestElement(op.elementId), theSize - op.index - 1, op.value));
 				theSize--;
 				break;
 			case set:
-				reversedOps.add(new CollectionOp<>(op.type, op.value, theSize - op.index - 1));
+				reversedOps.add(new CollectionOp<>(op.type, getDestElement(op.elementId), theSize - op.index - 1, op.value));
 				break;
 			}
 		}
@@ -75,15 +75,15 @@ public class ReversedCollectionLink<E> extends AbstractObservableCollectionLink<
 		for (CollectionOp<E> op : ops) {
 			switch (op.type) {
 			case add:
-				parentOps.add(new CollectionOp<>(op.type, op.value, theSize - op.index));
+				parentOps.add(new CollectionOp<>(op.type, getSourceElement(op.elementId), theSize - op.index, op.value));
 				theSize++;
 				break;
 			case remove:
-				parentOps.add(new CollectionOp<>(op.type, op.value, theSize - op.index - 1));
+				parentOps.add(new CollectionOp<>(op.type, getSourceElement(op.elementId), theSize - op.index - 1, op.value));
 				theSize--;
 				break;
 			case set:
-				parentOps.add(new CollectionOp<>(op.type, op.value, theSize - op.index - 1));
+				parentOps.add(new CollectionOp<>(op.type, getSourceElement(op.elementId), theSize - op.index - 1, op.value));
 				break;
 			}
 		}
