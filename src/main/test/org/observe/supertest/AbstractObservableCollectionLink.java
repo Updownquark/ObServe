@@ -106,6 +106,10 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		theTester.checkRemovedValues(isCheckingRemovedValues);
 		theTester.getExpected().clear();
 		getCollection().onChange(this::change);
+		for (int i = 0; i < getCollection().size(); i++) {
+			ElementId el = theElements.addElement(null, false).getElementId();
+			theElements.mutableElement(el).set(new LinkElement(() -> theElements.getElementsBefore(el)));
+		}
 
 		// Extras
 		theExtras = "";
@@ -1069,7 +1073,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			// opts.useFirst(helper.getBoolean()).preserveSourceOrder(opts.canPreserveSourceOrder() && helper.getBoolean()); TODO
 			options.accept(opts);
 		});
-		setChild(new DistinctCollectionLink<>(this, theType, derivedFlow, theFlow, helper, isCheckingRemovedValues, options.get(), asRoot));
+		setChild(new DistinctCollectionLink<>(this, theType, derivedFlow, helper, isCheckingRemovedValues, options.get(), asRoot));
 		return (ObservableCollectionChainLink<T, T>) theChild;
 	}
 
@@ -1079,8 +1083,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		Comparator<T> compare = SortedCollectionLink.compare(theType, helper);
 		options.useFirst(/*TODO helper.getBoolean()*/ false);
 		CollectionDataFlow<?, ?, T> derivedFlow = flow.distinctSorted(compare, options.isUseFirst());
-		setChild(
-			new DistinctCollectionLink<>(this, theType, derivedFlow, theFlow, helper, isCheckingRemovedValues, options, asRoot));
+		setChild(new DistinctCollectionLink<>(this, theType, derivedFlow, helper, isCheckingRemovedValues, options, asRoot));
 		return (ObservableCollectionChainLink<T, T>) theChild;
 	}
 

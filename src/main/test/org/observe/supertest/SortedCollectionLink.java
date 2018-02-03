@@ -64,6 +64,10 @@ public class SortedCollectionLink<E> extends OneToOneCollectionLink<E, E> {
 			ElementId sortedEl = insert(value, srcId);
 			getExpected().add(theSortedElements.getElementsBefore(sortedEl), value);
 		}
+		for (int i = 0; i < theSortedElements.size(); i++) {
+			int sortedIdx = theSortedElements.getElementsBefore(theSourceElements.get(i).sortedId);
+			mapSourceElement(getParent().getElements().get(i), getElements().get(sortedIdx));
+		}
 	}
 
 	private ElementId insert(E value, ElementId srcId) {

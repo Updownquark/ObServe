@@ -45,9 +45,11 @@ public class FilteredCollectionLink<E> extends OneToOneCollectionLink<E, E> {
 	@Override
 	public void initialize(TestHelper helper) {
 		super.initialize(helper);
-		for (E value : getParent().getCollection()) {
+		for (int i = 0; i < getParent().getElements().size(); i++) {
+			E value = getParent().getCollection().get(i);
 			ElementId srcId = theSourceValues.addElement(value, false).getElementId();
 			if (theFilter.apply(value) == null) {
+				mapSourceElement(getParent().getElements().get(i), getElements().get(thePresentSourceElements.size()));
 				thePresentSourceElements.add(srcId);
 				getExpected().add(value);
 			}
@@ -74,8 +76,7 @@ public class FilteredCollectionLink<E> extends OneToOneCollectionLink<E, E> {
 						int presentIndex = thePresentSourceElements.getElementsBefore(presentElement.getElementId());
 						thePresentSourceElements.mutableElement(presentElement.getElementId()).remove();
 						LinkElement srcLinkEl = getParent().getElements().get(i);
-						// TODO NOT RIGHT! Already removed!
-						// LinkElement destLinkEl = getElements().get(presentIndex);
+						LinkElement destLinkEl = getDestElement(srcLinkEl);
 						mapSourceElement(srcLinkEl, destLinkEl);
 						ops.add(new CollectionOp<>(CollectionChangeType.remove, destLinkEl, presentIndex, srcEl.get()));
 					} else if (presentElement == null && isIncluded) {

@@ -45,7 +45,8 @@ public class SubSetLink<E> extends OneToOneCollectionLink<E, E> {
 	public void initialize(TestHelper helper) {
 		super.initialize(helper);
 		boolean pastMin = theMin == null;
-		for (E value : getParent().getCollection()) {
+		for (int i = 0; i < getParent().getElements().size(); i++) {
+			E value = getParent().getCollection().get(i);
 			ElementId srcId = theSourceValues.addElement(value, false).getElementId();
 			if (!pastMin) {
 				int comp = theCompare.compare(theMin, value);
@@ -60,6 +61,7 @@ public class SubSetLink<E> extends OneToOneCollectionLink<E, E> {
 				if (comp < 0 || (!isMaxIncluded && comp == 0))
 					continue;
 			}
+			mapSourceElement(getParent().getElements().get(i), getElements().get(theIncludedValues.size()));
 			theIncludedValues.put(srcId, value);
 			getExpected().add(value);
 		}

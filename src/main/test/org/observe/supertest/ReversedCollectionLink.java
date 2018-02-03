@@ -22,6 +22,8 @@ public class ReversedCollectionLink<E> extends OneToOneCollectionLink<E, E> {
 		theSize = getParent().getCollection().size();
 		for (E value : getParent().getCollection())
 			getExpected().add(0, value);
+		for (int i = 0; i < getElements().size(); i++)
+			mapSourceElement(getParent().getElements().get(i), getElements().get(getElements().size() - i - 1));
 	}
 
 	@Override

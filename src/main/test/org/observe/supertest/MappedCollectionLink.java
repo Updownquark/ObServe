@@ -37,8 +37,10 @@ public class MappedCollectionLink<E, T> extends OneToOneCollectionLink<E, T> {
 	@Override
 	public void initialize(TestHelper helper) {
 		super.initialize(helper);
-		for (E src : getParent().getCollection())
-			getExpected().add(theMap.map(src));
+		for (int i = 0; i < getElements().size(); i++) {
+			getExpected().add(theMap.map(getParent().getCollection().get(i)));
+			mapSourceElement(getParent().getElements().get(i), getElements().get(i));
+		}
 	}
 
 	@Override

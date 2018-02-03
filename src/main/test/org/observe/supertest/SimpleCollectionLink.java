@@ -101,7 +101,7 @@ public class SimpleCollectionLink<E> extends AbstractObservableCollectionLink<E,
 				BetterSortedSet<E> backing = new BetterTreeSet<>(true, compare2);
 				DefaultObservableSortedSet<E> base = new DefaultObservableSortedSet<>((TypeToken<E>) fType.getType(), backing);
 				SimpleCollectionLink<E> simple = new SimpleCollectionLink<>(parent, fType, base.flow(), helper);
-				holder.accept(new DistinctCollectionLink<>(simple, fType, base.flow(), base.flow(), helper, true,
+				holder.accept(new DistinctCollectionLink<>(simple, fType, base.flow(), helper, true,
 					new FlowOptions.SimpleUniqueOptions(true), true));
 			});
 		}
