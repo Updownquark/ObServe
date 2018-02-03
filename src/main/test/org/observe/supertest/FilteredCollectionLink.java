@@ -23,7 +23,7 @@ import org.qommons.collect.ElementId;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeSet;
 
-public class FilteredCollectionLink<E> extends OneToOneCollectionLink<E, E> {
+public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<E, E> {
 	private final SimpleSettableValue<Function<E, String>> theFilterValue;
 	private final boolean isFilterVariable;
 	private Function<E, String> theFilter;

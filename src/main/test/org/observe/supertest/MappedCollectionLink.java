@@ -18,7 +18,7 @@ import org.qommons.TestHelper;
 import org.qommons.TestHelper.RandomAction;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
-public class MappedCollectionLink<E, T> extends OneToOneCollectionLink<E, T> {
+public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink<E, T> {
 	private final SimpleSettableValue<TypeTransformation<E, T>> theMapValue;
 	private final boolean isMapVariable;
 	private TypeTransformation<E, T> theMap;

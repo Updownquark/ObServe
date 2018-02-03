@@ -17,7 +17,7 @@ import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BinaryTreeNode;
 
-public class SortedCollectionLink<E> extends OneToOneCollectionLink<E, E> {
+public class SortedCollectionLink<E> extends AbstractObservableCollectionLink<E, E> {
 	private class SortedElement {
 		E value;
 		final ElementId sourceId;

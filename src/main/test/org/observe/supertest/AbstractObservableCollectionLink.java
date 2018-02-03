@@ -10,8 +10,10 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -62,6 +64,11 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 	private final Deque<LinkElement> theAddedElements;
 	private LinkElement theLastAddedOrModified;
 
+	private final Map<LinkElement, LinkElement> theSourceToDest;
+	private final Map<LinkElement, LinkElement> theDestToSource;
+	private final List<LinkElement> theElementsToRemove;
+	private LinkElement theLastAddedSource;
+
 	// Extras
 	private ObservableElement<T> theMonitoredElement;
 	private Supplier<CollectionElement<T>> theCorrectMonitoredElement;
@@ -96,6 +103,10 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 
 		theElements = new BetterTreeList<>(false);
 		theAddedElements = new BetterTreeList<>(false);
+
+		theSourceToDest = new HashMap<>();
+		theDestToSource = new HashMap<>();
+		theElementsToRemove = new ArrayList<>();
 	}
 
 	@Override
@@ -215,8 +226,14 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			theElements.mutableElement(addedId).set(element);
 			theAddedElements.add(element);
 			theLastAddedOrModified = element;
+			LinkElement srcEl = getParent().getLastAddedOrModifiedElement();
+			if (srcEl != theLastAddedSource) {
+				theLastAddedSource = srcEl;
+				mapSourceElement(srcEl, element);
+			}
 			break;
 		case remove:
+			theElementsToRemove.add(getElements().get(evt.getIndex()));
 			theElements.remove(evt.getIndex());
 			break;
 		case set:
@@ -273,13 +290,22 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		return theElements;
 	}
 
+	protected LinkElement getSourceElement(LinkElement ours) {
+		return theDestToSource.get(ours);
+	}
+
+	protected LinkElement getDestElement(LinkElement src) {
+		return theSourceToDest.get(src);
+	}
+
+	protected void mapSourceElement(LinkElement srcEl, LinkElement destEl) {
+		theSourceToDest.put(srcEl, destEl);
+		theDestToSource.put(destEl, srcEl);
+	}
+
 	@Override
 	public LinkElement getLastAddedOrModifiedElement() {
 		return theLastAddedOrModified;
-	}
-
-	public Deque<LinkElement> getAddedElements() {
-		return theAddedElements;
 	}
 
 	protected String getExtras() {
@@ -917,6 +943,12 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		}
 
 		theAddedElements.clear();
+
+		for (LinkElement el : theElementsToRemove) {
+			LinkElement srcEl = theDestToSource.remove(el);
+			theSourceToDest.remove(srcEl);
+		}
+		theElementsToRemove.clear();
 	}
 
 	@Override

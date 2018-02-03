@@ -2,6 +2,7 @@ package org.observe.supertest;
 
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -46,6 +47,12 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			sourceEls.put(sourceId, sourceEl);
 			representative = sourceId;
 		}
+
+		public void add(ElementId srcId, LinkElement srcEl) {
+			sourceEls.put(srcId, srcEl);
+			if (theOptions.isUseFirst() && sourceEls.keySet().first() == srcId)
+				representative = srcId;
+		}
 	}
 	private final FlowOptions.UniqueOptions theOptions;
 	/** A map of value to equivalent values, grouped by source ID */
@@ -89,22 +96,22 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		super.initialize(helper);
 		// This is not completely perfect. Which elements are representative are sometimes based on the temporal order in which
 		// elements are encountered, which is not always the same as the order in the collection, even on initialization
-		// While "equivalent" elements are also equal, this is good enough.
+		// As long as "equivalent" elements are also equal, this is good enough.
 		// If I ever test other kinds of equivalence, this may cause failure.
 		theValues.keySet().addAll(getCollection());
+		Map<E, LinkElement> distinctEls = new HashMap<>();
+		for (int i = 0; i < theValues.size(); i++)
+			distinctEls.put(getCollection().get(i), getElements().get(i));
+		int i = 0;
 		for (E src : getParent().getCollection()) {
-			ElementId srcId = theSourceValues.addElement(src, false).getElementId();
-			MutableMapEntryHandle<E, BetterSortedMap<ElementId, E>> valueEntry = theValues
-				.mutableEntry(theValues.getEntry(src).getElementId());
-			if (valueEntry.get() == null) {
-				valueEntry.set(new BetterTreeMap<>(false, ElementId::compareTo));
-				theRepresentativeElements.put(valueEntry.getElementId(), srcId);
-				if (theOptions.isPreservingSourceOrder())
-					theSortedRepresentatives.add(srcId);
-				else
-					theSortedRepresentatives.add(valueEntry.getElementId());
-			}
-			valueEntry.get().put(srcId, src);
+			LinkElement srcEl = getParent().getElements().get(i);
+			ElementId srcId = theSourceElements.addElement(srcEl, false).getElementId();
+			MutableMapEntryHandle<E, GroupedValues> valueEntry = theValues.mutableEntry(theValues.getEntry(src).getElementId());
+			if (valueEntry.get() == null)
+				valueEntry.set(new GroupedValues(valueEntry.getElementId(), srcId, srcEl, distinctEls.get(src)));
+			else
+				valueEntry.get().add(srcId, srcEl);
+			i++;
 		}
 		getExpected().addAll(theValues.keySet());
 	}
@@ -121,7 +128,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			addedSet = getCollection().equivalence().createSet();
 			getParent().checkModifiable(//
 				ops.stream().map(op -> new CollectionOp<>(op, op.type, -1, op.value)).collect(Collectors.toList()), 0,
-				theSourceValues.size(), helper);
+				theSourceElements.size(), helper);
 			parentOps = null;
 		} else {
 			parentOps = new ArrayList<>();
@@ -137,8 +144,8 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 					continue;
 				}
 
-				MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueEntry = theValues.getEntry(op.value);
-				MapEntryHandle<E, BetterSortedMap<ElementId, E>> valueHandle;
+				MapEntryHandle<E, GroupedValues> valueEntry = theValues.getEntry(op.value);
+				MapEntryHandle<E, GroupedValues> valueHandle;
 				// TODO All the index adding here is for isPreservingSourceOrder=false. Rewrite for true.
 				if (valueEntry != null) {
 					op.reject(StdMsg.ELEMENT_EXISTS, false);
@@ -178,15 +185,14 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 						op.reject(StdMsg.NOT_FOUND, false);
 				}
 				if (op.getMessage() == null && getParent() != null) {
-					for (ElementId srcId : valueEntry.get().keySet()) {
-						parentOps.add(new CollectionOp<>(op, op.type, theSourceValues.getElementsBefore(srcId),
-							theSourceValues.getElement(srcId).get()));
+					for (ElementId srcId : valueEntry.get().sourceEls.keySet()) {
+						parentOps.add(new CollectionOp<>(op, op.type, theSourceElements.getElementsBefore(srcId), op.value));
 					}
 				}
 				break;
 			case set:
-				MapEntryHandle<E, BetterSortedMap<ElementId, E>> oldValueEntry = getValueHandle(subListStart + op.index);
-				MapEntryHandle<E, BetterSortedMap<ElementId, E>> newValueEntry = theValues.getEntry(op.value);
+				MapEntryHandle<E, GroupedValues> oldValueEntry = getValueHandle(subListStart + op.index);
+				MapEntryHandle<E, GroupedValues> newValueEntry = theValues.getEntry(op.value);
 				if (newValueEntry != null && !newValueEntry.getElementId().equals(oldValueEntry.getElementId())) {
 					op.reject(StdMsg.ELEMENT_EXISTS, true);
 					continue;
@@ -196,22 +202,21 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 					if (op.getMessage() != null)
 						continue;
 				}
-				for (ElementId srcId : oldValueEntry.get().keySet()) {
-					CollectionOp<E> parentSet = new CollectionOp<>(op, op.type, theSourceValues.getElementsBefore(srcId), op.value);
+				for (ElementId srcId : oldValueEntry.get().sourceEls.keySet()) {
+					CollectionOp<E> parentSet = new CollectionOp<>(op, op.type, theSourceElements.getElementsBefore(srcId), op.value);
 					parentOps.add(parentSet);
 				}
 				break;
 			}
 		}
 		if (parentOps != null)
-			getParent().checkModifiable(parentOps, 0, theSourceValues.size(), helper);
+			getParent().checkModifiable(parentOps, 0, theSourceElements.size(), helper);
 	}
 
 	@Override
 	public void fromBelow(List<CollectionOp<E>> ops, TestHelper helper) {
 		theDebug.act("fromBelow").param("ops", ops).exec();
 		List<CollectionOp<E>> distinctOps = new ArrayList<>(ops.size());
-		Deque<BiTuple<Integer, E>> newValues = new LinkedList<>(getNewValues());
 		for (CollectionOp<E> op : ops) {
 			switch (op.type) {
 			case add:
@@ -220,9 +225,8 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 				if (theValues.containsKey(op.value))
 					destIndex = -1;
 				else {
-					BiTuple<Integer, E> newValue = newValues.removeFirst();
-					Assert.assertEquals("Link " + getLinkIndex(), newValue.getValue2(), op.value);
-					destIndex = newValue.getValue1();
+					LinkElement destEl = getDestElement(op.elementId);
+					destIndex = destEl.getIndex();
 				}
 				add(op.index, op.value, destIndex, distinctOps);
 				break;
@@ -231,7 +235,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 				remove(op.index, distinctOps);
 				break;
 			case set:
-				CollectionElement<E> srcEl = theSourceValues.getElement(op.index);
+				CollectionElement<LinkElement> srcEl = theSourceElements.getElement(op.index);
 				E oldValue = srcEl.get();
 				theDebug.act("update").param("@", oldValue).param("newValue", op.value).exec();
 				MapEntryHandle<E, BetterSortedMap<ElementId, E>> oldValueEntry = theValues.getEntry(oldValue);
@@ -268,12 +272,8 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 						if (newValueEntry != null)
 							destIndex = -1;
 						else {
-							BiTuple<Integer, E> newValue = newValues.removeFirst();
-							Assert.assertEquals("Link " + getLinkIndex(), newValue.getValue2(), op.value);
-							if (isOrderImportant() || theValues.containsKey(op.value))
-								destIndex = -1; // If the order is important then figure it out ourselves and test for it
-							else
-								destIndex = newValue.getValue1();
+							LinkElement destEl = getDestElement(op.elementId);
+							destIndex = destEl.getIndex();
 						}
 						add(op.index, op.value, destIndex, distinctOps);
 					}
@@ -366,7 +366,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		modified(ops, helper, !above);
 	}
 
-	private MapEntryHandle<E, BetterSortedMap<ElementId, E>> getValueHandle(int index) {
+	private MapEntryHandle<E, GroupedValues> getValueHandle(int index) {
 		if (theValues.keySet() instanceof BetterList) // True for sorted
 			return theValues.getEntryById(((BetterList<?>) theValues.keySet()).getElement(index).getElementId());
 		else {

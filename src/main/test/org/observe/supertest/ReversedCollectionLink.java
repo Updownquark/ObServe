@@ -8,7 +8,7 @@ import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ObservableChainTester.TestValueType;
 import org.qommons.TestHelper;
 
-public class ReversedCollectionLink<E> extends OneToOneCollectionLink<E, E> {
+public class ReversedCollectionLink<E> extends AbstractObservableCollectionLink<E, E> {
 	private int theSize;
 
 	public ReversedCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type, CollectionDataFlow<?, ?, E> flow,

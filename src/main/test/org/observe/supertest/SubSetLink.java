@@ -16,7 +16,7 @@ import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeMap;
 
-public class SubSetLink<E> extends OneToOneCollectionLink<E, E> {
+public class SubSetLink<E> extends AbstractObservableCollectionLink<E, E> {
 	private final Comparator<? super E> theCompare;
 	private final E theMin;
 	private final boolean isMinIncluded;
