@@ -1,15 +1,25 @@
 package org.observe.supertest;
 
-import java.util.function.IntSupplier;
+import org.qommons.collect.BetterList;
+import org.qommons.collect.ElementId;
 
 public final class LinkElement {
-	private final IntSupplier index;
+	private final BetterList<?> theList;
+	private final ElementId theElement;
 
-	LinkElement(IntSupplier idx) {
-		index = idx;
+	public LinkElement(BetterList<?> list, ElementId element) {
+		theList = list;
+		theElement = element;
 	}
 
 	public int getIndex() {
-		return index.getAsInt();
+		if (!theElement.isPresent())
+			throw new IllegalStateException("Cannot be called once removed");
+		return theList.getElementsBefore(theElement);
+	}
+
+	@Override
+	public String toString() {
+		return theElement.isPresent() ? ("[" + getIndex() + "]") : "removed";
 	}
 }

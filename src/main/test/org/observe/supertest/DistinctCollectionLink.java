@@ -12,6 +12,7 @@ import org.observe.collect.Equivalence;
 import org.observe.collect.FlowOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ObservableChainTester.TestValueType;
+import org.qommons.ArrayUtils;
 import org.qommons.Ternian;
 import org.qommons.TestHelper;
 import org.qommons.ValueHolder;
@@ -20,11 +21,13 @@ import org.qommons.collect.BetterMap;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.BetterSortedMap;
 import org.qommons.collect.BetterSortedSet;
+import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.collect.MutableMapEntryHandle;
 import org.qommons.debug.Debug;
 import org.qommons.debug.Debug.DebugData;
@@ -53,6 +56,11 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			sourceEls.put(srcId, srcEl);
 			if (theOptions.isUseFirst() && sourceEls.keySet().first() == srcId)
 				representative = srcId;
+		}
+
+		@Override
+		public String toString() {
+			return String.valueOf(value);
 		}
 	}
 	private final FlowOptions.UniqueOptions theOptions;
@@ -231,14 +239,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			switch (op.type) {
 			case add:
 				theDebug.act("addSource").param("@", op.value).exec();
-				int destIndex;
-				if (theValues.containsKey(op.value))
-					destIndex = -1;
-				else {
-					LinkElement destEl = getDestElement(op.elementId);
-					destIndex = destEl.getIndex();
-				}
-				add(op.index, op.value, destIndex, distinctOps);
+				add(op.elementId, op.index, op.value, distinctOps);
 				break;
 			case remove:
 				theDebug.act("remove").param("@", op.value).exec();
@@ -246,44 +247,37 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 				break;
 			case set:
 				CollectionElement<GroupedValues> srcEl = theSourceElements.getElement(op.index);
-				GroupedValues oldValue = srcEl.get();
-				theDebug.act("update").param("@", oldValue).param("newValue", op.value).exec();
-				MapEntryHandle<E, GroupedValues> oldValueEntry = theValues.getEntry(oldValue.value);
-				MapEntryHandle<E, GroupedValues> newValueEntry = theValues.getEntry(op.value);
-				if (newValueEntry != null && oldValueEntry.getElementId().equals(newValueEntry.getElementId())) {
+				GroupedValues oldValues = srcEl.get();
+				GroupedValues newValues = theValues.get(op.value);
+				theDebug.act("update").param("@", oldValues).param("newValue", op.value).exec();
+				if (newValues != null && oldValues == newValues) {
 					// Category is unchanged
-					if (oldValue.representative.equals(srcEl.getElementId())) {
-						ElementId repId = theOptions.isPreservingSourceOrder() ? srcEl.getElementId() : newValueEntry.getElementId();
+					if (oldValues.representative.equals(srcEl.getElementId())) {
+						ElementId repId = theOptions.isPreservingSourceOrder() ? srcEl.getElementId() : newValues.valueId;
 						// The updated value is the representative for its category. Fire the update event.
 						theDebug.act("update:trueUpdate").exec();
 						int repIndex = theSortedRepresentatives.indexOf(repId);
-						distinctOps.add(new CollectionOp<>(CollectionChangeType.set, oldValue.distinctEl, repIndex, op.value));
+						distinctOps.add(new CollectionOp<>(CollectionChangeType.set, oldValues.distinctEl, repIndex, op.value));
 					} else {
 						theDebug.act("update:no-effect").exec();
 						// The update value is not the representative for its category. No change to the derived collection.
 					}
 				} else {
 					// Category has been changed.
-					if (oldValueEntry.get().sourceEls.size() == 1
-						&& theValues.keySet().mutableElement(oldValueEntry.getElementId()).isAcceptable(op.value) == null) {
+					if (newValues == null && oldValues.sourceEls.size() == 1
+						&& theValues.keySet().mutableElement(oldValues.valueId).isAcceptable(op.value) == null) {
 						theDebug.act("update:move").exec();
-						theSourceElements.mutableElement(srcEl.getElementId()).set(newValueEntry.get());
-						oldValue.value = op.value;
-						theValues.keySet().mutableElement(oldValueEntry.getElementId()).set(op.value);
-						ElementId repId = theOptions.isPreservingSourceOrder() ? srcEl.getElementId() : oldValueEntry.getElementId();
+						theSourceElements.mutableElement(srcEl.getElementId()).set(oldValues);
+						oldValues.value = op.value;
+						theValues.keySet().mutableElement(oldValues.valueId).set(op.value);
+						ElementId repId = theOptions.isPreservingSourceOrder() ? srcEl.getElementId() : oldValues.valueId;
 						// The updated value is the representative for its category. Fire the update event.
 						int repIndex = theSortedRepresentatives.indexOf(repId);
-						distinctOps.add(new CollectionOp<>(CollectionChangeType.set, oldValue.distinctEl, repIndex, op.value));
+						distinctOps.add(new CollectionOp<>(CollectionChangeType.set, oldValues.distinctEl, repIndex, op.value));
 					} else {
 						// Same as a remove, then an add.
 						remove(op.index, distinctOps);
-						if (newValueEntry != null)
-							destIndex = -1;
-						else {
-							LinkElement destEl = getDestElement(op.elementId);
-							destIndex = destEl.getIndex();
-						}
-						add(op.index, op.value, destIndex, distinctOps);
+						add(op.elementId, op.index, op.value, distinctOps);
 					}
 				}
 			}
@@ -300,9 +294,8 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			switch (op.type) {
 			case add:
 				LinkElement srcLinkEl = getSourceElement(op.elementId);
-				int srcIndex = srcLinkEl.getIndex();
+				int srcIndex = add(srcLinkEl, -1, op.value, distinctOps);
 				parentOps.add(new CollectionOp<>(CollectionChangeType.add, srcLinkEl, srcIndex, op.value));
-				add(srcIndex, op.value, op.index, distinctOps);
 				break;
 			case remove:
 				GroupedValues values = getValueHandle(op.index).get();
@@ -310,54 +303,51 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 					theSortedRepresentatives.remove(values.representative);
 				else
 					theSortedRepresentatives.remove(values.valueId);
-				for (ElementId srcEl : values.sourceEls.keySet()) {
-					CollectionElement<E> srcValEntry = theSourceValues.getElement(srcEl);
-					srcIndex = theSourceValues.getElementsBefore(srcValEntry.getElementId());
-					parentOps.add(new CollectionOp<>(CollectionChangeType.remove, srcIndex, srcValEntry.get()));
-					theSourceValues.mutableElement(srcValEntry.getElementId()).remove();
+				for (Map.Entry<ElementId, LinkElement> srcEl : values.sourceEls.entrySet()) {
+					srcIndex = theSourceElements.getElementsBefore(srcEl.getKey());
+					parentOps.add(new CollectionOp<>(CollectionChangeType.remove, srcEl.getValue(), srcIndex, op.value));
+					theSourceElements.mutableElement(srcEl.getKey()).remove();
 				}
 				distinctOps.add(op);
-				theValues.mutableEntry(valueEl).remove();
+				theValues.mutableEntry(values.valueId).remove();
 				break;
 			case set:
-				MapEntryHandle<E, GroupedValues> valueEntry = getValueHandle(op.index);
-				GroupedValues values = valueEntry.get();
-				MapEntryHandle<E, GroupedValues> newValueEntry = theValues.getEntry(op.value);
-				if (newValueEntry != null && !newValueEntry.getElementId().equals(valueEntry.getElementId())) {
+				values = getValueHandle(op.index).get();
+				GroupedValues newValues = theValues.get(op.value);
+				if (newValues != null && newValues != values) {
 					if (!above)
 						Assert.assertTrue("This should not happen", false);
 					// It is permissible for a set operation from a derived collection to result in an element in a distinct collection
 					// being merged with another (i.e. disappearing)
-					List<ElementId> srcIds = new ArrayList<>(valueEntry.get().size());
-					srcIds.addAll(valueEntry.get().keySet());
-					for (ElementId srcId : srcIds) {
-						srcIndex = theSourceValues.getElementsBefore(srcId);
+					List<Map.Entry<ElementId, LinkElement>> srcIds = new ArrayList<>(values.sourceEls.size());
+					srcIds.addAll(values.sourceEls.entrySet());
+					for (Map.Entry<ElementId, LinkElement> srcId : srcIds) {
+						srcIndex = theSourceElements.getElementsBefore(srcId.getKey());
 						remove(srcIndex, distinctOps);
-						add(srcIndex, op.value, -1, distinctOps);
+						add(srcId.getValue(), srcIndex, op.value, distinctOps);
 					}
 				} else {
 					if (theOptions.isPreservingSourceOrder()) {
-						if (theValues.keySet().mutableElement(valueEntry.getElementId()).isAcceptable(op.value) == null)
-							theValues.keySet().mutableElement(valueEntry.getElementId()).set(op.value);
+						if (theValues.keySet().mutableElement(values.valueId).isAcceptable(op.value) == null)
+							theValues.keySet().mutableElement(values.valueId).set(op.value);
 						else {
-							theValues.mutableEntry(valueEntry.getElementId()).remove();
+							theValues.mutableEntry(values.valueId).remove();
 							theValues.putEntry(op.value, values, false).getElementId();
 						}
 					} else {
-						theValues.keySet().mutableElement(valueEntry.getElementId()).set(op.value);
-						Assert.assertEquals(op.index, getElementIndex(valueEntry.getElementId())); // Set operations are not allowed to
-						// modify order
+						theValues.keySet().mutableElement(values.valueId).set(op.value);
+						Assert.assertEquals(op.index, getElementIndex(values.valueId)); // Set operations are not allowed to modify order
 					}
 					// Need to copy the entries, because set operations from above can cause unintended side effects (e.g. removal)
 					// Representative element goes first
-					ElementId repId = theRepresentativeElements.get(valueEntry.getElementId());
-					parentOps.add(new CollectionOp<>(CollectionChangeType.set, op.value, theSourceValues.getElementsBefore(repId)));
-					for (Map.Entry<ElementId, E> entry : new ArrayList<>(values.entrySet())) {
-						theSourceValues.mutableElement(entry.getKey()).set(op.value);
-						entry.setValue(op.value);
+					ElementId repId = values.representative;
+					parentOps.add(new CollectionOp<>(CollectionChangeType.set, values.sourceEls.get(repId),
+						theSourceElements.getElementsBefore(repId), op.value));
+					for (Map.Entry<ElementId, LinkElement> entry : new ArrayList<>(values.sourceEls.entrySet())) {
+						values.value = op.value;
 						if (!entry.getKey().equals(repId))
-							parentOps.add(
-								new CollectionOp<>(CollectionChangeType.set, op.value, theSourceValues.getElementsBefore(entry.getKey())));
+							parentOps.add(new CollectionOp<>(CollectionChangeType.set, entry.getValue(),
+								theSourceElements.getElementsBefore(entry.getKey()), op.value));
 					}
 					distinctOps.add(op);
 				}
@@ -405,14 +395,57 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		}
 	}
 
-	private void add(int srcIndex, E value, int destIndex, List<CollectionOp<E>> distinctOps) {
-		ElementId srcEl = theSourceValues.addElement(srcIndex, value).getElementId();
-		MapEntryHandle<E, GroupedValues> valueEntry = theValues.getEntry(value);
-		if (valueEntry != null && !valueEntry.getValue().isEmpty()) {
-			MapEntryHandle<ElementId, E> valueSourceEntry = valueEntry.get().putEntry(srcEl, value, false);
-			if (theOptions.isUseFirst() && valueEntry.get().keySet().getElementsBefore(valueSourceEntry.getElementId()) == 0) {
+	private ElementId getSourceInsertHandle(LinkElement sourceEl) {
+		int srcIdx = ArrayUtils.binarySearch(0, theSourceElements.size() - 1, //
+			index -> {
+				GroupedValues values = theSourceElements.get(index);
+				int diff = sourceEl.getIndex() - values.sourceEls.firstEntry().getValue().getIndex();
+				return diff;
+			});
+		// Should not have been found exactly
+		srcIdx = -srcIdx - 1;
+		return srcIdx < theSourceElements.size() ? theSourceElements.getElement(srcIdx).getElementId() : null;
+	}
+
+	private ElementId getDistinctInsertHandle(LinkElement distinctEl) {
+		if (theValues instanceof BetterSortedMap) {
+			CollectionElement<?> result = ((BetterSortedMap<E, GroupedValues>) theValues).entrySet().search(entry -> {
+				return distinctEl.getIndex() - entry.getValue().distinctEl.getIndex();
+			}, SortedSearchFilter.Greater);
+			return result == null ? null : result.getElementId();
+		} else {
+			MutableElementSpliterator<Map.Entry<E, GroupedValues>> spliter = theValues.entrySet().spliterator(false);
+			ValueHolder<ElementId> result = new ValueHolder<>();
+			boolean[] passed = new boolean[1];
+			while (!passed[0] && spliter.forElement(el -> {
+				int diff = distinctEl.getIndex() - el.get().getValue().distinctEl.getIndex();
+				if (diff < 0)
+					result.accept(el.getElementId());
+				else
+					passed[0] = true;
+			}, false)) {}
+			return result.get();
+		}
+	}
+
+	private int add(LinkElement srcLinkEl, int srcIndex, E value, List<CollectionOp<E>> distinctOps) {
+		ElementId srcEl;
+		if (srcIndex >= 0)
+			srcEl = theSourceElements.addElement(srcIndex, null).getElementId();
+		else {
+			// The caller doesn't have the index at which the source element should be added. Figure it out
+			ElementId srcInsertHandle = getSourceInsertHandle(srcLinkEl);
+			if (srcInsertHandle != null) // Add before the insert handle
+				srcEl = theSourceElements.mutableElement(srcInsertHandle).add(null, true);
+			else // Add as the last entry
+				srcEl = theSourceElements.addElement(null, false).getElementId();
+		}
+		GroupedValues values = theValues.get(value);
+		if (values != null && !values.sourceEls.isEmpty()) {
+			ElementId valueSourceId = values.sourceEls.putEntry(srcEl, srcLinkEl, false).getElementId();
+			if (theOptions.isUseFirst() && values.sourceEls.keySet().getElementsBefore(valueSourceId) == 0) {
 				// The new value is replacing the old value as the representative element
-				ElementId oldRep = theRepresentativeElements.put(valueEntry.getElementId(), srcEl);
+				ElementId oldRep = values.representative;
 				int oldIndex, newIndex;
 				if (theOptions.isPreservingSourceOrder()) {
 					// The order of the representative element may have changed
@@ -423,19 +456,19 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 					newIndex = theSortedRepresentatives.getElementsBefore(orderEl.getElementId());
 				} else {
 					// The order in the derived collection cannot have been changed
-					oldIndex = newIndex = getElementIndex(valueEntry.getElementId());
+					oldIndex = newIndex = getElementIndex(values.valueId);
 				}
 				if (oldIndex != newIndex) {
 					theDebug.act("add:move").param("value", value)//
 					// .param("oldIndex", oldIndex).param("newIndex", newIndex).param("srcIndex", srcIndex)//
 					.exec();
-					distinctOps.add(new CollectionOp<>(CollectionChangeType.remove, value, oldIndex));
-					distinctOps.add(new CollectionOp<>(CollectionChangeType.add, value, newIndex));
+					distinctOps.add(new CollectionOp<>(CollectionChangeType.remove, values.distinctEl, oldIndex, value));
+					distinctOps.add(new CollectionOp<>(CollectionChangeType.add, values.distinctEl, newIndex, value));
 				} else {
 					theDebug.act("add:update").param("value", value)//
 					// .param("index", oldIndex).param("srcIndex", srcIndex)//
 					.exec();
-					distinctOps.add(new CollectionOp<>(CollectionChangeType.set, value, oldIndex));
+					distinctOps.add(new CollectionOp<>(CollectionChangeType.set, values.distinctEl, oldIndex, value));
 				}
 			} else {
 				// No effect
@@ -445,82 +478,81 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			}
 		} else {
 			// The new value is the first in its category
-			if (valueEntry == null) {
+			if (values == null) {
 				// Add at the correct position if specified
 				theDebug.act("add:new").param("value", value)//
 				.exec();
-				if (destIndex < 0 || theValues.isEmpty()) {
-					valueEntry = theValues.putEntry(value, new BetterTreeMap<>(false, ElementId::compareTo), false);
+				LinkElement distinctEl = getDestElement(srcLinkEl);
+				if (theValues.isEmpty()) {
+					ElementId valueId = theValues.putEntry(value, null, false).getElementId();
+					values = new GroupedValues(value, valueId, srcEl, srcLinkEl, distinctEl);
+					theValues.mutableEntry(valueId).set(values);
 				} else {
+					ElementId distinctInsertHandle = getDistinctInsertHandle(distinctEl);
 					ElementId addedEntryId;
-					if (destIndex == 0)
-						addedEntryId = theValues.keySet().mutableElement(getValueHandle(0).getElementId()).add(value, true);
-					else
-						addedEntryId = theValues.keySet().mutableElement(getValueHandle(destIndex - 1).getElementId()).add(value, false);
-					theValues.mutableEntry(addedEntryId).set(new BetterTreeMap<>(false, ElementId::compareTo));
-					valueEntry = theValues.getEntryById(addedEntryId);
+					if (distinctInsertHandle != null) // Add before the insert handle
+						addedEntryId = theValues.keySet().mutableElement(distinctInsertHandle).add(value, true);
+					else // Add as the last entry
+						addedEntryId = theValues.keySet().mutableElement(theValues.keySet().getTerminalElement(false).getElementId())
+						.add(value, false);
+					values = new GroupedValues(value, addedEntryId, srcEl, srcLinkEl, distinctEl);
+					theValues.mutableEntry(addedEntryId).set(values);
 				}
 			}
-			valueEntry.get().put(srcEl, value);
-			theRepresentativeElements.put(valueEntry.getElementId(), srcEl);
 			ElementId orderEl;
 			if (theOptions.isPreservingSourceOrder())
 				orderEl = theSortedRepresentatives.addElement(srcEl, true).getElementId();
 			else
-				orderEl = theSortedRepresentatives.addElement(valueEntry.getElementId(), true).getElementId();
+				orderEl = theSortedRepresentatives.addElement(values.valueId, true).getElementId();
 			int repIndex = theSortedRepresentatives.getElementsBefore(orderEl);
-			distinctOps.add(new CollectionOp<>(CollectionChangeType.add, value, repIndex));
+			distinctOps.add(new CollectionOp<>(CollectionChangeType.add, values.distinctEl, repIndex, value));
 		}
+		theSourceElements.mutableElement(srcEl).set(values);
+		return theSourceElements.getElementsBefore(srcEl);
 	}
 
 	private void remove(int srcIndex, List<CollectionOp<E>> distinctOps) {
-		CollectionElement<E> srcEl = theSourceValues.getElement(srcIndex);
-		E value=srcEl.get();
-		MapEntryHandle<E, GroupedValues> valueEntry = theValues.getEntry(value);
-		valueEntry.get().remove(srcEl.getElementId());
-		MapEntryHandle<ElementId, ElementId> repEntry = theRepresentativeElements.getEntry(valueEntry.getElementId());
-		if (repEntry.get().equals(srcEl.getElementId())) {
+		ElementId srcId = theSourceElements.getElement(srcIndex).getElementId();
+		GroupedValues values = theSourceElements.getElement(srcId).get();
+		values.sourceEls.remove(srcId);
+		if (values.representative.equals(srcId)) {
 			// The removed element was the representative for its category. Need to transition to a different element.
-			CollectionElement<ElementId> orderEl;
+			ElementId orderId;
 			if (theOptions.isPreservingSourceOrder())
-				orderEl = theSortedRepresentatives.getElement(srcEl.getElementId(), true);
+				orderId = theSortedRepresentatives.getElement(srcId, true).getElementId();
 			else
-				orderEl = theSortedRepresentatives.getElement(valueEntry.getElementId(), true);
-			int oldIndex = theSortedRepresentatives.getElementsBefore(orderEl.getElementId());
-			if (valueEntry.get().isEmpty()) {
+				orderId = theSortedRepresentatives.getElement(values.valueId, true).getElementId();
+			int oldIndex = theSortedRepresentatives.getElementsBefore(orderId);
+			if (values.sourceEls.isEmpty()) {
 				// No more elements in the category.The element will be removed from the derived collection.
-				theDebug.act("remove:remove").param("value", value)//
+				theDebug.act("remove:remove").param("value", values.value)//
 				// .param("index", oldIndex).param("srcIndex", srcIndex)//
 				.exec();
-				theSortedRepresentatives.mutableElement(orderEl.getElementId()).remove();
-				theRepresentativeElements.mutableEntry(repEntry.getElementId()).remove();
-				theValues.mutableEntry(valueEntry.getElementId()).remove();
-				distinctOps.add(new CollectionOp<>(CollectionChangeType.remove, value, oldIndex));
+				theSortedRepresentatives.mutableElement(orderId).remove();
+				theValues.mutableEntry(values.valueId).remove();
+				distinctOps.add(new CollectionOp<>(CollectionChangeType.remove, values.distinctEl, oldIndex, values.value));
 			} else {
 				// Need to transition to the new first element in the category
-				Map.Entry<ElementId, E> newFirstSrcEntry = valueEntry.get().firstEntry();
-				theRepresentativeElements.mutableEntry(repEntry.getElementId()).set(newFirstSrcEntry.getKey());
+				Map.Entry<ElementId, LinkElement> newFirstSrcEntry = values.sourceEls.firstEntry();
+				values.representative = newFirstSrcEntry.getKey();
 				int newIndex;
 				if (theOptions.isPreservingSourceOrder()) {
-					theSortedRepresentatives.mutableElement(orderEl.getElementId()).remove();
-					orderEl = theSortedRepresentatives.addElement(newFirstSrcEntry.getKey(), true);
-					newIndex = theSortedRepresentatives.getElementsBefore(orderEl.getElementId());
+					theSortedRepresentatives.mutableElement(orderId).remove();
+					orderId = theSortedRepresentatives.addElement(newFirstSrcEntry.getKey(), true).getElementId();
+					newIndex = theSortedRepresentatives.getElementsBefore(orderId);
 				} else
 					newIndex = oldIndex;
 				if (oldIndex != newIndex) {
-					theDebug.act("remove:move").param("value", value)//
+					theDebug.act("remove:move").param("value", values.value)//
 					// .param("oldIndex", oldIndex).param("newIndex", newIndex).param("srcIndex", srcIndex)//
 					.exec();
-					distinctOps.add(new CollectionOp<>(CollectionChangeType.remove, value, oldIndex));
-					distinctOps.add(new CollectionOp<>(CollectionChangeType.add, newFirstSrcEntry.getValue(), newIndex));
+					distinctOps.add(new CollectionOp<>(CollectionChangeType.remove, values.distinctEl, oldIndex, values.value));
+					distinctOps.add(new CollectionOp<>(CollectionChangeType.add, values.distinctEl, newIndex, values.value));
 				} else {
 					theDebug.act("remove:representativeChange")//
 					// .param("index", oldIndex).param("srcIndex", srcIndex)//
 					.exec();
-					if (valueEntry.getKey() != newFirstSrcEntry.getValue()) {
-						theValues.keySet().mutableElement(valueEntry.getElementId()).set(newFirstSrcEntry.getValue());
-						distinctOps.add(new CollectionOp<>(CollectionChangeType.set, newFirstSrcEntry.getValue(), oldIndex));
-					}
+					distinctOps.add(new CollectionOp<>(CollectionChangeType.set, values.distinctEl, oldIndex, values.value));
 				}
 			}
 		} else {
@@ -528,9 +560,9 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			// .param("value", value).param("srcIndex", srcIndex)//
 			.exec();
 			// The removed element was not the representative for its category. No change to the derived collection.
-			Assert.assertFalse(valueEntry.get().isEmpty());
+			Assert.assertFalse(values.sourceEls.isEmpty());
 		}
-		theSourceValues.mutableElement(srcEl.getElementId()).remove();
+		theSourceElements.mutableElement(srcId).remove();
 	}
 
 	@Override

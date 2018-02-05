@@ -196,7 +196,7 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 	public void fromAbove(List<CollectionOp<E>> ops, TestHelper helper, boolean above) {
 		List<CollectionOp<E>> parentOps = new ArrayList<>();
 		for (CollectionOp<E> op : ops) {
-			LinkElement srcElement = getDestElement(op.elementId);
+			LinkElement srcElement = getSourceElement(op.elementId);
 			switch (op.type) {
 			case add:
 				// Assuming that the added elements were added in the same order as the list of operations. Valid?

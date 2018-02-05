@@ -119,7 +119,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		getCollection().onChange(this::change);
 		for (int i = 0; i < getCollection().size(); i++) {
 			ElementId el = theElements.addElement(null, false).getElementId();
-			theElements.mutableElement(el).set(new LinkElement(() -> theElements.getElementsBefore(el)));
+			theElements.mutableElement(el).set(new LinkElement(theElements, el));
 		}
 
 		// Extras
@@ -222,18 +222,21 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		switch (evt.getType()) {
 		case add:
 			ElementId addedId = theElements.addElement(evt.getIndex(), null).getElementId();
-			LinkElement element = new LinkElement(() -> theElements.getElementsBefore(addedId));
+			LinkElement element = new LinkElement(theElements, addedId);
 			theElements.mutableElement(addedId).set(element);
 			theAddedElements.add(element);
 			theLastAddedOrModified = element;
-			LinkElement srcEl = getParent().getLastAddedOrModifiedElement();
-			if (srcEl != theLastAddedSource) {
-				theLastAddedSource = srcEl;
-				mapSourceElement(srcEl, element);
+			if (getParent() != null) {
+				LinkElement srcEl = getParent().getLastAddedOrModifiedElement();
+				if (srcEl != theLastAddedSource) {
+					theLastAddedSource = srcEl;
+					mapSourceElement(srcEl, element);
+				}
 			}
 			break;
 		case remove:
-			theElementsToRemove.add(getElements().get(evt.getIndex()));
+			if (getParent() != null)
+				theElementsToRemove.add(getElements().get(evt.getIndex()));
 			theElements.remove(evt.getIndex());
 			break;
 		case set:
@@ -347,8 +350,10 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			List<CollectionOp<T>> ops = Arrays.asList(op);
 			checkModifiable(ops, subListStart, subListEnd, helper);
 			op = addToCollection(op, modify, subListStart, helper);
-			if (op != null)
+			if (op != null) {
+				ops.set(0, op);
 				postModify(ops, helper);
+			}
 		}).or(1, () -> { // addAll
 			int length = (int) helper.getDouble(0, 100, 1000); // Aggressively tend smaller
 			int index = helper.getBoolean() ? -1 : helper.getInt(0, modify.size() + 1);
@@ -795,6 +800,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 				Assert.assertEquals(theCollection.get(elIndex), ops.get(i).value);
 				ops.set(i, new CollectionOp<>(CollectionChangeType.add, element, elIndex, ops.get(i).value));
 			}
+			Collections.sort(ops, (o1, o2) -> o1.index - o2.index);
 		}
 	}
 
