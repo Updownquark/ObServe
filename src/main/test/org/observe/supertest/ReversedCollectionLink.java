@@ -56,15 +56,15 @@ public class ReversedCollectionLink<E> extends AbstractObservableCollectionLink<
 		for (CollectionOp<E> op : ops) {
 			switch (op.type) {
 			case add:
-				reversedOps.add(new CollectionOp<>(op.type, getDestElement(op.elementId), theSize - op.index, op.value));
+				reversedOps.add(new CollectionOp<>(op.type, getDestElements(op.elementId).getLast(), theSize - op.index, op.value));
 				theSize++;
 				break;
 			case remove:
-				reversedOps.add(new CollectionOp<>(op.type, getDestElement(op.elementId), theSize - op.index - 1, op.value));
+				reversedOps.add(new CollectionOp<>(op.type, getDestElements(op.elementId).getLast(), theSize - op.index - 1, op.value));
 				theSize--;
 				break;
 			case set:
-				reversedOps.add(new CollectionOp<>(op.type, getDestElement(op.elementId), theSize - op.index - 1, op.value));
+				reversedOps.add(new CollectionOp<>(op.type, getDestElements(op.elementId).getLast(), theSize - op.index - 1, op.value));
 				break;
 			}
 		}

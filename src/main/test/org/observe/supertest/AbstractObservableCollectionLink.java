@@ -12,6 +12,7 @@ import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -39,14 +40,19 @@ import org.qommons.Ternian;
 import org.qommons.TestHelper;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
+import org.qommons.collect.BetterHashMap;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterMap;
 import org.qommons.collect.BetterSet;
+import org.qommons.collect.BetterSortedMap;
 import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ElementSpliterator;
+import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.tree.BetterTreeList;
+import org.qommons.tree.BetterTreeMap;
 
 import com.google.common.reflect.TypeToken;
 
@@ -61,12 +67,13 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 	private final Function<TestHelper, T> theSupplier;
 
 	private final BetterList<LinkElement> theElements;
+	private final BetterSortedMap<ElementId, LinkElement> theLinkElementsById;
 	private final Deque<LinkElement> theAddedElements;
 	private LinkElement theLastAddedOrModified;
 
-	private final Map<LinkElement, LinkElement> theSourceToDest;
-	private final Map<LinkElement, LinkElement> theDestToSource;
-	private final List<LinkElement> theElementsToRemove;
+	private final Map<LinkElement, Deque<LinkElement>> theSourceToDest;
+	private final BetterMap<LinkElement, LinkElement> theDestToSource;
+	private final List<ElementId> theElementsToRemove;
 	private LinkElement theLastAddedSource;
 
 	// Extras
@@ -102,11 +109,12 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			theFlow = theCollection.flow();
 
 		theElements = new BetterTreeList<>(false);
+		theLinkElementsById = new BetterTreeMap<>(false, ElementId::compareTo);
 		theAddedElements = new BetterTreeList<>(false);
+		theElementsToRemove = new ArrayList<>();
 
 		theSourceToDest = new HashMap<>();
-		theDestToSource = new HashMap<>();
-		theElementsToRemove = new ArrayList<>();
+		theDestToSource = BetterHashMap.build().buildMap();
 	}
 
 	@Override
@@ -119,7 +127,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		getCollection().onChange(this::change);
 		for (int i = 0; i < getCollection().size(); i++) {
 			ElementId el = theElements.addElement(null, false).getElementId();
-			theElements.mutableElement(el).set(new LinkElement(theElements, el));
+			theElements.mutableElement(el).set(new LinkElement(theElements, el, getCollection().getElement(i).getElementId()));
 		}
 
 		// Extras
@@ -221,8 +229,16 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 	protected void change(ObservableCollectionEvent<? extends T> evt) {
 		switch (evt.getType()) {
 		case add:
-			ElementId addedId = theElements.addElement(evt.getIndex(), null).getElementId();
-			LinkElement element = new LinkElement(theElements, addedId);
+			MapEntryHandle<ElementId, LinkElement> lebiHandle = theLinkElementsById.putEntry(evt.getElementId(), null, false);
+			CollectionElement<ElementId> prev = theLinkElementsById.keySet().getAdjacentElement(lebiHandle.getElementId(), false);
+			int addIndex;
+			if (prev == null)
+				addIndex = 0;
+			else
+				addIndex = theLinkElementsById.getEntryById(prev.getElementId()).getValue().getIndex() + 1;
+			ElementId addedId = theElements.addElement(addIndex, null).getElementId();
+			LinkElement element = new LinkElement(theElements, addedId, evt.getElementId());
+			theLinkElementsById.mutableEntry(lebiHandle.getElementId()).set(element);
 			theElements.mutableElement(addedId).set(element);
 			theAddedElements.add(element);
 			theLastAddedOrModified = element;
@@ -235,12 +251,11 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			}
 			break;
 		case remove:
-			if (getParent() != null)
-				theElementsToRemove.add(getElements().get(evt.getIndex()));
-			theElements.remove(evt.getIndex());
+			element = theLinkElementsById.remove(evt.getElementId());
+			theElementsToRemove.add(theElements.getElement(element.getIndex()).getElementId());
 			break;
 		case set:
-			theLastAddedOrModified = theElements.get(evt.getIndex());
+			theLastAddedOrModified = theLinkElementsById.get(evt.getElementId());
 			break;
 		}
 	}
@@ -297,12 +312,12 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		return theDestToSource.get(ours);
 	}
 
-	protected LinkElement getDestElement(LinkElement src) {
+	protected Deque<LinkElement> getDestElements(LinkElement src) {
 		return theSourceToDest.get(src);
 	}
 
 	protected void mapSourceElement(LinkElement srcEl, LinkElement destEl) {
-		theSourceToDest.put(srcEl, destEl);
+		theSourceToDest.computeIfAbsent(srcEl, __ -> new LinkedList<>()).add(destEl);
 		theDestToSource.put(destEl, srcEl);
 	}
 
@@ -950,9 +965,29 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 
 		theAddedElements.clear();
 
-		for (LinkElement el : theElementsToRemove) {
-			LinkElement srcEl = theDestToSource.remove(el);
-			theSourceToDest.remove(srcEl);
+		for (ElementId el : theElementsToRemove) {
+			LinkElement linkEl = theElements.getElement(el).get();
+			theElements.mutableElement(el).remove();
+			LinkElement srcEl = theDestToSource.remove(linkEl);
+			if (srcEl != null) {
+				Deque<LinkElement> std = theSourceToDest.get(srcEl);
+				std.remove(el);
+				if (std.isEmpty())
+					theSourceToDest.remove(srcEl);
+			}
+		}
+		// Remove mappings for source elements that are no longer present
+		Iterator<Map.Entry<LinkElement, Deque<LinkElement>>> srcMaps = theSourceToDest.entrySet().iterator();
+		while (srcMaps.hasNext()) {
+			Map.Entry<LinkElement, Deque<LinkElement>> entry = srcMaps.next();
+			if (entry.getKey().isPresent())
+				continue;
+			for (LinkElement destEl : entry.getValue()) {
+				MapEntryHandle<LinkElement, LinkElement> destMap = theDestToSource.getEntry(destEl);
+				if (destMap != null && destMap.getValue().equals(entry.getKey()))
+					theDestToSource.mutableEntry(destMap.getElementId()).remove();
+			}
+			srcMaps.remove();
 		}
 		theElementsToRemove.clear();
 	}

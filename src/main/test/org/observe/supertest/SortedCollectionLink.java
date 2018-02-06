@@ -181,14 +181,15 @@ public class SortedCollectionLink<E> extends AbstractObservableCollectionLink<E,
 				ElementId srcId = theSourceElements.addElement(op.index, null).getElementId();
 				ElementId sortedId = insert(op.value, srcId);
 				sortedOps
-				.add(new CollectionOp<>(CollectionChangeType.add, getDestElement(op.elementId),
+					.add(new CollectionOp<>(CollectionChangeType.add, getDestElements(op.elementId).getLast(),
 					theSortedElements.getElementsBefore(sortedId), op.value));
 				break;
 			case remove:
 				SortedElement element = theSourceElements.remove(op.index);
 				int sortedIndex = theSortedElements.getElementsBefore(element.sortedId);
 				theSortedElements.mutableElement(element.sortedId).remove();
-				sortedOps.add(new CollectionOp<>(CollectionChangeType.remove, getDestElement(op.elementId), sortedIndex, op.value));
+				sortedOps
+					.add(new CollectionOp<>(CollectionChangeType.remove, getDestElements(op.elementId).getFirst(), sortedIndex, op.value));
 				break;
 			case set:
 				element = theSourceElements.get(op.index);
@@ -198,13 +199,16 @@ public class SortedCollectionLink<E> extends AbstractObservableCollectionLink<E,
 				if (move) {
 					theSortedElements.mutableElement(element.sortedId).remove();
 					sortedId = insert(op.value, element.sourceId);
-					sortedOps.add(new CollectionOp<>(CollectionChangeType.remove, getDestElement(op.elementId), sortedIdx, element.value));
+					sortedOps.add(
+						new CollectionOp<>(CollectionChangeType.remove, getDestElements(op.elementId).getLast(), sortedIdx, element.value));
 					sortedIdx = theSortedElements.getElementsBefore(sortedId);
 					element.value = op.value;
-					sortedOps.add(new CollectionOp<>(CollectionChangeType.add, getDestElement(op.elementId), sortedIdx, op.value));
+					sortedOps
+						.add(new CollectionOp<>(CollectionChangeType.add, getDestElements(op.elementId).getLast(), sortedIdx, op.value));
 				} else {
 					element.value = op.value;
-					sortedOps.add(new CollectionOp<>(CollectionChangeType.set, getDestElement(op.elementId), sortedIdx, op.value));
+					sortedOps
+						.add(new CollectionOp<>(CollectionChangeType.set, getDestElements(op.elementId).getLast(), sortedIdx, op.value));
 				}
 				break;
 			}

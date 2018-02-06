@@ -3,27 +3,34 @@ package org.observe.supertest;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.ElementId;
 
-public final class LinkElement {
-	private final BetterList<?> theList;
-	private final ElementId theElement;
+public final class LinkElement implements Comparable<LinkElement> {
+	private final BetterList<?> theLinkElementList;
+	private final ElementId theLinkElement;
+	private final ElementId theCollectionElement;
 
-	public LinkElement(BetterList<?> list, ElementId element) {
-		theList = list;
-		theElement = element;
+	public LinkElement(BetterList<?> list, ElementId element, ElementId collectionElement) {
+		theLinkElementList = list;
+		theLinkElement = element;
+		theCollectionElement = collectionElement;
+	}
+
+	@Override
+	public int compareTo(LinkElement o) {
+		return theLinkElement.compareTo(o.theLinkElement);
 	}
 
 	public boolean isPresent() {
-		return theElement.isPresent();
+		return theCollectionElement.isPresent();
 	}
 
 	public int getIndex() {
-		if (!theElement.isPresent())
+		if (!theLinkElement.isPresent())
 			throw new IllegalStateException("Cannot be called once removed");
-		return theList.getElementsBefore(theElement);
+		return theLinkElementList.getElementsBefore(theLinkElement);
 	}
 
 	@Override
 	public String toString() {
-		return theElement.isPresent() ? ("[" + getIndex() + "]") : "removed";
+		return theLinkElement.isPresent() ? ("[" + getIndex() + "]") : "removed";
 	}
 }

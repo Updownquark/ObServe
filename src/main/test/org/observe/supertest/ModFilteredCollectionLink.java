@@ -80,7 +80,7 @@ public class ModFilteredCollectionLink<E> extends AbstractObservableCollectionLi
 	@Override
 	public void fromBelow(List<CollectionOp<E>> ops, TestHelper helper) {
 		modified(//
-			ops.stream().map(op -> new CollectionOp<>(op.type, getDestElement(op.elementId), op.index, op.value))
+			ops.stream().map(op -> new CollectionOp<>(op.type, getDestElements(op.elementId).getLast(), op.index, op.value))
 			.collect(Collectors.toList()),
 			helper, true);
 	}

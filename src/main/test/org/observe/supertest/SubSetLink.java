@@ -122,7 +122,7 @@ public class SubSetLink<E> extends AbstractObservableCollectionLink<E, E> {
 					int addedAt = theIncludedValues.keySet()
 						.getElementsBefore(theIncludedValues.putEntry(srcId, op.value, false).getElementId());
 					Assert.assertEquals(addedAt, op.index - theStartIndex);
-					subSetOps.add(new CollectionOp<>(op.type, getDestElement(op.elementId), addedAt, op.value));
+					subSetOps.add(new CollectionOp<>(op.type, getDestElements(op.elementId).getLast(), addedAt, op.value));
 				} else if (valid < 0)
 					theStartIndex++;
 				break;
@@ -134,7 +134,7 @@ public class SubSetLink<E> extends AbstractObservableCollectionLink<E, E> {
 					int includedIndex = theIncludedValues.keySet().getElementsBefore(includedEntry.getElementId());
 					Assert.assertEquals(op.index - theStartIndex, includedIndex);
 					Assert.assertEquals(op.value, includedEntry.getValue());
-					subSetOps.add(new CollectionOp<>(op.type, getDestElement(op.elementId), includedIndex, op.value));
+					subSetOps.add(new CollectionOp<>(op.type, getDestElements(op.elementId).getFirst(), includedIndex, op.value));
 					theIncludedValues.mutableEntry(includedEntry.getElementId()).remove();
 				} else if (valid < 0)
 					theStartIndex--;
@@ -150,16 +150,17 @@ public class SubSetLink<E> extends AbstractObservableCollectionLink<E, E> {
 					if (oldValid == 0) {
 						theIncludedValues.mutableEntry(includedEntry.getElementId()).set(op.value);
 						int index = theIncludedValues.keySet().getElementsBefore(includedEntry.getElementId());
-						subSetOps.add(new CollectionOp<>(op.type, getDestElement(op.elementId), index, op.value));
+						subSetOps.add(new CollectionOp<>(op.type, getDestElements(op.elementId).getLast(), index, op.value));
 					} else {
 						includedEntry = theIncludedValues.putEntry(srcId, op.value, false);
 						int index = theIncludedValues.keySet().getElementsBefore(includedEntry.getElementId());
-						subSetOps.add(new CollectionOp<>(CollectionChangeType.add, getDestElement(op.elementId), index, op.value));
+						subSetOps
+						.add(new CollectionOp<>(CollectionChangeType.add, getDestElements(op.elementId).getLast(), index, op.value));
 					}
 				} else if (oldValid == 0) {
 					int index = theIncludedValues.keySet().getElementsBefore(includedEntry.getElementId());
-					subSetOps.add(
-						new CollectionOp<>(CollectionChangeType.remove, getDestElement(op.elementId), index, includedEntry.getValue()));
+					subSetOps.add(new CollectionOp<>(CollectionChangeType.remove, getDestElements(op.elementId).getLast(), index,
+						includedEntry.getValue()));
 					theIncludedValues.mutableEntry(includedEntry.getElementId()).remove();
 				}
 				if (oldValid < 0 && valid >= 0)

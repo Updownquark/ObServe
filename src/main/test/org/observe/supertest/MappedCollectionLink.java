@@ -127,7 +127,7 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 	@Override
 	public void fromBelow(List<CollectionOp<E>> ops, TestHelper helper) {
 		List<CollectionOp<T>> mappedOps = ops.stream()
-			.map(op -> new CollectionOp<>(op.type, getDestElement(op.elementId), op.index, theMap.map(op.value)))
+			.map(op -> new CollectionOp<>(op.type, getDestElements(op.elementId).getLast(), op.index, theMap.map(op.value)))
 			.collect(Collectors.toList());
 		modified(mappedOps, helper, true);
 	}
