@@ -21,7 +21,6 @@ import org.qommons.collect.BetterMap;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.BetterSortedMap;
 import org.qommons.collect.BetterSortedSet;
-import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ElementSpliterator;
@@ -396,36 +395,45 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	}
 
 	private ElementId getSourceInsertHandle(LinkElement sourceEl) {
-		int srcIdx = ArrayUtils.binarySearch(0, theSourceElements.size() - 1, //
+		int[] minMax = new int[] { 0, theSourceElements.size() - 1 };
+		int srcIdx = ArrayUtils.binarySearch(minMax, //
 			index -> {
-				GroupedValues values = theSourceElements.get(index);
-				int diff = sourceEl.getIndex() - values.sourceEls.firstEntry().getValue().getIndex();
-				return diff;
+				ElementId srcId = theSourceElements.getElement(index).getElementId();
+				LinkElement srcEl = theSourceElements.getElement(srcId).get().sourceEls.get(srcId);
+				for (int i = index - 1; !srcEl.isPresent() && i > minMax[0]; i--) {
+					srcId = theSourceElements.getElement(i).getElementId();
+					srcEl = theSourceElements.getElement(srcId).get().sourceEls.get(srcId);
+				}
+				for (int i = index + 1; !srcEl.isPresent() && i < minMax[1]; i++) {
+					srcId = theSourceElements.getElement(i).getElementId();
+					srcEl = theSourceElements.getElement(srcId).get().sourceEls.get(srcId);
+				}
+				if (!srcEl.isPresent())
+					return 0; // No more present elements, so doesn't matter where the new one goes
+				return sourceEl.getIndex() - srcEl.getIndex();
 			});
-		// Should not have been found exactly
+		if (srcIdx >= 0) {
+			// No more present elements
+			return null;
+		}
 		srcIdx = -srcIdx - 1;
 		return srcIdx < theSourceElements.size() ? theSourceElements.getElement(srcIdx).getElementId() : null;
 	}
 
 	private ElementId getDistinctInsertHandle(LinkElement distinctEl) {
-		if (theValues instanceof BetterSortedMap) {
-			CollectionElement<?> result = ((BetterSortedMap<E, GroupedValues>) theValues).entrySet().search(entry -> {
-				return distinctEl.getIndex() - entry.getValue().distinctEl.getIndex();
-			}, SortedSearchFilter.Greater);
-			return result == null ? null : result.getElementId();
-		} else {
-			MutableElementSpliterator<Map.Entry<E, GroupedValues>> spliter = theValues.entrySet().spliterator(false);
-			ValueHolder<ElementId> result = new ValueHolder<>();
-			boolean[] passed = new boolean[1];
-			while (!passed[0] && spliter.forElement(el -> {
-				int diff = distinctEl.getIndex() - el.get().getValue().distinctEl.getIndex();
-				if (diff < 0)
-					result.accept(el.getElementId());
-				else
-					passed[0] = true;
-			}, false)) {}
-			return result.get();
-		}
+		MutableElementSpliterator<Map.Entry<E, GroupedValues>> spliter = theValues.entrySet().spliterator(false);
+		ValueHolder<ElementId> result = new ValueHolder<>();
+		boolean[] passed = new boolean[1];
+		while (!passed[0] && spliter.forElement(el -> {
+			if (!el.get().getValue().distinctEl.isPresent())
+				return;
+			int diff = distinctEl.getIndex() - el.get().getValue().distinctEl.getIndex();
+			if (diff < 0)
+				result.accept(el.getElementId());
+			else
+				passed[0] = true;
+		}, false)) {}
+		return result.get();
 	}
 
 	private int add(LinkElement srcLinkEl, int srcIndex, E value, List<CollectionOp<E>> distinctOps) {

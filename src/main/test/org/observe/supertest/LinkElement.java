@@ -12,6 +12,10 @@ public final class LinkElement {
 		theElement = element;
 	}
 
+	public boolean isPresent() {
+		return theElement.isPresent();
+	}
+
 	public int getIndex() {
 		if (!theElement.isPresent())
 			throw new IllegalStateException("Cannot be called once removed");
