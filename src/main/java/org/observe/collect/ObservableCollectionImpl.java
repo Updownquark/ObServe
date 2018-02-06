@@ -1570,12 +1570,11 @@ public final class ObservableCollectionImpl {
 					try (Transaction sourceLock = theSource.lock(false, evt)) {
 						currentMap[0] = evt.getNewValue();
 						MutableElementSpliterator<? extends E> sourceSpliter = theSource.spliterator(!isReversed);
-						int[] index = new int[] { isReversed ? size() - 1 : 0 };
+						int[] index = new int[1];
 						sourceSpliter.forEachElement(sourceEl -> {
 							E sourceVal = sourceEl.get();
-							observer.accept(new ObservableCollectionEvent<>(mapId(sourceEl.getElementId()), getType(), index[0],
+							observer.accept(new ObservableCollectionEvent<>(mapId(sourceEl.getElementId()), getType(), index[0]++,
 								CollectionChangeType.set, evt.getOldValue().apply(sourceVal), currentMap[0].apply(sourceVal), evt));
-							index[0] += isReversed ? -1 : 1;
 						}, !isReversed);
 					}
 				});
