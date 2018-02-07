@@ -6,11 +6,13 @@ import org.qommons.collect.ElementId;
 public final class LinkElement implements Comparable<LinkElement> {
 	private final BetterList<?> theLinkElementList;
 	private final ElementId theLinkElement;
+	private final BetterList<?> theCollection;
 	private final ElementId theCollectionElement;
 
-	public LinkElement(BetterList<?> list, ElementId element, ElementId collectionElement) {
+	public LinkElement(BetterList<?> list, ElementId element, BetterList<?> collection, ElementId collectionElement) {
 		theLinkElementList = list;
 		theLinkElement = element;
+		theCollection = collection;
 		theCollectionElement = collectionElement;
 	}
 
@@ -29,8 +31,20 @@ public final class LinkElement implements Comparable<LinkElement> {
 		return theLinkElementList.getElementsBefore(theLinkElement);
 	}
 
+	public int getObservableIndex() {
+		if (!theCollectionElement.isPresent())
+			return -1;
+		return theCollection.getElementsBefore(theCollectionElement);
+	}
+
 	@Override
 	public String toString() {
-		return theLinkElement.isPresent() ? ("[" + getIndex() + "]") : "removed";
+		StringBuilder str = new StringBuilder();
+		str.append('[');
+		str.append(theLinkElement.isPresent() ? "" + getIndex() : "*");
+		str.append('/');
+		str.append(theCollectionElement.isPresent() ? "" + getObservableIndex() : "*");
+		str.append(']');
+		return str.toString();
 	}
 }

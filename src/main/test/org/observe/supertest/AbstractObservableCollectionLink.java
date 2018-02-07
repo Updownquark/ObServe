@@ -36,6 +36,7 @@ import org.observe.collect.ObservableElementTester;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.supertest.MappedCollectionLink.TypeTransformation;
 import org.observe.supertest.ObservableChainTester.TestValueType;
+import org.qommons.BreakpointHere;
 import org.qommons.Ternian;
 import org.qommons.TestHelper;
 import org.qommons.Transaction;
@@ -127,7 +128,8 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		getCollection().onChange(this::change);
 		for (int i = 0; i < getCollection().size(); i++) {
 			ElementId el = theElements.addElement(null, false).getElementId();
-			theElements.mutableElement(el).set(new LinkElement(theElements, el, getCollection().getElement(i).getElementId()));
+			theElements.mutableElement(el)
+			.set(new LinkElement(theElements, el, getCollection(), getCollection().getElement(i).getElementId()));
 		}
 
 		// Extras
@@ -237,7 +239,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			else
 				addIndex = theLinkElementsById.getEntryById(prev.getElementId()).getValue().getIndex() + 1;
 			ElementId addedId = theElements.addElement(addIndex, null).getElementId();
-			LinkElement element = new LinkElement(theElements, addedId, evt.getElementId());
+			LinkElement element = new LinkElement(theElements, addedId, getCollection(), evt.getElementId());
 			theLinkElementsById.mutableEntry(lebiHandle.getElementId()).set(element);
 			theElements.mutableElement(addedId).set(element);
 			theAddedElements.add(element);
@@ -953,16 +955,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 
 	@Override
 	public void check(boolean transComplete) {
-		if (transComplete)
-			theTester.check();
-		else
-			theTester.checkNonBatchSynced();
-
-		if (transComplete && theMonitoredElement != null) {
-			CollectionElement<T> correct = theCorrectMonitoredElement.get();
-			theMonitoredElementTester.check(correct == null ? null : correct.getElementId(), correct == null ? null : correct.get());
-		}
-
+		// Clean up synthetic element mappings
 		theAddedElements.clear();
 
 		for (ElementId el : theElementsToRemove) {
@@ -990,6 +983,18 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			srcMaps.remove();
 		}
 		theElementsToRemove.clear();
+		if (getLinkIndex() == 7)
+			BreakpointHere.breakpoint();
+
+		if (transComplete)
+			theTester.check();
+		else
+			theTester.checkNonBatchSynced();
+
+		if (transComplete && theMonitoredElement != null) {
+			CollectionElement<T> correct = theCorrectMonitoredElement.get();
+			theMonitoredElementTester.check(correct == null ? null : correct.getElementId(), correct == null ? null : correct.get());
+		}
 	}
 
 	@Override

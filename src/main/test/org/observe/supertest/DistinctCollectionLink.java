@@ -11,6 +11,7 @@ import org.observe.collect.CollectionChangeType;
 import org.observe.collect.Equivalence;
 import org.observe.collect.FlowOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
+import org.observe.collect.ObservableCollectionEvent;
 import org.observe.supertest.ObservableChainTester.TestValueType;
 import org.qommons.Ternian;
 import org.qommons.TestHelper;
@@ -64,9 +65,10 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	/** A map of value to equivalent values, grouped by source ID */
 	private final BetterMap<E, GroupedValues> theValues;
 
-	/** A parallel representation of the values in the source (parent) collection */
+	/** A parallel representation of the elements in the source (parent) collection */
 	private final BetterSortedMap<LinkElement, GroupedValues> theSourceElements;
 	private final BetterSortedSet<ElementId> theSortedRepresentatives;
+	private final Map<E, LinkElement> theDistinctElementsByValue;
 
 	private final boolean isRoot;
 	private final DebugData theDebug;
@@ -80,6 +82,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		theValues = flow.equivalence().createMap();
 		theSourceElements = new BetterTreeMap<>(false, LinkElement::compareTo);
 		theSortedRepresentatives = new BetterTreeSet<>(false, ElementId::compareTo);
+		theDistinctElementsByValue = isOrderImportant() ? null : flow.equivalence().createMap();
 
 		theDebug = Debug.d().add("distinctLink");
 	}
@@ -92,7 +95,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		/* The order of sets with hash-based distinctness is very complicated and depends on the order in which elements are encountered
 		 * This order may be vastly different from the order of the source collection.
 		 * Element encounter order is very difficult to keep track of in the tester and is not important. */
-		if (options.isPreservingSourceOrder())
+		if (options.isPreservingSourceOrder() && options.isUseFirst())
 			return true;
 		return equivalence instanceof org.observe.collect.Equivalence.ComparatorEquivalence;
 	}
@@ -129,6 +132,25 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		theValues.values().stream().map(v -> theOptions.isPreservingSourceOrder() ? v.representative : v.valueId)
 		.forEach(theSortedRepresentatives::add);
 		getExpected().addAll(theValues.keySet());
+	}
+
+	@Override
+	protected void change(ObservableCollectionEvent<? extends E> evt) {
+		super.change(evt);
+		if (theDistinctElementsByValue != null) {
+			switch (evt.getType()) {
+			case add:
+				theDistinctElementsByValue.put(evt.getNewValue(), getLastAddedOrModifiedElement());
+				break;
+			case remove:
+				theDistinctElementsByValue.remove(evt.getOldValue());
+				break;
+			case set:
+				theDistinctElementsByValue.remove(evt.getOldValue());
+				theDistinctElementsByValue.put(evt.getNewValue(), getLastAddedOrModifiedElement());
+				break;
+			}
+		}
 	}
 
 	@Override
@@ -248,7 +270,30 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 				GroupedValues oldValues = srcEl.get();
 				GroupedValues newValues = theValues.get(op.value);
 				theDebug.act("update").param("@", oldValues).param("newValue", op.value).exec();
-				if (newValues != null && oldValues == newValues) {
+				if (theDistinctElementsByValue != null) {
+					// Using the empirical elements to determine order
+					LinkElement distinctEl = theDistinctElementsByValue.get(op.value);
+					if (newValues == null || !newValues.distinctEl.equals(distinctEl)) {
+						remove(op.elementId, distinctOps);
+						add(op.elementId, op.value, distinctOps);
+					} else if (oldValues == newValues) {
+						distinctOps
+						.add(new CollectionOp<>(CollectionChangeType.set, distinctEl, getElementIndex(oldValues.valueId), op.value));
+					} else if (oldValues.sourceEls.size() == 1
+						&& theValues.keySet().mutableElement(oldValues.valueId).isAcceptable(op.value) == null) {
+						theDebug.act("update:move").exec();
+						theSourceElements.mutableEntry(srcEl.getElementId()).set(oldValues);
+						oldValues.value = op.value;
+						theValues.keySet().mutableElement(oldValues.valueId).set(op.value);
+						ElementId repId = theOptions.isPreservingSourceOrder() ? srcEl.getElementId() : oldValues.valueId;
+						// The updated value is the representative for its category. Fire the update event.
+						int repIndex = theSortedRepresentatives.indexOf(repId);
+						distinctOps.add(new CollectionOp<>(CollectionChangeType.set, oldValues.distinctEl, repIndex, op.value));
+					} else {
+						remove(op.elementId, distinctOps);
+						add(op.elementId, op.value, distinctOps);
+					}
+				} else if (newValues != null && oldValues == newValues) {
 					// Category is unchanged
 					if (oldValues.representative.equals(srcEl.getElementId())) {
 						ElementId repId = theOptions.isPreservingSourceOrder() ? srcEl.getElementId() : newValues.valueId;
@@ -409,6 +454,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	private int add(LinkElement srcLinkEl, E value, List<CollectionOp<E>> distinctOps) {
 		ElementId srcEl = theSourceElements.putEntry(srcLinkEl, null, false).getElementId();
 		GroupedValues values = theValues.get(value);
+		// TODO If the values' distinctEl is no longer present, grab the one that is from theDistinctElementsByValue
 		if (values != null && !values.sourceEls.isEmpty()) {
 			ElementId valueSourceId = values.sourceEls.putEntry(srcEl, srcLinkEl, false).getElementId();
 			if (theOptions.isUseFirst() && values.sourceEls.keySet().getElementsBefore(valueSourceId) == 0) {
