@@ -56,25 +56,14 @@ import com.google.common.reflect.TypeToken;
  * {@link CollectionDataFlow#combine(TypeToken, Function) combination} or other operations on the elements of the source. Collections so
  * derived from a source collection are themselves observable and reflect changes to the source. The derived collection may also be mutable,
  * with modifications to the derived collection affecting the source.</li>
- * <li><b>Modification Control</b> The {@link #flow() flow} API also supports constraints on how or whether a derived collection may be
- * {@link CollectionDataFlow#filterMod(Consumer) modified}.</li>
- * <li><b>Enhanced {@link Spliterator}s</b> ObservableCollections must implement {@link #spliterator(boolean)}, which returns a
- * {@link org.qommons.collect.MutableElementSpliterator}, which is an enhanced {@link Spliterator}. This has potential for the improved
- * performance associated with using {@link Spliterator} instead of {@link Iterator} as well as the reversibility and ability to
- * {@link MutableCollectionElement#add(Object, boolean) add}, {@link MutableCollectionElement#remove() remove}, or
- * {@link MutableCollectionElement#set(Object) replace} elements during iteration.</li>
- * <li><b>Transactionality</b> ObservableCollections support the {@link org.qommons.Transactable} interface, allowing callers to reserve a
- * collection for write or to ensure that the collection is not written to during an operation (for implementations that support this. See
- * {@link org.qommons.Transactable#isLockSupported() isLockSupported()}).</li>
  * <li><b>Run-time type safety</b> ObservableCollections have a {@link #getType() type} associated with them, allowing them to enforce
  * type-safety at run time. How strictly this type-safety is enforced is implementation-dependent.</li>
  * <li><b>Custom {@link #equivalence() equivalence}</b> Instead of being a slave to each element's own {@link Object#equals(Object) equals}
  * scheme, collections can be defined with custom schemes which will affect any operations involving element comparison, such as
  * {@link #contains(Object)} and {@link #remove()}.</li>
- * <li><b>Enhanced element access</b> The {@link #forElement(Object, Consumer, boolean) forObservableElement} and
- * {@link #forMutableElement(Object, Consumer, boolean) forMutableElement} methods, along with several others, allow access to elements in
- * the array without the need and potentially without the performance cost of iterating.</li>
  * </ul>
+ *
+ * See <a href="https://github.com/Updownquark/ObServe/wiki/ObservableCollection-API">the wiki</a> for more detail.
  *
  * @param <E> The type of element in the collection
  */
@@ -106,9 +95,6 @@ public interface ObservableCollection<E> extends BetterList<E> {
 			return false;
 		return true;
 	}
-
-	@Override
-	abstract boolean isLockSupported();
 
 	/**
 	 * Registers a listener for changes to this collection
@@ -880,7 +866,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 *         {@link ObservableCollection#equivalence() equivalence} scheme.
 		 * @see #withEquivalence(Equivalence)
 		 */
-		default UniqueDataFlow<E, T, T> distinct() {
+		default DistinctDataFlow<E, T, T> distinct() {
 			return distinct(options -> {});
 		}
 
@@ -890,7 +876,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 *         {@link ObservableCollection#equivalence() equivalence} scheme.
 		 * @see #withEquivalence(Equivalence)
 		 */
-		UniqueDataFlow<E, T, T> distinct(Consumer<UniqueOptions> options);
+		DistinctDataFlow<E, T, T> distinct(Consumer<UniqueOptions> options);
 
 		/**
 		 * @param compare The comparator to use to sort the source elements
@@ -900,7 +886,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * @return A {@link #supportsPassive() active} flow capable of producing a sorted set ordered by the given comparator that excludes
 		 *         duplicate elements according to the comparator's {@link Equivalence#of(Class, Comparator, boolean) equivalence}.
 		 */
-		UniqueSortedDataFlow<E, T, T> distinctSorted(Comparator<? super T> compare, boolean alwaysUseFirst);
+		DistinctSortedDataFlow<E, T, T> distinctSorted(Comparator<? super T> compare, boolean alwaysUseFirst);
 
 		/** @return A flow with the same data and properties as this flow, but whose collected results cannot be modified externally */
 		default CollectionDataFlow<E, T, T> unmodifiable() {
@@ -1025,21 +1011,21 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @param <I> Intermediate type
 	 * @param <T> The type of collection this flow may build
 	 */
-	interface UniqueDataFlow<E, I, T> extends CollectionDataFlow<E, I, T> {
+	interface DistinctDataFlow<E, I, T> extends CollectionDataFlow<E, I, T> {
 		@Override
-		UniqueDataFlow<E, T, T> reverse();
+		DistinctDataFlow<E, T, T> reverse();
 
 		@Override
-		UniqueDataFlow<E, T, T> filter(Function<? super T, String> filter);
+		DistinctDataFlow<E, T, T> filter(Function<? super T, String> filter);
 
 		@Override
-		<X> UniqueDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include);
+		<X> DistinctDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include);
 
 		@Override
-		UniqueDataFlow<E, T, T> refresh(Observable<?> refresh);
+		DistinctDataFlow<E, T, T> refresh(Observable<?> refresh);
 
 		@Override
-		UniqueDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh);
+		DistinctDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh);
 
 		/**
 		 * @param <X> The type for the mapped flow
@@ -1049,7 +1035,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * @return The mapped flow
 		 * @see #mapEquivalent(TypeToken, Function, Function, Consumer)
 		 */
-		default <X> UniqueDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		default <X> DistinctDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
 			Function<? super X, ? extends T> reverse) {
 			return mapEquivalent(target, map, reverse, options -> {});
 		}
@@ -1074,16 +1060,16 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * @param options Allows customization of the behavior of the mapped set
 		 * @return The mapped flow
 		 */
-		<X> UniqueDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		<X> DistinctDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
 			Function<? super X, ? extends T> reverse, Consumer<MapOptions<T, X>> options);
 
 		@Override
-		default UniqueDataFlow<E, T, T> unmodifiable() {
+		default DistinctDataFlow<E, T, T> unmodifiable() {
 			return filterMod(options -> options.unmodifiable(StdMsg.UNSUPPORTED_OPERATION, true));
 		}
 
 		@Override
-		UniqueDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options);
+		DistinctDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options);
 
 		@Override
 		default ObservableSet<T> collect() {
@@ -1104,26 +1090,26 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @param <I> Intermediate type
 	 * @param <T> The type of collection this flow may build
 	 */
-	interface UniqueSortedDataFlow<E, I, T> extends UniqueDataFlow<E, I, T> {
+	interface DistinctSortedDataFlow<E, I, T> extends DistinctDataFlow<E, I, T> {
 		Comparator<? super T> comparator();
 
 		@Override
-		UniqueSortedDataFlow<E, T, T> reverse();
+		DistinctSortedDataFlow<E, T, T> reverse();
 
 		@Override
-		UniqueSortedDataFlow<E, T, T> filter(Function<? super T, String> filter);
+		DistinctSortedDataFlow<E, T, T> filter(Function<? super T, String> filter);
 
 		@Override
-		<X> UniqueSortedDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include);
+		<X> DistinctSortedDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include);
 
 		@Override
-		UniqueSortedDataFlow<E, T, T> refresh(Observable<?> refresh);
+		DistinctSortedDataFlow<E, T, T> refresh(Observable<?> refresh);
 
 		@Override
-		UniqueSortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh);
+		DistinctSortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh);
 
 		@Override
-		default <X> UniqueSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		default <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
 			Function<? super X, ? extends T> reverse) {
 			return mapEquivalent(target, map, reverse, options -> {});
 		}
@@ -1135,7 +1121,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * @param compare The comparator to source the mapped values in the same order as the corresponding source values
 		 * @return The mapped flow
 		 */
-		default <X> UniqueSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		default <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
 			Comparator<? super X> compare) {
 			return mapEquivalent(target, map, compare, options -> {});
 		}
@@ -1158,7 +1144,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * @return The mapped flow
 		 */
 		@Override
-		<X> UniqueSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		<X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
 			Function<? super X, ? extends T> reverse, Consumer<MapOptions<T, X>> options);
 
 		/**
@@ -1169,20 +1155,20 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * @param options Allows customization for the behavior of the mapped flow
 		 * @return The mapped flow
 		 */
-		<X> UniqueSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		<X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
 			Comparator<? super X> compare, Consumer<MapOptions<T, X>> options);
 
 		@Override
-		default UniqueSortedDataFlow<E, T, T> unmodifiable() {
+		default DistinctSortedDataFlow<E, T, T> unmodifiable() {
 			return filterMod(options -> options.unmodifiable(StdMsg.UNSUPPORTED_OPERATION, true));
 		}
 
 		@Override
-		UniqueSortedDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options);
+		DistinctSortedDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options);
 
 		@Override
 		default ObservableSortedSet<T> collect() {
-			return (ObservableSortedSet<T>) UniqueDataFlow.super.collect();
+			return (ObservableSortedSet<T>) DistinctDataFlow.super.collect();
 		}
 
 		@Override

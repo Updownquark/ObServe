@@ -25,8 +25,8 @@ import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
-import org.observe.collect.ObservableCollection.UniqueDataFlow;
-import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
+import org.observe.collect.ObservableCollection.DistinctDataFlow;
+import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveMappedCollectionManager;
@@ -74,7 +74,7 @@ public class ObservableMultiMapImpl {
 		}
 
 		@Override
-		public <K2> MultiMapFlow<K2, V> withKeys(Function<UniqueDataFlow<?, ?, K>, UniqueDataFlow<?, ?, K2>> keyMap) {
+		public <K2> MultiMapFlow<K2, V> withKeys(Function<DistinctDataFlow<?, ?, K>, DistinctDataFlow<?, ?, K2>> keyMap) {
 			TypeToken<Map.Entry<K, V>> entryType = theEntryFlow.getTargetType();
 			TypeToken<K> oldKeyType = (TypeToken<K>) entryType.resolveType(Map.Entry.class.getTypeParameters()[0]);
 			KeyFlow<?, ?, K, V> keyFlow;
@@ -113,7 +113,7 @@ public class ObservableMultiMapImpl {
 			ValueFlow<?, K, ?, V2> derivedValueFlow;
 			derivedValueFlow = (ValueFlow<?, K, ?, V2>) valueMap.apply(valueFlow);
 			return derived(derivedValueFlow.getEntries(), theKeyEquivalence, derivedValueFlow.equivalence(),
-				derivedValueFlow instanceof UniqueDataFlow);
+				derivedValueFlow instanceof DistinctDataFlow);
 		}
 
 		@Override
@@ -163,8 +163,8 @@ public class ObservableMultiMapImpl {
 
 		@Override
 		public <K2> SortedMultiMapFlow<K2, V> withSortedKeys(
-			Function<UniqueSortedDataFlow<?, ?, K>, UniqueSortedDataFlow<?, ?, K2>> keyMap) {
-			return (SortedMultiMapFlow<K2, V>) super.withKeys(keys -> keyMap.apply((UniqueSortedDataFlow<?, ?, K>) keys));
+			Function<DistinctSortedDataFlow<?, ?, K>, DistinctSortedDataFlow<?, ?, K2>> keyMap) {
+			return (SortedMultiMapFlow<K2, V>) super.withKeys(keys -> keyMap.apply((DistinctSortedDataFlow<?, ?, K>) keys));
 		}
 
 		@Override
@@ -193,7 +193,7 @@ public class ObservableMultiMapImpl {
 		}
 	}
 
-	static class KeyFlow<E, I, K, V> implements UniqueDataFlow<E, I, K> {
+	static class KeyFlow<E, I, K, V> implements DistinctDataFlow<E, I, K> {
 		private final CollectionDataFlow<?, ?, Map.Entry<K, V>> theEntryFlow;
 		private final TypeToken<K> theKeyType;
 		private final Equivalence<? super K> theKeyEquivalence;
@@ -219,22 +219,22 @@ public class ObservableMultiMapImpl {
 		}
 
 		@Override
-		public UniqueDataFlow<E, K, K> reverse() {
+		public DistinctDataFlow<E, K, K> reverse() {
 			return new KeyFlow<>(theEntryFlow.reverse(), theKeyType, theKeyEquivalence);
 		}
 
 		@Override
-		public UniqueDataFlow<E, K, K> filter(Function<? super K, String> filter) {
+		public DistinctDataFlow<E, K, K> filter(Function<? super K, String> filter) {
 			return new KeyFlow<>(theEntryFlow.filter(entry -> filter.apply(entry.getKey())), theKeyType, theKeyEquivalence);
 		}
 
 		@Override
-		public UniqueDataFlow<E, K, K> filterStatic(Function<? super K, String> filter) {
+		public DistinctDataFlow<E, K, K> filterStatic(Function<? super K, String> filter) {
 			return new KeyFlow<>(theEntryFlow.filterStatic(entry -> filter.apply(entry.getKey())), theKeyType, theKeyEquivalence);
 		}
 
 		@Override
-		public <X> UniqueDataFlow<E, K, K> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
+		public <X> DistinctDataFlow<E, K, K> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
 			CollectionDataFlow<?, ?, Map.Entry<K, V>> otherEntryFlow = other.filterStatic(//
 				v -> v == null || theKeyType.getRawType().isInstance(v) ? null : StdMsg.ILLEGAL_ELEMENT//
 				).map(//
@@ -245,17 +245,17 @@ public class ObservableMultiMapImpl {
 		}
 
 		@Override
-		public UniqueDataFlow<E, K, K> refresh(Observable<?> refresh) {
+		public DistinctDataFlow<E, K, K> refresh(Observable<?> refresh) {
 			return new KeyFlow<>(theEntryFlow.refresh(refresh), theKeyType, theKeyEquivalence);
 		}
 
 		@Override
-		public UniqueDataFlow<E, K, K> refreshEach(Function<? super K, ? extends Observable<?>> refresh) {
+		public DistinctDataFlow<E, K, K> refreshEach(Function<? super K, ? extends Observable<?>> refresh) {
 			return new KeyFlow<>(theEntryFlow.refreshEach(entry -> refresh.apply(entry.getKey())), theKeyType, theKeyEquivalence);
 		}
 
 		@Override
-		public <X> UniqueDataFlow<E, K, X> mapEquivalent(TypeToken<X> target, Function<? super K, ? extends X> map,
+		public <X> DistinctDataFlow<E, K, X> mapEquivalent(TypeToken<X> target, Function<? super K, ? extends X> map,
 			Function<? super X, ? extends K> reverse, Consumer<MapOptions<K, X>> options) {
 			TypeToken<Map.Entry<X, V>> mappedEntryType = ObservableMap.buildEntryType(target,
 				(TypeToken<V>) theEntryFlow.getTargetType().resolveType(Map.Entry.class.getTypeParameters()[1]));
@@ -280,7 +280,7 @@ public class ObservableMultiMapImpl {
 		}
 
 		@Override
-		public UniqueDataFlow<E, K, K> filterMod(Consumer<ModFilterBuilder<K>> options) {
+		public DistinctDataFlow<E, K, K> filterMod(Consumer<ModFilterBuilder<K>> options) {
 			ModFilterBuilder<K> keyOptions = new ModFilterBuilder<>();
 			options.accept(keyOptions);
 			if (keyOptions.getUnmodifiableMsg() != null)
@@ -329,12 +329,12 @@ public class ObservableMultiMapImpl {
 		}
 
 		@Override
-		public UniqueDataFlow<E, K, K> distinct(Consumer<UniqueOptions> options) {
-			return (UniqueDataFlow<E, K, K>) this;
+		public DistinctDataFlow<E, K, K> distinct(Consumer<UniqueOptions> options) {
+			return (DistinctDataFlow<E, K, K>) this;
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, K, K> distinctSorted(Comparator<? super K> compare, boolean alwaysUseFirst) {
+		public DistinctSortedDataFlow<E, K, K> distinctSorted(Comparator<? super K> compare, boolean alwaysUseFirst) {
 			throw new UnsupportedOperationException("Only equivalent unique operations are permitted");
 		}
 
@@ -376,7 +376,7 @@ public class ObservableMultiMapImpl {
 		}
 	}
 
-	static class SortedKeyFlow<E, I, K, V> extends KeyFlow<E, I, K, V> implements UniqueSortedDataFlow<E, I, K> {
+	static class SortedKeyFlow<E, I, K, V> extends KeyFlow<E, I, K, V> implements DistinctSortedDataFlow<E, I, K> {
 		private final Comparator<? super K> theKeyCompare;
 
 		SortedKeyFlow(CollectionDataFlow<?, ?, Entry<K, V>> entryFlow, TypeToken<K> keyType, ComparatorEquivalence<? super K> keyCompare) {
@@ -390,51 +390,51 @@ public class ObservableMultiMapImpl {
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, K, K> reverse() {
+		public DistinctSortedDataFlow<E, K, K> reverse() {
 			ComparatorEquivalence<? super K> equiv = (ComparatorEquivalence<? super K>) equivalence();
 			return new SortedKeyFlow<>(getEntries().reverse(), getTargetType(), equiv.reverse());
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, K, K> filter(Function<? super K, String> filter) {
+		public DistinctSortedDataFlow<E, K, K> filter(Function<? super K, String> filter) {
 			// TODO Auto-generated method stub
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, K, K> filterStatic(Function<? super K, String> filter) {
+		public DistinctSortedDataFlow<E, K, K> filterStatic(Function<? super K, String> filter) {
 			// TODO Auto-generated method stub
 		}
 
 		@Override
-		public <X> UniqueSortedDataFlow<E, K, K> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
+		public <X> DistinctSortedDataFlow<E, K, K> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
 			// TODO Auto-generated method stub
 		}
 
 		@Override
-		public <X> UniqueSortedDataFlow<E, K, X> mapEquivalent(TypeToken<X> target, Function<? super K, ? extends X> map,
+		public <X> DistinctSortedDataFlow<E, K, X> mapEquivalent(TypeToken<X> target, Function<? super K, ? extends X> map,
 			Function<? super X, ? extends K> reverse, Consumer<MapOptions<K, X>> options) {
 			// TODO Auto-generated method stub
 		}
 
 		@Override
-		public <X> UniqueSortedDataFlow<E, K, X> mapEquivalent(TypeToken<X> target, Function<? super K, ? extends X> map,
+		public <X> DistinctSortedDataFlow<E, K, X> mapEquivalent(TypeToken<X> target, Function<? super K, ? extends X> map,
 			Comparator<? super X> compare, Consumer<MapOptions<K, X>> options) {
 			// TODO Auto-generated method stub
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, K, K> refresh(Observable<?> refresh) {
+		public DistinctSortedDataFlow<E, K, K> refresh(Observable<?> refresh) {
 			return new SortedKeyFlow<>(getEntries().refresh(refresh), getTargetType(), (ComparatorEquivalence<? super K>) equivalence());
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, K, K> refreshEach(Function<? super K, ? extends Observable<?>> refresh) {
+		public DistinctSortedDataFlow<E, K, K> refreshEach(Function<? super K, ? extends Observable<?>> refresh) {
 			return new SortedKeyFlow<>(getEntries().refreshEach(entry -> refresh.apply(entry.getKey())), getTargetType(),
 				(ComparatorEquivalence<? super K>) equivalence());
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, K, K> filterMod(Consumer<ModFilterBuilder<K>> options) {
+		public DistinctSortedDataFlow<E, K, K> filterMod(Consumer<ModFilterBuilder<K>> options) {
 			// TODO Auto-generated method stub
 		}
 
@@ -535,12 +535,12 @@ public class ObservableMultiMapImpl {
 		}
 
 		@Override
-		public UniqueDataFlow<E, V, V> distinct(Consumer<UniqueOptions> options) {
+		public DistinctDataFlow<E, V, V> distinct(Consumer<UniqueOptions> options) {
 			// TODO Auto-generated method stub
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, V, V> distinctSorted(Comparator<? super V> compare, boolean alwaysUseFirst) {
+		public DistinctSortedDataFlow<E, V, V> distinctSorted(Comparator<? super V> compare, boolean alwaysUseFirst) {
 			// TODO Auto-generated method stub
 		}
 
@@ -587,50 +587,50 @@ public class ObservableMultiMapImpl {
 		}
 	}
 
-	static class DistinctValueFlow<E, K, I, V> extends ValueFlow<E, K, I, V> implements UniqueDataFlow<E, I, V> {
+	static class DistinctValueFlow<E, K, I, V> extends ValueFlow<E, K, I, V> implements DistinctDataFlow<E, I, V> {
 		DistinctValueFlow(CollectionDataFlow<?, ?, Entry<K, V>> entryFlow, TypeToken<V> valueType,
 			Equivalence<? super V> valueEquivalence) {
 			super(entryFlow, valueType, valueEquivalence);
 		}
 
 		@Override
-		public UniqueDataFlow<E, V, V> reverse() {
+		public DistinctDataFlow<E, V, V> reverse() {
 			return new DistinctValueFlow<>(getEntries().reverse(), getTargetType(), equivalence());
 		}
 
 		@Override
-		public UniqueDataFlow<E, V, V> filter(Function<? super V, String> filter) {
+		public DistinctDataFlow<E, V, V> filter(Function<? super V, String> filter) {
 			// TODO Auto-generated method stub
 		}
 
 		@Override
-		public UniqueDataFlow<E, V, V> filterStatic(Function<? super V, String> filter) {
+		public DistinctDataFlow<E, V, V> filterStatic(Function<? super V, String> filter) {
 			// TODO Auto-generated method stub
 		}
 
 		@Override
-		public <X> UniqueDataFlow<E, V, V> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
+		public <X> DistinctDataFlow<E, V, V> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
 			// TODO Auto-generated method stub
 		}
 
 		@Override
-		public <X> UniqueDataFlow<E, V, X> mapEquivalent(TypeToken<X> target, Function<? super V, ? extends X> map,
+		public <X> DistinctDataFlow<E, V, X> mapEquivalent(TypeToken<X> target, Function<? super V, ? extends X> map,
 			Function<? super X, ? extends V> reverse, Consumer<MapOptions<V, X>> options) {
 			// TODO Auto-generated method stub
 		}
 
 		@Override
-		public UniqueDataFlow<E, V, V> refresh(Observable<?> refresh) {
+		public DistinctDataFlow<E, V, V> refresh(Observable<?> refresh) {
 			// TODO Auto-generated method stub
 		}
 
 		@Override
-		public UniqueDataFlow<E, V, V> refreshEach(Function<? super V, ? extends Observable<?>> refresh) {
+		public DistinctDataFlow<E, V, V> refreshEach(Function<? super V, ? extends Observable<?>> refresh) {
 			// TODO Auto-generated method stub
 		}
 
 		@Override
-		public UniqueDataFlow<E, V, V> filterMod(Consumer<ModFilterBuilder<V>> options) {
+		public DistinctDataFlow<E, V, V> filterMod(Consumer<ModFilterBuilder<V>> options) {
 			// TODO Auto-generated method stub
 		}
 
@@ -645,7 +645,7 @@ public class ObservableMultiMapImpl {
 		}
 	}
 
-	static class DistinctSortedValueFlow<E, K, I, V> extends DistinctValueFlow<E, K, I, V> implements UniqueSortedDataFlow<E, I, V> {
+	static class DistinctSortedValueFlow<E, K, I, V> extends DistinctValueFlow<E, K, I, V> implements DistinctSortedDataFlow<E, I, V> {
 		private final Comparator<? super V> theValueCompare;
 
 		DistinctSortedValueFlow(CollectionDataFlow<?, ?, Entry<K, V>> entryFlow, TypeToken<V> valueType,
@@ -660,50 +660,50 @@ public class ObservableMultiMapImpl {
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, V, V> reverse() {
+		public DistinctSortedDataFlow<E, V, V> reverse() {
 			return new DistinctSortedValueFlow<>(getEntries().reverse(), getTargetType(),
 				((ComparatorEquivalence<? super V>) equivalence()).reverse());
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, V, V> filter(Function<? super V, String> filter) {
+		public DistinctSortedDataFlow<E, V, V> filter(Function<? super V, String> filter) {
 			// TODO Auto-generated method stub
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, V, V> filterStatic(Function<? super V, String> filter) {
+		public DistinctSortedDataFlow<E, V, V> filterStatic(Function<? super V, String> filter) {
 			// TODO Auto-generated method stub
 		}
 
 		@Override
-		public <X> UniqueSortedDataFlow<E, V, V> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
+		public <X> DistinctSortedDataFlow<E, V, V> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
 			// TODO Auto-generated method stub
 		}
 
 		@Override
-		public <X> UniqueSortedDataFlow<E, V, X> mapEquivalent(TypeToken<X> target, Function<? super V, ? extends X> map,
+		public <X> DistinctSortedDataFlow<E, V, X> mapEquivalent(TypeToken<X> target, Function<? super V, ? extends X> map,
 			Function<? super X, ? extends V> reverse, Consumer<MapOptions<V, X>> options) {
 			// TODO Auto-generated method stub
 		}
 
 		@Override
-		public <X> UniqueSortedDataFlow<E, V, X> mapEquivalent(TypeToken<X> target, Function<? super V, ? extends X> map,
+		public <X> DistinctSortedDataFlow<E, V, X> mapEquivalent(TypeToken<X> target, Function<? super V, ? extends X> map,
 			Comparator<? super X> compare, Consumer<MapOptions<V, X>> options) {
 			// TODO Auto-generated method stub
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, V, V> refresh(Observable<?> refresh) {
+		public DistinctSortedDataFlow<E, V, V> refresh(Observable<?> refresh) {
 			// TODO Auto-generated method stub
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, V, V> refreshEach(Function<? super V, ? extends Observable<?>> refresh) {
+		public DistinctSortedDataFlow<E, V, V> refreshEach(Function<? super V, ? extends Observable<?>> refresh) {
 			// TODO Auto-generated method stub
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, V, V> filterMod(Consumer<ModFilterBuilder<V>> options) {
+		public DistinctSortedDataFlow<E, V, V> filterMod(Consumer<ModFilterBuilder<V>> options) {
 			// TODO Auto-generated method stub
 		}
 

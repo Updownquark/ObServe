@@ -32,8 +32,8 @@ import org.observe.collect.FlowOptions.SimpleUniqueOptions;
 import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
-import org.observe.collect.ObservableCollection.UniqueDataFlow;
-import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
+import org.observe.collect.ObservableCollection.DistinctDataFlow;
+import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.PassiveDerivedCollection;
 import org.observe.util.WeakListening;
@@ -624,14 +624,14 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public UniqueDataFlow<E, T, T> distinct(Consumer<UniqueOptions> options) {
+		public DistinctDataFlow<E, T, T> distinct(Consumer<UniqueOptions> options) {
 			SimpleUniqueOptions uo = new SimpleUniqueOptions(equivalence() instanceof Equivalence.ComparatorEquivalence);
 			options.accept(uo);
 			return new ObservableSetImpl.UniqueOp<>(theSource, this, equivalence(), uo.isUseFirst(), uo.isPreservingSourceOrder());
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, T, T> distinctSorted(Comparator<? super T> compare, boolean alwaysUseFirst) {
+		public DistinctSortedDataFlow<E, T, T> distinctSorted(Comparator<? super T> compare, boolean alwaysUseFirst) {
 			return new ObservableSortedSetImpl.UniqueSortedOp<>(theSource, this, compare, alwaysUseFirst);
 		}
 
@@ -640,7 +640,7 @@ public class ObservableCollectionDataFlowImpl {
 			Equivalence<? super K> keyEquivalence) {
 			TypeToken<Map.Entry<K, T>> entryType = ObservableMap.buildEntryType(keyType, getTargetType());
 			return new ObservableMultiMapImpl.DefaultMultiMapFlow<>(map(entryType, v -> new GroupedEntry<>(v, keyMap)), keyEquivalence,
-				equivalence(), this instanceof UniqueDataFlow);
+				equivalence(), this instanceof DistinctDataFlow);
 		}
 
 		@Override
@@ -648,7 +648,7 @@ public class ObservableCollectionDataFlowImpl {
 			Comparator<? super K> keyCompare) {
 			TypeToken<Map.Entry<K, T>> entryType = ObservableMap.buildEntryType(keyType, getTargetType());
 			return new ObservableMultiMapImpl.DefaultSortedMultiMapFlow<>(map(entryType, v -> new GroupedEntry<>(v, keyMap)),
-				Equivalence.of((Class<K>) keyType.getRawType(), keyCompare, true), equivalence(), this instanceof UniqueDataFlow);
+				Equivalence.of((Class<K>) keyType.getRawType(), keyCompare, true), equivalence(), this instanceof DistinctDataFlow);
 		}
 
 		@Override

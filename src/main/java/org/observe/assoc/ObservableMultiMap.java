@@ -20,7 +20,7 @@ import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.SubscriptionCause;
-import org.observe.collect.ObservableCollection.UniqueDataFlow;
+import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableSet;
 import org.qommons.Causable;
 import org.qommons.Transaction;
@@ -730,7 +730,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 	}
 
 	interface MultiMapFlow<K, V> {
-		<K2> MultiMapFlow<K2, V> withKeys(Function<UniqueDataFlow<?, ?, K>, UniqueDataFlow<?, ?, K2>> keyMap);
+		<K2> MultiMapFlow<K2, V> withKeys(Function<DistinctDataFlow<?, ?, K>, DistinctDataFlow<?, ?, K2>> keyMap);
 
 		<V2> MultiMapFlow<K, V2> withValues(Function<CollectionDataFlow<?, ?, V>, CollectionDataFlow<?, ?, V2>> valueMap);
 

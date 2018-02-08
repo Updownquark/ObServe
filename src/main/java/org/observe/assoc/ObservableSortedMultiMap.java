@@ -14,7 +14,7 @@ import org.observe.collect.FlowOptions.GroupingOptions;
 import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
-import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
+import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableSortedSet;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
@@ -160,7 +160,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 	}
 
 	interface SortedMultiMapFlow<K, V> extends MultiMapFlow<K, V> {
-		<K2> SortedMultiMapFlow<K2, V> withSortedKeys(Function<UniqueSortedDataFlow<?, ?, K>, UniqueSortedDataFlow<?, ?, K2>> keyMap);
+		<K2> SortedMultiMapFlow<K2, V> withSortedKeys(Function<DistinctSortedDataFlow<?, ?, K>, DistinctSortedDataFlow<?, ?, K2>> keyMap);
 
 		@Override
 		<V2> SortedMultiMapFlow<K, V2> withValues(Function<CollectionDataFlow<?, ?, V>, CollectionDataFlow<?, ?, V2>> valueMap);

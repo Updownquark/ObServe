@@ -36,7 +36,6 @@ import org.observe.collect.ObservableElementTester;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.supertest.MappedCollectionLink.TypeTransformation;
 import org.observe.supertest.ObservableChainTester.TestValueType;
-import org.qommons.BreakpointHere;
 import org.qommons.Ternian;
 import org.qommons.TestHelper;
 import org.qommons.Transaction;
@@ -983,8 +982,8 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			srcMaps.remove();
 		}
 		theElementsToRemove.clear();
-		if (getLinkIndex() == 7)
-			BreakpointHere.breakpoint();
+		// if (getLinkIndex() == 7)
+		// BreakpointHere.breakpoint();
 
 		if (transComplete)
 			theTester.check();
@@ -1105,7 +1104,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 					subSet = sortedSet.subSet(min, includeMin, max, includeMax);
 				}
 				CollectionDataFlow<?, ?, T> derivedFlow = subSet.flow();
-				setChild(new SubSetLink<>(this, theType, (ObservableCollection.UniqueSortedDataFlow<?, ?, T>) derivedFlow, helper, true,
+				setChild(new SubSetLink<>(this, theType, (ObservableCollection.DistinctSortedDataFlow<?, ?, T>) derivedFlow, helper, true,
 					min, includeMin, max, includeMax));
 				derived.accept((ObservableChainLink<X>) theChild);
 			});
@@ -1143,7 +1142,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		CollectionDataFlow<?, ?, T> flow = theFlow;
 		// distinct() is a no-op for a distinct flow, so unless we change the equivalence, this is pointless
 		// plus, hash distinct() can affect ordering, so this could cause failures
-		if (flow instanceof ObservableCollection.UniqueDataFlow || helper.getBoolean()) {
+		if (flow instanceof ObservableCollection.DistinctDataFlow || helper.getBoolean()) {
 			Comparator<T> compare = SortedCollectionLink.compare(theType, helper);
 			flow = flow.withEquivalence(Equivalence.of((Class<T>) getType().getRawType(), compare, false));
 		}

@@ -16,7 +16,7 @@ import org.observe.collect.FlowOptions.MapOptions;
 import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
-import org.observe.collect.ObservableCollection.UniqueDataFlow;
+import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.BaseCollectionDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionElementListener;
@@ -67,29 +67,29 @@ public class ObservableSetImpl {
 	}
 
 	public static class UniqueDataFlowWrapper<E, T> extends ObservableCollectionDataFlowImpl.AbstractDataFlow<E, T, T>
-	implements UniqueDataFlow<E, T, T> {
+	implements DistinctDataFlow<E, T, T> {
 		protected UniqueDataFlowWrapper(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent,
 			Equivalence<? super T> equivalence) {
 			super(source, parent, parent.getTargetType(), equivalence);
 		}
 
 		@Override
-		public UniqueDataFlow<E, T, T> reverse() {
+		public DistinctDataFlow<E, T, T> reverse() {
 			return new UniqueDataFlowWrapper<>(getSource(), super.reverse(), equivalence());
 		}
 
 		@Override
-		public UniqueDataFlow<E, T, T> filter(Function<? super T, String> filter) {
+		public DistinctDataFlow<E, T, T> filter(Function<? super T, String> filter) {
 			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter), equivalence());
 		}
 
 		@Override
-		public <X> UniqueDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
+		public <X> DistinctDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
 			return new UniqueDataFlowWrapper<>(getSource(), super.whereContained(other, include), equivalence());
 		}
 
 		@Override
-		public <X> UniqueDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		public <X> DistinctDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
 			Function<? super X, ? extends T> reverse, Consumer<MapOptions<T, X>> options) {
 			MapOptions<T, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);
@@ -98,23 +98,23 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public UniqueDataFlow<E, T, T> distinct(Consumer<UniqueOptions> options) {
+		public DistinctDataFlow<E, T, T> distinct(Consumer<UniqueOptions> options) {
 			options.accept(new FlowOptions.SimpleUniqueOptions(equivalence() instanceof Equivalence.ComparatorEquivalence));
 			return this; // No-op
 		}
 
 		@Override
-		public UniqueDataFlow<E, T, T> refresh(Observable<?> refresh) {
+		public DistinctDataFlow<E, T, T> refresh(Observable<?> refresh) {
 			return new UniqueDataFlowWrapper<>(getSource(), super.refresh(refresh), equivalence());
 		}
 
 		@Override
-		public UniqueDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
+		public DistinctDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
 			return new UniqueDataFlowWrapper<>(getSource(), super.refreshEach(refresh), equivalence());
 		}
 
 		@Override
-		public UniqueDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
+		public DistinctDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
 			return new UniqueDataFlowWrapper<>(getSource(), super.filterMod(options), equivalence());
 		}
 
@@ -168,29 +168,29 @@ public class ObservableSetImpl {
 		}
 	}
 
-	public static class UniqueMapOp<E, I, T> extends ObservableCollectionDataFlowImpl.MapOp<E, I, T> implements UniqueDataFlow<E, I, T> {
-		public UniqueMapOp(ObservableCollection<E> source, UniqueDataFlow<E, ?, I> parent, TypeToken<T> target,
+	public static class UniqueMapOp<E, I, T> extends ObservableCollectionDataFlowImpl.MapOp<E, I, T> implements DistinctDataFlow<E, I, T> {
+		public UniqueMapOp(ObservableCollection<E> source, DistinctDataFlow<E, ?, I> parent, TypeToken<T> target,
 			Function<? super I, ? extends T> map, MapDef<I, T> options) {
 			super(source, parent, target, map, options);
 		}
 
 		@Override
-		public UniqueDataFlow<E, T, T> reverse() {
+		public DistinctDataFlow<E, T, T> reverse() {
 			return new UniqueDataFlowWrapper<>(getSource(), super.reverse(), equivalence());
 		}
 
 		@Override
-		public UniqueDataFlow<E, T, T> filter(Function<? super T, String> filter) {
+		public DistinctDataFlow<E, T, T> filter(Function<? super T, String> filter) {
 			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter), equivalence());
 		}
 
 		@Override
-		public <X> UniqueDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
+		public <X> DistinctDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
 			return new UniqueDataFlowWrapper<>(getSource(), super.whereContained(other, include), equivalence());
 		}
 
 		@Override
-		public <X> UniqueDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		public <X> DistinctDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
 			Function<? super X, ? extends T> reverse, Consumer<MapOptions<T, X>> options) {
 			MapOptions<T, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);
@@ -198,17 +198,17 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public UniqueDataFlow<E, T, T> refresh(Observable<?> refresh) {
+		public DistinctDataFlow<E, T, T> refresh(Observable<?> refresh) {
 			return new UniqueDataFlowWrapper<>(getSource(), super.refresh(refresh), equivalence());
 		}
 
 		@Override
-		public UniqueDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
+		public DistinctDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
 			return new UniqueDataFlowWrapper<>(getSource(), super.refreshEach(refresh), equivalence());
 		}
 
 		@Override
-		public UniqueDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
+		public DistinctDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
 			return new UniqueDataFlowWrapper<>(getSource(), super.filterMod(options), equivalence());
 		}
 
@@ -666,7 +666,7 @@ public class ObservableSetImpl {
 		}
 	}
 
-	public static class UniqueBaseFlow<E> extends BaseCollectionDataFlow<E> implements UniqueDataFlow<E, E, E> {
+	public static class UniqueBaseFlow<E> extends BaseCollectionDataFlow<E> implements DistinctDataFlow<E, E, E> {
 		protected UniqueBaseFlow(ObservableSet<E> source) {
 			super(source);
 		}
@@ -677,22 +677,22 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public UniqueDataFlow<E, E, E> reverse() {
+		public DistinctDataFlow<E, E, E> reverse() {
 			return new UniqueDataFlowWrapper<>(getSource(), super.reverse(), equivalence());
 		}
 
 		@Override
-		public UniqueDataFlow<E, E, E> filter(Function<? super E, String> filter) {
+		public DistinctDataFlow<E, E, E> filter(Function<? super E, String> filter) {
 			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter), equivalence());
 		}
 
 		@Override
-		public <X> UniqueDataFlow<E, E, E> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
+		public <X> DistinctDataFlow<E, E, E> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
 			return new UniqueDataFlowWrapper<>(getSource(), super.whereContained(other, include), equivalence());
 		}
 
 		@Override
-		public <X> UniqueDataFlow<E, E, X> mapEquivalent(TypeToken<X> target, Function<? super E, ? extends X> map,
+		public <X> DistinctDataFlow<E, E, X> mapEquivalent(TypeToken<X> target, Function<? super E, ? extends X> map,
 			Function<? super X, ? extends E> reverse, Consumer<MapOptions<E, X>> options) {
 			MapOptions<E, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);
@@ -700,17 +700,17 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public UniqueDataFlow<E, E, E> refresh(Observable<?> refresh) {
+		public DistinctDataFlow<E, E, E> refresh(Observable<?> refresh) {
 			return new UniqueDataFlowWrapper<>(getSource(), super.refresh(refresh), equivalence());
 		}
 
 		@Override
-		public UniqueDataFlow<E, E, E> refreshEach(Function<? super E, ? extends Observable<?>> refresh) {
+		public DistinctDataFlow<E, E, E> refreshEach(Function<? super E, ? extends Observable<?>> refresh) {
 			return new UniqueDataFlowWrapper<>(getSource(), super.refreshEach(refresh), equivalence());
 		}
 
 		@Override
-		public UniqueDataFlow<E, E, E> filterMod(Consumer<ModFilterBuilder<E>> options) {
+		public DistinctDataFlow<E, E, E> filterMod(Consumer<ModFilterBuilder<E>> options) {
 			return new UniqueDataFlowWrapper<>(getSource(), super.filterMod(options), equivalence());
 		}
 

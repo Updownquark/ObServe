@@ -13,8 +13,8 @@ import org.observe.collect.FlowOptions.MapOptions;
 import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
-import org.observe.collect.ObservableCollection.UniqueDataFlow;
-import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
+import org.observe.collect.ObservableCollection.DistinctDataFlow;
+import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
 import org.observe.collect.ObservableSetImpl.UniqueBaseFlow;
@@ -289,7 +289,7 @@ public class ObservableSortedSetImpl {
 	}
 
 	public static class UniqueSortedDataFlowWrapper<E, T> extends ObservableSetImpl.UniqueDataFlowWrapper<E, T>
-	implements UniqueSortedDataFlow<E, T, T> {
+	implements DistinctSortedDataFlow<E, T, T> {
 		private final Comparator<? super T> theCompare;
 
 		protected UniqueSortedDataFlowWrapper(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent,
@@ -309,22 +309,22 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, T, T> reverse() {
+		public DistinctSortedDataFlow<E, T, T> reverse() {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), super.reverse(), theCompare.reversed());
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, T, T> filter(Function<? super T, String> filter) {
+		public DistinctSortedDataFlow<E, T, T> filter(Function<? super T, String> filter) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), super.filter(filter), theCompare);
 		}
 
 		@Override
-		public <X> UniqueSortedDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
+		public <X> DistinctSortedDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), super.whereContained(other, include), theCompare);
 		}
 
 		@Override
-		public <X> UniqueSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		public <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
 			Function<? super X, ? extends T> reverse, Consumer<MapOptions<T, X>> options) {
 			MapOptions<T, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);
@@ -335,7 +335,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public <X> UniqueSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		public <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
 			Comparator<? super X> compare, Consumer<MapOptions<T, X>> options) {
 			MapOptions<T, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);
@@ -343,23 +343,23 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, T, T> distinct(Consumer<UniqueOptions> options) {
+		public DistinctSortedDataFlow<E, T, T> distinct(Consumer<UniqueOptions> options) {
 			options.accept(new FlowOptions.SimpleUniqueOptions(true));
 			return this; // No-op
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, T, T> refresh(Observable<?> refresh) {
+		public DistinctSortedDataFlow<E, T, T> refresh(Observable<?> refresh) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), super.refresh(refresh), theCompare);
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
+		public DistinctSortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), super.refreshEach(refresh), theCompare);
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
+		public DistinctSortedDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), super.filterMod(options), theCompare);
 		}
 
@@ -398,10 +398,10 @@ public class ObservableSortedSetImpl {
 		}
 	}
 
-	public static class UniqueSortedMapOp<E, I, T> extends ObservableSetImpl.UniqueMapOp<E, I, T> implements UniqueSortedDataFlow<E, I, T> {
+	public static class UniqueSortedMapOp<E, I, T> extends ObservableSetImpl.UniqueMapOp<E, I, T> implements DistinctSortedDataFlow<E, I, T> {
 		private final Comparator<? super T> theCompare;
 
-		public UniqueSortedMapOp(ObservableCollection<E> source, UniqueDataFlow<E, ?, I> parent, TypeToken<T> target,
+		public UniqueSortedMapOp(ObservableCollection<E> source, DistinctDataFlow<E, ?, I> parent, TypeToken<T> target,
 			Function<? super I, ? extends T> map, MapDef<I, T> options, Comparator<? super T> compare) {
 			super(source, parent, target, map, options);
 			theCompare = compare;
@@ -413,22 +413,22 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, T, T> reverse() {
+		public DistinctSortedDataFlow<E, T, T> reverse() {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), super.reverse(), theCompare.reversed());
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, T, T> filter(Function<? super T, String> filter) {
+		public DistinctSortedDataFlow<E, T, T> filter(Function<? super T, String> filter) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), super.filter(filter), comparator());
 		}
 
 		@Override
-		public <X> UniqueSortedDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
+		public <X> DistinctSortedDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), super.whereContained(other, include), theCompare);
 		}
 
 		@Override
-		public <X> UniqueSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		public <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
 			Function<? super X, ? extends T> reverse, Consumer<MapOptions<T, X>> options) {
 			MapOptions<T, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);
@@ -439,7 +439,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public <X> UniqueSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		public <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
 			Comparator<? super X> compare, Consumer<MapOptions<T, X>> options) {
 			MapOptions<T, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);
@@ -447,17 +447,17 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, T, T> refresh(Observable<?> refresh) {
+		public DistinctSortedDataFlow<E, T, T> refresh(Observable<?> refresh) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), super.refresh(refresh), comparator());
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
+		public DistinctSortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), super.refreshEach(refresh), comparator());
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
+		public DistinctSortedDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), super.filterMod(options), theCompare);
 		}
 
@@ -472,7 +472,7 @@ public class ObservableSortedSetImpl {
 		}
 	}
 
-	public static class UniqueSortedBaseFlow<E> extends UniqueBaseFlow<E> implements UniqueSortedDataFlow<E, E, E> {
+	public static class UniqueSortedBaseFlow<E> extends UniqueBaseFlow<E> implements DistinctSortedDataFlow<E, E, E> {
 		protected UniqueSortedBaseFlow(ObservableSortedSet<E> source) {
 			super(source);
 		}
@@ -488,22 +488,22 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, E, E> reverse() {
+		public DistinctSortedDataFlow<E, E, E> reverse() {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), super.reverse(), comparator().reversed());
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, E, E> filter(Function<? super E, String> filter) {
+		public DistinctSortedDataFlow<E, E, E> filter(Function<? super E, String> filter) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), super.filter(filter), getSource().comparator());
 		}
 
 		@Override
-		public <X> UniqueSortedDataFlow<E, E, E> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
+		public <X> DistinctSortedDataFlow<E, E, E> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), super.whereContained(other, include), comparator());
 		}
 
 		@Override
-		public <X> UniqueSortedDataFlow<E, E, X> mapEquivalent(TypeToken<X> target, Function<? super E, ? extends X> map,
+		public <X> DistinctSortedDataFlow<E, E, X> mapEquivalent(TypeToken<X> target, Function<? super E, ? extends X> map,
 			Function<? super X, ? extends E> reverse, Consumer<MapOptions<E, X>> options) {
 			MapOptions<E, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);
@@ -514,7 +514,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public <X> UniqueSortedDataFlow<E, E, X> mapEquivalent(TypeToken<X> target, Function<? super E, ? extends X> map,
+		public <X> DistinctSortedDataFlow<E, E, X> mapEquivalent(TypeToken<X> target, Function<? super E, ? extends X> map,
 			Comparator<? super X> compare, Consumer<MapOptions<E, X>> options) {
 			MapOptions<E, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);
@@ -522,17 +522,17 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, E, E> refresh(Observable<?> refresh) {
+		public DistinctSortedDataFlow<E, E, E> refresh(Observable<?> refresh) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), super.refresh(refresh), getSource().comparator());
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, E, E> refreshEach(Function<? super E, ? extends Observable<?>> refresh) {
+		public DistinctSortedDataFlow<E, E, E> refreshEach(Function<? super E, ? extends Observable<?>> refresh) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), super.refreshEach(refresh), getSource().comparator());
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, E, E> filterMod(Consumer<ModFilterBuilder<E>> options) {
+		public DistinctSortedDataFlow<E, E, E> filterMod(Consumer<ModFilterBuilder<E>> options) {
 			return new UniqueSortedDataFlowWrapper<>(getSource(), super.filterMod(options), comparator());
 		}
 
