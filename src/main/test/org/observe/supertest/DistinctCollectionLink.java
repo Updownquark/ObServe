@@ -36,8 +36,8 @@ import org.qommons.tree.BetterTreeSet;
 public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<E, E> {
 	class GroupedValues {
 		E value;
-		final ElementId valueId;
-		final LinkElement distinctEl;
+		ElementId valueId;
+		LinkElement distinctEl;
 		final BetterSortedMap<ElementId, LinkElement> sourceEls;
 		ElementId representative;
 
@@ -454,7 +454,6 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	private int add(LinkElement srcLinkEl, E value, List<CollectionOp<E>> distinctOps) {
 		ElementId srcEl = theSourceElements.putEntry(srcLinkEl, null, false).getElementId();
 		GroupedValues values = theValues.get(value);
-		// TODO If the values' distinctEl is no longer present, grab the one that is from theDistinctElementsByValue
 		if (values != null && !values.sourceEls.isEmpty()) {
 			ElementId valueSourceId = values.sourceEls.putEntry(srcEl, srcLinkEl, false).getElementId();
 			if (theOptions.isUseFirst() && values.sourceEls.keySet().getElementsBefore(valueSourceId) == 0) {
@@ -485,6 +484,25 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 					distinctOps.add(new CollectionOp<>(CollectionChangeType.set, values.distinctEl, oldIndex, value));
 				}
 			} else {
+				if (theDistinctElementsByValue != null) {
+					// When the distinct order is encounter-order-dependent, the we may need to make corrections due to
+					// the CollectionOps being in a different order than the actual collection events
+					LinkElement distinctEl = theDistinctElementsByValue.get(value);
+					if (values.distinctEl != distinctEl) {
+						int oldIndex = getElementIndex(values.valueId);
+						distinctOps.add(new CollectionOp<>(CollectionChangeType.remove, values.distinctEl, oldIndex, value));
+						theValues.mutableEntry(values.valueId).remove();
+						ElementId distinctInsertHandle = getDistinctInsertHandle(distinctEl);
+						if (distinctInsertHandle != null) // Add before the insert handle
+							values.valueId = theValues.keySet().mutableElement(distinctInsertHandle).add(value, true);
+						else // Add as the last entry
+							values.valueId = theValues.keySet().mutableElement(theValues.keySet().getTerminalElement(false).getElementId())
+							.add(value, false);
+						theValues.mutableEntry(values.valueId).set(values);
+						distinctOps
+						.add(new CollectionOp<>(CollectionChangeType.add, values.distinctEl, getElementIndex(values.valueId), value));
+					}
+				}
 				// No effect
 				theDebug.act("add:no-effect").param("value", value)//
 				// .param("srcIndex", srcIndex)//
