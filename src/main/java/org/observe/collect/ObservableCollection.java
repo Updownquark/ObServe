@@ -265,7 +265,12 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 	@Override
 	default ObservableCollection<E> with(E... values) {
-		addAll(java.util.Arrays.asList(values));
+		return withAll(java.util.Arrays.asList(values));
+	}
+
+	@Override
+	default ObservableCollection<E> withAll(Collection<? extends E> values) {
+		addAll(values);
 		return this;
 	}
 

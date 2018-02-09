@@ -75,6 +75,12 @@ public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> 
 	}
 
 	@Override
+	default ObservableSet<E> withAll(Collection<? extends E> values) {
+		ObservableCollection.super.withAll(values);
+		return this;
+	}
+
+	@Override
 	default <T> DistinctDataFlow<E, E, E> flow() {
 		return new ObservableSetImpl.DistinctBaseFlow<>(this);
 	}
