@@ -15,8 +15,8 @@ import org.observe.collect.FlowOptions.MapDef;
 import org.observe.collect.FlowOptions.MapOptions;
 import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
-import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollection.DistinctDataFlow;
+import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.BaseCollectionDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionElementListener;
@@ -41,11 +41,16 @@ import org.qommons.tree.BinaryTreeEntry;
 
 import com.google.common.reflect.TypeToken;
 
-/** Holds default implementation methods and classes for {@link ObservableSet} methods */
+/** Holds default implementation methods and classes for {@link ObservableSet} and {@link DistinctDataFlow} methods */
 public class ObservableSetImpl {
 	private ObservableSetImpl() {}
 
+	/**
+	 * Implements {@link ObservableSet#reverse()}
+	 * @param <E> The type of the set
+	 */
 	public static class ReversedSet<E> extends ReversedObservableCollection<E> implements ObservableSet<E> {
+		/** @param wrapped The set to reverse */
 		public ReversedSet(ObservableSet<E> wrapped) {
 			super(wrapped);
 		}
@@ -66,26 +71,38 @@ public class ObservableSetImpl {
 		}
 	}
 
-	public static class UniqueDataFlowWrapper<E, T> extends ObservableCollectionDataFlowImpl.AbstractDataFlow<E, T, T>
+	/**
+	 * An abstract {@link DistinctDataFlow} implementation returning default {@link DistinctDataFlow} implementations for most
+	 * operations that should produce one
+	 *
+	 * @param <E> The type of the source collection
+	 * @param <T> The type of this flow
+	 */
+	public static class DistinctDataFlowWrapper<E, T> extends ObservableCollectionDataFlowImpl.AbstractDataFlow<E, T, T>
 	implements DistinctDataFlow<E, T, T> {
-		protected UniqueDataFlowWrapper(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent,
+		/**
+		 * @param source The source collection
+		 * @param parent The parent flow
+		 * @param equivalence The equivalence for this flow
+		 */
+		protected DistinctDataFlowWrapper(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent,
 			Equivalence<? super T> equivalence) {
 			super(source, parent, parent.getTargetType(), equivalence);
 		}
 
 		@Override
 		public DistinctDataFlow<E, T, T> reverse() {
-			return new UniqueDataFlowWrapper<>(getSource(), super.reverse(), equivalence());
+			return new DistinctDataFlowWrapper<>(getSource(), super.reverse(), equivalence());
 		}
 
 		@Override
 		public DistinctDataFlow<E, T, T> filter(Function<? super T, String> filter) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter), equivalence());
+			return new DistinctDataFlowWrapper<>(getSource(), super.filter(filter), equivalence());
 		}
 
 		@Override
 		public <X> DistinctDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.whereContained(other, include), equivalence());
+			return new DistinctDataFlowWrapper<>(getSource(), super.whereContained(other, include), equivalence());
 		}
 
 		@Override
@@ -94,7 +111,7 @@ public class ObservableSetImpl {
 			MapOptions<T, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);
 			mapOptions.withReverse(reverse);
-			return new UniqueMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions));
+			return new DistinctMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions));
 		}
 
 		@Override
@@ -105,17 +122,17 @@ public class ObservableSetImpl {
 
 		@Override
 		public DistinctDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.refresh(refresh), equivalence());
+			return new DistinctDataFlowWrapper<>(getSource(), super.refresh(refresh), equivalence());
 		}
 
 		@Override
 		public DistinctDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.refreshEach(refresh), equivalence());
+			return new DistinctDataFlowWrapper<>(getSource(), super.refreshEach(refresh), equivalence());
 		}
 
 		@Override
 		public DistinctDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.filterMod(options), equivalence());
+			return new DistinctDataFlowWrapper<>(getSource(), super.filterMod(options), equivalence());
 		}
 
 		@Override
@@ -146,11 +163,26 @@ public class ObservableSetImpl {
 		}
 	}
 
-	public static class UniqueOp<E, T> extends UniqueDataFlowWrapper<E, T> {
+	/**
+	 * Implements {@link CollectionDataFlow#distinct()}
+	 *
+	 * @param <E> The type of the source collection
+	 * @param <T> The type of this flow
+	 */
+	public static class DistinctOp<E, T> extends DistinctDataFlowWrapper<E, T> {
 		private final boolean isAlwaysUsingFirst;
 		private final boolean isPreservingSourceOrder;
 
-		protected UniqueOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, Equivalence<? super T> equivalence,
+		/**
+		 * @param source The source collection
+		 * @param parent The parent flow
+		 * @param equivalence The equivalence for this flow
+		 * @param alwaysUseFirst Whether to always use the earliest element in a category of equivalent values to represent the group in
+		 *        this flow
+		 * @param preserveSourceOrder Whether to order the derived elements by their representative's order in the parent collection, as
+		 *        opposed to the value's order in the equivalence's {@link Equivalence#createSet() set}
+		 */
+		protected DistinctOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, Equivalence<? super T> equivalence,
 			boolean alwaysUseFirst, boolean preserveSourceOrder) {
 			super(source, parent, equivalence);
 			isAlwaysUsingFirst = alwaysUseFirst;
@@ -164,29 +196,43 @@ public class ObservableSetImpl {
 
 		@Override
 		public ActiveCollectionManager<E, ?, T> manageActive() {
-			return new UniqueManager<>(getParent().manageActive(), equivalence(), isAlwaysUsingFirst, isPreservingSourceOrder);
+			return new DistinctManager<>(getParent().manageActive(), equivalence(), isAlwaysUsingFirst, isPreservingSourceOrder);
 		}
 	}
 
-	public static class UniqueMapOp<E, I, T> extends ObservableCollectionDataFlowImpl.MapOp<E, I, T> implements DistinctDataFlow<E, I, T> {
-		public UniqueMapOp(ObservableCollection<E> source, DistinctDataFlow<E, ?, I> parent, TypeToken<T> target,
+	/**
+	 * Implements {@link DistinctDataFlow#mapEquivalent(TypeToken, Function, Function)}
+	 *
+	 * @param <E> The type of the source collection
+	 * @param <I> The type of the parent flow
+	 * @param <T> The type of this flow
+	 */
+	public static class DistinctMapOp<E, I, T> extends ObservableCollectionDataFlowImpl.MapOp<E, I, T> implements DistinctDataFlow<E, I, T> {
+		/**
+		 * @param source The source collection
+		 * @param parent The parent flow
+		 * @param target The type of this flow
+		 * @param map The mapping function to produce this flow's values from its source
+		 * @param options The options governing certain aspects of this flow's behavior, e.g. caching
+		 */
+		public DistinctMapOp(ObservableCollection<E> source, DistinctDataFlow<E, ?, I> parent, TypeToken<T> target,
 			Function<? super I, ? extends T> map, MapDef<I, T> options) {
 			super(source, parent, target, map, options);
 		}
 
 		@Override
 		public DistinctDataFlow<E, T, T> reverse() {
-			return new UniqueDataFlowWrapper<>(getSource(), super.reverse(), equivalence());
+			return new DistinctDataFlowWrapper<>(getSource(), super.reverse(), equivalence());
 		}
 
 		@Override
 		public DistinctDataFlow<E, T, T> filter(Function<? super T, String> filter) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter), equivalence());
+			return new DistinctDataFlowWrapper<>(getSource(), super.filter(filter), equivalence());
 		}
 
 		@Override
 		public <X> DistinctDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.whereContained(other, include), equivalence());
+			return new DistinctDataFlowWrapper<>(getSource(), super.whereContained(other, include), equivalence());
 		}
 
 		@Override
@@ -194,22 +240,22 @@ public class ObservableSetImpl {
 			Function<? super X, ? extends T> reverse, Consumer<MapOptions<T, X>> options) {
 			MapOptions<T, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);
-			return new UniqueMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions));
+			return new DistinctMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions));
 		}
 
 		@Override
 		public DistinctDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.refresh(refresh), equivalence());
+			return new DistinctDataFlowWrapper<>(getSource(), super.refresh(refresh), equivalence());
 		}
 
 		@Override
 		public DistinctDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.refreshEach(refresh), equivalence());
+			return new DistinctDataFlowWrapper<>(getSource(), super.refreshEach(refresh), equivalence());
 		}
 
 		@Override
 		public DistinctDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.filterMod(options), equivalence());
+			return new DistinctDataFlowWrapper<>(getSource(), super.filterMod(options), equivalence());
 		}
 
 		@Override
@@ -223,7 +269,83 @@ public class ObservableSetImpl {
 		}
 	}
 
-	public static class UniqueManager<E, T> implements ActiveCollectionManager<E, T, T> {
+	/**
+	 * Implements {@link ObservableSet#flow()}
+	 *
+	 * @param <E> The type of this flow
+	 */
+	public static class DistinctBaseFlow<E> extends BaseCollectionDataFlow<E> implements DistinctDataFlow<E, E, E> {
+		/** @param source The source set */
+		protected DistinctBaseFlow(ObservableSet<E> source) {
+			super(source);
+		}
+
+		@Override
+		protected ObservableSet<E> getSource() {
+			return (ObservableSet<E>) super.getSource();
+		}
+
+		@Override
+		public DistinctDataFlow<E, E, E> reverse() {
+			return new DistinctDataFlowWrapper<>(getSource(), super.reverse(), equivalence());
+		}
+
+		@Override
+		public DistinctDataFlow<E, E, E> filter(Function<? super E, String> filter) {
+			return new DistinctDataFlowWrapper<>(getSource(), super.filter(filter), equivalence());
+		}
+
+		@Override
+		public <X> DistinctDataFlow<E, E, E> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
+			return new DistinctDataFlowWrapper<>(getSource(), super.whereContained(other, include), equivalence());
+		}
+
+		@Override
+		public <X> DistinctDataFlow<E, E, X> mapEquivalent(TypeToken<X> target, Function<? super E, ? extends X> map,
+			Function<? super X, ? extends E> reverse, Consumer<MapOptions<E, X>> options) {
+			MapOptions<E, X> mapOptions = new MapOptions<>();
+			options.accept(mapOptions);
+			return new DistinctMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions));
+		}
+
+		@Override
+		public DistinctDataFlow<E, E, E> refresh(Observable<?> refresh) {
+			return new DistinctDataFlowWrapper<>(getSource(), super.refresh(refresh), equivalence());
+		}
+
+		@Override
+		public DistinctDataFlow<E, E, E> refreshEach(Function<? super E, ? extends Observable<?>> refresh) {
+			return new DistinctDataFlowWrapper<>(getSource(), super.refreshEach(refresh), equivalence());
+		}
+
+		@Override
+		public DistinctDataFlow<E, E, E> filterMod(Consumer<ModFilterBuilder<E>> options) {
+			return new DistinctDataFlowWrapper<>(getSource(), super.filterMod(options), equivalence());
+		}
+
+		@Override
+		public ObservableSet<E> collect() {
+			return (ObservableSet<E>) super.collect();
+		}
+
+		@Override
+		public ObservableSet<E> collectPassive() {
+			return getSource();
+		}
+
+		@Override
+		public ObservableSet<E> collectActive(Observable<?> until) {
+			return new ActiveDerivedSet<>(manageActive(), until);
+		}
+	}
+
+	/**
+	 * Implements {@link DistinctOp#manageActive()}
+	 *
+	 * @param <E> The type of the source collection
+	 * @param <T> The type of the derived set
+	 */
+	public static class DistinctManager<E, T> implements ActiveCollectionManager<E, T, T> {
 		private final ActiveCollectionManager<E, ?, T> theParent;
 		private final BetterMap<T, UniqueElement> theElementsByValue;
 		private final Equivalence<? super T> theEquivalence;
@@ -233,7 +355,15 @@ public class ObservableSetImpl {
 
 		private DebugData theDebug;
 
-		protected UniqueManager(ActiveCollectionManager<E, ?, T> parent, Equivalence<? super T> equivalence, boolean alwaysUseFirst,
+		/**
+		 * @param parent The parent manager
+		 * @param equivalence The equivalence for this manager
+		 * @param alwaysUseFirst Whether to always use the earliest element in a category of equivalent values to represent the group in
+		 *        this flow
+		 * @param preserveSourceOrder Whether to order the derived elements by their representative's order in the parent collection, as
+		 *        opposed to the value's order in the equivalence's {@link Equivalence#createSet() set}
+		 */
+		protected DistinctManager(ActiveCollectionManager<E, ?, T> parent, Equivalence<? super T> equivalence, boolean alwaysUseFirst,
 			boolean preserveSourceOrder) {
 			theParent = parent;
 			theEquivalence = equivalence;
@@ -270,10 +400,18 @@ public class ObservableSetImpl {
 			return element == null ? el -> -1 : element;
 		}
 
+		/**
+		 * @param value The value to get the element for
+		 * @return The handle for the element at the given value
+		 */
 		protected MapEntryHandle<T, UniqueElement> getElement(T value) {
 			return theElementsByValue.getEntry(value);
 		}
 
+		/**
+		 * @param valueId The entry ID of the value to get the element for
+		 * @return The handle for the element with the given ID in the value map
+		 */
 		protected MapEntryHandle<T, UniqueElement> getElement(ElementId valueId) {
 			return theElementsByValue.getEntryById(valueId);
 		}
@@ -382,10 +520,15 @@ public class ObservableSetImpl {
 			}, listening);
 		}
 
+		/**
+		 * @param value The value to create new element for
+		 * @return The element to use for the value
+		 */
 		protected UniqueElement createUniqueElement(T value) {
 			return new UniqueElement(value);
 		}
 
+		/** A {@link DerivedCollectionElement} for a {@link DistinctManager} */
 		protected class UniqueElement implements DerivedCollectionElement<T> {
 			private final BetterTreeMap<DerivedCollectionElement<T>, T> theParentElements;
 			private T theValue;
@@ -394,19 +537,30 @@ public class ObservableSetImpl {
 			private CollectionElementListener<T> theListener;
 			private boolean isInternallySetting;
 
+			/** @param value The value that the element is for */
 			protected UniqueElement(T value) {
 				theValue = value;
 				theParentElements = new BetterTreeMap<>(false, DerivedCollectionElement::compareTo);
 			}
 
+			/** @return The source element that currently represents this element in the distinct collection */
 			protected DerivedCollectionElement<T> getActiveElement() {
 				return theActiveElement;
 			}
 
+			/** @return All elements (and their last known values) grouped into this distinct element */
 			protected BetterTreeMap<DerivedCollectionElement<T>, T> getParentElements() {
 				return theParentElements;
 			}
 
+			/**
+			 * Called when an element whose value is equivalent to this element's is added to the source collection (also for initial
+			 * values)
+			 * 
+			 * @param parentEl The added source element
+			 * @param cause The cause of the addition
+			 * @return The entry in the {@link #theParentElements element map} map where the parent was added
+			 */
 			protected BinaryTreeEntry<DerivedCollectionElement<T>, T> addParent(DerivedCollectionElement<T> parentEl, Object cause) {
 				if (theValueId == null)
 					theValueId = theElementsByValue.getEntry(theValue).getElementId();
@@ -516,10 +670,31 @@ public class ObservableSetImpl {
 				return node;
 			}
 
+			/**
+			 * Called after a source element's value has been reported as changed, which did not require moving the source element to a
+			 * different distinct element
+			 *
+			 * @param node The tree entry of the source element
+			 * @param oldValue The source element's previously-reported value
+			 * @param newValue The source element's new value
+			 * @param cause The cause of the change
+			 */
 			protected void parentUpdated(BinaryTreeEntry<DerivedCollectionElement<T>, T> node, T oldValue, T newValue, Object cause) {}
 
+			/**
+			 * Called after a source element has been removed or if the element's value has been changed such that it must be moved to a
+			 * different distinct element
+			 * 
+			 * @param parentEl The (already removed) tree entry of the source element
+			 * @param value The source element's previously-reported value
+			 * @param cause The cause of the removal
+			 */
 			protected void parentRemoved(BinaryTreeEntry<DerivedCollectionElement<T>, T> parentEl, T value, Object cause) {}
 
+			/**
+			 * @return The element ID of the map entry where this distinct element is stored in the manager's
+			 *         {@link DistinctManager#theElementsByValue value map}
+			 */
 			protected ElementId getValueElement() {
 				if (theValueId == null)
 					theValueId = theElementsByValue.getEntry(theActiveElement.get()).getElementId();
@@ -666,71 +841,13 @@ public class ObservableSetImpl {
 		}
 	}
 
-	public static class UniqueBaseFlow<E> extends BaseCollectionDataFlow<E> implements DistinctDataFlow<E, E, E> {
-		protected UniqueBaseFlow(ObservableSet<E> source) {
-			super(source);
-		}
-
-		@Override
-		protected ObservableSet<E> getSource() {
-			return (ObservableSet<E>) super.getSource();
-		}
-
-		@Override
-		public DistinctDataFlow<E, E, E> reverse() {
-			return new UniqueDataFlowWrapper<>(getSource(), super.reverse(), equivalence());
-		}
-
-		@Override
-		public DistinctDataFlow<E, E, E> filter(Function<? super E, String> filter) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.filter(filter), equivalence());
-		}
-
-		@Override
-		public <X> DistinctDataFlow<E, E, E> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.whereContained(other, include), equivalence());
-		}
-
-		@Override
-		public <X> DistinctDataFlow<E, E, X> mapEquivalent(TypeToken<X> target, Function<? super E, ? extends X> map,
-			Function<? super X, ? extends E> reverse, Consumer<MapOptions<E, X>> options) {
-			MapOptions<E, X> mapOptions = new MapOptions<>();
-			options.accept(mapOptions);
-			return new UniqueMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions));
-		}
-
-		@Override
-		public DistinctDataFlow<E, E, E> refresh(Observable<?> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.refresh(refresh), equivalence());
-		}
-
-		@Override
-		public DistinctDataFlow<E, E, E> refreshEach(Function<? super E, ? extends Observable<?>> refresh) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.refreshEach(refresh), equivalence());
-		}
-
-		@Override
-		public DistinctDataFlow<E, E, E> filterMod(Consumer<ModFilterBuilder<E>> options) {
-			return new UniqueDataFlowWrapper<>(getSource(), super.filterMod(options), equivalence());
-		}
-
-		@Override
-		public ObservableSet<E> collect() {
-			return (ObservableSet<E>) super.collect();
-		}
-
-		@Override
-		public ObservableSet<E> collectPassive() {
-			return getSource();
-		}
-
-		@Override
-		public ObservableSet<E> collectActive(Observable<?> until) {
-			return new ActiveDerivedSet<>(manageActive(), until);
-		}
-	}
-
-	static class PassiveDerivedSet<E, T> extends PassiveDerivedCollection<E, T> implements ObservableSet<T> {
+	/**
+	 * A {@link DistinctDataFlow#collect() collected}, {@link DistinctDataFlow#supportsPassive() passive}ly-derived set
+	 *
+	 * @param <E> The type of the source set
+	 * @param <T> The type of this set
+	 */
+	public static class PassiveDerivedSet<E, T> extends PassiveDerivedCollection<E, T> implements ObservableSet<T> {
 		/**
 		 * @param source The source set
 		 * @param flow The data flow used to create the modified collection
@@ -750,7 +867,16 @@ public class ObservableSetImpl {
 		}
 	}
 
+	/**
+	 * A {@link DistinctDataFlow#collect() collected}, {@link DistinctDataFlow#supportsPassive() active}ly-derived set
+	 *
+	 * @param <T> The type of this set
+	 */
 	public static class ActiveDerivedSet<T> extends ActiveDerivedCollection<T> implements ObservableSet<T> {
+		/**
+		 * @param flow The active manager to drive this set
+		 * @param until The observable to terminate this derived set
+		 */
 		public ActiveDerivedSet(ActiveCollectionManager<?, ?, T> flow, Observable<?> until) {
 			super(flow, until);
 		}

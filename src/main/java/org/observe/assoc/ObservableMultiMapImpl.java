@@ -36,7 +36,7 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionMan
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSetImpl;
-import org.observe.collect.ObservableSetImpl.UniqueManager;
+import org.observe.collect.ObservableSetImpl.DistinctManager;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.collect.ObservableSortedSetImpl;
 import org.observe.util.WeakListening;
@@ -718,7 +718,7 @@ public class ObservableMultiMapImpl {
 		}
 	}
 
-	static class GroupingManager<E, K, V> extends ObservableSetImpl.UniqueManager<E, Map.Entry<K, V>> {
+	static class GroupingManager<E, K, V> extends ObservableSetImpl.DistinctManager<E, Map.Entry<K, V>> {
 		private final ActiveCollectionManager<E, ?, Map.Entry<K, V>> theParent;
 		private final TypeToken<K> theKeyType;
 		private final TypeToken<V> theValueType;
@@ -755,7 +755,7 @@ public class ObservableMultiMapImpl {
 		Subscription onChange(K key, Consumer<? super ObservableCollectionEvent<? extends V>> action) {
 			Map.Entry<K, V> keyEntry = new SimpleMapEntry<>(key, null);
 			try (Transaction t = lock(false, null)) {
-				MapEntryHandle<Map.Entry<K, V>, UniqueManager<E, Entry<K, V>>.UniqueElement> element = getElement(keyEntry);
+				MapEntryHandle<Map.Entry<K, V>, DistinctManager<E, Entry<K, V>>.UniqueElement> element = getElement(keyEntry);
 				ListenerList<Consumer<? super ObservableCollectionEvent<? extends V>>> listeners;
 				if (element != null)
 					listeners = ((GroupedElement) element.get()).theListeners;
@@ -777,17 +777,17 @@ public class ObservableMultiMapImpl {
 		}
 
 		@Override
-		protected MapEntryHandle<Map.Entry<K, V>, UniqueManager<E, Entry<K, V>>.UniqueElement> getElement(Entry<K, V> value) {
+		protected MapEntryHandle<Map.Entry<K, V>, DistinctManager<E, Entry<K, V>>.UniqueElement> getElement(Entry<K, V> value) {
 			return super.getElement(value);
 		}
 
 		@Override
-		protected MapEntryHandle<Map.Entry<K, V>, UniqueManager<E, Entry<K, V>>.UniqueElement> getElement(ElementId valueId) {
+		protected MapEntryHandle<Map.Entry<K, V>, DistinctManager<E, Entry<K, V>>.UniqueElement> getElement(ElementId valueId) {
 			return super.getElement(valueId);
 		}
 
 		@Override
-		protected UniqueManager<E, Map.Entry<K, V>>.UniqueElement createUniqueElement(Map.Entry<K, V> value) {
+		protected DistinctManager<E, Map.Entry<K, V>>.UniqueElement createUniqueElement(Map.Entry<K, V> value) {
 			ListenerList<Consumer<? super ObservableCollectionEvent<? extends V>>> listeners = theValueListeners.remove(value);
 			if (listeners == null)
 				listeners = new ListenerList<>("Illegal listener state");

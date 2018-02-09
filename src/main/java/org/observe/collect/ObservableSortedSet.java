@@ -192,7 +192,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 
 	@Override
 	default <T> DistinctSortedDataFlow<E, E, E> flow() {
-		return new ObservableSortedSetImpl.UniqueSortedBaseFlow<>(this);
+		return new ObservableSortedSetImpl.DistinctSortedBaseFlow<>(this);
 	}
 
 	/**

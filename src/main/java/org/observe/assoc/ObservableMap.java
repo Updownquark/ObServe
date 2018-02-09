@@ -269,14 +269,38 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 		return values().simpleChanges();
 	}
 
+	/**
+	 * @param <K> The (compile-time) key type for the map
+	 * @param <V> The (compile-time) value type for the map
+	 * @param keyType The (run-time) key type for the map
+	 * @param valueType The (run-time) value type for the map
+	 * @return A new, empty, modifiable ObservableMap with the given types
+	 */
 	static <K, V> ObservableMap<K, V> create(TypeToken<K> keyType, TypeToken<V> valueType) {
 		return create(keyType, valueType, Equivalence.DEFAULT);
 	}
 
+	/**
+	 * @param <K> The (compile-time) key type for the map
+	 * @param <V> The (compile-time) value type for the map
+	 * @param keyType The (run-time) key type for the map
+	 * @param valueType The (run-time) value type for the map
+	 * @param keyEquivalence The equivalence for the map's key set
+	 * @return A new, empty, modifiable ObservableMap with the given types and key equivalence
+	 */
 	static <K, V> ObservableMap<K, V> create(TypeToken<K> keyType, TypeToken<V> valueType, Equivalence<Object> keyEquivalence) {
 		return create(keyType, valueType, keyEquivalence, ObservableCollection.createDefaultBacking());
 	}
 
+	/**
+	 * @param <K> The (compile-time) key type for the map
+	 * @param <V> The (compile-time) value type for the map
+	 * @param keyType The (run-time) key type for the map
+	 * @param valueType The (run-time) value type for the map
+	 * @param keyEquivalence The equivalence for the map's key set
+	 * @param entryCollection The BetterList to hold the map's entries. Should not be modified externally.
+	 * @return A new, empty, modifiable ObservableMap with the given types and key equivalence
+	 */
 	static <K, V> ObservableMap<K, V> create(TypeToken<K> keyType, TypeToken<V> valueType, Equivalence<? super K> keyEquivalence,
 		BetterList<Map.Entry<K, V>> entryCollection) {
 		TypeToken<Map.Entry<K, V>> entryType = new TypeToken<Map.Entry<K, V>>() {}.where(new TypeParameter<K>() {}, keyType.wrap())

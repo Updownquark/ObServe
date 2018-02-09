@@ -76,7 +76,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> 
 
 	@Override
 	default <T> DistinctDataFlow<E, E, E> flow() {
-		return new ObservableSetImpl.UniqueBaseFlow<>(this);
+		return new ObservableSetImpl.DistinctBaseFlow<>(this);
 	}
 
 	/**

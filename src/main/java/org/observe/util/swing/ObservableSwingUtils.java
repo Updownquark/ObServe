@@ -19,6 +19,15 @@ import org.observe.collect.CollectionChangeEvent;
 
 /** Utilities for the org.observe.util.swing package */
 public class ObservableSwingUtils {
+	/**
+	 * Links up a check box's {@link JCheckBox#isSelected() selected} state to a settable boolean, such that the user's interaction with the
+	 * check box is reported by the value, and setting the value alters the check box.
+	 * 
+	 * @param checkBox The check box to control observably
+	 * @param descrip The description for the check box's tool tip when it is enabled
+	 * @param selected The settable, observable boolean to control the check box's selection
+	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to terminate the link
+	 */
 	public static Subscription checkFor(JCheckBox checkBox, String descrip, SettableValue<Boolean> selected) {
 		ActionListener action = evt -> {
 			selected.set(checkBox.isSelected(), evt);
@@ -45,6 +54,18 @@ public class ObservableSwingUtils {
 		};
 	}
 
+	/**
+	 * Links up the {@link JToggleButton#isSelected() selected} state of a list of {@link JToggleButton}s to a settable value, such that the
+	 * user's interaction with the toggle buttons is reported by the value, and setting the value alters the toggle buttons.
+	 * 
+	 * @param <T> The type of the option values
+	 * @param buttons The toggle buttons to control observably
+	 * @param options The options corresponding to each toggle button. Each toggle button will be selected when the <code>selected</code>
+	 *        observable's value is equal to the button's corresponding value.
+	 * @param descrips The description tooltips for each toggle button when enabled
+	 * @param selected The value observable to control the toggle buttons
+	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to terminate the link
+	 */
 	public static <T> Subscription togglesFor(JToggleButton[] buttons, T[] options, String[] descrips, SettableValue<T> selected) {
 		ActionListener[] actions = new ActionListener[buttons.length];
 		for (int i = 0; i < buttons.length; i++) {
@@ -86,10 +107,28 @@ public class ObservableSwingUtils {
 		};
 	}
 
+	/**
+	 * Links up a spinner's {@link JSpinner#getValue() value} with the value in a settable integer value, such that the user's interaction
+	 * with the spinner is reported by the value, and setting the value alters the spinner.
+	 * 
+	 * @param spinner The spinner to control observably
+	 * @param descrip The description tooltip for the spinner when enabled
+	 * @param value The value observable to control the spinner
+	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to terminate the link
+	 */
 	public static Subscription intSpinnerFor(JSpinner spinner, String descrip, SettableValue<Integer> value) {
 		return spinnerFor(spinner, descrip, value, true);
 	}
 
+	/**
+	 * Links up a spinner's {@link JSpinner#getValue() value} with the value in a settable double value, such that the user's interaction
+	 * with the spinner is reported by the value, and setting the value alters the spinner.
+	 * 
+	 * @param spinner The spinner to control observably
+	 * @param descrip The description tooltip for the spinner when enabled
+	 * @param value The value observable to control the spinner
+	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to terminate the link
+	 */
 	public static Subscription doubleSpinnerFor(JSpinner spinner, String descrip, SettableValue<Double> value) {
 		return spinnerFor(spinner, descrip, value, false);
 	}
@@ -153,6 +192,15 @@ public class ObservableSwingUtils {
 		};
 	}
 
+	/**
+	 * Links up a slider's {@link JSlider#getValue() value} with the value in a settable integer value, such that the user's interaction
+	 * with the slider is reported by the value, and setting the value alters the slider.
+	 * 
+	 * @param slider The slider to control observably
+	 * @param descrip The description tooltip for the slider when enabled
+	 * @param value The value observable to control the slider
+	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to terminate the link
+	 */
 	public static Subscription sliderFor(JSlider slider, String descrip, SettableValue<Integer> value) {
 		boolean[] callbackLock = new boolean[1];
 		ChangeListener changeListener = evt -> {
