@@ -1,5 +1,6 @@
 package org.observe.supertest;
 
+import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -13,6 +14,8 @@ import org.observe.collect.FlowOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollectionEvent;
 import org.observe.supertest.ObservableChainTester.TestValueType;
+import org.qommons.ArrayUtils;
+import org.qommons.BreakpointHere;
 import org.qommons.Ternian;
 import org.qommons.TestHelper;
 import org.qommons.ValueHolder;
@@ -26,7 +29,6 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.collect.MutableMapEntryHandle;
 import org.qommons.debug.Debug;
 import org.qommons.debug.Debug.DebugData;
@@ -259,7 +261,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			switch (op.type) {
 			case add:
 				theDebug.act("addSource").param("@", op.value).exec();
-				add(op.elementId, op.value, distinctOps);
+				add(op.elementId, op.value, -1, distinctOps);
 				break;
 			case remove:
 				theDebug.act("remove").param("@", op.value).exec();
@@ -270,30 +272,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 				GroupedValues oldValues = srcEl.get();
 				GroupedValues newValues = theValues.get(op.value);
 				theDebug.act("update").param("@", oldValues).param("newValue", op.value).exec();
-				if (theDistinctElementsByValue != null) {
-					// Using the empirical elements to determine order
-					LinkElement distinctEl = theDistinctElementsByValue.get(op.value);
-					if (newValues == null || !newValues.distinctEl.equals(distinctEl)) {
-						remove(op.elementId, distinctOps);
-						add(op.elementId, op.value, distinctOps);
-					} else if (oldValues == newValues) {
-						distinctOps
-						.add(new CollectionOp<>(CollectionChangeType.set, distinctEl, getElementIndex(oldValues.valueId), op.value));
-					} else if (oldValues.sourceEls.size() == 1
-						&& theValues.keySet().mutableElement(oldValues.valueId).isAcceptable(op.value) == null) {
-						theDebug.act("update:move").exec();
-						theSourceElements.mutableEntry(srcEl.getElementId()).set(oldValues);
-						oldValues.value = op.value;
-						theValues.keySet().mutableElement(oldValues.valueId).set(op.value);
-						ElementId repId = theOptions.isPreservingSourceOrder() ? srcEl.getElementId() : oldValues.valueId;
-						// The updated value is the representative for its category. Fire the update event.
-						int repIndex = theSortedRepresentatives.indexOf(repId);
-						distinctOps.add(new CollectionOp<>(CollectionChangeType.set, oldValues.distinctEl, repIndex, op.value));
-					} else {
-						remove(op.elementId, distinctOps);
-						add(op.elementId, op.value, distinctOps);
-					}
-				} else if (newValues != null && oldValues == newValues) {
+				if (newValues != null && oldValues == newValues) {
 					// Category is unchanged
 					if (oldValues.representative.equals(srcEl.getElementId())) {
 						ElementId repId = theOptions.isPreservingSourceOrder() ? srcEl.getElementId() : newValues.valueId;
@@ -320,10 +299,90 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 					} else {
 						// Same as a remove, then an add.
 						remove(op.elementId, distinctOps);
-						add(op.elementId, op.value, distinctOps);
+						add(op.elementId, op.value, -1, distinctOps);
 					}
 				}
 			}
+		}
+		if (!isOrderImportant()) {
+			/* The encounter-order-dependent nature of hash-based distinctness makes it extremely difficult to expect the correct element
+			 * order unless the encounter order of the actual distinct manager can be replicated in the testing.
+			 * This also is difficult to reproduce from some types of links, like reversibility or flattening (where operations from above
+			 * may propagate back up the chain due to shared values between elements).
+			 *
+			 * The order of a hash-based distinct collection is not significant of anything, so I do not feel a need to test for its
+			 * consistency.
+			 * So here, I directly ensure that the order of the expected collection (and the internal structure of the link) is consistent
+			 * with the actual distinct collection.
+			 *
+			 * This code assumes that if order is not important for a map, then entry insertion at arbitrary positions is supported.
+			 */
+			Map<E, ElementId> standard = getCollection().equivalence().createMap();
+			getCollection().spliterator().forEachElement(el -> {
+				standard.put(el.get(), el.getElementId());
+			}, true);
+			E[] values = theValues.keySet()
+				.toArray((E[]) Array.newInstance(getCollection().getType().wrap().getRawType(), theValues.size()));
+			ArrayUtils.sort(values, new ArrayUtils.SortListener<E>() {
+				@Override
+				public int compare(E o1, E o2) {
+					ElementId id1 = standard.get(o1);
+					ElementId id2 = standard.get(o2);
+					if (id1 == null || id2 == null) {
+						// This should not happen, but we'll let the tester throw the exception when the check fails
+						BreakpointHere.breakpoint(); // Debug if enabled
+					}
+					return id1.compareTo(id2);
+				}
+
+				@Override
+				public void swapped(E o1, int idx1, E o2, int idx2) {
+					MutableMapEntryHandle<E, GroupedValues> valueEntry1 = theValues.mutableEntry(theValues.getEntry(o1).getElementId());
+					MutableMapEntryHandle<E, GroupedValues> valueEntry2 = theValues.mutableEntry(theValues.getEntry(o2).getElementId());
+					// Note that the sort method always calls this method with idx1<idx2
+
+					// Get the id of the adjacent element to the first entry
+					boolean adjacentFirstLeft;
+					CollectionElement<E> adjacentFirst = theValues.keySet().getAdjacentElement(valueEntry1.getElementId(), true);
+					if (adjacentFirst != null)
+						adjacentFirstLeft = true;
+					else {
+						adjacentFirst = theValues.keySet().getAdjacentElement(valueEntry1.getElementId(), false);
+						adjacentFirstLeft = false;
+					}
+					// Remove the first entry
+					GroupedValues tempGV = valueEntry1.get();
+					valueEntry1.remove();
+
+					// Insert the first entry again, adjacent to the second entry
+					valueEntry1 = theValues.mutableEntry(theValues.keySet().mutableElement(valueEntry2.getElementId()).add(o1, true));
+					valueEntry1.set(tempGV);
+
+					// Remove the second entry
+					tempGV = valueEntry2.get();
+					valueEntry2.remove();
+
+					// Insert the second entry again, in the first entry's old position
+					if (adjacentFirst.getElementId().isPresent())
+						valueEntry2 = theValues
+						.mutableEntry(theValues.keySet().mutableElement(adjacentFirst.getElementId()).add(o2, !adjacentFirstLeft));
+					else // First entry must have been adjacent to the second entry
+						valueEntry2 = theValues.mutableEntry(theValues.keySet().mutableElement(valueEntry1.getElementId()).add(o2, true));
+					valueEntry2.set(tempGV);
+
+					valueEntry1.get().valueId = valueEntry1.getElementId();
+					valueEntry2.get().valueId = valueEntry2.getElementId();
+
+					// Now I need to add modifications to adjust the expected collection and the links downstream
+					distinctOps.add(new CollectionOp<>(CollectionChangeType.remove, valueEntry2.get().distinctEl, idx2, o1));
+					distinctOps.add(new CollectionOp<>(CollectionChangeType.remove, valueEntry1.get().distinctEl, idx1, o1));
+					// Get the correct distinctEls for both values
+					valueEntry1.get().distinctEl = theDistinctElementsByValue.get(o1);
+					valueEntry2.get().distinctEl = theDistinctElementsByValue.get(o2);
+					distinctOps.add(new CollectionOp<>(CollectionChangeType.add, valueEntry2.get().distinctEl, idx1, o2));
+					distinctOps.add(new CollectionOp<>(CollectionChangeType.add, valueEntry1.get().distinctEl, idx2, o1));
+				}
+			});
 		}
 		modified(distinctOps, helper, true);
 	}
@@ -337,7 +396,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			switch (op.type) {
 			case add:
 				LinkElement srcLinkEl = getSourceElement(op.elementId);
-				int srcIndex = add(srcLinkEl, op.value, distinctOps);
+				int srcIndex = add(srcLinkEl, op.value, op.index, distinctOps);
 				parentOps.add(new CollectionOp<>(CollectionChangeType.add, srcLinkEl, srcIndex, op.value));
 				break;
 			case remove:
@@ -366,7 +425,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 					srcIds.addAll(values.sourceEls.entrySet());
 					for (Map.Entry<ElementId, LinkElement> srcId : srcIds) {
 						remove(srcId.getValue(), distinctOps);
-						add(srcId.getValue(), op.value, distinctOps);
+						add(srcId.getValue(), op.value, op.index, distinctOps);
 					}
 				} else {
 					if (theOptions.isPreservingSourceOrder()) {
@@ -437,21 +496,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		}
 	}
 
-	private ElementId getDistinctInsertHandle(LinkElement distinctEl) {
-		MutableElementSpliterator<Map.Entry<E, GroupedValues>> spliter = theValues.entrySet().spliterator(false);
-		ValueHolder<ElementId> result = new ValueHolder<>();
-		boolean[] passed = new boolean[1];
-		while (!passed[0] && spliter.forElement(el -> {
-			int diff = distinctEl.getIndex() - el.get().getValue().distinctEl.getIndex();
-			if (diff < 0)
-				result.accept(el.getElementId());
-			else
-				passed[0] = true;
-		}, false)) {}
-		return result.get();
-	}
-
-	private int add(LinkElement srcLinkEl, E value, List<CollectionOp<E>> distinctOps) {
+	private int add(LinkElement srcLinkEl, E value, int destIdx, List<CollectionOp<E>> distinctOps) {
 		ElementId srcEl = theSourceElements.putEntry(srcLinkEl, null, false).getElementId();
 		GroupedValues values = theValues.get(value);
 		if (values != null && !values.sourceEls.isEmpty()) {
@@ -484,25 +529,6 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 					distinctOps.add(new CollectionOp<>(CollectionChangeType.set, values.distinctEl, oldIndex, value));
 				}
 			} else {
-				if (theDistinctElementsByValue != null) {
-					// When the distinct order is encounter-order-dependent, the we may need to make corrections due to
-					// the CollectionOps being in a different order than the actual collection events
-					LinkElement distinctEl = theDistinctElementsByValue.get(value);
-					if (values.distinctEl != distinctEl) {
-						int oldIndex = getElementIndex(values.valueId);
-						distinctOps.add(new CollectionOp<>(CollectionChangeType.remove, values.distinctEl, oldIndex, value));
-						theValues.mutableEntry(values.valueId).remove();
-						ElementId distinctInsertHandle = getDistinctInsertHandle(distinctEl);
-						if (distinctInsertHandle != null) // Add before the insert handle
-							values.valueId = theValues.keySet().mutableElement(distinctInsertHandle).add(value, true);
-						else // Add as the last entry
-							values.valueId = theValues.keySet().mutableElement(theValues.keySet().getTerminalElement(false).getElementId())
-							.add(value, false);
-						theValues.mutableEntry(values.valueId).set(values);
-						distinctOps
-						.add(new CollectionOp<>(CollectionChangeType.add, values.distinctEl, getElementIndex(values.valueId), value));
-					}
-				}
 				// No effect
 				theDebug.act("add:no-effect").param("value", value)//
 				// .param("srcIndex", srcIndex)//
@@ -515,23 +541,17 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 				theDebug.act("add:new").param("value", value)//
 				.exec();
 				LinkElement distinctEl = getDestElements(srcLinkEl).getLast();
-				if (theValues.isEmpty() || isOrderImportant()) {
-					// If order is important, then we can just insert into the value map and the value map will put it in the right order
-					ElementId valueId = theValues.putEntry(value, null, false).getElementId();
-					values = new GroupedValues(value, valueId, srcEl, srcLinkEl, distinctEl);
-					theValues.mutableEntry(valueId).set(values);
-				} else {
-					// If order is unimportant, we need use the empirical element indexes to get the correct insert location
-					ElementId distinctInsertHandle = getDistinctInsertHandle(distinctEl);
-					ElementId addedEntryId;
-					if (distinctInsertHandle != null) // Add before the insert handle
-						addedEntryId = theValues.keySet().mutableElement(distinctInsertHandle).add(value, true);
-					else // Add as the last entry
-						addedEntryId = theValues.keySet().mutableElement(theValues.keySet().getTerminalElement(false).getElementId())
-						.add(value, false);
-					values = new GroupedValues(value, addedEntryId, srcEl, srcLinkEl, distinctEl);
-					theValues.mutableEntry(addedEntryId).set(values);
-				}
+				ElementId valueId;
+				if (destIdx >= 0 && !theValues.isEmpty()) {
+					if (destIdx == 0)
+						valueId = theValues.keySet().mutableElement(theValues.keySet().getTerminalElement(true).getElementId()).add(value,
+							true);
+					else
+						valueId = theValues.keySet().mutableElement(getValueHandle(destIdx - 1).getElementId()).add(value, false);
+				} else
+					valueId = theValues.putEntry(value, null, false).getElementId();
+				values = new GroupedValues(value, valueId, srcEl, srcLinkEl, distinctEl);
+				theValues.mutableEntry(valueId).set(values);
 			}
 			ElementId orderEl;
 			if (theOptions.isPreservingSourceOrder())
