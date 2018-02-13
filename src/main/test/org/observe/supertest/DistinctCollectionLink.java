@@ -16,6 +16,7 @@ import org.observe.collect.ObservableCollectionEvent;
 import org.observe.supertest.ObservableChainTester.TestValueType;
 import org.qommons.ArrayUtils;
 import org.qommons.BreakpointHere;
+import org.qommons.QommonsTestUtils;
 import org.qommons.Ternian;
 import org.qommons.TestHelper;
 import org.qommons.ValueHolder;
@@ -306,7 +307,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		}
 		if (!isOrderImportant()) {
 			/* The encounter-order-dependent nature of hash-based distinctness makes it extremely difficult to expect the correct element
-			 * order unless the encounter order of the actual distinct manager can be replicated in the testing.
+			 * order unless the encounter order of the actual distinct manager can be exactly replicated in the testing.
 			 * This also is difficult to reproduce from some types of links, like reversibility or flattening (where operations from above
 			 * may propagate back up the chain due to shared values between elements).
 			 *
@@ -339,50 +340,67 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 				public void swapped(E o1, int idx1, E o2, int idx2) {
 					MutableMapEntryHandle<E, GroupedValues> valueEntry1 = theValues.mutableEntry(theValues.getEntry(o1).getElementId());
 					MutableMapEntryHandle<E, GroupedValues> valueEntry2 = theValues.mutableEntry(theValues.getEntry(o2).getElementId());
-					// Note that the sort method always calls this method with idx1<idx2
-
-					// Get the id of the adjacent element to the first entry
-					boolean adjacentFirstLeft;
-					CollectionElement<E> adjacentFirst = theValues.keySet().getAdjacentElement(valueEntry1.getElementId(), true);
-					if (adjacentFirst != null)
-						adjacentFirstLeft = true;
-					else {
-						adjacentFirst = theValues.keySet().getAdjacentElement(valueEntry1.getElementId(), false);
-						adjacentFirstLeft = false;
+					if (!theOptions.isPreservingSourceOrder()) {
+						theSortedRepresentatives.remove(valueEntry1.getElementId());
+						theSortedRepresentatives.remove(valueEntry2.getElementId());
 					}
-					// Remove the first entry
-					GroupedValues tempGV = valueEntry1.get();
-					valueEntry1.remove();
+					// Note that the sort method always calls this method with idx1<idx2
+					if (idx2 == idx1 + 1) {
+						// If they're next to each other, this is easier
+						GroupedValues tempGV = valueEntry1.get();
+						valueEntry1.remove();
+						valueEntry1 = theValues.mutableEntry(theValues.keySet().mutableElement(valueEntry2.getElementId()).add(o1, false));
+						valueEntry1.set(tempGV);
 
-					// Insert the first entry again, adjacent to the second entry
-					valueEntry1 = theValues.mutableEntry(theValues.keySet().mutableElement(valueEntry2.getElementId()).add(o1, true));
-					valueEntry1.set(tempGV);
+						// Now I need to add modifications to adjust the expected collection and the links downstream
+						distinctOps.add(new CollectionOp<>(CollectionChangeType.remove, valueEntry1.get().distinctEl, idx1, o1));
+						valueEntry1.get().distinctEl = theDistinctElementsByValue.get(o1);
+						distinctOps.add(new CollectionOp<>(CollectionChangeType.add, valueEntry1.get().distinctEl, idx2, o1));
+					} else {
+						// Get the adjacent element to the first entry
+						boolean adjacentFirstLeft;
+						CollectionElement<E> adjacentFirst = theValues.keySet().getAdjacentElement(valueEntry1.getElementId(), true);
+						if (adjacentFirst != null)
+							adjacentFirstLeft = false;
+						else {
+							adjacentFirst = theValues.keySet().getAdjacentElement(valueEntry1.getElementId(), false);
+							adjacentFirstLeft = true;
+						}
+						// Remove the first entry
+						GroupedValues tempGV = valueEntry1.get();
+						valueEntry1.remove();
 
-					// Remove the second entry
-					tempGV = valueEntry2.get();
-					valueEntry2.remove();
+						// Insert the first entry again, adjacent to the second entry
+						valueEntry1 = theValues.mutableEntry(theValues.keySet().mutableElement(valueEntry2.getElementId()).add(o1, true));
+						valueEntry1.set(tempGV);
 
-					// Insert the second entry again, in the first entry's old position
-					if (adjacentFirst.getElementId().isPresent())
+						// Remove the second entry
+						tempGV = valueEntry2.get();
+						valueEntry2.remove();
+
+						// Insert the second entry again, in the first entry's old position
 						valueEntry2 = theValues
-						.mutableEntry(theValues.keySet().mutableElement(adjacentFirst.getElementId()).add(o2, !adjacentFirstLeft));
-					else // First entry must have been adjacent to the second entry
-						valueEntry2 = theValues.mutableEntry(theValues.keySet().mutableElement(valueEntry1.getElementId()).add(o2, true));
-					valueEntry2.set(tempGV);
+							.mutableEntry(theValues.keySet().mutableElement(adjacentFirst.getElementId()).add(o2, !adjacentFirstLeft));
+						valueEntry2.set(tempGV);
 
+						// Now I need to add modifications to adjust the expected collection and the links downstream
+						distinctOps.add(new CollectionOp<>(CollectionChangeType.remove, valueEntry2.get().distinctEl, idx2, o2));
+						distinctOps.add(new CollectionOp<>(CollectionChangeType.remove, valueEntry1.get().distinctEl, idx1, o1));
+						valueEntry1.get().distinctEl = theDistinctElementsByValue.get(o1);
+						valueEntry2.get().distinctEl = theDistinctElementsByValue.get(o2);
+						distinctOps.add(new CollectionOp<>(CollectionChangeType.add, valueEntry2.get().distinctEl, idx1, o2));
+						distinctOps.add(new CollectionOp<>(CollectionChangeType.add, valueEntry1.get().distinctEl, idx2, o1));
+					}
+					// Bookkeeping
 					valueEntry1.get().valueId = valueEntry1.getElementId();
 					valueEntry2.get().valueId = valueEntry2.getElementId();
-
-					// Now I need to add modifications to adjust the expected collection and the links downstream
-					distinctOps.add(new CollectionOp<>(CollectionChangeType.remove, valueEntry2.get().distinctEl, idx2, o1));
-					distinctOps.add(new CollectionOp<>(CollectionChangeType.remove, valueEntry1.get().distinctEl, idx1, o1));
-					// Get the correct distinctEls for both values
-					valueEntry1.get().distinctEl = theDistinctElementsByValue.get(o1);
-					valueEntry2.get().distinctEl = theDistinctElementsByValue.get(o2);
-					distinctOps.add(new CollectionOp<>(CollectionChangeType.add, valueEntry2.get().distinctEl, idx1, o2));
-					distinctOps.add(new CollectionOp<>(CollectionChangeType.add, valueEntry1.get().distinctEl, idx2, o1));
+					if (!theOptions.isPreservingSourceOrder()) {
+						theSortedRepresentatives.add(valueEntry1.getElementId());
+						theSortedRepresentatives.add(valueEntry2.getElementId());
+					}
 				}
 			});
+			Assert.assertThat(theValues.keySet(), QommonsTestUtils.collectionsEqual(getCollection(), true));
 		}
 		modified(distinctOps, helper, true);
 	}
@@ -456,7 +474,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			}
 		}
 		getParent().fromAbove(parentOps, helper, true);
-		modified(ops, helper, !above);
+		modified(distinctOps, helper, !above);
 	}
 
 	private MapEntryHandle<E, GroupedValues> getValueHandle(int index) {
@@ -631,6 +649,8 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		if (isRoot)
 			getParent().check(transComplete);
 		super.check(transComplete);
+		Assert.assertThat(theSourceElements.values().stream().map(v -> v.value).collect(Collectors.toList()),
+			QommonsTestUtils.collectionsEqual(getParent().getCollection(), true));
 	}
 
 	@Override

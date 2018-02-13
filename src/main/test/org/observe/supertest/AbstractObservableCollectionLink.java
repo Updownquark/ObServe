@@ -935,7 +935,8 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 	}
 
 	protected void modified(List<CollectionOp<T>> ops, TestHelper helper, boolean propagateUp) {
-		for (CollectionOp<T> op : ops) {
+		for (int i = 0; i < ops.size(); i++) {
+			CollectionOp<T> op = ops.get(i);
 			switch (op.type) {
 			case add:
 				theTester.add(op.index, op.value);
