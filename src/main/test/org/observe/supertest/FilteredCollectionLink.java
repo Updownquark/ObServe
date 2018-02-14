@@ -173,7 +173,7 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 				theSourceValues.mutableElement(srcId).set(op.value);
 				presentEl = thePresentSourceElements.getElement(srcId, true); // By value, not by element ID
 				if (presentEl != null) {
-					LinkElement element = getDestElements(op.elementId).getLast();
+					LinkElement element = getDestElements(op.elementId).getFirst();
 					int presentIndex = thePresentSourceElements.getElementsBefore(presentEl.getElementId());
 					if (theFilter.apply(op.value) == null) {
 						filterOps.add(new CollectionOp<>(CollectionChangeType.set, element, presentIndex, op.value));
