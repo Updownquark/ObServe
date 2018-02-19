@@ -1378,7 +1378,7 @@ public final class ObservableCollectionImpl {
 			if (isReversed) {
 				ElementId temp = reverseId(after);
 				after = reverseId(before);
-				before = reverseId(temp);
+				before = temp;
 			}
 			return theSource.canAdd(reversed.result, after, before);
 		}
@@ -1394,7 +1394,7 @@ public final class ObservableCollectionImpl {
 				if (isReversed) {
 					ElementId temp = reverseId(after);
 					after = reverseId(before);
-					before = reverseId(temp);
+					before = temp;
 				}
 				CollectionElement<E> srcEl = theSource.addElement(reversed.result, after, before, first);
 				return srcEl == null ? null : elementFor(srcEl, null);
@@ -1505,7 +1505,7 @@ public final class ObservableCollectionImpl {
 		@Override
 		public MutableElementSpliterator<T> spliterator(ElementId element, boolean asNext) {
 			if (isReversed) {
-				element = element.reverse();
+				element = reverseId(element);
 				asNext = !asNext;
 			}
 			return new PassiveDerivedMutableSpliterator(theSource.spliterator(element, asNext));
@@ -1590,12 +1590,9 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public MutableElementSpliterator<T> spliterator(boolean fromStart) {
-			MutableElementSpliterator<E> srcSpliter;
 			if (isReversed)
-				srcSpliter = theSource.spliterator(!fromStart).reverse();
-			else
-				srcSpliter = theSource.spliterator(fromStart);
-			return new PassiveDerivedMutableSpliterator(srcSpliter);
+				fromStart = !fromStart;
+			return new PassiveDerivedMutableSpliterator(theSource.spliterator(fromStart));
 		}
 
 		@Override
@@ -1699,12 +1696,18 @@ public final class ObservableCollectionImpl {
 
 			@Override
 			protected boolean internalForElement(Consumer<? super CollectionElement<T>> action, boolean forward) {
-				return theSourceSpliter.forElement(el -> action.accept(elementFor(el, theMap)), forward);
+				if (isReversed)
+					forward = !forward;
+				return theSourceSpliter.forElement(//
+					el -> action.accept(elementFor(el, theMap)), forward);
 			}
 
 			@Override
 			protected boolean internalForElementM(Consumer<? super MutableCollectionElement<T>> action, boolean forward) {
-				return theSourceSpliter.forElementM(el -> action.accept(mutableElementFor(el, theMap)), forward);
+				if (isReversed)
+					forward = !forward;
+				return theSourceSpliter.forElementM(//
+					el -> action.accept(mutableElementFor(el, theMap)), forward);
 			}
 
 			@Override
@@ -1732,7 +1735,7 @@ public final class ObservableCollectionImpl {
 	public static class ActiveDerivedCollection<T> implements ObservableCollection<T> {
 		/**
 		 * Holds a {@link ObservableCollectionDataFlowImpl.DerivedCollectionElement}s for an {@link ActiveDerivedCollection}
-		 * 
+		 *
 		 * @param <T> The type of the collection
 		 */
 		protected static class DerivedElementHolder<T> implements ElementId {
@@ -2187,12 +2190,14 @@ public final class ObservableCollectionImpl {
 
 			@Override
 			protected boolean internalForElement(Consumer<? super CollectionElement<T>> action, boolean forward) {
-				return theElementSpliter.forValue(element -> action.accept(elementFor(element)), forward);
+				return theElementSpliter.forValue(//
+					element -> action.accept(elementFor(element)), forward);
 			}
 
 			@Override
 			protected boolean internalForElementM(Consumer<? super MutableCollectionElement<T>> action, boolean forward) {
-				return theElementSpliter.forElementM(element -> action.accept(mutableElement(element.get(), element)), forward);
+				return theElementSpliter.forElementM(//
+					element -> action.accept(mutableElement(element.get(), element)), forward);
 			}
 
 			@Override
