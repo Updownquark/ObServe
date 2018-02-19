@@ -21,6 +21,7 @@ public final class LinkElement implements Comparable<LinkElement> {
 		return theLinkElement.compareTo(o.theLinkElement);
 	}
 
+	/** @return Whether this element is still present in the ObservableCollection being tested */
 	public boolean isPresent() {
 		return theCollectionElement.isPresent();
 	}

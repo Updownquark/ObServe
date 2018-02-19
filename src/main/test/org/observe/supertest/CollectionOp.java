@@ -124,6 +124,10 @@ public class CollectionOp<E> {
 	public static boolean isAddAllIndex(List<? extends CollectionOp<?>> ops) {
 		return !ops.isEmpty()//
 			&& ops.get(0).type == CollectionChangeType.add && ops.get(0).index >= 0//
-			&& CollectionOp.isSameType(ops) && CollectionOp.isSameIndex(ops);
+			&& isSameType(ops) && isSameIndex(ops);
+	}
+
+	public static boolean isMultiRemove(List<? extends CollectionOp<?>> ops) {
+		return ops.size() > 1 && ops.get(0).type == CollectionChangeType.remove && isSameType(ops);
 	}
 }

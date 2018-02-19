@@ -85,7 +85,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		theValues = flow.equivalence().createMap();
 		theSourceElements = new BetterTreeMap<>(false, LinkElement::compareTo);
 		theSortedRepresentatives = new BetterTreeSet<>(false, ElementId::compareTo);
-		theDistinctElementsByValue = isOrderImportant() ? null : flow.equivalence().createMap();
+		theDistinctElementsByValue = flow.equivalence().createMap();
 
 		theDebug = Debug.d().add("distinctLink");
 	}
@@ -140,19 +140,17 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 	@Override
 	protected void change(ObservableCollectionEvent<? extends E> evt) {
 		super.change(evt);
-		if (theDistinctElementsByValue != null) {
-			switch (evt.getType()) {
-			case add:
-				theDistinctElementsByValue.put(evt.getNewValue(), getLastAddedOrModifiedElement());
-				break;
-			case remove:
-				theDistinctElementsByValue.remove(evt.getOldValue());
-				break;
-			case set:
-				theDistinctElementsByValue.remove(evt.getOldValue());
-				theDistinctElementsByValue.put(evt.getNewValue(), getLastAddedOrModifiedElement());
-				break;
-			}
+		switch (evt.getType()) {
+		case add:
+			theDistinctElementsByValue.put(evt.getNewValue(), getLastAddedOrModifiedElement());
+			break;
+		case remove:
+			theDistinctElementsByValue.remove(evt.getOldValue());
+			break;
+		case set:
+			theDistinctElementsByValue.remove(evt.getOldValue());
+			theDistinctElementsByValue.put(evt.getNewValue(), getLastAddedOrModifiedElement());
+			break;
 		}
 	}
 
@@ -262,11 +260,11 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			switch (op.type) {
 			case add:
 				theDebug.act("addSource").param("@", op.value).exec();
-				add(op.elementId, op.index, op.value, -1, distinctOps);
+				add(op.elementId, op.value, -1, distinctOps);
 				break;
 			case remove:
 				theDebug.act("remove").param("@", op.value).exec();
-				remove(op.elementId, op.index, distinctOps);
+				remove(op.elementId, distinctOps);
 				break;
 			case set:
 				CollectionElement<GroupedValues> srcEl = theSourceElements.getEntry(op.elementId);
@@ -288,7 +286,9 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 					}
 				} else {
 					// Category has been changed.
-					if (newValues == null && oldValues.sourceEls.size() == 1
+					// Due to differences in encounter order between the actual collection and the test, this may actually represent an
+					// add/remove. We detect this by testing if the outgoing link ID is no longer present.
+					if (newValues == null && oldValues.sourceEls.size() == 1 && oldValues.distinctEl.isPresent()
 						&& theValues.keySet().mutableElement(oldValues.valueId).isAcceptable(op.value) == null) {
 						theDebug.act("update:move").exec();
 						theSourceElements.mutableEntry(srcEl.getElementId()).set(oldValues);
@@ -300,8 +300,8 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 						distinctOps.add(new CollectionOp<>(CollectionChangeType.set, oldValues.distinctEl, repIndex, op.value));
 					} else {
 						// Same as a remove, then an add.
-						remove(op.elementId, op.index, distinctOps);
-						add(op.elementId, op.index, op.value, -1, distinctOps);
+						remove(op.elementId, distinctOps);
+						add(op.elementId, op.value, -1, distinctOps);
 					}
 				}
 			}
@@ -415,7 +415,7 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 			switch (op.type) {
 			case add:
 				LinkElement srcLinkEl = getSourceElement(op.elementId);
-				int srcIndex = add(srcLinkEl, -1, op.value, op.index, distinctOps);
+				int srcIndex = add(srcLinkEl, op.value, op.index, distinctOps);
 				parentOps.add(new CollectionOp<>(CollectionChangeType.add, srcLinkEl, srcIndex, op.value));
 				break;
 			case remove:
@@ -443,8 +443,8 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 					List<Map.Entry<ElementId, LinkElement>> srcIds = new ArrayList<>(values.sourceEls.size());
 					srcIds.addAll(values.sourceEls.entrySet());
 					for (Map.Entry<ElementId, LinkElement> srcId : srcIds) {
-						remove(srcId.getValue(), -1, distinctOps);
-						add(srcId.getValue(), -1, op.value, op.index, distinctOps);
+						remove(srcId.getValue(), distinctOps);
+						add(srcId.getValue(), op.value, op.index, distinctOps);
 					}
 				} else {
 					if (theOptions.isPreservingSourceOrder()) {
@@ -515,10 +515,8 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		}
 	}
 
-	private int add(LinkElement srcLinkEl, int srcIndex, E value, int destIdx, List<CollectionOp<E>> distinctOps) {
+	private int add(LinkElement srcLinkEl, E value, int destIdx, List<CollectionOp<E>> distinctOps) {
 		ElementId srcEl = theSourceElements.putEntry(srcLinkEl, null, false).getElementId();
-		if (srcIndex >= 0)
-			Assert.assertEquals(theSourceElements.keySet().getElementsBefore(srcEl), srcIndex);
 		GroupedValues values = theValues.get(value);
 		if (values != null && !values.sourceEls.isEmpty()) {
 			ElementId valueSourceId = values.sourceEls.putEntry(srcEl, srcLinkEl, false).getElementId();
@@ -561,7 +559,9 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 				// Add at the correct position if specified
 				theDebug.act("add:new").param("value", value)//
 				.exec();
-				LinkElement distinctEl = getDestElements(srcLinkEl).getLast();
+				// Differences in encounter order may have caused the distinct element mapped to the source element to have been removed
+				// in the ObservableCollection. So we need to get the empirical element mapped to the value instead.
+				LinkElement distinctEl = theDistinctElementsByValue.get(value);
 				ElementId valueId;
 				if (destIdx >= 0 && !theValues.isEmpty()) {
 					if (destIdx == 0)
@@ -586,10 +586,8 @@ public class DistinctCollectionLink<E> extends AbstractObservableCollectionLink<
 		return theSourceElements.keySet().getElementsBefore(srcEl);
 	}
 
-	private void remove(LinkElement srcLinkEl, int srcIndex, List<CollectionOp<E>> distinctOps) {
+	private void remove(LinkElement srcLinkEl, List<CollectionOp<E>> distinctOps) {
 		ElementId srcId = theSourceElements.getEntry(srcLinkEl).getElementId();
-		if (srcIndex >= 0)
-			Assert.assertEquals(theSourceElements.keySet().getElementsBefore(srcId), srcIndex);
 		GroupedValues values = theSourceElements.getEntryById(srcId).get();
 		values.sourceEls.remove(srcId);
 		if (values.representative.equals(srcId)) {

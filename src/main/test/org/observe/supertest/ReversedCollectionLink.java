@@ -1,6 +1,7 @@
 package org.observe.supertest;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.function.IntUnaryOperator;
 
@@ -73,6 +74,7 @@ public class ReversedCollectionLink<E> extends AbstractObservableCollectionLink<
 
 	@Override
 	public void fromAbove(List<CollectionOp<E>> ops, TestHelper helper, boolean above) {
+		// multi-remove operations need to be reversed because the indexes are pre-modification
 		List<CollectionOp<E>> parentOps = new ArrayList<>();
 		for (CollectionOp<E> op : ops) {
 			switch (op.type) {
@@ -90,6 +92,8 @@ public class ReversedCollectionLink<E> extends AbstractObservableCollectionLink<
 			}
 		}
 		modified(ops, helper, !above);
+		if (CollectionOp.isMultiRemove(parentOps))
+			Collections.reverse(ops);
 		getParent().fromAbove(parentOps, helper, true);
 	}
 

@@ -16,11 +16,11 @@ import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ObservableChainTester.TestValueType;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.RandomAction;
-import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterSortedMap;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
-import org.qommons.tree.BetterTreeList;
+import org.qommons.tree.BetterTreeMap;
 import org.qommons.tree.BetterTreeSet;
 
 public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<E, E> {
@@ -28,7 +28,7 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 	private final boolean isFilterVariable;
 	private Function<E, String> theFilter;
 
-	private final BetterList<E> theSourceValues;
+	private final BetterSortedMap<LinkElement, E> theSourceValues;
 	private final BetterSortedSet<ElementId> thePresentSourceElements;
 
 	public FilteredCollectionLink(ObservableCollectionChainLink<?, E> parent, TestValueType type, CollectionDataFlow<?, ?, E> flow,
@@ -38,7 +38,7 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 		isFilterVariable = variableFilter;
 		theFilter = filter.get();
 
-		theSourceValues = new BetterTreeList<>(false);
+		theSourceValues = new BetterTreeMap<>(false, LinkElement::compareTo);
 		thePresentSourceElements = new BetterTreeSet<>(false, ElementId::compareTo);
 	}
 
@@ -47,9 +47,10 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 		super.initialize(helper);
 		for (int i = 0; i < getParent().getElements().size(); i++) {
 			E value = getParent().getCollection().get(i);
-			ElementId srcId = theSourceValues.addElement(value, false).getElementId();
+			LinkElement srcEl = getParent().getElements().get(i);
+			ElementId srcId = theSourceValues.putEntry(srcEl, value, false).getElementId();
 			if (theFilter.apply(value) == null) {
-				mapSourceElement(getParent().getElements().get(i), getElements().get(thePresentSourceElements.size()));
+				mapSourceElement(srcEl, getElements().get(thePresentSourceElements.size()));
 				thePresentSourceElements.add(srcId);
 				getExpected().add(value);
 			}
@@ -68,26 +69,25 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 				theFilter = newFilter;
 				theFilterValue.set(theFilter, null);
 				List<CollectionOp<E>> ops = new ArrayList<>();
-				for (int i = 0; i < theSourceValues.size(); i++) {
-					CollectionElement<E> srcEl = theSourceValues.getElement(i);
-					CollectionElement<ElementId> presentElement = thePresentSourceElements.getElement(srcEl.getElementId(), true); // value
-					boolean isIncluded = newFilter.apply(srcEl.get()) == null;
+				theSourceValues.entrySet().spliterator().forEachElement(el -> {
+					CollectionElement<ElementId> presentElement = thePresentSourceElements.getElement(el.getElementId(), true); // value
+					LinkElement srcLinkEl = el.get().getKey();
+					E value = el.get().getValue();
+					boolean isIncluded = newFilter.apply(value) == null;
 					if (presentElement != null && !isIncluded) {
 						int presentIndex = thePresentSourceElements.getElementsBefore(presentElement.getElementId());
 						thePresentSourceElements.mutableElement(presentElement.getElementId()).remove();
-						LinkElement srcLinkEl = getParent().getElements().get(i);
 						LinkElement destLinkEl = getDestElements(srcLinkEl).getLast();
 						mapSourceElement(srcLinkEl, destLinkEl);
-						ops.add(new CollectionOp<>(CollectionChangeType.remove, destLinkEl, presentIndex, srcEl.get()));
+						ops.add(new CollectionOp<>(CollectionChangeType.remove, destLinkEl, presentIndex, value));
 					} else if (presentElement == null && isIncluded) {
-						presentElement = thePresentSourceElements.addElement(srcEl.getElementId(), true);
+						presentElement = thePresentSourceElements.addElement(el.getElementId(), true);
 						int presentIndex = thePresentSourceElements.getElementsBefore(presentElement.getElementId());
-						LinkElement srcLinkEl = getParent().getElements().get(i);
 						LinkElement destLinkEl = getElements().get(presentIndex);
 						mapSourceElement(srcLinkEl, destLinkEl);
-						ops.add(new CollectionOp<>(CollectionChangeType.add, destLinkEl, presentIndex, srcEl.get()));
+						ops.add(new CollectionOp<>(CollectionChangeType.add, destLinkEl, presentIndex, value));
 					}
-				}
+				}, true);
 				modified(ops, action.getHelper(), true);
 			});
 		}
@@ -139,7 +139,7 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 	private int getSourceIndex(int index) {
 		if (index == thePresentSourceElements.size())
 			return theSourceValues.size();
-		return theSourceValues.getElementsBefore(thePresentSourceElements.get(index));
+		return theSourceValues.keySet().getElementsBefore(thePresentSourceElements.get(index));
 	}
 
 	@Override
@@ -148,7 +148,8 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 		for (CollectionOp<E> op : ops) {
 			switch (op.type) {
 			case add:
-				ElementId srcId = theSourceValues.addElement(op.index, op.value).getElementId();
+				ElementId srcId = theSourceValues.putEntry(op.elementId, op.value, false).getElementId();
+				Assert.assertEquals(op.index, theSourceValues.keySet().getElementsBefore(srcId));
 				if (theFilter.apply(op.value) == null) {
 					LinkElement element = getDestElements(op.elementId).getLast();
 					ElementId presentId = thePresentSourceElements.addElement(srcId, false).getElementId();
@@ -156,7 +157,8 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 				}
 				break;
 			case remove:
-				srcId = theSourceValues.getElement(op.index).getElementId();
+				srcId = theSourceValues.getEntry(op.elementId).getElementId();
+				Assert.assertEquals(op.index, theSourceValues.keySet().getElementsBefore(srcId));
 				CollectionElement<ElementId> presentEl = thePresentSourceElements.getElement(srcId, true); // By value, not by element ID
 				if (presentEl != null) {
 					LinkElement element = getDestElements(op.elementId).getLast();
@@ -165,12 +167,13 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 						op.value));
 					thePresentSourceElements.mutableElement(presentEl.getElementId()).remove();
 				}
-				theSourceValues.mutableElement(srcId).remove();
+				theSourceValues.mutableEntry(srcId).remove();
 				break;
 			case set:
-				srcId = theSourceValues.getElement(op.index).getElementId();
-				E oldValue = theSourceValues.getElement(srcId).get();
-				theSourceValues.mutableElement(srcId).set(op.value);
+				srcId = theSourceValues.getEntry(op.elementId).getElementId();
+				Assert.assertEquals(op.index, theSourceValues.keySet().getElementsBefore(srcId));
+				E oldValue = theSourceValues.getEntryById(srcId).get();
+				theSourceValues.mutableEntry(srcId).set(op.value);
 				presentEl = thePresentSourceElements.getElement(srcId, true); // By value, not by element ID
 				if (presentEl != null) {
 					LinkElement element = getDestElements(op.elementId).getFirst();
@@ -202,22 +205,22 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 			switch (op.type) {
 			case add:
 				// Assuming that the added elements were added in the same order as the list of operations. Valid?
-				int srcIndex = srcElement.getIndex();
+				ElementId srcId = theSourceValues.putEntry(srcElement, op.value, false).getElementId();
+				int srcIndex = theSourceValues.keySet().getElementsBefore(srcId);
 				parentOps.add(new CollectionOp<>(CollectionChangeType.add, srcElement, srcIndex, op.value));
-				ElementId srcId = theSourceValues.addElement(srcIndex, op.value).getElementId();
 				ElementId presentId = thePresentSourceElements.addElement(srcId, false).getElementId();
 				Assert.assertEquals(op.index, thePresentSourceElements.getElementsBefore(presentId));
 				break;
 			case remove:
 				srcId = thePresentSourceElements.remove(op.index);
-				srcIndex = theSourceValues.getElementsBefore(srcId);
-				theSourceValues.mutableElement(srcId).remove();
+				srcIndex = theSourceValues.keySet().getElementsBefore(srcId);
+				theSourceValues.mutableEntry(srcId).remove();
 				parentOps.add(new CollectionOp<>(CollectionChangeType.remove, srcElement, srcIndex, op.value));
 				break;
 			case set:
 				srcId = thePresentSourceElements.get(op.index);
-				srcIndex = theSourceValues.getElementsBefore(srcId);
-				theSourceValues.mutableElement(srcId).set(op.value);
+				srcIndex = theSourceValues.keySet().getElementsBefore(srcId);
+				theSourceValues.mutableEntry(srcId).set(op.value);
 				parentOps.add(new CollectionOp<>(CollectionChangeType.set, srcElement, srcIndex, op.value));
 				break;
 			}

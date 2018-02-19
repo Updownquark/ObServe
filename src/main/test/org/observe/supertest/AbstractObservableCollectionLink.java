@@ -125,11 +125,12 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		theTester.checkRemovedValues(isCheckingRemovedValues);
 		theTester.getExpected().clear();
 		getCollection().onChange(this::change);
-		for (int i = 0; i < getCollection().size(); i++) {
-			ElementId el = theElements.addElement(null, false).getElementId();
-			theElements.mutableElement(el)
-			.set(new LinkElement(theElements, el, getCollection(), getCollection().getElement(i).getElementId()));
-		}
+		getCollection().spliterator().forEachElement(el -> {
+			ElementId el2 = theElements.addElement(null, false).getElementId();
+			LinkElement linkEl = new LinkElement(theElements, el2, getCollection(), el.getElementId());
+			theElements.mutableElement(el2).set(linkEl);
+			theLinkElementsById.put(el.getElementId(), linkEl);
+		}, true);
 
 		// Extras
 		theExtras = "";
@@ -544,6 +545,8 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 			try {
 				element = modify.addElement(add.value, first);
 			} catch (UnsupportedOperationException | IllegalArgumentException e) {
+				if (add.getMessage() == null)
+					e.printStackTrace();
 				element = null;
 			}
 			if (element != null) {
