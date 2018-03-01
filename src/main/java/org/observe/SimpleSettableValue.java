@@ -1,5 +1,9 @@
 package org.observe;
 
+import java.util.concurrent.locks.ReentrantLock;
+
+import org.qommons.Transaction;
+
 import com.google.common.reflect.TypeToken;
 
 /**
@@ -7,11 +11,12 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <T> The type of the value
  */
-public class SimpleSettableValue<T> extends DefaultSettableValue<T> {
-	private final Observer<ObservableValueEvent<T>> theController;
+public class SimpleSettableValue<T> implements SettableValue<T> {
+	private final SimpleObservable<ObservableValueEvent<T>> theEventer;
 
 	private final TypeToken<T> theType;
 	private final boolean isNullable;
+	private final ReentrantLock theLock;
 	private T theValue;
 
 	/**
@@ -19,9 +24,10 @@ public class SimpleSettableValue<T> extends DefaultSettableValue<T> {
 	 * @param nullable Whether null can be assigned to the value
 	 */
 	public SimpleSettableValue(TypeToken<T> type, boolean nullable) {
-		theController = control(null);
+		theEventer = createEventer();
 		theType = type;
 		isNullable = nullable && !type.isPrimitive();
+		theLock = new ReentrantLock();
 	}
 
 	/**
@@ -37,6 +43,17 @@ public class SimpleSettableValue<T> extends DefaultSettableValue<T> {
 		return theType;
 	}
 
+	@Override
+	public Observable<ObservableValueEvent<T>> changes() {
+		return theEventer.readOnly();
+	}
+
+	@Override
+	public Transaction lock() {
+		theLock.lock();
+		return () -> theLock.unlock();
+	}
+
 	/** @return Whether null can be assigned to this value */
 	public boolean isNullable() {
 		return isNullable;
@@ -47,15 +64,28 @@ public class SimpleSettableValue<T> extends DefaultSettableValue<T> {
 		return theValue;
 	}
 
+	private void fireInitial(Observer<? super ObservableValueEvent<T>> observer) {
+		ObservableValueEvent<T> event = createInitialEvent(get(), null);
+		observer.onNext(event);
+	}
+
 	@Override
 	public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
 		String accept = isAcceptable(value);
 		if(accept != null)
 			throw new IllegalArgumentException(accept);
-		T old = theValue;
-		theValue = value;
-		Observer.onNextAndFinish(theController, createChangeEvent(old, value, cause));
-		return old;
+		theLock.lock();
+		try {
+			T old = theValue;
+			theValue = value;
+			ObservableValueEvent<T> evt = createChangeEvent(old, value, cause);
+			try (Transaction t = ObservableValueEvent.use(evt)) {
+				theEventer.onNext(evt);
+			}
+			return old;
+		} finally {
+			theLock.unlock();
+		}
 	}
 
 	@Override
@@ -69,7 +99,12 @@ public class SimpleSettableValue<T> extends DefaultSettableValue<T> {
 
 	@Override
 	public ObservableValue<String> isEnabled() {
-		return ObservableValue.constant(TypeToken.of(String.class), null);
+		return ObservableValue.of(TypeToken.of(String.class), null);
+	}
+
+	/** @return The observable for this value to use to fire its initial and change events */
+	protected SimpleObservable<ObservableValueEvent<T>> createEventer() {
+		return new SimpleObservable<>(observer -> fireInitial(observer), true, true);
 	}
 
 	@Override

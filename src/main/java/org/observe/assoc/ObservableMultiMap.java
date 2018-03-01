@@ -1,30 +1,40 @@
 package org.observe.assoc;
 
 import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.Iterator;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
-import org.observe.ObservableValueEvent;
+import org.observe.SettableValue;
 import org.observe.Subscription;
-import org.observe.collect.CollectionSession;
+import org.observe.collect.CollectionChangeType;
+import org.observe.collect.CollectionSubscription;
+import org.observe.collect.Equivalence;
+import org.observe.collect.FlowOptions.GroupingOptions;
+import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollection;
-import org.observe.collect.ObservableElement;
-import org.observe.collect.ObservableList;
-import org.observe.collect.ObservableOrderedCollection;
-import org.observe.collect.ObservableOrderedElement;
-import org.observe.collect.ObservableReversibleCollection;
+import org.observe.collect.ObservableCollection.CollectionDataFlow;
+import org.observe.collect.ObservableCollection.DistinctDataFlow;
+import org.observe.collect.ObservableCollection.SubscriptionCause;
 import org.observe.collect.ObservableSet;
-import org.observe.collect.ObservableSortedSet;
-import org.qommons.Equalizer;
+import org.qommons.Causable;
 import org.qommons.Transaction;
-import org.qommons.collect.TransactableMultiMap;
+import org.qommons.collect.BetterCollection;
+import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterMultiMap;
+import org.qommons.collect.ElementId;
+import org.qommons.collect.MapEntryHandle;
+import org.qommons.collect.MultiEntryHandle;
+import org.qommons.collect.MultiMap;
+import org.qommons.collect.MultiMapEntryHandle;
+import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.collect.MutableElementSpliterator;
+import org.qommons.collect.MutableMapEntryHandle;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -35,23 +45,112 @@ import com.google.common.reflect.TypeToken;
  * @param <K> The type of key used by this map
  * @param <V> The type of values stored in this map
  */
-public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
+public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 	/**
 	 * A {@link java.util.Map.Entry} with observable capabilities
 	 *
 	 * @param <K> The type of key this entry uses
 	 * @param <V> The type of value this entry stores
 	 */
-	public interface ObservableMultiEntry<K, V> extends MultiEntry<K, V>, ObservableCollection<V> {
-	}
+	public interface ObservableMultiEntry<K, V> extends MultiEntryHandle<K, V> {
+		/** @return The key type of this entry's map */
+		TypeToken<K> getKeyType();
 
-	/**
-	 * A {@link ObservableMultiMap.ObservableMultiEntry} whose values are sorted
-	 *
-	 * @param <K> The type of key this entry uses
-	 * @param <V> The type of value this entry stores
-	 */
-	public interface ValueSortedMultiEntry<K, V> extends ObservableMultiEntry<K, V>, ObservableSortedSet<V> {}
+		@Override
+		ObservableCollection<V> getValues();
+
+		/**
+		 * @param <K> The key type for the entry
+		 * @param <V> The value type for the entry
+		 * @param keyType The key type for the entry
+		 * @param keyId The ID for the entry
+		 * @param key The key for the entry
+		 * @param keyEquivalence The key equivalence for the entry
+		 * @param values The values for the entry
+		 * @return The new entry
+		 */
+		static <K, V> ObservableMultiEntry<K, V> create(TypeToken<K> keyType, ElementId keyId, K key, Equivalence<? super K> keyEquivalence,
+			ObservableCollection<V> values) {
+			return new ObservableMultiEntry<K, V>() {
+				@Override
+				public TypeToken<K> getKeyType() {
+					return keyType;
+				}
+
+				@Override
+				public ElementId getElementId() {
+					return keyId;
+				}
+
+				@Override
+				public K getKey() {
+					return key;
+				}
+
+				@Override
+				public ObservableCollection<V> getValues() {
+					return values;
+				}
+
+				@Override
+				public int hashCode() {
+					return Objects.hashCode(key);
+				}
+
+				@Override
+				public boolean equals(Object obj) {
+					if (!(obj instanceof ObservableMultiEntry))
+						return false;
+					ObservableMultiEntry<?, ?> other = (ObservableMultiEntry<?, ?>) obj;
+					if (!keyEquivalence.isElement(other.getKey()))
+						return false;
+					return keyEquivalence.elementEquals(key, other.getKey());
+				}
+
+				@Override
+				public String toString() {
+					return key + "=" + values;
+				}
+			};
+		}
+
+		@Override
+		default ObservableMultiEntry<K, V> reverse() {
+			return new ReversedObservableMultiEntry<>(this);
+		}
+
+		/**
+		 * A reversed observable multi-map entry
+		 *
+		 * @param <K> The key type of the multi-map
+		 * @param <V> The value type of the multi-map
+		 */
+		class ReversedObservableMultiEntry<K, V> extends ReversedMultiEntryHandle<K, V> implements ObservableMultiEntry<K, V> {
+			public ReversedObservableMultiEntry(ObservableMultiEntry<K, V> wrapped) {
+				super(wrapped);
+			}
+
+			@Override
+			protected ObservableMultiEntry<K, V> getSource() {
+				return (ObservableMultiEntry<K, V>) super.getSource();
+			}
+
+			@Override
+			public TypeToken<K> getKeyType() {
+				return getSource().getKeyType();
+			}
+
+			@Override
+			public ObservableCollection<V> getValues() {
+				return (ObservableCollection<V>) super.getValues();
+			}
+
+			@Override
+			public ObservableMultiEntry<K, V> reverse() {
+				return getSource();
+			}
+		}
+	}
 
 	/** @return The type of keys this map uses */
 	TypeToken<K> getKeyType();
@@ -59,45 +158,28 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	/** @return The type of values this map stores */
 	TypeToken<V> getValueType();
 
+	/** @return The type of elements in the entry set. Should be cached, as type tokens aren't cheap to build. */
+	TypeToken<ObservableMultiEntry<K, V>> getEntryType();
+
 	/**
-	 * @return The observable value for the current session of this map. The session allows listeners to retain state for the duration of a
-	 *         unit of work (controlled by implementation-specific means), batching events where possible. Not all events on a map will have
-	 *         a session (the value may be null). In addition, the presence or absence of a session need not imply anything about the
-	 *         threaded interactions with a session. A transaction may encompass events fired and received on multiple threads. In short,
-	 *         the only thing guaranteed about sessions is that they will end. Therefore, if a session is present, observers may assume that
-	 *         they can delay expensive results of map events until the session completes. The {@link ObservableCollection#getSession()
-	 *         sessions} of the {@link #entrySet() entries}, {@link #keySet() keys}, and {@link #entrySet() values} collections should be
-	 *         the same as this one.
+	 * Builds an {@link #getEntryType() entry type} from the key and value types
+	 *
+	 * @param keyType The key type of the map
+	 * @param valueType The value type of the map
+	 * @return The entry type for the map
 	 */
-	ObservableValue<CollectionSession> getSession();
+	static <K, V> TypeToken<ObservableMultiEntry<K, V>> buildEntryType(TypeToken<K> keyType, TypeToken<V> valueType) {
+		return new TypeToken<ObservableMultiEntry<K, V>>() {}//
+		.where(new TypeParameter<K>() {}, keyType.wrap())//
+		.where(new TypeParameter<V>() {}, valueType.wrap());
+	}
+
+	@Override
+	abstract boolean isLockSupported();
 
 	/** @return The keys that have least one value in this map */
 	@Override
 	ObservableSet<K> keySet();
-
-	/**
-	 * <p>
-	 * A default implementation of {@link #keySet()}.
-	 * </p>
-	 * <p>
-	 * No {@link ObservableMultiMap} implementation may use the default implementations for its {@link #keySet()}, {@link #get(Object)}, and
-	 * {@link #entrySet()} methods. {@link #defaultEntrySet(ObservableMultiMap)} may not be used in the same implementation as
-	 * {@link #defaultKeySet(ObservableMultiMap)} or {@link #defaultGet(ObservableMultiMap, Object)}. Either {@link #entrySet()} or both
-	 * {@link #keySet()} and {@link #get(Object)} must be custom. If an implementation supplies custom {@link #keySet()} and
-	 * {@link #get(Object)} implementations, it may use {@link #defaultEntrySet(ObservableMultiMap)} for its {@link #entrySet()} . If
-	 * an implementation supplies a custom {@link #entrySet()} implementation, it may use {@link #defaultKeySet(ObservableMultiMap)} and
-	 * {@link #defaultGet(ObservableMultiMap, Object)} for its {@link #keySet()} and {@link #get(Object)} implementations, respectively.
-	 * Using default implementations for both will result in infinite loops.
-	 * </p>
-	 *
-	 * @param <K> The key type of the map
-	 * @param <V> The value type of the map
-	 * @param map The map to create a key set for
-	 * @return A key set for the map
-	 */
-	public static <K, V> ObservableSet<K> defaultKeySet(ObservableMultiMap<K, V> map) {
-		return ObservableSet.unique(map.entrySet().map(ObservableMultiEntry::getKey), Objects::equals);
-	}
 
 	/**
 	 * @param key The key to get values for
@@ -106,138 +188,94 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 	@Override
 	ObservableCollection<V> get(Object key);
 
-	/**
-	 * <p>
-	 * A default implementation of {@link #get(Object)}.
-	 * </p>
-	 * <p>
-	 * No {@link ObservableMultiMap} implementation may use the default implementations for its {@link #keySet()}, {@link #get(Object)}, and
-	 * {@link #entrySet()} methods. {@link #defaultEntrySet(ObservableMultiMap)} may not be used in the same implementation as
-	 * {@link #defaultKeySet(ObservableMultiMap)} or {@link #defaultGet(ObservableMultiMap, Object)}. Either {@link #entrySet()} or both
-	 * {@link #keySet()} and {@link #get(Object)} must be custom. If an implementation supplies custom {@link #keySet()} and
-	 * {@link #get(Object)} implementations, it may use {@link #defaultEntrySet(ObservableMultiMap)} for its {@link #entrySet()} . If
-	 * an implementation supplies a custom {@link #entrySet()} implementation, it may use {@link #defaultKeySet(ObservableMultiMap)} and
-	 * {@link #defaultGet(ObservableMultiMap, Object)} for its {@link #keySet()} and {@link #get(Object)} implementations, respectively.
-	 * Using default implementations for both will result in infinite loops.
-	 * </p>
-	 *
-	 * @param <K> The key type of the map
-	 * @param <V> The value type of the map
-	 * @param map The map to create an entry set for
-	 * @param key The key to get the value collection for
-	 * @return A key set for the map
-	 */
-	public static <K, V> ObservableCollection<V> defaultGet(ObservableMultiMap<K, V> map, Object key) {
-		if(key != null && !map.getKeyType().isAssignableFrom(key.getClass()))
-			return ObservableList.constant(map.getValueType());
-
-		ObservableSet<? extends ObservableMultiEntry<K, V>> entries = map.entrySet();
-		class KeyEntry extends ObservableCollection.ConstantObservableCollection<Object> implements MultiEntry<Object, Object> {
-			KeyEntry() {
-				super(TypeToken.of(Object.class), Collections.emptyList());
-			}
-
-			@Override
-			public Object getKey() {
-				return key;
-			}
-
-			@Override
-			public int hashCode() {
-				return Objects.hashCode(key);
-			}
-
-			@Override
-			public boolean equals(Object obj) {
-				return obj instanceof MultiEntry && Objects.equals(((MultiEntry<?, ?>) obj).getKey(), key);
-			}
-
-			@Override
-			public String toString() {
-				return String.valueOf(key);
-			}
-		}
-		KeyEntry keyEntry = new KeyEntry();
-
-		ObservableValue<? extends ObservableMultiEntry<K, V>> equiv = entries.equivalent(keyEntry);
-		return map.entryFor((K) key, equiv);
-	}
-
-	/**
-	 * @param key The key to get the entry for
-	 * @return A multi-entry that represents the given key's presence in this map. Never null.
-	 */
-	default ObservableMultiEntry<K, V> entryFor(K key) {
-		ObservableCollection<V> values = get(key);
-		if(values instanceof ObservableMultiEntry)
-			return (ObservableMultiEntry<K, V>) values;
-		else if (values instanceof ObservableList)
-			return new ObsMultiEntryList<>(this, key, (ObservableList<V>) values);
-		else if(values instanceof ObservableSortedSet)
-			return new ObsMultiEntrySortedSet<>(this, key, (ObservableSortedSet<V>) values);
-		else if(values instanceof ObservableOrderedCollection)
-			return new ObsMultiEntryOrdered<>(this, key, (ObservableOrderedCollection<V>) values);
-		else if(values instanceof ObservableSet)
-			return new ObsMultiEntrySet<>(this, key, (ObservableSet<V>) values);
-		else
-			return new ObsMultiEntryImpl<>(this, key, values);
-	}
-
-	/**
-	 * @param key The key to get the entry for
-	 * @param values The values to represent in the entry
-	 * @return A multi-entry that represents the given key and values
-	 */
-	default ObservableMultiEntry<K, V> entryFor(K key, ObservableValue<? extends ObservableMultiEntry<K, V>> values) {
-		if (TypeToken.of(ValueSortedMultiEntry.class).isAssignableFrom(values.getType()))
-			return new ObsMultiEntrySortedSet<>(this, key, getValueType(), (ObservableValue<? extends ValueSortedMultiEntry<K, V>>) values);
-		else if (TypeToken.of(ObservableList.class).isAssignableFrom(values.getType())) {
-			return new ObsMultiEntryList<>(this, key, getValueType(), (ObservableValue<? extends ObservableList<V>>) values);
-		} else if (TypeToken.of(ObservableSortedSet.class).isAssignableFrom(values.getType())) {
-			return new ObsMultiEntrySortedSet<>(this, key, getValueType(), (ObservableValue<? extends ObservableSortedSet<V>>) values);
-		} else if (TypeToken.of(ObservableOrderedCollection.class).isAssignableFrom(values.getType())) {
-			return new ObsMultiEntryOrdered<>(this, key, getValueType(),
-				(ObservableValue<? extends ObservableOrderedCollection<V>>) values);
-		} else if (TypeToken.of(ObservableSet.class).isAssignableFrom(values.getType())) {
-			return new ObsMultiEntrySet<>(this, key, getValueType(), (ObservableValue<? extends ObservableSet<V>>) values);
-		} else {
-			return new ObsMultiEntryImpl<>(this, key, getValueType(), values);
-		}
-	}
-
-	/** @return An observable collection of {@link ObservableMultiEntry observable entries} of all the key-value set pairs stored in this map */
 	@Override
-	ObservableSet<? extends ObservableMultiEntry<K, V>> entrySet();
+	ObservableMultiEntry<K, V> getEntry(ElementId keyId);
 
-	/**
-	 * <p>
-	 * A default implementation of {@link #entrySet()}.
-	 * </p>
-	 * <p>
-	 * No {@link ObservableMultiMap} implementation may use the default implementations for its {@link #keySet()}, {@link #get(Object)}, and
-	 * {@link #entrySet()} methods. {@link #defaultEntrySet(ObservableMultiMap)} may not be used in the same implementation as
-	 * {@link #defaultKeySet(ObservableMultiMap)} or {@link #defaultGet(ObservableMultiMap, Object)}. Either {@link #entrySet()} or both
-	 * {@link #keySet()} and {@link #get(Object)} must be custom. If an implementation supplies custom {@link #keySet()} and
-	 * {@link #get(Object)} implementations, it may use {@link #defaultEntrySet(ObservableMultiMap)} for its {@link #entrySet()} . If
-	 * an implementation supplies a custom {@link #entrySet()} implementation, it may use {@link #defaultKeySet(ObservableMultiMap)} and
-	 * {@link #defaultGet(ObservableMultiMap, Object)} for its {@link #keySet()} and {@link #get(Object)} implementations, respectively.
-	 * Using default implementations for both will result in infinite loops.
-	 * </p>
-	 *
-	 * @param <K> The key type of the map
-	 * @param <V> The value type of the map
-	 * @param map The map to create an entry set for
-	 * @return An entry set for the map
-	 */
-	public static <K, V> ObservableSet<? extends ObservableMultiEntry<K, V>> defaultEntrySet(ObservableMultiMap<K, V> map) {
-		return ObservableSet.unique(map.keySet().map(map::entryFor), (entry1, entry2) -> map.keySet().getEqualizer()
-			.equals(((ObservableMultiEntry<K, V>) entry1).getKey(), ((ObservableMultiEntry<K, V>) entry2).getKey()));
+	@Override
+	default ObservableMultiEntry<K, V> getEntry(K key) {
+		return (ObservableMultiEntry<K, V>) BetterMultiMap.super.getEntry(key);
 	}
 
-	/** @return Whether this map is thread-safe, meaning it is constrained to only fire events on a single thread at a time */
-	boolean isSafe();
+	/**
+	 * @param action The action to perform on changes to this map
+	 * @return The collection subscription to terminate listening
+	 */
+	Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action);
 
-	// TODO default ObservableGraph<N, E> safe(){}
+	/**
+	 * @param action The action to perform on initial map values and changes
+	 * @param keyForward Whether to subscribe to the key set in forward or reverse order
+	 * @param valueForward Whether to subscribe to the value collections for each key in forward or reverse order
+	 * @return The collection subscription to terminate listening
+	 */
+	default CollectionSubscription subscribe(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action, boolean keyForward,
+		boolean valueForward) {
+		try (Transaction t = lock(false, null)) {
+			Subscription sub = onChange(action);
+			SubscriptionCause subCause = new SubscriptionCause();
+			try (Transaction ct = SubscriptionCause.use(subCause)) {
+				int[] keyIndex = new int[] { keyForward ? 0 : keySet().size() - 1 };
+				entrySet().spliterator(keyForward).forEachElement(entryEl -> {
+					ObservableCollection<V> values = entryEl.get().getValues();
+					int[] valueIndex = new int[] { valueForward ? 0 : values.size() - 1 };
+					values.spliterator(valueForward).forEachElement(valueEl -> {
+						ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(entryEl.getElementId(), valueEl.getElementId(),
+							getKeyType(), getValueType(), keyIndex[0], valueIndex[0], CollectionChangeType.add, entryEl.get().getKey(),
+							null, valueEl.get(), subCause);
+						try (Transaction mt = ObservableMapEvent.use(mapEvent)) {
+							action.accept(mapEvent);
+						}
+						if (valueForward)
+							valueIndex[0]++;
+						else
+							valueIndex[0]--;
+					}, valueForward);
+					if (keyForward)
+						keyIndex[0]++;
+					else
+						keyIndex[0]--;
+				}, keyForward);
+			}
+			return removeAll -> {
+				if (!removeAll) {
+					sub.unsubscribe();
+					return;
+				}
+				try (Transaction unsubT = lock(false, null)) {
+					sub.unsubscribe();
+					SubscriptionCause unsubCause = new SubscriptionCause();
+					try (Transaction ct = SubscriptionCause.use(unsubCause)) {
+						int[] keyIndex = new int[] { keyForward ? 0 : keySet().size() - 1 };
+						entrySet().spliterator(keyForward).forEachElement(entryEl -> {
+							ObservableCollection<V> values = entryEl.get().getValues();
+							int[] valueIndex = new int[] { valueForward ? 0 : values.size() - 1 };
+							values.spliterator(valueForward).forEachElement(valueEl -> {
+								ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(entryEl.getElementId(), valueEl.getElementId(),
+									getKeyType(), getValueType(), keyIndex[0], valueIndex[0], CollectionChangeType.remove,
+									entryEl.get().getKey(), null, valueEl.get(), unsubCause);
+								try (Transaction mt = ObservableMapEvent.use(mapEvent)) {
+									action.accept(mapEvent);
+								}
+								if (!valueForward)
+									valueIndex[0]--;
+							}, valueForward);
+							if (!keyForward)
+								keyIndex[0]--;
+						}, keyForward);
+					}
+				}
+			};
+		}
+	}
+
+	/**
+	 * @return An observable collection of {@link ObservableMultiEntry observable entries} of all the key-value set pairs stored in this map
+	 */
+	@Override
+	default ObservableSet<? extends ObservableMultiEntry<K, V>> entrySet() {
+		return keySet().flow().mapEquivalent(getEntryType(), this::getEntry, entry -> entry.getKey(), options -> //
+		options.cache(false)).collect();
+	}
 
 	/**
 	 * @param key The key to store the value by
@@ -279,12 +317,6 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 		boolean ret = !values.isEmpty();
 		values.clear();
 		return ret;
-	}
-
-	/** @return All values stored in this map */
-	@Override
-	default ObservableCollection<V> values() {
-		return ObservableCollection.flatten(entrySet());
 	}
 
 	/** @return A collection of plain (non-observable) {@link java.util.Map.Entry entries}, one for each value in this map */
@@ -329,753 +361,476 @@ public interface ObservableMultiMap<K, V> extends TransactableMultiMap<K, V> {
 				return theKey + "=" + theValue;
 			}
 		}
-		return ObservableCollection.flatten(entrySet().map(entry -> entry.map(value -> new DefaultMapEntry(entry.getKey(), value))));
+		TypeToken<Map.Entry<K, V>> entryType = new TypeToken<Map.Entry<K, V>>() {}//
+		.where(new TypeParameter<K>() {}, getKeyType()).where(new TypeParameter<V>() {}, getValueType());
+
+		return entrySet().flow()
+			.flatMap(entryType, //
+				entry -> entry.getValues().flow().map(entryType, value -> new DefaultMapEntry(entry.getKey(), value),
+					options -> options.cache(false))//
+				).collect();
 	}
 
 	/**
-	 * @param key The key to get the values for
-	 * @return The values (in the form of a {@link ObservableMultiEntry multi-entry}) stored for the given key
+	 * @param value The function to produce single (observable) values from each of this map's value collections
+	 * @return An ObservableMap whose values are the result of the given operation on this multi-map's entries
 	 */
-	default ObservableMultiEntry<K, V> subscribe(K key) {
-		ObservableValue<? extends ObservableMultiEntry<K, V>> existingEntry = entrySet()
-			.find(
-				entry -> java.util.Objects.equals(entry.getKey(), key));
-		class WrappingMultiEntry implements ObservableCollection.PartialCollectionImpl<V>, ObservableMultiEntry<K, V> {
-			@Override
-			public TypeToken<V> getType() {
-				return getValueType();
-			}
-
-			@Override
-			public Subscription onElement(Consumer<? super ObservableElement<V>> onElement) {
-				Subscription [] innerSub = new Subscription[1];
-				Subscription outerSub = existingEntry.value().act(entry -> {
-					Subscription is = innerSub[0];
-					innerSub[0] = null;
-					if(is != null)
-						is.unsubscribe();
-					if(entry != null)
-						innerSub[0] = entry.onElement(onElement);
-				});
-				return () -> {
-					outerSub.unsubscribe();
-					Subscription is = innerSub[0];
-					innerSub[0] = null;
-					if(is != null)
-						is.unsubscribe();
-				};
-			}
-
-			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return ObservableValue.flatten(existingEntry.mapV(ObservableCollection::getSession));
-			}
-
-			@Override
-			public Transaction lock(boolean write, Object cause) {
-				return ObservableMultiMap.this.lock(write, cause);
-			}
-
-			@Override
-			public boolean isSafe() {
-				return existingEntry.isSafe();
-			}
-
-			@Override
-			public K getKey() {
-				return key;
-			}
-
-			@Override
-			public Iterator<V> iterator() {
-				ObservableMultiEntry<K, V> ee = existingEntry.get();
-				return ee == null ? java.util.Collections.EMPTY_LIST.iterator() : ee.iterator();
-			}
-
-			@Override
-			public int size() {
-				ObservableMultiEntry<K, V> ee = existingEntry.get();
-				return ee == null ? 0 : ee.size();
-			}
-
-			@Override
-			public boolean add(V e) {
-				return ObservableMultiMap.this.add(key, e);
-			}
-
-			@Override
-			public boolean remove(Object o) {
-				return ObservableMultiMap.this.remove(key, o);
-			}
-
-			@Override
-			public boolean canRemove(Object value) {
-				return entryFor(key).canRemove(value);
-			}
-
-			@Override
-			public boolean canAdd(V value) {
-				return entryFor(key).canAdd(value);
-			}
-
-			@Override
-			public void clear() {
-				ObservableMultiMap.this.removeAll(key);
-			}
-
-			@Override
-			public int hashCode() {
-				return Objects.hashCode(key);
-			}
-
-			@Override
-			public boolean equals(Object obj) {
-				return obj instanceof MultiEntry && Objects.equals(((MultiEntry<?, ?>) obj).getKey(), key);
-			}
-
-			@Override
-			public String toString() {
-				return ObservableCollection.toString(this);
-			}
-		}
-		return new WrappingMultiEntry();
-	}
-
-	/** @return An observable map of collections which mirrors the keys and values in this multi-map */
-	default ObservableMap<K, Collection<V>> asCollectionMap() {
-		ObservableMultiMap<K, V> outer = this;
-		class CollectionMap implements ObservableMap<K, Collection<V>> {
-			private TypeToken<Collection<V>> theValueType = new TypeToken<Collection<V>>() {}.where(new TypeParameter<V>() {},
-				outer.getValueType());
-			@Override
-			public TypeToken<K> getKeyType() {
-				return outer.getKeyType();
-			}
-
-			@Override
-			public TypeToken<Collection<V>> getValueType() {
-				return theValueType;
-			}
-
-			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return outer.getSession();
-			}
-
-			@Override
-			public Transaction lock(boolean write, Object cause) {
-				return outer.lock(write, cause);
-			}
-
-			@Override
-			public boolean isSafe() {
-				return outer.isSafe();
-			}
-
-			@Override
-			public ObservableSet<K> keySet() {
-				return outer.keySet();
-			}
-
-			@Override
-			public ObservableValue<Collection<V>> observe(Object key) {
-				return outer.get(key).asValue();
-			}
-
-			@Override
-			public ObservableSet<? extends ObservableEntry<K, Collection<V>>> observeEntries() {
-				return ObservableMap.defaultObserveEntries(this);
-			}
-
-			@Override
-			public String toString() {
-				return entrySet().toString();
-			}
-		}
-		return new CollectionMap();
-	}
-
-	/** @return An observable map with the same key set as this map and whose values are one of the elements in this multi-map for each key */
-	default ObservableMap<K, V> unique() {
-		ObservableMultiMap<K, V> outer = this;
-		class UniqueMap implements ObservableMap<K, V> {
-			@Override
-			public TypeToken<K> getKeyType() {
-				return outer.getKeyType();
-			}
-
-			@Override
-			public TypeToken<V> getValueType() {
-				return outer.getValueType();
-			}
-
-			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return outer.getSession();
-			}
-
-			@Override
-			public Transaction lock(boolean write, Object cause) {
-				return outer.lock(write, cause);
-			}
-
-			@Override
-			public boolean isSafe() {
-				return outer.isSafe();
-			}
-
-			@Override
-			public ObservableSet<K> keySet() {
-				return outer.keySet();
-			}
-
-			@Override
-			public ObservableValue<V> observe(Object key) {
-				return outer.get(key).find(value -> true);
-			}
-
-			@Override
-			public ObservableSet<? extends ObservableEntry<K, V>> observeEntries() {
-				return ObservableMap.defaultObserveEntries(this);
-			}
-
-			@Override
-			public String toString() {
-				return entrySet().toString();
-			}
-		}
-		return new UniqueMap();
+	default ObservableMap<K, V> single(BiFunction<K, ObservableCollection<V>, ObservableValue<V>> value) {
+		return new SingleMap<>(this, value);
 	}
 
 	/**
-	 * @return An observable that fires a (null) value whenever anything in this structure changes. This observable will only fire 1 event
-	 *         per transaction.
+	 * @return An observable that fires a value whenever anything in this structure changes. This observable will only fire 1 event per
+	 *         transaction.
 	 */
-	default Observable<ObservableValueEvent<?>> changes() {
-		return keySet().refreshEach(key -> get(key).simpleChanges()).simpleChanges();
+	default Observable<Object> changes() {
+		return entrySet().simpleChanges();
 	}
 
+	/** @return A multi-map data flow that may be used to produce derived maps whose data is based on this map's */
+	MultiMapFlow<K, V> flow();
+
 	/**
-	 * @param <T> The type of values to map to
-	 * @param map The function to map values
-	 * @return A map with the same key set, but with its values mapped according to the given mapping function
+	 * @param <K> The (compile-time) key type for the map
+	 * @param <V> The (compile-time) value type for the map
+	 * @param keyType The (run-time) key type for the map
+	 * @param valueType The (run-time) value type for the map
+	 * @param keyEquivalence The equivalence to use for the map's key set distinctness
+	 * @return A flow that may be transformed, if desired, then {@link MultiMapFlow#gather() gathered} into an {@link ObservableMultiMap}
 	 */
-	default <T> ObservableMultiMap<K, T> map(Function<? super V, T> map) {
-		ObservableMultiMap<K, V> outer = this;
-		return new ObservableMultiMap<K, T>() {
-			private TypeToken<T> theValueType = (TypeToken<T>) TypeToken.of(map.getClass())
-				.resolveType(Function.class.getTypeParameters()[1]);
-
-			@Override
-			public Transaction lock(boolean write, Object cause) {
-				return outer.lock(write, cause);
-			}
-
-			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return outer.getSession();
-			}
-
-			@Override
-			public boolean isSafe() {
-				return outer.isSafe();
-			}
-
-			@Override
-			public TypeToken<K> getKeyType() {
-				return outer.getKeyType();
-			}
-
-			@Override
-			public TypeToken<T> getValueType() {
-				return theValueType;
-			}
-
-			@Override
-			public ObservableSet<K> keySet() {
-				return outer.keySet();
-			}
-
-			@Override
-			public ObservableCollection<T> get(Object key) {
-				return outer.get(key).map(map);
-			}
-
-			@Override
-			public ObservableSet<? extends ObservableMultiEntry<K, T>> entrySet() {
-				return ObservableMultiMap.defaultEntrySet(this);
-			}
-
-			@Override
-			public String toString() {
-				return entrySet().toString();
-			}
-		};
-	}
-
-	/** @return An immutable copy of this map */
-	default ObservableMultiMap<K, V> immutable() {
-		ObservableMultiMap<K, V> outer = this;
-		return new ObservableMultiMap<K, V>() {
-			@Override
-			public TypeToken<K> getKeyType() {
-				return outer.getKeyType();
-			}
-
-			@Override
-			public TypeToken<V> getValueType() {
-				return outer.getValueType();
-			}
-
-			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return outer.getSession();
-			}
-
-			@Override
-			public Transaction lock(boolean write, Object cause) {
-				return outer.lock(write, cause);
-			}
-
-			@Override
-			public boolean isSafe() {
-				return outer.isSafe();
-			}
-
-			@Override
-			public ObservableSet<K> keySet() {
-				return outer.keySet().immutable();
-			}
-
-			@Override
-			public ObservableCollection<V> get(Object key) {
-				return outer.get(key).immutable();
-			}
-
-			@Override
-			public ObservableSet<? extends ObservableMultiEntry<K, V>> entrySet() {
-				return outer.entrySet().immutable();
-			}
-
-			@Override
-			public String toString() {
-				return entrySet().toString();
-			}
-		};
+	static <K, V> MultiMapFlow<K, V> create(TypeToken<K> keyType, TypeToken<V> valueType, Equivalence<? super K> keyEquivalence) {
+		return create(keyType, valueType, keyEquivalence, ObservableCollection.createDefaultBacking());
 	}
 
 	/**
-	 * Simple multi-entry implementation
+	 * @param <K> The (compile-time) key type for the map
+	 * @param <V> The (compile-time) value type for the map
+	 * @param keyType The (run-time) key type for the map
+	 * @param valueType The (run-time) value type for the map
+	 * @param keyEquivalence The equivalence to use for the map's key set distinctness
+	 * @param entryCollection The list to hold the map's entries. Should not be modified externally.
+	 * @return A flow that may be transformed, if desired, then {@link MultiMapFlow#gather() gathered} into an {@link ObservableMultiMap}
+	 */
+	static <K, V> MultiMapFlow<K, V> create(TypeToken<K> keyType, TypeToken<V> valueType, Equivalence<? super K> keyEquivalence,
+		BetterList<Map.Entry<K, V>> entryCollection) {
+		TypeToken<Map.Entry<K, V>> entryType = new TypeToken<Map.Entry<K, V>>() {}.where(new TypeParameter<K>() {}, keyType.wrap())
+			.where(new TypeParameter<V>() {}, valueType.wrap());
+		ObservableCollection<Map.Entry<K, V>> simpleEntryCollection = ObservableCollection.create(entryType, entryCollection);
+		if (keyEquivalence instanceof Equivalence.ComparatorEquivalence)
+			return new ObservableMultiMapImpl.DefaultSortedMultiMapFlow<>(simpleEntryCollection.flow(),
+				(Equivalence.ComparatorEquivalence<? super K>) keyEquivalence, Equivalence.DEFAULT, false);
+		else
+			return new ObservableMultiMapImpl.DefaultMultiMapFlow<>(simpleEntryCollection.flow(), keyEquivalence, Equivalence.DEFAULT,
+				false);
+	}
+
+	/**
+	 * A default toString implementation for {@link ObservableMultiMap} implementations
 	 *
-	 * @param <K> The key type for this entry
-	 * @param <V> The value type for this entry
+	 * @param map The map to print
+	 * @return The string representation of the multi-map
 	 */
-	class ObsMultiEntryImpl<K, V> implements ObservableMultiEntry<K, V> {
-		private final ObservableMultiMap<K, V> theMap;
-		private final K theKey;
+	public static String toString(ObservableMultiMap<?, ?> map) {
+		StringBuilder str = new StringBuilder();
+		boolean first = true;
+		for (MultiMap.MultiEntry<?, ?> entry : map.entrySet()) {
+			if (!first)
+				str.append('\n');
+			first = false;
+			str.append(entry.getKey()).append('=').append(entry.getValues());
+		}
+		return str.toString();
+	}
 
-		private final TypeToken<V> theValueType;
+	/**
+	 * Implements {@link ObservableMultiMap#single(BiFunction)}
+	 *
+	 * @param <K> The key-type of the map
+	 * @param <V> The value-type of the map
+	 */
+	class SingleMap<K, V> implements ObservableMap<K, V> {
+		private final ObservableMultiMap<K, V> theSource;
+		private final BiFunction<K, ObservableCollection<V>, ObservableValue<V>> theValueMap;
+		private final TypeToken<Map.Entry<K, V>> theEntryType;
 
-		private final ObservableValue<? extends ObservableCollection<V>> theValues;
-
-		ObsMultiEntryImpl(ObservableMultiMap<K, V> map, K key, ObservableCollection<V> values) {
-			this(map, key, values.getType(), ObservableValue
-				.constant(new TypeToken<ObservableCollection<V>>() {}.where(new TypeParameter<V>() {}, values.getType()), values));
+		public SingleMap(ObservableMultiMap<K, V> outer, BiFunction<K, ObservableCollection<V>, ObservableValue<V>> valueMap) {
+			theSource = outer;
+			theValueMap = valueMap;
+			theEntryType = ObservableMap.buildEntryType(getKeyType(), getValueType());
 		}
 
-		ObsMultiEntryImpl(ObservableMultiMap<K, V> map, K key, TypeToken<V> valueType,
-			ObservableValue<? extends ObservableCollection<V>> values) {
-			theMap = map;
-			theKey = key;
-			theValueType = valueType;
-			theValues = values;
+		protected ObservableMultiMap<K, V> getSource() {
+			return theSource;
 		}
 
-		protected ObservableMultiMap<K, V> getMap() {
-			return theMap;
-		}
-
-		protected ObservableCollection<V> getWrapped() {
-			return theValues.get();
-		}
-
-		protected ObservableValue<? extends ObservableCollection<V>> getWrappedObservable() {
-			return theValues;
-		}
-
-		@Override
-		public K getKey() {
-			return theKey;
-		}
-
-		@Override
-		public TypeToken<V> getType() {
-			return theValueType;
+		protected BiFunction<K, ObservableCollection<V>, ObservableValue<V>> getValueMap() {
+			return theValueMap;
 		}
 
 		@Override
-		public Subscription onElement(Consumer<? super ObservableElement<V>> onElement) {
-			return ObservableCollection.flattenValue(getWrappedObservable()).onElement(onElement);
+		public TypeToken<K> getKeyType() {
+			return theSource.getKeyType();
 		}
 
 		@Override
-		public ObservableValue<CollectionSession> getSession() {
-			return theMap.getSession();
+		public TypeToken<V> getValueType() {
+			return theSource.getValueType();
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theMap.lock(write, cause);
+		public TypeToken<Map.Entry<K, V>> getEntryType() {
+			return theEntryType;
 		}
 
 		@Override
-		public boolean isSafe() {
-			return false;
+		public boolean isLockSupported() {
+			return theSource.isLockSupported();
 		}
 
 		@Override
-		public int size() {
-			ObservableCollection<V> current = getWrapped();
-			return current != null ? current.size() : 0;
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			return theSource.lock(write, structural, cause);
 		}
 
 		@Override
-		public Iterator<V> iterator() {
-			ObservableCollection<V> current = getWrapped();
-			return current != null ? current.iterator() : new Iterator<V>() {
+		public Equivalence<? super V> equivalence() {
+			return Equivalence.DEFAULT;
+		}
+
+		@Override
+		public ObservableSet<K> keySet() {
+			return theSource.keySet();
+		}
+
+		@Override
+		public <K2> ObservableValue<V> observe(K2 key) {
+			if (!theSource.keySet().belongs(key))
+				return ObservableValue.of(getValueType(), null);
+			return theValueMap.apply((K) key, theSource.get(key));
+		}
+
+		@Override
+		public MapEntryHandle<K, V> getEntry(K key) {
+			ObservableMultiEntry<K, V> outerHandle = theSource.getEntry(key);
+			return outerHandle == null ? null : entryFor(outerHandle);
+		}
+
+		private MapEntryHandle<K, V> entryFor(ObservableMultiEntry<K, V> outerHandle) {
+			ObservableValue<V> value = theValueMap.apply(outerHandle.getKey(), outerHandle.getValues());
+			return new MapEntryHandle<K, V>() {
 				@Override
-				public boolean hasNext() {
-					return false;
+				public ElementId getElementId() {
+					return outerHandle.getElementId();
 				}
 
 				@Override
-				public V next() {
-					throw new java.util.NoSuchElementException();
+				public V get() {
+					return value.get();
+				}
+
+				@Override
+				public K getKey() {
+					return outerHandle.getKey();
 				}
 			};
 		}
 
 		@Override
-		public boolean add(V e) {
-			return theMap.add(theKey, e);
+		public MapEntryHandle<K, V> getEntryById(ElementId entryId) {
+			return entryFor(theSource.getEntry(entryId));
 		}
 
 		@Override
-		public boolean addAll(Collection<? extends V> c) {
-			return theMap.addAll(theKey, c);
+		public MutableMapEntryHandle<K, V> mutableEntry(ElementId entryId) {
+			return mutableEntryFor(theSource.getEntry(entryId));
+		}
+
+		private MutableMapEntryHandle<K, V> mutableEntryFor(ObservableMultiEntry<K, V> outerHandle) {
+			ObservableValue<V> mappedValue = theValueMap.apply(outerHandle.getKey(), outerHandle.getValues());
+			return new MutableMapEntryHandle<K, V>() {
+				@Override
+				public K getKey() {
+					return outerHandle.getKey();
+				}
+
+				@Override
+				public BetterCollection<V> getCollection() {
+					return outerHandle.getValues();
+				}
+
+				@Override
+				public ElementId getElementId() {
+					return outerHandle.getElementId();
+				}
+
+				@Override
+				public V get() {
+					return mappedValue.get();
+				}
+
+				@Override
+				public String isEnabled() {
+					if (mappedValue instanceof SettableValue)
+						return ((SettableValue<V>) mappedValue).isEnabled().get();
+					else if (outerHandle.getValues().isEmpty())
+						return null; // Unfortunately, there's no canAdd() method with no argument
+					else if (outerHandle.getValues().size() == 1)
+						return outerHandle.getValues().mutableElement(outerHandle.getValues().getElement(0).getElementId()).isEnabled();
+					else
+						return StdMsg.ELEMENT_EXISTS;
+				}
+
+				@Override
+				public String isAcceptable(V value) {
+					if (mappedValue instanceof SettableValue)
+						return ((SettableValue<V>) value).isAcceptable(value);
+					else if (outerHandle.getValues().isEmpty())
+						return outerHandle.getValues().canAdd(value);
+					else if (outerHandle.getValues().size() == 1)
+						return outerHandle.getValues().mutableElement(outerHandle.getValues().getElement(0).getElementId())
+							.isAcceptable(value);
+					else
+						return StdMsg.ELEMENT_EXISTS;
+				}
+
+				@Override
+				public void set(V value) throws UnsupportedOperationException, IllegalArgumentException {
+					if (mappedValue instanceof SettableValue)
+						((SettableValue<V>) mappedValue).set(value, null);
+					else if (outerHandle.getValues().isEmpty())
+						outerHandle.getValues().add(value);
+					else if (outerHandle.getValues().size() == 1)
+						outerHandle.getValues().set(0, value);
+					else
+						throw new UnsupportedOperationException(StdMsg.ELEMENT_EXISTS);
+				}
+
+				@Override
+				public String canRemove() {
+					if (outerHandle.getValues().isEmpty())
+						return StdMsg.UNSUPPORTED_OPERATION;
+					MutableElementSpliterator<V> spliter = outerHandle.getValues().spliterator();
+					String[] msg = new String[1];
+					while (msg[0] == null && spliter.forElementM(el -> msg[0] = el.canRemove(), true)) {}
+					return msg[0];
+				}
+
+				@Override
+				public void remove() throws UnsupportedOperationException {
+					String msg = canRemove();
+					if (msg != null)
+						throw new UnsupportedOperationException(msg);
+					MutableElementSpliterator<V> spliter = outerHandle.getValues().spliterator();
+					while (spliter.forElementM(el -> el.remove(), true)) {}
+				}
+			};
 		}
 
 		@Override
-		public boolean remove(Object o) {
-			ObservableCollection<V> current = getWrapped();
-			if(current == null)
-				return false;
-			return current.remove(o);
+		public MapEntryHandle<K, V> putEntry(K key, V value, ElementId after, ElementId before, boolean first) {
+			try (Transaction t = lock(true, true, null)) {
+				ObservableMultiEntry<K, V> outerHandle = theSource.getEntry(key);
+				if (outerHandle != null) {
+					ObservableValue<V> mappedValue = theValueMap.apply(outerHandle.getKey(), outerHandle.getValues());
+					if (mappedValue instanceof SettableValue)
+						((SettableValue<V>) mappedValue).set(value, null);
+					else if (outerHandle.getValues().isEmpty())
+						outerHandle.getValues().add(value);
+					else if (outerHandle.getValues().size() == 1) {
+						outerHandle.getValues().set(0, value);
+					} else {
+						// Here we can't be sure that anything we do will result in the correct value being populated,
+						// short of clearing the collection and adding the value, which seems like overkill
+						throw new UnsupportedOperationException(StdMsg.ELEMENT_EXISTS);
+					}
+					return entryFor(outerHandle);
+				}
+				ObservableValue<V> mappedValue = theValueMap.apply(key, theSource.get(key));
+				if (mappedValue instanceof SettableValue)
+					((SettableValue<V>) mappedValue).set(value, null);
+				MultiMapEntryHandle<K, V> handle2 = theSource.putEntry(key, value, after, before, first);
+				if (handle2 == null)
+					return null;
+				outerHandle = theSource.getEntry(handle2.getKeyId());
+				return entryFor(outerHandle);
+			}
 		}
 
 		@Override
-		public boolean removeAll(Collection<?> c) {
-			ObservableCollection<V> current = getWrapped();
-			if(current == null)
-				return false;
-			return current.removeAll(c);
+		public V put(K key, V value) {
+			try (Transaction t = theSource.lock(true, true, null)) {
+				ObservableCollection<V> values = theSource.get(key);
+				if (values.isEmpty()) {
+					values.add(value);
+					return null;
+				} else
+					return values.set(0, value);
+			}
 		}
 
 		@Override
-		public boolean retainAll(Collection<?> c) {
-			ObservableCollection<V> current = getWrapped();
-			if(current == null)
-				return false;
-			return current.retainAll(c);
+		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
+			boolean[] init = new boolean[1];
+			CollectionSubscription sub = subscribe(evt -> {
+				if (init[0])
+					action.accept(evt);
+			}, true);
+			init[0] = true;
+			return sub;
 		}
 
 		@Override
-		public void clear() {
-			ObservableCollection<V> current = getWrapped();
-			if(current == null)
-				return;
-			current.clear();
-		}
+		public CollectionSubscription subscribe(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action, boolean forward) {
+			class EntrySubscription {
+				final K key;
+				Subscription sub;
+				V value;
 
-		@Override
-		public boolean canRemove(Object value) {
-			ObservableCollection<V> current = getWrapped();
-			if (current == null)
-				return false;
-			return current.canRemove(value);
-		}
-
-		@Override
-		public boolean canAdd(V value) {
-			ObservableCollection<V> current = getWrapped();
-			if (current == null)
-				return false;
-			return current.canAdd(value);
-		}
-
-		@Override
-		public int hashCode() {
-			return Objects.hashCode(theKey);
-		}
-
-		@Override
-		public boolean equals(Object obj) {
-			if(this == obj)
-				return true;
-			return obj instanceof MultiEntry && Objects.equals(theKey, ((MultiEntry<?, ?>) obj).getKey());
+				EntrySubscription(K key) {
+					this.key = key;
+				}
+			}
+			Map<ElementId, EntrySubscription> valueSubs = new HashMap<>();
+			try (Transaction t = lock(false, null)) {
+				Subscription outerSub = theSource.keySet().subscribe(evt -> {
+					switch (evt.getType()) {
+					case add:
+						ObservableValue<V> value = theValueMap.apply(evt.getNewValue(), theSource.get(evt.getNewValue()));
+						EntrySubscription entrySub = new EntrySubscription(evt.getNewValue());
+						entrySub.sub = value.changes().act(valueEvt -> {
+							CollectionChangeType mapEvtType;
+							int index;
+							if (valueEvt.isInitial()) {
+								mapEvtType = CollectionChangeType.add;
+								index = evt.getIndex();
+							} else {
+								mapEvtType = CollectionChangeType.set;
+								index = theSource.keySet().getElementsBefore(evt.getElementId());
+							}
+							entrySub.value = valueEvt.getNewValue();
+							action.accept(new ObservableMapEvent<>(evt.getElementId(), evt.getElementId(), //
+								getKeyType(), getValueType(), index, 0, //
+								mapEvtType, evt.getNewValue(), null, valueEvt.getNewValue(), valueEvt));
+						});
+						valueSubs.put(evt.getElementId(), entrySub);
+						break;
+					case remove:
+						entrySub = valueSubs.remove(evt.getElementId());
+						entrySub.sub.unsubscribe();
+						action.accept(new ObservableMapEvent<>(evt.getElementId(), evt.getElementId(), //
+							getKeyType(), getValueType(), evt.getIndex(), 0, //
+							CollectionChangeType.remove, evt.getNewValue(), entrySub.value, entrySub.value, evt));
+						break;
+					case set:
+						break;
+					}
+				}, forward);
+				return removeAll -> {
+					try (Transaction t2 = lock(false, false, null)) {
+						outerSub.unsubscribe();
+						for (EntrySubscription sub : valueSubs.values())
+							sub.sub.unsubscribe();
+						if (removeAll) {
+							Causable cause = Causable.simpleCause(null);
+							try (Transaction ct = Causable.use(cause)) {
+								for (Map.Entry<ElementId, EntrySubscription> entry : valueSubs.entrySet()) {
+									EntrySubscription sub = entry.getValue();
+									entry.getValue().sub.unsubscribe();
+									int index = theSource.keySet().getElementsBefore(entry.getKey());
+									ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(entry.getKey(), entry.getKey(), //
+										getKeyType(), getValueType(), index, 0, //
+										CollectionChangeType.remove, sub.key, sub.value, sub.value, cause);
+									try (Transaction mt = ObservableMapEvent.use(mapEvent)) {
+										action.accept(mapEvent);
+									}
+								}
+							}
+						}
+					}
+				};
+			}
 		}
 
 		@Override
 		public String toString() {
-			return theKey + "=" + theValues.get();
+			return entrySet().toString();
 		}
 	}
 
 	/**
-	 * Simple ordered multi-entry implementation
+	 * Like {@link org.observe.collect.ObservableCollection.CollectionDataFlow CollectionDataFlow} for multi-maps. Provides different types
+	 * of transformations and can be {@link #gather() gathered} into a ObservableMultiMap.
 	 *
-	 * @param <K> The key type for this entry
-	 * @param <V> The value type for this entry
+	 * @param <K> The key type of this flow
+	 * @param <V> The value type of this flow
 	 */
-	class ObsMultiEntryOrdered<K, V> extends ObsMultiEntryImpl<K, V> implements ObservableOrderedCollection<V> {
-		public ObsMultiEntryOrdered(ObservableMultiMap<K, V> map, K key, ObservableOrderedCollection<V> values) {
-			super(map, key, values);
+	interface MultiMapFlow<K, V> {
+		/**
+		 * @param <K2> The key type for the derived flow
+		 * @param keyMap The function to produce a derived key flow from this flow's key flow
+		 * @return The derived flow
+		 */
+		<K2> MultiMapFlow<K2, V> withKeys(Function<DistinctDataFlow<?, ?, K>, DistinctDataFlow<?, ?, K2>> keyMap);
+
+		/**
+		 * @param <V2> The value type for the derived flow
+		 * @param valueMap The function to produce a derived value flow from the value flow of each of this flow's entries' value
+		 *        collections
+		 * @return The derived flow
+		 */
+		<V2> MultiMapFlow<K, V2> withValues(Function<CollectionDataFlow<?, ?, V>, CollectionDataFlow<?, ?, V2>> valueMap);
+
+		/** @return A flow that contains no 2 equivalent values in the entire map */
+		default MultiMapFlow<K, V> distinctForMap() {
+			return distinctForMap(options -> {});
 		}
 
-		public ObsMultiEntryOrdered(ObservableMultiMap<K, V> map, K key, TypeToken<V> valueType,
-			ObservableValue<? extends ObservableOrderedCollection<V>> values) {
-			super(map, key, valueType, values);
+		/**
+		 * @param options Options governing the value distinctness
+		 * @return A flow that contains no 2 equivalent values in the entire map
+		 */
+		MultiMapFlow<K, V> distinctForMap(Consumer<UniqueOptions> options);
+
+		/**
+		 * @return A flow identical to this flow, but whose keys are reversed in the key set and whose values are reversed in each key's
+		 *         value collection
+		 */
+		MultiMapFlow<K, V> reverse();
+
+		/** @return Whether this flow supports passive (light-weight) gathering */
+		boolean supportsPassive();
+
+		/** @return Whether this flow both supports and prefers passive (light-weight) to active (heavy-weight) gathering */
+		default boolean prefersPassive() {
+			return supportsPassive();
 		}
 
-		@Override
-		protected ObservableOrderedCollection<V> getWrapped() {
-			return (ObservableOrderedCollection<V>) super.getWrapped();
+		/** @return An ObservableMultiMap derived from this flow's source by this flow's configuration */
+		default ObservableMultiMap<K, V> gather() {
+			return gather(options -> {});
 		}
 
-		@Override
-		protected ObservableValue<? extends ObservableOrderedCollection<V>> getWrappedObservable() {
-			return (ObservableValue<? extends ObservableOrderedCollection<V>>) super.getWrappedObservable();
+		/**
+		 * @param options Options governing the multi-map's grouping behavior
+		 * @return An ObservableMultiMap derived from this flow's source by this flow's configuration
+		 */
+		default ObservableMultiMap<K, V> gather(Consumer<GroupingOptions> options) {
+			return gather(Observable.empty, options);
 		}
 
-		@Override
-		public Subscription onOrderedElement(Consumer<? super ObservableOrderedElement<V>> onElement) {
-			return ObservableOrderedCollection.flattenValue(getWrappedObservable()).onOrderedElement(onElement);
-		}
-	}
-
-	/**
-	 * Simple multi-entry sorted set implementation
-	 *
-	 * @param <K> The key type for this entry
-	 * @param <V> The value type for this entry
-	 */
-	class ObsMultiEntrySortedSet<K, V> extends ObsMultiEntryOrdered<K, V> implements ValueSortedMultiEntry<K, V> {
-		public ObsMultiEntrySortedSet(ObservableMultiMap<K, V> map, K key, ObservableSortedSet<V> values) {
-			super(map, key, values);
+		/**
+		 * @param until The observable to terminate the active map's listening (to its source data)
+		 * @return An ObservableMultiMap derived from this flow's source by this flow's configuration
+		 */
+		default ObservableMultiMap<K, V> gather(Observable<?> until) {
+			return gather(until, options -> {});
 		}
 
-		public ObsMultiEntrySortedSet(ObservableMultiMap<K, V> map, K key, TypeToken<V> valueType,
-			ObservableValue<? extends ObservableSortedSet<V>> values) {
-			super(map, key, valueType, values);
-		}
-
-		@Override
-		protected ObservableSortedSet<V> getWrapped() {
-			return (ObservableSortedSet<V>) super.getWrapped();
-		}
-
-		@Override
-		protected ObservableValue<? extends ObservableSortedSet<V>> getWrappedObservable() {
-			return (ObservableValue<? extends ObservableSortedSet<V>>) super.getWrappedObservable();
-		}
-
-		@Override
-		public Iterable<V> descending() {
-			return () -> {
-				return descendingIterator();
-			};
-		}
-
-		@Override
-		public V pollFirst() {
-			ObservableSortedSet<V> current = getWrapped();
-			return current != null ? current.pollFirst() : null;
-		}
-
-		@Override
-		public V pollLast() {
-			ObservableSortedSet<V> current = getWrapped();
-			return current != null ? current.pollLast() : null;
-		}
-
-		@Override
-		public Iterator<V> descendingIterator() {
-			ObservableSortedSet<V> current = getWrapped();
-			return current != null ? current.descendingIterator() : new Iterator<V>() {
-				@Override
-				public boolean hasNext() {
-					return false;
-				}
-
-				@Override
-				public V next() {
-					throw new java.util.NoSuchElementException();
-				}
-			};
-		}
-
-		@Override
-		public Comparator<? super V> comparator() {
-			ObservableSortedSet<V> current = getWrapped();
-			return current != null ? current.comparator() : null;
-		}
-
-		@Override
-		public V first() {
-			ObservableSortedSet<V> current = getWrapped();
-			if(current != null)
-				return current.first();
-			throw new java.util.NoSuchElementException();
-		}
-
-		@Override
-		public V last() {
-			ObservableSortedSet<V> current = getWrapped();
-			if(current != null)
-				return current.last();
-			throw new java.util.NoSuchElementException();
-		}
-
-		@Override
-		public Iterable<V> iterateFrom(V element, boolean included, boolean reversed) {
-			ObservableSortedSet<V> current = getWrapped();
-			return current == null ? Collections.EMPTY_LIST : current.iterateFrom(element, included, reversed);
-		}
-
-		@Override
-		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<V>> onElement) {
-			return ObservableReversibleCollection.flattenValue(getWrappedObservable()).onElementReverse(onElement);
-		}
-	}
-
-	/**
-	 * Simple multi-entry list implementation
-	 *
-	 * @param <K> The key type for this entry
-	 * @param <V> The value type for this entry
-	 */
-	class ObsMultiEntryList<K, V> extends ObsMultiEntryOrdered<K, V> implements ObservableList<V> {
-		public ObsMultiEntryList(ObservableMultiMap<K, V> map, K key, ObservableList<V> values) {
-			super(map, key, values);
-		}
-
-		public ObsMultiEntryList(ObservableMultiMap<K, V> map, K key, TypeToken<V> valueType,
-			ObservableValue<? extends ObservableList<V>> values) {
-			super(map, key, valueType, values);
-		}
-
-		@Override
-		protected ObservableValue<? extends ObservableList<V>> getWrappedObservable() {
-			return (ObservableValue<? extends ObservableList<V>>) super.getWrappedObservable();
-		}
-
-		@Override
-		protected ObservableList<V> getWrapped() {
-			return (ObservableList<V>) super.getWrapped();
-		}
-
-		@Override
-		public boolean addAll(int index, Collection<? extends V> c) {
-			ObservableList<V> current = getWrapped();
-			if(current == null) {
-				if(index == 0)
-					return getMap().addAll(getKey(), c);
-				else
-					throw new IndexOutOfBoundsException(index + " of 0");
-			} else
-				return current.addAll(index, c);
-		}
-
-		@Override
-		public V get(int index) {
-			ObservableList<V> current = getWrapped();
-			if(current == null)
-				throw new IndexOutOfBoundsException(index + " of 0");
-			else
-				return current.get(index);
-		}
-
-		@Override
-		public V set(int index, V element) {
-			ObservableList<V> current = getWrapped();
-			if(current == null)
-				throw new IndexOutOfBoundsException(index + " of 0");
-			else
-				return current.set(index, element);
-		}
-
-		@Override
-		public void add(int index, V element) {
-			ObservableList<V> current = getWrapped();
-			if(current == null) {
-				if(index == 0)
-					getMap().add(getKey(), element);
-				else
-					throw new IndexOutOfBoundsException(index + " of 0");
-			} else
-				current.add(index, element);
-		}
-
-		@Override
-		public V remove(int index) {
-			ObservableList<V> current = getWrapped();
-			if(current == null)
-				throw new IndexOutOfBoundsException(index + " of 0");
-			return current.remove(index);
-		}
-
-		@Override
-		public int indexOf(Object o) {
-			ObservableList<V> current = getWrapped();
-			return current != null ? current.indexOf(o) : -1;
-		}
-
-		@Override
-		public int lastIndexOf(Object o) {
-			ObservableList<V> current = getWrapped();
-			return current != null ? current.lastIndexOf(o) : -1;
-		}
-
-		@Override
-		public Subscription onElementReverse(Consumer<? super ObservableOrderedElement<V>> onElement) {
-			return ObservableReversibleCollection.flattenValue(getWrappedObservable()).onElementReverse(onElement);
-		}
-	}
-
-	/**
-	 * Simple multi-entry set implementation
-	 *
-	 * @param <K> The key type for this entry
-	 * @param <V> The value type for this entry
-	 */
-	class ObsMultiEntrySet<K, V> extends ObsMultiEntryImpl<K, V> implements ObservableSet<V> {
-		public ObsMultiEntrySet(ObservableMultiMap<K, V> map, K key, ObservableSet<V> values) {
-			super(map, key, values);
-		}
-
-		public ObsMultiEntrySet(ObservableMultiMap<K, V> map, K key, TypeToken<V> valueType,
-			ObservableValue<? extends ObservableSet<V>> values) {
-			super(map, key, valueType, values);
-		}
-
-		@Override
-		protected ObservableSet<V> getWrapped() {
-			return (ObservableSet<V>) super.getWrapped();
-		}
-
-		@Override
-		public Equalizer getEqualizer() {
-			return getWrapped().getEqualizer();
-		}
+		/**
+		 * @param until The observable to terminate the active map's listening (to its source data)
+		 * @param options Options governing the multi-map's grouping behavior
+		 * @return An ObservableMultiMap derived from this flow's source by this flow's configuration
+		 */
+		ObservableMultiMap<K, V> gather(Observable<?> until, Consumer<GroupingOptions> options);
 	}
 }

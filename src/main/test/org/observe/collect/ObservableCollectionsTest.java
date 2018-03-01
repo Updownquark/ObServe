@@ -1,24 +1,28 @@
 package org.observe.collect;
 
-import static org.hamcrest.CoreMatchers.notNullValue;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.qommons.QommonsTestUtils.collectionsEqual;
-import static org.qommons.QommonsTestUtils.contains;
+import static org.qommons.debug.Debug.d;
 
+import java.io.File;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.function.BinaryOperator;
 import java.util.function.Consumer;
@@ -27,29 +31,46 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import org.junit.Assert;
 import org.junit.Test;
-import org.observe.DefaultObservable;
 import org.observe.Observable;
+import org.observe.ObservableTester;
 import org.observe.ObservableValue;
-import org.observe.ObservableValueEvent;
-import org.observe.Observer;
+import org.observe.ObservableValueTester;
+import org.observe.SimpleObservable;
 import org.observe.SimpleSettableValue;
 import org.observe.Subscription;
+import org.observe.assoc.ObservableMapEvent;
 import org.observe.assoc.ObservableMultiMap;
-import org.observe.collect.impl.ObservableArrayList;
-import org.observe.collect.impl.ObservableHashSet;
-import org.observe.collect.impl.ObservableLinkedList;
-import org.observe.collect.impl.ObservableTreeList;
-import org.observe.collect.impl.ObservableTreeSet;
-import org.qommons.Equalizer;
+import org.observe.assoc.ObservableSortedMultiMap;
+import org.observe.collect.ObservableCollection.CollectionDataFlow;
+import org.qommons.Causable;
 import org.qommons.QommonsTestUtils;
+import org.qommons.Ternian;
+import org.qommons.TestHelper;
+import org.qommons.TestHelper.Testable;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterList;
+import org.qommons.collect.CircularArrayList;
+import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.TransactableList;
+import org.qommons.debug.Debug;
+import org.qommons.tree.BetterTreeList;
+import org.qommons.tree.BetterTreeSet;
 
 import com.google.common.reflect.TypeToken;
 
 /** Tests observable collections and their default implementations */
 public class ObservableCollectionsTest {
+	// Tweaks for debugging the barrage tests
+	private static boolean BARRAGE_USE_MAP = true;
+	private static boolean BARRAGE_USE_FILTER = true;
+	private static boolean BARRAGE_USE_COMBINE = true;
+	private static boolean BARRAGE_USE_MULTI_MAP = true;
+
+	/** The primitive integer type, for re-use */
+	public static final TypeToken<Integer> intType = TypeToken.of(int.class);
+
 	/**
 	 * A predicate interface that helps with testing observable structures
 	 *
@@ -64,25 +85,26 @@ public class ObservableCollectionsTest {
 	 * @param <T> The type of the collection
 	 * @param coll The collection to test
 	 * @param check An optional check to run against the collection after every modification
+	 * @param helper The test helper to assist with debugging
 	 */
-	public static <T extends Collection<Integer>> void testCollection(T coll, Consumer<? super T> check) {
-		testCollection(coll, check, 0);
+	public static <T extends Collection<Integer>> void testCollection(T coll, Consumer<? super T> check, TestHelper helper) {
+		testCollection(coll, check, 0, helper);
 	}
 
-	private static <T extends Collection<Integer>> void testCollection(T coll, Consumer<? super T> check, int depth) {
+	private static <T extends Collection<Integer>> void testCollection(T coll, Consumer<? super T> check, int depth, TestHelper helper) {
 		QommonsTestUtils.testCollection(coll, check, v -> {
 			if (v instanceof ObservableCollection)
 				return (Consumer<? super T>) testingObservableCollection((ObservableCollection<Integer>) v,
-					(Consumer<? super ObservableCollection<Integer>>) check, depth);
+					(Consumer<? super ObservableCollection<Integer>>) check, depth, helper);
 			else
 				return null;
-		} , depth);
+		}, depth, helper);
 	}
 
 	private static <T extends ObservableCollection<Integer>> Checker<ObservableCollection<Integer>> testingObservableCollection(T coll,
-		Consumer<? super T> check, int depth) {
+		Consumer<? super T> check, int depth, TestHelper helper) {
 
-		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(coll);
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("base", coll);
 
 		// Quick test first
 		coll.addAll(QommonsTestUtils.sequence(50, null, true));
@@ -96,30 +118,69 @@ public class ObservableCollectionsTest {
 
 		Function<Integer, Integer> mapFn = v -> v + 1000;
 		Function<Integer, Integer> reverseMapFn = v -> v - 1000;
-		ObservableCollection<Integer> mappedOL = coll.map(null, mapFn, reverseMapFn);
-		ObservableCollectionTester<Integer> mappedTester = new ObservableCollectionTester<>(mappedOL);
+		ObservableCollection<Integer> mappedOL;
+		ObservableCollectionTester<Integer> mappedTester;
+		if (BARRAGE_USE_MAP) {
+			mappedOL = coll.flow().map(intType, mapFn, options -> options.cache(false).withReverse(reverseMapFn)).collectPassive();
+			d().set("mapped@" + depth, mappedOL);
+			mappedTester = new ObservableCollectionTester<>("mapped", mappedOL);
+		} else {
+			mappedOL = null;
+			mappedTester = null;
+		}
 
-		Predicate<Integer> filterFn1 = v -> v % 3 == 0;
-		ObservableCollection<Integer> filteredOL1 = coll.filter(filterFn1);
-		ObservableCollectionTester<Integer> filterTester1 = new ObservableCollectionTester<>(filteredOL1);
-
-		Function<Integer, Integer> filterMap = v -> v;
-		ObservableCollection<Integer> filterMapOL = coll.filterMap(null, filterMap, filterMap, false);
-		ObservableCollectionTester<Integer> filterMapTester = new ObservableCollectionTester<>(filterMapOL);
+		Function<Integer, String> filterFn1 = v -> v % 3 == 0 ? null : "no";
+		ObservableCollection<Integer> filteredOL1;
+		ObservableCollectionTester<Integer> filterTester1;
+		if (BARRAGE_USE_FILTER) {
+			filteredOL1 = coll.flow().filter(filterFn1).collect();
+			d().set("filtered@" + depth, filteredOL1);
+			filterTester1 = new ObservableCollectionTester<>("filtered", filteredOL1);
+		} else {
+			filteredOL1 = null;
+			filterTester1 = null;
+		}
 
 		Function<Integer, Integer> groupFn = v -> v % 3;
-		ObservableMultiMap<Integer, Integer> grouped = coll.groupBy(groupFn);
-		Map<Integer, List<Integer>> groupedSynced = new LinkedHashMap<>();
-		ObservableCollectionsTest.sync(grouped, groupedSynced, () -> new ArrayList<>());
+		ObservableMultiMap<Integer, Integer> grouped;
+		Map<Integer, List<Integer>> groupedSynced;
+		ObservableSortedMultiMap<Integer, Integer> groupedSorted;
+		NavigableMap<Integer, List<Integer>> groupedSortedSynced;
+		if (BARRAGE_USE_MULTI_MAP) {
+			grouped = coll.flow().groupBy(intType, groupFn).gather(options -> options.useFirst(true));
+			d().set("grouped@" + depth, grouped);
+			groupedSynced = new LinkedHashMap<>();
+			ObservableCollectionsTest.sync(grouped, groupedSynced, () -> new ArrayList<>());
+
+			groupedSorted = coll.flow().groupBy(intType, groupFn, Integer::compareTo).gather(options -> options.useFirst(true));
+			d().set("groupedSorted@" + depth, groupedSorted);
+			groupedSortedSynced = new TreeMap<>();
+			ObservableCollectionsTest.sync(groupedSorted, groupedSortedSynced, () -> new ArrayList<>());
+		} else {
+			grouped = null;
+			groupedSynced = null;
+			groupedSorted = null;
+			groupedSortedSynced = null;
+		}
 
 		BinaryOperator<Integer> combineFn = (v1, v2) -> v1 + v2;
 		BinaryOperator<Integer> reverseCombineFn = (v1, v2) -> v1 - v2;
 		SimpleSettableValue<Integer> combineVar = new SimpleSettableValue<>(Integer.class, false);
 		combineVar.set(10000, null);
-		ObservableCollection<Integer> combinedOL = coll.combine(combineVar, coll.getType(), combineFn, reverseCombineFn);
-		ObservableCollectionTester<Integer> combinedTester = new ObservableCollectionTester<>(combinedOL);
+		ObservableCollection<Integer> combinedOL;
+		ObservableCollectionTester<Integer> combinedTester;
+		if (BARRAGE_USE_COMBINE) {
+			combinedOL = coll.flow().combine(intType, combine -> {
+				return combine.with(combineVar).withReverse(reverseCombineFn).build(combineFn);
+			}).collect();
+			d().set("combined@" + depth, combinedOL);
+			combinedTester = new ObservableCollectionTester<>("combined", combinedOL);
+		} else {
+			combinedOL = null;
+			combinedTester = null;
+		}
 
-		// TODO Test reversed sets
+		// TODO Test reversed observable collections
 
 		BinaryOperator<Integer> maxFn = (v1, v2) -> v1 >= v2 ? v1 : v2;
 		ObservableValue<Integer> sum = coll.reduce(0, combineFn, reverseCombineFn);
@@ -134,11 +195,9 @@ public class ObservableCollectionsTest {
 		// If sorted set, test on some synced sub-sets
 		class SubSetRange {
 			final Integer min;
-
 			final Integer max;
 
 			final boolean includeMin;
-
 			final boolean includeMax;
 
 			SubSetRange(Integer min, Integer max, boolean includeMin, boolean includeMax) {
@@ -198,32 +257,47 @@ public class ObservableCollectionsTest {
 		return new Checker<ObservableCollection<Integer>>() {
 			@Override
 			public void accept(ObservableCollection<Integer> value) {
-				boolean ordered = coll instanceof ObservableOrderedCollection;
 				tester.checkSynced();
 				if(check != null)
 					check.accept(coll);
 
-				mappedTester.set(coll.stream().map(mapFn).collect(Collectors.toList()));
-				mappedTester.check();
-
-				filterTester1.set(coll.stream().filter(filterFn1).collect(Collectors.toList()));
-				filterTester1.check();
-
-				filterMapTester.set(tester.getSyncedCopy());
-				filterMapTester.check();
-
-				Set<Integer> groupKeySet = tester.getSyncedCopy().stream().map(groupFn).collect(Collectors.toSet());
-				assertThat(grouped.keySet(), collectionsEqual(groupKeySet, false));
-				assertThat(groupedSynced.keySet(), collectionsEqual(groupKeySet, false));
-				for(Integer groupKey : groupKeySet) {
-					List<Integer> values = tester.getSyncedCopy().stream().filter(v -> Objects.equals(groupFn.apply(v), groupKey))
-						.collect(Collectors.toList());
-					assertThat(grouped.get(groupKey), collectionsEqual(values, ordered));
-					assertThat(groupedSynced.get(groupKey), collectionsEqual(values, ordered));
+				if (mappedTester != null) {
+					mappedTester.set(coll.stream().map(mapFn).collect(Collectors.toList()));
+					mappedTester.check();
 				}
 
-				combinedTester.set(coll.stream().map(v -> v + combineVar.get()).collect(Collectors.toList()));
-				combinedTester.check();
+				if (filterTester1 != null) {
+					filterTester1.set(coll.stream().filter(v -> filterFn1.apply(v) == null).collect(Collectors.toList()));
+					filterTester1.check();
+				}
+
+				if (grouped != null) {
+					Set<Integer> groupKeySet = tester.getSyncedCopy().stream().map(groupFn).collect(Collectors.toSet());
+					assertThat(grouped.keySet(), collectionsEqual(groupKeySet, false));
+					assertThat(groupedSynced.keySet(), collectionsEqual(groupKeySet, false));
+					for (Integer groupKey : groupKeySet) {
+						List<Integer> values = tester.getSyncedCopy().stream().filter(v -> Objects.equals(groupFn.apply(v), groupKey))
+							.collect(Collectors.toList());
+						Debug.d().debugIf(!values.equals(grouped.get(groupKey)));
+						assertThat(grouped.get(groupKey), collectionsEqual(values, true));
+						assertThat(groupedSynced.get(groupKey), collectionsEqual(values, true));
+					}
+
+					Set<Integer> groupSortedKeySet = tester.getSyncedCopy().stream().map(groupFn).sorted().collect(Collectors.toSet());
+					assertThat(groupedSorted.keySet(), collectionsEqual(groupSortedKeySet, false));
+					assertThat(groupedSynced.keySet(), collectionsEqual(groupSortedKeySet, false));
+					for (Integer groupKey : groupSortedKeySet) {
+						List<Integer> values = tester.getSyncedCopy().stream().filter(v -> Objects.equals(groupFn.apply(v), groupKey))
+							.collect(Collectors.toList());
+						assertThat(groupedSorted.get(groupKey), collectionsEqual(values, true));
+						assertThat(groupedSortedSynced.get(groupKey), collectionsEqual(values, true));
+					}
+				}
+
+				if (combinedTester != null) {
+					combinedTester.set(coll.stream().map(v -> v + combineVar.get()).collect(Collectors.toList()));
+					combinedTester.check();
+				}
 
 				if(subSets != null) {
 					for(int i = 0; i < subSets.size(); i++) {
@@ -281,29 +355,29 @@ public class ObservableCollectionsTest {
 			@Override
 			public void close() {
 				if (depth < QommonsTestUtils.COLLECTION_TEST_DEPTH) {
-					testCollection(mappedOL, this, depth + 1);
-					testCollection(filterMapOL, this, depth + 1);
-					testCollection(combinedOL, this, depth + 1);
+					if (mappedOL != null)
+						testCollection(mappedOL, this, depth + 1, helper);
+					if (combinedOL != null)
+						testCollection(combinedOL, this, depth + 1, helper);
 				}
 
-				// Test filter adding
-				filteredOL1.add(0);
-				assertEquals(1, filteredOL1.size());
-				accept(coll);
+				if (filteredOL1 != null) {
+					// Test filter adding
+					filteredOL1.add(0);
+					assertEquals(1, filteredOL1.size());
+					accept(coll);
 
-				try {
-					filteredOL1.add(1);
-					assertTrue("Should have thrown an IllegalArgumentException", false);
-				} catch(IllegalArgumentException e) {
-				}
-				assertEquals(1, filteredOL1.size());
-				accept(coll);
+					try {
+						filteredOL1.add(1);
+						assertTrue("Should have thrown an IllegalArgumentException", false);
+					} catch (IllegalArgumentException e) {}
+					assertEquals(1, filteredOL1.size());
+					accept(coll);
 
-				filteredOL1.remove(0);
-				assertEquals(0, filteredOL1.size());
-				accept(coll);
+					filteredOL1.remove(0);
+					assertEquals(0, filteredOL1.size());
+					accept(coll);
 
-				if(coll instanceof ObservableList) {
 					ListIterator<Integer> listIter = ((List<Integer>) filteredOL1).listIterator();
 					listIter.add(0);
 					assertEquals(1, filteredOL1.size());
@@ -311,8 +385,7 @@ public class ObservableCollectionsTest {
 					try {
 						listIter.add(1);
 						assertTrue("Should have thrown an IllegalArgumentException", false);
-					} catch(IllegalArgumentException e) {
-					}
+					} catch (IllegalArgumentException e) {}
 					listIter.previous();
 					listIter.remove();
 					assertEquals(0, filteredOL1.size());
@@ -320,10 +393,12 @@ public class ObservableCollectionsTest {
 				}
 
 				tester.setSynced(false);
-				mappedTester.setSynced(false);
-				filterTester1.setSynced(false);
-				filterMapTester.setSynced(false);
-				combinedTester.setSynced(false);
+				if (mappedTester != null)
+					mappedTester.setSynced(false);
+				if (filterTester1 != null)
+					filterTester1.setSynced(false);
+				if (combinedTester != null)
+					combinedTester.setSynced(false);
 				if(syncedSubSetSubs != null) {
 					for(Subscription sub : syncedSubSetSubs)
 						sub.unsubscribe();
@@ -348,48 +423,19 @@ public class ObservableCollectionsTest {
 	}
 
 	private static <T> Subscription sync(ObservableCollection<T> coll, List<T> synced, int [] opCount) {
-		if(coll instanceof ObservableOrderedCollection)
-			return ((ObservableOrderedCollection<T>) coll).onOrderedElement(el -> {
-				el.subscribe(new Observer<ObservableValueEvent<T>>() {
-					@Override
-					public <V extends ObservableValueEvent<T>> void onNext(V evt) {
-						opCount[0]++;
-						if(evt.isInitial())
-							synced.add(el.getIndex(), evt.getValue());
-						else {
-							assertEquals(evt.getOldValue(), synced.get(el.getIndex()));
-							synced.set(el.getIndex(), evt.getValue());
-						}
-					}
-
-					@Override
-					public <V extends ObservableValueEvent<T>> void onCompleted(V evt) {
-						opCount[0]++;
-						assertEquals(evt.getValue(), synced.remove(el.getIndex()));
-					}
-				});
-			});
-		else
-			return coll.onElement(el -> {
-				el.subscribe(new Observer<ObservableValueEvent<T>>() {
-					@Override
-					public <V extends ObservableValueEvent<T>> void onNext(V evt) {
-						opCount[0]++;
-						if(evt.isInitial())
-							synced.add(evt.getValue());
-						else {
-							assertTrue(synced.remove(evt.getOldValue()));
-							synced.add(evt.getValue());
-						}
-					}
-
-					@Override
-					public <V extends ObservableValueEvent<T>> void onCompleted(V evt) {
-						opCount[0]++;
-						assertTrue(synced.remove(evt.getValue()));
-					}
-				});
-			});
+		return coll.subscribe(evt -> {
+			switch (evt.getType()) {
+			case add:
+				synced.add(evt.getIndex(), evt.getNewValue());
+				break;
+			case remove:
+				assertEquals(evt.getOldValue(), synced.remove(evt.getIndex()));
+				break;
+			case set:
+				assertEquals(evt.getOldValue(), synced.set(evt.getIndex(), evt.getNewValue()));
+				break;
+			}
+		}, true);
 	}
 
 	/**
@@ -403,189 +449,432 @@ public class ObservableCollectionsTest {
 	 * @param collectCreator Creates collections for the unobservable map when a new key is observed in the observable map
 	 * @return The subscription to use to terminate the synchronization
 	 */
-	public static <K, V, C extends Collection<V>> Subscription sync(ObservableMultiMap<K, V> map, Map<K, C> synced,
+	public static <K, V, C extends List<V>> Subscription sync(ObservableMultiMap<K, V> map, Map<K, C> synced,
 		Supplier<? extends C> collectCreator) {
-		return map.keySet().onElement(el -> el.subscribe(new Observer<ObservableValueEvent<K>>() {
+		return map.subscribe(new Consumer<ObservableMapEvent<? extends K, ? extends V>>() {
 			@Override
-			public <E extends ObservableValueEvent<K>> void onNext(E event) {
-				if(!event.isInitial())
-					return;
-				assertEquals(null, synced.get(event.getValue()));
-				C collect = collectCreator.get();
-				synced.put(event.getValue(), collect);
-				Subscription elSub = map.get(event.getValue()).onElement(el2 -> el2.subscribe(new Observer<ObservableValueEvent<V>>() {
-					@Override
-					public <E2 extends ObservableValueEvent<V>> void onNext(E2 event2) {
-						if(el2 instanceof ObservableOrderedElement && collect instanceof List) {
-							ObservableOrderedElement<V> orderedEl = (ObservableOrderedElement<V>) el2;
-							if(event2.isInitial())
-								((List<V>) collect).add(orderedEl.getIndex(), event2.getValue());
-							else {
-								assertEquals(event2.getOldValue(), ((List<V>) collect).get(orderedEl.getIndex()));
-								((List<V>) collect).set(orderedEl.getIndex(), event2.getValue());
-							}
-						} else {
-							if(event2.isInitial())
-								collect.add(event2.getValue());
-							else {
-								assertEquals(event2.getOldValue(), collect.remove(event2.getOldValue()));
-								collect.add(event2.getValue());
-							}
-						}
-					}
-
-					@Override
-					public <E2 extends ObservableValueEvent<V>> void onCompleted(E2 event2) {
-						if(el2 instanceof ObservableOrderedElement && collect instanceof List) {
-							ObservableOrderedElement<V> orderedEl = (ObservableOrderedElement<V>) el2;
-							assertEquals(event2.getValue(), ((List<V>) collect).remove(orderedEl.getIndex()));
-						} else {
-							assertThat(collect, contains(event2.getValue()));
-							collect.remove(event2.getValue());
-						}
-					}
-				}));
-				el.completed().act(evt -> elSub.unsubscribe());
+			public void accept(ObservableMapEvent<? extends K, ? extends V> evt) {
+				switch(evt.getType()){
+				case add:
+					synced.computeIfAbsent(evt.getKey(), k -> collectCreator.get()).add(evt.getIndex(), evt.getNewValue());
+					break;
+				case remove:
+					C values = synced.get(evt.getKey());
+					Assert.assertNotNull(values);
+					assertEquals(evt.getOldValue(), values.remove(evt.getIndex()));
+					if (values.isEmpty())
+						synced.remove(evt.getKey());
+					break;
+				case set:
+					values = synced.get(evt.getKey());
+					Assert.assertNotNull(values);
+					assertEquals(evt.getOldValue(), values.set(evt.getIndex(), evt.getNewValue()));
+					break;
+				}
 			}
-
-			@Override
-			public <E extends ObservableValueEvent<K>> void onCompleted(E event) {
-				assertThat(synced.remove(event.getValue()), notNullValue());
-			}
-		}));
+		}, true, true);
 	}
 
-	/** Runs a barrage of tests on {@link ObservableArrayList} */
+	static class ArrayListTester implements TestHelper.Testable {
+		@Override
+		public void accept(TestHelper helper) {
+			CircularArrayList<Integer> backing = CircularArrayList.build().unsafe().build();
+			testCollection(ObservableCollection.create(TypeToken.of(Integer.class), backing), set -> backing.checkValid(), helper);
+		}
+	}
+
+	/** Runs a barrage of tests on a {@link DefaultObservableCollection} backed by a {@link CircularArrayList} */
 	@Test
 	public void testObservableArrayList() {
-		testCollection(new ObservableArrayList<>(TypeToken.of(Integer.class)), null, 0);
+		TestHelper.createTester(ArrayListTester.class).withDebug(false).withFailurePersistence(false).withRandomCases(1).execute()
+		.throwErrorIfFailed();
 	}
 
-	/** Runs a barrage of tests on {@link ObservableLinkedList} */
-	@Test
-	public void testObservableLinkedList() {
-		testCollection(new ObservableLinkedList<>(TypeToken.of(Integer.class)),
-			// Easier to debug this way
-			list -> list.validate(), 0);
+	static class TreeListTester implements TestHelper.Testable {
+		@Override
+		public void accept(TestHelper helper) {
+			BetterTreeList<Integer> backing = new BetterTreeList<>(false);
+			testCollection(ObservableCollection.create(TypeToken.of(Integer.class), backing), set -> backing.checkValid(), helper);
+		}
 	}
 
-	/** Runs a barrage of tests on {@link ObservableTreeList} */
+	/** Runs a barrage of tests on a {@link DefaultObservableCollection} backed by a {@link BetterTreeList} */
 	@Test
 	public void testObservableTreeList() {
-		testCollection(new ObservableTreeList<>(TypeToken.of(Integer.class)), null, 0);
+		TestHelper.createTester(TreeListTester.class).withDebug(false).withFailurePersistence(false).withRandomCases(1).execute()
+		.throwErrorIfFailed();
 	}
 
-	/** Runs a barrage of tests on {@link ObservableHashSet} */
-	@Test
-	public void testObservableHashSet() {
-		testCollection(new ObservableHashSet<>(TypeToken.of(Integer.class)), null);
+	static class TreeSetTester implements TestHelper.Testable {
+		@Override
+		public void accept(TestHelper helper) {
+			BetterTreeSet<Integer> backing = new BetterTreeSet<>(false, Integer::compareTo);
+			testCollection(ObservableCollection.create(TypeToken.of(Integer.class), backing), set -> backing.checkValid(), helper);
+		}
 	}
 
-	/** Runs a barrage of tests on {@link ObservableTreeSet} */
+	/** Runs a barrage of tests on a {@link DefaultObservableCollection} backed by a {@link BetterTreeSet} */
 	@Test
 	public void testObservableTreeSet() {
-		testCollection(new ObservableTreeSet<>(TypeToken.of(Integer.class), Integer::compareTo), set -> set.checkValid());
+		TestHelper.createTester(TreeSetTester.class).withDebug(false).withFailurePersistence(false).withRandomCases(1).execute()
+		.throwErrorIfFailed();
+	}
+
+	// Random test generation
+
+	interface CollectionAdjuster {
+		boolean add(List<Integer> values, int index, Integer value);
+
+		boolean remove(List<Integer> values, int index, Integer value);
+
+		boolean set(List<Integer> values, int index, Integer oldValue, Integer newValue);
+
+		void refresh(List<Integer> src, List<Integer> values);
+	}
+
+	static class SimpleRandomTester implements Testable {
+		SimpleRandomTester() {
+		}
+
+		@Override
+		public void accept(TestHelper helper) {
+			ObservableCollection<Integer> source = ObservableCollection.create(intType);
+			CollectionAdjuster refresh;
+			CollectionDataFlow<Integer, ?, Integer> derivedFlow;
+			int methods = 3;
+			int modifier1, modifier2;
+			int range = 1000;
+			switch (helper.getInt(0, methods)) {
+			case 0:
+				Function<Integer, Integer> map;
+				boolean adjustable;
+				switch (helper.getInt(0, 5)) {
+				case 0:
+					modifier1 = helper.getInt(0, 100);
+					map = v -> v + modifier1;
+					adjustable = true;
+					break;
+				case 1:
+					modifier1 = helper.getInt(0, 100);
+					map = v -> v - modifier1;
+					adjustable = true;
+					break;
+				case 2:
+					modifier1 = helper.getInt(0, 100);
+					map = v -> v * modifier1;
+					adjustable = modifier1 > 0;
+					break;
+				case 3:
+					modifier1 = helper.getInt(1, 10);
+					map = v -> v / modifier1;
+					adjustable = false;
+					break;
+				default:
+					modifier1 = helper.getInt(1, 10);
+					map = v -> v % modifier1;
+					adjustable = false;
+					break;
+				}
+				derivedFlow = source.flow().map(intType, map, options -> {
+					options.cache(helper.getBoolean())//
+					.fireIfUnchanged(helper.getBoolean())//
+					.reEvalOnUpdate(helper.getBoolean());
+				});
+				refresh = new CollectionAdjuster() {
+					@Override
+					public boolean add(List<Integer> values, int index, Integer value) {
+						if (index >= 0)
+							values.add(index, map.apply(value));
+						else
+							values.add(map.apply(value));
+						return true;
+					}
+
+					@Override
+					public boolean remove(List<Integer> values, int index, Integer value) {
+						if (index >= 0)
+							assertEquals(map.apply(value), values.remove(index));
+						else if (adjustable)
+							values.remove(map.apply(value));
+						else
+							return false;
+						return true;
+					}
+
+					@Override
+					public boolean set(List<Integer> values, int index, Integer oldValue, Integer newValue) {
+						assertEquals(map.apply(oldValue), values.set(index, map.apply(newValue)));
+						return true;
+					}
+
+					@Override
+					public void refresh(List<Integer> src, List<Integer> values) {
+						src.stream().map(map).forEach(v -> values.add(v));
+					}
+				};
+				break;
+			case 1:
+				Predicate<Integer> filter;
+				switch (helper.getInt(0, 3)) {
+				case 0:
+					modifier1 = helper.getInt(0, range);
+					filter = v -> v < modifier1;
+					break;
+				case 1:
+					modifier1 = helper.getInt(0, range);
+					filter = v -> v > modifier1;
+					break;
+				default:
+					modifier1 = helper.getInt(2, 10);
+					modifier2 = helper.getInt(0, modifier1);
+					filter = v -> (v % modifier1) == modifier2;
+					break;
+				}
+				derivedFlow = source.flow().filter(v -> filter.test(v) ? null : StdMsg.ILLEGAL_ELEMENT);
+				refresh = new CollectionAdjuster() {
+					@Override
+					public boolean add(List<Integer> values, int index, Integer value) {
+						if (index >= 0)
+							return false;
+						if (!filter.test(value))
+							return true;
+						values.add(value);
+						return true;
+					}
+
+					@Override
+					public boolean remove(List<Integer> values, int index, Integer value) {
+						if (!filter.test(value))
+							return true;
+						if (index >= 0)
+							return false;
+						values.remove(value);
+						return true;
+					}
+
+					@Override
+					public boolean set(List<Integer> values, int index, Integer oldValue, Integer newValue) {
+						return !filter.test(oldValue) && !filter.test(newValue);
+					}
+
+					@Override
+					public void refresh(List<Integer> src, List<Integer> values) {
+						src.stream().filter(filter).forEach(values::add);
+					}
+				};
+				break;
+			default:
+				boolean forwardSort = helper.getBoolean();
+				Comparator<Integer> compare = forwardSort ? Integer::compareTo : (i1, i2) -> -Integer.compare(i1, i2);
+				derivedFlow = source.flow().sorted(compare);
+				refresh = new CollectionAdjuster() {
+					@Override
+					public boolean add(List<Integer> values, int index, Integer value) {
+						index = Collections.binarySearch(values, value, compare);
+						if (index < 0)
+							index = -index - 1;
+						values.add(index, value);
+						return true;
+					}
+
+					@Override
+					public boolean remove(List<Integer> values, int index, Integer value) {
+						index = Collections.binarySearch(values, value, compare);
+						if (index < 0)
+							return true;
+						values.remove(index);
+						return true;
+					}
+
+					@Override
+					public boolean set(List<Integer> values, int index, Integer oldValue, Integer newValue) {
+						values.remove(oldValue);
+						index = Collections.binarySearch(values, newValue, compare);
+						if (index < 0)
+							index = -index - 1;
+						values.add(index, newValue);
+						return true;
+					}
+
+					@Override
+					public void refresh(List<Integer> src, List<Integer> values) {}
+				};
+				break;
+			}
+			ObservableCollection<Integer> derived;
+			if (derivedFlow.supportsPassive() && helper.getBoolean())
+				derived = derivedFlow.collectPassive();
+			else
+				derived = derivedFlow.collectActive(Observable.empty);
+			ObservableCollectionTester<Integer> tester;
+			BetterList<Integer> expected = new BetterTreeList<>(false);
+			if (helper.getBoolean()) {
+				derived = derived.reverse();
+				tester = new ObservableCollectionTester<>("reversed", derived, expected.reverse());
+			} else
+				tester = new ObservableCollectionTester<>("base", derived, expected);
+
+			for (int i = 0; i < 500; i++) {
+				int index;
+				Integer value;
+				boolean adjusted;
+				helper.placemark();
+				switch (helper.getInt(0, 10)) {
+				case 0:
+				case 1:
+				case 2:
+				case 3:
+				case 4: // More adds than other ops
+					value = helper.getInt(0, range);
+					source.add(value);
+					adjusted = refresh.add(expected, -1, value);
+					break;
+				case 5:
+					index = helper.getInt(0, source.size() + 1);
+					value = helper.getInt(0, range);
+					source.add(index, value);
+					adjusted = refresh.add(expected, index, value);
+					break;
+				case 6:
+				case 7: // Set
+					value = helper.getInt(0, range);
+					if (source.isEmpty()) {
+						source.add(value);
+						adjusted = refresh.add(expected, -1, value);
+					} else {
+						index = helper.getInt(0, source.size());
+						Integer oldValue = source.set(index, value);
+						adjusted = refresh.set(expected, index, oldValue, value);
+					}
+					break;
+				case 8: // Remove by value
+					value = helper.getInt(0, range);
+					if (source.isEmpty()) {
+						source.add(value);
+						adjusted = refresh.add(expected, -1, value);
+					} else {
+						source.remove(value);
+						adjusted = refresh.remove(expected, -1, value);
+					}
+					break;
+				case 9: // Remove by index
+					if (source.isEmpty()) {
+						value = helper.getInt(0, range);
+						source.add(value);
+						adjusted = refresh.add(expected, -1, value);
+					} else {
+						index = helper.getInt(0, source.size());
+						value = source.remove(index);
+						adjusted = refresh.remove(expected, index, value);
+					}
+					break;
+				default:
+					throw new IllegalStateException("Bad int");
+				}
+				if (!adjusted) {
+					expected.clear();
+					refresh.refresh(source, expected);
+				}
+				tester.check();
+			}
+		}
+	}
+
+	/** Tests some simple {@link ObservableCollection} functionality in a random way */
+	@Test
+	public void randomSimple() {
+		TestHelper.createTester(SimpleRandomTester.class).withMaxTotalDuration(Duration.ofSeconds(5))//
+		/**/.withPersistenceDir(new File("src/main/test/org/observe/collect"), false)//
+		.execute().throwErrorIfFailed();
 	}
 
 	// Older, more specific tests
 
+	/** Tests basic {@link ObservableCollection} functionality */
+	@Test
+	public void observableCollection() {
+		ObservableCollection<Integer> list = ObservableCollection.create(intType);
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("", list);
+
+		for (int i = 0; i < 30; i++) {
+			list.add(i);
+			tester.add(i);
+			tester.check(1);
+		}
+		for (int i = 0; i < 30; i++) {
+			list.remove((Integer) i);
+			tester.remove(i);
+			tester.check(1);
+		}
+
+		for (int i = 0; i < 30; i++) {
+			list.add(i);
+			tester.add(i);
+			tester.check(1);
+		}
+		tester.setSynced(false);
+		List<Integer> unchanged = new ArrayList<>(list);
+		for (int i = 30; i < 50; i++) {
+			list.add(i);
+			assertEquals(unchanged, tester.getExpected());
+		}
+		for (int i = 0; i < 30; i++) {
+			list.remove((Integer) i);
+			assertEquals(unchanged, tester.getExpected());
+		}
+	}
+
 	/** Tests basic {@link ObservableSet} functionality */
 	@Test
 	public void observableSet() {
-		ObservableHashSet<Integer> set = new ObservableHashSet<>(TypeToken.of(Integer.TYPE));
+		ObservableSet<Integer> set = ObservableCollection.create(intType).flow().distinct().collect();
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
-		Subscription sub = set.onElement(element -> {
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
-					compare1.add(value.getValue());
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onCompleted(V value) {
-					compare1.remove(value.getValue());
-				}
-			});
-		});
+		CollectionSubscription sub = set.subscribe(evt -> {
+			switch (evt.getType()) {
+			case add:
+				assertTrue(compare1.add(evt.getNewValue()));
+				break;
+			case remove:
+				assertTrue(compare1.remove(evt.getOldValue()));
+				break;
+			case set:
+				throw new IllegalStateException("No sets on sets");
+			}
+		}, true);
 
 		for(int i = 0; i < 30; i++) {
-			set.add(i);
+			assertTrue(set.add(i));
+			correct.add(i);
+			assertEquals(new TreeSet<>(set), compare1);
+			assertEquals(correct, compare1);
+		}
+		for (int i = 0; i < 30; i++) {
+			assertFalse(set.add(i));
 			correct.add(i);
 			assertEquals(new TreeSet<>(set), compare1);
 			assertEquals(correct, compare1);
 		}
 		for(int i = 0; i < 30; i++) {
-			set.remove(i);
+			assertTrue(set.remove(Integer.valueOf(i)));
 			correct.remove(i);
 			assertEquals(new TreeSet<>(set), compare1);
 			assertEquals(correct, compare1);
 		}
 
 		for(int i = 0; i < 30; i++) {
-			set.add(i);
+			assertTrue(set.add(i));
 			correct.add(i);
 			assertEquals(new TreeSet<>(set), compare1);
 			assertEquals(correct, compare1);
 		}
 		sub.unsubscribe();
 		for(int i = 30; i < 50; i++) {
-			set.add(i);
+			assertTrue(set.add(i));
 			assertEquals(correct, compare1);
 		}
 		for(int i = 0; i < 30; i++) {
-			set.remove(i);
-			assertEquals(correct, compare1);
-		}
-	}
-
-	/** Tests basic {@link ObservableList} functionality */
-	@Test
-	public void observableList() {
-		ObservableArrayList<Integer> list = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
-		List<Integer> compare1 = new ArrayList<>();
-		List<Integer> correct = new ArrayList<>();
-		Subscription sub = list.onElement(element -> {
-			ObservableOrderedElement<Integer> listEl = (ObservableOrderedElement<Integer>) element;
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
-					compare1.add(listEl.getIndex(), value.getValue());
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onCompleted(V value) {
-					compare1.remove(listEl.getIndex());
-				}
-			});
-		});
-
-		for(int i = 0; i < 30; i++) {
-			list.add(i);
-			correct.add(i);
-			assertEquals(new ArrayList<>(list), compare1);
-			assertEquals(correct, compare1);
-		}
-		for(int i = 0; i < 30; i++) {
-			list.remove((Integer) i);
-			correct.remove((Integer) i);
-			assertEquals(new ArrayList<>(list), compare1);
-			assertEquals(correct, compare1);
-		}
-
-		for(int i = 0; i < 30; i++) {
-			list.add(i);
-			correct.add(i);
-			assertEquals(new ArrayList<>(list), compare1);
-			assertEquals(correct, compare1);
-		}
-		sub.unsubscribe();
-		for(int i = 30; i < 50; i++) {
-			list.add(i);
-			assertEquals(correct, compare1);
-		}
-		for(int i = 0; i < 30; i++) {
-			list.remove((Integer) i);
+			assertTrue(set.remove(Integer.valueOf(i)));
 			assertEquals(correct, compare1);
 		}
 	}
@@ -593,94 +882,67 @@ public class ObservableCollectionsTest {
 	/** Tests {@link ObservableCollection#observeContainsAll(ObservableCollection)} */
 	@Test
 	public void observableContainsAll() {
-		ObservableArrayList<Integer> list1 = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
-		ObservableArrayList<Integer> list2 = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
-		list1.addValues(0, 1, 2, 4, 5, 6, 7, 8, 8);
-		list2.addValues(0, 2, 4, 6, 8, 10, 10);
+		ObservableCollection<Integer> list1 = ObservableCollection.create(intType);
+		ObservableCollection<Integer> list2 = ObservableCollection.create(intType);
+		list1.with(0, 1, 2, 4, 5, 6, 7, 8, 8);
+		list2.with(0, 2, 4, 6, 8, 10, 10);
 		ObservableValue<Boolean> containsAll = list1.observeContainsAll(list2);
-		assertEquals(false, containsAll.get());
-		boolean[] reported = new boolean[1];
-		int[] events = new int[1];
-		Subscription sub = containsAll.value().act(//
-			ca -> {
-				reported[0] = ca;
-				events[0]++;
-			});
-		int correctEvents = 1;
-		assertEquals(false, reported[0]);
-		assertEquals(correctEvents, events[0]);
+		ObservableValueTester<Boolean> tester = new ObservableValueTester<>(containsAll);
+		tester.check(false, 1);
 		list1.add(10);
-		correctEvents++;
-		assertEquals(true, reported[0]);
-		assertEquals(correctEvents, events[0]);
+		tester.check(true, 1);
 		list1.remove(Integer.valueOf(10));
-		correctEvents++;
-		assertEquals(false, reported[0]);
-		assertEquals(correctEvents, events[0]);
+		tester.check(false, 1);
 		list2.remove(Integer.valueOf(10));
-		assertEquals(false, reported[0]);
-		assertEquals(correctEvents, events[0]);
+		tester.check(false, 0);
 		list2.remove(Integer.valueOf(10));
-		correctEvents++;
-		assertEquals(true, reported[0]);
-		assertEquals(correctEvents, events[0]);
+		tester.check(true, 1);
 		list2.add(10);
-		correctEvents++;
-		assertEquals(false, reported[0]);
-		assertEquals(correctEvents, events[0]);
+		tester.check(false, 1);
 		list2.remove(Integer.valueOf(10));
-		correctEvents++;
-		assertEquals(true, reported[0]);
-		assertEquals(correctEvents, events[0]);
+		tester.check(true, 1);
 		list1.remove(Integer.valueOf(8));
-		assertEquals(true, reported[0]);
-		assertEquals(correctEvents, events[0]);
+		tester.check(true, 0);
 		list1.remove(Integer.valueOf(8));
-		correctEvents++;
-		assertEquals(false, reported[0]);
-		assertEquals(correctEvents, events[0]);
+		tester.check(false, 1);
 		try (Transaction t = list1.lock(true, null)) {
 			list1.add(8);
 			list1.remove(Integer.valueOf(8));
 			list1.add(8);
 			list1.remove(Integer.valueOf(8));
 		}
-		assertEquals(false, reported[0]);
-		assertEquals(correctEvents, events[0]);
+		tester.check(false, 0);
 		try (Transaction t = list1.lock(true, null)) {
 			list1.add(8);
 			list1.remove(Integer.valueOf(8));
 			list1.add(8);
 		}
-		correctEvents++;
-		assertEquals(true, reported[0]);
-		assertEquals(correctEvents, events[0]);
+		tester.check(true, 1);
 
-		sub.unsubscribe();
+		tester.setSynced(false);
 		list1.remove(Integer.valueOf(8));
-		assertEquals(true, reported[0]);
-		assertEquals(correctEvents, events[0]);
+		tester.checkValue(true);
+		tester.checkOps(0);
 	}
 
-	/** Tests {@link ObservableSet#map(java.util.function.Function)} */
+	/** Tests {@link CollectionDataFlow#map(TypeToken, Function)} */
 	@Test
 	public void observableSetMap() {
-		ObservableHashSet<Integer> set = new ObservableHashSet<>(TypeToken.of(Integer.TYPE));
+		ObservableSet<Integer> set = ObservableCollection.create(intType).flow().distinct().collect();
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
-		set.map(value -> value * 10).onElement(element -> {
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
-					compare1.add(value.getValue());
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onCompleted(V value) {
-					compare1.remove(value.getValue());
-				}
-			});
-		});
+		set.flow().map(intType, value -> value * 10, options -> options.cache(false)).collectPassive().subscribe(evt -> {
+			switch (evt.getType()) {
+			case add:
+				assertTrue(compare1.add(evt.getNewValue()));
+				break;
+			case remove:
+				assertTrue(compare1.remove(evt.getOldValue()));
+				break;
+			case set:
+				throw new IllegalStateException("No sets on sets");
+			}
+		}, true);
 
 		for(int i = 0; i < 30; i++) {
 			set.add(i);
@@ -688,31 +950,30 @@ public class ObservableCollectionsTest {
 			assertEquals(correct, compare1);
 		}
 		for(int i = 0; i < 30; i++) {
-			set.remove(i);
+			set.remove(Integer.valueOf(i));
 			correct.remove(i * 10);
 			assertEquals(correct, compare1);
 		}
 	}
 
-	/** Tests {@link ObservableSet#filter(java.util.function.Predicate)} */
+	/** Tests {@link CollectionDataFlow#filter(Function)} */
 	@Test
 	public void observableSetFilter() {
-		ObservableHashSet<Integer> set = new ObservableHashSet<>(TypeToken.of(Integer.TYPE));
+		ObservableSet<Integer> set = ObservableCollection.create(intType).flow().distinct().collect();
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
-		set.filter(value -> (value != null && value % 2 == 0)).onElement(element -> {
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
-					compare1.add(value.getValue());
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onCompleted(V value) {
-					compare1.remove(value.getValue());
-				}
-			});
-		});
+		set.flow().filter(value -> (value != null && value % 2 == 0) ? null : StdMsg.ILLEGAL_ELEMENT).collect().subscribe(evt -> {
+			switch (evt.getType()) {
+			case add:
+				assertTrue(compare1.add(evt.getNewValue()));
+				break;
+			case remove:
+				assertTrue(compare1.remove(evt.getOldValue()));
+				break;
+			case set:
+				throw new IllegalStateException("No sets on sets");
+			}
+		}, true);
 
 		for(int i = 0; i < 30; i++) {
 			set.add(i);
@@ -721,70 +982,34 @@ public class ObservableCollectionsTest {
 			assertEquals(correct, compare1);
 		}
 		for(int i = 0; i < 30; i++) {
-			set.remove(i);
+			set.remove(Integer.valueOf(i));
 			if(i % 2 == 0)
 				correct.remove(i);
 			assertEquals(correct, compare1);
 		}
 	}
 
-	/** Tests {@link ObservableSet#filterStatic(Predicate)} */
-	@Test
-	public void observableSetFilterStatic() {
-		ObservableHashSet<Integer> set = new ObservableHashSet<>(TypeToken.of(Integer.TYPE));
-		Set<Integer> compare1 = new TreeSet<>();
-		Set<Integer> correct = new TreeSet<>();
-		set.filterStatic(value -> (value != null && value % 2 == 0)).onElement(element -> {
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
-					compare1.add(value.getValue());
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onCompleted(V value) {
-					compare1.remove(value.getValue());
-				}
-			});
-		});
-
-		for (int i = 0; i < 30; i++) {
-			set.add(i);
-			if (i % 2 == 0)
-				correct.add(i);
-			assertEquals(correct, compare1);
-		}
-		for (int i = 0; i < 30; i++) {
-			set.remove(i);
-			if (i % 2 == 0)
-				correct.remove(i);
-			assertEquals(correct, compare1);
-		}
-	}
-
-	/** Tests {@link ObservableSet#filterMap(java.util.function.Function)} */
+	/** Tests {@link CollectionDataFlow#filter(Function)} and {@link CollectionDataFlow#map(TypeToken, Function)} together */
 	@Test
 	public void observableSetFilterMap() {
-		ObservableHashSet<Integer> set = new ObservableHashSet<>(TypeToken.of(Integer.TYPE));
+		ObservableSet<Integer> set = ObservableCollection.create(intType).flow().distinct().collect();
 		Set<Integer> compare1 = new TreeSet<>();
 		Set<Integer> correct = new TreeSet<>();
-		set.filterMap(value -> {
-			if(value == null || value % 2 != 0)
-				return null;
-			return value / 2;
-		}).onElement(element -> {
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
-					compare1.add(value.getValue());
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onCompleted(V value) {
-					compare1.remove(value.getValue());
-				}
-			});
-		});
+		set.flow()//
+		.filter(value -> (value == null || value % 2 != 0) ? StdMsg.ILLEGAL_ELEMENT : null)//
+		.map(intType, value -> value / 2)//
+		.collect().subscribe(evt -> {
+			switch (evt.getType()) {
+			case add:
+				assertTrue(compare1.add(evt.getNewValue()));
+				break;
+			case remove:
+				assertTrue(compare1.remove(evt.getOldValue()));
+				break;
+			case set:
+				throw new IllegalStateException("No sets on sets");
+			}
+		}, true);
 
 		for(int i = 0; i < 30; i++) {
 			set.add(i);
@@ -793,36 +1018,39 @@ public class ObservableCollectionsTest {
 			assertEquals(correct, compare1);
 		}
 		for(int i = 0; i < 30; i++) {
-			set.remove(i);
+			set.remove(Integer.valueOf(i));
 			if(i % 2 == 0)
 				correct.remove(i / 2);
 			assertEquals(correct, compare1);
 		}
 	}
 
-	/** Tests {@link ObservableSet#combine(ObservableValue, java.util.function.BiFunction)} */
+	/** Tests {@link CollectionDataFlow#combine(TypeToken, Function)} */
 	@Test
 	public void observableSetCombine() {
-		ObservableHashSet<Integer> set = new ObservableHashSet<>(TypeToken.of(Integer.TYPE));
+		ObservableSet<Integer> set = ObservableCollection.create(intType).flow().distinct().collect();
 		SimpleSettableValue<Integer> value1 = new SimpleSettableValue<>(Integer.TYPE, false);
 		value1.set(1, null);
 		List<Integer> compare1 = new ArrayList<>();
 		Set<Integer> correct = new TreeSet<>();
-		set.combine(value1, (v1, v2) -> v1 * v2).filter(value -> value != null && value % 3 == 0).onElement(element -> {
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
-					if(!event.isInitial())
-						compare1.remove(event.getOldValue());
-					compare1.add(event.getValue());
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onCompleted(V event) {
-					compare1.remove(event.getValue());
-				}
-			});
-		});
+		set.flow()//
+		.combine(intType, combine -> {
+			return combine.with(value1).build((v1, v2) -> v1 * v2);
+		}).filter(value -> value != null && value % 3 == 0 ? null : StdMsg.ILLEGAL_ELEMENT)//
+		.collect().subscribe(evt -> {
+			switch (evt.getType()) {
+			case add:
+				assertTrue(compare1.add(evt.getNewValue()));
+				break;
+			case remove:
+				assertTrue(compare1.remove(evt.getOldValue()));
+				break;
+			case set:
+				assertTrue(compare1.remove(evt.getOldValue()));
+				assertTrue(compare1.add(evt.getNewValue()));
+				break;
+			}
+		}, true);
 
 		for(int i = 0; i < 30; i++) {
 			set.add(i);
@@ -854,7 +1082,7 @@ public class ObservableCollectionsTest {
 		assertEquals(correct.size(), compare1.size());
 
 		for(int i = 0; i < 30; i++) {
-			set.remove(i);
+			set.remove(Integer.valueOf(i));
 			int value = i * value1.get();
 			if(value % 3 == 0)
 				correct.remove(value);
@@ -863,31 +1091,23 @@ public class ObservableCollectionsTest {
 		}
 	}
 
-	/** Tests {@link ObservableSet#unique(ObservableCollection, Equalizer)} */
+	/** Tests {@link CollectionDataFlow#distinct()} */
 	@Test
 	public void observableSetUnique() {
-		ObservableArrayList<Integer> list = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
-		ObservableSet<Integer> unique = ObservableSet.unique(list, Objects::equals);
+		ObservableCollection<Integer> list = ObservableCollection.create(intType);
+		ObservableSet<Integer> unique = list.flow().distinct().collect();
 		testUnique(list, unique);
 	}
 
-	/** Tests {@link ObservableOrderedSet#unique(ObservableOrderedCollection, Equalizer, boolean)} */
-	@Test
-	public void observableOrderedSetUnique() {
-		ObservableArrayList<Integer> list = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
-		ObservableOrderedSet<Integer> unique = ObservableOrderedSet.unique(list, Objects::equals, true);
-		testUnique(list, unique);
-	}
-
-	/** Tests {@link ObservableSortedSet#unique(ObservableCollection, Comparator)} */
+	/** Tests {@link CollectionDataFlow#distinctSorted(Comparator, boolean)} */
 	@Test
 	public void observableSortedSetUnique() {
-		ObservableArrayList<Integer> list = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
-		ObservableSortedSet<Integer> unique = ObservableSortedSet.unique(list, Integer::compareTo);
+		ObservableCollection<Integer> list = ObservableCollection.create(intType);
+		ObservableSortedSet<Integer> unique = list.flow().distinctSorted(Integer::compareTo, false).collect();
 		testUnique(list, unique);
 	}
 
-	private void testUnique(ObservableList<Integer> list, ObservableSet<Integer> unique) {
+	private void testUnique(ObservableCollection<Integer> list, ObservableSet<Integer> unique) {
 		List<Integer> compare1 = new ArrayList<>();
 		Set<Integer> correct = new TreeSet<>();
 
@@ -900,8 +1120,7 @@ public class ObservableCollectionsTest {
 		assertEquals(correct, new TreeSet<>(unique));
 		assertEquals(correct, new TreeSet<>(compare1));
 		assertEquals(correct.size(), compare1.size());
-		if (unique instanceof ObservableOrderedCollection)
-			assertThat(compare1, collectionsEqual(correct, true));
+		assertThat(compare1, collectionsEqual(correct, true));
 
 		for(int i = 0; i < 30; i++) {
 			list.add(i);
@@ -909,8 +1128,7 @@ public class ObservableCollectionsTest {
 		assertEquals(correct, new TreeSet<>(unique));
 		assertEquals(correct, new TreeSet<>(compare1));
 		assertEquals(correct.size(), compare1.size());
-		if (unique instanceof ObservableOrderedCollection)
-			assertThat(compare1, collectionsEqual(correct, true));
+		assertThat(compare1, collectionsEqual(correct, true));
 
 		for(int i = 29; i >= 0; i--) {
 			list.remove(30 + i);
@@ -918,8 +1136,7 @@ public class ObservableCollectionsTest {
 		assertEquals(correct, new TreeSet<>(unique));
 		assertEquals(correct, new TreeSet<>(compare1));
 		assertEquals(correct.size(), compare1.size());
-		if (unique instanceof ObservableOrderedCollection)
-			assertThat(compare1, collectionsEqual(correct, true));
+		assertThat(compare1, collectionsEqual(correct, true));
 
 		for(int i = 0; i < 30; i++) {
 			list.add(i);
@@ -927,8 +1144,7 @@ public class ObservableCollectionsTest {
 		assertEquals(correct, new TreeSet<>(unique));
 		assertEquals(correct, new TreeSet<>(compare1));
 		assertEquals(correct.size(), compare1.size());
-		if (unique instanceof ObservableOrderedCollection)
-			assertThat(compare1, collectionsEqual(correct, true));
+		assertThat(compare1, collectionsEqual(correct, true));
 
 		for(int i = 29; i >= 0; i--) {
 			list.remove(i);
@@ -936,8 +1152,7 @@ public class ObservableCollectionsTest {
 		assertEquals(correct, new TreeSet<>(unique));
 		assertEquals(correct, new TreeSet<>(compare1));
 		assertEquals(correct.size(), compare1.size());
-		if (unique instanceof ObservableOrderedCollection)
-			assertThat(compare1, collectionsEqual(correct, true));
+		assertThat(compare1, collectionsEqual(correct, true));
 
 		for(int i = 29; i >= 0; i--) {
 			list.remove(i);
@@ -946,8 +1161,7 @@ public class ObservableCollectionsTest {
 		assertEquals(correct, new TreeSet<>(unique));
 		assertEquals(correct, new TreeSet<>(compare1));
 		assertEquals(correct.size(), compare1.size());
-		if (unique instanceof ObservableOrderedCollection)
-			assertThat(compare1, collectionsEqual(correct, true));
+		assertThat(compare1, collectionsEqual(correct, true));
 
 		for(int i = 0; i < 30; i++) {
 			list.add(i);
@@ -957,65 +1171,32 @@ public class ObservableCollectionsTest {
 		assertEquals(correct, new TreeSet<>(unique));
 		assertEquals(correct, new TreeSet<>(compare1));
 		assertEquals(correct.size(), compare1.size());
-		if (unique instanceof ObservableOrderedCollection)
-			assertThat(compare1, collectionsEqual(correct, true));
+		assertThat(compare1, collectionsEqual(correct, true));
 		list.clear();
 		correct.clear();
 		assertEquals(correct, new TreeSet<>(unique));
 		assertEquals(correct, new TreeSet<>(compare1));
 		assertEquals(correct.size(), compare1.size());
-		if (unique instanceof ObservableOrderedCollection)
-			assertThat(compare1, collectionsEqual(correct, true));
+		assertThat(compare1, collectionsEqual(correct, true));
 	}
 
-	/** Tests {@link ObservableCollection#flatten(ObservableCollection)} */
+	/** Tests {@link CollectionDataFlow#flatMapC(TypeToken, Function)} */
 	@Test
 	public void observableCollectionFlatten() {
-		ObservableHashSet<Integer> set1 = new ObservableHashSet<>(TypeToken.of(Integer.TYPE));
-		ObservableHashSet<Integer> set2 = new ObservableHashSet<>(TypeToken.of(Integer.TYPE));
-		ObservableHashSet<Integer> set3 = new ObservableHashSet<>(TypeToken.of(Integer.TYPE));
-		ObservableArrayList<ObservableSet<Integer>> outer = new ObservableArrayList<>(new TypeToken<ObservableSet<Integer>>() {});
+		ObservableSet<Integer> set1 = ObservableCollection.create(intType).flow().distinct().collect();
+		ObservableSet<Integer> set2 = ObservableCollection.create(intType).flow().distinct().collect();
+		ObservableSet<Integer> set3 = ObservableCollection.create(intType).flow().distinct().collect();
+		ObservableCollection<ObservableSet<Integer>> outer = ObservableCollection.create(new TypeToken<ObservableSet<Integer>>() {});
 		outer.add(set1);
 		outer.add(set2);
-		ObservableCollection<Integer> flat = ObservableCollection.flatten(outer);
-		List<Integer> compare1 = new ArrayList<>();
-		List<Integer> filtered = new ArrayList<>();
-		flat.onElement(element -> {
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
-					if(!event.isInitial())
-						compare1.remove(event.getOldValue());
-					compare1.add(event.getValue());
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onCompleted(V event) {
-					compare1.remove(event.getValue());
-				}
-			});
-		});
-		flat.filter(value -> value != null && value % 3 == 0).onElement(element -> {
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
-					if(!event.isInitial())
-						filtered.remove(event.getOldValue());
-					filtered.add(event.getValue());
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onCompleted(V event) {
-					filtered.remove(event.getValue());
-				}
-			});
-		});
+		CollectionDataFlow<?, ?, Integer> flat = outer.flow().flatMap(intType, s -> s.flow());
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("flat", flat.collect());
+		ObservableCollectionTester<Integer> filterTester = new ObservableCollectionTester<>("filter", //
+			flat.filter(value -> value != null && value % 3 == 0 ? null : StdMsg.ILLEGAL_ELEMENT).collect());
 
 		List<Integer> correct1 = new ArrayList<>();
 		List<Integer> correct2 = new ArrayList<>();
 		List<Integer> correct3 = new ArrayList<>();
-		List<Integer> correct = new ArrayList<>();
-		List<Integer> filteredCorrect = new ArrayList<>();
 
 		for(int i = 0; i < 30; i++) {
 			set1.add(i);
@@ -1024,90 +1205,75 @@ public class ObservableCollectionsTest {
 			correct1.add(i);
 			correct2.add(i * 10);
 			correct3.add(i * 100);
-			correct.clear();
-			correct.addAll(correct1);
-			correct.addAll(correct2);
-			filteredCorrect.clear();
+			tester.clear();
+			tester.addAll(correct1);
+			tester.addAll(correct2);
+			filterTester.clear();
 			for(int j : correct1)
 				if(j % 3 == 0)
-					filteredCorrect.add(j);
+					filterTester.add(j);
 			for(int j : correct2)
 				if(j % 3 == 0)
-					filteredCorrect.add(j);
-			assertEquals(new TreeSet<>(flat), new TreeSet<>(compare1));
-			assertEquals(flat.size(), compare1.size());
-			assertEquals(new TreeSet<>(correct), new TreeSet<>(compare1));
-			assertEquals(correct.size(), compare1.size());
-			assertEquals(new TreeSet<>(filteredCorrect), new TreeSet<>(filtered));
-			assertEquals(filteredCorrect.size(), filtered.size());
+					filterTester.add(j);
+
+			tester.check();
+			filterTester.check();
 		}
 
 		outer.add(set3);
-		correct.clear();
-		correct.addAll(correct1);
-		correct.addAll(correct2);
-		correct.addAll(correct3);
-		filteredCorrect.clear();
+		tester.clear();
+		tester.addAll(correct1);
+		tester.addAll(correct2);
+		tester.addAll(correct3);
+		filterTester.clear();
 		for(int j : correct1)
 			if(j % 3 == 0)
-				filteredCorrect.add(j);
+				filterTester.add(j);
 		for(int j : correct2)
 			if(j % 3 == 0)
-				filteredCorrect.add(j);
+				filterTester.add(j);
 		for(int j : correct3)
 			if(j % 3 == 0)
-				filteredCorrect.add(j);
+				filterTester.add(j);
 
-		assertEquals(new TreeSet<>(flat), new TreeSet<>(compare1));
-		assertEquals(flat.size(), compare1.size());
-		assertEquals(new TreeSet<>(correct), new TreeSet<>(compare1));
-		assertEquals(correct.size(), compare1.size());
-		assertEquals(new TreeSet<>(filteredCorrect), new TreeSet<>(filtered));
-		assertEquals(filteredCorrect.size(), filtered.size());
+		tester.check();
+		filterTester.check();
 
 		outer.remove(set2);
-		correct.clear();
-		correct.addAll(correct1);
-		correct.addAll(correct3);
-		filteredCorrect.clear();
+		tester.clear();
+		tester.addAll(correct1);
+		tester.addAll(correct3);
+		filterTester.clear();
 		for(int j : correct1)
 			if(j % 3 == 0)
-				filteredCorrect.add(j);
+				filterTester.add(j);
 		for(int j : correct3)
 			if(j % 3 == 0)
-				filteredCorrect.add(j);
+				filterTester.add(j);
 
-		assertEquals(new TreeSet<>(flat), new TreeSet<>(compare1));
-		assertEquals(flat.size(), compare1.size());
-		assertEquals(new TreeSet<>(correct), new TreeSet<>(compare1));
-		assertEquals(correct.size(), compare1.size());
-		assertEquals(new TreeSet<>(filteredCorrect), new TreeSet<>(filtered));
-		assertEquals(filteredCorrect.size(), filtered.size());
+		tester.check();
+		filterTester.check();
 
 		for(int i = 0; i < 30; i++) {
-			set1.remove(i);
-			set2.remove(i * 10);
-			set3.remove(i * 100);
+			set1.remove(Integer.valueOf(i));
+			set2.remove(Integer.valueOf(i * 10));
+			set3.remove(Integer.valueOf(i * 100));
 			correct1.remove((Integer) i);
 			correct2.remove((Integer) (i * 10));
 			correct3.remove((Integer) (i * 100));
-			correct.clear();
-			correct.addAll(correct1);
-			correct.addAll(correct3);
-			filteredCorrect.clear();
+			tester.clear();
+			tester.addAll(correct1);
+			tester.addAll(correct3);
+			filterTester.clear();
 			for(int j : correct1)
 				if(j % 3 == 0)
-					filteredCorrect.add(j);
+					filterTester.add(j);
 			for(int j : correct3)
 				if(j % 3 == 0)
-					filteredCorrect.add(j);
+					filterTester.add(j);
 
-			assertEquals(new TreeSet<>(flat), new TreeSet<>(compare1));
-			assertEquals(flat.size(), compare1.size());
-			assertEquals(new TreeSet<>(correct), new TreeSet<>(compare1));
-			assertEquals(correct.size(), compare1.size());
-			assertEquals(new TreeSet<>(filteredCorrect), new TreeSet<>(filtered));
-			assertEquals(filteredCorrect.size(), filtered.size());
+			tester.check();
+			filterTester.check();
 		}
 	}
 
@@ -1117,10 +1283,13 @@ public class ObservableCollectionsTest {
 		SimpleSettableValue<Integer> obs1 = new SimpleSettableValue<>(Integer.class, true);
 		SimpleSettableValue<Integer> obs2 = new SimpleSettableValue<>(Integer.class, true);
 		SimpleSettableValue<Integer> obs3 = new SimpleSettableValue<>(Integer.class, true);
-		ObservableHashSet<ObservableValue<Integer>> set = new ObservableHashSet<>(new TypeToken<ObservableValue<Integer>>() {});
+		ObservableSet<ObservableValue<Integer>> set = ObservableCollection.create(new TypeToken<ObservableValue<Integer>>() {}).flow()
+			.distinct().collect();
 		set.add(obs1);
 		set.add(obs2);
-		Observable<Integer> folded = ObservableCollection.fold(set.map(value -> value.value()));
+		Observable<Integer> folded = ObservableCollection
+			.fold(set.flow().map(new TypeToken<Observable<Integer>>() {}, value -> value.value(), options -> options.cache(false))
+				.collectPassive());
 		int [] received = new int[1];
 		folded.noInit().act(value -> received[0] = value);
 
@@ -1139,431 +1308,239 @@ public class ObservableCollectionsTest {
 		assertEquals(4, received[0]);
 	}
 
-	/** Tests {@link ObservableList#map(java.util.function.Function)} */
+	/** Tests {@link CollectionDataFlow#map(TypeToken, Function)} */
 	@Test
 	public void observableListMap() {
-		ObservableArrayList<Integer> list = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
-		List<Integer> compare1 = new ArrayList<>();
-		List<Integer> correct = new ArrayList<>();
-		list.map(value -> value * 10).onElement(element -> {
-			ObservableOrderedElement<Integer> listEl = (ObservableOrderedElement<Integer>) element;
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
-					if(!value.isInitial())
-						compare1.set(listEl.getIndex(), value.getValue());
-					else
-						compare1.add(listEl.getIndex(), value.getValue());
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onCompleted(V value) {
-					compare1.remove(listEl.getIndex());
-				}
-			});
-		});
+		ObservableCollection<Integer> list = ObservableCollection.create(intType);
+		ObservableCollectionTester<Integer> lwTester = new ObservableCollectionTester<>("light",
+			list.flow().map(intType, value -> value * 10, options -> options.cache(false)).collectPassive());
+		ObservableCollectionTester<Integer> hwTester = new ObservableCollectionTester<>("heavy",
+			list.flow().map(intType, value -> value * 10).collect());
 
 		for(int i = 0; i < 30; i++) {
 			list.add(i);
-			correct.add(i * 10);
-			assertEquals(correct, compare1);
+			lwTester.add(i * 10);
+			hwTester.add(i * 10);
+			lwTester.check();
+			hwTester.check();
 		}
 		for(int i = 0; i < 30; i++) {
 			list.add(i);
-			correct.add(i * 10);
-			assertEquals(correct, compare1);
+			lwTester.add(i * 10);
+			hwTester.add(i * 10);
+			lwTester.check();
+			hwTester.check();
 		}
 		for(int i = 0; i < 30; i++) {
 			list.remove(Integer.valueOf(i));
-			correct.remove(Integer.valueOf(i * 10));
-			assertEquals(correct, compare1);
+			lwTester.remove(Integer.valueOf(i * 10));
+			hwTester.remove(Integer.valueOf(i * 10));
+			lwTester.check();
+			hwTester.check();
 		}
 	}
 
-	/** Tests {@link ObservableList#filter(Predicate)} */
+	/** Tests {@link CollectionDataFlow#filter(Function)} */
 	@Test
 	public void observableListFilter() {
-		ObservableArrayList<Integer> list = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
-		List<Integer> compare1 = new ArrayList<>();
-		List<Integer> correct = new ArrayList<>();
-		list.filter(value -> value != null && value % 2 == 0).onElement(element -> {
-			ObservableOrderedElement<Integer> listEl = (ObservableOrderedElement<Integer>) element;
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
-					if(!value.isInitial())
-						compare1.set(listEl.getIndex(), value.getValue());
-					else
-						compare1.add(listEl.getIndex(), value.getValue());
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onCompleted(V value) {
-					compare1.remove(listEl.getIndex());
-				}
-			});
-		});
+		ObservableCollection<Integer> list = ObservableCollection.create(intType);
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("filtered", //
+			list.flow().filter(value -> value != null && value % 2 == 0 ? null : StdMsg.ILLEGAL_ELEMENT).collect());
 
 		for(int i = 0; i < 30; i++) {
 			list.add(i);
 			if(i % 2 == 0)
-				correct.add(i);
-			assertEquals(correct, compare1);
+				tester.add(i);
+			tester.check(i % 2 == 0 ? 1 : 0);
 		}
 		for(int i = 0; i < 30; i++) {
 			list.add(i);
 			if(i % 2 == 0)
-				correct.add(i);
-			assertEquals(correct, compare1);
+				tester.add(i);
+			tester.check(i % 2 == 0 ? 1 : 0);
 		}
 		for(int i = 0; i < 30; i++) {
 			list.remove(Integer.valueOf(i));
 			if(i % 2 == 0)
-				correct.remove(Integer.valueOf(i));
-			assertEquals(correct, compare1);
-		}
-	}
-
-	/** Tests {@link ObservableList#filterStatic(Predicate)} */
-	@Test
-	public void observableListFilterStatic() {
-		ObservableArrayList<Integer> list = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
-		List<Integer> compare1 = new ArrayList<>();
-		List<Integer> correct = new ArrayList<>();
-		list.filterStatic(value -> value != null && value % 2 == 0).onElement(element -> {
-			ObservableOrderedElement<Integer> listEl = (ObservableOrderedElement<Integer>) element;
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
-					if (!value.isInitial())
-						compare1.set(listEl.getIndex(), value.getValue());
-					else
-						compare1.add(listEl.getIndex(), value.getValue());
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onCompleted(V value) {
-					compare1.remove(listEl.getIndex());
-				}
-			});
-		});
-
-		for (int i = 0; i < 30; i++) {
-			list.add(i);
-			if (i % 2 == 0)
-				correct.add(i);
-			assertEquals(correct, compare1);
-		}
-		for (int i = 0; i < 30; i++) {
-			list.add(i);
-			if (i % 2 == 0)
-				correct.add(i);
-			assertEquals(correct, compare1);
-		}
-		for (int i = 0; i < 30; i++) {
-			list.remove(Integer.valueOf(i));
-			if (i % 2 == 0)
-				correct.remove(Integer.valueOf(i));
-			assertEquals(correct, compare1);
+				tester.remove(i);
+			tester.check(i % 2 == 0 ? 1 : 0);
 		}
 	}
 
 	/** Slight variation on {@link #observableListFilter()} */
 	@Test
 	public void observableListFilter2() {
-		ObservableArrayList<Integer> list = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
-		List<Integer> compare0 = new ArrayList<>();
-		List<Integer> correct0 = new ArrayList<>();
-		List<Integer> compare1 = new ArrayList<>();
-		List<Integer> correct1 = new ArrayList<>();
-		List<Integer> compare2 = new ArrayList<>();
-		List<Integer> correct2 = new ArrayList<>();
+		ObservableCollection<Integer> list = ObservableCollection.create(intType);
 
-		list.filter(value -> value % 3 == 0).onElement(element -> {
-			ObservableOrderedElement<Integer> oel = (ObservableOrderedElement<Integer>) element;
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
-					if(!value.isInitial())
-						compare0.set(oel.getIndex(), value.getValue());
-					else
-						compare0.add(oel.getIndex(), value.getValue());
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onCompleted(V value) {
-					compare0.remove(oel.getIndex());
-				}
-			});
-		});
-		list.filter(value -> value % 3 == 1).onElement(element -> {
-			ObservableOrderedElement<Integer> oel = (ObservableOrderedElement<Integer>) element;
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
-					if(!value.isInitial())
-						compare1.set(oel.getIndex(), value.getValue());
-					else
-						compare1.add(oel.getIndex(), value.getValue());
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onCompleted(V value) {
-					compare1.remove(oel.getIndex());
-				}
-			});
-		});
-		list.filter(value -> value % 3 == 2).onElement(element -> {
-			ObservableOrderedElement<Integer> oel = (ObservableOrderedElement<Integer>) element;
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
-					if(!value.isInitial())
-						compare2.set(oel.getIndex(), value.getValue());
-					else
-						compare2.add(oel.getIndex(), value.getValue());
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onCompleted(V value) {
-					compare2.remove(oel.getIndex());
-				}
-			});
-		});
+		ObservableCollectionTester<Integer> tester0 = new ObservableCollectionTester<>("%3==0", //
+			list.flow().filter(value -> value % 3 == 0 ? null : StdMsg.ILLEGAL_ELEMENT).collect());
+		ObservableCollectionTester<Integer> tester1 = new ObservableCollectionTester<>("%3==1", //
+			list.flow().filter(value -> value % 3 == 1 ? null : StdMsg.ILLEGAL_ELEMENT).collect());
+		ObservableCollectionTester<Integer> tester2 = new ObservableCollectionTester<>("%3==2", //
+			list.flow().filter(value -> value % 3 == 2 ? null : StdMsg.ILLEGAL_ELEMENT).collect());
 
 		int count = 30;
 		for(int i = 0; i < count; i++) {
 			list.add(i);
 			switch (i % 3) {
 			case 0:
-				correct0.add(i);
+				tester0.add(i);
 				break;
 			case 1:
-				correct1.add(i);
+				tester1.add(i);
 				break;
 			case 2:
-				correct2.add(i);
+				tester2.add(i);
 				break;
 			}
-			assertEquals(correct0, compare0);
-			assertEquals(correct1, compare1);
-			assertEquals(correct2, compare2);
+			tester0.check(i % 3 == 0 ? 1 : 0);
+			tester1.check(i % 3 == 1 ? 1 : 0);
+			tester2.check(i % 3 == 2 ? 1 : 0);
 		}
 		for(int i = 0; i < count; i++) {
 			int value = i + 1;
 			list.set(i, value);
 			switch (i % 3) {
 			case 0:
-				correct0.remove(Integer.valueOf(i));
+				tester0.remove(Integer.valueOf(i));
 				break;
 			case 1:
-				correct1.remove(Integer.valueOf(i));
+				tester1.remove(Integer.valueOf(i));
 				break;
 			case 2:
-				correct2.remove(Integer.valueOf(i));
+				tester2.remove(Integer.valueOf(i));
 				break;
 			}
 			switch (value % 3) {
 			case 0:
-				correct0.add(i / 3, value);
+				tester0.add(i / 3, value);
 				break;
 			case 1:
-				correct1.add(i / 3, value);
+				tester1.add(i / 3, value);
 				break;
 			case 2:
-				correct2.add(i / 3, value);
+				tester2.add(i / 3, value);
 				break;
 			}
-			assertEquals(correct0, compare0);
-			assertEquals(correct1, compare1);
-			assertEquals(correct2, compare2);
+			tester0.check();
+			tester1.check();
+			tester2.check();
 		}
 		for(int i = count - 1; i >= 0; i--) {
 			int value = list.get(i);
 			list.remove(Integer.valueOf(value));
 			switch (value % 3) {
 			case 0:
-				correct0.remove(Integer.valueOf(value));
+				tester0.remove(Integer.valueOf(value));
 				break;
 			case 1:
-				correct1.remove(Integer.valueOf(value));
+				tester1.remove(Integer.valueOf(value));
 				break;
 			case 2:
-				correct2.remove(Integer.valueOf(value));
+				tester2.remove(Integer.valueOf(value));
 				break;
 			}
-			assertEquals(correct0, compare0);
-			assertEquals(correct1, compare1);
-			assertEquals(correct2, compare2);
+			tester0.check(value % 3 == 0 ? 1 : 0);
+			tester1.check(value % 3 == 1 ? 1 : 0);
+			tester2.check(value % 3 == 2 ? 1 : 0);
 		}
 	}
 
-	/** Tests {@link ObservableList#filterMap(java.util.function.Function)} */
+	/** Tests {@link CollectionDataFlow#filter(Function)} and {@link CollectionDataFlow#map(TypeToken, Function)} together */
 	@Test
 	public void observableListFilterMap() {
-		ObservableArrayList<Integer> list = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
-		List<Integer> compare1 = new ArrayList<>();
-		List<Integer> correct = new ArrayList<>();
-		list.filterMap(value -> {
-			if(value == null || value % 2 != 0)
-				return null;
-			return value / 2;
-		}).onElement(element -> {
-			ObservableOrderedElement<Integer> listEl = (ObservableOrderedElement<Integer>) element;
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onNext(V value) {
-					if(!value.isInitial())
-						compare1.set(listEl.getIndex(), value.getValue());
-					else
-						compare1.add(listEl.getIndex(), value.getValue());
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onCompleted(V value) {
-					compare1.remove(listEl.getIndex());
-				}
-			});
-		});
+		ObservableCollection<Integer> list = ObservableCollection.create(intType);
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("filterMap",
+			list.flow()//
+			.filter(value -> (value == null || value % 2 != 0) ? StdMsg.ILLEGAL_ELEMENT : null)//
+			.map(intType, value -> value / 2)//
+			.collect());
 
 		for(int i = 0; i < 30; i++) {
 			list.add(i);
 			if(i % 2 == 0)
-				correct.add(i / 2);
-			assertEquals(correct, compare1);
+				tester.add(i / 2);
+			tester.check(i % 2 == 0 ? 1 : 0);
 		}
 		for(int i = 0; i < 30; i++) {
 			list.add(i);
 			if(i % 2 == 0)
-				correct.add(i / 2);
-			assertEquals(correct, compare1);
+				tester.add(i / 2);
+			tester.check(i % 2 == 0 ? 1 : 0);
 		}
 		for(int i = 0; i < 30; i++) {
 			list.remove(Integer.valueOf(i));
 			if(i % 2 == 0)
-				correct.remove(Integer.valueOf(i / 2));
-			assertEquals(correct, compare1);
+				tester.remove(Integer.valueOf(i / 2));
+			tester.check(i % 2 == 0 ? 1 : 0);
 		}
 	}
 
-	/** Tests {@link ObservableList#combine(ObservableValue, java.util.function.BiFunction)} */
+	/** Tests {@link CollectionDataFlow#combine(TypeToken, Function)} */
 	@Test
 	public void observableListCombine() {
-		ObservableArrayList<Integer> list = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
+		ObservableCollection<Integer> list = ObservableCollection.create(intType);
 		SimpleSettableValue<Integer> value1 = new SimpleSettableValue<>(Integer.TYPE, false);
 		value1.set(1, null);
-		List<Integer> compare1 = new ArrayList<>();
-		List<Integer> correct = new ArrayList<>();
-		list.combine(value1, (v1, v2) -> v1 * v2).filter(value -> value != null && value % 3 == 0).onElement(element -> {
-			ObservableOrderedElement<Integer> listEl = (ObservableOrderedElement<Integer>) element;
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
-					if(!event.isInitial())
-						compare1.set(listEl.getIndex(), event.getValue());
-					else
-						compare1.add(listEl.getIndex(), event.getValue());
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onCompleted(V event) {
-					compare1.remove(listEl.getIndex());
-				}
-			});
-		});
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("combined", list.flow()//
+			.combine(intType, combine -> {
+				return combine.with(value1).build((v1, v2) -> v1 * v2);
+			}).filter(value -> value != null && value % 3 == 0 ? null : StdMsg.ILLEGAL_ELEMENT)//
+			.collect());
 
 		for(int i = 0; i < 30; i++) {
 			list.add(i);
 			int value = i * value1.get();
 			if(value % 3 == 0)
-				correct.add(value);
-			assertEquals(correct, compare1);
-			assertEquals(correct.size(), compare1.size());
+				tester.add(value);
+			tester.check(i % 3 == 0 ? 1 : 0);
 		}
 
 		value1.set(3, null);
-		correct.clear();
+		tester.clear();
 		for(int i = 0; i < 30; i++) {
 			int value = i * value1.get();
 			if(value % 3 == 0)
-				correct.add(value);
+				tester.add(value);
 		}
-		assertEquals(correct, compare1);
-		assertEquals(correct.size(), compare1.size());
+		tester.check();
 
 		value1.set(10, null);
-		correct.clear();
+		tester.clear();
 		for(int i = 0; i < 30; i++) {
 			int value = i * value1.get();
 			if(value % 3 == 0)
-				correct.add(value);
+				tester.add(value);
 		}
-		assertEquals(correct, compare1);
-		assertEquals(correct.size(), compare1.size());
+		tester.check();
 
 		for(int i = 0; i < 30; i++) {
 			list.remove(Integer.valueOf(i));
 			int value = i * value1.get();
 			if(value % 3 == 0)
-				correct.remove(Integer.valueOf(value));
-			assertEquals(correct, compare1);
-			assertEquals(correct.size(), compare1.size());
+				tester.remove(Integer.valueOf(value));
+			tester.check(value % 3 == 0 ? 0 : 0);
 		}
 	}
 
-	/** Tests {@link ObservableList#flatten(ObservableList)} */
+	/** Tests {@link CollectionDataFlow#flatMap(TypeToken, Function)} */
 	@Test
 	public void observableListFlatten() {
-		ObservableArrayList<Integer> set1 = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
-		ObservableArrayList<Integer> set2 = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
-		ObservableArrayList<Integer> set3 = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
-		ObservableArrayList<ObservableList<Integer>> outer = new ObservableArrayList<>(new TypeToken<ObservableList<Integer>>() {});
+		ObservableCollection<Integer> set1 = ObservableCollection.create(intType);
+		ObservableCollection<Integer> set2 = ObservableCollection.create(intType);
+		ObservableCollection<Integer> set3 = ObservableCollection.create(intType);
+		ObservableCollection<ObservableCollection<Integer>> outer = ObservableCollection
+			.create(new TypeToken<ObservableCollection<Integer>>() {});
 		outer.add(set1);
 		outer.add(set2);
-		ObservableList<Integer> flat = ObservableList.flatten(outer);
-		List<Integer> compare1 = new ArrayList<>();
-		List<Integer> filtered = new ArrayList<>();
-		flat.onElement(element -> {
-			ObservableOrderedElement<Integer> listEl = (ObservableOrderedElement<Integer>) element;
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
-					if(!event.isInitial())
-						compare1.set(listEl.getIndex(), event.getOldValue());
-					else
-						compare1.add(listEl.getIndex(), event.getValue());
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onCompleted(V event) {
-					compare1.remove(listEl.getIndex());
-				}
-			});
-		});
-		flat.filter(value -> value != null && value % 3 == 0).onElement(element -> {
-			ObservableOrderedElement<Integer> listEl = (ObservableOrderedElement<Integer>) element;
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
-					if(!event.isInitial()) {
-						filtered.set(listEl.getIndex(), event.getValue());
-					} else {
-						filtered.add(listEl.getIndex(), event.getValue());
-					}
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onCompleted(V event) {
-					filtered.remove(listEl.getIndex());
-				}
-			});
-		});
+		ObservableCollection<Integer> flat = outer.flow().flatMap(intType, s -> s.flow()).collect();
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("flat", flat);
+		ObservableCollectionTester<Integer> filteredTester = new ObservableCollectionTester<>("flatFiltered", //
+			flat.flow().filter(value -> value != null && value % 3 == 0 ? null : StdMsg.ILLEGAL_ELEMENT).collect());
 
 		List<Integer> correct1 = new ArrayList<>();
 		List<Integer> correct2 = new ArrayList<>();
 		List<Integer> correct3 = new ArrayList<>();
-		List<Integer> correct = new ArrayList<>();
-		List<Integer> filteredCorrect = new ArrayList<>();
 
 		for(int i = 0; i < 30; i++) {
 			set1.add(i);
@@ -1572,65 +1549,53 @@ public class ObservableCollectionsTest {
 			correct1.add(i);
 			correct2.add(i * 10);
 			correct3.add(i * 100);
-			correct.clear();
-			correct.addAll(correct1);
-			correct.addAll(correct2);
-			filteredCorrect.clear();
+			tester.clear();
+			tester.addAll(correct1);
+			tester.addAll(correct2);
+			filteredTester.clear();
 			for(int j : correct1)
 				if(j % 3 == 0)
-					filteredCorrect.add(j);
+					filteredTester.add(j);
 			for(int j : correct2)
 				if(j % 3 == 0)
-					filteredCorrect.add(j);
-			assertEquals(new ArrayList<>(flat), compare1);
-			assertEquals(flat.size(), compare1.size());
-			assertEquals(correct, compare1);
-			assertEquals(correct.size(), compare1.size());
-			assertEquals(filteredCorrect, filtered);
-			assertEquals(filteredCorrect.size(), filtered.size());
+					filteredTester.add(j);
+			tester.check();
+			filteredTester.check();
 		}
 
 		outer.add(set3);
-		correct.clear();
-		correct.addAll(correct1);
-		correct.addAll(correct2);
-		correct.addAll(correct3);
-		filteredCorrect.clear();
+		tester.clear();
+		tester.addAll(correct1);
+		tester.addAll(correct2);
+		tester.addAll(correct3);
+		filteredTester.clear();
 		for(int j : correct1)
 			if(j % 3 == 0)
-				filteredCorrect.add(j);
+				filteredTester.add(j);
 		for(int j : correct2)
 			if(j % 3 == 0)
-				filteredCorrect.add(j);
+				filteredTester.add(j);
 		for(int j : correct3)
 			if(j % 3 == 0)
-				filteredCorrect.add(j);
+				filteredTester.add(j);
 
-		assertEquals(new ArrayList<>(flat), compare1);
-		assertEquals(flat.size(), compare1.size());
-		assertEquals(correct, compare1);
-		assertEquals(correct.size(), compare1.size());
-		assertEquals(filteredCorrect, filtered);
-		assertEquals(filteredCorrect.size(), filtered.size());
+		tester.check();
+		filteredTester.check();
 
 		outer.remove(set2);
-		correct.clear();
-		correct.addAll(correct1);
-		correct.addAll(correct3);
-		filteredCorrect.clear();
+		tester.clear();
+		tester.addAll(correct1);
+		tester.addAll(correct3);
+		filteredTester.clear();
 		for(int j : correct1)
 			if(j % 3 == 0)
-				filteredCorrect.add(j);
+				filteredTester.add(j);
 		for(int j : correct3)
 			if(j % 3 == 0)
-				filteredCorrect.add(j);
+				filteredTester.add(j);
 
-		assertEquals(new ArrayList<>(flat), compare1);
-		assertEquals(flat.size(), compare1.size());
-		assertEquals(correct, compare1);
-		assertEquals(correct.size(), compare1.size());
-		assertEquals(filteredCorrect, filtered);
-		assertEquals(filteredCorrect.size(), filtered.size());
+		tester.check();
+		filteredTester.check();
 
 		for(int i = 0; i < 30; i++) {
 			set1.remove((Integer) i);
@@ -1639,43 +1604,38 @@ public class ObservableCollectionsTest {
 			correct1.remove((Integer) i);
 			correct2.remove((Integer) (i * 10));
 			correct3.remove((Integer) (i * 100));
-			correct.clear();
-			correct.addAll(correct1);
-			correct.addAll(correct3);
-			filteredCorrect.clear();
+			tester.clear();
+			tester.addAll(correct1);
+			tester.addAll(correct3);
+			filteredTester.clear();
 			for(int j : correct1)
 				if(j % 3 == 0)
-					filteredCorrect.add(j);
+					filteredTester.add(j);
 			for(int j : correct3)
 				if(j % 3 == 0)
-					filteredCorrect.add(j);
+					filteredTester.add(j);
 
-			assertEquals(new ArrayList<>(flat), compare1);
-			assertEquals(flat.size(), compare1.size());
-			assertEquals(correct, compare1);
-			assertEquals(correct.size(), compare1.size());
-			assertEquals(filteredCorrect, filtered);
-			assertEquals(filteredCorrect.size(), filtered.size());
+			tester.check();
+			filteredTester.check();
 		}
 	}
 
-	/** Tests {@link ObservableList#find(java.util.function.Predicate)} */
+	/** Tests {@link ObservableCollection#observeFind(Predicate, Supplier, boolean)} */
 	@Test
 	public void observableListFind() {
-		ObservableArrayList<Integer> list = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
-		ObservableValue<Integer> found = list.findFirst(value -> value % 3 == 0);
-		Integer [] received = new Integer[] {0};
-		found.act(value -> received[0] = value.getValue());
+		ObservableCollection<Integer> list = ObservableCollection.create(intType);
+		ObservableValue<Integer> found = list.observeFind(value -> value % 3 == 0, () -> null, true);
+		ObservableValueTester<Integer> tester = new ObservableValueTester<>(found);
 		Integer [] correct = new Integer[] {null};
+		tester.check(correct[0], 1);
 
-		assertEquals(correct[0], received[0]);
-		assertEquals(correct[0], found.get());
 		for(int i = 1; i < 30; i++) {
 			list.add(i);
-			if(i % 3 == 0 && correct[0] == null)
+			if (i % 3 == 0 && correct[0] == null) {
 				correct[0] = i;
-			assertEquals(correct[0], received[0]);
-			assertEquals(correct[0], found.get());
+				tester.check(i, 1);
+			} else
+				tester.check(correct[0], 0);
 		}
 		for(int i = 1; i < 30; i++) {
 			list.remove(Integer.valueOf(i));
@@ -1683,16 +1643,16 @@ public class ObservableCollectionsTest {
 				correct[0] += 3;
 				if(correct[0] >= 30)
 					correct[0] = null;
-			}
-			assertEquals(correct[0], received[0]);
-			assertEquals(correct[0], found.get());
+				tester.check(correct[0], 1);
+			} else
+				tester.check(correct[0], 0);
 		}
 	}
 
-	/** Tests {@link ObservableList#flattenValues(ObservableList)} */
+	/** Tests {@link CollectionDataFlow#flattenValues(TypeToken, Function)} */
 	@Test
 	public void flattenListValues() {
-		ObservableArrayList<ObservableValue<Integer>> list = new ObservableArrayList<>(new TypeToken<ObservableValue<Integer>>() {});
+		ObservableCollection<ObservableValue<Integer>> list = ObservableCollection.create(new TypeToken<ObservableValue<Integer>>() {});
 		SimpleSettableValue<Integer> value1 = new SimpleSettableValue<>(Integer.TYPE, false);
 		value1.set(1, null);
 		SimpleSettableValue<Integer> value2 = new SimpleSettableValue<>(Integer.TYPE, false);
@@ -1706,42 +1666,68 @@ public class ObservableCollectionsTest {
 		list.addAll(java.util.Arrays.asList(value1, value2, value3, value4));
 
 		Integer [] received = new Integer[1];
-		ObservableList.flattenValues(list).findFirst(value -> value % 3 == 0).value()
+		ObservableCollection<Integer> flattened = list.flow().flattenValues(intType, v -> v).collect();
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("flattened", flattened);
+		flattened.observeFind(value -> value % 3 == 0, () -> null, Ternian.NONE).value()
 		.act(value -> received[0] = value);
 		assertEquals(Integer.valueOf(3), received[0]);
 		value3.set(4, null);
+		tester.getExpected().set(2, 4);
+		tester.check();
 		assertEquals(null, received[0]);
 		value4.set(6, null);
+		tester.getExpected().set(3, 6);
+		tester.check();
 		assertEquals(Integer.valueOf(6), received[0]);
 		list.remove(value4);
+		tester.getExpected().remove(3);
+		tester.check();
 		assertEquals(null, received[0]);
 		list.add(value5);
+		tester.add(value5.get());
+		tester.check();
 		assertEquals(Integer.valueOf(9), received[0]);
+		list.add(3, value4);
+		tester.getExpected().add(3, value4.get());
+		tester.check();
+
+		// Test list modification
+		flattened.set(4, 10);
+		tester.getExpected().set(4, 10);
+		assertEquals(Integer.valueOf(10), value5.get());
+		tester.check();
+		assertTrue(list.contains(value3));
+		flattened.remove(2);
+		tester.getExpected().remove(2);
+		assertFalse(list.contains(value3));
+		tester.check();
 	}
 
-	/** Tests {@link ObservableList#flattenValue(ObservableValue)} */
+	/** Tests {@link ObservableCollection#flattenValue(ObservableValue)} */
 	@Test
 	public void flattenListValue() {
-		SimpleSettableValue<ObservableList<Integer>> listVal = new SimpleSettableValue<>(new TypeToken<ObservableList<Integer>>() {}, true);
-		ObservableArrayList<Integer> firstList = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
-		ObservableArrayList<Integer> secondList = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
+		SimpleSettableValue<ObservableCollection<Integer>> listVal = new SimpleSettableValue<>(
+			new TypeToken<ObservableCollection<Integer>>() {}, true);
+		ObservableCollection<Integer> firstList = ObservableCollection.create(TypeToken.of(Integer.TYPE));
+		ObservableCollection<Integer> secondList = ObservableCollection.create(TypeToken.of(Integer.TYPE));
 		listVal.set(firstList, null);
 
-		firstList.addValues(10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
-		secondList.addValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+		firstList.with(10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
+		secondList.with(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
 
-		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(ObservableList.flattenValue(listVal));
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("flattened",
+			ObservableCollection.flattenValue(listVal));
 		tester.check(firstList);
-		firstList.addValues(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+		firstList.with(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
 		tester.check(firstList);
 		listVal.set(null, null);
-		tester.check(ObservableList.constant(TypeToken.of(Integer.TYPE)));
+		tester.check(ObservableCollection.of(TypeToken.of(Integer.TYPE)));
 		listVal.set(firstList, null);
 		tester.check(firstList);
 		listVal.set(secondList, null);
 		tester.check(secondList);
 		try (Transaction t = firstList.lock(true, null)) {
-			for (int i = firstList.size() - 1; i > 10; i++)
+			for (int i = firstList.size() - 1; i > 10; i--)
 				firstList.remove(i);
 		}
 		tester.check(secondList, 0);
@@ -1751,60 +1737,39 @@ public class ObservableCollectionsTest {
 		tester.check(firstList, 0);
 	}
 
-	/** Tests {@link ObservableOrderedCollection#sorted(java.util.Comparator)} */
+	/** Tests {@link CollectionDataFlow#sorted(java.util.Comparator)} */
 	@Test
 	public void sortedObservableList() {
-		ObservableArrayList<Integer> list = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
+		ObservableCollection<Integer> list = ObservableCollection.create(intType);
 
-		List<Integer> compare = new ArrayList<>();
-		list.sorted(Integer::compareTo).onElement(element -> {
-			ObservableOrderedElement<Integer> orderedEl = (ObservableOrderedElement<Integer>) element;
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
-					if(event.isInitial())
-						compare.add(orderedEl.getIndex(), event.getValue());
-					else
-						compare.set(orderedEl.getIndex(), event.getValue());
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onCompleted(V event) {
-					compare.remove(orderedEl.getIndex());
-				}
-			});
-		});
-
-		List<Integer> correct = new ArrayList<>(30);
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("sorted", //
+			list.flow().sorted(Integer::compareTo).collect());
 
 		for(int i = 30; i >= 0; i--) {
 			list.add(i);
-			correct.add(i);
+			tester.add(i);
 		}
 
-		java.util.Collections.sort(correct);
-		assertEquals(correct, compare);
+		java.util.Collections.sort(tester.getExpected());
+		tester.check();
 
 		for (int i = 0; i < list.size(); i++) {
 			list.set(i, list.get(i) - 50);
-			correct.clear();
-			correct.addAll(list);
-			java.util.Collections.sort(correct);
-			assertEquals(correct, compare);
+			tester.clear();
+			tester.addAll(list);
+			java.util.Collections.sort(tester.getExpected());
+			tester.check();
 		}
 
 		for (int i = -20; i >= -50; i--) {
 			list.remove((Integer) i);
-			correct.remove((Integer) i);
+			tester.remove(Integer.valueOf(i));
 
-			assertEquals(correct, compare);
+			tester.check();
 		}
 	}
 
-	/**
-	 * Tests {@link ObservableOrderedCollection#flatten(ObservableOrderedCollection)} and
-	 * {@link ObservableOrderedCollection#sorted(Comparator)}
-	 */
+	/** Tests {@link CollectionDataFlow#flatMap(TypeToken, Function)} and {@link CollectionDataFlow#sorted(Comparator)} */
 	@Test
 	public void observableOrderedFlatten() {
 		observableOrderedFlatten(null);
@@ -1812,20 +1777,21 @@ public class ObservableCollectionsTest {
 	}
 
 	private void observableOrderedFlatten(java.util.Comparator<Integer> comparator) {
-		ObservableArrayList<ObservableList<Integer>> outer = new ObservableArrayList<>(new TypeToken<ObservableList<Integer>>() {});
-		ObservableArrayList<Integer> list1 = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
-		ObservableArrayList<Integer> list2 = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
-		ObservableArrayList<Integer> list3 = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
+		ObservableCollection<ObservableCollection<Integer>> outer = ObservableCollection
+			.create(new TypeToken<ObservableCollection<Integer>>() {});
+		ObservableCollection<Integer> list1 = ObservableCollection.create(intType);
+		ObservableCollection<Integer> list2 = ObservableCollection.create(intType);
+		ObservableCollection<Integer> list3 = ObservableCollection.create(intType);
 
 		outer.add(list1);
 		outer.add(list2);
 
-		ArrayList<Integer> compare = new ArrayList<>();
 		ArrayList<Integer> correct1 = new ArrayList<>();
 		ArrayList<Integer> correct2 = new ArrayList<>();
 		ArrayList<Integer> correct3 = new ArrayList<>();
 
 		// Add data before the subscription because subscribing to non-empty, indexed, flattened collections is complicated
+		// This comment is old. Not sure it's that complicated anymore
 		for(int i = 0; i <= 30; i++) {
 			if(i % 3 == 1) {
 				list1.add(i);
@@ -1839,41 +1805,28 @@ public class ObservableCollectionsTest {
 			}
 		}
 
-		ObservableOrderedCollection<Integer> flat = ObservableOrderedCollection.flatten(outer);
+		CollectionDataFlow<?, ?, Integer> flow = outer.flow().flatMap(intType, c -> c.flow());
 		if (comparator != null)
-			flat = flat.sorted(comparator);
-		Subscription sub = flat.onOrderedElement(element -> {
-			element.subscribe(new Observer<ObservableValueEvent<Integer>>() {
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onNext(V event) {
-					if(event.isInitial())
-						compare.add(element.getIndex(), event.getValue());
-					else
-						compare.set(element.getIndex(), event.getValue());
-				}
-
-				@Override
-				public <V extends ObservableValueEvent<Integer>> void onCompleted(V event) {
-					compare.remove(element.getIndex());
-				}
-			});
-		});
-		assertEquals(join(comparator, correct1, correct2), compare);
+			flow = flow.sorted(comparator);
+		SimpleObservable<Void> unsub = new SimpleObservable<>();
+		ObservableCollection<Integer> flat = flow.collectActive(unsub);
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("flat", flat);
+		tester.set(join(comparator, correct1, correct2)).check();
 
 		outer.add(list3);
-		assertEquals(join(comparator, correct1, correct2, correct3), compare);
+		tester.set(join(comparator, correct1, correct2, correct3)).check();
 
 		outer.remove(list2);
-		assertEquals(join(comparator, correct1, correct3), compare);
+		tester.set(join(comparator, correct1, correct3)).check();
 
 		list1.remove((Integer) 16);
 		correct1.remove((Integer) 16);
-		assertEquals(join(comparator, correct1, correct3), compare);
+		tester.set(join(comparator, correct1, correct3)).check();
 		list1.add(list1.indexOf(19), 16);
 		correct1.add(correct1.indexOf(19), 16);
-		assertEquals(join(comparator, correct1, correct3), compare);
+		tester.set(join(comparator, correct1, correct3)).check();
 
-		sub.unsubscribe();
+		unsub.onNext(null);
 	}
 
 	private static <T> List<T> join(Comparator<? super T> comparator, List<T>... correct) {
@@ -1885,114 +1838,60 @@ public class ObservableCollectionsTest {
 		return ret;
 	}
 
-	/** Tests {@link ObservableList#asList(ObservableCollection)} */
-	@Test
-	public void obervableListFromCollection() {
-		ObservableHashSet<Integer> set = new ObservableHashSet<>(TypeToken.of(Integer.TYPE));
-		ObservableList<Integer> list = ObservableList.asList(set);
-		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(list);
-
-		int count = 30;
-		for(int i = 0; i < count; i++) {
-			set.add(i);
-			tester.add(i);
-
-			tester.check();
-		}
-		ArrayList<Integer> compare2 = new ArrayList<>();
-		sync(list, compare2);
-		assertEquals(tester.getExpected(), compare2);
-		for(int i = count - 1; i >= 0; i--) {
-			if(i % 2 == 0) {
-				set.remove(i);
-				tester.remove(i); // By index
-			}
-
-			tester.check();
-			assertEquals(tester.getExpected(), compare2);
-		}
-	}
-
-	/**
-	 * Tests {@link ObservableSet#unique(ObservableCollection, Equalizer)} wrapped with {@link ObservableList#asList(ObservableCollection)}.
-	 * I wrote this test to capture a specific test case, but I couldn't reproduce the error here. Not sure this test is super valuable.
-	 */
-	@Test
-	public void observableListFromUnique() {
-		ObservableArrayList<Integer> list = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
-		ObservableList<Integer> uniqued = ObservableList.asList(ObservableSet.unique(list, Objects::equals));
-		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(uniqued);
-
-		int count = 30;
-		for(int i = 0; i < count; i++) {
-			list.add(i);
-			list.add(i);
-			tester.add(i);
-
-			tester.check();
-		}
-		list.clear();
-		tester.clear();
-		tester.check();
-	}
-
-	/** Tests {@link ObservableCollection#refreshEach(Function)} */
+	/** Tests {@link CollectionDataFlow#refreshEach(Function)} */
 	@Test
 	public void testRefreshEach() {
-		ObservableArrayList<int []> list = new ObservableArrayList<>(new TypeToken<int []>() {});
-		Map<int [], Observable<Void>> elObservables = new LinkedHashMap<>();
-		Map<int [], Observer<Void>> controllers = new LinkedHashMap<>();
+		ObservableCollection<int[]> list = ObservableCollection.create(new TypeToken<int[]>() {});
+		Map<int[], SimpleObservable<Void>> elObservables = new LinkedHashMap<>();
 		for(int i = 0; i < 30; i++) {
 			int [] el = new int[] {i};
-			DefaultObservable<Void> elObs = new DefaultObservable<>();
+			SimpleObservable<Void> elObs = new SimpleObservable<>();
 			elObservables.put(el, elObs);
-			controllers.put(el, elObs.control(null));
 			list.add(el);
 		}
-		ObservableList<Integer> values = list.refreshEach(el -> elObservables.get(el)).map(el -> el[0]);
-		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>(values);
+		ObservableCollection<Integer> values = list.flow().refreshEach(el -> elObservables.get(el)).map(intType, el -> el[0]).collect();
+		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("refreshed", values);
 		tester.check();
 
 		for(int i = 0; i < list.size(); i++) {
 			list.get(i)[0]++;
 			tester.getExpected().set(i, list.get(i)[0]);
-			controllers.get(list.get(i)).onNext(null);
+			elObservables.get(list.get(i)).onNext(null);
 			tester.check();
 		}
 
 		for(int i = 0; i < list.size(); i++) {
 			list.get(i)[0] *= 50;
 			tester.getExpected().set(i, list.get(i)[0]);
-			controllers.get(list.get(i)).onNext(null);
+			elObservables.get(list.get(i)).onNext(null);
 			tester.check();
 		}
 
 		for(int i = 0; i < list.size(); i++) {
 			list.get(i)[0]--;
 			tester.getExpected().set(i, list.get(i)[0]);
-			controllers.get(list.get(i)).onNext(null);
+			elObservables.get(list.get(i)).onNext(null);
 			tester.check();
 		}
 
 		for(int i = 0; i < list.size(); i++) {
 			list.get(i)[0] = 0;
 			tester.getExpected().set(i, list.get(i)[0]);
-			controllers.get(list.get(i)).onNext(null);
+			elObservables.get(list.get(i)).onNext(null);
 			tester.check();
 		}
 
 		list.clear();
-		for(Observer<Void> controller : controllers.values())
+		for (SimpleObservable<Void> controller : elObservables.values())
 			controller.onNext(null);
 		tester.checkOps(0);
 
-		for(int [] value : controllers.keySet())
+		for (int[] value : elObservables.keySet())
 			list.add(value);
 
 		tester.setSynced(false);
-		for(int i = 0; i < list.size(); i++) {
-			controllers.get(list.get(i)).onNext(null);
-		}
+		for (int i = 0; i < list.size(); i++)
+			elObservables.get(list.get(i)).onNext(null);
 		tester.checkOps(0);
 	}
 
@@ -2000,171 +1899,180 @@ public class ObservableCollectionsTest {
 	@Test
 	public void testTransactionsBasic() {
 		// Use find() and changes() to test
-		ObservableArrayList<Integer> list = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
+		ObservableCollection<Integer> list = ObservableCollection.create(intType);
 		testTransactionsByFind(list, list);
 		testTransactionsByChanges(list, list);
 	}
 
-	/** Tests transactions in {@link ObservableList#flatten(ObservableList) flattened} collections */
+	/** Tests transactions in {@link CollectionDataFlow#flatMap(TypeToken, Function) flattened} collections */
 	@Test
 	public void testTransactionsFlattened() {
-		ObservableArrayList<Integer> list1 = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
-		ObservableArrayList<Integer> list2 = new ObservableArrayList<>(TypeToken.of(Integer.TYPE));
-		ObservableList<Integer> flat = ObservableList.flattenLists(TypeToken.of(Integer.TYPE), list1, list2);
+		ObservableCollection<Integer> list1 = ObservableCollection.create(intType);
+		ObservableCollection<Integer> list2 = ObservableCollection.create(intType);
+		TypeToken<ObservableCollection<Integer>> outerType = new TypeToken<ObservableCollection<Integer>>() {};
+		ObservableCollection<Integer> flat = ObservableCollection.create(outerType).with(list1, list2).flow()
+			.flatMap(intType, c -> c.flow()).collect();
 		list1.add(50);
 
 		testTransactionsByFind(flat, list2);
 		testTransactionsByChanges(flat, list2);
 	}
 
-	private void testTransactionsByFind(ObservableList<Integer> observable, TransactableList<Integer> controller) {
-		Integer [] found = new Integer[1];
-		int [] findCount = new int[1];
-		Subscription sub = observable.findFirst(value -> value % 5 == 4).act(event -> {
-			findCount[0]++;
-			found[0] = event.getValue();
-		});
+	private void testTransactionsByFind(ObservableCollection<Integer> observable, TransactableList<Integer> controller) {
+		ObservableValueTester<Integer> tester = new ObservableValueTester<>(
+			observable.observeFind(value -> value % 5 == 4, () -> null, true));
 
-		assertEquals(1, findCount[0]);
+		tester.checkOps(1);
 		controller.add(0);
-		assertEquals(1, findCount[0]);
+		tester.checkOps(0);
 		controller.add(3);
-		assertEquals(1, findCount[0]);
+		tester.checkOps(0);
 		controller.add(9);
-		assertEquals(2, findCount[0]);
-		assertEquals(9, (int) found[0]);
-		Transaction trans = controller.lock(true, null);
-		assertEquals(2, findCount[0]);
-		controller.add(0, 4);
-		assertEquals(2, findCount[0]);
-		trans.close();
-		assertEquals(3, findCount[0]);
-		assertEquals(4, (int) found[0]);
+		tester.check(9, 1);
+		Causable cause = Causable.simpleCause(null);
+		try (Transaction t = Causable.use(cause)) {
+			Transaction trans = controller.lock(true, cause);
+			tester.checkOps(0);
+			controller.add(0, 4);
+			tester.checkOps(0);
+			trans.close();
+		}
+		tester.check(4, 1);
 
-		sub.unsubscribe();
+		tester.setSynced(false);
 		controller.clear();
 	}
 
-	private void testTransactionsByChanges(ObservableList<Integer> observable, TransactableList<Integer> controller) {
+	private void testTransactionsByChanges(ObservableCollection<Integer> observable, TransactableList<Integer> controller) {
 		ArrayList<Integer> compare = new ArrayList<>(observable);
 		ArrayList<Integer> correct = new ArrayList<>(observable);
+		boolean[] error = new boolean[1];
 		int [] changeCount = new int[1];
+		int[] correctChanges = new int[1];
 		Subscription sub = observable.changes().act(event -> {
+			if (error[0])
+				return;
 			changeCount[0]++;
 			switch (event.type) {
 			case add:
-				for (int i = 0; i < event.indexes.size(); i++)
-					compare.add(event.indexes.get(i), event.values.get(i));
+				for (CollectionChangeEvent.ElementChange<Integer> change : event.elements) {
+					compare.add(change.index, change.newValue);
+				}
 				break;
 			case remove:
-				for (int i = event.indexes.size() - 1; i >= 0; i--)
-					assertEquals(compare.remove(event.indexes.get(i)), event.values.get(i));
+				for (CollectionChangeEvent.ElementChange<Integer> change : event.getElementsReversed()) {
+					assertEquals(compare.remove(change.index), change.newValue);
+				}
 				break;
 			case set:
-				for (int i = 0; i < event.indexes.size(); i++)
-					assertEquals(compare.set(event.indexes.get(i), event.values.get(i)), event.oldValues.get(i));
+				for (CollectionChangeEvent.ElementChange<Integer> change : event.elements) {
+					assertEquals(compare.set(change.index, change.newValue), change.oldValue);
+				}
 				break;
 			}
 		});
-		assertEquals(0, changeCount[0]);
+		assertEquals(correctChanges[0], changeCount[0]);
 
 		for(int i = 0; i < 30; i++) {
-			assertEquals(i, changeCount[0]);
+			assertEquals(correctChanges[0], changeCount[0]);
 			int toAdd = (int) (Math.random() * 2000000) - 1000000;
 			controller.add(toAdd);
+			correctChanges[0]++;
 			correct.add(toAdd);
 			assertEquals(correct, new ArrayList<>(observable));
 			assertEquals(correct, compare);
 		}
-		assertEquals(30, changeCount[0]);
+		assertEquals(correctChanges[0], changeCount[0]);
 
-		Transaction trans = controller.lock(true, null);
-		controller.clear();
-		correct.clear();
-		correct.addAll(observable);
-		for(int i = 0; i < 30; i++) {
-			int toAdd = (int) (Math.random() * 2000000) - 1000000;
-			controller.add(toAdd);
-			correct.add(toAdd);
-			assertEquals(correct, new ArrayList<>(observable));
+		Causable cause = Causable.simpleCause(null);
+		try (Transaction t = Causable.use(cause); Transaction trans = controller.lock(true, cause)) {
+			controller.clear();
+			correct.clear();
+			correct.addAll(observable);
+			correctChanges[0]++;
+			// Depending on the nature of the observable collection, the event for the clear may have been fired immediately, or it may
+			// be fired at the next add, so don't check it until after that add
+			for (int i = 0; i < 30; i++) {
+				int toAdd = (int) (Math.random() * 2000000) - 1000000;
+				controller.add(toAdd);
+				if (i == 0)
+					assertEquals(correctChanges[0], changeCount[0]);
+				correct.add(toAdd);
+				assertEquals(correct, new ArrayList<>(observable));
+			}
+			assertEquals(correctChanges[0], changeCount[0]);
+		} catch (RuntimeException | Error e) {
+			error[0] = true;
+			throw e;
 		}
-		// The exact numbers here and down are pretty deep in the weeds of the changes observable. Still need this test to draw attention
-		// to when this changes
-		assertEquals(32, changeCount[0]);
-		trans.close();
-		assertEquals(33, changeCount[0]);
+		correctChanges[0]++;
+		assertEquals(correctChanges[0], changeCount[0]);
 		assertEquals(correct, compare);
 
 		sub.unsubscribe();
 		controller.clear();
 	}
 
-	/** Tests transactions caused by {@link ObservableCollection#refresh(Observable) refreshing} on an observable */
+	/** Tests transactions caused by {@link CollectionDataFlow#refresh(Observable) refreshing} on an observable */
 	@Test
 	public void testTransactionsRefresh() {
-		ObservableArrayList<Integer> list = new ObservableArrayList<>(new TypeToken<Integer>() {});
-		DefaultObservable<Void> refresh = new DefaultObservable<>();
-		Observer<Void> control = refresh.control(null);
+		ObservableCollection<Integer> list = ObservableCollection.create(new TypeToken<Integer>() {});
+		SimpleObservable<Causable> refresh = new SimpleObservable<>();
 
 		for(int i = 0; i < 30; i++)
 			list.add(i);
 
-		int [] changes = new int[1];
-		Subscription sub = list.refresh(refresh).simpleChanges().act(v -> {
-			changes[0]++;
-		});
-		int correctChanges = 0;
+		ObservableTester tester = new ObservableTester(list.flow().refresh(refresh).collect().simpleChanges());
 
-		assertEquals(correctChanges, changes[0]);
+		tester.checkOps(0);
 
-		control.onNext(null);
-		correctChanges++;
-		assertEquals(correctChanges, changes[0]);
+		refresh.onNext(null);
+		tester.checkOps(1);
 
-		Transaction trans = list.lock(true, null);
-		control.onNext(null);
-		control.onNext(null);
-		trans.close();
-		correctChanges++;
-		assertEquals(correctChanges, changes[0]);
+		Causable cause = Causable.simpleCause(null);
+		try (Transaction t = Causable.use(cause)) {
+			Transaction trans = list.lock(true, cause);
+			refresh.onNext(cause);
+			refresh.onNext(cause);
+			trans.close();
+		}
+		tester.checkOps(1);
 
-		trans = list.lock(true, null);
-		for(int i = 0; i < 30; i++)
-			list.set(i, i + 1);
-		control.onNext(null);
-		trans.close();
-		correctChanges++;
-		assertEquals(correctChanges, changes[0]);
+		cause = Causable.simpleCause(null);
+		try (Transaction t = Causable.use(cause)) {
+			Transaction trans = list.lock(true, cause);
+			for (int i = 0; i < 30; i++)
+				list.set(i, i + 1);
+			refresh.onNext(cause);
+			trans.close();
+		}
+		tester.checkOps(1);
 
 		list.clear();
-		correctChanges++;
-		assertEquals(correctChanges, changes[0]);
-		control.onNext(null);
-		assertEquals(correctChanges, changes[0]);
+		tester.checkOps(1);
+		refresh.onNext(null);
+		tester.checkOps(0);
 
 		list.addAll(java.util.Arrays.asList(0, 1, 2, 3, 4));
-		correctChanges++;
-		assertEquals(correctChanges, changes[0]);
-		control.onNext(null);
-		correctChanges++;
-		assertEquals(correctChanges, changes[0]);
+		tester.checkOps(1);
+		refresh.onNext(null);
+		tester.checkOps(1);
 
-		int preChanges = changes[0];
-		sub.unsubscribe();
-		control.onNext(null);
-		assertEquals(preChanges, changes[0]);
+		tester.setSynced(false);
+		refresh.onNext(null);
+		tester.checkOps(0);
 	}
 
-	/**
-	 * Tests transactions caused by {@link ObservableCollection#combine(ObservableValue, java.util.function.BiFunction) combining} a list
-	 * with an observable value
-	 */
+	/** Tests transactions caused by {@link CollectionDataFlow#combine(TypeToken, Function) combining} a list with an observable value */
 	@Test
 	public void testTransactionsCombined() {
-		ObservableArrayList<Integer> list = new ObservableArrayList<>(new TypeToken<Integer>() {});
+		ObservableCollection<Integer> list = ObservableCollection.create(new TypeToken<Integer>() {});
 		SimpleSettableValue<Integer> mult = new SimpleSettableValue<>(new TypeToken<Integer>() {}, false);
 		mult.set(1, null);
-		ObservableList<Integer> product = list.combine(mult, (v1, v2) -> v1 * v2);
+		ObservableCollection<Integer> product = list.flow().combine(intType, combine -> {
+			return combine.with(mult).build((v1, v2) -> //
+			v1 * v2);
+		}).collect();
 
 		for(int i = 0; i < 30; i++)
 			list.add(i);
@@ -2181,18 +2089,24 @@ public class ObservableCollectionsTest {
 		correctChanges++;
 		assertEquals(correctChanges, changes[0]);
 
-		Transaction trans = list.lock(true, null);
-		mult.set(3, null);
-		mult.set(4, null);
-		trans.close();
+		Causable cause = Causable.simpleCause(null);
+		try (Transaction t = Causable.use(cause)) {
+			Transaction trans = list.lock(true, cause);
+			mult.set(3, cause);
+			mult.set(4, cause);
+			trans.close();
+		}
 		correctChanges++;
 		assertEquals(correctChanges, changes[0]);
 
-		trans = list.lock(true, null);
-		for(int i = 0; i < 30; i++)
-			list.set(i, i + 1);
-		mult.set(5, null);
-		trans.close();
+		cause = Causable.simpleCause(null);
+		try (Transaction t = Causable.use(cause)) {
+			Transaction trans = list.lock(true, cause);
+			for (int i = 0; i < 30; i++)
+				list.set(i, i + 1);
+			mult.set(5, cause);
+			trans.close();
+		}
 		correctChanges++;
 		assertEquals(correctChanges, changes[0]);
 

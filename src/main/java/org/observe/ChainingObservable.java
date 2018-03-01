@@ -1,10 +1,11 @@
 package org.observe;
 
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
- * An observable for which calls may be chained. The {@link #subscribe(Observer)} and {@link #act(Action)} methods of ChainingObservable
+ * An observable for which calls may be chained. The {@link #subscribe(Observer)} and {@link #act(Consumer)} methods of ChainingObservable
  * return a chained observable, which may be filtered, mapped, etc. or observed itself. If any of these ChainingObservables' Subscription
  * {@link #unsubscribe()} methods is called, all observers on any link in the chain will be unsubscribed.
  *
@@ -18,10 +19,7 @@ public interface ChainingObservable<T> extends Observable<T>, Subscription {
 	ChainingObservable<T> subscribe(Observer<? super T> observer);
 
 	@Override
-	ChainingObservable<T> act(Action<? super T> action);
-
-	@Override
-	ChainingObservable<Throwable> error();
+	ChainingObservable<T> act(Consumer<? super T> action);
 
 	@Override
 	ChainingObservable<T> completed();

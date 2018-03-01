@@ -10,9 +10,7 @@ import javax.swing.event.ListSelectionListener;
 
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
-import org.observe.collect.ObservableList;
 import org.observe.collect.ObservableSortedSet;
-import org.observe.collect.impl.ObservableTreeSet;
 import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeToken;
@@ -23,7 +21,7 @@ import com.google.common.reflect.TypeToken;
  * @param <E> The type of item to select
  */
 public class ObservableListSelectionModel<E> implements ListSelectionModel {
-	private final ObservableList<E> theValues;
+	private final ObservableCollection<E> theValues;
 	private final ObservableSortedSet<Integer> theSelectedIndexes;
 	private final ObservableCollection<E> theSelectedValues;
 	private final Map<ListSelectionListener, Subscription> theListeners;
@@ -33,36 +31,23 @@ public class ObservableListSelectionModel<E> implements ListSelectionModel {
 	private boolean isValueAdjusting;
 
 	/** @param values The list of values to be selected from */
-	public ObservableListSelectionModel(ObservableList<E> values) {
+	public ObservableListSelectionModel(ObservableCollection<E> values) {
 		theValues = values;
-		theSelectedIndexes = new ObservableTreeSet<>(new TypeToken<Integer>() {}, Integer::compareTo).filterAdd(index -> {
-			if (index < 0)
-				throw new IllegalArgumentException("" + index);
-			return true;
-		});
-		theSelectedValues = theSelectedIndexes.filter(index -> index < theValues.size())
-				.map(theValues.getType(), index -> theValues.get(index), value -> {
-					int index;
-					for (index = 0; index < theValues.size(); index++) {
-						if (value == theValues.get(index) && !theSelectedIndexes.contains(index))
-							break;
-					}
-					if (index == theValues.size())
-						throw new IllegalStateException("This should be prevented");
-					return index;
-				}).filterAdd(value -> {
-					int index;
-					for (index = 0; index < theValues.size(); index++) {
-						if (value == theValues.get(index) && !theSelectedIndexes.contains(index))
-							break;
-					}
-					return index < theValues.size();
-				});
+		theSelectedIndexes = ObservableCollection.create(TypeToken.of(Integer.TYPE)).flow().filter(idx -> {
+			if (idx < 0)
+				return "Negative index";
+			else if (idx >= theValues.size())
+				return "Index>size";
+			else
+				return null;
+		}).distinctSorted(Integer::compareTo, false).collect();
+		theSelectedValues = theSelectedIndexes.flow().filter(idx -> idx < theValues.size() ? null : "Index>size")
+			.map(values.getType(), idx -> theValues.get(idx)).collect();
 		theListeners = new LinkedHashMap<>();
 	}
 
 	/** @return The list of values being selected from */
-	public ObservableList<E> getValues() {
+	public ObservableCollection<E> getValues() {
 		return theValues;
 	}
 
@@ -188,8 +173,7 @@ public class ObservableListSelectionModel<E> implements ListSelectionModel {
 	@Override
 	public void addListSelectionListener(ListSelectionListener x) {
 		theListeners.put(x, theSelectedIndexes.changes().act(evt -> {
-			int[][] intervals = ObservableSwingUtils.getContinuousIntervals(toArray(evt.values),
-					true);
+			int[][] intervals = ObservableSwingUtils.getContinuousIntervals(toArray(evt.getValues()), true);
 			for (int i = 0; i < intervals.length; i++)
 				x.valueChanged(new ListSelectionEvent(this, intervals[i][0], intervals[i][1], i < intervals.length - 1));
 		}));

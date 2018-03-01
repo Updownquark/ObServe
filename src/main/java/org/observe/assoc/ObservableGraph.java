@@ -1,20 +1,19 @@
 package org.observe.assoc;
 
-import java.util.Map;
 import java.util.Objects;
-import java.util.function.Function;
-import java.util.function.Predicate;
+import java.util.function.Consumer;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
+import org.observe.SettableValue;
 import org.observe.Subscription;
-import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
-import org.observe.collect.ObservableElement;
+import org.qommons.Causable;
 import org.qommons.Transaction;
 import org.qommons.collect.Graph;
+import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.TransactableGraph;
 
 import com.google.common.reflect.TypeParameter;
@@ -33,21 +32,78 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 	 * @param <N> The type of values stored in the nodes of the graph
 	 * @param <E> The type of values stored in the edges of the graph
 	 */
-	interface Node<N, E> extends Graph.Node<N, E> {
+	interface Node<N, E> extends Graph.Node<N, E>, SettableValue<N> {
 		@Override
 		ObservableCollection<? extends Edge<N, E>> getEdges();
 
 		@Override
-		N getValue();
+		ObservableCollection<? extends Edge<N, E>> getOutward();
 
 		@Override
-		default ObservableCollection<? extends Edge<N, E>> getOutward() {
-			return getEdges().filter(edge -> edge.getStart() == Node.this);
-		}
+		ObservableCollection<? extends Edge<N, E>> getInward();
 
 		@Override
-		default ObservableCollection<? extends Edge<N, E>> getInward() {
-			return getEdges().filter(edge -> edge.getEnd() == Node.this);
+		default ObservableGraph.Node<N, E> unsettable() {
+			ObservableGraph.Node<N, E> source = this;
+			return new ObservableGraph.Node<N, E>() {
+				@Override
+				public TypeToken<N> getType() {
+					return source.getType();
+				}
+
+				@Override
+				public N get() {
+					return source.get();
+				}
+
+				@Override
+				public ObservableValue<String> isEnabled() {
+					return ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION);
+				}
+
+				@Override
+				public <V extends N> String isAcceptable(V value) {
+					return StdMsg.UNSUPPORTED_OPERATION;
+				}
+
+				@Override
+				public <V extends N> N set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				}
+
+				@Override
+				public Observable<ObservableValueEvent<N>> changes() {
+					return source.changes();
+				}
+
+				@Override
+				public Transaction lock() {
+					return source.lock();
+				}
+
+				@Override
+				public ObservableCollection<? extends Edge<N, E>> getEdges() {
+					return source.getEdges().flow().map((TypeToken<ObservableGraph.Edge<N, E>>) source.getEdges().getType(),
+						e -> e.unsettable(), options -> options.cache(false)).unmodifiable().collectPassive();
+				}
+
+				@Override
+				public ObservableCollection<? extends Edge<N, E>> getOutward() {
+					return source.getEdges().flow().map((TypeToken<ObservableGraph.Edge<N, E>>) source.getOutward().getType(),
+						e -> e.unsettable(), options -> options.cache(false)).unmodifiable().collectPassive();
+				}
+
+				@Override
+				public ObservableCollection<? extends Edge<N, E>> getInward() {
+					return source.getEdges().flow().map((TypeToken<ObservableGraph.Edge<N, E>>) source.getOutward().getType(),
+						e -> e.unsettable(), options -> options.cache(false)).unmodifiable().collectPassive();
+				}
+
+				@Override
+				public Node<N, E> unsettable() {
+					return this;
+				}
+			};
 		}
 	}
 
@@ -57,7 +113,7 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 	 * @param <N> The type of values stored in the nodes of the graph
 	 * @param <E> The type of values stored in the edges of the graph
 	 */
-	interface Edge<N, E> extends Graph.Edge<N, E>{
+	interface Edge<N, E> extends Graph.Edge<N, E>, SettableValue<E> {
 		@Override
 		Node<N, E> getStart();
 
@@ -68,11 +124,72 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 		boolean isDirected();
 
 		@Override
-		E getValue();
+		default ObservableGraph.Edge<N, E> unsettable() {
+			ObservableGraph.Edge<N, E> source = this;
+			return new ObservableGraph.Edge<N, E>() {
+				@Override
+				public TypeToken<E> getType() {
+					return source.getType();
+				}
+
+				@Override
+				public E get() {
+					return source.get();
+				}
+
+				@Override
+				public ObservableValue<String> isEnabled() {
+					return ObservableValue.of(StdMsg.UNSUPPORTED_OPERATION);
+				}
+
+				@Override
+				public <V extends E> String isAcceptable(V value) {
+					return StdMsg.UNSUPPORTED_OPERATION;
+				}
+
+				@Override
+				public <V extends E> E set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+				}
+
+				@Override
+				public Observable<ObservableValueEvent<E>> changes() {
+					return source.changes();
+				}
+
+				@Override
+				public Transaction lock() {
+					return source.lock();
+				}
+
+				@Override
+				public Node<N, E> getStart() {
+					return source.getStart().unsettable();
+				}
+
+				@Override
+				public Node<N, E> getEnd() {
+					return source.getEnd().unsettable();
+				}
+
+				@Override
+				public boolean isDirected() {
+					return source.isDirected();
+				}
+
+				@Override
+				public Edge<N, E> unsettable() {
+					return this;
+				}
+			};
+		}
 	}
 
 	@Override
 	ObservableCollection<? extends Node<N, E>> getNodes();
+
+	@Override
+	ObservableCollection<N> getNodeValues();
 
 	@Override
 	ObservableCollection<? extends Edge<N, E>> getEdges();
@@ -80,82 +197,36 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 	@Override
 	default Node<N, E> nodeFor(N value) {
 		for (Node<N, E> node : getNodes())
-			if (Objects.equals(node.getValue(), value))
+			if (Objects.equals(node.get(), value))
 				return node;
 		return null;
 	}
 
 	/**
-	 * @return The observable value for the current session of this graph. The session allows listeners to retain state for the duration of
-	 *         a unit of work (controlled by implementation-specific means), batching events where possible. Not all events on a graph will
-	 *         have a session (the value may be null). In addition, the presence or absence of a session need not imply anything about the
-	 *         threaded interactions with a session. A transaction may encompass events fired and received on multiple threads. In short,
-	 *         the only thing guaranteed about sessions is that they will end. Therefore, if a session is present, observers may assume that
-	 *         they can delay expensive results of graph events until the session completes. The {@link ObservableCollection#getSession()
-	 *         sessions} of the {@link #getNodes() node} and {@link #getEdges() edge} collections should be the same as this one.
-	 */
-	ObservableValue<CollectionSession> getSession();
-
-	/** @return Whether this graph is thread-safe, meaning it is constrained to only fire events on a single thread at a time */
-	boolean isSafe();
-
-	// TODO default ObservableGraph<N, E> safe(){}
-
-	/**
 	 * @return An observable that fires a (null) value whenever anything in this collection changes. This observable will only fire 1 event
 	 *         per transaction.
 	 */
-	default Observable<Void> changes() {
-		return new Observable<Void>() {
+	default Observable<Object> changes() {
+		Observable<Object> nodeChanges = getNodes().simpleChanges();
+		Observable<Object> edgeChanges = getEdges().simpleChanges();
+		return new Observable<Object>() {
 			@Override
-			public Subscription subscribe(Observer<? super Void> observer) {
-				boolean[] initialized = new boolean[1];
-				Object key = new Object();
-				java.util.function.Consumer<ObservableElement<?>> listener = element -> {
-					element.subscribe(new Observer<ObservableValueEvent<?>>() {
-						@Override
-						public <V extends ObservableValueEvent<?>> void onNext(V value) {
-							if (!initialized[0])
-								return;
-							CollectionSession session = getSession().get();
-							if (session == null)
-								observer.onNext(null);
-							else
-								session.put(key, "changed", true);
-						}
-
-						@Override
-						public <V extends ObservableValueEvent<?>> void onCompleted(V value) {
-							if (!initialized[0])
-								return;
-							CollectionSession session = getSession().get();
-							if (session == null)
-								observer.onNext(null);
-							else
-								session.put(key, "changed", true);
-						}
-					});
-				};
-				Subscription nodeSub = getNodes().onElement(listener);
-				Subscription edgeSub = getEdges().onElement(listener);
-				Subscription transSub = getSession().act(event -> {
-					if (!initialized[0])
-						return;
-					if (event.getOldValue() != null && event.getOldValue().put(key, "changed", null) != null) {
-						observer.onNext(null);
-					}
-				});
-				initialized[0] = true;
-				return () -> {
-					nodeSub.unsubscribe();
-					edgeSub.unsubscribe();
-					transSub.unsubscribe();
-				};
+			public boolean isSafe() {
+				return true;
 			}
 
 			@Override
-			public boolean isSafe() {
-				return ObservableGraph.this.isSafe();
+			public Subscription subscribe(Observer<? super Object> observer) {
+				Causable.CausableKey key = Causable.key((cause, data) -> observer.onNext(cause));
+				Consumer<Object> action = v -> {
+					if (v instanceof Causable)
+						((Causable) v).getRootCausable().onFinish(key);
+					else
+						observer.onNext(v);
+				};
+				Subscription nodeSub = nodeChanges.act(action);
+				Subscription edgeSub = edgeChanges.act(action);
+				return Subscription.forAll(nodeSub, edgeSub);
 			}
 		};
 	}
@@ -165,136 +236,39 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 	 * @return An observable value containing the node in this graph whose value is equal to the argument. The value may be null.
 	 */
 	default ObservableValue<? extends Node<N, E>> getNode(N nodeValue) {
-		return getNodes().find(node -> node.getValue().equals(nodeValue));
+		return getNodes().observeFind(node -> node.get().equals(nodeValue), () -> null, true);
 	}
 
-	/**
-	 * @param nodeFilter The function to filter node values (may be null to not filter node values)
-	 * @param edgeFilter The function to filter edge values (may be null to not filter edge values)
-	 * @return A new graph based on a subset of this graph
-	 */
-	default ObservableGraph<N, E> filter(Predicate<? super N> nodeFilter, Predicate<? super E> edgeFilter) {
-		if(nodeFilter == null && edgeFilter == null)
-			return this;
-		if(nodeFilter == null) {
-			nodeFilter = node -> true;
-		}
-		if(edgeFilter == null) {
-			edgeFilter = edge -> true;
-		}
-		final Predicate<? super N> nf = nodeFilter;
-		final Predicate<? super E> ef = edgeFilter;
-		ObservableGraph<N, E> outer = this;
-		class FilteredNode implements Node<N, E> {
-			private final Node<N, E> wrapped;
-			private final Function<Edge<N, E>, Edge<N, E>> theEdgeMap;
-
-			FilteredNode(Node<N, E> wrap, Function<Edge<N, E>, Edge<N, E>> edgeMap) {
-				wrapped = wrap;
-				theEdgeMap = edgeMap;
+	/** @return A representation of this graph that is not modifiable */
+	default ObservableGraph<N, E> unmodifiable() {
+		ObservableGraph<N, E> source = this;
+		return new ObservableGraph<N, E>() {
+			@Override
+			public ObservableCollection<? extends ObservableGraph.Node<N, E>> getNodes() {
+				return source.getNodes().flow()
+					.map((TypeToken<ObservableGraph.Node<N, E>>) source.getNodes().getType(), n -> n.unsettable(),
+						options -> options.cache(false))
+					.unmodifiable().collectPassive();
 			}
 
 			@Override
-			public ObservableCollection<Edge<N, E>> getEdges() {
-				return wrapped.getEdges().filterMap(theEdgeMap);
+			public ObservableCollection<N> getNodeValues() {
+				return source.getNodeValues().flow().unmodifiable().collectPassive();
 			}
 
 			@Override
-			public N getValue() {
-				return wrapped.getValue();
-			}
-		}
-		class FilteredEdge implements Edge<N, E> {
-			private final Edge<N, E> wrapped;
-			private final Node<N, E> start;
-			private final Node<N, E> end;
-
-			FilteredEdge(Edge<N, E> wrap, Node<N, E> s, Node<N, E> e) {
-				wrapped = wrap;
-				start = s;
-				end = e;
+			public ObservableCollection<? extends ObservableGraph.Edge<N, E>> getEdges() {
+				return source.getEdges().flow()
+					.map((TypeToken<ObservableGraph.Edge<N, E>>) source.getEdges().getType(), e -> e.unsettable(),
+						options -> options.cache(false))
+					.unmodifiable().collectPassive();
 			}
 
 			@Override
-			public Node<N, E> getStart() {
-				return start;
+			public ObservableGraph<N, E> unmodifiable() {
+				return this;
 			}
-
-			@Override
-			public Node<N, E> getEnd() {
-				return end;
-			}
-
-			@Override
-			public boolean isDirected() {
-				return wrapped.isDirected();
-			}
-
-			@Override
-			public E getValue() {
-				return wrapped.getValue();
-			}
-		}
-		class FilteredGraph implements ObservableGraph<N, E> {
-			private final Map<Node<N, E>, FilteredNode> theNodeMap = new org.qommons.ConcurrentIdentityHashMap<>();
-			private final Map<Edge<N, E>, FilteredEdge> theEdgeMap = new org.qommons.ConcurrentIdentityHashMap<>();
-			private final ObservableCollection<? extends Node<N, E>> theCachedNodes = outer.getNodes().cached();
-			private final ObservableCollection<? extends Edge<N, E>> theCachedEdges = outer.getEdges().cached();
-
-			@Override
-			public ObservableCollection<Node<N, E>> getNodes() {
-				return theCachedNodes.filter(node -> nf.test(node.getValue())).map(node -> filter(node));
-			}
-
-			@Override
-			public ObservableCollection<Edge<N, E>> getEdges() {
-				return theCachedEdges.filter(edge -> ef.test(edge.getValue())).map(edge -> filter(edge));
-			}
-
-			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return outer.getSession();
-			}
-
-			@Override
-			public Transaction lock(boolean write, Object cause) {
-				return outer.lock(write, cause);
-			}
-
-			@Override
-			public boolean isSafe() {
-				return outer.isSafe();
-			}
-
-			private FilteredNode filter(Node<N, E> node) {
-				// TODO Not completely thread-safe
-				FilteredNode ret = theNodeMap.get(node);
-				if(ret == null) {
-					ret = new FilteredNode(node, edge -> {
-						if(!ef.test(edge.getValue()))
-							return null;
-						if(edge.getStart() != node && !nf.test(edge.getStart().getValue()))
-							return null;
-						if(edge.getEnd() != node && !nf.test(edge.getEnd().getValue()))
-							return null;
-						return filter(edge);
-					});
-					theNodeMap.put(node, ret);
-				}
-				return ret;
-			}
-
-			private FilteredEdge filter(Edge<N, E> edge) {
-				// TODO Not completely thread-safe
-				FilteredEdge ret = theEdgeMap.get(edge);
-				if(ret == null) {
-					ret = new FilteredEdge(edge, filter(edge.getStart()), filter(edge.getEnd()));
-					theEdgeMap.put(edge, ret);
-				}
-				return ret;
-			}
-		}
-		return new FilteredGraph();
+		};
 	}
 
 	// default <N2, E2> ObservableGraph<N2, E2> map(Function<N, N2> nodeMap, Function<E, E2> edgeMap) {
@@ -305,37 +279,6 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 	//
 	// default <V, E2> ObservableGraph<N, E2> combineEdges(ObservableValue<V> other, BiFunction<N, E, E2> map) {
 	// }
-
-	/** @return An immutable copy of this graph */
-	default ObservableGraph<N, E> immutable() {
-		ObservableGraph<N, E> outer = this;
-		return new ObservableGraph<N, E>() {
-			@Override
-			public ObservableCollection<? extends Node<N, E>> getNodes() {
-				return outer.getNodes().immutable();
-			}
-
-			@Override
-			public ObservableCollection<? extends Edge<N, E>> getEdges() {
-				return outer.getEdges().immutable();
-			}
-
-			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return outer.getSession();
-			}
-
-			@Override
-			public boolean isSafe() {
-				return outer.isSafe();
-			}
-
-			@Override
-			public Transaction lock(boolean write, Object cause) {
-				return outer.lock(write, cause);
-			}
-		};
-	}
 
 	// default ObservableCollection<Edge<N, E>> traverse(Node<N, E> start, Node<N, E> end, Function<Edge<N, E>, Double> cost) {
 	// }
@@ -348,33 +291,32 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 	 * @return An empty graph
 	 */
 	static <N, E> ObservableGraph<N, E> empty(TypeToken<N> nodeType, TypeToken<E> edgeType) {
+		TypeToken<Node<N, E>> nodeType2 = new TypeToken<Node<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType.wrap())
+			.where(new TypeParameter<E>() {}, edgeType.wrap());
+		TypeToken<Edge<N, E>> edgeType2 = new TypeToken<Edge<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType.wrap())
+			.where(new TypeParameter<E>() {}, edgeType.wrap());
+		ObservableCollection<Node<N, E>> nodes = ObservableCollection.of(nodeType2);
+		ObservableCollection<Edge<N, E>> edges = ObservableCollection.of(edgeType2);
+		ObservableCollection<N> nodeValues = ObservableCollection.of(nodeType);
 		return new ObservableGraph<N, E>() {
 			@Override
 			public ObservableCollection<Node<N, E>> getNodes() {
-				return org.observe.collect.ObservableSet.constant(
-					new TypeToken<Node<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType).where(new TypeParameter<E>() {}, edgeType));
+				return nodes;
+			}
+
+			@Override
+			public ObservableCollection<N> getNodeValues() {
+				return nodeValues;
 			}
 
 			@Override
 			public ObservableCollection<Edge<N, E>> getEdges() {
-				return org.observe.collect.ObservableSet.constant(
-					new TypeToken<Edge<N, E>>() {}.where(new TypeParameter<N>() {}, nodeType).where(new TypeParameter<E>() {}, edgeType));
-			}
-
-			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return ObservableValue.constant(TypeToken.of(CollectionSession.class), null);
+				return edges;
 			}
 
 			@Override
 			public Transaction lock(boolean write, Object cause) {
-				return () -> {
-				};
-			}
-
-			@Override
-			public boolean isSafe() {
-				return true;
+				return Transaction.NONE;
 			}
 		};
 	}

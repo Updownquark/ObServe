@@ -2,17 +2,15 @@ package org.observe.collect;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
-import static org.junit.Assert.assertTrue;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 import org.observe.AbstractObservableTester;
-import org.observe.ObservableValueEvent;
-import org.observe.Observer;
 import org.observe.Subscription;
 import org.qommons.QommonsTestUtils;
 
@@ -22,22 +20,45 @@ import org.qommons.QommonsTestUtils;
  * @param <E> The type of values in the collection
  */
 public class ObservableCollectionTester<E> extends AbstractObservableTester<Collection<E>> {
-	private final ObservableCollection<E> theCollection;
+	private final String theName;
+	private final ObservableCollection<? extends E> theCollection;
 	private final ArrayList<E> theSyncedCopy;
-	private final ArrayList<E> theExpected;
+	private final ArrayList<E> theBatchSyncedCopy;
+	private final List<E> theExpected;
+	private boolean checkRemovedValues;
 
 	/** @param collect The observable collection to test */
-	public ObservableCollectionTester(ObservableCollection<E> collect) {
+	public ObservableCollectionTester(String name, ObservableCollection<? extends E> collect) {
+		this(name, collect, new ArrayList<>());
+	}
+
+	/**
+	 * @param collect The observable collection to test
+	 * @param expected The collection to use for the expected value
+	 */
+	public ObservableCollectionTester(String name, ObservableCollection<? extends E> collect, List<E> expected) {
+		theName = name;
 		theCollection = collect;
 		theSyncedCopy=new ArrayList<>();
+		theBatchSyncedCopy = new ArrayList<>();
 		setSynced(true);
-		theExpected = new ArrayList<>();
+		theExpected = expected;
 		theExpected.addAll(collect);
+		checkRemovedValues = true;
+	}
+
+	public ObservableCollectionTester<E> checkRemovedValues(boolean check) {
+		checkRemovedValues = check;
+		return this;
 	}
 
 	/** @return The expected values for the collection */
 	public List<E> getExpected() {
 		return theExpected;
+	}
+
+	public boolean isCheckingRemovedValues() {
+		return checkRemovedValues;
 	}
 
 	/**
@@ -59,6 +80,16 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 	}
 
 	/**
+	 * @param index The index to add the value at
+	 * @param value The value to add
+	 * @return This tester
+	 */
+	public ObservableCollectionTester<E> add(int index, E value) {
+		theExpected.add(index, value);
+		return this;
+	}
+
+	/**
 	 * @param values The values to add to the expected collection
 	 * @return This tester
 	 */
@@ -68,10 +99,28 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 	}
 
 	/**
+	 * @param values The values to add to the expected collection
+	 * @return This tester
+	 */
+	public ObservableCollectionTester<E> addAll(Collection<? extends E> values) {
+		theExpected.addAll(values);
+		return this;
+	}
+
+	/**
+	 * @param value The value to remove from the expected collection
+	 * @return This tester
+	 */
+	public ObservableCollectionTester<E> remove(E value) {
+		theExpected.remove(value);
+		return this;
+	}
+
+	/**
 	 * @param values The values to remove from the expected collection
 	 * @return This tester
 	 */
-	public ObservableCollectionTester<E> remove(E... values) {
+	public ObservableCollectionTester<E> removeAll(E... values) {
 		theExpected.removeAll(Arrays.asList(values));
 		return this;
 	}
@@ -124,65 +173,85 @@ public class ObservableCollectionTester<E> extends AbstractObservableTester<Coll
 
 	@Override
 	public void checkValue(Collection<E> expected) {
-		boolean ordered = theCollection instanceof ObservableOrderedCollection;
-		assertThat(expected, QommonsTestUtils.collectionsEqual(theSyncedCopy, ordered));
+		assertThat(theSyncedCopy, QommonsTestUtils.collectionsEqual(expected, true));
+		assertThat(theBatchSyncedCopy, QommonsTestUtils.collectionsEqual(expected, true));
 	}
 
 	@Override
 	public void checkSynced() {
-		boolean ordered = theCollection instanceof ObservableOrderedCollection;
-		assertThat(theSyncedCopy, QommonsTestUtils.collectionsEqual(theCollection, ordered));
+		assertThat(theSyncedCopy, QommonsTestUtils.collectionsEqual(theCollection, true));
+		assertThat(theBatchSyncedCopy, QommonsTestUtils.collectionsEqual(theCollection, true));
+	}
+
+	/** Checks the non-batched synchronized collection against the source collection and the internal expected values */
+	public void checkNonBatchSynced() {
+		checkNonBatchSynced(theExpected);
+	}
+
+	/**
+	 * Checks the non-batched synchronized collection against the source collection and the given expected values
+	 *
+	 * @param expected The expected values
+	 */
+	public void checkNonBatchSynced(Collection<E> expected) {
+		assertThat(theSyncedCopy, QommonsTestUtils.collectionsEqual(theCollection, true));
+		assertThat(theSyncedCopy, QommonsTestUtils.collectionsEqual(expected, true));
 	}
 
 	@Override
 	protected Subscription sync() {
-		if (theCollection instanceof ObservableOrderedCollection)
-			return ((ObservableOrderedCollection<E>) theCollection).onOrderedElement(new Consumer<ObservableOrderedElement<E>>() {
-				@Override
-				public void accept(ObservableOrderedElement<E> el) {
-					el.subscribe(new Observer<ObservableValueEvent<E>>() {
-						@Override
-						public <V extends ObservableValueEvent<E>> void onNext(V evt) {
-							op();
-							if (evt.isInitial())
-								theSyncedCopy.add(el.getIndex(), evt.getValue());
-							else {
-								assertEquals(evt.getOldValue(), theSyncedCopy.get(el.getIndex()));
-								theSyncedCopy.set(el.getIndex(), evt.getValue());
-							}
-						}
-
-						@Override
-						public <V extends ObservableValueEvent<E>> void onCompleted(V evt) {
-							op();
-							assertEquals(evt.getValue(), theSyncedCopy.remove(el.getIndex()));
-						}
-					});
+		Subscription singleSub = theCollection.subscribe(evt -> {
+			switch (evt.getType()) {
+			case add:
+				theSyncedCopy.add(evt.getIndex(), evt.getNewValue());
+				break;
+			case remove:
+				E oldValue = theSyncedCopy.remove(evt.getIndex());
+				if (checkRemovedValues && !Objects.equals(evt.getOldValue(), oldValue))
+					assertEquals(theName + "[" + evt.getIndex() + "]", evt.getOldValue(), oldValue);
+				break;
+			case set:
+				oldValue = theSyncedCopy.set(evt.getIndex(), evt.getNewValue());
+				if (checkRemovedValues && !Objects.equals(evt.getOldValue(), oldValue))
+					assertEquals(theName + "[" + evt.getIndex() + "]", evt.getOldValue(), oldValue);
+				break;
+			}
+		}, true);
+		theBatchSyncedCopy.addAll(theCollection); // The changes observable doesn't populate initial values
+		Subscription batchSub = theCollection.changes().act(new Consumer<CollectionChangeEvent<? extends E>>() {
+			@Override
+			public void accept(CollectionChangeEvent<? extends E> evt) {
+				op();
+				switch (evt.type) {
+				case add:
+					for (CollectionChangeEvent.ElementChange<? extends E> change : evt.elements)
+						theBatchSyncedCopy.add(change.index, change.newValue);
+					break;
+				case remove:
+					for (CollectionChangeEvent.ElementChange<? extends E> change : evt.getElementsReversed()) {
+						E oldValue = theBatchSyncedCopy.remove(change.index);
+						if (checkRemovedValues && !Objects.equals(change.oldValue, oldValue))
+							assertEquals(theName + "[" + change.index + "]", change.oldValue, oldValue);
+					}
+					break;
+				case set:
+					for (CollectionChangeEvent.ElementChange<? extends E> change : evt.elements) {
+						E oldValue = theBatchSyncedCopy.set(change.index, change.newValue);
+						if (checkRemovedValues)
+							assertEquals(theName, change.oldValue, oldValue);
+					}
+					break;
 				}
-			});
-		else
-			return theCollection.onElement(new Consumer<ObservableElement<E>>() {
-				@Override
-				public void accept(ObservableElement<E> el) {
-					el.subscribe(new Observer<ObservableValueEvent<E>>() {
-						@Override
-						public <V extends ObservableValueEvent<E>> void onNext(V evt) {
-							op();
-							if (evt.isInitial())
-								theSyncedCopy.add(evt.getValue());
-							else {
-								assertTrue(theSyncedCopy.remove(evt.getOldValue()));
-								theSyncedCopy.add(evt.getValue());
-							}
-						}
+			}
 
-						@Override
-						public <V extends ObservableValueEvent<E>> void onCompleted(V evt) {
-							op();
-							assertTrue(theSyncedCopy.remove(evt.getValue()));
-						}
-					});
-				}
-			});
+			@Override
+			public String toString() {
+				return theName;
+			}
+		});
+		return () -> {
+			singleSub.unsubscribe();
+			batchSub.unsubscribe();
+		};
 	}
 }

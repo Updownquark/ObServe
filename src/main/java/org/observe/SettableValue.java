@@ -1,12 +1,13 @@
 package org.observe;
 
-import static org.observe.ObservableDebug.d;
-
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+import org.observe.XformOptions.SimpleXformOptions;
+import org.observe.XformOptions.XformDef;
+import org.qommons.Transaction;
 import org.qommons.TriFunction;
 
 import com.google.common.reflect.TypeToken;
@@ -17,14 +18,18 @@ import com.google.common.reflect.TypeToken;
  * @param <T> The type of the value
  */
 public interface SettableValue<T> extends ObservableValue<T> {
+	/** TypeToken for String.class */
+	TypeToken<String> STRING_TYPE = TypeToken.of(String.class);
+
 	/**
 	 * @param <V> The type of the value to set
 	 * @param value The value to assign to this value
 	 * @param cause Something that may have caused this change
 	 * @return The value that was previously set for in this container
 	 * @throws IllegalArgumentException If the value is not acceptable or setting it fails
+	 * @throws UnsupportedOperationException If this operation is not supported (e.g. because this value is {@link #isEnabled() disabled}
 	 */
-	<V extends T> T set(V value, Object cause) throws IllegalArgumentException;
+	<V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException;
 
 	/**
 	 * @param <V> The type of the value to check
@@ -64,8 +69,8 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			@Override
 			public ObservableValue<String> isEnabled() {
 				BiFunction<String, String, String> combineFn = (str1, str2) -> str1 != null ? str1 : str2;
-				return SettableValue.this.isEnabled().combineV(TypeToken.of(String.class), combineFn,
-					value.refresh(SettableValue.this.noInit()).mapV(v -> isAcceptable(v)), true);
+				return SettableValue.this.isEnabled().combine(STRING_TYPE, combineFn,
+					value.refresh(SettableValue.this.changes().noInit()).map(STRING_TYPE, v -> isAcceptable(v)), options -> {});
 			}
 
 			@Override
@@ -81,14 +86,14 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @return A subscription by which the link may be canceled
 	 */
 	default <V extends T> Subscription link(ObservableValue<V> value) {
-		return value.act(d().lambda(event -> {
-			set(event.getValue(), event);
-		}, "link"));
+		return value.changes().act(event -> {
+			set(event.getNewValue(), event);
+		});
 	}
 
 	/** @return This value, but not settable */
 	default ObservableValue<T> unsettable() {
-		return d().debug(new ObservableValue<T>() {
+		return new ObservableValue<T>() {
 			@Override
 			public TypeToken<T> getType() {
 				return SettableValue.this.getType();
@@ -100,20 +105,20 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			}
 
 			@Override
-			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-				return SettableValue.this.subscribe(observer);
+			public Observable<ObservableValueEvent<T>> changes() {
+				return SettableValue.this.changes();
 			}
 
 			@Override
-			public boolean isSafe() {
-				return SettableValue.this.isSafe();
+			public Transaction lock() {
+				return SettableValue.this.lock();
 			}
 
 			@Override
 			public String toString() {
 				return SettableValue.this.toString();
 			}
-		}).from("unsettable", this).get();
+		};
 	}
 
 	/**
@@ -134,13 +139,13 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			}
 
 			@Override
-			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-				return outer.subscribe(observer);
+			public Observable<ObservableValueEvent<T>> changes() {
+				return SettableValue.this.changes();
 			}
 
 			@Override
-			public boolean isSafe() {
-				return outer.isSafe();
+			public Transaction lock() {
+				return outer.lock();
 			}
 
 			@Override
@@ -193,13 +198,13 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			}
 
 			@Override
-			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-				return outer.subscribe(observer);
+			public Observable<ObservableValueEvent<T>> changes() {
+				return SettableValue.this.changes();
 			}
 
 			@Override
-			public boolean isSafe() {
-				return outer.isSafe();
+			public Transaction lock() {
+				return outer.lock();
 			}
 
 			@Override
@@ -244,13 +249,13 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			}
 
 			@Override
-			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-				return outer.subscribe(observer);
+			public Observable<ObservableValueEvent<T>> changes() {
+				return SettableValue.this.changes();
 			}
 
 			@Override
-			public boolean isSafe() {
-				return outer.isSafe();
+			public Transaction lock() {
+				return outer.lock();
 			}
 
 			@Override
@@ -284,8 +289,8 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @param reverse The function to map the other value to this one
 	 * @return The mapped settable value
 	 */
-	public default <R> SettableValue<R> mapV(Function<? super T, R> function, Function<? super R, ? extends T> reverse) {
-		return mapV(null, function, reverse, false);
+	public default <R> SettableValue<R> map(Function<? super T, R> function, Function<? super R, ? extends T> reverse) {
+		return map(null, function, reverse, options -> {});
 	}
 
 	/**
@@ -293,22 +298,21 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @param type The type for the new value
 	 * @param function The function to map this value to another
 	 * @param reverse The function to map the other value to this one
-	 * @param combineNull Whether to apply the combination function if the arguments are null. If false and any arguments are null, the
-	 *            result will be null.
+	 * @param options Options determining the behavior of the result
 	 * @return The mapped settable value
 	 */
-	public default <R> SettableValue<R> mapV(TypeToken<R> type, Function<? super T, R> function, Function<? super R, ? extends T> reverse,
-		boolean combineNull) {
+	public default <R> SettableValue<R> map(TypeToken<R> type, Function<? super T, R> function, Function<? super R, ? extends T> reverse,
+		Consumer<XformOptions> options) {
+		SimpleXformOptions xform = new SimpleXformOptions();
+		options.accept(xform);
 		SettableValue<T> root = this;
-		return d().debug(new ComposedSettableValue<R>(type, d().lambda(args -> {
+		return new ComposedSettableValue<R>(type, args -> {
 			return function.apply((T) args[0]);
-		}, "mapV"), combineNull, this) {
+		}, new XformDef(xform), this) {
 			@Override
 			public <V extends R> R set(V value, Object cause) throws IllegalArgumentException {
 				T old = root.set(reverse.apply(value), cause);
-				if(old != null || combineNull)
-					return function.apply(old);
-				return null;
+				return function.apply(old);
 			}
 
 			@Override
@@ -320,12 +324,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			public ObservableValue<String> isEnabled() {
 				return root.isEnabled();
 			}
-
-			@Override
-			public boolean isSafe() {
-				return root.isSafe();
-			}
-		}).from("map", this).using("map", function).using("reverse", reverse).tag("combineNull", combineNull).get();
+		};
 	}
 
 	/**
@@ -338,9 +337,9 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @param reverse The function to reverse the transformation
 	 * @return The composed settable value
 	 */
-	public default <U, R> SettableValue<R> composeV(BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
+	public default <U, R> SettableValue<R> compose(BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		BiFunction<? super R, ? super U, ? extends T> reverse) {
-		return combineV(null, function, arg, reverse, false);
+		return combine(null, function, arg, reverse, options -> {});
 	}
 
 	/**
@@ -352,24 +351,22 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @param function The function to combine the values into another value
 	 * @param arg The value to combine this value with
 	 * @param reverse The function to reverse the transformation
-	 * @param combineNull Whether to apply the combination function if the arguments are null. If false and any arguments are null, the
-	 *            result will be null.
+	 * @param options Options determining the behavior of the result
 	 * @return The composed settable value
 	 */
-	public default <U, R> SettableValue<R> combineV(TypeToken<R> type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
-		BiFunction<? super R, ? super U, ? extends T> reverse, boolean combineNull) {
+	public default <U, R> SettableValue<R> combine(TypeToken<R> type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
+		BiFunction<? super R, ? super U, ? extends T> reverse, Consumer<XformOptions> options) {
+		SimpleXformOptions xform = new SimpleXformOptions();
+		options.accept(xform);
 		SettableValue<T> root = this;
-		return d().debug(new ComposedSettableValue<R>(type, d().lambda(args -> {
+		return new ComposedSettableValue<R>(type, args -> {
 			return function.apply((T) args[0], (U) args[1]);
-		}, "combineV"), combineNull, this, arg) {
+		}, new XformDef(xform), this, arg) {
 			@Override
 			public <V extends R> R set(V value, Object cause) throws IllegalArgumentException {
 				U argVal = arg.get();
 				T old = root.set(reverse.apply(value, argVal), cause);
-				if(old != null || combineNull)
-					return function.apply(old, argVal);
-				else
-					return null;
+				return function.apply(old, argVal);
 			}
 
 			@Override
@@ -381,8 +378,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			public ObservableValue<String> isEnabled() {
 				return root.isEnabled();
 			}
-		}).from("combine", this).from("with", arg).using("combination", function).using("reverse", reverse).tag("combineNull", combineNull)
-			.get();
+		};
 	}
 
 	/**
@@ -395,23 +391,23 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @param arg The value to combine this value with
 	 * @param accept The function to filter acceptance of values for the new value
 	 * @param reverse The function to reverse the transformation
-	 * @param combineNull Whether to apply the filter to null values or simply preserve the null
+	 * @param options Options determining the behavior of the result
 	 * @return The composed settable value
 	 */
-	public default <U, R> SettableValue<R> combineV(TypeToken<R> type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
-		BiFunction<? super R, ? super U, String> accept, BiFunction<? super R, ? super U, ? extends T> reverse, boolean combineNull) {
+	public default <U, R> SettableValue<R> combine(TypeToken<R> type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
+		BiFunction<? super R, ? super U, String> accept, BiFunction<? super R, ? super U, ? extends T> reverse,
+		Consumer<XformOptions> options) {
+		SimpleXformOptions xform = new SimpleXformOptions();
+		options.accept(xform);
 		SettableValue<T> root = this;
-		return d().debug(new ComposedSettableValue<R>(type, args -> {
+		return new ComposedSettableValue<R>(type, args -> {
 			return function.apply((T) args[0], (U) args[1]);
-		}, combineNull, this, arg) {
+		}, new XformDef(xform), this, arg) {
 			@Override
 			public <V extends R> R set(V value, Object cause) throws IllegalArgumentException {
 				U argVal = arg.get();
 				T old = root.set(reverse.apply(value, argVal), cause);
-				if(old != null || combineNull)
-					return function.apply(old, argVal);
-				else
-					return null;
+				return function.apply(old, argVal);
 			}
 
 			@Override
@@ -427,8 +423,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			public ObservableValue<String> isEnabled() {
 				return root.isEnabled();
 			}
-		}).from("combine", this).from("with", arg).using("combination", function).using("reverse", reverse).using("accept", accept)
-			.tag("combineNull", combineNull).get();
+		};
 	}
 
 	/**
@@ -443,9 +438,9 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @param reverse The function to reverse the transformation
 	 * @return The composed settable value
 	 */
-	public default <U, V, R> SettableValue<R> combineV(TriFunction<? super T, ? super U, ? super V, R> function, ObservableValue<U> arg2,
+	public default <U, V, R> SettableValue<R> combine(TriFunction<? super T, ? super U, ? super V, R> function, ObservableValue<U> arg2,
 		ObservableValue<V> arg3, TriFunction<? super R, ? super U, ? super V, ? extends T> reverse) {
-		return combineV(null, function, arg2, arg3, reverse, false);
+		return combine(null, function, arg2, arg3, reverse, options -> {});
 	}
 
 	/**
@@ -459,26 +454,24 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @param arg2 The first other value to combine this value with
 	 * @param arg3 The second other value to combine this value with
 	 * @param reverse The function to reverse the transformation
-	 * @param combineNull Whether to apply the combination function if the arguments are null. If false and any arguments are null, the
-	 *            result will be null.
+	 * @param options Options determining the behavior of the result
 	 * @return The composed settable value
 	 */
-	public default <U, V, R> SettableValue<R> combineV(TypeToken<R> type, TriFunction<? super T, ? super U, ? super V, R> function,
+	public default <U, V, R> SettableValue<R> combine(TypeToken<R> type, TriFunction<? super T, ? super U, ? super V, R> function,
 		ObservableValue<U> arg2, ObservableValue<V> arg3, TriFunction<? super R, ? super U, ? super V, ? extends T> reverse,
-		boolean combineNull) {
+		Consumer<XformOptions> options) {
+		SimpleXformOptions xform = new SimpleXformOptions();
+		options.accept(xform);
 		SettableValue<T> root = this;
-		return d().debug(new ComposedSettableValue<R>(type, args -> {
+		return new ComposedSettableValue<R>(type, args -> {
 			return function.apply((T) args[0], (U) args[1], (V) args[2]);
-		}, combineNull, this, arg2, arg3) {
+		}, new XformDef(xform), this, arg2, arg3) {
 			@Override
 			public <V2 extends R> R set(V2 value, Object cause) throws IllegalArgumentException {
 				U arg2Val = arg2.get();
 				V arg3Val = arg3.get();
 				T old = root.set(reverse.apply(value, arg2Val, arg3Val), cause);
-				if(old != null || combineNull)
-					return function.apply(old, arg2Val, arg3Val);
-				else
-					return null;
+				return function.apply(old, arg2Val, arg3Val);
 			}
 
 			@Override
@@ -490,18 +483,12 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			public ObservableValue<String> isEnabled() {
 				return root.isEnabled();
 			}
-		}).from("combine", this).from("with", arg2).from("with", arg3).using("combination", function).using("reverse", reverse)
-			.tag("combineNull", combineNull).get();
+		};
 	}
 
 	@Override
 	default SettableValue<T> takeUntil(Observable<?> until){
 		return new SettableValueTakenUntil<>(this, until, true);
-	}
-
-	@Override
-	default SettableValue<T> unsubscribeOn(Observable<?> until) {
-		return new SettableValueTakenUntil<>(this, until, false);
 	}
 
 	@Override
@@ -547,20 +534,12 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @param <T> The type of the value
 	 */
 	abstract class ComposedSettableValue<T> extends ComposedObservableValue<T> implements SettableValue<T> {
-		public ComposedSettableValue(Function<Object [], T> function, boolean combineNull, ObservableValue<?> [] composed) {
-			super(function, combineNull, composed);
+		public ComposedSettableValue(Function<Object[], T> function, XformDef options, ObservableValue<?>[] composed) {
+			super(function, options, composed);
 		}
 
-		public ComposedSettableValue(TypeToken<T> type, Function<Object [], T> function, boolean combineNull,
-			ObservableValue<?>... composed) {
-			super(type, function, combineNull, composed);
-		}
-
-		@Override
-		public boolean isSafe() {
-			return true;
-			// Should be able to do this. Don't understand why it won't compile.
-			// return ComposedObservableValue.super.isSafe();
+		public ComposedSettableValue(TypeToken<T> type, Function<Object[], T> function, XformDef options, ObservableValue<?>... composed) {
+			super(type, function, options, composed);
 		}
 	}
 
@@ -681,13 +660,13 @@ public interface SettableValue<T> extends ObservableValue<T> {
 
 		@Override
 		public ObservableValue<String> isEnabled() {
-			ObservableValue<ObservableValue<String>> wrapE = getWrapped().mapV(sv -> {
+			ObservableValue<ObservableValue<String>> wrapE = getWrapped().map(sv -> {
 				if (sv == null)
-					return ObservableValue.constant("No wrapped value to set");
+					return ObservableValue.of("No wrapped value to set");
 				else if (sv instanceof SettableValue)
 					return ((SettableValue<? extends T>) sv).isEnabled();
 				else
-					return ObservableValue.constant("Wrapped value is not settable");
+					return ObservableValue.of("Wrapped value is not settable");
 			});
 			return ObservableValue.flatten(wrapE);
 		}

@@ -1,12 +1,10 @@
 package org.observe.assoc;
 
 import java.util.List;
-import java.util.Objects;
 import java.util.function.Function;
 
 import org.observe.ObservableValue;
 import org.observe.collect.ObservableSet;
-import org.qommons.Equalizer;
 
 import com.google.common.reflect.TypeToken;
 
@@ -99,11 +97,6 @@ public interface ObservableSetTree<N, V> extends ObservableTree<N, V> {
 		 */
 		public ValuePathSet(ObservableSetTree<N, V> tree, Function<? super V, ? extends N> nodeCreator, boolean onlyTerminal) {
 			super(tree, nodeCreator, onlyTerminal);
-		}
-
-		@Override
-		public Equalizer getEqualizer() {
-			return Objects::equals;
 		}
 	}
 }

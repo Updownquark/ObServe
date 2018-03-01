@@ -8,7 +8,7 @@ import javax.swing.event.TableModelEvent;
 import javax.swing.event.TableModelListener;
 import javax.swing.table.TableModel;
 
-import org.observe.collect.ObservableList;
+import org.observe.collect.ObservableCollection;
 
 import com.google.common.reflect.TypeToken;
 
@@ -18,7 +18,7 @@ import com.google.common.reflect.TypeToken;
  * @param <T> The type of the backing row data
  */
 public abstract class ObservableTableModel<T> implements TableModel {
-	private final ObservableList<T> theRows;
+	private final ObservableCollection<T> theRows;
 	private final String[] theColNames;
 	private final Function<? super T, ?>[] theColumns;
 
@@ -29,7 +29,7 @@ public abstract class ObservableTableModel<T> implements TableModel {
 	 * @param colNames The names for the columns
 	 * @param columns The functions that provide cell data for each row
 	 */
-	public ObservableTableModel(ObservableList<T> rows, String[] colNames, Function<? super T, ?>... columns) {
+	public ObservableTableModel(ObservableCollection<T> rows, String[] colNames, Function<? super T, ?>... columns) {
 		if (colNames.length != columns.length) {
 			throw new IllegalArgumentException("Column names and columns do not have the same lengths ("+colNames.length+" and "+columns.length+")");
 		}
@@ -39,7 +39,7 @@ public abstract class ObservableTableModel<T> implements TableModel {
 		theListeners = new ArrayList<>();
 
 		theRows.changes().act(event -> {
-			int[] indexes = event.indexes.toArray();
+			int[] indexes = event.getIndexes();
 			switch (event.type) {
 			case add:
 				added(indexes);
@@ -50,7 +50,7 @@ public abstract class ObservableTableModel<T> implements TableModel {
 			case set:
 				boolean justChanges = true;
 				for (int i = 0; i < indexes.length && justChanges; i++) {
-					justChanges &= event.oldValues.get(i) == event.values.get(i);
+					justChanges &= event.elements.get(i).oldValue == event.elements.get(i).newValue;
 				}
 				if (justChanges) {
 					changed(indexes);

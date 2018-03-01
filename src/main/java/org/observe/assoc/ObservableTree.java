@@ -15,12 +15,10 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
-import org.observe.collect.CollectionSession;
 import org.observe.collect.ObservableCollection;
-import org.observe.collect.ObservableElement;
-import org.observe.collect.ObservableOrderedCollection;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
+import org.qommons.collect.MutableCollectionElement.StdMsg;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -49,15 +47,6 @@ public interface ObservableTree<N, V> extends Transactable {
 	 * @return All nodes with the given node as their parent
 	 */
 	ObservableCollection<? extends N> getChildren(N node);
-
-	/**
-	 * @return Whether this tree is safe, in that all observables returned by this tree obey a common safe scheme such that events are only
-	 *         fired on one thread at a time.
-	 */
-	boolean isSafe();
-
-	/** @return The session for this tree */
-	ObservableValue<CollectionSession> getSession();
 
 	/**
 	 * Builds a tree from components
@@ -126,16 +115,6 @@ public interface ObservableTree<N, V> extends Transactable {
 		}
 
 		@Override
-		public boolean isSafe() {
-			return false;
-		}
-
-		@Override
-		public ObservableValue<CollectionSession> getSession() {
-			return ObservableValue.constant(TypeToken.of(CollectionSession.class), null);
-		}
-
-		@Override
 		public Transaction lock(boolean write, Object cause) {
 			return Transaction.NONE; // Can't think of a good mechanism to do locking on this kind of tree
 		}
@@ -167,7 +146,7 @@ public interface ObservableTree<N, V> extends Transactable {
 	 * @param <N> The node type of the tree
 	 * @param <V> The value type of the tree
 	 */
-	public static class ValuePathCollection<N, V> implements ObservableCollection.PartialCollectionImpl<List<V>> {
+	public static class ValuePathCollection<N, V> implements ObservableCollection<List<V>> {
 		private final ObservableTree<N, V> theTree;
 		private final Function<? super V, ? extends N> theNodeCreator;
 		private final boolean isOnlyTerminal;
@@ -187,16 +166,6 @@ public interface ObservableTree<N, V> extends Transactable {
 		@Override
 		public TypeToken<List<V>> getType() {
 			return new TypeToken<List<V>>(){}.where(new TypeParameter<V>(){}, theTree.getValueType());
-		}
-
-		@Override
-		public ObservableValue<CollectionSession> getSession() {
-			return theTree.getSession();
-		}
-
-		@Override
-		public boolean isSafe() {
-			return theTree.isSafe();
 		}
 
 		@Override
@@ -283,26 +252,26 @@ public interface ObservableTree<N, V> extends Transactable {
 		}
 
 		@Override
-		public boolean canAdd(List<V> path) {
+		public String canAdd(List<V> path) {
 			return testAdd(path, false);
 		}
 
 		@Override
 		public boolean add(List<V> e) {
-			return testAdd(e, true);
+			return testAdd(e, true) == null;
 		}
 
 		@Override
 		public boolean addAll(Collection<? extends List<V>> c) {
 			boolean changed = false;
 			for (List<V> path : c)
-				changed |= testAdd(path, true);
+				changed |= testAdd(path, true) != null;
 			return changed;
 		}
 
-		private boolean testAdd(List<V> path, boolean reallyAdd) {
+		private String testAdd(List<V> path, boolean reallyAdd) {
 			if (path.isEmpty())
-				return false;
+				return "Empty path not allowed";
 
 			N node = theTree.getRoot().get();
 			ObservableCollection<? extends N> children = null;
@@ -320,41 +289,41 @@ public interface ObservableTree<N, V> extends Transactable {
 				}
 			}
 			if (i < path.size() - 1)
-				return false; // No such path prefix found
+				return StdMsg.NOT_FOUND; // No such path prefix found
 			N newNode = theNodeCreator.apply(pathValue);
 			if (newNode == null)
-				return false;
+				return StdMsg.ILLEGAL_ELEMENT;
 			// We'll assume the node creator creates nodes of the right sub-type for the collection
 			if (reallyAdd)
-				return ((ObservableOrderedCollection<N>) children).add(newNode);
+				return ((ObservableCollection<N>) children).add(newNode) ? null : StdMsg.UNSUPPORTED_OPERATION;
 			else
-				return ((ObservableOrderedCollection<N>) children).canAdd(newNode);
+				return ((ObservableCollection<N>) children).canAdd(newNode);
 		}
 
 		@Override
-		public boolean canRemove(Object value) {
+		public String canRemove(Object value) {
 			return testRemove(value, false);
 		}
 
 		@Override
 		public boolean remove(Object o) {
-			return testRemove(o, true);
+			return testRemove(o, true) == null;
 		}
 
 		@Override
 		public boolean removeAll(Collection<?> c) {
 			boolean changed = false;
 			for (Object o : c)
-				changed |= testRemove(o, true);
+				changed |= testRemove(o, true) == null;
 			return changed;
 		}
 
-		private boolean testRemove(Object value, boolean reallyRemove) {
+		private String testRemove(Object value, boolean reallyRemove) {
 			if (!(value instanceof List))
-				return false;
+				return StdMsg.BAD_TYPE;
 			List<V> path = (List<V>) value;
 			if (path.isEmpty())
-				return false;
+				return StdMsg.NOT_FOUND;
 
 			N node = theTree.getRoot().get();
 			ObservableCollection<? extends N> children = null;
@@ -372,11 +341,11 @@ public interface ObservableTree<N, V> extends Transactable {
 				}
 			}
 			if (i < path.size())
-				return false; // No such path found
+				return StdMsg.NOT_FOUND; // No such path found
 			if (isOnlyTerminal && !theTree.getChildren(node).isEmpty())
-				return false; // The node is not terminal
+				return StdMsg.ILLEGAL_ELEMENT; // The node is not terminal
 			if (reallyRemove)
-				return children.remove(pathValue);
+				return children.remove(pathValue) ? null : StdMsg.UNSUPPORTED_OPERATION;
 			else
 				return children.canRemove(pathValue);
 		}
@@ -459,7 +428,7 @@ public interface ObservableTree<N, V> extends Transactable {
 								for (int j = 0; j < oldValue.size(); j++) {
 									if (j == pathIndex) {
 										oldValue.add(valueEvent.getOldValue());
-										newValue.add(valueEvent.getValue());
+										newValue.add(valueEvent.getNewValue());
 									} else {
 										V value_i = theValues.get(j).get();
 										oldValue.add(value_i);
@@ -513,14 +482,14 @@ public interface ObservableTree<N, V> extends Transactable {
 					List<ObservableValue<? extends V>> pathValues = new ArrayList<>(parentValues.size() + 1);
 					pathValues.addAll(parentValues);
 					ObservableValue<? extends V> nodeValue = ObservableValue
-						.flatten(theNodeObservable.mapV(node -> theTree.getValue(node)));
+						.flatten(theNodeObservable.map(node -> theTree.getValue(node)));
 					pathValues.add(nodeValue);
 					thePathValues = pathValues;
 				}
 
 				@Override
 				public <E extends ObservableValueEvent<? extends N>> void onNext(E nodeEvent) {
-					ObservableCollection<? extends N> children = theTree.getChildren(nodeEvent.getValue());
+					ObservableCollection<? extends N> children = theTree.getChildren(nodeEvent.getNewValue());
 					if (!isOnlyTerminal) {
 						// The easy case
 						onElement.accept(new PathNode(thePathValues));

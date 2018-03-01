@@ -1,9 +1,7 @@
 package org.observe.util.swing;
 
-import java.awt.EventQueue;
 import java.awt.event.ItemEvent;
 import java.awt.event.ItemListener;
-import java.util.Objects;
 import java.util.function.Consumer;
 
 import javax.swing.ComboBoxModel;
@@ -11,23 +9,20 @@ import javax.swing.JComboBox;
 
 import org.observe.SettableValue;
 import org.observe.Subscription;
-import org.observe.collect.ObservableList;
-import org.observe.collect.ObservableOrderedCollection;
+import org.observe.collect.ObservableCollection;
 
 /**
- * A combo box model backed by an {@link ObservableList}
+ * A combo box model backed by an {@link ObservableCollection}
  *
- * @param <E>
- *            The type of elements in the model
+ * @param <E> The type of elements in the model
  */
 public class ObservableComboBoxModel<E> extends ObservableListModel<E> implements ComboBoxModel<E> {
 	private E theSelectedValue;
 
 	/**
-	 * @param values
-	 *            The observable list to back this model
+	 * @param values The observable collection to back this model
 	 */
-	public ObservableComboBoxModel(ObservableOrderedCollection<E> values) {
+	public ObservableComboBoxModel(ObservableCollection<E> values) {
 		super(values);
 	}
 
@@ -41,7 +36,17 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		return theSelectedValue;
 	}
 
-	public static <T> Subscription comboFor(JComboBox<T> comboBox, String descrip, ObservableOrderedCollection<T> availableValues,
+	/**
+	 * Creates and installs a combo box model whose data is backed by an {@link ObservableCollection} and whose selection is governed by a
+	 * {@link SettableValue}
+	 * 
+	 * @param comboBox The combo box to install the model into
+	 * @param descrip The tooltip description for the combo box (when the selected value is enabled)
+	 * @param availableValues The values available for (potential) selection in the combo box
+	 * @param selected The selected value that will control the combo box's selection and report it
+	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to to cease listening
+	 */
+	public static <T> Subscription comboFor(JComboBox<T> comboBox, String descrip, ObservableCollection<T> availableValues,
 		SettableValue<? super T> selected) {
 		ObservableComboBoxModel<T> comboModel = new ObservableComboBoxModel<>(availableValues);
 		comboBox.setModel(comboModel);
@@ -67,33 +72,18 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 				checkEnabled.accept(selected.isEnabled().get());
 		};
 		comboBox.addItemListener(itemListener);
-		Subscription valueSub = selected.act(evt -> {
+		Subscription valueSub = selected.changes().act(evt -> {
 			if (!callbackLock[0]) {
-				// Because ObservableListModel is cached, it is possible that the list model may not have been updated to include the value
-				// that is now selected in the underlying model. If that is the case, a simple invokeLater should allow the model to be
-				// updated, and then we can set the selected item. TODO Use evt.onRootFinish()?
-				boolean existsYet = false;
-				for (int i = 0; i < comboModel.getSize(); i++)
-					if (Objects.equals(comboModel.getElementAt(i), evt.getValue())) {
-						existsYet = true;
-						break;
-					}
-				Runnable doSetSelected = () -> {
-					callbackLock[0] = true;
-					try {
-						comboBox.setSelectedItem(evt.getValue());
-					} finally {
-						callbackLock[0] = false;
-					}
-				};
-				if (existsYet)
-					doSetSelected.run();
-				else
-					EventQueue.invokeLater(doSetSelected);
+				callbackLock[0] = true;
+				try {
+					comboBox.setSelectedItem(evt.getNewValue());
+				} finally {
+					callbackLock[0] = false;
+				}
 			}
 			checkEnabled.accept(selected.isEnabled().get());
 		});
-		Subscription enabledSub = selected.isEnabled().act(evt -> checkEnabled.accept(evt.getValue()));
+		Subscription enabledSub = selected.isEnabled().changes().act(evt -> checkEnabled.accept(evt.getNewValue()));
 		return () -> {
 			valueSub.unsubscribe();
 			enabledSub.unsubscribe();

@@ -2,7 +2,8 @@ package org.observe;
 
 import java.lang.reflect.Array;
 
-import org.observe.collect.ObservableList;
+import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableCollectionImpl;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -55,7 +56,7 @@ public interface ObservableAction<T> {
 
 			@Override
 			public ObservableValue<String> isEnabled() {
-				return ObservableValue.constant(TypeToken.of(String.class), null);
+				return ObservableValue.of(TypeToken.of(String.class), null);
 			}
 		};
 	}
@@ -80,7 +81,7 @@ public interface ObservableAction<T> {
 
 			@Override
 			public ObservableValue<String> isEnabled() {
-				return ObservableValue.constant(message);
+				return ObservableValue.of(message);
 			}
 		};
 	}
@@ -94,8 +95,9 @@ public interface ObservableAction<T> {
 	 * @return A single action that invokes the given actions and returns their values as an array
 	 */
 	static <T> ObservableAction<T[]> and(TypeToken<T> type, ObservableAction<? extends T>... actions) {
-		return and(ObservableList.constant(new TypeToken<ObservableAction<? extends T>>() {}.where(new TypeParameter<T>() {}, type),
-			java.util.Arrays.asList(actions)));
+		TypeToken<ObservableAction<? extends T>> actionType = new TypeToken<ObservableAction<? extends T>>() {}
+		.where(new TypeParameter<T>() {}, type);
+		return and(ObservableCollection.of(actionType, actions));
 	}
 
 	/**
@@ -105,7 +107,7 @@ public interface ObservableAction<T> {
 	 * @param actions The actions to combine
 	 * @return A single action that invokes the given actions and returns their values as an array
 	 */
-	static <T> ObservableAction<T[]> and(ObservableList<? extends ObservableAction<? extends T>> actions) {
+	static <T> ObservableAction<T[]> and(ObservableCollection<? extends ObservableAction<? extends T>> actions) {
 		return new AndObservableAction<>(actions);
 	}
 
@@ -144,24 +146,24 @@ public interface ObservableAction<T> {
 
 		@Override
 		public ObservableValue<String> isEnabled() {
-			return ObservableValue.flatten(theWrapper.mapV(action -> action.isEnabled()),
+			return ObservableValue.flatten(theWrapper.map(action -> action.isEnabled()),
 				() -> "This wrapper (" + theWrapper + ") is empty");
 		}
 	}
 
 	/**
-	 * Implements {@link ObservableAction#and(ObservableList)}
+	 * Implements {@link ObservableAction#and(ObservableCollection)}
 	 *
 	 * @param <T> The type of the actions
 	 */
 	class AndObservableAction<T> implements ObservableAction<T[]> {
-		private final ObservableList<? extends ObservableAction<? extends T>> theActions;
+		private final ObservableCollection<? extends ObservableAction<? extends T>> theActions;
 		private final TypeToken<T[]> theArrayType;
 
-		protected AndObservableAction(ObservableList<? extends ObservableAction<? extends T>> actions) {
+		protected AndObservableAction(ObservableCollection<? extends ObservableAction<? extends T>> actions) {
 			theActions = actions;
 			theArrayType = new TypeToken<T[]>() {}.where(new TypeParameter<T>() {}, (TypeToken<T>) actions.getType()
-				.resolveType(ObservableList.class.getTypeParameters()[0]).resolveType(ObservableAction.class.getTypeParameters()[0]));
+				.resolveType(ObservableCollection.class.getTypeParameters()[0]).resolveType(ObservableAction.class.getTypeParameters()[0]));
 		}
 
 		@Override
@@ -185,7 +187,8 @@ public interface ObservableAction<T> {
 
 		@Override
 		public ObservableValue<String> isEnabled() {
-			return ObservableList.flattenValues(theActions.map(action -> action.isEnabled())).findFirst(e -> e != null);
+			return theActions.flow().flattenValues(ObservableCollectionImpl.STRING_TYPE, action -> action.isEnabled()).collect()
+				.observeFind(enabled -> enabled != null, () -> null, true);
 		}
 
 		@Override

@@ -1,18 +1,23 @@
 package org.observe.assoc;
 
-import static org.observe.assoc.ObservableMap.ObservableEntry.constEntry;
-
 import java.util.Comparator;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.function.Consumer;
 
-import org.observe.ObservableValue;
-import org.observe.collect.CollectionSession;
+import org.observe.Subscription;
+import org.observe.collect.CollectionChangeType;
+import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedSet;
-import org.qommons.SimpleMapEntry;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterSortedMap;
+import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
+import org.qommons.collect.ElementId;
+import org.qommons.collect.MapEntryHandle;
+import org.qommons.collect.MutableMapEntryHandle;
+import org.qommons.collect.SimpleMapEntry;
 
 import com.google.common.reflect.TypeToken;
 
@@ -22,60 +27,14 @@ import com.google.common.reflect.TypeToken;
  * @param <K> The key type for the map
  * @param <V> The value type for the map
  */
-public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, NavigableMap<K, V> {
+public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSortedMap<K, V> {
 	@Override
 	ObservableSortedSet<K> keySet();
 
-	/**
-	 * <p>
-	 * A default implementation of {@link #keySet()}.
-	 * </p>
-	 * <p>
-	 * No {@link ObservableMap} implementation may use the default implementations for its {@link #keySet()}, {@link #get(Object)}, and
-	 * {@link #observeEntries()} methods. {@link #defaultObserveEntries(ObservableSortedMap)} may not be used in the same implementation as
-	 * {@link #defaultKeySet(ObservableSortedMap)} or {@link ObservableMap#defaultObserve(ObservableMap, Object)}. Either
-	 * {@link #observeEntries()} or both {@link #keySet()} and {@link #get(Object)} must be custom. If an implementation supplies custom
-	 * {@link #keySet()} and {@link #get(Object)} implementations, it may use {@link #defaultObserveEntries(ObservableSortedMap)} for its
-	 * {@link #observeEntries()} . If an implementation supplies a custom {@link #observeEntries()} implementation, it may use
-	 * {@link #defaultKeySet(ObservableSortedMap)} and {@link ObservableMap#defaultObserve(ObservableMap, Object)} for its {@link #keySet()}
-	 * and {@link #get(Object)} implementations, respectively. Using default implementations for both will result in infinite loops.
-	 * </p>
-	 *
-	 * @param <K> The key type of the map
-	 * @param <V> The value type of the map
-	 * @param map The map to create a key set for
-	 * @return A key set for the map
-	 */
-	public static <K, V> ObservableSortedSet<K> defaultKeySet(ObservableSortedMap<K, V> map) {
-		return ObservableSortedSet.<K> unique(map.observeEntries().map(Entry::getKey), map.comparator());
-	}
-
 	@Override
-	ObservableSortedSet<? extends ObservableEntry<K, V>> observeEntries();
-
-	/**
-	 * <p>
-	 * A default implementation of {@link #observeEntries()}.
-	 * </p>
-	 * <p>
-	 * No {@link ObservableMap} implementation may use the default implementations for its {@link #keySet()}, {@link #get(Object)}, and
-	 * {@link #observeEntries()} methods. {@link #defaultObserveEntries(ObservableSortedMap)} may not be used in the same implementation as
-	 * {@link #defaultKeySet(ObservableSortedMap)} or {@link ObservableMap#defaultObserve(ObservableMap, Object)}. Either
-	 * {@link #observeEntries()} or both {@link #keySet()} and {@link #get(Object)} must be custom. If an implementation supplies custom
-	 * {@link #keySet()} and {@link #get(Object)} implementations, it may use {@link #defaultObserveEntries(ObservableSortedMap)} for its
-	 * {@link #observeEntries()} . If an implementation supplies a custom {@link #observeEntries()} implementation, it may use
-	 * {@link #defaultKeySet(ObservableSortedMap)} and {@link ObservableMap#defaultObserve(ObservableMap, Object)} for its {@link #keySet()}
-	 * and {@link #get(Object)} implementations, respectively. Using default implementations for both will result in infinite loops.
-	 * </p>
-	 *
-	 * @param <K> The key type of the map
-	 * @param <V> The value type of the map
-	 * @param map The map to create an entry set for
-	 * @return An entry set for the map
-	 */
-	public static <K, V> ObservableSortedSet<? extends ObservableEntry<K, V>> defaultObserveEntries(ObservableSortedMap<K, V> map) {
-		return ObservableSortedSet.unique(map.keySet().map(map::entryFor),
-				(Entry<K, V> entry1, Entry<K, V> entry2) -> map.comparator().compare(entry1.getKey(), entry2.getKey()));
+	default ObservableSortedSet<Map.Entry<K, V>> observeEntries() {
+		return keySet().flow().mapEquivalent(getEntryType(), this::entryFor, entry -> entry.getKey(), options -> options.cache(false))
+			.collect();
 	}
 
 	@Override
@@ -105,7 +64,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, Navigabl
 
 	@Override
 	default Entry<K, V> lowerEntry(K key) {
-		return entrySet().lower(constEntry(getValueType(), key, (V) null));
+		return entrySet().lower(new SimpleMapEntry<>(key, (V) null));
 	}
 
 	@Override
@@ -115,7 +74,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, Navigabl
 
 	@Override
 	default Entry<K, V> floorEntry(K key) {
-		return entrySet().floor(constEntry(getValueType(), key, (V) null));
+		return entrySet().floor(new SimpleMapEntry<>(key, (V) null));
 	}
 
 	@Override
@@ -125,7 +84,7 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, Navigabl
 
 	@Override
 	default Entry<K, V> ceilingEntry(K key) {
-		return entrySet().ceiling(constEntry(getValueType(), key, (V) null));
+		return entrySet().ceiling(new SimpleMapEntry<>(key, (V) null));
 	}
 
 	@Override
@@ -168,6 +127,16 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, Navigabl
 		ObservableSortedMap<K, V> outer = this;
 		return new ObservableSortedMap<K, V>() {
 			@Override
+			public boolean isLockSupported() {
+				return outer.isLockSupported();
+			}
+
+			@Override
+			public Transaction lock(boolean write, boolean structural, Object cause) {
+				return outer.lock(write, structural, cause);
+			}
+
+			@Override
 			public TypeToken<K> getKeyType() {
 				return outer.getKeyType();
 			}
@@ -178,18 +147,13 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, Navigabl
 			}
 
 			@Override
-			public ObservableValue<CollectionSession> getSession() {
-				return outer.getSession();
+			public TypeToken<Map.Entry<K, V>> getEntryType() {
+				return outer.getEntryType();
 			}
 
 			@Override
-			public boolean isSafe() {
-				return outer.isSafe();
-			}
-
-			@Override
-			public Transaction lock(boolean write, Object cause) {
-				return outer.lock(write, cause);
+			public Equivalence<? super V> equivalence() {
+				return outer.equivalence();
 			}
 
 			@Override
@@ -198,18 +162,38 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, Navigabl
 			}
 
 			@Override
-			public ObservableValue<V> observe(Object key) {
-				return outer.observe(key);
-			}
-
-			@Override
-			public ObservableCollection<V> values() {
-				return outer.values();
-			}
-
-			@Override
-			public ObservableSortedSet<? extends ObservableEntry<K, V>> observeEntries() {
+			public ObservableSortedSet<Map.Entry<K, V>> observeEntries() {
 				return outer.observeEntries().descendingSet();
+			}
+
+			@Override
+			public MapEntryHandle<K, V> putEntry(K key, V value, boolean first) {
+				return MapEntryHandle.reverse(outer.putEntry(key, value, !first));
+			}
+
+			@Override
+			public MapEntryHandle<K, V> putEntry(K key, V value, ElementId after, ElementId before, boolean first) {
+				return MapEntryHandle.reverse(outer.putEntry(key, value, ElementId.reverse(before), ElementId.reverse(after), !first));
+			}
+
+			@Override
+			public MapEntryHandle<K, V> getEntry(K key) {
+				return MapEntryHandle.reverse(outer.getEntry(key));
+			}
+
+			@Override
+			public MapEntryHandle<K, V> getEntryById(ElementId entryId) {
+				return MapEntryHandle.reverse(outer.getEntryById(entryId.reverse()));
+			}
+
+			@Override
+			public MapEntryHandle<K, V> search(Comparable<? super K> search, SortedSearchFilter filter) {
+				return MapEntryHandle.reverse(outer.search(v -> -search.compareTo(v), filter.opposite()));
+			}
+
+			@Override
+			public MutableMapEntryHandle<K, V> mutableEntry(ElementId entryId) {
+				return MutableMapEntryHandle.reverse(outer.mutableEntry(entryId.reverse()));
 			}
 
 			@Override
@@ -218,18 +202,38 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, Navigabl
 			}
 
 			@Override
-			public V remove(Object key) {
-				return outer.remove(key);
-			}
-
-			@Override
 			public void putAll(Map<? extends K, ? extends V> m) {
 				outer.putAll(m);
 			}
 
 			@Override
+			public V remove(Object key) {
+				return outer.remove(key);
+			}
+
+			@Override
 			public void clear() {
 				outer.clear();
+			}
+
+			@Override
+			public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
+				try (Transaction t = lock(false, null)) {
+					int[] size = new int[] { size() };
+					return outer.onChange(evt -> {
+						if (evt.getType() == CollectionChangeType.add)
+							size[0]++;
+						int index = size[0] - evt.getIndex() - 1;
+						if (evt.getType() == CollectionChangeType.remove)
+							size[0]--;
+						ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(evt.getKeyElement().reverse(),
+							evt.getElementId().reverse(), outer.getKeyType(), outer.getValueType(), index, index, evt.getType(),
+							evt.getKey(), evt.getOldValue(), evt.getNewValue(), evt);
+						try (Transaction mt = ObservableMapEvent.use(mapEvent)) {
+							action.accept(mapEvent);
+						}
+					});
+				}
 			}
 
 			@Override
@@ -254,126 +258,125 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, Navigabl
 		return keySet().descendingSet();
 	}
 
+	/**
+	 * @param from Determines the minimum key to use
+	 * @param to Determines the maximum key to use
+	 * @return A sorted sub-map containing only the specified range of keys
+	 */
+	@Override
+	default ObservableSortedMap<K, V> subMap(Comparable<? super K> from, Comparable<? super K> to) {
+		return new ObservableSubMap<>(this, from, to);
+	}
+
 	@Override
 	default ObservableSortedMap<K, V> subMap(K fromKey, boolean fromInclusive, K toKey, boolean toInclusive) {
-		return new ObservableSubMap<>(this, true, fromKey, fromInclusive, true, toKey, toInclusive);
+		return subMap(v -> {
+			int comp = comparator().compare(toKey, v);
+			if (!fromInclusive && comp == 0)
+				comp = 1;
+			return comp;
+		}, v -> {
+			int comp = comparator().compare(toKey, v);
+			if (!fromInclusive && comp == 0)
+				comp = -1;
+			return comp;
+		});
 	}
 
 	@Override
 	default ObservableSortedMap<K, V> headMap(K toKey, boolean inclusive) {
-		return new ObservableSubMap<>(this, false, null, false, true, toKey, inclusive);
+		return subMap(null, v -> {
+			int comp = comparator().compare(toKey, v);
+			if (!inclusive && comp == 0)
+				comp = -1;
+			return comp;
+		});
 	}
 
 	@Override
 	default ObservableSortedMap<K, V> tailMap(K fromKey, boolean inclusive) {
-		return new ObservableSubMap<>(this, true, fromKey, inclusive, false, null, false);
+		return subMap(v -> {
+			int comp = comparator().compare(fromKey, v);
+			if (!inclusive && comp == 0)
+				comp = 1;
+			return comp;
+		}, null);
 	}
 
 	@Override
 	default ObservableSortedMap<K, V> subMap(K fromKey, K toKey) {
-		return new ObservableSubMap<>(this, true, fromKey, true, true, toKey, true);
+		return subMap(fromKey, true, toKey, true);
 	}
 
 	@Override
 	default ObservableSortedMap<K, V> headMap(K toKey) {
-		return new ObservableSubMap<>(this, false, null, false, true, toKey, true);
+		return headMap(toKey, true);
 	}
 
 	@Override
 	default ObservableSortedMap<K, V> tailMap(K fromKey) {
-		return new ObservableSubMap<>(this, true, fromKey, true, false, null, false);
+		return tailMap(fromKey, true);
 	}
 
 	/**
 	 * Implements {@link ObservableSortedMap#subMap(Object, boolean, Object, boolean)}
-	 * 
+	 *
 	 * @param <K> The key type of the map
 	 * @param <V> The value type of the map
 	 */
-	class ObservableSubMap<K, V> implements ObservableSortedMap<K, V> {
-		private final ObservableSortedMap<K, V> theOuter;
-		private boolean hasLowerBound;
-		private K theLowerBound;
-		private boolean isLowerInclusive;
-		private boolean hasUpperBound;
-		private K theUpperBound;
-		private boolean isUpperInclusive;
+	class ObservableSubMap<K, V> extends BetterSortedMap.BetterSubMap<K, V> implements ObservableSortedMap<K, V> {
+		public ObservableSubMap(ObservableSortedMap<K, V> source, Comparable<? super K> lower, Comparable<? super K> upper) {
+			super(source, lower, upper);
+		}
 
-		public ObservableSubMap(ObservableSortedMap<K, V> outer, boolean hasLower, K lowerBound, boolean lowerInclusive, boolean hasUpper,
-				K upperBound, boolean upperInclusive) {
-			theOuter = outer;
-			hasLowerBound = hasLower;
-			theLowerBound = lowerBound;
-			isLowerInclusive = lowerInclusive;
-			hasUpperBound = hasUpper;
-			theUpperBound = upperBound;
-			isUpperInclusive = upperInclusive;
+		@Override
+		protected ObservableSortedMap<K, V> getSource() {
+			return (ObservableSortedMap<K, V>) super.getSource();
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return getSource().isLockSupported();
 		}
 
 		@Override
 		public TypeToken<K> getKeyType() {
-			return theOuter.getKeyType();
+			return getSource().getKeyType();
 		}
 
 		@Override
 		public TypeToken<V> getValueType() {
-			return theOuter.getValueType();
+			return getSource().getValueType();
 		}
 
 		@Override
-		public ObservableValue<CollectionSession> getSession() {
-			return theOuter.getSession();
+		public TypeToken<Map.Entry<K, V>> getEntryType() {
+			return getSource().getEntryType();
 		}
 
 		@Override
-		public boolean isSafe() {
-			return theOuter.isSafe();
-		}
-
-		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theOuter.lock(write, cause);
+		public Equivalence<? super V> equivalence() {
+			return getSource().equivalence();
 		}
 
 		@Override
 		public ObservableSortedSet<K> keySet() {
-			if (hasLowerBound) {
-				if (hasUpperBound)
-					return theOuter.keySet().subSet(theLowerBound, isLowerInclusive, theUpperBound, isUpperInclusive);
-				else
-					return theOuter.keySet().tailSet(theLowerBound, isLowerInclusive);
-			} else
-				return theOuter.keySet().headSet(theUpperBound, isUpperInclusive);
+			return (ObservableSortedSet<K>) super.keySet();
 		}
 
 		@Override
-		public ObservableValue<V> observe(Object key) {
-			if (!getKeyType().getRawType().isInstance(key))
-				return ObservableValue.constant(getValueType(), null);
-			if (hasLowerBound) {
-				int lowCompare = theOuter.comparator().compare((K) key, theLowerBound);
-				if (lowCompare < 0 || (lowCompare == 0 && !isLowerInclusive))
-					return ObservableValue.constant(getValueType(), null);
-			}
-			if (hasUpperBound) {
-				int highCompare = theOuter.comparator().compare((K) key, theUpperBound);
-				if (highCompare > 0 || (highCompare == 0 && !isUpperInclusive))
-					return ObservableValue.constant(getValueType(), null);
-			}
-			return theOuter.observe(key);
-		}
-
-		@Override
-		public ObservableSortedSet<? extends ObservableEntry<K, V>> observeEntries() {
-			ObservableSortedSet<ObservableEntry<K, V>> entries = (ObservableSortedSet<ObservableEntry<K, V>>) theOuter.observeEntries();
-			if (hasLowerBound) {
-				if (hasUpperBound)
-					return entries.subSet(constEntry(getValueType(), theLowerBound, (V) null), isLowerInclusive,
-							constEntry(getValueType(), theUpperBound, null), isUpperInclusive);
-				else
-					return entries.tailSet(constEntry(getValueType(), theLowerBound, (V) null), isLowerInclusive);
-			} else
-				return entries.headSet(constEntry(getValueType(), theUpperBound, (V) null), isUpperInclusive);
+		public Subscription onChange(Consumer<? super ObservableMapEvent<? extends K, ? extends V>> action) {
+			return getSource().onChange(evt -> {
+				if (!keySet().belongs(evt.getKey()))
+					return;
+				int index = keySet().getElementsBefore(evt.getKeyElement());
+				ObservableMapEvent<K, V> mapEvent = new ObservableMapEvent<>(evt.getKeyElement(), evt.getElementId(),
+					getSource().getKeyType(), getSource().getValueType(), index, index, evt.getType(), evt.getKey(), evt.getOldValue(),
+					evt.getNewValue(), evt);
+				try (Transaction t = ObservableMapEvent.use(mapEvent)) {
+					action.accept(mapEvent);
+				}
+			});
 		}
 	};
 }

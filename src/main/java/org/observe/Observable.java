@@ -1,7 +1,5 @@
 package org.observe;
 
-import static org.observe.ObservableDebug.d;
-
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
@@ -12,6 +10,7 @@ import java.util.function.Supplier;
 
 import org.qommons.Causable;
 import org.qommons.ListenerSet;
+import org.qommons.Transaction;
 
 /**
  * A stream of values that can be filtered, mapped, composed, etc. and evaluated on
@@ -36,45 +35,22 @@ public interface Observable<T> {
 	 * @param action The action to perform for each new value
 	 * @return The subscription for the action
 	 */
-	default Subscription act(Action<? super T> action) {
+	default Subscription act(Consumer<? super T> action) {
 		return subscribe(new Observer<T>() {
 			@Override
 			public <V extends T> void onNext(V value) {
-				action.act(value);
+				action.accept(value);
+			}
+
+			@Override
+			public <V extends T> void onCompleted(V value) {
+			}
+
+			@Override
+			public String toString() {
+				return action.toString();
 			}
 		});
-	}
-
-	/** @return An observable for this observable's errors */
-	default Observable<Throwable> error() {
-		Observable<T> outer = this;
-		class ErrorObserver implements Observer<Object> {
-			private final Observer<? super Throwable> wrapped;
-
-			ErrorObserver(Observer<? super Throwable> wrap) {
-				wrapped = wrap;
-			}
-
-			@Override
-			public <V> void onNext(V value) {
-			}
-
-			@Override
-			public void onError(Throwable e) {
-				wrapped.onNext(e);
-			}
-		}
-		return d().debug(new Observable<Throwable>() {
-			@Override
-			public Subscription subscribe(Observer<? super Throwable> observer) {
-				return outer.subscribe(new ErrorObserver(observer));
-			}
-
-			@Override
-			public boolean isSafe() {
-				return outer.isSafe();
-			}
-		}).from("error", outer).get();
 	}
 
 	/** @return An observable that will fire once when this observable completes (the value will be null) */
@@ -97,7 +73,7 @@ public interface Observable<T> {
 				wrapped.onCompleted(value);
 			}
 		}
-		return d().debug(new Observable<T>() {
+		return new Observable<T>() {
 			@Override
 			public Subscription subscribe(Observer<? super T> observer) {
 				return outer.subscribe(new CompleteObserver(observer));
@@ -107,7 +83,7 @@ public interface Observable<T> {
 			public boolean isSafe() {
 				return outer.isSafe();
 			}
-		}).from("completed", outer).get();
+		};
 	}
 
 	/**
@@ -116,7 +92,7 @@ public interface Observable<T> {
 	 */
 	default Observable<T> fireOnComplete() {
 		Observable<T> outer = this;
-		return d().debug(new Observable<T>() {
+		return new Observable<T>() {
 			@Override
 			public Subscription subscribe(Observer<? super T> observer) {
 				return outer.subscribe(new Observer<T>() {
@@ -137,7 +113,7 @@ public interface Observable<T> {
 			public boolean isSafe() {
 				return outer.isSafe();
 			}
-		}).from("fireOnComplete", this).get();
+		};
 	}
 
 	/**
@@ -145,8 +121,7 @@ public interface Observable<T> {
 	 *         ignored.
 	 */
 	default Observable<T> noInit() {
-		Observable<T> outer = this;
-		return d().debug(new NoInitObservable<>(this)).from("noInit", outer).get();
+		return new NoInitObservable<>(this);
 	}
 
 	/**
@@ -163,9 +138,17 @@ public interface Observable<T> {
 	 * @return An observable that provides the values of this observable, mapped by the given function
 	 */
 	default <R> Observable<R> map(Function<? super T, R> func) {
-		return d().debug(new ComposedObservable<R>(d().lambda(args -> {
-			return func.apply((T) args[0]);
-		}, "map"), this)).from("mapped", this).using("map", func).get();
+		return new ComposedObservable<>(args -> func.apply((T) args[0]), this);
+	}
+
+	/**
+	 * A shortcut for {@link #flatten(Observable) flatten}({@link #map(Function) map}(map))
+	 *
+	 * @param map The function producing an observable for each value from this observable
+	 * @return An observable that may produce any number of values for each value from this observable
+	 */
+	default <R> Observable<R> flatMap(Function<? super T, ? extends Observable<? extends R>> map) {
+		return flatten(map(map));
 	}
 
 	/**
@@ -175,7 +158,7 @@ public interface Observable<T> {
 	 *         null
 	 */
 	default <R> Observable<R> filterMap(Function<? super T, R> func) {
-		return d().debug(new FilteredObservable<>(this, func)).from("filterMap", this).using("map", func).get();
+		return new FilteredObservable<>(this, func);
 	}
 
 	/**
@@ -194,9 +177,7 @@ public interface Observable<T> {
 	 * @return A new observable whose values are the specified combination of this observable and the others'
 	 */
 	default <V, R> Observable<R> combine(Observable<V> other, BiFunction<? super T, ? super V, R> func) {
-		return d().debug(new ComposedObservable<R>(d().lambda(args -> {
-			return func.apply((T) args[0], (V) args[1]);
-		}, "combine"), this, other)).from("combine-arg0", this).from("combine-arg1", other).using("combination", func).get();
+		return new ComposedObservable<>(args -> func.apply((T) args[0], (V) args[1]), this, other);
 	}
 
 	/**
@@ -204,8 +185,7 @@ public interface Observable<T> {
 	 * @return An observable that provides the same values as this observable until the first value is observed from the given observable
 	 */
 	default Observable<T> takeUntil(Observable<?> until) {
-		return d().debug(new ObservableTakenUntil<>(this, until, true)).from("take", this).from("until", until).tag("terminate", true)
-			.get();
+		return new ObservableTakenUntil<>(this, until, true);
 	}
 
 	/**
@@ -216,9 +196,7 @@ public interface Observable<T> {
 	 * @return An observable that provides the same values as this observable until the first value is observed from the given observable
 	 */
 	default Observable<T> unsubscribeOn(Observable<?> until) {
-		return d().debug(new ObservableTakenUntil<>(this, until, false)).from("take", this).from("until", until)
-			.tag("terminate", false)
-			.get();
+		return new ObservableTakenUntil<>(this, until, false);
 	}
 
 	/**
@@ -226,7 +204,7 @@ public interface Observable<T> {
 	 * @return An observable that provides the same values as this observable but completes after the given number of values
 	 */
 	default Observable<T> take(int times) {
-		return d().debug(new ObservableTakenTimes<>(this, times)).from("take", this).tag("times", times).get();
+		return new ObservableTakenTimes<>(this, times);
 	}
 
 	/**
@@ -234,7 +212,7 @@ public interface Observable<T> {
 	 * @return An observable that provides the same values as this observable but ignores the first {@code times} values
 	 */
 	default Observable<T> skip(int times) {
-		return d().label(skip(() -> times)).tag("times", times).get();
+		return skip(() -> times);
 	}
 
 	/**
@@ -245,7 +223,7 @@ public interface Observable<T> {
 	 * @return An observable that provides the same values as this observable but ignores the first {@code times} values
 	 */
 	default Observable<T> skip(java.util.function.Supplier<Integer> times) {
-		return d().debug(new SkippingObservable<>(this, times)).from("skip", this).using("times", times).get();
+		return new SkippingObservable<>(this, times);
 	}
 
 	/** @return Whether this observable is thread-safe, meaning it is constrained to only fire values on a single thread at a time */
@@ -256,7 +234,7 @@ public interface Observable<T> {
 		if (isSafe())
 			return this;
 		else
-			return d().debug(new SafeObservable<>(this)).from("safe", this).get();
+			return new SafeObservable<>(this);
 	}
 
 	/**
@@ -265,7 +243,7 @@ public interface Observable<T> {
 	 * @return An observable that pushes a value each time any of the given observables pushes a value
 	 */
 	public static <V> Observable<V> or(Observable<? extends V>... obs) {
-		return d().debug(new Observable<V>() {
+		return new Observable<V>() {
 			@Override
 			public Subscription subscribe(Observer<? super V> observer) {
 				Subscription [] subs = new Subscription[obs.length];
@@ -316,7 +294,7 @@ public interface Observable<T> {
 				ret.append(')');
 				return ret.toString();
 			}
-		}).from("or", (Object[]) obs).get();
+		};
 	}
 
 	/**
@@ -325,7 +303,7 @@ public interface Observable<T> {
 	 * @return An observable that pushes the given value as soon as it is subscribed to and never completes
 	 */
 	public static <T> Observable<T> constant(T value) {
-		return d().debug(new Observable<T>() {
+		return new Observable<T>() {
 			@Override
 			public Subscription subscribe(Observer<? super T> observer) {
 				observer.onNext(value);
@@ -342,14 +320,14 @@ public interface Observable<T> {
 			public String toString() {
 				return "" + value;
 			}
-		}).tag("constant", value).get();
+		};
 	}
 
 	/**
 	 * @param ov An observable of observables
 	 * @return An observable reflecting the values of the inner observables
 	 */
-	public static <T> Observable<T> flatten(Observable<Observable<T>> ov) {
+	public static <T> Observable<T> flatten(Observable<? extends Observable<? extends T>> ov) {
 		return new FlattenedObservable<>(ov);
 	}
 
@@ -373,6 +351,14 @@ public interface Observable<T> {
 	};
 
 	/**
+	 * @param <T> The type of the observable
+	 * @return An observable that never does anything
+	 */
+	static <T> Observable<T> empty() {
+		return (Observable<T>) empty;
+	}
+
+	/**
 	 * Implements {@link #chain()}
 	 *
 	 * @param <T> The type of the observable
@@ -393,8 +379,13 @@ public interface Observable<T> {
 		 */
 		public DefaultChainingObservable(Observable<T> wrap, Observable<Void> completion, Observer<Void> controller) {
 			theWrapped = wrap;
-			theCompletion = completion == null ? new DefaultObservable<>() : completion;
-			theCompletionController = completion == null ? ((DefaultObservable<Void>) theCompletion).control(null) : controller;
+			if (completion != null) {
+				theCompletion = completion;
+				theCompletionController = controller;
+			} else {
+				theCompletion = new SimpleObservable<>();
+				theCompletionController = (Observer<Void>) theCompletion;
+			}
 		}
 
 		@Override
@@ -414,14 +405,9 @@ public interface Observable<T> {
 		}
 
 		@Override
-		public ChainingObservable<T> act(Action<? super T> action) {
+		public ChainingObservable<T> act(Consumer<? super T> action) {
 			theWrapped.takeUntil(theCompletion).act(action);
 			return this;
-		}
-
-		@Override
-		public ChainingObservable<Throwable> error() {
-			return new DefaultChainingObservable<>(theWrapped.error(), theCompletion, theCompletionController);
 		}
 
 		@Override
@@ -515,11 +501,6 @@ public interface Observable<T> {
 				public <V extends T> void onCompleted(V value) {
 					observer.onCompleted(value);
 				}
-
-				@Override
-				public void onError(Throwable e) {
-					observer.onError(e);
-				}
 			});
 			initialized[0] = true;
 			return ret;
@@ -577,11 +558,6 @@ public interface Observable<T> {
 						observer.onNext(mapped);
 					else
 						observer.onCompleted(null); // Gotta pass along the completion even if it doesn't include a value
-				}
-
-				@Override
-				public void onError(Throwable e) {
-					observer.onError(e);
 				}
 			});
 		}
@@ -646,11 +622,6 @@ public interface Observable<T> {
 										fireCompleted((T) next);
 								}
 
-								@Override
-								public void onError(Throwable error) {
-									fireError(error);
-								}
-
 								private Object getNext() {
 									Object [] args = values.clone();
 									for(Object value : args)
@@ -665,10 +636,6 @@ public interface Observable<T> {
 
 								private void fireCompleted(T next) {
 									theObservers.forEach(listener -> listener.onCompleted(next));
-								}
-
-								private void fireError(Throwable error) {
-									theObservers.forEach(listener -> listener.onError(error));
 								}
 							});
 						}
@@ -714,11 +681,17 @@ public interface Observable<T> {
 		private final Observable<T> theWrapped;
 		private final Observable<?> theUntil;
 		private final boolean isTerminating;
+		private final Supplier<T> theDefaultValue;
 
 		protected ObservableTakenUntil(Observable<T> wrap, Observable<?> until, boolean terminate) {
+			this(wrap, until, terminate, () -> null);
+		}
+
+		protected ObservableTakenUntil(Observable<T> wrap, Observable<?> until, boolean terminate, Supplier<T> def) {
 			theWrapped = wrap;
 			theUntil = until;
 			isTerminating = terminate;
+			theDefaultValue = def;
 		}
 
 		protected Observable<T> getWrapped() {
@@ -727,10 +700,6 @@ public interface Observable<T> {
 
 		protected Observable<?> getUntil() {
 			return theUntil;
-		}
-
-		protected T getDefaultValue() {
-			return null;
 		}
 
 		@Override
@@ -751,10 +720,10 @@ public interface Observable<T> {
 					complete[0] = true;
 					outerSub.unsubscribe();
 					if (isTerminating) {
-						T defValue = getDefaultValue();
-						observer.onCompleted(defValue);
-						if (defValue instanceof Causable)
-							((Causable) defValue).finish();
+						T defValue = theDefaultValue.get();
+						try (Transaction t = Causable.use(defValue)) {
+							observer.onCompleted(defValue);
+						}
 					}
 				}
 			});
@@ -826,12 +795,6 @@ public interface Observable<T> {
 					if(theCounter.get() < theTimes)
 						observer.onCompleted(value);
 				}
-
-				@Override
-				public void onError(Throwable e) {
-					if(theCounter.get() < theTimes)
-						observer.onError(e);
-				}
 			});
 			if (completed[0])
 				wrapSub[0].unsubscribe();
@@ -892,12 +855,6 @@ public interface Observable<T> {
 				public <V extends T> void onCompleted(V value) {
 					observer.onCompleted(value);
 				}
-
-				@Override
-				public void onError(Throwable e) {
-					if(counter.get() <= 0)
-						observer.onError(e);
-				}
 			});
 		}
 
@@ -956,16 +913,6 @@ public interface Observable<T> {
 						theLock.unlock();
 					}
 				}
-
-				@Override
-				public void onError(Throwable e) {
-					theLock.lock();
-					try {
-						observer.onError(e);
-					} finally {
-						theLock.unlock();
-					}
-				}
 			});
 		}
 
@@ -1009,6 +956,11 @@ public interface Observable<T> {
 							public <V extends T> void onNext(V value) {
 								theLastValue = value;
 								observer.onNext(value);
+							}
+
+							@Override
+							public <V extends T> void onCompleted(V value) {
+								// Do nothing. The outer observable may get another value.
 							}
 						});
 					} else {

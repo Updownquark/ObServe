@@ -12,7 +12,7 @@ import javax.swing.tree.TreeModel;
 import javax.swing.tree.TreePath;
 
 import org.observe.Subscription;
-import org.observe.collect.ObservableOrderedCollection;
+import org.observe.collect.ObservableCollection;
 import org.qommons.ArrayUtils;
 
 /** A swing tree model well suited to visualizing observable structures */
@@ -74,7 +74,7 @@ public abstract class ObservableTreeModel implements TreeModel {
 	 *            The parent to get the children of
 	 * @return An observable collection representing the parent's children
 	 */
-	protected abstract ObservableOrderedCollection<?> getChildren(Object parent);
+	protected abstract ObservableCollection<?> getChildren(Object parent);
 
 	/** Releases this model's observers placed on child collections */
 	public void dispose() {
@@ -87,7 +87,7 @@ public abstract class ObservableTreeModel implements TreeModel {
 		private final TreeNode theParent;
 		private final Object theValue;
 		private final List<TreeNode> theChildNodes;
-		private ObservableOrderedCollection<?> theChildren;
+		private ObservableCollection<?> theChildren;
 		private Subscription theChildrenSub;
 		private boolean areChildrenInitialized;
 
@@ -107,25 +107,25 @@ public abstract class ObservableTreeModel implements TreeModel {
 				theChildNodes.add(newChild(value));
 			}
 			theChildrenSub = theChildren.changes().act(event -> {
-				int[] indexes = event.indexes.toArray();
+				int[] indexes = event.getIndexes();
 				switch (event.type) {
 				case add:
-					added(indexes, event.values.toArray());
+					added(indexes, event.getValues().toArray());
 					break;
 				case remove:
-					removed(indexes, event.values.toArray());
+					removed(indexes, event.getValues().toArray());
 					break;
 				case set:
 					boolean justChanges = true;
 					for (int i = 0; i < indexes.length && justChanges; i++) {
-						justChanges &= event.oldValues.get(i) == event.values.get(i);
+						justChanges &= event.elements.get(i).oldValue == event.elements.get(i).newValue;
 					}
 					if (justChanges) {
-						changed(indexes, event.values.toArray());
+						changed(indexes, event.getValues().toArray());
 					} else {
 						for (int i = 0; i < indexes.length; i++) {
-							removed(new int[] { indexes[i] }, new Object[] { event.oldValues.get(i) });
-							added(new int[] { indexes[i] }, new Object[] { event.values.get(i) });
+							removed(new int[] { indexes[i] }, new Object[] { event.elements.get(i).oldValue });
+							added(new int[] { indexes[i] }, new Object[] { event.elements.get(i).newValue });
 						}
 					}
 					break;
