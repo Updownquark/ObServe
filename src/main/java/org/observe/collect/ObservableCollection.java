@@ -26,6 +26,7 @@ import org.observe.collect.FlowOptions.MapOptions;
 import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
+import org.observe.collect.ObservableCollectionImpl.ReducedValue;
 import org.qommons.Causable;
 import org.qommons.Ternian;
 import org.qommons.Transactable;
@@ -284,7 +285,35 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 	/** @return An observable value for the size of this collection */
 	default ObservableValue<Integer> observeSize() {
-		return reduce(TypeToken.of(Integer.TYPE), 0, (s, v) -> s + 1, (s, v) -> s - 1);
+		return new ReducedValue<E, Integer, Integer>(this, TypeToken.of(Integer.TYPE)) {
+			@Override
+			protected Integer init() {
+				return 0;
+			}
+
+			@Override
+			protected Integer getCurrent() {
+				return size();
+			}
+
+			@Override
+			protected Integer update(Integer oldValue, ObservableCollectionEvent<? extends E> change) {
+				switch (change.getType()) {
+				case add:
+					return oldValue + 1;
+				case remove:
+					return oldValue - 1;
+				case set:
+					break;
+				}
+				return oldValue;
+			}
+
+			@Override
+			protected Integer getValue(Integer updated) {
+				return updated;
+			}
+		};
 	}
 
 	/**

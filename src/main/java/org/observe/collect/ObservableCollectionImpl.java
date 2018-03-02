@@ -749,10 +749,10 @@ public final class ObservableCollectionImpl {
 							if (!init[0])
 								fireChangeEvent(oldV, v, root, observer::onNext);
 						});
-					x.accept(init());
-					value.accept(getValue(x.get()));
 					Subscription sub;
 					try (Transaction t = theCollection.lock(false, null)) {
+						x.accept(getCurrent());
+						value.accept(getValue(x.get()));
 						sub = theCollection.onChange(evt -> {
 							X newX = update(x.get(), evt);
 							x.accept(newX);
@@ -773,8 +773,25 @@ public final class ObservableCollectionImpl {
 			return theCollection.lock(false, null);
 		}
 
+		@Override
+		public T get() {
+			return getValue(getCurrent());
+		}
+
 		/** @return The initial computation value */
 		protected abstract X init();
+
+		/** @return The computation value for the collection's current state */
+		protected X getCurrent() {
+			try (Transaction t = theCollection.lock(false, null)) {
+				ValueHolder<X> value = new ValueHolder<>(init());
+				int[] i = new int[1];
+				theCollection.spliterator()
+				.forEachElement(el -> value.accept(update(value.get(), new ObservableCollectionEvent<>(el.getElementId(),
+					theCollection.getType(), i[0]++, CollectionChangeType.add, null, el.get(), null))), true);
+				return value.get();
+			}
+		}
 
 		/**
 		 * Performs a reduction of a computation value with a collection element
