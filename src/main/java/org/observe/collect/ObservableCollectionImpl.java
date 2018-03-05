@@ -34,6 +34,7 @@ import org.qommons.BiTuple;
 import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
 import org.qommons.ConcurrentHashSet;
+import org.qommons.IdentityKey;
 import org.qommons.Ternian;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
@@ -1739,7 +1740,7 @@ public final class ObservableCollectionImpl {
 	 * Stores strong references to actively-derived collections on which listeners are installed, preventing the garbage-collection of these
 	 * collections since the listeners only contain weak references to their data sources.
 	 */
-	private static final Set<ActiveDerivedCollection<?>> STRONG_REFS = new ConcurrentHashSet<>();
+	private static final Set<IdentityKey<ActiveDerivedCollection<?>>> STRONG_REFS = new ConcurrentHashSet<>();
 
 	/**
 	 * A derived collection, {@link ObservableCollection.CollectionDataFlow#collect() collected} from a
@@ -1920,11 +1921,11 @@ public final class ObservableCollectionImpl {
 			// Add a strong reference to this collection while we have listeners.
 			// Otherwise, this collection could be GC'd and listeners (which may not reference this collection) would just be left hanging
 			if (theListenerCount.getAndIncrement() == 0)
-				STRONG_REFS.add(this);
+				STRONG_REFS.add(new IdentityKey<>(this));
 			return () -> {
 				remove.run();
 				if (theListenerCount.decrementAndGet() == 0)
-					STRONG_REFS.remove(this);
+					STRONG_REFS.remove(new IdentityKey<>(this));
 			};
 		}
 

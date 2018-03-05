@@ -103,7 +103,8 @@ public class WeakListening {
 	}
 
 	Object getAction(Long actionId) {
-		return theActions.get(actionId).action;
+		ActionStruct action = theActions.get(actionId);
+		return action == null ? null : action.action;
 	}
 
 	void unsubscribe() {
