@@ -167,6 +167,11 @@ public interface ObservableSortedMap<K, V> extends ObservableMap<K, V>, BetterSo
 			}
 
 			@Override
+			public MapEntryHandle<K, V> searchEntries(Comparable<? super Entry<K, V>> search, SortedSearchFilter filter) {
+				return MapEntryHandle.reverse(outer.searchEntries(v -> -search.compareTo(v), filter.opposite()));
+			}
+
+			@Override
 			public MapEntryHandle<K, V> putEntry(K key, V value, boolean first) {
 				return MapEntryHandle.reverse(outer.putEntry(key, value, !first));
 			}

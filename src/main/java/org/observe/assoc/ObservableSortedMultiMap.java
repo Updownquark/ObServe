@@ -204,11 +204,10 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		}
 
 		@Override
-		public MapEntryHandle<K, V> search(Comparable<? super K> search, SortedSearchFilter filter) {
-			CollectionElement<K> keyEntry = keySet().search(search, filter);
+		public MapEntryHandle<K, V> searchEntries(Comparable<? super Entry<K, V>> search, SortedSearchFilter filter) {
+			CollectionElement<Map.Entry<K, V>> keyEntry = entrySet().search(search, filter);
 			if (keyEntry == null)
 				return null;
-			ObservableValue<V> value = getValueMap().apply(keyEntry.get(), getSource().get(keyEntry.get()));
 			return new MapEntryHandle<K, V>() {
 				@Override
 				public ElementId getElementId() {
@@ -217,12 +216,12 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 
 				@Override
 				public K getKey() {
-					return keyEntry.get();
+					return keyEntry.get().getKey();
 				}
 
 				@Override
 				public V get() {
-					return value.get();
+					return keyEntry.get().getValue();
 				}
 			};
 		}
