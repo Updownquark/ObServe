@@ -293,7 +293,35 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 	/** @return An observable value for the size of this collection */
 	default ObservableValue<Integer> observeSize() {
-		return reduce(TypeToken.of(Integer.TYPE), 0, (s, v) -> s + 1, (s, v) -> s - 1);
+		return new ObservableCollectionImpl.ReducedValue<E, Integer, Integer>(this, TypeToken.of(Integer.TYPE)) {
+			@Override
+			public Integer get() {
+				return getCollection().size();
+			}
+
+			@Override
+			protected Integer init() {
+				return getCollection().size();
+			}
+
+			@Override
+			protected Integer update(Integer oldValue, ObservableCollectionEvent<? extends E> change) {
+				switch (change.getType()) {
+				case add:
+					return oldValue + 1;
+				case remove:
+					return oldValue - 1;
+				case set:
+					break;
+				}
+				return oldValue;
+			}
+
+			@Override
+			protected Integer getValue(Integer updated) {
+				return updated;
+			}
+		};
 	}
 
 	/**
@@ -413,27 +441,27 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * Equivalent to {@link #reduce(Object, BiFunction, BiFunction)} with null for the remove function
 	 *
 	 * @param <T> The type of the reduced value
-	 * @param init The seed value before the reduction
+	 * @param seed The seed value before the reduction
 	 * @param reducer The reducer function to accumulate the values. Must be associative.
 	 * @return The reduced value
 	 */
-	default <T> ObservableValue<T> reduce(T init, BiFunction<? super T, ? super E, T> reducer) {
-		return reduce(init, reducer, null);
+	default <T> ObservableValue<T> reduce(T seed, BiFunction<? super T, ? super E, T> reducer) {
+		return reduce(seed, reducer, null);
 	}
 
 	/**
 	 * Equivalent to {@link #reduce(TypeToken, Object, BiFunction, BiFunction)} using the type derived from the reducer's return type
 	 *
 	 * @param <T> The type of the reduced value
-	 * @param init The seed value before the reduction
+	 * @param seed The seed value before the reduction
 	 * @param add The reducer function to accumulate the values. Must be associative.
 	 * @param remove The de-reducer function to handle removal or replacement of values. This may be null, in which case removal or
 	 *        replacement of values will result in the entire collection being iterated over for each subscription. Null here will have no
 	 *        consequence if the result is never observed. Must be associative.
 	 * @return The reduced value
 	 */
-	default <T> ObservableValue<T> reduce(T init, BiFunction<? super T, ? super E, T> add, BiFunction<? super T, ? super E, T> remove) {
-		return reduce((TypeToken<T>) TypeToken.of(add.getClass()).resolveType(BiFunction.class.getTypeParameters()[2]), init, add, remove);
+	default <T> ObservableValue<T> reduce(T seed, BiFunction<? super T, ? super E, T> add, BiFunction<? super T, ? super E, T> remove) {
+		return reduce((TypeToken<T>) TypeToken.of(add.getClass()).resolveType(BiFunction.class.getTypeParameters()[2]), seed, add, remove);
 	}
 
 	/**
@@ -441,21 +469,21 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 *
 	 * @param <T> The compile-time type of the reduced value
 	 * @param type The run-time type of the reduced value
-	 * @param init The seed value before the reduction
+	 * @param seed The seed value before the reduction
 	 * @param add The reducer function to accumulate the values. Must be associative.
 	 * @param remove The de-reducer function to handle removal or replacement of values. This may be null, in which case removal or
 	 *        replacement of values will result in the entire collection being iterated over for each subscription. Null here will have no
 	 *        consequence if the result is never observed. Must be associative.
 	 * @return The reduced value
 	 */
-	default <T> ObservableValue<T> reduce(TypeToken<T> type, T init, BiFunction<? super T, ? super E, T> add,
+	default <T> ObservableValue<T> reduce(TypeToken<T> type, T seed, BiFunction<? super T, ? super E, T> add,
 		BiFunction<? super T, ? super E, T> remove) {
 		return new ObservableCollectionImpl.ReducedValue<E, T, T>(this, type) {
 			private final T RECALC = (T) new Object(); // Placeholder indicating that the value must be recalculated from scratch
 
 			@Override
 			public T get() {
-				T ret = init;
+				T ret = seed;
 				for (E element : ObservableCollection.this)
 					ret = add.apply(ret, element);
 				return ret;
@@ -463,7 +491,10 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 			@Override
 			protected T init() {
-				return init;
+				T value = seed;
+				for (E v : getCollection())
+					value = add.apply(value, v);
+				return value;
 			}
 
 			@Override
@@ -620,7 +651,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @param coll The collection to fold
 	 * @return An observable that is notified for every event on any observable in the collection
 	 */
-	static <T> Observable<T> fold(ObservableCollection<? extends Observable<T>> coll) {
+	static <T> Observable<T> fold(ObservableCollection<? extends Observable<? extends T>> coll) {
 		return new Observable<T>() {
 			@Override
 			public Subscription subscribe(Observer<? super T> observer) {
