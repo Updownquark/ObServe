@@ -208,6 +208,13 @@ public interface Equivalence<E> {
 		return new MappedEquivalence<>(this, type, filter, map, reverse);
 	}
 
+	/**
+	 * Implements {@link Equivalence#map(Class, Predicate, Function, Function)}
+	 *
+	 * @param <E> The type of the source equivalence
+	 * @param <E2> The sub type of the source equivalence's type that this equivalence understands
+	 * @param <T> The type of this equivalence
+	 */
 	class MappedEquivalence<E, E2 extends E, T> implements Equivalence<T> {
 		private final Equivalence<E> theWrapped;
 		private final Class<T> theType;
@@ -264,6 +271,14 @@ public interface Equivalence<E> {
 		}
 	}
 
+	/**
+	 * A set for a {@link Equivalence.MappedEquivalence}
+	 *
+	 * @param <E> The type of the source equivalence
+	 * @param <E2> The sub type of the source equivalence's type that this set's equivalence understands
+	 * @param <T> The type of this set's equivalence
+	 * @param <T2> The type of the set
+	 */
 	class MappedSet<E, E2 extends E, T, T2 extends T> implements BetterSet<T2> {
 		private final MappedEquivalence<E, E2, T> theEquivalence;
 		private final BetterSet<E> theWrapped;
@@ -498,6 +513,15 @@ public interface Equivalence<E> {
 		}
 	}
 
+	/**
+	 * A map for a {@link Equivalence.MappedEquivalence}
+	 * 
+	 * @param <E> The type of the source equivalence
+	 * @param <E2> The sub type of the source equivalence's type that this map's equivalence understands
+	 * @param <T> The type of this map's equivalence
+	 * @param <T2> The key type of this map
+	 * @param <V> The value type of this map
+	 */
 	class MappedMap<E, E2 extends E, T, T2 extends T, V> implements BetterMap<T2, V> {
 		private final MappedEquivalence<E, E2, T> theEquivalence;
 		private final BetterMap<E, V> theWrapped;

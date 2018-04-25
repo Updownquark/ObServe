@@ -11,7 +11,9 @@ import org.qommons.collect.MutableElementSpliterator;
 import com.google.common.reflect.TypeToken;
 
 /**
- * A set whose content can be observed
+ * A set whose content can be observed.
+ *
+ * See <a href="https://github.com/Updownquark/ObServe/wiki/ObservableCollection-API#observableset">the wiki</a> for more detail.
  *
  * @param <E> The type of element in the set
  */
@@ -73,14 +75,14 @@ public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> 
 	}
 
 	@Override
-	default <T> UniqueDataFlow<E, E, E> flow() {
-		return new ObservableSetImpl.UniqueBaseFlow<>(this);
-	}
-
-	@Override
 	default ObservableSet<E> withAll(Collection<? extends E> values) {
 		ObservableCollection.super.withAll(values);
 		return this;
+	}
+
+	@Override
+	default <T> DistinctDataFlow<E, E, E> flow() {
+		return new ObservableSetImpl.DistinctBaseFlow<>(this);
 	}
 
 	/**

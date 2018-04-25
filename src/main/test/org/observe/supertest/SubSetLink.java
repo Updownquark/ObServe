@@ -28,7 +28,7 @@ public class SubSetLink<E> extends AbstractObservableCollectionLink<E, E> {
 	private int theStartIndex;
 
 	public SubSetLink(ObservableCollectionChainLink<?, E> parent, TestValueType type,
-		ObservableCollection.UniqueSortedDataFlow<?, ?, E> flow, TestHelper helper, boolean checkRemovedValues, E min, boolean includeMin,
+		ObservableCollection.DistinctSortedDataFlow<?, ?, E> flow, TestHelper helper, boolean checkRemovedValues, E min, boolean includeMin,
 		E max, boolean includeMax) {
 		super(parent, type, flow, helper, checkRemovedValues);
 		theCompare = flow.comparator();
@@ -45,7 +45,8 @@ public class SubSetLink<E> extends AbstractObservableCollectionLink<E, E> {
 	public void initialize(TestHelper helper) {
 		super.initialize(helper);
 		boolean pastMin = theMin == null;
-		for (E value : getParent().getCollection()) {
+		for (int i = 0; i < getParent().getElements().size(); i++) {
+			E value = getParent().getCollection().get(i);
 			ElementId srcId = theSourceValues.addElement(value, false).getElementId();
 			if (!pastMin) {
 				int comp = theCompare.compare(theMin, value);
@@ -60,6 +61,7 @@ public class SubSetLink<E> extends AbstractObservableCollectionLink<E, E> {
 				if (comp < 0 || (!isMaxIncluded && comp == 0))
 					continue;
 			}
+			mapSourceElement(getParent().getElements().get(i), getElements().get(theIncludedValues.size()));
 			theIncludedValues.put(srcId, value);
 			getExpected().add(value);
 		}
@@ -88,19 +90,19 @@ public class SubSetLink<E> extends AbstractObservableCollectionLink<E, E> {
 				if (isValueValid(op.value) != 0)
 					op.reject(StdMsg.ILLEGAL_ELEMENT, true);
 				else
-					parentOps.add(op.index < 0 ? op : new CollectionOp<>(op, op.type, op.value, op.index));
+					parentOps.add(op.index < 0 ? op : new CollectionOp<>(op, op.type, op.index, op.value));
 				break;
 			case remove:
 				if (isValueValid(op.value) != 0)
 					op.reject(StdMsg.NOT_FOUND, false);
 				else
-					parentOps.add(op.index < 0 ? op : new CollectionOp<>(op, op.type, op.value, op.index));
+					parentOps.add(op.index < 0 ? op : new CollectionOp<>(op, op.type, op.index, op.value));
 				break;
 			case set:
 				if (isValueValid(op.value) != 0)
 					op.reject(StdMsg.ILLEGAL_ELEMENT, true);
 				else
-					parentOps.add(op.index < 0 ? op : new CollectionOp<>(op, op.type, op.value, op.index));
+					parentOps.add(op.index < 0 ? op : new CollectionOp<>(op, op.type, op.index, op.value));
 				break;
 			}
 		}
@@ -115,30 +117,31 @@ public class SubSetLink<E> extends AbstractObservableCollectionLink<E, E> {
 			int valid = isValueValid(op.value);
 			switch (op.type) {
 			case add:
-				ElementId srcId=theSourceValues.addElement(op.index, op.value).getElementId();
+				ElementId srcId = theSourceValues.addElement(op.index, op.value).getElementId();
 				if (valid == 0) {
-					int addedAt=theIncludedValues.keySet().getElementsBefore(theIncludedValues.putEntry(srcId, op.value, false).getElementId());
-					Assert.assertEquals(addedAt, op.index-theStartIndex);
-					subSetOps.add(new CollectionOp<>(op.type, op.value, addedAt));
+					int addedAt = theIncludedValues.keySet()
+						.getElementsBefore(theIncludedValues.putEntry(srcId, op.value, false).getElementId());
+					Assert.assertEquals(addedAt, op.index - theStartIndex);
+					subSetOps.add(new CollectionOp<>(op.type, getDestElements(op.elementId).getLast(), addedAt, op.value));
 				} else if (valid < 0)
 					theStartIndex++;
 				break;
 			case remove:
-				srcId=theSourceValues.getElement(op.index).getElementId();
-				MapEntryHandle<ElementId, E> includedEntry=theIncludedValues.getEntry(srcId);
+				srcId = theSourceValues.getElement(op.index).getElementId();
+				MapEntryHandle<ElementId, E> includedEntry = theIncludedValues.getEntry(srcId);
 				Assert.assertEquals(valid == 0, includedEntry != null);
-				if(includedEntry!=null){
-					int includedIndex=theIncludedValues.keySet().getElementsBefore(includedEntry.getElementId());
-					Assert.assertEquals(op.index-theStartIndex, includedIndex);
+				if (includedEntry != null) {
+					int includedIndex = theIncludedValues.keySet().getElementsBefore(includedEntry.getElementId());
+					Assert.assertEquals(op.index - theStartIndex, includedIndex);
 					Assert.assertEquals(op.value, includedEntry.getValue());
-					subSetOps.add(new CollectionOp<>(op.type, op.value, includedIndex));
+					subSetOps.add(new CollectionOp<>(op.type, getDestElements(op.elementId).getFirst(), includedIndex, op.value));
 					theIncludedValues.mutableEntry(includedEntry.getElementId()).remove();
 				} else if (valid < 0)
 					theStartIndex--;
 				theSourceValues.mutableElement(srcId).remove();
 				break;
 			case set:
-				srcId=theSourceValues.getElement(op.index).getElementId();
+				srcId = theSourceValues.getElement(op.index).getElementId();
 				int oldValid = isValueValid(theSourceValues.getElement(srcId).get());
 				theSourceValues.mutableElement(srcId).set(op.value);
 				includedEntry = theIncludedValues.getEntry(srcId);
@@ -146,16 +149,18 @@ public class SubSetLink<E> extends AbstractObservableCollectionLink<E, E> {
 				if (valid == 0) {
 					if (oldValid == 0) {
 						theIncludedValues.mutableEntry(includedEntry.getElementId()).set(op.value);
-						subSetOps.add(new CollectionOp<>(op.type, op.value,
-							theIncludedValues.keySet().getElementsBefore(includedEntry.getElementId())));
+						int index = theIncludedValues.keySet().getElementsBefore(includedEntry.getElementId());
+						subSetOps.add(new CollectionOp<>(op.type, getDestElements(op.elementId).getLast(), index, op.value));
 					} else {
 						includedEntry = theIncludedValues.putEntry(srcId, op.value, false);
-						subSetOps.add(new CollectionOp<>(CollectionChangeType.add, op.value,
-							theIncludedValues.keySet().getElementsBefore(includedEntry.getElementId())));
+						int index = theIncludedValues.keySet().getElementsBefore(includedEntry.getElementId());
+						subSetOps
+						.add(new CollectionOp<>(CollectionChangeType.add, getDestElements(op.elementId).getLast(), index, op.value));
 					}
 				} else if (oldValid == 0) {
-					subSetOps.add(new CollectionOp<>(CollectionChangeType.remove, includedEntry.getValue(),
-						theIncludedValues.keySet().getElementsBefore(includedEntry.getElementId())));
+					int index = theIncludedValues.keySet().getElementsBefore(includedEntry.getElementId());
+					subSetOps.add(new CollectionOp<>(CollectionChangeType.remove, getDestElements(op.elementId).getLast(), index,
+						includedEntry.getValue()));
 					theIncludedValues.mutableEntry(includedEntry.getElementId()).remove();
 				}
 				if (oldValid < 0 && valid >= 0)
@@ -177,19 +182,19 @@ public class SubSetLink<E> extends AbstractObservableCollectionLink<E, E> {
 			case add:
 				srcId = theSourceValues.addElement(srcIndex, op.value).getElementId();
 				theIncludedValues.put(srcId, op.value);
-				parentOps.add(new CollectionOp<>(op.type, op.value, srcIndex));
+				parentOps.add(new CollectionOp<>(op.type, getSourceElement(op.elementId), srcIndex, op.value));
 				break;
 			case remove:
 				srcId = theSourceValues.getElement(srcIndex).getElementId();
 				Assert.assertNotNull(theIncludedValues.remove(srcId));
-				parentOps.add(new CollectionOp<>(op.type, op.value, srcIndex));
+				parentOps.add(new CollectionOp<>(op.type, getSourceElement(op.elementId), srcIndex, op.value));
 				theSourceValues.mutableElement(srcId).remove();
 				break;
 			case set:
 				srcId = theSourceValues.getElement(srcIndex).getElementId();
 				theSourceValues.mutableElement(srcId).set(op.value);
 				Assert.assertNotNull(theIncludedValues.put(srcId, op.value));
-				parentOps.add(new CollectionOp<>(op.type, op.value, srcIndex));
+				parentOps.add(new CollectionOp<>(op.type, getSourceElement(op.elementId), srcIndex, op.value));
 				break;
 			}
 		}

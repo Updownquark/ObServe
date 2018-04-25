@@ -4,12 +4,14 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.observe.ObservableValue;
 import org.observe.SimpleSettableValue;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
+import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.supertest.ObservableChainTester.TestValueType;
@@ -27,6 +29,8 @@ public class FlattenedValueLink<E> extends AbstractObservableCollectionLink<E, E
 	private final Comparator<? super E> theCompare;
 	private final int theDepth;
 	private int theSelected;
+
+	private LinkElement theLastAddedSource;
 
 	public FlattenedValueLink(ObservableCollectionChainLink<?, E> parent, TestValueType type,
 		SimpleSettableValue<? extends ObservableCollection<E>> value, boolean distinct, boolean sorted, Comparator<? super E> compare,
@@ -60,8 +64,27 @@ public class FlattenedValueLink<E> extends AbstractObservableCollectionLink<E, E
 		}
 
 		super.initialize(helper);
-		if (theSelected < theContents.size())
-			getExpected().addAll(theContents.get(theSelected).getExpected());
+		if (theSelected < theContents.size()) {
+			AbstractObservableCollectionLink<?, E> selected = theContents.get(theSelected);
+			getExpected().addAll(selected.getExpected());
+			for (int i = 0; i < getElements().size(); i++)
+				mapSourceElement(selected.getElements().get(i), getElements().get(i));
+		}
+	}
+
+	@Override
+	protected void change(ObservableCollectionEvent<? extends E> evt) {
+		super.change(evt);
+		if (evt.getType() == CollectionChangeType.add) {
+			if (theSelected < theContents.size()) {
+				AbstractObservableCollectionLink<?, E> selected = theContents.get(theSelected);
+				LinkElement srcEl = selected.getLastAddedOrModifiedElement();
+				if (srcEl != theLastAddedSource) {
+					theLastAddedSource = srcEl;
+					mapSourceElement(srcEl, getLastAddedOrModifiedElement());
+				}
+			}
+		}
 	}
 
 	@Override
@@ -84,6 +107,7 @@ public class FlattenedValueLink<E> extends AbstractObservableCollectionLink<E, E
 		AbstractObservableCollectionLink<E, E> post = theSelected < theContents.size() ? theContents.get(theSelected) : null;
 		if (helper.isReproducing())
 			System.out.println("Switching from [" + preSelected + "]:" + pre + " to [" + theSelected + "]:" + post);
+		List<LinkElement> linkElCopy = new ArrayList<>(getElements());
 		if (theSelected < theContents.size())
 			((SimpleSettableValue<ObservableCollection<E>>) theValue).set(theContents.get(theSelected).getCollection(), null);
 		else
@@ -95,14 +119,18 @@ public class FlattenedValueLink<E> extends AbstractObservableCollectionLink<E, E
 			theContents.get(preSelected).setChild(null);
 			ObservableCollection<E> c = theContents.get(preSelected).getCollection();
 			int i = c.size() - 1;
-			for (E value : c.reverse())
-				ops.add(new CollectionOp<>(CollectionChangeType.remove, value, i--));
+			for (E value : c.reverse()) {
+				ops.add(new CollectionOp<>(CollectionChangeType.remove, linkElCopy.get(i), i, value));
+				i--;
+			}
 		}
 		if (theSelected < theContents.size()) {
 			ObservableCollection<E> c = theContents.get(theSelected).getCollection();
 			int i = 0;
-			for (E value : c)
-				ops.add(new CollectionOp<>(CollectionChangeType.add, value, i++));
+			for (E value : c) {
+				ops.add(new CollectionOp<>(CollectionChangeType.add, getElements().get(i), i, value));
+				i++;
+			}
 			theContents.get(theSelected).setChild(this);
 		}
 		modified(ops, helper, true);
@@ -119,14 +147,20 @@ public class FlattenedValueLink<E> extends AbstractObservableCollectionLink<E, E
 
 	@Override
 	public void fromBelow(List<CollectionOp<E>> ops, TestHelper helper) {
-		modified(ops, helper, true);
+		modified(//
+			ops.stream().map(op -> new CollectionOp<>(op.type, getDestElements(op.elementId).getLast(), op.index, op.value))
+			.collect(Collectors.toList()), //
+			helper, true);
 	}
 
 	@Override
 	public void fromAbove(List<CollectionOp<E>> ops, TestHelper helper, boolean above) {
 		if (ops.isEmpty())
 			return;
-		modified(ops, helper, false); // Since we don't call the super.tryModify, above will never be false
+		modified(//
+			ops.stream().map(op -> new CollectionOp<>(op.type, getSourceElement(op.elementId), op.index, op.value))
+			.collect(Collectors.toList()), //
+			helper, false); // Since we don't call the super.tryModify, above will never be false
 		theContents.get(theSelected).fromAbove(ops, helper, true);
 	}
 

@@ -2,6 +2,7 @@ package org.observe.supertest;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl;
@@ -22,6 +23,8 @@ public class ModFilteredCollectionLink<E> extends AbstractObservableCollectionLi
 		super.initialize(helper);
 		for (E src : getParent().getCollection())
 			getExpected().add(src);
+		for (int i = 0; i < getElements().size(); i++)
+			mapSourceElement(getParent().getElements().get(i), getElements().get(i));
 	}
 
 	@Override
@@ -76,13 +79,19 @@ public class ModFilteredCollectionLink<E> extends AbstractObservableCollectionLi
 
 	@Override
 	public void fromBelow(List<CollectionOp<E>> ops, TestHelper helper) {
-		modified(ops, helper, true);
+		modified(//
+			ops.stream().map(op -> new CollectionOp<>(op.type, getDestElements(op.elementId).getLast(), op.index, op.value))
+			.collect(Collectors.toList()),
+			helper, true);
 	}
 
 	@Override
 	public void fromAbove(List<CollectionOp<E>> ops, TestHelper helper, boolean above) {
 		modified(ops, helper, !above);
-		getParent().fromAbove(ops, helper, true);
+		getParent().fromAbove(//
+			ops.stream().map(op -> new CollectionOp<>(op.type, getSourceElement(op.elementId), op.index, op.value))
+			.collect(Collectors.toList()),
+			helper, true);
 	}
 
 	@Override

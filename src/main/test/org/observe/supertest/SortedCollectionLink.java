@@ -3,18 +3,13 @@ package org.observe.supertest;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.Deque;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
-import org.junit.Assert;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.supertest.ObservableChainTester.TestValueType;
-import org.qommons.BiTuple;
-import org.qommons.BreakpointHere;
 import org.qommons.TestHelper;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.ElementId;
@@ -68,6 +63,10 @@ public class SortedCollectionLink<E> extends AbstractObservableCollectionLink<E,
 			ElementId srcId = theSourceElements.addElement(null, false).getElementId();
 			ElementId sortedEl = insert(value, srcId);
 			getExpected().add(theSortedElements.getElementsBefore(sortedEl), value);
+		}
+		for (int i = 0; i < theSortedElements.size(); i++) {
+			int sortedIdx = theSortedElements.getElementsBefore(theSourceElements.get(i).sortedId);
+			mapSourceElement(getParent().getElements().get(i), getElements().get(sortedIdx));
 		}
 	}
 
@@ -123,20 +122,20 @@ public class SortedCollectionLink<E> extends AbstractObservableCollectionLink<E,
 					else if (idx < theSortedElements.size() && compareAt(op.value, idx) < 0)
 						op.reject(StdMsg.ILLEGAL_ELEMENT, true);
 					else
-						parentOps.add(new CollectionOp<>(op, CollectionChangeType.add, op.value, -1));
+						parentOps.add(new CollectionOp<>(op, CollectionChangeType.add, -1, op.value));
 				} else {
 					if (preStart != null && theCompare.compare(preStart, op.value) > 0)
 						op.reject(StdMsg.ILLEGAL_ELEMENT_POSITION, true);
 					else if (postEnd != null && theCompare.compare(postEnd, op.value) < 0)
 						op.reject(StdMsg.ILLEGAL_ELEMENT_POSITION, true);
 					else
-						parentOps.add(op.index < 0 ? op : new CollectionOp<>(op, op.type, op.value, -1));
+						parentOps.add(op.index < 0 ? op : new CollectionOp<>(op, op.type, -1, op.value));
 				}
 				break;
 			case remove:
 				if (op.index >= 0) {
 					int srcIndex = theSourceElements.getElementsBefore(theSortedElements.get(subListStart + op.index).sourceId);
-					parentOps.add(new CollectionOp<>(op, CollectionChangeType.remove, op.value, srcIndex));
+					parentOps.add(new CollectionOp<>(op, CollectionChangeType.remove, srcIndex, op.value));
 				} else
 					parentOps.add(op);
 				break;
@@ -165,7 +164,7 @@ public class SortedCollectionLink<E> extends AbstractObservableCollectionLink<E,
 				}
 				if (op.getMessage() == null) {
 					int srcIndex = theSourceElements.getElementsBefore(element.sourceId);
-					parentOps.add(new CollectionOp<>(op, CollectionChangeType.set, op.value, srcIndex));
+					parentOps.add(new CollectionOp<>(op, CollectionChangeType.set, srcIndex, op.value));
 				}
 				break;
 			}
@@ -182,13 +181,15 @@ public class SortedCollectionLink<E> extends AbstractObservableCollectionLink<E,
 				ElementId srcId = theSourceElements.addElement(op.index, null).getElementId();
 				ElementId sortedId = insert(op.value, srcId);
 				sortedOps
-				.add(new CollectionOp<>(CollectionChangeType.add, op.value, theSortedElements.getElementsBefore(sortedId)));
+					.add(new CollectionOp<>(CollectionChangeType.add, getDestElements(op.elementId).getLast(),
+					theSortedElements.getElementsBefore(sortedId), op.value));
 				break;
 			case remove:
 				SortedElement element = theSourceElements.remove(op.index);
 				int sortedIndex = theSortedElements.getElementsBefore(element.sortedId);
 				theSortedElements.mutableElement(element.sortedId).remove();
-				sortedOps.add(new CollectionOp<>(CollectionChangeType.remove, op.value, sortedIndex));
+				sortedOps
+					.add(new CollectionOp<>(CollectionChangeType.remove, getDestElements(op.elementId).getFirst(), sortedIndex, op.value));
 				break;
 			case set:
 				element = theSourceElements.get(op.index);
@@ -198,13 +199,16 @@ public class SortedCollectionLink<E> extends AbstractObservableCollectionLink<E,
 				if (move) {
 					theSortedElements.mutableElement(element.sortedId).remove();
 					sortedId = insert(op.value, element.sourceId);
-					sortedOps.add(new CollectionOp<>(CollectionChangeType.remove, element.value, sortedIdx));
+					sortedOps.add(
+						new CollectionOp<>(CollectionChangeType.remove, getDestElements(op.elementId).getLast(), sortedIdx, element.value));
 					sortedIdx = theSortedElements.getElementsBefore(sortedId);
 					element.value = op.value;
-					sortedOps.add(new CollectionOp<>(CollectionChangeType.add, op.value, sortedIdx));
+					sortedOps
+						.add(new CollectionOp<>(CollectionChangeType.add, getDestElements(op.elementId).getLast(), sortedIdx, op.value));
 				} else {
 					element.value = op.value;
-					sortedOps.add(new CollectionOp<>(CollectionChangeType.set, op.value, sortedIdx));
+					sortedOps
+						.add(new CollectionOp<>(CollectionChangeType.set, getDestElements(op.elementId).getLast(), sortedIdx, op.value));
 				}
 				break;
 			}
@@ -215,32 +219,29 @@ public class SortedCollectionLink<E> extends AbstractObservableCollectionLink<E,
 	@Override
 	public void fromAbove(List<CollectionOp<E>> ops, TestHelper helper, boolean above) {
 		List<CollectionOp<E>> parentOps = new ArrayList<>(ops.size());
-		Deque<BiTuple<Integer, E>> newSourceValues = new LinkedList<>(
-			((AbstractObservableCollectionLink<?, E>) getParent()).getNewValues());
 		for (CollectionOp<E> op : ops) {
+			LinkElement srcEl = getSourceElement(op.elementId);
 			switch (op.type) {
 			case add:
 				ElementId sortedId = theSortedElements.addElement(op.index, null).getElementId();
-				BiTuple<Integer, E> newSource = newSourceValues.removeFirst();
-				Assert.assertEquals(newSource.getValue2(), op.value);
-				int srcIndex = newSource.getValue1();
+				int srcIndex = srcEl.getIndex();
 				ElementId srcId = theSourceElements.addElement(srcIndex, null).getElementId();
 				SortedElement element = new SortedElement(op.value, srcId, sortedId);
 				theSortedElements.mutableElement(sortedId).set(element);
 				theSourceElements.mutableElement(srcId).set(element);
-				parentOps.add(new CollectionOp<>(CollectionChangeType.add, op.value, srcIndex));
+				parentOps.add(new CollectionOp<>(CollectionChangeType.add, srcEl, srcIndex, op.value));
 				break;
 			case remove:
 				element = theSortedElements.remove(op.index);
 				srcIndex = theSourceElements.getElementsBefore(element.sourceId);
 				theSourceElements.mutableElement(element.sourceId).remove();
-				parentOps.add(new CollectionOp<>(CollectionChangeType.remove, op.value, srcIndex));
+				parentOps.add(new CollectionOp<>(CollectionChangeType.remove, getSourceElement(op.elementId), srcIndex, op.value));
 				break;
 			case set:
 				element = theSortedElements.get(op.index);
 				element.value = op.value;
 				srcIndex = theSourceElements.getElementsBefore(element.sourceId);
-				parentOps.add(new CollectionOp<>(CollectionChangeType.set, op.value, srcIndex));
+				parentOps.add(new CollectionOp<>(CollectionChangeType.set, getSourceElement(op.elementId), srcIndex, op.value));
 				break;
 			}
 		}

@@ -14,7 +14,7 @@ import org.observe.collect.FlowOptions.GroupingOptions;
 import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
-import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
+import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableSortedSet;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
@@ -160,7 +160,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 	}
 
 	interface SortedMultiMapFlow<K, V> extends MultiMapFlow<K, V> {
-		<K2> SortedMultiMapFlow<K2, V> withSortedKeys(Function<UniqueSortedDataFlow<?, ?, K>, UniqueSortedDataFlow<?, ?, K2>> keyMap);
+		<K2> SortedMultiMapFlow<K2, V> withSortedKeys(Function<DistinctSortedDataFlow<?, ?, K>, DistinctSortedDataFlow<?, ?, K2>> keyMap);
 
 		@Override
 		<V2> SortedMultiMapFlow<K, V2> withValues(Function<CollectionDataFlow<?, ?, V>, CollectionDataFlow<?, ?, V2>> valueMap);
@@ -204,11 +204,10 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 		}
 
 		@Override
-		public MapEntryHandle<K, V> search(Comparable<? super K> search, SortedSearchFilter filter) {
-			CollectionElement<K> keyEntry = keySet().search(search, filter);
+		public MapEntryHandle<K, V> searchEntries(Comparable<? super Entry<K, V>> search, SortedSearchFilter filter) {
+			CollectionElement<Map.Entry<K, V>> keyEntry = entrySet().search(search, filter);
 			if (keyEntry == null)
 				return null;
-			ObservableValue<V> value = getValueMap().apply(keyEntry.get(), getSource().get(keyEntry.get()));
 			return new MapEntryHandle<K, V>() {
 				@Override
 				public ElementId getElementId() {
@@ -217,12 +216,12 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 
 				@Override
 				public K getKey() {
-					return keyEntry.get();
+					return keyEntry.get().getKey();
 				}
 
 				@Override
 				public V get() {
-					return value.get();
+					return keyEntry.get().getValue();
 				}
 			};
 		}

@@ -12,12 +12,12 @@ import org.observe.collect.FlowOptions.MapDef;
 import org.observe.collect.FlowOptions.MapOptions;
 import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
+import org.observe.collect.ObservableCollection.DistinctDataFlow;
+import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
-import org.observe.collect.ObservableCollection.UniqueDataFlow;
-import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
-import org.observe.collect.ObservableSetImpl.UniqueBaseFlow;
+import org.observe.collect.ObservableSetImpl.DistinctBaseFlow;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.BetterSortedSet;
@@ -28,13 +28,24 @@ import org.qommons.tree.BetterTreeSet;
 
 import com.google.common.reflect.TypeToken;
 
+/** Holds default implementation methods and classes for {@link ObservableSortedSet} and {@link DistinctSortedDataFlow} methods */
 public class ObservableSortedSetImpl {
 	private ObservableSortedSetImpl() {}
 
+	/**
+	 * Implements {@link ObservableSortedSet#observeRelative(Comparable, SortedSearchFilter, java.util.function.Supplier)}
+	 *
+	 * @param <E> The type of elements in the collection
+	 */
 	public static class RelativeFinder<E> extends ObservableCollectionImpl.AbstractObservableElementFinder<E> {
 		private final Comparable<? super E> theSearch;
 		private final SortedSearchFilter theFilter;
 
+		/**
+		 * @param set The sorted set to search
+		 * @param search The search comparable
+		 * @param filter The search filter
+		 */
 		public RelativeFinder(ObservableSortedSet<E> set, Comparable<? super E> search, SortedSearchFilter filter) {
 			super(set, (el1, el2) -> {
 				int comp1 = search.compareTo(el1.get());
@@ -97,11 +108,16 @@ public class ObservableSortedSetImpl {
 	}
 
 	/**
-	 * Implements {@link ObservableSortedSet#subSet(Object, boolean, Object, boolean)}
+	 * Implements {@link ObservableSortedSet#subSet(Comparable, Comparable)}
 	 *
 	 * @param <E> The type of elements in the set
 	 */
 	public static class ObservableSubSet<E> extends BetterSortedSet.BetterSubSet<E> implements ObservableSortedSet<E> {
+		/**
+		 * @param set The super set
+		 * @param from The lower bound of this sub-set
+		 * @param to The upper bound of this sub-set
+		 */
 		public ObservableSubSet(ObservableSortedSet<E> set, Comparable<? super E> from, Comparable<? super E> to) {
 			super(set, from, to);
 		}
@@ -234,6 +250,7 @@ public class ObservableSortedSetImpl {
 	 * @param <E> The type of elements in the collection
 	 */
 	public static class ReversedSortedSet<E> extends ObservableSetImpl.ReversedSet<E> implements ObservableSortedSet<E> {
+		/** @param wrap The sorted set to reverse */
 		public ReversedSortedSet(ObservableSortedSet<E> wrap) {
 			super(wrap);
 		}
@@ -288,11 +305,23 @@ public class ObservableSortedSetImpl {
 		}
 	}
 
-	public static class UniqueSortedDataFlowWrapper<E, T> extends ObservableSetImpl.UniqueDataFlowWrapper<E, T>
-	implements UniqueSortedDataFlow<E, T, T> {
+	/**
+	 * An abstract {@link DistinctSortedDataFlow} implementation returning default {@link DistinctSortedDataFlow} implementations for most
+	 * operations that should produce one
+	 *
+	 * @param <E> The type of the source collection
+	 * @param <T> The type of this flow
+	 */
+	public static class DistinctSortedDataFlowWrapper<E, T> extends ObservableSetImpl.DistinctDataFlowWrapper<E, T>
+	implements DistinctSortedDataFlow<E, T, T> {
 		private final Comparator<? super T> theCompare;
 
-		protected UniqueSortedDataFlowWrapper(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent,
+		/**
+		 * @param source The source collection
+		 * @param parent This flow's parent
+		 * @param compare The comparator that this flow's elements are ordered by
+		 */
+		protected DistinctSortedDataFlowWrapper(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent,
 			Comparator<? super T> compare) {
 			super(source, parent, Equivalence.of((Class<T>) parent.getTargetType().getRawType(), compare, true));
 			theCompare = compare;
@@ -309,65 +338,65 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, T, T> reverse() {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), super.reverse(), theCompare.reversed());
+		public DistinctSortedDataFlow<E, T, T> reverse() {
+			return new DistinctSortedDataFlowWrapper<>(getSource(), super.reverse(), theCompare.reversed());
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, T, T> filter(Function<? super T, String> filter) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), super.filter(filter), theCompare);
+		public DistinctSortedDataFlow<E, T, T> filter(Function<? super T, String> filter) {
+			return new DistinctSortedDataFlowWrapper<>(getSource(), super.filter(filter), theCompare);
 		}
 
 		@Override
-		public <X> UniqueSortedDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), super.whereContained(other, include), theCompare);
+		public <X> DistinctSortedDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
+			return new DistinctSortedDataFlowWrapper<>(getSource(), super.whereContained(other, include), theCompare);
 		}
 
 		@Override
-		public <X> UniqueSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		public <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
 			Function<? super X, ? extends T> reverse, Consumer<MapOptions<T, X>> options) {
 			MapOptions<T, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);
 			mapOptions.withReverse(reverse);
-			return new UniqueSortedMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions), (x1, x2) -> {
+			return new DistinctSortedMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions), (x1, x2) -> {
 				return theCompare.compare(reverse.apply(x1), reverse.apply(x2));
 			});
 		}
 
 		@Override
-		public <X> UniqueSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		public <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
 			Comparator<? super X> compare, Consumer<MapOptions<T, X>> options) {
 			MapOptions<T, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);
-			return new UniqueSortedMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions), compare);
+			return new DistinctSortedMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions), compare);
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, T, T> distinct(Consumer<UniqueOptions> options) {
+		public DistinctSortedDataFlow<E, T, T> distinct(Consumer<UniqueOptions> options) {
 			options.accept(new FlowOptions.SimpleUniqueOptions(true));
 			return this; // No-op
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), super.refresh(refresh), theCompare);
+		public DistinctSortedDataFlow<E, T, T> refresh(Observable<?> refresh) {
+			return new DistinctSortedDataFlowWrapper<>(getSource(), super.refresh(refresh), theCompare);
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), super.refreshEach(refresh), theCompare);
+		public DistinctSortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
+			return new DistinctSortedDataFlowWrapper<>(getSource(), super.refreshEach(refresh), theCompare);
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), super.filterMod(options), theCompare);
+		public DistinctSortedDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
+			return new DistinctSortedDataFlowWrapper<>(getSource(), super.filterMod(options), theCompare);
 		}
 
 		@Override
 		public ObservableSortedSet<T> collectPassive() {
 			if (!supportsPassive())
 				throw new UnsupportedOperationException("Passive collection not supported");
-			return new PassiveDerivedSortedSet<>(managePassive(true), comparator());
+			return new PassiveDerivedSortedSet<>((ObservableSortedSet<E>) getSource(), managePassive(), comparator());
 		}
 
 		@Override
@@ -376,10 +405,23 @@ public class ObservableSortedSetImpl {
 		}
 	}
 
-	public static class UniqueSortedOp<E, T> extends UniqueSortedDataFlowWrapper<E, T> {
+	/**
+	 * Implements {@link CollectionDataFlow#distinctSorted(Comparator, boolean)}
+	 *
+	 * @param <E> The type of the source collection
+	 * @param <T> The type of this flow
+	 */
+	public static class DistinctSortedOp<E, T> extends DistinctSortedDataFlowWrapper<E, T> {
 		private final boolean isAlwaysUsingFirst;
 
-		protected UniqueSortedOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, Comparator<? super T> compare,
+		/**
+		 * @param source The source collection
+		 * @param parent The parent flow
+		 * @param compare The comparator to order this flow's elements
+		 * @param alwaysUseFirst Whether to always use the earliest element in a category of equivalent values to represent the group in
+		 *        this flow
+		 */
+		protected DistinctSortedOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, Comparator<? super T> compare,
 			boolean alwaysUseFirst) {
 			super(source, parent, compare);
 			isAlwaysUsingFirst = alwaysUseFirst;
@@ -392,16 +434,31 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public ActiveCollectionManager<E, ?, T> manageActive() {
-			return new ObservableSetImpl.UniqueManager<>(
+			return new ObservableSetImpl.DistinctManager<>(
 				new ObservableCollectionDataFlowImpl.ActiveEquivalenceSwitchedManager<>(getParent().manageActive(), equivalence()),
 				equivalence(), isAlwaysUsingFirst, false);
 		}
 	}
 
-	public static class UniqueSortedMapOp<E, I, T> extends ObservableSetImpl.UniqueMapOp<E, I, T> implements UniqueSortedDataFlow<E, I, T> {
+	/**
+	 * Implements {@link DistinctSortedDataFlow#mapEquivalent(TypeToken, Function, Comparator)}
+	 *
+	 * @param <E> The type of the source collection
+	 * @param <I> The type of the parent flow
+	 * @param <T> The type of this flow
+	 */
+	public static class DistinctSortedMapOp<E, I, T> extends ObservableSetImpl.DistinctMapOp<E, I, T> implements DistinctSortedDataFlow<E, I, T> {
 		private final Comparator<? super T> theCompare;
 
-		public UniqueSortedMapOp(ObservableCollection<E> source, UniqueDataFlow<E, ?, I> parent, TypeToken<T> target,
+		/**
+		 * @param source The source collection
+		 * @param parent The parent flow
+		 * @param target The type of this flow
+		 * @param map The mapping function to produce this flow's values from its source
+		 * @param options The options governing certain aspects of this flow's behavior, e.g. caching
+		 * @param compare The comparator that this flow's values are sorted by
+		 */
+		public DistinctSortedMapOp(ObservableCollection<E> source, DistinctDataFlow<E, ?, I> parent, TypeToken<T> target,
 			Function<? super I, ? extends T> map, MapDef<I, T> options, Comparator<? super T> compare) {
 			super(source, parent, target, map, options);
 			theCompare = compare;
@@ -413,57 +470,57 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, T, T> reverse() {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), super.reverse(), theCompare.reversed());
+		public DistinctSortedDataFlow<E, T, T> reverse() {
+			return new DistinctSortedDataFlowWrapper<>(getSource(), super.reverse(), theCompare.reversed());
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, T, T> filter(Function<? super T, String> filter) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), super.filter(filter), comparator());
+		public DistinctSortedDataFlow<E, T, T> filter(Function<? super T, String> filter) {
+			return new DistinctSortedDataFlowWrapper<>(getSource(), super.filter(filter), comparator());
 		}
 
 		@Override
-		public <X> UniqueSortedDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), super.whereContained(other, include), theCompare);
+		public <X> DistinctSortedDataFlow<E, T, T> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
+			return new DistinctSortedDataFlowWrapper<>(getSource(), super.whereContained(other, include), theCompare);
 		}
 
 		@Override
-		public <X> UniqueSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		public <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
 			Function<? super X, ? extends T> reverse, Consumer<MapOptions<T, X>> options) {
 			MapOptions<T, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);
 			mapOptions.withReverse(reverse);
-			return new UniqueSortedMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions), (x1, x2) -> {
+			return new DistinctSortedMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions), (x1, x2) -> {
 				return theCompare.compare(reverse.apply(x1), reverse.apply(x2));
 			});
 		}
 
 		@Override
-		public <X> UniqueSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		public <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
 			Comparator<? super X> compare, Consumer<MapOptions<T, X>> options) {
 			MapOptions<T, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);
-			return new UniqueSortedMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions), compare);
+			return new DistinctSortedMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions), compare);
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, T, T> refresh(Observable<?> refresh) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), super.refresh(refresh), comparator());
+		public DistinctSortedDataFlow<E, T, T> refresh(Observable<?> refresh) {
+			return new DistinctSortedDataFlowWrapper<>(getSource(), super.refresh(refresh), comparator());
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), super.refreshEach(refresh), comparator());
+		public DistinctSortedDataFlow<E, T, T> refreshEach(Function<? super T, ? extends Observable<?>> refresh) {
+			return new DistinctSortedDataFlowWrapper<>(getSource(), super.refreshEach(refresh), comparator());
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), super.filterMod(options), theCompare);
+		public DistinctSortedDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
+			return new DistinctSortedDataFlowWrapper<>(getSource(), super.filterMod(options), theCompare);
 		}
 
 		@Override
 		public ObservableSortedSet<T> collectPassive() {
-			return new PassiveDerivedSortedSet<>(managePassive(true), comparator());
+			return new PassiveDerivedSortedSet<>((ObservableSortedSet<E>) getSource(), managePassive(), comparator());
 		}
 
 		@Override
@@ -472,8 +529,14 @@ public class ObservableSortedSetImpl {
 		}
 	}
 
-	public static class UniqueSortedBaseFlow<E> extends UniqueBaseFlow<E> implements UniqueSortedDataFlow<E, E, E> {
-		protected UniqueSortedBaseFlow(ObservableSortedSet<E> source) {
+	/**
+	 * Implements {@link ObservableSortedSet#flow()}
+	 *
+	 * @param <E> The type of this flow
+	 */
+	public static class DistinctSortedBaseFlow<E> extends DistinctBaseFlow<E> implements DistinctSortedDataFlow<E, E, E> {
+		/** @param source The source set */
+		protected DistinctSortedBaseFlow(ObservableSortedSet<E> source) {
 			super(source);
 		}
 
@@ -488,52 +551,52 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, E, E> reverse() {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), super.reverse(), comparator().reversed());
+		public DistinctSortedDataFlow<E, E, E> reverse() {
+			return new DistinctSortedDataFlowWrapper<>(getSource(), super.reverse(), comparator().reversed());
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, E, E> filter(Function<? super E, String> filter) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), super.filter(filter), getSource().comparator());
+		public DistinctSortedDataFlow<E, E, E> filter(Function<? super E, String> filter) {
+			return new DistinctSortedDataFlowWrapper<>(getSource(), super.filter(filter), getSource().comparator());
 		}
 
 		@Override
-		public <X> UniqueSortedDataFlow<E, E, E> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), super.whereContained(other, include), comparator());
+		public <X> DistinctSortedDataFlow<E, E, E> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
+			return new DistinctSortedDataFlowWrapper<>(getSource(), super.whereContained(other, include), comparator());
 		}
 
 		@Override
-		public <X> UniqueSortedDataFlow<E, E, X> mapEquivalent(TypeToken<X> target, Function<? super E, ? extends X> map,
+		public <X> DistinctSortedDataFlow<E, E, X> mapEquivalent(TypeToken<X> target, Function<? super E, ? extends X> map,
 			Function<? super X, ? extends E> reverse, Consumer<MapOptions<E, X>> options) {
 			MapOptions<E, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);
 			mapOptions.withReverse(reverse);
-			return new UniqueSortedMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions), (x1, x2) -> {
+			return new DistinctSortedMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions), (x1, x2) -> {
 				return comparator().compare(reverse.apply(x1), reverse.apply(x2));
 			});
 		}
 
 		@Override
-		public <X> UniqueSortedDataFlow<E, E, X> mapEquivalent(TypeToken<X> target, Function<? super E, ? extends X> map,
+		public <X> DistinctSortedDataFlow<E, E, X> mapEquivalent(TypeToken<X> target, Function<? super E, ? extends X> map,
 			Comparator<? super X> compare, Consumer<MapOptions<E, X>> options) {
 			MapOptions<E, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);
-			return new UniqueSortedMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions), compare);
+			return new DistinctSortedMapOp<>(getSource(), this, target, map, new MapDef<>(mapOptions), compare);
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, E, E> refresh(Observable<?> refresh) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), super.refresh(refresh), getSource().comparator());
+		public DistinctSortedDataFlow<E, E, E> refresh(Observable<?> refresh) {
+			return new DistinctSortedDataFlowWrapper<>(getSource(), super.refresh(refresh), getSource().comparator());
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, E, E> refreshEach(Function<? super E, ? extends Observable<?>> refresh) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), super.refreshEach(refresh), getSource().comparator());
+		public DistinctSortedDataFlow<E, E, E> refreshEach(Function<? super E, ? extends Observable<?>> refresh) {
+			return new DistinctSortedDataFlowWrapper<>(getSource(), super.refreshEach(refresh), getSource().comparator());
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, E, E> filterMod(Consumer<ModFilterBuilder<E>> options) {
-			return new UniqueSortedDataFlowWrapper<>(getSource(), super.filterMod(options), comparator());
+		public DistinctSortedDataFlow<E, E, E> filterMod(Consumer<ModFilterBuilder<E>> options) {
+			return new DistinctSortedDataFlowWrapper<>(getSource(), super.filterMod(options), comparator());
 		}
 
 		@Override
@@ -552,14 +615,23 @@ public class ObservableSortedSetImpl {
 		}
 	}
 
+	/**
+	 * A {@link DistinctSortedDataFlow#collect() collected}, {@link DistinctSortedDataFlow#supportsPassive() passive}ly-derived sorted set
+	 *
+	 * @param <E> The type of the source set
+	 * @param <T> The type of this set
+	 */
 	public static class PassiveDerivedSortedSet<E, T> extends ObservableSetImpl.PassiveDerivedSet<E, T> implements ObservableSortedSet<T> {
 		private final Comparator<? super T> theCompare;
 
-		public PassiveDerivedSortedSet(PassiveCollectionManager<E, ?, T> flow,
+		/**
+		 * @param source The source set
+		 * @param flow The passive manager
+		 * @param compare The comparator by which the values are sorted
+		 */
+		public PassiveDerivedSortedSet(ObservableSortedSet<E> source, PassiveCollectionManager<E, ?, T> flow,
 			Comparator<? super T> compare) {
-			super(flow);
-			if (!(flow.getSource() instanceof ObservableSortedSet))
-				throw new IllegalArgumentException("The given flow is not distinct sorted");
+			super(source, flow);
 			theCompare = compare;
 		}
 
@@ -573,6 +645,10 @@ public class ObservableSortedSetImpl {
 			return theCompare;
 		}
 
+		/**
+		 * @param search The search comparable for this set
+		 * @return The search comparable to use on the source set
+		 */
 		protected Comparable<? super E> mappedSearch(Comparable<? super T> search) {
 			Function<? super E, ? extends T> map = getFlow().map().get();
 			return v -> search.compareTo(map.apply(v));
@@ -590,9 +666,19 @@ public class ObservableSortedSetImpl {
 		}
 	}
 
+	/**
+	 * A {@link DistinctSortedDataFlow#collect() collected}, {@link DistinctSortedDataFlow#supportsPassive() active}ly-derived sorted set
+	 *
+	 * @param <T> The type of this set
+	 */
 	public static class ActiveDerivedSortedSet<T> extends ObservableSetImpl.ActiveDerivedSet<T> implements ObservableSortedSet<T> {
 		private final Comparator<? super T> theCompare;
 
+		/**
+		 * @param flow The active manager to drive this set
+		 * @param compare The comparator by which this set's values will be sorted
+		 * @param until The observable to terminate this derived set
+		 */
 		public ActiveDerivedSortedSet(ActiveCollectionManager<?, ?, T> flow, Comparator<? super T> compare,
 			Observable<?> until) {
 			super(flow, until);
@@ -618,7 +704,7 @@ public class ObservableSortedSetImpl {
 	}
 
 	/**
-	 * Implements {@link ObservableSortedSet#flattenValue(ObservableValue)}
+	 * Implements {@link ObservableSortedSet#flattenValue(ObservableValue, Comparator)}
 	 *
 	 * @param <E> The type of elements in the set
 	 */
@@ -626,6 +712,10 @@ public class ObservableSortedSetImpl {
 	implements ObservableSortedSet<E> {
 		private final Comparator<? super E> theCompare;
 
+		/**
+		 * @param collectionObservable The value containing a sorted set
+		 * @param compare The comparator that all values the observable value may contain must use
+		 */
 		public FlattenedValueSortedSet(ObservableValue<? extends ObservableSortedSet<E>> collectionObservable,
 			Comparator<? super E> compare) {
 			super(collectionObservable, Equivalence.of(extractElementType(collectionObservable), compare, false));

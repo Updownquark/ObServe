@@ -19,8 +19,8 @@ import org.observe.collect.FlowOptions.GroupingOptions;
 import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
+import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableCollection.SubscriptionCause;
-import org.observe.collect.ObservableCollection.UniqueDataFlow;
 import org.observe.collect.ObservableSet;
 import org.qommons.Causable;
 import org.qommons.Transaction;
@@ -63,6 +63,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		 * @param <K> The key type for the entry
 		 * @param <V> The value type for the entry
 		 * @param keyType The key type for the entry
+		 * @param keyId The ID for the entry
 		 * @param key The key for the entry
 		 * @param keyEquivalence The key equivalence for the entry
 		 * @param values The values for the entry
@@ -370,6 +371,10 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 				).collect();
 	}
 
+	/**
+	 * @param value The function to produce single (observable) values from each of this map's value collections
+	 * @return An ObservableMap whose values are the result of the given operation on this multi-map's entries
+	 */
 	default ObservableMap<K, V> single(BiFunction<K, ObservableCollection<V>, ObservableValue<V>> value) {
 		return new SingleMap<>(this, value);
 	}
@@ -385,10 +390,27 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 	/** @return A multi-map data flow that may be used to produce derived maps whose data is based on this map's */
 	MultiMapFlow<K, V> flow();
 
+	/**
+	 * @param <K> The (compile-time) key type for the map
+	 * @param <V> The (compile-time) value type for the map
+	 * @param keyType The (run-time) key type for the map
+	 * @param valueType The (run-time) value type for the map
+	 * @param keyEquivalence The equivalence to use for the map's key set distinctness
+	 * @return A flow that may be transformed, if desired, then {@link MultiMapFlow#gather() gathered} into an {@link ObservableMultiMap}
+	 */
 	static <K, V> MultiMapFlow<K, V> create(TypeToken<K> keyType, TypeToken<V> valueType, Equivalence<? super K> keyEquivalence) {
 		return create(keyType, valueType, keyEquivalence, ObservableCollection.createDefaultBacking());
 	}
 
+	/**
+	 * @param <K> The (compile-time) key type for the map
+	 * @param <V> The (compile-time) value type for the map
+	 * @param keyType The (run-time) key type for the map
+	 * @param valueType The (run-time) value type for the map
+	 * @param keyEquivalence The equivalence to use for the map's key set distinctness
+	 * @param entryCollection The list to hold the map's entries. Should not be modified externally.
+	 * @return A flow that may be transformed, if desired, then {@link MultiMapFlow#gather() gathered} into an {@link ObservableMultiMap}
+	 */
 	static <K, V> MultiMapFlow<K, V> create(TypeToken<K> keyType, TypeToken<V> valueType, Equivalence<? super K> keyEquivalence,
 		BetterList<Map.Entry<K, V>> entryCollection) {
 		TypeToken<Map.Entry<K, V>> entryType = new TypeToken<Map.Entry<K, V>>() {}.where(new TypeParameter<K>() {}, keyType.wrap())
@@ -402,6 +424,12 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 				false);
 	}
 
+	/**
+	 * A default toString implementation for {@link ObservableMultiMap} implementations
+	 *
+	 * @param map The map to print
+	 * @return The string representation of the multi-map
+	 */
 	public static String toString(ObservableMultiMap<?, ?> map) {
 		StringBuilder str = new StringBuilder();
 		boolean first = true;
@@ -415,7 +443,7 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 	}
 
 	/**
-	 * Implements {@link ObservableMultiMap#single(Function)}
+	 * Implements {@link ObservableMultiMap#single(BiFunction)}
 	 *
 	 * @param <K> The key-type of the map
 	 * @param <V> The value-type of the map
@@ -729,37 +757,80 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 		}
 	}
 
+	/**
+	 * Like {@link org.observe.collect.ObservableCollection.CollectionDataFlow CollectionDataFlow} for multi-maps. Provides different types
+	 * of transformations and can be {@link #gather() gathered} into a ObservableMultiMap.
+	 *
+	 * @param <K> The key type of this flow
+	 * @param <V> The value type of this flow
+	 */
 	interface MultiMapFlow<K, V> {
-		<K2> MultiMapFlow<K2, V> withKeys(Function<UniqueDataFlow<?, ?, K>, UniqueDataFlow<?, ?, K2>> keyMap);
+		/**
+		 * @param <K2> The key type for the derived flow
+		 * @param keyMap The function to produce a derived key flow from this flow's key flow
+		 * @return The derived flow
+		 */
+		<K2> MultiMapFlow<K2, V> withKeys(Function<DistinctDataFlow<?, ?, K>, DistinctDataFlow<?, ?, K2>> keyMap);
 
+		/**
+		 * @param <V2> The value type for the derived flow
+		 * @param valueMap The function to produce a derived value flow from the value flow of each of this flow's entries' value
+		 *        collections
+		 * @return The derived flow
+		 */
 		<V2> MultiMapFlow<K, V2> withValues(Function<CollectionDataFlow<?, ?, V>, CollectionDataFlow<?, ?, V2>> valueMap);
 
+		/** @return A flow that contains no 2 equivalent values in the entire map */
 		default MultiMapFlow<K, V> distinctForMap() {
 			return distinctForMap(options -> {});
 		}
 
+		/**
+		 * @param options Options governing the value distinctness
+		 * @return A flow that contains no 2 equivalent values in the entire map
+		 */
 		MultiMapFlow<K, V> distinctForMap(Consumer<UniqueOptions> options);
 
+		/**
+		 * @return A flow identical to this flow, but whose keys are reversed in the key set and whose values are reversed in each key's
+		 *         value collection
+		 */
 		MultiMapFlow<K, V> reverse();
 
+		/** @return Whether this flow supports passive (light-weight) gathering */
 		boolean supportsPassive();
 
+		/** @return Whether this flow both supports and prefers passive (light-weight) to active (heavy-weight) gathering */
 		default boolean prefersPassive() {
 			return supportsPassive();
 		}
 
+		/** @return An ObservableMultiMap derived from this flow's source by this flow's configuration */
 		default ObservableMultiMap<K, V> gather() {
 			return gather(options -> {});
 		}
 
+		/**
+		 * @param options Options governing the multi-map's grouping behavior
+		 * @return An ObservableMultiMap derived from this flow's source by this flow's configuration
+		 */
 		default ObservableMultiMap<K, V> gather(Consumer<GroupingOptions> options) {
 			return gather(Observable.empty, options);
 		}
 
+		/**
+		 * @param until The observable to terminate the active map's listening (to its source data)
+		 * @return An ObservableMultiMap derived from this flow's source by this flow's configuration
+		 */
 		default ObservableMultiMap<K, V> gather(Observable<?> until) {
 			return gather(until, options -> {});
 		}
 
+		/**
+		 * @param until The observable to terminate the active map's listening (to its source data)
+		 * @param options Options governing the multi-map's grouping behavior
+		 * @return An ObservableMultiMap derived from this flow's source by this flow's configuration
+		 */
 		ObservableMultiMap<K, V> gather(Observable<?> until, Consumer<GroupingOptions> options);
 	}
 }

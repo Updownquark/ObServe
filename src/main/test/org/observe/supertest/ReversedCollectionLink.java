@@ -1,6 +1,7 @@
 package org.observe.supertest;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.function.IntUnaryOperator;
 
@@ -22,6 +23,8 @@ public class ReversedCollectionLink<E> extends AbstractObservableCollectionLink<
 		theSize = getParent().getCollection().size();
 		for (E value : getParent().getCollection())
 			getExpected().add(0, value);
+		for (int i = 0; i < getElements().size(); i++)
+			mapSourceElement(getParent().getElements().get(i), getElements().get(getElements().size() - i - 1));
 	}
 
 	@Override
@@ -37,11 +40,11 @@ public class ReversedCollectionLink<E> extends AbstractObservableCollectionLink<
 		for (CollectionOp<E> op : ops) {
 			switch (op.type) {
 			case add:
-				parentOps.add(new CollectionOp<>(op, op.type, op.value, convertIndex.applyAsInt(op.index)));
+				parentOps.add(new CollectionOp<>(op, op.type, convertIndex.applyAsInt(op.index), op.value));
 				break;
 			case remove:
 			case set:
-				parentOps.add(new CollectionOp<>(op, op.type, op.value, convertIndex.applyAsInt(op.index) - 1));
+				parentOps.add(new CollectionOp<>(op, op.type, convertIndex.applyAsInt(op.index) - 1, op.value));
 				break;
 			}
 		}
@@ -54,15 +57,15 @@ public class ReversedCollectionLink<E> extends AbstractObservableCollectionLink<
 		for (CollectionOp<E> op : ops) {
 			switch (op.type) {
 			case add:
-				reversedOps.add(new CollectionOp<>(op.type, op.value, theSize - op.index));
+				reversedOps.add(new CollectionOp<>(op.type, getDestElements(op.elementId).getLast(), theSize - op.index, op.value));
 				theSize++;
 				break;
 			case remove:
-				reversedOps.add(new CollectionOp<>(op.type, op.value, theSize - op.index - 1));
+				reversedOps.add(new CollectionOp<>(op.type, getDestElements(op.elementId).getLast(), theSize - op.index - 1, op.value));
 				theSize--;
 				break;
 			case set:
-				reversedOps.add(new CollectionOp<>(op.type, op.value, theSize - op.index - 1));
+				reversedOps.add(new CollectionOp<>(op.type, getDestElements(op.elementId).getLast(), theSize - op.index - 1, op.value));
 				break;
 			}
 		}
@@ -71,23 +74,26 @@ public class ReversedCollectionLink<E> extends AbstractObservableCollectionLink<
 
 	@Override
 	public void fromAbove(List<CollectionOp<E>> ops, TestHelper helper, boolean above) {
+		// multi-remove operations need to be reversed because the indexes are pre-modification
 		List<CollectionOp<E>> parentOps = new ArrayList<>();
 		for (CollectionOp<E> op : ops) {
 			switch (op.type) {
 			case add:
-				parentOps.add(new CollectionOp<>(op.type, op.value, theSize - op.index));
+				parentOps.add(new CollectionOp<>(op.type, getSourceElement(op.elementId), theSize - op.index, op.value));
 				theSize++;
 				break;
 			case remove:
-				parentOps.add(new CollectionOp<>(op.type, op.value, theSize - op.index - 1));
+				parentOps.add(new CollectionOp<>(op.type, getSourceElement(op.elementId), theSize - op.index - 1, op.value));
 				theSize--;
 				break;
 			case set:
-				parentOps.add(new CollectionOp<>(op.type, op.value, theSize - op.index - 1));
+				parentOps.add(new CollectionOp<>(op.type, getSourceElement(op.elementId), theSize - op.index - 1, op.value));
 				break;
 			}
 		}
 		modified(ops, helper, !above);
+		if (CollectionOp.isMultiRemove(parentOps))
+			Collections.reverse(ops);
 		getParent().fromAbove(parentOps, helper, true);
 	}
 

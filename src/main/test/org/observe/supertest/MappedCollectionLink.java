@@ -37,8 +37,10 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 	@Override
 	public void initialize(TestHelper helper) {
 		super.initialize(helper);
-		for (E src : getParent().getCollection())
-			getExpected().add(theMap.map(src));
+		for (int i = 0; i < getElements().size(); i++) {
+			getExpected().add(theMap.map(getParent().getCollection().get(i)));
+			mapSourceElement(getParent().getElements().get(i), getElements().get(i));
+		}
 	}
 
 	@Override
@@ -57,7 +59,7 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 				for (int i = 0; i < getParent().getExpected().size(); i++) {
 					E src = getParent().getExpected().get(i);
 					T newValue = newMap.map(src);
-					sets.add(new CollectionOp<>(CollectionChangeType.set, newValue, i));
+					sets.add(new CollectionOp<>(CollectionChangeType.set, getElements().get(i), i, newValue));
 				}
 				modified(sets, action.getHelper(), true);
 			});
@@ -79,7 +81,7 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 					op.reject(StdMsg.ILLEGAL_ELEMENT, true);
 					continue;
 				}
-				parentOps.add(new CollectionOp<>(op, op.type, reversed, op.index));
+				parentOps.add(new CollectionOp<>(op, op.type, op.index, reversed));
 				break;
 			case remove:
 				if (op.index < 0) {
@@ -90,10 +92,10 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 						op.reject(StdMsg.UNSUPPORTED_OPERATION, true);
 						continue;
 					}
-					parentOps.add(new CollectionOp<>(op, op.type, theOptions.getReverse().apply(op.value), -1));
+					parentOps.add(new CollectionOp<>(op, op.type, -1, theOptions.getReverse().apply(op.value)));
 				} else
 					parentOps.add(
-						new CollectionOp<>(op, op.type, getParent().getCollection().get(subListStart + op.index), op.index));
+						new CollectionOp<>(op, op.type, op.index, getParent().getCollection().get(subListStart + op.index)));
 				break;
 			case set:
 				if (theOptions.getElementReverse() != null) {
@@ -115,7 +117,7 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 					op.reject(StdMsg.ILLEGAL_ELEMENT, true);
 					return;
 				}
-				parentOps.add(new CollectionOp<>(op, op.type, reversed, op.index));
+				parentOps.add(new CollectionOp<>(op, op.type, op.index, reversed));
 				break;
 			}
 		}
@@ -124,14 +126,16 @@ public class MappedCollectionLink<E, T> extends AbstractObservableCollectionLink
 
 	@Override
 	public void fromBelow(List<CollectionOp<E>> ops, TestHelper helper) {
-		List<CollectionOp<T>> mappedOps = ops.stream().map(op -> new CollectionOp<>(op.type, theMap.map(op.value), op.index))
+		List<CollectionOp<T>> mappedOps = ops.stream()
+			.map(op -> new CollectionOp<>(op.type, getDestElements(op.elementId).getLast(), op.index, theMap.map(op.value)))
 			.collect(Collectors.toList());
 		modified(mappedOps, helper, true);
 	}
 
 	@Override
 	public void fromAbove(List<CollectionOp<T>> ops, TestHelper helper, boolean above) {
-		List<CollectionOp<E>> parentOps = ops.stream().map(op -> new CollectionOp<>(op.type, theMap.reverse(op.value), op.index))
+		List<CollectionOp<E>> parentOps = ops.stream()
+			.map(op -> new CollectionOp<>(op.type, getSourceElement(op.elementId), op.index, theMap.reverse(op.value)))
 			.collect(Collectors.toList());
 		getParent().fromAbove(parentOps, helper, true);
 		modified(ops, helper, !above);

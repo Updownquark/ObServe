@@ -13,7 +13,9 @@ import org.qommons.tree.BetterTreeSet;
 import com.google.common.reflect.TypeToken;
 
 /**
- * A sorted set whose content can be observed
+ * A sorted set whose content can be observed.
+ *
+ * See <a href="https://github.com/Updownquark/ObServe/wiki/ObservableCollection-API#observablesortedset">the wiki</a> for more detail.
  *
  * @param <E> The type of element in the set
  */
@@ -195,8 +197,8 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 	}
 
 	@Override
-	default <T> UniqueSortedDataFlow<E, E, E> flow() {
-		return new ObservableSortedSetImpl.UniqueSortedBaseFlow<>(this);
+	default <T> DistinctSortedDataFlow<E, E, E> flow() {
+		return new ObservableSortedSetImpl.DistinctSortedBaseFlow<>(this);
 	}
 
 	/**

@@ -31,9 +31,9 @@ import org.observe.collect.FlowOptions.MapOptions;
 import org.observe.collect.FlowOptions.SimpleUniqueOptions;
 import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
+import org.observe.collect.ObservableCollection.DistinctDataFlow;
+import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
-import org.observe.collect.ObservableCollection.UniqueDataFlow;
-import org.observe.collect.ObservableCollection.UniqueSortedDataFlow;
 import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.PassiveDerivedCollection;
 import org.observe.util.WeakListening;
@@ -51,6 +51,7 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.collect.TransactableCollection;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeMap;
 import org.qommons.tree.BinaryTreeNode;
@@ -63,40 +64,54 @@ public class ObservableCollectionDataFlowImpl {
 	private ObservableCollectionDataFlowImpl() {}
 
 	/**
-	 * Used in mapping/filtering collection data
+	 * Used in mapping/filtering collection data {@link PassiveCollectionManager passively}
 	 *
 	 * @param <E> The source type
 	 * @param <T> The destination type
 	 */
 	public static class FilterMapResult<E, T> {
+		/** The pre-mapped source value */
 		public E source;
+		/** The mapped result */
 		public T result;
 		private boolean isError;
 		private String rejectReason;
 
+		/** Creates an empty mapping structure */
 		public FilterMapResult() {}
 
+		/** @param src The pre-mapped source value for this mapping structure */
 		public FilterMapResult(E src) {
 			source = src;
 		}
 
+		/** @return Whether the mapping operation was successful */
 		public boolean isAccepted() {
 			return rejectReason == null;
 		}
 
+		/** @return Whether the mapping operation, if attempted, should throw an exception */
 		public boolean isError() {
 			return isError;
 		}
 
+		/** @return null if the mapping operation was successful, or a reason why it would fail */
 		public String getRejectReason() {
 			return rejectReason;
 		}
 
+		/** Clears the {@link #isError() error} and {@link #getRejectReason() reject reason} fields */
 		public void clearRejection() {
 			rejectReason = null;
 			isError = false;
 		}
 
+		/**
+		 * @param <X> The type of exception to throw
+		 * @param type The function to create the exception to throw
+		 * @return The {@link #getRejectReason() reject reason}, if {@link #isError() error} is false
+		 * @throws X If {@link #isError() error} is true
+		 */
 		public <X extends Throwable> String throwIfError(Function<String, X> type) throws X {
 			if (rejectReason == null)
 				return null;
@@ -105,6 +120,13 @@ public class ObservableCollectionDataFlowImpl {
 			return rejectReason;
 		}
 
+		/**
+		 * Marks this mapping operation as rejected
+		 *
+		 * @param reason The reason for the rejection
+		 * @param error Whether the mapping operation, if attempted, should throw an exception
+		 * @return This structure
+		 */
 		public FilterMapResult<E, T> reject(String reason, boolean error) {
 			if (error && reason == null)
 				throw new IllegalArgumentException("Need a reason for the error");
@@ -114,12 +136,26 @@ public class ObservableCollectionDataFlowImpl {
 			return this;
 		}
 
+		/**
+		 * Marks this mapping operation as rejected (if <code>reason</code> is non-null)
+		 *
+		 * @param reason The reason for the rejection
+		 * @param error Whether the mapping operation, if attempted, should throw an exception
+		 * @return This structure
+		 */
 		public FilterMapResult<E, T> maybeReject(String reason, boolean error) {
 			if (reason != null)
 				reject(reason, error);
 			return this;
 		}
 
+		/**
+		 * A little generic trick. For performance, this method does not create a new structure, but simply converts this structure's source
+		 * using the given map and returns this structure as a structure of a given type.
+		 *
+		 * @param map The mapping operation to apply to the source
+		 * @return This structure
+		 */
 		public <X> FilterMapResult<X, T> map(Function<? super E, ? extends X> map) {
 			FilterMapResult<X, T> mapped = (FilterMapResult<X, T>) this;
 			mapped.source = map.apply(source);
@@ -127,37 +163,102 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
+	/**
+	 * The super type of the {@link PassiveCollectionManager passive} and {@link ActiveCollectionManager active} collection managers
+	 * produced by {@link CollectionDataFlow}s to do the work of managing a derived collection.
+	 *
+	 * @param <E> The type of the source collection
+	 * @param <I> An intermediate type
+	 * @param <T> The type of the derived collection that can use this manager
+	 */
 	public static interface CollectionOperation<E, I, T> extends Transactable {
+		/** @return The type of collection that this operation would produce */
 		TypeToken<T> getTargetType();
 
+		/** @return The equivalence of the collection that this operation would produce */
 		Equivalence<? super T> equivalence();
 	}
 
+	/**
+	 * A manager for a {@link PassiveDerivedCollection passively-}derived collection
+	 *
+	 * @param <E> The type of the source collection
+	 * @param <I> An intermediate type
+	 * @param <T> The type of the derived collection that this manager can power
+	 */
 	public static interface PassiveCollectionManager<E, I, T> extends CollectionOperation<E, I, T> {
+		/** @return Whether this manager is the result of an odd number of {@link CollectionDataFlow#reverse() reverse} operations */
+		boolean isReversed();
+
+		/** @return The observable value of this manager's mapping function that produces values from source values */
 		ObservableValue<? extends Function<? super E, ? extends T>> map();
 
+		/**
+		 * @return Whether this manager has the ability to convert its values to source values for at least some sub-set of possible values
+		 */
 		String canReverse();
 
+		/**
+		 * @param dest The filter-map structure whose source is the value to convert
+		 * @param forAdd Whether this operation is a precursor to inserting the value into the collection
+		 * @return The filter-mapped result (typically the same instance as <code>dest</code>)
+		 */
 		FilterMapResult<T, E> reverse(FilterMapResult<T, E> dest, boolean forAdd);
 
+		/**
+		 * A shortcut for reversing a value
+		 *
+		 * @param dest The value to convert
+		 * @param forAdd Whether this operation is a precursor to inserting the value into the collection
+		 * @return The filter-mapped result
+		 */
 		default FilterMapResult<T, E> reverse(T dest, boolean forAdd) {
 			return reverse(new FilterMapResult<>(dest), forAdd);
 		}
 
+		/** @return Whether this manager may disallow some remove operations */
 		boolean isRemoveFiltered();
 
+		/**
+		 * @param element The source element to map
+		 * @param map The mapping function to apply to the element's value
+		 * @return The element for the derived collection
+		 */
 		MutableCollectionElement<T> map(MutableCollectionElement<E> element, Function<? super E, ? extends T> map);
 
+		/**
+		 * Maps the old and new source values for an event from the source collection to this manager's value type
+		 *
+		 * @param oldSource The old value from the source event
+		 * @param newSource The new value from the source event
+		 * @param map The mapping function to apply to the values
+		 * @return The old and new values for the event to propagate from the manager's derived collection
+		 */
 		BiTuple<T, T> map(E oldSource, E newSource, Function<? super E, ? extends T> map);
 
+		/**
+		 * @return Whether this manager may produce a single mapped value for many different source values. Affects searching by value in
+		 *         the derived collection.
+		 */
 		boolean isManyToOne();
 
+		/**
+		 * @param elements The elements to set the value for en masse
+		 * @param value The value to set for the elements
+		 */
 		void setValue(Collection<MutableCollectionElement<T>> elements, T value);
-
-		ObservableCollection<E> getSource();
 	}
 
-	public static <E, T> TypeToken<Function<? super E, T>> functionType(TypeToken<E> srcType, TypeToken<T> destType) {
+	/**
+	 * Derives a function type from its parameter types
+	 *
+	 * @param <E> The compiler type of the function's source parameter
+	 * @param <T> The compiler type of the function's product parameter
+	 * @param srcType The run-time type of the function's source parameter
+	 * @param destType The run-time type of the function's product parameter
+	 * @return The type of a function with the given parameter types
+	 */
+	static <E, T> TypeToken<Function<? super E, T>> functionType(TypeToken<E> srcType, TypeToken<T> destType) {
 		return new TypeToken<Function<? super E, T>>() {}.where(new TypeParameter<E>() {}, srcType.wrap()).where(new TypeParameter<T>() {},
 			destType.wrap());
 	}
@@ -187,7 +288,23 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
+	/**
+	 * A manager for a {@link ActiveDerivedCollection actively-}derived collection
+	 *
+	 * @param <E> The type of the source collection
+	 * @param <I> An intermediate type
+	 * @param <T> The type of the derived collection that this manager can power
+	 */
 	public static interface ActiveCollectionManager<E, I, T> extends CollectionOperation<E, I, T> {
+		/**
+		 * Obtains a lock on this manager's data source(s)
+		 * 
+		 * @param write Whether to obtain a write lock
+		 * @param structural Whether to obtain a structural lock
+		 * @param cause The cause for the transaction
+		 * @return The transaction to {@link Transaction#close() close} to release the lock
+		 * @see TransactableCollection#lock(boolean, boolean, Object)
+		 */
 		Transaction lock(boolean write, boolean structural, Object cause);
 
 		@Override
@@ -195,47 +312,131 @@ public class ObservableCollectionDataFlowImpl {
 			return lock(write, write, cause);
 		}
 
+		/** @return Whether this manager's collection should be able to insert values at arbitrary positions */
 		boolean isContentControlled();
 
+		/**
+		 * @param value The value to find
+		 * @return A finder that can navigate a sorted set of elements by collection order to find an element with the given value, or null
+		 *         if this manager does not possess information that could allow a faster-than-linear search
+		 */
 		Comparable<DerivedCollectionElement<T>> getElementFinder(T value);
 
+		/**
+		 * @param toAdd The value to add
+		 * @param after The element to insert the value after (or null for no lower bound)
+		 * @param before The element to insert the value before (or null if no upper bound)
+		 * @return null If such an addition is allowable, or a message why it is not
+		 */
 		String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before);
 
+		/**
+		 * @param value The value to add
+		 * @param after The element to insert the value after (or null for no lower bound)
+		 * @param before The element to insert the value before (or null if no upper bound)
+		 * @param first Whether to prefer inserting the value toward the beginning of the designated range or toward the end
+		 * @return The element that was added
+		 * @throws UnsupportedOperationException If the operation is not allowed, regardless of any of the arguments
+		 * @throws IllegalArgumentException If the operation is not allowed due to one or more of the argument values
+		 */
 		DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
-			boolean first);
+			boolean first) throws UnsupportedOperationException, IllegalArgumentException;
 
 		/**
 		 * Removes all elements in this manager, if possible
 		 *
-		 * @return Whether this method removed all elements. If false, the derived collection may need to remove elements itself.
+		 * @return Whether this method removed all elements. If false, the derived collection may need to remove elements itself,
+		 *         one-by-one.
 		 */
 		boolean clear();
 
+		/**
+		 * @param elements The elements to modify
+		 * @param newValue The value for the elements
+		 * @throws UnsupportedOperationException If the operation fails regardless of the argument value
+		 * @throws IllegalArgumentException If the operation fails due to the value of the argument
+		 */
 		void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
 			throws UnsupportedOperationException, IllegalArgumentException;
 
+		/**
+		 * Begins listening to this manager's elements
+		 * 
+		 * @param fromStart Whether to initialize the derived collection using the elements from the beginning or end of the source
+		 *        collection
+		 * @param onElement The listener to accept initial and added elements for the collection
+		 * @param listening The weakly-listening structure that contains the derived collection's listening chains
+		 */
 		void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening);
 	}
 
+	/**
+	 * Accepts elements in an actively-derived collection
+	 *
+	 * @param <E> The type of element to accept
+	 * @see ActiveCollectionManager
+	 * @see ActiveDerivedCollection
+	 */
 	public static interface ElementAccepter<E> {
+		/**
+		 * @param element The initial or added element in the collection
+		 * @param cause The cause of the addition
+		 */
 		void accept(DerivedCollectionElement<E> element, Object cause);
 	}
 
+	/**
+	 * A collection element structure in an actively-derived collection
+	 *
+	 * @param <E> The type of the element
+	 * @see ActiveCollectionManager
+	 * @see ActiveDerivedCollection
+	 */
 	public static interface DerivedCollectionElement<E> extends Comparable<DerivedCollectionElement<E>> {
+		/**
+		 * Installs a listener in this element. To uninstall the listener, re-invoke this method with null.
+		 *
+		 * @param listener The listener for this element to notify of changes
+		 */
 		void setListener(CollectionElementListener<E> listener);
 
+		/** @return The current value of this element */
 		E get();
 
+		/**
+		 * @return null if the {@link #set(Object) set} operation may succeed on this element for any possible argument, or a message why it
+		 *         would not
+		 */
 		String isEnabled();
 
+		/**
+		 * @param value The value to test
+		 * @return null if the {@link #set(Object) set} operation would succeed on this element for the given argument, or a message why it
+		 *         would not
+		 */
 		String isAcceptable(E value);
 
+		/**
+		 * @param value The value to set for this element
+		 * @throws UnsupportedOperationException If the given operation does not succeed for a reason that does not depend on the argument
+		 * @throws IllegalArgumentException If the given operation does not succeed due to some property of the argument
+		 */
 		void set(E value) throws UnsupportedOperationException, IllegalArgumentException;
 
+		/**
+		 * @return null if the {@link #remove() remove} operation would succeed on this element with its current value, or a message why it
+		 *         would not
+		 */
 		String canRemove();
 
+		/**
+		 * Removes this element
+		 *
+		 * @throws UnsupportedOperationException If the operation does not succeed
+		 */
 		void remove() throws UnsupportedOperationException;
 
+		/** @return An element identical to this, but with its order reversed in the derived collection */
 		default DerivedCollectionElement<E> reverse() {
 			DerivedCollectionElement<E> outer = this;
 			return new DerivedCollectionElement<E>() {
@@ -286,14 +487,43 @@ public class ObservableCollectionDataFlowImpl {
 			};
 		}
 
+		/**
+		 * @param el The element to reverse
+		 * @return The reversed element, or null if the element was null
+		 */
 		public static <E> DerivedCollectionElement<E> reverse(DerivedCollectionElement<E> el) {
 			return el == null ? null : el.reverse();
 		}
 	}
 
+	/**
+	 * A listener for changes to or removal of an element in an actively-derived collection
+	 *
+	 * @param <E> The type of the element
+	 * @see DerivedCollectionElement
+	 * @see ActiveDerivedCollection
+	 */
 	public static interface CollectionElementListener<E> {
+		/**
+		 * Alerts the derived collection that the source element's content (value) has been changed or updated
+		 *
+		 * @param oldValue The element's previous value. This is not guaranteed to be the last <code>newValue</code> from this method or the
+		 *        initial value of the element as passed to the {@link ElementAccepter}. Some flows do not keep track of their current
+		 *        value, so this value might be a guess. If an element's actual previous value is important to a listener, it must be
+		 *        tracked independently.
+		 * @param newValue The new (current) value of the element
+		 * @param cause The cause of the change
+		 */
 		void update(E oldValue, E newValue, Object cause);
 
+		/**
+		 * Alerts the derived collection that the element has been removed from the source flow
+		 *
+		 * @param value The element's previous value before it was removed. As with <code>oldValue</code> in the
+		 *        {@link #update(Object, Object, Object) update} method, this value is not guaranteed to be the last that the listener knew
+		 *        about.
+		 * @param cause The cause of the element's removal
+		 */
 		void removed(E value, Object cause);
 	}
 
@@ -307,6 +537,11 @@ public class ObservableCollectionDataFlowImpl {
 			listener.removed(value, cause);
 	}
 
+	/**
+	 * An immutable structure with the configuration from a {@link CollectionDataFlow#filterMod(Consumer) filterMod} operation
+	 *
+	 * @param <T> The type of elements to filter modification for
+	 */
 	public static class ModFilterer<T> {
 		private final String theUnmodifiableMessage;
 		private final boolean areUpdatesAllowed;
@@ -315,6 +550,7 @@ public class ObservableCollectionDataFlowImpl {
 		private final Function<? super T, String> theAddFilter;
 		private final Function<? super T, String> theRemoveFilter;
 
+		/** @param options The mod-filtering options to copy */
 		public ModFilterer(ModFilterBuilder<T> options) {
 			theUnmodifiableMessage = options.getUnmodifiableMsg();
 			this.areUpdatesAllowed = options.areUpdatesAllowed();
@@ -324,36 +560,63 @@ public class ObservableCollectionDataFlowImpl {
 			theRemoveFilter = options.getRemoveMsgFn();
 		}
 
+		/** @return The message that this filter returns for modifications that are not prevented by other settings */
 		public String getUnmodifiableMessage() {
 			return theUnmodifiableMessage;
 		}
 
+		/**
+		 * @return True if updates (sets where the new value is identical to the current value) are allowed even for an
+		 *         {@link #getUnmodifiableMessage() unmodifiable} filter
+		 */
 		public boolean areUpdatesAllowed() {
 			return areUpdatesAllowed;
 		}
 
+		/** @return The message that this filter returns for adds that are not prevented by the {@link #getAddFilter() add filter} */
 		public String getAddMessage() {
 			return theAddMessage;
 		}
 
+		/**
+		 * @return The message that this filter returns for removals that are not prevented by the {@link #getRemoveFilter() remove filter}
+		 */
 		public String getRemoveMessage() {
 			return theRemoveMessage;
 		}
 
+		/**
+		 * @return The message function that tests values for addition to the collection and returns null if the addition is allowed, or a
+		 *         reason code if not
+		 */
 		public Function<? super T, String> getAddFilter() {
 			return theAddFilter;
 		}
 
+		/**
+		 * @return The message function that tests values for removal from the collection and returns null if the removal is allowed, or a
+		 *         reason code if not
+		 */
 		public Function<? super T, String> getRemoveFilter() {
 			return theRemoveFilter;
 		}
 
+		/**
+		 * @return null if any possible operation may be allowed by this filter, or the {@link #getUnmodifiableMessage() unmodifiable}
+		 *         message if not
+		 */
 		public String isEnabled() {
 			if (areUpdatesAllowed)
 				return null;
 			return theUnmodifiableMessage;
 		}
 
+		/**
+		 * @param value The value to test
+		 * @param oldValue Supplies the current value of the element, if relevant
+		 * @return null if the value is acceptable to replace the old value in an element according to this filter's configuration, or a
+		 *         reason code otherwise
+		 */
 		public String isAcceptable(T value, Supplier<T> oldValue) {
 			String msg = null;
 			if (isAddFiltered() || isRemoveFiltered() || (theUnmodifiableMessage != null && areUpdatesAllowed)) {
@@ -380,7 +643,14 @@ public class ObservableCollectionDataFlowImpl {
 			return msg;
 		}
 
-		public void assertSet(T value, Supplier<T> oldValue) {
+		/**
+		 * @param value The value to set for an element
+		 * @param oldValue Supplies the current value of the element, if relevant
+		 * @throws UnsupportedOperationException If this filter prevents such an operation, regardless of the values involved
+		 * @throws IllegalArgumentException If this filter prevents such an operation due to the value of either the new value or the
+		 *         current value
+		 */
+		public void assertSet(T value, Supplier<T> oldValue) throws UnsupportedOperationException, IllegalArgumentException {
 			String msg = null;
 			if (isAddFiltered() || isRemoveFiltered() || (theUnmodifiableMessage != null && areUpdatesAllowed)) {
 				T old = oldValue.get();
@@ -412,14 +682,26 @@ public class ObservableCollectionDataFlowImpl {
 			}
 		}
 
+		/**
+		 * @return Whether this filter may prevent any adds <b>specifically</b> (not as a result of general {@link #getUnmodifiableMessage()
+		 *         unmodifiability})
+		 */
 		public boolean isAddFiltered() {
 			return theAddFilter != null || theAddMessage != null;
 		}
 
+		/**
+		 * @return Whether this filter may prevent any removals <b>specifically</b> (not as a result of general
+		 *         {@link #getUnmodifiableMessage() unmodifiability})
+		 */
 		public boolean isRemoveFiltered() {
 			return theRemoveFilter != null || theRemoveMessage != null;
 		}
 
+		/**
+		 * @param oldValue Supplies the current value of the element to remove, if relevant
+		 * @return null if the element can be removed according to this filter's configuration, or a reason code otherwise
+		 */
 		public String canRemove(Supplier<T> oldValue) {
 			String msg = null;
 			if (theRemoveFilter != null)
@@ -431,7 +713,11 @@ public class ObservableCollectionDataFlowImpl {
 			return msg;
 		}
 
-		public void assertRemove(Supplier<T> oldValue) {
+		/**
+		 * @param oldValue The current value of the element to remove, if relevant
+		 * @throws UnsupportedOperationException If this filter prevents the operation
+		 */
+		public void assertRemove(Supplier<T> oldValue) throws UnsupportedOperationException {
 			String msg = null;
 			if (theRemoveFilter != null)
 				msg = theRemoveFilter.apply(oldValue.get());
@@ -443,6 +729,11 @@ public class ObservableCollectionDataFlowImpl {
 				throw new UnsupportedOperationException(msg);
 		}
 
+		/**
+		 * @return null if this filter may allow some additions, or a reason code otherwise
+		 * @see #getAddMessage()
+		 * @see #getUnmodifiableMessage()
+		 */
 		public String canAdd() {
 			if (theAddMessage != null)
 				return theAddMessage;
@@ -451,6 +742,13 @@ public class ObservableCollectionDataFlowImpl {
 			return null;
 		}
 
+		/**
+		 * @param value The value to add
+		 * @return null if this filter allows the given value to be added, or a reason code otherwise
+		 * @see #getAddFilter()
+		 * @see #getAddMessage()
+		 * @see #getUnmodifiableMessage()
+		 */
 		public String canAdd(T value) {
 			String msg = null;
 			if (theAddFilter != null)
@@ -462,6 +760,11 @@ public class ObservableCollectionDataFlowImpl {
 			return msg;
 		}
 
+		/**
+		 * @param value The value to add
+		 * @throws UnsupportedOperationException If this filter prevents the addition regardless of the value
+		 * @throws IllegalArgumentException If this filter prevents the operation due to the value
+		 */
 		public void assertAdd(T value) throws UnsupportedOperationException, IllegalArgumentException {
 			String msg = null;
 			if (theAddFilter != null)
@@ -476,6 +779,7 @@ public class ObservableCollectionDataFlowImpl {
 				throw new UnsupportedOperationException(msg);
 		}
 
+		/** @return True if this filter does not prevent any operations */
 		public boolean isEmpty() {
 			return theUnmodifiableMessage == null && theAddMessage == null && theRemoveMessage == null && theAddFilter == null
 				&& theRemoveFilter == null;
@@ -528,12 +832,25 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
+	/**
+	 * An abstract {@link CollectionDataFlow} that delegates many of the derivation methods to standard implementations of this type
+	 *
+	 * @param <E> The source collection this flow is derived from
+	 * @param <I> The type this flow's parent
+	 * @param <T> This flow's type, i.e. the type of the collection that would be produced by {@link #collect()}
+	 */
 	public static abstract class AbstractDataFlow<E, I, T> implements CollectionDataFlow<E, I, T> {
 		private final ObservableCollection<E> theSource;
 		private final CollectionDataFlow<E, ?, I> theParent;
 		private final TypeToken<T> theTargetType;
 		private final Equivalence<? super T> theEquivalence;
 
+		/**
+		 * @param source The source collection
+		 * @param parent The parent flow (may be null)
+		 * @param targetType The type of this flow
+		 * @param equivalence The equivalence of this flow
+		 */
 		protected AbstractDataFlow(ObservableCollection<E> source, CollectionDataFlow<E, ?, I> parent, TypeToken<T> targetType,
 			Equivalence<? super T> equivalence) {
 			theSource = source;
@@ -542,10 +859,12 @@ public class ObservableCollectionDataFlowImpl {
 			theEquivalence = equivalence;
 		}
 
+		/** @return The source collection */
 		protected ObservableCollection<E> getSource() {
 			return theSource;
 		}
 
+		/** @return This flow's parent flow (may be null) */
 		protected CollectionDataFlow<E, ?, I> getParent() {
 			return theParent;
 		}
@@ -624,15 +943,15 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public UniqueDataFlow<E, T, T> distinct(Consumer<UniqueOptions> options) {
+		public DistinctDataFlow<E, T, T> distinct(Consumer<UniqueOptions> options) {
 			SimpleUniqueOptions uo = new SimpleUniqueOptions(equivalence() instanceof Equivalence.ComparatorEquivalence);
 			options.accept(uo);
-			return new ObservableSetImpl.UniqueOp<>(theSource, this, equivalence(), uo.isUseFirst(), uo.isPreservingSourceOrder());
+			return new ObservableSetImpl.DistinctOp<>(theSource, this, equivalence(), uo.isUseFirst(), uo.isPreservingSourceOrder());
 		}
 
 		@Override
-		public UniqueSortedDataFlow<E, T, T> distinctSorted(Comparator<? super T> compare, boolean alwaysUseFirst) {
-			return new ObservableSortedSetImpl.UniqueSortedOp<>(theSource, this, compare, alwaysUseFirst);
+		public DistinctSortedDataFlow<E, T, T> distinctSorted(Comparator<? super T> compare, boolean alwaysUseFirst) {
+			return new ObservableSortedSetImpl.DistinctSortedOp<>(theSource, this, compare, alwaysUseFirst);
 		}
 
 		@Override
@@ -640,7 +959,7 @@ public class ObservableCollectionDataFlowImpl {
 			Equivalence<? super K> keyEquivalence) {
 			TypeToken<Map.Entry<K, T>> entryType = ObservableMap.buildEntryType(keyType, getTargetType());
 			return new ObservableMultiMapImpl.DefaultMultiMapFlow<>(map(entryType, v -> new GroupedEntry<>(v, keyMap)), keyEquivalence,
-				equivalence(), this instanceof UniqueDataFlow);
+				equivalence(), this instanceof DistinctDataFlow);
 		}
 
 		@Override
@@ -648,14 +967,14 @@ public class ObservableCollectionDataFlowImpl {
 			Comparator<? super K> keyCompare) {
 			TypeToken<Map.Entry<K, T>> entryType = ObservableMap.buildEntryType(keyType, getTargetType());
 			return new ObservableMultiMapImpl.DefaultSortedMultiMapFlow<>(map(entryType, v -> new GroupedEntry<>(v, keyMap)),
-				Equivalence.of((Class<K>) keyType.getRawType(), keyCompare, true), equivalence(), this instanceof UniqueDataFlow);
+				Equivalence.of((Class<K>) keyType.getRawType(), keyCompare, true), equivalence(), this instanceof DistinctDataFlow);
 		}
 
 		@Override
 		public ObservableCollection<T> collectPassive() {
 			if (!supportsPassive())
 				throw new UnsupportedOperationException("This flow does not support passive collection");
-			return new PassiveDerivedCollection<>(managePassive(true));
+			return new PassiveDerivedCollection<>(getSource(), managePassive());
 		}
 
 		@Override
@@ -673,6 +992,8 @@ public class ObservableCollectionDataFlowImpl {
 			theCompare = compare;
 		}
 
+		/** @return The comparator used to re-order element values */
+		@SuppressWarnings("unused")
 		protected Comparator<? super T> getCompare() {
 			return theCompare;
 		}
@@ -683,7 +1004,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public PassiveCollectionManager<E, ?, T> managePassive(boolean forward) {
+		public PassiveCollectionManager<E, ?, T> managePassive() {
 			return null;
 		}
 
@@ -699,6 +1020,7 @@ public class ObservableCollectionDataFlowImpl {
 	 * @param <E> The type of the source collection
 	 */
 	public static class BaseCollectionDataFlow<E> extends AbstractDataFlow<E, E, E> {
+		/** @param source The source collection */
 		protected BaseCollectionDataFlow(ObservableCollection<E> source) {
 			super(source, null, source.getType(), source.equivalence());
 		}
@@ -709,8 +1031,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public PassiveCollectionManager<E, ?, E> managePassive(boolean forward) {
-			return new BaseCollectionPassThrough<>(forward ? getSource() : getSource().reverse());
+		public PassiveCollectionManager<E, ?, E> managePassive() {
+			return new BaseCollectionPassThrough<>(getSource());
 		}
 
 		@Override
@@ -735,8 +1057,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public PassiveCollectionManager<E, ?, T> managePassive(boolean forward) {
-			return new PassiveReversedManager<E, T>(getParent().managePassive(!forward));
+		public PassiveCollectionManager<E, ?, T> managePassive() {
+			return new PassiveReversedManager<>(getParent().managePassive());
 		}
 
 		@Override
@@ -759,7 +1081,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public PassiveCollectionManager<E, ?, T> managePassive(boolean forward) {
+		public PassiveCollectionManager<E, ?, T> managePassive() {
 			return null;
 		}
 
@@ -786,7 +1108,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public PassiveCollectionManager<E, ?, T> managePassive(boolean forward) {
+		public PassiveCollectionManager<E, ?, T> managePassive() {
 			return null;
 		}
 
@@ -808,8 +1130,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public PassiveCollectionManager<E, ?, T> managePassive(boolean forward) {
-			return new PassiveEquivalenceSwitchedManager<>(getParent().managePassive(forward), equivalence());
+		public PassiveCollectionManager<E, ?, T> managePassive() {
+			return new PassiveEquivalenceSwitchedManager<>(getParent().managePassive(), equivalence());
 		}
 
 		@Override
@@ -829,6 +1151,13 @@ public class ObservableCollectionDataFlowImpl {
 		private final Function<? super I, ? extends T> theMap;
 		private final MapDef<I, T> theOptions;
 
+		/**
+		 * @param source The source collection
+		 * @param parent This flow's parent (not null)
+		 * @param target The type of this flow
+		 * @param map The mapping function to produce this flow's values from its parent's
+		 * @param options The mapping options governing certain aspects of this flow's behavior, e.g. caching
+		 */
 		protected MapOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, I> parent, TypeToken<T> target,
 			Function<? super I, ? extends T> map, MapDef<I, T> options) {
 			super(source, parent, target, mapEquivalence(parent.getTargetType(), parent.equivalence(), target, map, options));
@@ -844,8 +1173,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public PassiveCollectionManager<E, ?, T> managePassive(boolean forward) {
-			return new PassiveMappedCollectionManager<>(getParent().managePassive(forward), getTargetType(), theMap, equivalence(),
+		public PassiveCollectionManager<E, ?, T> managePassive() {
+			return new PassiveMappedCollectionManager<>(getParent().managePassive(), getTargetType(), theMap, equivalence(),
 				theOptions);
 		}
 
@@ -875,6 +1204,13 @@ public class ObservableCollectionDataFlowImpl {
 	public static class CombinedCollectionOp<E, I, T> extends AbstractDataFlow<E, I, T> {
 		private final CombinedFlowDef<I, T> theDef;
 
+		/**
+		 * @param source The source collection
+		 * @param parent This flow's parent (not null)
+		 * @param target The type of this flow
+		 * @param def The combination definition used to produce this flow's values from its parent's and to govern certain aspects of this
+		 *        flow's behavior, e.g. caching
+		 */
 		protected CombinedCollectionOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, I> parent, TypeToken<T> target,
 			CombinedFlowDef<I, T> def) {
 			super(source, parent, target,
@@ -895,8 +1231,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public PassiveCollectionManager<E, ?, T> managePassive(boolean forward) {
-			return new PassiveCombinedCollectionManager<>(getParent().managePassive(forward), getTargetType(), theDef);
+		public PassiveCollectionManager<E, ?, T> managePassive() {
+			return new PassiveCombinedCollectionManager<>(getParent().managePassive(), getTargetType(), theDef);
 		}
 
 		@Override
@@ -919,8 +1255,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public PassiveCollectionManager<E, ?, T> managePassive(boolean forward) {
-			return new PassiveRefreshingCollectionManager<>(getParent().managePassive(forward), theRefresh);
+		public PassiveCollectionManager<E, ?, T> managePassive() {
+			return new PassiveRefreshingCollectionManager<>(getParent().managePassive(), theRefresh);
 		}
 
 		@Override
@@ -944,7 +1280,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public PassiveCollectionManager<E, ?, T> managePassive(boolean forward) {
+		public PassiveCollectionManager<E, ?, T> managePassive() {
 			return null;
 		}
 
@@ -954,9 +1290,20 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
+	/**
+	 * A flow produced from a {@link CollectionDataFlow#filterMod(Consumer) filterMod} operation
+	 *
+	 * @param <E> The type of the source collection
+	 * @param <T> The type of this flow
+	 */
 	protected static class ModFilteredOp<E, T> extends AbstractDataFlow<E, T, T> {
 		private final ModFilterer<T> theOptions;
 
+		/**
+		 * @param source The source collection
+		 * @param parent The parent flow
+		 * @param options The modification filter options to enforce
+		 */
 		protected ModFilteredOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, ModFilterer<T> options) {
 			super(source, parent, parent.getTargetType(), parent.equivalence());
 			theOptions = options;
@@ -968,8 +1315,8 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public PassiveCollectionManager<E, ?, T> managePassive(boolean forward) {
-			return new PassiveModFilteredManager<>(getParent().managePassive(forward), theOptions);
+		public PassiveCollectionManager<E, ?, T> managePassive() {
+			return new PassiveModFilteredManager<>(getParent().managePassive(), theOptions);
 		}
 
 		@Override
@@ -993,7 +1340,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public PassiveCollectionManager<E, ?, T> managePassive(boolean forward) {
+		public PassiveCollectionManager<E, ?, T> managePassive() {
 			return null;
 		}
 
@@ -1025,6 +1372,11 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public Equivalence<? super E> equivalence() {
 			return theSource.equivalence();
+		}
+
+		@Override
+		public boolean isReversed() {
+			return false;
 		}
 
 		@Override
@@ -1068,11 +1420,6 @@ public class ObservableCollectionDataFlowImpl {
 		public void setValue(Collection<MutableCollectionElement<E>> elements, E value) {
 			theSource.setValue(//
 				elements.stream().map(el -> el.getElementId()).collect(Collectors.toList()), value);
-		}
-
-		@Override
-		public ObservableCollection<E> getSource() {
-			return theSource;
 		}
 	}
 
@@ -1238,6 +1585,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isReversed() {
+			return !theParent.isReversed();
+		}
+
+		@Override
 		public ObservableValue<? extends Function<? super E, ? extends T>> map() {
 			return theParent.map();
 		}
@@ -1277,11 +1629,6 @@ public class ObservableCollectionDataFlowImpl {
 			theParent.setValue(//
 				elements, value);
 			// elements.stream().map(el -> el.reverse()).collect(Collectors.toList()), value);
-		}
-
-		@Override
-		public ObservableCollection<E> getSource() {
-			return theParent.getSource();
 		}
 	}
 
@@ -1351,6 +1698,12 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
+	/**
+	 * An {@link ActiveCollectionManager active manager} that sorts its elements by value
+	 *
+	 * @param <E> The type of the source collection
+	 * @param <T> The type of this manager
+	 */
 	protected static class SortedManager<E, T> implements ActiveCollectionManager<E, T, T> {
 		private final ActiveCollectionManager<E, ?, T> theParent;
 		private final Comparator<? super T> theCompare;
@@ -1359,6 +1712,10 @@ public class ObservableCollectionDataFlowImpl {
 		private final Comparator<BiTuple<T, DerivedCollectionElement<T>>> theTupleCompare;
 		private ElementAccepter<T> theAccepter;
 
+		/**
+		 * @param parent The parent manager
+		 * @param compare The comparator to use to sort the elements
+		 */
 		protected SortedManager(ActiveCollectionManager<E, ?, T> parent, Comparator<? super T> compare) {
 			theParent = parent;
 			theCompare = compare;
@@ -1398,8 +1755,10 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
-			//TODO Why can't we find it?
-			return null; // Even if the parent could've found it, the order will be mixed up now
+			// Most likely, this manager's equivalence is not the same as its comparison order, so we can't take advantage of the
+			// sorting to find the element.
+			// And even if the parent could've found it, the order will be mixed up now.
+			return null;
 		}
 
 		@Override
@@ -2072,6 +2431,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isReversed() {
+			return theParent.isReversed();
+		}
+
+		@Override
 		public ObservableValue<? extends Function<? super E, ? extends T>> map() {
 			return theParent.map();
 		}
@@ -2109,11 +2473,6 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public void setValue(Collection<MutableCollectionElement<T>> elements, T value) {
 			theParent.setValue(elements, value);
-		}
-
-		@Override
-		public ObservableCollection<E> getSource() {
-			return theParent.getSource();
 		}
 	}
 
@@ -2211,6 +2570,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isReversed() {
+			return theParent.isReversed();
+		}
+
+		@Override
 		public ObservableValue<Function<? super E, T>> map() {
 			return theParent.map().map(parentMap -> new MapWithParent<>(parentMap, theMap));
 		}
@@ -2292,11 +2656,6 @@ public class ObservableCollectionDataFlowImpl {
 			if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
 				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 			theParent.setValue(remaining, reversed);
-		}
-
-		@Override
-		public ObservableCollection<E> getSource() {
-			return theParent.getSource();
 		}
 
 		class MappedElement implements MutableCollectionElement<T> {
@@ -2396,6 +2755,13 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
+	/**
+	 * An {@link ActiveCollectionManager active manager} produced by a {@link CollectionDataFlow#map(TypeToken, Function) mapping} operation
+	 *
+	 * @param <E> The type of the source collection
+	 * @param <I> The type of the parent flow
+	 * @param <T> The type of this manager
+	 */
 	public static class ActiveMappedCollectionManager<E, I, T> implements ActiveCollectionManager<E, I, T> {
 		private final ActiveCollectionManager<E, ?, I> theParent;
 		private final TypeToken<T> theTargetType;
@@ -2403,6 +2769,13 @@ public class ObservableCollectionDataFlowImpl {
 		private final Equivalence<? super T> theEquivalence;
 		private final MapDef<I, T> theOptions;
 
+		/**
+		 * @param parent The parent manager
+		 * @param targetType The type of this manager
+		 * @param map The mapping function to produce this manager's values from the source values
+		 * @param equivalence The equivalence for this manager
+		 * @param options The mapping options governing some of the manager's behavior, e.g. caching
+		 */
 		public ActiveMappedCollectionManager(ActiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
 			Function<? super I, ? extends T> map, Equivalence<? super T> equivalence, MapDef<I, T> options) {
 			theParent = parent;
@@ -2505,6 +2878,7 @@ public class ObservableCollectionDataFlowImpl {
 			}, listening);
 		}
 
+		/** A {@link DerivedCollectionElement} implementation for {@link ActiveMappedCollectionManager} */
 		public class MappedElement implements DerivedCollectionElement<T> {
 			private final DerivedCollectionElement<I> theParentEl;
 			private CollectionElementListener<T> theListener;
@@ -2567,6 +2941,7 @@ public class ObservableCollectionDataFlowImpl {
 				}
 			}
 
+			/** @return The source element that this element derives its data from */
 			public DerivedCollectionElement<I> getParentEl() {
 				return theParentEl;
 			}
@@ -2689,6 +3064,11 @@ public class ObservableCollectionDataFlowImpl {
 				for (int a = 0; a < valueLocks.length; a++)
 					valueLocks[a].close();
 			};
+		}
+
+		@Override
+		public boolean isReversed() {
+			return theParent.isReversed();
 		}
 
 		@Override
@@ -2865,11 +3245,6 @@ public class ObservableCollectionDataFlowImpl {
 				return;
 			theParent.setValue(elements.stream().map(el -> ((CombinedElement) el).theInterm).collect(Collectors.toList()),
 				((CombinedElement) elements.iterator().next()).theCombinedMap.reverse(value));
-		}
-
-		@Override
-		public ObservableCollection<E> getSource() {
-			return theParent.getSource();
 		}
 
 		class SimpleSupplier implements Supplier<Object> {
@@ -3380,6 +3755,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isReversed() {
+			return theParent.isReversed();
+		}
+
+		@Override
 		public ObservableValue<? extends Function<? super E, ? extends T>> map() {
 			return theParent.map().refresh(theRefresh);
 		}
@@ -3417,11 +3797,6 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public void setValue(Collection<MutableCollectionElement<T>> elements, T value) {
 			theParent.setValue(elements, value);
-		}
-
-		@Override
-		public ObservableCollection<E> getSource() {
-			return theParent.getSource();
 		}
 	}
 
@@ -3837,6 +4212,11 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isReversed() {
+			return theParent.isReversed();
+		}
+
+		@Override
 		public ObservableValue<? extends Function<? super E, ? extends T>> map() {
 			return theParent.map();
 		}
@@ -3882,11 +4262,6 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public void setValue(Collection<MutableCollectionElement<T>> elements, T value) {
 			theParent.setValue(elements.stream().map(el -> ((ModFilteredElement) el).theParentMapped).collect(Collectors.toList()), value);
-		}
-
-		@Override
-		public ObservableCollection<E> getSource() {
-			return theParent.getSource();
 		}
 
 		private class ModFilteredElement implements MutableCollectionElement<T> {

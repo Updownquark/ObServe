@@ -9,7 +9,7 @@ import com.google.common.reflect.TypeToken;
 /**
  * An event representing a change to a {@link ObservableMultiMap} or {@link ObservableMap}
  *
- * @param <K> The key-type of th map
+ * @param <K> The key-type of the map
  * @param <V> The value-type of the map
  */
 public class ObservableMapEvent<K, V> extends ObservableCollectionEvent<V> {
@@ -17,6 +17,19 @@ public class ObservableMapEvent<K, V> extends ObservableCollectionEvent<V> {
 	private final K theKey;
 	private final int theKeyIndex;
 
+	/**
+	 * @param keyElementId The element ID of the entry in the map under which a value was added/removed/changed
+	 * @param valueElementId The element ID of the entry in the map entry's value collection that was added/removed changed
+	 * @param keyType The key type of the map
+	 * @param valueType The value type of the map
+	 * @param keyIndex The index in the key set of the key under which a value was added/removed/changed
+	 * @param valueIndex The index in the entry's value collection of the element that was added/removed/changed
+	 * @param type The type of the change (addition/removal/change)
+	 * @param key The key under which a value was added/removed/changed
+	 * @param oldValue The value of the element before the change (for change type of {@link CollectionChangeType#set set} only)
+	 * @param newValue The value of the element after the change
+	 * @param cause The cause of the change
+	 */
 	public ObservableMapEvent(ElementId keyElementId, ElementId valueElementId, TypeToken<K> keyType, TypeToken<V> valueType, int keyIndex,
 		int valueIndex, CollectionChangeType type, K key, V oldValue, V newValue, Object cause) {
 		super(valueElementId, valueType, valueIndex, type, oldValue, newValue, cause);
@@ -25,14 +38,17 @@ public class ObservableMapEvent<K, V> extends ObservableCollectionEvent<V> {
 		theKeyIndex = keyIndex;
 	}
 
+	/** @return The element ID of the entry in the map under which a value was added/removed/changed */
 	public ElementId getKeyElement() {
 		return theKeyElement;
 	}
 
+	/** @return The key under which a value was added/removed/changed */
 	public K getKey() {
 		return theKey;
 	}
 
+	/** @return The index in the key set of the key under which a value was added/removed/changed */
 	public int getKeyIndex() {
 		return theKeyIndex;
 	}

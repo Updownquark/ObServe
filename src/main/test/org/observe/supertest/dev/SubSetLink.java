@@ -28,7 +28,7 @@ public class SubSetLink<E> extends AbstractObservableCollectionLink<E, E> {
 	private int theStartIndex;
 
 	public SubSetLink(ObservableCollectionChainLink<?, E> parent, TestValueType type,
-		ObservableCollection.UniqueSortedDataFlow<?, ?, E> flow, TestHelper helper, boolean checkRemovedValues, E min, boolean includeMin,
+		ObservableCollection.DistinctSortedDataFlow<?, ?, E> flow, TestHelper helper, boolean checkRemovedValues, E min, boolean includeMin,
 		E max, boolean includeMax) {
 		super(parent, type, flow, helper, checkRemovedValues);
 		theCompare = flow.comparator();

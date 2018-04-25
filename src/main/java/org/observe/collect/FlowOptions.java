@@ -178,7 +178,7 @@ public interface FlowOptions {
 		}
 	}
 
-	/** Options used by {@link ObservableCollection.CollectionDataFlow#groupBy(TypeToken, Function, Consumer)} */
+	/** Options used by {@link ObservableCollection.CollectionDataFlow#groupBy(TypeToken, Function)} */
 	class GroupingOptions extends XformOptions.SimpleXformOptions implements UniqueOptions {
 		private final boolean isSorted;
 		private boolean isStaticCategories = false;
@@ -292,6 +292,7 @@ public interface FlowOptions {
 		}
 	}
 
+	/** An immutable version of {@link GroupingOptions} */
 	class GroupingDef {
 		private final boolean isStaticCategories;
 		private final boolean isUsingFirst;
@@ -303,14 +304,17 @@ public interface FlowOptions {
 			isPreservingSourceOrder = options.isPreservingSourceOrder();
 		}
 
+		/** @return Whether to assume that collection values will never change categories */
 		public boolean isStaticCategories() {
 			return isStaticCategories;
 		}
 
+		/** @return Whether to always use the mapped value of the earliest element in the collection as the representative key */
 		public boolean isUsingFirst() {
 			return isUsingFirst;
 		}
 
+		/** @return Whether to preserve the source collection's order in the key set */
 		public boolean isPreservingSourceOrder() {
 			return isPreservingSourceOrder;
 		}

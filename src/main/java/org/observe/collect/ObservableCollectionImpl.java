@@ -34,6 +34,7 @@ import org.qommons.BiTuple;
 import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
 import org.qommons.ConcurrentHashSet;
+import org.qommons.IdentityKey;
 import org.qommons.Ternian;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
@@ -773,8 +774,25 @@ public final class ObservableCollectionImpl {
 			return theCollection.lock(false, null);
 		}
 
+		@Override
+		public T get() {
+			return getValue(getCurrent());
+		}
+
 		/** @return The initial computation value */
 		protected abstract X init();
+
+		/** @return The computation value for the collection's current state */
+		protected X getCurrent() {
+			try (Transaction t = theCollection.lock(false, null)) {
+				ValueHolder<X> value = new ValueHolder<>(init());
+				int[] i = new int[1];
+				theCollection.spliterator()
+				.forEachElement(el -> value.accept(update(value.get(), new ObservableCollectionEvent<>(el.getElementId(),
+					theCollection.getType(), i[0]++, CollectionChangeType.add, null, el.get(), null))), true);
+				return value.get();
+			}
+		}
 
 		/**
 		 * Performs a reduction of a computation value with a collection element
@@ -892,6 +910,14 @@ public final class ObservableCollectionImpl {
 			return commonCount;
 		}
 
+		/**
+		 * @param left The left collection
+		 * @param right The right collection
+		 * @param until The observable to terminate this structure's record-keeping activity
+		 * @param weak Whether to listen to the collections weakly or strongly
+		 * @param initAction The action to perform on this structure after the initial values of the collections are accounted for
+		 * @return The subscription to use to cease record-keeping
+		 */
 		public Subscription init(ObservableCollection<E> left, ObservableCollection<X> right, Observable<?> until, boolean weak,
 			Consumer<ValueCounts<E, X>> initAction) {
 			theLock.lock();
@@ -1012,6 +1038,15 @@ public final class ObservableCollectionImpl {
 				changed(count, oldValue, CollectionChangeType.set, onLeft, false, cause);
 		}
 
+		/**
+		 * @param count The counts for value in the left and right collections
+		 * @param oldValue The old value of the change
+		 * @param type The type of the change that occurred
+		 * @param onLeft Whether the change occurred in the left or in the right collection
+		 * @param containmentChange Whether the change resulted in either the left or right collection's containment of the value to change
+		 *        to true or false
+		 * @param cause The cause of the change
+		 */
 		protected abstract void changed(ValueCount<?> count, Object oldValue, CollectionChangeType type, boolean onLeft,
 			boolean containmentChange, Causable cause);
 	}
@@ -1265,17 +1300,25 @@ public final class ObservableCollectionImpl {
 		private final ObservableCollection<E> theSource;
 		private final PassiveCollectionManager<E, ?, T> theFlow;
 		private final Equivalence<? super T> theEquivalence;
+		private final boolean isReversed;
 
-		public PassiveDerivedCollection(PassiveCollectionManager<E, ?, T> flow) {
-			theSource = flow.getSource();
+		/**
+		 * @param source The source collection
+		 * @param flow The passive manager to produce this collection's elements
+		 */
+		public PassiveDerivedCollection(ObservableCollection<E> source, PassiveCollectionManager<E, ?, T> flow) {
+			theSource = source;
 			theFlow = flow;
 			theEquivalence = theFlow.equivalence();
+			isReversed = theFlow.isReversed();
 		}
 
+		/** @return The source collection */
 		protected ObservableCollection<E> getSource() {
 			return theSource;
 		}
 
+		/** @return The passive manager that produces this collection's elements */
 		protected PassiveCollectionManager<E, ?, T> getFlow() {
 			return theFlow;
 		}
@@ -1325,11 +1368,36 @@ public final class ObservableCollectionImpl {
 			return theSource.isEmpty();
 		}
 
+		/**
+		 * @param source The element ID from the source collection
+		 * @return The ID of the corresponding element in this collection
+		 */
+		protected ElementId mapId(ElementId source) {
+			if (source == null)
+				return null;
+			return isReversed ? source.reverse() : source;
+		}
+
+		/**
+		 * @param mapped The ID of an element in this collection
+		 * @return The ID of the corresponding element in the source collection
+		 */
+		protected ElementId reverseId(ElementId mapped) {
+			if (mapped == null)
+				return null;
+			return isReversed ? mapped.reverse() : mapped;
+		}
+
 		@Override
 		public String canAdd(T value, ElementId after, ElementId before) {
 			FilterMapResult<T, E> reversed = theFlow.reverse(value, true);
 			if (!reversed.isAccepted())
 				return reversed.getRejectReason();
+			if (isReversed) {
+				ElementId temp = reverseId(after);
+				after = reverseId(before);
+				before = temp;
+			}
 			return theSource.canAdd(reversed.result, after, before);
 		}
 
@@ -1341,6 +1409,11 @@ public final class ObservableCollectionImpl {
 				FilterMapResult<T, E> reversed = theFlow.reverse(value, true);
 				if (reversed.throwIfError(IllegalArgumentException::new) != null)
 					return null;
+				if (isReversed) {
+					ElementId temp = reverseId(after);
+					after = reverseId(before);
+					before = temp;
+				}
 				CollectionElement<E> srcEl = theSource.addElement(reversed.result, after, before, first);
 				return srcEl == null ? null : elementFor(srcEl, null);
 			}
@@ -1351,10 +1424,11 @@ public final class ObservableCollectionImpl {
 			if (!theFlow.isRemoveFiltered())
 				theSource.clear();
 			else {
-				spliterator().forEachElementM(el -> {
+				boolean reverse = isReversed;
+				spliterator(!reverse).forEachElementM(el -> {
 					if (el.canRemove() == null)
 						el.remove();
-				}, true);
+				}, !reverse);
 			}
 		}
 
@@ -1363,22 +1437,31 @@ public final class ObservableCollectionImpl {
 			try (Transaction t = lock(true, false, null)) {
 				Function<? super E, ? extends T> map = theFlow.map().get();
 				theFlow.setValue(//
-					elements.stream().map(el -> theFlow.map(theSource.mutableElement(el), map)).collect(Collectors.toList()), value);
+					elements.stream().map(el -> theFlow.map(theSource.mutableElement(reverseId(el)), map)).collect(Collectors.toList()),
+					value);
 			}
 		}
 
 		@Override
 		public int getElementsBefore(ElementId id) {
+			if (isReversed)
+				return theSource.getElementsAfter(id.reverse());
+			else
 			return theSource.getElementsBefore(id);
 		}
 
 		@Override
 		public int getElementsAfter(ElementId id) {
+			if (isReversed)
+				return theSource.getElementsBefore(id.reverse());
+			else
 			return theSource.getElementsAfter(id);
 		}
 
 		@Override
 		public CollectionElement<T> getElement(int index) {
+			if (isReversed)
+				index = getSource().size() - index - 1;
 			return elementFor(theSource.getElement(index), null);
 		}
 
@@ -1397,11 +1480,12 @@ public final class ObservableCollectionImpl {
 					}
 				}
 				ElementId[] match = new ElementId[1];
-				MutableElementSpliterator<E> spliter = theSource.spliterator(first);
+				boolean forward = first ^ isReversed;
+				MutableElementSpliterator<E> spliter = theSource.spliterator(forward);
 				while (match[0] == null && spliter.forElement(el -> {
 					if (equivalence().elementEquals(map.apply(el.get()), value))
 						match[0] = el.getElementId();
-				}, first)) {}
+				}, forward)) {}
 				if (match[0] == null)
 					return null;
 				return elementFor(theSource.getElement(match[0]), map);
@@ -1410,31 +1494,46 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public CollectionElement<T> getElement(ElementId id) {
-			return elementFor(theSource.getElement(id), null);
+			return elementFor(theSource.getElement(reverseId(id)), null);
 		}
 
 		@Override
 		public CollectionElement<T> getTerminalElement(boolean first) {
+			if (isReversed)
+				first = !first;
 			CollectionElement<E> t = theSource.getTerminalElement(first);
 			return t == null ? null : elementFor(t, null);
 		}
 
 		@Override
 		public CollectionElement<T> getAdjacentElement(ElementId elementId, boolean next) {
+			if (isReversed) {
+				elementId = elementId.reverse();
+				next = !next;
+			}
 			CollectionElement<E> adj = theSource.getAdjacentElement(elementId, next);
 			return adj == null ? null : elementFor(adj, null);
 		}
 
 		@Override
 		public MutableCollectionElement<T> mutableElement(ElementId id) {
-			return mutableElementFor(theSource.mutableElement(id), null);
+			return mutableElementFor(theSource.mutableElement(reverseId(id)), null);
 		}
 
 		@Override
 		public MutableElementSpliterator<T> spliterator(ElementId element, boolean asNext) {
+			if (isReversed) {
+				element = reverseId(element);
+				asNext = !asNext;
+			}
 			return new PassiveDerivedMutableSpliterator(theSource.spliterator(element, asNext));
 		}
 
+		/**
+		 * @param el The source element
+		 * @param map The mapping function for the element's values, or null to just get the current map from the flow
+		 * @return The corresponding element for this collection
+		 */
 		protected CollectionElement<T> elementFor(CollectionElement<? extends E> el, Function<? super E, ? extends T> map) {
 			Function<? super E, ? extends T> fMap = map == null ? theFlow.map().get() : map;
 			return new CollectionElement<T>() {
@@ -1445,11 +1544,16 @@ public final class ObservableCollectionImpl {
 
 				@Override
 				public ElementId getElementId() {
-					return el.getElementId();
+					return mapId(el.getElementId());
 				}
 			};
 		}
 
+		/**
+		 * @param el The source mutable element
+		 * @param map The mapping function for the element's values, or null to just get the current map from the flow
+		 * @return The corresponding mutable element for this collection
+		 */
 		protected MutableCollectionElement<T> mutableElementFor(MutableCollectionElement<E> el, Function<? super E, ? extends T> map) {
 			Function<? super E, ? extends T> fMap = map == null ? theFlow.map().get() : map;
 			MutableCollectionElement<T> flowEl = theFlow.map(el, fMap);
@@ -1461,7 +1565,7 @@ public final class ObservableCollectionImpl {
 
 				@Override
 				public ElementId getElementId() {
-					return el.getElementId();
+					return mapId(el.getElementId());
 				}
 
 				@Override
@@ -1504,8 +1608,9 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public MutableElementSpliterator<T> spliterator(boolean fromStart) {
-			MutableElementSpliterator<E> srcSpliter = theSource.spliterator(fromStart);
-			return new PassiveDerivedMutableSpliterator(srcSpliter);
+			if (isReversed)
+				fromStart = !fromStart;
+			return new PassiveDerivedMutableSpliterator(theSource.spliterator(fromStart));
 		}
 
 		@Override
@@ -1520,16 +1625,19 @@ public final class ObservableCollectionImpl {
 					}
 					try (Transaction sourceLock = theSource.lock(false, evt)) {
 						currentMap[0] = evt.getNewValue();
-						MutableElementSpliterator<? extends E> sourceSpliter = theSource.spliterator();
+						MutableElementSpliterator<? extends E> sourceSpliter = theSource.spliterator(!isReversed);
 						int[] index = new int[1];
 						sourceSpliter.forEachElement(sourceEl -> {
 							E sourceVal = sourceEl.get();
-							observer.accept(new ObservableCollectionEvent<>(sourceEl.getElementId(), getType(), index[0]++,
+							observer.accept(new ObservableCollectionEvent<>(mapId(sourceEl.getElementId()), getType(), index[0]++,
 								CollectionChangeType.set, evt.getOldValue().apply(sourceVal), currentMap[0].apply(sourceVal), evt));
-						}, true);
+						}, !isReversed);
 					}
 				});
+				try (Transaction sourceT = theSource.lock(false, null)) {
 				sourceSub = getSource().onChange(new Consumer<ObservableCollectionEvent<? extends E>>() {
+						private int theSize = isReversed ? size() : -1;
+
 					@Override
 					public void accept(ObservableCollectionEvent<? extends E> evt) {
 						try (Transaction t = theFlow.lock(true, evt)) {
@@ -1553,11 +1661,22 @@ public final class ObservableCollectionImpl {
 							default:
 								throw new IllegalStateException("Unrecognized collection change type: " + evt.getType());
 							}
-							observer.accept(new ObservableCollectionEvent<>(evt.getElementId(), getType(), evt.getIndex(), evt.getType(),
+								int index;
+								if (!isReversed)
+									index = evt.getIndex();
+								else {
+									if (evt.getType() == CollectionChangeType.add)
+										theSize++;
+									index = theSize - evt.getIndex() - 1;
+									if (evt.getType() == CollectionChangeType.remove)
+										theSize--;
+								}
+								observer.accept(new ObservableCollectionEvent<>(mapId(evt.getElementId()), getType(), index, evt.getType(),
 								oldValue, newValue, evt));
 						}
 					}
 				});
+			}
 			}
 			return Subscription.forAll(sourceSub, mapSub);
 		}
@@ -1567,6 +1686,7 @@ public final class ObservableCollectionImpl {
 			return ObservableCollection.toString(this);
 		}
 
+		/** A spliterator for the {@link PassiveDerivedCollection} class */
 		protected class PassiveDerivedMutableSpliterator extends MutableElementSpliterator.SimpleMutableSpliterator<T> {
 			private final MutableElementSpliterator<E> theSourceSpliter;
 			private final Function<? super E, ? extends T> theMap;
@@ -1594,12 +1714,18 @@ public final class ObservableCollectionImpl {
 
 			@Override
 			protected boolean internalForElement(Consumer<? super CollectionElement<T>> action, boolean forward) {
-				return theSourceSpliter.forElement(el -> action.accept(elementFor(el, theMap)), forward);
+				if (isReversed)
+					forward = !forward;
+				return theSourceSpliter.forElement(//
+					el -> action.accept(elementFor(el, theMap)), forward);
 			}
 
 			@Override
 			protected boolean internalForElementM(Consumer<? super MutableCollectionElement<T>> action, boolean forward) {
-				return theSourceSpliter.forElementM(el -> action.accept(mutableElementFor(el, theMap)), forward);
+				if (isReversed)
+					forward = !forward;
+				return theSourceSpliter.forElementM(//
+					el -> action.accept(mutableElementFor(el, theMap)), forward);
 			}
 
 			@Override
@@ -1614,7 +1740,7 @@ public final class ObservableCollectionImpl {
 	 * Stores strong references to actively-derived collections on which listeners are installed, preventing the garbage-collection of these
 	 * collections since the listeners only contain weak references to their data sources.
 	 */
-	private static final Set<ActiveDerivedCollection<?>> STRONG_REFS = new ConcurrentHashSet<>();
+	private static final Set<IdentityKey<ActiveDerivedCollection<?>>> STRONG_REFS = new ConcurrentHashSet<>();
 
 	/**
 	 * A derived collection, {@link ObservableCollection.CollectionDataFlow#collect() collected} from a
@@ -1625,12 +1751,19 @@ public final class ObservableCollectionImpl {
 	 * @param <T> The type of values in the collection
 	 */
 	public static class ActiveDerivedCollection<T> implements ObservableCollection<T> {
+		/**
+		 * Holds a {@link ObservableCollectionDataFlowImpl.DerivedCollectionElement}s for an {@link ActiveDerivedCollection}
+		 *
+		 * @param <T> The type of the collection
+		 */
 		protected static class DerivedElementHolder<T> implements ElementId {
+			/** The element from the flow */
 			protected final DerivedCollectionElement<T> element;
 			BinaryTreeNode<DerivedElementHolder<T>> treeNode;
 
-			protected DerivedElementHolder(DerivedCollectionElement<T> manager) {
-				this.element = manager;
+			/** @param element The element from the flow */
+			protected DerivedElementHolder(DerivedCollectionElement<T> element) {
+				this.element = element;
 			}
 
 			@Override
@@ -1649,6 +1782,7 @@ public final class ObservableCollectionImpl {
 				return this;
 			}
 
+			/** @return The current value of this element */
 			public T get() {
 				return element.get();
 			}
@@ -1680,6 +1814,10 @@ public final class ObservableCollectionImpl {
 		private final AtomicLong theStructureStamp;
 		private final WeakListening.Builder theWeakListening;
 
+		/**
+		 * @param flow The active data manager to power this collection
+		 * @param until The observable to cease maintenance
+		 */
 		public ActiveDerivedCollection(ActiveCollectionManager<?, ?, T> flow, Observable<?> until) {
 			theFlow = flow;
 			theDerivedElements = new BetterTreeSet<>(false, (e1, e2) -> e1.element.compareTo(e2.element));
@@ -1737,14 +1875,20 @@ public final class ObservableCollectionImpl {
 			theFlow.begin(true, onElement, theWeakListening.getListening());
 		}
 
+		/**
+		 * @param el The flow element
+		 * @return The holder for the element
+		 */
 		protected DerivedElementHolder<T> createHolder(DerivedCollectionElement<T> el) {
 			return new DerivedElementHolder<>(el);
 		}
 
+		/** @return This collection's data manager */
 		protected ActiveCollectionManager<?, ?, T> getFlow() {
 			return theFlow;
 		}
 
+		/** @return This collection's element holders */
 		protected BetterTreeSet<DerivedElementHolder<T>> getPresentElements() {
 			return theDerivedElements;
 		}
@@ -1777,11 +1921,11 @@ public final class ObservableCollectionImpl {
 			// Add a strong reference to this collection while we have listeners.
 			// Otherwise, this collection could be GC'd and listeners (which may not reference this collection) would just be left hanging
 			if (theListenerCount.getAndIncrement() == 0)
-				STRONG_REFS.add(this);
+				STRONG_REFS.add(new IdentityKey<>(this));
 			return () -> {
 				remove.run();
 				if (theListenerCount.decrementAndGet() == 0)
-					STRONG_REFS.remove(this);
+					STRONG_REFS.remove(new IdentityKey<>(this));
 			};
 		}
 
@@ -1938,6 +2082,10 @@ public final class ObservableCollectionImpl {
 			return new MutableDerivedSpliterator(theDerivedElements.spliterator(el.check().treeNode.getElementId(), asNext));
 		}
 
+		/**
+		 * @param el The element holder
+		 * @return A collection element for the given element in this collection
+		 */
 		protected CollectionElement<T> elementFor(DerivedElementHolder<T> el) {
 			el.check();
 			return new CollectionElement<T>() {
@@ -1963,6 +2111,10 @@ public final class ObservableCollectionImpl {
 			return new MutableDerivedSpliterator(theDerivedElements.spliterator(fromStart));
 		}
 
+		/**
+		 * @param elementSpliter The element set's spliterator
+		 * @return A spliterator for this collection placed at the given spliterator's position
+		 */
 		protected MutableElementSpliterator<T> spliterator(MutableElementSpliterator<DerivedElementHolder<T>> elementSpliter) {
 			return new MutableDerivedSpliterator(elementSpliter);
 		}
@@ -2056,12 +2208,14 @@ public final class ObservableCollectionImpl {
 
 			@Override
 			protected boolean internalForElement(Consumer<? super CollectionElement<T>> action, boolean forward) {
-				return theElementSpliter.forValue(element -> action.accept(elementFor(element)), forward);
+				return theElementSpliter.forValue(//
+					element -> action.accept(elementFor(element)), forward);
 			}
 
 			@Override
 			protected boolean internalForElementM(Consumer<? super MutableCollectionElement<T>> action, boolean forward) {
-				return theElementSpliter.forElementM(element -> action.accept(mutableElement(element.get(), element)), forward);
+				return theElementSpliter.forElementM(//
+					element -> action.accept(mutableElement(element.get(), element)), forward);
 			}
 
 			@Override
