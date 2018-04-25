@@ -746,13 +746,13 @@ public final class ObservableCollectionImpl {
 							T oldV = value.get();
 							T v = getValue((X) values.get("x"));
 							value.accept(v);
-							if (!init[0])
+							if (init[0])
 								fireChangeEvent(oldV, v, root, observer::onNext);
 						});
-					x.accept(init());
-					value.accept(getValue(x.get()));
 					Subscription sub;
 					try (Transaction t = theCollection.lock(false, null)) {
+						x.accept(init());
+						value.accept(getValue(x.get()));
 						sub = theCollection.onChange(evt -> {
 							X newX = update(x.get(), evt);
 							x.accept(newX);
@@ -761,7 +761,7 @@ public final class ObservableCollectionImpl {
 							values.put("x", newX);
 						});
 						fireInitialEvent(value.get(), null, observer::onNext);
-						init[0] = false;
+						init[0] = true;
 					}
 					return sub;
 				}

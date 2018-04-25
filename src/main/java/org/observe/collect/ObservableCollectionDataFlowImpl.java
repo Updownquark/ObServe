@@ -3498,7 +3498,11 @@ public class ObservableCollectionDataFlowImpl {
 				onElement.accept(new RefreshingElement(parentEl, false), cause);
 			}, listening);
 			listening.withConsumer((Object r) -> {
-				try (Transaction t = lock(true, false, r)) {
+				// Although we ourselves are only doing a refresh, this could cause structural changes downstream,
+				// e.g. a refresh->filter combo.
+				// If a non-structural lock were obtained, it would be possible for multiple refreshes to fire simultaneously,
+				// resulting in simultaneous restructures downstream and possible exceptions
+				try (Transaction t = lock(true, true, r)) {
 					// Refreshing should be done in element order
 					Collections.sort(theElements);
 					CollectionElement<RefreshingElement> el = theElements.getTerminalElement(true);
@@ -4385,7 +4389,7 @@ public class ObservableCollectionDataFlowImpl {
 						@Override
 						public void update(X oldValue, X newValue, Object cause) {
 							// Need to make sure that the flattened collection isn't firing at the same time as the child collection
-							try (Transaction t = theParent.lock(true, false, null)) {
+							try (Transaction t = theParent.lock(false, null)) {
 								ObservableCollectionDataFlowImpl.update(theListener, oldValue, newValue, cause);
 							}
 						}
@@ -4394,7 +4398,7 @@ public class ObservableCollectionDataFlowImpl {
 						public void removed(X value, Object cause) {
 							theHolder.theElements.mutableElement(theElementId).remove();
 							// Need to make sure that the flattened collection isn't firing at the same time as the child collection
-							try (Transaction t = theParent.lock(true, false, null)) {
+							try (Transaction t = theParent.lock(false, null)) {
 								ObservableCollectionDataFlowImpl.removed(theListener, value, cause);
 							}
 						}

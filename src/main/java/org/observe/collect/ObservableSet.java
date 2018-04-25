@@ -77,6 +77,12 @@ public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> 
 		return new ObservableSetImpl.UniqueBaseFlow<>(this);
 	}
 
+	@Override
+	default ObservableSet<E> withAll(Collection<? extends E> values) {
+		ObservableCollection.super.withAll(values);
+		return this;
+	}
+
 	/**
 	 * @param <E> The type for the set
 	 * @param type The type for the set

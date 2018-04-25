@@ -189,6 +189,12 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 	}
 
 	@Override
+	default ObservableSortedSet<E> withAll(Collection<? extends E> values) {
+		ObservableSet.super.withAll(values);
+		return this;
+	}
+
+	@Override
 	default <T> UniqueSortedDataFlow<E, E, E> flow() {
 		return new ObservableSortedSetImpl.UniqueSortedBaseFlow<>(this);
 	}
