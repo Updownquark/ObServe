@@ -601,7 +601,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 				}
 			});
 			theObservers.setOnSubscribe(observer -> {
-				ObservableValueEvent<T> evt = createInitialEvent(theValue, null);
+				ObservableValueEvent<T> evt = createInitialEvent(get(), null);
 				try (Transaction t = ObservableValueEvent.use(evt)) {
 					if (completed[0])
 						observer.onCompleted(evt);
