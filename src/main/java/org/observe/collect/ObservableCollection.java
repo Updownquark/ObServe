@@ -620,7 +620,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @param collectionObservable The observable value
 	 * @return A collection representing the contents of the value, or a zero-length collection when null
 	 */
-	static <E> ObservableCollection<E> flattenValue(ObservableValue<? extends ObservableCollection<E>> collectionObservable) {
+	static <E> ObservableCollection<E> flattenValue(ObservableValue<? extends ObservableCollection<? extends E>> collectionObservable) {
 		return flattenValue(collectionObservable, Equivalence.DEFAULT);
 	}
 
@@ -631,7 +631,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @param equivalence The equivalence for the collection
 	 * @return A collection representing the contents of the value, or a zero-length collection when null
 	 */
-	static <E> ObservableCollection<E> flattenValue(ObservableValue<? extends ObservableCollection<E>> collectionObservable,
+	static <E> ObservableCollection<E> flattenValue(ObservableValue<? extends ObservableCollection<? extends E>> collectionObservable,
 		Equivalence<Object> equivalence) {
 		return new ObservableCollectionImpl.FlattenedValueCollection<>(collectionObservable, equivalence);
 	}
