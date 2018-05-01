@@ -1,7 +1,10 @@
 package org.observe.util.swing;
 
 import java.awt.EventQueue;
-import java.util.IdentityHashMap;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import javax.swing.ListModel;
 import javax.swing.event.ListDataEvent;
@@ -11,6 +14,7 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
+import org.qommons.Transaction;
 
 /**
  * A swing ListModel backed by an {@link ObservableCollection}
@@ -19,16 +23,22 @@ import org.observe.collect.ObservableCollection;
  */
 public class ObservableListModel<E> implements ListModel<E> {
 	private final ObservableCollection<E> theWrapped;
-	private final IdentityHashMap<ListDataListener, Subscription> theListenerSubscribes;
+	/**
+	 * This model must keep an independent representation of its data, which is only modified on the EDT, just before firing an event
+	 * documenting the modification
+	 */
+	private final List<E> theCachedData;
+	private final List<ListDataListener> theListeners;
+	private Subscription theListening;
 
 	/**
 	 * @param wrap
 	 *            The observable list to back this model
 	 */
 	public ObservableListModel(ObservableCollection<E> wrap) {
-		super();
 		theWrapped = wrap;
-		theListenerSubscribes = new IdentityHashMap<>();
+		theCachedData = new ArrayList<>();
+		theListeners = new ArrayList<>();
 	}
 
 	/** @return The observable list that this model wraps */
@@ -38,49 +48,107 @@ public class ObservableListModel<E> implements ListModel<E> {
 
 	@Override
 	public int getSize() {
-		return theWrapped.size();
+		if (theListening != null)
+			return theCachedData.size();
+		else
+			return theWrapped.size();
 	}
 
 	@Override
 	public E getElementAt(int index) {
-		return theWrapped.get(index);
+		if (theListening != null)
+			return theCachedData.get(index);
+		else
+			return theWrapped.get(index);
 	}
 
 	@Override
 	public void addListDataListener(ListDataListener l) {
-		theListenerSubscribes.put(l, theWrapped.changes().act(event -> {
-			// DEADLOCK can occur if the event handling is done off the EDT
-			if (EventQueue.isDispatchThread()) {
-				handleEvent(l, event);
-			} else {
-				try {
-					EventQueue.invokeLater(() -> handleEvent(l, event));
-				} catch (Exception e) {
-					e.printStackTrace();
-				}
-			}
-		}));
+		onEDT(() -> {
+			if (theListeners.isEmpty())
+				beginListening();
+			theListeners.add(l);
+		});
 	}
 
-	private void handleEvent(ListDataListener l, CollectionChangeEvent<E> event) {
-		int[][] split = ObservableSwingUtils.getContinuousIntervals(event.elements, true);
+	@Override
+	public void removeListDataListener(ListDataListener l) {
+		onEDT(() -> {
+			theListeners.remove(l);
+			if (theListeners.isEmpty() && theListening != null) {
+				theListening.unsubscribe();
+				theListening = null;
+				theCachedData.clear();
+			}
+		});
+	}
+
+	private void onEDT(Runnable action) {
+		if (EventQueue.isDispatchThread())
+			action.run();
+		else
+			EventQueue.invokeLater(action);
+	}
+
+	private void beginListening() {
+		try (Transaction t = theWrapped.lock(false, null)) {
+			theCachedData.addAll(theWrapped);
+			theListening = theWrapped.changes().act(event -> {
+				// All internal data representation mutation and event firing must be done on the EDT
+				onEDT(() -> handleEvent(event));
+			});
+		}
+	}
+
+	private void handleEvent(CollectionChangeEvent<E> event) {
+		System.out.println("ListEvent: " + event);
+		Map<Integer, E> changesByIndex = new HashMap<>();
+		if (event.type != CollectionChangeType.remove) {
+			for (CollectionChangeEvent.ElementChange<E> el : event.elements)
+				changesByIndex.put(el.index, el.newValue);
+		}
+		int[][] split = ObservableSwingUtils.getContinuousIntervals(event.elements, event.type != CollectionChangeType.remove);
 		for (int[] indexes : split) {
 			ListDataEvent wrappedEvent = new ListDataEvent(ObservableListModel.this, getSwingType(event.type), indexes[0], indexes[1]);
 			switch (event.type) {
 			case add:
-				l.intervalAdded(wrappedEvent);
+				for (int i = indexes[0]; i <= indexes[1]; i++)
+					theCachedData.add(i, changesByIndex.remove(i));
+				intervalAdded(wrappedEvent);
 				break;
 			case remove:
-				l.intervalRemoved(wrappedEvent);
+				for (int i = indexes[1]; i >= indexes[0]; i--)
+					theCachedData.remove(i);
+				intervalRemoved(wrappedEvent);
 				break;
 			case set:
-				l.contentsChanged(wrappedEvent);
+				for (int i = indexes[0]; i <= indexes[1]; i++)
+					theCachedData.set(i, changesByIndex.remove(i));
+				contentsChanged(wrappedEvent);
 				break;
 			}
 		}
 	}
 
-	private int getSwingType(CollectionChangeType type) {
+	private void intervalAdded(ListDataEvent event) {
+		for (ListDataListener listener : theListeners) {
+			listener.intervalAdded(event);
+		}
+	}
+
+	private void intervalRemoved(ListDataEvent event) {
+		for (ListDataListener listener : theListeners) {
+			listener.intervalRemoved(event);
+		}
+	}
+
+	private void contentsChanged(ListDataEvent event) {
+		for (ListDataListener listener : theListeners) {
+			listener.contentsChanged(event);
+		}
+	}
+
+	private static int getSwingType(CollectionChangeType type) {
 		switch(type){
 		case add:
 			return ListDataEvent.INTERVAL_ADDED;
@@ -90,13 +158,5 @@ public class ObservableListModel<E> implements ListModel<E> {
 			return ListDataEvent.CONTENTS_CHANGED;
 		}
 		throw new IllegalStateException("Unrecognized event type: " + type);
-	}
-
-	@Override
-	public void removeListDataListener(ListDataListener l) {
-		Subscription sub = theListenerSubscribes.remove(l);
-		if (sub != null) {
-			sub.unsubscribe();
-		}
 	}
 }
