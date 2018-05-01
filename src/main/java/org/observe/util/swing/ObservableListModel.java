@@ -101,7 +101,6 @@ public class ObservableListModel<E> implements ListModel<E> {
 	}
 
 	private void handleEvent(CollectionChangeEvent<E> event) {
-		System.out.println("ListEvent: " + event);
 		Map<Integer, E> changesByIndex = new HashMap<>();
 		if (event.type != CollectionChangeType.remove) {
 			for (CollectionChangeEvent.ElementChange<E> el : event.elements)
