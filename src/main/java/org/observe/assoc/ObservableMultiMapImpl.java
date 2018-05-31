@@ -765,7 +765,7 @@ public class ObservableMultiMapImpl {
 				return () -> {
 					try (Transaction t2 = lock(false, null)) {
 						listenerRemove.run();
-						if (listeners.isEmtpy())
+						if (listeners.isEmpty())
 							theValueListeners.remove(keyEntry);
 					}
 				};
@@ -868,7 +868,7 @@ public class ObservableMultiMapImpl {
 				fireEvent(new ObservableMapEvent<>(theKeyId, parentEl.getElementId(), theKeyType, theValueType, //
 					keyIndex, valueIndex, CollectionChangeType.remove, active.get().getKey(), value.getValue(), value.getValue(), cause));
 				// If someone's listening to this, preserve the listeners in case the key appears in the map again
-				if (getParentElements().isEmpty() && !theListeners.isEmtpy())
+				if (getParentElements().isEmpty() && !theListeners.isEmpty())
 					theValueListeners.put(new SimpleMapEntry<>(active.get().getKey(), null), theListeners);
 			}
 

@@ -710,12 +710,7 @@ public interface Observable<T> {
 			untilSub[0] = theUntil.subscribe(new Observer<Object>() {
 				@Override
 				public void onNext(Object value) {
-					onCompleted(value);
-				}
-
-				@Override
-				public void onCompleted(Object value) {
-					if(complete[0])
+					if (complete[0])
 						return;
 					complete[0] = true;
 					outerSub.unsubscribe();
@@ -725,6 +720,11 @@ public interface Observable<T> {
 							observer.onCompleted(defValue);
 						}
 					}
+				}
+
+				@Override
+				public void onCompleted(Object value) {
+					//A completed until shouldn't affect things
 				}
 			});
 			return () -> {

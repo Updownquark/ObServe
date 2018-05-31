@@ -1,5 +1,6 @@
 package org.observe.util.swing;
 
+import java.awt.EventQueue;
 import java.awt.event.ItemEvent;
 import java.awt.event.ItemListener;
 import java.util.function.Consumer;
@@ -39,7 +40,7 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 	/**
 	 * Creates and installs a combo box model whose data is backed by an {@link ObservableCollection} and whose selection is governed by a
 	 * {@link SettableValue}
-	 * 
+	 *
 	 * @param comboBox The combo box to install the model into
 	 * @param descrip The tooltip description for the combo box (when the selected value is enabled)
 	 * @param availableValues The values available for (potential) selection in the combo box
@@ -74,20 +75,24 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		comboBox.addItemListener(itemListener);
 		Subscription valueSub = selected.changes().act(evt -> {
 			if (!callbackLock[0]) {
-				callbackLock[0] = true;
-				try {
-					comboBox.setSelectedItem(evt.getNewValue());
-				} finally {
-					callbackLock[0] = false;
-				}
+				String enabled = selected.isEnabled().get();
+				EventQueue.invokeLater(() -> {
+					callbackLock[0] = true;
+					try {
+						comboBox.setSelectedItem(evt.getNewValue());
+					} finally {
+						callbackLock[0] = false;
+					}
+					checkEnabled.accept(enabled);
+				});
 			}
-			checkEnabled.accept(selected.isEnabled().get());
 		});
-		Subscription enabledSub = selected.isEnabled().changes().act(evt -> checkEnabled.accept(evt.getNewValue()));
+		Subscription enabledSub = selected.isEnabled().changes()
+			.act(evt -> ObservableSwingUtils.onEQ(() -> checkEnabled.accept(evt.getNewValue())));
 		return () -> {
 			valueSub.unsubscribe();
 			enabledSub.unsubscribe();
-			comboBox.removeItemListener(itemListener);
+			ObservableSwingUtils.onEQ(() -> comboBox.removeItemListener(itemListener));
 		};
 	}
 }
