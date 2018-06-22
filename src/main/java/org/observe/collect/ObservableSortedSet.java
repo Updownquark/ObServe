@@ -238,7 +238,7 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 	 * @param compare The comparator for the set. The contents of the value must always have the same comparator.
 	 * @return A sorted set representing the contents of the value, or a zero-length set when null
 	 */
-	public static <E> ObservableSortedSet<E> flattenValue(ObservableValue<? extends ObservableSortedSet<E>> collectionObservable,
+	public static <E> ObservableSortedSet<E> flattenValue(ObservableValue<? extends ObservableSortedSet<? extends E>> collectionObservable,
 		Comparator<? super E> compare) {
 		return new ObservableSortedSetImpl.FlattenedValueSortedSet<>(collectionObservable, compare);
 	}
