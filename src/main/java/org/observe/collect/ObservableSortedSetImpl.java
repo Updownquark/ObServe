@@ -159,7 +159,8 @@ public class ObservableSortedSetImpl {
 
 		@Override
 		public ObservableSortedSet<E> subSet(Comparable<? super E> from, Comparable<? super E> to) {
-			return new ObservableSubSet<>(getWrapped(), and(from, true), and(to, false));
+			return new ObservableSubSet<>(getWrapped(), BetterSortedSet.and(getFrom(), from, true),
+				BetterSortedSet.and(getTo(), to, false));
 		}
 
 		@Override
