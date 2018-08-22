@@ -2,6 +2,7 @@ package org.observe;
 
 import java.util.concurrent.locks.ReentrantLock;
 
+import org.observe.util.TypeTokens;
 import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeToken;
@@ -92,7 +93,7 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 	public <V extends T> String isAcceptable(V value) {
 		if(value == null && !isNullable)
 			return "Null values not acceptable for this value";
-		if(value != null && !theType.wrap().getRawType().isInstance(value))
+		if (value != null && !TypeTokens.get().isInstance(theType, value))
 			return "Value of type " + value.getClass().getName() + " cannot be assigned as " + theType;
 		return null;
 	}

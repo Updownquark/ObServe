@@ -22,6 +22,7 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.BaseCollectionDataFl
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionElementListener;
 import org.observe.collect.ObservableCollectionDataFlowImpl.DerivedCollectionElement;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ElementAccepter;
+import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
 import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.FlattenedValueCollection;
@@ -31,6 +32,7 @@ import org.observe.util.WeakListening;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterMap;
 import org.qommons.collect.BetterSet;
+import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
@@ -58,6 +60,11 @@ public class ObservableSetImpl {
 		@Override
 		protected ObservableSet<E> getWrapped() {
 			return (ObservableSet<E>) super.getWrapped();
+		}
+
+		@Override
+		public CollectionElement<E> getOrAdd(E value, boolean first, Runnable added) {
+			return CollectionElement.reverse(getOrAdd(value, !first, added));
 		}
 
 		@Override
@@ -556,7 +563,7 @@ public class ObservableSetImpl {
 			/**
 			 * Called when an element whose value is equivalent to this element's is added to the source collection (also for initial
 			 * values)
-			 * 
+			 *
 			 * @param parentEl The added source element
 			 * @param cause The cause of the addition
 			 * @return The entry in the {@link #theParentElements element map} map where the parent was added
@@ -684,7 +691,7 @@ public class ObservableSetImpl {
 			/**
 			 * Called after a source element has been removed or if the element's value has been changed such that it must be moved to a
 			 * different distinct element
-			 * 
+			 *
 			 * @param parentEl The (already removed) tree entry of the source element
 			 * @param value The source element's previously-reported value
 			 * @param cause The cause of the removal
@@ -862,6 +869,18 @@ public class ObservableSetImpl {
 		}
 
 		@Override
+		public CollectionElement<T> getOrAdd(T value, boolean first, Runnable added) {
+			try (Transaction t = lock(true, null)) {
+				// Lock so the reversed value is consistent until it is added
+				FilterMapResult<T, E> reversed = getFlow().reverse(value, true);
+				if (reversed.throwIfError(IllegalArgumentException::new) != null)
+					return null;
+				CollectionElement<E> srcEl = getSource().getOrAdd(reversed.result, first, added);
+				return srcEl == null ? null : elementFor(srcEl, null);
+			}
+		}
+
+		@Override
 		public String toString() {
 			return BetterSet.toString(this);
 		}
@@ -882,6 +901,20 @@ public class ObservableSetImpl {
 		}
 
 		@Override
+		public CollectionElement<T> getOrAdd(T value, boolean first, Runnable added) {
+			// At the moment, the flow doesn't support this operation directly, so we have to do a double-dive
+			try (Transaction t = lock(true, null)) {
+				CollectionElement<T> element = getElement(value, first);
+				if (element == null) {
+					element = addElement(value, first);
+					if (element != null && added != null)
+						added.run();
+				}
+				return element;
+			}
+		}
+
+		@Override
 		public String toString() {
 			return BetterSet.toString(this);
 		}
@@ -899,6 +932,20 @@ public class ObservableSetImpl {
 		 */
 		protected FlattenedValueSet(ObservableValue<? extends ObservableSet<E>> collectionObservable, Equivalence<? super E> equivalence) {
 			super(collectionObservable, equivalence);
+		}
+
+		@Override
+		public CollectionElement<E> getOrAdd(E value, boolean first, Runnable added) {
+			// *Possibly* could figure out how to do this more efficiently, but for the moment this will work
+			try (Transaction t = lock(true, null)) {
+				CollectionElement<E> element = getElement(value, first);
+				if (element == null) {
+					element = addElement(value, first);
+					if (element != null && added != null)
+						added.run();
+				}
+				return element;
+			}
 		}
 
 		@Override

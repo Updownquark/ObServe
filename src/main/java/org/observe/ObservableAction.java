@@ -4,6 +4,7 @@ import java.lang.reflect.Array;
 
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionImpl;
+import org.observe.util.TypeTokens;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -179,7 +180,7 @@ public interface ObservableAction<T> {
 				if (msg != null)
 					throw new IllegalStateException(msg);
 			}
-			T[] values = (T[]) Array.newInstance(theArrayType.getComponentType().getRawType(), actions.length);
+			T[] values = (T[]) Array.newInstance(TypeTokens.getRawType(theArrayType.getComponentType()), actions.length);
 			for (int i = 0; i < values.length; i++)
 				values[i] = actions[i].act(cause);
 			return values;

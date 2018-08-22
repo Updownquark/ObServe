@@ -16,6 +16,7 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableSortedSet;
+import org.observe.util.TypeTokens;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedMultiMap;
@@ -156,7 +157,7 @@ public interface ObservableSortedMultiMap<K, V> extends ObservableMultiMap<K, V>
 	static <K, V> SortedMultiMapFlow<K, V> create(TypeToken<K> keyType, TypeToken<V> valueType, Comparator<? super K> keyCompare,
 		BetterList<Map.Entry<K, V>> entryCollection) {
 		return (SortedMultiMapFlow<K, V>) ObservableMultiMap.create(keyType, valueType,
-			Equivalence.of((Class<K>) keyType.getRawType(), keyCompare, true));
+			Equivalence.of(TypeTokens.getRawType(keyType), keyCompare, true));
 	}
 
 	interface SortedMultiMapFlow<K, V> extends MultiMapFlow<K, V> {

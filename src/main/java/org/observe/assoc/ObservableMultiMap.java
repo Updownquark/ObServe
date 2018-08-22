@@ -515,6 +515,20 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 			return outerHandle == null ? null : entryFor(outerHandle);
 		}
 
+		@Override
+		public MapEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, boolean first, Runnable added) {
+			// At the moment, the multi-map doesn't support this operation directly, so we have to do a double-dive
+			try (Transaction t = lock(true, true, null)) {
+				MapEntryHandle<K, V> entry = getEntry(key);
+				if (entry == null) {
+					entry = putEntry(key, value.apply(key), first);
+					if (entry != null && added != null)
+						added.run();
+				}
+				return entry;
+			}
+		}
+
 		private MapEntryHandle<K, V> entryFor(ObservableMultiEntry<K, V> outerHandle) {
 			ObservableValue<V> value = theValueMap.apply(outerHandle.getKey(), outerHandle.getValues());
 			return new MapEntryHandle<K, V>() {

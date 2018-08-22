@@ -5,6 +5,7 @@ import java.awt.event.ActionListener;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.Consumer;
 
 import javax.swing.JCheckBox;
@@ -20,17 +21,31 @@ import org.observe.collect.CollectionChangeEvent;
 
 /** Utilities for the org.observe.util.swing package */
 public class ObservableSwingUtils {
+	private static final ConcurrentLinkedQueue<Runnable> EDT_EVENTS = new ConcurrentLinkedQueue<>();
+
 	/**
 	 * Executes a task on the AWT/Swing event thread. If this thread *is* the event thread, the task is executed inline
-	 * 
+	 *
 	 * @param task The task to execute on the AWT {@link EventQueue}
 	 */
 	public static void onEQ(Runnable task) {
 		if (EventQueue.isDispatchThread())
 			task.run();
-		else
-			EventQueue.invokeLater(task);
-	};
+		else {
+			boolean tellEdt = EDT_EVENTS.isEmpty();
+			EDT_EVENTS.add(task);
+			if (tellEdt)
+				EventQueue.invokeLater(ObservableSwingUtils::emptyEdtEvents);
+		}
+	}
+
+	private static void emptyEdtEvents() {
+		Runnable task = EDT_EVENTS.poll();
+		while (task != null) {
+			task.run();
+			task = EDT_EVENTS.poll();
+		}
+	}
 
 	/**
 	 * Links up a check box's {@link JCheckBox#isSelected() selected} state to a settable boolean, such that the user's interaction with the

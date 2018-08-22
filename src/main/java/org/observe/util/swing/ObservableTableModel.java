@@ -9,6 +9,7 @@ import javax.swing.event.TableModelListener;
 import javax.swing.table.TableModel;
 
 import org.observe.collect.ObservableCollection;
+import org.observe.util.TypeTokens;
 
 import com.google.common.reflect.TypeToken;
 
@@ -82,7 +83,7 @@ public abstract class ObservableTableModel<T> implements TableModel {
 
 	@Override
 	public Class<?> getColumnClass(int columnIndex) {
-		return TypeToken.of(theColumns[columnIndex].getClass()).resolveType(Function.class.getTypeParameters()[1]).getRawType();
+		return TypeTokens.getRawType(TypeToken.of(theColumns[columnIndex].getClass()).resolveType(Function.class.getTypeParameters()[1]));
 	}
 
 	@Override

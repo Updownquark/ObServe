@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -16,6 +17,7 @@ import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.SubscriptionCause;
 import org.observe.collect.ObservableSet;
+import org.observe.util.TypeTokens;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
@@ -432,6 +434,12 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 			}
 
 			@Override
+			public MapEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, boolean first, Runnable added) {
+				CollectionElement<Map.Entry<K, V>> entryEl = entrySet.getOrAdd(new SimpleMapEntry<>(key, value.apply(key)), first, added);
+				return entryEl == null ? null : handleFor(entryEl);
+			}
+
+			@Override
 			public MutableMapEntryHandle<K, V> mutableEntry(ElementId entryId) {
 				MutableCollectionElement<Map.Entry<K, V>> entryEl = entrySet.mutableElement(entryId);
 				return entryEl == null ? null : mutableHandleFor(entryEl);
@@ -485,14 +493,14 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 
 					@Override
 					public String isAcceptable(V value) {
-						if (value != null && !valueType.getRawType().isInstance(value))
+						if (value != null && !TypeTokens.get().isInstance(valueType, value))
 							return StdMsg.BAD_TYPE;
 						return null;
 					}
 
 					@Override
 					public void set(V value) throws UnsupportedOperationException, IllegalArgumentException {
-						if (value != null && !valueType.getRawType().isInstance(value))
+						if (value != null && !TypeTokens.get().isInstance(valueType, value))
 							throw new IllegalArgumentException(StdMsg.BAD_TYPE);
 						entryEl.get().setValue(value);
 					}
@@ -603,6 +611,11 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 			@Override
 			public MapEntryHandle<K, V> getEntryById(ElementId entryId) {
 				throw new NoSuchElementException();
+			}
+
+			@Override
+			public MapEntryHandle<K, V> getOrPutEntry(K key, Function<? super K, ? extends V> value, boolean first, Runnable added) {
+				return null;
 			}
 
 			@Override

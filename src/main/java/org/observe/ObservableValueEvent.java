@@ -1,5 +1,6 @@
 package org.observe;
 
+import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 
 import com.google.common.reflect.TypeToken;
@@ -24,10 +25,12 @@ public class ObservableValueEvent<T> extends Causable {
 	protected ObservableValueEvent(TypeToken<T> type, boolean initial, T oldValue, T newValue, Object cause) {
 		super(cause);
 		isInitial = initial;
-		if(oldValue != null) // Allow null for old value even for primitive types
-			oldValue = (T) type.wrap().getRawType().cast(oldValue);
+		if (oldValue != null && !TypeTokens.get().isInstance(type, oldValue))
+			throw new ClassCastException("Cannot cast " + oldValue.getClass().getName() + " to " + type);
 		theOldValue = oldValue;
-		theNewValue = (T) type.wrap().getRawType().cast(newValue);
+		if (newValue != null && !TypeTokens.get().isInstance(type, newValue))
+			throw new ClassCastException("Cannot cast " + newValue.getClass().getName() + " to " + type);
+		theNewValue = newValue;
 	}
 
 	/** @return Whether this represents the population of the initial value of an observable value in response to subscription */

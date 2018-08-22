@@ -11,6 +11,7 @@ import javax.swing.JComboBox;
 import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
+import org.observe.util.TypeTokens;
 
 /**
  * A combo box model backed by an {@link ObservableCollection}
@@ -29,7 +30,7 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 
 	@Override
 	public void setSelectedItem(Object anItem) {
-		theSelectedValue = (E) getWrapped().getType().getRawType().cast(anItem);
+		theSelectedValue = TypeTokens.get().cast(getWrapped().getType(), anItem);
 	}
 
 	@Override

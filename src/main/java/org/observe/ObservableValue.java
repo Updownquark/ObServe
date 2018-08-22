@@ -14,6 +14,7 @@ import java.util.function.Supplier;
 import org.observe.XformOptions.SimpleXformOptions;
 import org.observe.XformOptions.XformDef;
 import org.observe.collect.ObservableCollection;
+import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
 import org.qommons.ListenerSet;
 import org.qommons.Transaction;
@@ -831,7 +832,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 		 */
 		public ConstantObservableValue(TypeToken<T> type, T value) {
 			theType = type;
-			theValue = (T) type.wrap().getRawType().cast(value);
+			theValue = TypeTokens.get().cast(type, value);
 		}
 
 		@Override

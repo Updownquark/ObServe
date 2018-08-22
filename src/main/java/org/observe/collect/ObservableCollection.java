@@ -26,6 +26,7 @@ import org.observe.collect.FlowOptions.MapOptions;
 import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
+import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Ternian;
 import org.qommons.Transactable;
@@ -102,7 +103,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		TypeToken<E> type = getType();
 		if (value == null)
 			return !type.isPrimitive();
-		else if (!getType().wrap().getRawType().isInstance(value))
+		else if (!TypeTokens.get().isInstance(getType(), value))
 			return false;
 		return true;
 	}
@@ -258,7 +259,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	default E[] toArray() {
 		E[] array;
 		try (Transaction t = lock(false, null)) {
-			array = (E[]) java.lang.reflect.Array.newInstance(getType().wrap().getRawType(), size());
+			array = (E[]) java.lang.reflect.Array.newInstance(TypeTokens.get().wrap(TypeTokens.getRawType(getType())), size());
 			int[] i = new int[1];
 			spliterator().forEachRemaining(v -> array[i[0]++] = v);
 		}
@@ -880,7 +881,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 					// Allow setting elements via the wrapped settable value
 					if (!(ov instanceof SettableValue))
 						return MutableCollectionElement.StdMsg.UNSUPPORTED_OPERATION;
-					else if (newValue != null && !ov.getType().wrap().getRawType().isInstance(newValue))
+					else if (newValue != null && !TypeTokens.get().isInstance(ov.getType(), newValue))
 						return MutableCollectionElement.StdMsg.BAD_TYPE;
 					String msg = ((SettableValue<X>) ov).isAcceptable(newValue);
 					if (msg != null)

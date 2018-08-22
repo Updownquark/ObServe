@@ -2,6 +2,7 @@ package org.observe.collect;
 
 import java.util.Comparator;
 
+import org.observe.util.TypeTokens;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionElement;
 
@@ -21,7 +22,7 @@ public class DefaultObservableSortedSet<E> extends DefaultObservableCollection<E
 	 */
 	public DefaultObservableSortedSet(TypeToken<E> type, BetterSortedSet<E> sortedSet) {
 		super(type, sortedSet);
-		theEquivalence = Equivalence.of((Class<E>) type.getRawType(), sortedSet.comparator(), false);
+		theEquivalence = Equivalence.of(TypeTokens.getRawType(type), sortedSet.comparator(), false);
 	}
 
 	@Override

@@ -8,7 +8,10 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -36,6 +39,7 @@ import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.PassiveDerivedCollection;
+import org.observe.util.TypeTokens;
 import org.observe.util.WeakListening;
 import org.qommons.BiTuple;
 import org.qommons.Ternian;
@@ -298,7 +302,7 @@ public class ObservableCollectionDataFlowImpl {
 	public static interface ActiveCollectionManager<E, I, T> extends CollectionOperation<E, I, T> {
 		/**
 		 * Obtains a lock on this manager's data source(s)
-		 * 
+		 *
 		 * @param write Whether to obtain a write lock
 		 * @param structural Whether to obtain a structural lock
 		 * @param cause The cause for the transaction
@@ -361,7 +365,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		/**
 		 * Begins listening to this manager's elements
-		 * 
+		 *
 		 * @param fromStart Whether to initialize the derived collection using the elements from the beginning or end of the source
 		 *        collection
 		 * @param onElement The listener to accept initial and added elements for the collection
@@ -967,7 +971,7 @@ public class ObservableCollectionDataFlowImpl {
 			Comparator<? super K> keyCompare) {
 			TypeToken<Map.Entry<K, T>> entryType = ObservableMap.buildEntryType(keyType, getTargetType());
 			return new ObservableMultiMapImpl.DefaultSortedMultiMapFlow<>(map(entryType, v -> new GroupedEntry<>(v, keyMap)),
-				Equivalence.of((Class<K>) keyType.getRawType(), keyCompare, true), equivalence(), this instanceof DistinctDataFlow);
+				Equivalence.of(TypeTokens.getRawType(keyType), keyCompare, true), equivalence(), this instanceof DistinctDataFlow);
 		}
 
 		@Override
@@ -1351,10 +1355,18 @@ public class ObservableCollectionDataFlowImpl {
 	}
 
 	private static class BaseCollectionPassThrough<E> implements PassiveCollectionManager<E, E, E> {
+		private static final ConcurrentHashMap<TypeToken<?>, TypeToken<? extends Function<?, ?>>> thePassThroughFunctionTypes = new ConcurrentHashMap<>();
+
 		private final ObservableCollection<E> theSource;
+		private final ObservableValue<Function<? super E, E>> theFunctionValue;
 
 		BaseCollectionPassThrough(ObservableCollection<E> source) {
 			theSource = source;
+
+			TypeToken<E> srcType = theSource.getType();
+			TypeToken<Function<? super E, E>> functionType = (TypeToken<Function<? super E, E>>) thePassThroughFunctionTypes
+				.computeIfAbsent(srcType, st -> functionType(st, st));
+			theFunctionValue = ObservableValue.of(functionType, v -> v);
 		}
 
 		@Override
@@ -1381,8 +1393,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public ObservableValue<Function<? super E, E>> map() {
-			TypeToken<E> srcType = theSource.getType();
-			return ObservableValue.of(functionType(srcType, srcType), v -> v);
+			return theFunctionValue;
 		}
 
 		@Override
@@ -1814,7 +1825,7 @@ public class ObservableCollectionDataFlowImpl {
 			if (node == null)
 				return theValues.addElement(tuple, false);
 			else {
-				node = node.findClosest(n -> theTupleCompare.compare(tuple, n.get()), true, false);
+				node = node.findClosest(n -> theTupleCompare.compare(tuple, n.get()), true, false, null);
 				return theValues.getElement(theValues.mutableNodeFor(node).add(tuple, theTupleCompare.compare(tuple, node.get()) < 0));
 			}
 		}
@@ -4499,6 +4510,7 @@ public class ObservableCollectionDataFlowImpl {
 		private ElementAccepter<T> theAccepter;
 		private WeakListening theListening;
 		private final BetterList<FlattenedHolder> theOuterElements;
+		private final ReentrantReadWriteLock theLock;
 
 		public FlattenedManager(ActiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
 			Function<? super I, ? extends CollectionDataFlow<?, ?, ? extends T>> map) {
@@ -4507,6 +4519,7 @@ public class ObservableCollectionDataFlowImpl {
 			theMap = map;
 
 			theOuterElements = new BetterTreeList<>(false);
+			theLock = new ReentrantReadWriteLock();
 		}
 
 		@Override
@@ -4519,9 +4532,18 @@ public class ObservableCollectionDataFlowImpl {
 			return Equivalence.DEFAULT;
 		}
 
+		Transaction lockLocal() {
+			Lock localLock = theLock.writeLock();
+			localLock.lock();
+			return localLock::unlock;
+		}
+
 		@Override
 		public Transaction lock(boolean write, boolean structural, Object cause) {
-			Transaction outerLock = theParent.lock(write, structural, cause);
+			/* No operations against this manager can affect the parent collection, but only its content collections */
+			Transaction outerLock = theParent.lock(false, false, cause);
+			Lock localLock = write ? theLock.writeLock() : theLock.readLock();
+			localLock.lock();
 			List<Transaction> innerLocks = new LinkedList<>();
 			for (FlattenedHolder holder : theOuterElements) {
 				if (holder.manager != null)
@@ -4530,13 +4552,14 @@ public class ObservableCollectionDataFlowImpl {
 			return () -> {
 				for (Transaction innerLock : innerLocks)
 					innerLock.close();
+				localLock.unlock();
 				outerLock.close();
 			};
 		}
 
 		@Override
 		public boolean isContentControlled() {
-			try (Transaction t = theParent.lock(true, false, null)) {
+			try (Transaction t = theParent.lock(false, false, null)) {
 				boolean anyControlled = false;
 				for (FlattenedHolder outerEl : theOuterElements) {
 					if (outerEl.manager == null)
@@ -4554,7 +4577,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public boolean clear() {
-			try (Transaction t = theParent.lock(true, false, null)) {
+			try (Transaction t = theParent.lock(false, false, null)) {
 				boolean allCleared = true;
 				for (FlattenedHolder outerEl : theOuterElements) {
 					if (outerEl.manager == null)
@@ -4568,7 +4591,7 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
 			String[] msg = new String[1];
-			try (Transaction t = theParent.lock(true, false, null)) {
+			try (Transaction t = theParent.lock(false, false, null)) {
 				ElementSpliterator<FlattenedHolder> outerSpliter;
 				if (after != null)
 					outerSpliter = theOuterElements.spliterator(((FlattenedElement) after).theHolder.holderElement, true);
@@ -4583,7 +4606,7 @@ public class ObservableCollectionDataFlowImpl {
 					lastOuter[0] = before != null && ((FlattenedElement) before).theHolder.holderElement.equals(holderEl.getElementId());
 					if (holder.manager == null)
 						return;
-					if (!holder.manager.getTargetType().wrap().getRawType().isInstance(toAdd)
+					if (!TypeTokens.get().isInstance(holder.manager.getTargetType(), toAdd)
 						|| !holder.manager.equivalence().isElement(toAdd)) {
 						msg[0] = StdMsg.ILLEGAL_ELEMENT;
 						return;
@@ -4615,7 +4638,7 @@ public class ObservableCollectionDataFlowImpl {
 			boolean first) {
 			String[] msg = new String[1];
 			ValueHolder<DerivedCollectionElement<T>> added = new ValueHolder<>();
-			try (Transaction t = theParent.lock(true, false, null)) {
+			try (Transaction t = theParent.lock(false, false, null)) {
 				ElementSpliterator<FlattenedHolder> outerSpliter;
 				if (first) {
 					if (before != null)
@@ -4641,7 +4664,7 @@ public class ObservableCollectionDataFlowImpl {
 						firstOuter[0] = after != null && ((FlattenedElement) after).theHolder.holderElement.equals(holderEl.getElementId());
 					if (holder.manager == null)
 						return;
-					if (!holder.manager.getTargetType().wrap().getRawType().isInstance(value)
+					if (!TypeTokens.get().isInstance(holder.manager.getTargetType(), value)
 						|| !holder.manager.equivalence().isElement(value)) {
 						msg[0] = StdMsg.ILLEGAL_ELEMENT;
 						return;
@@ -4719,13 +4742,15 @@ public class ObservableCollectionDataFlowImpl {
 
 					@Override
 					public void removed(I value, Object innerCause) {
-						clearSubElements(innerCause);
+						try (Transaction parentT = theParent.lock(false, null); Transaction innerT = lockLocal()) {
+							clearSubElements(innerCause);
+						}
 					}
 				});
 			}
 
 			void updated(I newValue, Object cause) {
-				try (Transaction t = theParent.lock(true, false, cause)) {
+				try (Transaction parentT = theParent.lock(false, null); Transaction t = lockLocal()) {
 					CollectionDataFlow<?, ?, ? extends T> newFlow = theMap.apply(newValue);
 					if (newFlow == theFlow)
 						return;
@@ -4733,8 +4758,10 @@ public class ObservableCollectionDataFlowImpl {
 					theFlow = newFlow;
 					manager = newFlow.manageActive();
 					manager.begin(isFromStart, (childEl, innerCause) -> {
-						FlattenedElement flatEl = new FlattenedElement(this, childEl, false);
-						theAccepter.accept(flatEl, innerCause);
+						try (Transaction innerParentT = theParent.lock(false, null); Transaction innerLocalT = lockLocal()) {
+							FlattenedElement flatEl = new FlattenedElement(this, childEl, false);
+							theAccepter.accept(flatEl, innerCause);
+						}
 					}, theChildListening.getListening());
 				}
 			}
@@ -4764,7 +4791,7 @@ public class ObservableCollectionDataFlowImpl {
 						@Override
 						public void update(X oldValue, X newValue, Object cause) {
 							// Need to make sure that the flattened collection isn't firing at the same time as the child collection
-							try (Transaction t = theParent.lock(false, null)) {
+							try (Transaction parentT = theParent.lock(false, null); Transaction localT = lockLocal()) {
 								ObservableCollectionDataFlowImpl.update(theListener, oldValue, newValue, cause);
 							}
 						}
@@ -4773,7 +4800,7 @@ public class ObservableCollectionDataFlowImpl {
 						public void removed(X value, Object cause) {
 							theHolder.theElements.mutableElement(theElementId).remove();
 							// Need to make sure that the flattened collection isn't firing at the same time as the child collection
-							try (Transaction t = theParent.lock(false, null)) {
+							try (Transaction parentT = theParent.lock(false, null); Transaction localT = lockLocal()) {
 								ObservableCollectionDataFlowImpl.removed(theListener, value, cause);
 							}
 						}
@@ -4808,14 +4835,14 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public String isAcceptable(T value) {
-				if (value != null && !theHolder.manager.getTargetType().wrap().getRawType().isInstance(value))
+				if (value != null && !TypeTokens.get().isInstance(theHolder.manager.getTargetType(), value))
 					return StdMsg.BAD_TYPE;
 				return ((DerivedCollectionElement<T>) theParentEl).isAcceptable(value);
 			}
 
 			@Override
 			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
-				if (value != null && !theHolder.manager.getTargetType().wrap().getRawType().isInstance(value))
+				if (value != null && !TypeTokens.get().isInstance(theHolder.manager.getTargetType(), value))
 					throw new IllegalArgumentException(StdMsg.BAD_TYPE);
 				((DerivedCollectionElement<T>) theParentEl).set(value);
 			}

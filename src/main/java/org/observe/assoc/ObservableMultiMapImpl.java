@@ -24,9 +24,9 @@ import org.observe.collect.FlowOptions.MapOptions;
 import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
-import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
+import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollectionDataFlowImpl;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveMappedCollectionManager;
@@ -39,6 +39,7 @@ import org.observe.collect.ObservableSetImpl;
 import org.observe.collect.ObservableSetImpl.DistinctManager;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.collect.ObservableSortedSetImpl;
+import org.observe.util.TypeTokens;
 import org.observe.util.WeakListening;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
@@ -236,7 +237,7 @@ public class ObservableMultiMapImpl {
 		@Override
 		public <X> DistinctDataFlow<E, K, K> whereContained(CollectionDataFlow<?, ?, X> other, boolean include) {
 			CollectionDataFlow<?, ?, Map.Entry<K, V>> otherEntryFlow = other.filterStatic(//
-				v -> v == null || theKeyType.getRawType().isInstance(v) ? null : StdMsg.ILLEGAL_ELEMENT//
+				v -> v == null || TypeTokens.get().isInstance(theKeyType, v) ? null : StdMsg.ILLEGAL_ELEMENT//
 				).map(//
 					theEntryFlow.getTargetType(), v -> new SimpleMapEntry<>((K) v, null)//
 					, options -> options.cache(false));
@@ -275,7 +276,7 @@ public class ObservableMultiMapImpl {
 					.reEvalOnUpdate(keyOptions.isReEvalOnUpdate())//
 					.withReverse(entryReverse);
 				});
-			Equivalence<X> mappedEquiv = theKeyEquivalence.map((Class<X>) target.getRawType(), x -> true, map, reverse);
+			Equivalence<X> mappedEquiv = theKeyEquivalence.map(TypeTokens.getRawType(target), x -> true, map, reverse);
 			return new KeyFlow<>(mappedEntries, target, mappedEquiv);
 		}
 
@@ -908,7 +909,7 @@ public class ObservableMultiMapImpl {
 			Predicate<Map.Entry<K, ?>> entryFilter = entry -> {
 				if (entry == null || !theKeyEquivalence.isElement(entry.getKey()))
 					return false;
-				if (entry.getKey() != null && !theKeyType.getRawType().isInstance(entry.getKey()))
+				if (entry.getKey() != null && !TypeTokens.get().isInstance(theKeyType, entry.getKey()))
 					return false;
 				return true;
 			};
@@ -1031,7 +1032,7 @@ public class ObservableMultiMapImpl {
 
 		@Override
 		public ObservableCollection<V> get(Object key) {
-			if (key != null && !theKeyType.getRawType().isInstance(key))
+			if (key != null && !TypeTokens.get().isInstance(theKeyType, key))
 				return ObservableCollection.of(theValueType);
 			if (!theKeyEquivalence.isElement(key))
 				return ObservableCollection.of(theValueType);

@@ -18,6 +18,7 @@ import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
 import org.observe.collect.ObservableSetImpl.DistinctBaseFlow;
+import org.observe.util.TypeTokens;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.BetterSortedSet;
@@ -324,7 +325,7 @@ public class ObservableSortedSetImpl {
 		 */
 		protected DistinctSortedDataFlowWrapper(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent,
 			Comparator<? super T> compare) {
-			super(source, parent, Equivalence.of((Class<T>) parent.getTargetType().getRawType(), compare, true));
+			super(source, parent, Equivalence.of(TypeTokens.getRawType(parent.getTargetType()), compare, true));
 			theCompare = compare;
 		}
 
@@ -724,7 +725,8 @@ public class ObservableSortedSetImpl {
 		}
 
 		private static <E> Class<E> extractElementType(ObservableValue<? extends ObservableSortedSet<E>> collectionObservable) {
-			return (Class<E>) collectionObservable.getType().resolveType(ObservableCollection.class.getTypeParameters()[0]).getRawType();
+			return (Class<E>) TypeTokens
+				.getRawType(collectionObservable.getType().resolveType(ObservableCollection.class.getTypeParameters()[0]));
 		}
 
 		@Override

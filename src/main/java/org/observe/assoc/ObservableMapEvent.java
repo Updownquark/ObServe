@@ -2,6 +2,7 @@ package org.observe.assoc;
 
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollectionEvent;
+import org.observe.util.TypeTokens;
 import org.qommons.collect.ElementId;
 
 import com.google.common.reflect.TypeToken;
@@ -34,7 +35,7 @@ public class ObservableMapEvent<K, V> extends ObservableCollectionEvent<V> {
 		int valueIndex, CollectionChangeType type, K key, V oldValue, V newValue, Object cause) {
 		super(valueElementId, valueType, valueIndex, type, oldValue, newValue, cause);
 		theKeyElement = keyElementId;
-		theKey = (K) keyType.wrap().getRawType().cast(key);
+		theKey = TypeTokens.get().cast(keyType, key);
 		theKeyIndex = keyIndex;
 	}
 

@@ -1,6 +1,5 @@
 package org.observe.util.swing;
 
-import java.awt.EventQueue;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -64,7 +63,7 @@ public class ObservableListModel<E> implements ListModel<E> {
 
 	@Override
 	public void addListDataListener(ListDataListener l) {
-		onEDT(() -> {
+		ObservableSwingUtils.onEQ(() -> {
 			if (theListeners.isEmpty())
 				beginListening();
 			theListeners.add(l);
@@ -73,7 +72,7 @@ public class ObservableListModel<E> implements ListModel<E> {
 
 	@Override
 	public void removeListDataListener(ListDataListener l) {
-		onEDT(() -> {
+		ObservableSwingUtils.onEQ(() -> {
 			theListeners.remove(l);
 			if (theListeners.isEmpty() && theListening != null) {
 				theListening.unsubscribe();
@@ -83,19 +82,12 @@ public class ObservableListModel<E> implements ListModel<E> {
 		});
 	}
 
-	private void onEDT(Runnable action) {
-		if (EventQueue.isDispatchThread())
-			action.run();
-		else
-			EventQueue.invokeLater(action);
-	}
-
 	private void beginListening() {
 		try (Transaction t = theWrapped.lock(false, null)) {
 			theCachedData.addAll(theWrapped);
 			theListening = theWrapped.changes().act(event -> {
 				// All internal data representation mutation and event firing must be done on the EDT
-				onEDT(() -> handleEvent(event));
+				ObservableSwingUtils.onEQ(() -> handleEvent(event));
 			});
 		}
 	}

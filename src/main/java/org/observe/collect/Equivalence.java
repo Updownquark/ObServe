@@ -7,6 +7,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
+import org.observe.util.TypeTokens;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -22,8 +23,6 @@ import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.collect.MutableMapEntryHandle;
 import org.qommons.tree.BetterTreeMap;
 import org.qommons.tree.BetterTreeSet;
-
-import com.google.common.reflect.TypeToken;
 
 /**
  * Defines an equality scheme for comparing values for equivalence
@@ -130,7 +129,7 @@ public interface Equivalence<E> {
 	 */
 	static <E> ComparatorEquivalence<E> of(Class<E> type, Comparator<? super E> compare, boolean nullable) {
 		if (type.isPrimitive())
-			type = (Class<E>) TypeToken.of(type).wrap().getRawType(); // Better way to do this?
+			type = TypeTokens.get().wrap(type);
 		return new ComparatorEquivalence<>(type, nullable, compare);
 	}
 
@@ -146,7 +145,7 @@ public interface Equivalence<E> {
 
 		ComparatorEquivalence(Class<E> type, boolean nullable, Comparator<? super E> compare) {
 			if (type.isPrimitive())
-				type = (Class<E>) TypeToken.of(type).wrap().getRawType(); // Better way to do this?
+				type = TypeTokens.get().wrap(type);
 			this.type = type;
 			this.nullable = nullable;
 			this.compare = compare;
@@ -225,7 +224,7 @@ public interface Equivalence<E> {
 		public MappedEquivalence(Equivalence<E> wrapped, Class<T> type, Predicate<? super T> filter, Function<? super E2, ? extends T> map,
 			Function<? super T, ? extends E2> reverse) {
 			if (type.isPrimitive())
-				type = (Class<T>) TypeToken.of(type).wrap().getRawType(); // Better way to do this?
+				type = TypeTokens.get().wrap(type);
 			theWrapped = wrapped;
 			theType = type;
 			theFilter = filter;
@@ -415,6 +414,11 @@ public interface Equivalence<E> {
 		}
 
 		@Override
+		public CollectionElement<T2> getOrAdd(T2 value, boolean first, Runnable added) {
+			return handleFor(theWrapped.getOrAdd(theReverse.apply(value), first, added));
+		}
+
+		@Override
 		public MutableCollectionElement<T2> mutableElement(ElementId id) {
 			return mutableHandleFor(theWrapped.mutableElement(id));
 		}
@@ -515,7 +519,7 @@ public interface Equivalence<E> {
 
 	/**
 	 * A map for a {@link Equivalence.MappedEquivalence}
-	 * 
+	 *
 	 * @param <E> The type of the source equivalence
 	 * @param <E2> The sub type of the source equivalence's type that this map's equivalence understands
 	 * @param <T> The type of this map's equivalence
@@ -549,6 +553,11 @@ public interface Equivalence<E> {
 		@Override
 		public MapEntryHandle<T2, V> putEntry(T2 key, V value, ElementId after, ElementId before, boolean first) {
 			return handleFor(theWrapped.putEntry(theReverse.apply(key), value, after, before, first));
+		}
+
+		@Override
+		public MapEntryHandle<T2, V> getOrPutEntry(T2 key, Function<? super T2, ? extends V> value, boolean first, Runnable added) {
+			return handleFor(theWrapped.getOrPutEntry(theReverse.apply(key), k -> value.apply(key), first, added));
 		}
 
 		private MapEntryHandle<T2, V> handleFor(MapEntryHandle<E, V> entry) {

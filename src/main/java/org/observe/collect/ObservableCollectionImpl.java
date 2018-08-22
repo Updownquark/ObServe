@@ -28,6 +28,7 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.DerivedCollectionEle
 import org.observe.collect.ObservableCollectionDataFlowImpl.ElementAccepter;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
+import org.observe.util.TypeTokens;
 import org.observe.util.WeakListening;
 import org.qommons.ArrayUtils;
 import org.qommons.BiTuple;
@@ -1447,7 +1448,7 @@ public final class ObservableCollectionImpl {
 			if (isReversed)
 				return theSource.getElementsAfter(id.reverse());
 			else
-			return theSource.getElementsBefore(id);
+				return theSource.getElementsBefore(id);
 		}
 
 		@Override
@@ -1455,7 +1456,7 @@ public final class ObservableCollectionImpl {
 			if (isReversed)
 				return theSource.getElementsBefore(id.reverse());
 			else
-			return theSource.getElementsAfter(id);
+				return theSource.getElementsAfter(id);
 		}
 
 		@Override
@@ -1635,32 +1636,32 @@ public final class ObservableCollectionImpl {
 					}
 				});
 				try (Transaction sourceT = theSource.lock(false, null)) {
-				sourceSub = getSource().onChange(new Consumer<ObservableCollectionEvent<? extends E>>() {
+					sourceSub = getSource().onChange(new Consumer<ObservableCollectionEvent<? extends E>>() {
 						private int theSize = isReversed ? size() : -1;
 
-					@Override
-					public void accept(ObservableCollectionEvent<? extends E> evt) {
-						try (Transaction t = theFlow.lock(true, evt)) {
-							T oldValue, newValue;
-							switch (evt.getType()) {
-							case add:
-								newValue = currentMap[0].apply(evt.getNewValue());
-								oldValue = null;
-								break;
-							case remove:
-								oldValue = currentMap[0].apply(evt.getOldValue());
-								newValue = oldValue;
-								break;
-							case set:
-								BiTuple<T, T> values = theFlow.map(evt.getOldValue(), evt.getNewValue(), currentMap[0]);
-								if (values == null)
-									return;
-								oldValue = values.getValue1();
-								newValue = values.getValue2();
-								break;
-							default:
-								throw new IllegalStateException("Unrecognized collection change type: " + evt.getType());
-							}
+						@Override
+						public void accept(ObservableCollectionEvent<? extends E> evt) {
+							try (Transaction t = theFlow.lock(true, evt)) {
+								T oldValue, newValue;
+								switch (evt.getType()) {
+								case add:
+									newValue = currentMap[0].apply(evt.getNewValue());
+									oldValue = null;
+									break;
+								case remove:
+									oldValue = currentMap[0].apply(evt.getOldValue());
+									newValue = oldValue;
+									break;
+								case set:
+									BiTuple<T, T> values = theFlow.map(evt.getOldValue(), evt.getNewValue(), currentMap[0]);
+									if (values == null)
+										return;
+									oldValue = values.getValue1();
+									newValue = values.getValue2();
+									break;
+								default:
+									throw new IllegalStateException("Unrecognized collection change type: " + evt.getType());
+								}
 								int index;
 								if (!isReversed)
 									index = evt.getIndex();
@@ -1672,11 +1673,11 @@ public final class ObservableCollectionImpl {
 										theSize--;
 								}
 								observer.accept(new ObservableCollectionEvent<>(mapId(evt.getElementId()), getType(), index, evt.getType(),
-								oldValue, newValue, evt));
+									oldValue, newValue, evt));
+							}
 						}
-					}
-				});
-			}
+					});
+				}
 			}
 			return Subscription.forAll(sourceSub, mapSub);
 		}
@@ -2645,7 +2646,7 @@ public final class ObservableCollectionImpl {
 			ObservableCollection<? extends E> current = theCollectionObservable.get();
 			if (current == null)
 				return MutableCollectionElement.StdMsg.UNSUPPORTED_OPERATION;
-			else if (value != null && !current.getType().wrap().getRawType().isInstance(value))
+			else if (value != null && !TypeTokens.get().isInstance(current.getType(), value))
 				return MutableCollectionElement.StdMsg.BAD_TYPE;
 			return ((ObservableCollection<E>) current).canAdd(value, after, before);
 		}
@@ -2656,7 +2657,7 @@ public final class ObservableCollectionImpl {
 			ObservableCollection<? extends E> coll = theCollectionObservable.get();
 			if (coll == null)
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-			if (value != null && !coll.getType().wrap().getRawType().isInstance(value))
+			if (value != null && !TypeTokens.get().isInstance(coll.getType(), value))
 				throw new IllegalArgumentException(MutableCollectionElement.StdMsg.BAD_TYPE);
 			return ((ObservableCollection<E>) coll).addElement(value, after, before, first);
 		}
