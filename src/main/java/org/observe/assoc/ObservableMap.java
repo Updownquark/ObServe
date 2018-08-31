@@ -143,11 +143,6 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 			}
 
 			@Override
-			public Transaction lock() {
-				return ObservableMap.this.lock(false, null);
-			}
-
-			@Override
 			public V get() {
 				CollectionElement<Map.Entry<K, V>> entryEl = entrySet().getElement(new SimpleMapEntry<>((K) key, null), true);
 				if (entryEl != null)
@@ -185,7 +180,17 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 
 					@Override
 					public boolean isSafe() {
-						return true;
+						return ObservableMap.this.isLockSupported();
+					}
+
+					@Override
+					public Transaction lock() {
+						return ObservableMap.this.lock(false, null);
+					}
+
+					@Override
+					public Transaction tryLock() {
+						return ObservableMap.this.tryLock(false, false, null);
 					}
 				};
 			}

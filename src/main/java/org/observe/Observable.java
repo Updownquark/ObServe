@@ -2,7 +2,7 @@ package org.observe;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -10,6 +10,7 @@ import java.util.function.Supplier;
 
 import org.qommons.Causable;
 import org.qommons.ListenerSet;
+import org.qommons.Lockable;
 import org.qommons.Transaction;
 
 /**
@@ -17,7 +18,7 @@ import org.qommons.Transaction;
  *
  * @param <T> The type of values this observable provides
  */
-public interface Observable<T> {
+public interface Observable<T> extends Lockable {
 	/**
 	 * Subscribes to this observable such that the given observer will be notified of any new values on this observable.
 	 *
@@ -43,8 +44,7 @@ public interface Observable<T> {
 			}
 
 			@Override
-			public <V extends T> void onCompleted(V value) {
-			}
+			public <V extends T> void onCompleted(V value) {}
 
 			@Override
 			public String toString() {
@@ -64,8 +64,7 @@ public interface Observable<T> {
 			}
 
 			@Override
-			public <V extends T> void onNext(V value) {
-			}
+			public <V extends T> void onNext(V value) {}
 
 			@Override
 			public <V extends T> void onCompleted(V value) {
@@ -82,6 +81,16 @@ public interface Observable<T> {
 			@Override
 			public boolean isSafe() {
 				return outer.isSafe();
+			}
+
+			@Override
+			public Transaction lock() {
+				return outer.lock();
+			}
+
+			@Override
+			public Transaction tryLock() {
+				return outer.tryLock();
 			}
 		};
 	}
@@ -112,6 +121,16 @@ public interface Observable<T> {
 			@Override
 			public boolean isSafe() {
 				return outer.isSafe();
+			}
+
+			@Override
+			public Transaction lock() {
+				return outer.lock();
+			}
+
+			@Override
+			public Transaction tryLock() {
+				return outer.tryLock();
 			}
 		};
 	}
@@ -229,6 +248,22 @@ public interface Observable<T> {
 	/** @return Whether this observable is thread-safe, meaning it is constrained to only fire values on a single thread at a time */
 	boolean isSafe();
 
+	@Override
+	default boolean isLockSupported() {
+		return isSafe();
+	}
+
+	/**
+	 * Prevents this observable from firing while the lock is held. The lock is not exclusive.
+	 *
+	 * @return The transaction to close to release the lock
+	 */
+	@Override
+	Transaction lock();
+
+	@Override
+	Transaction tryLock();
+
 	/** @return An observable firing the same values that only fires values on a single thread at a time */
 	default Observable<T> safe() {
 		if (isSafe())
@@ -246,25 +281,37 @@ public interface Observable<T> {
 		return new Observable<V>() {
 			@Override
 			public Subscription subscribe(Observer<? super V> observer) {
-				Subscription [] subs = new Subscription[obs.length];
+				Subscription[] subs = new Subscription[obs.length];
 				boolean[] init = new boolean[] { true };
 				for (int i = 0; i < subs.length; i++) {
 					int index = i;
 					subs[i] = obs[i].subscribe(new Observer<V>() {
 						@Override
 						public <V2 extends V> void onNext(V2 value) {
-							observer.onNext(value);
+							try (Transaction t = lockOthers()) {
+								observer.onNext(value);
+							}
 						}
 
 						@Override
 						public <V2 extends V> void onCompleted(V2 value) {
-							subs[index] = null;
-							boolean allDone = !init[0];
-							for (int j = 0; allDone && j < subs.length; j++)
-								if (subs[j] != null)
-									allDone = false;
-							if (allDone)
-								observer.onCompleted(value);
+							try (Transaction t = lockOthers()) {
+								subs[index] = null;
+								boolean allDone = !init[0];
+								for (int j = 0; allDone && j < subs.length; j++)
+									if (subs[j] != null)
+										allDone = false;
+								if (allDone)
+									observer.onCompleted(value);
+							}
+						}
+
+						Transaction lockOthers() {
+							Transaction[] locks = new Transaction[obs.length];
+							for (int j = 0; j < subs.length; j++)
+								if (j != index)
+									locks[j] = obs[j].lock();
+							return Transaction.and(locks);
 						}
 					});
 				}
@@ -280,14 +327,27 @@ public interface Observable<T> {
 
 			@Override
 			public boolean isSafe() {
-				return false;
+				for (Observable<?> o : obs)
+					if (!o.isSafe())
+						return false;
+				return true;
+			}
+
+			@Override
+			public Transaction lock() {
+				return Lockable.lockAll(obs);
+			}
+
+			@Override
+			public Transaction tryLock() {
+				return Lockable.tryLockAll(obs);
 			}
 
 			@Override
 			public String toString() {
 				StringBuilder ret = new StringBuilder("or(");
-				for(int i = 0; i < obs.length; i++) {
-					if(i > 0)
+				for (int i = 0; i < obs.length; i++) {
+					if (i > 0)
 						ret.append(", ");
 					ret.append(obs[i]);
 				}
@@ -307,13 +367,22 @@ public interface Observable<T> {
 			@Override
 			public Subscription subscribe(Observer<? super T> observer) {
 				observer.onNext(value);
-				return () -> {
-				};
+				return () -> {};
 			}
 
 			@Override
 			public boolean isSafe() {
 				return true;
+			}
+
+			@Override
+			public Transaction lock() {
+				return Transaction.NONE;
+			}
+
+			@Override
+			public Transaction tryLock() {
+				return Transaction.NONE;
 			}
 
 			@Override
@@ -335,13 +404,22 @@ public interface Observable<T> {
 	public static Observable<?> empty = new Observable<Object>() {
 		@Override
 		public Subscription subscribe(Observer<? super Object> observer) {
-			return () -> {
-			};
+			return () -> {};
 		}
 
 		@Override
 		public boolean isSafe() {
 			return true;
+		}
+
+		@Override
+		public Transaction lock() {
+			return Transaction.NONE;
+		}
+
+		@Override
+		public Transaction tryLock() {
+			return Transaction.NONE;
 		}
 
 		@Override
@@ -373,8 +451,8 @@ public interface Observable<T> {
 		/**
 		 * @param wrap The observable that this chaining observable reflects the values of
 		 * @param completion The completion observable that will emit a value when the {@link #unsubscribe()} method of any link in the
-		 *            chain is called. May be null if this is the first link in the chain, in which case the observable and its controller
-		 *            will be created.
+		 *        chain is called. May be null if this is the first link in the chain, in which case the observable and its controller will
+		 *        be created.
 		 * @param controller The controller for the completion observable. May be null if <code>completion</code> is null.
 		 */
 		public DefaultChainingObservable(Observable<T> wrap, Observable<Void> completion, Observer<Void> controller) {
@@ -466,6 +544,16 @@ public interface Observable<T> {
 		}
 
 		@Override
+		public Transaction lock() {
+			return theWrapped.lock();
+		}
+
+		@Override
+		public Transaction tryLock() {
+			return theWrapped.tryLock();
+		}
+
+		@Override
 		public String toString() {
 			return theWrapped.toString();
 		}
@@ -489,11 +577,11 @@ public interface Observable<T> {
 
 		@Override
 		public Subscription subscribe(Observer<? super T> observer) {
-			boolean [] initialized = new boolean[1];
+			boolean[] initialized = new boolean[1];
 			Subscription ret = theWrapped.subscribe(new Observer<T>() {
 				@Override
 				public <V extends T> void onNext(V value) {
-					if(initialized[0])
+					if (initialized[0])
 						observer.onNext(value);
 				}
 
@@ -509,6 +597,16 @@ public interface Observable<T> {
 		@Override
 		public boolean isSafe() {
 			return theWrapped.isSafe();
+		}
+
+		@Override
+		public Transaction lock() {
+			return theWrapped.lock();
+		}
+
+		@Override
+		public Transaction tryLock() {
+			return theWrapped.tryLock();
 		}
 
 		@Override
@@ -547,14 +645,14 @@ public interface Observable<T> {
 				@Override
 				public <V extends T> void onNext(V value) {
 					R mapped = theMap.apply(value);
-					if(mapped != null)
+					if (mapped != null)
 						observer.onNext(mapped);
 				}
 
 				@Override
 				public <V extends T> void onCompleted(V value) {
 					R mapped = theMap.apply(value);
-					if(mapped != null)
+					if (mapped != null)
 						observer.onNext(mapped);
 					else
 						observer.onCompleted(null); // Gotta pass along the completion even if it doesn't include a value
@@ -565,6 +663,16 @@ public interface Observable<T> {
 		@Override
 		public boolean isSafe() {
 			return theWrapped.isSafe();
+		}
+
+		@Override
+		public Transaction lock() {
+			return theWrapped.lock();
+		}
+
+		@Override
+		public Transaction tryLock() {
+			return theWrapped.tryLock();
 		}
 
 		@Override
@@ -583,7 +691,7 @@ public interface Observable<T> {
 
 		private final List<Observable<?>> theComposed;
 
-		private final Function<Object [], T> theFunction;
+		private final Function<Object[], T> theFunction;
 
 		private final ListenerSet<Observer<? super T>> theObservers;
 
@@ -591,26 +699,26 @@ public interface Observable<T> {
 		 * @param function The function that operates on the argument observables to produce this observable's value
 		 * @param composed The argument observables whose values are passed to the function
 		 */
-		public ComposedObservable(Function<Object [], T> function, Observable<?>... composed) {
+		public ComposedObservable(Function<Object[], T> function, Observable<?>... composed) {
 			theFunction = function;
 			theComposed = java.util.Collections.unmodifiableList(java.util.Arrays.asList(composed));
 			theObservers = new ListenerSet<>();
 			theObservers.setUsedListener(new Consumer<Boolean>() {
-				private final Subscription [] composedSubs = new Subscription[theComposed.size()];
+				private final Subscription[] composedSubs = new Subscription[theComposed.size()];
 
-				private final Object [] values = new Object[theComposed.size()];
+				private final Object[] values = new Object[theComposed.size()];
 
 				@Override
 				public void accept(Boolean used) {
-					if(used) {
-						for(int i = 0; i < theComposed.size(); i++) {
+					if (used) {
+						for (int i = 0; i < theComposed.size(); i++) {
 							int index = i;
 							composedSubs[i] = theComposed.get(i).subscribe(new Observer<Object>() {
 								@Override
 								public <V> void onNext(V value) {
 									values[index] = value;
 									Object next = getNext();
-									if(next != NONE)
+									if (next != NONE)
 										fireNext((T) next);
 								}
 
@@ -618,14 +726,14 @@ public interface Observable<T> {
 								public <V> void onCompleted(V value) {
 									values[index] = value;
 									Object next = getNext();
-									if(next != NONE)
+									if (next != NONE)
 										fireCompleted((T) next);
 								}
 
 								private Object getNext() {
-									Object [] args = values.clone();
-									for(Object value : args)
-										if(value == NONE)
+									Object[] args = values.clone();
+									for (Object value : args)
+										if (value == NONE)
 											return NONE;
 									return theFunction.apply(args);
 								}
@@ -640,7 +748,7 @@ public interface Observable<T> {
 							});
 						}
 					} else {
-						for(int i = 0; i < theComposed.size(); i++) {
+						for (int i = 0; i < theComposed.size(); i++) {
 							composedSubs[i].unsubscribe();
 							composedSubs[i] = null;
 							values[i] = null;
@@ -657,13 +765,26 @@ public interface Observable<T> {
 		}
 
 		/** @return The observables that this observable uses as sources */
-		public Observable<?> [] getComposed() {
+		public Observable<?>[] getComposed() {
 			return theComposed.toArray(new Observable[theComposed.size()]);
 		}
 
 		@Override
 		public boolean isSafe() {
+			for (Observable<?> o : theComposed)
+				if (!o.isSafe())
+					return false;
 			return true;
+		}
+
+		@Override
+		public Transaction lock() {
+			return Lockable.lockAll(theComposed);
+		}
+
+		@Override
+		public Transaction tryLock() {
+			return Lockable.tryLockAll(theComposed);
 		}
 
 		@Override
@@ -705,8 +826,8 @@ public interface Observable<T> {
 		@Override
 		public Subscription subscribe(Observer<? super T> observer) {
 			Subscription outerSub = theWrapped.subscribe(observer);
-			boolean [] complete = new boolean[1];
-			Subscription [] untilSub = new Subscription[1];
+			boolean[] complete = new boolean[1];
+			Subscription[] untilSub = new Subscription[1];
 			untilSub[0] = theUntil.subscribe(new Observer<Object>() {
 				@Override
 				public void onNext(Object value) {
@@ -724,11 +845,11 @@ public interface Observable<T> {
 
 				@Override
 				public void onCompleted(Object value) {
-					//A completed until shouldn't affect things
+					// A completed until shouldn't affect things
 				}
 			});
 			return () -> {
-				if(complete[0])
+				if (complete[0])
 					return;
 				complete[0] = true;
 				outerSub.unsubscribe();
@@ -739,6 +860,16 @@ public interface Observable<T> {
 		@Override
 		public boolean isSafe() {
 			return theWrapped.isSafe();
+		}
+
+		@Override
+		public Transaction lock() {
+			return theWrapped.lock();
+		}
+
+		@Override
+		public Transaction tryLock() {
+			return theWrapped.tryLock();
 		}
 
 		@Override
@@ -780,7 +911,7 @@ public interface Observable<T> {
 				@Override
 				public <V extends T> void onNext(V value) {
 					int count = theCounter.getAndIncrement();
-					if(count < theTimes)
+					if (count < theTimes)
 						observer.onNext(value);
 					if (count == theTimes - 1) {
 						observer.onCompleted(value);
@@ -792,7 +923,7 @@ public interface Observable<T> {
 
 				@Override
 				public <V extends T> void onCompleted(V value) {
-					if(theCounter.get() < theTimes)
+					if (theCounter.get() < theTimes)
 						observer.onCompleted(value);
 				}
 			});
@@ -809,6 +940,16 @@ public interface Observable<T> {
 		@Override
 		public boolean isSafe() {
 			return theWrapped.isSafe();
+		}
+
+		@Override
+		public Transaction lock() {
+			return theWrapped.lock();
+		}
+
+		@Override
+		public Transaction tryLock() {
+			return theWrapped.tryLock();
 		}
 
 		@Override
@@ -847,7 +988,7 @@ public interface Observable<T> {
 
 				@Override
 				public <V extends T> void onNext(V value) {
-					if(counter.get() <= 0 || counter.getAndDecrement() <= 0)
+					if (counter.get() <= 0 || counter.getAndDecrement() <= 0)
 						observer.onNext(value);
 				}
 
@@ -864,6 +1005,16 @@ public interface Observable<T> {
 		}
 
 		@Override
+		public Transaction lock() {
+			return theWrapped.lock();
+		}
+
+		@Override
+		public Transaction tryLock() {
+			return theWrapped.tryLock();
+		}
+
+		@Override
 		public String toString() {
 			return theWrapped + ".skip(" + theTimes + ")";
 		}
@@ -876,19 +1027,15 @@ public interface Observable<T> {
 	 */
 	class SafeObservable<T> implements Observable<T> {
 		private final Observable<T> theWrapped;
-		private final Lock theLock;
+		private final ReentrantReadWriteLock theLock;
 
 		protected SafeObservable(Observable<T> wrap) {
 			theWrapped = wrap;
-			theLock = new java.util.concurrent.locks.ReentrantLock();
+			theLock = new ReentrantReadWriteLock();
 		}
 
 		protected Observable<T> getWrapped() {
 			return theWrapped;
-		}
-
-		protected Lock getLock() {
-			return theLock;
 		}
 
 		@Override
@@ -896,21 +1043,21 @@ public interface Observable<T> {
 			return theWrapped.subscribe(new Observer<T>() {
 				@Override
 				public <V extends T> void onNext(V value) {
-					theLock.lock();
+					theLock.writeLock().lock();
 					try {
 						observer.onNext(value);
 					} finally {
-						theLock.unlock();
+						theLock.writeLock().unlock();
 					}
 				}
 
 				@Override
 				public <V extends T> void onCompleted(V value) {
-					theLock.lock();
+					theLock.writeLock().lock();
 					try {
 						observer.onCompleted(value);
 					} finally {
-						theLock.unlock();
+						theLock.writeLock().unlock();
 					}
 				}
 			});
@@ -919,6 +1066,16 @@ public interface Observable<T> {
 		@Override
 		public boolean isSafe() {
 			return true;
+		}
+
+		@Override
+		public Transaction lock() {
+			return Lockable.lockAll(theWrapped, Lockable.lockable(theLock, false));
+		}
+
+		@Override
+		public Transaction tryLock() {
+			return Lockable.tryLockAll(theWrapped, Lockable.lockable(theLock, false));
 		}
 
 		@Override
@@ -980,6 +1137,16 @@ public interface Observable<T> {
 		@Override
 		public boolean isSafe() {
 			return false; // Can't guarantee that all values in the wrapper will be safe
+		}
+
+		@Override
+		public Transaction lock() {
+			return theWrapper.lock(); // Can't access the contents reliably
+		}
+
+		@Override
+		public Transaction tryLock() {
+			return theWrapper.tryLock(); // Can't access the contents reliably
 		}
 	}
 }

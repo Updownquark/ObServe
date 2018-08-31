@@ -303,6 +303,11 @@ public interface Equivalence<E> {
 		}
 
 		@Override
+		public Transaction tryLock(boolean write, boolean structural, Object cause) {
+			return theWrapped.tryLock(write, structural, cause);
+		}
+
+		@Override
 		public long getStamp(boolean structuralOnly) {
 			return theWrapped.getStamp(structuralOnly);
 		}

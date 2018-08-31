@@ -1,7 +1,5 @@
 package org.observe;
 
-import java.util.concurrent.locks.ReentrantLock;
-
 import org.observe.util.TypeTokens;
 import org.qommons.Transaction;
 
@@ -17,7 +15,6 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 
 	private final TypeToken<T> theType;
 	private final boolean isNullable;
-	private final ReentrantLock theLock;
 	private T theValue;
 
 	/**
@@ -28,7 +25,6 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 		theEventer = createEventer();
 		theType = type;
 		isNullable = nullable && !type.isPrimitive();
-		theLock = new ReentrantLock();
 	}
 
 	/**
@@ -47,12 +43,6 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 	@Override
 	public Observable<ObservableValueEvent<T>> changes() {
 		return theEventer.readOnly();
-	}
-
-	@Override
-	public Transaction lock() {
-		theLock.lock();
-		return () -> theLock.unlock();
 	}
 
 	/** @return Whether null can be assigned to this value */
@@ -75,7 +65,8 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 		String accept = isAcceptable(value);
 		if(accept != null)
 			throw new IllegalArgumentException(accept);
-		theLock.lock();
+		if (theEventer.isLockSupported())
+			theEventer.getLock().writeLock().lock();
 		try {
 			T old = theValue;
 			theValue = value;
@@ -85,7 +76,8 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 			}
 			return old;
 		} finally {
-			theLock.unlock();
+			if (theEventer.isLockSupported())
+				theEventer.getLock().writeLock().unlock();
 		}
 	}
 

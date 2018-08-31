@@ -7,7 +7,6 @@ import java.util.function.Supplier;
 
 import org.observe.XformOptions.SimpleXformOptions;
 import org.observe.XformOptions.XformDef;
-import org.qommons.Transaction;
 import org.qommons.TriFunction;
 
 import com.google.common.reflect.TypeToken;
@@ -110,11 +109,6 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			}
 
 			@Override
-			public Transaction lock() {
-				return SettableValue.this.lock();
-			}
-
-			@Override
 			public String toString() {
 				return SettableValue.this.toString();
 			}
@@ -141,11 +135,6 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			@Override
 			public Observable<ObservableValueEvent<T>> changes() {
 				return SettableValue.this.changes();
-			}
-
-			@Override
-			public Transaction lock() {
-				return outer.lock();
 			}
 
 			@Override
@@ -203,11 +192,6 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			}
 
 			@Override
-			public Transaction lock() {
-				return outer.lock();
-			}
-
-			@Override
 			public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
 				onSetAction.accept(value);
 				return outer.set(value, cause);
@@ -251,11 +235,6 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			@Override
 			public Observable<ObservableValueEvent<T>> changes() {
 				return SettableValue.this.changes();
-			}
-
-			@Override
-			public Transaction lock() {
-				return outer.lock();
 			}
 
 			@Override

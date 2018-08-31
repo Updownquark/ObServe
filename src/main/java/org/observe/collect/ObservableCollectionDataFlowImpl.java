@@ -5,12 +5,10 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -42,6 +40,8 @@ import org.observe.collect.ObservableCollectionImpl.PassiveDerivedCollection;
 import org.observe.util.TypeTokens;
 import org.observe.util.WeakListening;
 import org.qommons.BiTuple;
+import org.qommons.Lockable;
+import org.qommons.StructuredTransactable;
 import org.qommons.Ternian;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
@@ -55,7 +55,6 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
-import org.qommons.collect.TransactableCollection;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeMap;
 import org.qommons.tree.BinaryTreeNode;
@@ -175,7 +174,7 @@ public class ObservableCollectionDataFlowImpl {
 	 * @param <I> An intermediate type
 	 * @param <T> The type of the derived collection that can use this manager
 	 */
-	public static interface CollectionOperation<E, I, T> extends Transactable {
+	public static interface CollectionOperation<E, I, T> extends StructuredTransactable {
 		/** @return The type of collection that this operation would produce */
 		TypeToken<T> getTargetType();
 
@@ -300,22 +299,6 @@ public class ObservableCollectionDataFlowImpl {
 	 * @param <T> The type of the derived collection that this manager can power
 	 */
 	public static interface ActiveCollectionManager<E, I, T> extends CollectionOperation<E, I, T> {
-		/**
-		 * Obtains a lock on this manager's data source(s)
-		 *
-		 * @param write Whether to obtain a write lock
-		 * @param structural Whether to obtain a structural lock
-		 * @param cause The cause for the transaction
-		 * @return The transaction to {@link Transaction#close() close} to release the lock
-		 * @see TransactableCollection#lock(boolean, boolean, Object)
-		 */
-		Transaction lock(boolean write, boolean structural, Object cause);
-
-		@Override
-		default Transaction lock(boolean write, Object cause) {
-			return lock(write, write, cause);
-		}
-
 		/** @return Whether this manager's collection should be able to insert values at arbitrary positions */
 		boolean isContentControlled();
 
@@ -539,6 +522,64 @@ public class ObservableCollectionDataFlowImpl {
 	static <T> void removed(CollectionElementListener<T> listener, T value, Object cause) {
 		if (listener != null)
 			listener.removed(value, cause);
+	}
+
+	public static StructuredTransactable structureAffectedPassLockThroughToParent(CollectionOperation<?, ?, ?> parent) {
+		return new StructuredTransactable() {
+			@Override
+			public boolean isLockSupported() {
+				return parent.isLockSupported();
+			}
+
+			@Override
+			public Transaction lock(boolean write, boolean structural, Object cause) {
+				return structureAffectedPassLockThroughToParent(parent, write, structural, cause);
+			}
+
+			@Override
+			public Transaction tryLock(boolean write, boolean structural, Object cause) {
+				return structureAffectedTryPassLockThroughToParent(parent, write, structural, cause);
+			}
+		};
+	}
+
+	/**
+	 * This method is to be used by derived operations that affect the structure of the result. E.g. filtering, sorting, etc. where an
+	 * update from the parent collection may cause values to be added, removed, or moved in the derived collection.
+	 *
+	 * @param parent The parent operation
+	 * @param write Whether to obtain a write (exclusive) lock or a read (non-exclusive) lock
+	 * @param structural Whether to obtain a structural or an update lock
+	 * @param cause The cause of the lock
+	 * @return The parent lock to close to release it
+	 * @see StructuredTransactable#lock(boolean, boolean, Object)
+	 */
+	public static Transaction structureAffectedPassLockThroughToParent(CollectionOperation<?, ?, ?> parent, boolean write,
+		boolean structural, Object cause) {
+		if (write) {
+			// If the caller is doing the modifications, we can prevent any potential updates that would affect the child's structure
+			// Because a write lock is always exclusive (no external modifications, even updates, may be performed while any write lock
+			// is held), we don't need to worry about updates from the parent
+			return parent.lock(true, structural, cause);
+		} else {
+			// Because updates to the parent can affect this derived structure,
+			// we need to prevent updates from the parent even when the caller would allow updates
+			return parent.lock(false, false, cause);
+		}
+	}
+
+	public static Transaction structureAffectedTryPassLockThroughToParent(CollectionOperation<?, ?, ?> parent, boolean write,
+		boolean structural, Object cause) {
+		if (write) {
+			// If the caller is doing the modifications, we can prevent any potential updates that would affect the child's structure
+			// Because a write lock is always exclusive (no external modifications, even updates, may be performed while any write lock
+			// is held), we don't need to worry about updates from the parent
+			return parent.tryLock(true, structural, cause);
+		} else {
+			// Because updates to the parent can affect this derived structure,
+			// we need to prevent updates from the parent even when the caller would allow updates
+			return parent.tryLock(false, false, cause);
+		}
 	}
 
 	/**
@@ -1123,8 +1164,7 @@ public class ObservableCollectionDataFlowImpl {
 	}
 
 	private static class EquivalenceSwitchOp<E, T> extends AbstractDataFlow<E, T, T> {
-		EquivalenceSwitchOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent,
-			Equivalence<? super T> equivalence) {
+		EquivalenceSwitchOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, T> parent, Equivalence<? super T> equivalence) {
 			super(source, parent, parent.getTargetType(), equivalence);
 		}
 
@@ -1178,8 +1218,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public PassiveCollectionManager<E, ?, T> managePassive() {
-			return new PassiveMappedCollectionManager<>(getParent().managePassive(), getTargetType(), theMap, equivalence(),
-				theOptions);
+			return new PassiveMappedCollectionManager<>(getParent().managePassive(), getTargetType(), theMap, equivalence(), theOptions);
 		}
 
 		@Override
@@ -1370,10 +1409,18 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			// The derived collection takes care of locking the source
-			// return theSource.lock(write, cause);
-			return Transaction.NONE;
+		public boolean isLockSupported() {
+			return theSource.isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			return theSource.lock(write, structural, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, boolean structural, Object cause) {
+			return theSource.tryLock(write, structural, cause);
 		}
 
 		@Override
@@ -1444,8 +1491,18 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isLockSupported() {
+			return theSource.isLockSupported();
+		}
+
+		@Override
 		public Transaction lock(boolean write, boolean structural, Object cause) {
 			return theSource.lock(write, structural, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, boolean structural, Object cause) {
+			return theSource.tryLock(write, structural, cause);
 		}
 
 		@Override
@@ -1591,8 +1648,18 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theParent.lock(write, cause);
+		public boolean isLockSupported() {
+			return theParent.isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			return theParent.lock(write, structural, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, boolean structural, Object cause) {
+			return theParent.tryLock(write, structural, cause);
 		}
 
 		@Override
@@ -1661,8 +1728,18 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isLockSupported() {
+			return theParent.isLockSupported();
+		}
+
+		@Override
 		public Transaction lock(boolean write, boolean structural, Object cause) {
 			return theParent.lock(write, structural, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, boolean structural, Object cause) {
+			return theParent.tryLock(write, structural, cause);
 		}
 
 		@Override
@@ -1750,8 +1827,18 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isLockSupported() {
+			return theParent.isLockSupported();
+		}
+
+		@Override
 		public Transaction lock(boolean write, boolean structural, Object cause) {
-			return theParent.lock(write, structural, cause);
+			return structureAffectedPassLockThroughToParent(theParent, write, structural, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, boolean structural, Object cause) {
+			return structureAffectedTryPassLockThroughToParent(theParent, write, structural, cause);
 		}
 
 		@Override
@@ -1972,8 +2059,18 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isLockSupported() {
+			return theParent.isLockSupported();
+		}
+
+		@Override
 		public Transaction lock(boolean write, boolean structural, Object cause) {
-			return theParent.lock(write, structural, cause);
+			return structureAffectedPassLockThroughToParent(theParent, write, structural, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, boolean structural, Object cause) {
+			return structureAffectedTryPassLockThroughToParent(theParent, write, structural, cause);
 		}
 
 		@Override
@@ -2280,7 +2377,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		private final ActiveCollectionManager<E, ?, T> theParent;
-		private final CollectionDataFlow<?, ?, X> theFilter;
+		private final ObservableCollection<X> theFilter;
 		private final Equivalence<? super T> theEquivalence; // Make this a field since we'll need it often
 		/** Whether a value's presence in the right causes the value in the left to be present (true) or absent (false) in the result */
 		private final boolean isExclude;
@@ -2292,7 +2389,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		IntersectionManager(ActiveCollectionManager<E, ?, T> parent, CollectionDataFlow<?, ?, X> filter, boolean exclude) {
 			theParent = parent;
-			theFilter = filter;
+			theFilter = filter.collect();
 			theEquivalence = parent.equivalence();
 			isExclude = exclude;
 			theValues = theEquivalence.createMap();
@@ -2304,8 +2401,20 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isLockSupported() {
+			return theParent.isLockSupported() || theFilter.isLockSupported();
+		}
+
+		@Override
 		public Transaction lock(boolean write, boolean structural, Object cause) {
-			return theParent.lock(write, structural, cause);
+			return Lockable.lockAll(Lockable.lockable(structureAffectedPassLockThroughToParent(theParent), write, structural, cause),
+				Lockable.lockable(theFilter));
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, boolean structural, Object cause) {
+			return Lockable.tryLockAll(Lockable.lockable(structureAffectedPassLockThroughToParent(theParent), write, structural, cause),
+				Lockable.lockable(theFilter));
 		}
 
 		@Override
@@ -2368,7 +2477,6 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
-			ObservableCollection<X> collectedFilter = theFilter.collect();
 			listening.withConsumer((ObservableCollectionEvent<? extends X> evt) -> {
 				// We're not modifying, but we want to obtain an exclusive lock
 				// to ensure that nothing above or below us is firing events at the same time.
@@ -2406,7 +2514,7 @@ public class ObservableCollectionDataFlowImpl {
 						break;
 					}
 				}
-			}, action -> collectedFilter.subscribe(action, fromStart).removeAll());
+			}, action -> theFilter.subscribe(action, fromStart).removeAll());
 			theParent.begin(fromStart, (parentEl, cause) -> {
 				IntersectionElement element = theValues.computeIfAbsent(parentEl.get(), v -> new IntersectionElement(v));
 				IntersectedCollectionElement el = new IntersectedCollectionElement(parentEl, element, false);
@@ -2437,8 +2545,18 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theParent.lock(write, cause);
+		public boolean isLockSupported() {
+			return theParent.isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			return theParent.lock(write, structural, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, boolean structural, Object cause) {
+			return theParent.tryLock(write, structural, cause);
 		}
 
 		@Override
@@ -2507,8 +2625,18 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isLockSupported() {
+			return theParent.isLockSupported();
+		}
+
+		@Override
 		public Transaction lock(boolean write, boolean structural, Object cause) {
 			return theParent.lock(write, structural, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, boolean structural, Object cause) {
+			return theParent.tryLock(write, structural, cause);
 		}
 
 		@Override
@@ -2576,8 +2704,18 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theParent.lock(write, cause);
+		public boolean isLockSupported() {
+			return theParent.isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			return theParent.lock(write, structural, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, boolean structural, Object cause) {
+			return theParent.tryLock(write, structural, cause);
 		}
 
 		@Override
@@ -2807,8 +2945,18 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isLockSupported() {
+			return theParent.isLockSupported();
+		}
+
+		@Override
 		public Transaction lock(boolean write, boolean structural, Object cause) {
 			return theParent.lock(write, structural, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, boolean structural, Object cause) {
+			return theParent.tryLock(write, structural, cause);
 		}
 
 		@Override
@@ -3057,24 +3205,36 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			Transaction parentLock = theParent.lock(write, cause);
-			Transaction valueLock = lockValues();
-			return () -> {
-				valueLock.close();
-				parentLock.close();
-			};
+		public boolean isLockSupported() {
+			return true;
 		}
 
-		private Transaction lockValues() {
-			Transaction[] valueLocks = new Transaction[theDef.getArgs().size()];
-			int v = 0;
-			for (ObservableValue<?> arg : theDef.getArgs())
-				valueLocks[v++] = arg.lock();
-			return () -> {
-				for (int a = 0; a < valueLocks.length; a++)
-					valueLocks[a].close();
-			};
+		@Override
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			Collection<ObservableValue<?>> argsToLock;
+			if (write || !structural) {
+				// For a read-only, non-structural lock, updates are permitted.
+				// Since the arg values can only cause updates, we don't need to lock the values for that type of lock
+				argsToLock = theDef.getArgs();
+			} else
+				argsToLock = Collections.emptyList();
+			return Lockable.lockAll(Lockable.lockable(theParent, write, structural, cause), argsToLock);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, boolean structural, Object cause) {
+			Collection<ObservableValue<?>> argsToLock;
+			if (write || !structural) {
+				// For a read-only, non-structural lock, updates are permitted.
+				// Since the arg values can only cause updates, we don't need to lock the values for that type of lock
+				argsToLock = theDef.getArgs();
+			} else
+				argsToLock = Collections.emptyList();
+			return Lockable.tryLockAll(Lockable.lockable(theParent, write, structural, cause), argsToLock);
+		}
+
+		private Transaction lockArgs() {
+			return Lockable.lockAll(theDef.getArgs());
 		}
 
 		@Override
@@ -3100,8 +3260,8 @@ public class ObservableCollectionDataFlowImpl {
 				@Override
 				public Transaction lock() {
 					Transaction parentLock = parentMap.lock();
-					Transaction valueLock=lockValues();
-					return ()->{
+					Transaction valueLock = lockArgs();
+					return () -> {
 						valueLock.close();
 						parentLock.close();
 					};
@@ -3119,36 +3279,38 @@ public class ObservableCollectionDataFlowImpl {
 
 				@Override
 				public Observable<ObservableValueEvent<Function<? super E, T>>> changes() {
-					Observable<? extends ObservableValueEvent<? extends Function<? super E, ? extends I>>> parentChanges=parentMap.changes();
-					return new Observable<ObservableValueEvent<Function<? super E, T>>>(){
+					Observable<? extends ObservableValueEvent<? extends Function<? super E, ? extends I>>> parentChanges = parentMap
+						.changes();
+					return new Observable<ObservableValueEvent<Function<? super E, T>>>() {
 						private CombinedMap theCurrentMap;
 
 						@Override
 						public boolean isSafe() {
-							return true;
+							return Lockable.isLockSupported(theDef.getArgs());
 						}
 
 						@Override
 						public Subscription subscribe(Observer<? super ObservableValueEvent<Function<? super E, T>>> observer) {
-							Subscription parentSub=parentChanges.act(new Consumer<ObservableValueEvent<? extends Function<? super E, ? extends I>>>(){
-								@Override
-								public void accept(ObservableValueEvent<? extends Function<? super E, ? extends I>> parentEvt){
-									if (parentEvt.isInitial()) {
-										theCurrentMap = new CombinedMap(parentEvt.getNewValue(), null, new HashMap<>());
-										return;
+							Subscription parentSub = parentChanges
+								.act(new Consumer<ObservableValueEvent<? extends Function<? super E, ? extends I>>>() {
+									@Override
+									public void accept(ObservableValueEvent<? extends Function<? super E, ? extends I>> parentEvt) {
+										if (parentEvt.isInitial()) {
+											theCurrentMap = new CombinedMap(parentEvt.getNewValue(), null, new HashMap<>());
+											return;
+										}
+										try (Transaction valueLock = lockArgs()) {
+											CombinedMap oldMap = theCurrentMap;
+											theCurrentMap = new CombinedMap(parentEvt.getNewValue(), null, oldMap.theValues);
+											observer.onNext(createChangeEvent(oldMap, theCurrentMap, parentEvt));
+										}
 									}
-									try(Transaction valueLock=lockValues()){
-										CombinedMap oldMap = theCurrentMap;
-										theCurrentMap = new CombinedMap(parentEvt.getNewValue(), null, oldMap.theValues);
-										observer.onNext(createChangeEvent(oldMap, theCurrentMap, parentEvt));
-									}
-								}
-							});
-							Subscription [] argSubs=new Subscription[theDef.getArgs().size()];
-							int a=0;
-							for(ObservableValue<?> arg : theDef.getArgs()){
-								int argIndex=a++;
-								argSubs[argIndex]=arg.changes().act(new Consumer<ObservableValueEvent<?>>(){
+								});
+							Subscription[] argSubs = new Subscription[theDef.getArgs().size()];
+							int a = 0;
+							for (ObservableValue<?> arg : theDef.getArgs()) {
+								int argIndex = a++;
+								argSubs[argIndex] = arg.changes().act(new Consumer<ObservableValueEvent<?>>() {
 									@Override
 									public void accept(ObservableValueEvent<?> argEvent) {
 										if (argEvent.isInitial()) {
@@ -3174,6 +3336,16 @@ public class ObservableCollectionDataFlowImpl {
 									parentSub.unsubscribe();
 								}
 							};
+						}
+
+						@Override
+						public Transaction lock() {
+							return Lockable.lockAll(theDef.getArgs());
+						}
+
+						@Override
+						public Transaction tryLock() {
+							return Lockable.tryLockAll(theDef.getArgs());
 						}
 					};
 				}
@@ -3457,24 +3629,36 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isLockSupported() {
+			return true;
+		}
+
+		@Override
 		public Transaction lock(boolean write, boolean structural, Object cause) {
-			Transaction parentLock = theParent.lock(write, structural, cause);
-			Transaction argLock = lockArgs();
-			return () -> {
-				argLock.close();
-				parentLock.close();
-			};
+			Collection<ObservableValue<?>> argsToLock;
+			if (write || !structural) {
+				// For a read-only, non-structural lock, updates are permitted.
+				// Since the arg values can only cause updates, we don't need to lock the values for that type of lock
+				argsToLock = theDef.getArgs();
+			} else
+				argsToLock = Collections.emptyList();
+			return Lockable.lockAll(Lockable.lockable(theParent, write, structural, cause), argsToLock);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, boolean structural, Object cause) {
+			Collection<ObservableValue<?>> argsToLock;
+			if (write || !structural) {
+				// For a read-only, non-structural lock, updates are permitted.
+				// Since the arg values can only cause updates, we don't need to lock the values for that type of lock
+				argsToLock = theDef.getArgs();
+			} else
+				argsToLock = Collections.emptyList();
+			return Lockable.tryLockAll(Lockable.lockable(theParent, write, structural, cause), argsToLock);
 		}
 
 		private Transaction lockArgs() {
-			Transaction[] argLocks = new Transaction[theArgs.size()];
-			int a = 0;
-			for (ObservableValue<?> arg : theArgs.keySet())
-				argLocks[a++] = arg.lock();
-			return () -> {
-				for (int a2 = 0; a2 < argLocks.length; a2++)
-					argLocks[a2].close();
-			};
+			return Lockable.lockAll(theDef.getArgs());
 		}
 
 		@Override
@@ -3533,7 +3717,7 @@ public class ObservableCollectionDataFlowImpl {
 					Ternian update = holder.isUpdate(evt.getOldValue(), evt.getNewValue());
 					if (update == null)
 						return; // No change, no event
-					try (Transaction t = lock(true, false, null)) {
+					try (Transaction t = lock(false, false, null)) {
 						// The old values are not needed if we're caching each element value
 						Object[] source = theDef.isCached() ? null : new Object[1];
 						Combination.CombinedValues<I> oldValues = theDef.isCached() ? null : getCopy(source, arg.getKey(), oldValue);
@@ -3733,12 +3917,10 @@ public class ObservableCollectionDataFlowImpl {
 	private static class PassiveRefreshingCollectionManager<E, T> implements PassiveCollectionManager<E, T, T> {
 		private final PassiveCollectionManager<E, ?, T> theParent;
 		private final Observable<?> theRefresh;
-		private final ReentrantLock theLock;
 
 		PassiveRefreshingCollectionManager(PassiveCollectionManager<E, ?, T> parent, Observable<?> refresh) {
 			theParent = parent;
 			theRefresh = refresh;
-			theLock = new ReentrantLock();
 		}
 
 		@Override
@@ -3752,17 +3934,28 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			Transaction parentLock = theParent.lock(write, cause);
-			theLock.lock();
-			boolean[] unlocked = new boolean[1];
-			return () -> {
-				if (unlocked[0])
-					return;
-				unlocked[0] = true;
-				theLock.unlock();
-				parentLock.close();
-			};
+		public boolean isLockSupported() {
+			return theParent.isLockSupported() && theRefresh.isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			// For a read-only, non-structural lock, updates are permitted.
+			// Since the refresh can only cause updates, we don't need to lock the refresh for that type of lock
+			if (write || !structural)
+				return Lockable.lockAll(Lockable.lockable(theParent, write, structural, cause), theRefresh);
+			else
+				return theParent.lock(write, structural, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, boolean structural, Object cause) {
+			// For a read-only, non-structural lock, updates are permitted.
+			// Since the refresh can only cause updates, we don't need to lock the refresh for that type of lock
+			if (write || !structural)
+				return Lockable.tryLockAll(Lockable.lockable(theParent, write, structural, cause), theRefresh);
+			else
+				return theParent.tryLock(write, structural, cause);
 		}
 
 		@Override
@@ -3833,8 +4026,28 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isLockSupported() {
+			return theParent.isLockSupported() && theRefresh.isLockSupported();
+		}
+
+		@Override
 		public Transaction lock(boolean write, boolean structural, Object cause) {
-			return theParent.lock(write, structural, cause);
+			// For a read-only, non-structural lock, updates are permitted.
+			// Since the refresh can only cause updates, we don't need to lock the refresh for that type of lock
+			if (write || !structural)
+				return Lockable.lockAll(Lockable.lockable(theParent, write, structural, cause), theRefresh);
+			else
+				return theParent.lock(write, structural, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, boolean structural, Object cause) {
+			// For a read-only, non-structural lock, updates are permitted.
+			// Since the refresh can only cause updates, we don't need to lock the refresh for that type of lock
+			if (write || !structural)
+				return Lockable.tryLockAll(Lockable.lockable(theParent, write, structural, cause), theRefresh);
+			else
+				return theParent.tryLock(write, structural, cause);
 		}
 
 		@Override
@@ -3881,14 +4094,14 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
 			theParent.begin(fromStart, (parentEl, cause) -> {
-				onElement.accept(new RefreshingElement(parentEl, false), cause);
+				// Make sure the refresh doesn't fire while we're firing notifications from the parent change
+				try (Transaction t = theRefresh.lock()) {
+					onElement.accept(new RefreshingElement(parentEl, false), cause);
+				}
 			}, listening);
 			listening.withConsumer((Object r) -> {
-				// Although we ourselves are only doing a refresh, this could cause structural changes downstream,
-				// e.g. a refresh->filter combo.
-				// If a non-structural lock were obtained, it would be possible for multiple refreshes to fire simultaneously,
-				// resulting in simultaneous restructures downstream and possible exceptions
-				try (Transaction t = lock(true, true, r)) {
+				// Make sure the parent doesn't fire while we're firing notifications from the refresh
+				try (Transaction t = theParent.lock(false, false, r)) {
 					// Refreshing should be done in element order
 					Collections.sort(theElements);
 					CollectionElement<RefreshingElement> el = theElements.getTerminalElement(true);
@@ -3914,13 +4127,17 @@ public class ObservableCollectionDataFlowImpl {
 					theParentEl.setListener(new CollectionElementListener<T>() {
 						@Override
 						public void update(T oldValue, T newValue, Object cause) {
-							ObservableCollectionDataFlowImpl.update(theListener, oldValue, newValue, cause);
+							try (Transaction t = theRefresh.lock()) {
+								ObservableCollectionDataFlowImpl.update(theListener, oldValue, newValue, cause);
+							}
 						}
 
 						@Override
 						public void removed(T value, Object cause) {
 							theElements.mutableElement(theElementId).remove();
-							ObservableCollectionDataFlowImpl.removed(theListener, value, cause);
+							try (Transaction t = theRefresh.lock()) {
+								ObservableCollectionDataFlowImpl.removed(theListener, value, cause);
+							}
 						}
 					});
 				} else
@@ -3989,11 +4206,11 @@ public class ObservableCollectionDataFlowImpl {
 				theElementId = theRefreshObservables.putEntry(refresh, this, false).getElementId();
 				elements = new BetterTreeList<>(false);
 				theSub = theListening.withConsumer(r -> {
-					try (Transaction t = lock(true, false, r)) {
+					try (Transaction refreshT = lockRefresh(true); Transaction parentT = theParent.lock(false, false, null)) {
 						for (RefreshingElement el : elements)
 							el.refresh(r);
 					}
-				}, action -> refresh.safe().act(action));
+				}, action -> refresh.act(action));
 			}
 
 			void remove(ElementId element) {
@@ -4009,11 +4226,13 @@ public class ObservableCollectionDataFlowImpl {
 		private final Function<? super T, ? extends Observable<?>> theRefresh;
 		private final BetterMap<Observable<?>, RefreshHolder> theRefreshObservables;
 		private WeakListening theListening;
+		private final ReentrantReadWriteLock theLock;
 
 		ElementRefreshingCollectionManager(ActiveCollectionManager<E, ?, T> parent, Function<? super T, ? extends Observable<?>> refresh) {
 			theParent = parent;
 			theRefresh = refresh;
 			theRefreshObservables = BetterHashMap.build().unsafe().buildMap();
+			theLock = new ReentrantReadWriteLock();
 		}
 
 		@Override
@@ -4027,8 +4246,32 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isLockSupported() {
+			return true;
+		}
+
+		@Override
 		public Transaction lock(boolean write, boolean structural, Object cause) {
-			return theParent.lock(write, structural, cause);
+			// For a read-only, non-structural lock, updates are permitted.
+			// Since the refresh can only cause updates, we don't need to lock the refresh for that type of lock
+			if (write || !structural)
+				return Lockable.lockAll(Lockable.lockable(theParent, write, structural, cause), Lockable.lockable(theLock, false));
+			else
+				return theParent.lock(write, structural, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, boolean structural, Object cause) {
+			// For a read-only, non-structural lock, updates are permitted.
+			// Since the refresh can only cause updates, we don't need to lock the refresh for that type of lock
+			if (write || !structural)
+				return Lockable.tryLockAll(Lockable.lockable(theParent, write, structural, cause), Lockable.lockable(theLock, false));
+			else
+				return theParent.tryLock(write, structural, cause);
+		}
+
+		Transaction lockRefresh(boolean exclusive) {
+			return Transactable.lock(theLock, exclusive);
 		}
 
 		@Override
@@ -4075,7 +4318,9 @@ public class ObservableCollectionDataFlowImpl {
 		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
 			theListening = listening;
 			theParent.begin(fromStart, (parentEl, cause) -> {
-				onElement.accept(new RefreshingElement(parentEl), cause);
+				try (Transaction t = lockRefresh(false)) {
+					onElement.accept(new RefreshingElement(parentEl), cause);
+				}
 			}, listening);
 		}
 
@@ -4124,19 +4369,23 @@ public class ObservableCollectionDataFlowImpl {
 					theParentEl.setListener(new CollectionElementListener<T>() {
 						@Override
 						public void update(T oldValue, T newValue, Object cause) {
-							ObservableCollectionDataFlowImpl.update(theListener, oldValue, newValue, cause);
-							updated(newValue);
+							try (Transaction t = lockRefresh(false)) {
+								ObservableCollectionDataFlowImpl.update(theListener, oldValue, newValue, cause);
+								updated(newValue);
+							}
 						}
 
 						@Override
 						public void removed(T value, Object cause) {
-							if (theCurrentHolder != null) { // Remove from old refresh if non-null
-								theCurrentHolder.remove(theElementId);
-								theElementId = null;
-								theCurrentHolder = null;
+							try (Transaction t = lockRefresh(false)) {
+								if (theCurrentHolder != null) { // Remove from old refresh if non-null
+									theCurrentHolder.remove(theElementId);
+									theElementId = null;
+									theCurrentHolder = null;
+								}
+								theCurrentRefresh = null;
+								ObservableCollectionDataFlowImpl.removed(theListener, value, cause);
 							}
-							theCurrentRefresh = null;
-							ObservableCollectionDataFlowImpl.removed(theListener, value, cause);
 						}
 					});
 				} else if (isInstalled && theListener == null) {
@@ -4218,8 +4467,18 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public Transaction lock(boolean write, Object cause) {
-			return theParent.lock(write, cause);
+		public boolean isLockSupported() {
+			return theParent.isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			return theParent.lock(write, structural, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, boolean structural, Object cause) {
+			return theParent.tryLock(write, structural, cause);
 		}
 
 		@Override
@@ -4375,8 +4634,18 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public boolean isLockSupported() {
+			return theParent.isLockSupported();
+		}
+
+		@Override
 		public Transaction lock(boolean write, boolean structural, Object cause) {
 			return theParent.lock(write, structural, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, boolean structural, Object cause) {
+			return theParent.tryLock(write, structural, cause);
 		}
 
 		@Override
@@ -4532,6 +4801,11 @@ public class ObservableCollectionDataFlowImpl {
 			return Equivalence.DEFAULT;
 		}
 
+		@Override
+		public boolean isLockSupported() {
+			return true; // No way to know if any of the outer collection's elements will ever support locking
+		}
+
 		Transaction lockLocal() {
 			Lock localLock = theLock.writeLock();
 			localLock.lock();
@@ -4541,20 +4815,15 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public Transaction lock(boolean write, boolean structural, Object cause) {
 			/* No operations against this manager can affect the parent collection, but only its content collections */
-			Transaction outerLock = theParent.lock(false, false, cause);
-			Lock localLock = write ? theLock.writeLock() : theLock.readLock();
-			localLock.lock();
-			List<Transaction> innerLocks = new LinkedList<>();
-			for (FlattenedHolder holder : theOuterElements) {
-				if (holder.manager != null)
-					innerLocks.add(holder.manager.lock(write, structural, cause));
-			}
-			return () -> {
-				for (Transaction innerLock : innerLocks)
-					innerLock.close();
-				localLock.unlock();
-				outerLock.close();
-			};
+			return Lockable.lockAll(Lockable.lockable(theParent), theOuterElements, //
+				oe -> Lockable.lockable(oe.manager, write, structural, cause));
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, boolean structural, Object cause) {
+			/* No operations against this manager can affect the parent collection, but only its content collections */
+			return Lockable.tryLockAll(Lockable.lockable(theParent), theOuterElements, //
+				oe -> Lockable.lockable(oe.manager, write, structural, cause));
 		}
 
 		@Override

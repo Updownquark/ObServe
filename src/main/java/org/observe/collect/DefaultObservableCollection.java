@@ -54,6 +54,10 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	@Override
 	public Transaction lock(boolean write, boolean structural, Object cause) {
 		Transaction t = theValues.lock(write, structural, cause);
+		return addCause(t, write, cause);
+	}
+
+	private Transaction addCause(Transaction valueLock, boolean write, Object cause) {
 		Causable tCause;
 		Transaction causeFinish;
 		if (cause == null && !theTransactionCauses.isEmpty()) {
@@ -80,9 +84,15 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 					causeFinish.close();
 				if (write && tCause != null)
 					theTransactionCauses.removeLastOccurrence(tCause);
-				t.close();
+				valueLock.close();
 			}
 		};
+	}
+
+	@Override
+	public Transaction tryLock(boolean write, boolean structural, Object cause) {
+		Transaction t = theValues.tryLock(write, structural, cause);
+		return t == null ? null : addCause(t, write, cause);
 	}
 
 	Causable getCurrentCause() {

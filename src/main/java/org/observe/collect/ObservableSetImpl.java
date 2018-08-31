@@ -392,8 +392,18 @@ public class ObservableSetImpl {
 		}
 
 		@Override
+		public boolean isLockSupported() {
+			return theParent.isLockSupported();
+		}
+
+		@Override
 		public Transaction lock(boolean write, boolean structural, Object cause) {
-			return theParent.lock(write, structural, cause);
+			return ObservableCollectionDataFlowImpl.structureAffectedPassLockThroughToParent(theParent, write, structural, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, boolean structural, Object cause) {
+			return ObservableCollectionDataFlowImpl.structureAffectedTryPassLockThroughToParent(theParent, write, structural, cause);
 		}
 
 		@Override

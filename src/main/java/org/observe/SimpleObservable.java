@@ -1,7 +1,11 @@
 package org.observe;
 
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
+
+import org.qommons.Transactable;
+import org.qommons.Transaction;
+import org.qommons.collect.ListenerList;
 
 /**
  * A simple observable that can be controlled directly
@@ -10,10 +14,10 @@ import java.util.function.Consumer;
  */
 public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 	private final Consumer<? super Observer<? super T>> theOnSubscribe;
-	private final AtomicBoolean isAlive = new AtomicBoolean(true);
-	private final org.qommons.collect.ListenerList<Observer<? super T>> theListeners;
+	private boolean isAlive = true;
+	private final ListenerList<Observer<? super T>> theListeners;
 	private final boolean isInternalState;
-	private final boolean isSafe;
+	private final ReentrantReadWriteLock theLock;
 
 	/** Creates a simple observable */
 	public SimpleObservable() {
@@ -47,12 +51,16 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 		theListeners = new org.qommons.collect.ListenerList<>("An event is already firing");
 		theOnSubscribe = onSubscribe;
 		isInternalState = internalState;
-		isSafe = safe;
+		theLock = safe ? new ReentrantReadWriteLock() : null;
+	}
+
+	protected ReentrantReadWriteLock getLock() {
+		return theLock;
 	}
 
 	@Override
 	public Subscription subscribe(Observer<? super T> observer) {
-		if (!isAlive.get()) {
+		if (!isAlive) {
 			observer.onCompleted(null);
 			return () -> {};
 		} else {
@@ -65,24 +73,48 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 
 	@Override
 	public <V extends T> void onNext(V value) {
-		if (!isAlive.get())
-			throw new IllegalStateException("Firing a value on a completed observable");
-		theListeners.forEach(//
-			observer -> observer.onNext(value));
+		if (theLock != null)
+			theLock.writeLock().lock();
+		try {
+			if (!isAlive)
+				throw new IllegalStateException("Firing a value on a completed observable");
+			theListeners.forEach(//
+				observer -> observer.onNext(value));
+		} finally {
+			if (theLock != null)
+				theLock.writeLock().unlock();
+		}
 	}
 
 	@Override
 	public <V extends T> void onCompleted(V value) {
-		if (isAlive.getAndSet(false)) {
+		if (theLock != null)
+			theLock.writeLock().lock();
+		try {
+			if (!isAlive)
+				return;
 			theListeners.forEach(//
 				observer -> observer.onCompleted(value));
 			theListeners.clear();
+		} finally {
+			if (theLock != null)
+				theLock.writeLock().unlock();
 		}
 	}
 
 	@Override
 	public boolean isSafe() {
-		return isSafe;
+		return theLock != null;
+	}
+
+	@Override
+	public Transaction lock() {
+		return Transactable.lock(theLock, false);
+	}
+
+	@Override
+	public Transaction tryLock() {
+		return Transactable.tryLock(theLock, false);
 	}
 
 	/** @return An observable that fires events from this SimpleObservable but cannot be used to initiate events */
@@ -105,6 +137,16 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 		@Override
 		public boolean isSafe() {
 			return theWrapped.isSafe();
+		}
+
+		@Override
+		public Transaction lock() {
+			return theWrapped.lock();
+		}
+
+		@Override
+		public Transaction tryLock() {
+			return theWrapped.tryLock();
 		}
 	}
 }

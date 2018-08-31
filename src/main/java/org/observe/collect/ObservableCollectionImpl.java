@@ -36,6 +36,7 @@ import org.qommons.Causable;
 import org.qommons.Causable.CausableKey;
 import org.qommons.ConcurrentHashSet;
 import org.qommons.IdentityKey;
+import org.qommons.Lockable;
 import org.qommons.Ternian;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
@@ -337,7 +338,17 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean isSafe() {
-			return true;
+			return collection.isLockSupported();
+		}
+
+		@Override
+		public Transaction lock() {
+			return collection.lock(false, false, null);
+		}
+
+		@Override
+		public Transaction tryLock() {
+			return collection.tryLock(false, false, null);
 		}
 
 		@Override
@@ -532,14 +543,19 @@ public final class ObservableCollectionImpl {
 
 				@Override
 				public boolean isSafe() {
-					return true;
+					return theCollection.isLockSupported();
+				}
+
+				@Override
+				public Transaction lock() {
+					return theCollection.lock(false, false, null);
+				}
+
+				@Override
+				public Transaction tryLock() {
+					return theCollection.tryLock(false, false, null);
 				}
 			};
-		}
-
-		@Override
-		public Transaction lock() {
-			return theCollection.lock(false, null);
 		}
 
 		private class SimpleElement implements CollectionElement<E> {
@@ -735,7 +751,7 @@ public final class ObservableCollectionImpl {
 			return new Observable<ObservableValueEvent<T>>() {
 				@Override
 				public boolean isSafe() {
-					return true;
+					return theCollection.isLockSupported();
 				}
 
 				@Override
@@ -767,12 +783,17 @@ public final class ObservableCollectionImpl {
 					}
 					return sub;
 				}
-			};
-		}
 
-		@Override
-		public Transaction lock() {
-			return theCollection.lock(false, null);
+				@Override
+				public Transaction lock() {
+					return theCollection.lock(false, false, null);
+				}
+
+				@Override
+				public Transaction tryLock() {
+					return theCollection.tryLock(false, false, null);
+				}
+			};
 		}
 
 		@Override
@@ -1094,7 +1115,7 @@ public final class ObservableCollectionImpl {
 			return new Observable<ObservableValueEvent<Boolean>>() {
 				@Override
 				public boolean isSafe() {
-					return true;
+					return theLeft.isLockSupported() && theRight.isLockSupported();
 				}
 
 				@Override
@@ -1122,16 +1143,16 @@ public final class ObservableCollectionImpl {
 						}
 					});
 				}
-			};
-		}
 
-		@Override
-		public Transaction lock() {
-			Transaction leftLock = theLeft.lock(false, null);
-			Transaction rightLock = theRight.lock(false, null);
-			return () -> {
-				leftLock.close();
-				rightLock.close();
+				@Override
+				public Transaction lock() {
+					return Lockable.lockAll(Lockable.lockable(theLeft), Lockable.lockable(theRight));
+				}
+
+				@Override
+				public Transaction tryLock() {
+					return Lockable.tryLockAll(Lockable.lockable(theLeft), Lockable.lockable(theRight));
+				}
 			};
 		}
 	}
@@ -1341,17 +1362,19 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public boolean isLockSupported() {
-			return theSource.isLockSupported() || theFlow.isLockSupported();
+			return theSource.isLockSupported() && theFlow.isLockSupported();
 		}
 
 		@Override
 		public Transaction lock(boolean write, boolean structural, Object cause) {
-			Transaction srcT = theSource.lock(write, structural, cause);
-			Transaction flowT = theFlow.lock(write, cause);
-			return () -> {
-				srcT.close();
-				flowT.close();
-			};
+			return Lockable.lockAll(Lockable.lockable(theSource, write, structural, cause),
+				Lockable.lockable(theFlow, write, structural, cause));
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, boolean structural, Object cause) {
+			return Lockable.tryLockAll(Lockable.lockable(theSource, write, structural, cause),
+				Lockable.lockable(theFlow, write, structural, cause));
 		}
 
 		@Override
@@ -1946,6 +1969,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public Transaction tryLock(boolean write, boolean structural, Object cause) {
+			return theFlow.tryLock(write, structural, cause);
+		}
+
+		@Override
 		public long getStamp(boolean structuralOnly) {
 			return structuralOnly ? theStructureStamp.get() : theModCount.get();
 		}
@@ -2262,6 +2290,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public Transaction tryLock(boolean write, boolean structural, Object cause) {
+			return Transaction.NONE;
+		}
+
+		@Override
 		public long getStamp(boolean structuralOnly) {
 			return 0;
 		}
@@ -2529,13 +2562,13 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public Transaction lock(boolean write, boolean structural, Object cause) {
-			Transaction valueLock = theCollectionObservable.lock();
-			ObservableCollection<? extends E> coll = theCollectionObservable.get();
-			Transaction t = coll == null ? Transaction.NONE : coll.lock(write, structural, cause);
-			return () -> {
-				t.close();
-				valueLock.close();
-			};
+			return Lockable.lock(theCollectionObservable, () -> Lockable.lockable(theCollectionObservable.get(), write, structural, cause));
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, boolean structural, Object cause) {
+			return Lockable.tryLock(theCollectionObservable,
+				() -> Lockable.lockable(theCollectionObservable.get(), write, structural, cause));
 		}
 
 		@Override

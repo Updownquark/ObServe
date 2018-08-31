@@ -11,6 +11,7 @@ import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.qommons.Causable;
+import org.qommons.Lockable;
 import org.qommons.Transaction;
 import org.qommons.collect.Graph;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
@@ -227,6 +228,16 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 				Subscription nodeSub = nodeChanges.act(action);
 				Subscription edgeSub = edgeChanges.act(action);
 				return Subscription.forAll(nodeSub, edgeSub);
+			}
+
+			@Override
+			public Transaction lock() {
+				return Lockable.lockAll(nodeChanges, edgeChanges);
+			}
+
+			@Override
+			public Transaction tryLock() {
+				return Lockable.tryLockAll(nodeChanges, edgeChanges);
 			}
 		};
 	}

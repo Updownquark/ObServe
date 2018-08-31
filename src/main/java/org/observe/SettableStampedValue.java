@@ -5,7 +5,6 @@ import java.util.function.Function;
 
 import org.observe.XformOptions.SimpleXformOptions;
 import org.observe.XformOptions.XformDef;
-import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeToken;
 
@@ -29,11 +28,6 @@ public interface SettableStampedValue<T> extends SettableValue<T>, StampedObserv
 			@Override
 			public Observable<ObservableValueEvent<T>> changes() {
 				return SettableStampedValue.this.changes();
-			}
-
-			@Override
-			public Transaction lock() {
-				return SettableStampedValue.this.lock();
 			}
 
 			@Override

@@ -28,6 +28,7 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionMana
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
+import org.qommons.Lockable;
 import org.qommons.Ternian;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
@@ -350,7 +351,17 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 			@Override
 			public boolean isSafe() {
-				return true;
+				return ObservableCollection.this.isLockSupported();
+			}
+
+			@Override
+			public Transaction lock() {
+				return ObservableCollection.this.lock(false, false, null);
+			}
+
+			@Override
+			public Transaction tryLock() {
+				return ObservableCollection.this.tryLock(false, false, null);
 			}
 		};
 	}
@@ -678,6 +689,16 @@ public interface ObservableCollection<E> extends BetterList<E> {
 			@Override
 			public boolean isSafe() {
 				return false;
+			}
+
+			@Override
+			public Transaction lock() {
+				return Lockable.lockAll(Lockable.lockable(coll), coll);
+			}
+
+			@Override
+			public Transaction tryLock() {
+				return Lockable.tryLockAll(Lockable.lockable(coll), coll);
 			}
 
 			@Override

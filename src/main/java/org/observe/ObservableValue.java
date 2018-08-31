@@ -17,6 +17,7 @@ import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
 import org.qommons.ListenerSet;
+import org.qommons.Lockable;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
 
@@ -29,7 +30,7 @@ import com.google.common.reflect.TypeToken;
  *
  * @param <T> The compile-time type of this observable's value
  */
-public interface ObservableValue<T> extends java.util.function.Supplier<T> {
+public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lockable {
 	/** @return The run-time type of this value */
 	TypeToken<T> getType();
 
@@ -43,13 +44,20 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 	 */
 	Observable<ObservableValueEvent<T>> changes();
 
-	/**
-	 * Locks this value for modification. Does not affect {@link #get()}, i.e. the lock is not exclusive. Only prevents modification of this
-	 * value while the lock is held.
-	 *
-	 * @return The transaction to close to release the lock
-	 */
-	Transaction lock();
+	@Override
+	default boolean isLockSupported() {
+		return changes().isLockSupported();
+	}
+
+	@Override
+	default Transaction lock() {
+		return changes().lock();
+	}
+
+	@Override
+	default Transaction tryLock() {
+		return changes().tryLock();
+	}
 
 	/** @return An observable that just reports this observable value's value in an observable without the event */
 	default Observable<T> value() {
@@ -124,11 +132,6 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 			@Override
 			public Observable<ObservableValueEvent<T>> changes() {
 				return outer.changes().map(eventMap);
-			}
-
-			@Override
-			public Transaction lock() {
-				return outer.lock();
 			}
 
 			@Override
@@ -374,6 +377,21 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 			public boolean isSafe() {
 				return false; // Can't guarantee that the contents will always be safe
 			}
+
+			@Override
+			public boolean isLockSupported() {
+				return value.changes().isLockSupported();
+			}
+
+			@Override
+			public Transaction lock() {
+				return Lockable.lock(value.changes(), value::get);
+			}
+
+			@Override
+			public Transaction tryLock() {
+				return Lockable.tryLock(value.changes(), value::get);
+			}
 		};
 	}
 
@@ -503,7 +521,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 
 									@Override
 									public Transaction lock() {
-										return ComposedObservableValue.this.lock();
+										return changes().lock();
 									}
 
 									@Override
@@ -665,17 +683,16 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 				public boolean isSafe() {
 					return true;
 				}
-			};
-		}
 
-		@Override
-		public Transaction lock() {
-			Transaction[] locks = new Transaction[theComposed.size()];
-			for (int i = 0; i < locks.length; i++)
-				locks[i] = theComposed.get(i).lock();
-			return () -> {
-				for (int i = 0; i < locks.length; i++)
-					locks[i].close();
+				@Override
+				public Transaction lock() {
+					return Lockable.lockAll(theComposed);
+				}
+
+				@Override
+				public Transaction tryLock() {
+					return Lockable.tryLockAll(theComposed);
+				}
 			};
 		}
 
@@ -719,11 +736,6 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 		@Override
 		public Observable<ObservableValueEvent<T>> changes() {
 			return theChanges;
-		}
-
-		@Override
-		public Transaction lock() {
-			return theWrapped.lock();
 		}
 	}
 
@@ -801,14 +813,19 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 
 				@Override
 				public boolean isSafe() {
-					return false;
+					return theWrapped.changes().isSafe() && theRefresh.isSafe();
+				}
+
+				@Override
+				public Transaction lock() {
+					return Lockable.lockAll(theWrapped, theRefresh);
+				}
+
+				@Override
+				public Transaction tryLock() {
+					return Lockable.tryLockAll(theWrapped, theRefresh);
 				}
 			};
-		}
-
-		@Override
-		public Transaction lock() {
-			return theWrapped.lock();
 		}
 
 		@Override
@@ -851,6 +868,16 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 				public boolean isSafe() {
 					return true;
 				}
+
+				@Override
+				public Transaction lock() {
+					return Transaction.NONE;
+				}
+
+				@Override
+				public Transaction tryLock() {
+					return Transaction.NONE;
+				}
 			};
 		}
 
@@ -862,11 +889,6 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 		@Override
 		public T get() {
 			return theValue;
-		}
-
-		@Override
-		public Transaction lock() {
-			return Transaction.NONE;
 		}
 
 		@Override
@@ -904,11 +926,6 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 		@Override
 		public Observable<ObservableValueEvent<T>> changes() {
 			return theWrapped.changes().safe();
-		}
-
-		@Override
-		public Transaction lock() {
-			return theWrapped.lock();
 		}
 
 		@Override
@@ -1075,17 +1092,16 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 				public boolean isSafe() {
 					return false;
 				}
-			};
-		}
 
-		@Override
-		public Transaction lock() {
-			Transaction outerLock = theValue.lock();
-			ObservableValue<? extends T> inner = theValue.get();
-			Transaction innerLock = inner == null ? Transaction.NONE : inner.lock();
-			return () -> {
-				innerLock.close();
-				outerLock.close();
+				@Override
+				public Transaction lock() {
+					return Lockable.lock(theValue, theValue::get);
+				}
+
+				@Override
+				public Transaction tryLock() {
+					return Lockable.tryLock(theValue, theValue::get);
+				}
 			};
 		}
 
@@ -1240,17 +1256,52 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T> {
 				public boolean isSafe() {
 					return true;
 				}
-			};
-		}
 
-		@Override
-		public Transaction lock() {
-			Transaction[] locks = new Transaction[theValues.length];
-			for (int i = 0; i < locks.length; i++)
-				locks[i] = theValues[i].lock();
-			return () -> {
-				for (int i = 0; i < locks.length; i++)
-					locks[i].close();
+				@Override
+				public Transaction lock() {
+					Transaction[] locks = new Transaction[theValues.length];
+					reattempt: while (true) {
+						boolean firstLock = true;
+						for (int i = 0; i < locks.length; i++) {
+							if (firstLock) {
+								locks[i] = theValues[i].changes().lock();
+								firstLock = false;
+							} else {
+								locks[i] = theValues[i].changes().tryLock();
+								if (locks[i] == null) {
+									for (int j = i - 1; j >= 0; j--)
+										locks[j].close();
+									continue reattempt;
+								}
+							}
+							if (theTest.test(theValues[i].get()))
+								break;
+						}
+						return Transaction.and(locks);
+					}
+				}
+
+				@Override
+				public Transaction tryLock() {
+					Transaction[] locks = new Transaction[theValues.length];
+					boolean firstLock = true;
+					for (int i = 0; i < locks.length; i++) {
+						if (firstLock) {
+							locks[i] = theValues[i].changes().lock();
+							firstLock = false;
+						} else {
+							locks[i] = theValues[i].changes().tryLock();
+							if (locks[i] == null) {
+								for (int j = i - 1; j >= 0; j--)
+									locks[j].close();
+								return null;
+							}
+						}
+						if (theTest.test(theValues[i].get()))
+							break;
+					}
+					return Transaction.and(locks);
+				}
 			};
 		}
 	}
