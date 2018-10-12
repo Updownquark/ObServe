@@ -378,7 +378,7 @@ public class ObservableSetImpl {
 			isAlwaysUsingFirst = alwaysUseFirst;
 			isPreservingSourceOrder = preserveSourceOrder;
 
-			theDebug = Debug.d().add("distinct");
+			theDebug = Debug.d().debug(DistinctManager.class).add("distinct");
 		}
 
 		@Override

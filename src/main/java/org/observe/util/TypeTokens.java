@@ -97,6 +97,7 @@ public class TypeTokens {
 	public final TypeToken<Double> DOUBLE;
 	public final TypeToken<Long> LONG;
 	public final TypeToken<Integer> INT;
+	public final TypeToken<Object> OBJECT;
 
 	protected TypeTokens() {
 		TYPES = new ConcurrentHashMap<>();
@@ -127,6 +128,7 @@ public class TypeTokens {
 		DOUBLE = of(Double.class);
 		LONG = of(Long.class);
 		INT = of(Integer.class);
+		OBJECT = of(Object.class);
 	}
 
 	protected <T> TypeKey<T> createKey(Class<T> type) {
@@ -203,6 +205,24 @@ public class TypeTokens {
 	public <T> Class<T> unwrap(Class<T> type) {
 		Class<?> wrapped = WRAPPER_TO_PRIMITIVE.get(type);
 		return wrapped == null ? type : (Class<T>) wrapped;
+	}
+
+	public <T> TypeToken<T> unwrap(TypeToken<T> type) {
+		Class<T> raw = getRawType(type);
+		Class<T> unwrapped = unwrap(raw);
+		if (unwrapped == raw)
+			return type;
+		else
+			return of(unwrapped);
+	}
+
+	public <T> TypeToken<T> wrap(TypeToken<T> type) {
+		Class<T> raw = getRawType(type);
+		Class<T> wrapped = wrap(raw);
+		if (wrapped == raw)
+			return type;
+		else
+			return of(wrapped);
 	}
 
 	public boolean isInstance(TypeToken<?> type, Object value) {
