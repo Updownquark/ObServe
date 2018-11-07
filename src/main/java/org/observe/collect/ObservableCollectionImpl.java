@@ -1308,6 +1308,21 @@ public final class ObservableCollectionImpl {
 	}
 
 	/**
+	 * An ObservableCollection derived from one or more source ObservableCollections
+	 *
+	 * @param <T> The type of elements in the collection
+	 */
+	public static interface DerivedCollection<T> extends ObservableCollection<T> {
+		/**
+		 * @param source The collection that the source element is from
+		 * @param sourceEl The id of an element in a source collection
+		 * @param derivedEl The id of an element in the derived collection
+		 * @return Whether the derived element is a product of this operation on the given element from the source collection
+		 */
+		boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl, ElementId derivedEl);
+	}
+
+	/**
 	 * A derived collection, {@link ObservableCollection.CollectionDataFlow#collect() collected} from a
 	 * {@link ObservableCollection.CollectionDataFlow}. A passive collection maintains no information about its sources (either the source
 	 * collection or any external sources from its flow), but relies on the state of the collection. Each listener to the collection
@@ -1318,7 +1333,7 @@ public final class ObservableCollectionImpl {
 	 * @param <E> The type of the source collection
 	 * @param <T> The type of values in the collection
 	 */
-	public static class PassiveDerivedCollection<E, T> implements ObservableCollection<T> {
+	public static class PassiveDerivedCollection<E, T> implements DerivedCollection<T> {
 		private final ObservableCollection<E> theSource;
 		private final PassiveCollectionManager<E, ?, T> theFlow;
 		private final Equivalence<? super T> theEquivalence;
@@ -1343,6 +1358,19 @@ public final class ObservableCollectionImpl {
 		/** @return The passive manager that produces this collection's elements */
 		protected PassiveCollectionManager<E, ?, T> getFlow() {
 			return theFlow;
+		}
+
+		@Override
+		public boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl, ElementId derivedEl) {
+			if (source == theSource) {
+				if (theFlow.isReversed())
+					return sourceEl.equals(derivedEl.reverse());
+				else
+					return sourceEl.equals(derivedEl);
+			} else if (theSource instanceof DerivedCollection)
+				return ((DerivedCollection<E>) theSource).isAssociated(source, sourceEl, derivedEl);
+			else
+				return false;
 		}
 
 		@Override
@@ -1774,7 +1802,7 @@ public final class ObservableCollectionImpl {
 	 *
 	 * @param <T> The type of values in the collection
 	 */
-	public static class ActiveDerivedCollection<T> implements ObservableCollection<T> {
+	public static class ActiveDerivedCollection<T> implements DerivedCollection<T> {
 		/**
 		 * Holds a {@link ObservableCollectionDataFlowImpl.DerivedCollectionElement}s for an {@link ActiveDerivedCollection}
 		 *
@@ -1922,6 +1950,11 @@ public final class ObservableCollectionImpl {
 				theListeners.forEach(//
 					listener -> listener.accept(event));
 			}
+		}
+
+		@Override
+		public boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl, ElementId derivedEl) {
+			return ((DerivedElementHolder<T>) derivedEl).element.isAssociated(source, sourceEl);
 		}
 
 		@Override

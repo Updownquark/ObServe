@@ -36,6 +36,7 @@ import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection;
+import org.observe.collect.ObservableCollectionImpl.DerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.PassiveDerivedCollection;
 import org.observe.util.TypeTokens;
 import org.observe.util.WeakListening;
@@ -183,7 +184,7 @@ public class ObservableCollectionDataFlowImpl {
 	}
 
 	/**
-	 * A manager for a {@link PassiveDerivedCollection passively-}derived collection
+	 * A manager for a {@link ObservableCollection.CollectionDataFlow#supportsPassive() passively-}derived collection
 	 *
 	 * @param <E> The type of the source collection
 	 * @param <I> An intermediate type
@@ -387,6 +388,13 @@ public class ObservableCollectionDataFlowImpl {
 		 */
 		void setListener(CollectionElementListener<E> listener);
 
+		/**
+		 * @param source The source collection that the element is from
+		 * @param sourceEl The element that is possibly a source of this element
+		 * @return Whether this element is associated with the given element in the source collection
+		 */
+		boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl);
+
 		/** @return The current value of this element */
 		E get();
 
@@ -435,6 +443,11 @@ public class ObservableCollectionDataFlowImpl {
 				@Override
 				public void setListener(CollectionElementListener<E> listener) {
 					outer.setListener(listener);
+				}
+
+				@Override
+				public boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl) {
+					return outer.isAssociated(source, sourceEl);
 				}
 
 				@Override
@@ -1594,6 +1607,16 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			@Override
+			public boolean isAssociated(ObservableCollection<?> otherSource, ElementId sourceEl) {
+				if (otherSource == theSource)
+					return source.getElementId().equals(sourceEl);
+				else if (theSource instanceof DerivedCollection)
+					return ((DerivedCollection<E>) theSource).isAssociated(otherSource, sourceEl, source.getElementId());
+				else
+					return false;
+			}
+
+			@Override
 			public E get() {
 				return source.get();
 			}
@@ -1991,6 +2014,11 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			@Override
+			public boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl) {
+				return theParentEl.isAssociated(source, sourceEl);
+			}
+
+			@Override
 			public T get() {
 				if (theValueNode != null)
 					return theValueNode.get().getValue1();
@@ -2184,6 +2212,11 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			@Override
+			public boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl) {
+				return theParentEl.isAssociated(source, sourceEl);
+			}
+
+			@Override
 			public T get() {
 				return theParentEl.get();
 			}
@@ -2229,27 +2262,29 @@ public class ObservableCollectionDataFlowImpl {
 	private static class IntersectionManager<E, T, X> implements ActiveCollectionManager<E, T, T> {
 		private class IntersectionElement {
 			private final T value;
-			private int rightCount;
 			final List<IntersectedCollectionElement> leftElements;
+			final List<ElementId> rightElements;
 
 			IntersectionElement(T value) {
 				this.value = value;
 				leftElements = new ArrayList<>();
+				rightElements = new ArrayList<>();
 			}
 
 			boolean isPresent() {
-				return (rightCount > 0) != isExclude;
+				return rightElements.isEmpty() == isExclude;
 			}
 
-			void incrementRight(Object cause) {
-				rightCount++;
-				if (rightCount == 1)
+			void incrementRight(ElementId rightEl, Object cause) {
+				boolean preEmpty = rightElements.isEmpty();
+				rightElements.add(rightEl);
+				if (preEmpty)
 					presentChanged(cause);
 			}
 
-			void decrementRight(Object cause) {
-				rightCount--;
-				if (rightCount == 0) {
+			void decrementRight(ElementId rightEl, Object cause) {
+				rightElements.remove(rightEl);
+				if (rightElements.isEmpty()) {
 					presentChanged(cause);
 					if (leftElements.isEmpty())
 						theValues.remove(value);
@@ -2262,7 +2297,7 @@ public class ObservableCollectionDataFlowImpl {
 
 			void removeLeft(IntersectedCollectionElement element) {
 				leftElements.remove(element);
-				if (leftElements.isEmpty() && rightCount == 0)
+				if (leftElements.isEmpty() && rightElements.isEmpty())
 					theValues.remove(value);
 			}
 
@@ -2335,6 +2370,22 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			@Override
+			public boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl) {
+				if (theParentEl.isAssociated(source, sourceEl))
+					return true;
+				else if (source == theFilter) {
+					for (ElementId rightEl : intersection.rightElements)
+						if (sourceEl.equals(rightEl))
+							return true;
+				} else if (theFilter instanceof DerivedCollection) {
+					for (ElementId rightEl : intersection.rightElements)
+						if (((DerivedCollection<?>) theFilter).isAssociated(source, sourceEl, rightEl))
+							return true;
+				}
+				return false;
+			}
+
+			@Override
 			public T get() {
 				return theParentEl.get();
 			}
@@ -2349,8 +2400,11 @@ public class ObservableCollectionDataFlowImpl {
 				String msg = theParentEl.isAcceptable(value);
 				if (msg != null)
 					return msg;
+				if (theEquivalence.elementEquals(theParentEl.get(), value))
+					return null;
 				IntersectionElement intersect = theValues.get(value);
-				boolean filterHas = intersect == null ? false : intersect.rightCount > 0;
+
+				boolean filterHas = intersect == null ? false : !intersect.rightElements.isEmpty();
 				if (filterHas == isExclude)
 					return StdMsg.ILLEGAL_ELEMENT;
 				return null;
@@ -2358,10 +2412,12 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
-				IntersectionElement intersect = theValues.get(value);
-				boolean filterHas = intersect == null ? false : intersect.rightCount > 0;
-				if (filterHas == isExclude)
-					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+				if (!theEquivalence.elementEquals(theParentEl.get(), value)) {
+					IntersectionElement intersect = theValues.get(value);
+					boolean filterHas = intersect == null ? false : !intersect.rightElements.isEmpty();
+					if (filterHas == isExclude)
+						throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
+				}
 				theParentEl.set(value);
 			}
 
@@ -2438,7 +2494,7 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
 			IntersectionElement intersect = theValues.get(toAdd);
-			boolean filterHas = intersect == null ? false : intersect.rightCount > 0;
+			boolean filterHas = intersect == null ? false : !intersect.rightElements.isEmpty();
 			if (filterHas == isExclude)
 				return StdMsg.ILLEGAL_ELEMENT;
 			return theParent.canAdd(toAdd, strip(after), strip(before));
@@ -2448,7 +2504,7 @@ public class ObservableCollectionDataFlowImpl {
 		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
 			boolean first) {
 			IntersectionElement intersect = theValues.get(value);
-			boolean filterHas = intersect == null ? false : intersect.rightCount > 0;
+			boolean filterHas = intersect == null ? false : !intersect.rightElements.isEmpty();
 			if (filterHas == isExclude)
 				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 			DerivedCollectionElement<T> parentEl = theParent.addElement(value, strip(after), strip(before), first);
@@ -2468,7 +2524,7 @@ public class ObservableCollectionDataFlowImpl {
 		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
 			throws UnsupportedOperationException, IllegalArgumentException {
 			IntersectionElement intersect = theValues.get(newValue);
-			boolean filterHas = intersect == null ? false : intersect.rightCount > 0;
+			boolean filterHas = intersect == null ? false : !intersect.rightElements.isEmpty();
 			if (filterHas == isExclude)
 				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 			theParent.setValues(elements.stream().map(el -> ((IntersectedCollectionElement) el).theParentEl).collect(Collectors.toList()),
@@ -2488,14 +2544,14 @@ public class ObservableCollectionDataFlowImpl {
 						if (!theEquivalence.isElement(evt.getNewValue()))
 							return;
 						element = theValues.computeIfAbsent((T) evt.getNewValue(), v -> new IntersectionElement(v));
-						element.incrementRight(evt);
+						element.incrementRight(evt.getElementId(), evt);
 						theRightElementValues.put(evt.getElementId(), element);
 						break;
 					case remove:
 						element = theRightElementValues.remove(evt.getElementId());
 						if (element == null)
 							return; // Must not have belonged to the flow's equivalence
-						element.decrementRight(evt);
+						element.decrementRight(evt.getElementId(), evt);
 						break;
 					case set:
 						element = theRightElementValues.get(evt.getElementId());
@@ -2504,11 +2560,11 @@ public class ObservableCollectionDataFlowImpl {
 						boolean newIsElement = equivalence().isElement(evt.getNewValue());
 						if (element != null) {
 							theRightElementValues.remove(evt.getElementId());
-							element.decrementRight(evt);
+							element.decrementRight(evt.getElementId(), evt);
 						}
 						if (newIsElement) {
 							element = theValues.computeIfAbsent((T) evt.getNewValue(), v -> new IntersectionElement(v));
-							element.incrementRight(evt);
+							element.incrementRight(evt.getElementId(), evt);
 							theRightElementValues.put(evt.getElementId(), element);
 						}
 						break;
@@ -3113,6 +3169,11 @@ public class ObservableCollectionDataFlowImpl {
 			@Override
 			public void setListener(CollectionElementListener<T> listener) {
 				theListener = listener;
+			}
+
+			@Override
+			public boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl) {
+				return theParentEl.isAssociated(source, sourceEl);
 			}
 
 			@Override
@@ -3878,6 +3939,11 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			@Override
+			public boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl) {
+				return theParentEl.isAssociated(source, sourceEl);
+			}
+
+			@Override
 			public T get() {
 				return theDef.isCached() ? theValue : combineValue(theParentEl.get());
 			}
@@ -4160,6 +4226,11 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			@Override
+			public boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl) {
+				return theParentEl.isAssociated(source, sourceEl);
+			}
+
+			@Override
 			public T get() {
 				return theParentEl.get();
 			}
@@ -4413,6 +4484,11 @@ public class ObservableCollectionDataFlowImpl {
 			public void setListener(CollectionElementListener<T> listener) {
 				theListener = listener;
 				installOrUninstall();
+			}
+
+			@Override
+			public boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl) {
+				return theParentEl.isAssociated(source, sourceEl);
 			}
 
 			@Override
@@ -4720,6 +4796,11 @@ public class ObservableCollectionDataFlowImpl {
 			@Override
 			public void setListener(CollectionElementListener<T> listener) {
 				theParentEl.setListener(listener);
+			}
+
+			@Override
+			public boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl) {
+				return theParentEl.isAssociated(source, sourceEl);
 			}
 
 			@Override
@@ -5090,6 +5171,11 @@ public class ObservableCollectionDataFlowImpl {
 			@Override
 			public void setListener(CollectionElementListener<T> listener) {
 				theListener = listener;
+			}
+
+			@Override
+			public boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl) {
+				return theParentEl.isAssociated(source, sourceEl) || theHolder.theParentEl.isAssociated(source, sourceEl);
 			}
 
 			@Override
