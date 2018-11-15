@@ -1430,24 +1430,14 @@ public final class ObservableCollectionImpl {
 			return isReversed ? source.reverse() : source;
 		}
 
-		/**
-		 * @param mapped The ID of an element in this collection
-		 * @return The ID of the corresponding element in the source collection
-		 */
-		protected ElementId reverseId(ElementId mapped) {
-			if (mapped == null)
-				return null;
-			return isReversed ? mapped.reverse() : mapped;
-		}
-
 		@Override
 		public String canAdd(T value, ElementId after, ElementId before) {
 			FilterMapResult<T, E> reversed = theFlow.reverse(value, true);
 			if (!reversed.isAccepted())
 				return reversed.getRejectReason();
 			if (isReversed) {
-				ElementId temp = reverseId(after);
-				after = reverseId(before);
+				ElementId temp = mapId(after);
+				after = mapId(before);
 				before = temp;
 			}
 			return theSource.canAdd(reversed.result, after, before);
@@ -1462,8 +1452,8 @@ public final class ObservableCollectionImpl {
 				if (reversed.throwIfError(IllegalArgumentException::new) != null)
 					return null;
 				if (isReversed) {
-					ElementId temp = reverseId(after);
-					after = reverseId(before);
+					ElementId temp = mapId(after);
+					after = mapId(before);
 					before = temp;
 				}
 				CollectionElement<E> srcEl = theSource.addElement(reversed.result, after, before, first);
@@ -1489,7 +1479,7 @@ public final class ObservableCollectionImpl {
 			try (Transaction t = lock(true, false, null)) {
 				Function<? super E, ? extends T> map = theFlow.map().get();
 				theFlow.setValue(//
-					elements.stream().map(el -> theFlow.map(theSource.mutableElement(reverseId(el)), map)).collect(Collectors.toList()),
+					elements.stream().map(el -> theFlow.map(theSource.mutableElement(mapId(el)), map)).collect(Collectors.toList()),
 					value);
 			}
 		}
@@ -1546,7 +1536,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public CollectionElement<T> getElement(ElementId id) {
-			return elementFor(theSource.getElement(reverseId(id)), null);
+			return elementFor(theSource.getElement(mapId(id)), null);
 		}
 
 		@Override
@@ -1569,13 +1559,13 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public MutableCollectionElement<T> mutableElement(ElementId id) {
-			return mutableElementFor(theSource.mutableElement(reverseId(id)), null);
+			return mutableElementFor(theSource.mutableElement(mapId(id)), null);
 		}
 
 		@Override
 		public MutableElementSpliterator<T> spliterator(ElementId element, boolean asNext) {
 			if (isReversed) {
-				element = reverseId(element);
+				element = mapId(element);
 				asNext = !asNext;
 			}
 			return new PassiveDerivedMutableSpliterator(theSource.spliterator(element, asNext));
