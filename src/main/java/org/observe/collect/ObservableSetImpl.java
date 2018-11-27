@@ -1017,18 +1017,18 @@ public class ObservableSetImpl {
 			}
 
 			@Override
-			public void removed(CollectionElement<E> element) {
-				theWrapped.removed(elementFor(element, theMap));
+			public X removed(CollectionElement<E> element) {
+				return theWrapped.removed(elementFor(element, theMap));
 			}
 
 			@Override
-			public X preTransfer(CollectionElement<E> element) {
-				return theWrapped.preTransfer(elementFor(element, theMap));
+			public void disposed(E value, X data) {
+				theWrapped.disposed(theMap.apply(value), data);
 			}
 
 			@Override
-			public void postTransfer(CollectionElement<E> element, X data) {
-				theWrapped.postTransfer(elementFor(element, theMap), data);
+			public void transferred(CollectionElement<E> element, X data) {
+				theWrapped.transferred(elementFor(element, theMap), data);
 			}
 		}
 	}
