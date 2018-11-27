@@ -20,6 +20,7 @@ import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveSetManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.BaseCollectionDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionElementListener;
 import org.observe.collect.ObservableCollectionDataFlowImpl.DerivedCollectionElement;
@@ -173,7 +174,7 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public ActiveCollectionManager<E, ?, T> manageActive() {
+		public ActiveSetManager<E, ?, T> manageActive() {
 			return getParent().manageActive();
 		}
 
@@ -227,7 +228,7 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public ActiveCollectionManager<E, ?, T> manageActive() {
+		public ActiveSetManager<E, ?, T> manageActive() {
 			return new DistinctManager<>(getParent().manageActive(), equivalence(), isAlwaysUsingFirst, isPreservingSourceOrder);
 		}
 	}
@@ -288,6 +289,11 @@ public class ObservableSetImpl {
 		@Override
 		public DistinctDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
 			return new DistinctDataFlowWrapper<>(getSource(), super.filterMod(options), equivalence());
+		}
+
+		@Override
+		public ActiveSetManager<E, ?, T> manageActive() {
+			return super.manageActive();
 		}
 
 		@Override
@@ -358,6 +364,11 @@ public class ObservableSetImpl {
 		@Override
 		public ObservableSet<E> collect() {
 			return (ObservableSet<E>) super.collect();
+		}
+
+		@Override
+		public ActiveSetManager<E, ?, E> manageActive() {
+			return super.manageActive();
 		}
 
 		@Override
@@ -1043,8 +1054,13 @@ public class ObservableSetImpl {
 		 * @param flow The active manager to drive this set
 		 * @param until The observable to terminate this derived set
 		 */
-		public ActiveDerivedSet(ActiveCollectionManager<?, ?, T> flow, Observable<?> until) {
+		public ActiveDerivedSet(ActiveSetManager<?, ?, T> flow, Observable<?> until) {
 			super(flow, until);
+		}
+
+		@Override
+		protected ActiveSetManager<?, ?, T> getFlow() {
+			return (ActiveSetManager<?, ?, T>) super.getFlow();
 		}
 
 		@Override
@@ -1059,6 +1075,26 @@ public class ObservableSetImpl {
 				}
 				return element;
 			}
+		}
+
+		@Override
+		public boolean isConsistent(ElementId element) {
+			return getFlow().isConsistent(((DerivedElementHolder<T>) element).element);
+		}
+
+		@Override
+		public boolean checkConsistency() {
+			return getFlow().checkConsistency();
+		}
+
+		@Override
+		public <X> boolean repair(ElementId element, RepairListener<T, X> listener) {
+			return getFlow().repair(((DerivedElementHolder<T>) element).element, blah);
+		}
+
+		@Override
+		public <X> boolean repair(RepairListener<T, X> listener) {
+			return getFlow().repair(blah);
 		}
 
 		@Override

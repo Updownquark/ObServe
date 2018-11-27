@@ -17,6 +17,7 @@ import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveSetManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
 import org.observe.collect.ObservableSetImpl.DistinctBaseFlow;
 import org.observe.util.TypeTokens;
@@ -397,6 +398,11 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
+		public ActiveSetManager<E, ?, T> manageActive() {
+			return super.manageActive();
+		}
+
+		@Override
 		public ObservableSortedSet<T> collectPassive() {
 			if (!supportsPassive())
 				throw new UnsupportedOperationException("Passive collection not supported");
@@ -523,6 +529,11 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
+		public ActiveSetManager<E, ?, T> manageActive() {
+			return super.manageActive();
+		}
+
+		@Override
 		public ObservableSortedSet<T> collectPassive() {
 			return new PassiveDerivedSortedSet<>((ObservableSortedSet<E>) getSource(), managePassive(), comparator());
 		}
@@ -609,6 +620,11 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
+		public ActiveSetManager<E, ?, E> manageActive() {
+			return super.manageActive();
+		}
+
+		@Override
 		public ObservableSortedSet<E> collectPassive() {
 			return getSource();
 		}
@@ -683,7 +699,7 @@ public class ObservableSortedSetImpl {
 		 * @param compare The comparator by which this set's values will be sorted
 		 * @param until The observable to terminate this derived set
 		 */
-		public ActiveDerivedSortedSet(ActiveCollectionManager<?, ?, T> flow, Comparator<? super T> compare,
+		public ActiveDerivedSortedSet(ActiveSetManager<?, ?, T> flow, Comparator<? super T> compare,
 			Observable<?> until) {
 			super(flow, until);
 			theCompare = compare;

@@ -25,6 +25,7 @@ import org.observe.collect.Combination.CombinedFlowDef;
 import org.observe.collect.FlowOptions.MapOptions;
 import org.observe.collect.FlowOptions.UniqueOptions;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveSetManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
@@ -1146,6 +1147,9 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		default ObservableSet<T> collect() {
 			return (ObservableSet<T>) CollectionDataFlow.super.collect();
 		}
+
+		@Override
+		ActiveSetManager<E, ?, T> manageActive();
 
 		@Override
 		ObservableSet<T> collectPassive();
