@@ -21,6 +21,7 @@ import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.collect.MutableMapEntryHandle;
+import org.qommons.collect.ValueStoredCollection;
 import org.qommons.tree.BetterTreeMap;
 import org.qommons.tree.BetterTreeSet;
 
@@ -469,6 +470,26 @@ public interface Equivalence<E> {
 		}
 
 		@Override
+		public boolean isConsistent(ElementId element) {
+			return theWrapped.isConsistent(element);
+		}
+
+		@Override
+		public boolean checkConsistency() {
+			return theWrapped.checkConsistency();
+		}
+
+		@Override
+		public <X> boolean repair(ElementId element, ValueStoredCollection.RepairListener<T2, X> listener) {
+			return theWrapped.repair(element, listener == null ? null : new MappedRepairListener<>(listener));
+		}
+
+		@Override
+		public <X> boolean repair(ValueStoredCollection.RepairListener<T2, X> listener) {
+			return theWrapped.repair(listener == null ? null : new MappedRepairListener<>(listener));
+		}
+
+		@Override
 		public void clear() {
 			theWrapped.clear();
 		}
@@ -518,6 +539,29 @@ public interface Equivalence<E> {
 			public MutableElementSpliterator<T2> trySplit() {
 				MutableElementSpliterator<E> wrapSplit = theWrappedSpliter.trySplit();
 				return wrapSplit == null ? null : new MappedMutableSpliterator(wrapSplit);
+			}
+		}
+
+		private class MappedRepairListener<X> implements ValueStoredCollection.RepairListener<E, X> {
+			private final ValueStoredCollection.RepairListener<T2, X> theWrappedListener;
+
+			MappedRepairListener(ValueStoredCollection.RepairListener<T2, X> wrapped) {
+				theWrappedListener = wrapped;
+			}
+
+			@Override
+			public X removed(CollectionElement<E> element) {
+				return theWrappedListener.removed(handleFor(element));
+			}
+
+			@Override
+			public void disposed(E value, X data) {
+				theWrappedListener.disposed((T2) theMap.apply((E2) value), data);
+			}
+
+			@Override
+			public void transferred(CollectionElement<E> element, X data) {
+				theWrappedListener.transferred(handleFor(element), data);
 			}
 		}
 	}

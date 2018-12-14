@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -18,6 +20,7 @@ import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveSetManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.BaseCollectionDataFlow;
 import org.observe.collect.ObservableCollectionDataFlowImpl.CollectionElementListener;
 import org.observe.collect.ObservableCollectionDataFlowImpl.DerivedCollectionElement;
@@ -29,6 +32,7 @@ import org.observe.collect.ObservableCollectionImpl.FlattenedValueCollection;
 import org.observe.collect.ObservableCollectionImpl.PassiveDerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.ReversedObservableCollection;
 import org.observe.util.WeakListening;
+import org.qommons.Ternian;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterMap;
 import org.qommons.collect.BetterSet;
@@ -36,6 +40,7 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.collect.OptimisticContext;
 import org.qommons.debug.Debug;
 import org.qommons.debug.Debug.DebugData;
 import org.qommons.tree.BetterTreeMap;
@@ -65,6 +70,27 @@ public class ObservableSetImpl {
 		@Override
 		public CollectionElement<E> getOrAdd(E value, boolean first, Runnable added) {
 			return CollectionElement.reverse(getOrAdd(value, !first, added));
+		}
+
+		@Override
+		public boolean isConsistent(ElementId element) {
+			return getWrapped().isConsistent(element.reverse());
+		}
+
+		@Override
+		public boolean checkConsistency() {
+			return getWrapped().checkConsistency();
+		}
+
+		@Override
+		public <X> boolean repair(ElementId element, RepairListener<E, X> listener) {
+			return getWrapped().repair(element.reverse(),
+				listener == null ? null : new BetterSet.ReversedBetterSet.ReversedRepairListener<>(listener));
+		}
+
+		@Override
+		public <X> boolean repair(RepairListener<E, X> listener) {
+			return getWrapped().repair(listener == null ? null : new BetterSet.ReversedBetterSet.ReversedRepairListener<>(listener));
 		}
 
 		@Override
@@ -148,7 +174,7 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public ActiveCollectionManager<E, ?, T> manageActive() {
+		public ActiveSetManager<E, ?, T> manageActive() {
 			return getParent().manageActive();
 		}
 
@@ -202,7 +228,7 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public ActiveCollectionManager<E, ?, T> manageActive() {
+		public ActiveSetManager<E, ?, T> manageActive() {
 			return new DistinctManager<>(getParent().manageActive(), equivalence(), isAlwaysUsingFirst, isPreservingSourceOrder);
 		}
 	}
@@ -263,6 +289,11 @@ public class ObservableSetImpl {
 		@Override
 		public DistinctDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options) {
 			return new DistinctDataFlowWrapper<>(getSource(), super.filterMod(options), equivalence());
+		}
+
+		@Override
+		public ActiveSetManager<E, ?, T> manageActive() {
+			return super.manageActive();
 		}
 
 		@Override
@@ -333,6 +364,11 @@ public class ObservableSetImpl {
 		@Override
 		public ObservableSet<E> collect() {
 			return (ObservableSet<E>) super.collect();
+		}
+
+		@Override
+		public ActiveSetManager<E, ?, E> manageActive() {
+			return super.manageActive();
 		}
 
 		@Override
@@ -615,34 +651,74 @@ public class ObservableSetImpl {
 							parentUpdated(node, realOldValue, newValue, innerCause);
 							return;
 						}
+						/* As originally written, this code made the assumption that at the time of an update event, only that element may
+						 * have changed in the collection.  Unfortunately, this assumption makes many good use cases of this tool invalid.
+						 *
+						 * E.g. if there is a collection of entities sorted by name, there may be an operation which changes the names of
+						 * multiple entities at once (outside the scope of the collection) and then attempts to alert the collection to all
+						 * the changes after the fact.
+						 *
+						 * This use case is prone to failure because multiple nodes in the tree backing the collection may have become
+						 * corrupt.  Attempts to fix this by one-by-one repair may fail, leaving the collection unsorted and some elements
+						 * unsearchable.
+						 *
+						 * See https://github.com/Updownquark/Qommons/issues/2 for more details.
+						 *
+						 * I am modifying this code to attempt to address this vulnerability.
+						 */
 						UniqueElement ue = theElementsByValue.get(newValue);
+						boolean reInsert;
+						BooleanSupplier consistent;
+						if (node.getValue() != newValue)
+							consistent = OptimisticContext.TRUE;
+						else
+							consistent = new BooleanSupplier() {
+							private Ternian value = Ternian.NONE;
+
+							@Override
+							public boolean getAsBoolean() {
+								if (value == Ternian.NONE)
+									value = Ternian.ofBoolean(theElementsByValue.isConsistent(theValueId));
+								return value.value;
+							}
+						};
 						if (ue == UniqueElement.this) {
+							reInsert = false;
 							if (theActiveElement == parentEl) {
-								theDebug.act("update:trueUpdate").exec();
-								theValue = newValue;
-								ObservableCollectionDataFlowImpl.update(theListener, realOldValue, newValue, innerCause);
-							} else
+								// Check to see if the value is still consistent in the structure
+								if (consistent.getAsBoolean()) {
+									theDebug.act("update:trueUpdate").exec();
+									theValue = newValue;
+									ObservableCollectionDataFlowImpl.update(theListener, realOldValue, newValue, innerCause);
+								} else
+									reInsert = true;
+							} else {
+								// The updated parent element is not the representative for the value--no effect
 								theDebug.act("update:no-effect").exec();
-							theParentElements.mutableEntry(node.getElementId()).setValue(newValue);
-							parentUpdated(node, realOldValue, newValue, innerCause);
-						} else {
-							if (ue == null && theParentElements.size() == 1
-								&& theElementsByValue.keySet().mutableElement(theValueId).isAcceptable(newValue) == null) {
-								theDebug.act("update:move").exec();
-								// If we can just fire an update instead of an add/remove, let's do that
-								moveTo(newValue);
+							}
+							if (!reInsert) {
 								theParentElements.mutableEntry(node.getElementId()).setValue(newValue);
-								ObservableCollectionDataFlowImpl.update(theListener, realOldValue, newValue, innerCause);
 								parentUpdated(node, realOldValue, newValue, innerCause);
-								return;
 							}
-							if (ue == null) {
-								ue = createUniqueElement(newValue);
-								theElementsByValue.put(newValue, ue);
-							}
+						} else if (ue == null && theElementsByValue.keySet().mutableElement(theValueId).isAcceptable(newValue) == null
+							&& consistent.getAsBoolean()) {
+							// If we can just fire an update instead of an add/remove, let's do that
+							theDebug.act("update:move").exec();
+							moveTo(newValue);
+							theParentElements.mutableEntry(node.getElementId()).setValue(newValue);
+							ObservableCollectionDataFlowImpl.update(theListener, realOldValue, newValue, innerCause);
+							parentUpdated(node, realOldValue, newValue, innerCause);
+							reInsert = false;
+						} else
+							reInsert = true;
+
+						if (reInsert) {
 							theParentElements.mutableEntry(node.getElementId()).remove();
+							if (consistent.getAsBoolean()) {
+								// TODO
+							}
 							if (theParentElements.isEmpty()) {
-								theDebug.act("remove:remove").param("value", theValue).exec();
+								theDebug.act("update:remove").param("value", theValue).exec();
 								// This element is no longer represented
 								theElementsByValue.mutableEntry(theValueId).remove();
 								ObservableCollectionDataFlowImpl.removed(theListener, realOldValue, innerCause);
@@ -650,17 +726,24 @@ public class ObservableSetImpl {
 							} else if (theActiveElement == parentEl) {
 								Map.Entry<DerivedCollectionElement<T>, T> activeEntry = theParentElements.firstEntry();
 								theActiveElement = activeEntry.getKey();
-								theDebug.act("remove:representativeChange").exec();
+								theDebug.act("update:remove:representativeChange").exec();
 								theValue = activeEntry.getValue();
 								if (realOldValue != theValue)
 									ObservableCollectionDataFlowImpl.update(theListener, realOldValue, theValue, innerCause);
 								parentUpdated(node, realOldValue, newValue, innerCause);
 							} else
-								theDebug.act("remove:no-effect").exec();
-							// The new UniqueElement will call setListener and we won't get its events anymore
-							theDebug.setField("internalAdd", true);
-							ue.addParent(parentEl, innerCause);
-							theDebug.setField("internalAdd", null);
+								theDebug.act("update:remove:no-effect").exec();
+
+							if (ue == null) {
+								ue = createUniqueElement(newValue);
+								theElementsByValue.put(newValue, ue);
+							}
+							if (ue != UniqueElement.this) {
+								// The new UniqueElement will call setListener and we won't get its events anymore
+								theDebug.setField("internalAdd", true);
+								ue.addParent(parentEl, innerCause);
+								theDebug.setField("internalAdd", null);
+							}
 						}
 					}
 
@@ -897,8 +980,67 @@ public class ObservableSetImpl {
 		}
 
 		@Override
+		public boolean isConsistent(ElementId element) {
+			return getSource().isConsistent(mapId(element));
+		}
+
+		@Override
+		public boolean checkConsistency() {
+			return getSource().checkConsistency();
+		}
+
+		@Override
+		public <X> boolean repair(ElementId element, RepairListener<T, X> listener) {
+			RepairListener<E, X> mappedListener;
+			if (listener != null) {
+				if (getFlow().isReversed())
+					listener = new BetterSet.ReversedBetterSet.ReversedRepairListener<>(listener);
+				mappedListener = new MappedRepairListener<>(listener);
+			} else
+				mappedListener = null;
+			return getSource().repair(mapId(element), mappedListener);
+		}
+
+		@Override
+		public <X> boolean repair(RepairListener<T, X> listener) {
+			RepairListener<E, X> mappedListener;
+			if (listener != null) {
+				if (getFlow().isReversed())
+					listener = new BetterSet.ReversedBetterSet.ReversedRepairListener<>(listener);
+				mappedListener = new MappedRepairListener<>(listener);
+			} else
+				mappedListener = null;
+			return getSource().repair(mappedListener);
+		}
+
+		@Override
 		public String toString() {
 			return BetterSet.toString(this);
+		}
+
+		private class MappedRepairListener<X> implements RepairListener<E, X> {
+			private final RepairListener<T, X> theWrapped;
+			private final Function<? super E, ? extends T> theMap;
+
+			MappedRepairListener(RepairListener<T, X> wrapped) {
+				theWrapped = wrapped;
+				theMap = getFlow().map().get();
+			}
+
+			@Override
+			public X removed(CollectionElement<E> element) {
+				return theWrapped.removed(elementFor(element, theMap));
+			}
+
+			@Override
+			public void disposed(E value, X data) {
+				theWrapped.disposed(theMap.apply(value), data);
+			}
+
+			@Override
+			public void transferred(CollectionElement<E> element, X data) {
+				theWrapped.transferred(elementFor(element, theMap), data);
+			}
 		}
 	}
 
@@ -912,8 +1054,13 @@ public class ObservableSetImpl {
 		 * @param flow The active manager to drive this set
 		 * @param until The observable to terminate this derived set
 		 */
-		public ActiveDerivedSet(ActiveCollectionManager<?, ?, T> flow, Observable<?> until) {
+		public ActiveDerivedSet(ActiveSetManager<?, ?, T> flow, Observable<?> until) {
 			super(flow, until);
+		}
+
+		@Override
+		protected ActiveSetManager<?, ?, T> getFlow() {
+			return (ActiveSetManager<?, ?, T>) super.getFlow();
 		}
 
 		@Override
@@ -928,6 +1075,26 @@ public class ObservableSetImpl {
 				}
 				return element;
 			}
+		}
+
+		@Override
+		public boolean isConsistent(ElementId element) {
+			return getFlow().isConsistent(((DerivedElementHolder<T>) element).element);
+		}
+
+		@Override
+		public boolean checkConsistency() {
+			return getFlow().checkConsistency();
+		}
+
+		@Override
+		public <X> boolean repair(ElementId element, RepairListener<T, X> listener) {
+			return getFlow().repair(((DerivedElementHolder<T>) element).element, blah);
+		}
+
+		@Override
+		public <X> boolean repair(RepairListener<T, X> listener) {
+			return getFlow().repair(blah);
 		}
 
 		@Override
@@ -967,6 +1134,38 @@ public class ObservableSetImpl {
 		@Override
 		protected ObservableValue<? extends ObservableSet<E>> getWrapped() {
 			return (ObservableValue<? extends ObservableSet<E>>) super.getWrapped();
+		}
+
+		@Override
+		public boolean isConsistent(ElementId element) {
+			ObservableSet<E> wrapped = getWrapped().get();
+			if (wrapped == null)
+				throw new NoSuchElementException();
+			return wrapped.isConsistent(element);
+		}
+
+		@Override
+		public boolean checkConsistency() {
+			ObservableSet<E> wrapped = getWrapped().get();
+			if (wrapped == null)
+				throw new NoSuchElementException();
+			return wrapped.checkConsistency();
+		}
+
+		@Override
+		public <X> boolean repair(ElementId element, RepairListener<E, X> listener) {
+			ObservableSet<E> wrapped = getWrapped().get();
+			if (wrapped == null)
+				throw new NoSuchElementException();
+			return wrapped.repair(element, listener);
+		}
+
+		@Override
+		public <X> boolean repair(RepairListener<E, X> listener) {
+			ObservableSet<E> wrapped=getWrapped().get();
+			if(wrapped==null)
+				throw new NoSuchElementException();
+			return wrapped.repair(listener);
 		}
 	}
 }

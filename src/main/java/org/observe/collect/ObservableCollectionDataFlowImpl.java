@@ -359,6 +359,24 @@ public class ObservableCollectionDataFlowImpl {
 		void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening);
 	}
 
+	public static interface ActiveSetManager<E, I, T> extends ActiveCollectionManager<E, I, T> {
+		boolean isConsistent(DerivedCollectionElement<T> element);
+
+		boolean checkConsistency();
+
+		<X> boolean repair(DerivedCollectionElement<T> element, RepairListener<T, X> listener);
+
+		<X> boolean repair(RepairListener<T, X> listener);
+	}
+
+	public interface RepairListener<E, X> {
+		X removed(DerivedCollectionElement<E> element);
+
+		void disposed(E value, X data);
+
+		void transferred(DerivedCollectionElement<E> element, X data);
+	}
+
 	/**
 	 * Accepts elements in an actively-derived collection
 	 *

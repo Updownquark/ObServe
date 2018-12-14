@@ -2,6 +2,7 @@ package org.observe.collect;
 
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.NoSuchElementException;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -16,6 +17,7 @@ import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveSetManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
 import org.observe.collect.ObservableSetImpl.DistinctBaseFlow;
 import org.observe.util.TypeTokens;
@@ -26,6 +28,7 @@ import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.tree.BetterTreeSet;
 
 import com.google.common.reflect.TypeToken;
@@ -399,6 +402,11 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
+		public ActiveSetManager<E, ?, T> manageActive() {
+			return super.manageActive();
+		}
+
+		@Override
 		public ObservableSortedSet<T> collectPassive() {
 			if (!supportsPassive())
 				throw new UnsupportedOperationException("Passive collection not supported");
@@ -525,6 +533,11 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
+		public ActiveSetManager<E, ?, T> manageActive() {
+			return super.manageActive();
+		}
+
+		@Override
 		public ObservableSortedSet<T> collectPassive() {
 			return new PassiveDerivedSortedSet<>((ObservableSortedSet<E>) getSource(), managePassive(), comparator());
 		}
@@ -611,6 +624,11 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
+		public ActiveSetManager<E, ?, E> manageActive() {
+			return super.manageActive();
+		}
+
+		@Override
 		public ObservableSortedSet<E> collectPassive() {
 			return getSource();
 		}
@@ -685,7 +703,7 @@ public class ObservableSortedSetImpl {
 		 * @param compare The comparator by which this set's values will be sorted
 		 * @param until The observable to terminate this derived set
 		 */
-		public ActiveDerivedSortedSet(ActiveCollectionManager<?, ?, T> flow, Comparator<? super T> compare,
+		public ActiveDerivedSortedSet(ActiveSetManager<?, ?, T> flow, Comparator<? super T> compare,
 			Observable<?> until) {
 			super(flow, until);
 			theCompare = compare;
@@ -767,6 +785,46 @@ public class ObservableSortedSetImpl {
 			if (wrapped == null)
 				return null;
 			return wrapped.search(search, filter);
+		}
+
+		@Override
+		public CollectionElement<E> getOrAdd(E value, boolean first, Runnable added) {
+			ObservableSortedSet<E> wrapped = getWrapped().get();
+			if (wrapped == null)
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+			return wrapped.getOrAdd(value, first, added);
+		}
+
+		@Override
+		public boolean isConsistent(ElementId element) {
+			ObservableSortedSet<E> wrapped = getWrapped().get();
+			if (wrapped == null)
+				throw new NoSuchElementException();
+			return wrapped.isConsistent(element);
+		}
+
+		@Override
+		public boolean checkConsistency() {
+			ObservableSortedSet<E> wrapped = getWrapped().get();
+			if (wrapped == null)
+				return true;
+			return wrapped.checkConsistency();
+		}
+
+		@Override
+		public <X> boolean repair(ElementId element, RepairListener<E, X> listener) {
+			ObservableSortedSet<E> wrapped = getWrapped().get();
+			if (wrapped == null)
+				throw new NoSuchElementException();
+			return wrapped.repair(element, listener);
+		}
+
+		@Override
+		public <X> boolean repair(RepairListener<E, X> listener) {
+			ObservableSortedSet<E> wrapped = getWrapped().get();
+			if (wrapped == null)
+				return false;
+			return wrapped.repair(listener);
 		}
 	}
 }
