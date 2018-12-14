@@ -19,6 +19,7 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionMana
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
 import org.observe.collect.ObservableSetImpl.DistinctBaseFlow;
 import org.observe.util.TypeTokens;
+import org.qommons.Causable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.BetterSortedSet;
@@ -233,8 +234,11 @@ public class ObservableSortedSetImpl {
 					}
 
 					void fire(ObservableCollectionEvent<? extends E> evt, CollectionChangeType type, int index, E oldValue, E newValue) {
-						observer
-						.accept(new ObservableCollectionEvent<>(evt.getElementId(), getType(), index, type, oldValue, newValue, evt));
+						ObservableCollectionEvent<? extends E> evt2 = new ObservableCollectionEvent<>(evt.getElementId(), getType(), index,
+							type, oldValue, newValue, evt);
+						try (Transaction evtT = Causable.use(evt2)) {
+							observer.accept(evt2);
+						}
 					}
 				});
 			}

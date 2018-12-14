@@ -193,7 +193,9 @@ public interface ObservableCollection<E> extends BetterList<E> {
 				spliterator(forward).forEachElement(el -> {
 					ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(), index[0],
 						CollectionChangeType.add, null, el.get(), cause);
-					observer.accept(event);
+					try (Transaction evtT = Causable.use(event)) {
+						observer.accept(event);
+					}
 					if (forward)
 						index[0]++;
 					//					else
@@ -218,7 +220,9 @@ public interface ObservableCollection<E> extends BetterList<E> {
 							E value = el.get();
 							ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(), index[0],
 								CollectionChangeType.remove, value, value, cause);
-							observer.accept(event);
+							try (Transaction evtT = Causable.use(event)) {
+								observer.accept(event);
+							}
 							if (forward)
 								index[0]--;
 						}, !forward);

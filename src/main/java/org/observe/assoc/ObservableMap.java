@@ -18,6 +18,7 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollection.SubscriptionCause;
 import org.observe.collect.ObservableSet;
 import org.observe.util.TypeTokens;
+import org.qommons.Causable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
@@ -169,11 +170,17 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 								V oldValue = exists[0] ? evt.getOldValue() : null;
 								V newValue = newExists ? evt.getNewValue() : null;
 								exists[0] = newExists;
-								observer.onNext(createChangeEvent(oldValue, newValue, evt));
+								ObservableValueEvent<V> evt2 = createChangeEvent(oldValue, newValue, evt);
+								try (Transaction evtT = Causable.use(evt2)) {
+									observer.onNext(evt2);
+								}
 							});
 							CollectionElement<Map.Entry<K, V>> entryEl = entrySet().getElement(new SimpleMapEntry<>((K) key, null), true);
 							exists[0] = entryEl != null;
-							observer.onNext(createInitialEvent(exists[0] ? entryEl.get().getValue() : null, null));
+							ObservableValueEvent<V> evt = createInitialEvent(exists[0] ? entryEl.get().getValue() : null, null);
+							try (Transaction evtT = Causable.use(evt)) {
+								observer.onNext(evt);
+							}
 							return sub;
 						}
 					}

@@ -722,18 +722,24 @@ public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
 								index = theSource.keySet().getElementsBefore(evt.getElementId());
 							}
 							entrySub.value = valueEvt.getNewValue();
-							action.accept(new ObservableMapEvent<>(evt.getElementId(), evt.getElementId(), //
+							ObservableMapEvent<K, V> evt2 = new ObservableMapEvent<>(evt.getElementId(), evt.getElementId(), //
 								getKeyType(), getValueType(), index, 0, //
-								mapEvtType, evt.getNewValue(), null, valueEvt.getNewValue(), valueEvt));
+								mapEvtType, evt.getNewValue(), null, valueEvt.getNewValue(), valueEvt);
+							try (Transaction evtT = Causable.use(evt2)) {
+								action.accept(evt2);
+							}
 						});
 						valueSubs.put(evt.getElementId(), entrySub);
 						break;
 					case remove:
 						entrySub = valueSubs.remove(evt.getElementId());
 						entrySub.sub.unsubscribe();
-						action.accept(new ObservableMapEvent<>(evt.getElementId(), evt.getElementId(), //
+						ObservableMapEvent<K, V> evt2 = new ObservableMapEvent<>(evt.getElementId(), evt.getElementId(), //
 							getKeyType(), getValueType(), evt.getIndex(), 0, //
-							CollectionChangeType.remove, evt.getNewValue(), entrySub.value, entrySub.value, evt));
+							CollectionChangeType.remove, evt.getNewValue(), entrySub.value, entrySub.value, evt);
+						try (Transaction evtT = Causable.use(evt2)) {
+							action.accept(evt2);
+						}
 						break;
 					case set:
 						break;

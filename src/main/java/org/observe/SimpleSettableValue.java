@@ -1,6 +1,7 @@
 package org.observe;
 
 import org.observe.util.TypeTokens;
+import org.qommons.Causable;
 import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeToken;
@@ -57,7 +58,9 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 
 	private void fireInitial(Observer<? super ObservableValueEvent<T>> observer) {
 		ObservableValueEvent<T> event = createInitialEvent(get(), null);
-		observer.onNext(event);
+		try (Transaction t = Causable.use(event)) {
+			observer.onNext(event);
+		}
 	}
 
 	@Override

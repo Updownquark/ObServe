@@ -41,6 +41,7 @@ import org.observe.collect.ObservableCollectionImpl.PassiveDerivedCollection;
 import org.observe.util.TypeTokens;
 import org.observe.util.WeakListening;
 import org.qommons.BiTuple;
+import org.qommons.Causable;
 import org.qommons.Lockable;
 import org.qommons.StructuredTransactable;
 import org.qommons.Ternian;
@@ -3363,7 +3364,11 @@ public class ObservableCollectionDataFlowImpl {
 										try (Transaction valueLock = lockArgs()) {
 											CombinedMap oldMap = theCurrentMap;
 											theCurrentMap = new CombinedMap(parentEvt.getNewValue(), null, oldMap.theValues);
-											observer.onNext(createChangeEvent(oldMap, theCurrentMap, parentEvt));
+											ObservableValueEvent<Function<? super E, T>> evt2 = createChangeEvent(oldMap, theCurrentMap,
+												parentEvt);
+											try (Transaction evtT = Causable.use(evt2)) {
+												observer.onNext(evt2);
+											}
 										}
 									}
 								});
@@ -3384,12 +3389,19 @@ public class ObservableCollectionDataFlowImpl {
 												(Map<ObservableValue<?>, SimpleSupplier>) oldMap.theValues);
 											newValues.put(arg, new SimpleSupplier(argEvent.getNewValue()));
 											theCurrentMap = new CombinedMap(oldMap.getParentMap(), null, newValues);
-											observer.onNext(createChangeEvent(oldMap, theCurrentMap, argEvent));
+											ObservableValueEvent<Function<? super E, T>> evt = createChangeEvent(oldMap, theCurrentMap,
+												argEvent);
+											try (Transaction evtT = Causable.use(evt)) {
+												observer.onNext(evt);
+											}
 										}
 									}
 								});
 							}
-							observer.onNext(createInitialEvent(theCurrentMap, null));
+							ObservableValueEvent<Function<? super E, T>> evt = createInitialEvent(theCurrentMap, null);
+							try (Transaction t = Causable.use(evt)) {
+								observer.onNext(evt);
+							}
 							return () -> {
 								try (Transaction t = lock()) {
 									for (int i = 0; i < argSubs.length; i++)

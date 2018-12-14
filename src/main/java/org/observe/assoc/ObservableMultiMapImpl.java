@@ -41,6 +41,7 @@ import org.observe.collect.ObservableSortedSet;
 import org.observe.collect.ObservableSortedSetImpl;
 import org.observe.util.TypeTokens;
 import org.observe.util.WeakListening;
+import org.qommons.Causable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedSet;
@@ -874,8 +875,10 @@ public class ObservableMultiMapImpl {
 			}
 
 			private void fireEvent(ObservableMapEvent<K, V> event) {
-				theEventListener.accept(event);
-				theListeners.forEach(listener -> listener.accept(event));
+				try (Transaction t = Causable.use(event)) {
+					theEventListener.accept(event);
+					theListeners.forEach(listener -> listener.accept(event));
+				}
 			}
 		}
 	}

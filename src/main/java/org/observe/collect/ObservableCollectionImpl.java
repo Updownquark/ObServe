@@ -448,7 +448,10 @@ public final class ObservableCollectionImpl {
 									ElementId newId = theCurrentElement == null ? null : theCurrentElement.getElementId();
 									E oldVal = oldElement == null ? theDefault.get() : oldElement.get();
 									E newVal = theCurrentElement == null ? theDefault.get() : theCurrentElement.get();
-									observer.onNext(createChangeEvent(oldId, oldVal, newId, newVal, cause));
+									ObservableElementEvent<E> evt = createChangeEvent(oldId, oldVal, newId, newVal, cause);
+									try (Transaction evtT = Causable.use(evt)) {
+										observer.onNext(evt);
+									}
 								});
 							}
 
@@ -523,7 +526,10 @@ public final class ObservableCollectionImpl {
 						Subscription collSub = theCollection.onChange(listener);
 						ElementId initId = listener.theCurrentElement == null ? null : listener.theCurrentElement.getElementId();
 						E initVal = listener.theCurrentElement == null ? theDefault.get() : listener.theCurrentElement.get();
-						observer.onNext(createInitialEvent(initId, initVal, null));
+						ObservableElementEvent<E> evt = createInitialEvent(initId, initVal, null);
+						try (Transaction evtT = Causable.use(evt)) {
+							observer.onNext(evt);
+						}
 						return new Subscription() {
 							private boolean isDone;
 
@@ -535,7 +541,10 @@ public final class ObservableCollectionImpl {
 								collSub.unsubscribe();
 								ElementId endId = listener.theCurrentElement == null ? null : listener.theCurrentElement.getElementId();
 								E endVal = listener.theCurrentElement == null ? theDefault.get() : listener.theCurrentElement.get();
-								observer.onCompleted(createChangeEvent(endId, endVal, endId, endVal, null));
+								ObservableElementEvent<E> evt2 = createChangeEvent(endId, endVal, endId, endVal, null);
+								try (Transaction evtT = Causable.use(evt2)) {
+									observer.onCompleted(evt2);
+								}
 							}
 						};
 					}
@@ -810,8 +819,13 @@ public final class ObservableCollectionImpl {
 				ValueHolder<X> value = new ValueHolder<>(init());
 				int[] i = new int[1];
 				theCollection.spliterator()
-				.forEachElement(el -> value.accept(update(value.get(), new ObservableCollectionEvent<>(el.getElementId(),
-					theCollection.getType(), i[0]++, CollectionChangeType.add, null, el.get(), null))), true);
+				.forEachElement(el -> {
+					ObservableCollectionEvent<? extends E> evt = new ObservableCollectionEvent<>(el.getElementId(),
+						theCollection.getType(), i[0]++, CollectionChangeType.add, null, el.get(), null);
+					try (Transaction evtT = Causable.use(evt)) {
+						value.accept(update(value.get(), evt));
+					}
+				}, true);
 				return value.get();
 			}
 		}
@@ -1681,8 +1695,12 @@ public final class ObservableCollectionImpl {
 						int[] index = new int[1];
 						sourceSpliter.forEachElement(sourceEl -> {
 							E sourceVal = sourceEl.get();
-							observer.accept(new ObservableCollectionEvent<>(mapId(sourceEl.getElementId()), getType(), index[0]++,
-								CollectionChangeType.set, evt.getOldValue().apply(sourceVal), currentMap[0].apply(sourceVal), evt));
+							ObservableCollectionEvent<? extends T> evt2 = new ObservableCollectionEvent<>(mapId(sourceEl.getElementId()),
+								getType(), index[0]++, CollectionChangeType.set, evt.getOldValue().apply(sourceVal),
+								currentMap[0].apply(sourceVal), evt);
+							try (Transaction evtT = Causable.use(evt2)) {
+								observer.accept(evt2);
+							}
 						}, !isReversed);
 					}
 				});
@@ -1723,8 +1741,11 @@ public final class ObservableCollectionImpl {
 									if (evt.getType() == CollectionChangeType.remove)
 										theSize--;
 								}
-								observer.accept(new ObservableCollectionEvent<>(mapId(evt.getElementId()), getType(), index, evt.getType(),
-									oldValue, newValue, evt));
+								ObservableCollectionEvent<? extends T> evt2 = new ObservableCollectionEvent<>(mapId(evt.getElementId()),
+									getType(), index, evt.getType(), oldValue, newValue, evt);
+								try (Transaction evtT = Causable.use(evt2)) {
+									observer.accept(evt2);
+								}
 							}
 						}
 					});
