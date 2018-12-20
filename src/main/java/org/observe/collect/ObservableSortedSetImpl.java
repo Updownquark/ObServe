@@ -16,7 +16,6 @@ import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
-import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.ActiveSetManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
 import org.observe.collect.ObservableSetImpl.DistinctBaseFlow;
@@ -447,7 +446,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public ActiveCollectionManager<E, ?, T> manageActive() {
+		public ActiveSetManager<E, ?, T> manageActive() {
 			return new ObservableSetImpl.DistinctManager<>(
 				new ObservableCollectionDataFlowImpl.ActiveEquivalenceSwitchedManager<>(getParent().manageActive(), equivalence()),
 				equivalence(), isAlwaysUsingFirst, false);

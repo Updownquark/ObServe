@@ -27,6 +27,7 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.DerivedCollectionEle
 import org.observe.collect.ObservableCollectionDataFlowImpl.ElementAccepter;
 import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
+import org.observe.collect.ObservableCollectionDataFlowImpl.RepairListener;
 import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.FlattenedValueCollection;
 import org.observe.collect.ObservableCollectionImpl.PassiveDerivedCollection;
@@ -41,6 +42,7 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.OptimisticContext;
+import org.qommons.collect.ValueStoredCollection;
 import org.qommons.debug.Debug;
 import org.qommons.debug.Debug.DebugData;
 import org.qommons.tree.BetterTreeMap;
@@ -175,7 +177,7 @@ public class ObservableSetImpl {
 
 		@Override
 		public ActiveSetManager<E, ?, T> manageActive() {
-			return getParent().manageActive();
+			return new ActiveSetMgrPlaceholder<>(getParent().manageActive());
 		}
 
 		@Override
@@ -193,6 +195,97 @@ public class ObservableSetImpl {
 		@Override
 		public ObservableSet<T> collectActive(Observable<?> until) {
 			return new ActiveDerivedSet<>(manageActive(), until);
+		}
+	}
+
+	private static class ActiveSetMgrPlaceholder<E, I, T> implements ActiveSetManager<E, I, T> {
+		private final ActiveCollectionManager<E, I, T> theWrapped;
+
+		ActiveSetMgrPlaceholder(ActiveCollectionManager<E, I, T> wrapped) {
+			theWrapped = wrapped;
+		}
+
+		@Override
+		public boolean isContentControlled() {
+			return theWrapped.isContentControlled();
+		}
+
+		@Override
+		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
+			return theWrapped.getElementFinder(value);
+		}
+
+		@Override
+		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
+			return theWrapped.canAdd(toAdd, after, before);
+		}
+
+		@Override
+		public DerivedCollectionElement<T> addElement(T value, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before,
+			boolean first) throws UnsupportedOperationException, IllegalArgumentException {
+			return theWrapped.addElement(value, after, before, first);
+		}
+
+		@Override
+		public boolean clear() {
+			return theWrapped.clear();
+		}
+
+		@Override
+		public void setValues(Collection<DerivedCollectionElement<T>> elements, T newValue)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			theWrapped.setValues(elements, newValue);
+		}
+
+		@Override
+		public void begin(boolean fromStart, ElementAccepter<T> onElement, WeakListening listening) {
+			theWrapped.begin(fromStart, onElement, listening);
+		}
+
+		@Override
+		public TypeToken<T> getTargetType() {
+			return theWrapped.getTargetType();
+		}
+
+		@Override
+		public Equivalence<? super T> equivalence() {
+			return theWrapped.equivalence();
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return theWrapped.isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			return theWrapped.lock(write, structural, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, boolean structural, Object cause) {
+			return theWrapped.tryLock(write, structural, cause);
+		}
+
+		@Override
+		public boolean isConsistent(DerivedCollectionElement<T> element) {
+			throw new UnsupportedOperationException("Not implemented yet"); // TODO
+		}
+
+		@Override
+		public boolean checkConsistency() {
+			throw new UnsupportedOperationException("Not implemented yet"); // TODO
+		}
+
+		@Override
+		public <X> boolean repair(DerivedCollectionElement<T> element,
+			org.observe.collect.ObservableCollectionDataFlowImpl.RepairListener<T, X> listener) {
+			throw new UnsupportedOperationException("Not implemented yet"); // TODO
+		}
+
+		@Override
+		public <X> boolean repair(org.observe.collect.ObservableCollectionDataFlowImpl.RepairListener<T, X> listener) {
+			throw new UnsupportedOperationException("Not implemented yet"); // TODO
 		}
 	}
 
@@ -293,7 +386,7 @@ public class ObservableSetImpl {
 
 		@Override
 		public ActiveSetManager<E, ?, T> manageActive() {
-			return super.manageActive();
+			return new ActiveSetMgrPlaceholder<>(super.manageActive());
 		}
 
 		@Override
@@ -368,7 +461,7 @@ public class ObservableSetImpl {
 
 		@Override
 		public ActiveSetManager<E, ?, E> manageActive() {
-			return super.manageActive();
+			return new DistinctBaseManager<>(getSource());
 		}
 
 		@Override
@@ -382,13 +475,70 @@ public class ObservableSetImpl {
 		}
 	}
 
+	static class DistinctBaseManager<E> extends ObservableCollectionDataFlowImpl.BaseCollectionManager<E>
+	implements ActiveSetManager<E, E, E> {
+		DistinctBaseManager(ObservableSet<E> source) {
+			super(source);
+		}
+
+		@Override
+		protected ObservableSet<E> getSource() {
+			return (ObservableSet<E>) super.getSource();
+		}
+
+		@Override
+		public boolean isConsistent(DerivedCollectionElement<E> element) {
+			return getSource().isConsistent(((BaseDerivedElement) element).getElementId());
+		}
+
+		@Override
+		public boolean checkConsistency() {
+			return getSource().checkConsistency();
+		}
+
+		@Override
+		public <X> boolean repair(DerivedCollectionElement<E> element,
+			org.observe.collect.ObservableCollectionDataFlowImpl.RepairListener<E, X> listener) {
+			return getSource().repair(((BaseDerivedElement) element).getElementId(),
+				listener == null ? null : new BaseRepairListener<>(listener));
+		}
+
+		@Override
+		public <X> boolean repair(org.observe.collect.ObservableCollectionDataFlowImpl.RepairListener<E, X> listener) {
+			return getSource().repair(listener == null ? null : new BaseRepairListener<>(listener));
+		}
+
+		private class BaseRepairListener<X> implements ValueStoredCollection.RepairListener<E, X> {
+			private final org.observe.collect.ObservableCollectionDataFlowImpl.RepairListener<E, X> theWrapped;
+
+			BaseRepairListener(org.observe.collect.ObservableCollectionDataFlowImpl.RepairListener<E, X> wrapped) {
+				theWrapped = wrapped;
+			}
+
+			@Override
+			public X removed(CollectionElement<E> element) {
+				return theWrapped.removed(new BaseDerivedElement(getSource().mutableElement(element.getElementId())));
+			}
+
+			@Override
+			public void disposed(E value, X data) {
+				theWrapped.disposed(value, data);
+			}
+
+			@Override
+			public void transferred(CollectionElement<E> element, X data) {
+				theWrapped.transferred(new BaseDerivedElement(getSource().mutableElement(element.getElementId())), data);
+			}
+		}
+	}
+
 	/**
 	 * Implements {@link DistinctOp#manageActive()}
 	 *
 	 * @param <E> The type of the source collection
 	 * @param <T> The type of the derived set
 	 */
-	public static class DistinctManager<E, T> implements ActiveCollectionManager<E, T, T> {
+	public static class DistinctManager<E, T> implements ActiveSetManager<E, T, T> {
 		private final ActiveCollectionManager<E, ?, T> theParent;
 		private final BetterMap<T, UniqueElement> theElementsByValue;
 		private final Equivalence<? super T> theEquivalence;
@@ -571,6 +721,26 @@ public class ObservableSetImpl {
 				T value = parentEl.get();
 				theElementsByValue.computeIfAbsent(value, v -> createUniqueElement(v)).addParent(parentEl, cause);
 			}, listening);
+		}
+
+		@Override
+		public boolean isConsistent(DerivedCollectionElement<T> element) {
+			return theElementsByValue.isConsistent(((UniqueElement) element).getValueElement());
+		}
+
+		@Override
+		public boolean checkConsistency() {
+			return theElementsByValue.checkConsistency();
+		}
+
+		@Override
+		public <X> boolean repair(DerivedCollectionElement<T> element, RepairListener<T, X> listener) {
+			throw new UnsupportedOperationException("Not implemented yet"); // TODO
+		}
+
+		@Override
+		public <X> boolean repair(RepairListener<T, X> listener) {
+			throw new UnsupportedOperationException("Not implemented yet"); // TODO
 		}
 
 		/**
@@ -1089,12 +1259,14 @@ public class ObservableSetImpl {
 
 		@Override
 		public <X> boolean repair(ElementId element, RepairListener<T, X> listener) {
-			return getFlow().repair(((DerivedElementHolder<T>) element).element, blah);
+			throw new UnsupportedOperationException("Not implemented yet"); // TODO
+			// return getFlow().repair(((DerivedElementHolder<T>) element).element, blah);
 		}
 
 		@Override
 		public <X> boolean repair(RepairListener<T, X> listener) {
-			return getFlow().repair(blah);
+			throw new UnsupportedOperationException("Not implemented yet"); // TODO
+			// return getFlow().repair(blah);
 		}
 
 		@Override

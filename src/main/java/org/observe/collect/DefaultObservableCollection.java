@@ -14,6 +14,7 @@ import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableElementSpliterator;
+import org.qommons.collect.ValueStoredCollection;
 
 import com.google.common.reflect.TypeToken;
 
@@ -259,6 +260,38 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			@Override
 			public void set(E value) throws UnsupportedOperationException, IllegalArgumentException {
 				E old = get();
+				if (value == old && theValues instanceof ValueStoredCollection) {
+					// A pure update on a value-stored collection may mean that the value has changed such that it needs to be moved
+					// Correct the storage structure
+					boolean[] thisMoved = new boolean[1];
+					RepairOperation op = new RepairOperation(getCurrentCause());
+					try (Transaction opT = Causable.use(op); Transaction vt = lock(true, true, op)) {
+						((ValueStoredCollection<E>) theValues).repair(valueEl.getElementId(),
+							new ValueStoredCollection.RepairListener<E, Void>() {
+							@Override
+							public Void removed(CollectionElement<E> element) {
+								if (element.getElementId().equals(valueEl.getElementId()))
+									thisMoved[0] = true;
+								fire(new ObservableCollectionEvent<>(element.getElementId(), getType(),
+									theValues.getElementsBefore(element.getElementId()), CollectionChangeType.remove, element.get(),
+									element.get(), op));
+								return null;
+							}
+
+							@Override
+							public void disposed(E oldValue, Void data) {}
+
+							@Override
+							public void transferred(CollectionElement<E> element, Void data) {
+								fire(new ObservableCollectionEvent<>(element.getElementId(), getType(),
+									theValues.getElementsBefore(element.getElementId()), CollectionChangeType.add, null, element.get(),
+									op));
+							}
+						});
+					}
+					if (thisMoved[0])
+						return;
+				}
 				valueEl.set(value);
 				fire(new ObservableCollectionEvent<>(getElementId(), getType(), getElementsBefore(getElementId()), CollectionChangeType.set,
 					old, value, getCurrentCause()));
@@ -284,6 +317,13 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 				return valueEl.toString();
 			}
 		};
+	}
+
+	/** A Causable representing a {@link ValueStoredCollection} repair operation */
+	static class RepairOperation extends Causable {
+		RepairOperation(Object cause) {
+			super(cause);
+		}
 	}
 
 	@Override

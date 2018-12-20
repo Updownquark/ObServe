@@ -1513,13 +1513,17 @@ public class ObservableCollectionDataFlowImpl {
 		}
 	}
 
-	private static class BaseCollectionManager<E> implements ActiveCollectionManager<E, E, E> {
+	static class BaseCollectionManager<E> implements ActiveCollectionManager<E, E, E> {
 		private final ObservableCollection<E> theSource;
 		private final BetterTreeMap<ElementId, CollectionElementListener<E>> theElementListeners;
 
 		BaseCollectionManager(ObservableCollection<E> source) {
 			theSource = source;
 			theElementListeners = new BetterTreeMap<>(false, ElementId::compareTo);
+		}
+
+		protected ObservableCollection<E> getSource() {
+			return theSource;
 		}
 
 		@Override
@@ -1613,6 +1617,10 @@ public class ObservableCollectionDataFlowImpl {
 
 			BaseDerivedElement(MutableCollectionElement<E> src) {
 				source = src;
+			}
+
+			ElementId getElementId() {
+				return source.getElementId();
 			}
 
 			@Override

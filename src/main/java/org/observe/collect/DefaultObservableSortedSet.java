@@ -82,12 +82,18 @@ public class DefaultObservableSortedSet<E> extends DefaultObservableCollection<E
 
 	@Override
 	public <X> boolean repair(ElementId element, ValueStoredCollection.RepairListener<E, X> listener) {
-		return getValues().repair(element, new ObservableRepairListener<>(listener));
+		RepairOperation op = new RepairOperation(getCurrentCause());
+		try (Transaction opT = Causable.use(op); Transaction t = lock(true, true, op)) {
+			return getValues().repair(element, new ObservableRepairListener<>(listener));
+		}
 	}
 
 	@Override
 	public <X> boolean repair(ValueStoredCollection.RepairListener<E, X> listener) {
-		return getValues().repair(new ObservableRepairListener<>(listener));
+		RepairOperation op = new RepairOperation(getCurrentCause());
+		try (Transaction opT = Causable.use(op); Transaction t = lock(true, true, op)) {
+			return getValues().repair(new ObservableRepairListener<>(listener));
+		}
 	}
 
 	private class ObservableRepairListener<X> implements ValueStoredCollection.RepairListener<E, RepairEvent<X>> {
