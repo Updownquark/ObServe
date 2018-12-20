@@ -102,7 +102,7 @@ public class ObservableDemoGui extends JPanel {
 		.addActionListener(evt -> theCategoryRemoveObservable.onNext((ValueCategory) theCategoryCombo.getSelectedItem()));
 		ObservableCollection<Integer> selectedValues = ObservableCollection.flattenValue(theSelectedCategory.map(cat -> cat.values));
 		theValueList = new JList<>(new ObservableListModel<>(selectedValues));
-		ObservableListSelectionModel<Integer> selectionModel = new ObservableListSelectionModel<>(selectedValues);
+		ObservableListSelectionModel<Integer> selectionModel = new ObservableListSelectionModel<>(selectedValues, null);
 		theValueList.setSelectionModel(selectionModel);
 		theSelectedValues = selectionModel.getSelectedValues();
 		theValueSpinner = new JSpinner(new SpinnerNumberModel(0, 0, 100000, 1));
