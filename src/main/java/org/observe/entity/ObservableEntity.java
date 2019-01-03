@@ -6,4 +6,6 @@ public interface ObservableEntity<E> {
 	EntityIdentity<? super E> getId();
 
 	<F> ObservableEntityField<? super E, F> getField(ObservableEntityFieldType<? super E, F> fieldType);
+
+	E getEntity();
 }

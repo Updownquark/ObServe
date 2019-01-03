@@ -13,4 +13,7 @@ public interface ObservableEntitySet {
 			throw new IllegalArgumentException("Entity type " + entity.getClass().getName() + " not supported");
 		return type.observableEntity((X) entity);
 	}
+
+	<E> EntitySelection<E> select(ObservableEntityType<E> type);
+	<E> EntityCreator<E> create(ObservableEntityType<E> type);
 }
