@@ -76,8 +76,8 @@ public class ObservableTextField<E> extends JTextField {
 			private void checkText() {
 				isDirty = true;
 				try {
-					theFormat.parse(getText());
-					setErrorState(null);
+					E parsed = theFormat.parse(getText());
+					setErrorState(theValue.isAcceptable(parsed));
 				} catch (ParseException e) {
 					setErrorState(e.getMessage() == null ? "Invalid text" : e.getMessage());
 				}
@@ -190,19 +190,23 @@ public class ObservableTextField<E> extends JTextField {
 		}
 	}
 
-	private long lastTooltipDisplayed = 0;
+	private long toolTipLastDisplayed = 0;
 
 	private void setTooltipVisible(boolean visible) {
 		// Super hacky, but not sure how else to do this. Swing's tooltip system doesn't have many hooks into it.
+		// This won't work right if the tooltip is already displayed or dismissed due to user interaction within the dismiss delay,
+		// but will start working correctly again after the dismiss delay elapses
+		// Overall, this approach may be somewhat flawed, but it's about the best I can do,
+		// the potential negative consequences are small, and I think it's a very good feature
 		long now = System.currentTimeMillis();
-		boolean displayed = (now - lastTooltipDisplayed) < ToolTipManager.sharedInstance().getDismissDelay();
+		boolean displayed = (now - toolTipLastDisplayed) < ToolTipManager.sharedInstance().getDismissDelay();
 		if (visible == displayed) {
 			// Tooltip is visible or invisible according to the parameter already
 		} else {
 			if (visible)
-				lastTooltipDisplayed = now;
+				toolTipLastDisplayed = now;
 			else
-				lastTooltipDisplayed = 0;
+				toolTipLastDisplayed = 0;
 			KeyEvent ke = new KeyEvent(this, KeyEvent.KEY_PRESSED, System.currentTimeMillis(), InputEvent.CTRL_MASK, KeyEvent.VK_F1,
 				KeyEvent.CHAR_UNDEFINED);
 			dispatchEvent(ke);
