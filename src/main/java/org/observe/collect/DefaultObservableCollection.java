@@ -171,11 +171,6 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	}
 
 	@Override
-	public MutableElementSpliterator<E> spliterator(ElementId element, boolean asNext) {
-		return new DefaultMutableSpliterator(theValues.spliterator(element, asNext));
-	}
-
-	@Override
 	public String canAdd(E value, ElementId after, ElementId before) {
 		return theValues.canAdd(value, after, before);
 	}
@@ -223,11 +218,6 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 			theObservers.forEach(//
 				listener -> listener.accept(evt));
 		}
-	}
-
-	@Override
-	public MutableElementSpliterator<E> spliterator(boolean fromStart) {
-		return new DefaultMutableSpliterator(theValues.spliterator(fromStart));
 	}
 
 	private MutableCollectionElement<E> mutableElementFor(MutableCollectionElement<E> valueEl) {
@@ -339,50 +329,5 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	@Override
 	public String toString() {
 		return theValues.toString();
-	}
-
-	private class DefaultMutableSpliterator extends MutableElementSpliterator.SimpleMutableSpliterator<E> {
-		private final MutableElementSpliterator<E> theValueSpliter;
-
-		DefaultMutableSpliterator(MutableElementSpliterator<E> valueSpliter) {
-			super(DefaultObservableCollection.this);
-			theValueSpliter = valueSpliter;
-		}
-
-		@Override
-		public long estimateSize() {
-			return theValueSpliter.estimateSize();
-		}
-
-		@Override
-		public int characteristics() {
-			return theValueSpliter.characteristics();
-		}
-
-		@Override
-		public long getExactSizeIfKnown() {
-			return theValueSpliter.getExactSizeIfKnown();
-		}
-
-		@Override
-		public Comparator<? super E> getComparator() {
-			return theValueSpliter.getComparator();
-		}
-
-		@Override
-		protected boolean internalForElement(Consumer<? super CollectionElement<E>> action, boolean forward) {
-			return theValueSpliter.forElement(action, forward);
-		}
-
-		@Override
-		protected boolean internalForElementM(Consumer<? super MutableCollectionElement<E>> action, boolean forward) {
-			return theValueSpliter.forElementM(el -> action.accept(mutableElementFor(el)), forward);
-		}
-
-		@Override
-		public MutableElementSpliterator<E> trySplit() {
-			MutableElementSpliterator<E> valueSplit = theValueSpliter.trySplit();
-			return valueSplit == null ? null : new DefaultMutableSpliterator(valueSplit);
-		}
 	}
 }

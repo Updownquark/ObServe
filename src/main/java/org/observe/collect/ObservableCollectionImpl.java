@@ -1576,15 +1576,6 @@ public final class ObservableCollectionImpl {
 			return mutableElementFor(theSource.mutableElement(mapId(id)), null);
 		}
 
-		@Override
-		public MutableElementSpliterator<T> spliterator(ElementId element, boolean asNext) {
-			if (isReversed) {
-				element = mapId(element);
-				asNext = !asNext;
-			}
-			return new PassiveDerivedMutableSpliterator(theSource.spliterator(element, asNext));
-		}
-
 		/**
 		 * @param el The source element
 		 * @param map The mapping function for the element's values, or null to just get the current map from the flow
@@ -1660,13 +1651,6 @@ public final class ObservableCollectionImpl {
 				}
 			}
 			return new PassiveMutableElement();
-		}
-
-		@Override
-		public MutableElementSpliterator<T> spliterator(boolean fromStart) {
-			if (isReversed)
-				fromStart = !fromStart;
-			return new PassiveDerivedMutableSpliterator(theSource.spliterator(fromStart));
 		}
 
 		@Override
@@ -1747,55 +1731,6 @@ public final class ObservableCollectionImpl {
 		@Override
 		public String toString() {
 			return ObservableCollection.toString(this);
-		}
-
-		/** A spliterator for the {@link PassiveDerivedCollection} class */
-		protected class PassiveDerivedMutableSpliterator extends MutableElementSpliterator.SimpleMutableSpliterator<T> {
-			private final MutableElementSpliterator<E> theSourceSpliter;
-			private final Function<? super E, ? extends T> theMap;
-
-			PassiveDerivedMutableSpliterator(MutableElementSpliterator<E> srcSpliter) {
-				super(PassiveDerivedCollection.this);
-				theSourceSpliter = srcSpliter;
-				theMap = theFlow.map().get();
-			}
-
-			@Override
-			public long estimateSize() {
-				return theSourceSpliter.estimateSize();
-			}
-
-			@Override
-			public long getExactSizeIfKnown() {
-				return theSourceSpliter.getExactSizeIfKnown();
-			}
-
-			@Override
-			public int characteristics() {
-				return theSourceSpliter.characteristics() & (~(DISTINCT | SORTED));
-			}
-
-			@Override
-			protected boolean internalForElement(Consumer<? super CollectionElement<T>> action, boolean forward) {
-				if (isReversed)
-					forward = !forward;
-				return theSourceSpliter.forElement(//
-					el -> action.accept(elementFor(el, theMap)), forward);
-			}
-
-			@Override
-			protected boolean internalForElementM(Consumer<? super MutableCollectionElement<T>> action, boolean forward) {
-				if (isReversed)
-					forward = !forward;
-				return theSourceSpliter.forElementM(//
-					el -> action.accept(mutableElementFor(el, theMap)), forward);
-			}
-
-			@Override
-			public MutableElementSpliterator<T> trySplit() {
-				MutableElementSpliterator<E> srcSplit = theSourceSpliter.trySplit();
-				return srcSplit == null ? null : new PassiveDerivedMutableSpliterator(srcSplit);
-			}
 		}
 	}
 
@@ -2149,12 +2084,6 @@ public final class ObservableCollectionImpl {
 			return new DerivedMutableCollectionElement();
 		}
 
-		@Override
-		public MutableElementSpliterator<T> spliterator(ElementId element, boolean asNext) {
-			DerivedElementHolder<T> el = (DerivedElementHolder<T>) element;
-			return new MutableDerivedSpliterator(theDerivedElements.spliterator(el.check().treeNode.getElementId(), asNext));
-		}
-
 		/**
 		 * @param el The element holder
 		 * @return A collection element for the given element in this collection
@@ -2177,19 +2106,6 @@ public final class ObservableCollectionImpl {
 					return el.element.toString();
 				}
 			};
-		}
-
-		@Override
-		public MutableElementSpliterator<T> spliterator(boolean fromStart) {
-			return new MutableDerivedSpliterator(theDerivedElements.spliterator(fromStart));
-		}
-
-		/**
-		 * @param elementSpliter The element set's spliterator
-		 * @return A spliterator for this collection placed at the given spliterator's position
-		 */
-		protected MutableElementSpliterator<T> spliterator(MutableElementSpliterator<DerivedElementHolder<T>> elementSpliter) {
-			return new MutableDerivedSpliterator(elementSpliter);
 		}
 
 		@Override
@@ -2254,48 +2170,6 @@ public final class ObservableCollectionImpl {
 		protected void finalize() throws Throwable {
 			super.finalize();
 			theWeakListening.unsubscribe();
-		}
-
-		private class MutableDerivedSpliterator extends MutableElementSpliterator.SimpleMutableSpliterator<T> {
-			private final MutableElementSpliterator<DerivedElementHolder<T>> theElementSpliter;
-
-			MutableDerivedSpliterator(MutableElementSpliterator<DerivedElementHolder<T>> elementSpliter) {
-				super(ActiveDerivedCollection.this);
-				theElementSpliter = elementSpliter;
-			}
-
-			@Override
-			public long estimateSize() {
-				return theElementSpliter.estimateSize();
-			}
-
-			@Override
-			public long getExactSizeIfKnown() {
-				return theElementSpliter.getExactSizeIfKnown();
-			}
-
-			@Override
-			public int characteristics() {
-				return theElementSpliter.characteristics();
-			}
-
-			@Override
-			protected boolean internalForElement(Consumer<? super CollectionElement<T>> action, boolean forward) {
-				return theElementSpliter.forValue(//
-					element -> action.accept(elementFor(element)), forward);
-			}
-
-			@Override
-			protected boolean internalForElementM(Consumer<? super MutableCollectionElement<T>> action, boolean forward) {
-				return theElementSpliter.forElementM(//
-					element -> action.accept(mutableElement(element.get(), element)), forward);
-			}
-
-			@Override
-			public MutableElementSpliterator<T> trySplit() {
-				MutableElementSpliterator<DerivedElementHolder<T>> split = theElementSpliter.trySplit();
-				return split == null ? null : new MutableDerivedSpliterator(split);
-			}
 		}
 	}
 
@@ -2474,68 +2348,6 @@ public final class ObservableCollectionImpl {
 		public CollectionElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
 			throws UnsupportedOperationException, IllegalArgumentException {
 			return null;
-		}
-
-		@Override
-		public MutableElementSpliterator<E> spliterator(boolean fromStart) {
-			MutableElementSpliterator<? extends E> split = theValues.spliterator(fromStart);
-			return mutableSpliterator(split);
-		}
-
-		@Override
-		public MutableElementSpliterator<E> spliterator(ElementId element, boolean asNext) {
-			MutableElementSpliterator<? extends E> split = theValues.spliterator(element, asNext);
-			return mutableSpliterator(split);
-		}
-
-		private MutableElementSpliterator<E> mutableSpliterator(MutableElementSpliterator<? extends E> split) {
-			return new MutableElementSpliterator<E>() {
-				@Override
-				public long estimateSize() {
-					return split.estimateSize();
-				}
-
-				@Override
-				public int characteristics() {
-					return split.characteristics() | Spliterator.IMMUTABLE;
-				}
-
-				@Override
-				public long getExactSizeIfKnown() {
-					return split.getExactSizeIfKnown();
-				}
-
-				@Override
-				public Comparator<? super E> getComparator() {
-					return (Comparator<? super E>) split.getComparator();
-				}
-
-				@Override
-				public boolean forElement(Consumer<? super CollectionElement<E>> action, boolean forward) {
-					return split.forElement(el -> action.accept((CollectionElement<E>) el), forward);
-				}
-
-				@Override
-				public void forEachElement(Consumer<? super CollectionElement<E>> action, boolean forward) {
-					split.forEachElement(el -> action.accept((CollectionElement<E>) el), forward);
-				}
-
-				@Override
-				public boolean forElementM(Consumer<? super MutableCollectionElement<E>> action, boolean forward) {
-					return split.forElementM(el -> action.accept(mutableElement(el)), forward);
-				}
-
-				@Override
-				public void forEachElementM(Consumer<? super MutableCollectionElement<E>> action, boolean forward) {
-					split.forEachElementM(el -> action.accept(mutableElement(el)), forward);
-				}
-
-				@Override
-				public MutableElementSpliterator<E> trySplit() {
-					MutableElementSpliterator<? extends E> subSplit = split.trySplit();
-					return subSplit == null ? null : mutableSpliterator(subSplit);
-				}
-			};
 		}
 
 		@Override
@@ -2753,22 +2565,6 @@ public final class ObservableCollectionImpl {
 				((ObservableCollection<E>) coll).setValue(elements, value);
 			else if (!elements.isEmpty())
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-		}
-
-		@Override
-		public MutableElementSpliterator<E> spliterator(boolean fromStart) {
-			ObservableCollection<? extends E> coll = theCollectionObservable.get();
-			if (coll == null)
-				return MutableElementSpliterator.empty();
-			return ((ObservableCollection<E>) coll).spliterator(fromStart);
-		}
-
-		@Override
-		public MutableElementSpliterator<E> spliterator(ElementId id, boolean asNext) {
-			ObservableCollection<? extends E> coll = theCollectionObservable.get();
-			if (coll == null)
-				throw new NoSuchElementException();
-			return ((ObservableCollection<E>) coll).spliterator(id, asNext);
 		}
 
 		@Override
