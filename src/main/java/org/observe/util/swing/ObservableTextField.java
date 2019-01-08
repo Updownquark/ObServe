@@ -1,11 +1,15 @@
 package org.observe.util.swing;
 
 import java.awt.Color;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
+import java.awt.event.InputEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.text.ParseException;
 
 import javax.swing.JTextField;
+import javax.swing.ToolTipManager;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
@@ -24,6 +28,7 @@ public class ObservableTextField<E> extends JTextField {
 	private final Color error_bg = new Color(255, 200, 200);
 	private final Color error_disabled_bg = new Color(200, 150, 150);
 
+	private boolean revertOnFocusLoss;
 	private String theError;
 	private String theToolTip;
 
@@ -37,6 +42,7 @@ public class ObservableTextField<E> extends JTextField {
 		disabled_bg = getBackground();
 		setEnabled(true);
 
+		revertOnFocusLoss = true;
 		theValue.changes().takeUntil(until).act(evt -> {
 			if (!isInternallyChanging)
 				setValue(evt.getNewValue());
@@ -48,20 +54,33 @@ public class ObservableTextField<E> extends JTextField {
 		getDocument().addDocumentListener(new DocumentListener() {
 			@Override
 			public void removeUpdate(DocumentEvent e) {
-				if (!isInternallyChanging)
-					isDirty = true;
+				if (!isInternallyChanging) {
+					checkText();
+				}
 			}
 
 			@Override
 			public void insertUpdate(DocumentEvent e) {
-				if (!isInternallyChanging)
-					isDirty = true;
+				if (!isInternallyChanging) {
+					checkText();
+				}
 			}
 
 			@Override
 			public void changedUpdate(DocumentEvent e) {
-				if (!isInternallyChanging)
-					isDirty = true;
+				if (!isInternallyChanging) {
+					checkText();
+				}
+			}
+
+			private void checkText() {
+				isDirty = true;
+				try {
+					theFormat.parse(getText());
+					setErrorState(null);
+				} catch (ParseException e) {
+					setErrorState(e.getMessage() == null ? "Invalid text" : e.getMessage());
+				}
 			}
 		});
 		addKeyListener(new KeyAdapter() {
@@ -73,6 +92,23 @@ public class ObservableTextField<E> extends JTextField {
 					flushEdits(e);
 			}
 		});
+		addFocusListener(new FocusAdapter() {
+			@Override
+			public void focusGained(FocusEvent e) {
+				selectAll();
+			}
+
+			@Override
+			public void focusLost(FocusEvent e) {
+				if (revertOnFocusLoss && isDirty)
+					revertEdits();
+			}
+		});
+	}
+
+	public ObservableTextField<E> setRevertOnFocusLoss(boolean revert) {
+		revertOnFocusLoss = revert;
+		return this;
 	}
 
 	@Override
@@ -128,6 +164,7 @@ public class ObservableTextField<E> extends JTextField {
 	}
 
 	private void setErrorState(String error) {
+		boolean prevError = theError != null;
 		theError = error;
 		String disabled = theValue.isEnabled().get();
 		if (theError != null) {
@@ -140,11 +177,35 @@ public class ObservableTextField<E> extends JTextField {
 		else
 			setBackground(normal_bg);
 
-		if (theError != null)
+		if (theError != null) {
 			super.setToolTipText(theError);
-		else if (disabled != null)
-			super.setToolTipText(disabled);
-		else
-			super.setToolTipText(theToolTip);
+			setTooltipVisible(true);
+		} else {
+			if (prevError)
+				setTooltipVisible(false);
+			if (disabled != null)
+				super.setToolTipText(disabled);
+			else
+				super.setToolTipText(theToolTip);
+		}
+	}
+
+	private long lastTooltipDisplayed = 0;
+
+	private void setTooltipVisible(boolean visible) {
+		// Super hacky, but not sure how else to do this. Swing's tooltip system doesn't have many hooks into it.
+		long now = System.currentTimeMillis();
+		boolean displayed = (now - lastTooltipDisplayed) < ToolTipManager.sharedInstance().getDismissDelay();
+		if (visible == displayed) {
+			// Tooltip is visible or invisible according to the parameter already
+		} else {
+			if (visible)
+				lastTooltipDisplayed = now;
+			else
+				lastTooltipDisplayed = 0;
+			KeyEvent ke = new KeyEvent(this, KeyEvent.KEY_PRESSED, System.currentTimeMillis(), InputEvent.CTRL_MASK, KeyEvent.VK_F1,
+				KeyEvent.CHAR_UNDEFINED);
+			dispatchEvent(ke);
+		}
 	}
 }
