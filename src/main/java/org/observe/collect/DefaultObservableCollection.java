@@ -1,7 +1,6 @@
 package org.observe.collect;
 
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.function.Consumer;
 
@@ -13,7 +12,6 @@ import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
-import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.collect.ValueStoredCollection;
 
 import com.google.common.reflect.TypeToken;

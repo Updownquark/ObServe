@@ -4315,7 +4315,8 @@ public class ObservableCollectionDataFlowImpl {
 				theElementId = theRefreshObservables.putEntry(refresh, this, false).getElementId();
 				elements = new BetterTreeList<>(false);
 				theSub = theListening.withConsumer(r -> {
-					try (Transaction refreshT = lockRefresh(true); Transaction parentT = theParent.lock(false, false, null)) {
+					try (Transaction t = Lockable.lockAll(Lockable.lockable(theLock, true),
+						Lockable.lockable(theParent, false, false, null))) {
 						for (RefreshingElement el : elements)
 							el.refresh(r);
 					}
@@ -4361,22 +4362,26 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public Transaction lock(boolean write, boolean structural, Object cause) {
-			// For a read-only, non-structural lock, updates are permitted.
-			// Since the refresh can only cause updates, we don't need to lock the refresh for that type of lock
-			if (write || !structural)
-				return Lockable.lockAll(Lockable.lockable(theParent, write, structural, cause), Lockable.lockable(theLock, false));
-			else
+			// The purpose of the refresh lock is solely to prevent simultaneous refresh events,
+			// or any refresh events that would violate the contract of a held lock
+			// If this lock method will obtain any exclusive locks, then locking the refresh lock is unnecessary,
+			// because incoming refresh updates obtain a read lock on the parent
+			if (write)
 				return theParent.lock(write, structural, cause);
+			else
+				return Lockable.lockAll(Lockable.lockable(theParent, write, structural, cause), Lockable.lockable(theLock, false));
 		}
 
 		@Override
 		public Transaction tryLock(boolean write, boolean structural, Object cause) {
-			// For a read-only, non-structural lock, updates are permitted.
-			// Since the refresh can only cause updates, we don't need to lock the refresh for that type of lock
-			if (write || !structural)
-				return Lockable.tryLockAll(Lockable.lockable(theParent, write, structural, cause), Lockable.lockable(theLock, false));
-			else
+			// The purpose of the refresh lock is solely to prevent simultaneous refresh events,
+			// or any refresh events that would violate the contract of a held lock
+			// If this lock method will obtain any exclusive locks, then locking the refresh lock is unnecessary,
+			// because incoming refresh updates obtain a read lock on the parent
+			if (write)
 				return theParent.tryLock(write, structural, cause);
+			else
+				return Lockable.tryLockAll(Lockable.lockable(theParent, write, structural, cause), Lockable.lockable(theLock, false));
 		}
 
 		Transaction lockRefresh(boolean exclusive) {
