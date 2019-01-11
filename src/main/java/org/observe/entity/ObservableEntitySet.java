@@ -4,7 +4,7 @@ import java.util.List;
 
 public interface ObservableEntitySet {
 	List<ObservableEntityType<?>> getEntityTypes();
-
+	ObservableEntityType<?> getEntityType(String entityName);
 	<E> ObservableEntityType<E> getEntityType(Class<E> type);
 
 	default <E, X extends E> ObservableEntity<? extends E> observableEntity(E entity) throws IllegalArgumentException {

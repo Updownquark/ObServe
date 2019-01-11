@@ -2,10 +2,13 @@ package org.observe.entity;
 
 import java.util.function.Function;
 
+import org.qommons.StructuredTransactable;
 import org.qommons.collect.ParameterSet.ParameterMap;
 
-public interface ObservableEntityType<E> {
+public interface ObservableEntityType<E> extends StructuredTransactable {
 	ObservableEntityType<? super E> getParent();
+	ObservableEntityType<? super E> getRoot();
+	String getEntityName();
 	Class<E> getEntityType();
 
 	ParameterMap<ObservableEntityFieldType<? super E, ?>> getFields();

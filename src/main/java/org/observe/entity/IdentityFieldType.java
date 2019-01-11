@@ -8,7 +8,7 @@ public class IdentityFieldType<E, T> implements ObservableEntityFieldType<E, T> 
 	private final TypeToken<T> theFieldType;
 	final int theIndex;
 
-	IdentityFieldType(ObservableEntityType<E> entityType, String name, TypeToken<T> fieldType, int index) {
+	public IdentityFieldType(ObservableEntityType<E> entityType, String name, TypeToken<T> fieldType, int index) {
 		theEntityType = entityType;
 		theName = name;
 		theFieldType = fieldType;
