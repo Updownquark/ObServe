@@ -20,6 +20,8 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	/** TypeToken for String.class */
 	TypeToken<String> STRING_TYPE = TypeToken.of(String.class);
 
+	ObservableValue<String> ALWAYS_ENABLED = ObservableValue.of(STRING_TYPE, null);
+
 	/**
 	 * @param <V> The type of the value to set
 	 * @param value The value to assign to this value
