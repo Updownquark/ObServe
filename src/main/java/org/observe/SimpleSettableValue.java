@@ -33,7 +33,7 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 	 * @param nullable Whether null can be assigned to the value
 	 */
 	public SimpleSettableValue(Class<T> type, boolean nullable) {
-		this(TypeToken.of(type), nullable);
+		this(TypeTokens.get().of(type), nullable);
 	}
 
 	@Override
@@ -56,7 +56,7 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 		return theValue;
 	}
 
-	private void fireInitial(Observer<? super ObservableValueEvent<T>> observer) {
+	protected void fireInitial(Observer<? super ObservableValueEvent<T>> observer) {
 		ObservableValueEvent<T> event = createInitialEvent(get(), null);
 		try (Transaction t = Causable.use(event)) {
 			observer.onNext(event);

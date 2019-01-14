@@ -38,6 +38,11 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 	 * @param safe Whether this observable is externally thread-safed
 	 */
 	public SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, boolean internalState, boolean safe) {
+		this(onSubscribe, internalState, safe ? new ReentrantReadWriteLock() : null, null);
+	}
+
+	public SimpleObservable(Consumer<? super Observer<? super T>> onSubscribe, boolean internalState, ReentrantReadWriteLock lock,
+		Consumer<ListenerList.Builder> listeningOptions) {
 		/* Java's ConcurrentLinkedQueue has a problem (for me) that makes the class unusable here.  As documented in fireNext() below, the
 		 * behavior of observables is advertised such that if a listener is added by a listener, the new listener will be added at the end
 		 * of the listeners and will be notified for the currently firing value.  ConcurrentLinkedQueue allows for this except when the
@@ -48,10 +53,13 @@ public class SimpleObservable<T> implements Observable<T>, Observer<T> {
 		 * mine.
 		 */
 		// theListeners = new ConcurrentLinkedQueue<>();
-		theListeners = new org.qommons.collect.ListenerList<>("An event is already firing");
+		ListenerList.Builder listeningBuilder = ListenerList.build();
+		if (listeningOptions != null)
+			listeningOptions.accept(listeningBuilder);
+		theListeners = listeningBuilder.build();
 		theOnSubscribe = onSubscribe;
 		isInternalState = internalState;
-		theLock = safe ? new ReentrantReadWriteLock() : null;
+		theLock = lock;
 	}
 
 	protected ReentrantReadWriteLock getLock() {

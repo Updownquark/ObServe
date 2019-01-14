@@ -305,7 +305,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 	public static <X> ObservableValue<X> of(final X value) {
 		if (value == null)
 			throw new IllegalArgumentException("Cannot call constant(value) with a null value.  Use constant(TypeToken<X>, X).");
-		return new ConstantObservableValue<>(TypeToken.of((Class<X>) value.getClass()), value);
+		return new ConstantObservableValue<>(TypeTokens.get().of((Class<X>) value.getClass()), value);
 	}
 
 	/**
