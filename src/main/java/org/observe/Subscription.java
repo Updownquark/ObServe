@@ -30,4 +30,7 @@ public interface Subscription {
 		} else
 			return false;
 	}
+
+	/** A subscription that does nothing on {@link #unsubscribe()} */
+	static Subscription NONE = () -> {};
 }

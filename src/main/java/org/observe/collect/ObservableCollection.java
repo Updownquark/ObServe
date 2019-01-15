@@ -960,9 +960,20 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 */
 		DistinctSortedDataFlow<E, T, T> distinctSorted(Comparator<? super T> compare, boolean alwaysUseFirst);
 
-		/** @return A flow with the same data and properties as this flow, but whose collected results cannot be modified externally */
+		/**
+		 * @return A flow with the same data and properties as this flow, but whose collected results cannot be modified externally (with
+		 *         the exception of updates, which are allowed)
+		 */
 		default CollectionDataFlow<E, T, T> unmodifiable() {
 			return filterMod(options -> options.unmodifiable(StdMsg.UNSUPPORTED_OPERATION, true));
+		}
+
+		/**
+		 * @return A flow with the same data and properties as this flow, but whose collected results cannot be modified externally
+		 * @param allowUpdates Whether the collected results should allow updates
+		 */
+		default CollectionDataFlow<E, T, T> unmodifiable(boolean allowUpdates) {
+			return filterMod(options -> options.unmodifiable(StdMsg.UNSUPPORTED_OPERATION, allowUpdates));
 		}
 
 		/**
@@ -1145,6 +1156,11 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		}
 
 		@Override
+		default DistinctDataFlow<E, T, T> unmodifiable(boolean allowUpdates) {
+			return filterMod(options -> options.unmodifiable(StdMsg.UNSUPPORTED_OPERATION, allowUpdates));
+		}
+
+		@Override
 		DistinctDataFlow<E, T, T> filterMod(Consumer<ModFilterBuilder<T>> options);
 
 		@Override
@@ -1240,6 +1256,11 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		@Override
 		default DistinctSortedDataFlow<E, T, T> unmodifiable() {
 			return filterMod(options -> options.unmodifiable(StdMsg.UNSUPPORTED_OPERATION, true));
+		}
+
+		@Override
+		default DistinctSortedDataFlow<E, T, T> unmodifiable(boolean allowUpdates) {
+			return filterMod(options -> options.unmodifiable(StdMsg.UNSUPPORTED_OPERATION, allowUpdates));
 		}
 
 		@Override

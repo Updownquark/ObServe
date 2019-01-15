@@ -1,8 +1,12 @@
 package org.observe;
 
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Consumer;
+
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Transaction;
+import org.qommons.collect.ListenerList;
 
 import com.google.common.reflect.TypeToken;
 
@@ -22,18 +26,23 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 	 * @param type The type of the value
 	 * @param nullable Whether null can be assigned to the value
 	 */
-	public SimpleSettableValue(TypeToken<T> type, boolean nullable) {
-		theEventer = createEventer();
-		theType = type;
-		isNullable = nullable && !type.isPrimitive();
+	public SimpleSettableValue(Class<T> type, boolean nullable) {
+		this(TypeTokens.get().of(type), nullable);
 	}
 
 	/**
 	 * @param type The type of the value
 	 * @param nullable Whether null can be assigned to the value
 	 */
-	public SimpleSettableValue(Class<T> type, boolean nullable) {
-		this(TypeTokens.get().of(type), nullable);
+	public SimpleSettableValue(TypeToken<T> type, boolean nullable) {
+		this(type, nullable, new ReentrantReadWriteLock(), null);
+	}
+
+	public SimpleSettableValue(TypeToken<T> type, boolean nullable, ReentrantReadWriteLock lock,
+		Consumer<ListenerList.Builder> listeningOptions) {
+		theType = type;
+		isNullable = nullable && !type.isPrimitive();
+		theEventer = createEventer(lock, listeningOptions);
 	}
 
 	@Override
@@ -66,7 +75,7 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 	@Override
 	public <V extends T> T set(V value, Object cause) throws IllegalArgumentException {
 		String accept = isAcceptable(value);
-		if(accept != null)
+		if (accept != null)
 			throw new IllegalArgumentException(accept);
 		if (theEventer.isLockSupported())
 			theEventer.getLock().writeLock().lock();
@@ -86,7 +95,7 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 
 	@Override
 	public <V extends T> String isAcceptable(V value) {
-		if(value == null && !isNullable)
+		if (value == null && !isNullable)
 			return "Null values not acceptable for this value";
 		if (value != null && !TypeTokens.get().isInstance(theType, value))
 			return "Value of type " + value.getClass().getName() + " cannot be assigned as " + theType;
@@ -95,12 +104,13 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 
 	@Override
 	public ObservableValue<String> isEnabled() {
-		return ObservableValue.of(TypeToken.of(String.class), null);
+		return ALWAYS_ENABLED;
 	}
 
 	/** @return The observable for this value to use to fire its initial and change events */
-	protected SimpleObservable<ObservableValueEvent<T>> createEventer() {
-		return new SimpleObservable<>(observer -> fireInitial(observer), true, true);
+	protected SimpleObservable<ObservableValueEvent<T>> createEventer(ReentrantReadWriteLock lock,
+		Consumer<ListenerList.Builder> listeningOptions) {
+		return new SimpleObservable<>(observer -> fireInitial(observer), true, lock, listeningOptions);
 	}
 
 	@Override

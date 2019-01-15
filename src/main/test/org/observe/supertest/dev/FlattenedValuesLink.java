@@ -3,6 +3,8 @@ package org.observe.supertest.dev;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.junit.Assert;
@@ -18,6 +20,7 @@ import org.qommons.collect.BetterHashMap;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedMap;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeMap;
@@ -203,7 +206,8 @@ public class FlattenedValuesLink<E, T> extends AbstractObservableCollectionLink<
 		}
 
 		@Override
-		protected SimpleObservable<ObservableValueEvent<T>> createEventer() {
+		protected SimpleObservable<ObservableValueEvent<T>> createEventer(ReentrantReadWriteLock lock,
+			Consumer<ListenerList.Builder> listeningOptions) {
 			return new ValueBucketEventer();
 		}
 
