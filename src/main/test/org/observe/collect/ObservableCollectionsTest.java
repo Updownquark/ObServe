@@ -46,7 +46,6 @@ import org.observe.assoc.ObservableSortedMultiMap;
 import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.qommons.Causable;
 import org.qommons.QommonsTestUtils;
-import org.qommons.Ternian;
 import org.qommons.TestHelper;
 import org.qommons.TestHelper.Testable;
 import org.qommons.Transaction;
@@ -1624,7 +1623,7 @@ public class ObservableCollectionsTest {
 	@Test
 	public void observableListFind() {
 		ObservableCollection<Integer> list = ObservableCollection.create(intType);
-		ObservableValue<Integer> found = list.observeFind(value -> value % 3 == 0, () -> null, true);
+		ObservableValue<Integer> found = list.observeFind(value -> value % 3 == 0).first().find();
 		ObservableValueTester<Integer> tester = new ObservableValueTester<>(found);
 		Integer [] correct = new Integer[] {null};
 		tester.check(correct[0], 1);
@@ -1668,8 +1667,7 @@ public class ObservableCollectionsTest {
 		Integer [] received = new Integer[1];
 		ObservableCollection<Integer> flattened = list.flow().flattenValues(intType, v -> v).collect();
 		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("flattened", flattened);
-		flattened.observeFind(value -> value % 3 == 0, () -> null, Ternian.NONE).value()
-		.act(value -> received[0] = value);
+		flattened.observeFind(value -> value % 3 == 0).anywhere().find().value().act(value -> received[0] = value);
 		assertEquals(Integer.valueOf(3), received[0]);
 		value3.set(4, null);
 		tester.getExpected().set(2, 4);
@@ -1920,7 +1918,7 @@ public class ObservableCollectionsTest {
 
 	private void testTransactionsByFind(ObservableCollection<Integer> observable, TransactableList<Integer> controller) {
 		ObservableValueTester<Integer> tester = new ObservableValueTester<>(
-			observable.observeFind(value -> value % 5 == 4, () -> null, true));
+			observable.observeFind(value -> value % 5 == 4).first().find());
 
 		tester.checkOps(1);
 		controller.add(0);

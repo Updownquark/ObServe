@@ -1,5 +1,6 @@
 package org.observe.collect;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.Iterator;
@@ -8,6 +9,7 @@ import java.util.function.Supplier;
 import org.observe.ObservableValue;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.MutableElementSpliterator;
+import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeSet;
 
 import com.google.common.reflect.TypeToken;
@@ -199,6 +201,31 @@ public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSe
 	@Override
 	default <T> DistinctSortedDataFlow<E, E, E> flow() {
 		return new ObservableSortedSetImpl.DistinctSortedBaseFlow<>(this);
+	}
+
+	/**
+	 * @param <E> The type for the set
+	 * @param type The type for the set
+	 * @param compare The comparator for the set
+	 * @param values The values to be in the immutable set
+	 * @return An immutable set with the given values
+	 */
+	static <E> ObservableSortedSet<E> of(TypeToken<E> type, Comparator<? super E> compare, E... values) {
+		return of(type, compare, Arrays.asList(values));
+	}
+
+	/**
+	 * @param <E> The type for the set
+	 * @param type The type for the set
+	 * @param compare The comparator for the set
+	 * @param values The values to be in the immutable set
+	 * @return An immutable set with the given values
+	 */
+	static <E> ObservableSortedSet<E> of(TypeToken<E> type, Comparator<? super E> compare, Collection<? extends E> values) {
+		java.util.TreeSet<E> valueSet = new java.util.TreeSet<>(compare);
+		valueSet.addAll(values);
+		return ObservableCollection.create(type, new BetterTreeList<E>(false).withAll(valueSet))//
+			.flow().distinctSorted(compare, false).unmodifiable(false).collect();
 	}
 
 	/**

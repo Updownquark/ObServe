@@ -7,7 +7,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
-import java.util.Spliterator;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
@@ -366,18 +365,21 @@ public final class ObservableCollectionImpl {
 		private final ObservableCollection<E> theCollection;
 		private final Comparator<CollectionElement<? extends E>> theElementCompare;
 		private final Supplier<? extends E> theDefault;
+		private final Observable<?> theRefresh;
 
 		/**
 		 * @param collection The collection to find elements in
 		 * @param elementCompare A comparator to determine whether to prefer one {@link #test(Object) matching} element over another. When
 		 *        <code>elementCompare{@link Comparable#compareTo(Object) compareTo}(el1, el2)<0</code>, el1 will replace el2.
 		 * @param def The default value to use when no element matches this finder's condition
+		 * @param refresh The observable which, when fired, will cause this value to re-check its elements
 		 */
 		public AbstractObservableElementFinder(ObservableCollection<E> collection,
-			Comparator<CollectionElement<? extends E>> elementCompare, Supplier<? extends E> def) {
+			Comparator<CollectionElement<? extends E>> elementCompare, Supplier<? extends E> def, Observable<?> refresh) {
 			theCollection = collection;
 			theElementCompare = elementCompare;
 			theDefault = def;
+			theRefresh = refresh;
 		}
 
 		/** @return The collection that this finder searches elements in */
@@ -429,36 +431,46 @@ public final class ObservableCollectionImpl {
 			return new Observable<ObservableElementEvent<E>>() {
 				@Override
 				public Subscription subscribe(Observer<? super ObservableElementEvent<E>> observer) {
-					try (Transaction t = theCollection.lock(false, null)) {
+					try (Transaction t = Lockable.lockAll(theRefresh, Lockable.lockable(theCollection, false, false, null))) {
 						class FinderListener implements Consumer<ObservableCollectionEvent<? extends E>> {
 							private SimpleElement theCurrentElement;
-							private final Causable.CausableKey theCauseKey;
+							private final Causable.CausableKey theCollectionCauseKey;
+							private final Causable.CausableKey theRefreshCauseKey;
+							private boolean isChanging;
+							private boolean isRefreshNeeded;
 
 							{
-								theCauseKey = Causable.key((cause, data) -> {
-									SimpleElement oldElement = theCurrentElement;
-									if (data.containsKey("re-search")) {
-										// Means we need to find the new value in the collection
-										if (!find(//
-											el -> theCurrentElement = new SimpleElement(el.getElementId(), el.get())))
-											theCurrentElement = null;
-									} else
-										theCurrentElement = (SimpleElement) data.get("replacement");
-									ElementId oldId = oldElement == null ? null : oldElement.getElementId();
-									ElementId newId = theCurrentElement == null ? null : theCurrentElement.getElementId();
-									E oldVal = oldElement == null ? theDefault.get() : oldElement.get();
-									E newVal = theCurrentElement == null ? theDefault.get() : theCurrentElement.get();
-									ObservableElementEvent<E> evt = createChangeEvent(oldId, oldVal, newId, newVal, cause);
-									try (Transaction evtT = Causable.use(evt)) {
-										observer.onNext(evt);
+								theCollectionCauseKey = Causable.key((cause, data) -> {
+									synchronized (this) {
+										boolean refresh = isRefreshNeeded;
+										isRefreshNeeded = false;
+										isChanging = false;
+										if (refresh || data.containsKey("re-search")) {
+											// Means we need to find the new value in the collection
+											doRefresh(cause);
+											if (!find(//
+												el -> theCurrentElement = new SimpleElement(el.getElementId(), el.get())))
+												theCurrentElement = null;
+										} else
+											setCurrentElement((SimpleElement) data.get("replacement"), cause);
+									}
+								});
+								theRefreshCauseKey = Causable.key((cause, data) -> {
+									synchronized (this) {
+										if (isChanging)
+											return; // We'll do it when the collection finishes changing
+										if (!isRefreshNeeded)
+											return; // Refresh has already been done
+										isRefreshNeeded = false;
+										doRefresh(cause);
 									}
 								});
 							}
 
 							@Override
 							public void accept(ObservableCollectionEvent<? extends E> evt) {
-								Map<Object, Object> causeData = theCauseKey.getData();
-								if (causeData.containsKey("re-search"))
+								Map<Object, Object> causeData = theCollectionCauseKey.getData();
+								if (isRefreshNeeded || causeData.containsKey("re-search"))
 									return; // We've lost track of the current best and will need to find it again later
 								SimpleElement current = (SimpleElement) causeData.getOrDefault("replacement", theCurrentElement);
 								boolean mayReplace;
@@ -486,7 +498,17 @@ public final class ObservableCollectionImpl {
 
 								// At this point we know that we will have to do something
 								// If causeData!=null, then it's unmodifiable, so we need to grab the modifiable form using the cause
-								causeData = evt.getRootCausable().onFinish(theCauseKey);
+								boolean refresh;
+								if (!isChanging) {
+									synchronized (this) {
+										isChanging = true;
+										refresh = isRefreshNeeded;
+									}
+								} else
+									refresh = false;
+								causeData = evt.getRootCausable().onFinish(theCollectionCauseKey);
+								if (refresh)
+									return;
 								if (!matches) {
 									// The current element's value no longer matches
 									// We need to search for the new value if we don't already know of a better match.
@@ -517,6 +539,39 @@ public final class ObservableCollectionImpl {
 									}
 								}
 							}
+
+							synchronized void refresh(Object cause) {
+								if (!isRefreshNeeded) {
+									if (isChanging) {
+										// If the collection is also changing, just do the refresh after all the other changes
+										isRefreshNeeded = true;
+										return;
+									}
+								} else if (cause instanceof Causable) {
+									isRefreshNeeded = true;
+									((Causable) cause).getRootCausable().onFinish(theRefreshCauseKey);
+								} else {
+									doRefresh(cause);
+								}
+							}
+
+							void doRefresh(Object cause) {
+								if (!find(//
+									el -> setCurrentElement(new SimpleElement(el.getElementId(), el.get()), cause)))
+									setCurrentElement(null, cause);
+							}
+
+							void setCurrentElement(SimpleElement element, Object cause) {
+								SimpleElement oldElement = theCurrentElement;
+								ElementId oldId = oldElement == null ? null : oldElement.getElementId();
+								ElementId newId = theCurrentElement == null ? null : theCurrentElement.getElementId();
+								E oldVal = oldElement == null ? theDefault.get() : oldElement.get();
+								E newVal = theCurrentElement == null ? theDefault.get() : theCurrentElement.get();
+								ObservableElementEvent<E> evt = createChangeEvent(oldId, oldVal, newId, newVal, cause);
+								try (Transaction evtT = Causable.use(evt)) {
+									observer.onNext(evt);
+								}
+							}
 						}
 						FinderListener listener = new FinderListener();
 						if (!find(el -> {
@@ -524,6 +579,7 @@ public final class ObservableCollectionImpl {
 						}))
 							listener.theCurrentElement = null;
 						Subscription collSub = theCollection.onChange(listener);
+						Subscription refreshSub = theRefresh != null ? theRefresh.act(r -> listener.refresh(r)) : Subscription.NONE;
 						ElementId initId = listener.theCurrentElement == null ? null : listener.theCurrentElement.getElementId();
 						E initVal = listener.theCurrentElement == null ? theDefault.get() : listener.theCurrentElement.get();
 						ObservableElementEvent<E> evt = createInitialEvent(initId, initVal, null);
@@ -538,6 +594,7 @@ public final class ObservableCollectionImpl {
 								if (isDone)
 									return;
 								isDone = true;
+								refreshSub.unsubscribe();
 								collSub.unsubscribe();
 								ElementId endId = listener.theCurrentElement == null ? null : listener.theCurrentElement.getElementId();
 								E endVal = listener.theCurrentElement == null ? theDefault.get() : listener.theCurrentElement.get();
@@ -594,7 +651,7 @@ public final class ObservableCollectionImpl {
 	}
 
 	/**
-	 * Implements {@link ObservableCollection#observeFind(Predicate, Supplier, boolean)}
+	 * Implements {@link ObservableCollection#observeFind(Predicate)}
 	 *
 	 * @param <E> The type of the value
 	 */
@@ -607,9 +664,10 @@ public final class ObservableCollectionImpl {
 		 * @param test The test to find elements that pass
 		 * @param def The default value to use when no passing element is found in the collection
 		 * @param first Whether to get the first value in the collection that passes, the last value, or any passing value
+		 * @param refresh The observable which, when fired, will cause this value to re-check its elements
 		 */
 		protected ObservableCollectionFinder(ObservableCollection<E> collection, Predicate<? super E> test, Supplier<? extends E> def,
-			Ternian first) {
+			Ternian first, Observable<?> refresh) {
 			super(collection, (el1, el2) -> {
 				if (first == Ternian.NONE)
 					return 0;
@@ -617,7 +675,7 @@ public final class ObservableCollectionImpl {
 				if (!first.value)
 					compare = -compare;
 				return compare;
-			}, def);
+			}, def, refresh);
 			theTest = test;
 			isFirst = first;
 		}
@@ -653,7 +711,7 @@ public final class ObservableCollectionImpl {
 				if (!first)
 					compare = -compare;
 				return compare;
-			}, () -> null);
+			}, () -> null, null);
 			theValue = value;
 			isFirst = first;
 		}
@@ -683,9 +741,10 @@ public final class ObservableCollectionImpl {
 		 * @param compare The comparator for element values
 		 * @param def The default value for an empty collection
 		 * @param first Whether to use the first, last, or any element in a tie
+		 * @param refresh The observable which, when fired, will cause this value to re-check its elements
 		 */
 		public BestCollectionElement(ObservableCollection<E> collection, Comparator<? super E> compare, Supplier<? extends E> def,
-			Ternian first) {
+			Ternian first, Observable<?> refresh) {
 			super(collection, (el1, el2) -> {
 				int comp = compare.compare(el1.get(), el2.get());
 				if (comp == 0 && first.value != null) {
@@ -694,7 +753,7 @@ public final class ObservableCollectionImpl {
 						comp = -comp;
 				}
 				return comp;
-			}, def);
+			}, def, refresh);
 			theCompare = compare;
 			isFirst = first;
 		}

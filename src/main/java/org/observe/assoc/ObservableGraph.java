@@ -247,7 +247,7 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 	 * @return An observable value containing the node in this graph whose value is equal to the argument. The value may be null.
 	 */
 	default ObservableValue<? extends Node<N, E>> getNode(N nodeValue) {
-		return getNodes().observeFind(node -> node.get().equals(nodeValue), () -> null, true);
+		return getNodes().observeFind(node -> node.get().equals(nodeValue)).first().find();
 	}
 
 	/** @return A representation of this graph that is not modifiable */

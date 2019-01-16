@@ -7,6 +7,7 @@ import java.util.Iterator;
 import org.observe.ObservableValue;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.MutableElementSpliterator;
+import org.qommons.tree.BetterTreeList;
 
 import com.google.common.reflect.TypeToken;
 
@@ -113,9 +114,8 @@ public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> 
 	 * @return An immutable set with the given values
 	 */
 	static <E> ObservableSet<E> of(TypeToken<E> type, Equivalence<? super E> equivalence, Collection<? extends E> values) {
-		ObservableSet<E> set = create(type, equivalence);
-		set.addAll(values);
-		return set.flow().unmodifiable().collect();
+		return ObservableCollection.create(type, new BetterTreeList<E>(false).withAll(values))//
+			.flow().withEquivalence(equivalence).distinct().unmodifiable(false).collect();
 	}
 
 	/**

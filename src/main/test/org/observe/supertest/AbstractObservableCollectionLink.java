@@ -180,7 +180,7 @@ abstract class AbstractObservableCollectionLink<E, T> implements ObservableColle
 		}).or(1, () -> { // First/last
 			boolean first = helper.getBoolean();
 			theExtras = ", " + (first ? "first" : "last");
-			theMonitoredElement = theCollection.observeFind(v -> true, () -> null, first);
+			theMonitoredElement = theCollection.observeFind(v -> true).at(first).find();
 			theCorrectMonitoredElement = () -> theCollection.getTerminalElement(first);
 		});
 		if (theCollection instanceof ObservableSortedSet) {

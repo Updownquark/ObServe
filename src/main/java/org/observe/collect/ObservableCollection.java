@@ -393,19 +393,8 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @param first true to always use the first element passing the test, false to always use the last element
 	 * @return An observable value containing a value in this collection passing the given test
 	 */
-	default ObservableElement<E> observeFind(Predicate<? super E> test, Supplier<? extends E> def, boolean first) {
-		return observeFind(test, def, Ternian.of(first));
-	}
-
-	/**
-	 * @param test The test to find passing elements for
-	 * @param def Supplies a default value for the observable result when no elements in this collection pass the test
-	 * @param first {@link Ternian#TRUE} to always use the first element passing the test, {@link Ternian#FALSE} to always use the last
-	 *        element, or {@link Ternian#NONE NONE} to use any passing element
-	 * @return An observable value containing a value in this collection passing the given test
-	 */
-	default ObservableElement<E> observeFind(Predicate<? super E> test, Supplier<? extends E> def, Ternian first) {
-		return new ObservableCollectionImpl.ObservableCollectionFinder<>(this, test, def, first);
+	default ObservableFinderBuilder<E> observeFind(Predicate<? super E> test) {
+		return new ObservableFinderBuilder<>(this, test);
 	}
 
 	/**
@@ -560,7 +549,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	 * @return An observable value containing the minimum of the values, by the given comparator
 	 */
 	default ObservableElement<E> minBy(Comparator<? super E> compare, Supplier<? extends E> def, Ternian first) {
-		return new ObservableCollectionImpl.BestCollectionElement<>(this, compare, def, first);
+		return new ObservableCollectionImpl.BestCollectionElement<>(this, compare, def, first, null);
 	}
 
 	/**
@@ -1103,6 +1092,11 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		DistinctDataFlow<E, T, T> reverse();
 
 		@Override
+		default <X> DistinctDataFlow<E, ?, X> filter(Class<X> type) {
+			return (DistinctDataFlow<E, ?, X>) CollectionDataFlow.super.filter(type);
+		}
+
+		@Override
 		DistinctDataFlow<E, T, T> filter(Function<? super T, String> filter);
 
 		@Override
@@ -1190,6 +1184,11 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 		@Override
 		DistinctSortedDataFlow<E, T, T> reverse();
+
+		@Override
+		default <X> DistinctSortedDataFlow<E, ?, X> filter(Class<X> type) {
+			return (DistinctSortedDataFlow<E, ?, X>) DistinctDataFlow.super.filter(type);
+		}
 
 		@Override
 		DistinctSortedDataFlow<E, T, T> filter(Function<? super T, String> filter);
@@ -1360,6 +1359,107 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		public ModFilterBuilder<T> filterRemove(Function<? super T, String> messageFn) {
 			theRemoveMsgFn = messageFn;
 			return this;
+		}
+	}
+
+	/**
+	 * Builds an observable element that corresponds to an element in an {@link ObservableCollection} whose value matches a condition
+	 *
+	 * @param <E> The type of elements in the collection
+	 */
+	class ObservableFinderBuilder<E> {
+		private final ObservableCollection<E> theCollection;
+		private final Predicate<? super E> theCondition;
+		private Ternian theLocation;
+		private Supplier<? extends E> theDefault;
+		private Observable<?> theRefresh;
+
+		public ObservableFinderBuilder(ObservableCollection<E> collection, Predicate<? super E> condition) {
+			theCollection = collection;
+			theCondition = condition;
+			theLocation = Ternian.TRUE;
+			theDefault = () -> null;
+		}
+
+		/**
+		 * Determines the location of the element that this finder will find when multiple elements match the condition
+		 *
+		 * @param location
+		 *        <ul>
+		 *        <li>{@link Ternian#TRUE TRUE} to find the matching element closest to the beginning of the collection</li>
+		 *        <li>{@link Ternian#FALSE FALSE} to find the matching element closest to the end of the collection</li>
+		 *        <li>{@link Ternian#NONE NONE} to find any matching element in the collection regardless of location. This option may have
+		 *        performance advantages</li>
+		 *        </ul>
+		 * @return This builder
+		 */
+		public ObservableFinderBuilder<E> at(Ternian location) {
+			theLocation = location;
+			return this;
+		}
+
+		/**
+		 * Determines the location of the element that this finder will find when multiple elements match the condition
+		 *
+		 * @param first Whether to find the matching element closest to the beginning or the end of the collection
+		 * @return this builder
+		 */
+		public ObservableFinderBuilder<E> at(boolean first) {
+			return at(Ternian.ofBoolean(first));
+		}
+
+		/**
+		 * Use this to find the matching element closest to the beginning of the collection
+		 *
+		 * @return This builder
+		 */
+		public ObservableFinderBuilder<E> first() {
+			return at(Ternian.TRUE);
+		}
+
+		/**
+		 * Use this to find the matching element closest to the end of the collection
+		 *
+		 * @return This builder
+		 */
+		public ObservableFinderBuilder<E> last() {
+			return at(Ternian.FALSE);
+		}
+
+		/**
+		 * Use this to find any matching element in the collection regardless of location. This option may have performance advantages
+		 *
+		 * @return This builder
+		 */
+		public ObservableFinderBuilder<E> anywhere() {
+			return at(Ternian.NONE);
+		}
+
+		/**
+		 * @param refresh An observable which, when fired, will cause the finder to re-check its results
+		 * @return This builder
+		 */
+		public ObservableFinderBuilder<E> refresh(Observable<?> refresh) {
+			if (refresh == null) {} else if (theRefresh != null)
+				theRefresh = Observable.or(theRefresh, refresh);
+			else
+				theRefresh = refresh;
+			return this;
+		}
+
+		/**
+		 * @param def A supplier of a default value for the finder when no collection elements match the condition
+		 * @return This builder
+		 */
+		public ObservableFinderBuilder<E> withDefault(Supplier<? extends E> def) {
+			theDefault = def;
+			return this;
+		}
+
+		/** @return The finder */
+		public ObservableElement<E> find() {
+			return new ObservableCollectionImpl.ObservableCollectionFinder<>(theCollection, theCondition, theDefault, theLocation,
+				theRefresh);
 		}
 	}
 }

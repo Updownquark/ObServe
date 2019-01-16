@@ -11,6 +11,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 import com.google.common.reflect.TypeToken;
 
@@ -25,13 +27,15 @@ public class TypeTokens {
 		return instance;
 	}
 
-	public static class TypeKey<T> {
+	public class TypeKey<T> {
 		public final Class<T> clazz;
 		public final TypeToken<T> type;
+		private TypeToken<?> parameterizedType;
 		public final boolean isBoolean;
 		public final Class<? extends Number> number;
 		public final boolean comparable;
 		public final List<T> enumConstants;
+		private Map<TypeToken<?>, TypeToken<?>> theCompoundTypes;
 
 		TypeKey(Class<T> clazz) {
 			this.clazz = clazz;
@@ -62,6 +66,36 @@ public class TypeTokens {
 			isBoolean = b;
 			enumConstants = consts;
 			comparable = number != null || clazz.isPrimitive() || Comparable.class.isAssignableFrom(clazz);
+		}
+
+		/**
+		 * <p>
+		 * Allows caching of compound type tokens.
+		 * </p>
+		 *
+		 * <p>
+		 * For example, to cache the type for Collection&lt;Integer&gt;, one could use:
+		 * <code>TypeTokens.get().keyFor(Collection.class).getCompoundType(Integer.class, (i)->new TypeToken<Collection<Integer>>(){})</code>
+		 * </p>
+		 *
+		 * @param paramType The type of the parameter
+		 * @param creator Creates the type if it is not yet cached
+		 * @return The compound type token
+		 */
+		public <I, C> TypeToken<C> getCompoundType(Class<I> paramType, Function<TypeToken<I>, TypeToken<C>> creator) {
+			return getCompoundType(of(paramType), creator);
+		}
+
+		public <I, C> TypeToken<C> getCompoundType(TypeToken<I> paramType, Function<TypeToken<I>, TypeToken<C>> creator) {
+			if (theCompoundTypes == null)
+				theCompoundTypes = new ConcurrentHashMap<>();
+			return (TypeToken<C>) theCompoundTypes.computeIfAbsent(paramType, t -> creator.apply((TypeToken<I>) t));
+		}
+
+		public <P> TypeToken<P> parameterized(Supplier<TypeToken<P>> creator) {
+			if (parameterizedType == null)
+				parameterizedType = creator.get();
+			return (TypeToken<P>) parameterizedType;
 		}
 
 		@Override
@@ -135,7 +169,7 @@ public class TypeTokens {
 		return new TypeKey<>(type);
 	}
 
-	protected <T> TypeKey<T> keyFor(Class<T> type) {
+	public <T> TypeKey<T> keyFor(Class<T> type) {
 		// Type hackery, yes, I know
 		TypeKey<T> key = (TypeKey<T>) TYPES.get(type);
 		if (key == null) {

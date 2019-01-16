@@ -189,7 +189,7 @@ public interface ObservableAction<T> {
 		@Override
 		public ObservableValue<String> isEnabled() {
 			return theActions.flow().flattenValues(ObservableCollectionImpl.STRING_TYPE, action -> action.isEnabled()).collect()
-				.observeFind(enabled -> enabled != null, () -> null, true);
+				.observeFind(enabled -> enabled != null).first().find();
 		}
 
 		@Override
