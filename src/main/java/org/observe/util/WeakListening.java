@@ -10,8 +10,11 @@ import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import org.observe.Observable;
+import org.observe.Observer;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
+import org.qommons.Transaction;
 
 /**
  * <p>
@@ -231,6 +234,94 @@ public class WeakListening {
 			BiConsumer<E, F> action = getAction();
 			if (action != null)
 				action.accept(value1, value2);
+		}
+	}
+
+	public static <T> Subscription consumeWeakly(Consumer<? super T> strongListener,
+		Function<? super Consumer<T>, Subscription> subscribe) {
+		Subscription[] sub = new Subscription[1];
+		sub[0] = subscribe.apply(new StandaloneWeakConsumer<>(strongListener, sub));
+		return sub[0];
+	}
+
+	public static <T> Subscription observeWeakly(Observer<? super T> strongListener, Observable<T> observable) {
+		Subscription[] sub = new Subscription[1];
+		sub[0] = observable.subscribe(new StandaloneWeakObserver<>(strongListener, sub));
+		return sub[0];
+	}
+
+	public static <T> Observable<T> weaklyListeningObservable(Observable<T> observable) {
+		class WeaklyListeningObservable implements Observable<T> {
+			@Override
+			public Subscription subscribe(Observer<? super T> observer) {
+				return observeWeakly(observer, observable);
+			}
+
+			@Override
+			public boolean isSafe() {
+				return observable.isSafe();
+			}
+
+			@Override
+			public boolean isLockSupported() {
+				return observable.isLockSupported();
+			}
+
+			@Override
+			public Transaction lock() {
+				return observable.lock();
+			}
+
+			@Override
+			public Transaction tryLock() {
+				return observable.tryLock();
+			}
+		}
+		return new WeaklyListeningObservable();
+	}
+
+	private static class StandaloneWeakConsumer<T> implements Consumer<T> {
+		private final WeakReference<Consumer<? super T>> theListenerRef;
+		private final Subscription[] theSubscription;
+
+		StandaloneWeakConsumer(Consumer<? super T> strongListener, Subscription[] sub) {
+			theListenerRef = new WeakReference<>(strongListener);
+			theSubscription = sub;
+		}
+
+		@Override
+		public void accept(T t) {
+			Consumer<? super T> listener = theListenerRef.get();
+			if (listener != null)
+				listener.accept(t);
+			else
+				theSubscription[0].unsubscribe();
+		}
+	}
+
+	private static class StandaloneWeakObserver<T> implements Observer<T> {
+		private final WeakReference<Observer<? super T>> theListenerRef;
+		private final Subscription[] theSubscription;
+
+		StandaloneWeakObserver(Observer<? super T> strongListener, Subscription[] sub) {
+			theListenerRef = new WeakReference<>(strongListener);
+			theSubscription = sub;
+		}
+
+		@Override
+		public <V extends T> void onNext(V t) {
+			Observer<? super T> listener = theListenerRef.get();
+			if (listener != null)
+				listener.onNext(t);
+			else
+				theSubscription[0].unsubscribe();
+		}
+
+		@Override
+		public <V extends T> void onCompleted(V value) {
+			Observer<? super T> listener = theListenerRef.get();
+			if (listener != null)
+				listener.onCompleted(value);
 		}
 	}
 }

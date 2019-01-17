@@ -149,7 +149,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 	 * @return The new observable whose value is a function of this observable's value
 	 */
 	default <R> ObservableValue<R> map(Function<? super T, R> function) {
-		return map(null, function, options -> {});
+		return map(null, function, null);
 	}
 
 	/**
@@ -161,7 +161,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 	 * @return The new observable whose value is a function of this observable's value
 	 */
 	default <R> ObservableValue<R> map(TypeToken<R> type, Function<? super T, R> function) {
-		return map(type, function, options -> {});
+		return map(type, function, null);
 	}
 
 	/**
@@ -173,7 +173,8 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 	 */
 	default <R> ObservableValue<R> map(TypeToken<R> type, Function<? super T, R> function, Consumer<XformOptions> options) {
 		SimpleXformOptions xform = new SimpleXformOptions();
-		options.accept(xform);
+		if (options != null)
+			options.accept(xform);
 		return new ComposedObservableValue<>(type, args -> {
 			return function.apply((T) args[0]);
 		}, new XformDef(xform), this);
@@ -199,7 +200,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 	 * @return The new observable whose value is a function of this observable's value and the other's
 	 */
 	default <U, R> ObservableValue<R> combine(BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg) {
-		return combine(null, function, arg, options -> {});
+		return combine(null, function, arg, null);
 	}
 
 	/**
@@ -216,7 +217,8 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 	default <U, R> ObservableValue<R> combine(TypeToken<R> type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		Consumer<XformOptions> options) {
 		SimpleXformOptions xform = new SimpleXformOptions();
-		options.accept(xform);
+		if (options != null)
+			options.accept(xform);
 		return new ComposedObservableValue<>(type, args -> {
 			return function.apply((T) args[0], (U) args[1]);
 		}, new XformDef(xform), this, arg);
@@ -235,7 +237,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 	 */
 	default <U, V, R> ObservableValue<R> combine(TriFunction<? super T, ? super U, ? super V, R> function, ObservableValue<U> arg2,
 		ObservableValue<V> arg3) {
-		return combine(null, function, arg2, arg3, options -> {});
+		return combine(null, function, arg2, arg3, null);
 	}
 
 	/**
@@ -254,7 +256,8 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 	default <U, V, R> ObservableValue<R> combine(TypeToken<R> type, TriFunction<? super T, ? super U, ? super V, R> function,
 		ObservableValue<U> arg2, ObservableValue<V> arg3, Consumer<XformOptions> options) {
 		SimpleXformOptions xform = new SimpleXformOptions();
-		options.accept(xform);
+		if (options != null)
+			options.accept(xform);
 		return new ComposedObservableValue<>(type, args -> {
 			return function.apply((T) args[0], (U) args[1], (V) args[2]);
 		}, new XformDef(xform), this, arg2, arg3);
@@ -489,7 +492,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 		public ComposedObservableValue(TypeToken<T> type, Function<Object[], T> function, XformDef options,
 			ObservableValue<?>... composed) {
 			theFunction = function;
-			theOptions = options;
+			theOptions = options == null ? new XformDef(new XformOptions.SimpleXformOptions()) : options;
 			theType = type != null ? type
 				: (TypeToken<T>) TypeToken.of(function.getClass()).resolveType(Function.class.getTypeParameters()[1]);
 			theComposed = java.util.Collections.unmodifiableList(java.util.Arrays.asList(composed));
@@ -1000,6 +1003,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 					ObservableValue<T> retObs = FlattenedObservableValue.this;
 					AtomicReference<Subscription> innerSub = new AtomicReference<>();
 					boolean[] firedInit = new boolean[1];
+					Object[] old = new Object[1];
 					Subscription outerSub = theValue.changes()
 						.subscribe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends T>>>() {
 							private final ReentrantLock theLock = new ReentrantLock();
@@ -1013,7 +1017,6 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 									// Shouldn't have 2 inner observables potentially generating events at the same time
 									if (!Objects.equals(innerObs, event.getOldValue()))
 										Subscription.unsubscribe(innerSub.getAndSet(null));
-									Object[] old = new Object[1];
 									if (innerObs != null && !innerObs.equals(event.getOldValue())) {
 										boolean[] firedInit2 = new boolean[1];
 										Subscription.unsubscribe(innerSub
@@ -1037,6 +1040,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 														try (Transaction t = ObservableValueEvent.use(toFire)) {
 															observer.onNext(toFire);
 														}
+														old[0] = event2.getNewValue();
 													} finally {
 														theLock.unlock();
 													}

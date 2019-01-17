@@ -11,7 +11,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Function;
 import java.util.function.Supplier;
 
 import com.google.common.reflect.TypeToken;
@@ -27,6 +26,10 @@ public class TypeTokens {
 		return instance;
 	}
 
+	public static abstract class CompoundTypeCreator<T> {
+		public abstract <P> TypeToken<? extends T> createCompoundType(TypeToken<P> param);
+	}
+
 	public class TypeKey<T> {
 		public final Class<T> clazz;
 		public final TypeToken<T> type;
@@ -35,7 +38,8 @@ public class TypeTokens {
 		public final Class<? extends Number> number;
 		public final boolean comparable;
 		public final List<T> enumConstants;
-		private Map<TypeToken<?>, TypeToken<?>> theCompoundTypes;
+		private CompoundTypeCreator<T> theCompoundTypeCreator;
+		private Map<TypeToken<?>, TypeToken<? extends T>> theCompoundTypes;
 
 		TypeKey(Class<T> clazz) {
 			this.clazz = clazz;
@@ -68,6 +72,13 @@ public class TypeTokens {
 			comparable = number != null || clazz.isPrimitive() || Comparable.class.isAssignableFrom(clazz);
 		}
 
+		public TypeKey<T> enableCompoundTypes(CompoundTypeCreator<T> creator) {
+			theCompoundTypeCreator = creator;
+			if (theCompoundTypes == null)
+				theCompoundTypes = new ConcurrentHashMap<>();
+			return this;
+		}
+
 		/**
 		 * <p>
 		 * Allows caching of compound type tokens.
@@ -82,14 +93,14 @@ public class TypeTokens {
 		 * @param creator Creates the type if it is not yet cached
 		 * @return The compound type token
 		 */
-		public <I, C> TypeToken<C> getCompoundType(Class<I> paramType, Function<TypeToken<I>, TypeToken<C>> creator) {
-			return getCompoundType(of(paramType), creator);
+		public <I, C extends T> TypeToken<C> getCompoundType(Class<I> paramType) {
+			return getCompoundType(of(paramType));
 		}
 
-		public <I, C> TypeToken<C> getCompoundType(TypeToken<I> paramType, Function<TypeToken<I>, TypeToken<C>> creator) {
-			if (theCompoundTypes == null)
-				theCompoundTypes = new ConcurrentHashMap<>();
-			return (TypeToken<C>) theCompoundTypes.computeIfAbsent(paramType, t -> creator.apply((TypeToken<I>) t));
+		public <I, C extends T> TypeToken<C> getCompoundType(TypeToken<I> paramType) {
+			if (theCompoundTypeCreator == null)
+				throw new IllegalStateException("Compound types have not been enabled for " + clazz.getName());
+			return (TypeToken<C>) theCompoundTypes.computeIfAbsent(paramType, t -> theCompoundTypeCreator.createCompoundType(t));
 		}
 
 		public <P> TypeToken<P> parameterized(Supplier<TypeToken<P>> creator) {
@@ -129,8 +140,12 @@ public class TypeTokens {
 	public final TypeToken<String> STRING;
 	public final TypeToken<Boolean> BOOLEAN;
 	public final TypeToken<Double> DOUBLE;
+	public final TypeToken<Float> FLOAT;
 	public final TypeToken<Long> LONG;
 	public final TypeToken<Integer> INT;
+	public final TypeToken<Short> SHORT;
+	public final TypeToken<Byte> BYTE;
+	public final TypeToken<Character> CHAR;
 	public final TypeToken<Object> OBJECT;
 
 	protected TypeTokens() {
@@ -160,8 +175,12 @@ public class TypeTokens {
 		STRING = of(String.class);
 		BOOLEAN = of(Boolean.class);
 		DOUBLE = of(Double.class);
+		FLOAT = of(Float.class);
 		LONG = of(Long.class);
 		INT = of(Integer.class);
+		SHORT = of(Short.class);
+		BYTE = of(Byte.class);
+		CHAR = of(Character.class);
 		OBJECT = of(Object.class);
 	}
 
@@ -232,6 +251,8 @@ public class TypeTokens {
 			return (Class<T>) Byte.class;
 		else if (type == short.class)
 			return (Class<T>) Short.class;
+		else if (type == char.class)
+			return (Class<T>) Character.class;
 		else
 			return type;
 	}

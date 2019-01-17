@@ -4939,14 +4939,14 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public Transaction lock(boolean write, boolean structural, Object cause) {
 			/* No operations against this manager can affect the parent collection, but only its content collections */
-			return Lockable.lockAll(Lockable.lockable(theParent), theOuterElements, //
+			return Lockable.lockAll(Lockable.lockable(theParent), () -> theOuterElements, //
 				oe -> Lockable.lockable(oe.manager, write, structural, cause));
 		}
 
 		@Override
 		public Transaction tryLock(boolean write, boolean structural, Object cause) {
 			/* No operations against this manager can affect the parent collection, but only its content collections */
-			return Lockable.tryLockAll(Lockable.lockable(theParent), theOuterElements, //
+			return Lockable.tryLockAll(Lockable.lockable(theParent), () -> theOuterElements, //
 				oe -> Lockable.lockable(oe.manager, write, structural, cause));
 		}
 

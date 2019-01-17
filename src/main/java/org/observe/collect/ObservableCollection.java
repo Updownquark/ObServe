@@ -82,6 +82,15 @@ import com.google.common.reflect.TypeToken;
  * @param <E> The type of element in the collection
  */
 public interface ObservableCollection<E> extends BetterList<E> {
+	/** <code>TypeToken&lt;ObservableCollection&lt;?>></code> */
+	@SuppressWarnings("rawtypes")
+	static final TypeToken<ObservableCollection<?>> TYPE = TypeTokens.get().keyFor(ObservableCollection.class)
+	.enableCompoundTypes(new TypeTokens.CompoundTypeCreator<ObservableCollection>() {
+		@Override
+		public <P> TypeToken<? extends ObservableCollection> createCompoundType(TypeToken<P> param) {
+			return new TypeToken<ObservableCollection<P>>() {}.where(new TypeParameter<P>() {}, param);
+		}
+	}).parameterized(() -> new TypeToken<ObservableCollection<?>>() {});
 	/**
 	 * The {@link ObservableCollectionEvent#getCause() cause} for events fired for extant elements in the collection upon
 	 * {@link #subscribe(Consumer, boolean) subscription}
