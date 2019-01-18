@@ -56,6 +56,7 @@ public class VetoableSettableValue<T> implements SettableStampedValue<T> {
 		// We secure this list ourselves, so no need for any thread-safety
 		theListeners = ListenerList.build().forEachSafe(false).allowReentrant().withFastSize(false)
 			.withSyncType(ListenerList.SynchronizationType.NONE).build();
+		isAlive = true;
 	}
 
 	@Override

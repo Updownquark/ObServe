@@ -42,6 +42,17 @@ import com.google.common.reflect.TypeToken;
  * @param <V> The type of values this map stores
  */
 public interface ObservableMap<K, V> extends BetterMap<K, V> {
+	/** This class's wildcard {@link TypeToken} */
+	@SuppressWarnings("rawtypes")
+	static TypeToken<ObservableMap<?, ?>> TYPE = TypeTokens.get().keyFor(ObservableMap.class)
+	.enableCompoundTypes(new TypeTokens.BinaryCompoundTypeCreator<ObservableMap>() {
+		@Override
+		public <P1, P2> TypeToken<? extends ObservableMap> createCompoundType(TypeToken<P1> param1, TypeToken<P2> param2) {
+			return new TypeToken<ObservableMap<P1, P2>>() {}.where(new TypeParameter<P1>() {}, param1).where(new TypeParameter<P2>() {},
+				param2);
+		}
+	}).parameterized();
+
 	/** @return The type of keys this map uses */
 	TypeToken<K> getKeyType();
 
@@ -322,7 +333,9 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 		ObservableSet<Map.Entry<K, V>> entrySet = ObservableCollection.create(entryType, entryCollection).flow().distinct().collect();
 		ObservableSet<Map.Entry<K, V>> exposedEntrySet = entrySet.flow().filterMod(fm -> fm.noAdd(StdMsg.UNSUPPORTED_OPERATION))
 			.collectPassive();
-		ObservableSet<K> keySet = entrySet.flow().mapEquivalent(keyType, Map.Entry::getKey, key -> new SimpleMapEntry<>(key, null))
+		ObservableSet<K> keySet = entrySet.flow()
+			.mapEquivalent(keyType, Map.Entry::getKey, key -> new SimpleMapEntry<>(key, null),
+				opts -> opts.cache(false).reEvalOnUpdate(false).fireIfUnchanged(false))
 			.filterMod(fm -> fm.noAdd(StdMsg.UNSUPPORTED_OPERATION)).collectPassive();
 		ReentrantLock valueLock = new ReentrantLock();
 		Object[] firstCause = new Object[1];

@@ -6,6 +6,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -448,9 +449,6 @@ public final class ObservableCollectionImpl {
 										if (refresh || data.containsKey("re-search")) {
 											// Means we need to find the new value in the collection
 											doRefresh(cause);
-											if (!find(//
-												el -> theCurrentElement = new SimpleElement(el.getElementId(), el.get())))
-												theCurrentElement = null;
 										} else
 											setCurrentElement((SimpleElement) data.get("replacement"), cause);
 									}
@@ -541,12 +539,11 @@ public final class ObservableCollectionImpl {
 							}
 
 							synchronized void refresh(Object cause) {
-								if (!isRefreshNeeded) {
-									if (isChanging) {
-										// If the collection is also changing, just do the refresh after all the other changes
-										isRefreshNeeded = true;
-										return;
-									}
+								if (isRefreshNeeded)
+									return; // We already know
+								else if (isChanging) {
+									// If the collection is also changing, just do the refresh after all the other changes
+									isRefreshNeeded = true;
 								} else if (cause instanceof Causable) {
 									isRefreshNeeded = true;
 									((Causable) cause).getRootCausable().onFinish(theRefreshCauseKey);
@@ -564,9 +561,12 @@ public final class ObservableCollectionImpl {
 							void setCurrentElement(SimpleElement element, Object cause) {
 								SimpleElement oldElement = theCurrentElement;
 								ElementId oldId = oldElement == null ? null : oldElement.getElementId();
-								ElementId newId = theCurrentElement == null ? null : theCurrentElement.getElementId();
+								ElementId newId = element == null ? null : element.getElementId();
 								E oldVal = oldElement == null ? theDefault.get() : oldElement.get();
-								E newVal = theCurrentElement == null ? theDefault.get() : theCurrentElement.get();
+								E newVal = element == null ? theDefault.get() : element.get();
+								if (Objects.equals(oldId, newId))
+									return;
+								theCurrentElement = element;
 								ObservableElementEvent<E> evt = createChangeEvent(oldId, oldVal, newId, newVal, cause);
 								try (Transaction evtT = Causable.use(evt)) {
 									observer.onNext(evt);

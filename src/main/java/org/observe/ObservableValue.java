@@ -21,6 +21,7 @@ import org.qommons.Lockable;
 import org.qommons.Transaction;
 import org.qommons.TriFunction;
 
+import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 /**
@@ -31,6 +32,16 @@ import com.google.common.reflect.TypeToken;
  * @param <T> The compile-time type of this observable's value
  */
 public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lockable {
+	/** This class's wildcard {@link TypeToken} */
+	@SuppressWarnings("rawtypes")
+	static TypeToken<ObservableValue<?>> TYPE = TypeTokens.get().keyFor(ObservableValue.class)
+	.enableCompoundTypes(new TypeTokens.UnaryCompoundTypeCreator<ObservableValue>() {
+		@Override
+		public <P> TypeToken<? extends ObservableValue> createCompoundType(TypeToken<P> param) {
+			return new TypeToken<ObservableValue<P>>() {}.where(new TypeParameter<P>() {}, param);
+		}
+	}).parameterized();
+
 	/** @return The run-time type of this value */
 	TypeToken<T> getType();
 
@@ -404,7 +415,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 	 *
 	 * <code>
 	 * 	{@link ObservableCollection#of(TypeToken, Object...) ObservableCollection.of(type, values)}.collect()
-	 * {@link ObservableCollection#observeFind(Predicate, Supplier, boolean) .observeFind(test, ()->null, true)}
+	 * {@link ObservableCollection#observeFind(Predicate) .observeFind(test, ()->null, true)}.find()
 	 * {{@link #map(Function) .mapV(v->v!=null ? v : def.get()}
 	 * </code>
 	 *
@@ -579,13 +590,15 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 
 								private void fireNext(ObservableValueEvent<T> next) {
 									try (Transaction t = ObservableValueEvent.use(next)) {
-										theObservers.forEach(listener -> listener.onNext(next));
+										theObservers.forEach(//
+											listener -> listener.onNext(next));
 									}
 								}
 
 								private void fireCompleted(ObservableValueEvent<T> next) {
 									try (Transaction t = ObservableValueEvent.use(next)) {
-										theObservers.forEach(listener -> listener.onCompleted(next));
+										theObservers.forEach(//
+											listener -> listener.onCompleted(next));
 										Subscription.forAll(composedSubs).unsubscribe();
 									}
 								}

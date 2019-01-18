@@ -7,11 +7,13 @@ import java.util.Iterator;
 import java.util.function.Supplier;
 
 import org.observe.ObservableValue;
+import org.observe.util.TypeTokens;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.MutableElementSpliterator;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeSet;
 
+import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 /**
@@ -22,6 +24,16 @@ import com.google.common.reflect.TypeToken;
  * @param <E> The type of element in the set
  */
 public interface ObservableSortedSet<E> extends ObservableSet<E>, BetterSortedSet<E> {
+	/** This class's wildcard {@link TypeToken} */
+	@SuppressWarnings("rawtypes")
+	static TypeToken<ObservableSortedSet<?>> TYPE = TypeTokens.get().keyFor(ObservableSortedSet.class)
+	.enableCompoundTypes(new TypeTokens.UnaryCompoundTypeCreator<ObservableSortedSet>() {
+		@Override
+		public <P> TypeToken<? extends ObservableSortedSet> createCompoundType(TypeToken<P> param) {
+			return new TypeToken<ObservableSortedSet<P>>() {}.where(new TypeParameter<P>() {}, param);
+		}
+	}).parameterized();
+
 	@Override
 	default Iterator<E> iterator() {
 		return ObservableSet.super.iterator();

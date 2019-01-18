@@ -7,8 +7,10 @@ import java.util.function.Supplier;
 
 import org.observe.XformOptions.SimpleXformOptions;
 import org.observe.XformOptions.XformDef;
+import org.observe.util.TypeTokens;
 import org.qommons.TriFunction;
 
+import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 /**
@@ -17,6 +19,16 @@ import com.google.common.reflect.TypeToken;
  * @param <T> The type of the value
  */
 public interface SettableValue<T> extends ObservableValue<T> {
+	/** This class's wildcard {@link TypeToken} */
+	@SuppressWarnings("rawtypes")
+	static TypeToken<SettableValue<?>> TYPE = TypeTokens.get().keyFor(SettableValue.class)
+	.enableCompoundTypes(new TypeTokens.UnaryCompoundTypeCreator<SettableValue>() {
+		@Override
+		public <P> TypeToken<? extends SettableValue> createCompoundType(TypeToken<P> param) {
+			return new TypeToken<SettableValue<P>>() {}.where(new TypeParameter<P>() {}, param);
+		}
+	}).parameterized();
+
 	/** TypeToken for String.class */
 	TypeToken<String> STRING_TYPE = TypeToken.of(String.class);
 
@@ -271,7 +283,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 * @return The mapped settable value
 	 */
 	public default <R> SettableValue<R> map(Function<? super T, R> function, Function<? super R, ? extends T> reverse) {
-		return map(null, function, reverse, options -> {});
+		return map(null, function, reverse, null);
 	}
 
 	/**
@@ -285,7 +297,8 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	public default <R> SettableValue<R> map(TypeToken<R> type, Function<? super T, R> function, Function<? super R, ? extends T> reverse,
 		Consumer<XformOptions> options) {
 		SimpleXformOptions xform = new SimpleXformOptions();
-		options.accept(xform);
+		if (options != null)
+			options.accept(xform);
 		SettableValue<T> root = this;
 		return new ComposedSettableValue<R>(type, args -> {
 			return function.apply((T) args[0]);
@@ -320,7 +333,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 */
 	public default <U, R> SettableValue<R> compose(BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		BiFunction<? super R, ? super U, ? extends T> reverse) {
-		return combine(null, function, arg, reverse, options -> {});
+		return combine(null, function, arg, reverse, null);
 	}
 
 	/**
@@ -338,7 +351,8 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	public default <U, R> SettableValue<R> combine(TypeToken<R> type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		BiFunction<? super R, ? super U, ? extends T> reverse, Consumer<XformOptions> options) {
 		SimpleXformOptions xform = new SimpleXformOptions();
-		options.accept(xform);
+		if (options != null)
+			options.accept(xform);
 		SettableValue<T> root = this;
 		return new ComposedSettableValue<R>(type, args -> {
 			return function.apply((T) args[0], (U) args[1]);
@@ -379,7 +393,8 @@ public interface SettableValue<T> extends ObservableValue<T> {
 		BiFunction<? super R, ? super U, String> accept, BiFunction<? super R, ? super U, ? extends T> reverse,
 		Consumer<XformOptions> options) {
 		SimpleXformOptions xform = new SimpleXformOptions();
-		options.accept(xform);
+		if (options != null)
+			options.accept(xform);
 		SettableValue<T> root = this;
 		return new ComposedSettableValue<R>(type, args -> {
 			return function.apply((T) args[0], (U) args[1]);
@@ -421,7 +436,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	 */
 	public default <U, V, R> SettableValue<R> combine(TriFunction<? super T, ? super U, ? super V, R> function, ObservableValue<U> arg2,
 		ObservableValue<V> arg3, TriFunction<? super R, ? super U, ? super V, ? extends T> reverse) {
-		return combine(null, function, arg2, arg3, reverse, options -> {});
+		return combine(null, function, arg2, arg3, reverse, null);
 	}
 
 	/**
@@ -442,7 +457,8 @@ public interface SettableValue<T> extends ObservableValue<T> {
 		ObservableValue<U> arg2, ObservableValue<V> arg3, TriFunction<? super R, ? super U, ? super V, ? extends T> reverse,
 		Consumer<XformOptions> options) {
 		SimpleXformOptions xform = new SimpleXformOptions();
-		options.accept(xform);
+		if (options != null)
+			options.accept(xform);
 		SettableValue<T> root = this;
 		return new ComposedSettableValue<R>(type, args -> {
 			return function.apply((T) args[0], (U) args[1], (V) args[2]);

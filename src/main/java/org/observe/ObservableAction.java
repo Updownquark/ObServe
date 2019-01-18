@@ -15,6 +15,16 @@ import com.google.common.reflect.TypeToken;
  * @param <T> The type of value the action produces
  */
 public interface ObservableAction<T> {
+	/** This class's wildcard {@link TypeToken} */
+	@SuppressWarnings("rawtypes")
+	static TypeToken<ObservableAction<?>> TYPE = TypeTokens.get().keyFor(ObservableAction.class)
+	.enableCompoundTypes(new TypeTokens.UnaryCompoundTypeCreator<ObservableAction>() {
+		@Override
+		public <P> TypeToken<? extends ObservableAction> createCompoundType(TypeToken<P> param) {
+			return new TypeToken<ObservableAction<P>>() {}.where(new TypeParameter<P>() {}, param);
+		}
+	}).parameterized();
+
 	/** @return The run-time type of values that this action produces */
 	TypeToken<T> getType();
 

@@ -5,10 +5,12 @@ import java.util.Collection;
 import java.util.Iterator;
 
 import org.observe.ObservableValue;
+import org.observe.collect.ObservableSetImpl.ConstantObservableSet;
+import org.observe.util.TypeTokens;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.MutableElementSpliterator;
-import org.qommons.tree.BetterTreeList;
 
+import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
 
 /**
@@ -19,6 +21,16 @@ import com.google.common.reflect.TypeToken;
  * @param <E> The type of element in the set
  */
 public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> {
+	/** This class's wildcard {@link TypeToken} */
+	@SuppressWarnings("rawtypes")
+	static TypeToken<ObservableSet<?>> TYPE = TypeTokens.get().keyFor(ObservableSet.class)
+	.enableCompoundTypes(new TypeTokens.UnaryCompoundTypeCreator<ObservableSet>() {
+		@Override
+		public <P> TypeToken<? extends ObservableSet> createCompoundType(TypeToken<P> param) {
+			return new TypeToken<ObservableSet<P>>() {}.where(new TypeParameter<P>() {}, param);
+		}
+	}).parameterized();
+
 	@Override
 	default Iterator<E> iterator() {
 		return ObservableCollection.super.iterator();
@@ -114,8 +126,7 @@ public interface ObservableSet<E> extends ObservableCollection<E>, BetterSet<E> 
 	 * @return An immutable set with the given values
 	 */
 	static <E> ObservableSet<E> of(TypeToken<E> type, Equivalence<? super E> equivalence, Collection<? extends E> values) {
-		return ObservableCollection.create(type, new BetterTreeList<E>(false).withAll(values))//
-			.flow().withEquivalence(equivalence).distinct().unmodifiable(false).collect();
+		return new ConstantObservableSet<>(type, equivalence, ObservableCollection.<E> createDefaultBacking().withAll(values));
 	}
 
 	/**

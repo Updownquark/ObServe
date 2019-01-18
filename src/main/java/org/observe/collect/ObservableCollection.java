@@ -82,15 +82,16 @@ import com.google.common.reflect.TypeToken;
  * @param <E> The type of element in the collection
  */
 public interface ObservableCollection<E> extends BetterList<E> {
-	/** <code>TypeToken&lt;ObservableCollection&lt;?>></code> */
+	/** This class's wildcard {@link TypeToken} */
 	@SuppressWarnings("rawtypes")
-	static final TypeToken<ObservableCollection<?>> TYPE = TypeTokens.get().keyFor(ObservableCollection.class)
-	.enableCompoundTypes(new TypeTokens.CompoundTypeCreator<ObservableCollection>() {
+	static TypeToken<ObservableCollection<?>> TYPE = TypeTokens.get().keyFor(ObservableCollection.class)
+	.enableCompoundTypes(new TypeTokens.UnaryCompoundTypeCreator<ObservableCollection>() {
 		@Override
 		public <P> TypeToken<? extends ObservableCollection> createCompoundType(TypeToken<P> param) {
 			return new TypeToken<ObservableCollection<P>>() {}.where(new TypeParameter<P>() {}, param);
 		}
-	}).parameterized(() -> new TypeToken<ObservableCollection<?>>() {});
+	}).parameterized();
+
 	/**
 	 * The {@link ObservableCollectionEvent#getCause() cause} for events fired for extant elements in the collection upon
 	 * {@link #subscribe(Consumer, boolean) subscription}
@@ -815,7 +816,7 @@ public interface ObservableCollection<E> extends BetterList<E> {
 					return null;
 				else
 					return MutableCollectionElement.StdMsg.BAD_TYPE;
-			}).map(TypeToken.of(type), v -> (X) v);
+			}).map(TypeTokens.get().of(type), v -> (X) v, opts -> opts.cache(false));
 		}
 
 		/**
@@ -1102,7 +1103,12 @@ public interface ObservableCollection<E> extends BetterList<E> {
 
 		@Override
 		default <X> DistinctDataFlow<E, ?, X> filter(Class<X> type) {
-			return (DistinctDataFlow<E, ?, X>) CollectionDataFlow.super.filter(type);
+			return filter(value -> {
+				if (type == null || type.isInstance(value))
+					return null;
+				else
+					return MutableCollectionElement.StdMsg.BAD_TYPE;
+			}).mapEquivalent(TypeTokens.get().of(type), v -> (X) v, x -> (T) x, opts -> opts.cache(false));
 		}
 
 		@Override

@@ -29,12 +29,14 @@ import org.observe.collect.ObservableCollectionDataFlowImpl.FilterMapResult;
 import org.observe.collect.ObservableCollectionDataFlowImpl.PassiveCollectionManager;
 import org.observe.collect.ObservableCollectionDataFlowImpl.RepairListener;
 import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection;
+import org.observe.collect.ObservableCollectionImpl.ConstantCollection;
 import org.observe.collect.ObservableCollectionImpl.FlattenedValueCollection;
 import org.observe.collect.ObservableCollectionImpl.PassiveDerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.ReversedObservableCollection;
 import org.observe.util.WeakListening;
 import org.qommons.Ternian;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterMap;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.CollectionElement;
@@ -1272,6 +1274,63 @@ public class ObservableSetImpl {
 		@Override
 		public String toString() {
 			return BetterSet.toString(this);
+		}
+	}
+
+	/**
+	 * An {@link ObservableSet} whose content cannot change
+	 *
+	 * @param <T> The type of values in the set
+	 */
+	public static class ConstantObservableSet<T> extends ConstantCollection<T> implements ObservableSet<T> {
+		private final Equivalence<? super T> theEquivalence;
+		private final BetterMap<T, ElementId> theIndex;
+
+		/**
+		 * @param type The type of values in the set
+		 * @param equivalence The equivalence of the set
+		 * @param values The values for the set
+		 */
+		public ConstantObservableSet(TypeToken<T> type, Equivalence<? super T> equivalence, BetterList<? extends T> values) {
+			super(type, values);
+			theEquivalence = equivalence;
+			theIndex = theEquivalence.createMap();
+			CollectionElement<T> el = getTerminalElement(true);
+			while (el != null) {
+				ElementId id = el.getElementId();
+				if (theIndex.computeIfAbsent(el.get(), v -> id) != id)
+					values.mutableElement(el.getElementId()).remove();
+				el = getAdjacentElement(el.getElementId(), true);
+			}
+		}
+
+		@Override
+		public CollectionElement<T> getOrAdd(T value, boolean first, Runnable added) {
+			ElementId el = theIndex.get(value);
+			if (el != null)
+				return getElement(el);
+			else
+				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public boolean isConsistent(ElementId element) {
+			return true;
+		}
+
+		@Override
+		public boolean checkConsistency() {
+			return false;
+		}
+
+		@Override
+		public <X> boolean repair(ElementId element, org.qommons.collect.ValueStoredCollection.RepairListener<T, X> listener) {
+			return false;
+		}
+
+		@Override
+		public <X> boolean repair(org.qommons.collect.ValueStoredCollection.RepairListener<T, X> listener) {
+			return false;
 		}
 	}
 

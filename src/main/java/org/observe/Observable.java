@@ -8,10 +8,14 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.ListenerSet;
 import org.qommons.Lockable;
 import org.qommons.Transaction;
+
+import com.google.common.reflect.TypeParameter;
+import com.google.common.reflect.TypeToken;
 
 /**
  * A stream of values that can be filtered, mapped, composed, etc. and evaluated on
@@ -19,6 +23,16 @@ import org.qommons.Transaction;
  * @param <T> The type of values this observable provides
  */
 public interface Observable<T> extends Lockable {
+	/** This class's wildcard {@link TypeToken} */
+	@SuppressWarnings("rawtypes")
+	static TypeToken<Observable<?>> TYPE = TypeTokens.get().keyFor(Observable.class)
+	.enableCompoundTypes(new TypeTokens.UnaryCompoundTypeCreator<Observable>() {
+		@Override
+		public <P> TypeToken<? extends Observable> createCompoundType(TypeToken<P> param) {
+			return new TypeToken<Observable<P>>() {}.where(new TypeParameter<P>() {}, param);
+		}
+	}).parameterized();
+
 	/**
 	 * Subscribes to this observable such that the given observer will be notified of any new values on this observable.
 	 *
@@ -283,19 +297,26 @@ public interface Observable<T> extends Lockable {
 			public Subscription subscribe(Observer<? super V> observer) {
 				Subscription[] subs = new Subscription[obs.length];
 				boolean[] init = new boolean[] { true };
-				for (int i = 0; i < subs.length; i++) {
+				for (int i = 0; i < obs.length; i++) {
 					int index = i;
+					Lockable[] others = new Lockable[obs.length - 1];
+					for (int j = 0; j < obs.length; j++) {
+						if (j < index)
+							others[j] = obs[j];
+						else if (j > index)
+							others[j - 1] = obs[j];
+					}
 					subs[i] = obs[i].subscribe(new Observer<V>() {
 						@Override
 						public <V2 extends V> void onNext(V2 value) {
-							try (Transaction t = lockOthers()) {
+							try (Transaction t = Lockable.lockAll(others)) {
 								observer.onNext(value);
 							}
 						}
 
 						@Override
 						public <V2 extends V> void onCompleted(V2 value) {
-							try (Transaction t = lockOthers()) {
+							try (Transaction t = Lockable.lockAll(others)) {
 								subs[index] = null;
 								boolean allDone = !init[0];
 								for (int j = 0; allDone && j < subs.length; j++)
@@ -304,14 +325,6 @@ public interface Observable<T> extends Lockable {
 								if (allDone)
 									observer.onCompleted(value);
 							}
-						}
-
-						Transaction lockOthers() {
-							Transaction[] locks = new Transaction[obs.length];
-							for (int j = 0; j < subs.length; j++)
-								if (j != index)
-									locks[j] = obs[j].lock();
-							return Transaction.and(locks);
 						}
 					});
 				}

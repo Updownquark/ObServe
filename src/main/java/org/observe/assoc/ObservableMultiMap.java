@@ -22,6 +22,7 @@ import org.observe.collect.ObservableCollection.CollectionDataFlow;
 import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableCollection.SubscriptionCause;
 import org.observe.collect.ObservableSet;
+import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
@@ -46,6 +47,17 @@ import com.google.common.reflect.TypeToken;
  * @param <V> The type of values stored in this map
  */
 public interface ObservableMultiMap<K, V> extends BetterMultiMap<K, V> {
+	/** This class's wildcard {@link TypeToken} */
+	@SuppressWarnings("rawtypes")
+	static TypeToken<ObservableMultiMap<?, ?>> TYPE = TypeTokens.get().keyFor(ObservableMultiMap.class)
+	.enableCompoundTypes(new TypeTokens.BinaryCompoundTypeCreator<ObservableMultiMap>() {
+		@Override
+		public <P1, P2> TypeToken<? extends ObservableMultiMap> createCompoundType(TypeToken<P1> param1, TypeToken<P2> param2) {
+			return new TypeToken<ObservableMultiMap<P1, P2>>() {}.where(new TypeParameter<P1>() {}, param1)
+					.where(new TypeParameter<P2>() {}, param2);
+		}
+	}).parameterized();
+
 	/**
 	 * A {@link java.util.Map.Entry} with observable capabilities
 	 *
