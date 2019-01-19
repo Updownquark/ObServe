@@ -70,7 +70,8 @@ public interface SettableStampedValue<T> extends SettableValue<T>, StampedObserv
 	default <R> SettableStampedValue<R> map(TypeToken<R> type, Function<? super T, R> function, Function<? super R, ? extends T> reverse,
 		Consumer<XformOptions> options) {
 		SimpleXformOptions xform = new SimpleXformOptions();
-		options.accept(xform);
+		if (options != null)
+			options.accept(xform);
 		SettableValue<T> root = this;
 		return new ComposedSettableStampedValue<R>(type, args -> {
 			return function.apply((T) args[0]);

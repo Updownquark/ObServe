@@ -157,7 +157,9 @@ public interface ObservableAction<T> {
 
 		@Override
 		public ObservableValue<String> isEnabled() {
-			return ObservableValue.flatten(theWrapper.map(action -> action.isEnabled()),
+			return ObservableValue.flatten(
+				theWrapper//
+					.map(action -> action == null ? ObservableValue.of(TypeTokens.get().STRING, "Empty Action") : action.isEnabled()), //
 				() -> "This wrapper (" + theWrapper + ") is empty");
 		}
 	}
