@@ -227,11 +227,18 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 	 */
 	default <U, R> ObservableValue<R> combine(TypeToken<R> type, BiFunction<? super T, ? super U, R> function, ObservableValue<U> arg,
 		Consumer<XformOptions> options) {
+		if (function == null)
+			throw new NullPointerException("Combination function cannot be null");
 		SimpleXformOptions xform = new SimpleXformOptions();
 		if (options != null)
 			options.accept(xform);
 		return new ComposedObservableValue<>(type, args -> {
-			return function.apply((T) args[0], (U) args[1]);
+			try {
+				return function.apply((T) args[0], (U) args[1]);
+			} catch (NullPointerException e) { // DEBUG
+				System.err.println("null args");
+				throw e;
+			}
 		}, new XformDef(xform), this, arg);
 	}
 
@@ -556,7 +563,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 										caches[index].initialize(event.getNewValue());
 										return;
 									} else if (!isInitialized())
-										caches[index].initialize(event.getNewValue());
+										return;
 									BiTuple<T, T> change = caches[index].handleChange(event.getOldValue(), event.getNewValue());
 									if (change != null) {
 										ObservableValueEvent<T> toFire = ComposedObservableValue.this.createChangeEvent(change.getValue1(),
@@ -1160,6 +1167,8 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 				if (theTest.test(value))
 					break;
 			}
+			if (value == null)
+				value = theDefault.get();
 			return value;
 		}
 
