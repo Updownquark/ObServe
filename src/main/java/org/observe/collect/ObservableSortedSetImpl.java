@@ -741,11 +741,11 @@ public class ObservableSortedSetImpl {
 		 */
 		public FlattenedValueSortedSet(ObservableValue<? extends ObservableSortedSet<? extends E>> collectionObservable,
 			Comparator<? super E> compare) {
-			super(collectionObservable, (Equivalence<? super E>) Equivalence.of(extractElementType(collectionObservable), compare, false));
+			super(collectionObservable, Equivalence.of(extractElementType(collectionObservable), compare, false));
 			theCompare = compare;
 		}
 
-		private static <E> Class<E> extractElementType(ObservableValue<? extends ObservableSortedSet<E>> collectionObservable) {
+		private static <E> Class<E> extractElementType(ObservableValue<? extends ObservableSortedSet<? extends E>> collectionObservable) {
 			return (Class<E>) TypeTokens
 				.getRawType(collectionObservable.getType().resolveType(ObservableCollection.class.getTypeParameters()[0]));
 		}
