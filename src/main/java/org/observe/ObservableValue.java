@@ -16,6 +16,7 @@ import org.observe.XformOptions.XformDef;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
 import org.qommons.BiTuple;
+import org.qommons.Causable;
 import org.qommons.ListenerSet;
 import org.qommons.Lockable;
 import org.qommons.Transaction;
@@ -51,9 +52,13 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 
 	/**
 	 * @return An observable that fires an {@link ObservableValueEvent#isInitial() initial} event for the current value and subsequent
-	 *         change events when this value changes
+	 *         change events when this value changes, and also an initial event for the value when subscribed
 	 */
-	Observable<ObservableValueEvent<T>> changes();
+	default Observable<ObservableValueEvent<T>> changes() {
+		return new ObservableValueChanges<>(this);
+	}
+
+	Observable<ObservableValueEvent<T>> noInitChanges();
 
 	@Override
 	default boolean isLockSupported() {
@@ -141,8 +146,8 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 			}
 
 			@Override
-			public Observable<ObservableValueEvent<T>> changes() {
-				return outer.changes().map(eventMap);
+			public Observable<ObservableValueEvent<T>> noInitChanges() {
+				return outer.noInitChanges().map(eventMap);
 			}
 
 			@Override
@@ -474,6 +479,57 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 		return new ComposedObservableValue<>(t, c -> value.get(), new XformOptions.XformDef(opts), components);
 	}
 
+	public class ObservableValueChanges<T> implements Observable<ObservableValueEvent<T>> {
+		private final ObservableValue<T> theValue;
+		private final Observable<ObservableValueEvent<T>> theNoInitChanges;
+
+		public ObservableValueChanges(ObservableValue<T> value) {
+			theValue = value;
+			theNoInitChanges = value.noInitChanges();
+		}
+
+		@Override
+		public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+			try (Transaction t = theNoInitChanges.lock()) {
+				ObservableValueEvent<T> initEvent = theValue.createInitialEvent(theValue.get(), null);
+				try (Transaction eventT = Causable.use(initEvent)) {
+					observer.onNext(initEvent);
+				}
+				return theNoInitChanges.subscribe(observer);
+			}
+		}
+
+		@Override
+		public boolean isSafe() {
+			return theNoInitChanges.isSafe();
+		}
+
+		@Override
+		public Transaction lock() {
+			return theNoInitChanges.lock();
+		}
+
+		@Override
+		public Transaction tryLock() {
+			return theNoInitChanges.tryLock();
+		}
+
+		@Override
+		public int hashCode() {
+			return theValue.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			return o instanceof ObservableValueChanges && theValue.equals(((ObservableValueChanges<?>) o).theValue);
+		}
+
+		@Override
+		public String toString() {
+			return theValue + " changes";
+		}
+	}
+
 	/**
 	 * An observable that depends on the values of other observables
 	 *
@@ -642,15 +698,6 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 					return combine(composedValues);
 				}
 			});
-			theObservers.setOnSubscribe(observer -> {
-				ObservableValueEvent<T> evt = createInitialEvent(get(), null);
-				try (Transaction t = ObservableValueEvent.use(evt)) {
-					if (completed[0])
-						observer.onCompleted(evt);
-					else
-						observer.onNext(evt);
-				}
-			});
 		}
 
 		@Override
@@ -694,7 +741,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 		}
 
 		@Override
-		public Observable<ObservableValueEvent<T>> changes() {
+		public Observable<ObservableValueEvent<T>> noInitChanges() {
 			return new Observable<ObservableValueEvent<T>>() {
 				@Override
 				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
@@ -736,7 +783,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 
 		protected ObservableValueTakenUntil(ObservableValue<T> wrap, Observable<?> until, boolean terminate) {
 			theWrapped = wrap;
-			theChanges = new Observable.ObservableTakenUntil<>(theWrapped.changes(), until, terminate, () -> {
+			theChanges = new Observable.ObservableTakenUntil<>(theWrapped.noInitChanges(), until, terminate, () -> {
 				T value = theWrapped.get();
 				return theWrapped.createChangeEvent(value, value, null);
 			});
@@ -757,7 +804,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 		}
 
 		@Override
-		public Observable<ObservableValueEvent<T>> changes() {
+		public Observable<ObservableValueEvent<T>> noInitChanges() {
 			return theChanges;
 		}
 	}
@@ -795,13 +842,13 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 		}
 
 		@Override
-		public Observable<ObservableValueEvent<T>> changes() {
+		public Observable<ObservableValueEvent<T>> noInitChanges() {
 			return new Observable<ObservableValueEvent<T>>() {
 				@Override
 				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 					Subscription[] refireSub = new Subscription[1];
 					boolean[] completed = new boolean[1];
-					Subscription outerSub = theWrapped.changes().subscribe(new Observer<ObservableValueEvent<T>>() {
+					Subscription outerSub = theWrapped.noInitChanges().subscribe(new Observer<ObservableValueEvent<T>>() {
 						@Override
 						public <V extends ObservableValueEvent<T>> void onNext(V value) {
 							observer.onNext(value);
@@ -876,32 +923,8 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 		}
 
 		@Override
-		public Observable<ObservableValueEvent<T>> changes() {
-			return new Observable<ObservableValueEvent<T>>() {
-				@Override
-				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-					ObservableValueEvent<T> evt = createInitialEvent(theValue, null);
-					try (Transaction t = ObservableValueEvent.use(evt)) {
-						observer.onNext(evt);
-					}
-					return () -> {};
-				}
-
-				@Override
-				public boolean isSafe() {
-					return true;
-				}
-
-				@Override
-				public Transaction lock() {
-					return Transaction.NONE;
-				}
-
-				@Override
-				public Transaction tryLock() {
-					return Transaction.NONE;
-				}
-			};
+		public Observable<ObservableValueEvent<T>> noInitChanges() {
+			return Observable.empty();
 		}
 
 		@Override
@@ -947,8 +970,8 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 		}
 
 		@Override
-		public Observable<ObservableValueEvent<T>> changes() {
-			return theWrapped.changes().safe();
+		public Observable<ObservableValueEvent<T>> noInitChanges() {
+			return theWrapped.noInitChanges().safe();
 		}
 
 		@Override
@@ -1017,121 +1040,140 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 
 		@Override
 		public Observable<ObservableValueEvent<T>> changes() {
-			return new Observable<ObservableValueEvent<T>>() {
-				@Override
-				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-					ObservableValue<T> retObs = FlattenedObservableValue.this;
-					AtomicReference<Subscription> innerSub = new AtomicReference<>();
-					boolean[] firedInit = new boolean[1];
-					Object[] old = new Object[1];
-					Subscription outerSub = theValue.changes()
-						.subscribe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends T>>>() {
-							private final ReentrantLock theLock = new ReentrantLock();
+			return new FlattenedValueChanges(true);
+		}
 
-							@Override
-							public <V extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onNext(V event) {
-								firedInit[0] = true;
-								theLock.lock();
-								try {
-									final ObservableValue<? extends T> innerObs = event.getNewValue();
-									// Shouldn't have 2 inner observables potentially generating events at the same time
-									if (!Objects.equals(innerObs, event.getOldValue()))
-										Subscription.unsubscribe(innerSub.getAndSet(null));
-									if (innerObs != null && !innerObs.equals(event.getOldValue())) {
-										boolean[] firedInit2 = new boolean[1];
-										Subscription.unsubscribe(innerSub
-											.getAndSet(innerObs.changes().subscribe(new Observer<ObservableValueEvent<? extends T>>() {
-												@Override
-												public <V2 extends ObservableValueEvent<? extends T>> void onNext(V2 event2) {
-													firedInit2[0] = true;
-													theLock.lock();
-													try {
-														T innerOld;
-														if (event2.isInitial())
-															innerOld = (T) old[0];
-														else
-															old[0] = innerOld = event2.getOldValue();
-														ObservableValueEvent<T> toFire;
-														if (event.isInitial() && event2.isInitial())
-															toFire = retObs.createInitialEvent(event2.getNewValue(), event2.getCause());
-														else
-															toFire = retObs.createChangeEvent(innerOld, event2.getNewValue(),
-																event2.getCause());
-														try (Transaction t = ObservableValueEvent.use(toFire)) {
-															observer.onNext(toFire);
-														}
-														old[0] = event2.getNewValue();
-													} finally {
-														theLock.unlock();
-													}
-												}
-
-												@Override
-												public <V2 extends ObservableValueEvent<? extends T>> void onCompleted(V2 value) {}
-											})));
-										if (!firedInit2[0])
-											throw new IllegalStateException(innerObs + " did not fire an initial value");
-									} else {
-										T newValue = get(event.getNewValue());
-										ObservableValueEvent<T> toFire;
-										if (event.isInitial())
-											toFire = retObs.createInitialEvent(newValue, event.getCause());
-										else
-											toFire = retObs.createChangeEvent((T) old[0], newValue, event.getCause());
-										old[0] = newValue;
-										try (Transaction t = ObservableValueEvent.use(toFire)) {
-											observer.onNext(toFire);
-										}
-									}
-								} finally {
-									theLock.unlock();
-								}
-							}
-
-							@Override
-							public <V extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onCompleted(V event) {
-								firedInit[0] = true;
-								Subscription.unsubscribe(innerSub.getAndSet(null));
-								theLock.lock();
-								try {
-									ObservableValueEvent<T> toFire = retObs.createChangeEvent(get(event.getOldValue()),
-										get(event.getNewValue()), event.getCause());
-									try (Transaction t = ObservableValueEvent.use(toFire)) {
-										observer.onCompleted(toFire);
-									}
-								} finally {
-									theLock.unlock();
-								}
-							}
-						});
-					if (!firedInit[0])
-						throw new IllegalStateException(theValue + " did not fire an initial value");
-					return () -> {
-						outerSub.unsubscribe();
-						Subscription.unsubscribe(innerSub.getAndSet(null));
-					};
-				}
-
-				@Override
-				public boolean isSafe() {
-					return false;
-				}
-
-				@Override
-				public Transaction lock() {
-					return Lockable.lock(theValue, theValue::get);
-				}
-
-				@Override
-				public Transaction tryLock() {
-					return Lockable.tryLock(theValue, theValue::get);
-				}
-			};
+		@Override
+		public Observable<ObservableValueEvent<T>> noInitChanges() {
+			return new FlattenedValueChanges(false);
 		}
 
 		@Override
 		public String toString() {
 			return "flat(" + theValue + ")";
+		}
+
+		private class FlattenedValueChanges implements Observable<ObservableValueEvent<T>> {
+			private final boolean withInitialEvent;
+
+			public FlattenedValueChanges(boolean withInitialEvent) {
+				this.withInitialEvent = withInitialEvent;
+			}
+
+			@Override
+			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+				ObservableValue<T> retObs = FlattenedObservableValue.this;
+				AtomicReference<Subscription> innerSub = new AtomicReference<>();
+				boolean[] firedInit = new boolean[1];
+				Object[] old = new Object[1];
+				Subscription outerSub = theValue.changes()
+					.subscribe(new Observer<ObservableValueEvent<? extends ObservableValue<? extends T>>>() {
+						private final ReentrantLock theLock = new ReentrantLock();
+
+						@Override
+						public <V extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onNext(V event) {
+							firedInit[0] = true;
+							theLock.lock();
+							try {
+								final ObservableValue<? extends T> innerObs = event.getNewValue();
+								// Shouldn't have 2 inner observables potentially generating events at the same time
+								if (!Objects.equals(innerObs, event.getOldValue()))
+									Subscription.unsubscribe(innerSub.getAndSet(null));
+								if (innerObs != null && !innerObs.equals(event.getOldValue())) {
+									boolean[] firedInit2 = new boolean[1];
+									Subscription.unsubscribe(
+										innerSub.getAndSet(innerObs.changes().subscribe(new Observer<ObservableValueEvent<? extends T>>() {
+											@Override
+											public <V2 extends ObservableValueEvent<? extends T>> void onNext(V2 event2) {
+												firedInit2[0] = true;
+												theLock.lock();
+												try {
+													T innerOld;
+													if (event2.isInitial())
+														innerOld = (T) old[0];
+													else
+														old[0] = innerOld = event2.getOldValue();
+													ObservableValueEvent<T> toFire;
+													if (event.isInitial() && event2.isInitial())
+														toFire = withInitialEvent
+															? retObs.createInitialEvent(event2.getNewValue(), event2.getCause()) : null;
+														else
+															toFire = retObs.createChangeEvent(innerOld, event2.getNewValue(),
+																event2.getCause());
+													if (toFire != null) {
+														try (Transaction t = ObservableValueEvent.use(toFire)) {
+															observer.onNext(toFire);
+														}
+													}
+													old[0] = event2.getNewValue();
+												} finally {
+													theLock.unlock();
+												}
+											}
+
+											@Override
+											public <V2 extends ObservableValueEvent<? extends T>> void onCompleted(V2 value) {
+											}
+										})));
+									if (!firedInit2[0])
+										throw new IllegalStateException(innerObs + " did not fire an initial value");
+								} else {
+									T newValue = get(event.getNewValue());
+									ObservableValueEvent<T> toFire;
+									if (event.isInitial())
+										toFire = withInitialEvent ? retObs.createInitialEvent(newValue, event.getCause()) : null;
+										else
+											toFire = retObs.createChangeEvent((T) old[0], newValue, event.getCause());
+									old[0] = newValue;
+									if (toFire != null) {
+										try (Transaction t = ObservableValueEvent.use(toFire)) {
+											observer.onNext(toFire);
+										}
+									}
+								}
+							} finally {
+								theLock.unlock();
+							}
+						}
+
+						@Override
+						public <V extends ObservableValueEvent<? extends ObservableValue<? extends T>>> void onCompleted(V event) {
+							firedInit[0] = true;
+							Subscription.unsubscribe(innerSub.getAndSet(null));
+							theLock.lock();
+							try {
+								ObservableValueEvent<T> toFire = retObs.createChangeEvent(get(event.getOldValue()),
+									get(event.getNewValue()), event.getCause());
+								try (Transaction t = ObservableValueEvent.use(toFire)) {
+									observer.onCompleted(toFire);
+								}
+							} finally {
+								theLock.unlock();
+							}
+						}
+					});
+				if (!firedInit[0])
+					throw new IllegalStateException(theValue + " did not fire an initial value");
+				return () -> {
+					outerSub.unsubscribe();
+					Subscription.unsubscribe(innerSub.getAndSet(null));
+				};
+			}
+
+			@Override
+			public boolean isSafe() {
+				return false;
+			}
+
+			@Override
+			public Transaction lock() {
+				return Lockable.lock(theValue, theValue::get);
+			}
+
+			@Override
+			public Transaction tryLock() {
+				return Lockable.tryLock(theValue, theValue::get);
+			}
 		}
 	}
 
@@ -1182,7 +1224,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 						try (Transaction t = ObservableValueEvent.use(evt)) {
 							observer.onNext(evt);
 						}
-						return () -> {};
+						return Subscription.NONE;
 					}
 					Subscription[] valueSubs = new Subscription[theValues.length];
 					boolean[] finished = new boolean[theValues.length];
