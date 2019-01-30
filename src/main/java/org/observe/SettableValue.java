@@ -266,7 +266,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 
 			@Override
 			public ObservableValue<String> isEnabled() {
-				return ObservableValue.firstValue(TypeToken.of(String.class), s -> s != null, () -> null, enabled, outer.isEnabled());
+				return ObservableValue.firstValue(TypeTokens.get().STRING, s -> s != null, () -> null, enabled, outer.isEnabled());
 			}
 
 			@Override
