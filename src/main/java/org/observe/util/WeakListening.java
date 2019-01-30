@@ -15,6 +15,7 @@ import org.observe.Observer;
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.qommons.Transaction;
+import org.qommons.collect.ListenerList;
 
 /**
  * <p>
@@ -252,9 +253,17 @@ public class WeakListening {
 
 	public static <T> Observable<T> weaklyListeningObservable(Observable<T> observable) {
 		class WeaklyListeningObservable implements Observable<T> {
+			private final ListenerList<Observer<? super T>> theObservers = ListenerList.build().allowReentrant().forEachSafe(false)
+				.withFastSize(false).build();
+
 			@Override
 			public Subscription subscribe(Observer<? super T> observer) {
-				return observeWeakly(observer, observable);
+				Runnable remove = theObservers.add(observer, false);
+				Subscription weakObs = observeWeakly(observer, observable);
+				return () -> {
+					remove.run();
+					weakObs.unsubscribe();
+				};
 			}
 
 			@Override

@@ -30,7 +30,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	}).parameterized();
 
 	/** TypeToken for String.class */
-	TypeToken<String> STRING_TYPE = TypeToken.of(String.class);
+	TypeToken<String> STRING_TYPE = TypeTokens.get().of(String.class);
 
 	ObservableValue<String> ALWAYS_ENABLED = ObservableValue.of(STRING_TYPE, null);
 
@@ -83,7 +83,8 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			public ObservableValue<String> isEnabled() {
 				BiFunction<String, String, String> combineFn = (str1, str2) -> str1 != null ? str1 : str2;
 				return SettableValue.this.isEnabled().combine(STRING_TYPE, combineFn,
-					value.refresh(SettableValue.this.changes().noInit()).map(STRING_TYPE, v -> isAcceptable(v)), options -> {});
+					value.refresh(SettableValue.this.changes().noInit()).map(STRING_TYPE, v -> isAcceptable(v)),
+					options -> options.fireIfUnchanged(false));
 			}
 
 			@Override
@@ -174,7 +175,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 
 			@Override
 			public String toString() {
-				return SettableValue.this.toString();
+				return outer.toString();
 			}
 		};
 	}
@@ -223,7 +224,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 
 			@Override
 			public String toString() {
-				return SettableValue.this.toString();
+				return outer.toString();
 			}
 		};
 	}
@@ -271,7 +272,7 @@ public interface SettableValue<T> extends ObservableValue<T> {
 
 			@Override
 			public String toString() {
-				return SettableValue.this.toString();
+				return outer.toString();
 			}
 		};
 	}
