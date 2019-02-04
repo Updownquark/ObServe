@@ -26,8 +26,8 @@ public interface SettableStampedValue<T> extends SettableValue<T>, StampedObserv
 			}
 
 			@Override
-			public Observable<ObservableValueEvent<T>> changes() {
-				return SettableStampedValue.this.changes();
+			public Observable<ObservableValueEvent<T>> noInitChanges() {
+				return SettableStampedValue.this.noInitChanges();
 			}
 
 			@Override

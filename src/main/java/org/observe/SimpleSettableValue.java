@@ -51,7 +51,7 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 	}
 
 	@Override
-	public Observable<ObservableValueEvent<T>> changes() {
+	public Observable<ObservableValueEvent<T>> noInitChanges() {
 		return theEventer.readOnly();
 	}
 
@@ -110,7 +110,7 @@ public class SimpleSettableValue<T> implements SettableValue<T> {
 	/** @return The observable for this value to use to fire its initial and change events */
 	protected SimpleObservable<ObservableValueEvent<T>> createEventer(ReentrantReadWriteLock lock,
 		Consumer<ListenerList.Builder> listeningOptions) {
-		return new SimpleObservable<>(observer -> fireInitial(observer), true, lock, listeningOptions);
+		return new SimpleObservable<>(null, true, lock, listeningOptions);
 	}
 
 	@Override

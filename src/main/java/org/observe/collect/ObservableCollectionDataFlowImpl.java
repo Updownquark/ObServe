@@ -3448,6 +3448,11 @@ public class ObservableCollectionDataFlowImpl {
 						}
 					};
 				}
+
+				@Override
+				public Observable<ObservableValueEvent<Function<? super E, T>>> noInitChanges() {
+					return changes().noInit();
+				}
 			};
 		}
 

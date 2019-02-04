@@ -75,7 +75,7 @@ public class VetoableSettableValue<T> implements SettableStampedValue<T> {
 	}
 
 	@Override
-	public Observable<ObservableValueEvent<T>> changes() {
+	public Observable<ObservableValueEvent<T>> noInitChanges() {
 		return theChanges;
 	}
 
@@ -217,19 +217,10 @@ public class VetoableSettableValue<T> implements SettableStampedValue<T> {
 			if (lock != null)
 				lock.lock();
 			try {
-				ObservableValueEvent<T> initEvt = createInitialEvent(theValue, null);
-				try (Transaction evtT = Causable.use(initEvt)) {
-					observer.onNext(initEvt);
-				}
-				if (isAlive) {
+				if (isAlive)
 					return theListeners.add(new ListenerHolder<>(observer, theStamp, theValue), false)::run;
-				} else {
-					ObservableValueEvent<T> completeEvt = createChangeEvent(theValue, theValue, null);
-					try (Transaction evtT = Causable.use(completeEvt)) {
-						observer.onCompleted(completeEvt);
-					}
+				else
 					return Subscription.NONE;
-				}
 			} finally {
 				if (lock != null)
 					lock.unlock();

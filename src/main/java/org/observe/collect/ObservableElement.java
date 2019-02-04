@@ -54,6 +54,11 @@ public interface ObservableElement<T> extends ObservableValue<T> {
 		return elementChanges().map(evt -> evt);
 	}
 
+	@Override
+	default Observable<ObservableValueEvent<T>> noInitChanges() {
+		return changes().noInit();
+	}
+
 	/**
 	 * Creates an event to alert a consumer to this element's initial state upon listening
 	 *

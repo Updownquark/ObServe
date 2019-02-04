@@ -119,8 +119,8 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			}
 
 			@Override
-			public Observable<ObservableValueEvent<T>> changes() {
-				return SettableValue.this.changes();
+			public Observable<ObservableValueEvent<T>> noInitChanges() {
+				return SettableValue.this.noInitChanges();
 			}
 
 			@Override
@@ -148,8 +148,8 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			}
 
 			@Override
-			public Observable<ObservableValueEvent<T>> changes() {
-				return SettableValue.this.changes();
+			public Observable<ObservableValueEvent<T>> noInitChanges() {
+				return SettableValue.this.noInitChanges();
 			}
 
 			@Override
@@ -202,8 +202,8 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			}
 
 			@Override
-			public Observable<ObservableValueEvent<T>> changes() {
-				return SettableValue.this.changes();
+			public Observable<ObservableValueEvent<T>> noInitChanges() {
+				return SettableValue.this.noInitChanges();
 			}
 
 			@Override
@@ -248,8 +248,8 @@ public interface SettableValue<T> extends ObservableValue<T> {
 			}
 
 			@Override
-			public Observable<ObservableValueEvent<T>> changes() {
-				return SettableValue.this.changes();
+			public Observable<ObservableValueEvent<T>> noInitChanges() {
+				return SettableValue.this.noInitChanges();
 			}
 
 			@Override

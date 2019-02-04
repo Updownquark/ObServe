@@ -73,8 +73,8 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 				}
 
 				@Override
-				public Observable<ObservableValueEvent<N>> changes() {
-					return source.changes();
+				public Observable<ObservableValueEvent<N>> noInitChanges() {
+					return source.noInitChanges();
 				}
 
 				@Override
@@ -154,8 +154,8 @@ public interface ObservableGraph<N, E> extends TransactableGraph<N, E> {
 				}
 
 				@Override
-				public Observable<ObservableValueEvent<E>> changes() {
-					return source.changes();
+				public Observable<ObservableValueEvent<E>> noInitChanges() {
+					return source.noInitChanges();
 				}
 
 				@Override

@@ -1,5 +1,6 @@
 package org.observe;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
@@ -1096,7 +1097,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 													ObservableValueEvent<T> toFire;
 													if (event.isInitial() && event2.isInitial())
 														toFire = withInitialEvent
-															? retObs.createInitialEvent(event2.getNewValue(), event2.getCause()) : null;
+														? retObs.createInitialEvent(event2.getNewValue(), event2.getCause()) : null;
 														else
 															toFire = retObs.createChangeEvent(innerOld, event2.getNewValue(),
 																event2.getCause());
@@ -1216,161 +1217,138 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 
 		@Override
 		public Observable<ObservableValueEvent<T>> changes() {
-			return new Observable<ObservableValueEvent<T>>() {
-				@Override
-				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
-					if (theValues.length == 0) {
+			return new FirstValueChanges(true);
+		}
+
+		@Override
+		public Observable<ObservableValueEvent<T>> noInitChanges() {
+			return new FirstValueChanges(false);
+		}
+
+		class FirstValueChanges implements Observable<ObservableValueEvent<T>> {
+			private final boolean withInitEvent;
+
+			FirstValueChanges(boolean withInitEvent) {
+				this.withInitEvent = withInitEvent;
+			}
+
+			@Override
+			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+				if (theValues.length == 0) {
+					if (withInitEvent) {
 						ObservableValueEvent<T> evt = createInitialEvent(null, null);
 						try (Transaction t = ObservableValueEvent.use(evt)) {
 							observer.onNext(evt);
 						}
-						return Subscription.NONE;
 					}
-					Subscription[] valueSubs = new Subscription[theValues.length];
-					boolean[] finished = new boolean[theValues.length];
-					Object[] lastValue = new Object[1];
-					boolean[] hasFiredInit = new boolean[1];
-					Lock lock = new ReentrantLock();
-					class ElementFirstObserver implements Observer<ObservableValueEvent<? extends T>> {
-						private final int index;
-						private boolean isFound;
+					return Subscription.NONE;
+				}
+				Subscription[] valueSubs = new Subscription[theValues.length];
+				boolean[] finished = new boolean[theValues.length];
+				Object[] lastValue = new Object[1];
+				boolean[] hasFiredInit = new boolean[1];
+				Lock lock = new ReentrantLock();
+				class ElementFirstObserver implements Observer<ObservableValueEvent<? extends T>> {
+					private final int index;
+					private boolean isFound;
 
-						ElementFirstObserver(int idx) {
-							index = idx;
-						}
-
-						@Override
-						public <V extends ObservableValueEvent<? extends T>> void onNext(V event) {
-							event(event, false);
-						}
-
-						@Override
-						public <V extends ObservableValueEvent<? extends T>> void onCompleted(V event) {
-							event(event, true);
-						}
-
-						private void event(ObservableValueEvent<? extends T> event, boolean complete) {
-							lock.lock();
-							try {
-								boolean found = !complete && theTest.test(event.getNewValue());
-								int nextIndex = index + 1;
-								if (!found) {
-									while (nextIndex < theValues.length && finished[nextIndex])
-										nextIndex++;
-								}
-								T oldValue = (T) lastValue[0];
-								ObservableValueEvent<T> toFire;
-								if (complete) {
-									finished[index] = true;
-									valueSubs[index] = null;
-									if (allCompleted())
-										toFire = new ObservableValueEvent<>(getType(), !hasFiredInit[0], oldValue, oldValue, event);
-									else
-										toFire = null;
-								} else {
-									if (found) {
-										lastValue[0] = event.getNewValue();
-										toFire = new ObservableValueEvent<>(getType(), !hasFiredInit[0], oldValue, event.getNewValue(),
-											event);
-									} else if (nextIndex == theValues.length)
-										toFire = new ObservableValueEvent<>(getType(), !hasFiredInit[0], oldValue, theDefault.get(), event);
-									else
-										toFire = null;
-								}
-								if (toFire != null) {
-									hasFiredInit[0] = true;
-									try (Transaction t = ObservableValueEvent.use(toFire)) {
-										observer.onNext(toFire);
-									}
-								}
-								if (found != isFound) {
-									isFound = found;
-									if (found) {
-										for (int i = index + 1; i < valueSubs.length; i++) {
-											if (valueSubs[i] != null) {
-												valueSubs[i].unsubscribe();
-												valueSubs[i] = null;
-											}
-										}
-									} else if (nextIndex < theValues.length)
-										valueSubs[nextIndex] = theValues[nextIndex].changes()
-										.subscribe(new ElementFirstObserver(nextIndex));
-								} else if (!hasFiredInit[0])
-									valueSubs[nextIndex] = theValues[nextIndex].changes().subscribe(new ElementFirstObserver(nextIndex));
-							} finally {
-								lock.unlock();
-							}
-						}
-
-						private boolean allCompleted() {
-							for (boolean f : finished)
-								if (f)
-									return false;
-							return true;
-						}
+					ElementFirstObserver(int idx) {
+						index = idx;
 					}
-					valueSubs[0] = theValues[0].safe().changes().subscribe(new ElementFirstObserver(0));
-					return () -> {
-						for (int i = 0; i < valueSubs.length; i++) {
-							if (valueSubs[i] != null) {
-								valueSubs[i].unsubscribe();
-								valueSubs[i] = null;
+
+					@Override
+					public <V extends ObservableValueEvent<? extends T>> void onNext(V event) {
+						event(event, false);
+					}
+
+					@Override
+					public <V extends ObservableValueEvent<? extends T>> void onCompleted(V event) {
+						event(event, true);
+					}
+
+					private void event(ObservableValueEvent<? extends T> event, boolean complete) {
+						lock.lock();
+						try {
+							boolean found = !complete && theTest.test(event.getNewValue());
+							int nextIndex = index + 1;
+							if (!found) {
+								while (nextIndex < theValues.length && finished[nextIndex])
+									nextIndex++;
 							}
-						}
-					};
-				}
-
-				@Override
-				public boolean isSafe() {
-					return true;
-				}
-
-				@Override
-				public Transaction lock() {
-					Transaction[] locks = new Transaction[theValues.length];
-					reattempt: while (true) {
-						boolean firstLock = true;
-						for (int i = 0; i < locks.length; i++) {
-							if (firstLock) {
-								locks[i] = theValues[i].changes().lock();
-								firstLock = false;
+							T oldValue = (T) lastValue[0];
+							ObservableValueEvent<T> toFire;
+							if (complete) {
+								finished[index] = true;
+								valueSubs[index] = null;
+								if (allCompleted())
+									toFire = new ObservableValueEvent<>(getType(), !hasFiredInit[0], oldValue, oldValue, event);
+								else
+									toFire = null;
 							} else {
-								locks[i] = theValues[i].changes().tryLock();
-								if (locks[i] == null) {
-									for (int j = i - 1; j >= 0; j--)
-										locks[j].close();
-									continue reattempt;
+								if (found) {
+									lastValue[0] = event.getNewValue();
+									toFire = new ObservableValueEvent<>(getType(), !hasFiredInit[0], oldValue, event.getNewValue(), event);
+								} else if (nextIndex == theValues.length)
+									toFire = new ObservableValueEvent<>(getType(), !hasFiredInit[0], oldValue, theDefault.get(), event);
+								else
+									toFire = null;
+							}
+							if (toFire != null && !(toFire.isInitial() && !withInitEvent)) {
+								hasFiredInit[0] = true;
+								try (Transaction t = ObservableValueEvent.use(toFire)) {
+									observer.onNext(toFire);
 								}
 							}
-							if (theTest.test(theValues[i].get()))
-								break;
+							if (found != isFound) {
+								isFound = found;
+								if (found) {
+									for (int i = index + 1; i < valueSubs.length; i++) {
+										if (valueSubs[i] != null) {
+											valueSubs[i].unsubscribe();
+											valueSubs[i] = null;
+										}
+									}
+								} else if (nextIndex < theValues.length)
+									valueSubs[nextIndex] = theValues[nextIndex].changes().subscribe(new ElementFirstObserver(nextIndex));
+							} else if (!hasFiredInit[0])
+								valueSubs[nextIndex] = theValues[nextIndex].changes().subscribe(new ElementFirstObserver(nextIndex));
+						} finally {
+							lock.unlock();
 						}
-						return Transaction.and(locks);
 					}
-				}
 
-				@Override
-				public Transaction tryLock() {
-					Transaction[] locks = new Transaction[theValues.length];
-					boolean firstLock = true;
-					for (int i = 0; i < locks.length; i++) {
-						if (firstLock) {
-							locks[i] = theValues[i].changes().lock();
-							firstLock = false;
-						} else {
-							locks[i] = theValues[i].changes().tryLock();
-							if (locks[i] == null) {
-								for (int j = i - 1; j >= 0; j--)
-									locks[j].close();
-								return null;
-							}
-						}
-						if (theTest.test(theValues[i].get()))
-							break;
+					private boolean allCompleted() {
+						for (boolean f : finished)
+							if (f)
+								return false;
+						return true;
 					}
-					return Transaction.and(locks);
 				}
-			};
+				valueSubs[0] = theValues[0].safe().changes().subscribe(new ElementFirstObserver(0));
+				return () -> {
+					for (int i = 0; i < valueSubs.length; i++) {
+						if (valueSubs[i] != null) {
+							valueSubs[i].unsubscribe();
+							valueSubs[i] = null;
+						}
+					}
+				};
+			}
+
+			@Override
+			public boolean isSafe() {
+				return true;
+			}
+
+			@Override
+			public Transaction lock() {
+				return Lockable.lockAll(null, () -> Arrays.asList(theValues), ObservableValue::noInitChanges);
+			}
+
+			@Override
+			public Transaction tryLock() {
+				return Lockable.tryLockAll(null, () -> Arrays.asList(theValues), ObservableValue::noInitChanges);
+			}
 		}
 	}
 }

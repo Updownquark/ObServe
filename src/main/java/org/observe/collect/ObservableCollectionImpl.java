@@ -815,7 +815,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public Observable<ObservableValueEvent<T>> changes() {
+		public Observable<ObservableValueEvent<T>> noInitChanges() {
 			return new Observable<ObservableValueEvent<T>>() {
 				@Override
 				public boolean isSafe() {
@@ -846,7 +846,6 @@ public final class ObservableCollectionImpl {
 							Map<Object, Object> values = evt.getRootCausable().onFinish(key);
 							values.put("x", newX);
 						});
-						fireInitialEvent(value.get(), null, observer::onNext);
 						init[0] = true;
 					}
 					return sub;
@@ -1227,6 +1226,11 @@ public final class ObservableCollectionImpl {
 					return Lockable.tryLockAll(Lockable.lockable(theLeft), Lockable.lockable(theRight));
 				}
 			};
+		}
+
+		@Override
+		public Observable<ObservableValueEvent<Boolean>> noInitChanges() {
+			return changes().noInit();
 		}
 	}
 

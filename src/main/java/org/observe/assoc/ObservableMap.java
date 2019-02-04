@@ -164,7 +164,7 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 			}
 
 			@Override
-			public Observable<ObservableValueEvent<V>> changes() {
+			public Observable<ObservableValueEvent<V>> noInitChanges() {
 				return new Observable<ObservableValueEvent<V>>() {
 					@Override
 					public Subscription subscribe(Observer<? super ObservableValueEvent<V>> observer) {
@@ -188,10 +188,6 @@ public interface ObservableMap<K, V> extends BetterMap<K, V> {
 							});
 							CollectionElement<Map.Entry<K, V>> entryEl = entrySet().getElement(new SimpleMapEntry<>((K) key, null), true);
 							exists[0] = entryEl != null;
-							ObservableValueEvent<V> evt = createInitialEvent(exists[0] ? entryEl.get().getValue() : null, null);
-							try (Transaction evtT = Causable.use(evt)) {
-								observer.onNext(evt);
-							}
 							return sub;
 						}
 					}
