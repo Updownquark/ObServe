@@ -74,11 +74,10 @@ public class ObservableUtils {
 			if (t != null)
 				t.close();
 		});
+		boolean[] isLinkChanging = new boolean[1]; // This boolean is thread-safed by the collections
 		Subscription sub1 = c1.subscribe(evt -> {
-			if (evt.hasCauseLike(
-				cause -> cause instanceof ObservableCollectionLinkEvent && ((ObservableCollectionLinkEvent) cause).isSource(c2)) != null) {
-				return; // The event is from c2's listener trying to adjust c1--don't make a cycle
-			}
+			if (isLinkChanging[0])
+				return;
 			// This outer transaction is because locking once for a series of changes
 			// is much more efficient than repeatedly locking for each change
 			evt.getRootCausable().onFinish(ck).computeIfAbsent("c2Transaction",
@@ -90,27 +89,30 @@ public class ObservableUtils {
 			ObservableCollectionLinkEvent linkEvt = new ObservableCollectionLinkEvent(c1, evt);
 			try (Transaction linkEvtT = Causable.use(linkEvt);
 				Transaction evtT = c2.lock(true, evt.getType() != CollectionChangeType.set, linkEvt)) {
-				switch (evt.getType()) {
-				case add:
-					c2.add(evt.getIndex(), map1.apply(evt.getNewValue()));
-					break;
-				case remove:
-					c2.remove(evt.getIndex());
-					break;
-				case set:
-					if (evt.getOldValue() != evt.getNewValue() || reMapOnUpdate1)
-						c2.set(evt.getIndex(), map1.apply(evt.getNewValue()));
-					else
-						c2.set(evt.getIndex(), c2.get(evt.getIndex()));
-					break;
+				isLinkChanging[0] = true;
+				try {
+					switch (evt.getType()) {
+					case add:
+						c2.add(evt.getIndex(), map1.apply(evt.getNewValue()));
+						break;
+					case remove:
+						c2.remove(evt.getIndex());
+						break;
+					case set:
+						if (evt.getOldValue() != evt.getNewValue() || reMapOnUpdate1)
+							c2.set(evt.getIndex(), map1.apply(evt.getNewValue()));
+						else
+							c2.set(evt.getIndex(), c2.get(evt.getIndex()));
+						break;
+					}
+				} finally {
+					isLinkChanging[0] = false;
 				}
 			}
 		}, true);
 		Subscription sub2 = c2.subscribe(evt -> {
-			if (evt.hasCauseLike(
-				cause -> cause instanceof ObservableCollectionLinkEvent && ((ObservableCollectionLinkEvent) cause).isSource(c1)) != null) {
-				return; // The event is from c1's listener trying to adjust c2--don't make a cycle
-			}
+			if (isLinkChanging[0])
+				return;
 			// This outer transaction is because locking once for a series of changes
 			// is much more efficient than repeatedly locking for each change
 			evt.getRootCausable().onFinish(ck).computeIfAbsent("c1Transaction",
@@ -119,19 +121,24 @@ public class ObservableUtils {
 			ObservableCollectionLinkEvent linkEvt = new ObservableCollectionLinkEvent(c2, evt);
 			try (Transaction linkEvtT = Causable.use(linkEvt);
 				Transaction evtT = c1.lock(true, evt.getType() != CollectionChangeType.set, linkEvt)) {
-				switch (evt.getType()) {
-				case add:
-					c1.add(evt.getIndex(), map2.apply(evt.getNewValue()));
-					break;
-				case remove:
-					c1.remove(evt.getIndex());
-					break;
-				case set:
-					if (evt.getOldValue() != evt.getNewValue() || reMapOnUpdate2)
-						c1.set(evt.getIndex(), map2.apply(evt.getNewValue()));
-					else
-						c1.set(evt.getIndex(), c1.get(evt.getIndex()));
-					break;
+				isLinkChanging[0] = true;
+				try {
+					switch (evt.getType()) {
+					case add:
+						c1.add(evt.getIndex(), map2.apply(evt.getNewValue()));
+						break;
+					case remove:
+						c1.remove(evt.getIndex());
+						break;
+					case set:
+						if (evt.getOldValue() != evt.getNewValue() || reMapOnUpdate2)
+							c1.set(evt.getIndex(), map2.apply(evt.getNewValue()));
+						else
+							c1.set(evt.getIndex(), c1.get(evt.getIndex()));
+						break;
+					}
+				} finally {
+					isLinkChanging[0] = false;
 				}
 			}
 		}, true);
