@@ -100,8 +100,18 @@ public class ObservableTextField<E> extends JTextField {
 
 			@Override
 			public void focusLost(FocusEvent e) {
-				if (revertOnFocusLoss && isDirty)
-					revertEdits();
+				if (revertOnFocusLoss && isDirty) {
+					isInternallyChanging = true;
+					try {
+						E parsed = theFormat.parse(getText());
+						theValue.set(parsed, e);
+					} catch (ParseException | UnsupportedOperationException | IllegalArgumentException ex) {
+						isInternallyChanging = false;
+						revertEdits();
+					} finally {
+						isInternallyChanging = false;
+					}
+				}
 			}
 		});
 	}
