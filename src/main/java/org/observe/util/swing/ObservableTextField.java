@@ -30,6 +30,7 @@ public class ObservableTextField<E> extends JTextField {
 
 	private boolean revertOnFocusLoss;
 	private String theError;
+	private boolean isExternallyEnabled;
 	private String theToolTip;
 
 	public ObservableTextField(SettableValue<E> value, Format<E> format, Observable<?> until) {
@@ -38,9 +39,10 @@ public class ObservableTextField<E> extends JTextField {
 		if (until == null)
 			until = Observable.empty;
 
-		setEnabled(false);
+		isExternallyEnabled = true;
+		super.setEnabled(false);
 		disabled_bg = getBackground();
-		setEnabled(true);
+		super.setEnabled(true);
 
 		revertOnFocusLoss = true;
 		theValue.changes().takeUntil(until).act(evt -> {
@@ -48,7 +50,7 @@ public class ObservableTextField<E> extends JTextField {
 				setValue(evt.getNewValue());
 		});
 		theValue.isEnabled().changes().takeUntil(until).act(evt -> {
-			setEnabled(evt.getNewValue() == null);
+			checkEnabled();
 			setErrorState(theError);
 		});
 		getDocument().addDocumentListener(new DocumentListener() {
@@ -100,14 +102,15 @@ public class ObservableTextField<E> extends JTextField {
 
 			@Override
 			public void focusLost(FocusEvent e) {
-				if (revertOnFocusLoss && isDirty) {
+				if (isDirty) {
 					isInternallyChanging = true;
 					try {
 						E parsed = theFormat.parse(getText());
 						theValue.set(parsed, e);
 					} catch (ParseException | UnsupportedOperationException | IllegalArgumentException ex) {
 						isInternallyChanging = false;
-						revertEdits();
+						if (revertOnFocusLoss)
+							revertEdits();
 					} finally {
 						isInternallyChanging = false;
 					}
@@ -119,6 +122,22 @@ public class ObservableTextField<E> extends JTextField {
 	public ObservableTextField<E> setRevertOnFocusLoss(boolean revert) {
 		revertOnFocusLoss = revert;
 		return this;
+	}
+
+	public ObservableTextField<E> withToolTip(String tooltip) {
+		setToolTipText(tooltip);
+		return this;
+	}
+
+	public ObservableTextField<E> withColumns(int cols) {
+		setColumns(cols);
+		return this;
+	}
+
+	@Override
+	public void setEnabled(boolean enabled) {
+		isExternallyEnabled = enabled;
+		checkEnabled();
 	}
 
 	@Override
@@ -171,6 +190,12 @@ public class ObservableTextField<E> extends JTextField {
 		} finally {
 			isInternallyChanging = false;
 		}
+	}
+
+	private void checkEnabled() {
+		boolean enabled = isExternallyEnabled && theValue.isEnabled().get() == null;
+		if (isEnabled() != enabled)
+			super.setEnabled(enabled);
 	}
 
 	private void setErrorState(String error) {
