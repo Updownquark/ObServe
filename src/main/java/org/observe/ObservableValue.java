@@ -1217,29 +1217,21 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 
 		@Override
 		public Observable<ObservableValueEvent<T>> changes() {
-			return new FirstValueChanges(true);
+			return new FirstValueChanges();
 		}
 
 		@Override
 		public Observable<ObservableValueEvent<T>> noInitChanges() {
-			return new FirstValueChanges(false);
+			return changes().noInit();
 		}
 
 		class FirstValueChanges implements Observable<ObservableValueEvent<T>> {
-			private final boolean withInitEvent;
-
-			FirstValueChanges(boolean withInitEvent) {
-				this.withInitEvent = withInitEvent;
-			}
-
 			@Override
 			public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
 				if (theValues.length == 0) {
-					if (withInitEvent) {
-						ObservableValueEvent<T> evt = createInitialEvent(null, null);
-						try (Transaction t = ObservableValueEvent.use(evt)) {
-							observer.onNext(evt);
-						}
+					ObservableValueEvent<T> evt = createInitialEvent(null, null);
+					try (Transaction t = ObservableValueEvent.use(evt)) {
+						observer.onNext(evt);
 					}
 					return Subscription.NONE;
 				}
@@ -1293,7 +1285,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 								else
 									toFire = null;
 							}
-							if (toFire != null && !(toFire.isInitial() && !withInitEvent)) {
+							if (toFire != null) {
 								hasFiredInit[0] = true;
 								try (Transaction t = ObservableValueEvent.use(toFire)) {
 									observer.onNext(toFire);
@@ -1326,12 +1318,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 				}
 				valueSubs[0] = theValues[0].safe().changes().subscribe(new ElementFirstObserver(0));
 				return () -> {
-					for (int i = 0; i < valueSubs.length; i++) {
-						if (valueSubs[i] != null) {
-							valueSubs[i].unsubscribe();
-							valueSubs[i] = null;
-						}
-					}
+					Subscription.forAll(valueSubs).unsubscribe();
 				};
 			}
 
