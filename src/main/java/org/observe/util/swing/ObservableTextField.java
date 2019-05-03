@@ -119,6 +119,14 @@ public class ObservableTextField<E> extends JTextField {
 		});
 	}
 
+	public SettableValue<E> getValue() {
+		return theValue;
+	}
+
+	public Format<E> getFormat() {
+		return theFormat;
+	}
+
 	public ObservableTextField<E> setRevertOnFocusLoss(boolean revert) {
 		revertOnFocusLoss = revert;
 		return this;
@@ -173,6 +181,25 @@ public class ObservableTextField<E> extends JTextField {
 		}
 	}
 
+	/**
+	 * @return The error for the current text of this field. Specifically, either:
+	 *         <ol>
+	 *         <li>The message in the {@link ParseException} thrown by this field's {@link #getFormat() format} when the text was parsed (or
+	 *         "Invalid text" if the exception message was null) or</li>
+	 *         <li>The message reported by the value ({@link SettableValue#isAcceptable(Object)}) for the parsed value</li>
+	 *         <ol>
+	 */
+	public String getEditError() {
+		return theError;
+	}
+
+	public void redisplayErrorTooltip() {
+		if (theError != null) {
+			super.setToolTipText(theError);
+			setTooltipVisible(true);
+		}
+	}
+
 	private void setValue(E value) {
 		String formatted;
 		try {
@@ -212,10 +239,9 @@ public class ObservableTextField<E> extends JTextField {
 		else
 			setBackground(normal_bg);
 
-		if (theError != null) {
-			super.setToolTipText(theError);
-			setTooltipVisible(true);
-		} else {
+		if (theError != null)
+			redisplayErrorTooltip();
+		else {
 			if (prevError)
 				setTooltipVisible(false);
 			if (disabled != null)

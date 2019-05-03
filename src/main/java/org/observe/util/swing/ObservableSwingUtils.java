@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import javax.swing.JCheckBox;
 import javax.swing.JOptionPane;
@@ -145,7 +146,7 @@ public class ObservableSwingUtils {
 	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to terminate the link
 	 */
 	public static Subscription intSpinnerFor(JSpinner spinner, String descrip, SettableValue<Integer> value) {
-		return spinnerFor(spinner, descrip, value, true);
+		return spinnerFor(spinner, descrip, value, Number::intValue);
 	}
 
 	/**
@@ -158,33 +159,36 @@ public class ObservableSwingUtils {
 	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to terminate the link
 	 */
 	public static Subscription doubleSpinnerFor(JSpinner spinner, String descrip, SettableValue<Double> value) {
-		return spinnerFor(spinner, descrip, value, false);
+		return spinnerFor(spinner, descrip, value, Number::doubleValue);
 	}
 
-	private static Subscription spinnerFor(JSpinner spinner, String descrip, SettableValue<? extends Number> value, boolean integer) {
+	/**
+	 * Links up a spinner's {@link JSpinner#getValue() value} with the value in a settable value, such that the user's interaction with the
+	 * spinner is reported by the value, and setting the value alters the spinner.
+	 *
+	 * @param spinner The spinner to control observably
+	 * @param descrip The description tooltip for the spinner when enabled
+	 * @param value The value observable to control the spinner
+	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to terminate the link
+	 */
+	public static <T> Subscription spinnerFor(JSpinner spinner, String descrip, SettableValue<T> value) {
+		return spinnerFor(spinner, descrip, value, v -> v);
+	}
+
+	public static <T> Subscription spinnerFor(JSpinner spinner, String descrip, SettableValue<T> value,
+		Function<? super T, ? extends T> purify) {
 		boolean[] callbackLock = new boolean[1];
 		ChangeListener changeListener = evt -> {
 			if (!callbackLock[0]) {
 				callbackLock[0] = true;
 				try {
-					if (integer) {
-						int newValue = ((Number) spinner.getValue()).intValue();
-						String accept = ((SettableValue<Integer>) value).isAcceptable(newValue);
-						if (accept != null) {
-							JOptionPane.showMessageDialog(spinner.getParent(), accept, "Unacceptable Value", JOptionPane.ERROR_MESSAGE);
-							spinner.setValue(value.get());
-						} else {
-							((SettableValue<Integer>) value).set(newValue, evt);
-						}
+					T newValue = purify.apply((T) spinner.getValue());
+					String accept = value.isAcceptable(newValue);
+					if (accept != null) {
+						JOptionPane.showMessageDialog(spinner.getParent(), accept, "Unacceptable Value", JOptionPane.ERROR_MESSAGE);
+						spinner.setValue(value.get());
 					} else {
-						double newValue = ((Number) spinner.getValue()).doubleValue();
-						String accept = ((SettableValue<Double>) value).isAcceptable(newValue);
-						if (accept != null) {
-							JOptionPane.showMessageDialog(spinner.getParent(), accept, "Unacceptable Value", JOptionPane.ERROR_MESSAGE);
-							spinner.setValue(value.get());
-						} else {
-							((SettableValue<Double>) value).set(newValue, evt);
-						}
+						value.set(newValue, evt);
 					}
 				} finally {
 					callbackLock[0] = false;
@@ -197,11 +201,7 @@ public class ObservableSwingUtils {
 			if (!callbackLock[0]) {
 				callbackLock[0] = true;
 				try {
-					Number newValue;
-					if (integer)
-						newValue = Integer.valueOf(evt.getNewValue().intValue());
-					else
-						newValue = Double.valueOf(evt.getNewValue().doubleValue());
+					T newValue = purify.apply(evt.getNewValue());
 					spinner.setValue(newValue);
 				} finally {
 					callbackLock[0] = false;
@@ -232,7 +232,7 @@ public class ObservableSwingUtils {
 	public static Subscription sliderFor(JSlider slider, String descrip, SettableValue<Integer> value) {
 		boolean[] callbackLock = new boolean[1];
 		ChangeListener changeListener = evt -> {
-			if (!callbackLock[0]) {
+			if (!callbackLock[0] && !slider.getValueIsAdjusting()) {
 				callbackLock[0] = true;
 				try {
 					int newValue = slider.getValue();

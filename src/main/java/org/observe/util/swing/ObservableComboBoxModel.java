@@ -48,10 +48,10 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 	 * @param selected The selected value that will control the combo box's selection and report it
 	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to to cease listening
 	 */
-	public static <T> Subscription comboFor(JComboBox<T> comboBox, String descrip, ObservableCollection<T> availableValues,
+	public static <T> Subscription comboFor(JComboBox<T> comboBox, String descrip, ObservableCollection<? extends T> availableValues,
 		SettableValue<? super T> selected) {
-		ObservableComboBoxModel<T> comboModel = new ObservableComboBoxModel<>(availableValues);
-		comboBox.setModel(comboModel);
+		ObservableComboBoxModel<? extends T> comboModel = new ObservableComboBoxModel<>(availableValues);
+		comboBox.setModel((ComboBoxModel<T>) comboModel);
 		boolean[] callbackLock = new boolean[1];
 		Consumer<String> checkEnabled = enabled -> {
 			if (enabled == null) {

@@ -90,14 +90,14 @@ public class ObservableDemoGui extends JPanel {
 				return;
 			theSelectedCategory.set((ValueCategory) evt.getItem(), evt);
 		});
-		theCategoryAddButton = new JButton("Add Category");
+		theCategoryAddButton = new JButton("Add CategoryRenderStrategy");
 		theCategoryAddButton.addActionListener(evt -> {
 			String text = theNewCategoryText.getText();
 			if (text == null || text.length() == 0)
 				return;
 			theCategoryAddObservable.onNext(text);
 		});
-		theCategoryRemoveButton = new JButton("Remove Selected Category");
+		theCategoryRemoveButton = new JButton("Remove Selected CategoryRenderStrategy");
 		theCategoryRemoveButton
 		.addActionListener(evt -> theCategoryRemoveObservable.onNext((ValueCategory) theCategoryCombo.getSelectedItem()));
 		ObservableCollection<Integer> selectedValues = ObservableCollection.flattenValue(theSelectedCategory.map(cat -> cat.values));

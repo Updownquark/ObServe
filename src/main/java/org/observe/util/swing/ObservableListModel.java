@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.swing.ListModel;
 import javax.swing.event.ListDataEvent;
@@ -29,6 +30,7 @@ public class ObservableListModel<E> implements ListModel<E> {
 	private final List<E> theCachedData;
 	private final List<ListDataListener> theListeners;
 	private Subscription theListening;
+	private final AtomicInteger thePendingUpdates;
 
 	/**
 	 * @param wrap
@@ -38,6 +40,7 @@ public class ObservableListModel<E> implements ListModel<E> {
 		theWrapped = wrap;
 		theCachedData = new ArrayList<>();
 		theListeners = new ArrayList<>();
+		thePendingUpdates = new AtomicInteger();
 	}
 
 	/** @return The observable list that this model wraps */
@@ -82,17 +85,27 @@ public class ObservableListModel<E> implements ListModel<E> {
 		});
 	}
 
+	/**
+	 * @return The number of update events that have occurred in the backing collection but are not yet represented in the EDT-safe list
+	 *         model
+	 */
+	public int getPendingUpdates() {
+		return thePendingUpdates.get();
+	}
+
 	private void beginListening() {
 		try (Transaction t = theWrapped.lock(false, null)) {
 			theCachedData.addAll(theWrapped);
 			theListening = theWrapped.changes().act(event -> {
 				// All internal data representation mutation and event firing must be done on the EDT
+				thePendingUpdates.getAndIncrement();
 				ObservableSwingUtils.onEQ(() -> handleEvent(event));
 			});
 		}
 	}
 
 	private void handleEvent(CollectionChangeEvent<E> event) {
+		thePendingUpdates.getAndDecrement();
 		Map<Integer, E> changesByIndex = new HashMap<>();
 		if (event.type != CollectionChangeType.remove) {
 			for (CollectionChangeEvent.ElementChange<E> el : event.elements)
