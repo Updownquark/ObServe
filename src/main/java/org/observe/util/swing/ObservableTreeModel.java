@@ -1,6 +1,5 @@
 package org.observe.util.swing;
 
-import java.awt.EventQueue;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -42,6 +41,17 @@ public abstract class ObservableTreeModel implements TreeModel {
 	@Override
 	public Object getRoot() {
 		return theRoot;
+	}
+
+	/** Fires a change event on the root (but not the entire tree) */
+	public void rootChanged() {
+		ObservableSwingUtils.onEQ(() -> {
+			TreeModelEvent event = new TreeModelEvent(theRoot, new Object[] { theRoot }, null, null);
+
+			for (TreeModelListener listener : theListeners) {
+				listener.treeNodesChanged(event);
+			}
+		});
 	}
 
 	@Override
@@ -112,7 +122,7 @@ public abstract class ObservableTreeModel implements TreeModel {
 					theChildNodes.add(newChild(value));
 				}
 				theChildrenSub = theChildren.changes().act(event -> {
-					onEDT(() -> {
+					ObservableSwingUtils.onEQ(() -> {
 						int[] indexes = event.getIndexes();
 						switch (event.type) {
 						case add:
@@ -139,13 +149,6 @@ public abstract class ObservableTreeModel implements TreeModel {
 					});
 				});
 			}
-		}
-
-		private void onEDT(Runnable action) {
-			if (EventQueue.isDispatchThread())
-				action.run();
-			else
-				EventQueue.invokeLater(action);
 		}
 
 		private TreeNode newChild(Object value) {
