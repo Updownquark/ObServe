@@ -1,7 +1,6 @@
 package org.observe.util.swing;
 
 import java.awt.EventQueue;
-import java.awt.Point;
 import java.awt.event.ItemEvent;
 import java.awt.event.ItemListener;
 import java.awt.event.MouseEvent;
@@ -122,14 +121,7 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 			MouseMotionListener popupMouseListener = new MouseMotionAdapter() {
 				@Override
 				public void mouseMoved(MouseEvent e) {
-					Point listLocation = popupList.getLocationOnScreen();
-					if (listLocation == null) {
-						popupList.setToolTipText(null);
-						return;
-					}
-					Point evtRelList = e.getLocationOnScreen();
-					evtRelList.translate(-listLocation.x, -listLocation.y);
-					int index = popupList.locationToIndex(evtRelList);
+					int index = popupList.locationToIndex(e.getPoint());
 					if (index < 0) {
 						popupList.setToolTipText(null);
 						return;
