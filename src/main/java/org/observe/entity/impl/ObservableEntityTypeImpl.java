@@ -4,7 +4,9 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.Map;
 import java.util.function.Function;
 
 import org.observe.entity.EntityCreator;
@@ -19,6 +21,7 @@ import org.qommons.Transaction;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterHashMap;
 import org.qommons.collect.BetterMap;
+import org.qommons.collect.ParameterSet;
 import org.qommons.collect.ParameterSet.ParameterMap;
 import org.qommons.collect.StampedLockingStrategy;
 
@@ -35,10 +38,13 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 
 	private final StampedLockingStrategy theLock;
 	private final BetterMap<Method, MethodHandle> theDefaultMethods;
+	private final E theProxy;
+	private final MethodRetrievingHandler theProxyHandler;
+	private final ParameterMap<ObservableEntityFieldType<? super E, ?>> theFieldsByGetter;
 
 	ObservableEntityTypeImpl(ObservableEntitySetImpl entitySet, String name, Class<E> entityType,
 		ObservableEntityTypeImpl<? super E> parent, ParameterMap<IdentityFieldType<? super E, ?>> idFields,
-		ParameterMap<ObservableEntityFieldType<? super E, ?>> fields) {
+		ParameterMap<ObservableEntityFieldType<? super E, ?>> fields, E proxy, MethodRetrievingHandler handler) {
 		theEntitySet = entitySet;
 		theName = name;
 		theEntityType = entityType;
@@ -55,6 +61,18 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 		theEntitiesById = BetterHashMap.build().unsafe().buildMap();
 		theEntitiesByProxy = new IdentityHashMap<>();
 		theDefaultMethods = BetterHashMap.build().buildMap();
+		theProxy = proxy;
+		theProxyHandler = handler;
+		if (theProxy != null) {
+			Map<String, ObservableEntityFieldType<? super E, ?>> getters = new HashMap<>();
+			for (ObservableEntityFieldType<? super E, ?> field : fields.allValues()) {
+				if (((ObservableEntitySetImpl.FieldTypeImpl<?, ?>) field).getFieldGetter() != null)
+					getters.put(((ObservableEntitySetImpl.FieldTypeImpl<?, ?>) field).getFieldGetter().getName(), field);
+			}
+			fieldsByGetter = ParameterSet.of(getters.keySet());
+
+		} else
+			theFieldsByGetter = null;
 	}
 
 	@Override
@@ -157,11 +175,13 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 
 	@Override
 	public <F> EntityValueAccess<E, F> fieldValue(ObservableEntityFieldType<? super E, F> field) {
+
 		// TODO Auto-generated method stub
 	}
 
 	@Override
 	public <F> ObservableEntityFieldType<? super E, F> getField(Function<? super E, F> fieldGetter) {
+
 		// TODO Auto-generated method stub
 	}
 
