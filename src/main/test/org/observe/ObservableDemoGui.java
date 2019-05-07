@@ -1,7 +1,6 @@
 package org.observe;
 
 import java.awt.BorderLayout;
-import java.awt.event.ItemEvent;
 
 import javax.swing.GroupLayout;
 import javax.swing.JButton;
@@ -17,8 +16,8 @@ import javax.swing.JTree;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.tree.TreePath;
 
-import org.observe.assoc.ObservableMultiMap;
 import org.observe.collect.ObservableCollection;
+import org.observe.util.TypeTokens;
 import org.observe.util.swing.ObservableComboBoxModel;
 import org.observe.util.swing.ObservableListModel;
 import org.observe.util.swing.ObservableListSelectionModel;
@@ -74,8 +73,8 @@ public class ObservableDemoGui extends JPanel {
 	}
 
 	private void initObservables() {
-		theCategories = ObservableCollection.create(TypeToken.of(ValueCategory.class));
-		theSelectedCategory = new SimpleSettableValue<>(new TypeToken<ValueCategory>() {}, true);
+		theCategories = ObservableCollection.create(TypeTokens.get().of(ValueCategory.class));
+		theSelectedCategory = new SimpleSettableValue<>(TypeTokens.get().of(ValueCategory.class), true);
 		theCategoryAddObservable = new SimpleObservable<>();
 		theCategoryRemoveObservable = new SimpleObservable<>();
 		theValueAddObservable = new SimpleObservable<>();
@@ -84,12 +83,8 @@ public class ObservableDemoGui extends JPanel {
 
 	private void initComponents() {
 		theNewCategoryText = new JTextField();
-		theCategoryCombo = new JComboBox<>(new ObservableComboBoxModel<>(theCategories));
-		theCategoryCombo.addItemListener(evt -> {
-			if (evt.getStateChange() != ItemEvent.SELECTED)
-				return;
-			theSelectedCategory.set((ValueCategory) evt.getItem(), evt);
-		});
+		theCategoryCombo = new JComboBox<>();
+		ObservableComboBoxModel.comboFor(theCategoryCombo, "Select a category", cat -> cat.toString(), theCategories, theSelectedCategory);
 		theCategoryAddButton = new JButton("Add CategoryRenderStrategy");
 		theCategoryAddButton.addActionListener(evt -> {
 			String text = theNewCategoryText.getText();
@@ -98,9 +93,9 @@ public class ObservableDemoGui extends JPanel {
 			theCategoryAddObservable.onNext(text);
 		});
 		theCategoryRemoveButton = new JButton("Remove Selected CategoryRenderStrategy");
-		theCategoryRemoveButton
-		.addActionListener(evt -> theCategoryRemoveObservable.onNext((ValueCategory) theCategoryCombo.getSelectedItem()));
-		ObservableCollection<Integer> selectedValues = ObservableCollection.flattenValue(theSelectedCategory.map(cat -> cat.values));
+		theCategoryRemoveButton.addActionListener(evt -> theCategoryRemoveObservable.onNext(theSelectedCategory.get()));
+		ObservableCollection<Integer> selectedValues = ObservableCollection.flattenValue(//
+			theSelectedCategory.map(cat -> cat == null ? ObservableCollection.of(TypeTokens.get().INT) : cat.values));
 		theValueList = new JList<>(new ObservableListModel<>(selectedValues));
 		ObservableListSelectionModel<Integer> selectionModel = new ObservableListSelectionModel<>(selectedValues, null);
 		theValueList.setSelectionModel(selectionModel);
@@ -131,35 +126,36 @@ public class ObservableDemoGui extends JPanel {
 		});
 		theValueTree.setEditable(false);
 
-		theGroupedValueTree = new JTree(new ObservableTreeModel("Grouped Values") {
-			private ObservableMultiMap<Long, Integer> theMap;
-
-			{
-				ObservableCollection<Integer> values = ObservableCollection.flattenValue(theSelectedCategory.map(cat -> cat.values));
-				theMap = values.flow()
-					.groupBy(TypeToken.of(Long.class), //
-						v -> Long.valueOf(v % 5))
-					.gather(options -> options.useFirst(true));
-			}
-
-			@Override
-			public boolean isLeaf(Object node) {
-				return node instanceof Integer;
-			}
-
-			@Override
-			public void valueForPathChanged(TreePath path, Object newValue) {}
-
-			@Override
-			protected ObservableCollection<?> getChildren(Object parent) {
-				if (parent instanceof String)
-					return theMap.keySet();
-				else if (parent instanceof Long)
-					return theMap.get(parent);
-				else
-					return ObservableCollection.of(TypeToken.of(Void.class));
-			}
-		});
+		// This tree uses the groupBy functionality of collection flow, which is currently quite broken
+		// theGroupedValueTree = new JTree(new ObservableTreeModel("Grouped Values") {
+		// private ObservableMultiMap<Long, Integer> theMap;
+		//
+		// {
+		// ObservableCollection<Integer> values = ObservableCollection.flattenValue(theSelectedCategory.map(cat -> cat.values));
+		// theMap = values.flow()
+		// .groupBy(TypeToken.of(Long.class), //
+		// v -> Long.valueOf(v % 5))
+		// .gather(options -> options.useFirst(true));
+		// }
+		//
+		// @Override
+		// public boolean isLeaf(Object node) {
+		// return node instanceof Integer;
+		// }
+		//
+		// @Override
+		// public void valueForPathChanged(TreePath path, Object newValue) {}
+		//
+		// @Override
+		// protected ObservableCollection<?> getChildren(Object parent) {
+		// if (parent instanceof String)
+		// return theMap.keySet();
+		// else if (parent instanceof Long)
+		// return theMap.get(parent);
+		// else
+		// return ObservableCollection.of(TypeToken.of(Void.class));
+		// }
+		// });
 	}
 
 	private void layoutComponents() {
@@ -170,7 +166,7 @@ public class ObservableDemoGui extends JPanel {
 		mainSplit.setRightComponent(treeSplit);
 		JScrollPane treeScroll = new JScrollPane(theValueTree);
 		treeSplit.setTopComponent(treeScroll);
-		treeScroll = new JScrollPane(theGroupedValueTree);
+		treeScroll = new JScrollPane(/*theGroupedValueTree*/);
 		treeSplit.setBottomComponent(treeScroll);
 		JPanel controlPanel = new JPanel();
 		GroupLayout controlLayout = new GroupLayout(controlPanel);

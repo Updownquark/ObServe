@@ -1,5 +1,7 @@
 package org.observe;
 
+import java.util.Collection;
+
 /** A subscription to an observable */
 @FunctionalInterface
 public interface Subscription {
@@ -17,6 +19,14 @@ public interface Subscription {
 					subs[s] = null;
 			}
 		};
+	}
+
+	/**
+	 * @param subs The subscriptions to bundle
+	 * @return A single subscription whose {@link #unsubscribe()} method unsubscribes all of the given subscriptions
+	 */
+	static Subscription forAll(Collection<? extends Subscription> subs) {
+		return forAll(subs.toArray(new Subscription[subs.size()]));
 	}
 
 	/**

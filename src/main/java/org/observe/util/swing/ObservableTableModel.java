@@ -1,7 +1,9 @@
 package org.observe.util.swing;
 
+import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
+import java.awt.event.MouseMotionListener;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
@@ -230,7 +232,8 @@ public class ObservableTableModel<R> implements TableModel {
 				CategoryRenderStrategy<? super R, ?> column = model.getColumn(c);
 				TableColumn tblColumn = table.getColumnModel().getColumn(c);
 				tblColumn.setIdentifier(column);
-				tblColumn.setCellEditor(column.getMutator().getEditor());
+				tblColumn.setCellEditor(column.getMutator().getEditor()//
+					.withValueTooltip((row, col) -> ((CategoryRenderStrategy<R, Object>) column).getTooltip((R) row, col)));
 				// TODO Add other column stuff, esp. renderer
 			}
 			MouseListener ml = new MouseListener() {
@@ -315,6 +318,44 @@ public class ObservableTableModel<R> implements TableModel {
 			};
 			table.addMouseListener(ml);
 			subs.add(() -> table.removeMouseListener(ml));
+			MouseMotionListener tableMML = new MouseAdapter() {
+				@Override
+				public void mouseMoved(MouseEvent evt) {
+					int row = table.rowAtPoint(evt.getPoint());
+					if (row < 0) {
+						table.setToolTipText(null);
+						return;
+					}
+					int column = table.columnAtPoint(evt.getPoint());
+					if (column < 0) {
+						table.setToolTipText(null);
+						return;
+					}
+					CategoryRenderStrategy<? super R, Object> category = (CategoryRenderStrategy<? super R, Object>) model
+						.getColumn(column);
+					row = table.convertRowIndexToModel(row);
+					column = table.convertColumnIndexToModel(column);
+					R rowValue = model.getRow(row);
+					table.setToolTipText(category.getTooltip(rowValue, category.getCategoryValue(rowValue)));
+				}
+			};
+			table.addMouseMotionListener(tableMML);
+			subs.add(() -> table.removeMouseMotionListener(tableMML));
+			MouseMotionListener headerMML = new MouseAdapter() {
+				@Override
+				public void mouseMoved(MouseEvent evt) {
+					int column = table.columnAtPoint(evt.getPoint());
+					if (column < 0) {
+						table.getTableHeader().setToolTipText(null);
+						return;
+					}
+					CategoryRenderStrategy<? super R, Object> category = (CategoryRenderStrategy<? super R, Object>) model
+						.getColumn(column);
+					table.getTableHeader().setToolTipText(category.getHeaderTooltip());
+				}
+			};
+			table.getTableHeader().addMouseMotionListener(headerMML);
+			subs.add(() -> table.getTableHeader().removeMouseMotionListener(headerMML));
 		}
 		return Subscription.forAll(subs.toArray(new Subscription[subs.size()]));
 	}

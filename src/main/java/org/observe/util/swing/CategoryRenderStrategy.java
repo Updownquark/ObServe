@@ -268,6 +268,10 @@ public class CategoryRenderStrategy<R, C> {
 		return this;
 	}
 
+	public String getHeaderTooltip() {
+		return theHeaderTooltip;
+	}
+
 	public CategoryMouseListener<? super R, ? super C> getMouseListener() {
 		return theMouseListener;
 	}
