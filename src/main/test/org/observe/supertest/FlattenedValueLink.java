@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 import org.observe.ObservableValue;
@@ -15,14 +16,17 @@ import org.observe.collect.ObservableCollectionEvent;
 import org.observe.collect.ObservableSet;
 import org.observe.collect.ObservableSortedSet;
 import org.observe.supertest.ObservableChainTester.TestValueType;
+import org.qommons.Lockable;
 import org.qommons.Ternian;
 import org.qommons.TestHelper;
+import org.qommons.Transaction;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
 import com.google.common.reflect.TypeToken;
 
 public class FlattenedValueLink<E> extends AbstractObservableCollectionLink<E, E> {
 	private final SimpleSettableValue<? extends ObservableCollection<E>> theValue;
+	private ReentrantReadWriteLock theValueLock;
 	private final List<AbstractObservableCollectionLink<E, E>> theContents;
 	private final boolean isDistinct;
 	private final boolean isSorted;
@@ -33,10 +37,12 @@ public class FlattenedValueLink<E> extends AbstractObservableCollectionLink<E, E
 	private LinkElement theLastAddedSource;
 
 	public FlattenedValueLink(ObservableCollectionChainLink<?, E> parent, TestValueType type,
-		SimpleSettableValue<? extends ObservableCollection<E>> value, boolean distinct, boolean sorted, Comparator<? super E> compare,
+		SimpleSettableValue<? extends ObservableCollection<E>> value, ReentrantReadWriteLock lock, boolean distinct, boolean sorted,
+			Comparator<? super E> compare,
 			CollectionDataFlow<?, ?, E> flow, TestHelper helper, int depth) {
 		super(parent, type, flow, helper, true);
 		theValue = value;
+		theValueLock = lock;
 		theContents = new ArrayList<>();
 		isDistinct = distinct;
 		isSorted = sorted;
@@ -70,6 +76,19 @@ public class FlattenedValueLink<E> extends AbstractObservableCollectionLink<E, E
 			for (int i = 0; i < getElements().size(); i++)
 				mapSourceElement(selected.getElements().get(i), getElements().get(i));
 		}
+	}
+
+	@Override
+	public Transaction lock() {
+		// If we just let the superclass do this, the value would be locked read-only
+		// (which is correct, since modifying a flattened collection cannot change the value)
+		// Plus, since the contents can change, we need to lock all possible contents of the value
+		// So we need to lock the value and all contents both for write
+		Transaction valueT = Lockable.lockable(theValueLock, true).lock();
+		Transaction[] collT = new Transaction[theContents.size()];
+		for (int i = 0; i < collT.length; i++)
+			collT[i] = theContents.get(i).lock();
+		return Transaction.and(valueT, Transaction.and(collT));
 	}
 
 	@Override
@@ -108,10 +127,7 @@ public class FlattenedValueLink<E> extends AbstractObservableCollectionLink<E, E
 		if (helper.isReproducing())
 			System.out.println("Switching from [" + preSelected + "]:" + pre + " to [" + theSelected + "]:" + post);
 		List<LinkElement> linkElCopy = new ArrayList<>(getElements());
-		if (theSelected < theContents.size())
-			((SimpleSettableValue<ObservableCollection<E>>) theValue).set(theContents.get(theSelected).getCollection(), null);
-		else
-			theValue.set(null, null);
+		((SimpleSettableValue<ObservableCollection<E>>) theValue).set(post == null ? null : post.getCollection(), null);
 		if (preSelected == theSelected)
 			return;
 		List<CollectionOp<E>> ops = new ArrayList<>();
@@ -211,17 +227,18 @@ public class FlattenedValueLink<E> extends AbstractObservableCollectionLink<E, E
 			compare = SortedCollectionLink.compare(type, helper);
 
 		SimpleSettableValue<? extends ObservableCollection<E>> value;
+		ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 		ObservableCollection<E> collection;
 		if (sorted) {
-			value = new SimpleSettableValue<>(new TypeToken<ObservableSortedSet<E>>() {}, true);
+			value = new SimpleSettableValue<>(new TypeToken<ObservableSortedSet<E>>() {}, true, lock, null);
 			collection = ObservableSortedSet.flattenValue((ObservableValue<ObservableSortedSet<E>>) value, compare);
 		} else if (distinct) {
-			value = new SimpleSettableValue<>(new TypeToken<ObservableSet<E>>() {}, true);
+			value = new SimpleSettableValue<>(new TypeToken<ObservableSet<E>>() {}, true, lock, null);
 			collection = ObservableSet.flattenValue((ObservableValue<ObservableSet<E>>) value);
 		} else {
-			value = new SimpleSettableValue<>(new TypeToken<ObservableCollection<E>>() {}, true);
+			value = new SimpleSettableValue<>(new TypeToken<ObservableCollection<E>>() {}, true, lock, null);
 			collection = ObservableCollection.flattenValue(value);
 		}
-		return new FlattenedValueLink<>(parent, type, value, distinct, sorted, compare, collection.flow(), helper, depth);
+		return new FlattenedValueLink<>(parent, type, value, lock, distinct, sorted, compare, collection.flow(), helper, depth);
 	}
 }

@@ -100,7 +100,7 @@ public class ObservableChainTester implements Testable {
 		TestHelper.TestSummary summary = TestHelper.createTester(getClass())//
 			/**/.withRandomCases(-1).withMaxTotalDuration(testDuration)//
 			/**/.withMaxFailures(maxFailures)//
-			/**/.withMaxCheckInDuration(Duration.ofSeconds(5))// Shouldn't go for long without placemarkers, prevent deadlocks/inf. loops
+			/**/.withMaxProgressInterval(Duration.ofSeconds(5))// Shouldn't go for long without placemarkers, prevent deadlocks/inf. loops
 			/**/.withPersistenceDir(new File("src/main/test/org/observe/supertest"), false)//
 			/**/.withPlacemarks("Transaction", "Modification")
 			/**/.withDebug(true)//
@@ -144,13 +144,13 @@ public class ObservableChainTester implements Testable {
 			ObservableChainLink<?> targetLink = theChain.get(linkIndex);
 			boolean finished = false;
 			boolean useTransaction = helper.getBoolean(.75);
+			int transactionMods = (int) helper.getDouble(1, 10, 26);
+			if (transactionMods == 25)
+				transactionMods = 0; // Want the probability of no-op transactions to be small but present
+			if (helper.isReproducing())
+				System.out.println("Modification set " + (tri + 1) + ": " + transactionMods + " modifications on link " + linkIndex);
+			helper.placemark("Transaction");
 			try (Transaction t = useTransaction ? targetLink.lock() : Transaction.NONE) {
-				int transactionMods = (int) helper.getDouble(1, 10, 26);
-				if (transactionMods == 25)
-					transactionMods = 0; // Want the probability of no-op transactions to be small but present
-				if (helper.isReproducing())
-					System.out.println("Modification set " + (tri + 1) + ": " + transactionMods + " modifications on link " + linkIndex);
-				helper.placemark("Transaction");
 				for (int transactionTri = 0; transactionTri < transactionMods; transactionTri++) {
 					String preValue = toString();
 					if (helper.isReproducing())
