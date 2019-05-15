@@ -100,6 +100,7 @@ public class ObservableChainTester implements Testable {
 		TestHelper.TestSummary summary = TestHelper.createTester(getClass())//
 			/**/.withRandomCases(-1).withMaxTotalDuration(testDuration)//
 			/**/.withMaxFailures(maxFailures)//
+			/**/.withMaxCheckInDuration(Duration.ofSeconds(5))// Shouldn't go for long without placemarkers, prevent deadlocks/inf. loops
 			/**/.withPersistenceDir(new File("src/main/test/org/observe/supertest"), false)//
 			/**/.withPlacemarks("Transaction", "Modification")
 			/**/.withDebug(true)//
