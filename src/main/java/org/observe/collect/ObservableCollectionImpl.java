@@ -564,7 +564,7 @@ public final class ObservableCollectionImpl {
 								ElementId newId = element == null ? null : element.getElementId();
 								E oldVal = oldElement == null ? theDefault.get() : oldElement.get();
 								E newVal = element == null ? theDefault.get() : element.get();
-								if (Objects.equals(oldId, newId))
+								if (Objects.equals(oldId, newId) && oldVal == newVal)
 									return;
 								theCurrentElement = element;
 								ObservableElementEvent<E> evt = createChangeEvent(oldId, oldVal, newId, newVal, cause);
