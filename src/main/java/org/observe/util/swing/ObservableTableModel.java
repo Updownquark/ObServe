@@ -1,20 +1,29 @@
 package org.observe.util.swing;
 
+import java.awt.Component;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.awt.event.MouseMotionListener;
+import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.function.Function;
 
 import javax.swing.JTable;
+import javax.swing.ListModel;
+import javax.swing.event.ChangeEvent;
 import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
+import javax.swing.event.ListSelectionEvent;
+import javax.swing.event.TableColumnModelEvent;
+import javax.swing.event.TableColumnModelListener;
 import javax.swing.event.TableModelEvent;
 import javax.swing.event.TableModelListener;
+import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumn;
+import javax.swing.table.TableColumnModel;
 import javax.swing.table.TableModel;
 
 import org.observe.Subscription;
@@ -28,7 +37,8 @@ import org.qommons.collect.MutableCollectionElement;
 import com.google.common.reflect.TypeToken;
 
 /**
- * A simple swing table model backed by an observable list
+ * A simple swing table model backed by an observable collection of {@link #getRows() row values} and an observable collection of
+ * {@link #getColumns() column definitions}
  *
  * @param <R> The type of the backing row data
  */
@@ -125,9 +135,19 @@ public class ObservableTableModel<R> implements TableModel {
 		return theRows;
 	}
 
+	/** @return This table model's rows, in {@link ListModel} form */
+	public ObservableListModel<R> getRowModel() {
+		return theRowModel;
+	}
+
 	/** @return This table model's columns */
 	public ObservableCollection<? extends CategoryRenderStrategy<? super R, ?>> getColumns() {
 		return theColumns;
+	}
+
+	/** @return This table model's columns, in {@link ListModel} form */
+	public ObservableListModel<? extends CategoryRenderStrategy<? super R, ?>> getColumnModel() {
+		return theColumnModel;
 	}
 
 	@Override
@@ -135,10 +155,18 @@ public class ObservableTableModel<R> implements TableModel {
 		return theRowModel.getSize();
 	}
 
+	/**
+	 * @param index The index of the row to get
+	 * @return The row value at the given index
+	 */
 	public R getRow(int index) {
 		return theRowModel.getElementAt(index);
 	}
 
+	/**
+	 * @param index The index of the row to get
+	 * @return The column definition at the given index
+	 */
 	public CategoryRenderStrategy<? super R, ?> getColumn(int index) {
 		return theColumnModel.getElementAt(index);
 	}
@@ -225,17 +253,69 @@ public class ObservableTableModel<R> implements TableModel {
 		}
 	}
 
+	/**
+	 * @param <R> The row-type of the table model
+	 * @param table The JTable to link with the supplementary (more than just model) functionality of the {@link ObservableTableModel}
+	 * @param model The {@link ObservableTableModel} to control the table with
+	 * @return A subscription which, when {@link Subscription#unsubscribe() unsubscribed}, will stop the non-model control of the model over
+	 *         the table
+	 */
 	public static <R> Subscription hookUp(JTable table, ObservableTableModel<R> model) {
 		LinkedList<Subscription> subs = new LinkedList<>();
 		try (Transaction rowT = model.getRows().lock(false, null); Transaction colT = model.getColumns().lock(false, null)) {
+			if (table.getModel() != model)
+				table.setModel(model);
 			for (int c = 0; c < model.getColumnCount(); c++) {
 				CategoryRenderStrategy<? super R, ?> column = model.getColumn(c);
 				TableColumn tblColumn = table.getColumnModel().getColumn(c);
-				tblColumn.setIdentifier(column);
-				tblColumn.setCellEditor(column.getMutator().getEditor()//
-					.withValueTooltip((row, col) -> ((CategoryRenderStrategy<R, Object>) column).getTooltip((R) row, col)));
-				// TODO Add other column stuff, esp. renderer
+				hookUp(tblColumn, column, model);
 			}
+			TableColumnModelListener colListener = new TableColumnModelListener() {
+				@Override
+				public void columnAdded(TableColumnModelEvent e) {
+					hookUp(table.getColumnModel().getColumn(e.getToIndex()), model.getColumn(e.getToIndex()), model);
+				}
+
+				@Override
+				public void columnRemoved(TableColumnModelEvent e) {
+				}
+
+				@Override
+				public void columnMoved(TableColumnModelEvent e) {
+				}
+
+				@Override
+				public void columnSelectionChanged(ListSelectionEvent e) {}
+
+				@Override
+				public void columnMarginChanged(ChangeEvent e) {
+				}
+			};
+			PropertyChangeListener colModelListener = evt -> {
+				((TableColumnModel) evt.getOldValue()).removeColumnModelListener(colListener);
+				((TableColumnModel) evt.getNewValue()).addColumnModelListener(colListener);
+			};
+			table.getColumnModel().addColumnModelListener(colListener);
+			table.addPropertyChangeListener("columnModel", colModelListener);
+			ListDataListener columnListener = new ListDataListener() {
+				@Override
+				public void intervalRemoved(ListDataEvent e) {}
+
+				@Override
+				public void intervalAdded(ListDataEvent e) {}
+
+				@Override
+				public void contentsChanged(ListDataEvent e) {
+					for (int i = e.getIndex0(); i <= e.getIndex1(); i++)
+						hookUp(table.getColumnModel().getColumn(i), model.theColumnModel.getElementAt(i), model);
+				}
+			};
+			model.getColumnModel().addListDataListener(columnListener);
+			subs.add(() -> {
+				table.removePropertyChangeListener("columnModel", colModelListener);
+				table.getColumnModel().removeColumnModelListener(colListener);
+				model.getColumnModel().removeListDataListener(columnListener);
+			});
 			MouseListener ml = new MouseListener() {
 				class MouseClickStruct {
 					final CollectionElement<R> row;
@@ -358,5 +438,39 @@ public class ObservableTableModel<R> implements TableModel {
 			subs.add(() -> table.getTableHeader().removeMouseMotionListener(headerMML));
 		}
 		return Subscription.forAll(subs.toArray(new Subscription[subs.size()]));
+	}
+
+	private static <R, C> void hookUp(TableColumn tblColumn, CategoryRenderStrategy<? super R, C> column, ObservableTableModel<R> model) {
+		tblColumn.setIdentifier(column);
+		if (column.getRenderer() != null)
+			tblColumn.setCellRenderer(new ObservableTableCellRenderer<>(model, column.getRenderer()));
+		if (column.getMutator().getEditor() != null)
+			tblColumn.setCellEditor(column.getMutator().getEditor()//
+				.withValueTooltip((row, col) -> ((CategoryRenderStrategy<R, Object>) column).getTooltip((R) row, col)));
+		if (column.getMinWidth() >= 0)
+			tblColumn.setMinWidth(column.getMinWidth());
+		if (column.getPrefWidth() >= 0)
+			tblColumn.setPreferredWidth(column.getPrefWidth());
+		if (column.getMaxWidth() >= 0)
+			tblColumn.setMaxWidth(column.getMaxWidth());
+		tblColumn.setResizable(column.isResizable());
+		// TODO Add other column stuff
+	}
+
+	private static class ObservableTableCellRenderer<R, C> implements TableCellRenderer {
+		private final ObservableTableModel<R> theModel;
+		private final ObservableCellRenderer<? super R, C> theRenderer;
+
+		ObservableTableCellRenderer(ObservableTableModel<R> model, ObservableCellRenderer<? super R, C> renderer) {
+			theModel = model;
+			theRenderer = renderer;
+		}
+
+		@Override
+		public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row,
+			int column) {
+			return theRenderer.getCellRendererComponent(table, //
+				() -> theModel.getRow(row), (C) value, isSelected, false, true, hasFocus, row, column);
+		}
 	}
 }

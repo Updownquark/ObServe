@@ -14,6 +14,12 @@ import org.qommons.io.Format;
 
 import com.google.common.reflect.TypeToken;
 
+/**
+ * Contains utilities to render and edit values in a table column (for a table whose model is an {@link ObservableTableModel})
+ *
+ * @param <R> The type of the table row values
+ * @param <C> The type of the column value
+ */
 public class CategoryRenderStrategy<R, C> {
 	public class CategoryMutationStrategy<R, C> {
 		private BiPredicate<? super R, ? super C> theEditability;
@@ -209,12 +215,19 @@ public class CategoryRenderStrategy<R, C> {
 	private CategoryMouseListener<? super R, ? super C> theMouseListener;
 	private String theHeaderTooltip;
 	private BiFunction<? super R, ? super C, String> theTooltip;
+	private ObservableCellRenderer<? super R, ? super C> theRenderer;
+	private int theMinWidth;
+	private int thePrefWidth;
+	private int theMaxWidth;
+	private boolean isResizable;
 
 	public CategoryRenderStrategy(String name, TypeToken<C> type, Function<? super R, ? extends C> accessor) {
 		theName = name;
 		theType = type;
 		theAccessor = accessor;
 		theMutator = new CategoryMutationStrategy<>();
+		theMinWidth = thePrefWidth = theMaxWidth = -1;
+		isResizable = true;
 	}
 
 	public String getName() {
@@ -274,5 +287,72 @@ public class CategoryRenderStrategy<R, C> {
 
 	public CategoryMouseListener<? super R, ? super C> getMouseListener() {
 		return theMouseListener;
+	}
+
+	public CategoryRenderStrategy<R, C> withRenderer(ObservableCellRenderer<? super R, ? super C> renderer) {
+		theRenderer = renderer;
+		return this;
+	}
+
+	public CategoryRenderStrategy<R, C> formatText(BiFunction<? super R, ? super C, String> format) {
+		theRenderer = ObservableCellRenderer.formatted(format);
+		return this;
+	}
+
+	public CategoryRenderStrategy<R, C> formatText(Function<? super C, String> format) {
+		theRenderer = ObservableCellRenderer.formatted(format);
+		return this;
+	}
+
+	public ObservableCellRenderer<? super R, ? super C> getRenderer() {
+		return theRenderer;
+	}
+
+	public CategoryRenderStrategy<R, C> withWidth(String type, int width) {
+		switch (type.toLowerCase()) {
+		case "min":
+		case "minimum":
+			theMinWidth = width;
+			break;
+		case "pref":
+		case "preferred":
+			thePrefWidth = width;
+			break;
+		case "max":
+		case "maximum":
+			theMaxWidth = width;
+			break;
+		default:
+			throw new IllegalArgumentException("Unrecognized width type: " + type + "; use min, max, or pref");
+		}
+		return this;
+	}
+
+	public CategoryRenderStrategy<R, C> withWidths(int min, int pref, int max) {
+		theMinWidth = min;
+		thePrefWidth = pref;
+		theMaxWidth = max;
+		return this;
+	}
+
+	public int getMinWidth() {
+		return theMinWidth;
+	}
+
+	public int getPrefWidth() {
+		return thePrefWidth;
+	}
+
+	public int getMaxWidth() {
+		return theMaxWidth;
+	}
+
+	public boolean isResizable() {
+		return isResizable;
+	}
+
+	public CategoryRenderStrategy<R, C> setResizable(boolean resizable) {
+		isResizable = resizable;
+		return this;
 	}
 }
