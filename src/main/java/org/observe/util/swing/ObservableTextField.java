@@ -20,6 +20,7 @@ import org.qommons.io.Format;
 public class ObservableTextField<E> extends JTextField {
 	private final SettableValue<E> theValue;
 	private final Format<E> theFormat;
+	private boolean reformatOnCommit;
 	private boolean isInternallyChanging;
 	private boolean isDirty;
 
@@ -38,6 +39,7 @@ public class ObservableTextField<E> extends JTextField {
 		theFormat = format;
 		if (until == null)
 			until = Observable.empty;
+		reformatOnCommit = true;
 
 		isExternallyEnabled = true;
 		super.setEnabled(false);
@@ -127,6 +129,11 @@ public class ObservableTextField<E> extends JTextField {
 		return theFormat;
 	}
 
+	public ObservableTextField<E> setReformatOnCommit(boolean format) {
+		reformatOnCommit = format;
+		return this;
+	}
+
 	public ObservableTextField<E> setRevertOnFocusLoss(boolean revert) {
 		revertOnFocusLoss = revert;
 		return this;
@@ -174,6 +181,8 @@ public class ObservableTextField<E> extends JTextField {
 		isInternallyChanging = true;
 		try {
 			theValue.set(parsed, cause);
+			if (reformatOnCommit)
+				setText(theFormat.format(parsed));
 		} catch (IllegalArgumentException | UnsupportedOperationException e) {
 			setErrorState(e.getMessage());
 		} finally {
