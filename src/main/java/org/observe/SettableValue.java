@@ -45,6 +45,19 @@ public interface SettableValue<T> extends ObservableValue<T> {
 	<V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException;
 
 	/**
+	 * @param <V> The type of the value to set
+	 * @param value The value to assign to this value
+	 * @param cause Something that may have caused this change
+	 * @return The value that was previously set for in this container
+	 * @throws IllegalArgumentException If the value is not acceptable or setting it fails
+	 * @throws UnsupportedOperationException If this operation is not supported (e.g. because this value is {@link #isEnabled() disabled}
+	 */
+	default <V extends T> SettableValue<T> withValue(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+		set(value, cause);
+		return this;
+	}
+
+	/**
 	 * @param <V> The type of the value to check
 	 * @param value The value to check
 	 * @return null if the value is not known to be unacceptable for this value, or an error text if it is known to be unacceptable. A null
