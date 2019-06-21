@@ -1,6 +1,5 @@
 package org.observe.util.swing;
 
-import java.awt.EventQueue;
 import java.awt.event.ItemEvent;
 import java.awt.event.ItemListener;
 import java.awt.event.MouseEvent;
@@ -81,9 +80,6 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		comboBox.setModel((ComboBoxModel<T>) comboModel);
 		boolean[] callbackLock = new boolean[1];
 		Consumer<String> checkEnabled = enabled -> {
-			if (enabled == null) {
-				enabled = selected.isAcceptable((T) comboBox.getSelectedItem());
-			}
 			comboBox.setEnabled(enabled == null);
 			comboBox.setToolTipText(enabled == null ? descrip : enabled);
 		};
@@ -105,7 +101,7 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 		subs.add(selected.changes().act(evt -> {
 			if (!callbackLock[0]) {
 				String enabled = selected.isEnabled().get();
-				EventQueue.invokeLater(() -> {
+				ObservableSwingUtils.onEQ(() -> {
 					callbackLock[0] = true;
 					try {
 						comboBox.setSelectedItem(evt.getNewValue());
@@ -117,35 +113,36 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 			}
 		}));
 		subs.add(selected.isEnabled().changes().act(evt -> ObservableSwingUtils.onEQ(() -> checkEnabled.accept(evt.getNewValue()))));
-		if (valueTooltip != null) {
-			// Pretty hacky here, but it's the only way I've found to display tooltips over expanded combo box items
-			AccessibleContext accessible = comboBox.getAccessibleContext();
-			ComboPopup popup = null;
-			for (int i = 0; i < accessible.getAccessibleChildrenCount(); i++) {
-				Accessible child = accessible.getAccessibleChild(i);
-				if (child instanceof ComboPopup) {
-					popup = (ComboPopup) child;
-					break;
-				}
+
+		// Pretty hacky here, but it's the only way I've found to display tooltips over expanded combo box items
+		AccessibleContext accessible = comboBox.getAccessibleContext();
+		ComboPopup popup = null;
+		for (int i = 0; i < accessible.getAccessibleChildrenCount(); i++) {
+			Accessible child = accessible.getAccessibleChild(i);
+			if (child instanceof ComboPopup) {
+				popup = (ComboPopup) child;
+				break;
 			}
-			if (popup != null) {
-				JList<T> popupList = popup.getList();
-				MouseMotionListener popupMouseListener = new MouseMotionAdapter() {
-					@Override
-					public void mouseMoved(MouseEvent e) {
-						int index = popupList.locationToIndex(e.getPoint());
-						if (index < 0) {
-							popupList.setToolTipText(null);
-							return;
-						}
-						T item = comboModel.getElementAt(index);
-						String tooltip = valueTooltip.apply(item);
-						popupList.setToolTipText(tooltip);
+		}
+		if (popup != null) {
+			JList<T> popupList = popup.getList();
+			MouseMotionListener popupMouseListener = new MouseMotionAdapter() {
+				@Override
+				public void mouseMoved(MouseEvent e) {
+					int index = popupList.locationToIndex(e.getPoint());
+					if (index < 0) {
+						popupList.setToolTipText(null);
+						return;
 					}
-				};
-				popupList.addMouseMotionListener(popupMouseListener);
-				subs.add(() -> ObservableSwingUtils.onEQ(() -> popupList.removeMouseMotionListener(popupMouseListener)));
-			}
+					T item = comboModel.getElementAt(index);
+					String tooltip = selected.isAcceptable(item);
+					if (tooltip == null && valueTooltip != null)
+						tooltip = valueTooltip.apply(item);
+					popupList.setToolTipText(tooltip);
+				}
+			};
+			popupList.addMouseMotionListener(popupMouseListener);
+			subs.add(() -> ObservableSwingUtils.onEQ(() -> popupList.removeMouseMotionListener(popupMouseListener)));
 		}
 		return Subscription.forAll(subs);
 	}
