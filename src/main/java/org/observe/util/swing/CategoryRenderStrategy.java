@@ -209,6 +209,7 @@ public class CategoryRenderStrategy<R, C> {
 	}
 
 	private String theName;
+	private Object theIdentifier;
 	private final TypeToken<C> theType;
 	private final Function<? super R, ? extends C> theAccessor;
 	private final CategoryMutationStrategy<R, C> theMutator;
@@ -232,6 +233,15 @@ public class CategoryRenderStrategy<R, C> {
 
 	public String getName() {
 		return theName;
+	}
+
+	public Object getIdentifier() {
+		return theIdentifier;
+	}
+
+	public CategoryRenderStrategy<R, C> withIdentifier(Object identifier) {
+		theIdentifier = identifier;
+		return this;
 	}
 
 	public TypeToken<C> getType() {

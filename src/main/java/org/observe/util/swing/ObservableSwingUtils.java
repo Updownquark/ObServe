@@ -1,6 +1,7 @@
 package org.observe.util.swing;
 
 import java.awt.EventQueue;
+import java.awt.Font;
 import java.awt.event.ActionListener;
 import java.util.ArrayList;
 import java.util.List;
@@ -8,8 +9,10 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import javax.swing.JCheckBox;
+import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
@@ -45,6 +48,110 @@ public class ObservableSwingUtils {
 		while (task != null) {
 			task.run();
 			task = EDT_EVENTS.poll();
+		}
+	}
+
+	/**
+	 * @param text The text to create the label with
+	 * @return The LabelHolder to use to configure the label
+	 */
+	public static LabelHolder label(String text) {
+		return new LabelHolder(text);
+	}
+
+	/**
+	 * @param label The label to create the holder with
+	 * @return The LabelHolder to use to configure the label
+	 */
+	public static LabelHolder label(JLabel label) {
+		return new LabelHolder(label);
+	}
+
+	/** A holder of a JLabel that contains many chain-compatible methods for configuration */
+	public static class LabelHolder implements Supplier<JLabel> {
+		/** The label */
+		public final JLabel label;
+
+		/** Creates a holder for an empty label */
+		public LabelHolder() {
+			this(new JLabel());
+		}
+
+		/** @param text The text to create the label with */
+		public LabelHolder(String text) {
+			this(new JLabel(text));
+		}
+
+		/** @param label The label to create the holder with */
+		public LabelHolder(JLabel label) {
+			this.label = label;
+		}
+
+		/**
+		 * Performs a generic operation on the label
+		 *
+		 * @param adjustment The operation
+		 * @return This holder
+		 */
+		public LabelHolder adjust(Consumer<JLabel> adjustment) {
+			adjustment.accept(label);
+			return this;
+		}
+
+		/**
+		 * Makes the label's font {@link Font#BOLD bold}
+		 *
+		 * @return This holder
+		 */
+		public LabelHolder bold() {
+			return withStyle(Font.BOLD);
+		}
+
+		/**
+		 * Makes the label's font {@link Font#PLAIN plain}
+		 *
+		 * @return This holder
+		 */
+		public LabelHolder plain() {
+			return withStyle(Font.PLAIN);
+		}
+
+		/**
+		 * @param fontSize The point size for the label's font
+		 * @return This holder
+		 */
+		public LabelHolder withFontSize(float fontSize) {
+			label.setFont(label.getFont().deriveFont(fontSize));
+			return this;
+		}
+
+		/**
+		 * @param style The font {@link Font#getStyle() style} for the label
+		 * @return This holder
+		 */
+		public LabelHolder withStyle(int style) {
+			label.setFont(label.getFont().deriveFont(style));
+			return this;
+		}
+
+		/**
+		 * @param style The font {@link Font#getStyle() style} for the label
+		 * @param fontSize The point size for the label's font
+		 * @return This holder
+		 */
+		public LabelHolder withSizeAndStyle(int style, float fontSize) {
+			label.setFont(label.getFont().deriveFont(style, fontSize));
+			return this;
+		}
+
+		@Override
+		public JLabel get() {
+			return label;
+		}
+
+		@Override
+		public String toString() {
+			return label.toString();
 		}
 	}
 
@@ -166,6 +273,7 @@ public class ObservableSwingUtils {
 	 * Links up a spinner's {@link JSpinner#getValue() value} with the value in a settable value, such that the user's interaction with the
 	 * spinner is reported by the value, and setting the value alters the spinner.
 	 *
+	 * @param <T> The type of the model value
 	 * @param spinner The spinner to control observably
 	 * @param descrip The description tooltip for the spinner when enabled
 	 * @param value The value observable to control the spinner
@@ -175,6 +283,14 @@ public class ObservableSwingUtils {
 		return spinnerFor(spinner, descrip, value, v -> v);
 	}
 
+	/**
+	 * @param <T> The type of the model value
+	 * @param spinner The spinner to hook up
+	 * @param descrip The description tooltip for the spinner when enabled
+	 * @param value The value observable to control the spinner
+	 * @param purify A function to call on the spinner's value before passing it to the model value
+	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to terminate the link
+	 */
 	public static <T> Subscription spinnerFor(JSpinner spinner, String descrip, SettableValue<T> value,
 		Function<? super T, ? extends T> purify) {
 		boolean[] callbackLock = new boolean[1];

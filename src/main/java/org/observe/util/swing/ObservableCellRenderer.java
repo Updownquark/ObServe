@@ -1,7 +1,9 @@
 package org.observe.util.swing;
 
 import java.awt.Component;
+import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -12,6 +14,8 @@ import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableCellRenderer;
 import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.TreeCellRenderer;
+
+import org.qommons.TriFunction;
 
 public interface ObservableCellRenderer<M, C> {
 	Component getCellRendererComponent(Component parent, Supplier<M> modelValue, C columnValue, boolean selected, boolean expanded,
@@ -64,6 +68,10 @@ public interface ObservableCellRenderer<M, C> {
 		private DefaultTreeCellRenderer theTreeRenderer;
 		private JLabel theLabel;
 
+		private Consumer<? super JLabel> theLabelModifier;
+		private BiConsumer<? super C, ? super JLabel> theValueLabelModifier;
+		private TriFunction<? super M, ? super C, ? super JLabel, ?> theRowValueLabelModifier;
+
 		@Override
 		public Component getCellRendererComponent(Component parent, Supplier<M> modelValue, C columnValue, boolean selected,
 			boolean expanded, boolean leaf, boolean hasFocus, int row, int column) {
@@ -90,9 +98,46 @@ public interface ObservableCellRenderer<M, C> {
 			boolean hasFocus, int row, int column) {
 			return columnValue;
 		}
+
+		public DefaultObservableCellRenderer<M, C> modify(Consumer<? super JLabel> modifier) {
+			if (theLabelModifier == null)
+				theLabelModifier = modifier;
+			else {
+				theLabelModifier = label -> {
+					theLabelModifier.accept(label);
+					modifier.accept(label);
+				};
+			}
+			return this;
+		}
+
+		public DefaultObservableCellRenderer<M, C> modify(BiConsumer<? super C, ? super JLabel> modifier) {
+			if (theValueLabelModifier == null)
+				theValueLabelModifier = modifier;
+			else {
+				theValueLabelModifier = (cv, label) -> {
+					theValueLabelModifier.accept(cv, label);
+					modifier.accept(cv, label);
+				};
+			}
+			return this;
+		}
+
+		public DefaultObservableCellRenderer<M, C> modify(TriFunction<? super M, ? super C, ? super JLabel, ?> modifier) {
+			if (theRowValueLabelModifier == null)
+				theRowValueLabelModifier = modifier;
+			else {
+				theRowValueLabelModifier = (rv, cv, label) -> {
+					theRowValueLabelModifier.apply(rv, cv, label);
+					modifier.apply(rv, cv, label);
+					return null;
+				};
+			}
+			return this;
+		}
 	}
 
-	public static <M, C, R extends Component> ObservableCellRenderer<M, C> formatted(BiFunction<? super M, ? super C, String> format) {
+	public static <M, C, R extends JLabel> DefaultObservableCellRenderer<M, C> formatted(BiFunction<? super M, ? super C, String> format) {
 		class BiFormattedCellRenderer extends DefaultObservableCellRenderer<M, C> {
 			@Override
 			protected Object getRenderValue(Supplier<M> modelValue, C columnValue, boolean selected, boolean expanded, boolean leaf,
@@ -103,7 +148,7 @@ public interface ObservableCellRenderer<M, C> {
 		return new BiFormattedCellRenderer();
 	}
 
-	public static <M, C, R extends Component> ObservableCellRenderer<M, C> formatted(Function<? super C, String> format) {
+	public static <M, C, R extends JLabel> DefaultObservableCellRenderer<M, C> formatted(Function<? super C, String> format) {
 		class BiFormattedCellRenderer extends DefaultObservableCellRenderer<M, C> {
 			@Override
 			protected Object getRenderValue(Supplier<M> modelValue, C columnValue, boolean selected, boolean expanded, boolean leaf,

@@ -441,7 +441,10 @@ public class ObservableTableModel<R> implements TableModel {
 	}
 
 	private static <R, C> void hookUp(TableColumn tblColumn, CategoryRenderStrategy<? super R, C> column, ObservableTableModel<R> model) {
-		tblColumn.setIdentifier(column);
+		if (column.getIdentifier() != null)
+			tblColumn.setIdentifier(column.getIdentifier());
+		else
+			tblColumn.setIdentifier(column);
 		if (column.getRenderer() != null)
 			tblColumn.setCellRenderer(new ObservableTableCellRenderer<>(model, column.getRenderer()));
 		if (column.getMutator().getEditor() != null)
