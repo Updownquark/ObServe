@@ -1,5 +1,7 @@
 package org.observe;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -447,6 +449,14 @@ public interface Observable<T> extends Lockable {
 	 */
 	static <T> Observable<T> empty() {
 		return (Observable<T>) empty;
+	}
+
+	static Observable<Void> onVmShutdown() {
+		return new VmShutdownObservable();
+	}
+
+	static <T> Observable<T> every(Duration initDelay, Duration interval, Duration until, Function<? super Duration, ? extends T> value) {
+		return new IntervalObservable<>(initDelay, interval, until, value);
 	}
 
 	/**
@@ -1160,6 +1170,118 @@ public interface Observable<T> extends Lockable {
 		@Override
 		public Transaction tryLock() {
 			return theWrapper.tryLock(); // Can't access the contents reliably
+		}
+	}
+
+	class VmShutdownObservable implements Observable<Void> {
+		@Override
+		public Subscription subscribe(Observer<? super Void> observer) {
+			Thread hook = new Thread(() -> {
+				observer.onNext(null);
+			}, "VM Shutdown");
+			Runtime.getRuntime().addShutdownHook(hook);
+			return () -> Runtime.getRuntime().removeShutdownHook(hook);
+		}
+
+		@Override
+		public boolean isSafe() {
+			return true;
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return false;
+		}
+
+		@Override
+		public Transaction lock() {
+			return Transaction.NONE;
+		}
+
+		@Override
+		public Transaction tryLock() {
+			return Transaction.NONE;
+		}
+	}
+
+	class IntervalObservable<T> implements Observable<T> {
+		private final Duration theInitDelay;
+		private final Duration theInterval;
+		private final Duration theUntil;
+		private boolean isActual;
+		private final Function<? super Duration, ? extends T> theValue;
+		private String theThreadName;
+		private Consumer<Runnable> theRunnable;
+
+		public IntervalObservable(Duration initDelay, Duration interval, Duration until, Function<? super Duration, ? extends T> value) {
+			theInitDelay = initDelay;
+			theInterval = interval;
+			if (theInterval.compareTo(Duration.ofMillis(1)) < 0)
+				throw new IllegalArgumentException("Interval must be >=1ms");
+			theUntil = until;
+			isActual = true;
+			theValue = value;
+			theThreadName = getClass().getSimpleName();
+			theRunnable = task -> {
+				new Thread(task, theThreadName).start();
+			};
+		}
+
+		public IntervalObservable<T> withRunnable(Consumer<Runnable> runnable) {
+			theRunnable = runnable;
+			return this;
+		}
+
+		public IntervalObservable<T> withThreadName(String threadName) {
+			theThreadName = threadName;
+			return this;
+		}
+
+		public IntervalObservable<T> actualDuration(boolean actual) {
+			isActual = actual;
+			return this;
+		}
+
+		@Override
+		public Subscription subscribe(Observer<? super T> observer) {
+			boolean[] going = new boolean[] { true };
+			theRunnable.accept(() -> {
+				Instant time = Instant.now();
+				Duration tolerance = theInterval.dividedBy(10);
+				long sleepTime = Math.min(25, theInterval.toMillis());
+				Instant nextFire = time;
+				if (theInitDelay.isZero())
+					nextFire = nextFire.plus(theInitDelay.minus(tolerance));
+				while (going[0]) {
+					if (time.compareTo(nextFire) >= 0) {
+						// TODO
+					}
+					try {
+						Thread.sleep(sleepTime);
+					} catch (InterruptedException e) {}
+				}
+			});
+			return () -> going[0] = false;
+		}
+
+		@Override
+		public boolean isSafe() {
+			return true;
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return false;
+		}
+
+		@Override
+		public Transaction lock() {
+			return Transaction.NONE;
+		}
+
+		@Override
+		public Transaction tryLock() {
+			return Transaction.NONE;
 		}
 	}
 }
