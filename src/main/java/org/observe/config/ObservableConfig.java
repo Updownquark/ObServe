@@ -1,5 +1,6 @@
 package org.observe.config;
 
+import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -8,8 +9,12 @@ import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Consumer;
 
+import org.observe.Observable;
+import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
 import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
@@ -19,12 +24,14 @@ import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.StructuredTransactable;
 import org.qommons.Transaction;
+import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
+import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.io.Format;
 import org.qommons.tree.BetterTreeList;
 
@@ -35,7 +42,6 @@ public class ObservableConfig implements StructuredTransactable {
 	public static final String PATH_SEPARATOR_STR = "" + PATH_SEPARATOR;
 	public static final String EMPTY_PATH = "".intern();
 	public static final String ANY_NAME = "*".intern();
-	public static final String MULTI_PATH = "**".intern();
 	public static final TypeToken<ObservableConfig> TYPE = TypeTokens.get().of(ObservableConfig.class);
 
 	public static class ObservableConfigPath {
@@ -67,16 +73,37 @@ public class ObservableConfig implements StructuredTransactable {
 					return false;
 			if (matcherIter.hasNext())
 				return false;
-			else if (pathIter.hasNext() && !getLastElement().getName().equals(MULTI_PATH)) {
+			else if (pathIter.hasNext())
 				return false;
-			} else
+			else
 				return true;
 		}
 
-		// TODO hashCode,equals
+		@Override
+		public int hashCode() {
+			return theElements.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (obj == this)
+				return true;
+			return obj instanceof ObservableConfigPath && theElements.equals(((ObservableConfigPath) obj).theElements);
+		}
 
 		@Override
 		public String toString() {
+			if (theElements.size() == 1)
+				return theElements.get(0).toString();
+			StringBuilder str = new StringBuilder();
+			boolean first = true;
+			for (ObservableConfigPathElement el : theElements) {
+				if (first)
+					first = false;
+				else
+					str.append(PATH_SEPARATOR);
+				str.append(el.toString());
+			}
 			return theElements.toString();
 		}
 	}
@@ -84,10 +111,12 @@ public class ObservableConfig implements StructuredTransactable {
 	public static class ObservableConfigPathElement {
 		private final String theName;
 		private final Map<String, String> theAttributes;
+		private final boolean isMulti;
 
-		protected ObservableConfigPathElement(String name, Map<String, String> attributes) {
+		protected ObservableConfigPathElement(String name, Map<String, String> attributes, boolean multi) {
 			theName = name;
 			theAttributes = attributes;
+			isMulti = multi;
 		}
 
 		public String getName() {
@@ -96,6 +125,10 @@ public class ObservableConfig implements StructuredTransactable {
 
 		public Map<String, String> getAttributes() {
 			return theAttributes;
+		}
+
+		public boolean isMulti() {
+			return isMulti;
 		}
 
 		public boolean matches(ObservableConfig config) {
@@ -117,7 +150,42 @@ public class ObservableConfig implements StructuredTransactable {
 			return true;
 		}
 
-		// TODO hashCode, equals, toString
+		@Override
+		public int hashCode() {
+			return Objects.hash(theName, theAttributes, isMulti);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (obj == this)
+				return true;
+			else if (!(obj instanceof ObservableConfigPathElement))
+				return false;
+			ObservableConfigPathElement other = (ObservableConfigPathElement) obj;
+			return theName.equals(other.theName) && Objects.equals(theAttributes, other.theAttributes) && isMulti == other.isMulti;
+		}
+
+		@Override
+		public String toString() {
+			if (theAttributes.isEmpty() && !isMulti)
+				return theName;
+			StringBuilder str = new StringBuilder(theName);
+			if (isMulti)
+				str.append(ANY_NAME);
+			if (!theAttributes.isEmpty()) {
+				str.append('{');
+				boolean first = true;
+				for (Map.Entry<String, String> attr : theAttributes.entrySet()) {
+					if (first)
+						first = false;
+					else
+						str.append(',');
+					str.append(attr.getKey()).append('=').append(attr.getValue());
+				}
+				str.append('}');
+			}
+			return str.toString();
+		}
 	}
 
 	public static class ObservableConfigPathBuilder {
@@ -125,6 +193,7 @@ public class ObservableConfig implements StructuredTransactable {
 		private final List<ObservableConfigPathElement> thePath;
 		private final String theName;
 		private Map<String, String> theAttributes;
+		private boolean isMulti;
 		private boolean isUsed;
 
 		protected ObservableConfigPathBuilder(ObservableConfig target, List<ObservableConfigPathElement> path, String name) {
@@ -140,17 +209,20 @@ public class ObservableConfig implements StructuredTransactable {
 			return this;
 		}
 
+		public ObservableConfigPathBuilder multi() {
+			isMulti = true;
+			return this;
+		}
+
 		protected void seal() {
 			if (isUsed)
 				throw new IllegalStateException("This class cannot be used twice");
 			isUsed = true;
 			thePath.add(new ObservableConfigPathElement(theName,
-				theAttributes == null ? Collections.emptyMap() : Collections.unmodifiableMap(theAttributes)));
+				theAttributes == null ? Collections.emptyMap() : Collections.unmodifiableMap(theAttributes), isMulti));
 		}
 
 		public ObservableConfigPathBuilder andThen(String name) {
-			if (MULTI_PATH.equals(theName))
-				throw new IllegalArgumentException(MULTI_PATH + " can only be used for the last element in a path");
 			seal();
 			return theTarget.buildPath(thePath, name);
 		}
@@ -185,6 +257,7 @@ public class ObservableConfig implements StructuredTransactable {
 	private final ObservableConfig theParent;
 	private final ElementId theParentContentRef;
 	private final CollectionLockingStrategy theLocking;
+	private final ValueHolder<Causable> theRootCausable;
 	private final String theName;
 	private String theValue;
 	private final BetterList<ObservableConfig> theContent;
@@ -193,10 +266,11 @@ public class ObservableConfig implements StructuredTransactable {
 	private long theModCount;
 
 	protected ObservableConfig(ObservableConfig parent, ElementId parentContentRef, String name, CollectionLockingStrategy locking,
-		String value) {
+		ValueHolder<Causable> rootCause, String value) {
 		theParent = parent;
 		theParentContentRef = parentContentRef;
 		theLocking = locking;
+		theRootCausable = rootCause;
 		theName = name;
 		theContent = new BetterTreeList<>(locking);
 		theListeners = ListenerList.build().build();
@@ -247,8 +321,14 @@ public class ObservableConfig implements StructuredTransactable {
 			return null;
 		String[] split = parsePath(path);
 		ObservableConfigPathBuilder builder = buildPath(split[0]);
-		for (int i = 1; i < split.length; i++)
+		for (int i = 1; i < split.length; i++) {
+			boolean multi = split[i].length() > 0 && split[i].charAt(split[i].length() - 1) == ANY_NAME.charAt(0);
+			if (multi)
+				split[i] = split[i].substring(0, split[i].length() - 1);
 			builder = builder.andThen(split[i]);
+			if (multi)
+				builder.multi();
+		}
 		return builder.build();
 	}
 
@@ -256,8 +336,9 @@ public class ObservableConfig implements StructuredTransactable {
 		return TYPE;
 	}
 
-	protected ObservableConfig createChild(ElementId parentContentRef, String name, CollectionLockingStrategy locking, String value) {
-		return new ObservableConfig(this, parentContentRef, name, locking, value);
+	protected ObservableConfig createChild(ElementId parentContentRef, String name, CollectionLockingStrategy locking,
+		ValueHolder<Causable> rootCause, String value) {
+		return new ObservableConfig(this, parentContentRef, name, locking, rootCause, value);
 	}
 
 	public Subscription watch(String pathFilter, Consumer<ObservableConfigEvent> listener) {
@@ -277,7 +358,7 @@ public class ObservableConfig implements StructuredTransactable {
 	}
 
 	public ObservableCollection<? extends ObservableConfig> getContent(ObservableConfigPath path) {
-		if (path.getElements().size() == 1 && !path.getLastElement().getName().equals(MULTI_PATH)) {
+		if (path.getElements().size() == 1) {
 			if (path.getLastElement().getName().equals(ANY_NAME))
 				return new FullObservableConfigContent<>(this, getType());
 			else
@@ -287,11 +368,11 @@ public class ObservableConfig implements StructuredTransactable {
 	}
 
 	public SettableValue<String> observeValue() {
-		return observeValue(Format.TEXT);
+		return observeValue(TypeTokens.get().STRING, Format.TEXT);
 	}
 
-	public <T> SettableValue<T> observeValue(Format<T> format) {
-		return observeValue((ObservableConfigPath) null, format);
+	public <T> SettableValue<T> observeValue(TypeToken<T> type, Format<T> format) {
+		return observeValue((ObservableConfigPath) null, type, format);
 	}
 
 	public SettableValue<String> observeValue(String path) {
@@ -317,14 +398,37 @@ public class ObservableConfig implements StructuredTransactable {
 
 	@Override
 	public Transaction lock(boolean write, boolean structural, Object cause) {
-		// TODO Do something with the cause if write
-		return theContent.lock(write, structural, cause);
+		return withCause(theContent.lock(write, structural, cause), cause);
 	}
 
 	@Override
 	public Transaction tryLock(boolean write, boolean structural, Object cause) {
-		// TODO Do something with the cause if write
-		return theContent.tryLock(write, structural, cause);
+		return withCause(theContent.tryLock(write, structural, cause), cause);
+	}
+
+	private Transaction withCause(Transaction t, Object cause) {
+		if (t == null)
+			return null;
+		boolean causeIsRoot = theRootCausable.get() == null;
+		if (causeIsRoot) {
+			if (cause instanceof Causable) {
+				theRootCausable.accept((Causable) cause);
+				return () -> {
+					theRootCausable.accept(null);
+					t.close();
+				};
+			} else {
+				Causable synCause = Causable.simpleCause(cause);
+				Transaction causeT = Causable.use(synCause);
+				theRootCausable.accept(synCause);
+				return () -> {
+					causeT.close();
+					theRootCausable.accept(null);
+					t.close();
+				};
+			}
+		} else
+			return t;
 	}
 
 	public long getStamp(boolean structuralOnly) {
@@ -338,35 +442,36 @@ public class ObservableConfig implements StructuredTransactable {
 	public ObservableConfig getChild(ObservableConfigPath path, boolean createIfAbsent) {
 		try (Transaction t = lock(createIfAbsent, null)) {
 			ObservableConfig ret = null;
-			List<ObservableConfig> eventPath = new ArrayList<>(path.getElements().size());
 			for (ObservableConfigPathElement el : path.getElements()) {
-				String pathName = el.getName();
-				if (pathName.equals(ANY_NAME) || pathName.equals(MULTI_PATH))
-					throw new IllegalArgumentException("Variable paths not allowed for getChild");
-				ObservableConfig found = null;
-				for (ObservableConfig config : theContent) {
-					if (config.getName().equals(pathName)) {
-						found = config;
-						break;
-					}
-				}
-				if (found == null) {
-					if (createIfAbsent)
-						found = addChild(pathName);
-					else
-						return null;
-				}
-				eventPath.add(found);
+				ObservableConfig found = ret.getChild(el, createIfAbsent);
+				if (found == null)
+					return null;
 				ret = found;
 			}
 			return ret;
 		}
 	}
 
+	protected ObservableConfig getChild(ObservableConfigPathElement el, boolean createIfAbsent) {
+		String pathName = el.getName();
+		if (pathName.equals(ANY_NAME))
+			throw new IllegalArgumentException("Variable paths not allowed for getChild");
+		ObservableConfig found = null;
+		for (ObservableConfig config : theContent) {
+			if (config.getName().equals(pathName)) {
+				found = config;
+				break;
+			}
+		}
+		if (found == null && createIfAbsent)
+			found = addChild(pathName);
+		return found;
+	}
+
 	public ObservableConfig addChild(String name) {
 		try (Transaction t = lock(true, true, null)) {
 			ElementId el = theContent.addElement(null, false).getElementId();
-			ObservableConfig child = createChild(el, name, theLocking, null);
+			ObservableConfig child = createChild(el, name, theLocking, theRootCausable, null);
 			theContent.mutableElement(el).set(child);
 			fire(CollectionChangeType.add, Arrays.asList(child));
 			return child;
@@ -386,7 +491,18 @@ public class ObservableConfig implements StructuredTransactable {
 		return this;
 	}
 
-	protected final Object getCurrentCause() {}
+	public void remove() {
+		try (Transaction t = lock(true, null)) {
+			if (!theParentContentRef.isPresent())
+				return;
+			theParent.theContent.mutableElement(theParentContentRef).remove();
+			fire(CollectionChangeType.remove, Collections.emptyList());
+		}
+	}
+
+	protected final Object getCurrentCause() {
+		return theRootCausable.get();
+	}
 
 	protected void fire(CollectionChangeType eventType, List<ObservableConfig> relativePath) {
 		_fire(eventType, relativePath, getCurrentCause());
@@ -403,7 +519,7 @@ public class ObservableConfig implements StructuredTransactable {
 					intL.listener.accept(event);
 			});
 		}
-		if (theParent != null)
+		if (theParent != null && theParentContentRef.isPresent())
 			theParent.fire(eventType, addToList(this, relativePath));
 	}
 
@@ -447,14 +563,84 @@ public class ObservableConfig implements StructuredTransactable {
 			theType = type;
 			theRoot = root;
 			thePath = path;
-			thePathElements = new ObservableConfig[path.getElements().size()];
-			// TODO populate the elements
+			for (ObservableConfigPathElement el : path.getElements()) {
+				if (el.isMulti())
+					throw new IllegalArgumentException("Cannot use observeValue with a multiple path");
+			}
 			theFormat = format;
+			thePathElements = new ObservableConfig[path.getElements().size()];
 		}
 
 		@Override
 		public TypeToken<T> getType() {
 			return theType;
+		}
+
+		@Override
+		public T get() {
+			try (Transaction t = lock()) {
+				if (!resolvePath(false))
+					return null;
+				String value = thePathElements[thePathElements.length - 1].getValue();
+				if (value == null)
+					return null;
+				return parse(value);
+			}
+		}
+
+		private boolean resolvePath(boolean createIfAbsent) {
+			ObservableConfig parent = theRoot;
+			for (int i = 0; i < thePathElements.length; i++) {
+				ObservableConfig child;
+				if (thePathElements[i] != null && thePathElements[i].theParentContentRef.isPresent()) {
+					child = thePathElements[i];
+					continue;
+				}
+				child = parent.getChild(thePath.getElements().get(i), createIfAbsent);
+				if (child == null)
+					return false;
+				thePathElements[i] = parent = child;
+			}
+			return true;
+		}
+
+		private T parse(String valueStr) {
+			try {
+				return theFormat.parse(valueStr);
+			} catch (ParseException e) {
+				System.err.println("Could not parse value " + this + ": " + e.getMessage());
+				return null;
+			}
+		}
+
+		@Override
+		public Observable<ObservableValueEvent<T>> noInitChanges() {
+			// TODO Auto-generated method stub
+		}
+
+		@Override
+		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+			try (Transaction t = theRoot.lock(true, cause)) {
+				String msg = isAcceptable(value);
+				if (msg != null)
+					throw new IllegalArgumentException(msg);
+				if (resolvePath(true))
+					throw new UnsupportedOperationException(StdMsg.NOT_FOUND);
+				String valueStr = theFormat.format(value);
+				String oldValueStr = thePathElements[thePathElements.length - 1].getValue();
+				thePathElements[thePathElements.length - 1].setValue(valueStr);
+				return parse(oldValueStr);
+			}
+		}
+
+		@Override
+		public <V extends T> String isAcceptable(V value) {
+			return TypeTokens.get().isInstance(theType, value) ? null : StdMsg.BAD_TYPE;
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			// TODO Auto-generated method stub
 		}
 	}
 
@@ -494,13 +680,11 @@ public class ObservableConfig implements StructuredTransactable {
 		@Override
 		public CollectionElement<C> getElement(ElementId id) {
 			// TODO Auto-generated method stub
-			return null;
 		}
 
 		@Override
 		public MutableCollectionElement<C> mutableElement(ElementId id) {
 			// TODO Auto-generated method stub
-			return null;
 		}
 
 		@Override
