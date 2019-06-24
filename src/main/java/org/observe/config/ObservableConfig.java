@@ -11,6 +11,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
+import java.util.function.IntConsumer;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -249,11 +251,16 @@ public class ObservableConfig implements StructuredTransactable {
 	public static class ObservableConfigEvent extends Causable {
 		public final CollectionChangeType changeType;
 		public final List<ObservableConfig> relativePath;
+		public final String oldName;
+		public final String oldValue;
 
-		public ObservableConfigEvent(CollectionChangeType changeType, List<ObservableConfig> relativePath, Object cause) {
+		public ObservableConfigEvent(CollectionChangeType changeType, String oldName, String oldValue, List<ObservableConfig> relativePath,
+			Object cause) {
 			super(cause);
 			this.changeType = changeType;
 			this.relativePath = relativePath;
+			this.oldName = oldName;
+			this.oldValue = oldValue;
 		}
 
 		public String getRelativePathString() {
@@ -267,11 +274,15 @@ public class ObservableConfig implements StructuredTransactable {
 		}
 	}
 
+	public static interface ObservableConfigPersistence<E extends Exception> {
+		void persist(ObservableConfig config) throws E;
+	}
+
 	private final ObservableConfig theParent;
 	private final ElementId theParentContentRef;
 	private final CollectionLockingStrategy theLocking;
 	private final ValueHolder<Causable> theRootCausable;
-	private final String theName;
+	private String theName;
 	private String theValue;
 	private final BetterList<ObservableConfig> theContent;
 	private final ListenerList<InternalObservableConfigListener> theListeners;
@@ -486,15 +497,27 @@ public class ObservableConfig implements StructuredTransactable {
 			ElementId el = theContent.addElement(null, false).getElementId();
 			ObservableConfig child = createChild(el, name, theLocking, theRootCausable, null);
 			theContent.mutableElement(el).set(child);
-			fire(CollectionChangeType.add, Arrays.asList(child));
+			fire(CollectionChangeType.add, Arrays.asList(child), name, null);
 			return child;
 		}
 	}
 
+	public ObservableConfig setName(String name) {
+		if (name == null)
+			throw new NullPointerException("Name must not be null");
+		try (Transaction t = lock(true, false, null)) {
+			String oldName = theName;
+			theName = name;
+			fire(CollectionChangeType.set, Collections.emptyList(), oldName, theValue);
+		}
+		return this;
+	}
+
 	public ObservableConfig setValue(String value) {
 		try (Transaction t = lock(true, false, null)) {
+			String oldValue = theValue;
 			theValue = value;
-			fire(CollectionChangeType.set, Collections.emptyList());
+			fire(CollectionChangeType.set, Collections.emptyList(), theName, oldValue);
 		}
 		return this;
 	}
@@ -509,7 +532,7 @@ public class ObservableConfig implements StructuredTransactable {
 			if (!theParentContentRef.isPresent())
 				return;
 			theParent.theContent.mutableElement(theParentContentRef).remove();
-			fire(CollectionChangeType.remove, Collections.emptyList());
+			fire(CollectionChangeType.remove, Collections.emptyList(), theName, theValue);
 		}
 	}
 
@@ -517,15 +540,15 @@ public class ObservableConfig implements StructuredTransactable {
 		return theRootCausable.get();
 	}
 
-	protected void fire(CollectionChangeType eventType, List<ObservableConfig> relativePath) {
-		_fire(eventType, relativePath, getCurrentCause());
+	protected void fire(CollectionChangeType eventType, List<ObservableConfig> relativePath, String oldName, String oldValue) {
+		_fire(eventType, relativePath, oldName, oldValue, getCurrentCause());
 	}
 
-	private void _fire(CollectionChangeType eventType, List<ObservableConfig> relativePath, Object cause) {
+	private void _fire(CollectionChangeType eventType, List<ObservableConfig> relativePath, String oldName, String oldValue, Object cause) {
 		theModCount++;
-		if (eventType != CollectionChangeType.set)
+		if (eventType != CollectionChangeType.set && relativePath.isEmpty())
 			theStructureModCount++;
-		ObservableConfigEvent event = new ObservableConfigEvent(eventType, relativePath, getCurrentCause());
+		ObservableConfigEvent event = new ObservableConfigEvent(eventType, oldName, oldValue, relativePath, getCurrentCause());
 		try (Transaction t = Causable.use(event)) {
 			theListeners.forEach(intL -> {
 				if (intL.path == null || intL.path.matches(relativePath)) {
@@ -537,7 +560,7 @@ public class ObservableConfig implements StructuredTransactable {
 			});
 		}
 		if (theParent != null && theParentContentRef.isPresent())
-			theParent.fire(eventType, addToList(this, relativePath));
+			theParent.fire(eventType, addToList(this, relativePath), oldName, oldValue);
 	}
 
 	private static List<ObservableConfig> addToList(ObservableConfig c, List<ObservableConfig> list) {
@@ -548,19 +571,51 @@ public class ObservableConfig implements StructuredTransactable {
 		return Arrays.asList(array);
 	}
 
-	public Subscription persistOnShutdown() {
-		return persistWhen(Observable.onVmShutdown());
+	public <E extends Exception> Subscription persistOnShutdown(ObservableConfigPersistence<E> persistence,
+		Consumer<? super Exception> onException) {
+		return persistWhen(Observable.onVmShutdown(), persistence, onException);
 	}
 
-	public Subscription persistEvery(Duration interval) {
-		return persistWhen(Observable.<Void> every(Duration.ZERO, interval, null, d -> null));
+	public <E extends Exception> Subscription persistEvery(Duration interval, ObservableConfigPersistence<E> persistence,
+		Consumer<? super Exception> onException) {
+		return persistWhen(Observable.<Void> every(Duration.ZERO, interval, null, d -> null), persistence, onException);
 	}
 
-	public Subscription persistOnChange() {
-		return persistWhen(watch(buildPath(ANY_DEPTH).build()));
+	public <E extends Exception> Subscription persistOnChange(ObservableConfigPersistence<E> persistence,
+		Consumer<? super Exception> onException) {
+		return persistWhen(watch(buildPath(ANY_DEPTH).build()), persistence, onException);
 	}
 
-	public Subscription persistWhen(Observable<?> observable) {}
+	public <E extends Exception> Subscription persistWhen(Observable<?> observable, ObservableConfigPersistence<E> persistence,
+		Consumer<? super Exception> onException) {
+		return observable.subscribe(new Observer<Object>() {
+			private long theLastStamp = theModCount;
+
+			@Override
+			public <V> void onNext(V value) {
+				tryPersist(false);
+			}
+
+			@Override
+			public <V> void onCompleted(V value) {
+				tryPersist(true);
+			}
+
+			private void tryPersist(boolean waitForLock) {
+				if (theModCount == theLastStamp)
+					return; // No changes, don't re-persist
+				Transaction lock = waitForLock ? lock(false, null) : tryLock(false, null);
+				if (lock == null)
+					return;
+				try {
+					theLastStamp = theModCount;
+					persistence.persist(ObservableConfig.this);
+				} catch (Exception ex) {
+					onException.accept(ex);
+				}
+			}
+		});
+	}
 
 	private static class InternalObservableConfigListener {
 		final ObservableConfigPath path;
@@ -613,14 +668,15 @@ public class ObservableConfig implements StructuredTransactable {
 		}
 	}
 
-	protected static class ObservableConfigValue<T> implements SettableValue<T> {
-		private final TypeToken<T> theType;
+	protected static class ObservableConfigChild<C extends ObservableConfig> implements ObservableValue<C> {
+		private final TypeToken<C> theType;
 		private final ObservableConfig theRoot;
 		private final ObservableConfigPath thePath;
 		private final ObservableConfig[] thePathElements;
-		private final Format<T> theFormat;
+		private final Subscription[] thePathElSubscriptions;
+		private final ListenerList<Observer<? super ObservableValueEvent<C>>> theListeners;
 
-		public ObservableConfigValue(TypeToken<T> type, ObservableConfig root, ObservableConfigPath path, Format<T> format) {
+		public ObservableConfigChild(TypeToken<C> type, ObservableConfig root, ObservableConfigPath path) {
 			theType = type;
 			theRoot = root;
 			thePath = path;
@@ -628,8 +684,155 @@ public class ObservableConfig implements StructuredTransactable {
 				if (el.isMulti() || el.getName().equals(ANY_NAME) || el.getName().equals(ANY_DEPTH))
 					throw new IllegalArgumentException("Cannot use observeValue with a variable path");
 			}
+			thePathElements = new ObservableConfig[path.getElements().size() + 1];
+			thePathElements[0] = theRoot;
+			thePathElSubscriptions = new Subscription[thePathElements.length];
+			theListeners = ListenerList.build().withInUse(this::setInUse).build();
+		}
+
+		ObservableConfig getRoot() {
+			return theRoot;
+		}
+
+		void setInUse(boolean inUse) {
+			try (Transaction t = theRoot.lock(false, null)) {
+				if (inUse) {
+					watchPathElement(0);
+					if (resolvePath(1, false, i -> watchPathElement(i)))
+						watchTerminal();
+				} else {
+					invalidate(0);
+					for (int i = thePathElSubscriptions.length - 1; i >= 0; i--) {
+						thePathElSubscriptions[i].unsubscribe();
+						thePathElSubscriptions[i] = null;
+					}
+				}
+			}
+		}
+
+		private void pathChanged(int pathIndex, CollectionChangeType type, ObservableConfig newValue) {
+			boolean reCheck = false;
+			switch (type) {
+			case add:
+				// This can affect the value if the new value matches the path and appears before the currently-used config
+				if (newValue.theParentContentRef.compareTo(thePathElements[pathIndex].theParentContentRef) < 0
+					&& thePath.getElements().get(pathIndex).matches(newValue))
+					reCheck = true; // The new element needs to replace the current element at the path index
+				break;
+			case remove:
+			case set:
+				if (newValue == thePathElements[pathIndex])
+					reCheck = true;
+				break;
+			}
+			if (reCheck) {
+				invalidate(pathIndex);
+				if (resolvePath(pathIndex, false, i -> watchPathElement(i)))
+					watchTerminal();
+			}
+		}
+
+		private void watchPathElement(int pathIndex) {
+			thePathElSubscriptions[pathIndex] = thePathElements[pathIndex].getAllContent()
+				.onChange(evt -> pathChanged(pathIndex + 1, evt.getType(), evt.getNewValue()));
+		}
+
+		private void watchTerminal() {
+			int lastIdx = thePathElements.length - 1;
+			thePathElSubscriptions[thePathElements.length] = thePathElements[lastIdx].watch(EMPTY_PATH).act(evt -> {
+				fire(createChangeEvent((C) thePathElements[lastIdx], (C) thePathElements[lastIdx], evt));
+			});
+		}
+
+		private void fire(ObservableValueEvent<C> event) {
+			theListeners.forEach(//
+				listener -> listener.onNext(event));
+		}
+
+		@Override
+		public TypeToken<C> getType() {
+			return theType;
+		}
+
+		@Override
+		public C get() {
+			try (Transaction t = lock()) {
+				if (!resolvePath(1, false, null))
+					return null;
+				return (C) thePathElements[thePathElements.length - 1];
+			}
+		}
+
+		private void invalidate(int startIndex) {
+			for (int i = thePathElSubscriptions.length - 1; i >= startIndex; i--) {
+				if (thePathElSubscriptions[i] != null) {
+					thePathElSubscriptions[i].unsubscribe();
+					thePathElSubscriptions[i] = null;
+				}
+			}
+			for (int i = thePathElements.length - 1; i >= startIndex; i--)
+				thePathElements[i] = null;
+		}
+
+		boolean resolvePath(int startIndex, boolean createIfAbsent, IntConsumer onResolution) {
+			ObservableConfig parent = thePathElements[startIndex - 1];
+			boolean resolved = true;
+			int i;
+			for (i = startIndex; i < thePathElements.length; i++) {
+				ObservableConfig child;
+				if (thePathElements[i] != null && thePathElements[i].theParentContentRef.isPresent()) {
+					child = thePathElements[i];
+					continue;
+				}
+				child = parent.getChild(thePath.getElements().get(i), createIfAbsent);
+				if (child == null) {
+					resolved = false;
+					break;
+				} else {
+					thePathElements[i] = parent = child;
+					onResolution.accept(i);
+				}
+			}
+			if (!resolved)
+				Arrays.fill(thePathElements, i, thePathElements.length, null);
+			return true;
+		}
+
+		@Override
+		public Observable<ObservableValueEvent<C>> noInitChanges() {
+			return new Observable<ObservableValueEvent<C>>() {
+				@Override
+				public Subscription subscribe(Observer<? super ObservableValueEvent<C>> observer) {
+					return theListeners.add(observer, true)::run;
+				}
+
+				@Override
+				public boolean isSafe() {
+					return theRoot.isLockSupported();
+				}
+
+				@Override
+				public Transaction lock() {
+					return theRoot.lock(false, null);
+				}
+
+				@Override
+				public Transaction tryLock() {
+					return theRoot.tryLock(false, null);
+				}
+			};
+		}
+	}
+
+	protected static class ObservableConfigValue<T> implements SettableValue<T> {
+		private final ObservableConfigChild<ObservableConfig> theConfigChild;
+		private final TypeToken<T> theType;
+		private final Format<T> theFormat;
+
+		public ObservableConfigValue(TypeToken<T> type, ObservableConfig root, ObservableConfigPath path, Format<T> format) {
+			theConfigChild = new ObservableConfigChild<>(ObservableConfig.TYPE, root, path);
+			theType = type;
 			theFormat = format;
-			thePathElements = new ObservableConfig[path.getElements().size()];
 		}
 
 		@Override
@@ -640,32 +843,15 @@ public class ObservableConfig implements StructuredTransactable {
 		@Override
 		public T get() {
 			try (Transaction t = lock()) {
-				if (!resolvePath(false))
-					return null;
-				String value = thePathElements[thePathElements.length - 1].getValue();
-				if (value == null)
-					return null;
-				return parse(value);
+				ObservableConfig config = theConfigChild.get();
+				return parse(config);
 			}
 		}
 
-		private boolean resolvePath(boolean createIfAbsent) {
-			ObservableConfig parent = theRoot;
-			for (int i = 0; i < thePathElements.length; i++) {
-				ObservableConfig child;
-				if (thePathElements[i] != null && thePathElements[i].theParentContentRef.isPresent()) {
-					child = thePathElements[i];
-					continue;
-				}
-				child = parent.getChild(thePath.getElements().get(i), createIfAbsent);
-				if (child == null)
-					return false;
-				thePathElements[i] = parent = child;
-			}
-			return true;
-		}
-
-		private T parse(String valueStr) {
+		private T parse(ObservableConfig config) {
+			String valueStr = config == null ? null : config.getValue();
+			if (valueStr == null)
+				return null;
 			try {
 				return theFormat.parse(valueStr);
 			} catch (ParseException e) {
@@ -676,21 +862,20 @@ public class ObservableConfig implements StructuredTransactable {
 
 		@Override
 		public Observable<ObservableValueEvent<T>> noInitChanges() {
-			// TODO Auto-generated method stub
+			return theConfigChild.noInitChanges().map(evt -> createChangeEvent(parse(evt.getOldValue()), parse(evt.getNewValue()), evt));
 		}
 
 		@Override
 		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
-			try (Transaction t = theRoot.lock(true, cause)) {
+			try (Transaction t = theConfigChild.getRoot().lock(true, cause)) {
 				String msg = isAcceptable(value);
 				if (msg != null)
 					throw new IllegalArgumentException(msg);
-				if (resolvePath(true))
-					throw new UnsupportedOperationException(StdMsg.NOT_FOUND);
+				theConfigChild.resolvePath(1, true, null);
 				String valueStr = theFormat.format(value);
-				String oldValueStr = thePathElements[thePathElements.length - 1].getValue();
-				thePathElements[thePathElements.length - 1].setValue(valueStr);
-				return parse(oldValueStr);
+				T oldValue = parse(theConfigChild.get());
+				theConfigChild.get().setValue(valueStr);
+				return oldValue;
 			}
 		}
 
@@ -701,7 +886,7 @@ public class ObservableConfig implements StructuredTransactable {
 
 		@Override
 		public ObservableValue<String> isEnabled() {
-			// TODO Auto-generated method stub
+			return SettableValue.ALWAYS_ENABLED;
 		}
 	}
 

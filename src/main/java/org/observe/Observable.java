@@ -14,6 +14,7 @@ import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.ListenerSet;
 import org.qommons.Lockable;
+import org.qommons.TimeUtils;
 import org.qommons.Transaction;
 
 import com.google.common.reflect.TypeParameter;
@@ -451,11 +452,24 @@ public interface Observable<T> extends Lockable {
 		return (Observable<T>) empty;
 	}
 
+	/**
+	 * @return An observable that fires (a null value) both for {@link Observer#onNext(Object) onNext} and
+	 *         {@link Observer#onCompleted(Object) onCompleted} as the Java VM is shutting down
+	 */
 	static Observable<Void> onVmShutdown() {
 		return new VmShutdownObservable();
 	}
 
-	static <T> Observable<T> every(Duration initDelay, Duration interval, Duration until, Function<? super Duration, ? extends T> value) {
+	/**
+	 * @param initDelay The initial delay before firing the first value
+	 * @param interval The interval at which to fire values
+	 * @param until The duration after which values will stop being fired (and an {@link Observer#onCompleted(Object) onCompleted} event
+	 *        will be fired)
+	 * @param value The function to produce values for the observable
+	 * @return The (configurable) observable
+	 */
+	static <T> IntervalObservable<T> every(Duration initDelay, Duration interval, Duration until,
+		Function<? super Duration, ? extends T> value) {
 		return new IntervalObservable<>(initDelay, interval, until, value);
 	}
 
@@ -1173,11 +1187,13 @@ public interface Observable<T> extends Lockable {
 		}
 	}
 
+	/** Implements {@link Observable#onVmShutdown()} */
 	class VmShutdownObservable implements Observable<Void> {
 		@Override
 		public Subscription subscribe(Observer<? super Void> observer) {
 			Thread hook = new Thread(() -> {
 				observer.onNext(null);
+				observer.onCompleted(null);
 			}, "VM Shutdown");
 			Runtime.getRuntime().addShutdownHook(hook);
 			return () -> Runtime.getRuntime().removeShutdownHook(hook);
@@ -1204,22 +1220,32 @@ public interface Observable<T> extends Lockable {
 		}
 	}
 
+	/**
+	 * Implements {@link Observable#every(Duration, Duration, Duration, Function)}
+	 *
+	 * @param <T> The type of value the observable publishes
+	 */
 	class IntervalObservable<T> implements Observable<T> {
 		private final Duration theInitDelay;
 		private final Duration theInterval;
 		private final Duration theUntil;
-		private boolean isActual;
 		private final Function<? super Duration, ? extends T> theValue;
+		private boolean isPrecise;
+		private boolean isActual;
 		private String theThreadName;
 		private Consumer<Runnable> theRunnable;
 
 		public IntervalObservable(Duration initDelay, Duration interval, Duration until, Function<? super Duration, ? extends T> value) {
 			theInitDelay = initDelay;
+			if (theInitDelay.isNegative())
+				throw new IllegalArgumentException("Initial delay must be >=0");
 			theInterval = interval;
 			if (theInterval.compareTo(Duration.ofMillis(1)) < 0)
 				throw new IllegalArgumentException("Interval must be >=1ms");
 			theUntil = until;
-			isActual = true;
+			if (theUntil != null && theUntil.compareTo(theInitDelay.plus(theInterval)) < 0)
+				throw new IllegalArgumentException("Until, if specified (not null), must be >=initial delay + interval");
+			isPrecise = true;
 			theValue = value;
 			theThreadName = getClass().getSimpleName();
 			theRunnable = task -> {
@@ -1242,23 +1268,55 @@ public interface Observable<T> extends Lockable {
 			return this;
 		}
 
+		public IntervalObservable<T> preciseTiming(boolean precise) {
+			isPrecise = precise;
+			return this;
+		}
+
 		@Override
 		public Subscription subscribe(Observer<? super T> observer) {
 			boolean[] going = new boolean[] { true };
 			theRunnable.accept(() -> {
-				Instant time = Instant.now();
-				Duration tolerance = theInterval.dividedBy(10);
-				long sleepTime = Math.min(25, theInterval.toMillis());
-				Instant nextFire = time;
-				if (theInitDelay.isZero())
-					nextFire = nextFire.plus(theInitDelay.minus(tolerance));
-				while (going[0]) {
-					if (time.compareTo(nextFire) >= 0) {
-						// TODO
-					}
+				Instant start = Instant.now();
+				Instant time = start;
+				Instant stop = theUntil == null ? null : time.plus(theUntil);
+				if (theInitDelay.isZero()) {
 					try {
-						Thread.sleep(sleepTime);
+						Thread.sleep(theInitDelay.getSeconds(), theInitDelay.getNano());
 					} catch (InterruptedException e) {}
+					time = Instant.now();
+				}
+				boolean actual = isActual;
+				boolean precise = isPrecise;
+				double intvlSecs = actual ? 0 : TimeUtils.toSeconds(theInterval);
+				while (going[0]) {
+					Duration valueD = TimeUtils.between(start, time);
+					if (!actual) {
+						double mult = TimeUtils.toSeconds(valueD) / intvlSecs;
+						valueD = theInterval.multipliedBy(Math.round(mult));
+					}
+					T value = theValue.apply(valueD);
+					observer.onNext(value);
+
+					try {
+						Duration sleepTime = theInterval;
+						if (precise) {
+							sleepTime = sleepTime.minus(TimeUtils.between(Instant.now(), time));
+						}
+						Thread.sleep(sleepTime.getSeconds(), sleepTime.getNano());
+					} catch (InterruptedException e) {}
+					time = Instant.now();
+
+					if (stop != null && time.compareTo(stop) >= 0) {
+						valueD = TimeUtils.between(start, time);
+						if (!actual) {
+							double mult = TimeUtils.toSeconds(valueD) / intvlSecs;
+							valueD = theInterval.multipliedBy(Math.round(mult));
+						}
+						value = theValue.apply(valueD);
+						observer.onCompleted(value);
+						break;
+					}
 				}
 			});
 			return () -> going[0] = false;
