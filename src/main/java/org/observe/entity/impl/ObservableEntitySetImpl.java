@@ -329,7 +329,7 @@ public class ObservableEntitySetImpl implements ObservableEntitySet {
 
 		@Override
 		public ObservableEntityField<E, F> getField(ObservableEntity<? extends E> entity) {
-			// TODO Auto-generated method stub
+			return (ObservableEntityField<E, F>) entity.getField(this);
 		}
 
 		@Override

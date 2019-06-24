@@ -69,8 +69,11 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 				if (((ObservableEntitySetImpl.FieldTypeImpl<?, ?>) field).getFieldGetter() != null)
 					getters.put(((ObservableEntitySetImpl.FieldTypeImpl<?, ?>) field).getFieldGetter().getName(), field);
 			}
-			fieldsByGetter = ParameterSet.of(getters.keySet());
-
+			ParameterSet getterNames = ParameterSet.of(getters.keySet());
+			ParameterMap<ObservableEntityFieldType<? super E, ?>> fieldsByGetter = getterNames.createMap();
+			for (int i = 0; i < getterNames.size(); i++)
+				fieldsByGetter.put(i, getters.get(getterNames.get(i)));
+			theFieldsByGetter = fieldsByGetter.unmodifiable();
 		} else
 			theFieldsByGetter = null;
 	}
