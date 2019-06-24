@@ -4,12 +4,14 @@ import java.text.ParseException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
@@ -23,11 +25,13 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableCollectionEvent;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.StructuredTransactable;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
+import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.CollectionLockingStrategy;
@@ -72,6 +76,12 @@ public class ObservableConfig implements StructuredTransactable {
 
 		public ObservableConfigPathElement getLastElement() {
 			return theElements.get(theElements.size() - 1);
+		}
+
+		public ObservableConfigPath getLast() {
+			if (theElements.size() == 1)
+				return this;
+			return new ObservableConfigPath(theElements.subList(theElements.size() - 1, theElements.size()));
 		}
 
 		public ObservableConfigPath getParent() {
@@ -157,6 +167,35 @@ public class ObservableConfig implements StructuredTransactable {
 							continue;
 						if (attr.getValue() != null && !attr.getValue().equals(child.getValue()))
 							continue;
+					}
+					if (!found)
+						return false;
+				}
+			}
+			return true;
+		}
+
+		public boolean matchedBefore(ObservableConfig config, ObservableConfigEvent change) {
+			if (!theName.equals(ANY_NAME)) {
+				if (change.relativePath.size() == 1) {
+					if (!theName.equals(change.oldName))
+						return false;
+				} else if (!theName.equals(config.getName()))
+					return false;
+			}
+			try (Transaction t = config.lock(false, null)) {
+				for (Map.Entry<String, String> attr : theAttributes.entrySet()) {
+					boolean found = false;
+
+					if (change.relativePath.size() == 1 && change.oldName.equals(attr.getKey()))
+						found = attr.getValue() == null || attr.getValue().equals(change.oldValue);
+					if (!found) {
+						for (ObservableConfig child : config.theContent) {
+							if (!child.getName().equals(attr.getKey()))
+								continue;
+							if (attr.getValue() != null && !attr.getValue().equals(child.getValue()))
+								continue;
+						}
 					}
 					if (!found)
 						return false;
@@ -272,6 +311,10 @@ public class ObservableConfig implements StructuredTransactable {
 			}
 			return str.toString();
 		}
+
+		public ObservableConfigEvent asFromChild() {
+			return new ObservableConfigEvent(changeType, oldName, oldValue, relativePath.subList(1, relativePath.size()), getCause());
+		}
 	}
 
 	public static interface ObservableConfigPersistence<E extends Exception> {
@@ -324,6 +367,10 @@ public class ObservableConfig implements StructuredTransactable {
 		if (theParentContentRef == null || !theParentContentRef.isPresent())
 			return -1;
 		return theParent.theContent.getElementsBefore(theParentContentRef);
+	}
+
+	ElementId getParentChildRef() {
+		return theParentContentRef;
 	}
 
 	public ObservableConfigPathBuilder buildPath(String firstName) {
@@ -387,8 +434,18 @@ public class ObservableConfig implements StructuredTransactable {
 				return new FullObservableConfigContent<>(this, getType());
 			else
 				return new SimpleObservableConfigContent<>(this, TYPE, path.getLastElement());
-		} else
-			return new ObservableConfigContent<>(this, TYPE, path);
+		} else {
+			ObservableConfigPath last = path.getLast();
+			TypeToken<ObservableConfig> type = (TypeToken<ObservableConfig>) getType();
+			TypeToken<ObservableCollection<ObservableConfig>> collType = TypeTokens.get().keyFor(ObservableCollection.class)
+				.getCompoundType(type);
+			return ObservableCollection.flattenValue(
+				observeDescendant(path.getParent()).map(collType, p -> (ObservableCollection<ObservableConfig>) p.getContent(last)));
+		}
+	}
+
+	public ObservableValue<? extends ObservableConfig> observeDescendant(ObservableConfigPath path) {
+		return new ObservableConfigChild<>(getType(), this, path);
 	}
 
 	public SettableValue<String> observeValue() {
@@ -482,21 +539,31 @@ public class ObservableConfig implements StructuredTransactable {
 			throw new IllegalArgumentException("Variable paths not allowed for getChild");
 		ObservableConfig found = null;
 		for (ObservableConfig config : theContent) {
-			if (config.getName().equals(pathName)) {
+			if (el.matches(config)) {
 				found = config;
 				break;
 			}
 		}
-		if (found == null && createIfAbsent)
-			found = addChild(pathName);
+		if (found == null && createIfAbsent) {
+			found = addChild(pathName, ch -> {
+				for (Map.Entry<String, String> attr : el.getAttributes().entrySet())
+					ch.addChild(attr.getKey(), atCh -> atCh.setValue(attr.getValue()));
+			});
+		}
 		return found;
 	}
 
 	public ObservableConfig addChild(String name) {
+		return addChild(name, null);
+	}
+
+	public ObservableConfig addChild(String name, Consumer<ObservableConfig> preAddMod) {
 		try (Transaction t = lock(true, true, null)) {
 			ElementId el = theContent.addElement(null, false).getElementId();
 			ObservableConfig child = createChild(el, name, theLocking, theRootCausable, null);
 			theContent.mutableElement(el).set(child);
+			if (preAddMod != null)
+				preAddMod.accept(child);
 			fire(CollectionChangeType.add, Arrays.asList(child), name, null);
 			return child;
 		}
@@ -924,16 +991,6 @@ public class ObservableConfig implements StructuredTransactable {
 		}
 
 		@Override
-		public CollectionElement<C> getElement(ElementId id) {
-			// TODO Auto-generated method stub
-		}
-
-		@Override
-		public MutableCollectionElement<C> mutableElement(ElementId id) {
-			// TODO Auto-generated method stub
-		}
-
-		@Override
 		public Transaction lock(boolean write, boolean structural, Object cause) {
 			return theConfig.lock(write, structural, cause);
 		}
@@ -953,6 +1010,175 @@ public class ObservableConfig implements StructuredTransactable {
 		public FullObservableConfigContent(ObservableConfig config, TypeToken<C> type) {
 			super(config, type);
 		}
+
+		@Override
+		public void clear() {
+			try (Transaction t = getConfig().lock(true, null)) {
+				ObservableConfig lastChild = getConfig().theContent.getLast();
+				while (lastChild != null) {
+					ObservableConfig nextLast = CollectionElement
+						.get(getConfig().theContent.getAdjacentElement(lastChild.theParentContentRef, false));
+					lastChild.remove();
+					lastChild = nextLast;
+				}
+			}
+		}
+
+		@Override
+		public int size() {
+			return getConfig().theContent.size();
+		}
+
+		@Override
+		public boolean isEmpty() {
+			return getConfig().theContent.isEmpty();
+		}
+
+		@Override
+		public CollectionElement<C> getElement(int index) {
+			ObservableConfig child = getConfig().theContent.get(index);
+			return new ConfigCollectionElement<>(child);
+		}
+
+		@Override
+		public int getElementsBefore(ElementId id) {
+			return getConfig().theContent.getElementsBefore(id);
+		}
+
+		@Override
+		public int getElementsAfter(ElementId id) {
+			return getConfig().theContent.getElementsAfter(id);
+		}
+
+		@Override
+		public CollectionElement<C> getElement(C value, boolean first) {
+			ObservableConfig config = CollectionElement.get(getConfig().theContent.getElement(value, first));
+			return config == null ? null : new ConfigCollectionElement<>(config);
+		}
+
+		@Override
+		public CollectionElement<C> getElement(ElementId id) {
+			ObservableConfig config = CollectionElement.get(getConfig().theContent.getElement(id));
+			return new ConfigCollectionElement<>(config);
+		}
+
+		@Override
+		public CollectionElement<C> getTerminalElement(boolean first) {
+			ObservableConfig config = CollectionElement.get(getConfig().theContent.getTerminalElement(first));
+			return config == null ? null : new ConfigCollectionElement<>(config);
+		}
+
+		@Override
+		public CollectionElement<C> getAdjacentElement(ElementId elementId, boolean next) {
+			ObservableConfig config = CollectionElement.get(getConfig().theContent.getAdjacentElement(elementId, next));
+			return config == null ? null : new ConfigCollectionElement<>(config);
+		}
+
+		@Override
+		public MutableCollectionElement<C> mutableElement(ElementId id) {
+			ObservableConfig config = CollectionElement.get(getConfig().theContent.getElement(id));
+			return new MutableConfigCollectionElement<>(config, this);
+		}
+
+		@Override
+		public String canAdd(C value, ElementId after, ElementId before) {
+			return StdMsg.UNSUPPORTED_OPERATION;
+		}
+
+		@Override
+		public CollectionElement<C> addElement(C value, ElementId after, ElementId before, boolean first)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public void setValue(Collection<ElementId> elements, C value) {
+			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends C>> observer) {
+			return getConfig().watch(getConfig().createPath(ANY_NAME)).act(evt -> {
+				C child = (C) evt.relativePath.get(0);
+				C oldValue = evt.changeType == CollectionChangeType.add ? null : child;
+				ObservableCollectionEvent<C> collEvt = new ObservableCollectionEvent<>(child.getParentChildRef(), getType(),
+					child.getIndexInParent(), evt.changeType, oldValue, child, evt);
+				observer.accept(collEvt);
+			});
+		}
+	}
+
+	private static class ConfigCollectionElement<C extends ObservableConfig> implements CollectionElement<C> {
+		final ObservableConfig theConfig;
+
+		ConfigCollectionElement(ObservableConfig config) {
+			theConfig = config;
+		}
+
+		@Override
+		public ElementId getElementId() {
+			return theConfig.theParentContentRef;
+		}
+
+		@Override
+		public C get() {
+			return (C) theConfig;
+		}
+
+		@Override
+		public int hashCode() {
+			return theConfig.theParentContentRef.hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			return obj instanceof ConfigCollectionElement && ((ConfigCollectionElement<?>) obj).theConfig == theConfig;
+		}
+
+		@Override
+		public String toString() {
+			return theConfig.toString();
+		}
+	}
+
+	private static class MutableConfigCollectionElement<C extends ObservableConfig> extends ConfigCollectionElement<C>
+	implements MutableCollectionElement<C> {
+		private final ObservableCollection<C> theCollection;
+
+		MutableConfigCollectionElement(ObservableConfig config, ObservableCollection<C> collection) {
+			super(config);
+			theCollection = collection;
+		}
+
+		@Override
+		public BetterCollection<C> getCollection() {
+			return theCollection;
+		}
+
+		@Override
+		public String isEnabled() {
+			return StdMsg.UNSUPPORTED_OPERATION;
+		}
+
+		@Override
+		public String isAcceptable(C value) {
+			return StdMsg.UNSUPPORTED_OPERATION;
+		}
+
+		@Override
+		public void set(C value) throws UnsupportedOperationException, IllegalArgumentException {
+			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public String canRemove() {
+			return null;
+		}
+
+		@Override
+		public void remove() throws UnsupportedOperationException {
+			theConfig.remove();
+		}
 	}
 
 	protected static class SimpleObservableConfigContent<C extends ObservableConfig> extends AbstractObservableConfigContent<C> {
@@ -962,14 +1188,189 @@ public class ObservableConfig implements StructuredTransactable {
 			super(config, type);
 			thePathElement = pathEl;
 		}
-	}
 
-	protected static class ObservableConfigContent<C extends ObservableConfig> extends AbstractObservableConfigContent<C> {
-		private final ObservableConfigPath thePath;
+		@Override
+		public int size() {
+			try (Transaction t = getConfig().lock(false, null)) {
+				return (int) getConfig().theContent.stream().filter(thePathElement::matches).count();
+			}
+		}
 
-		public ObservableConfigContent(ObservableConfig config, TypeToken<C> type, ObservableConfigPath path) {
-			super(config, type);
-			thePath = path;
+		@Override
+		public boolean isEmpty() {
+			try (Transaction t = getConfig().lock(false, null)) {
+				return getConfig().theContent.stream().anyMatch(thePathElement::matches);
+			}
+		}
+
+		@Override
+		public CollectionElement<C> getElement(int index) {
+			try (Transaction t = getConfig().lock(false, null)) {
+				int i = 0;
+				for (CollectionElement<ObservableConfig> el : getConfig().theContent.elements()) {
+					if (thePathElement.matches(el.get())) {
+						if (i == index)
+							return new ConfigCollectionElement<>(el.get());
+						i++;
+					}
+				}
+				throw new IndexOutOfBoundsException(index + " of " + i);
+			}
+		}
+
+		@Override
+		public int getElementsBefore(ElementId id) {
+			try (Transaction t = getConfig().lock(false, null)) {
+				ObservableConfig config = CollectionElement.get(getConfig().theContent.getElement(id));
+				if (config == null || !thePathElement.matches(config))
+					throw new NoSuchElementException();
+				int i = 0;
+				for (CollectionElement<ObservableConfig> el : getConfig().theContent.elements()) {
+					if (thePathElement.matches(el.get())) {
+						if (el.get() == config)
+							return i;
+						i++;
+					}
+				}
+				throw new IllegalStateException("Element found but then not found");
+			}
+		}
+
+		@Override
+		public int getElementsAfter(ElementId id) {
+			try (Transaction t = getConfig().lock(false, null)) {
+				ObservableConfig config = CollectionElement.get(getConfig().theContent.getElement(id));
+				if (config == null || !thePathElement.matches(config))
+					throw new NoSuchElementException();
+				int i = 0;
+				for (CollectionElement<ObservableConfig> el : getConfig().theContent.reverse().elements()) {
+					if (thePathElement.matches(el.get())) {
+						if (el.get() == config)
+							return i;
+						i++;
+					}
+				}
+				throw new IllegalStateException("Element found but then not found");
+			}
+		}
+
+		@Override
+		public CollectionElement<C> getElement(C value, boolean first) {
+			if (!thePathElement.matches(value))
+				return null;
+			try (Transaction t = getConfig().lock(false, null)) {
+				ObservableConfig config = CollectionElement.get(getConfig().theContent.getElement(value, first));
+				return config == null ? null : new ConfigCollectionElement<>(config);
+			}
+		}
+
+		@Override
+		public CollectionElement<C> getElement(ElementId id) {
+			try (Transaction t = getConfig().lock(false, null)) {
+				ObservableConfig config = CollectionElement.get(getConfig().theContent.getElement(id));
+				if (!thePathElement.matches(config))
+					throw new NoSuchElementException();
+				return new ConfigCollectionElement<>(config);
+			}
+		}
+
+		@Override
+		public CollectionElement<C> getTerminalElement(boolean first) {
+			try (Transaction t = getConfig().lock(false, null)) {
+				ObservableConfig config = CollectionElement.get(getConfig().theContent.getTerminalElement(first));
+				while (config != null && !thePathElement.matches(config))
+					config = CollectionElement.get(getConfig().theContent.getAdjacentElement(config.getParentChildRef(), first));
+				return config == null ? null : new ConfigCollectionElement<>(config);
+			}
+		}
+
+		@Override
+		public CollectionElement<C> getAdjacentElement(ElementId elementId, boolean next) {
+			try (Transaction t = getConfig().lock(false, null)) {
+				ObservableConfig config = CollectionElement.get(getConfig().theContent.getAdjacentElement(elementId, next));
+				while (config != null && !thePathElement.matches(config))
+					config = CollectionElement.get(getConfig().theContent.getAdjacentElement(config.getParentChildRef(), next));
+				return config == null ? null : new ConfigCollectionElement<>(config);
+			}
+		}
+
+		@Override
+		public MutableCollectionElement<C> mutableElement(ElementId id) {
+			try (Transaction t = getConfig().lock(false, null)) {
+				ObservableConfig config = CollectionElement.get(getConfig().theContent.getElement(id));
+				if (!thePathElement.matches(config))
+					throw new NoSuchElementException();
+				return new MutableConfigCollectionElement<>(config, this);
+			}
+		}
+
+		@Override
+		public String canAdd(C value, ElementId after, ElementId before) {
+			return StdMsg.UNSUPPORTED_OPERATION;
+		}
+
+		@Override
+		public CollectionElement<C> addElement(C value, ElementId after, ElementId before, boolean first)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public void setValue(Collection<ElementId> elements, C value) {
+			throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
+		}
+
+		@Override
+		public void clear() {
+			try (Transaction t = getConfig().lock(true, null)) {
+				for (CollectionElement<ObservableConfig> el : getConfig().theContent.elements()) {
+					if (thePathElement.matches(el.get()))
+						el.get().remove();
+				}
+			}
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends C>> observer) {
+			String watchPath=thePathElement.getAttributes().isEmpty() ? ANY_NAME : ANY_DEPTH;
+			return getConfig().watch(getConfig().createPath(watchPath)).act(evt -> {
+				if (evt.relativePath.size() > 2) // Too deep to affect path matching currently
+					return;
+				C child = (C) evt.relativePath.get(0);
+				boolean postMatches=thePathElement.matches(child);
+				boolean preMatches = evt.changeType == CollectionChangeType.set ? thePathElement.matchedBefore(child, evt.asFromChild())
+					: postMatches;
+				if(preMatches || postMatches){
+					int index;
+					if(postMatches)
+						index = getElementsBefore(child.getParentChildRef());
+					else{
+						int i = 0;
+						for (CollectionElement<ObservableConfig> el : getConfig().theContent.elements()) {
+							if (el.get() == child){
+								index=i;
+								break;
+							} else if (thePathElement.matches(el.get())) {
+								i++;
+							}
+						}
+						throw new IllegalStateException("Element found but then not found");
+					}
+
+					CollectionChangeType changeType;
+					if (preMatches && postMatches)
+						changeType = evt.changeType;
+					else if (preMatches)
+						changeType = CollectionChangeType.remove;
+					else
+						changeType = CollectionChangeType.add;
+
+					C oldValue = changeType == CollectionChangeType.add ? null : child;
+					ObservableCollectionEvent<C> collEvt = new ObservableCollectionEvent<>(child.getParentChildRef(), getType(), index,
+						changeType, oldValue, child, evt);
+					observer.accept(collEvt);
+				}
+			});
 		}
 	}
 }
