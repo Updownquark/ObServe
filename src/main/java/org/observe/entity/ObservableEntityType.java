@@ -17,6 +17,9 @@ public interface ObservableEntityType<E> extends StructuredTransactable {
 	ObservableEntity<? extends E> observableEntity(EntityIdentity<? super E> id);
 	ObservableEntity<? extends E> observableEntity(E entity);
 
+	EntitySelection<E> select();
+	EntityCreator<E> create();
+
 	<F> EntityValueAccess<E, F> fieldValue(ObservableEntityFieldType<? super E, F> field);
 	<F> ObservableEntityFieldType<? super E, F> getField(Function<? super E, F> fieldGetter);
 	default <F> EntityValueAccess<E, F> fieldAccess(Function<? super E, F> fieldGetter) {

@@ -3,12 +3,12 @@ package org.observe.entity;
 public class EntityOperationVariable<E, T> {
 	private final EntityOperation<E> theOperation;
 	private final String theName;
-	private final ObservableEntityFieldType<?, T> theField;
+	private final EntityValueAccess<? super E, T> theValue;
 
-	public EntityOperationVariable(EntityOperation<E> operation, String name, ObservableEntityFieldType<?, T> field) {
+	public EntityOperationVariable(EntityOperation<E> operation, String name, EntityValueAccess<? super E, T> value) {
 		theOperation = operation;
 		theName = name;
-		theField = field;
+		theValue = value;
 	}
 
 	public EntityOperation<E> getOperation() {
@@ -19,7 +19,7 @@ public class EntityOperationVariable<E, T> {
 		return theName;
 	}
 
-	public ObservableEntityFieldType<?, T> getField() {
-		return theField;
+	public EntityValueAccess<? super E, T> getValue() {
+		return theValue;
 	}
 }
