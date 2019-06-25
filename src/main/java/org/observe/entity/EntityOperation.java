@@ -32,4 +32,6 @@ public interface EntityOperation<E> {
 	 *         incompatible with the specified variable
 	 */
 	EntityOperation<E> satisfy(String variableName, Object value) throws IllegalStateException, IllegalArgumentException;
+
+	ParameterMap<Object> getVariableValues();
 }

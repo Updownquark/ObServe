@@ -1,7 +1,6 @@
 package org.observe.entity.impl;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import org.observe.entity.EntityOperation;
@@ -16,17 +15,18 @@ public abstract class AbstractEntityOperation<E> implements EntityOperation<E> {
 	private final ObservableEntityType<E> theType;
 	private final boolean isPrepared;
 	private final ParameterMap<EntityOperationVariable<E, ?>> theVariables;
-	private final Object[] theVariableValues;
+	private final ParameterMap<Object> theVariableValues;
 
 	public AbstractEntityOperation(ObservableEntityType<E> type, ParameterMap<EntityOperationVariable<E, ?>> variables,
-		Object[] variableValues) {
+		ParameterMap<Object> variableValues) {
 		theType = type;
 		isPrepared = variableValues != null;
 		theVariables = variables;
 		theVariableValues = variableValues;
 	}
 
-	protected abstract AbstractEntityOperation<E> copy(ParameterMap<EntityOperationVariable<E, ?>> variables, Object[] variableValues);
+	protected abstract AbstractEntityOperation<E> copy(ParameterMap<EntityOperationVariable<E, ?>> variables,
+		ParameterMap<Object> variableValues);
 
 	@Override
 	public ObservableEntityType<E> getEntityType() {
@@ -41,6 +41,11 @@ public abstract class AbstractEntityOperation<E> implements EntityOperation<E> {
 	@Override
 	public ParameterMap<EntityOperationVariable<E, ?>> getVariables() {
 		return theVariables;
+	}
+
+	@Override
+	public ParameterMap<Object> getVariableValues() {
+		return theVariableValues;
 	}
 
 	protected AbstractEntityOperation<E> addVariable(String variable, EntityValueAccess<E, ?> value) {
@@ -72,9 +77,13 @@ public abstract class AbstractEntityOperation<E> implements EntityOperation<E> {
 		String msg = ((EntityOperationVariable<E, Object>) vbl).getValue().canAccept(value);
 		if (msg != null)
 			throw new IllegalArgumentException(variableName + ": " + msg);
-		Object[] vvCopy = Arrays.copyOf(theVariableValues, theVariableValues.length);
-		vvCopy[idx] = value;
-		return copy(theVariables, vvCopy);
+		ParameterMap<Object> vvCopy = theVariableValues.keySet().createMap();
+		for (int i = 0; i < theVariableValues.keySet().size(); i++) {
+			if (i != idx)
+				vvCopy.put(i, theVariableValues.get(i));
+		}
+		vvCopy.put(idx, value);
+		return copy(theVariables, vvCopy.unmodifiable());
 	}
 
 }

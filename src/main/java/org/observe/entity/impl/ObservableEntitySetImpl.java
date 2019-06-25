@@ -11,8 +11,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 
-import org.observe.entity.EntityCreator;
-import org.observe.entity.EntitySelection;
 import org.observe.entity.IdentityFieldType;
 import org.observe.entity.ObservableEntity;
 import org.observe.entity.ObservableEntityField;
@@ -57,16 +55,6 @@ public class ObservableEntitySetImpl implements ObservableEntitySet {
 		if (entityType != null && entityType.getEntityType() == type)
 			return (ObservableEntityType<E>) entityType;
 		return null;
-	}
-
-	@Override
-	public <E> EntitySelection<E> select(ObservableEntityType<E> type) {
-		return ((ObservableEntityTypeImpl<E>) type).select();
-	}
-
-	@Override
-	public <E> EntityCreator<E> create(ObservableEntityType<E> type) {
-		return ((ObservableEntityTypeImpl<E>) type).create();
 	}
 
 	private static int compareEntityTypes(String type1, String type2) {

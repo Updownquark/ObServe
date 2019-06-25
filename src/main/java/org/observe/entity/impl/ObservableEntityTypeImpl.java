@@ -178,18 +178,20 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 
 	@Override
 	public <F> EntityValueAccess<E, F> fieldValue(ObservableEntityFieldType<? super E, F> field) {
-
 		// TODO Auto-generated method stub
 	}
 
 	@Override
 	public <F> ObservableEntityFieldType<? super E, F> getField(Function<? super E, F> fieldGetter) {
-
 		// TODO Auto-generated method stub
 	}
 
-	public EntitySelection<E> select() {}
+	@Override
+	public EntitySelection<E> select() {
+		return new EntitySelectionImpl<>(this, ParameterSet.EMPTY.createMap());
+	}
 
+	@Override
 	public EntityCreator<E> create() {}
 
 	MethodHandle getDefaultMethod(Method method) {
