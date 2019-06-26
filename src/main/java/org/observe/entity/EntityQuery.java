@@ -18,18 +18,8 @@ public interface EntityQuery<E> extends EntitySetOperation<E> {
 	EntityQuery<E> withAllPreLoaded(boolean preLoaded, boolean deep);
 
 	@Override
-	EntityQuery<E> prepare() throws IllegalStateException, EntityOperationException;
+	PreparedQuery<E> prepare() throws IllegalStateException, EntityOperationException;
 
-	@Override
-	EntityQuery<E> satisfy(String variableName, Object value) throws IllegalStateException, IllegalArgumentException;
-
-	/**
-	 * Same as {@link #count()}.{@link ObservableValue#get() get()}
-	 *
-	 * @see org.observe.entity.EntitySetOperation#execute()
-	 */
-	@Override
-	long execute() throws IllegalStateException, EntityOperationException;
 	ObservableValue<Long> count() throws IllegalStateException, EntityOperationException;
 	ObservableSortedSet<E> collect() throws IllegalStateException, EntityOperationException;
 	ObservableSortedSet<ObservableEntity<? extends E>> collectObservable(boolean withUpdates)

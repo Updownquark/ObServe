@@ -6,10 +6,16 @@ public interface EntityCreator<E> extends EntityOperation<E> {
 	EntityCreator<E> withVariable(ObservableEntityFieldType<? super E, ?> field, String variableName);
 
 	@Override
-	EntityCreator<E> prepare() throws IllegalStateException, EntityOperationException;
+	PreparedCreator<E> prepare() throws IllegalStateException, EntityOperationException;
 
-	@Override
-	EntityCreator<E> satisfy(String variableName, Object value) throws IllegalStateException, IllegalArgumentException;
+	/**
+	 * Creates a new entity with this creator's configured field values
+	 *
+	 * @return The ID of the new entity
+	 * @throws IllegalStateException If this creation has variables but has not been prepared or has unsatisfied variables
+	 * @throws EntityOperationException If the creation fails
+	 */
+	EntityIdentity<E> create() throws IllegalStateException, EntityOperationException;
 
 	/**
 	 * Creates a new entity with this creator's configured field values
@@ -18,5 +24,5 @@ public interface EntityCreator<E> extends EntityOperation<E> {
 	 * @throws IllegalStateException If this creation has variables but has not been prepared or has unsatisfied variables
 	 * @throws EntityOperationException If the creation fails
 	 */
-	ObservableEntity<E> create() throws IllegalStateException, EntityOperationException;
+	ObservableEntity<E> createAndGet() throws IllegalStateException, EntityOperationException;
 }

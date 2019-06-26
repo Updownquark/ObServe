@@ -22,8 +22,5 @@ public interface EntityUpdate<E> extends EntityModification<E> {
 		throws IllegalStateException, IllegalArgumentException;
 
 	@Override
-	EntityUpdate<E> prepare() throws IllegalStateException, EntityOperationException;
-
-	@Override
-	EntityUpdate<E> satisfy(String variableName, Object value) throws IllegalStateException, IllegalArgumentException;
+	PreparedUpdate<E> prepare() throws IllegalStateException, EntityOperationException;
 }

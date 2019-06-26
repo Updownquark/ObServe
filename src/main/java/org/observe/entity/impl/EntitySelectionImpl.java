@@ -21,12 +21,12 @@ public class EntitySelectionImpl<E> extends AbstractEntityOperation<E> implement
 
 	public EntitySelectionImpl(ObservableEntityType<E> type, ParameterMap<EntityOperationVariable<E, ?>> variables,
 		EntityCondition<E> condition) {
-		super(type, variables, null);
+		super(type, variables);
 		theCondition = condition == null ? new EntityCondition.None<>(this) : condition;
 	}
 
 	@Override
-	protected AbstractEntityOperation<E> copy(ParameterMap<EntityOperationVariable<E, ?>> variables, ParameterMap<Object> variableValues) {
+	protected AbstractEntityOperation<E> copy(ParameterMap<EntityOperationVariable<E, ?>> variables) {
 		throw new IllegalStateException("This is a precursor operation");
 	}
 
@@ -47,16 +47,16 @@ public class EntitySelectionImpl<E> extends AbstractEntityOperation<E> implement
 
 	@Override
 	public EntityQuery<E> query() {
-		// TODO Auto-generated method stub
+		return new EntityQueryImpl<>(this);
 	}
 
 	@Override
 	public EntityUpdate<E> update() {
-		// TODO Auto-generated method stub
+		return new EntityUpdateImpl<>(this);
 	}
 
 	@Override
 	public EntityDeletion<E> delete() {
-		// TODO Auto-generated method stub
+		return new EntityDeleteImpl<>(this);
 	}
 }

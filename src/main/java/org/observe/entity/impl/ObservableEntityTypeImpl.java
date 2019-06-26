@@ -192,7 +192,10 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 	}
 
 	@Override
-	public EntityCreator<E> create() {}
+	public EntityCreator<E> create() {
+		return new EntityCreatorImpl<>(this, ParameterSet.EMPTY.createMap(), theIdFields.keySet().createMap(),
+			theFields.keySet().createMap());
+	}
 
 	MethodHandle getDefaultMethod(Method method) {
 		return theDefaultMethods.computeIfAbsent(method, m -> {
