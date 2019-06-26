@@ -30,6 +30,7 @@ public class ObservableTextField<E> extends JTextField {
 	private final Color error_disabled_bg = new Color(200, 150, 150);
 
 	private boolean revertOnFocusLoss;
+	private boolean commitOnType;
 	private String theError;
 	private boolean isExternallyEnabled;
 	private String theToolTip;
@@ -59,29 +60,32 @@ public class ObservableTextField<E> extends JTextField {
 			@Override
 			public void removeUpdate(DocumentEvent e) {
 				if (!isInternallyChanging) {
-					checkText();
+					checkText(e);
 				}
 			}
 
 			@Override
 			public void insertUpdate(DocumentEvent e) {
 				if (!isInternallyChanging) {
-					checkText();
+					checkText(e);
 				}
 			}
 
 			@Override
 			public void changedUpdate(DocumentEvent e) {
 				if (!isInternallyChanging) {
-					checkText();
+					checkText(e);
 				}
 			}
 
-			private void checkText() {
+			private void checkText(Object cause) {
 				isDirty = true;
 				try {
 					E parsed = theFormat.parse(getText());
-					setErrorState(theValue.isAcceptable(parsed));
+					String err = theValue.isAcceptable(parsed);
+					setErrorState(err);
+					if (err == null && commitOnType)
+						doCommit(parsed, cause, false);
 				} catch (ParseException e) {
 					setErrorState(e.getMessage() == null ? "Invalid text" : e.getMessage());
 				}
@@ -129,13 +133,33 @@ public class ObservableTextField<E> extends JTextField {
 		return theFormat;
 	}
 
+	/**
+	 * @param format Whether this text field should, after successful editing, replace the user-entered text with the formatted value
+	 * @return This text field
+	 */
 	public ObservableTextField<E> setReformatOnCommit(boolean format) {
 		reformatOnCommit = format;
 		return this;
 	}
 
+	/**
+	 * @param revert Whether this text field should, when it loses focus while its text is either not {@link Format#parse(CharSequence)
+	 *        parseable} or {@link SettableValue#isAcceptable(Object) acceptable}, revert its text to the formatted current model value. If
+	 *        false, the text field will remain in an error state on focus lost.
+	 * @return This text field
+	 */
 	public ObservableTextField<E> setRevertOnFocusLoss(boolean revert) {
 		revertOnFocusLoss = revert;
+		return this;
+	}
+
+	/**
+	 * @param commit Whether this text field should update the model value with the parsed content of the text field each time the user
+	 *        types a key (assuming the text parses correctly and the value is {@link SettableValue#isAcceptable(Object) acceptable}.
+	 * @return This text field
+	 */
+	public ObservableTextField<E> setCommitOnType(boolean commit) {
+		commitOnType = commit;
 		return this;
 	}
 
@@ -178,10 +202,14 @@ public class ObservableTextField<E> extends JTextField {
 			setErrorState(e.getMessage() == null ? "Parsing failed" : e.getMessage());
 			return;
 		}
+		doCommit(parsed, cause, true);
+	}
+
+	private void doCommit(E parsed, Object cause, boolean maybeReformat) {
 		isInternallyChanging = true;
 		try {
 			theValue.set(parsed, cause);
-			if (reformatOnCommit)
+			if (maybeReformat && reformatOnCommit)
 				setText(theFormat.format(parsed));
 		} catch (IllegalArgumentException | UnsupportedOperationException e) {
 			setErrorState(e.getMessage());
