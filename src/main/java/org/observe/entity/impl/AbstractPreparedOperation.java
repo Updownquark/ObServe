@@ -8,11 +8,17 @@ import org.qommons.collect.ParameterSet.ParameterMap;
 
 public abstract class AbstractPreparedOperation<E, O extends PreparedOperation<E>> implements PreparedOperation<E> {
 	private final EntityOperation<E> theDefinition;
+	private final Object thePreparedObject;
 	private final ParameterMap<Object> theVariableValues;
 
-	public AbstractPreparedOperation(EntityOperation<E> definition, ParameterMap<Object> variableValues) {
+	public AbstractPreparedOperation(EntityOperation<E> definition, Object preparedObject, ParameterMap<Object> variableValues) {
 		theDefinition = definition;
+		thePreparedObject = preparedObject;
 		theVariableValues = variableValues;
+	}
+
+	protected Object getPreparedObject() {
+		return thePreparedObject;
 	}
 
 	@Override

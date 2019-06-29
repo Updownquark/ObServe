@@ -40,6 +40,7 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 	private final BetterMap<Method, MethodHandle> theDefaultMethods;
 	private final E theProxy;
 	private final MethodRetrievingHandler theProxyHandler;
+	private final ParameterMap<IdentityFieldType<? super E, ?>> theIdFieldsByGetter;
 	private final ParameterMap<ObservableEntityFieldType<? super E, ?>> theFieldsByGetter;
 
 	ObservableEntityTypeImpl(ObservableEntitySetImpl entitySet, String name, Class<E> entityType,
@@ -74,8 +75,24 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 			for (int i = 0; i < getterNames.size(); i++)
 				fieldsByGetter.put(i, getters.get(getterNames.get(i)));
 			theFieldsByGetter = fieldsByGetter.unmodifiable();
-		} else
+			if (parent != null)
+				theIdFieldsByGetter = null;
+			else {
+				getters.clear();
+				for (IdentityFieldType<? super E, ?> field : theIdFields.allValues()) {
+					if (((ObservableEntitySetImpl.FieldTypeImpl<?, ?>) field).getFieldGetter() != null)
+						getters.put(((ObservableEntitySetImpl.FieldTypeImpl<?, ?>) field).getFieldGetter().getName(), field);
+				}
+				getterNames = ParameterSet.of(getters.keySet());
+				ParameterMap<IdentityFieldType<? super E, ?>> idFieldsByGetter = getterNames.createMap();
+				for (int i = 0; i < getterNames.size(); i++)
+					idFieldsByGetter.put(i, (IdentityFieldType<? super E, ?>) getters.get(getterNames.get(i)));
+				theIdFieldsByGetter = idFieldsByGetter.unmodifiable();
+			}
+		} else {
+			theIdFieldsByGetter = null;
 			theFieldsByGetter = null;
+		}
 	}
 
 	@Override
@@ -183,7 +200,30 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 
 	@Override
 	public <F> ObservableEntityFieldType<? super E, F> getField(Function<? super E, F> fieldGetter) {
-		// TODO Auto-generated method stub
+		if (theProxy == null)
+			throw new IllegalStateException("This entity type is not mapped to a java entity, so this method cannot be used");
+		Method invoked;
+		synchronized (this) {
+			theProxyHandler.reset();
+			fieldGetter.apply(theProxy);
+			invoked = theProxyHandler.getInvoked();
+		}
+		if (invoked == null)
+			throw new IllegalArgumentException("The function did not invoke a field getter");
+		ObservableEntityFieldType<? super E, ?> field;
+		ObservableEntityTypeImpl<? super E> type = this;
+		while (type != null) {
+			field = theFieldsByGetter.get(invoked.getName());
+			if (field != null)
+				return (ObservableEntityFieldType<? super E, F>) field;
+			if (theIdFieldsByGetter != null) {
+				field = theIdFieldsByGetter.get(invoked.getName());
+				if (field != null)
+					return (ObservableEntityFieldType<? super E, F>) field;
+			}
+			type = type.theParent;
+		}
+		throw new IllegalArgumentException("The invoked method did not correspond to a field getter: " + invoked);
 	}
 
 	@Override
