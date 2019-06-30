@@ -17,6 +17,7 @@ import org.observe.entity.ObservableEntityField;
 import org.observe.entity.ObservableEntityFieldType;
 import org.observe.entity.ObservableEntitySet;
 import org.observe.entity.ObservableEntityType;
+import org.observe.util.MethodRetrievingHandler;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
 import org.qommons.collect.BetterSortedSet;

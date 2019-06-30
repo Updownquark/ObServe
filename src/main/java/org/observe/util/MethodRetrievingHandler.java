@@ -1,4 +1,4 @@
-package org.observe.entity.impl;
+package org.observe.util;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
@@ -8,8 +8,7 @@ public class MethodRetrievingHandler implements InvocationHandler {
 
 	@Override
 	public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-		if (theInvoked == null)
-			theInvoked = method;
+		theInvoked = method;
 		Class<?> retType = method.getReturnType();
 		if (!retType.isPrimitive() || retType == void.class)
 			return null;
