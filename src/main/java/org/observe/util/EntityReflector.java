@@ -1,6 +1,7 @@
 package org.observe.util;
 
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.lang.reflect.Proxy;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -14,21 +15,35 @@ import com.google.common.reflect.Invokable;
 import com.google.common.reflect.TypeToken;
 
 public class EntityReflector<E> {
-	private final Class<E> theClass;
+	public static class DefaultGetterFilter implements Predicate<Method> {
+		@Override
+		public boolean test(Method t) {
+			return (t.getModifiers() & Modifier.PUBLIC) != 0 && (t.getModifiers() & Modifier.STATIC) == 0//
+				&& t.getName().startsWith("get") && t.getReturnType() != void.class && t.getReturnType() != Void.class//
+				&& t.getParameterTypes().length == 0;
+		}
+	}
+
+	private final TypeToken<E> theType;
 	private final ParameterMap<Invokable<? super E, ?>> theFieldGetters;
 	private final E theProxy;
 	private final MethodRetrievingHandler theProxyHandler;
 
-	public EntityReflector(Class<E> clazz, Predicate<Method> getterFilter) {
-		if (!clazz.isInterface())
+	public EntityReflector(TypeToken<E> type) {
+		this(type, new DefaultGetterFilter());
+	}
+
+	public EntityReflector(TypeToken<E> type, Predicate<Method> getterFilter) {
+		Class<E> raw = TypeTokens.getRawType(type);
+		if (raw == null || !raw.isInterface())
 			throw new IllegalArgumentException("This class only works for interface types");
-		theClass = clazz;
+		theType = type;
 		Map<String, Invokable<? super E, ?>> fieldGetters = new LinkedHashMap<>();
-		addFieldGetters(TypeTokens.get().of(theClass), fieldGetters, getterFilter);
+		addFieldGetters(theType, fieldGetters, getterFilter);
 		theFieldGetters = ParameterMap.of(fieldGetters).unmodifiable();
 
 		theProxyHandler = new MethodRetrievingHandler();
-		theProxy = (E) Proxy.newProxyInstance(ObservableEntityUtils.class.getClassLoader(), new Class[] { clazz }, theProxyHandler);
+		theProxy = (E) Proxy.newProxyInstance(ObservableEntityUtils.class.getClassLoader(), new Class[] { raw }, theProxyHandler);
 	}
 
 	private static <T> void addFieldGetters(TypeToken<T> type, Map<String, Invokable<? super T, ?>> fieldGetters, Predicate<Method> getterFilter) {

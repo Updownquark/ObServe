@@ -1,7 +1,7 @@
 package org.observe.collect;
 
 public interface ObservableValueSet<E> {
-	ObservableCollection<E> getValues();
+	ObservableCollection<? extends E> getValues();
 
 	ValueCreator<E> create();
 }
