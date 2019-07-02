@@ -13,7 +13,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.IntConsumer;
 
 import org.observe.Observable;
@@ -26,6 +28,9 @@ import org.observe.collect.CollectionChangeType;
 import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
+import org.observe.collect.ObservableValueSet;
+import org.observe.collect.ValueCreator;
+import org.observe.util.EntityReflector;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.StructuredTransactable;
@@ -42,6 +47,7 @@ import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.io.Format;
 import org.qommons.tree.BetterTreeList;
 
+import com.google.common.reflect.Invokable;
 import com.google.common.reflect.TypeToken;
 
 /**
@@ -469,7 +475,48 @@ public class ObservableConfig implements StructuredTransactable {
 	}
 
 	public <T> SettableValue<T> observeValue(ObservableConfigPath path, TypeToken<T> type, Format<T> format) {
-		return new ObservableConfigValue<T>(type, this, path, format);
+		return new ObservableConfigValue<>(type, this, path, config -> {
+			if (config.getValue() == null)
+				return null;
+			try {
+				return format.parse(config.getValue());
+			} catch (ParseException e) {
+				System.err.println("Could not parse value " + this + ": " + e.getMessage());
+				return null;
+			}
+		}, (config, val) -> config.setValue(format.format(val)));
+	}
+
+	public <T> SettableValue<T> observeValue(ObservableConfigPath path, TypeToken<T> type, Function<ObservableConfig, ? extends T> parser,
+		BiConsumer<ObservableConfig, ? super T> format) {
+		return new ObservableConfigValue<T>(type, this, path, parser, format);
+	}
+
+	public <T> ObservableValueSet<T> observeValues(ObservableConfigPath path, TypeToken<T> type, Format<T> format) {
+		return observeValues(path, type, config -> {
+			if (config.getValue() == null)
+				return null;
+			try {
+				return format.parse(config.getValue());
+			} catch (ParseException e) {
+				System.err.println("Could not parse value " + this + ": " + e.getMessage());
+				return null;
+			}
+		}, (config, val) -> config.setValue(format.format(val)));
+	}
+
+	public <T> ObservableValueSet<T> observeValues(ObservableConfigPath path, TypeToken<T> type,
+		Function<ObservableConfig, ? extends T> parser, BiConsumer<ObservableConfig, ? super T> format, Observable<?> until) {
+		ObservableCollection<? extends ObservableConfig> configs;
+		if (path.getElements().size() == 1)
+			configs = getContent(path.getLastElement().getName());
+		else {
+			TypeToken<ObservableCollection<? extends ObservableConfig>> configListType = (TypeToken<ObservableCollection<? extends ObservableConfig>>) (TypeToken<?>) TypeTokens
+				.get().keyFor(ObservableCollection.class).getCompoundType(getType());
+			configs = ObservableCollection.flattenValue(observeDescendant(path.getParent()).map(configListType,
+				descendant -> descendant.getContent(path.getLastElement().getName())));
+		}
+		return new ObservableConfigValues<>(this, configs, type, parser, format, until);
 	}
 
 	@Override
@@ -894,11 +941,14 @@ public class ObservableConfig implements StructuredTransactable {
 	protected static class ObservableConfigValue<T> implements SettableValue<T> {
 		private final ObservableConfigChild<ObservableConfig> theConfigChild;
 		private final TypeToken<T> theType;
-		private final Format<T> theFormat;
+		private final Function<ObservableConfig, ? extends T> theParser;
+		private final BiConsumer<ObservableConfig, ? super T> theFormat;
 
-		public ObservableConfigValue(TypeToken<T> type, ObservableConfig root, ObservableConfigPath path, Format<T> format) {
+		public ObservableConfigValue(TypeToken<T> type, ObservableConfig root, ObservableConfigPath path,
+			Function<ObservableConfig, ? extends T> parser, BiConsumer<ObservableConfig, ? super T> format) {
 			theConfigChild = new ObservableConfigChild<>(ObservableConfig.TYPE, root, path);
 			theType = type;
+			theParser = parser;
 			theFormat = format;
 		}
 
@@ -916,15 +966,7 @@ public class ObservableConfig implements StructuredTransactable {
 		}
 
 		private T parse(ObservableConfig config) {
-			String valueStr = config == null ? null : config.getValue();
-			if (valueStr == null)
-				return null;
-			try {
-				return theFormat.parse(valueStr);
-			} catch (ParseException e) {
-				System.err.println("Could not parse value " + this + ": " + e.getMessage());
-				return null;
-			}
+			return theParser.apply(config);
 		}
 
 		@Override
@@ -939,9 +981,8 @@ public class ObservableConfig implements StructuredTransactable {
 				if (msg != null)
 					throw new IllegalArgumentException(msg);
 				theConfigChild.resolvePath(1, true, null);
-				String valueStr = theFormat.format(value);
 				T oldValue = parse(theConfigChild.get());
-				theConfigChild.get().setValue(valueStr);
+				theFormat.accept(theConfigChild.get(), value);
 				return oldValue;
 			}
 		}
@@ -954,6 +995,60 @@ public class ObservableConfig implements StructuredTransactable {
 		@Override
 		public ObservableValue<String> isEnabled() {
 			return SettableValue.ALWAYS_ENABLED;
+		}
+	}
+
+	protected static class ObservableConfigValues<T> implements ObservableValueSet<T> {
+		private final ObservableConfig theRoot;
+		private final ObservableCollection<? extends ObservableConfig> theConfigValues;
+		private final TypeToken<T> theType;
+		private final Function<ObservableConfig, ? extends T> theParser;
+		private final BiConsumer<ObservableConfig, ? super T> theFormat;
+
+		private final ObservableCollection<T> theValues;
+		private final EntityReflector<T> theReflector;
+
+		public ObservableConfigValues(ObservableConfig root, ObservableCollection<? extends ObservableConfig> configValues,
+			TypeToken<T> type, Function<ObservableConfig, ? extends T> parser, BiConsumer<ObservableConfig, ? super T> format,
+			Observable<?> until) {
+			theRoot = root;
+			theConfigValues = configValues;
+			theType = type;
+			theParser = parser;
+			theFormat = format;
+			theReflector = new EntityReflector<>(type);
+
+			theValues = ((ObservableCollection<ObservableConfig>) configValues).flow().map(type, parser).collectActive(until);
+		}
+
+		@Override
+		public ObservableCollection<? extends T> getValues() {
+			return theValues;
+		}
+
+		@Override
+		public ValueCreator<T> create() {
+			return new ValueCreator<T>() {
+				private final Map<String, Object> theFields = new LinkedHashMap<>();
+
+				@Override
+				public ValueCreator<T> with(String fieldName, Object value) throws IllegalArgumentException {
+					int fieldIndex = theReflector.getFieldGetters().keySet().indexOf(fieldName);
+					Invokable<? super T, ?> field = theReflector.getFieldGetters().get(fieldName);
+					// TODO Auto-generated method stub
+				}
+
+				@Override
+				public <F> ValueCreator<T> with(Function<? super T, F> field, F value)
+					throws IllegalArgumentException, UnsupportedOperationException {
+					// TODO Auto-generated method stub
+				}
+
+				@Override
+				public CollectionElement<T> create() {
+					// TODO Auto-generated method stub
+				}
+			};
 		}
 	}
 
@@ -1332,23 +1427,23 @@ public class ObservableConfig implements StructuredTransactable {
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends C>> observer) {
-			String watchPath=thePathElement.getAttributes().isEmpty() ? ANY_NAME : ANY_DEPTH;
+			String watchPath = thePathElement.getAttributes().isEmpty() ? ANY_NAME : ANY_DEPTH;
 			return getConfig().watch(getConfig().createPath(watchPath)).act(evt -> {
 				if (evt.relativePath.size() > 2) // Too deep to affect path matching currently
 					return;
 				C child = (C) evt.relativePath.get(0);
-				boolean postMatches=thePathElement.matches(child);
+				boolean postMatches = thePathElement.matches(child);
 				boolean preMatches = evt.changeType == CollectionChangeType.set ? thePathElement.matchedBefore(child, evt.asFromChild())
 					: postMatches;
-				if(preMatches || postMatches){
+				if (preMatches || postMatches) {
 					int index;
-					if(postMatches)
+					if (postMatches)
 						index = getElementsBefore(child.getParentChildRef());
-					else{
+					else {
 						int i = 0;
 						for (CollectionElement<ObservableConfig> el : getConfig().theContent.elements()) {
-							if (el.get() == child){
-								index=i;
+							if (el.get() == child) {
+								index = i;
 								break;
 							} else if (thePathElement.matches(el.get())) {
 								i++;
