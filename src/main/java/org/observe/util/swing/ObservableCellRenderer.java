@@ -7,7 +7,9 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JTable;
 import javax.swing.JTree;
 import javax.swing.table.DefaultTableCellRenderer;
@@ -66,6 +68,7 @@ public interface ObservableCellRenderer<M, C> {
 	public static class DefaultObservableCellRenderer<M, C> implements ObservableCellRenderer<M, C> {
 		private DefaultTableCellRenderer theTableRenderer;
 		private DefaultTreeCellRenderer theTreeRenderer;
+		private DefaultListCellRenderer theListRenderer;
 		private JLabel theLabel;
 
 		private Consumer<? super JLabel> theLabelModifier;
@@ -85,6 +88,10 @@ public interface ObservableCellRenderer<M, C> {
 				if (theTreeRenderer == null)
 					theTreeRenderer = new DefaultTreeCellRenderer();
 				c = theTreeRenderer.getTreeCellRendererComponent((JTree) parent, rendered, selected, expanded, leaf, row, hasFocus);
+			} else if (parent instanceof JList) {
+				if (theListRenderer == null)
+					theListRenderer = new DefaultListCellRenderer();
+				c = theListRenderer.getListCellRendererComponent((JList<? extends C>) parent, rendered, row, selected, hasFocus);
 			} else {
 				if (theLabel == null)
 					theLabel = new JLabel();

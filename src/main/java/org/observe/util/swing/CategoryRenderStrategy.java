@@ -1,6 +1,7 @@
 package org.observe.util.swing;
 
 import java.awt.event.MouseEvent;
+import java.util.Comparator;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
@@ -21,7 +22,7 @@ import com.google.common.reflect.TypeToken;
  * @param <C> The type of the column value
  */
 public class CategoryRenderStrategy<R, C> {
-	public class CategoryMutationStrategy<R, C> {
+	public class CategoryMutationStrategy {
 		private BiPredicate<? super R, ? super C> theEditability;
 		private BiFunction<? super R, ? super C, ? extends C> theAttributeMutator;
 		private BiFunction<? super R, ? super C, ? extends R> theRowMutator;
@@ -34,57 +35,57 @@ public class CategoryRenderStrategy<R, C> {
 
 		CategoryMutationStrategy() {}
 
-		public CategoryMutationStrategy<R, C> editableIf(BiPredicate<? super R, ? super C> editable) {
+		public CategoryMutationStrategy editableIf(BiPredicate<? super R, ? super C> editable) {
 			theEditability = editable;
 			return this;
 		}
 
-		public CategoryMutationStrategy<R, C> mutateAttribute(BiFunction<? super R, ? super C, ? extends C> mutator) {
+		public CategoryMutationStrategy mutateAttribute(BiFunction<? super R, ? super C, ? extends C> mutator) {
 			theAttributeMutator = mutator;
 			return this;
 		}
 
-		public CategoryMutationStrategy<R, C> withRowValueSwitch(BiFunction<? super R, ? super C, ? extends R> rowMutator) {
+		public CategoryMutationStrategy withRowValueSwitch(BiFunction<? super R, ? super C, ? extends R> rowMutator) {
 			theRowMutator = rowMutator;
 			return this;
 		}
 
-		public CategoryMutationStrategy<R, C> withRowUpdate(boolean updateIfUnchanged) {
+		public CategoryMutationStrategy withRowUpdate(boolean updateIfUnchanged) {
 			updateRowIfUnchanged = updateIfUnchanged;
 			return this;
 		}
 
-		public CategoryMutationStrategy<R, C> immutable() {
+		public CategoryMutationStrategy immutable() {
 			theAttributeMutator = null;
 			theRowMutator = null;
 			return this;
 		}
 
-		public CategoryMutationStrategy<R, C> filterAccept(BiFunction<MutableCollectionElement<? super R>, ? super C, String> filter) {
+		public CategoryMutationStrategy filterAccept(BiFunction<MutableCollectionElement<? super R>, ? super C, String> filter) {
 			theValueFilter = filter;
 			return this;
 		}
 
-		public CategoryMutationStrategy<R, C> withEditor(ObservableCellEditor<? super R, ? super C> editor) {
+		public CategoryMutationStrategy withEditor(ObservableCellEditor<? super R, ? super C> editor) {
 			theEditor = editor;
 			return this;
 		}
 
-		public CategoryMutationStrategy<R, C> asText(Format<C> format) {
+		public CategoryMutationStrategy asText(Format<C> format) {
 			return withEditor(ObservableCellEditor.createTextEditor(format));
 		}
 
-		public CategoryMutationStrategy<R, C> asCombo(Function<? super C, String> renderer, ObservableCollection<? extends C> options) {
+		public CategoryMutationStrategy asCombo(Function<? super C, String> renderer, ObservableCollection<? extends C> options) {
 			return withEditor(ObservableCellEditor.createComboEditor(renderer, options));
 		}
 
-		public CategoryMutationStrategy<R, C> asCheck() {
+		public CategoryMutationStrategy asCheck() {
 			if (!TypeTokens.get().isBoolean(getType()))
 				throw new IllegalStateException("Can only use checkbox editing with a boolean-typed category, not " + getType());
 			return withEditor((ObservableCellEditor<R, C>) ObservableCellEditor.createCheckBoxEditor());
 		}
 
-		public CategoryMutationStrategy<R, C> asSlider(int minValue, int maxValue) {
+		public CategoryMutationStrategy asSlider(int minValue, int maxValue) {
 			Class<?> raw = TypeTokens.getRawType(TypeTokens.get().wrap(getType()));
 			if (raw == Integer.class)
 				return withEditor((ObservableCellEditor<R, C>) ObservableCellEditor.createIntSliderEditor(minValue, maxValue));
@@ -94,7 +95,7 @@ public class CategoryRenderStrategy<R, C> {
 				throw new IllegalStateException("Can only use slider editing with an int- or double-typed category, not " + getType());
 		}
 
-		public CategoryMutationStrategy<R, C> asSlider(double minValue, double maxValue) {
+		public CategoryMutationStrategy asSlider(double minValue, double maxValue) {
 			Class<?> raw = TypeTokens.getRawType(TypeTokens.get().wrap(getType()));
 			if (raw == Integer.class)
 				throw new IllegalStateException("Use asSlider(int, int)");
@@ -104,11 +105,11 @@ public class CategoryRenderStrategy<R, C> {
 				throw new IllegalStateException("Can only use slider editing with an int- or double-typed category, not " + getType());
 		}
 
-		public CategoryMutationStrategy<R, C> asButton(Function<? super C, String> renderer, Function<? super C, ? extends C> action) {
+		public CategoryMutationStrategy asButton(Function<? super C, String> renderer, Function<? super C, ? extends C> action) {
 			return withEditor(ObservableCellEditor.createButtonEditor(renderer, action));
 		}
 
-		public CategoryMutationStrategy<R, C> withEditorTooltip(BiFunction<? super R, ? super C, String> tooltip) {
+		public CategoryMutationStrategy withEditorTooltip(BiFunction<? super R, ? super C, String> tooltip) {
 			theEditorTooltip = tooltip;
 			return this;
 		}
@@ -212,7 +213,7 @@ public class CategoryRenderStrategy<R, C> {
 	private Object theIdentifier;
 	private final TypeToken<C> theType;
 	private final Function<? super R, ? extends C> theAccessor;
-	private final CategoryMutationStrategy<R, C> theMutator;
+	private final CategoryMutationStrategy theMutator;
 	private CategoryMouseListener<? super R, ? super C> theMouseListener;
 	private String theHeaderTooltip;
 	private BiFunction<? super R, ? super C, String> theTooltip;
@@ -222,11 +223,14 @@ public class CategoryRenderStrategy<R, C> {
 	private int theMaxWidth;
 	private boolean isResizable;
 
+	private Comparator<? super C> theSortability;
+	private CategoryFilterStrategy<C> theFilterability;
+
 	public CategoryRenderStrategy(String name, TypeToken<C> type, Function<? super R, ? extends C> accessor) {
 		theName = name;
 		theType = type;
 		theAccessor = accessor;
-		theMutator = new CategoryMutationStrategy<>();
+		theMutator = new CategoryMutationStrategy();
 		theMinWidth = thePrefWidth = theMaxWidth = -1;
 		isResizable = true;
 	}
@@ -256,7 +260,7 @@ public class CategoryRenderStrategy<R, C> {
 		return theTooltip == null ? null : theTooltip.apply(row, category);
 	}
 
-	public CategoryMutationStrategy<R, C> getMutator() {
+	public CategoryMutationStrategy getMutator() {
 		return theMutator;
 	}
 
@@ -266,7 +270,7 @@ public class CategoryRenderStrategy<R, C> {
 	 * @param mutation The function to apply to this category's {@link #getMutator() mutator}
 	 * @return This category
 	 */
-	public CategoryRenderStrategy<R, C> withMutation(Consumer<CategoryMutationStrategy<R, C>> mutation) {
+	public CategoryRenderStrategy<R, C> withMutation(Consumer<CategoryMutationStrategy> mutation) {
 		mutation.accept(theMutator);
 		return this;
 	}
@@ -364,5 +368,28 @@ public class CategoryRenderStrategy<R, C> {
 	public CategoryRenderStrategy<R, C> setResizable(boolean resizable) {
 		isResizable = resizable;
 		return this;
+	}
+
+	public CategoryRenderStrategy<R, C> sortableWith(Comparator<? super C> sort) {
+		theSortability = sort;
+		return this;
+	}
+
+	public Comparator<? super C> getSortability() {
+		return theSortability;
+	}
+
+	public CategoryRenderStrategy<R, C> filterableWith(CategoryFilterStrategy<C> filtering) {
+		theFilterability = filtering;
+		return this;
+	}
+
+	public CategoryRenderStrategy<R, C> filterableWith(Function<CategoryRenderStrategy<?, C>, CategoryFilterStrategy<C>> filtering) {
+		theFilterability = filtering.apply(this);
+		return this;
+	}
+
+	public CategoryFilterStrategy<C> getFilterability() {
+		return theFilterability;
 	}
 }
