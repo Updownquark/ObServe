@@ -1034,13 +1034,21 @@ public class ObservableConfig implements StructuredTransactable {
 				@Override
 				public ValueCreator<T> with(String fieldName, Object value) throws IllegalArgumentException {
 					int fieldIndex = theReflector.getFieldGetters().keySet().indexOf(fieldName);
-					Invokable<? super T, ?> field = theReflector.getFieldGetters().get(fieldName);
+					if (fieldIndex < 0)
+						throw new IllegalArgumentException("No such field " + theType + "." + fieldName);
+					// TODO Should I need a setter since I'm synthesizing the data?
+					Invokable<? super T, ?> field = theReflector.getFieldSetters().get(fieldName);
+					if (field == null)
+						throw new IllegalArgumentException("Field " + theType + "." + fieldName + " does not have a setter");
 					// TODO Auto-generated method stub
 				}
 
 				@Override
 				public <F> ValueCreator<T> with(Function<? super T, F> field, F value)
 					throws IllegalArgumentException, UnsupportedOperationException {
+					int fieldIndex = theReflector.getGetterIndex(field);
+					if (fieldIndex < 0)
+						throw new IllegalArgumentException("Function did not invoke a " + theType + " getter");
 					// TODO Auto-generated method stub
 				}
 
