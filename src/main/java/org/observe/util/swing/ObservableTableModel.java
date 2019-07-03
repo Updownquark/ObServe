@@ -8,8 +8,10 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.awt.event.MouseMotionListener;
+import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.function.Function;
@@ -23,6 +25,7 @@ import javax.swing.JPopupMenu;
 import javax.swing.JSpinner;
 import javax.swing.JTable;
 import javax.swing.ListModel;
+import javax.swing.RowSorter.SortKey;
 import javax.swing.SortOrder;
 import javax.swing.SpinnerListModel;
 import javax.swing.event.ChangeEvent;
@@ -33,6 +36,7 @@ import javax.swing.event.TableColumnModelEvent;
 import javax.swing.event.TableColumnModelListener;
 import javax.swing.event.TableModelEvent;
 import javax.swing.event.TableModelListener;
+import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumn;
 import javax.swing.table.TableColumnModel;
@@ -46,6 +50,7 @@ import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableSet;
 import org.observe.util.TypeTokens;
+import org.observe.util.swing.CategoryFilterStrategy.CategoryFilter;
 import org.observe.util.swing.CategoryRenderStrategy.CategoryMouseListener;
 import org.qommons.Transaction;
 import org.qommons.collect.CollectionElement;
@@ -280,8 +285,35 @@ public class ObservableTableModel<R> implements TableModel {
 	public static <R> Subscription hookUp(JTable table, ObservableTableModel<R> model) {
 		LinkedList<Subscription> subs = new LinkedList<>();
 		try (Transaction rowT = model.getRows().lock(false, null); Transaction colT = model.getColumns().lock(false, null)) {
-			if (table.getModel() != model)
-				table.setModel(model);
+			if (table.getModel() == model) {
+				// The row filter must get model events before the table does
+				// so it can do its row- and column-indexed filtering before the row asks for it
+				table.setModel(new DefaultTableModel());
+			}
+			SimpleObservable<Void> until = new SimpleObservable<>(null, false, null, b -> b.unsafe());
+			subs.add(() -> until.onNext(null));
+			ObservableTableFiltering<R, ObservableTableModel<R>> rowFilter = new ObservableTableFiltering<>(model, until);
+			TableRowSorter<ObservableTableModel<R>> rowSorter = new TableRowSorter<>(model);
+			rowSorter.setRowFilter(rowFilter);
+			table.setModel(model);
+			table.setRowSorter(rowSorter);
+			boolean[] rowFilterEnabled = new boolean[] { true };
+			PropertyChangeListener rowSorterListener = new PropertyChangeListener() {
+				@Override
+				public void propertyChange(PropertyChangeEvent evt) {
+					rowFilterEnabled[0] = false;
+					System.err.println("Row sorter changed externally on a table with an " + ObservableTableModel.class.getSimpleName()
+						+ ". This will disable the table sort and filtering mechanism provided by this API");
+					table.removePropertyChangeListener("rowSorter", this);
+					// Refresh the columns so they can adjust to not being able to filter anymore
+					for (int c = 0; c < model.getColumnCount(); c++) {
+						CategoryRenderStrategy<? super R, ?> column = model.getColumn(c);
+						TableColumn tblColumn = table.getColumnModel().getColumn(c);
+						hookUp(table, tblColumn, c, column, model);
+					}
+				}
+			};
+			table.addPropertyChangeListener("rowSorter", rowSorterListener);
 			for (int c = 0; c < model.getColumnCount(); c++) {
 				CategoryRenderStrategy<? super R, ?> column = model.getColumn(c);
 				TableColumn tblColumn = table.getColumnModel().getColumn(c);
@@ -326,6 +358,10 @@ public class ObservableTableModel<R> implements TableModel {
 			};
 			model.getColumnModel().addListDataListener(columnListener);
 			subs.add(() -> {
+				table.removePropertyChangeListener("rowSorter", rowSorterListener);
+				if (table.getRowSorter() instanceof TableRowSorter
+					&& ((TableRowSorter<?>) table.getRowSorter()).getRowFilter() == rowFilter)
+					((TableRowSorter<?>) table.getRowSorter()).setRowFilter(null);
 				table.removePropertyChangeListener("columnModel", colModelListener);
 				table.getColumnModel().removeColumnModelListener(colListener);
 				model.getColumnModel().removeListDataListener(columnListener);
@@ -437,13 +473,14 @@ public class ObservableTableModel<R> implements TableModel {
 			subs.add(() -> table.removeMouseMotionListener(tableMML));
 			MouseAdapter headerML = new MouseAdapter() {
 				private int theEditingColumn;
+				private SettableValue<String> isFilterEnabled;
 				private JPopupMenu theFilterPopup;
 				private SettableValue<SortOrder> theSortOrder;
 				private JPanel theSortPanel;
 				private JCheckBox theFilterCheck;
 				private JPanel theCustomFilterPanel;
 
-				private final SimpleObservable<Void> theUnsub=new SimpleObservable<>();
+				private final SimpleObservable<Void> theUnsub = new SimpleObservable<>();
 
 				@Override
 				public void mousePressed(MouseEvent evt) {
@@ -474,6 +511,11 @@ public class ObservableTableModel<R> implements TableModel {
 				}
 
 				private <C> void showFilterPopup(int column) {
+					if (!rowFilterEnabled[0])
+						return;
+					CategoryFilter<C> filter = (CategoryFilter<C>) rowFilter.getFilter(column).getFilter();
+					if (filter == null)
+						return;
 					CategoryRenderStrategy<? super R, C> c = (CategoryRenderStrategy<? super R, C>) model.getColumn(column);
 					theEditingColumn = column;
 					if (theFilterPopup == null) {
@@ -482,8 +524,7 @@ public class ObservableTableModel<R> implements TableModel {
 						theSortOrder = new SimpleSettableValue<>(SortOrder.class, false);
 						theSortOrder.set(SortOrder.UNSORTED, null);
 						theSortOrder.noInitChanges().act(evt -> {
-							if (table.getRowSorter() instanceof DefaultRowSorter)
-								setSortOrder((DefaultRowSorter<?, ?>) table.getRowSorter(), theEditingColumn, evt.getNewValue());
+							setSortOrder(evt.getNewValue());
 						});
 						theSortPanel.setLayout(new BoxLayout(theSortPanel, BoxLayout.Y_AXIS));
 						theSortPanel.add(new JLabel("Sort:"));
@@ -499,6 +540,8 @@ public class ObservableTableModel<R> implements TableModel {
 						theSortPanel.add(sortSpinner);
 						theFilterPopup.add(theSortPanel);
 						theFilterCheck = new JCheckBox("Filter Values");
+						isFilterEnabled = new SimpleSettableValue<>(String.class, true);
+						theFilterCheck.addActionListener(evt -> setFilterEnabled(theFilterCheck.isSelected(), evt));
 						theFilterPopup.add(theFilterCheck);
 						theCustomFilterPanel = new JPanel(new BorderLayout());
 						theFilterPopup.add(theCustomFilterPanel);
@@ -510,16 +553,56 @@ public class ObservableTableModel<R> implements TableModel {
 							}
 						});
 					}
-					ObservableSet<C> distinctValues=model.getRows().flow().map(c.getType(), row->c.getCategoryValue(row))//
+					theSortOrder.set(getSortOrder(column), null);
+					theSortPanel.setVisible(c.getSortability() != null);
+					theFilterCheck.setSelected(filter.isFiltered());
+					ObservableSet<C> distinctValues = model.getRows().flow().map(c.getType(), row -> c.getCategoryValue(row))//
 						.withEquivalence(c.getFilterability().getEquivalence()).distinct().collectActive(theUnsub);
-					Component editor=c.getFilterability()
+					Component editor = filter.getEditor(distinctValues, isFilterEnabled, theUnsub, () -> {
+						rowSorter.sort();
+					});
+					theCustomFilterPanel.add(editor, BorderLayout.CENTER);
+					// TODO resize and relocate the popup
+					theFilterPopup.setVisible(true);
 				}
 
-				private void setSortOrder(DefaultRowSorter<?, ?> rowSorter, int column, SortOrder order) {
+				private void setFilterEnabled(boolean enabled, Object cause) {
+					int column = theEditingColumn;
 					if (column < 0)
 						return;
-					// TODO Auto-generated method stub
+					isFilterEnabled.set(enabled ? null : "Filtering is disabled", cause);
+					CategoryFilter<?> filter = rowFilter.getFilter(theEditingColumn).getFilter();
+					if (filter != null)
+						filter.clearFilters();
+				}
 
+				private SortOrder getSortOrder(int column) {
+					for (SortKey key : rowSorter.getSortKeys()) {
+						if (key.getColumn() == column)
+							return key.getSortOrder();
+					}
+					return SortOrder.UNSORTED;
+				}
+
+				private void setSortOrder(SortOrder order) {
+					int column = theEditingColumn;
+					if (column < 0)
+						return;
+					LinkedList<SortKey> keys = new LinkedList<>(rowSorter.getSortKeys());
+					Iterator<SortKey> keyIter = keys.iterator();
+					while (keyIter.hasNext()) {
+						SortKey key = keyIter.next();
+						if (key.getColumn() == column) {
+							if (key.getSortOrder() == order)
+								return; // Already sorted as specified
+							else {
+								keyIter.remove();
+								break;
+							}
+						}
+					}
+					keys.addFirst(new SortKey(column, order));
+					rowSorter.setSortKeys(keys);
 				}
 			};
 			table.getTableHeader().addMouseListener(headerML);
