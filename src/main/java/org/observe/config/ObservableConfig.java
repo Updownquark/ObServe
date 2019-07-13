@@ -28,8 +28,6 @@ import org.observe.collect.CollectionChangeType;
 import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
-import org.observe.collect.ObservableValueSet;
-import org.observe.collect.ValueCreator;
 import org.observe.util.EntityReflector;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;

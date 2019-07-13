@@ -546,7 +546,7 @@ public class ObservableTableModel<R> implements TableModel {
 					// TODO resize and relocate the popup
 					theFilterPopup.setVisible(true);
 				}
-				
+
 				private void setFilterEnabled(boolean enabled, Object cause) {
 					int column = theEditingColumn;
 					if (column < 0)
@@ -556,7 +556,7 @@ public class ObservableTableModel<R> implements TableModel {
 					if (filter != null)
 						filter.clearFilters();
 				}
-				
+
 				private SortOrder getSortOrder(int column) {
 					for (SortKey key : rowSorter.getSortKeys()) {
 						if (key.getColumn() == column)
@@ -564,7 +564,7 @@ public class ObservableTableModel<R> implements TableModel {
 					}
 					return SortOrder.UNSORTED;
 				}
-				
+
 				private void setSortOrder(SortOrder order) {
 					int column = theEditingColumn;
 					if (column < 0)

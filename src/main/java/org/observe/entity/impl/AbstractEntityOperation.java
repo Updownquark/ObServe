@@ -7,19 +7,19 @@ import org.observe.entity.EntityOperation;
 import org.observe.entity.EntityOperationVariable;
 import org.observe.entity.EntityValueAccess;
 import org.observe.entity.ObservableEntityType;
-import org.qommons.collect.ParameterSet;
-import org.qommons.collect.ParameterSet.ParameterMap;
+import org.qommons.collect.QuickSet;
+import org.qommons.collect.QuickSet.QuickMap;
 
 public abstract class AbstractEntityOperation<E> implements EntityOperation<E> {
 	private final ObservableEntityType<E> theType;
-	private final ParameterMap<EntityOperationVariable<E, ?>> theVariables;
+	private final QuickMap<String, EntityOperationVariable<E, ?>> theVariables;
 
-	public AbstractEntityOperation(ObservableEntityType<E> type, ParameterMap<EntityOperationVariable<E, ?>> variables) {
+	public AbstractEntityOperation(ObservableEntityType<E> type, QuickMap<String, EntityOperationVariable<E, ?>> variables) {
 		theType = type;
 		theVariables = variables;
 	}
 
-	protected abstract AbstractEntityOperation<E> copy(ParameterMap<EntityOperationVariable<E, ?>> variables);
+	protected abstract AbstractEntityOperation<E> copy(QuickMap<String, EntityOperationVariable<E, ?>> variables);
 
 	@Override
 	public ObservableEntityType<E> getEntityType() {
@@ -27,7 +27,7 @@ public abstract class AbstractEntityOperation<E> implements EntityOperation<E> {
 	}
 
 	@Override
-	public ParameterMap<EntityOperationVariable<E, ?>> getVariables() {
+	public QuickMap<String, EntityOperationVariable<E, ?>> getVariables() {
 		return theVariables;
 	}
 
@@ -37,7 +37,7 @@ public abstract class AbstractEntityOperation<E> implements EntityOperation<E> {
 		List<String> vars = new ArrayList<>(theVariables.keySet().size() + 1);
 		vars.addAll(theVariables.keySet());
 		vars.add(variable);
-		ParameterMap<EntityOperationVariable<E, ?>> newVars = ParameterSet.of(vars).createMap();
+		QuickMap<String, EntityOperationVariable<E, ?>> newVars = QuickSet.of(vars).createMap();
 		for (int i = 0; i < theVariables.keySet().size(); i++)
 			newVars.put(theVariables.keySet().get(i), theVariables.get(i));
 		newVars.put(variable, new EntityOperationVariable<>(this, variable, value));

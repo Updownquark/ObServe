@@ -4,14 +4,14 @@ import org.observe.entity.EntityOperation;
 import org.observe.entity.EntityOperationVariable;
 import org.observe.entity.PreparedOperation;
 import org.observe.util.TypeTokens;
-import org.qommons.collect.ParameterSet.ParameterMap;
+import org.qommons.collect.QuickSet.QuickMap;
 
 public abstract class AbstractPreparedOperation<E, O extends PreparedOperation<E>> implements PreparedOperation<E> {
 	private final EntityOperation<E> theDefinition;
 	private final Object thePreparedObject;
-	private final ParameterMap<Object> theVariableValues;
+	private final QuickMap<String, Object> theVariableValues;
 
-	public AbstractPreparedOperation(EntityOperation<E> definition, Object preparedObject, ParameterMap<Object> variableValues) {
+	public AbstractPreparedOperation(EntityOperation<E> definition, Object preparedObject, QuickMap<String, Object> variableValues) {
 		theDefinition = definition;
 		thePreparedObject = preparedObject;
 		theVariableValues = variableValues;
@@ -27,7 +27,7 @@ public abstract class AbstractPreparedOperation<E, O extends PreparedOperation<E
 	}
 
 	@Override
-	public ParameterMap<Object> getVariableValues() {
+	public QuickMap<String, Object> getVariableValues() {
 		return theVariableValues;
 	}
 
@@ -43,7 +43,7 @@ public abstract class AbstractPreparedOperation<E, O extends PreparedOperation<E
 		String msg = ((EntityOperationVariable<E, Object>) vbl).getValue().canAccept(value);
 		if (msg != null)
 			throw new IllegalArgumentException(variableName + ": " + msg);
-		ParameterMap<Object> vvCopy = theVariableValues.keySet().createMap();
+		QuickMap<String, Object> vvCopy = theVariableValues.keySet().createMap();
 		for (int i = 0; i < theVariableValues.keySet().size(); i++) {
 			if (i != idx)
 				vvCopy.put(i, theVariableValues.get(i));
@@ -52,5 +52,5 @@ public abstract class AbstractPreparedOperation<E, O extends PreparedOperation<E
 		return copy(vvCopy.unmodifiable());
 	}
 
-	protected abstract O copy(ParameterMap<Object> variableValues);
+	protected abstract O copy(QuickMap<String, Object> variableValues);
 }

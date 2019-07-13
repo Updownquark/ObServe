@@ -1,6 +1,6 @@
 package org.observe.entity;
 
-import org.qommons.collect.ParameterSet.ParameterMap;
+import org.qommons.collect.QuickSet.QuickMap;
 
 public interface PreparedOperation<E> extends EntityOperation<E> {
 	EntityOperation<E> getDefinition();
@@ -16,7 +16,7 @@ public interface PreparedOperation<E> extends EntityOperation<E> {
 	}
 
 	@Override
-	default ParameterMap<EntityOperationVariable<E, ?>> getVariables() {
+	default QuickMap<String, EntityOperationVariable<E, ?>> getVariables() {
 		return getDefinition().getVariables();
 	}
 
@@ -29,5 +29,5 @@ public interface PreparedOperation<E> extends EntityOperation<E> {
 	 */
 	EntityOperation<E> satisfy(String variableName, Object value) throws IllegalArgumentException;
 
-	ParameterMap<Object> getVariableValues();
+	QuickMap<String, Object> getVariableValues();
 }

@@ -21,8 +21,8 @@ import org.observe.util.MethodRetrievingHandler;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsUtils;
 import org.qommons.collect.BetterSortedSet;
-import org.qommons.collect.ParameterSet;
-import org.qommons.collect.ParameterSet.ParameterMap;
+import org.qommons.collect.QuickSet;
+import org.qommons.collect.QuickSet.QuickMap;
 import org.qommons.tree.BetterTreeSet;
 
 import com.google.common.reflect.TypeToken;
@@ -195,21 +195,21 @@ public class ObservableEntitySetImpl implements ObservableEntitySet {
 		}
 
 		public EntitySetBuilder build() {
-			ParameterMap<IdentityFieldType<? super E, ?>> idFields;
-			ParameterMap<ObservableEntityFieldType<? super E, ?>> fields;
+			QuickMap<String, IdentityFieldType<? super E, ?>> idFields;
+			QuickMap<String, ObservableEntityFieldType<? super E, ?>> fields;
 			if (theParent != null) {
-				idFields = (ParameterMap<IdentityFieldType<? super E, ?>>) (ParameterMap<?>) theParent.getIdentityFields();
+				idFields = (QuickMap<String, IdentityFieldType<? super E, ?>>) (QuickMap<String, ?>) theParent.getIdentityFields();
 				Set<String> otherFieldNames = new LinkedHashSet<>();
 				otherFieldNames.addAll(theParent.getFields().keySet());
 				otherFieldNames.addAll(theFields.keySet());
-				fields = ParameterSet.of(otherFieldNames).createMap();
+				fields = QuickSet.of(otherFieldNames).createMap();
 				for (int i = 0; i < theParent.getFields().keySet().size(); i++)
 					fields.put(theParent.getFields().keySet().get(i), theParent.getFields().get(i));
 			} else {
 				if (theIdFields == null)
 					throw new IllegalStateException("No identity fields defined for entity type " + theEntityName);
-				idFields = ParameterSet.of(theIdFields.keySet()).createMap();
-				fields = ParameterSet.of(theFields.keySet()).createMap();
+				idFields = QuickSet.of(theIdFields.keySet()).createMap();
+				fields = QuickSet.of(theFields.keySet()).createMap();
 			}
 			ObservableEntityTypeImpl<E> entityType = new ObservableEntityTypeImpl<>(theEntitySet, theEntityName, theJavaType, theParent, //
 				idFields.unmodifiable(), fields.unmodifiable(), theProxy, theProxyHandler);

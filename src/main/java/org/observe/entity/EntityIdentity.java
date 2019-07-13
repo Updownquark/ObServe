@@ -2,15 +2,15 @@ package org.observe.entity;
 
 import java.util.Objects;
 
-import org.qommons.collect.ParameterSet.ParameterMap;
+import org.qommons.collect.QuickSet.QuickMap;
 
 public class EntityIdentity<E> {
 	private final ObservableEntityType<E> theEntityType;
-	final ParameterMap<IdentityField<E, ?>> theFields;
+	final QuickMap<String, IdentityField<E, ?>> theFields;
 
 	private EntityIdentity(ObservableEntityType<E> entityType, Object[] fieldValues) {
 		theEntityType = entityType;
-		ParameterMap<IdentityField<E, ?>> fieldMap = entityType.getIdentityFields().keySet().createMap();
+		QuickMap<String, IdentityField<E, ?>> fieldMap = entityType.getIdentityFields().keySet().createMap();
 		for (int i = 0; i < fieldValues.length; i++)
 			fieldMap.put(i, new IdentityField<>((IdentityFieldType<E, Object>) entityType.getIdentityFields().get(i), fieldValues[i]));
 		theFields = fieldMap.unmodifiable();
@@ -20,7 +20,7 @@ public class EntityIdentity<E> {
 		return theEntityType;
 	}
 
-	public ParameterMap<IdentityField<E, ?>> getFields() {
+	public QuickMap<String, IdentityField<E, ?>> getFields() {
 		return theFields;
 	}
 

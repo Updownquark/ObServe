@@ -9,21 +9,21 @@ import org.observe.entity.ObservableEntity;
 import org.observe.entity.ObservableEntityFieldType;
 import org.observe.entity.ObservableEntityType;
 import org.observe.entity.PreparedCreator;
-import org.qommons.collect.ParameterSet.ParameterMap;
+import org.qommons.collect.QuickSet.QuickMap;
 
 public class EntityCreatorImpl<E> extends AbstractEntityOperation<E> implements EntityCreator<E> {
-	private final ParameterMap<Object> theIdFieldValues;
-	private final ParameterMap<Object> theFieldValues;
+	private final QuickMap<String, Object> theIdFieldValues;
+	private final QuickMap<String, Object> theFieldValues;
 
-	public EntityCreatorImpl(ObservableEntityType<E> entityType, ParameterMap<EntityOperationVariable<E, ?>> variables,
-		ParameterMap<Object> idFieldValues, ParameterMap<Object> fieldValues) {
+	public EntityCreatorImpl(ObservableEntityType<E> entityType, QuickMap<String, EntityOperationVariable<E, ?>> variables,
+		QuickMap<String, Object> idFieldValues, QuickMap<String, Object> fieldValues) {
 		super(entityType, variables);
 		theIdFieldValues = idFieldValues;
 		theFieldValues = fieldValues;
 	}
 
 	@Override
-	protected EntityCreatorImpl<E> copy(ParameterMap<EntityOperationVariable<E, ?>> variables) {
+	protected EntityCreatorImpl<E> copy(QuickMap<String, EntityOperationVariable<E, ?>> variables) {
 		return new EntityCreatorImpl<>(getEntityType(), variables, theIdFieldValues, theFieldValues);
 	}
 
@@ -38,7 +38,7 @@ public class EntityCreatorImpl<E> extends AbstractEntityOperation<E> implements 
 		if (idx >= 0) {
 			if (getEntityType().getIdentityFields().get(idx) != field)
 				throw new IllegalArgumentException("No such field: " + getEntityType() + "." + field);
-			ParameterMap<Object> copy = theIdFieldValues.copy();
+			QuickMap<String, Object> copy = theIdFieldValues.copy();
 			copy.put(idx, value);
 			return new EntityCreatorImpl<>(getEntityType(), getVariables(), copy, theFieldValues);
 		}
@@ -46,7 +46,7 @@ public class EntityCreatorImpl<E> extends AbstractEntityOperation<E> implements 
 		if (idx >= 0) {
 			if (getEntityType().getFields().get(idx) != field)
 				throw new IllegalArgumentException("No such field: " + getEntityType() + "." + field);
-			ParameterMap<Object> copy = theFieldValues.copy();
+			QuickMap<String, Object> copy = theFieldValues.copy();
 			copy.put(idx, value);
 			return new EntityCreatorImpl<>(getEntityType(), getVariables(), theIdFieldValues, copy);
 		}

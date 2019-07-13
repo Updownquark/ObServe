@@ -22,8 +22,8 @@ import org.qommons.Transaction;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterHashMap;
 import org.qommons.collect.BetterMap;
-import org.qommons.collect.ParameterSet;
-import org.qommons.collect.ParameterSet.ParameterMap;
+import org.qommons.collect.QuickSet;
+import org.qommons.collect.QuickSet.QuickMap;
 import org.qommons.collect.StampedLockingStrategy;
 
 class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
@@ -32,8 +32,8 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 	private final Class<E> theEntityType;
 	private final ObservableEntityTypeImpl<? super E> theParent;
 	private final ObservableEntityTypeImpl<? super E> theRoot;
-	private final ParameterMap<IdentityFieldType<? super E, ?>> theIdFields;
-	private final ParameterMap<ObservableEntityFieldType<? super E, ?>> theFields;
+	private final QuickMap<String, IdentityFieldType<? super E, ?>> theIdFields;
+	private final QuickMap<String, ObservableEntityFieldType<? super E, ?>> theFields;
 	private final BetterMap<EntityIdentity<? super E>, WeakReference<ObservableEntityImpl<? extends E>>> theEntitiesById;
 	private final IdentityHashMap<E, WeakReference<ObservableEntityImpl<? extends E>>> theEntitiesByProxy;
 
@@ -41,12 +41,12 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 	private final BetterMap<Method, MethodHandle> theDefaultMethods;
 	private final E theProxy;
 	private final MethodRetrievingHandler theProxyHandler;
-	private final ParameterMap<IdentityFieldType<? super E, ?>> theIdFieldsByGetter;
-	private final ParameterMap<ObservableEntityFieldType<? super E, ?>> theFieldsByGetter;
+	private final QuickMap<String, IdentityFieldType<? super E, ?>> theIdFieldsByGetter;
+	private final QuickMap<String, ObservableEntityFieldType<? super E, ?>> theFieldsByGetter;
 
 	ObservableEntityTypeImpl(ObservableEntitySetImpl entitySet, String name, Class<E> entityType,
-		ObservableEntityTypeImpl<? super E> parent, ParameterMap<IdentityFieldType<? super E, ?>> idFields,
-		ParameterMap<ObservableEntityFieldType<? super E, ?>> fields, E proxy, MethodRetrievingHandler handler) {
+		ObservableEntityTypeImpl<? super E> parent, QuickMap<String, IdentityFieldType<? super E, ?>> idFields,
+		QuickMap<String, ObservableEntityFieldType<? super E, ?>> fields, E proxy, MethodRetrievingHandler handler) {
 		theEntitySet = entitySet;
 		theName = name;
 		theEntityType = entityType;
@@ -71,8 +71,8 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 				if (((ObservableEntitySetImpl.FieldTypeImpl<?, ?>) field).getFieldGetter() != null)
 					getters.put(((ObservableEntitySetImpl.FieldTypeImpl<?, ?>) field).getFieldGetter().getName(), field);
 			}
-			ParameterSet getterNames = ParameterSet.of(getters.keySet());
-			ParameterMap<ObservableEntityFieldType<? super E, ?>> fieldsByGetter = getterNames.createMap();
+			QuickSet getterNames = QuickSet.of(getters.keySet());
+			QuickMap<String, ObservableEntityFieldType<? super E, ?>> fieldsByGetter = getterNames.createMap();
 			for (int i = 0; i < getterNames.size(); i++)
 				fieldsByGetter.put(i, getters.get(getterNames.get(i)));
 			theFieldsByGetter = fieldsByGetter.unmodifiable();
@@ -84,8 +84,8 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 					if (((ObservableEntitySetImpl.FieldTypeImpl<?, ?>) field).getFieldGetter() != null)
 						getters.put(((ObservableEntitySetImpl.FieldTypeImpl<?, ?>) field).getFieldGetter().getName(), field);
 				}
-				getterNames = ParameterSet.of(getters.keySet());
-				ParameterMap<IdentityFieldType<? super E, ?>> idFieldsByGetter = getterNames.createMap();
+				getterNames = QuickSet.of(getters.keySet());
+				QuickMap<String, IdentityFieldType<? super E, ?>> idFieldsByGetter = getterNames.createMap();
 				for (int i = 0; i < getterNames.size(); i++)
 					idFieldsByGetter.put(i, (IdentityFieldType<? super E, ?>) getters.get(getterNames.get(i)));
 				theIdFieldsByGetter = idFieldsByGetter.unmodifiable();
@@ -140,12 +140,12 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 	}
 
 	@Override
-	public ParameterMap<ObservableEntityFieldType<? super E, ?>> getFields() {
+	public QuickMap<String, ObservableEntityFieldType<? super E, ?>> getFields() {
 		return theFields;
 	}
 
 	@Override
-	public ParameterMap<IdentityFieldType<? super E, ?>> getIdentityFields() {
+	public QuickMap<String, IdentityFieldType<? super E, ?>> getIdentityFields() {
 		return theIdFields;
 	}
 
@@ -229,12 +229,12 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 
 	@Override
 	public EntitySelection<E> select() {
-		return new EntitySelectionImpl<>(this, ParameterSet.EMPTY.createMap());
+		return new EntitySelectionImpl<>(this, QuickSet.<String> empty().createMap());
 	}
 
 	@Override
 	public EntityCreator<E> create() {
-		return new EntityCreatorImpl<>(this, ParameterSet.EMPTY.createMap(), theIdFields.keySet().createMap(),
+		return new EntityCreatorImpl<>(this, QuickSet.<String> empty().createMap(), theIdFields.keySet().createMap(),
 			theFields.keySet().createMap());
 	}
 

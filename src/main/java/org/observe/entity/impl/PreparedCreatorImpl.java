@@ -6,11 +6,11 @@ import org.observe.entity.EntityOperationException;
 import org.observe.entity.ObservableEntity;
 import org.observe.entity.ObservableEntityFieldType;
 import org.observe.entity.PreparedCreator;
-import org.qommons.collect.ParameterSet.ParameterMap;
+import org.qommons.collect.QuickSet.QuickMap;
 
 public class PreparedCreatorImpl<E> extends AbstractPreparedOperation<E, PreparedCreatorImpl<E>> implements PreparedCreator<E> {
-	private final ParameterMap
-	PreparedCreatorImpl(EntityCreatorImpl<E> definition, Object preparedObject, ParameterMap<Object> variableValues) {
+	// private final ParameterMap
+	PreparedCreatorImpl(EntityCreatorImpl<E> definition, Object preparedObject, QuickMap<String, Object> variableValues) {
 		super(definition, preparedObject, variableValues);
 		// TODO Auto-generated constructor stub
 	}
@@ -40,7 +40,7 @@ public class PreparedCreatorImpl<E> extends AbstractPreparedOperation<E, Prepare
 	}
 
 	@Override
-	protected PreparedCreatorImpl<E> copy(ParameterMap<Object> variableValues) {
+	protected PreparedCreatorImpl<E> copy(QuickMap<String, Object> variableValues) {
 		// TODO Auto-generated method stub
 		return null;
 	}

@@ -1,12 +1,12 @@
 package org.observe.entity;
 
-import org.qommons.collect.ParameterSet.ParameterMap;
+import org.qommons.collect.QuickSet.QuickMap;
 
 public class GenericPersistedEntity<E> {
 	public final EntityIdentity<E> id;
-	public final ParameterMap<Object> fields;
+	public final QuickMap<String, Object> fields;
 
-	public GenericPersistedEntity(EntityIdentity<E> id, ParameterMap<Object> fields) {
+	public GenericPersistedEntity(EntityIdentity<E> id, QuickMap<String, Object> fields) {
 		super();
 		this.id = id;
 		this.fields = fields;

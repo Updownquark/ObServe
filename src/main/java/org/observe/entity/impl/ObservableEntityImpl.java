@@ -10,16 +10,16 @@ import org.observe.entity.EntityUtils;
 import org.observe.entity.ObservableEntity;
 import org.observe.entity.ObservableEntityField;
 import org.observe.entity.ObservableEntityFieldType;
-import org.qommons.collect.ParameterSet.ParameterMap;
+import org.qommons.collect.QuickSet.QuickMap;
 
 class ObservableEntityImpl<E> implements ObservableEntity<E> {
 	private final ObservableEntityTypeImpl<E> theType;
 	private final EntityIdentity<? super E> theId;
 	private final E theEntity;
-	private final ParameterMap<ObservableEntityField<? super E, ?>> theFields;
+	private final QuickMap<String, ObservableEntityField<? super E, ?>> theFields;
 
 	ObservableEntityImpl(ObservableEntityTypeImpl<E> type, EntityIdentity<? super E> id,
-		ParameterMap<ObservableEntityField<? super E, ?>> fields) {
+		QuickMap<String, ObservableEntityField<? super E, ?>> fields) {
 		theType = type;
 		theId = id;
 		theFields = fields;

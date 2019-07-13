@@ -8,7 +8,8 @@ import java.util.Map;
 import java.util.function.Function;
 
 import org.observe.entity.impl.ObservableEntityUtils;
-import org.qommons.collect.ParameterSet.ParameterMap;
+import org.qommons.QommonsUtils;
+import org.qommons.collect.QuickSet.QuickMap;
 
 import com.google.common.reflect.Invokable;
 import com.google.common.reflect.TypeToken;
@@ -49,8 +50,8 @@ public class EntityReflector<E> {
 	}
 
 	private final TypeToken<E> theType;
-	private final ParameterMap<Invokable<? super E, ?>> theFieldGetters;
-	private final ParameterMap<Invokable<? super E, ?>> theFieldSetters;
+	private final QuickMap<String, Invokable<? super E, ?>> theFieldGetters;
+	private final QuickMap<String, Invokable<? super E, ?>> theFieldSetters;
 	private final E theProxy;
 	private final MethodRetrievingHandler theProxyHandler;
 
@@ -66,8 +67,8 @@ public class EntityReflector<E> {
 		Map<String, Invokable<? super E, ?>> fieldGetters = new LinkedHashMap<>();
 		Map<String, Invokable<? super E, ?>> fieldSetters = new LinkedHashMap<>();
 		addFieldGetters(theType, fieldGetters, fieldSetters, getterFilter, setterFilter);
-		theFieldGetters = ParameterMap.of(fieldGetters).unmodifiable();
-		ParameterMap<Invokable<? super E, ?>> setters = theFieldGetters.keySet().createMap();
+		theFieldGetters = QuickMap.of(fieldGetters, QommonsUtils.DISTINCT_NUMBER_TOLERANT).unmodifiable();
+		QuickMap<String, Invokable<? super E, ?>> setters = theFieldGetters.keySet().createMap();
 		for (int i = 0; i < setters.keySet().size(); i++) {
 			String fieldName = setters.keySet().get(i);
 			setters.put(i, fieldSetters.get(fieldName));
@@ -99,11 +100,11 @@ public class EntityReflector<E> {
 			addFieldGetters((TypeToken<T>) type.resolveType(intf), fieldGetters, fieldSetters, getterFilter, setterFilter); // Generics hack
 	}
 
-	public ParameterMap<Invokable<? super E, ?>> getFieldGetters() {
+	public QuickMap<String, Invokable<? super E, ?>> getFieldGetters() {
 		return theFieldGetters;
 	}
 
-	public ParameterMap<Invokable<? super E, ?>> getFieldSetters() {
+	public QuickMap<String, Invokable<? super E, ?>> getFieldSetters() {
 		return theFieldSetters;
 	}
 

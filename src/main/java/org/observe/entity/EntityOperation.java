@@ -1,11 +1,11 @@
 package org.observe.entity;
 
-import org.qommons.collect.ParameterSet.ParameterMap;
+import org.qommons.collect.QuickSet.QuickMap;
 
 public interface EntityOperation<E> {
 	ObservableEntityType<E> getEntityType();
 
 	PreparedOperation<E> prepare() throws IllegalStateException, EntityOperationException;
 
-	ParameterMap<EntityOperationVariable<E, ?>> getVariables();
+	QuickMap<String, EntityOperationVariable<E, ?>> getVariables();
 }
