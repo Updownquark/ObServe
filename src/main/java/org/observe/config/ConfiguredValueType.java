@@ -4,4 +4,6 @@ import org.qommons.collect.QuickSet.QuickMap;
 
 public interface ConfiguredValueType<E> {
 	QuickMap<String, ConfiguredValueField<? super E, ?>> getFields();
+
+	boolean allowsCustomFields();
 }

@@ -1,11 +1,14 @@
 package org.observe.config;
 
+import java.util.Set;
 import java.util.function.Function;
 
 import org.qommons.collect.CollectionElement;
 
 public interface ValueCreator<E> {
 	ConfiguredValueType<E> getType();
+
+	Set<Integer> getRequiredFields();
 
 	ValueCreator<E> with(String fieldName, Object value) throws IllegalArgumentException;
 
