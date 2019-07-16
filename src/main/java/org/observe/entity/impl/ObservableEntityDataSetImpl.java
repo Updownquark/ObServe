@@ -15,7 +15,7 @@ import org.observe.entity.IdentityFieldType;
 import org.observe.entity.ObservableEntity;
 import org.observe.entity.ObservableEntityField;
 import org.observe.entity.ObservableEntityFieldType;
-import org.observe.entity.ObservableEntitySet;
+import org.observe.entity.ObservableEntityDataSet;
 import org.observe.entity.ObservableEntityType;
 import org.observe.util.MethodRetrievingHandler;
 import org.observe.util.TypeTokens;
@@ -27,11 +27,11 @@ import org.qommons.tree.BetterTreeSet;
 
 import com.google.common.reflect.TypeToken;
 
-public class ObservableEntitySetImpl implements ObservableEntitySet {
+public class ObservableEntityDataSetImpl implements ObservableEntityDataSet {
 	private final BetterSortedSet<ObservableEntityTypeImpl<?>> theEntityTypes;
 	private final Map<Class<?>, String> theWeirdNames;
 
-	private ObservableEntitySetImpl() {
+	private ObservableEntityDataSetImpl() {
 		theEntityTypes = new BetterTreeSet<>(true, (et1, et2) -> compareEntityTypes(et1.getEntityName(), et2.getEntityName()));
 		theWeirdNames = new HashMap<>();
 	}
@@ -67,11 +67,11 @@ public class ObservableEntitySetImpl implements ObservableEntitySet {
 	}
 
 	public static class EntitySetBuilder {
-		private final ObservableEntitySetImpl theEntitySet;
+		private final ObservableEntityDataSetImpl theEntitySet;
 		private boolean isBuilding;
 
 		EntitySetBuilder() {
-			theEntitySet = new ObservableEntitySetImpl();
+			theEntitySet = new ObservableEntityDataSetImpl();
 			isBuilding = true;
 		}
 
@@ -107,14 +107,14 @@ public class ObservableEntitySetImpl implements ObservableEntitySet {
 			return type;
 		}
 
-		public ObservableEntitySet build() {
+		public ObservableEntityDataSet build() {
 			return theEntitySet;
 		}
 	}
 
 	public static class ObservableEntityTypeBuilder<E> {
 		private final EntitySetBuilder theSetBuilder;
-		private final ObservableEntitySetImpl theEntitySet;
+		private final ObservableEntityDataSetImpl theEntitySet;
 		// private ObservableEntityTypeImpl<E> theType;
 		private final Class<E> theJavaType;
 		private final E theProxy;
@@ -127,7 +127,7 @@ public class ObservableEntitySetImpl implements ObservableEntitySet {
 
 		private boolean isBuilding;
 
-		ObservableEntityTypeBuilder(EntitySetBuilder setBuilder, ObservableEntitySetImpl entitySet, Class<E> entityType,
+		ObservableEntityTypeBuilder(EntitySetBuilder setBuilder, ObservableEntityDataSetImpl entitySet, Class<E> entityType,
 			String entityName) {
 			theSetBuilder = setBuilder;
 			theEntitySet = entitySet;

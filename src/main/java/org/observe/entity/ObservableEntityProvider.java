@@ -5,7 +5,7 @@ import org.qommons.Transactable;
 
 /**
  * <p>
- * An implementation data source to provide an ObservableEntitySet with entity data and possibly the power to execute changes to the data
+ * An implementation data source to provide an ObservableEntityDataSet with entity data and possibly the power to execute changes to the data
  * set.
  * </p>
  * <p>

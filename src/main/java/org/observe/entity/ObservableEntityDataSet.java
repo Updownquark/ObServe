@@ -2,7 +2,7 @@ package org.observe.entity;
 
 import java.util.List;
 
-public interface ObservableEntitySet {
+public interface ObservableEntityDataSet {
 	List<ObservableEntityType<?>> getEntityTypes();
 	ObservableEntityType<?> getEntityType(String entityName);
 	<E> ObservableEntityType<E> getEntityType(Class<E> type);

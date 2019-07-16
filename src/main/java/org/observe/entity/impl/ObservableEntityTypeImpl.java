@@ -27,7 +27,7 @@ import org.qommons.collect.QuickSet.QuickMap;
 import org.qommons.collect.StampedLockingStrategy;
 
 class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
-	private final ObservableEntitySetImpl theEntitySet;
+	private final ObservableEntityDataSetImpl theEntitySet;
 	private final String theName;
 	private final Class<E> theEntityType;
 	private final ObservableEntityTypeImpl<? super E> theParent;
@@ -44,7 +44,7 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 	private final QuickMap<String, IdentityFieldType<? super E, ?>> theIdFieldsByGetter;
 	private final QuickMap<String, ObservableEntityFieldType<? super E, ?>> theFieldsByGetter;
 
-	ObservableEntityTypeImpl(ObservableEntitySetImpl entitySet, String name, Class<E> entityType,
+	ObservableEntityTypeImpl(ObservableEntityDataSetImpl entitySet, String name, Class<E> entityType,
 		ObservableEntityTypeImpl<? super E> parent, QuickMap<String, IdentityFieldType<? super E, ?>> idFields,
 		QuickMap<String, ObservableEntityFieldType<? super E, ?>> fields, E proxy, MethodRetrievingHandler handler) {
 		theEntitySet = entitySet;
@@ -68,8 +68,8 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 		if (theProxy != null) {
 			Map<String, ObservableEntityFieldType<? super E, ?>> getters = new HashMap<>();
 			for (ObservableEntityFieldType<? super E, ?> field : fields.allValues()) {
-				if (((ObservableEntitySetImpl.FieldTypeImpl<?, ?>) field).getFieldGetter() != null)
-					getters.put(((ObservableEntitySetImpl.FieldTypeImpl<?, ?>) field).getFieldGetter().getName(), field);
+				if (((ObservableEntityDataSetImpl.FieldTypeImpl<?, ?>) field).getFieldGetter() != null)
+					getters.put(((ObservableEntityDataSetImpl.FieldTypeImpl<?, ?>) field).getFieldGetter().getName(), field);
 			}
 			QuickSet getterNames = QuickSet.of(getters.keySet());
 			QuickMap<String, ObservableEntityFieldType<? super E, ?>> fieldsByGetter = getterNames.createMap();
@@ -81,8 +81,8 @@ class ObservableEntityTypeImpl<E> implements ObservableEntityType<E> {
 			else {
 				getters.clear();
 				for (IdentityFieldType<? super E, ?> field : theIdFields.allValues()) {
-					if (((ObservableEntitySetImpl.FieldTypeImpl<?, ?>) field).getFieldGetter() != null)
-						getters.put(((ObservableEntitySetImpl.FieldTypeImpl<?, ?>) field).getFieldGetter().getName(), field);
+					if (((ObservableEntityDataSetImpl.FieldTypeImpl<?, ?>) field).getFieldGetter() != null)
+						getters.put(((ObservableEntityDataSetImpl.FieldTypeImpl<?, ?>) field).getFieldGetter().getName(), field);
 				}
 				getterNames = QuickSet.of(getters.keySet());
 				QuickMap<String, IdentityFieldType<? super E, ?>> idFieldsByGetter = getterNames.createMap();
