@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -42,6 +43,7 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.collect.QuickSet;
 import org.qommons.collect.QuickSet.QuickMap;
 import org.qommons.io.Format;
 import org.qommons.tree.BetterTreeList;
@@ -424,30 +426,30 @@ public class ObservableConfig implements StructuredTransactable {
 		return new ObservableConfigChangesObservable(this, path);
 	}
 
-	public ObservableCollection<? extends ObservableConfig> getAllContent() {
+	public ObservableValueSet<? extends ObservableConfig> getAllContent() {
 		return getContent(ANY_NAME);
 	}
 
-	// TODO Change this to an ObservableValueSet
-	public ObservableCollection<? extends ObservableConfig> getContent(String path) {
+	public ObservableValueSet<? extends ObservableConfig> getContent(String path) {
 		return getContent(createPath(path));
 	}
 
-	// TODO Change this to an ObservableValueSet
-	public ObservableCollection<? extends ObservableConfig> getContent(ObservableConfigPath path) {
+	public ObservableValueSet<? extends ObservableConfig> getContent(ObservableConfigPath path) {
+		ObservableCollection<? extends ObservableConfig> children;
 		if (path.getElements().size() == 1) {
 			if (path.getLastElement().getName().equals(ANY_NAME))
-				return new FullObservableConfigContent<>(this, getType());
+				children = new FullObservableConfigContent<>(this, getType());
 			else
-				return new SimpleObservableConfigContent<>(this, TYPE, path.getLastElement());
+				children = new SimpleObservableConfigContent<>(this, TYPE, path.getLastElement());
 		} else {
 			ObservableConfigPath last = path.getLast();
 			TypeToken<ObservableConfig> type = (TypeToken<ObservableConfig>) getType();
 			TypeToken<ObservableCollection<ObservableConfig>> collType = TypeTokens.get().keyFor(ObservableCollection.class)
 				.getCompoundType(type);
-			return ObservableCollection.flattenValue(
+			children = ObservableCollection.flattenValue(
 				observeDescendant(path.getParent()).map(collType, p -> (ObservableCollection<ObservableConfig>) p.getContent(last)));
 		}
+		return new ObservableChildSet<>(this, children, path.getLastElement().getName(), Observable.empty());
 	}
 
 	public ObservableValue<? extends ObservableConfig> observeDescendant(ObservableConfigPath path) {
@@ -516,6 +518,7 @@ public class ObservableConfig implements StructuredTransactable {
 			configs = ObservableCollection.flattenValue(observeDescendant(path.getParent()).map(configListType,
 				descendant -> descendant.getContent(path.getLastElement().getName())));
 		}
+		return new ObservableConfigValues<>(this, configs, type, parser, format, until);
 	}
 
 	public <T> ObservableValueSet<T> observeEntities(ObservableConfigPath path, TypeToken<T> type, ConfigEntityFieldParser fieldParser,
@@ -1009,6 +1012,11 @@ public class ObservableConfig implements StructuredTransactable {
 		public ObservableValue<String> isEnabled() {
 			return SettableValue.ALWAYS_ENABLED;
 		}
+	}
+
+	protected static class ObservableConfigValues<T> implements ObservableValueSet<T> {
+		private final ObservableConfig theRoot;
+		private final TypeToken<T> theType;
 	}
 
 	protected static class ObservableConfigEntityValues<T> implements ObservableValueSet<T> {
@@ -1545,6 +1553,106 @@ public class ObservableConfig implements StructuredTransactable {
 					observer.accept(collEvt);
 				}
 			});
+		}
+	}
+
+	protected static class ObservableChildSet<C extends ObservableConfig> implements ObservableValueSet<C> {
+		private final ObservableConfig theRoot;
+		private final ObservableConfigPath thePath;
+		private final ObservableCollection<C> theChildren;
+
+		private ElementId theNewChild;
+
+		public ObservableChildSet(ObservableConfig root, ObservableCollection<C> children, ObservableConfigPath path, Observable<?> until) {
+			theRoot = root;
+			theChildren = children;
+			thePath = path;
+
+			Subscription childSub = theChildren.onChange(evt -> {
+				if (evt.getType() == CollectionChangeType.add)
+					theNewChild = evt.getElementId();
+			});
+			until.take(1).act(__ -> childSub.unsubscribe());
+		}
+
+		@Override
+		public ConfiguredValueType<C> getType() {
+			return new ConfiguredValueType<C>() {
+				@Override
+				public TypeToken<C> getType() {
+					return theChildren.getType();
+				}
+
+				@Override
+				public QuickMap<String, ConfiguredValueField<? super C, ?>> getFields() {
+					return QuickSet.<String> empty().createMap();
+				}
+
+				@Override
+				public int getFieldIndex(Function<? super C, ?> fieldGetter) {
+					throw new UnsupportedOperationException();
+				}
+
+				@Override
+				public boolean allowsCustomFields() {
+					return true;
+				}
+			};
+		}
+
+		@Override
+		public ObservableCollection<? extends C> getValues() {
+			return theChildren;
+		}
+
+		@Override
+		public ValueCreator<C> create() {
+			return new ValueCreator<C>() {
+				private Map<String, String> theFields;
+
+				@Override
+				public ConfiguredValueType<C> getType() {
+					return ObservableChildSet.this.getType();
+				}
+
+				@Override
+				public Set<Integer> getRequiredFields() {
+					return Collections.emptySet();
+				}
+
+				@Override
+				public ValueCreator<C> with(String fieldName, Object value) throws IllegalArgumentException {
+					if (theFields == null)
+						theFields = new LinkedHashMap<>();
+					theFields.put(fieldName, String.valueOf(value));
+					return this;
+				}
+
+				@Override
+				public <F> ValueCreator<C> with(ConfiguredValueField<? super C, F> field, F value) throws IllegalArgumentException {
+					throw new UnsupportedOperationException();
+				}
+
+				@Override
+				public <F> ValueCreator<C> with(Function<? super C, F> field, F value) throws IllegalArgumentException {
+					throw new UnsupportedOperationException();
+				}
+
+				@Override
+				public CollectionElement<C> create() {
+					ElementId newChild;
+					try (Transaction t = theRoot.lock(true, null)) {
+						theRoot.getChild(thePath.getParent(), true).addChild(thePath.getLastElement().getName(), cfg -> {
+							if (theFields != null)
+								for (Map.Entry<String, String> field : theFields.entrySet())
+									cfg.set(field.getKey(), field.getValue());
+						});
+						newChild = theNewChild;
+						theNewChild = null;
+					}
+					return theChildren.getElement(newChild);
+				}
+			};
 		}
 	}
 }
