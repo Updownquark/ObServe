@@ -10,12 +10,13 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.BiFunction;
+import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.function.IntFunction;
 
 import org.observe.entity.impl.ObservableEntityUtils;
 import org.qommons.QommonsUtils;
+import org.qommons.collect.QuickSet;
 import org.qommons.collect.QuickSet.QuickMap;
 
 import com.google.common.reflect.Invokable;
@@ -55,6 +56,48 @@ public class EntityReflector<E> {
 		}
 	}
 
+	public static class ReflectedField<E, F> {
+		private final String theName;
+		private int theFieldIndex;
+		private final Invokable<? super E, F> theGetter;
+		private final Invokable<? super E, ?> theSetter;
+		private final SetterReturnType theSetterReturnType;
+
+		ReflectedField(String name, int fieldIndex, Invokable<? super E, F> getter, Invokable<? super E, ?> setter,
+			SetterReturnType setterReturnType) {
+			theName = name;
+			theFieldIndex = fieldIndex;
+			theGetter = getter;
+			theSetter = setter;
+			theSetterReturnType = setterReturnType;
+		}
+
+		public String getName() {
+			return theName;
+		}
+
+		public int getFieldIndex() {
+			return theFieldIndex;
+		}
+
+		public Invokable<? super E, F> getGetter() {
+			return theGetter;
+		}
+
+		public Invokable<? super E, ?> getSetter() {
+			return theSetter;
+		}
+
+		@Override
+		public String toString() {
+			return theName + " (" + theGetter.getReturnType() + ")";
+		}
+	}
+
+	private enum SetterReturnType {
+		OLD_VALUE, SELF, VOID;
+	}
+
 	static class MethodSignature implements Comparable<MethodSignature> {
 		final String name;
 		final Class<?>[] parameters;
@@ -86,8 +129,9 @@ public class EntityReflector<E> {
 	private final TypeToken<E> theType;
 	private final Function<Method, String> theGetterFilter;
 	private final Function<Method, String> theSetterFilter;
-	private final QuickMap<String, Invokable<? super E, ?>> theFieldGetters;
-	private final QuickMap<String, Invokable<? super E, ?>> theFieldSetters;
+	private final QuickMap<String, ReflectedField<E, ?>> theFields;
+	private final QuickMap<String, ReflectedField<E, ?>> theFieldsByGetter;
+	private final QuickMap<String, ReflectedField<E, ?>> theFieldsBySetter;
 	private final QuickMap<MethodSignature, Function<Object[], ?>> theCustomMethods;
 	private final QuickMap<MethodSignature, MethodHandle> theDefaultMethods;
 	private final E theProxy;
@@ -103,19 +147,41 @@ public class EntityReflector<E> {
 		if (raw == null || !raw.isInterface())
 			throw new IllegalArgumentException("This class only works for interface types");
 		theType = type;
-		theGetterFilter = getterFilter;
-		theSetterFilter = setterFilter;
+		theGetterFilter = getterFilter == null ? new PrefixFilter("get", 0) : getterFilter;
+		theSetterFilter = setterFilter == null ? new PrefixFilter("set", 1) : setterFilter;
 		Map<String, Invokable<? super E, ?>> fieldGetters = new LinkedHashMap<>();
 		Map<String, Invokable<? super E, ?>> fieldSetters = new LinkedHashMap<>();
 		Map<MethodSignature, MethodHandle> defaultMethods = new LinkedHashMap<>();
-		populateMethods(theType, fieldGetters, getterFilter, fieldSetters, setterFilter, defaultMethods, customMethods.keySet());
-		theFieldGetters = QuickMap.of(fieldGetters, QommonsUtils.DISTINCT_NUMBER_TOLERANT).unmodifiable();
-		QuickMap<String, Invokable<? super E, ?>> setters = theFieldGetters.keySet().createMap();
-		for (int i = 0; i < setters.keySet().size(); i++) {
-			String fieldName = setters.keySet().get(i);
-			setters.put(i, fieldSetters.get(fieldName));
+		populateMethods(theType, fieldGetters, theGetterFilter, fieldSetters, theSetterFilter, defaultMethods, customMethods.keySet());
+		QuickMap<String, ReflectedField<E, ?>> fields = QuickSet.of(fieldGetters.keySet()).createMap();
+		Map<String, ReflectedField<E, ?>> fieldsByGetter = new LinkedHashMap<>();
+		Map<String, ReflectedField<E, ?>> fieldsBySetter = new LinkedHashMap<>();
+		for (int i = 0; i < fields.keySet().size(); i++) {
+			Invokable<? super E, ?> getter = fieldGetters.get(fields.keySet().get(i));
+			Invokable<? super E, ?> setter = fieldSetters.get(fields.keySet().get(i));
+			SetterReturnType setterReturnType = null;
+			if (setter != null) {
+				Class<?> rawSetterRT = TypeTokens.getRawType(setter.getReturnType());
+				if (rawSetterRT == void.class || rawSetterRT == Void.class)
+					setterReturnType = SetterReturnType.VOID;
+				else if (setter.getReturnType().isAssignableFrom(type))
+					setterReturnType = SetterReturnType.SELF;
+				else if (setter.getReturnType().isAssignableFrom(getter.getReturnType()))
+					setterReturnType = SetterReturnType.OLD_VALUE;
+				else {
+					System.err.println("Return type of setter " + setter + " cannot be satisfied for this class");
+					setter = null;
+				}
+			}
+			ReflectedField<E, ?> field = new ReflectedField<>(fields.keySet().get(i), i, getter, setter, setterReturnType);
+			fields.put(i, field);
+			fieldsByGetter.put(getter.getName(), field);
+			if (setter != null)
+				fieldsBySetter.put(setter.getName(), field);
 		}
-		theFieldSetters = setters.unmodifiable();
+		theFields = fields.unmodifiable();
+		theFieldsByGetter = QuickMap.of(fieldsByGetter, String::compareTo).unmodifiable();
+		theFieldsBySetter = QuickMap.of(fieldsBySetter, String::compareTo).unmodifiable();
 		theDefaultMethods = QuickMap.of(defaultMethods, MethodSignature::compareTo).unmodifiable();
 		Map<MethodSignature, Function<Object[], ?>> internalCustomMethods = new LinkedHashMap<>();
 		for (Map.Entry<Method, Function<Object[], ?>> method : customMethods.entrySet())
@@ -165,21 +231,22 @@ public class EntityReflector<E> {
 				defaultMethods, customMethods);
 	}
 
-	public QuickMap<String, Invokable<? super E, ?>> getFieldGetters() {
-		return theFieldGetters;
+	public TypeToken<E> getType() {
+		return theType;
 	}
 
-	public QuickMap<String, Invokable<? super E, ?>> getFieldSetters() {
-		return theFieldSetters;
+	public QuickMap<String, ReflectedField<E, ?>> getFields() {
+		return theFields;
 	}
 
 	/**
 	 * @param fieldGetter A function invoking a field getter on this type
-	 * @return The index in {@link #getFieldGetters()} of the field invoked. If the function invokes multiple methods, this will be last
-	 *         method invoked. If the function does not invoke any getter, -1 will be returned.
-	 * @throws IllegalArgumentException If the method the function invokes last is not an included getter method
+	 * @return The index in {@link #getFields()} of the field invoked. If the function invokes multiple methods, this will be last method
+	 *         invoked
+	 * @throws IllegalArgumentException If the function does not invoke a field getter or the method the function invokes last is not an
+	 *         included getter method
 	 */
-	public int getGetterIndex(Function<? super E, ?> fieldGetter) throws IllegalArgumentException {
+	public int getFieldIndex(Function<? super E, ?> fieldGetter) throws IllegalArgumentException {
 		Method invoked;
 		synchronized (this) {
 			theProxyHandler.reset();
@@ -187,14 +254,14 @@ public class EntityReflector<E> {
 			invoked = theProxyHandler.getInvoked();
 		}
 		if (invoked == null)
-			return -1;
-		int idx = theFieldGetters.keySet().indexOf(invoked.getName());
+			throw new IllegalArgumentException("No " + theType + " field getter invoked");
+		int idx = theFieldsByGetter.keySet().indexOf(invoked.getName());
 		if (idx < 0)
 			throw new IllegalArgumentException(invoked + " is not a " + theType + " field getter");
 		return idx;
 	}
 
-	public E newInstance(IntFunction<Object> fieldGetter, BiFunction<Integer, Object, Object> fieldSetter) {
+	public E newInstance(IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter) {
 		Class<E> rawType = TypeTokens.getRawType(theType);
 		return (E) Proxy.newProxyInstance(rawType.getClassLoader(), new Class[] { rawType }, new InvocationHandler() {
 			@Override
@@ -212,17 +279,28 @@ public class EntityReflector<E> {
 						return handle.bindTo(proxy).invokeWithArguments(args);
 					}
 				}
-				String fieldName = theSetterFilter.apply(method);
-				if (fieldName != null) {
-					idx = theFieldSetters.keyIndexTolerant(fieldName);
-					if (idx >= 0)
-						return fieldSetter.apply(idx, args[0]);
+				idx = theFieldsBySetter.keyIndexTolerant(method.getName());
+				if (idx >= 0) {
+					ReflectedField<E, ?> field = theFieldsBySetter.get(idx);
+					Object returnValue;
+					switch (field.theSetterReturnType) {
+					case SELF:
+						returnValue = proxy;
+						break;
+					case OLD_VALUE:
+						returnValue = fieldGetter.apply(field.getFieldIndex());
+						break;
+					default:
+						returnValue = null;
+						break;
+					}
+					fieldSetter.accept(field.getFieldIndex(), args[0]);
+					return returnValue;
 				}
-				fieldName = theGetterFilter.apply(method);
-				if (fieldName != null) {
-					idx = theFieldGetters.keyIndexTolerant(fieldName);
-					if (idx >= 0)
-						return fieldGetter.apply(idx);
+				idx = theFieldsByGetter.keyIndexTolerant(method.getName());
+				if (idx >= 0) {
+					ReflectedField<E, ?> field = theFieldsBySetter.get(idx);
+					return fieldGetter.apply(field.getFieldIndex());
 				}
 				throw new IllegalStateException(
 					"Method " + method + " is not default or a recognized getter or setter, and its implementation is not provided");
