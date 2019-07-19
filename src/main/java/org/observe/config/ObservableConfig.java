@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
@@ -449,7 +450,7 @@ public class ObservableConfig implements StructuredTransactable {
 			children = ObservableCollection.flattenValue(
 				observeDescendant(path.getParent()).map(collType, p -> (ObservableCollection<ObservableConfig>) p.getContent(last)));
 		}
-		return new ObservableChildSet<>(this, children, path.getLastElement().getName(), Observable.empty());
+		return new ObservableChildSet<>(this, path, children, Observable.empty());
 	}
 
 	public ObservableValue<? extends ObservableConfig> observeDescendant(ObservableConfigPath path) {
@@ -458,6 +459,15 @@ public class ObservableConfig implements StructuredTransactable {
 
 	public SettableValue<String> observeValue() {
 		return observeValue(TypeTokens.get().STRING, Format.TEXT);
+	}
+
+	public String get(String path) {
+		return get(createPath(path));
+	}
+
+	public String get(ObservableConfigPath path) {
+		ObservableConfig config = getChild(path, false);
+		return config == null ? null : config.getValue();
 	}
 
 	public <T> SettableValue<T> observeValue(TypeToken<T> type, Format<T> format) {
@@ -491,7 +501,7 @@ public class ObservableConfig implements StructuredTransactable {
 
 	public <T> SettableValue<T> observeValue(ObservableConfigPath path, TypeToken<T> type, Function<ObservableConfig, ? extends T> parser,
 		BiConsumer<ObservableConfig, ? super T> format) {
-		return new ObservableConfigValue<T>(type, this, path, parser, format);
+		return new ObservableConfigValue<>(type, this, path, parser, format);
 	}
 
 	public <T> ObservableValueSet<T> observeValues(ObservableConfigPath path, TypeToken<T> type, Format<T> format) {
@@ -509,30 +519,14 @@ public class ObservableConfig implements StructuredTransactable {
 
 	public <T> ObservableValueSet<T> observeValues(ObservableConfigPath path, TypeToken<T> type,
 		Function<ObservableConfig, ? extends T> parser, BiConsumer<ObservableConfig, ? super T> format, Observable<?> until) {
-		ObservableCollection<? extends ObservableConfig> configs;
-		if (path.getElements().size() == 1)
-			configs = getContent(path.getLastElement().getName());
-		else {
-			TypeToken<ObservableCollection<? extends ObservableConfig>> configListType = (TypeToken<ObservableCollection<? extends ObservableConfig>>) (TypeToken<?>) TypeTokens
-				.get().keyFor(ObservableCollection.class).getCompoundType(getType());
-			configs = ObservableCollection.flattenValue(observeDescendant(path.getParent()).map(configListType,
-				descendant -> descendant.getContent(path.getLastElement().getName())));
-		}
-		return new ObservableConfigValues<>(this, configs, type, parser, format, until);
+		ObservableChildSet<? extends ObservableConfig> configs = (ObservableChildSet<? extends ObservableConfig>) getContent(path);
+		return new ObservableConfigValues<>(configs, type, parser, format, until);
 	}
 
 	public <T> ObservableValueSet<T> observeEntities(ObservableConfigPath path, TypeToken<T> type, ConfigEntityFieldParser fieldParser,
 		Observable<?> until) {
-		ObservableCollection<? extends ObservableConfig> configs;
-		if (path.getElements().size() == 1)
-			configs = getContent(path.getLastElement().getName());
-		else {
-			TypeToken<ObservableCollection<? extends ObservableConfig>> configListType = (TypeToken<ObservableCollection<? extends ObservableConfig>>) (TypeToken<?>) TypeTokens
-				.get().keyFor(ObservableCollection.class).getCompoundType(getType());
-			configs = ObservableCollection.flattenValue(observeDescendant(path.getParent()).map(configListType,
-				descendant -> descendant.getContent(path.getLastElement().getName())));
-		}
-		return new ObservableConfigEntityValues<>(this, configs, type, fieldParser, until);
+		ObservableValueSet<? extends ObservableConfig> configs = getContent(path);
+		return new ObservableConfigEntityValues<>(configs, type, fieldParser, until);
 	}
 
 	@Override
@@ -863,7 +857,7 @@ public class ObservableConfig implements StructuredTransactable {
 		}
 
 		private void watchPathElement(int pathIndex) {
-			thePathElSubscriptions[pathIndex] = thePathElements[pathIndex].getAllContent()
+			thePathElSubscriptions[pathIndex] = thePathElements[pathIndex].getAllContent().getValues()
 				.onChange(evt -> pathChanged(pathIndex + 1, evt.getType(), evt.getNewValue()));
 		}
 
@@ -1015,35 +1009,171 @@ public class ObservableConfig implements StructuredTransactable {
 	}
 
 	protected static class ObservableConfigValues<T> implements ObservableValueSet<T> {
-		private final ObservableConfig theRoot;
+		private final ObservableChildSet<? extends ObservableConfig> theConfigs;
 		private final TypeToken<T> theType;
+		private final Function<? super ObservableConfig, ? extends T> theParser;
+		private final BiConsumer<ObservableConfig, ? super T> theFormat;
+
+		private final ConfiguredValueType<T> theValueType;
+		private final ObservableCollection<T> theValues;
+
+		private ElementId theNewValue;
+
+		public ObservableConfigValues(ObservableChildSet<? extends ObservableConfig> configs, TypeToken<T> type,
+			Function<? super ObservableConfig, ? extends T> parser, BiConsumer<ObservableConfig, ? super T> format, Observable<?> until) {
+			theConfigs = configs;
+			theType = type;
+			theParser = parser;
+			theFormat = format;
+
+			theValueType = new ConfiguredValueType<T>() {
+				private final QuickMap<String, ConfiguredValueField<? super T, ?>> theFields;
+				{
+					QuickMap<String, ConfiguredValueField<? super T, ?>> fields = QuickSet.of("value").createMap();
+					fields.put(0, new ConfiguredValueField<T, T>() {
+						@Override
+						public ConfiguredValueType<T> getValueType() {
+							return theValueType;
+						}
+
+						@Override
+						public String getName() {
+							return "value";
+						}
+
+						@Override
+						public TypeToken<T> getFieldType() {
+							return theType;
+						}
+
+						@Override
+						public int getIndex() {
+							return 0;
+						}
+					});
+					theFields = fields.unmodifiable();
+				}
+
+				@Override
+				public TypeToken<T> getType() {
+					return theType;
+				}
+
+				@Override
+				public QuickMap<String, ConfiguredValueField<? super T, ?>> getFields() {
+					return theFields;
+				}
+
+				@Override
+				public int getFieldIndex(Function<? super T, ?> fieldGetter) {
+					throw new UnsupportedOperationException();
+				}
+
+				@Override
+				public boolean allowsCustomFields() {
+					return false;
+				}
+			};
+			theValues = theConfigs.getValues().flow().map(type, parser).collectActive(until);
+			Subscription valueSub = theValues.onChange(evt -> {
+				if (evt.getType() == CollectionChangeType.add)
+					theNewValue = evt.getElementId();
+			});
+			until.take(1).act(__ -> valueSub.unsubscribe());
+		}
+
+		@Override
+		public ConfiguredValueType<T> getType() {
+			return theValueType;
+		}
+
+		@Override
+		public ObservableCollection<? extends T> getValues() {
+			return theValues;
+		}
+
+		@Override
+		public ValueCreator<T> create() {
+			return new ValueCreator<T>() {
+				private T theValue;
+
+				@Override
+				public ConfiguredValueType<T> getType() {
+					return theValueType;
+				}
+
+				@Override
+				public Set<Integer> getRequiredFields() {
+					return new HashSet<>(Arrays.asList(0));
+				}
+
+				@Override
+				public ValueCreator<T> with(String fieldName, Object value) throws IllegalArgumentException {
+					if (!"value".equals(fieldName))
+						throw new IllegalArgumentException("Unrecognized field " + fieldName);
+					else if (value == null)
+						throw new IllegalArgumentException("Null value not allowed");
+					else if (!TypeTokens.get().isInstance(theType, value))
+						throw new IllegalArgumentException(
+							"Value of type " + value.getClass().getName() + " cannot be assigned to type " + theType);
+					theValue = (T) value;
+					return this;
+				}
+
+				@Override
+				public <F> ValueCreator<T> with(ConfiguredValueField<? super T, F> field, F value) throws IllegalArgumentException {
+					if (field.getName().equals("value"))
+						return with("value", value);
+					else
+						throw new IllegalArgumentException("Unrecognized field " + field.getName());
+				}
+
+				@Override
+				public <F> ValueCreator<T> with(Function<? super T, F> field, F value) throws IllegalArgumentException {
+					throw new UnsupportedOperationException();
+				}
+
+				@Override
+				public CollectionElement<T> create() {
+					ElementId added;
+					try (Transaction t = theConfigs.theRoot.lock(true, null)) {
+						theConfigs.theRoot.getChild(theConfigs.getPath().getParent(), true)
+						.addChild(theConfigs.getPath().getLastElement().getName(), cfg -> {
+							theFormat.accept(cfg, theValue);
+						});
+						added = theNewValue;
+					}
+					return theValues.getElement(added);
+				}
+			};
+		}
 	}
 
 	protected static class ObservableConfigEntityValues<T> implements ObservableValueSet<T> {
-		private final ObservableConfig theRoot;
+		private final ObservableValueSet<? extends ObservableConfig> theConfigs;
 		private final EntityConfiguredValueType<T> theType;
-		private final String theChildName;
 		private final QuickMap<String, String> theFieldChildNames;
-		private final ObservableCollection<? extends ObservableConfig> theConfigValues;
 		private final ConfigEntityFieldParser theFieldParser;
 
 		private final ObservableCollection<ConfigValueElement> theValueElements;
 		private final ObservableCollection<T> theValues;
-		private ConfigValueElement theNewElement;
 
-		public ObservableConfigEntityValues(ObservableConfig root, ObservableCollection<? extends ObservableConfig> configValues,
-			TypeToken<T> type, ConfigEntityFieldParser fieldParser, Observable<?> until) {
-			theRoot = root;
+		private ConfigValueElement theNewElement;
+		private boolean isUpdating;
+
+		public ObservableConfigEntityValues(ObservableValueSet<? extends ObservableConfig> configs, TypeToken<T> type,
+			ConfigEntityFieldParser fieldParser, Observable<?> until) {
+			theConfigs = configs;
 			theType = new EntityConfiguredValueType<>(type);
-			theChildName = StringUtils.parseByCase(TypeTokens.getRawType(theType.getType()).getSimpleName()).toKebabCase();
 			theFieldChildNames = theType.getFields().keySet().createMap(//
 				fieldIndex -> StringUtils.parseByCase(theType.getFields().keySet().get(fieldIndex)).toKebabCase()).unmodifiable();
-			theConfigValues = configValues;
 			theFieldParser = fieldParser;
 
-			theValueElements = ((ObservableCollection<ObservableConfig>) configValues).flow()
+			theValueElements = ((ObservableCollection<ObservableConfig>) theConfigs.getValues()).flow()
 				.map(new TypeToken<ConfigValueElement>() {}, cfg -> theNewElement = new ConfigValueElement(cfg)).collectActive(until);
 			theValueElements.onChange(evt -> {
+				if (isUpdating)
+					return;
 				switch (evt.getType()) {
 				case add:
 					evt.getNewValue().theValueId = evt.getElementId();
@@ -1071,31 +1201,29 @@ public class ObservableConfig implements StructuredTransactable {
 		@Override
 		public ValueCreator<T> create() {
 			return new SimpleValueCreator<T>(theType) {
+				private final ValueCreator<? extends ObservableConfig> theConfigCreator = theConfigs.create();
+
+				@Override
+				public <F> ValueCreator<T> with(ConfiguredValueField<? super T, F> field, F value) throws IllegalArgumentException {
+					super.with(field, value);
+					Format<F> fieldFormat = theFieldParser.getFieldFormat(field);
+					String formatted = fieldFormat.format(value);
+					theConfigCreator.with(theFieldChildNames.get(field.getIndex()), formatted);
+					return this;
+				}
+
 				@Override
 				public CollectionElement<T> create() {
-					return createValueElement(getFieldValues());
+					ConfigValueElement cve;
+					try (Transaction t = theConfigs.getValues().lock(true, null)) {
+						theConfigCreator.create();
+						cve = theNewElement;
+						theNewElement = null;
+					}
+					cve.initialize(getFieldValues());
+					return cve;
 				}
 			};
-		}
-
-		ConfigValueElement createValueElement(QuickMap<String, Object> fieldValues) {
-			ConfigValueElement cve;
-			try (Transaction t = theConfigValues.lock(true, null)) {
-				theRoot.addChild(theChildName, cfg -> {
-					for (int i = 0; i < fieldValues.keySet().size(); i++) {
-						Object fieldValue = fieldValues.get(i);
-						if (fieldValue != null) {
-							Format<Object> fieldFormat = (Format<Object>) theFieldParser.getFieldFormat(theType.getFields().get(i));
-							String formatted = fieldFormat.format(fieldValue);
-							cfg.set(theFieldChildNames.get(i), formatted);
-						}
-					}
-				});
-				cve = theNewElement;
-				theNewElement = null;
-			}
-			cve.initialize(fieldValues);
-			return cve;
 		}
 
 		class ConfigValueElement implements CollectionElement<T> {
@@ -1127,15 +1255,40 @@ public class ObservableConfig implements StructuredTransactable {
 				ObservableConfigEvent configCause = cause
 					.getCauseLike(c -> c instanceof ObservableConfigEvent ? (ObservableConfigEvent) c : null);
 				if (configCause != null) {
-
-				} else {}
+					// TODO Update for the specific field of the child
+				} else {
+					// TODO Update all fields
+				}
 			}
 
 			Object getField(int fieldIndex) {
-
+				Object value = theFieldValues.get(fieldIndex);
+				if (value == null) {
+					String serialized = theConfig.get(theFieldValues.keySet().get(fieldIndex));
+					if (serialized != null) {
+						try {
+							theFieldValues.put(fieldIndex,
+								value = theFieldParser.getFieldFormat(theType.getFields().get(fieldIndex)).parse(serialized));
+						} catch (ParseException e) {
+							throw new IllegalStateException(
+								"Could not parse field " + theType.getFields().get(fieldIndex) + ": " + e.getMessage(), e);
+						}
+					}
+				}
+				return value;
 			}
 
-			Object setField(int fieldIndex, Object fieldValue) {}
+			Object setField(int fieldIndex, Object fieldValue) {
+				Format<Object> fieldFormat = (Format<Object>) theFieldParser.getFieldFormat(theType.getFields().get(fieldIndex));
+				String formatted = fieldFormat.format(fieldValue);
+				try (Transaction t = theConfigs.getValues().lock(true, null)) {
+					isUpdating = true;
+					theConfig.set(theFieldChildNames.get(fieldIndex), formatted);
+				} finally {
+					isUpdating = false;
+				}
+				return null; // Return value doesn't mean anything
+			}
 		}
 	}
 
@@ -1563,16 +1716,24 @@ public class ObservableConfig implements StructuredTransactable {
 
 		private ElementId theNewChild;
 
-		public ObservableChildSet(ObservableConfig root, ObservableCollection<C> children, ObservableConfigPath path, Observable<?> until) {
+		public ObservableChildSet(ObservableConfig root, ObservableConfigPath path, ObservableCollection<C> children, Observable<?> until) {
 			theRoot = root;
-			theChildren = children;
 			thePath = path;
+			theChildren = children;
 
 			Subscription childSub = theChildren.onChange(evt -> {
 				if (evt.getType() == CollectionChangeType.add)
 					theNewChild = evt.getElementId();
 			});
 			until.take(1).act(__ -> childSub.unsubscribe());
+		}
+
+		public ObservableConfig getRoot() {
+			return theRoot;
+		}
+
+		public ObservableConfigPath getPath() {
+			return thePath;
 		}
 
 		@Override
