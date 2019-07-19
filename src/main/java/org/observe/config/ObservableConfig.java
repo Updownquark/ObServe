@@ -1008,9 +1008,15 @@ public class ObservableConfig implements StructuredTransactable {
 		}
 	}
 
+	/**
+	 * Implements {@link ObservableConfig#observeValues(ObservableConfigPath, TypeToken, Format)}
+	 * 
+	 * @param <T> The value type
+	 */
 	protected static class ObservableConfigValues<T> implements ObservableValueSet<T> {
 		private final ObservableChildSet<? extends ObservableConfig> theConfigs;
 		private final TypeToken<T> theType;
+		@SuppressWarnings("unused")
 		private final Function<? super ObservableConfig, ? extends T> theParser;
 		private final BiConsumer<ObservableConfig, ? super T> theFormat;
 
@@ -1019,6 +1025,13 @@ public class ObservableConfig implements StructuredTransactable {
 
 		private ElementId theNewValue;
 
+		/**
+		 * @param configs The config values backing each value
+		 * @param type The value type
+		 * @param parser The parser to parse values from configs
+		 * @param format The formatter to persist each value
+		 * @param until The observable on which to release resources
+		 */
 		public ObservableConfigValues(ObservableChildSet<? extends ObservableConfig> configs, TypeToken<T> type,
 			Function<? super ObservableConfig, ? extends T> parser, BiConsumer<ObservableConfig, ? super T> format, Observable<?> until) {
 			theConfigs = configs;
@@ -1149,6 +1162,11 @@ public class ObservableConfig implements StructuredTransactable {
 		}
 	}
 
+	/**
+	 * Implements {@link ObservableConfig#observeEntities(ObservableConfigPath, TypeToken, ConfigEntityFieldParser, Observable)}
+	 *
+	 * @param <T> The entity type
+	 */
 	protected static class ObservableConfigEntityValues<T> implements ObservableValueSet<T> {
 		private final ObservableValueSet<? extends ObservableConfig> theConfigs;
 		private final EntityConfiguredValueType<T> theType;
@@ -1161,6 +1179,12 @@ public class ObservableConfig implements StructuredTransactable {
 		private ConfigValueElement theNewElement;
 		private boolean isUpdating;
 
+		/**
+		 * @param configs The set of observable configs backing each entity
+		 * @param type The entity type
+		 * @param fieldParser The parsers/formatters/default values for each field
+		 * @param until The observable on which to release resources
+		 */
 		public ObservableConfigEntityValues(ObservableValueSet<? extends ObservableConfig> configs, TypeToken<T> type,
 			ConfigEntityFieldParser fieldParser, Observable<?> until) {
 			theConfigs = configs;
@@ -1273,7 +1297,8 @@ public class ObservableConfig implements StructuredTransactable {
 							throw new IllegalStateException(
 								"Could not parse field " + theType.getFields().get(fieldIndex) + ": " + e.getMessage(), e);
 						}
-					}
+					} else
+						value = theFieldParser.getDefaultValue(theType.getFields().get(fieldIndex));
 				}
 				return value;
 			}
@@ -1292,15 +1317,25 @@ public class ObservableConfig implements StructuredTransactable {
 		}
 	}
 
+	/**
+	 * Superclass to assist in implementing the collection behind {@link ObservableConfig#getContent(ObservableConfigPath)}
+	 *
+	 * @param <C> The config sub-type
+	 */
 	protected static abstract class AbstractObservableConfigContent<C extends ObservableConfig> implements ObservableCollection<C> {
 		private final ObservableConfig theConfig;
 		private final TypeToken<C> theType;
 
+		/**
+		 * @param config The root config
+		 * @param type The config sub-type
+		 */
 		public AbstractObservableConfigContent(ObservableConfig config, TypeToken<C> type) {
 			theConfig = config;
 			theType = type;
 		}
 
+		/** @return The root config */
 		public ObservableConfig getConfig() {
 			return theConfig;
 		}
@@ -1341,7 +1376,16 @@ public class ObservableConfig implements StructuredTransactable {
 		}
 	}
 
+	/**
+	 * Implements the collection behind {@link ObservableConfig#getAllContent()}
+	 *
+	 * @param <C> The config sub-type
+	 */
 	protected static class FullObservableConfigContent<C extends ObservableConfig> extends AbstractObservableConfigContent<C> {
+		/**
+		 * @param config The parent config
+		 * @param type The config sub-type
+		 */
 		public FullObservableConfigContent(ObservableConfig config, TypeToken<C> type) {
 			super(config, type);
 		}
@@ -1516,9 +1560,19 @@ public class ObservableConfig implements StructuredTransactable {
 		}
 	}
 
+	/**
+	 * Implements the collection behind {@link ObservableConfig#getContent(ObservableConfigPath)} for single-element paths
+	 *
+	 * @param <C> The sub-type of config
+	 */
 	protected static class SimpleObservableConfigContent<C extends ObservableConfig> extends AbstractObservableConfigContent<C> {
 		private final ObservableConfigPathElement thePathElement;
 
+		/**
+		 * @param config The parent config
+		 * @param type The config sub-type
+		 * @param pathEl The path element
+		 */
 		public SimpleObservableConfigContent(ObservableConfig config, TypeToken<C> type, ObservableConfigPathElement pathEl) {
 			super(config, type);
 			thePathElement = pathEl;
@@ -1709,6 +1763,11 @@ public class ObservableConfig implements StructuredTransactable {
 		}
 	}
 
+	/**
+	 * Implements the value set portion of {@link ObservableConfig#getContent(ObservableConfigPath)}
+	 *
+	 * @param <C> The sub-type of config
+	 */
 	protected static class ObservableChildSet<C extends ObservableConfig> implements ObservableValueSet<C> {
 		private final ObservableConfig theRoot;
 		private final ObservableConfigPath thePath;
@@ -1716,6 +1775,12 @@ public class ObservableConfig implements StructuredTransactable {
 
 		private ElementId theNewChild;
 
+		/**
+		 * @param root The root config
+		 * @param path The path for the values
+		 * @param children The child collection
+		 * @param until The observable to unsubscribe upon
+		 */
 		public ObservableChildSet(ObservableConfig root, ObservableConfigPath path, ObservableCollection<C> children, Observable<?> until) {
 			theRoot = root;
 			thePath = path;
@@ -1728,11 +1793,13 @@ public class ObservableConfig implements StructuredTransactable {
 			until.take(1).act(__ -> childSub.unsubscribe());
 		}
 
-		public ObservableConfig getRoot() {
+		/** @return The root config */
+		protected ObservableConfig getRoot() {
 			return theRoot;
 		}
 
-		public ObservableConfigPath getPath() {
+		/** @return the path for the values */
+		protected ObservableConfigPath getPath() {
 			return thePath;
 		}
 
