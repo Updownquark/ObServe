@@ -11,7 +11,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.function.Function;
 
-import javax.swing.DefaultRowSorter;
 import javax.swing.JTable;
 import javax.swing.ListModel;
 import javax.swing.event.ChangeEvent;
@@ -26,7 +25,6 @@ import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumn;
 import javax.swing.table.TableColumnModel;
 import javax.swing.table.TableModel;
-import javax.swing.table.TableRowSorter;
 
 import org.observe.SimpleObservable;
 import org.observe.Subscription;
@@ -463,20 +461,20 @@ public class ObservableTableModel<R> implements TableModel {
 
 				// private final SimpleObservable<Void> theUnsub = new SimpleObservable<>();
 
-				@Override
-				public void mousePressed(MouseEvent evt) {
-					int column = table.columnAtPoint(evt.getPoint());
-					if (column < 0)
-						return;
-					int modelColumn = table.convertColumnIndexToModel(column);
-					CategoryRenderStrategy<? super R, ?> c = model.getColumn(modelColumn);
-					/*if (c.getFilterability() != null)
-						showFilterPopup(modelColumn);
-					else*/ if (c.getSortability() != null) {
-						if (table.getRowSorter() instanceof DefaultRowSorter)
-							((DefaultRowSorter<?, ?>) table.getRowSorter()).toggleSortOrder(modelColumn);
-					}
-				}
+				// @Override
+				// public void mousePressed(MouseEvent evt) {
+				// int column = table.columnAtPoint(evt.getPoint());
+				// if (column < 0)
+				// return;
+				// int modelColumn = table.convertColumnIndexToModel(column);
+				// CategoryRenderStrategy<? super R, ?> c = model.getColumn(modelColumn);
+				// if (c.getFilterability() != null)
+				// showFilterPopup(modelColumn);
+				// else if (c.getSortability() != null) {
+				// if (table.getRowSorter() instanceof DefaultRowSorter)
+				// ((DefaultRowSorter<?, ?>) table.getRowSorter()).toggleSortOrder(modelColumn);
+				// }
+				// }
 
 				@Override
 				public void mouseMoved(MouseEvent evt) {
@@ -586,9 +584,9 @@ public class ObservableTableModel<R> implements TableModel {
 					rowSorter.setSortKeys(keys);
 				}*/
 			};
-			table.getTableHeader().addMouseListener(headerML);
+			// table.getTableHeader().addMouseListener(headerML);
 			table.getTableHeader().addMouseMotionListener(headerML);
-			subs.add(() -> table.getTableHeader().removeMouseListener(headerML));
+			// subs.add(() -> table.getTableHeader().removeMouseListener(headerML));
 			subs.add(() -> table.getTableHeader().removeMouseMotionListener(headerML));
 		}
 		return Subscription.forAll(subs.toArray(new Subscription[subs.size()]));
@@ -612,20 +610,20 @@ public class ObservableTableModel<R> implements TableModel {
 		if (column.getMaxWidth() >= 0)
 			tblColumn.setMaxWidth(column.getMaxWidth());
 		tblColumn.setResizable(column.isResizable());
-		if (column.getSortability() != null) {
-			if (table.getRowSorter() == null)
-				table.setRowSorter(new TableRowSorter<>(model));
-			if (table.getRowSorter() instanceof DefaultRowSorter) {
-				DefaultRowSorter<?, ?> sorter = (DefaultRowSorter<?, ?>) table.getRowSorter();
-				sorter.setMaxSortKeys(model.getColumnCount());
-				sorter.setSortsOnUpdates(true);
-				sorter.setComparator(columnIndex, column.getSortability());
-				sorter.setSortable(columnIndex, true);
-			}
-		} else if (table.getRowSorter() instanceof DefaultRowSorter) {
-			((DefaultRowSorter<?, ?>) table.getRowSorter()).setComparator(columnIndex, null);
-			((DefaultRowSorter<?, ?>) table.getRowSorter()).setSortable(columnIndex, false);
-		}
+		// if (column.getSortability() != null) {
+		// if (table.getRowSorter() == null)
+		// table.setRowSorter(new TableRowSorter<>(model));
+		// if (table.getRowSorter() instanceof DefaultRowSorter) {
+		// DefaultRowSorter<?, ?> sorter = (DefaultRowSorter<?, ?>) table.getRowSorter();
+		// sorter.setMaxSortKeys(model.getColumnCount());
+		// sorter.setSortsOnUpdates(true);
+		// sorter.setComparator(columnIndex, column.getSortability());
+		// sorter.setSortable(columnIndex, true);
+		// }
+		// } else if (table.getRowSorter() instanceof DefaultRowSorter) {
+		// ((DefaultRowSorter<?, ?>) table.getRowSorter()).setComparator(columnIndex, null);
+		// ((DefaultRowSorter<?, ?>) table.getRowSorter()).setSortable(columnIndex, false);
+		// }
 		// if (column.getSortability() != null && column.getFilterability() != null)
 		// tblColumn.setHeaderRenderer(new SortableFilterableHeaderRenderer<>(table, columnIndex, column));
 		// TODO Add other column stuff
