@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<config rootAttr="root">
+	<element1 attr1="attr1Value" />
+	<element2 attr2="attr2Value">
+		This is some&#10;text
+	</element2>
+	<elemen:xtestt3>&#10;</elemen:xtestt3>
+	<element4> </element4>
+</config>
