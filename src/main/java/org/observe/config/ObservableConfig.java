@@ -45,12 +45,16 @@ import org.qommons.StructuredTransactable;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.BetterSortedMap;
+import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
 import org.qommons.collect.CollectionLockingStrategy;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
+import org.qommons.collect.MapEntryHandle;
 import org.qommons.collect.StampedLockingStrategy;
 import org.qommons.io.Format;
 import org.qommons.tree.BetterTreeList;
+import org.qommons.tree.BetterTreeMap;
 import org.xml.sax.Attributes;
 import org.xml.sax.SAXException;
 import org.xml.sax.helpers.DefaultHandler;
@@ -69,6 +73,9 @@ import com.google.common.reflect.TypeToken;
  * </p>
  */
 public class ObservableConfig implements StructuredTransactable {
+	// TODO Need to uninstall listeners for removed descendants
+	// TODO toString()
+
 	public static final char PATH_SEPARATOR = '/';
 	public static final String PATH_SEPARATOR_STR = "" + PATH_SEPARATOR;
 	public static final String EMPTY_PATH = "".intern();
@@ -779,14 +786,17 @@ public class ObservableConfig implements StructuredTransactable {
 		public final String encodingPrefix;
 		public final String encodingReplacement;
 		public final String emptyContent;
-		public final Map<String, String> namedReplacements;
+		public final BetterSortedMap<String, String> namedReplacements;
 		private final StringBuilder str;
 
 		public XmlEncoding(String encodingPrefix, String encodingReplacement, String emptyContent, Map<String, String> replacements) {
 			this.encodingPrefix = encodingPrefix;
 			this.encodingReplacement = encodingReplacement;
 			this.emptyContent = emptyContent;
-			namedReplacements = replacements;
+			if (replacements instanceof BetterSortedMap)
+				namedReplacements = (BetterSortedMap<String, String>) replacements;
+			else
+				namedReplacements = new BetterTreeMap<String, String>(false, String::compareTo).withAll(replacements);
 			str = new StringBuilder();
 		}
 
@@ -806,7 +816,32 @@ public class ObservableConfig implements StructuredTransactable {
 			return Collections.unmodifiableMap(map);
 		}
 
-		public String encode(String xmlName) {}
+		public String encode(String xmlName) {
+			MapEntryHandle<String, String> found = null;
+			int i;
+			for (i = 0; i < xmlName.length() && found == null; i++) {
+				int offset = i;
+				found = namedReplacements.search(r -> searchMatch(xmlName, r, offset), SortedSearchFilter.OnlyMatch);
+			}
+			if (found == null)
+				return xmlName;
+
+			str.append(xmlName, 0, i);
+			do {
+				str.append(encodingPrefix);
+				str.append(found.getValue());
+				i += found.getKey().length();
+				found = null;
+				for (; i < xmlName.length() && found == null; i++) {
+					int offset = i;
+					found = namedReplacements.search(r -> searchMatch(xmlName, r, offset), SortedSearchFilter.OnlyMatch);
+				}
+			} while (found != null);
+			str.append(xmlName, i, xmlName.length());
+			String encoded = str.toString();
+			str.setLength(0);
+			return encoded;
+		}
 
 		public String decode(String xmlName) {
 			int len = xmlName.length() - Math.min(encodingPrefix.length(), encodingReplacement.length());
@@ -842,18 +877,28 @@ public class ObservableConfig implements StructuredTransactable {
 				}
 			}
 			str.append(xmlName, c, xmlName.length());
-			String encoded = str.toString();
+			String decoded = str.toString();
 			str.setLength(0);
-			return encoded;
+			return decoded;
 		}
 
-		private boolean matches(String xmlName, String encoding, int xmlOffset) {
+		private static boolean matches(String xmlName, String encoding, int xmlOffset) {
 			if (xmlName.length() < xmlOffset + encoding.length())
 				return false;
 			for (int c = 0; c < encoding.length(); c++)
 				if (xmlName.charAt(xmlOffset + c) != encoding.charAt(c))
 					return false;
 			return true;
+		}
+
+		private static int searchMatch(String xmlName, String replace, int xmlOffset) {
+			int limit = Math.min(replace.length(), xmlName.length() - xmlOffset);
+			for (int c = 0; c < limit; c++) {
+				int diff = replace.charAt(c) - xmlName.charAt(xmlOffset + c);
+				if (diff != 0)
+					return diff;
+			}
+			return 0;
 		}
 	}
 
@@ -952,8 +997,11 @@ public class ObservableConfig implements StructuredTransactable {
 						} else
 							contentStr = null;
 					} else { // If there's actual content, ignore the whitespace
-						contentStr = content.toString();
-						content.setLength(0);
+						if (content.length() > 0) {
+							contentStr = content.toString();
+							content.setLength(0);
+						} else
+							contentStr = null;
 						theIgnorableContent.setLength(0);
 					}
 					if (!Objects.equals(contentStr, cfg.getValue()))
@@ -966,7 +1014,9 @@ public class ObservableConfig implements StructuredTransactable {
 
 	public static void writeXml(ObservableConfig config, Writer out, XmlEncoding encoding, String indent) throws IOException {
 		out.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\n");
-		_writeXml(config, out, encoding, 0, indent, new XmlWriteHelper());
+		try (Transaction t = config.lock(false, null)) {
+			_writeXml(config, out, encoding, 0, indent, new XmlWriteHelper());
+		}
 		out.append('\n');
 	}
 
@@ -975,7 +1025,9 @@ public class ObservableConfig implements StructuredTransactable {
 		final BitSet childrenAsAttributes = new BitSet();
 		final StringBuilder escapeTemp = new StringBuilder();
 
-		String escapeXml(String xmlValue) {
+		String escapeXml(String xmlValue, XmlEncoding encoding) {
+			if (xmlValue.length() == 0)
+				return encoding.emptyContent;
 			int c;
 			for (c = 0; c < xmlValue.length(); c++) {
 				char ch = xmlValue.charAt(c);
@@ -1023,29 +1075,39 @@ public class ObservableConfig implements StructuredTransactable {
 		String singular = StringUtils.singularize(config.getName());
 		int i = 0;
 		for (ObservableConfig child : config.theContent) {
-			if (child.theValue == null || !child.theContent.isEmpty() || child.getName().equals(singular))
-				continue; // For children of the form <elements><element /><elements>, don't put any in attributes
-			Integer old = helper.attrNames.put(child.getName(), i);
-			if (old == null)
-				helper.childrenAsAttributes.set(i);
-			else
-				helper.childrenAsAttributes.clear(old);
+			boolean maybeAttr;
+			if (child.theValue == null || child.theValue.length() == 0 || !child.theContent.isEmpty() || child.getName().equals(singular))
+				maybeAttr = false;
+			else {
+				maybeAttr = true;
+				for (int c = 0; maybeAttr && c < child.theValue.length(); c++)
+					if (child.theValue.charAt(c) < ' ' || child.theValue.charAt(c) > '~')
+						maybeAttr = false;
+			}
+			if (maybeAttr) {
+				Integer old = helper.attrNames.put(child.getName(), i);
+				if (old == null)
+					helper.childrenAsAttributes.set(i);
+				else
+					helper.childrenAsAttributes.clear(old);
+			}
 			i++;
 		}
 		helper.attrNames.clear();
 		if (!helper.childrenAsAttributes.isEmpty()) {
 			for (i = helper.childrenAsAttributes.nextSetBit(0); i >= 0; i = helper.childrenAsAttributes.nextSetBit(i + 1)) {
 				ObservableConfig child = config.theContent.get(i);
-				out.append(' ').append(encoding.encode(child.getName())).append("=\"").append(helper.escapeXml(child.getValue()))
+				out.append(' ').append(encoding.encode(child.getName())).append("=\"").append(helper.escapeXml(child.getValue(), encoding))
 				.append('"');
 			}
 		}
 		if (helper.childrenAsAttributes.cardinality() == config.theContent.size() && config.theValue == null) {
 			out.append(" />");
+			helper.childrenAsAttributes.clear();
 		} else {
 			out.append(">");
 			if (config.theValue != null)
-				out.append(helper.escapeXml(config.getValue()));
+				out.append(helper.escapeXml(config.getValue(), encoding));
 			i = 0;
 			BitSet copy = (BitSet) helper.childrenAsAttributes.clone();
 			helper.childrenAsAttributes.clear();
