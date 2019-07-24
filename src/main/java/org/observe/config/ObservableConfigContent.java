@@ -43,7 +43,7 @@ import org.qommons.io.Format;
 
 import com.google.common.reflect.TypeToken;
 
-class ObservableConfigContent {
+public class ObservableConfigContent {
 	protected static class ObservableConfigChild<C extends ObservableConfig> implements ObservableValue<C> {
 		private final TypeToken<C> theType;
 		private final ObservableConfig theRoot;
@@ -115,7 +115,7 @@ class ObservableConfigContent {
 
 		private void watchTerminal() {
 			int lastIdx = thePathElements.length - 1;
-			thePathElSubscriptions[thePathElements.length] = thePathElements[lastIdx].watch(ObservableConfig.EMPTY_PATH).act(evt -> {
+			thePathElSubscriptions[lastIdx] = thePathElements[lastIdx].watch(ObservableConfig.EMPTY_PATH).act(evt -> {
 				fire(createChangeEvent((C) thePathElements[lastIdx], (C) thePathElements[lastIdx], evt));
 			});
 		}
@@ -160,13 +160,14 @@ class ObservableConfigContent {
 					child = thePathElements[i];
 					continue;
 				}
-				child = parent.getChild(thePath.getElements().get(i), createIfAbsent, null);
+				child = parent.getChild(thePath.getElements().get(i - 1), createIfAbsent, null);
 				if (child == null) {
 					resolved = false;
 					break;
 				} else {
 					thePathElements[i] = parent = child;
-					onResolution.accept(i);
+					if (onResolution != null)
+						onResolution.accept(i);
 				}
 			}
 			if (!resolved)
@@ -428,8 +429,9 @@ class ObservableConfigContent {
 		private final ObservableCollection<ConfigValueElement> theValueElements;
 		private final ObservableCollection<T> theValues;
 
-		private ConfigValueElement theNewElement;
-		private boolean isUpdating;
+		QuickMap<String, Object> theNewInstanceFields;
+		ConfigValueElement theNewElement;
+		boolean isUpdating;
 
 		/**
 		 * @param configs The set of observable configs backing each entity
@@ -446,13 +448,15 @@ class ObservableConfigContent {
 			theFieldParser = fieldParser;
 
 			theValueElements = ((ObservableCollection<ObservableConfig>) theConfigs.getValues()).flow()
-				.map(new TypeToken<ConfigValueElement>() {}, cfg -> theNewElement = new ConfigValueElement(cfg)).collectActive(until);
-			theValueElements.onChange(evt -> {
+				.map(new TypeToken<ConfigValueElement>() {}, cfg -> new ConfigValueElement(cfg)).collectActive(until);
+			theValueElements.subscribe(evt -> {
 				if (isUpdating)
 					return;
 				switch (evt.getType()) {
 				case add:
 					evt.getNewValue().theValueId = evt.getElementId();
+					evt.getNewValue().initialize(theNewInstanceFields);
+					theNewElement = evt.getNewValue();
 					break;
 				case set:
 					evt.getNewValue().update(evt);
@@ -460,7 +464,7 @@ class ObservableConfigContent {
 				default:
 					break;
 				}
-			});
+			}, true);
 			theValues = theValueElements.flow().map(type, cve -> cve.theInstance, opts -> opts.cache(false)).collectPassive();
 		}
 
@@ -492,7 +496,9 @@ class ObservableConfigContent {
 				public CollectionElement<T> create() {
 					ConfigValueElement cve;
 					try (Transaction t = theConfigs.getValues().lock(true, null)) {
+						theNewInstanceFields = getFieldValues();
 						theConfigCreator.create();
+						theNewInstanceFields = null;
 						cve = theNewElement;
 						theNewElement = null;
 					}
@@ -513,7 +519,7 @@ class ObservableConfigContent {
 			}
 
 			void initialize(QuickMap<String, Object> fieldValues) {
-				theFieldValues = fieldValues.copy();
+				theFieldValues = fieldValues == null ? theType.getFields().keySet().createMap() : fieldValues.copy();
 				theInstance = theType.create(this::getField, this::setField);
 			}
 
@@ -547,7 +553,9 @@ class ObservableConfigContent {
 								value = theFieldParser.getFieldFormat(theType.getFields().get(fieldIndex)).parse(serialized));
 						} catch (ParseException e) {
 							throw new IllegalStateException(
-								"Could not parse field " + theType.getFields().get(fieldIndex) + ": " + e.getMessage(), e);
+								"Could not parse value \"" + serialized + "\" fpr field " + theType.getFields().get(fieldIndex) + ": "
+									+ e.getMessage(),
+									e);
 						}
 					} else
 						value = theFieldParser.getDefaultValue(theType.getFields().get(fieldIndex));

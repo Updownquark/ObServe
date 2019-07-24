@@ -44,7 +44,7 @@ public class EntityReflector<E> {
 		public String apply(Method m) {
 			if ((m.getModifiers() & Modifier.PUBLIC) == 0 || (m.getModifiers() & Modifier.STATIC) != 0)
 				return null; // Must be public and not static
-			else if (m.getReturnType() == void.class || m.getReturnType() == Void.class)
+			else if (theParameterCount == 0 && (m.getReturnType() == void.class || m.getReturnType() == Void.class))
 				return null; // Must have non-void return type
 			else if (m.getParameterTypes().length != theParameterCount)
 				return null;
@@ -124,6 +124,17 @@ public class EntityReflector<E> {
 			}
 			return 0;
 		}
+
+		@Override
+		public String toString() {
+			StringBuilder str = new StringBuilder(name).append('(');
+			for (int i = 0; i < parameters.length; i++) {
+				if (i > 0)
+					str.append(", ");
+				str.append(parameters[i]);
+			}
+			return str.append(')').toString();
+		}
 	}
 
 	private final TypeToken<E> theType;
@@ -154,7 +165,8 @@ public class EntityReflector<E> {
 		Map<String, Invokable<? super E, ?>> fieldGetters = new LinkedHashMap<>();
 		Map<String, Invokable<? super E, ?>> fieldSetters = new LinkedHashMap<>();
 		Map<MethodSignature, MethodHandle> defaultMethods = new LinkedHashMap<>();
-		populateMethods(theType, fieldGetters, theGetterFilter, fieldSetters, theSetterFilter, defaultMethods, customMethods.keySet());
+		populateMethods(theType, fieldGetters, theGetterFilter, fieldSetters, theSetterFilter, defaultMethods, //
+			customMethods == null ? Collections.emptySet() : customMethods.keySet());
 		QuickMap<String, ReflectedField<E, ?>> fields = QuickSet.of(fieldGetters.keySet()).createMap();
 		Map<String, ReflectedField<E, ?>> fieldsByGetter = new LinkedHashMap<>();
 		Map<String, ReflectedField<E, ?>> fieldsBySetter = new LinkedHashMap<>();
@@ -186,8 +198,10 @@ public class EntityReflector<E> {
 		theFieldsBySetter = QuickMap.of(fieldsBySetter, String::compareTo).unmodifiable();
 		theDefaultMethods = QuickMap.of(defaultMethods, MethodSignature::compareTo).unmodifiable();
 		Map<MethodSignature, Function<Object[], ?>> internalCustomMethods = new LinkedHashMap<>();
-		for (Map.Entry<Method, Function<Object[], ?>> method : customMethods.entrySet())
-			internalCustomMethods.put(new MethodSignature(method.getKey()), method.getValue());
+		if (customMethods != null) {
+			for (Map.Entry<Method, Function<Object[], ?>> method : customMethods.entrySet())
+				internalCustomMethods.put(new MethodSignature(method.getKey()), method.getValue());
+		}
 		theCustomMethods = QuickMap.of(internalCustomMethods, MethodSignature::compareTo).unmodifiable();
 
 		theProxyHandler = new MethodRetrievingHandler();
@@ -301,7 +315,7 @@ public class EntityReflector<E> {
 				}
 				idx = theFieldsByGetter.keyIndexTolerant(method.getName());
 				if (idx >= 0) {
-					ReflectedField<E, ?> field = theFieldsBySetter.get(idx);
+					ReflectedField<E, ?> field = theFieldsByGetter.get(idx);
 					return fieldGetter.apply(field.getFieldIndex());
 				}
 				throw new IllegalStateException(

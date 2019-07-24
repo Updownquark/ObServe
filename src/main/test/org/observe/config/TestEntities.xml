@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<config>
+	<test-entities>
+		<test-entity a="5" b="true" c="10m" />
+		<test-entity a="10" b="false" c="10s" />
+		<test-entity a="4" b="true" c="1h" />
+		<test-entity a="42" b="false" c="10w" />
+	</test-entities>
+</config>

@@ -4,11 +4,14 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringWriter;
+import java.time.Duration;
 
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.observe.Observable;
 import org.observe.config.ObservableConfig.XmlEncoding;
+import org.observe.util.TypeTokens;
 import org.xml.sax.SAXException;
 
 public class ObservableConfigTest {
@@ -48,5 +51,51 @@ public class ObservableConfigTest {
 		theConfig.getAllContent().getValues().clear();
 		readXml(new ByteArrayInputStream(writer.toString().getBytes("UTF-8")));
 		testXml1();
+	}
+
+	@Test
+	public void testEntities() throws IOException, SAXException {
+		readXml(getClass().getResourceAsStream("TestEntities.xml"));
+		ObservableValueSet<TestEntity> testEntities = theConfig.observeEntities(theConfig.createPath("test-entities/test-entity"),
+			TypeTokens.get().of(TestEntity.class), Observable.empty());
+		int i = 0;
+		for (TestEntity entity : testEntities.getValues()) {
+			switch (i) {
+			case 0:
+				Assert.assertEquals(5, entity.getA());
+				Assert.assertEquals(true, entity.getB());
+				Assert.assertEquals(Duration.ofMinutes(10), entity.getC());
+				break;
+			case 1:
+				Assert.assertEquals(10, entity.getA());
+				Assert.assertEquals(false, entity.getB());
+				Assert.assertEquals(Duration.ofSeconds(10), entity.getC());
+				break;
+			case 2:
+				Assert.assertEquals(4, entity.getA());
+				Assert.assertEquals(true, entity.getB());
+				Assert.assertEquals(Duration.ofHours(1), entity.getC());
+				break;
+			case 3:
+				Assert.assertEquals(42, entity.getA());
+				Assert.assertEquals(false, entity.getB());
+				Assert.assertEquals(Duration.ofDays(10 * 7), entity.getC());
+				break;
+			default:
+				Assert.assertTrue("Too many entities", false);
+			}
+			i++;
+		}
+	}
+
+	public interface TestEntity {
+		int getA();
+		TestEntity setA(int a);
+
+		boolean getB();
+		TestEntity setB(boolean b);
+
+		Duration getC();
+		void setC(Duration c);
 	}
 }

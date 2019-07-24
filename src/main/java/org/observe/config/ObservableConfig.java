@@ -2,6 +2,7 @@ package org.observe.config;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.StringWriter;
 import java.io.Writer;
 import java.text.ParseException;
 import java.time.Duration;
@@ -74,7 +75,6 @@ import com.google.common.reflect.TypeToken;
  */
 public class ObservableConfig implements StructuredTransactable {
 	// TODO Need to uninstall listeners for removed descendants
-	// TODO toString()
 
 	public static final char PATH_SEPARATOR = '/';
 	public static final String PATH_SEPARATOR_STR = "" + PATH_SEPARATOR;
@@ -149,7 +149,7 @@ public class ObservableConfig implements StructuredTransactable {
 					str.append(PATH_SEPARATOR);
 				str.append(el.toString());
 			}
-			return theElements.toString();
+			return str.toString();
 		}
 	}
 
@@ -455,6 +455,10 @@ public class ObservableConfig implements StructuredTransactable {
 	}
 
 	public ObservableValueSet<? extends ObservableConfig> getContent(ObservableConfigPath path) {
+		return getContent(path, Observable.empty());
+	}
+
+	public ObservableValueSet<? extends ObservableConfig> getContent(ObservableConfigPath path, Observable<?> until) {
 		ObservableCollection<? extends ObservableConfig> children;
 		if (path.getElements().size() == 1) {
 			if (path.getLastElement().getName().equals(ANY_NAME))
@@ -464,12 +468,11 @@ public class ObservableConfig implements StructuredTransactable {
 		} else {
 			ObservableConfigPath last = path.getLast();
 			TypeToken<ObservableConfig> type = (TypeToken<ObservableConfig>) getType();
-			TypeToken<ObservableCollection<ObservableConfig>> collType = TypeTokens.get().keyFor(ObservableCollection.class)
-				.getCompoundType(type);
-			children = ObservableCollection.flattenValue(
-				observeDescendant(path.getParent()).map(collType, p -> (ObservableCollection<ObservableConfig>) p.getContent(last)));
+			TypeToken<ObservableCollection<ObservableConfig>> collType = ObservableCollection.TYPE_KEY.getCompoundType(type);
+			children = ObservableCollection.flattenValue(observeDescendant(path.getParent()).map(collType,
+				p -> (ObservableCollection<ObservableConfig>) p.getContent(last, until).getValues()));
 		}
-		return new ObservableChildSet<>(this, path, children, Observable.empty());
+		return new ObservableChildSet<>(this, path, children, until);
 	}
 
 	public ObservableValue<? extends ObservableConfig> observeDescendant(ObservableConfigPath path) {
@@ -538,13 +541,17 @@ public class ObservableConfig implements StructuredTransactable {
 
 	public <T> ObservableValueSet<T> observeValues(ObservableConfigPath path, TypeToken<T> type,
 		Function<ObservableConfig, ? extends T> parser, BiConsumer<ObservableConfig, ? super T> format, Observable<?> until) {
-		ObservableChildSet<? extends ObservableConfig> configs = (ObservableChildSet<? extends ObservableConfig>) getContent(path);
+		ObservableChildSet<? extends ObservableConfig> configs = (ObservableChildSet<? extends ObservableConfig>) getContent(path, until);
 		return new ObservableConfigValues<>(configs, type, parser, format, until);
+	}
+
+	public <T> ObservableValueSet<T> observeEntities(ObservableConfigPath path, TypeToken<T> type, Observable<?> until) {
+		return observeEntities(path, type, new ConfigEntityFieldParser(), until);
 	}
 
 	public <T> ObservableValueSet<T> observeEntities(ObservableConfigPath path, TypeToken<T> type, ConfigEntityFieldParser fieldParser,
 		Observable<?> until) {
-		ObservableValueSet<? extends ObservableConfig> configs = getContent(path);
+		ObservableValueSet<? extends ObservableConfig> configs = getContent(path, until);
 		return new ObservableConfigEntityValues<>(configs, type, fieldParser, until);
 	}
 
@@ -681,6 +688,17 @@ public class ObservableConfig implements StructuredTransactable {
 			theParent.theContent.mutableElement(theParentContentRef).remove();
 			fire(CollectionChangeType.remove, Collections.emptyList(), theName, theValue);
 		}
+	}
+
+	@Override
+	public String toString() {
+		StringWriter out = new StringWriter();
+		try {
+			_writeXml(this, out, new XmlEncoding(":", ":", ""), 0, "", new XmlWriteHelper(), false);
+		} catch (IOException e) {
+			throw new IllegalStateException(e);
+		}
+		return out.toString();
 	}
 
 	protected final Object getCurrentCause() {
@@ -1015,7 +1033,7 @@ public class ObservableConfig implements StructuredTransactable {
 	public static void writeXml(ObservableConfig config, Writer out, XmlEncoding encoding, String indent) throws IOException {
 		out.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\n");
 		try (Transaction t = config.lock(false, null)) {
-			_writeXml(config, out, encoding, 0, indent, new XmlWriteHelper());
+			_writeXml(config, out, encoding, 0, indent, new XmlWriteHelper(), true);
 		}
 		out.append('\n');
 	}
@@ -1065,7 +1083,7 @@ public class ObservableConfig implements StructuredTransactable {
 	}
 
 	private static void _writeXml(ObservableConfig config, Writer out, XmlEncoding encoding, int indentAmount, String indentStr,
-		XmlWriteHelper helper) throws IOException {
+		XmlWriteHelper helper, boolean withChildren) throws IOException {
 		for (int i = 0; i < indentAmount; i++)
 			out.append(indentStr);
 		String xmlName = encoding.encode(config.getName());
@@ -1075,15 +1093,9 @@ public class ObservableConfig implements StructuredTransactable {
 		String singular = StringUtils.singularize(config.getName());
 		int i = 0;
 		for (ObservableConfig child : config.theContent) {
-			boolean maybeAttr;
-			if (child.theValue == null || child.theValue.length() == 0 || !child.theContent.isEmpty() || child.getName().equals(singular))
+			boolean maybeAttr = child.mayBeAttribute();
+			if (maybeAttr && child.getName().equals(singular))
 				maybeAttr = false;
-			else {
-				maybeAttr = true;
-				for (int c = 0; maybeAttr && c < child.theValue.length(); c++)
-					if (child.theValue.charAt(c) < ' ' || child.theValue.charAt(c) > '~')
-						maybeAttr = false;
-			}
 			if (maybeAttr) {
 				Integer old = helper.attrNames.put(child.getName(), i);
 				if (old == null)
@@ -1101,28 +1113,41 @@ public class ObservableConfig implements StructuredTransactable {
 				.append('"');
 			}
 		}
-		if (helper.childrenAsAttributes.cardinality() == config.theContent.size() && config.theValue == null) {
+		if (withChildren)
+			withChildren = helper.childrenAsAttributes.cardinality() < config.theContent.size();
+		if (!withChildren && config.theValue == null) {
 			out.append(" />");
 			helper.childrenAsAttributes.clear();
 		} else {
 			out.append(">");
 			if (config.theValue != null)
 				out.append(helper.escapeXml(config.getValue(), encoding));
-			i = 0;
-			BitSet copy = (BitSet) helper.childrenAsAttributes.clone();
-			helper.childrenAsAttributes.clear();
-			for (ObservableConfig child : config.theContent) {
-				if (copy.get(i))
-					continue;
-				out.append('\n');
-				_writeXml(child, out, encoding, indentAmount + 1, indentStr, helper);
-				i++;
-			}
+			if (withChildren) {
+				i = 0;
+				BitSet copy = (BitSet) helper.childrenAsAttributes.clone();
+				helper.childrenAsAttributes.clear();
+				for (ObservableConfig child : config.theContent) {
+					if (copy.get(i))
+						continue;
+					out.append('\n');
+					_writeXml(child, out, encoding, indentAmount + 1, indentStr, helper, true);
+					i++;
+				}
 
-			for (i = 0; i < indentAmount; i++)
-				out.append(indentStr);
+				for (i = 0; i < indentAmount; i++)
+					out.append(indentStr);
+			}
 			out.append("</").append(xmlName).append('>');
 		}
+	}
+
+	protected boolean mayBeAttribute() {
+		if (theValue == null || theValue.length() == 0 || !theContent.isEmpty())
+			return false;
+		for (int c = 0; c < theValue.length(); c++)
+			if (theValue.charAt(c) < ' ' || theValue.charAt(c) > '~')
+				return false;
+		return true;
 	}
 
 	private static class InternalObservableConfigListener {
@@ -1140,9 +1165,13 @@ public class ObservableConfig implements StructuredTransactable {
 		if (pathSepIdx < 0)
 			return new String[] { path };
 		List<String> pathEls = new LinkedList<>();
+		int lastSep = -1;
 		while (pathSepIdx >= 0) {
-			pathEls.add(path.substring(0, pathSepIdx));
+			pathEls.add(path.substring(lastSep + 1, pathSepIdx));
+			lastSep = pathSepIdx;
+			pathSepIdx = path.indexOf(PATH_SEPARATOR, pathSepIdx + 1);
 		}
+		pathEls.add(path.substring(lastSep + 1));
 		return pathEls.toArray(new String[pathEls.size()]);
 	}
 
