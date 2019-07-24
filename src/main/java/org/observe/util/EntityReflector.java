@@ -146,6 +146,8 @@ public class EntityReflector<E> {
 		Class<E> raw = TypeTokens.getRawType(type);
 		if (raw == null || !raw.isInterface())
 			throw new IllegalArgumentException("This class only works for interface types");
+		else if ((raw.getModifiers() & Modifier.PUBLIC) == 0)
+			throw new IllegalArgumentException("This class only works for public interface types");
 		theType = type;
 		theGetterFilter = getterFilter == null ? new PrefixFilter("get", 0) : getterFilter;
 		theSetterFilter = setterFilter == null ? new PrefixFilter("set", 1) : setterFilter;
