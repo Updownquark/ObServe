@@ -25,7 +25,7 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 		this(type, null);
 	}
 
-	public EntityConfiguredValueType(TypeToken<E> type, Map<Method, Function<Object[], ?>> customMethods) {
+	public EntityConfiguredValueType(TypeToken<E> type, Map<Method, ? extends BiFunction<? super E, Object[], ?>> customMethods) {
 		theReflector = new EntityReflector<>(type, null, null, customMethods);
 		QuickMap<String, EntityConfiguredValueField<? super E, ?>> fields = theReflector.getFields().keySet().createMap();
 		for (int i = 0; i < fields.keySet().size(); i++)
@@ -56,6 +56,14 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 
 	public E create(IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter) {
 		return theReflector.newInstance(fieldGetter, fieldSetter);
+	}
+
+	public E associate(E entity, Object associated) {
+		return theReflector.associate(entity, associated);
+	}
+
+	public Object getAssociated(E entity) {
+		return theReflector.getAssociated(entity);
 	}
 
 	@Override

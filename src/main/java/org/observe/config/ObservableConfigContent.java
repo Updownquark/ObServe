@@ -1,15 +1,18 @@
 package org.observe.config;
 
+import java.lang.reflect.Method;
 import java.text.ParseException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
@@ -43,6 +46,7 @@ import org.qommons.io.Format;
 
 import com.google.common.reflect.TypeToken;
 
+/** Contains implementation classes for {@link ObservableConfig} methods */
 public class ObservableConfigContent {
 	protected static class ObservableConfigChild<C extends ObservableConfig> implements ObservableValue<C> {
 		private final TypeToken<C> theType;
@@ -79,8 +83,10 @@ public class ObservableConfigContent {
 				} else {
 					invalidate(0);
 					for (int i = thePathElSubscriptions.length - 1; i >= 0; i--) {
-						thePathElSubscriptions[i].unsubscribe();
-						thePathElSubscriptions[i] = null;
+						if (thePathElSubscriptions[i] != null) {
+							thePathElSubscriptions[i].unsubscribe();
+							thePathElSubscriptions[i] = null;
+						}
 					}
 				}
 			}
@@ -442,7 +448,16 @@ public class ObservableConfigContent {
 		public ObservableConfigEntityValues(ObservableValueSet<? extends ObservableConfig> configs, TypeToken<T> type,
 			ConfigEntityFieldParser fieldParser, Observable<?> until) {
 			theConfigs = configs;
-			theType = new EntityConfiguredValueType<>(type);
+			Map<Method, BiFunction<T, Object[], Object>> customMethods = new HashMap<>();
+			try {
+				customMethods.put(Object.class.getDeclaredMethod("toString"), (proxy, args) -> {
+					ConfigValueElement cve = (ConfigValueElement) ((EntityConfiguredValueType<T>) getType()).getAssociated(proxy);
+					return cve.print();
+				});
+			} catch (NoSuchMethodException | SecurityException e) {
+				throw new IllegalStateException(e);
+			}
+			theType = new EntityConfiguredValueType<>(type, customMethods);
 			theFieldChildNames = theType.getFields().keySet().createMap(//
 				fieldIndex -> StringUtils.parseByCase(theType.getFields().keySet().get(fieldIndex)).toKebabCase()).unmodifiable();
 			theFieldParser = fieldParser;
@@ -521,6 +536,7 @@ public class ObservableConfigContent {
 			void initialize(QuickMap<String, Object> fieldValues) {
 				theFieldValues = fieldValues == null ? theType.getFields().keySet().createMap() : fieldValues.copy();
 				theInstance = theType.create(this::getField, this::setField);
+				theType.associate(theInstance, this);
 			}
 
 			@Override
@@ -568,11 +584,34 @@ public class ObservableConfigContent {
 				String formatted = fieldFormat.format(fieldValue);
 				try (Transaction t = theConfigs.getValues().lock(true, null)) {
 					isUpdating = true;
+					theFieldValues.put(fieldIndex, fieldValue);
 					theConfig.set(theFieldChildNames.get(fieldIndex), formatted);
 				} finally {
 					isUpdating = false;
 				}
 				return null; // Return value doesn't mean anything
+			}
+
+			String print() {
+				StringBuilder str = new StringBuilder(theConfig.getName()).append('(');
+				boolean first = true;
+				for (int i = 0; i < theFieldValues.keySet().size(); i++) {
+					String value = theConfig.get(theFieldValues.keySet().get(i));
+					if (value != null) {
+						if (first)
+							first = false;
+						else
+							str.append(", ");
+						str.append(theFieldValues.keySet().get(i)).append('=').append(value);
+					}
+				}
+				str.append(')');
+				return str.toString();
+			}
+
+			@Override
+			public String toString() {
+				return theConfig.toString();
 			}
 		}
 	}

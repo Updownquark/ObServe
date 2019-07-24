@@ -470,7 +470,8 @@ public class ObservableConfig implements StructuredTransactable {
 			TypeToken<ObservableConfig> type = (TypeToken<ObservableConfig>) getType();
 			TypeToken<ObservableCollection<ObservableConfig>> collType = ObservableCollection.TYPE_KEY.getCompoundType(type);
 			children = ObservableCollection.flattenValue(observeDescendant(path.getParent()).map(collType,
-				p -> (ObservableCollection<ObservableConfig>) p.getContent(last, until).getValues()));
+				p -> (ObservableCollection<ObservableConfig>) p.getContent(last, until).getValues(), //
+				opts -> opts.cache(true).reEvalOnUpdate(false).fireIfUnchanged(false)));
 		}
 		return new ObservableChildSet<>(this, path, children, until);
 	}
@@ -677,7 +678,9 @@ public class ObservableConfig implements StructuredTransactable {
 	}
 
 	public ObservableConfig set(String path, String value) {
-		getChild(path, true, ch -> ch.setValue(value));
+		ObservableConfig child = getChild(path, true, ch -> ch.setValue(value));
+		if (child.getValue() != value)
+			child.setValue(value);
 		return this;
 	}
 
@@ -911,11 +914,14 @@ public class ObservableConfig implements StructuredTransactable {
 
 		private static int searchMatch(String xmlName, String replace, int xmlOffset) {
 			int limit = Math.min(replace.length(), xmlName.length() - xmlOffset);
-			for (int c = 0; c < limit; c++) {
+			int c;
+			for (c = 0; c < limit; c++) {
 				int diff = replace.charAt(c) - xmlName.charAt(xmlOffset + c);
 				if (diff != 0)
 					return diff;
 			}
+			if (c < replace.length())
+				return 1;
 			return 0;
 		}
 	}
@@ -1134,6 +1140,7 @@ public class ObservableConfig implements StructuredTransactable {
 					i++;
 				}
 
+				out.append('\n');
 				for (i = 0; i < indentAmount; i++)
 					out.append(indentStr);
 			}
