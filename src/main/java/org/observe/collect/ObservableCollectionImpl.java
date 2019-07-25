@@ -1656,6 +1656,21 @@ public final class ObservableCollectionImpl {
 				public ElementId getElementId() {
 					return mapId(el.getElementId());
 				}
+
+				@Override
+				public int hashCode() {
+					return getElementId().hashCode();
+				}
+
+				@Override
+				public boolean equals(Object obj) {
+					return obj instanceof CollectionElement && getElementId().equals(((CollectionElement<?>) obj).getElementId());
+				}
+
+				@Override
+				public String toString() {
+					return new StringBuilder("[").append(getElementsBefore(getElementId())).append("]: ").append(get()).toString();
+				}
 			};
 		}
 
@@ -1706,6 +1721,16 @@ public final class ObservableCollectionImpl {
 				@Override
 				public void remove() throws UnsupportedOperationException {
 					flowEl.remove();
+				}
+
+				@Override
+				public int hashCode() {
+					return getElementId().hashCode();
+				}
+
+				@Override
+				public boolean equals(Object obj) {
+					return obj instanceof MutableCollectionElement && getElementId().equals(((CollectionElement<?>) obj).getElementId());
 				}
 
 				@Override
