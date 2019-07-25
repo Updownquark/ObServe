@@ -345,8 +345,8 @@ public class ObservableConfig implements StructuredTransactable {
 		void persist(ObservableConfig config) throws E;
 	}
 
-	private final ObservableConfig theParent;
-	private final ElementId theParentContentRef;
+	private ObservableConfig theParent;
+	private ElementId theParentContentRef;
 	private final CollectionLockingStrategy theLocking;
 	private final ValueHolder<Causable> theRootCausable;
 	private String theName;
@@ -379,7 +379,10 @@ public class ObservableConfig implements StructuredTransactable {
 	}
 
 	public ObservableConfig getParent() {
-		return theParent;
+		if (theParentContentRef == null || !theParentContentRef.isPresent())
+			return null;
+		else
+			return theParent;
 	}
 
 	public String getPath() {
@@ -390,8 +393,6 @@ public class ObservableConfig implements StructuredTransactable {
 	}
 
 	public int getIndexInParent() {
-		if (theParentContentRef == null || !theParentContentRef.isPresent())
-			return -1;
 		return theParent.theContent.getElementsBefore(theParentContentRef);
 	}
 
@@ -691,6 +692,8 @@ public class ObservableConfig implements StructuredTransactable {
 			theParent.theContent.mutableElement(theParentContentRef).remove();
 			fire(CollectionChangeType.remove, Collections.emptyList(), theName, theValue);
 		}
+		theParent = null;
+		theParentContentRef = null;
 	}
 
 	@Override
@@ -714,7 +717,7 @@ public class ObservableConfig implements StructuredTransactable {
 
 	private void _fire(CollectionChangeType eventType, List<ObservableConfig> relativePath, String oldName, String oldValue, Object cause) {
 		theModCount++;
-		if (eventType != CollectionChangeType.set && relativePath.isEmpty())
+		if (eventType != CollectionChangeType.set)
 			theStructureModCount++;
 		ObservableConfigEvent event = new ObservableConfigEvent(eventType, oldName, oldValue, relativePath, getCurrentCause());
 		try (Transaction t = Causable.use(event)) {
@@ -727,7 +730,14 @@ public class ObservableConfig implements StructuredTransactable {
 				}
 			});
 		}
-		if (theParent != null && theParentContentRef.isPresent())
+		boolean fireWithParent;
+		if (theParent == null)
+			fireWithParent = false;
+		else if (theParentContentRef.isPresent())
+			fireWithParent = true;
+		else
+			fireWithParent = eventType == CollectionChangeType.remove && relativePath.isEmpty(); // Means this config was just removed
+		if (fireWithParent)
 			theParent.fire(eventType, addToList(this, relativePath), oldName, oldValue);
 	}
 

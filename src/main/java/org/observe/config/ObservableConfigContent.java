@@ -909,18 +909,17 @@ public class ObservableConfigContent {
 		@Override
 		public int getElementsBefore(ElementId id) {
 			try (Transaction t = getConfig().lock(false, null)) {
-				ObservableConfig config = CollectionElement.get(getConfig()._getContent().getElement(id));
-				if (config == null || !thePathElement.matches(config))
-					throw new NoSuchElementException();
+				int idx = getConfig()._getContent().getElementsBefore(id);
 				int i = 0;
+				int matches = 0;
 				for (CollectionElement<ObservableConfig> el : getConfig()._getContent().elements()) {
-					if (thePathElement.matches(el.get())) {
-						if (el.get() == config)
-							return i;
-						i++;
-					}
+					if (i == idx)
+						break;
+					if (thePathElement.matches(el.get()))
+						matches++;
+					i++;
 				}
-				throw new IllegalStateException("Element found but then not found");
+				return matches;
 			}
 		}
 
