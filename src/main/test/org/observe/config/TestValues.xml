@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <config>
+	<test-values>
+	</test-values>
 	<test-entities>
 		<test-entity a="5" b="true" c="10m" />
 		<test-entity a="10" b="false" c="10s" />

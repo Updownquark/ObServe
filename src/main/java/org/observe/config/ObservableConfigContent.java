@@ -272,7 +272,7 @@ public class ObservableConfigContent {
 	 *
 	 * @param <T> The value type
 	 */
-	protected static class ObservableConfigValues<T> implements ObservableValueSet<T> {
+	protected static class ObservableConfigValues<T> implements ObservableCollection<T> {
 		private final ObservableChildSet<? extends ObservableConfig> theConfigs;
 		private final TypeToken<T> theType;
 		@SuppressWarnings("unused")

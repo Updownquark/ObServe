@@ -528,7 +528,7 @@ public class ObservableConfig implements StructuredTransactable {
 		return new ObservableConfigValue<>(type, this, path, parser, format);
 	}
 
-	public <T> ObservableValueSet<T> observeValues(ObservableConfigPath path, TypeToken<T> type, Format<T> format) {
+	public <T> ObservableCollection<T> observeValues(ObservableConfigPath path, TypeToken<T> type, Format<T> format) {
 		return observeValues(path, type, config -> {
 			if (config.getValue() == null)
 				return null;
@@ -541,7 +541,7 @@ public class ObservableConfig implements StructuredTransactable {
 		}, (config, val) -> config.setValue(format.format(val)), Observable.empty());
 	}
 
-	public <T> ObservableValueSet<T> observeValues(ObservableConfigPath path, TypeToken<T> type,
+	public <T> ObservableCollection<T> observeValues(ObservableConfigPath path, TypeToken<T> type,
 		Function<ObservableConfig, ? extends T> parser, BiConsumer<ObservableConfig, ? super T> format, Observable<?> until) {
 		ObservableChildSet<? extends ObservableConfig> configs = (ObservableChildSet<? extends ObservableConfig>) getContent(path, until);
 		return new ObservableConfigValues<>(configs, type, parser, format, until);

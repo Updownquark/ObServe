@@ -57,6 +57,12 @@ public class ObservableConfigTest {
 		readXml(new ByteArrayInputStream(writer.toString().getBytes("UTF-8")));
 	}
 
+	// @Test TODO
+	public void testValues() throws IOException, SAXException {
+		SimpleObservable<Void> until = new SimpleObservable<>();
+		readXml(getClass().getResourceAsStream("TestValues.xml"));
+	}
+
 	@Test
 	public void testReadOnlyEntities() throws IOException, SAXException {
 		testEntities(false);
@@ -69,7 +75,7 @@ public class ObservableConfigTest {
 
 	private void testEntities(boolean withModification) throws IOException, SAXException {
 		SimpleObservable<Void> until = new SimpleObservable<>();
-		readXml(getClass().getResourceAsStream("TestEntities.xml"));
+		readXml(getClass().getResourceAsStream("TestValues.xml"));
 		ObservableValueSet<TestEntity> testEntities = theConfig.observeEntities(theConfig.createPath("test-entities/test-entity"),
 			TypeTokens.get().of(TestEntity.class), until);
 
