@@ -2,6 +2,16 @@
 
 <config>
 	<test-values>
+		<test-value>0</test-value>
+		<test-value>1</test-value>
+		<test-value>2</test-value>
+		<test-value>3</test-value>
+		<test-value>4</test-value>
+		<test-value>5</test-value>
+		<test-value>6</test-value>
+		<test-value>7</test-value>
+		<test-value>8</test-value>
+		<test-value>9</test-value>
 	</test-values>
 	<test-entities>
 		<test-entity a="5" b="true" c="10m" />

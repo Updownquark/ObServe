@@ -20,8 +20,6 @@ import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParser;
@@ -406,22 +404,13 @@ public class ObservableConfig implements StructuredTransactable {
 		return buildPath(new LinkedList<>(), firstName);
 	}
 
-	protected static final Pattern PATH_EL_PATTERN = Pattern.compile("(?<name>.*)\\{\\s*(.+)=(.+)(>\\s*,(.+)=(.+))*\\s*\\}");
-
 	protected ObservableConfigPathBuilder buildPath(List<ObservableConfigPathElement> path, String name) {
 		List<ObservableConfigPathElement> finalPath = new ArrayList<>(path.size());
 		finalPath.addAll(path);
 		Map<String, String> properties = null;
 		if (name.charAt(name.length() - 1) == '}') { // Quick check to avoid pattern checking on every single path, few of which will have
-			// attrs
-			Matcher matcher = PATH_EL_PATTERN.matcher(name);
-			if (matcher.matches()) {
-				properties = new LinkedHashMap<>();
-				for (int g = 1; g < matcher.groupCount(); g++) {
-					System.out.println("Group " + g + "=" + matcher.group(g));
-				}
-				name = matcher.group("name");
-			}
+			properties = new LinkedHashMap<>();
+			name = parsePathProperties(name, properties);
 		}
 		ObservableConfigPathBuilder builder = new ObservableConfigPathBuilder(this, finalPath, name);
 		if (properties != null) {
@@ -550,6 +539,10 @@ public class ObservableConfig implements StructuredTransactable {
 		return new ObservableConfigValue<>(type, this, path, parser, format);
 	}
 
+	public <T> ObservableCollection<T> observeValues(String path, TypeToken<T> type, Format<T> format) {
+		return observeValues(createPath(path), type, format);
+	}
+
 	public <T> ObservableCollection<T> observeValues(ObservableConfigPath path, TypeToken<T> type, Format<T> format) {
 		return observeValues(path, type, config -> {
 			if (config.getValue() == null)
@@ -560,14 +553,14 @@ public class ObservableConfig implements StructuredTransactable {
 				System.err.println("Could not parse value " + this + ": " + e.getMessage());
 				return null;
 			}
-		}, (config, val) -> config.setValue(format.format(val)), true, Observable.empty());
+		}, (config, val) -> config.setValue(format.format(val)), false, Observable.empty());
 	}
 
 	public <T> ObservableCollection<T> observeValues(ObservableConfigPath path, TypeToken<T> type,
-		Function<ObservableConfig, ? extends T> parser, BiConsumer<ObservableConfig, ? super T> format, boolean passive,
+		Function<ObservableConfig, ? extends T> parser, BiConsumer<ObservableConfig, ? super T> format, boolean active,
 		Observable<?> until) {
 		ObservableChildSet<? extends ObservableConfig> configs = (ObservableChildSet<? extends ObservableConfig>) getContent(path, until);
-		return new ObservableConfigValues<>(configs, type, parser, format, passive, until);
+		return new ObservableConfigValues<>(configs, type, parser, format, active, until);
 	}
 
 	public <T> ObservableValueSet<T> observeEntities(ObservableConfigPath path, TypeToken<T> type, Observable<?> until) {
@@ -622,6 +615,10 @@ public class ObservableConfig implements StructuredTransactable {
 
 	public long getStamp(boolean structuralOnly) {
 		return structuralOnly ? theStructureModCount : theModCount;
+	}
+
+	public ObservableConfig getChild(String path) {
+		return getChild(path, false, null);
 	}
 
 	public ObservableConfig getChild(String path, boolean createIfAbsent, Consumer<ObservableConfig> preAddMod) {
@@ -1221,6 +1218,32 @@ public class ObservableConfig implements StructuredTransactable {
 		}
 		pathEls.add(path.substring(lastSep + 1));
 		return pathEls.toArray(new String[pathEls.size()]);
+	}
+
+	private static String parsePathProperties(String pathEl, Map<String, String> properties) {
+		if (pathEl.length() == 0 || pathEl.charAt(pathEl.length() - 1) != '}')
+			return pathEl;
+		int index = pathEl.indexOf('{');
+		int nameEnd = index;
+		if (index < 0)
+			return pathEl;
+		int nextIdx = pathEl.indexOf(',', index + 1);
+		if (nextIdx < 0)
+			nextIdx = pathEl.length() - 1; // '}'
+		while (nextIdx >= 0) {
+			int eqIdx = pathEl.indexOf('=', index + 1);
+			if (eqIdx < 0 || eqIdx > nextIdx)
+				return pathEl;
+			properties.put(pathEl.substring(index + 1, eqIdx).trim(), pathEl.substring(eqIdx + 1, nextIdx).trim());
+			if (nextIdx == pathEl.length() - 1)
+				break;
+			index = nextIdx;
+			nextIdx = pathEl.indexOf(',', index + 1);
+			if (nextIdx < 0)
+				nextIdx = pathEl.length() - 1; // '}'
+		}
+		String name = pathEl.substring(0, nameEnd).trim();
+		return name;
 	}
 
 	private static class ObservableConfigChangesObservable implements Observable<ObservableConfigEvent> {

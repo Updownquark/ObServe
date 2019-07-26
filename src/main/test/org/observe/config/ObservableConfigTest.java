@@ -10,8 +10,10 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.observe.SimpleObservable;
+import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfig.XmlEncoding;
 import org.observe.util.TypeTokens;
+import org.qommons.io.Format;
 import org.xml.sax.SAXException;
 
 public class ObservableConfigTest {
@@ -57,10 +59,68 @@ public class ObservableConfigTest {
 		readXml(new ByteArrayInputStream(writer.toString().getBytes("UTF-8")));
 	}
 
-	// @Test TODO
+	@Test
 	public void testValues() throws IOException, SAXException {
 		SimpleObservable<Void> until = new SimpleObservable<>();
 		readXml(getClass().getResourceAsStream("TestValues.xml"));
+
+		ObservableCollection<Integer> testValues = theConfig.observeValues("test-values/test-value", TypeTokens.get().INT, Format.INT);
+		int i = 0;
+		for (Integer value : testValues) {
+			Assert.assertEquals(i, value.intValue());
+
+			switch (i) {
+			case 0:
+				testValues.set(i, 100);
+				break;
+			case 5:
+				testValues.remove(i);
+				break;
+			case 9:
+				testValues.remove(i - 1);
+				break;
+			}
+			i++;
+		}
+		Assert.assertEquals(10, i);
+
+		Assert.assertEquals(8, testValues.size());
+		Assert.assertEquals(100, testValues.get(0).intValue());
+		theConfig.getChild("test-values").getAllContent().getValues().get(3).setValue("30");
+		Assert.assertEquals(30, testValues.get(3).intValue());
+
+		testValues.add(90);
+		Assert.assertEquals(9, testValues.size());
+
+		writeClearAndParse();
+		i = 0;
+		for (Integer value : testValues) {
+			switch (i) {
+			case 0:
+				Assert.assertEquals(100, value.intValue());
+				break;
+			case 1:
+			case 2:
+				Assert.assertEquals(i, value.intValue());
+				break;
+			case 3:
+				Assert.assertEquals(30, value.intValue());
+				break;
+			case 4:
+				Assert.assertEquals(i, value.intValue());
+				break;
+			case 5:
+			case 6:
+			case 7:
+				Assert.assertEquals(i + 1, value.intValue());
+				break;
+			case 8:
+				Assert.assertEquals(90, value.intValue());
+				break;
+			}
+			i++;
+		}
+		Assert.assertEquals(9, testValues.size());
 	}
 
 	@Test
@@ -132,13 +192,14 @@ public class ObservableConfigTest {
 			return;
 
 		TestEntity entity2 = testEntities.create()//
-			.with(TestEntity::getA, 50)//
+			// .with(TestEntity::getA, 50)//Leave A default
 			.with(TestEntity::getB, false)//
 			.with(TestEntity::getC, Duration.ofDays(1))//
 			.create().get();
-		Assert.assertEquals(50, entity2.getA());
+		Assert.assertEquals(0, entity2.getA()); // Zero is the default for an integer--check for it
 		Assert.assertEquals(false, entity2.getB());
 		Assert.assertEquals(Duration.ofDays(1), entity2.getC());
+		entity2.setA(50);
 
 		until.onNext(null);
 		writeClearAndParse();
@@ -175,18 +236,21 @@ public class ObservableConfigTest {
 		}
 		Assert.assertEquals(4, i);
 
-		theConfig.set("test-entities/test-entity{a=10}/a", "20");
+		theConfig.set("test-entities/test-entity{a=10,b=true}/a", "20");
 		Assert.assertEquals(20, testEntities.getValues().get(1).getA());
 	}
 
 	public interface TestEntity {
 		int getA();
+
 		TestEntity setA(int a);
 
 		boolean getB();
+
 		TestEntity setB(boolean b);
 
 		Duration getC();
+
 		void setC(Duration c);
 
 		default String print() {

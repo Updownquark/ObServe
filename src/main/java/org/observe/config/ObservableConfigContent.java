@@ -96,15 +96,17 @@ public class ObservableConfigContent {
 			switch (type) {
 			case add:
 				// This can affect the value if the new value matches the path and appears before the currently-used config
-				if (newValue._getParentContentRef().compareTo(thePathElements[pathIndex]._getParentContentRef()) < 0
-					&& thePath.getElements().get(pathIndex).matches(newValue))
+				if (thePath.getElements().get(pathIndex - 1).matches(newValue) && (thePathElements[pathIndex] == null//
+				|| newValue._getParentContentRef().compareTo(thePathElements[pathIndex]._getParentContentRef()) < 0))
 					reCheck = true; // The new element needs to replace the current element at the path index
 				break;
 			case remove:
 			case set:
 				if (newValue == thePathElements[pathIndex])
 					reCheck = true;
-				break;
+				else if (newValue._getParentContentRef().compareTo(thePathElements[pathIndex]._getParentContentRef()) < 0//
+					&& thePath.getElements().get(pathIndex - 1).matches(newValue))
+					break;
 			}
 			if (reCheck) {
 				invalidate(pathIndex);
@@ -114,6 +116,8 @@ public class ObservableConfigContent {
 		}
 
 		private void watchPathElement(int pathIndex) {
+			if (pathIndex >= thePath.getElements().size())
+				return;
 			thePathElSubscriptions[pathIndex] = thePathElements[pathIndex].getAllContent().getValues()
 				.onChange(evt -> pathChanged(pathIndex + 1, evt.getType(), evt.getNewValue()));
 		}
@@ -177,7 +181,7 @@ public class ObservableConfigContent {
 			}
 			if (!resolved)
 				Arrays.fill(thePathElements, i, thePathElements.length, null);
-			return true;
+			return resolved;
 		}
 
 		@Override
@@ -281,31 +285,30 @@ public class ObservableConfigContent {
 
 		private final ObservableCollection<T> theValues;
 
-		private ElementId theNewValue;
-
 		/**
 		 * @param configs The config values backing each value
 		 * @param type The value type
 		 * @param parser The parser to parse values from configs
 		 * @param format The formatter to persist each value
+		 * @param active Whether to cache and actively maintain the parsed values, or just parse them for each access
 		 * @param until The observable on which to release resources
 		 */
 		public ObservableConfigValues(ObservableChildSet<? extends ObservableConfig> configs, TypeToken<T> type,
-			Function<? super ObservableConfig, ? extends T> parser, BiConsumer<ObservableConfig, ? super T> format, boolean passive,
+			Function<? super ObservableConfig, ? extends T> parser, BiConsumer<ObservableConfig, ? super T> format, boolean active,
 			Observable<?> until) {
 			theConfigs = configs;
 			theType = type;
 			theParser = parser;
 			theFormat = format;
 
-			isPassive = passive;
+			isPassive = active;
 
 			CollectionDataFlow<? extends ObservableConfig, ?, T> valueFlow = theConfigs.getValues().flow().map(type, parser,
-				opts -> opts.cache(!passive));
-			if (passive)
-				theValues = valueFlow.collectPassive();
-			else
+				opts -> opts.cache(active));
+			if (active)
 				theValues = valueFlow.collectActive(until);
+			else
+				theValues = valueFlow.collectPassive();
 		}
 
 		@Override
@@ -439,7 +442,7 @@ public class ObservableConfigContent {
 			return new ObservableConfigValuesMCE();
 		}
 
-		protected ElementId getConfigElement(ElementId valueElement) {
+		protected final ElementId getConfigElement(ElementId valueElement) {
 			if (valueElement == null)
 				return null;
 			if (isPassive)
@@ -457,10 +460,12 @@ public class ObservableConfigContent {
 		public CollectionElement<T> addElement(T value, ElementId after, ElementId before, boolean first)
 			throws UnsupportedOperationException, IllegalArgumentException {
 			try (Transaction t = lock(true, true, null)) {
-				theConfigs.create(getConfigElement(after), getConfigElement(before), first).create(cfg -> theFormat.accept(cfg, value));
-				ElementId newValue = theNewValue;
-				theNewValue = null;
-				return theValues.getElement(newValue);
+				ElementId configEl = theConfigs.create(getConfigElement(after), getConfigElement(before), first)
+					.create(cfg -> theFormat.accept(cfg, value)).getElementId();
+				if (isPassive)
+					return theValues.getElement(configEl);
+				else
+					return theValues.getElement(theConfigs.getValues().getElementsBefore(configEl));
 			}
 		}
 
@@ -564,6 +569,8 @@ public class ObservableConfigContent {
 		}
 
 		protected final ElementId getConfigElement(ElementId valueElement) {
+			if (valueElement == null)
+				return null;
 			return ((ObservableCollection<ObservableConfig>) theConfigs.getValues())
 				.getElement(theValueElements.getElement(valueElement).get().theConfig, true).getElementId();
 		}
