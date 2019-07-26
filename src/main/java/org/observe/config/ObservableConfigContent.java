@@ -6,7 +6,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -278,8 +277,8 @@ public class ObservableConfigContent {
 		@SuppressWarnings("unused")
 		private final Function<? super ObservableConfig, ? extends T> theParser;
 		private final BiConsumer<ObservableConfig, ? super T> theFormat;
+		private final boolean isPassive;
 
-		private final ConfiguredValueType<T> theValueType;
 		private final ObservableCollection<T> theValues;
 
 		private ElementId theNewValue;
@@ -292,132 +291,194 @@ public class ObservableConfigContent {
 		 * @param until The observable on which to release resources
 		 */
 		public ObservableConfigValues(ObservableChildSet<? extends ObservableConfig> configs, TypeToken<T> type,
-			Function<? super ObservableConfig, ? extends T> parser, BiConsumer<ObservableConfig, ? super T> format, Observable<?> until) {
+			Function<? super ObservableConfig, ? extends T> parser, BiConsumer<ObservableConfig, ? super T> format, boolean passive,
+			Observable<?> until) {
 			theConfigs = configs;
 			theType = type;
 			theParser = parser;
 			theFormat = format;
 
-			theValueType = new ConfiguredValueType<T>() {
-				private final QuickMap<String, ConfiguredValueField<? super T, ?>> theFields;
-				{
-					QuickMap<String, ConfiguredValueField<? super T, ?>> fields = QuickSet.of("value").createMap();
-					fields.put(0, new ConfiguredValueField<T, T>() {
-						@Override
-						public ConfiguredValueType<T> getValueType() {
-							return theValueType;
-						}
+			isPassive = passive;
 
-						@Override
-						public String getName() {
-							return "value";
-						}
-
-						@Override
-						public TypeToken<T> getFieldType() {
-							return theType;
-						}
-
-						@Override
-						public int getIndex() {
-							return 0;
-						}
-					});
-					theFields = fields.unmodifiable();
-				}
-
-				@Override
-				public TypeToken<T> getType() {
-					return theType;
-				}
-
-				@Override
-				public QuickMap<String, ConfiguredValueField<? super T, ?>> getFields() {
-					return theFields;
-				}
-
-				@Override
-				public int getFieldIndex(Function<? super T, ?> fieldGetter) {
-					throw new UnsupportedOperationException();
-				}
-
-				@Override
-				public boolean allowsCustomFields() {
-					return false;
-				}
-			};
-			theValues = theConfigs.getValues().flow().map(type, parser).collectActive(until);
-			Subscription valueSub = theValues.onChange(evt -> {
-				if (evt.getType() == CollectionChangeType.add)
-					theNewValue = evt.getElementId();
-			});
-			until.take(1).act(__ -> valueSub.unsubscribe());
+			CollectionDataFlow<? extends ObservableConfig, ?, T> valueFlow = theConfigs.getValues().flow().map(type, parser,
+				opts -> opts.cache(!passive));
+			if (passive)
+				theValues = valueFlow.collectPassive();
+			else
+				theValues = valueFlow.collectActive(until);
 		}
 
 		@Override
-		public ConfiguredValueType<T> getType() {
-			return theValueType;
+		public TypeToken<T> getType() {
+			return theType;
 		}
 
 		@Override
-		public ObservableCollection<? extends T> getValues() {
-			return theValues;
+		public long getStamp(boolean structuralOnly) {
+			return theValues.getStamp(structuralOnly);
 		}
 
 		@Override
-		public ValueCreator<T> create() {
-			return new ValueCreator<T>() {
-				private T theValue;
+		public int size() {
+			return theValues.size();
+		}
+
+		@Override
+		public boolean isEmpty() {
+			return theValues.isEmpty();
+		}
+
+		@Override
+		public boolean isLockSupported() {
+			return theValues.isLockSupported();
+		}
+
+		@Override
+		public Transaction lock(boolean write, boolean structural, Object cause) {
+			return theValues.lock(write, structural, cause);
+		}
+
+		@Override
+		public Transaction tryLock(boolean write, boolean structural, Object cause) {
+			return theValues.tryLock(write, structural, cause);
+		}
+
+		@Override
+		public Equivalence<? super T> equivalence() {
+			return theValues.equivalence();
+		}
+
+		@Override
+		public CollectionElement<T> getElement(int index) {
+			return theValues.getElement(index);
+		}
+
+		@Override
+		public boolean isContentControlled() {
+			return theValues.isContentControlled();
+		}
+
+		@Override
+		public int getElementsBefore(ElementId id) {
+			return theValues.getElementsBefore(id);
+		}
+
+		@Override
+		public int getElementsAfter(ElementId id) {
+			return theValues.getElementsAfter(id);
+		}
+
+		@Override
+		public CollectionElement<T> getElement(T value, boolean first) {
+			return theValues.getElement(value, first);
+		}
+
+		@Override
+		public CollectionElement<T> getElement(ElementId id) {
+			return theValues.getElement(id);
+		}
+
+		@Override
+		public CollectionElement<T> getTerminalElement(boolean first) {
+			return theValues.getTerminalElement(first);
+		}
+
+		@Override
+		public CollectionElement<T> getAdjacentElement(ElementId elementId, boolean next) {
+			return theValues.getAdjacentElement(elementId, next);
+		}
+
+		@Override
+		public MutableCollectionElement<T> mutableElement(ElementId id) {
+			MutableCollectionElement<T> backing = theValues.mutableElement(id);
+			class ObservableConfigValuesMCE implements MutableCollectionElement<T> {
+				private ElementId theConfigElement;
 
 				@Override
-				public ConfiguredValueType<T> getType() {
-					return theValueType;
+				public ElementId getElementId() {
+					return backing.getElementId();
 				}
 
 				@Override
-				public Set<Integer> getRequiredFields() {
-					return new HashSet<>(Arrays.asList(0));
+				public T get() {
+					return backing.get();
 				}
 
 				@Override
-				public ValueCreator<T> with(String fieldName, Object value) throws IllegalArgumentException {
-					if (!"value".equals(fieldName))
-						throw new IllegalArgumentException("Unrecognized field " + fieldName);
-					else if (value == null)
-						throw new IllegalArgumentException("Null value not allowed");
-					else if (!TypeTokens.get().isInstance(theType, value))
-						throw new IllegalArgumentException(
-							"Value of type " + value.getClass().getName() + " cannot be assigned to type " + theType);
-					theValue = (T) value;
-					return this;
+				public BetterCollection<T> getCollection() {
+					return ObservableConfigValues.this;
 				}
 
 				@Override
-				public <F> ValueCreator<T> with(ConfiguredValueField<? super T, F> field, F value) throws IllegalArgumentException {
-					if (field.getName().equals("value"))
-						return with("value", value);
-					else
-						throw new IllegalArgumentException("Unrecognized field " + field.getName());
+				public String isEnabled() {
+					return null;
 				}
 
 				@Override
-				public <F> ValueCreator<T> with(Function<? super T, F> field, F value) throws IllegalArgumentException {
-					throw new UnsupportedOperationException();
+				public String isAcceptable(T value) {
+					return TypeTokens.get().isInstance(theType, value) ? null : StdMsg.BAD_TYPE;
 				}
 
 				@Override
-				public CollectionElement<T> create() {
-					ElementId added;
-					try (Transaction t = theConfigs.theRoot.lock(true, null)) {
-						theConfigs.theRoot.getChild(theConfigs.getPath().getParent(), true, null)
-						.addChild(theConfigs.getPath().getLastElement().getName(), cfg -> {
-							theFormat.accept(cfg, theValue);
-						});
-						added = theNewValue;
-					}
-					return theValues.getElement(added);
+				public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
+					if (theConfigElement == null)
+						theConfigElement = getConfigElement(id);
+					theFormat.accept(theConfigs.getValues().getElement(id).get(), value);
 				}
-			};
+
+				@Override
+				public String canRemove() {
+					return backing.canRemove();
+				}
+
+				@Override
+				public void remove() throws UnsupportedOperationException {
+					backing.remove();
+				}
+			}
+			return new ObservableConfigValuesMCE();
+		}
+
+		protected ElementId getConfigElement(ElementId valueElement) {
+			if (valueElement == null)
+				return null;
+			if (isPassive)
+				return valueElement;
+			else
+				return theConfigs.getValues().getElement(theValues.getElementsBefore(valueElement)).getElementId();
+		}
+
+		@Override
+		public String canAdd(T value, ElementId after, ElementId before) {
+			return null;
+		}
+
+		@Override
+		public CollectionElement<T> addElement(T value, ElementId after, ElementId before, boolean first)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			try (Transaction t = lock(true, true, null)) {
+				theConfigs.create(getConfigElement(after), getConfigElement(before), first).create(cfg -> theFormat.accept(cfg, value));
+				ElementId newValue = theNewValue;
+				theNewValue = null;
+				return theValues.getElement(newValue);
+			}
+		}
+
+		@Override
+		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends T>> observer) {
+			return theValues.onChange(observer);
+		}
+
+		@Override
+		public void clear() {
+			theValues.clear();
+		}
+
+		@Override
+		public void setValue(Collection<ElementId> elements, T value) {
+			for (ElementId element : elements) {
+				theFormat.accept(theConfigs.getValues().getElement(getConfigElement(element)).get(), value);
+			}
 		}
 	}
 
@@ -436,6 +497,7 @@ public class ObservableConfigContent {
 		private final ObservableCollection<T> theValues;
 
 		QuickMap<String, Object> theNewInstanceFields;
+		Consumer<? super T> thePreAddAction;
 		ConfigValueElement theNewElement;
 		boolean isUpdating;
 
@@ -472,6 +534,14 @@ public class ObservableConfigContent {
 					evt.getNewValue().theValueId = evt.getElementId();
 					evt.getNewValue().initialize(theNewInstanceFields);
 					theNewElement = evt.getNewValue();
+					if (thePreAddAction != null) {
+						try {
+							thePreAddAction.accept(evt.getNewValue().get());
+						} catch (RuntimeException e) { // Can't allow exceptions to propagate here--could mess up the collection structures
+							System.err.println("Exception in pre-add action");
+							e.printStackTrace();
+						}
+					}
 					break;
 				case set:
 					evt.getNewValue().update(evt);
@@ -493,10 +563,18 @@ public class ObservableConfigContent {
 			return theValues;
 		}
 
+		protected final ElementId getConfigElement(ElementId valueElement) {
+			return ((ObservableCollection<ObservableConfig>) theConfigs.getValues())
+				.getElement(theValueElements.getElement(valueElement).get().theConfig, true).getElementId();
+		}
+
 		@Override
-		public ValueCreator<T> create() {
+		public ValueCreator<T> create(ElementId after, ElementId before, boolean first) {
+			ElementId configAfter = getConfigElement(after);
+			ElementId configBefore = getConfigElement(before);
 			return new SimpleValueCreator<T>(theType) {
-				private final ValueCreator<? extends ObservableConfig> theConfigCreator = theConfigs.create();
+				private final ValueCreator<? extends ObservableConfig> theConfigCreator = theConfigs.create(configAfter, configBefore,
+					first);
 
 				@Override
 				public <F> ValueCreator<T> with(ConfiguredValueField<? super T, F> field, F value) throws IllegalArgumentException {
@@ -508,9 +586,10 @@ public class ObservableConfigContent {
 				}
 
 				@Override
-				public CollectionElement<T> create() {
+				public CollectionElement<T> create(Consumer<? super T> preAddAction) {
 					ConfigValueElement cve;
 					try (Transaction t = theConfigs.getValues().lock(true, null)) {
+						thePreAddAction = preAddAction;
 						theNewInstanceFields = getFieldValues();
 						theConfigCreator.create();
 						theNewInstanceFields = null;
@@ -1132,7 +1211,7 @@ public class ObservableConfigContent {
 		}
 
 		@Override
-		public ValueCreator<C> create() {
+		public ValueCreator<C> create(ElementId after, ElementId before, boolean first) {
 			return new ValueCreator<C>() {
 				private Map<String, String> theFields;
 
@@ -1165,13 +1244,18 @@ public class ObservableConfigContent {
 				}
 
 				@Override
-				public CollectionElement<C> create() {
+				public CollectionElement<C> create(Consumer<? super C> preAddAction) {
+					ObservableConfig afterChild = after == null ? null : theChildren.getElement(after).get();
+					ObservableConfig beforeChild = after == null ? null : theChildren.getElement(before).get();
 					ElementId newChild;
 					try (Transaction t = theRoot.lock(true, null)) {
-						theRoot.getChild(thePath.getParent(), true, null).addChild(thePath.getLastElement().getName(), cfg -> {
+						ObservableConfig parent = theRoot.getChild(thePath.getParent(), true, null);
+						parent.addChild(afterChild, beforeChild, first, thePath.getLastElement().getName(), cfg -> {
 							if (theFields != null)
 								for (Map.Entry<String, String> field : theFields.entrySet())
 									cfg.set(field.getKey(), field.getValue());
+							if (preAddAction != null)
+								preAddAction.accept((C) cfg);
 						});
 						newChild = theNewChild;
 						theNewChild = null;

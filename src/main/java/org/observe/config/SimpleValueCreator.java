@@ -5,7 +5,6 @@ import java.util.Set;
 import java.util.function.Function;
 
 import org.observe.util.TypeTokens;
-import org.qommons.collect.CollectionElement;
 import org.qommons.collect.QuickSet.QuickMap;
 
 public abstract class SimpleValueCreator<E> implements ValueCreator<E> {
@@ -55,7 +54,4 @@ public abstract class SimpleValueCreator<E> implements ValueCreator<E> {
 	protected QuickMap<String, Object> getFieldValues() {
 		return theFieldValues;
 	}
-
-	@Override
-	public abstract CollectionElement<E> create();
 }

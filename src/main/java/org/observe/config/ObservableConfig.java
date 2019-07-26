@@ -20,6 +20,8 @@ import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParser;
@@ -404,10 +406,30 @@ public class ObservableConfig implements StructuredTransactable {
 		return buildPath(new LinkedList<>(), firstName);
 	}
 
+	protected static final Pattern PATH_EL_PATTERN = Pattern.compile("(?<name>.*)\\{\\s*(.+)=(.+)(>\\s*,(.+)=(.+))*\\s*\\}");
+
 	protected ObservableConfigPathBuilder buildPath(List<ObservableConfigPathElement> path, String name) {
 		List<ObservableConfigPathElement> finalPath = new ArrayList<>(path.size());
 		finalPath.addAll(path);
-		return new ObservableConfigPathBuilder(this, finalPath, name);
+		Map<String, String> properties = null;
+		if (name.charAt(name.length() - 1) == '}') { // Quick check to avoid pattern checking on every single path, few of which will have
+			// attrs
+			Matcher matcher = PATH_EL_PATTERN.matcher(name);
+			if (matcher.matches()) {
+				properties = new LinkedHashMap<>();
+				for (int g = 1; g < matcher.groupCount(); g++) {
+					System.out.println("Group " + g + "=" + matcher.group(g));
+				}
+				name = matcher.group("name");
+			}
+		}
+		ObservableConfigPathBuilder builder = new ObservableConfigPathBuilder(this, finalPath, name);
+		if (properties != null) {
+			for (Map.Entry<String, String> property : properties.entrySet()) {
+				builder.withAttribute(property.getKey(), property.getValue());
+			}
+		}
+		return builder;
 	}
 
 	protected ObservableConfigPath createPath(List<ObservableConfigPathElement> path) {
@@ -538,13 +560,14 @@ public class ObservableConfig implements StructuredTransactable {
 				System.err.println("Could not parse value " + this + ": " + e.getMessage());
 				return null;
 			}
-		}, (config, val) -> config.setValue(format.format(val)), Observable.empty());
+		}, (config, val) -> config.setValue(format.format(val)), true, Observable.empty());
 	}
 
 	public <T> ObservableCollection<T> observeValues(ObservableConfigPath path, TypeToken<T> type,
-		Function<ObservableConfig, ? extends T> parser, BiConsumer<ObservableConfig, ? super T> format, Observable<?> until) {
+		Function<ObservableConfig, ? extends T> parser, BiConsumer<ObservableConfig, ? super T> format, boolean passive,
+		Observable<?> until) {
 		ObservableChildSet<? extends ObservableConfig> configs = (ObservableChildSet<? extends ObservableConfig>) getContent(path, until);
-		return new ObservableConfigValues<>(configs, type, parser, format, until);
+		return new ObservableConfigValues<>(configs, type, parser, format, passive, until);
 	}
 
 	public <T> ObservableValueSet<T> observeEntities(ObservableConfigPath path, TypeToken<T> type, Observable<?> until) {
@@ -645,8 +668,16 @@ public class ObservableConfig implements StructuredTransactable {
 	}
 
 	public ObservableConfig addChild(String name, Consumer<ObservableConfig> preAddMod) {
+		return addChild(null, null, false, name, preAddMod);
+	}
+
+	public ObservableConfig addChild(ObservableConfig after, ObservableConfig before, boolean first, String name,
+		Consumer<ObservableConfig> preAddMod) {
 		try (Transaction t = lock(true, true, null)) {
-			ElementId el = theContent.addElement(null, false).getElementId();
+			ElementId el = theContent.addElement(null, //
+				after == null ? null : Objects.requireNonNull(after.theParentContentRef),
+					before == null ? null : Objects.requireNonNull(before.theParentContentRef), //
+						first).getElementId();
 			ObservableConfig child = createChild(el, name, theLocking, theRootCausable, null);
 			theContent.mutableElement(el).set(child);
 			if (preAddMod != null)

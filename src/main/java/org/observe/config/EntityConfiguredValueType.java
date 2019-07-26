@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.IntFunction;
 
@@ -167,11 +168,13 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 		}
 
 		@Override
-		public CollectionElement<E> create() {
+		public CollectionElement<E> create(Consumer<? super E> preAddAction) {
 			I newImpl = theImplCreator.apply(theFieldValues);
 			E newValue = theType.theReflector.newInstance(//
 				index -> theFieldGetter.apply(newImpl, index), //
 				(index, fieldValue) -> theFieldSetter.apply(newImpl, index, fieldValue));
+			if (preAddAction != null)
+				preAddAction.accept(newValue);
 			return theElementProducer.apply(newImpl, newValue);
 		}
 	}
