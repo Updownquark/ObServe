@@ -142,6 +142,7 @@ public class ObservableConfigTest {
 
 		until.onNext(null);
 		writeClearAndParse();
+		// TODO This next statement should be removed--the collection should be able to locate the new data in the config
 		testEntities = theConfig.observeEntities(theConfig.createPath("test-entities/test-entity"), TypeTokens.get().of(TestEntity.class),
 			until);
 		i = 0;
@@ -173,6 +174,9 @@ public class ObservableConfigTest {
 			i++;
 		}
 		Assert.assertEquals(4, i);
+
+		theConfig.set("test-entities/test-entity{a=10}/a", "20");
+		Assert.assertEquals(20, testEntities.getValues().get(1).getA());
 	}
 
 	public interface TestEntity {
