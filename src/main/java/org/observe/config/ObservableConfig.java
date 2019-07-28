@@ -179,17 +179,21 @@ public class ObservableConfig implements StructuredTransactable {
 		public boolean matches(ObservableConfig config) {
 			if (!theName.equals(ANY_NAME) && !theName.equals(config.getName()))
 				return false;
-			try (Transaction t = config.lock(false, null)) {
-				for (Map.Entry<String, String> attr : theAttributes.entrySet()) {
-					boolean found = false;
-					for (ObservableConfig child : config.theContent) {
-						if (!child.getName().equals(attr.getKey()))
-							continue;
-						if (attr.getValue() != null && !attr.getValue().equals(child.getValue()))
-							continue;
+			if (!theAttributes.isEmpty()) {
+				try (Transaction t = config.lock(false, null)) { // TODO Test attributes.empty before locking
+					for (Map.Entry<String, String> attr : theAttributes.entrySet()) {
+						boolean found = false;
+						for (ObservableConfig child : config.theContent) {
+							if (!child.getName().equals(attr.getKey()))
+								continue;
+							if (attr.getValue() == null || attr.getValue().equals(child.getValue())) {
+								found = true;
+								break;
+							}
+						}
+						if (!found)
+							return false;
 					}
-					if (!found)
-						return false;
 				}
 			}
 			return true;
@@ -313,14 +317,16 @@ public class ObservableConfig implements StructuredTransactable {
 
 	public static class ObservableConfigEvent extends Causable {
 		public final CollectionChangeType changeType;
+		public final ObservableConfig eventTarget;
 		public final List<ObservableConfig> relativePath;
 		public final String oldName;
 		public final String oldValue;
 
-		public ObservableConfigEvent(CollectionChangeType changeType, String oldName, String oldValue, List<ObservableConfig> relativePath,
-			Object cause) {
+		public ObservableConfigEvent(CollectionChangeType changeType, ObservableConfig eventTarget, String oldName, String oldValue,
+			List<ObservableConfig> relativePath, Object cause) {
 			super(cause);
 			this.changeType = changeType;
+			this.eventTarget = eventTarget;
 			this.relativePath = relativePath;
 			this.oldName = oldName;
 			this.oldValue = oldValue;
@@ -337,7 +343,29 @@ public class ObservableConfig implements StructuredTransactable {
 		}
 
 		public ObservableConfigEvent asFromChild() {
-			return new ObservableConfigEvent(changeType, oldName, oldValue, relativePath.subList(1, relativePath.size()), getCause());
+			return new ObservableConfigEvent(changeType, relativePath.get(0), oldName, oldValue,
+				relativePath.subList(1, relativePath.size()), getCause());
+		}
+
+		@Override
+		public String toString() {
+			StringBuilder str = new StringBuilder();
+			switch (changeType) {
+			case add:
+				str.append('+').append(relativePath.isEmpty() ? "this" : getRelativePathString());
+				break;
+			case remove:
+				str.append('-').append(relativePath.isEmpty() ? "this" : getRelativePathString());
+				break;
+			case set:
+				str.append(relativePath.isEmpty() ? "this" : getRelativePathString());
+				ObservableConfig changed = relativePath.isEmpty() ? eventTarget : relativePath.get(relativePath.size() - 1);
+				if (!oldName.equals(changed.getName()))
+					str.append(".name ").append(oldName).append("->").append(changed.getName());
+				else
+					str.append(".value ").append(oldValue).append("->").append(changed.getValue());
+			}
+			return str.toString();
 		}
 	}
 
@@ -701,13 +729,15 @@ public class ObservableConfig implements StructuredTransactable {
 		try (Transaction t = lock(true, false, null)) {
 			String oldValue = theValue;
 			theValue = value;
-			fire(CollectionChangeType.set, Collections.emptyList(), theName, oldValue);
+			fire(CollectionChangeType.set, //
+				Collections.emptyList(), theName, oldValue);
 		}
 		return this;
 	}
 
 	public ObservableConfig set(String path, String value) {
-		ObservableConfig child = getChild(path, true, ch -> ch.setValue(value));
+		ObservableConfig child = getChild(path, true, //
+			ch -> ch.setValue(value));
 		if (child.getValue() != value)
 			child.setValue(value);
 		return this;
@@ -740,23 +770,26 @@ public class ObservableConfig implements StructuredTransactable {
 	}
 
 	protected void fire(CollectionChangeType eventType, List<ObservableConfig> relativePath, String oldName, String oldValue) {
-		_fire(eventType, relativePath, oldName, oldValue, getCurrentCause());
+		_fire(eventType, relativePath, oldName, oldValue, //
+			getCurrentCause());
 	}
 
 	private void _fire(CollectionChangeType eventType, List<ObservableConfig> relativePath, String oldName, String oldValue, Object cause) {
 		theModCount++;
 		if (eventType != CollectionChangeType.set)
 			theStructureModCount++;
-		ObservableConfigEvent event = new ObservableConfigEvent(eventType, oldName, oldValue, relativePath, getCurrentCause());
-		try (Transaction t = Causable.use(event)) {
-			theListeners.forEach(intL -> {
-				if (intL.path == null || intL.path.matches(relativePath)) {
-					if (relativePath.isEmpty() && eventType == CollectionChangeType.remove)
-						intL.listener.onCompleted(event);
-					else
-						intL.listener.onNext(event);
-				}
-			});
+		if (!theListeners.isEmpty()) {
+			ObservableConfigEvent event = new ObservableConfigEvent(eventType, this, oldName, oldValue, relativePath, getCurrentCause());
+			try (Transaction t = Causable.use(event)) {
+				theListeners.forEach(intL -> {
+					if (intL.path == null || intL.path.matches(relativePath)) {
+						if (relativePath.isEmpty() && eventType == CollectionChangeType.remove)
+							intL.listener.onCompleted(event);
+						else
+							intL.listener.onNext(event);
+					}
+				});
+			}
 		}
 		boolean fireWithParent;
 		if (theParent == null)
@@ -766,7 +799,8 @@ public class ObservableConfig implements StructuredTransactable {
 		else
 			fireWithParent = eventType == CollectionChangeType.remove && relativePath.isEmpty(); // Means this config was just removed
 		if (fireWithParent)
-			theParent.fire(eventType, addToList(this, relativePath), oldName, oldValue);
+			theParent.fire(eventType, //
+				addToList(this, relativePath), oldName, oldValue);
 	}
 
 	private static List<ObservableConfig> addToList(ObservableConfig c, List<ObservableConfig> list) {
@@ -775,6 +809,21 @@ public class ObservableConfig implements StructuredTransactable {
 		for (int i = 0; i < list.size(); i++)
 			array[i + 1] = list.get(i);
 		return Arrays.asList(array);
+	}
+
+	private static class InternalObservableConfigListener {
+		final ObservableConfigPath path;
+		final Observer<? super ObservableConfigEvent> listener;
+
+		InternalObservableConfigListener(ObservableConfigPath path, Observer<? super ObservableConfigEvent> observer) {
+			this.path = path;
+			this.listener = observer;
+		}
+
+		@Override
+		public String toString() {
+			return path + ":" + listener;
+		}
 	}
 
 	/** Needed by ObservableConfigContent.* */
@@ -1193,16 +1242,6 @@ public class ObservableConfig implements StructuredTransactable {
 			if (theValue.charAt(c) < ' ' || theValue.charAt(c) > '~')
 				return false;
 		return true;
-	}
-
-	private static class InternalObservableConfigListener {
-		final ObservableConfigPath path;
-		final Observer<? super ObservableConfigEvent> listener;
-
-		InternalObservableConfigListener(ObservableConfigPath path, Observer<? super ObservableConfigEvent> observer) {
-			this.path = path;
-			this.listener = observer;
-		}
 	}
 
 	static String[] parsePath(String path) {

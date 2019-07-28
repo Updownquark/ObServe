@@ -155,8 +155,6 @@ public class ObservableConfigContent {
 					thePathElSubscriptions[i] = null;
 				}
 			}
-			for (int i = thePathElements.length - 1; i >= startIndex; i--)
-				thePathElements[i] = null;
 		}
 
 		boolean resolvePath(int startIndex, boolean createIfAbsent, IntConsumer onResolution) {
@@ -531,7 +529,7 @@ public class ObservableConfigContent {
 
 			theValueElements = ((ObservableCollection<ObservableConfig>) theConfigs.getValues()).flow()
 				.map(new TypeToken<ConfigValueElement>() {}, cfg -> new ConfigValueElement(cfg)).collectActive(until);
-			theValueElements.subscribe(evt -> {
+			Subscription valueElSub = theValueElements.subscribe(evt -> {
 				if (isUpdating)
 					return;
 				switch (evt.getType()) {
@@ -555,6 +553,7 @@ public class ObservableConfigContent {
 					break;
 				}
 			}, true);
+			until.take(1).act(__ -> valueElSub.unsubscribe());
 			theValues = theValueElements.flow().map(type, cve -> cve.theInstance, opts -> opts.cache(false)).collectPassive();
 		}
 
