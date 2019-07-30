@@ -987,9 +987,9 @@ public class ObservableSetImpl {
 			}
 
 			@Override
-			public boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl) {
+			public boolean isDerivedFrom(ElementId sourceEl) {
 				// Only represent the active elements--the others are basically filtered out
-				return theActiveElement.isAssociated(source, sourceEl);
+				return theActiveElement.isDerivedFrom(sourceEl);
 			}
 
 			@Override

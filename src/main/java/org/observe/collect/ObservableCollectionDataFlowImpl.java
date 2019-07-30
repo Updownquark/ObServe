@@ -36,7 +36,6 @@ import org.observe.collect.ObservableCollection.DistinctDataFlow;
 import org.observe.collect.ObservableCollection.DistinctSortedDataFlow;
 import org.observe.collect.ObservableCollection.ModFilterBuilder;
 import org.observe.collect.ObservableCollectionImpl.ActiveDerivedCollection;
-import org.observe.collect.ObservableCollectionImpl.DerivedCollection;
 import org.observe.collect.ObservableCollectionImpl.PassiveDerivedCollection;
 import org.observe.util.TypeTokens;
 import org.observe.util.WeakListening;
@@ -408,11 +407,10 @@ public class ObservableCollectionDataFlowImpl {
 		void setListener(CollectionElementListener<E> listener);
 
 		/**
-		 * @param source The source collection that the element is from
 		 * @param sourceEl The element that is possibly a source of this element
-		 * @return Whether this element is associated with the given element in the source collection
+		 * @return Whether this element is derived from the given element
 		 */
-		boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl);
+		boolean isDerivedFrom(ElementId sourceEl);
 
 		/** @return The current value of this element */
 		E get();
@@ -465,8 +463,8 @@ public class ObservableCollectionDataFlowImpl {
 				}
 
 				@Override
-				public boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl) {
-					return outer.isAssociated(source, sourceEl);
+				public boolean isDerivedFrom(ElementId sourceEl) {
+					return outer.isDerivedFrom(sourceEl);
 				}
 
 				@Override
@@ -1634,13 +1632,8 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			@Override
-			public boolean isAssociated(ObservableCollection<?> otherSource, ElementId sourceEl) {
-				if (otherSource == theSource)
-					return source.getElementId().equals(sourceEl);
-				else if (theSource instanceof DerivedCollection)
-					return ((DerivedCollection<E>) theSource).isAssociated(otherSource, sourceEl, source.getElementId());
-				else
-					return false;
+			public boolean isDerivedFrom(ElementId sourceEl) {
+				return source.getElementId().equals(sourceEl) || source.getElementId().isDerivedFrom(sourceEl);
 			}
 
 			@Override
@@ -2041,8 +2034,8 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			@Override
-			public boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl) {
-				return theParentEl.isAssociated(source, sourceEl);
+			public boolean isDerivedFrom(ElementId sourceEl) {
+				return theParentEl.isDerivedFrom(sourceEl);
 			}
 
 			@Override
@@ -2239,8 +2232,8 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			@Override
-			public boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl) {
-				return theParentEl.isAssociated(source, sourceEl);
+			public boolean isDerivedFrom(ElementId sourceEl) {
+				return theParentEl.isDerivedFrom(sourceEl);
 			}
 
 			@Override
@@ -2397,18 +2390,15 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			@Override
-			public boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl) {
-				if (theParentEl.isAssociated(source, sourceEl))
+			public boolean isDerivedFrom(ElementId sourceEl) {
+				if (theParentEl.isDerivedFrom(sourceEl))
 					return true;
-				else if (source == theFilter) {
-					for (ElementId rightEl : intersection.rightElements)
-						if (sourceEl.equals(rightEl))
-							return true;
-				} else if (theFilter instanceof DerivedCollection) {
-					for (ElementId rightEl : intersection.rightElements)
-						if (((DerivedCollection<?>) theFilter).isAssociated(source, sourceEl, rightEl))
-							return true;
-				}
+				for (ElementId rightEl : intersection.rightElements)
+					if (sourceEl.equals(rightEl))
+						return true;
+				for (ElementId rightEl : intersection.rightElements)
+					if (rightEl.isDerivedFrom(sourceEl))
+						return true;
 				return false;
 			}
 
@@ -3199,8 +3189,8 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			@Override
-			public boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl) {
-				return theParentEl.isAssociated(source, sourceEl);
+			public boolean isDerivedFrom(ElementId sourceEl) {
+				return theParentEl.isDerivedFrom(sourceEl);
 			}
 
 			@Override
@@ -3982,8 +3972,8 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			@Override
-			public boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl) {
-				return theParentEl.isAssociated(source, sourceEl);
+			public boolean isDerivedFrom(ElementId sourceEl) {
+				return theParentEl.isDerivedFrom(sourceEl);
 			}
 
 			@Override
@@ -4269,8 +4259,8 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			@Override
-			public boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl) {
-				return theParentEl.isAssociated(source, sourceEl);
+			public boolean isDerivedFrom(ElementId sourceEl) {
+				return theParentEl.isDerivedFrom(sourceEl);
 			}
 
 			@Override
@@ -4535,8 +4525,8 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			@Override
-			public boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl) {
-				return theParentEl.isAssociated(source, sourceEl);
+			public boolean isDerivedFrom(ElementId sourceEl) {
+				return theParentEl.isDerivedFrom(sourceEl);
 			}
 
 			@Override
@@ -4847,8 +4837,8 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			@Override
-			public boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl) {
-				return theParentEl.isAssociated(source, sourceEl);
+			public boolean isDerivedFrom(ElementId sourceEl) {
+				return theParentEl.isDerivedFrom(sourceEl);
 			}
 
 			@Override
@@ -5222,8 +5212,8 @@ public class ObservableCollectionDataFlowImpl {
 			}
 
 			@Override
-			public boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl) {
-				return theParentEl.isAssociated(source, sourceEl) || theHolder.theParentEl.isAssociated(source, sourceEl);
+			public boolean isDerivedFrom(ElementId sourceEl) {
+				return theParentEl.isDerivedFrom(sourceEl) || theHolder.theParentEl.isDerivedFrom(sourceEl);
 			}
 
 			@Override

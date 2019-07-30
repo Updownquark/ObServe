@@ -1390,13 +1390,6 @@ public final class ObservableCollectionImpl {
 	 * @param <T> The type of elements in the collection
 	 */
 	public static interface DerivedCollection<T> extends ObservableCollection<T> {
-		/**
-		 * @param source The collection that the source element is from
-		 * @param sourceEl The id of an element in a source collection
-		 * @param derivedEl The id of an element in the derived collection
-		 * @return Whether the derived element is a product of this operation on the given element from the source collection
-		 */
-		boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl, ElementId derivedEl);
 	}
 
 	/**
@@ -1435,19 +1428,6 @@ public final class ObservableCollectionImpl {
 		/** @return The passive manager that produces this collection's elements */
 		protected PassiveCollectionManager<E, ?, T> getFlow() {
 			return theFlow;
-		}
-
-		@Override
-		public boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl, ElementId derivedEl) {
-			if (source == theSource) {
-				if (theFlow.isReversed())
-					return sourceEl.equals(derivedEl.reverse());
-				else
-					return sourceEl.equals(derivedEl);
-			} else if (theSource instanceof DerivedCollection)
-				return ((DerivedCollection<E>) theSource).isAssociated(source, sourceEl, derivedEl);
-			else
-				return false;
 		}
 
 		@Override
@@ -1858,6 +1838,11 @@ public final class ObservableCollectionImpl {
 			}
 
 			@Override
+			public boolean isDerivedFrom(ElementId other) {
+				return equals(other) || element.isDerivedFrom(other);
+			}
+
+			@Override
 			public int compareTo(ElementId o) {
 				return treeNode.getElementId().compareTo(((DerivedElementHolder<T>) o).treeNode.getElementId());
 			}
@@ -1984,11 +1969,6 @@ public final class ObservableCollectionImpl {
 				theListeners.forEach(//
 					listener -> listener.accept(event));
 			}
-		}
-
-		@Override
-		public boolean isAssociated(ObservableCollection<?> source, ElementId sourceEl, ElementId derivedEl) {
-			return ((DerivedElementHolder<T>) derivedEl).element.isAssociated(source, sourceEl);
 		}
 
 		@Override
