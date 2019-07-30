@@ -169,6 +169,11 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	}
 
 	@Override
+	public CollectionElement<E> getElementBySource(ElementId sourceEl) {
+		return getElement(sourceEl);
+	}
+
+	@Override
 	public String canAdd(E value, ElementId after, ElementId before) {
 		return theValues.canAdd(value, after, before);
 	}

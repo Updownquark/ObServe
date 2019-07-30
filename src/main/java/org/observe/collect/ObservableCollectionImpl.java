@@ -1332,6 +1332,13 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public CollectionElement<E> getElementBySource(ElementId sourceEl) {
+			if (sourceEl instanceof ElementId.ReversedElementId)
+				sourceEl = sourceEl.reverse();
+			return CollectionElement.reverse(getWrapped().getElementBySource(sourceEl));
+		}
+
+		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
 			try (Transaction t = lock(false, null)) {
 				return getWrapped().onChange(new ReversedSubscriber(observer, size()));
@@ -1617,6 +1624,14 @@ public final class ObservableCollectionImpl {
 		@Override
 		public MutableCollectionElement<T> mutableElement(ElementId id) {
 			return mutableElementFor(theSource.mutableElement(mapId(id)), null);
+		}
+
+		@Override
+		public CollectionElement<T> getElementBySource(ElementId sourceEl) throws NoSuchElementException {
+			if (isReversed && sourceEl instanceof ElementId.ReversedElementId)
+				sourceEl = sourceEl.reverse();
+			CollectionElement<E> adj = theSource.getElementBySource(sourceEl);
+			return adj == null ? null : elementFor(adj, null);
 		}
 
 		/**
@@ -2095,6 +2110,19 @@ public final class ObservableCollectionImpl {
 			return mutableElement(id, null);
 		}
 
+		@Override
+		public CollectionElement<T> getElementBySource(ElementId sourceEl) throws NoSuchElementException {
+			if (sourceEl instanceof DerivedElementHolder
+				&& ((DerivedElementHolder<?>) sourceEl).treeNode.getParent().equals(theDerivedElements.getRoot()))
+				return getElement(sourceEl);
+
+			DerivedCollectionElement<T> el = theFlow.getElementBySource(sourceEl);
+			if (el == null)
+				return null;
+			DerivedElementHolder<T> found = theDerivedElements.searchValue(de -> el.compareTo(de.element), SortedSearchFilter.OnlyMatch);
+			return found == null ? null : elementFor(found);
+		}
+
 		private MutableCollectionElement<T> mutableElement(ElementId id, MutableCollectionElement<DerivedElementHolder<T>> spliterElement) {
 			DerivedElementHolder<T> el = (DerivedElementHolder<T>) id;
 			class DerivedMutableCollectionElement implements MutableCollectionElement<T> {
@@ -2398,6 +2426,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
+		public CollectionElement<E> getElementBySource(ElementId sourceEl) throws NoSuchElementException {
+			return getElement(sourceEl);
+		}
+
+		@Override
 		public String canAdd(E value) {
 			return StdMsg.UNSUPPORTED_OPERATION;
 		}
@@ -2596,6 +2629,14 @@ public final class ObservableCollectionImpl {
 			if (current == null)
 				throw new NoSuchElementException();
 			return ((ObservableCollection<E>) current).mutableElement(id);
+		}
+
+		@Override
+		public CollectionElement<E> getElementBySource(ElementId sourceEl) throws NoSuchElementException {
+			ObservableCollection<? extends E> current = getWrapped().get();
+			if (current == null)
+				throw new NoSuchElementException();
+			return ((ObservableCollection<E>) current).getElementBySource(sourceEl);
 		}
 
 		@Override

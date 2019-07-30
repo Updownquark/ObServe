@@ -310,6 +310,8 @@ public class ObservableCollectionDataFlowImpl {
 		 */
 		Comparable<DerivedCollectionElement<T>> getElementFinder(T value);
 
+		DerivedCollectionElement<T> getElementBySource(ElementId sourceEl);
+
 		/**
 		 * @param toAdd The value to add
 		 * @param after The element to insert the value after (or null for no lower bound)
@@ -1560,6 +1562,12 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public DerivedCollectionElement<E> getElementBySource(ElementId sourceEl) {
+			CollectionElement<E> el = theSource.getElementBySource(sourceEl);
+			return el == null ? null : new BaseDerivedElement(theSource.mutableElement(el.getElementId()));
+		}
+
+		@Override
 		public boolean clear() {
 			theSource.clear();
 			return true;
@@ -1799,6 +1807,13 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public DerivedCollectionElement<T> getElementBySource(ElementId sourceEl) {
+			if (sourceEl instanceof ElementId.ReversedElementId)
+				sourceEl = sourceEl.reverse();
+			return DerivedCollectionElement.reverse(theParent.getElementBySource(sourceEl));
+		}
+
+		@Override
 		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
 			return theParent.canAdd(toAdd, DerivedCollectionElement.reverse(before), DerivedCollectionElement.reverse(after));
 		}
@@ -1900,6 +1915,12 @@ public class ObservableCollectionDataFlowImpl {
 			// sorting to find the element.
 			// And even if the parent could've found it, the order will be mixed up now.
 			return null;
+		}
+
+		@Override
+		public DerivedCollectionElement<T> getElementBySource(ElementId sourceEl) {
+			DerivedCollectionElement<T> el = theParent.getElementBySource(sourceEl);
+			return el == null ? null : new SortedElement(el, true);
 		}
 
 		@Override
@@ -2137,6 +2158,11 @@ public class ObservableCollectionDataFlowImpl {
 			if (parentFinder == null)
 				return null;
 			return el -> parentFinder.compareTo(((FilteredElement) el).theParentEl);
+		}
+
+		@Override
+		public DerivedCollectionElement<T> getElementBySource(ElementId sourceEl) {
+			return theParent.getElementBySource(sourceEl);
 		}
 
 		@Override
@@ -2509,6 +2535,14 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public DerivedCollectionElement<T> getElementBySource(ElementId sourceEl) {
+			DerivedCollectionElement<T> el = theParent.getElementBySource(sourceEl);
+			if (el == null)
+				return null;
+			return new IntersectedCollectionElement(el, null, true);
+		}
+
+		@Override
 		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
 			IntersectionElement intersect = theValues.get(toAdd);
 			boolean filterHas = intersect == null ? false : !intersect.rightElements.isEmpty();
@@ -2725,6 +2759,11 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
 			return null;
+		}
+
+		@Override
+		public DerivedCollectionElement<T> getElementBySource(ElementId sourceEl) {
+			return theParent.getElementBySource(sourceEl);
 		}
 
 		@Override
@@ -3053,6 +3092,12 @@ public class ObservableCollectionDataFlowImpl {
 			if (pef == null)
 				return null;
 			return el -> pef.compareTo(((MappedElement) el).theParentEl);
+		}
+
+		@Override
+		public DerivedCollectionElement<T> getElementBySource(ElementId sourceEl) {
+			DerivedCollectionElement<I> el = theParent.getElementBySource(sourceEl);
+			return el == null ? null : new MappedElement(el, true);
 		}
 
 		@Override
@@ -3776,6 +3821,12 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public DerivedCollectionElement<T> getElementBySource(ElementId sourceEl) {
+			DerivedCollectionElement<I> el = theParent.getElementBySource(sourceEl);
+			return el == null ? null : new CombinedElement(el, true);
+		}
+
+		@Override
 		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
 			return theParent.canAdd(reverseValue(toAdd), strip(after), strip(before));
 		}
@@ -4158,6 +4209,12 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public DerivedCollectionElement<T> getElementBySource(ElementId sourceEl) {
+			DerivedCollectionElement<T> el = theParent.getElementBySource(sourceEl);
+			return el == null ? null : new RefreshingElement(el, true);
+		}
+
+		@Override
 		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
 			return theParent.canAdd(toAdd, strip(after), strip(before));
 		}
@@ -4394,6 +4451,12 @@ public class ObservableCollectionDataFlowImpl {
 			if (parentFinder == null)
 				return null;
 			return el -> parentFinder.compareTo(((RefreshingElement) el).theParentEl);
+		}
+
+		@Override
+		public DerivedCollectionElement<T> getElementBySource(ElementId sourceEl) {
+			DerivedCollectionElement<T> el = theParent.getElementBySource(sourceEl);
+			return el == null ? null : new RefreshingElement(el);
 		}
 
 		@Override
@@ -4786,6 +4849,12 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
+		public DerivedCollectionElement<T> getElementBySource(ElementId sourceEl) {
+			DerivedCollectionElement<T> el = theParent.getElementBySource(sourceEl);
+			return el == null ? null : new ModFilteredElement(el);
+		}
+
+		@Override
 		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
 			String msg = theFilter.canAdd(toAdd);
 			if (msg == null)
@@ -4961,6 +5030,15 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
 			return null;
+		}
+
+		@Override
+		public DerivedCollectionElement<T> getElementBySource(ElementId sourceEl) {
+			DerivedCollectionElement<I> outerEl = theParent.getElementBySource(sourceEl);
+			if (outerEl != null)
+
+				// TODO Auto-generated method stub
+				return null;
 		}
 
 		@Override
