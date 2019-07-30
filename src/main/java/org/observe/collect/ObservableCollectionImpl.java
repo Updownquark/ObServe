@@ -2112,15 +2112,18 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public CollectionElement<T> getElementBySource(ElementId sourceEl) throws NoSuchElementException {
-			if (sourceEl instanceof DerivedElementHolder
-				&& ((DerivedElementHolder<?>) sourceEl).treeNode.getParent().equals(theDerivedElements.getRoot()))
-				return getElement(sourceEl);
+			try (Transaction t = lock(false, null)) {
+				if (sourceEl instanceof DerivedElementHolder
+					&& ((DerivedElementHolder<?>) sourceEl).treeNode.getRoot().equals(theDerivedElements.getRoot()))
+					return getElement(sourceEl);
 
-			DerivedCollectionElement<T> el = theFlow.getElementBySource(sourceEl);
-			if (el == null)
-				return null;
-			DerivedElementHolder<T> found = theDerivedElements.searchValue(de -> el.compareTo(de.element), SortedSearchFilter.OnlyMatch);
-			return found == null ? null : elementFor(found);
+				DerivedCollectionElement<T> el = theFlow.getElementBySource(sourceEl);
+				if (el == null)
+					return null;
+				DerivedElementHolder<T> found = theDerivedElements.searchValue(de -> el.compareTo(de.element),
+					SortedSearchFilter.OnlyMatch);
+				return found == null ? null : elementFor(found);
+			}
 		}
 
 		private MutableCollectionElement<T> mutableElement(ElementId id, MutableCollectionElement<DerivedElementHolder<T>> spliterElement) {

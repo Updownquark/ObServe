@@ -218,6 +218,11 @@ public class ObservableSetImpl {
 		}
 
 		@Override
+		public DerivedCollectionElement<T> getElementBySource(ElementId sourceEl) {
+			return theWrapped.getElementBySource(sourceEl);
+		}
+
+		@Override
 		public String canAdd(T toAdd, DerivedCollectionElement<T> after, DerivedCollectionElement<T> before) {
 			return theWrapped.canAdd(toAdd, after, before);
 		}
@@ -280,13 +285,12 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public <X> boolean repair(DerivedCollectionElement<T> element,
-			org.observe.collect.ObservableCollectionDataFlowImpl.RepairListener<T, X> listener) {
+		public <X> boolean repair(DerivedCollectionElement<T> element, RepairListener<T, X> listener) {
 			throw new UnsupportedOperationException("Not implemented yet"); // TODO
 		}
 
 		@Override
-		public <X> boolean repair(org.observe.collect.ObservableCollectionDataFlowImpl.RepairListener<T, X> listener) {
+		public <X> boolean repair(RepairListener<T, X> listener) {
 			throw new UnsupportedOperationException("Not implemented yet"); // TODO
 		}
 	}
@@ -603,6 +607,14 @@ public class ObservableSetImpl {
 		public Comparable<DerivedCollectionElement<T>> getElementFinder(T value) {
 			UniqueElement element = theElementsByValue.get(value);
 			return element == null ? el -> -1 : element;
+		}
+
+		@Override
+		public DerivedCollectionElement<T> getElementBySource(ElementId sourceEl) {
+			DerivedCollectionElement<T> parentEl = theParent.getElementBySource(sourceEl);
+			if (parentEl == null)
+				return null;
+			return theElementsByValue.get(parentEl.get());
 		}
 
 		/**

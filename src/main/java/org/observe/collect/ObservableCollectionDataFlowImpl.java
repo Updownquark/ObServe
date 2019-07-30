@@ -56,6 +56,7 @@ import org.qommons.collect.ElementId;
 import org.qommons.collect.ElementSpliterator;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
+import org.qommons.collect.OptimisticContext;
 import org.qommons.tree.BetterTreeList;
 import org.qommons.tree.BetterTreeMap;
 import org.qommons.tree.BinaryTreeNode;
@@ -4966,7 +4967,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		private ElementAccepter<T> theAccepter;
 		private WeakListening theListening;
-		private final BetterList<FlattenedHolder> theOuterElements;
+		private final BetterTreeList<FlattenedHolder> theOuterElements;
 		private final ReentrantReadWriteLock theLock;
 
 		public FlattenedManager(ActiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
@@ -5035,10 +5036,25 @@ public class ObservableCollectionDataFlowImpl {
 		@Override
 		public DerivedCollectionElement<T> getElementBySource(ElementId sourceEl) {
 			DerivedCollectionElement<I> outerEl = theParent.getElementBySource(sourceEl);
-			if (outerEl != null)
-
-				// TODO Auto-generated method stub
-				return null;
+			if (outerEl != null) {
+				BinaryTreeNode<FlattenedHolder> fh = theOuterElements.getRoot()
+					.findClosest(fhEl -> outerEl.compareTo(fhEl.get().theParentEl), true, true, OptimisticContext.TRUE);
+				if (fh != null && fh.get().theParentEl.equals(outerEl))
+					return fh.get().theElements.peekFirst();
+			} else {
+				// Unfortunately, I think the only way to do this reliably is to ask every outer element
+				for (FlattenedHolder holder : theOuterElements) {
+					DerivedCollectionElement<T> innerEl = (DerivedCollectionElement<T>) holder.manager.getElementBySource(sourceEl);
+					if (innerEl != null) {
+						BinaryTreeNode<FlattenedElement> fe = holder.theElements.getRoot().findClosest(
+							feEl -> innerEl.compareTo((DerivedCollectionElement<T>) feEl.get().theParentEl), true, true,
+							OptimisticContext.TRUE);
+						if (fe != null && fe.get().theParentEl.equals(innerEl))
+							return fe.get();
+					}
+				}
+			}
+			return null;
 		}
 
 		@Override
@@ -5188,7 +5204,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		private class FlattenedHolder {
 			private final DerivedCollectionElement<I> theParentEl;
-			private final BetterCollection<FlattenedElement> theElements;
+			private final BetterTreeList<FlattenedElement> theElements;
 			private final WeakListening.Builder theChildListening = theListening.child();
 			private final boolean isFromStart;
 			ElementId holderElement;
