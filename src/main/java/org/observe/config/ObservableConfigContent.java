@@ -130,8 +130,10 @@ public class ObservableConfigContent {
 		}
 
 		private void fire(ObservableValueEvent<C> event) {
-			theListeners.forEach(//
-				listener -> listener.onNext(event));
+			try (Transaction t = Causable.use(event)) {
+				theListeners.forEach(//
+					listener -> listener.onNext(event));
+			}
 		}
 
 		@Override
@@ -163,7 +165,7 @@ public class ObservableConfigContent {
 			int i;
 			for (i = startIndex; i < thePathElements.length; i++) {
 				ObservableConfig child;
-				if (thePathElements[i] != null && thePathElements[i]._getParentContentRef().isPresent()) {
+				if (thePathElements[i] != null && thePathElements[i].getParent() != null) {
 					child = thePathElements[i];
 					continue;
 				}
@@ -438,6 +440,11 @@ public class ObservableConfigContent {
 				}
 			}
 			return new ObservableConfigValuesMCE();
+		}
+
+		@Override
+		public CollectionElement<T> getElementBySource(ElementId sourceEl) {
+			return theValues.getElementBySource(sourceEl);
 		}
 
 		protected final ElementId getConfigElement(ElementId valueElement) {
@@ -844,6 +851,12 @@ public class ObservableConfigContent {
 		}
 
 		@Override
+		public CollectionElement<C> getElementBySource(ElementId sourceEl) {
+			ObservableConfig config = CollectionElement.get(getConfig()._getContent().getElementBySource(sourceEl));
+			return new ConfigCollectionElement<>(config);
+		}
+
+		@Override
 		public String canAdd(C value, ElementId after, ElementId before) {
 			return StdMsg.UNSUPPORTED_OPERATION;
 		}
@@ -1047,6 +1060,16 @@ public class ObservableConfigContent {
 		}
 
 		@Override
+		public CollectionElement<C> getElementBySource(ElementId sourceEl) {
+			try (Transaction t = getConfig().lock(false, null)) {
+				ObservableConfig config = CollectionElement.get(getConfig()._getContent().getElementBySource(sourceEl));
+				if (!thePathElement.matches(config))
+					throw new NoSuchElementException();
+				return new ConfigCollectionElement<>(config);
+			}
+		}
+
+		@Override
 		public CollectionElement<C> getTerminalElement(boolean first) {
 			try (Transaction t = getConfig().lock(false, null)) {
 				ObservableConfig config = CollectionElement.get(getConfig()._getContent().getTerminalElement(first));
@@ -1104,10 +1127,9 @@ public class ObservableConfigContent {
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends C>> observer) {
-			String watchPath = thePathElement.getAttributes().isEmpty() ? ObservableConfig.ANY_NAME : ObservableConfig.ANY_DEPTH;
+			String watchPath = thePathElement.getName() + ObservableConfig.PATH_SEPARATOR
+				+ (thePathElement.getAttributes().isEmpty() ? ObservableConfig.ANY_NAME : ObservableConfig.ANY_DEPTH);
 			return getConfig().watch(getConfig().createPath(watchPath)).act(evt -> {
-				if (evt.relativePath.size() > 2) // Too deep to affect path matching currently
-					return;
 				C child = (C) evt.relativePath.get(0);
 				boolean postMatches = thePathElement.matches(child);
 				boolean preMatches = evt.changeType == CollectionChangeType.set ? thePathElement.matchedBefore(child, evt.asFromChild())
@@ -1140,7 +1162,9 @@ public class ObservableConfigContent {
 					C oldValue = changeType == CollectionChangeType.add ? null : child;
 					ObservableCollectionEvent<C> collEvt = new ObservableCollectionEvent<>(child.getParentChildRef(), getType(), index,
 						changeType, oldValue, child, evt);
-					observer.accept(collEvt);
+					try (Transaction t = Causable.use(collEvt)) {
+						observer.accept(collEvt);
+					}
 				}
 			});
 		}
@@ -1156,24 +1180,15 @@ public class ObservableConfigContent {
 		private final ObservableConfigPath thePath;
 		private final ObservableCollection<C> theChildren;
 
-		private ElementId theNewChild;
-
 		/**
 		 * @param root The root config
 		 * @param path The path for the values
 		 * @param children The child collection
-		 * @param until The observable to unsubscribe upon
 		 */
-		public ObservableChildSet(ObservableConfig root, ObservableConfigPath path, ObservableCollection<C> children, Observable<?> until) {
+		public ObservableChildSet(ObservableConfig root, ObservableConfigPath path, ObservableCollection<C> children) {
 			theRoot = root;
 			thePath = path;
 			theChildren = children;
-
-			Subscription childSub = theChildren.onChange(evt -> {
-				if (evt.getType() == CollectionChangeType.add)
-					theNewChild = evt.getElementId();
-			});
-			until.take(1).act(__ -> childSub.unsubscribe());
 		}
 
 		/** @return The root config */
@@ -1253,20 +1268,20 @@ public class ObservableConfigContent {
 				public CollectionElement<C> create(Consumer<? super C> preAddAction) {
 					ObservableConfig afterChild = after == null ? null : theChildren.getElement(after).get();
 					ObservableConfig beforeChild = after == null ? null : theChildren.getElement(before).get();
-					ElementId newChild;
+					ElementId newChildId;
 					try (Transaction t = theRoot.lock(true, null)) {
 						ObservableConfig parent = theRoot.getChild(thePath.getParent(), true, null);
-						parent.addChild(afterChild, beforeChild, first, thePath.getLastElement().getName(), cfg -> {
-							if (theFields != null)
-								for (Map.Entry<String, String> field : theFields.entrySet())
-									cfg.set(field.getKey(), field.getValue());
-							if (preAddAction != null)
-								preAddAction.accept((C) cfg);
-						});
-						newChild = theNewChild;
-						theNewChild = null;
+						ObservableConfig newChild = parent.addChild(afterChild, beforeChild, first, thePath.getLastElement().getName(),
+							cfg -> {
+								if (theFields != null)
+									for (Map.Entry<String, String> field : theFields.entrySet())
+										cfg.set(field.getKey(), field.getValue());
+								if (preAddAction != null)
+									preAddAction.accept((C) cfg);
+							});
+						newChildId = theChildren.getElementBySource(newChild._getParentContentRef()).getElementId();
 					}
-					return theChildren.getElement(newChild);
+					return theChildren.getElement(newChildId);
 				}
 			};
 		}

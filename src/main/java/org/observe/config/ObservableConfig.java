@@ -421,7 +421,7 @@ public class ObservableConfig implements StructuredTransactable {
 	}
 
 	public int getIndexInParent() {
-		return theParent.theContent.getElementsBefore(theParentContentRef);
+		return theParentContentRef == null ? null : theParent.theContent.getElementsBefore(theParentContentRef);
 	}
 
 	ElementId getParentChildRef() {
@@ -436,7 +436,8 @@ public class ObservableConfig implements StructuredTransactable {
 		List<ObservableConfigPathElement> finalPath = new ArrayList<>(path.size());
 		finalPath.addAll(path);
 		Map<String, String> properties = null;
-		if (name.charAt(name.length() - 1) == '}') { // Quick check to avoid pattern checking on every single path, few of which will have
+		// Quick check to avoid pattern checking on every single path, few of which will have attributes
+		if (name.length() > 0 && name.charAt(name.length() - 1) == '}') {
 			properties = new LinkedHashMap<>();
 			name = parsePathProperties(name, properties);
 		}
@@ -513,7 +514,7 @@ public class ObservableConfig implements StructuredTransactable {
 				p -> (ObservableCollection<ObservableConfig>) p.getContent(last, until).getValues(), //
 				opts -> opts.cache(true).reEvalOnUpdate(false).fireIfUnchanged(false)));
 		}
-		return new ObservableChildSet<>(this, path, children, until);
+		return new ObservableChildSet<>(this, path, children);
 	}
 
 	public ObservableValue<? extends ObservableConfig> observeDescendant(ObservableConfigPath path) {
