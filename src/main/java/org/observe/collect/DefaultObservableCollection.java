@@ -170,7 +170,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 
 	@Override
 	public CollectionElement<E> getElementBySource(ElementId sourceEl) {
-		return getElement(sourceEl);
+		return theValues.getElementBySource(sourceEl);
 	}
 
 	@Override
