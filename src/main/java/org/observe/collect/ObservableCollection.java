@@ -34,7 +34,6 @@ import org.qommons.Ternian;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
-import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
@@ -444,17 +443,6 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	default <T> CollectionDataFlow<E, E, E> flow() {
 		return new ObservableCollectionDataFlowImpl.BaseCollectionDataFlow<>(this);
 	}
-
-	/**
-	 * @param sourceEl The source element to get derived values from
-	 * @return An element in this collection that is derived from the source element, or null if:
-	 *         <ul>
-	 *         <li>the element belongs to a collection that is not a source for this collection,</li>
-	 *         <li>the given element belongs to a source of this collection but is not a source of any element in this collection,</li>
-	 *         <li>or if this collection does not support the operation.</li>
-	 *         </ul>
-	 */
-	CollectionElement<E> getElementBySource(ElementId sourceEl);
 
 	/** @return An observable value containing the only value in this collection while its size==1, otherwise null TODO TEST ME! */
 	default ObservableValue<E> only() {

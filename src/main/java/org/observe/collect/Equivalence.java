@@ -430,6 +430,12 @@ public interface Equivalence<E> {
 		}
 
 		@Override
+		public CollectionElement<T2> getElementBySource(ElementId sourceEl) {
+			CollectionElement<E> wrapEl = theWrapped.getElementBySource(sourceEl);
+			return wrapEl == null ? null : handleFor(wrapEl);
+		}
+
+		@Override
 		public MutableElementSpliterator<T2> spliterator(ElementId element, boolean asNext) {
 			return new MappedMutableSpliterator(theWrapped.spliterator(element, asNext));
 		}
