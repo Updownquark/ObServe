@@ -6,6 +6,7 @@ import java.awt.EventQueue;
 import java.awt.Font;
 import java.awt.LayoutManager2;
 import java.awt.event.ActionListener;
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedList;
@@ -474,16 +475,28 @@ public class ObservableSwingUtils {
 	}
 
 	/**
-	 * This method creates an API structure that makes building a panel of vertical fields very easy
+	 * <p>
+	 * This method creates an API structure that makes building a panel of vertical fields very easy.
+	 * </p>
+	 * <p>
+	 * This API uses net.miginfocom.swing.MigLayout, but this class is not packaged with ObServe, so it must be provided by the caller. If
+	 * the panel's layout is not a MigLayout (or the panel is null), the API will attempt to reflectively instantiate one, so MigLayout must
+	 * be on the classpath.
+	 * </p>
+	 * <p>
+	 * If the MigLayout is set for the container's layout, its fillx and hidemode 3 layout constraints should be set.
+	 * </p>
 	 *
-	 * @param container The container to add the field widgets to
+	 * @param <C> The type of the container
+	 * @param container The container to add the field widgets to. If null, a new {@link JPanel} will be created (be sure
+	 *        net.miginfocom.swing.MigLayout is in your classpath to use this).
 	 * @param until The observable that, when fired, will release all associated resources
 	 * @return The API structure to add fields with
 	 */
-	public static MigFieldPanelPopulator populateFields(Container container, Observable<?> until) {
+	public static <C extends Container> MigFieldPanelPopulator<C> populateFields(C container, Observable<?> until) {
 		if (container == null)
-			container = new JPanel();
-		return new MigFieldPanelPopulator(container, until);
+			container = (C) new JPanel();
+		return new MigFieldPanelPopulator<>(container, until);
 	}
 
 	/**
@@ -494,24 +507,26 @@ public class ObservableSwingUtils {
 	 * This layout class is not included in this library, but must be included separately.
 	 * </p>
 	 * <p>
-	 * If the container's layout is not a MigLayout when the field populator is created for it, an attempt will be made to set the layout,
-	 * looking up the class by name. This will throw an {@link IllegalStateException} if the class cannot be found or created.
+	 * If the container's layout is not a MigLayout when the field populator is created for it, an attempt will be made to create and set
+	 * the layout, looking up the class by name. This will throw an {@link IllegalStateException} if the class cannot be found or created.
 	 * </p>
 	 */
-	public static class MigFieldPanelPopulator {
+	public static class MigFieldPanelPopulator<C extends Container> {
 		private static final String MIG_LAYOUT_CLASS_NAME = "net.miginfocom.swing.MigLayout";
 
-		private final Container theContainer;
+		private final C theContainer;
 		private final Observable<?> theUntil;
 
-		public MigFieldPanelPopulator(Container container, Observable<?> until) {
+		public MigFieldPanelPopulator(C container, Observable<?> until) {
 			theContainer = container;
 			theUntil = until == null ? Observable.empty() : until;
 			if (container.getLayout() == null || !MIG_LAYOUT_CLASS_NAME.equals(container.getLayout().getClass().getName())) {
 				LayoutManager2 migLayout;
 				try {
-					migLayout = (LayoutManager2) Class.forName(MIG_LAYOUT_CLASS_NAME).newInstance();
-				} catch (InstantiationException | IllegalAccessException | ClassNotFoundException e) {
+					migLayout = (LayoutManager2) Class.forName(MIG_LAYOUT_CLASS_NAME).getConstructor(String.class)
+						.newInstance("fillx, hidemode 3");
+				} catch (InstantiationException | IllegalAccessException | ClassNotFoundException | IllegalArgumentException
+					| InvocationTargetException | NoSuchMethodException | SecurityException e) {
 					throw new IllegalStateException(getClass().getName() + " could not instantiate " + MIG_LAYOUT_CLASS_NAME
 						+ ": install the layout before using this class");
 				}
@@ -545,6 +560,16 @@ public class ObservableSwingUtils {
 			fieldPanel.done();
 			return this;
 		}
+
+		/* TODO
+		 * spinners
+		 * toggle/radio buttons
+		 * slider
+		 * table
+		 * tree
+		 * better button controls (visibility, variable text, etc.)
+		 * form controls (e.g. press enter in a text field and a submit action (also tied to a button) fires
+		 */
 
 		// public MigPanelPopulatorField<Integer, JSpinner> addIntSpinnerField(String fieldName, SettableValue<Integer> value) {
 		// return addSpinnerField(fieldName, value, Number::intValue);
@@ -598,17 +623,22 @@ public class ObservableSwingUtils {
 		// public <F> MigPanelPopulatorField<F, ObservableTreeModel> addTree(Object root,
 		// Function<Object, ? extends ObservableCollection<?>> branching) {}
 
+		public C getContainer() {
+			return theContainer;
+		}
+
 		public class MigPanelPopulatorField<F, E> {
-			private final String theFieldName;
+			private ObservableValue<String> theFieldName;
 			private final SettableValue<F> theValue;
 			private final E theEditor;
 			private ObservableValue<String> theTooltip;
 			private SettableValue<ObservableValue<String>> theSettableTooltip;
 			private JLabel thePostLabel;
 			private boolean isGrow;
+			private ObservableValue<Boolean> isVisible;
 
 			MigPanelPopulatorField(String fieldName, SettableValue<F> value, E editor) {
-				theFieldName = fieldName;
+				theFieldName = ObservableValue.of(TypeTokens.get().STRING, fieldName);
 				theValue = value;
 				theEditor = editor;
 				theSettableTooltip = new SimpleSettableValue<>(ObservableValue.TYPE_KEY.getCompoundType(String.class), true);
@@ -617,6 +647,16 @@ public class ObservableSwingUtils {
 
 			public E getEditor() {
 				return theEditor;
+			}
+
+			public MigPanelPopulatorField<F, E> withVariableFieldName(ObservableValue<String> fieldName) {
+				theFieldName = fieldName;
+				return this;
+			}
+
+			public MigPanelPopulatorField<F, E> visibleWhen(ObservableValue<Boolean> visible) {
+				isVisible = visible;
+				return this;
 			}
 
 			public MigPanelPopulatorField<F, E> modifyEditor(Consumer<E> modify) {
@@ -663,18 +703,29 @@ public class ObservableSwingUtils {
 			}
 
 			protected MigFieldPanelPopulator done() {
-				theContainer.add(new JLabel(theFieldName), "align right");
+				JLabel fieldNameLabel = new JLabel(theFieldName.get());
+				theFieldName.changes().takeUntil(theUntil).act(evt -> fieldNameLabel.setText(evt.getNewValue()));
+				theContainer.add(fieldNameLabel, "align right");
 				StringBuilder constraints = new StringBuilder();
 				if (isGrow)
-					constraints.append("grow");
+					constraints.append("growx, pushx");
 				if (thePostLabel == null) {
 					if (constraints.length() > 0)
 						constraints.append(", ");
 					constraints.append("span, wrap");
 				}
-				theContainer.add(getComponent(), constraints.toString());
+				Component component = getComponent();
+				theContainer.add(component, constraints.toString());
 				if (thePostLabel != null)
 					theContainer.add(thePostLabel, "wrap");
+				if (isVisible != null) {
+					isVisible.changes().takeUntil(theUntil).act(evt -> {
+						fieldNameLabel.setVisible(evt.getNewValue());
+						component.setVisible(evt.getNewValue());
+						if (thePostLabel != null)
+							thePostLabel.setVisible(evt.getNewValue());
+					});
+				}
 				return MigFieldPanelPopulator.this;
 			}
 		}
@@ -693,6 +744,11 @@ public class ObservableSwingUtils {
 
 			public String getValueTooltip(F value) {
 				return theValueTooltip == null ? null : theValueTooltip.apply(value);
+			}
+
+			@Override
+			public MigPanelComboField<F, E> withVariableFieldName(ObservableValue<String> fieldName) {
+				return (MigPanelComboField<F, E>) super.withVariableFieldName(fieldName);
 			}
 
 			@Override
@@ -718,6 +774,11 @@ public class ObservableSwingUtils {
 			@Override
 			public MigPanelComboField<F, E> withPostLabel(ObservableValue<String> descrip) {
 				return (MigPanelComboField<F, E>) super.withPostLabel(descrip);
+			}
+
+			@Override
+			public MigPanelComboField<F, E> grow() {
+				return (MigPanelComboField<F, E>) super.grow();
 			}
 		}
 
