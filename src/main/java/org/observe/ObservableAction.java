@@ -1,6 +1,7 @@
 package org.observe;
 
 import java.lang.reflect.Array;
+import java.util.function.Function;
 
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionImpl;
@@ -15,15 +16,17 @@ import com.google.common.reflect.TypeToken;
  * @param <T> The type of value the action produces
  */
 public interface ObservableAction<T> {
-	/** This class's wildcard {@link TypeToken} */
+	/** This class's type key */
 	@SuppressWarnings("rawtypes")
-	static TypeToken<ObservableAction<?>> TYPE = TypeTokens.get().keyFor(ObservableAction.class)
+	static TypeTokens.TypeKey<ObservableAction> TYPE_KEY = TypeTokens.get().keyFor(ObservableAction.class)
 	.enableCompoundTypes(new TypeTokens.UnaryCompoundTypeCreator<ObservableAction>() {
 		@Override
 		public <P> TypeToken<? extends ObservableAction> createCompoundType(TypeToken<P> param) {
 			return new TypeToken<ObservableAction<P>>() {}.where(new TypeParameter<P>() {}, param);
 		}
-	}).parameterized();
+	});
+	/** This class's wildcard {@link TypeToken} */
+	static TypeToken<ObservableAction<?>> TYPE = TYPE_KEY.parameterized();
 
 	/** @return The run-time type of values that this action produces */
 	TypeToken<T> getType();
@@ -37,6 +40,25 @@ public interface ObservableAction<T> {
 
 	/** @return An observable whose value reports null if this value can be set directly, or a string describing why it cannot */
 	ObservableValue<String> isEnabled();
+
+	/**
+	 * @param disabled The disabled message to override the action with
+	 * @return A new ObservableAction whose {@link #isEnabled()} message is the value of the given message, or this action's enablement if
+	 *         that is null
+	 */
+	default ObservableAction<T> disableWith(ObservableValue<String> disabled) {
+		return new DisabledObservableAction<>(this, disabled);
+	}
+
+	/**
+	 * @param <T> The type of the action
+	 * @param type The type of the action
+	 * @param action The action (parameter is the cause)
+	 * @return An ObservableAction that invokes the given function on its {@link #act(Object)} method
+	 */
+	static <T> ObservableAction<T> of(TypeToken<T> type, Function<Object, T> action) {
+		return new SimpleObservableAction<>(type, action);
+	}
 
 	/**
 	 * @param <T> The type of the action
@@ -123,6 +145,70 @@ public interface ObservableAction<T> {
 	}
 
 	/**
+	 * Implements {@link ObservableAction#of(TypeToken, Function)}
+	 *
+	 * @param <T> The type of the action
+	 */
+	class SimpleObservableAction<T> implements ObservableAction<T> {
+		private final TypeToken<T> theType;
+		private final Function<Object, T> theAction;
+
+		public SimpleObservableAction(TypeToken<T> type, Function<Object, T> action) {
+			theType = type;
+			theAction = action;
+		}
+
+		@Override
+		public TypeToken<T> getType() {
+			return theType;
+		}
+
+		@Override
+		public T act(Object cause) throws IllegalStateException {
+			return theAction.apply(cause);
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			return SettableValue.ALWAYS_ENABLED;
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableAction#disableWith(ObservableValue)}
+	 *
+	 * @param <T> The type of the action
+	 */
+	class DisabledObservableAction<T> implements ObservableAction<T> {
+		private final ObservableAction<T> theParentAction;
+		private final ObservableValue<String> theDisablement;
+
+		public DisabledObservableAction(ObservableAction<T> parentAction, ObservableValue<String> disablement) {
+			theParentAction = parentAction;
+			theDisablement = disablement;
+		}
+
+		@Override
+		public TypeToken<T> getType() {
+			return theParentAction.getType();
+		}
+
+		@Override
+		public T act(Object cause) throws IllegalStateException {
+			String msg = theDisablement.get();
+			if (msg != null)
+				throw new IllegalStateException(msg);
+			return theParentAction.act(cause);
+		}
+
+		@Override
+		public ObservableValue<String> isEnabled() {
+			return ObservableValue.firstValue(TypeTokens.get().STRING, msg -> msg != null, () -> null, theDisablement,
+				theParentAction.isEnabled());
+		}
+	}
+
+	/**
 	 * An observable action whose methods reflect those of the content of an observable value, or a disabled action when the content is null
 	 *
 	 * @param <T> The type of value the action produces
@@ -159,7 +245,7 @@ public interface ObservableAction<T> {
 		public ObservableValue<String> isEnabled() {
 			return ObservableValue.flatten(
 				theWrapper//
-					.map(action -> action == null ? ObservableValue.of(TypeTokens.get().STRING, "Empty Action") : action.isEnabled()), //
+				.map(action -> action == null ? ObservableValue.of(TypeTokens.get().STRING, "Empty Action") : action.isEnabled()), //
 				() -> "This wrapper (" + theWrapper + ") is empty");
 		}
 	}

@@ -26,15 +26,17 @@ import com.google.common.reflect.TypeToken;
  * @param <T> The type of values this observable provides
  */
 public interface Observable<T> extends Lockable {
-	/** This class's wildcard {@link TypeToken} */
+	/** This class's type key */
 	@SuppressWarnings("rawtypes")
-	static TypeToken<Observable<?>> TYPE = TypeTokens.get().keyFor(Observable.class)
+	static TypeTokens.TypeKey<Observable> TYPE_KEY = TypeTokens.get().keyFor(Observable.class)
 	.enableCompoundTypes(new TypeTokens.UnaryCompoundTypeCreator<Observable>() {
 		@Override
 		public <P> TypeToken<? extends Observable> createCompoundType(TypeToken<P> param) {
 			return new TypeToken<Observable<P>>() {}.where(new TypeParameter<P>() {}, param);
 		}
-	}).parameterized();
+	});
+	/** This class's wildcard {@link TypeToken} */
+	static TypeToken<Observable<?>> TYPE = TYPE_KEY.parameterized();
 
 	/**
 	 * Subscribes to this observable such that the given observer will be notified of any new values on this observable.

@@ -34,15 +34,17 @@ import com.google.common.reflect.TypeToken;
  * @param <T> The compile-time type of this observable's value
  */
 public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lockable {
-	/** This class's wildcard {@link TypeToken} */
+	/** This class's type key */
 	@SuppressWarnings("rawtypes")
-	static TypeToken<ObservableValue<?>> TYPE = TypeTokens.get().keyFor(ObservableValue.class)
+	static TypeTokens.TypeKey<ObservableValue> TYPE_KEY = TypeTokens.get().keyFor(ObservableValue.class)
 	.enableCompoundTypes(new TypeTokens.UnaryCompoundTypeCreator<ObservableValue>() {
 		@Override
 		public <P> TypeToken<? extends ObservableValue> createCompoundType(TypeToken<P> param) {
 			return new TypeToken<ObservableValue<P>>() {}.where(new TypeParameter<P>() {}, param);
 		}
-	}).parameterized();
+		});
+	/** This class's wildcard {@link TypeToken} */
+	static TypeToken<ObservableValue<?>> TYPE = TYPE_KEY.parameterized();
 
 	/** @return The run-time type of this value */
 	TypeToken<T> getType();

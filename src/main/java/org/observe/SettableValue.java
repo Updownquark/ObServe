@@ -19,15 +19,17 @@ import com.google.common.reflect.TypeToken;
  * @param <T> The type of the value
  */
 public interface SettableValue<T> extends ObservableValue<T> {
-	/** This class's wildcard {@link TypeToken} */
+	/** This class's type key */
 	@SuppressWarnings("rawtypes")
-	static TypeToken<SettableValue<?>> TYPE = TypeTokens.get().keyFor(SettableValue.class)
+	static TypeTokens.TypeKey<SettableValue> TYPE_KEY = TypeTokens.get().keyFor(SettableValue.class)
 	.enableCompoundTypes(new TypeTokens.UnaryCompoundTypeCreator<SettableValue>() {
 		@Override
 		public <P> TypeToken<? extends SettableValue> createCompoundType(TypeToken<P> param) {
 			return new TypeToken<SettableValue<P>>() {}.where(new TypeParameter<P>() {}, param);
 		}
-	}).parameterized();
+		});
+	/** This class's wildcard {@link TypeToken} */
+	static TypeToken<SettableValue<?>> TYPE = TYPE_KEY.parameterized();
 
 	/** TypeToken for String.class */
 	TypeToken<String> STRING_TYPE = TypeTokens.get().of(String.class);

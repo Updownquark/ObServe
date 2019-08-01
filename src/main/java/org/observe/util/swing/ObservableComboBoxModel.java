@@ -17,6 +17,7 @@ import javax.swing.JComboBox;
 import javax.swing.JList;
 import javax.swing.plaf.basic.ComboPopup;
 
+import org.observe.ObservableValue;
 import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
@@ -75,14 +76,34 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 	 */
 	public static <T> Subscription comboFor(JComboBox<T> comboBox, String descrip, Function<? super T, String> valueTooltip,
 		ObservableCollection<? extends T> availableValues, SettableValue<? super T> selected) {
+		return comboFor(comboBox, ObservableValue.of(TypeTokens.get().STRING, descrip), valueTooltip, availableValues, selected);
+	}
+
+	/**
+	 * Creates and installs a combo box model whose data is backed by an {@link ObservableCollection} and whose selection is governed by a
+	 * {@link SettableValue}
+	 *
+	 * @param comboBox The combo box to install the model into
+	 * @param descrip The tooltip description for the combo box (when the selected value is enabled)
+	 * @param valueTooltip A function to generate a tooltip for each value in the combo box
+	 * @param availableValues The values available for (potential) selection in the combo box
+	 * @param selected The selected value that will control the combo box's selection and report it
+	 * @return The subscription to {@link Subscription#unsubscribe() unsubscribe} to to cease listening
+	 */
+	public static <T> Subscription comboFor(JComboBox<T> comboBox, ObservableValue<String> descrip,
+		Function<? super T, String> valueTooltip, ObservableCollection<? extends T> availableValues, SettableValue<? super T> selected) {
 		ObservableComboBoxModel<? extends T> comboModel = new ObservableComboBoxModel<>(availableValues);
 		List<Subscription> subs = new LinkedList<>();
 		comboBox.setModel((ComboBoxModel<T>) comboModel);
 		boolean[] callbackLock = new boolean[1];
 		Consumer<String> checkEnabled = enabled -> {
 			comboBox.setEnabled(enabled == null);
-			comboBox.setToolTipText(enabled == null ? descrip : enabled);
+			comboBox.setToolTipText(enabled == null ? descrip.get() : enabled);
 		};
+		subs.add(descrip.changes().act(evt -> {
+			if (selected.isEnabled().get() == null)
+				comboBox.setToolTipText(evt.getNewValue());
+		}));
 		ItemListener itemListener = evt -> {
 			if (evt.getStateChange() != ItemEvent.SELECTED)
 				return;
