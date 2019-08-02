@@ -510,6 +510,8 @@ public class ObservableSwingUtils {
 	 * If the container's layout is not a MigLayout when the field populator is created for it, an attempt will be made to create and set
 	 * the layout, looking up the class by name. This will throw an {@link IllegalStateException} if the class cannot be found or created.
 	 * </p>
+	 *
+	 * @param <C> The type of the container
 	 */
 	public static class MigFieldPanelPopulator<C extends Container> {
 		private static final String MIG_LAYOUT_CLASS_NAME = "net.miginfocom.swing.MigLayout";
@@ -538,7 +540,7 @@ public class ObservableSwingUtils {
 			return new MigButtonPanel();
 		}
 
-		public <F> MigFieldPanelPopulator addTextField(String fieldName, SettableValue<F> field, Format<F> format,
+		public <F> MigFieldPanelPopulator<C> addTextField(String fieldName, SettableValue<F> field, Format<F> format,
 			Consumer<MigPanelPopulatorField<F, ObservableTextField<F>>> modify) {
 			MigPanelPopulatorField<F, ObservableTextField<F>> fieldPanel = new MigPanelPopulatorField<>(fieldName, field,
 				new ObservableTextField<>(field, format, theUntil));
@@ -549,7 +551,7 @@ public class ObservableSwingUtils {
 			return this;
 		}
 
-		public MigFieldPanelPopulator addCheckField(String fieldName, SettableValue<Boolean> field,
+		public MigFieldPanelPopulator<C> addCheckField(String fieldName, SettableValue<Boolean> field,
 			Consumer<MigPanelPopulatorField<Boolean, JCheckBox>> modify) {
 			MigPanelPopulatorField<Boolean, JCheckBox> fieldPanel = new MigPanelPopulatorField<Boolean, JCheckBox>(fieldName, field,
 				new JCheckBox());
@@ -584,12 +586,12 @@ public class ObservableSwingUtils {
 		// MigPanelPopulatorField<F, JSpinner> fieldPanel=new MigPanelPopulatorField<F, JSpinner>(fieldName, value, new JSpinner(new SNM));
 		// }
 
-		public <F> MigFieldPanelPopulator addComboField(String fieldName, SettableValue<F> value,
+		public <F> MigFieldPanelPopulator<C> addComboField(String fieldName, SettableValue<F> value,
 			Consumer<MigPanelComboField<F, JComboBox<F>>> modify, F... availableValues) {
 			return addComboField(fieldName, value, Arrays.asList(availableValues), modify);
 		}
 
-		public <F> MigFieldPanelPopulator addComboField(String fieldName, SettableValue<F> value, List<? extends F> availableValues,
+		public <F> MigFieldPanelPopulator<C> addComboField(String fieldName, SettableValue<F> value, List<? extends F> availableValues,
 			Consumer<MigPanelComboField<F, JComboBox<F>>> modify) {
 			ObservableCollection<? extends F> observableValues;
 			if (availableValues instanceof ObservableCollection)
@@ -697,7 +699,7 @@ public class ObservableSwingUtils {
 			// public MigPanelPopulatorField<F, E> andThen() { // TODO signature?
 			// }
 
-			public MigPanelPopulatorField<F, E> grow() {
+			public MigPanelPopulatorField<F, E> fill() {
 				isGrow = true;
 				return this;
 			}
@@ -777,8 +779,8 @@ public class ObservableSwingUtils {
 			}
 
 			@Override
-			public MigPanelComboField<F, E> grow() {
-				return (MigPanelComboField<F, E>) super.grow();
+			public MigPanelComboField<F, E> fill() {
+				return (MigPanelComboField<F, E>) super.fill();
 			}
 		}
 
