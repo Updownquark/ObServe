@@ -16,6 +16,7 @@ import org.qommons.ListenerSet;
 import org.qommons.Lockable;
 import org.qommons.TimeUtils;
 import org.qommons.Transaction;
+import org.qommons.threading.QommonsTimer;
 
 import com.google.common.reflect.TypeParameter;
 import com.google.common.reflect.TypeToken;
@@ -1224,6 +1225,8 @@ public interface Observable<T> extends Lockable {
 
 	/**
 	 * Implements {@link Observable#every(Duration, Duration, Duration, Function)}
+	 *
+	 * TODO Change this to use {@link QommonsTimer}
 	 *
 	 * @param <T> The type of value the observable publishes
 	 */
