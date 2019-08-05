@@ -16,6 +16,7 @@ import org.qommons.ListenerSet;
 import org.qommons.Lockable;
 import org.qommons.TimeUtils;
 import org.qommons.Transaction;
+import org.qommons.collect.ListenerList;
 import org.qommons.threading.QommonsTimer;
 
 import com.google.common.reflect.TypeParameter;
@@ -469,11 +470,12 @@ public interface Observable<T> extends Lockable {
 	 * @param until The duration after which values will stop being fired (and an {@link Observer#onCompleted(Object) onCompleted} event
 	 *        will be fired)
 	 * @param value The function to produce values for the observable
+	 * @param dispose An action to be taken on each generated value after it is used by all listeners (e.g. {@link AutoCloseable#close()})
 	 * @return The (configurable) observable
 	 */
 	static <T> IntervalObservable<T> every(Duration initDelay, Duration interval, Duration until,
-		Function<? super Duration, ? extends T> value) {
-		return new IntervalObservable<>(initDelay, interval, until, value);
+		Function<? super Duration, ? extends T> value, Consumer<? super T> dispose) {
+		return new IntervalObservable<>(QommonsTimer.getCommonInstance(), initDelay, interval, until, value, dispose);
 	}
 
 	/**
@@ -1224,48 +1226,43 @@ public interface Observable<T> extends Lockable {
 	}
 
 	/**
-	 * Implements {@link Observable#every(Duration, Duration, Duration, Function)}
-	 *
-	 * TODO Change this to use {@link QommonsTimer}
+	 * Implements {@link Observable#every(Duration, Duration, Duration, Function, Consumer)}
 	 *
 	 * @param <T> The type of value the observable publishes
 	 */
 	class IntervalObservable<T> implements Observable<T> {
-		private final Duration theInitDelay;
-		private final Duration theInterval;
-		private final Duration theUntil;
+		private final QommonsTimer theTimer;
+		private final QommonsTimer.TaskHandle theTask;
 		private final Function<? super Duration, ? extends T> theValue;
-		private boolean isPrecise;
+		private final Consumer<? super T> thePostAction;
+		private final ListenerList<Observer<? super T>> theObservers;
+		private Instant theStartTime;
 		private boolean isActual;
-		private String theThreadName;
-		private Consumer<Runnable> theRunnable;
 
-		public IntervalObservable(Duration initDelay, Duration interval, Duration until, Function<? super Duration, ? extends T> value) {
-			theInitDelay = initDelay;
-			if (theInitDelay.isNegative())
+		private Duration theInitDelay;
+
+		public IntervalObservable(QommonsTimer timer, Duration initDelay, Duration interval, Duration until,
+			Function<? super Duration, ? extends T> value, Consumer<? super T> postAction) {
+			theTimer = timer;
+			theTask = QommonsTimer.getCommonInstance().build(this::fire, interval, true);
+			theObservers = ListenerList.build().withInUse(inUse -> {
+				if (inUse) {
+					theStartTime = QommonsTimer.getCommonInstance().getClock().now();
+					theTask.resetExecutionCount();
+				}
+				theTask.setActive(inUse);
+			}).build();
+			if (initDelay.isNegative())
 				throw new IllegalArgumentException("Initial delay must be >=0");
-			theInterval = interval;
-			if (theInterval.compareTo(Duration.ofMillis(1)) < 0)
+			theInitDelay = initDelay;
+			if (interval.compareTo(Duration.ofMillis(1)) < 0)
 				throw new IllegalArgumentException("Interval must be >=1ms");
-			theUntil = until;
-			if (theUntil != null && theUntil.compareTo(theInitDelay.plus(theInterval)) < 0)
+			if (until != null && until.compareTo(theInitDelay.plus(interval)) < 0)
 				throw new IllegalArgumentException("Until, if specified (not null), must be >=initial delay + interval");
-			isPrecise = true;
 			theValue = value;
-			theThreadName = getClass().getSimpleName();
-			theRunnable = task -> {
-				new Thread(task, theThreadName).start();
-			};
-		}
-
-		public IntervalObservable<T> withRunnable(Consumer<Runnable> runnable) {
-			theRunnable = runnable;
-			return this;
-		}
-
-		public IntervalObservable<T> withThreadName(String threadName) {
-			theThreadName = threadName;
-			return this;
+			thePostAction = postAction;
+			if (until != null)
+				theTask.endIn(until, true);
 		}
 
 		public IntervalObservable<T> actualDuration(boolean actual) {
@@ -1274,57 +1271,29 @@ public interface Observable<T> extends Lockable {
 		}
 
 		public IntervalObservable<T> preciseTiming(boolean precise) {
-			isPrecise = precise;
+			theTask.setFrequency(theTask.getFrequency(), precise);
 			return this;
 		}
 
 		@Override
 		public Subscription subscribe(Observer<? super T> observer) {
-			boolean[] going = new boolean[] { true };
-			theRunnable.accept(() -> {
-				Instant start = Instant.now();
-				Instant time = start;
-				Instant stop = theUntil == null ? null : time.plus(theUntil);
-				if (theInitDelay.isZero()) {
-					try {
-						Thread.sleep(theInitDelay.getSeconds(), theInitDelay.getNano());
-					} catch (InterruptedException e) {}
-					time = Instant.now();
-				}
-				boolean actual = isActual;
-				boolean precise = isPrecise;
-				double intvlSecs = actual ? 0 : TimeUtils.toSeconds(theInterval);
-				while (going[0]) {
-					Duration valueD = TimeUtils.between(start, time);
-					if (!actual) {
-						double mult = TimeUtils.toSeconds(valueD) / intvlSecs;
-						valueD = theInterval.multipliedBy(Math.round(mult));
-					}
-					T value = theValue.apply(valueD);
-					observer.onNext(value);
+			return theObservers.add(observer, true)::run;
+		}
 
-					try {
-						Duration sleepTime = theInterval;
-						if (precise) {
-							sleepTime = sleepTime.minus(TimeUtils.between(Instant.now(), time));
-						}
-						Thread.sleep(sleepTime.getSeconds(), sleepTime.getNano());
-					} catch (InterruptedException e) {}
-					time = Instant.now();
-
-					if (stop != null && time.compareTo(stop) >= 0) {
-						valueD = TimeUtils.between(start, time);
-						if (!actual) {
-							double mult = TimeUtils.toSeconds(valueD) / intvlSecs;
-							valueD = theInterval.multipliedBy(Math.round(mult));
-						}
-						value = theValue.apply(valueD);
-						observer.onCompleted(value);
-						break;
-					}
-				}
-			});
-			return () -> going[0] = false;
+		void fire() {
+			Duration valueTime;
+			if (isActual)
+				valueTime = TimeUtils.between(theStartTime, theTimer.getClock().now());
+			else
+				valueTime = theTask.getFrequency().multipliedBy(theTask.getExecutionCount());
+			T value = theValue.apply(valueTime);
+			try {
+				theObservers.forEach(//
+					o -> o.onNext(value));
+			} finally {
+				if (thePostAction != null)
+					thePostAction.accept(value);
+			}
 		}
 
 		@Override
