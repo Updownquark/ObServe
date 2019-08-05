@@ -535,7 +535,9 @@ public class ObservableConfigContent {
 			theFieldParser = fieldParser;
 
 			theValueElements = ((ObservableCollection<ObservableConfig>) theConfigs.getValues()).flow()
-				.map(new TypeToken<ConfigValueElement>() {}, cfg -> new ConfigValueElement(cfg)).collectActive(until);
+				.map(new TypeToken<ConfigValueElement>() {}, cfg -> new ConfigValueElement(cfg), //
+					opts -> opts.cache(true).reEvalOnUpdate(false))
+				.collectActive(until);
 			Subscription valueElSub = theValueElements.subscribe(evt -> {
 				if (isUpdating)
 					return;
@@ -644,11 +646,13 @@ public class ObservableConfigContent {
 			void update(Causable cause) {
 				ObservableConfigEvent configCause = cause
 					.getCauseLike(c -> c instanceof ObservableConfigEvent ? (ObservableConfigEvent) c : null);
-				if (configCause != null) {
-					// TODO Update for the specific field of the child
-				} else {
-					// TODO Update all fields
-				}
+				if (configCause != null && configCause.relativePath.size() > 1) {
+					ObservableConfig child = configCause.relativePath.get(1);
+					int field = theFieldValues.keyIndexTolerant(child.getName());
+					if (field >= 0)
+						theFieldValues.put(field, null); // Clear the cache for the specific field, re-parse when needed
+				} else
+					theFieldValues.clear(); // Clear the cache for all fields, re-parse each when needed
 			}
 
 			Object getField(int fieldIndex) {
@@ -1127,12 +1131,11 @@ public class ObservableConfigContent {
 
 		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends C>> observer) {
-			String watchPath = thePathElement.getName() + ObservableConfig.PATH_SEPARATOR
-				+ (thePathElement.getAttributes().isEmpty() ? ObservableConfig.ANY_NAME : ObservableConfig.ANY_DEPTH);
+			String watchPath = thePathElement.getName() + ObservableConfig.PATH_SEPARATOR + ObservableConfig.ANY_DEPTH;
 			return getConfig().watch(getConfig().createPath(watchPath)).act(evt -> {
 				C child = (C) evt.relativePath.get(0);
 				boolean postMatches = thePathElement.matches(child);
-				boolean preMatches = evt.changeType == CollectionChangeType.set ? thePathElement.matchedBefore(child, evt.asFromChild())
+				boolean preMatches = evt.changeType == CollectionChangeType.set ? thePathElement.matchedBefore(child, evt)
 					: postMatches;
 				if (preMatches || postMatches) {
 					int index;
@@ -1152,7 +1155,9 @@ public class ObservableConfigContent {
 					}
 
 					CollectionChangeType changeType;
-					if (preMatches && postMatches)
+					if (evt.relativePath.size() > 1)
+						changeType = CollectionChangeType.set;
+					else if (preMatches && postMatches)
 						changeType = evt.changeType;
 					else if (preMatches)
 						changeType = CollectionChangeType.remove;

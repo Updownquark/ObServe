@@ -113,9 +113,13 @@ public class ObservableConfig implements StructuredTransactable {
 		public boolean matches(List<ObservableConfig> path) {
 			Iterator<ObservableConfigPathElement> matcherIter = theElements.iterator();
 			Iterator<ObservableConfig> pathIter = path.iterator();
-			while (matcherIter.hasNext() && pathIter.hasNext())
-				if (!matcherIter.next().matches(pathIter.next()))
+			while (matcherIter.hasNext()) {
+				if (pathIter.hasNext()) {
+					if (!matcherIter.next().matches(pathIter.next()))
+						return false;
+				} else if (!ANY_DEPTH.equals(matcherIter.next().getName()))
 					return false;
+			}
 			if (matcherIter.hasNext())
 				return false;
 			else if (pathIter.hasNext() && !ANY_DEPTH.equals(getLastElement().getName()))
@@ -177,10 +181,10 @@ public class ObservableConfig implements StructuredTransactable {
 		}
 
 		public boolean matches(ObservableConfig config) {
-			if (!theName.equals(ANY_NAME) && !theName.equals(config.getName()))
+			if (!isMulti && !theName.equals(config.getName()))
 				return false;
 			if (!theAttributes.isEmpty()) {
-				try (Transaction t = config.lock(false, null)) { // TODO Test attributes.empty before locking
+				try (Transaction t = config.lock(false, null)) {
 					for (Map.Entry<String, String> attr : theAttributes.entrySet()) {
 						boolean found = false;
 						for (ObservableConfig child : config.theContent) {
@@ -207,22 +211,24 @@ public class ObservableConfig implements StructuredTransactable {
 				} else if (!theName.equals(config.getName()))
 					return false;
 			}
-			try (Transaction t = config.lock(false, null)) {
-				for (Map.Entry<String, String> attr : theAttributes.entrySet()) {
-					boolean found = false;
+			if (!theAttributes.isEmpty()) {
+				try (Transaction t = config.lock(false, null)) {
+					for (Map.Entry<String, String> attr : theAttributes.entrySet()) {
+						boolean found = false;
 
-					if (change.relativePath.size() == 1 && change.oldName.equals(attr.getKey()))
-						found = attr.getValue() == null || attr.getValue().equals(change.oldValue);
-					if (!found) {
-						for (ObservableConfig child : config.theContent) {
-							if (!child.getName().equals(attr.getKey()))
-								continue;
-							if (attr.getValue() != null && !attr.getValue().equals(child.getValue()))
-								continue;
+						if (change.relativePath.size() == 1 && change.oldName.equals(attr.getKey()))
+							found = attr.getValue() == null || attr.getValue().equals(change.oldValue);
+						if (!found) {
+							for (ObservableConfig child : config.theContent) {
+								if (!child.getName().equals(attr.getKey()))
+									continue;
+								if (attr.getValue() != null && !attr.getValue().equals(child.getValue()))
+									continue;
+							}
 						}
+						if (!found)
+							return false;
 					}
-					if (!found)
-						return false;
 				}
 			}
 			return true;
@@ -376,7 +382,7 @@ public class ObservableConfig implements StructuredTransactable {
 	private ObservableConfig theParent;
 	private ElementId theParentContentRef;
 	private final CollectionLockingStrategy theLocking;
-	private final ValueHolder<Causable> theRootCausable;
+	private ValueHolder<Causable> theRootCausable;
 	private String theName;
 	private String theValue;
 	private final BetterList<ObservableConfig> theContent;
@@ -384,18 +390,20 @@ public class ObservableConfig implements StructuredTransactable {
 	private long theStructureModCount;
 	private long theModCount;
 
-	protected ObservableConfig(ObservableConfig parent, ElementId parentContentRef, String name, CollectionLockingStrategy locking,
-		ValueHolder<Causable> rootCause, String value) {
+	protected ObservableConfig(String name, CollectionLockingStrategy locking) {
 		if (name.length() == 0)
 			throw new IllegalArgumentException("Name must not be empty");
-		theParent = parent;
-		theParentContentRef = parentContentRef;
 		theLocking = locking;
-		theRootCausable = rootCause;
 		theName = name;
 		theContent = new BetterTreeList<>(locking);
 		theListeners = ListenerList.build().build();
-		theValue = value;
+	}
+
+	protected ObservableConfig initialize(ObservableConfig parent, ElementId parentContentRef) {
+		theParent = parent;
+		theParentContentRef = parentContentRef;
+		theRootCausable = parent == null ? new ValueHolder<>() : parent.theRootCausable;
+		return this;
 	}
 
 	public String getName() {
@@ -460,9 +468,14 @@ public class ObservableConfig implements StructuredTransactable {
 		String[] split = parsePath(path);
 		ObservableConfigPathBuilder builder = buildPath(split[0]);
 		for (int i = 1; i < split.length; i++) {
-			boolean multi = split[i].length() > 0 && split[i].charAt(split[i].length() - 1) == ANY_NAME.charAt(0);
-			if (multi)
-				split[i] = split[i].substring(0, split[i].length() - 1);
+			boolean multi;
+			if (ANY_DEPTH.equals(split[i]))
+				multi = true;
+			else {
+				multi = split[i].length() > 0 && split[i].charAt(split[i].length() - 1) == ANY_NAME.charAt(0);
+				if (multi)
+					split[i] = split[i].substring(0, split[i].length() - 1);
+			}
 			builder = builder.andThen(split[i]);
 			if (multi)
 				builder.multi();
@@ -474,9 +487,8 @@ public class ObservableConfig implements StructuredTransactable {
 		return TYPE;
 	}
 
-	protected ObservableConfig createChild(ElementId parentContentRef, String name, CollectionLockingStrategy locking,
-		ValueHolder<Causable> rootCause, String value) {
-		return new ObservableConfig(this, parentContentRef, name, locking, rootCause, value);
+	protected ObservableConfig createChild(String name, CollectionLockingStrategy locking) {
+		return new ObservableConfig(name, locking);
 	}
 
 	public Observable<ObservableConfigEvent> watch(String pathFilter) {
@@ -618,8 +630,8 @@ public class ObservableConfig implements StructuredTransactable {
 	}
 
 	private Transaction withCause(Transaction t, Object cause) {
-		if (t == null)
-			return null;
+		if (t == null || theRootCausable == null) // root causable can be null during initialization
+			return Transaction.NONE;
 		boolean causeIsRoot = theRootCausable.get() == null;
 		if (causeIsRoot) {
 			if (cause instanceof Causable) {
@@ -700,14 +712,14 @@ public class ObservableConfig implements StructuredTransactable {
 	public ObservableConfig addChild(ObservableConfig after, ObservableConfig before, boolean first, String name,
 		Consumer<ObservableConfig> preAddMod) {
 		try (Transaction t = lock(true, true, null)) {
-			ElementId el = theContent.addElement(null, //
+			ObservableConfig child = createChild(name, theLocking);
+			if (preAddMod != null)
+				preAddMod.accept(child);
+			ElementId el = theContent.addElement(child, //
 				after == null ? null : Objects.requireNonNull(after.theParentContentRef),
 					before == null ? null : Objects.requireNonNull(before.theParentContentRef), //
 						first).getElementId();
-			ObservableConfig child = createChild(el, name, theLocking, theRootCausable, null);
-			theContent.mutableElement(el).set(child);
-			if (preAddMod != null)
-				preAddMod.accept(child);
+			child.initialize(this, el);
 			fire(CollectionChangeType.add, Arrays.asList(child), name, null);
 			return child;
 		}
@@ -767,7 +779,7 @@ public class ObservableConfig implements StructuredTransactable {
 	}
 
 	protected final Object getCurrentCause() {
-		return theRootCausable.get();
+		return theRootCausable == null ? null : theRootCausable.get();
 	}
 
 	protected void fire(CollectionChangeType eventType, List<ObservableConfig> relativePath, String oldName, String oldValue) {
@@ -844,7 +856,7 @@ public class ObservableConfig implements StructuredTransactable {
 
 	public <E extends Exception> Subscription persistEvery(Duration interval, ObservableConfigPersistence<E> persistence,
 		Consumer<? super Exception> onException) {
-		return persistWhen(Observable.<Void> every(Duration.ZERO, interval, null, d -> null), persistence, onException);
+		return persistWhen(Observable.<Void> every(Duration.ZERO, interval, null, d -> null, null), persistence, onException);
 	}
 
 	public <E extends Exception> Subscription persistOnChange(ObservableConfigPersistence<E> persistence,
@@ -888,7 +900,7 @@ public class ObservableConfig implements StructuredTransactable {
 	}
 
 	public static ObservableConfig createRoot(String name, String value, CollectionLockingStrategy locking) {
-		return new ObservableConfig(null, null, name, locking, new ValueHolder<>(), value);
+		return new ObservableConfig(name, locking).setValue(value).initialize(null, null);
 	}
 
 	public static class XmlEncoding {

@@ -191,6 +191,31 @@ public class ObservableConfigTest {
 		if (!withModification)
 			return;
 
+		i = 0;
+		for (TestEntity entity : testEntities.getValues()) {
+			switch (i) {
+			case 0:
+				Assert.assertEquals(25, entity.getA());
+				Assert.assertEquals(true, entity.getB());
+				Assert.assertEquals(Duration.ofMinutes(10), entity.getC());
+				break;
+			case 1:
+				Assert.assertEquals(10, entity.getA());
+				Assert.assertEquals(true, entity.getB());
+				Assert.assertEquals(Duration.ofSeconds(10), entity.getC());
+				break;
+			case 2:
+				Assert.assertEquals(4, entity.getA());
+				Assert.assertEquals(true, entity.getB());
+				Assert.assertEquals(Duration.ZERO, entity.getC());
+				break;
+			default:
+				Assert.assertTrue("Too many entities", false);
+			}
+			i++;
+		}
+		Assert.assertEquals(3, i);
+
 		TestEntity entity2 = testEntities.create()//
 			// .with(TestEntity::getA, 50)//Leave A default
 			.with(TestEntity::getB, false)//
