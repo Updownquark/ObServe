@@ -25,6 +25,12 @@ public class ConfigEntityFieldParser {
 		return this;
 	}
 
+	public <T> void format(ConfiguredValueField<?, T> field, T value, ObservableConfig config) {
+		// TODO
+	}
+
+	public <T> T parse(ConfiguredValueField<?, T> field, T oldValue, ObservableConfig config) {}
+
 	public <T> Format<T> getFieldFormat(ConfiguredValueField<?, T> field) {
 		Class<?> rawType = TypeTokens.get().wrap(TypeTokens.getRawType(field.getFieldType()));
 		Format<T> format = (Format<T>) theCustomFormats.get(rawType);
