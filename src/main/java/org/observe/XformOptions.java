@@ -169,7 +169,7 @@ public interface XformOptions {
 			if (theDef.isCached())
 				theSrcCache = newSource;
 			boolean isUpdate;
-			if (!theDef.isReEvalOnUpdate() && !theDef.isFireIfUnchanged()) {
+			if (!theDef.isReEvalOnUpdate() || !theDef.isFireIfUnchanged()) {
 				if (theDef.isCached())
 					isUpdate = oldStored == newSource;
 				else
@@ -200,7 +200,9 @@ public interface XformOptions {
 					oldValue = map.apply(oldSource);
 					newValue = map.apply(newSource);
 				}
-			} else
+			} else if (theDef.isCached())
+				oldValue = newValue = theIntf.getDestCache();
+			else
 				oldValue = newValue = map.apply(newSource);
 			if (theDef.isFireIfUnchanged() || oldValue != newValue)
 				return new BiTuple<>(oldValue, newValue);
