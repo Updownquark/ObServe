@@ -5,27 +5,59 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
 import org.observe.util.TypeTokens;
 import org.qommons.io.Format;
 
 public class ConfigEntityFieldParser {
-	private final Map<Class<?>, Format<?>> theCustomFormats;
+	private final Map<Class<?>, Format<?>> theCustomSimpleFormats;
 	private final Map<Class<?>, Supplier<?>> theCustomDefaultValues;
+	private final Map<Class<?>, BiConsumer<?, ObservableConfig>> theCustomFormats;
+	private final Map<Class<?>, BiFunction<?, ObservableConfig, ?>> theCustomParsers;
 
 	public ConfigEntityFieldParser() {
-		theCustomFormats = new HashMap<>();
+		theCustomSimpleFormats = new HashMap<>();
 		theCustomDefaultValues = new HashMap<>();
+		theCustomFormats = new HashMap<>();
+		theCustomParsers = new HashMap<>();
 	}
 
-	public <T> ConfigEntityFieldParser forType(Class<T> type, Format<T> format, Supplier<? extends T> defaultValue) {
-		theCustomFormats.put(type, format);
+	public <T> ConfigEntityFieldParser forSimpleType(Class<T> type, Format<T> format, Supplier<? extends T> defaultValue) {
+		theCustomSimpleFormats.put(type, format);
 		theCustomDefaultValues.put(type, defaultValue);
 		return this;
 	}
 
 	public <T> void format(ConfiguredValueField<?, T> field, T value, ObservableConfig config) {
+		Class<?> rawType = TypeTokens.get().wrap(TypeTokens.getRawType(field.getFieldType()));
+		Format<T> simpleFormat = (Format<T>) theCustomSimpleFormats.get(rawType);
+		if (simpleFormat == null) {
+			if (rawType == String.class)
+				simpleFormat = (Format<T>) Format.TEXT;
+			else if (rawType == Boolean.class)
+				simpleFormat = (Format<T>) Format.BOOLEAN;
+			else if (rawType == Integer.class)
+				simpleFormat = (Format<T>) Format.INT;
+			else if (rawType == Double.class)
+				simpleFormat = (Format<T>) Format.doubleFormat("0.0############E0");
+			else if (rawType == Float.class)
+				simpleFormat = (Format<T>) Format.floatFormat("0.0########");
+			else if (rawType == Long.class)
+				simpleFormat = (Format<T>) Format.LONG;
+			else if (rawType == Duration.class)
+				simpleFormat = (Format<T>) Format.DURATION;
+			else if (rawType == Instant.class)
+				simpleFormat = (Format<T>) Format.date(new SimpleDateFormat("ddMMyyyy HH:mm:ss.SSS"));
+		}
+		if (simpleFormat != null) {
+			config.setValue(simpleFormat.format(value));
+			return;
+		}
+		format = theCustomFormats.get(rawType);
+		throw new IllegalArgumentException("Cannot format type " + rawType.getName() + " of field " + field + " by default");
 		// TODO
 	}
 
@@ -33,7 +65,7 @@ public class ConfigEntityFieldParser {
 
 	public <T> Format<T> getFieldFormat(ConfiguredValueField<?, T> field) {
 		Class<?> rawType = TypeTokens.get().wrap(TypeTokens.getRawType(field.getFieldType()));
-		Format<T> format = (Format<T>) theCustomFormats.get(rawType);
+		Format<T> format = (Format<T>) theCustomSimpleFormats.get(rawType);
 		if (format != null)
 			return format;
 		if (rawType == String.class)
