@@ -106,6 +106,16 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 		}
 
 		@Override
+		public F get(E entity) {
+			return (F) theValueType.theReflector.getField(entity, theIndex);
+		}
+
+		@Override
+		public void set(E entity, F fieldValue) throws UnsupportedOperationException {
+			theValueType.theReflector.setField(entity, theIndex, fieldValue);
+		}
+
+		@Override
 		public String toString() {
 			return theValueType + "." + theName + " (" + theFieldType + ")";
 		}

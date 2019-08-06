@@ -372,6 +372,16 @@ public class EntityReflector<E> {
 		return ((ProxyMethodHandler) Proxy.getInvocationHandler(proxy)).theAssociated;
 	}
 
+	public Object getField(E proxy, int fieldIndex) {
+		ProxyMethodHandler handler = (EntityReflector<E>.ProxyMethodHandler) Proxy.getInvocationHandler(proxy);
+		return handler.theFieldGetter.apply(fieldIndex);
+	}
+
+	public void setField(E proxy, int fieldIndex, Object value) {
+		ProxyMethodHandler handler = (EntityReflector<E>.ProxyMethodHandler) Proxy.getInvocationHandler(proxy);
+		handler.theFieldSetter.accept(fieldIndex, value);
+	}
+
 	private class ProxyMethodHandler implements InvocationHandler {
 		private final IntFunction<Object> theFieldGetter;
 		private final BiConsumer<Integer, Object> theFieldSetter;

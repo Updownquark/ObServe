@@ -10,4 +10,8 @@ public interface ConfiguredValueField<E, T> {
 	TypeToken<T> getFieldType();
 
 	int getIndex();
+
+	T get(E entity);
+
+	void set(E entity, T fieldValue) throws UnsupportedOperationException;
 }
