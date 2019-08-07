@@ -40,7 +40,9 @@ import org.observe.config.ObservableConfigContent.ObservableConfigValue;
 import org.observe.config.ObservableConfigContent.ObservableConfigValues;
 import org.observe.config.ObservableConfigContent.SimpleObservableConfigContent;
 import org.observe.util.TypeTokens;
+import org.qommons.ArrayUtils;
 import org.qommons.Causable;
+import org.qommons.Lockable;
 import org.qommons.StringUtils;
 import org.qommons.StructuredTransactable;
 import org.qommons.Transaction;
@@ -432,7 +434,7 @@ public class ObservableConfig implements StructuredTransactable {
 		return theParentContentRef == null ? null : theParent.theContent.getElementsBefore(theParentContentRef);
 	}
 
-	ElementId getParentChildRef() {
+	public ElementId getParentChildRef() {
 		return theParentContentRef;
 	}
 
@@ -749,11 +751,57 @@ public class ObservableConfig implements StructuredTransactable {
 	}
 
 	public ObservableConfig set(String path, String value) {
-		ObservableConfig child = getChild(path, true, //
+		ObservableConfig child = getChild(path, value != null, //
 			ch -> ch.setValue(value));
-		if (child.getValue() != value)
+		if (value == null) {
+			if (child != null)
+				child.remove();
+		} else if (child.getValue() != value)
 			child.setValue(value);
 		return this;
+	}
+
+	public ObservableConfig copyFrom(ObservableConfig source, boolean removeExtras) {
+		try (Transaction t = Lockable.lockAll(//
+			Lockable.lockable(source, false, false, null), //
+			Lockable.lockable(this, true, true, null))) {
+			_copyFrom(source, removeExtras);
+		}
+		return this;
+	}
+
+	private void _copyFrom(ObservableConfig source, boolean removeExtras) {
+		if (!Objects.equals(theValue, source.theValue))
+			setValue(source.theValue);
+		List<ObservableConfig> children = new ArrayList<>(theContent.size());
+		children.addAll(theContent);
+		ArrayUtils.adjust(children, source.theContent, new ArrayUtils.DifferenceListener<ObservableConfig, ObservableConfig>() {
+			@Override
+			public boolean identity(ObservableConfig o1, ObservableConfig o2) {
+				return o1.getName().equals(o2.getName());
+			}
+
+			@Override
+			public ObservableConfig added(ObservableConfig o, int mIdx, int retIdx) {
+				ObservableConfig before = retIdx == children.size() ? null : children.get(retIdx);
+				return addChild(null, before, false, o.getName(), newChild -> newChild._copyFrom(o, removeExtras));
+			}
+
+			@Override
+			public ObservableConfig removed(ObservableConfig o, int oIdx, int incMod, int retIdx) {
+				if (removeExtras) {
+					o.remove();
+					return null;
+				} else
+					return o;
+			}
+
+			@Override
+			public ObservableConfig set(ObservableConfig o1, int idx1, int incMod, ObservableConfig o2, int idx2, int retIdx) {
+				o1._copyFrom(source, removeExtras);
+				return o1;
+			}
+		});
 	}
 
 	public void remove() {
