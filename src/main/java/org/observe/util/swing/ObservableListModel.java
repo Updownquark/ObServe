@@ -1,5 +1,6 @@
 package org.observe.util.swing;
 
+import java.awt.EventQueue;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -15,6 +16,7 @@ import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
 import org.qommons.Transaction;
+import org.qommons.tree.BetterTreeList;
 
 /**
  * A swing ListModel backed by an {@link ObservableCollection}
@@ -31,6 +33,7 @@ public class ObservableListModel<E> implements ListModel<E> {
 	private final List<ListDataListener> theListeners;
 	private Subscription theListening;
 	private final AtomicInteger thePendingUpdates;
+	private volatile boolean isEventing;
 
 	/**
 	 * @param wrap
@@ -39,7 +42,7 @@ public class ObservableListModel<E> implements ListModel<E> {
 	public ObservableListModel(ObservableCollection<E> wrap) {
 		theWrapped = wrap;
 		theCachedData = new ArrayList<>();
-		theListeners = new ArrayList<>();
+		theListeners = new BetterTreeList<>(false);
 		thePendingUpdates = new AtomicInteger();
 	}
 
@@ -80,7 +83,10 @@ public class ObservableListModel<E> implements ListModel<E> {
 			if (theListeners.isEmpty() && theListening != null) {
 				theListening.unsubscribe();
 				theListening = null;
-				theCachedData.clear();
+				if (isEventing)
+					EventQueue.invokeLater(() -> theCachedData.clear());
+				else
+					theCachedData.clear();
 			}
 		});
 	}
@@ -99,38 +105,46 @@ public class ObservableListModel<E> implements ListModel<E> {
 			theListening = theWrapped.changes().act(event -> {
 				// All internal data representation mutation and event firing must be done on the EDT
 				thePendingUpdates.getAndIncrement();
-				ObservableSwingUtils.onEQ(() -> handleEvent(event));
+				if (EventQueue.isDispatchThread() && !isEventing)
+					handleEvent(event);
+				else
+					EventQueue.invokeLater(() -> handleEvent(event));
 			});
 		}
 	}
 
 	private void handleEvent(CollectionChangeEvent<E> event) {
-		thePendingUpdates.getAndDecrement();
-		Map<Integer, E> changesByIndex = new HashMap<>();
-		if (event.type != CollectionChangeType.remove) {
-			for (CollectionChangeEvent.ElementChange<E> el : event.elements)
-				changesByIndex.put(el.index, el.newValue);
-		}
-		int[][] split = ObservableSwingUtils.getContinuousIntervals(event.elements, event.type != CollectionChangeType.remove);
-		for (int[] indexes : split) {
-			ListDataEvent wrappedEvent = new ListDataEvent(ObservableListModel.this, getSwingType(event.type), indexes[0], indexes[1]);
-			switch (event.type) {
-			case add:
-				for (int i = indexes[0]; i <= indexes[1]; i++)
-					theCachedData.add(i, changesByIndex.remove(i));
-				intervalAdded(wrappedEvent);
-				break;
-			case remove:
-				for (int i = indexes[1]; i >= indexes[0]; i--)
-					theCachedData.remove(i);
-				intervalRemoved(wrappedEvent);
-				break;
-			case set:
-				for (int i = indexes[0]; i <= indexes[1]; i++)
-					theCachedData.set(i, changesByIndex.remove(i));
-				contentsChanged(wrappedEvent);
-				break;
+		isEventing = true;
+		try {
+			thePendingUpdates.getAndDecrement();
+			Map<Integer, E> changesByIndex = new HashMap<>();
+			if (event.type != CollectionChangeType.remove) {
+				for (CollectionChangeEvent.ElementChange<E> el : event.elements)
+					changesByIndex.put(el.index, el.newValue);
 			}
+			int[][] split = ObservableSwingUtils.getContinuousIntervals(event.elements, event.type != CollectionChangeType.remove);
+			for (int[] indexes : split) {
+				ListDataEvent wrappedEvent = new ListDataEvent(ObservableListModel.this, getSwingType(event.type), indexes[0], indexes[1]);
+				switch (event.type) {
+				case add:
+					for (int i = indexes[0]; i <= indexes[1]; i++)
+						theCachedData.add(i, changesByIndex.remove(i));
+					intervalAdded(wrappedEvent);
+					break;
+				case remove:
+					for (int i = indexes[1]; i >= indexes[0]; i--)
+						theCachedData.remove(i);
+					intervalRemoved(wrappedEvent);
+					break;
+				case set:
+					for (int i = indexes[0]; i <= indexes[1]; i++)
+						theCachedData.set(i, changesByIndex.remove(i));
+					contentsChanged(wrappedEvent);
+					break;
+				}
+			}
+		} finally {
+			isEventing = false;
 		}
 	}
 
