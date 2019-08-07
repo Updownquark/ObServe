@@ -3,6 +3,7 @@ package org.observe.collect;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.NoSuchElementException;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -369,7 +370,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		public <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, BiFunction<? super T, ? super X, ? extends X> map,
 			Function<? super X, ? extends T> reverse, Consumer<MapOptions<T, X>> options) {
 			MapOptions<T, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);
@@ -380,7 +381,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		public <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, BiFunction<? super T, ? super X, ? extends X> map,
 			Comparator<? super X> compare, Consumer<MapOptions<T, X>> options) {
 			MapOptions<T, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);
@@ -480,7 +481,7 @@ public class ObservableSortedSetImpl {
 		 * @param compare The comparator that this flow's values are sorted by
 		 */
 		public DistinctSortedMapOp(ObservableCollection<E> source, DistinctDataFlow<E, ?, I> parent, TypeToken<T> target,
-			Function<? super I, ? extends T> map, MapDef<I, T> options, Comparator<? super T> compare) {
+			BiFunction<? super I, ? super T, ? extends T> map, MapDef<I, T> options, Comparator<? super T> compare) {
 			super(source, parent, target, map, options);
 			theCompare = compare;
 		}
@@ -506,7 +507,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		public <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, BiFunction<? super T, ? super X, ? extends X> map,
 			Function<? super X, ? extends T> reverse, Consumer<MapOptions<T, X>> options) {
 			MapOptions<T, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);
@@ -517,7 +518,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		public <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, BiFunction<? super T, ? super X, ? extends X> map,
 			Comparator<? super X> compare, Consumer<MapOptions<T, X>> options) {
 			MapOptions<T, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);
@@ -592,7 +593,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public <X> DistinctSortedDataFlow<E, E, X> mapEquivalent(TypeToken<X> target, Function<? super E, ? extends X> map,
+		public <X> DistinctSortedDataFlow<E, E, X> mapEquivalent(TypeToken<X> target, BiFunction<? super E, ? super X, ? extends X> map,
 			Function<? super X, ? extends E> reverse, Consumer<MapOptions<E, X>> options) {
 			MapOptions<E, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);
@@ -603,7 +604,7 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public <X> DistinctSortedDataFlow<E, E, X> mapEquivalent(TypeToken<X> target, Function<? super E, ? extends X> map,
+		public <X> DistinctSortedDataFlow<E, E, X> mapEquivalent(TypeToken<X> target, BiFunction<? super E, ? super X, ? extends X> map,
 			Comparator<? super X> compare, Consumer<MapOptions<E, X>> options) {
 			MapOptions<E, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);

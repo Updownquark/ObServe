@@ -1,6 +1,6 @@
 package org.observe;
 
-import java.util.function.Function;
+import java.util.function.BiFunction;
 
 import org.qommons.BiTuple;
 import org.qommons.Ternian;
@@ -115,7 +115,7 @@ public interface XformOptions {
 	 */
 	interface XformCacheHandlingInterface<E, T> {
 		/** @return A mapping function to produce mapped values from source values */
-		Function<? super E, ? extends T> map();
+		BiFunction<? super E, ? super T, ? extends T> map();
 
 		/**
 		 * Ensures no modification occurs while the lock is held
@@ -191,20 +191,23 @@ public interface XformOptions {
 		public BiTuple<T, T> handleChange(E oldSource, E newSource, boolean update) {
 			// Now figure out if we need to fire an event
 			T oldValue, newValue;
-			Function<? super E, ? extends T> map = theIntf.map();
-			if (theDef.isReEvalOnUpdate() || !update) {
-				if (theDef.isCached()) {
-					oldValue = theIntf.getDestCache();
-					theIntf.setDestCache(newValue = map.apply(newSource));
-				} else {
-					oldValue = map.apply(oldSource);
-					newValue = map.apply(newSource);
+			BiFunction<? super E, ? super T, ? extends T> map = theIntf.map();
+			if (theDef.isCached()) {
+				oldValue = theIntf.getDestCache();
+				if (!update || theDef.isReEvalOnUpdate()) {
+					newValue = map.apply(newSource, oldValue);
+					theIntf.setDestCache(newValue);
+				} else
+					newValue = oldValue;
+			} else {
+				if (update)
+					oldValue = newValue = map.apply(newSource, null);
+				else {
+					oldValue = map.apply(oldSource, null);
+					newValue = map.apply(newSource, oldValue);
 				}
-			} else if (theDef.isCached())
-				oldValue = newValue = theIntf.getDestCache();
-			else
-				oldValue = newValue = map.apply(newSource);
-			if (theDef.isFireIfUnchanged() || oldValue != newValue)
+			}
+			if (oldValue != newValue || theDef.isFireIfUnchanged())
 				return new BiTuple<>(oldValue, newValue);
 			return null;
 		}

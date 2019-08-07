@@ -42,7 +42,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 		public <P> TypeToken<? extends ObservableValue> createCompoundType(TypeToken<P> param) {
 			return new TypeToken<ObservableValue<P>>() {}.where(new TypeParameter<P>() {}, param);
 		}
-		});
+	});
 	/** This class's wildcard {@link TypeToken} */
 	static TypeToken<ObservableValue<?>> TYPE = TYPE_KEY.parameterized();
 
@@ -541,7 +541,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 	public class ComposedObservableValue<T> implements ObservableValue<T> {
 		private final List<ObservableValue<?>> theComposed;
 
-		private final Function<Object[], T> theFunction;
+		private final BiFunction<Object[], T, T> theFunction;
 
 		private final ListenerSet<Observer<? super ObservableValueEvent<T>>> theObservers;
 
@@ -568,6 +568,17 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 		 */
 		public ComposedObservableValue(TypeToken<T> type, Function<Object[], T> function, XformDef options,
 			ObservableValue<?>... composed) {
+			this(type, (args, old) -> function.apply(args), options, composed);
+		}
+
+		/**
+		 * @param type The type for this value
+		 * @param function The function that operates on the argument observables to produce this observable's value
+		 * @param options Options determining the behavior of the observable
+		 * @param composed The argument observables whose values are passed to the function
+		 */
+		public ComposedObservableValue(TypeToken<T> type, BiFunction<Object[], T, T> function, XformDef options,
+			ObservableValue<?>... composed) {
 			theFunction = function;
 			theOptions = options == null ? new XformDef(new XformOptions.SimpleXformOptions()) : options;
 			theType = type != null ? type
@@ -587,13 +598,13 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 							caches[index] = theOptions
 								.createCacheHandler(new XformOptions.XformCacheHandlingInterface<Object, T>() {
 									@Override
-									public Function<? super Object, ? extends T> map() {
+									public BiFunction<? super Object, ? super T, ? extends T> map() {
 										Object[] composedValues = new Object[theComposed.size()];
 										for (int j = 0; j < composed.length; j++) {
 											if (j != index)
 												composedValues[j] = theOptions.isCached() ? caches[j].getSourceCache() : composed[j].get();
 										}
-										return src -> {
+										return (src, oldValue) -> {
 											composedValues[index] = src;
 											return combine(composedValues);
 										};
@@ -714,7 +725,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 		}
 
 		/** @return The function used to map this observable's composed values into its return value */
-		public Function<Object[], T> getFunction() {
+		public BiFunction<Object[], T, T> getFunction() {
 			return theFunction;
 		}
 
@@ -740,7 +751,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 		 * @return The combined value
 		 */
 		protected T combine(Object[] args) {
-			return theFunction.apply(args.clone());
+			return theFunction.apply(args.clone(), theValue);
 		}
 
 		@Override

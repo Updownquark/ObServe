@@ -877,7 +877,23 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * @param options Allows various options to be selected that determine the behavior of the mapped set
 		 * @return The mapped flow
 		 */
-		<X> CollectionDataFlow<E, T, X> map(TypeToken<X> target, Function<? super T, ? extends X> map, Consumer<MapOptions<T, X>> options);
+		default <X> CollectionDataFlow<E, T, X> map(TypeToken<X> target, Function<? super T, ? extends X> map,
+			Consumer<MapOptions<T, X>> options) {
+			return map(target, (src, oldResult) -> map.apply(src), options);
+		}
+
+		/**
+		 * Allows elements to be transformed via a function. This operation may produce an {@link #supportsPassive() active or passive} flow
+		 * depending on the options selected.
+		 *
+		 * @param <X> The type to map to
+		 * @param target The type to map to
+		 * @param map The mapping function to apply to each element
+		 * @param options Allows various options to be selected that determine the behavior of the mapped set
+		 * @return The mapped flow
+		 */
+		<X> CollectionDataFlow<E, T, X> map(TypeToken<X> target, BiFunction<? super T, ? super X, ? extends X> map,
+			Consumer<MapOptions<T, X>> options);
 
 		/**
 		 * Combines each element of this flow the the value of one or more observable values. This operation may produce an
@@ -1158,7 +1174,32 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * @param options Allows customization of the behavior of the mapped set
 		 * @return The mapped flow
 		 */
-		<X> DistinctDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		default <X> DistinctDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+			Function<? super X, ? extends T> reverse, Consumer<MapOptions<T, X>> options) {
+			return mapEquivalent(target, (src, old) -> map.apply(src), reverse, options);
+		}
+
+		/**
+		 * <p>
+		 * Same as {@link #map(TypeToken, BiFunction, Consumer)}, but with the additional assertion that the produced mapped data will be
+		 * one-to-one with the source data, such that the produced collection is unique in a similar way, without a need for an additional
+		 * {@link #distinct(Consumer) uniqueness} check.
+		 * </p>
+		 * <p>
+		 * This assertion cannot be checked (at compile time or run time), and if the assertion is incorrect such that multiple source
+		 * values map to equivalent target values, <b>the resulting set will not be unique and data errors, including internal
+		 * ObservableCollection errors, are possible</b>. Therefore caution should be used when considering whether to invoke this method.
+		 * When in doubt, use {@link #map(TypeToken, BiFunction, Consumer)} and {@link #distinct(Consumer)}.
+		 * </p>
+		 *
+		 * @param <X> The type of the mapped values
+		 * @param target The type of the mapped values
+		 * @param map The function to produce result values from source values
+		 * @param reverse The function to produce source values from result values--required to facilitate equivalence with the source flow
+		 * @param options Allows customization of the behavior of the mapped set
+		 * @return The mapped flow
+		 */
+		<X> DistinctDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, BiFunction<? super T, ? super X, ? extends X> map,
 			Function<? super X, ? extends T> reverse, Consumer<MapOptions<T, X>> options);
 
 		@Override
@@ -1255,7 +1296,30 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * @return The mapped flow
 		 */
 		@Override
-		<X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		default <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+			Function<? super X, ? extends T> reverse, Consumer<MapOptions<T, X>> options) {
+			return mapEquivalent(target, (src, old) -> map.apply(src), reverse, options);
+		}
+
+		/**
+		 * <p>
+		 * Same as {@link #map(TypeToken, BiFunction, Consumer)}, but with the additional assertion that the produced mapped data will be
+		 * one-to-one with the source data, such that the produced collection is unique in a similar way, without a need for an additional
+		 * {@link #distinctSorted(Comparator, boolean) uniqueness} check.
+		 * </p>
+		 * <p>
+		 * This assertion cannot be checked (at compile time or run time), and if the assertion is incorrect such that multiple source
+		 * values map to equivalent target values, <b>the resulting set will not be unique and data errors, including internal
+		 * ObservableCollection errors, are possible</b>. Therefore caution should be used when considering whether to invoke this method.
+		 * When in doubt, use {@link #map(TypeToken, BiFunction, Consumer)} and {@link #distinctSorted(Comparator, boolean)}.
+		 * </p>
+		 *
+		 * @param <X> The type of the mapped values
+		 * @param target The type of the mapped values
+		 * @return The mapped flow
+		 */
+		@Override
+		<X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, BiFunction<? super T, ? super X, ? extends X> map,
 			Function<? super X, ? extends T> reverse, Consumer<MapOptions<T, X>> options);
 
 		/**
@@ -1266,7 +1330,20 @@ public interface ObservableCollection<E> extends BetterList<E> {
 		 * @param options Allows customization for the behavior of the mapped flow
 		 * @return The mapped flow
 		 */
-		<X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		default <X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+			Comparator<? super X> compare, Consumer<MapOptions<T, X>> options) {
+			return mapEquivalent(target, (src, old) -> map.apply(src), compare, options);
+		}
+
+		/**
+		 * @param <X> The type for the mapped flow
+		 * @param target The type for the mapped flow
+		 * @param map The mapping function to produce values from each source element
+		 * @param compare The comparator to source the mapped values in the same order as the corresponding source values
+		 * @param options Allows customization for the behavior of the mapped flow
+		 * @return The mapped flow
+		 */
+		<X> DistinctSortedDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, BiFunction<? super T, ? super X, ? extends X> map,
 			Comparator<? super X> compare, Consumer<MapOptions<T, X>> options);
 
 		@Override

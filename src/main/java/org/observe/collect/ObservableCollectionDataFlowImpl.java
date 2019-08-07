@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -988,7 +989,7 @@ public class ObservableCollectionDataFlowImpl {
 		}
 
 		@Override
-		public <X> CollectionDataFlow<E, T, X> map(TypeToken<X> target, Function<? super T, ? extends X> map,
+		public <X> CollectionDataFlow<E, T, X> map(TypeToken<X> target, BiFunction<? super T, ? super X, ? extends X> map,
 			Consumer<MapOptions<T, X>> options) {
 			MapOptions<T, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);
@@ -1225,7 +1226,7 @@ public class ObservableCollectionDataFlowImpl {
 	 * @param <T> The type of values produced by this flow
 	 */
 	protected static class MapOp<E, I, T> extends AbstractDataFlow<E, I, T> {
-		private final Function<? super I, ? extends T> theMap;
+		private final BiFunction<? super I, ? super T, ? extends T> theMap;
 		private final MapDef<I, T> theOptions;
 
 		/**
@@ -1236,7 +1237,7 @@ public class ObservableCollectionDataFlowImpl {
 		 * @param options The mapping options governing certain aspects of this flow's behavior, e.g. caching
 		 */
 		protected MapOp(ObservableCollection<E> source, CollectionDataFlow<E, ?, I> parent, TypeToken<T> target,
-			Function<? super I, ? extends T> map, MapDef<I, T> options) {
+			BiFunction<? super I, ? super T, ? extends T> map, MapDef<I, T> options) {
 			super(source, parent, target, mapEquivalence(parent.getTargetType(), parent.equivalence(), target, map, options));
 			theMap = map;
 			theOptions = options;
@@ -1251,7 +1252,8 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public PassiveCollectionManager<E, ?, T> managePassive() {
-			return new PassiveMappedCollectionManager<>(getParent().managePassive(), getTargetType(), theMap, equivalence(), theOptions);
+			return new PassiveMappedCollectionManager<>(getParent().managePassive(), getTargetType(), src -> theMap.apply(src, null),
+				equivalence(), theOptions);
 		}
 
 		@Override
@@ -1261,7 +1263,7 @@ public class ObservableCollectionDataFlowImpl {
 	}
 
 	private static <I, T> Equivalence<? super T> mapEquivalence(TypeToken<I> srcType, Equivalence<? super I> equivalence,
-		TypeToken<T> targetType, Function<? super I, ? extends T> map, MapDef<I, T> options) {
+		TypeToken<T> targetType, BiFunction<? super I, ? super T, ? extends T> map, MapDef<I, T> options) {
 		if (options.getEquivalence() != null)
 			return options.getEquivalence();
 		else if (srcType.equals(targetType))
@@ -3027,7 +3029,7 @@ public class ObservableCollectionDataFlowImpl {
 	public static class ActiveMappedCollectionManager<E, I, T> implements ActiveCollectionManager<E, I, T> {
 		private final ActiveCollectionManager<E, ?, I> theParent;
 		private final TypeToken<T> theTargetType;
-		private final Function<? super I, ? extends T> theMap;
+		private final BiFunction<? super I, ? super T, ? extends T> theMap;
 		private final Equivalence<? super T> theEquivalence;
 		private final MapDef<I, T> theOptions;
 
@@ -3039,7 +3041,7 @@ public class ObservableCollectionDataFlowImpl {
 		 * @param options The mapping options governing some of the manager's behavior, e.g. caching
 		 */
 		public ActiveMappedCollectionManager(ActiveCollectionManager<E, ?, I> parent, TypeToken<T> targetType,
-			Function<? super I, ? extends T> map, Equivalence<? super T> equivalence, MapDef<I, T> options) {
+			BiFunction<? super I, ? super T, ? extends T> map, Equivalence<? super T> equivalence, MapDef<I, T> options) {
 			theParent = parent;
 			theTargetType = targetType;
 			theMap = map;
@@ -3087,7 +3089,7 @@ public class ObservableCollectionDataFlowImpl {
 			if (theOptions.getReverse() == null || theOptions.isManyToOne())
 				return null;
 			I reversed = theOptions.getReverse().apply(value);
-			if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
+			if (!theEquivalence.elementEquals(theMap.apply(reversed, value), value))
 				return null;
 			Comparable<DerivedCollectionElement<I>> pef = theParent.getElementFinder(reversed);
 			if (pef == null)
@@ -3106,7 +3108,7 @@ public class ObservableCollectionDataFlowImpl {
 			if (theOptions.getReverse() == null)
 				return StdMsg.UNSUPPORTED_OPERATION;
 			I reversed = theOptions.getReverse().apply(toAdd);
-			if (!theEquivalence.elementEquals(theMap.apply(reversed), toAdd))
+			if (!theEquivalence.elementEquals(theMap.apply(reversed, toAdd), toAdd))
 				return StdMsg.ILLEGAL_ELEMENT;
 			return theParent.canAdd(reversed, strip(after), strip(before));
 		}
@@ -3117,7 +3119,7 @@ public class ObservableCollectionDataFlowImpl {
 			if (theOptions.getReverse() == null)
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			I reversed = theOptions.getReverse().apply(value);
-			if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
+			if (!theEquivalence.elementEquals(theMap.apply(reversed, value), value))
 				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 			DerivedCollectionElement<I> parentEl = theParent.addElement(reversed, strip(after), strip(before), first);
 			return parentEl == null ? null : new MappedElement(parentEl, true);
@@ -3144,7 +3146,7 @@ public class ObservableCollectionDataFlowImpl {
 			if (theOptions.getReverse() == null)
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 			I reversed = theOptions.getReverse().apply(newValue);
-			if (!theEquivalence.elementEquals(theMap.apply(reversed), newValue))
+			if (!theEquivalence.elementEquals(theMap.apply(reversed, newValue), newValue))
 				throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 			theParent.setValues(remaining, reversed);
 		}
@@ -3168,7 +3170,7 @@ public class ObservableCollectionDataFlowImpl {
 				if (!synthetic) {
 					theCacheHandler = theOptions.createCacheHandler(new XformOptions.XformCacheHandlingInterface<I, T>() {
 						@Override
-						public Function<? super I, ? extends T> map() {
+						public BiFunction<? super I, ? super T, ? extends T> map() {
 							return theMap;
 						}
 
@@ -3193,7 +3195,7 @@ public class ObservableCollectionDataFlowImpl {
 						I srcVal = parentEl.get();
 						theCacheHandler.initialize(srcVal);
 						if (theOptions.isCached())
-							theValue = theMap.apply(srcVal);
+							theValue = theMap.apply(srcVal, null);
 					}
 					theParentEl.setListener(new CollectionElementListener<I>() {
 						@Override
@@ -3205,7 +3207,7 @@ public class ObservableCollectionDataFlowImpl {
 
 						@Override
 						public void removed(I value, Object cause) {
-							T val = theOptions.isCached() ? theValue : theMap.apply(value);
+							T val = theOptions.isCached() ? theValue : theMap.apply(value, null);
 							ObservableCollectionDataFlowImpl.removed(theListener, val, cause);
 							theListener = null;
 							theCacheHandler.initialize(null);
@@ -3215,7 +3217,7 @@ public class ObservableCollectionDataFlowImpl {
 				} else {
 					theCacheHandler = null;
 					if (theOptions.isCached())
-						theValue = theMap.apply(parentEl.get());
+						theValue = theMap.apply(parentEl.get(), null);
 				}
 			}
 
@@ -3241,7 +3243,7 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public T get() {
-				return theOptions.isCached() ? theValue : theMap.apply(theParentEl.get());
+				return theOptions.isCached() ? theValue : theMap.apply(theParentEl.get(), null);
 			}
 
 			@Override
@@ -3264,7 +3266,7 @@ public class ObservableCollectionDataFlowImpl {
 				if (theOptions.getReverse() == null)
 					return StdMsg.UNSUPPORTED_OPERATION;
 				I reversed = theOptions.getReverse().apply(value);
-				if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
+				if (!theEquivalence.elementEquals(theMap.apply(reversed, value), value))
 					return StdMsg.ILLEGAL_ELEMENT;
 				String setMsg = theParentEl.isAcceptable(reversed);
 				// If the element reverse is set, it should get the final word on the error message if
@@ -3282,7 +3284,7 @@ public class ObservableCollectionDataFlowImpl {
 				if (theOptions.getReverse() == null)
 					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
 				I reversed = theOptions.getReverse().apply(value);
-				if (!theEquivalence.elementEquals(theMap.apply(reversed), value))
+				if (!theEquivalence.elementEquals(theMap.apply(reversed, value), value))
 					throw new IllegalArgumentException(StdMsg.ILLEGAL_ELEMENT);
 				theParentEl.set(reversed);
 			}
@@ -3693,7 +3695,7 @@ public class ObservableCollectionDataFlowImpl {
 							throw new IllegalArgumentException("Unrecognized value: " + arg);
 						return (X) holder.get();
 					}
-				});
+				}, null);
 			}
 
 			I reverse(T dest) {
@@ -3733,8 +3735,8 @@ public class ObservableCollectionDataFlowImpl {
 			for (ObservableValue<?> arg : def.getArgs())
 				theArgs.put(arg, theDef.createCacheHandler(new XformOptions.XformCacheHandlingInterface<Object, Void>() {
 					@Override
-					public Function<? super Object, ? extends Void> map() {
-						return v -> null;
+					public BiFunction<? super Object, ? super Void, ? extends Void> map() {
+						return (v, o) -> null;
 					}
 
 					@Override
@@ -3897,7 +3899,7 @@ public class ObservableCollectionDataFlowImpl {
 				return arg.get();
 		}
 
-		private T combineValue(I source) {
+		private T combineValue(I source, T oldValue) {
 			return theDef.getCombination().apply(new Combination.CombinedValues<I>() {
 				@Override
 				public I getElement() {
@@ -3908,7 +3910,7 @@ public class ObservableCollectionDataFlowImpl {
 				public <V> V get(ObservableValue<V> arg) {
 					return getArgValue(arg);
 				}
-			});
+			}, oldValue);
 		}
 
 		private I reverseValue(T dest) {
@@ -3959,8 +3961,8 @@ public class ObservableCollectionDataFlowImpl {
 				if (!synthetic) {
 					theCacheHandler = theDef.createCacheHandler(new XformOptions.XformCacheHandlingInterface<I, T>() {
 						@Override
-						public Function<? super I, ? extends T> map() {
-							return v -> combineValue(v);
+						public BiFunction<? super I, ? super T, ? extends T> map() {
+							return (v, o) -> combineValue(v, o);
 						}
 
 						@Override
@@ -3989,7 +3991,7 @@ public class ObservableCollectionDataFlowImpl {
 						@Override
 						public void removed(I value, Object cause) {
 							try (Transaction t = lockArgs()) {
-								T val = theDef.isCached() ? theValue : combineValue(value);
+								T val = theDef.isCached() ? theValue : combineValue(value, null);
 								theElements.remove(this);
 								ObservableCollectionDataFlowImpl.removed(theListener, val, cause);
 								theListener = null;
@@ -4000,7 +4002,7 @@ public class ObservableCollectionDataFlowImpl {
 					if (theDef.isCached()) {
 						I parentValue = theParentEl.get();
 						theCacheHandler.initialize(parentValue);
-						theValue = combineValue(parentValue);
+						theValue = combineValue(parentValue, null);
 					}
 				} else
 					theCacheHandler = null;
@@ -4030,7 +4032,7 @@ public class ObservableCollectionDataFlowImpl {
 
 			@Override
 			public T get() {
-				return theDef.isCached() ? theValue : combineValue(theParentEl.get());
+				return theDef.isCached() ? theValue : combineValue(theParentEl.get(), null);
 			}
 
 			@Override

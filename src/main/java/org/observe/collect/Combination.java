@@ -57,7 +57,7 @@ public class Combination {
 	 */
 	public static class CombinedFlowDef<E, T> extends XformOptions.XformDef {
 		private final Set<ObservableValue<?>> theArgs;
-		private final Function<? super CombinedValues<? extends E>, ? extends T> theCombination;
+		private final BiFunction<? super CombinedValues<? extends E>, ? super T, ? extends T> theCombination;
 		private final Function<? super CombinedValues<T>, ? extends E> theReverse;
 		private final boolean isManyToOne;
 
@@ -69,7 +69,7 @@ public class Combination {
 		 * @param manyToOne Whether the mapping may produce the same output from different source (collection) values
 		 */
 		public CombinedFlowDef(CombinedCollectionBuilder<E, T> builder, Set<ObservableValue<?>> args,
-			Function<? super CombinedValues<? extends E>, ? extends T> combination,
+			BiFunction<? super CombinedValues<? extends E>, ? super T, ? extends T> combination,
 			Function<? super CombinedValues<T>, ? extends E> reverse, boolean manyToOne) {
 			super(builder);
 			theArgs = args;
@@ -84,7 +84,7 @@ public class Combination {
 		}
 
 		/** @return The combination function to combine the source and argument values */
-		public Function<? super CombinedValues<? extends E>, ? extends T> getCombination() {
+		public BiFunction<? super CombinedValues<? extends E>, ? super T, ? extends T> getCombination() {
 			return theCombination;
 		}
 
@@ -138,7 +138,11 @@ public class Combination {
 		@Override
 		CombinedCollectionBuilder<E, T> fireIfUnchanged(boolean fire);
 
-		CombinedFlowDef<E, T> build(Function<? super CombinedValues<? extends E>, ? extends T> combination);
+		default CombinedFlowDef<E, T> build(Function<? super CombinedValues<? extends E>, ? extends T> combination) {
+			return build((cv, o) -> combination.apply(cv));
+		}
+
+		CombinedFlowDef<E, T> build(BiFunction<? super CombinedValues<? extends E>, ? super T, ? extends T> combination);
 	}
 
 	/**
@@ -194,14 +198,6 @@ public class Combination {
 		public CombinedCollectionBuilder2<E, V, T> withReverse(Function<? super CombinedValues<? extends T>, ? extends E> reverse) {
 			super.withReverse(reverse);
 			return this;
-		}
-
-		/**
-		 * @param combination The function to combine the source value and the argument value
-		 * @return The combination definition
-		 */
-		public CombinedFlowDef<E, T> build(BiFunction<? super E, ? super V, ? extends T> combination) {
-			return build(cv -> combination.apply(cv.getElement(), cv.get(theArg2)));
 		}
 
 		@Override
@@ -421,6 +417,11 @@ public class Combination {
 
 		@Override
 		public CombinedFlowDef<E, R> build(Function<? super CombinedValues<? extends E>, ? extends R> combination) {
+			return build((cv, o) -> combination.apply(cv));
+		}
+
+		@Override
+		public CombinedFlowDef<E, R> build(BiFunction<? super CombinedValues<? extends E>, ? super R, ? extends R> combination) {
 			Set<ObservableValue<?>> args = Collections.unmodifiableSet(BetterHashSet.build().identity().unsafe().buildSet(theArgs));
 			return new CombinedFlowDef<>(this, args, combination, theReverse, isManyToOne);
 		}

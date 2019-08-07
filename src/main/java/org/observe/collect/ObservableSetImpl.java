@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.function.BiFunction;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -143,7 +144,7 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public <X> DistinctDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		public <X> DistinctDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, BiFunction<? super T, ? super X, ? extends X> map,
 			Function<? super X, ? extends T> reverse, Consumer<MapOptions<T, X>> options) {
 			MapOptions<T, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);
@@ -348,7 +349,7 @@ public class ObservableSetImpl {
 		 * @param options The options governing certain aspects of this flow's behavior, e.g. caching
 		 */
 		public DistinctMapOp(ObservableCollection<E> source, DistinctDataFlow<E, ?, I> parent, TypeToken<T> target,
-			Function<? super I, ? extends T> map, MapDef<I, T> options) {
+			BiFunction<? super I, ? super T, ? extends T> map, MapDef<I, T> options) {
 			super(source, parent, target, map, options);
 		}
 
@@ -368,7 +369,7 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public <X> DistinctDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, Function<? super T, ? extends X> map,
+		public <X> DistinctDataFlow<E, T, X> mapEquivalent(TypeToken<X> target, BiFunction<? super T, ? super X, ? extends X> map,
 			Function<? super X, ? extends T> reverse, Consumer<MapOptions<T, X>> options) {
 			MapOptions<T, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);
@@ -438,7 +439,7 @@ public class ObservableSetImpl {
 		}
 
 		@Override
-		public <X> DistinctDataFlow<E, E, X> mapEquivalent(TypeToken<X> target, Function<? super E, ? extends X> map,
+		public <X> DistinctDataFlow<E, E, X> mapEquivalent(TypeToken<X> target, BiFunction<? super E, ? super X, ? extends X> map,
 			Function<? super X, ? extends E> reverse, Consumer<MapOptions<E, X>> options) {
 			MapOptions<E, X> mapOptions = new MapOptions<>();
 			options.accept(mapOptions);
