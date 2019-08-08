@@ -64,7 +64,8 @@ public class ObservableConfigTest {
 		SimpleObservable<Void> until = new SimpleObservable<>();
 		readXml(getClass().getResourceAsStream("TestValues.xml"));
 
-		ObservableCollection<Integer> testValues = theConfig.observeValues("test-values/test-value", TypeTokens.get().INT, Format.INT);
+		ObservableCollection<Integer> testValues = theConfig.observeValues("test-values/test-value", TypeTokens.get().INT,
+			ObservableConfigFormat.ofQommonFormat(Format.INT), null);
 		int i = 0;
 		for (Integer value : testValues) {
 			Assert.assertEquals(i, value.intValue());

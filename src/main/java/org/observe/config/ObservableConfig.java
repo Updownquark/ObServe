@@ -438,6 +438,10 @@ public class ObservableConfig implements StructuredTransactable {
 		return theParentContentRef;
 	}
 
+	protected CollectionLockingStrategy getLocker() {
+		return theLocking;
+	}
+
 	public ObservableConfigPathBuilder buildPath(String firstName) {
 		return buildPath(new LinkedList<>(), firstName);
 	}
@@ -582,28 +586,15 @@ public class ObservableConfig implements StructuredTransactable {
 		return new ObservableConfigValue<>(type, this, path, parser, format);
 	}
 
-	public <T> ObservableCollection<T> observeValues(String path, TypeToken<T> type, Format<T> format) {
-		return observeValues(createPath(path), type, format);
+	public <T> ObservableCollection<T> observeValues(String path, TypeToken<T> type, ObservableConfigFormat<T> format,
+		Observable<?> until) {
+		return observeValues(createPath(path), type, format, until);
 	}
 
-	public <T> ObservableCollection<T> observeValues(ObservableConfigPath path, TypeToken<T> type, Format<T> format) {
-		return observeValues(path, type, config -> {
-			if (config.getValue() == null)
-				return null;
-			try {
-				return format.parse(config.getValue());
-			} catch (ParseException e) {
-				System.err.println("Could not parse value " + this + ": " + e.getMessage());
-				return null;
-			}
-		}, (config, val) -> config.setValue(format.format(val)), false, Observable.empty());
-	}
-
-	public <T> ObservableCollection<T> observeValues(ObservableConfigPath path, TypeToken<T> type,
-		Function<ObservableConfig, ? extends T> parser, BiConsumer<ObservableConfig, ? super T> format, boolean active,
+	public <T> ObservableCollection<T> observeValues(ObservableConfigPath path, TypeToken<T> type, ObservableConfigFormat<T> format,
 		Observable<?> until) {
 		ObservableChildSet<? extends ObservableConfig> configs = (ObservableChildSet<? extends ObservableConfig>) getContent(path, until);
-		return new ObservableConfigValues<>(configs, type, parser, format, active, until);
+		return new ObservableConfigValues<>(configs, type, format, until);
 	}
 
 	public <T> ObservableValueSet<T> observeEntities(ObservableConfigPath path, TypeToken<T> type, Observable<?> until) {
@@ -890,11 +881,6 @@ public class ObservableConfig implements StructuredTransactable {
 	/** Needed by ObservableConfigContent.* */
 	BetterList<ObservableConfig> _getContent() {
 		return theContent;
-	}
-
-	/** Needed by ObservableConfigContent.* */
-	ElementId _getParentContentRef() {
-		return theParentContentRef;
 	}
 
 	public <E extends Exception> Subscription persistOnShutdown(ObservableConfigPersistence<E> persistence,

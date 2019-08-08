@@ -21,6 +21,7 @@ import org.observe.ObservableValue;
 import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.SettableValue;
+import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.Equivalence;
@@ -29,6 +30,7 @@ import org.observe.collect.ObservableCollectionEvent;
 import org.observe.config.ObservableConfig.ObservableConfigEvent;
 import org.observe.config.ObservableConfig.ObservableConfigPath;
 import org.observe.config.ObservableConfig.ObservableConfigPathElement;
+import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
 import org.qommons.StringUtils;
@@ -97,14 +99,14 @@ public class ObservableConfigContent {
 			case add:
 				// This can affect the value if the new value matches the path and appears before the currently-used config
 				if (thePath.getElements().get(pathIndex - 1).matches(newValue) && (thePathElements[pathIndex] == null//
-				|| newValue._getParentContentRef().compareTo(thePathElements[pathIndex]._getParentContentRef()) < 0))
+					|| newValue.getParentChildRef().compareTo(thePathElements[pathIndex].getParentChildRef()) < 0))
 					reCheck = true; // The new element needs to replace the current element at the path index
 				break;
 			case remove:
 			case set:
 				if (newValue == thePathElements[pathIndex])
 					reCheck = true;
-				else if (newValue._getParentContentRef().compareTo(thePathElements[pathIndex]._getParentContentRef()) < 0//
+				else if (newValue.getParentChildRef().compareTo(thePathElements[pathIndex].getParentChildRef()) < 0//
 					&& thePath.getElements().get(pathIndex - 1).matches(newValue))
 					break;
 			}
@@ -270,141 +272,95 @@ public class ObservableConfigContent {
 		}
 	}
 
-	/**
-	 * Implements {@link ObservableConfig#observeValues(ObservableConfigPath, TypeToken, Format)}
-	 *
-	 * @param <T> The value type
-	 */
-	protected static class ObservableConfigValues<T> implements ObservableCollection<T> {
-		private final ObservableChildSet<? extends ObservableConfig> theConfigs;
+	protected static class ObservableConfigValues<T> extends ObservableCollectionWrapper<T> {
+		private final ObservableValueSet<? extends ObservableConfig> theConfigs;
 		private final TypeToken<T> theType;
-		@SuppressWarnings("unused")
-		private final Function<? super ObservableConfig, ? extends T> theParser;
-		private final BiConsumer<ObservableConfig, ? super T> theFormat;
-		private final boolean isPassive;
+		private final ObservableConfigFormat<T> theFormat;
+		private final Observable<?> theUntil;
 
+		private final ObservableCollection<ConfigValueElement> theValueElements;
 		private final ObservableCollection<T> theValues;
 
+		private boolean isAdding;
+		private T theAddingValue;
+
 		/**
-		 * @param configs The config values backing each value
-		 * @param type The value type
-		 * @param parser The parser to parse values from configs
-		 * @param format The formatter to persist each value
-		 * @param active Whether to cache and actively maintain the parsed values, or just parse them for each access
+		 * @param configs The set of observable configs backing each entity
+		 * @param type The entity type
+		 * @param format The format for this value set's values
 		 * @param until The observable on which to release resources
 		 */
-		public ObservableConfigValues(ObservableChildSet<? extends ObservableConfig> configs, TypeToken<T> type,
-			Function<? super ObservableConfig, ? extends T> parser, BiConsumer<ObservableConfig, ? super T> format, boolean active,
-			Observable<?> until) {
+		public ObservableConfigValues(ObservableValueSet<? extends ObservableConfig> configs, TypeToken<T> type,
+			ObservableConfigFormat<T> format, Observable<?> until) {
 			theConfigs = configs;
 			theType = type;
-			theParser = parser;
 			theFormat = format;
+			theUntil = until == null ? Observable.empty() : until;
 
-			isPassive = active;
-
-			CollectionDataFlow<? extends ObservableConfig, ?, T> valueFlow = theConfigs.getValues().flow().map(type, parser,
-				opts -> opts.cache(active));
-			if (active)
-				theValues = valueFlow.collectActive(until);
-			else
-				theValues = valueFlow.collectPassive();
+			theValueElements = ((ObservableCollection<ObservableConfig>) theConfigs.getValues()).flow()
+				.map(new TypeToken<ConfigValueElement>() {}, cfg -> new ConfigValueElement(cfg), //
+					opts -> opts.cache(true).reEvalOnUpdate(false))
+				.collectActive(theUntil);
+			Subscription valueElSub = theValueElements.subscribe(evt -> {
+				switch (evt.getType()) {
+				case add:
+					evt.getNewValue().theValueId = evt.getElementId();
+					evt.getNewValue().initialize(isAdding, theAddingValue);
+					break;
+				case remove:
+					evt.getNewValue().removed();
+					break;
+				case set:
+					evt.getNewValue().update(evt);
+					break;
+				}
+			}, true);
+			theUntil.take(1).act(__ -> valueElSub.unsubscribe());
+			theValues = theValueElements.flow().map(type, cve -> cve.theInstance, opts -> opts.cache(false)).collectPassive();
+			init(theValues);
 		}
 
 		@Override
-		public TypeToken<T> getType() {
-			return theType;
+		public String canAdd(T value, ElementId after, ElementId before) {
+			return null;
 		}
 
 		@Override
-		public long getStamp(boolean structuralOnly) {
-			return theValues.getStamp(structuralOnly);
+		public CollectionElement<T> addElement(T value, ElementId after, ElementId before, boolean first)
+			throws UnsupportedOperationException, IllegalArgumentException {
+			try (Transaction t = lock(true, null)) {
+				isAdding = true;
+				theAddingValue = value;
+				after = after == null ? null : theValueElements.getElement(after).get().theConfig.getParentChildRef();
+				before = before == null ? null : theValueElements.getElement(before).get().theConfig.getParentChildRef();
+				return theValueElements.getElementBySource(//
+					theConfigs.create(after, before, first).create(cfg -> {
+						theFormat.format(value, cfg);
+					}).getElementId()).get();
+			} finally {
+				isAdding = false;
+				theAddingValue = null;
+			}
 		}
 
 		@Override
-		public int size() {
-			return theValues.size();
-		}
-
-		@Override
-		public boolean isEmpty() {
-			return theValues.isEmpty();
-		}
-
-		@Override
-		public boolean isLockSupported() {
-			return theValues.isLockSupported();
-		}
-
-		@Override
-		public Transaction lock(boolean write, boolean structural, Object cause) {
-			return theValues.lock(write, structural, cause);
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, boolean structural, Object cause) {
-			return theValues.tryLock(write, structural, cause);
-		}
-
-		@Override
-		public Equivalence<? super T> equivalence() {
-			return theValues.equivalence();
-		}
-
-		@Override
-		public CollectionElement<T> getElement(int index) {
-			return theValues.getElement(index);
-		}
-
-		@Override
-		public boolean isContentControlled() {
-			return theValues.isContentControlled();
-		}
-
-		@Override
-		public int getElementsBefore(ElementId id) {
-			return theValues.getElementsBefore(id);
-		}
-
-		@Override
-		public int getElementsAfter(ElementId id) {
-			return theValues.getElementsAfter(id);
-		}
-
-		@Override
-		public CollectionElement<T> getElement(T value, boolean first) {
-			return theValues.getElement(value, first);
-		}
-
-		@Override
-		public CollectionElement<T> getElement(ElementId id) {
-			return theValues.getElement(id);
-		}
-
-		@Override
-		public CollectionElement<T> getTerminalElement(boolean first) {
-			return theValues.getTerminalElement(first);
-		}
-
-		@Override
-		public CollectionElement<T> getAdjacentElement(ElementId elementId, boolean next) {
-			return theValues.getAdjacentElement(elementId, next);
+		public void setValue(Collection<ElementId> elements, T value) {
+			for (ElementId el : elements)
+				theValueElements.getElement(el).get().set(value);
 		}
 
 		@Override
 		public MutableCollectionElement<T> mutableElement(ElementId id) {
-			MutableCollectionElement<T> backing = theValues.mutableElement(id);
-			class ObservableConfigValuesMCE implements MutableCollectionElement<T> {
-				private ElementId theConfigElement;
-
+			ConfigValueElement cve = theValueElements.getElement(id).get();
+			return new MutableCollectionElement<T>() {
 				@Override
 				public ElementId getElementId() {
-					return backing.getElementId();
+					return id;
 				}
 
 				@Override
 				public T get() {
-					return backing.get();
+					return cve.get();
 				}
 
 				@Override
@@ -419,75 +375,86 @@ public class ObservableConfigContent {
 
 				@Override
 				public String isAcceptable(T value) {
-					return TypeTokens.get().isInstance(theType, value) ? null : StdMsg.BAD_TYPE;
+					return null;
 				}
 
 				@Override
 				public void set(T value) throws UnsupportedOperationException, IllegalArgumentException {
-					if (theConfigElement == null)
-						theConfigElement = getConfigElement(id);
-					theFormat.accept(theConfigs.getValues().getElement(id).get(), value);
+					cve.set(value);
 				}
 
 				@Override
 				public String canRemove() {
-					return backing.canRemove();
+					return null;
 				}
 
 				@Override
 				public void remove() throws UnsupportedOperationException {
-					backing.remove();
+					cve.theConfig.remove();
+				}
+			};
+		}
+
+		class ConfigValueElement implements CollectionElement<T> {
+			private final ObservableConfig theConfig;
+			private final SimpleObservable<Void> theValueUntil;
+			ElementId theValueId;
+			private T theInstance;
+
+			public ConfigValueElement(ObservableConfig config) {
+				theConfig = config;
+				theValueUntil = new SimpleObservable<>(null, false, null, builder -> builder.unsafe().build());
+			}
+
+			@Override
+			public ElementId getElementId() {
+				return theValueId;
+			}
+
+			@Override
+			public T get() {
+				return theInstance;
+			}
+
+			void set(T value) {
+				theFormat.format(value, theConfig);
+				theInstance = value;
+			}
+
+			void initialize(boolean added, T addedValue) {
+				if (added)
+					theInstance = addedValue;
+				else {
+					try {
+						theInstance = theFormat.parse(theConfig, theInstance, null, //
+							Observable.or(theUntil, theValueUntil));
+					} catch (ParseException e) {
+						System.err.println("Could not initialize " + theConfig.getPath() + "(" + theType + ")");
+						e.printStackTrace();
+					}
 				}
 			}
-			return new ObservableConfigValuesMCE();
-		}
 
-		@Override
-		public CollectionElement<T> getElementBySource(ElementId sourceEl) {
-			return theValues.getElementBySource(sourceEl);
-		}
-
-		protected final ElementId getConfigElement(ElementId valueElement) {
-			if (valueElement == null)
-				return null;
-			if (isPassive)
-				return valueElement;
-			else
-				return theConfigs.getValues().getElement(theValues.getElementsBefore(valueElement)).getElementId();
-		}
-
-		@Override
-		public String canAdd(T value, ElementId after, ElementId before) {
-			return null;
-		}
-
-		@Override
-		public CollectionElement<T> addElement(T value, ElementId after, ElementId before, boolean first)
-			throws UnsupportedOperationException, IllegalArgumentException {
-			try (Transaction t = lock(true, true, null)) {
-				ElementId configEl = theConfigs.create(getConfigElement(after), getConfigElement(before), first)
-					.create(cfg -> theFormat.accept(cfg, value)).getElementId();
-				if (isPassive)
-					return theValues.getElement(configEl);
-				else
-					return theValues.getElement(theConfigs.getValues().getElementsBefore(configEl));
+			void update(Causable cause) {
+				ObservableConfigEvent configCause = cause
+					.getCauseLike(c -> c instanceof ObservableConfigEvent ? (ObservableConfigEvent) c : null);
+				try {
+					theInstance = theFormat.parse(theConfig, theInstance, //
+						configCause == null ? null : configCause.asFromChild(), //
+							Observable.or(theUntil, theValueUntil));
+				} catch (ParseException e) {
+					System.err.println("Could not update " + theConfig.getPath() + "(" + theType + ")");
+					e.printStackTrace();
+				}
 			}
-		}
 
-		@Override
-		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends T>> observer) {
-			return theValues.onChange(observer);
-		}
+			void removed() {
+				theValueUntil.onNext(null);
+			}
 
-		@Override
-		public void clear() {
-			theValues.clear();
-		}
-
-		@Override
-		public void setValue(Collection<ElementId> elements, T value) {
-			for (ElementId element : elements) {
-				theFormat.accept(theConfigs.getValues().getElement(getConfigElement(element)).get(), value);
+			@Override
+			public String toString() {
+				return theConfig.toString();
 			}
 		}
 	}
@@ -791,7 +758,7 @@ public class ObservableConfigContent {
 				ObservableConfig lastChild = getConfig()._getContent().getLast();
 				while (lastChild != null) {
 					ObservableConfig nextLast = CollectionElement
-						.get(getConfig()._getContent().getAdjacentElement(lastChild._getParentContentRef(), false));
+						.get(getConfig()._getContent().getAdjacentElement(lastChild.getParentChildRef(), false));
 					lastChild.remove();
 					lastChild = nextLast;
 				}
@@ -897,7 +864,7 @@ public class ObservableConfigContent {
 
 		@Override
 		public ElementId getElementId() {
-			return theConfig._getParentContentRef();
+			return theConfig.getParentChildRef();
 		}
 
 		@Override
@@ -907,7 +874,7 @@ public class ObservableConfigContent {
 
 		@Override
 		public int hashCode() {
-			return theConfig._getParentContentRef().hashCode();
+			return theConfig.getParentChildRef().hashCode();
 		}
 
 		@Override
@@ -1284,7 +1251,7 @@ public class ObservableConfigContent {
 								if (preAddAction != null)
 									preAddAction.accept((C) cfg);
 							});
-						newChildId = theChildren.getElementBySource(newChild._getParentContentRef()).getElementId();
+						newChildId = theChildren.getElementBySource(newChild.getParentChildRef()).getElementId();
 					}
 					return theChildren.getElement(newChildId);
 				}
