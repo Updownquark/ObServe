@@ -7,22 +7,16 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.Consumer;
 
 import org.observe.Observable;
 import org.observe.SimpleObservable;
-import org.observe.Subscription;
-import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
-import org.observe.collect.ObservableCollectionEvent;
 import org.observe.config.ObservableConfig.ObservableConfigEvent;
+import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
 import org.qommons.StringUtils;
 import org.qommons.Transaction;
-import org.qommons.collect.CollectionElement;
-import org.qommons.collect.ElementId;
-import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.QuickSet.QuickMap;
 import org.qommons.io.Format;
 
@@ -245,159 +239,29 @@ public interface ObservableConfigFormat<T> {
 			@Override
 			public C parse(ObservableConfig config, C previousValue, ObservableConfigEvent change, Observable<?> until)
 				throws ParseException {
-				class ConfigContentValueWrapper implements ObservableCollection<E> {
+				class ConfigContentValueWrapper extends ObservableCollectionWrapper<E> {
 					private final ObservableCollection<E> theValues;
 					private final SimpleObservable<Void> theContentUntil;
 
 					ConfigContentValueWrapper(ObservableCollection<E> values, SimpleObservable<Void> contentUntil) {
 						theValues = values;
 						theContentUntil = contentUntil;
+						init(theValues);
 					}
 
 					ObservableConfig getConfig() {
 						return config;
 					}
-
-					@Override
-					public CollectionElement<E> getElement(int index) {
-						return theValues.getElement(index);
-					}
-
-					@Override
-					public boolean isContentControlled() {
-						return theValues.isContentControlled();
-					}
-
-					@Override
-					public int getElementsBefore(ElementId id) {
-						return theValues.getElementsBefore(id);
-					}
-
-					@Override
-					public int getElementsAfter(ElementId id) {
-						return theValues.getElementsAfter(id);
-					}
-
-					@Override
-					public long getStamp(boolean structuralOnly) {
-						return theValues.getStamp(structuralOnly);
-					}
-
-					@Override
-					public CollectionElement<E> getElement(E value, boolean first) {
-						return theValues.getElement(value, first);
-					}
-
-					@Override
-					public CollectionElement<E> getElement(ElementId id) {
-						return theValues.getElement(id);
-					}
-
-					@Override
-					public CollectionElement<E> getTerminalElement(boolean first) {
-						return theValues.getTerminalElement(first);
-					}
-
-					@Override
-					public CollectionElement<E> getAdjacentElement(ElementId elementId, boolean next) {
-						return theValues.getAdjacentElement(elementId, next);
-					}
-
-					@Override
-					public MutableCollectionElement<E> mutableElement(ElementId id) {
-						return theValues.mutableElement(id);
-					}
-
-					@Override
-					public CollectionElement<E> getElementBySource(ElementId sourceEl) {
-						return theValues.getElementBySource(sourceEl);
-					}
-
-					@Override
-					public String canAdd(E value, ElementId after, ElementId before) {
-						return theValues.canAdd(value, after, before);
-					}
-
-					@Override
-					public CollectionElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
-						throws UnsupportedOperationException, IllegalArgumentException {
-						return theValues.addElement(value, after, before, first);
-					}
-
-					@Override
-					public int size() {
-						return theValues.size();
-					}
-
-					@Override
-					public Transaction lock(boolean write, boolean structural, Object cause) {
-						return theValues.lock(write, structural, cause);
-					}
-
-					@Override
-					public Transaction tryLock(boolean write, boolean structural, Object cause) {
-						return theValues.tryLock(write, structural, cause);
-					}
-
-					@Override
-					public boolean isEmpty() {
-						return theValues.isEmpty();
-					}
-
-					@Override
-					public TypeToken<E> getType() {
-						return theValues.getType();
-					}
-
-					@Override
-					public boolean isLockSupported() {
-						return theValues.isLockSupported();
-					}
-
-					@Override
-					public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
-						return theValues.onChange(observer);
-					}
-
-					@Override
-					public void clear() {
-						theValues.clear();
-					}
-
-					@Override
-					public Equivalence<? super E> equivalence() {
-						return theValues.equivalence();
-					}
-
-					@Override
-					public void setValue(Collection<ElementId> elements, E value) {
-						theValues.setValue(elements, value);
-					}
-
-					@Override
-					public int hashCode() {
-						return ObservableCollection.hashCode(this);
-					}
-
-					@Override
-					public boolean equals(Object obj) {
-						return ObservableCollection.equals(this, obj);
-					}
-
-					@Override
-					public String toString() {
-						return ObservableCollection.toString(this);
-					}
 				}
 				if (previousValue == null) {
 					SimpleObservable<Void> contentUntil = new SimpleObservable<>(null, false, null, b -> b.unsafe());
-					return (C) new ConfigContentValueWrapper(config, config.observeValues(childName, elementType, elementFormat, //
+					return (C) new ConfigContentValueWrapper(config.observeValues(childName, elementType, elementFormat, //
 						Observable.or(until, contentUntil)), contentUntil);
 				} else {
 					ConfigContentValueWrapper wrapper = (ConfigContentValueWrapper) previousValue;
 					if (wrapper.getConfig() != config) {
 						wrapper.theContentUntil.onNext(null);
-						return (C) new ConfigContentValueWrapper(config, config.observeValues(childName, elementType, elementFormat, //
+						return (C) new ConfigContentValueWrapper(config.observeValues(childName, elementType, elementFormat, //
 							Observable.or(until, wrapper.theContentUntil)), wrapper.theContentUntil);
 					} else
 						return previousValue;
