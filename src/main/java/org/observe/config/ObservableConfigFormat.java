@@ -1,12 +1,15 @@
 package org.observe.config;
 
 import java.text.ParseException;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 import org.observe.Observable;
 import org.observe.SimpleObservable;
@@ -23,20 +26,31 @@ import org.qommons.io.Format;
 import com.google.common.reflect.TypeToken;
 
 public interface ObservableConfigFormat<T> {
+	public static ObservableConfigFormat<String> TEXT = ofQommonFormat(Format.TEXT, () -> null);
+	public static ObservableConfigFormat<Double> DOUBLE = ofQommonFormat(Format.doubleFormat("0.############E0"), () -> 0.0);
+	public static ObservableConfigFormat<Float> FLOAT = ofQommonFormat(Format.floatFormat("0.########E0"), () -> 0.0f);
+	public static ObservableConfigFormat<Long> LONG = ofQommonFormat(Format.LONG, () -> 0L);
+	public static ObservableConfigFormat<Integer> INT = ofQommonFormat(Format.INT, () -> 0);
+	public static ObservableConfigFormat<Boolean> BOOLEAN = ofQommonFormat(Format.BOOLEAN, () -> false);
+	public static ObservableConfigFormat<Duration> DURATION = ofQommonFormat(Format.DURATION, () -> Duration.ZERO);
+	public static ObservableConfigFormat<Instant> DATE = ofQommonFormat(Format.date("ddMMyyyy HH:mm:ss.SSS"), () -> Instant.now());
+
 	void format(T value, ObservableConfig config);
 
 	T parse(ObservableConfig config, T previousValue, ObservableConfig.ObservableConfigEvent change, Observable<?> until)
 		throws ParseException;
 
-	static <T> ObservableConfigFormat<T> ofQommonFormat(Format<T> format) {
-		return new SimpleConfigFormat<>(format);
+	static <T> ObservableConfigFormat<T> ofQommonFormat(Format<T> format, Supplier<? extends T> defaultValue) {
+		return new SimpleConfigFormat<>(format, defaultValue);
 	}
 
 	class SimpleConfigFormat<T> implements ObservableConfigFormat<T> {
 		public final Format<T> format;
+		public final Supplier<? extends T> defaultValue;
 
-		public SimpleConfigFormat(Format<T> format) {
+		public SimpleConfigFormat(Format<T> format, Supplier<? extends T> defaultValue) {
 			this.format = format;
+			this.defaultValue = defaultValue;
 		}
 
 		@Override
@@ -50,6 +64,8 @@ public interface ObservableConfigFormat<T> {
 		@Override
 		public T parse(ObservableConfig config, T previousValue, ObservableConfig.ObservableConfigEvent change, Observable<?> until)
 			throws ParseException {
+			if (config == null)
+				return defaultValue.get();
 			if (change != null && !change.relativePath.isEmpty())
 				return previousValue; // Changing a sub-config doesn't affect this value
 			String value = config.getValue();
@@ -59,7 +75,7 @@ public interface ObservableConfigFormat<T> {
 		}
 	}
 
-	static <E> ObservableConfigFormat<E> ofEntity(EntityConfiguredValueType<E> entityType, ConfigEntityFieldParser formats) {
+	static <E> EntityConfigFormat<E> ofEntity(EntityConfiguredValueType<E> entityType, ConfigEntityFieldParser formats) {
 		return new EntityConfigFormat<>(entityType, formats);
 	}
 
@@ -103,21 +119,11 @@ public interface ObservableConfigFormat<T> {
 		@Override
 		public E parse(ObservableConfig config, E previousValue, ObservableConfig.ObservableConfigEvent change, Observable<?> until)
 			throws ParseException {
-			if ("true".equalsIgnoreCase(config.get("null")))
+			if (config == null || "true".equalsIgnoreCase(config.get("null")))
 				return null;
-			else if (previousValue == null) {
-				QuickMap<String, Object> fieldValues = entityType.getFields().keySet().createMap();
-				for (int i = 0; i < fieldValues.keySize(); i++) {
-					ObservableConfig fieldConfig = config.getChild(theFieldChildNames.get(i));
-					fieldValues.put(i, fieldFormats[i].parse(fieldConfig, null, null, until));
-				}
-				return entityType.create(//
-					idx -> fieldValues.get(idx), //
-					(idx, value) -> {
-						fieldValues.put(idx, value);
-						formatField(entityType.getFields().get(idx), value, config);
-					});
-			} else {
+			else if (previousValue == null)
+				return createInstance(config, entityType.getFields().keySet().createMap(), until);
+			else {
 				if (change == null) {
 					for (int i = 0; i < entityType.getFields().keySize(); i++)
 						parseUpdatedField(config, i, previousValue, null, until);
@@ -139,7 +145,24 @@ public interface ObservableConfigFormat<T> {
 			}
 		}
 
-		private void formatField(ConfiguredValueField<? super E, ?> field, Object fieldValue, ObservableConfig entityConfig) {
+		public String getChildName(int fieldIndex) {
+			return theFieldChildNames.get(fieldIndex);
+		}
+
+		public E createInstance(ObservableConfig config, QuickMap<String, Object> fieldValues, Observable<?> until) throws ParseException {
+			for (int i = 0; i < fieldValues.keySize(); i++) {
+				ObservableConfig fieldConfig = config.getChild(theFieldChildNames.get(i));
+				fieldValues.put(i, fieldFormats[i].parse(fieldConfig, null, null, until));
+			}
+			return entityType.create(//
+				idx -> fieldValues.get(idx), //
+				(idx, value) -> {
+					fieldValues.put(idx, value);
+					formatField(entityType.getFields().get(idx), value, config);
+				});
+		}
+
+		public void formatField(ConfiguredValueField<? super E, ?> field, Object fieldValue, ObservableConfig entityConfig) {
 			boolean[] added = new boolean[1];
 			if (fieldValue != null) {
 				ObservableConfig fieldConfig = entityConfig.getChild(theFieldChildNames.get(field.getIndex()), true, fc -> {
@@ -155,7 +178,7 @@ public interface ObservableConfigFormat<T> {
 			}
 		}
 
-		private void parseUpdatedField(ObservableConfig entityConfig, int fieldIdx, E previousValue,
+		public void parseUpdatedField(ObservableConfig entityConfig, int fieldIdx, E previousValue,
 			ObservableConfig.ObservableConfigEvent change, Observable<?> until) throws ParseException {
 			ConfiguredValueField<? super E, ?> field = entityType.getFields().get(fieldIdx);
 			Object oldValue = field.get(previousValue);

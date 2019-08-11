@@ -13,7 +13,6 @@ import org.observe.SimpleObservable;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfig.XmlEncoding;
 import org.observe.util.TypeTokens;
-import org.qommons.io.Format;
 import org.xml.sax.SAXException;
 
 public class ObservableConfigTest {
@@ -65,7 +64,7 @@ public class ObservableConfigTest {
 		readXml(getClass().getResourceAsStream("TestValues.xml"));
 
 		ObservableCollection<Integer> testValues = theConfig.observeValues("test-values/test-value", TypeTokens.get().INT,
-			ObservableConfigFormat.ofQommonFormat(Format.INT), null);
+			ObservableConfigFormat.INT, until);
 		int i = 0;
 		for (Integer value : testValues) {
 			Assert.assertEquals(i, value.intValue());

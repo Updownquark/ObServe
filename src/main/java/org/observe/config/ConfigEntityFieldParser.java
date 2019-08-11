@@ -1,86 +1,58 @@
 package org.observe.config;
 
-import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.function.BiConsumer;
-import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
 import org.observe.util.TypeTokens;
 import org.qommons.io.Format;
 
+import com.google.common.reflect.TypeToken;
+
 public class ConfigEntityFieldParser {
-	private final Map<Class<?>, Format<?>> theCustomSimpleFormats;
-	private final Map<Class<?>, Supplier<?>> theCustomDefaultValues;
-	private final Map<Class<?>, BiConsumer<?, ObservableConfig>> theCustomFormats;
-	private final Map<Class<?>, BiFunction<?, ObservableConfig, ?>> theCustomParsers;
+	public interface ConfigFormatGenerator<T> {
+		ObservableConfigFormat<T> formatFor(TypeToken<T> type);
+	}
+
+	public static <T> ConfigFormatGenerator<T> generate(ObservableConfigFormat<T> format) {
+		return type -> format;
+	}
+
+	private final Map<Class<?>, ConfigFormatGenerator<?>> theFormats;
 
 	public ConfigEntityFieldParser() {
-		theCustomSimpleFormats = new HashMap<>();
-		theCustomDefaultValues = new HashMap<>();
-		theCustomFormats = new HashMap<>();
-		theCustomParsers = new HashMap<>();
+		theFormats = new HashMap<>();
 	}
 
 	public <T> ConfigEntityFieldParser forSimpleType(Class<T> type, Format<T> format, Supplier<? extends T> defaultValue) {
-		theCustomSimpleFormats.put(type, format);
-		theCustomDefaultValues.put(type, defaultValue);
+		theFormats.put(type, generate(ObservableConfigFormat.ofQommonFormat(format, defaultValue)));
 		return this;
 	}
 
 	public <T> ObservableConfigFormat<T> getConfigFormat(ConfiguredValueField<?, T> field) {
-	}
-
-	public <T> Format<T> getFieldFormat(ConfiguredValueField<?, T> field) {
-		Class<?> rawType = TypeTokens.get().wrap(TypeTokens.getRawType(field.getFieldType()));
-		Format<T> format = (Format<T>) theCustomSimpleFormats.get(rawType);
-		if (format != null)
-			return format;
-		if (rawType == String.class)
-			return (Format<T>) Format.TEXT;
-		else if (rawType == Boolean.class)
-			return (Format<T>) Format.BOOLEAN;
-		else if (rawType == Integer.class)
-			return (Format<T>) Format.INT;
-		else if (rawType == Double.class)
-			return (Format<T>) Format.doubleFormat("0.0############E0");
-		else if (rawType == Float.class)
-			return (Format<T>) Format.floatFormat("0.0########");
-		else if (rawType == Long.class)
-			return (Format<T>) Format.LONG;
-		else if (rawType == Duration.class)
-			return (Format<T>) Format.DURATION;
-		else if (rawType == Instant.class)
-			return (Format<T>) Format.date(new SimpleDateFormat("ddMMyyyy HH:mm:ss.SSS"));
+		Class<T> raw = TypeTokens.getRawType(TypeTokens.get().unwrap(field.getFieldType()));
+		ConfigFormatGenerator<T> gen = (ConfigFormatGenerator<T>) theFormats.get(raw);
+		if (gen != null)
+			return gen.formatFor(field.getFieldType());
+		if (raw == String.class)
+			return (ObservableConfigFormat<T>) ObservableConfigFormat.TEXT;
+		else if (raw == double.class)
+			return (ObservableConfigFormat<T>) ObservableConfigFormat.DOUBLE;
+		else if (raw == float.class)
+			return (ObservableConfigFormat<T>) ObservableConfigFormat.FLOAT;
+		else if (raw == boolean.class)
+			return (ObservableConfigFormat<T>) ObservableConfigFormat.BOOLEAN;
+		else if (raw == long.class)
+			return (ObservableConfigFormat<T>) ObservableConfigFormat.LONG;
+		else if (raw == int.class)
+			return (ObservableConfigFormat<T>) ObservableConfigFormat.INT;
+		else if (raw == Duration.class)
+			return (ObservableConfigFormat<T>) ObservableConfigFormat.DURATION;
+		else if (raw == Instant.class)
+			return (ObservableConfigFormat<T>) ObservableConfigFormat.DATE;
 		else
-			throw new IllegalArgumentException("Cannot format type " + rawType.getName() + " of field " + field + " by default");
-	}
-
-	public <T> T getDefaultValue(ConfiguredValueField<?, T> field) {
-		Class<?> rawType = TypeTokens.get().wrap(TypeTokens.getRawType(field.getFieldType()));
-		Supplier<T> dv = (Supplier<T>) theCustomDefaultValues.get(rawType);
-		if (dv != null)
-			return dv.get();
-		if (rawType == String.class)
-			return (T) "";
-		else if (rawType == Boolean.class)
-			return (T) Boolean.FALSE;
-		else if (rawType == Integer.class)
-			return (T) Integer.valueOf(0);
-		else if (rawType == Double.class)
-			return (T) Double.valueOf(0);
-		else if (rawType == Float.class)
-			return (T) Float.valueOf(0);
-		else if (rawType == Long.class)
-			return (T) Long.valueOf(0);
-		else if (rawType == Duration.class)
-			return (T) Duration.ZERO;
-		else if (rawType == Instant.class)
-			return (T) Instant.now();
-		else
-			throw new IllegalArgumentException("Cannot format type " + rawType.getName() + " of field " + field + " by default");
+			throw new IllegalArgumentException("No custom or default format available for type " + raw.getName() + " of field " + field);
 	}
 }

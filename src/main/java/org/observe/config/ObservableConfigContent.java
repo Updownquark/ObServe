@@ -33,7 +33,6 @@ import org.observe.config.ObservableConfig.ObservableConfigPathElement;
 import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
-import org.qommons.StringUtils;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.CollectionElement;
@@ -43,7 +42,6 @@ import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 import org.qommons.collect.QuickSet;
 import org.qommons.collect.QuickSet.QuickMap;
-import org.qommons.io.Format;
 
 import com.google.common.reflect.TypeToken;
 
@@ -99,7 +97,7 @@ public class ObservableConfigContent {
 			case add:
 				// This can affect the value if the new value matches the path and appears before the currently-used config
 				if (thePath.getElements().get(pathIndex - 1).matches(newValue) && (thePathElements[pathIndex] == null//
-					|| newValue.getParentChildRef().compareTo(thePathElements[pathIndex].getParentChildRef()) < 0))
+				|| newValue.getParentChildRef().compareTo(thePathElements[pathIndex].getParentChildRef()) < 0))
 					reCheck = true; // The new element needs to replace the current element at the path index
 				break;
 			case remove:
@@ -467,12 +465,13 @@ public class ObservableConfigContent {
 	protected static class ObservableConfigEntityValues<T> implements ObservableValueSet<T> {
 		private final ObservableValueSet<? extends ObservableConfig> theConfigs;
 		private final EntityConfiguredValueType<T> theType;
-		private final QuickMap<String, String> theFieldChildNames;
 		private final ConfigEntityFieldParser theFieldParser;
+		private final ObservableConfigFormat.EntityConfigFormat<T> theEntityFormat;
 
 		private final ObservableCollection<ConfigValueElement> theValueElements;
 		private final ObservableCollection<T> theValues;
 
+		private final Observable<?> theUntil;
 		QuickMap<String, Object> theNewInstanceFields;
 		Consumer<? super T> thePreAddAction;
 		ConfigValueElement theNewElement;
@@ -497,14 +496,15 @@ public class ObservableConfigContent {
 				throw new IllegalStateException(e);
 			}
 			theType = new EntityConfiguredValueType<>(type, customMethods);
-			theFieldChildNames = theType.getFields().keySet().createMap(//
-				fieldIndex -> StringUtils.parseByCase(theType.getFields().keySet().get(fieldIndex)).toKebabCase()).unmodifiable();
+			theEntityFormat = ObservableConfigFormat.ofEntity(theType, fieldParser);
 			theFieldParser = fieldParser;
 
 			theValueElements = ((ObservableCollection<ObservableConfig>) theConfigs.getValues()).flow()
 				.map(new TypeToken<ConfigValueElement>() {}, cfg -> new ConfigValueElement(cfg), //
 					opts -> opts.cache(true).reEvalOnUpdate(false))
 				.collectActive(until);
+			theUntil = until == null ? Observable.empty() : until;
+
 			Subscription valueElSub = theValueElements.subscribe(evt -> {
 				if (isUpdating)
 					return;
@@ -561,9 +561,8 @@ public class ObservableConfigContent {
 				@Override
 				public <F> ValueCreator<T> with(ConfiguredValueField<? super T, F> field, F value) throws IllegalArgumentException {
 					super.with(field, value);
-					Format<F> fieldFormat = theFieldParser.getFieldFormat(field);
-					String formatted = fieldFormat.format(value);
-					theConfigCreator.with(theFieldChildNames.get(field.getIndex()), formatted);
+					theFieldParser.getConfigFormat(field); // Throws an exception if not supported
+					getFieldValues().put(field.getName(), value);
 					return this;
 				}
 
@@ -573,7 +572,13 @@ public class ObservableConfigContent {
 					try (Transaction t = theConfigs.getValues().lock(true, null)) {
 						thePreAddAction = preAddAction;
 						theNewInstanceFields = getFieldValues();
-						theConfigCreator.create();
+						theConfigCreator.create(cfg -> {
+							for (int i = 0; i < getFieldValues().keySize(); i++) {
+								Object value = getFieldValues().get(i);
+								if (value != null)
+									theEntityFormat.formatField(theType.getFields().get(i), value, cfg);
+							}
+						});
 						theNewInstanceFields = null;
 						cve = theNewElement;
 						theNewElement = null;
@@ -586,7 +591,6 @@ public class ObservableConfigContent {
 
 		class ConfigValueElement implements CollectionElement<T> {
 			private final ObservableConfig theConfig;
-			private QuickMap<String, Object> theFieldValues;
 			ElementId theValueId;
 			private T theInstance;
 
@@ -595,9 +599,14 @@ public class ObservableConfigContent {
 			}
 
 			void initialize(QuickMap<String, Object> fieldValues) {
-				theFieldValues = fieldValues == null ? theType.getFields().keySet().createMap() : fieldValues.copy();
-				theInstance = theType.create(this::getField, this::setField);
-				theType.associate(theInstance, this);
+				fieldValues = fieldValues == null ? theType.getFields().keySet().createMap() : fieldValues.copy();
+				try {
+					theInstance = theEntityFormat.createInstance(theConfig, fieldValues, theUntil);
+					theType.associate(theInstance, this);
+				} catch (ParseException e) {
+					System.err.println("Could not parse instance for " + theConfig);
+					e.printStackTrace();
+				}
 			}
 
 			@Override
@@ -613,59 +622,25 @@ public class ObservableConfigContent {
 			void update(Causable cause) {
 				ObservableConfigEvent configCause = cause
 					.getCauseLike(c -> c instanceof ObservableConfigEvent ? (ObservableConfigEvent) c : null);
-				if (configCause != null && configCause.relativePath.size() > 1) {
-					ObservableConfig child = configCause.relativePath.get(1);
-					int field = theFieldValues.keyIndexTolerant(child.getName());
-					if (field >= 0)
-						theFieldValues.put(field, null); // Clear the cache for the specific field, re-parse when needed
-				} else
-					theFieldValues.clear(); // Clear the cache for all fields, re-parse each when needed
-			}
-
-			Object getField(int fieldIndex) {
-				Object value = theFieldValues.get(fieldIndex);
-				if (value == null) {
-					String serialized = theConfig.get(theFieldValues.keySet().get(fieldIndex));
-					if (serialized != null) {
-						try {
-							theFieldValues.put(fieldIndex,
-								value = theFieldParser.getFieldFormat(theType.getFields().get(fieldIndex)).parse(serialized));
-						} catch (ParseException e) {
-							throw new IllegalStateException(
-								"Could not parse value \"" + serialized + "\" fpr field " + theType.getFields().get(fieldIndex) + ": "
-									+ e.getMessage(),
-									e);
-						}
-					} else
-						value = theFieldParser.getDefaultValue(theType.getFields().get(fieldIndex));
+				try {
+					theEntityFormat.parse(theConfig, theInstance, configCause, theUntil);
+				} catch (ParseException e) {
+					System.err.println("Could not update instance for " + theConfig);
+					e.printStackTrace();
 				}
-				return value;
-			}
-
-			Object setField(int fieldIndex, Object fieldValue) {
-				Format<Object> fieldFormat = (Format<Object>) theFieldParser.getFieldFormat(theType.getFields().get(fieldIndex));
-				String formatted = fieldFormat.format(fieldValue);
-				try (Transaction t = theConfigs.getValues().lock(true, null)) {
-					isUpdating = true;
-					theFieldValues.put(fieldIndex, fieldValue);
-					theConfig.set(theFieldChildNames.get(fieldIndex), formatted);
-				} finally {
-					isUpdating = false;
-				}
-				return null; // Return value doesn't mean anything
 			}
 
 			String print() {
 				StringBuilder str = new StringBuilder(theConfig.getName()).append('(');
 				boolean first = true;
-				for (int i = 0; i < theFieldValues.keySet().size(); i++) {
-					String value = theConfig.get(theFieldValues.keySet().get(i));
+				for (int i = 0; i < theType.getFields().keySet().size(); i++) {
+					String value = theConfig.get(theEntityFormat.getChildName(i));
 					if (value != null) {
 						if (first)
 							first = false;
 						else
 							str.append(", ");
-						str.append(theFieldValues.keySet().get(i)).append('=').append(value);
+						str.append(theType.getFields().keySet().get(i)).append('=').append(value);
 					}
 				}
 				str.append(')');
