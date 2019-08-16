@@ -55,10 +55,13 @@ public interface ObservableConfigFormat<T> {
 
 		@Override
 		public void format(T value, ObservableConfig config) {
+			String formatted;
 			if (value == null)
-				config.setValue(null);
+				formatted = null;
 			else
-				config.setValue(format.format(value));
+				formatted = format.format(value);
+			if (!Objects.equals(formatted, config.getValue()))
+				config.setValue(formatted);
 		}
 
 		@Override
@@ -66,7 +69,7 @@ public interface ObservableConfigFormat<T> {
 			throws ParseException {
 			if (config == null)
 				return defaultValue.get();
-			if (change != null && !change.relativePath.isEmpty())
+			if (change != null && change.relativePath.size() > 1)
 				return previousValue; // Changing a sub-config doesn't affect this value
 			String value = config.getValue();
 			if (value == null)
@@ -100,6 +103,10 @@ public interface ObservableConfigFormat<T> {
 			theFieldsByChildName = QuickMap.of(fcnReverse, String::compareTo);
 		}
 
+		public EntityConfiguredValueType<E> getEntityType() {
+			return entityType;
+		}
+
 		@Override
 		public void format(E value, ObservableConfig config) {
 			if (value == null) {
@@ -119,7 +126,7 @@ public interface ObservableConfigFormat<T> {
 		@Override
 		public E parse(ObservableConfig config, E previousValue, ObservableConfig.ObservableConfigEvent change, Observable<?> until)
 			throws ParseException {
-			if (config == null || "true".equalsIgnoreCase(config.get("null")))
+			if (config != null && "true".equalsIgnoreCase(config.get("null")))
 				return null;
 			else if (previousValue == null)
 				return createInstance(config, entityType.getFields().keySet().createMap(), until);
@@ -130,9 +137,9 @@ public interface ObservableConfigFormat<T> {
 				} else if (change.relativePath.isEmpty()) {
 					// Change to the value doesn't change any fields
 				} else {
-					ObservableConfig child = change.relativePath.get(0);
+					ObservableConfig child = change.relativePath.get(1);
 					int fieldIdx = theFieldsByChildName.keyIndexTolerant(child.getName());
-					if (change.relativePath.size() == 1 && !change.oldName.equals(child.getName())) {
+					if (change.relativePath.size() == 2 && !change.oldName.equals(child.getName())) {
 						if (fieldIdx >= 0)
 							parseUpdatedField(config, fieldIdx, previousValue, change, until);
 						fieldIdx = theFieldsByChildName.keyIndexTolerant(change.oldName);
@@ -183,7 +190,7 @@ public interface ObservableConfigFormat<T> {
 			ConfiguredValueField<? super E, ?> field = entityType.getFields().get(fieldIdx);
 			Object oldValue = field.get(previousValue);
 			ObservableConfig fieldConfig = entityConfig.getChild(theFieldChildNames.get(fieldIdx));
-			if (change != null && fieldConfig != change.relativePath.get(0))
+			if (change != null && fieldConfig != change.relativePath.get(1))
 				return; // The update does not actually affect the field value
 			Object newValue = ((ObservableConfigFormat<Object>) fieldFormats[fieldIdx]).parse(fieldConfig, oldValue,
 				change == null ? null : change.asFromChild(), until);
@@ -213,6 +220,13 @@ public interface ObservableConfigFormat<T> {
 							if (elementFormat instanceof SimpleConfigFormat) {
 								return Objects.equals(o1.getValue(),
 									o2 == null ? null : ((SimpleConfigFormat<E>) elementFormat).format.format(o2));
+								// } else if (elementFormat instanceof EntityConfigFormat
+								// && !((EntityConfigFormat<?>) elementFormat).getEntityType().getIdFields().isEmpty()) {
+								// EntityConfiguredValueType<?> entityType = ((EntityConfigFormat<?>) elementFormat).getEntityType();
+								// for(int i : entityType.getIdFields()){
+								// ConfiguredValueField<?, ?> f = entityType.getFields().get(i);
+								// TODO
+								// }
 							} else
 								return true; // No way to tell different values apart, just gotta reformat
 						}

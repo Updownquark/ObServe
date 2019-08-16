@@ -45,6 +45,11 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 		return (QuickMap<String, ConfiguredValueField<? super E, ?>>) (QuickMap<?, ?>) theFields;
 	}
 
+	/** @return The set of field IDs that are marked as identifying for this type */
+	public Set<Integer> getIdFields() {
+		return theReflector.getIdFields();
+	}
+
 	@Override
 	public int getFieldIndex(Function<? super E, ?> fieldGetter) {
 		return theReflector.getFieldIndex(fieldGetter);
@@ -59,12 +64,12 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 		return theReflector.newInstance(fieldGetter, fieldSetter);
 	}
 
-	public E associate(E entity, Object associated) {
-		return theReflector.associate(entity, associated);
+	public E associate(E entity, Object key, Object associated) {
+		return theReflector.associate(entity, key, associated);
 	}
 
-	public Object getAssociated(E entity) {
-		return theReflector.getAssociated(entity);
+	public Object getAssociated(E entity, Object key) {
+		return theReflector.getAssociated(entity, key);
 	}
 
 	@Override

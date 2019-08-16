@@ -1,5 +1,6 @@
 package org.observe.util;
 
+import java.lang.annotation.Annotation;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.reflect.Constructor;
@@ -9,7 +10,9 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Proxy;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.BiConsumer;
@@ -99,14 +102,16 @@ public class EntityReflector<E> {
 	public static class ReflectedField<E, F> {
 		private final String theName;
 		private int theFieldIndex;
+		private boolean id;
 		private final Invokable<? super E, F> theGetter;
 		private final Invokable<? super E, ?> theSetter;
 		private final SetterReturnType theSetterReturnType;
 
-		ReflectedField(String name, int fieldIndex, Invokable<? super E, F> getter, Invokable<? super E, ?> setter,
+		ReflectedField(String name, int fieldIndex, boolean id, Invokable<? super E, F> getter, Invokable<? super E, ?> setter,
 			SetterReturnType setterReturnType) {
 			theName = name;
 			theFieldIndex = fieldIndex;
+			this.id = id;
 			theGetter = getter;
 			theSetter = setter;
 			theSetterReturnType = setterReturnType;
@@ -120,6 +125,10 @@ public class EntityReflector<E> {
 		/** @return The field index, i.e. the index of this field in {@link EntityReflector#getFields()} */
 		public int getFieldIndex() {
 			return theFieldIndex;
+		}
+
+		public boolean isId() {
+			return id;
 		}
 
 		/** @return The entity type's getter method for this field */
@@ -189,6 +198,7 @@ public class EntityReflector<E> {
 	private final QuickMap<String, ReflectedField<E, ?>> theFieldsBySetter;
 	private final QuickMap<MethodSignature, BiFunction<? super E, Object[], ?>> theCustomMethods;
 	private final QuickMap<MethodSignature, MethodHandle> theDefaultMethods;
+	private final Set<Integer> theIdFields;
 	private final E theProxy;
 	private final MethodRetrievingHandler theProxyHandler;
 
@@ -219,6 +229,23 @@ public class EntityReflector<E> {
 		populateMethods(theType, fieldGetters, theGetterFilter, fieldSetters, theSetterFilter, defaultMethods, //
 			customMethods == null ? Collections.emptySet() : customMethods.keySet());
 		QuickMap<String, ReflectedField<E, ?>> fields = QuickSet.of(fieldGetters.keySet()).createMap();
+		LinkedHashSet<Integer> idFields = new LinkedHashSet<>();
+		// First, see if any fields are tagged with @Id
+		for (Map.Entry<String, Invokable<? super E, ?>> getter : fieldGetters.entrySet()) {
+			for (Annotation annotation : getter.getValue().getAnnotations()) {
+				if (annotation.annotationType().getSimpleName().equalsIgnoreCase("id")) // Any old ID annotation will do
+					idFields.add(fields.keySet().indexOf(getter.getKey()));
+			}
+		}
+		if (idFields.isEmpty()) {
+			// Otherwise, see if there is a field named ID
+			for (int i = 0; i < fields.keySize(); i++)
+				if (fields.keySet().get(i).equalsIgnoreCase("id")) {
+					idFields.add(i);
+					break;
+				}
+		}
+		theIdFields = idFields.isEmpty() ? Collections.emptySet() : Collections.unmodifiableSet(idFields);
 		Map<String, ReflectedField<E, ?>> fieldsByGetter = new LinkedHashMap<>();
 		Map<String, ReflectedField<E, ?>> fieldsBySetter = new LinkedHashMap<>();
 		for (int i = 0; i < fields.keySet().size(); i++) {
@@ -242,7 +269,8 @@ public class EntityReflector<E> {
 					setter = null;
 				}
 			}
-			ReflectedField<E, ?> field = new ReflectedField<>(fields.keySet().get(i), i, getter, setter, setterReturnType);
+			ReflectedField<E, ?> field = new ReflectedField<>(fields.keySet().get(i), i, idFields.contains(i), getter, setter,
+				setterReturnType);
 			fields.put(i, field);
 			fieldsByGetter.put(getter.getName(), field);
 			if (setter != null)
@@ -315,6 +343,11 @@ public class EntityReflector<E> {
 		return theFields;
 	}
 
+	/** @return The set of field IDs that are marked as identifying for this type */
+	public Set<Integer> getIdFields() {
+		return theIdFields;
+	}
+
 	/**
 	 * @param fieldGetter A function invoking a field getter on this type
 	 * @return The index in {@link #getFields()} of the field invoked. If the function invokes multiple methods, this will be last method
@@ -355,21 +388,23 @@ public class EntityReflector<E> {
 	 * Allows the association of an entity with a custom piece of information (retrievable via {@link #getAssociated(Object)})
 	 *
 	 * @param proxy The entity created with {@link #newInstance(IntFunction, BiConsumer)}
-	 * @param associated The data to associate with the entity
+	 * @param key The key to associate the data with
+	 * @param associated The data to associate with the entity for the key
 	 * @return The entity
 	 */
-	public E associate(E proxy, Object associated) {
+	public E associate(E proxy, Object key, Object associated) {
 		ProxyMethodHandler handler = (EntityReflector<E>.ProxyMethodHandler) Proxy.getInvocationHandler(proxy);
-		handler.theAssociated = associated;
+		handler.associate(key, associated);
 		return proxy;
 	}
 
 	/**
 	 * @param proxy The entity created with {@link #newInstance(IntFunction, BiConsumer)}
-	 * @return The data {@link #associate(Object, Object) associated} with the entity
+	 * @param key The key the data is associated with
+	 * @return The data {@link #associate(Object, Object, Object) associated} with the entity and key
 	 */
-	public Object getAssociated(E proxy) {
-		return ((ProxyMethodHandler) Proxy.getInvocationHandler(proxy)).theAssociated;
+	public Object getAssociated(E proxy, Object key) {
+		return ((ProxyMethodHandler) Proxy.getInvocationHandler(proxy)).getAssociated(key);
 	}
 
 	public Object getField(E proxy, int fieldIndex) {
@@ -386,12 +421,22 @@ public class EntityReflector<E> {
 		private final IntFunction<Object> theFieldGetter;
 		private final BiConsumer<Integer, Object> theFieldSetter;
 		private final Class<?> theRawType;
-		Object theAssociated;
+		private IdentityHashMap<Object, Object> theAssociated;
 
 		ProxyMethodHandler(IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter) {
 			theFieldGetter = fieldGetter;
 			theFieldSetter = fieldSetter;
 			theRawType = TypeTokens.getRawType(theType);
+		}
+
+		Object associate(Object key, Object value) {
+			if (theAssociated == null)
+				theAssociated = new IdentityHashMap<>();
+			return theAssociated.put(key, value);
+		}
+
+		Object getAssociated(Object key) {
+			return theAssociated == null ? null : theAssociated.get(key);
 		}
 
 		@Override

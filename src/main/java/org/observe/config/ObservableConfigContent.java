@@ -489,7 +489,7 @@ public class ObservableConfigContent {
 			Map<Method, BiFunction<T, Object[], Object>> customMethods = new HashMap<>();
 			try {
 				customMethods.put(Object.class.getDeclaredMethod("toString"), (proxy, args) -> {
-					ConfigValueElement cve = (ConfigValueElement) ((EntityConfiguredValueType<T>) getType()).getAssociated(proxy);
+					ConfigValueElement cve = (ConfigValueElement) ((EntityConfiguredValueType<T>) getType()).getAssociated(proxy, this);
 					return cve.print();
 				});
 			} catch (NoSuchMethodException | SecurityException e) {
@@ -602,7 +602,7 @@ public class ObservableConfigContent {
 				fieldValues = fieldValues == null ? theType.getFields().keySet().createMap() : fieldValues.copy();
 				try {
 					theInstance = theEntityFormat.createInstance(theConfig, fieldValues, theUntil);
-					theType.associate(theInstance, this);
+					theType.associate(theInstance, ObservableConfigEntityValues.this, this);
 				} catch (ParseException e) {
 					System.err.println("Could not parse instance for " + theConfig);
 					e.printStackTrace();
