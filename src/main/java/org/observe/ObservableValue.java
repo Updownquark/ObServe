@@ -54,13 +54,17 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 	T get();
 
 	/**
-	 * @return An observable that fires an {@link ObservableValueEvent#isInitial() initial} event for the current value and subsequent
-	 *         change events when this value changes, and also an initial event for the value when subscribed
+	 * @return An observable that fires an {@link ObservableValueEvent#isInitial() initial} event for the current value when subscribed, and
+	 *         subsequent change events when this value changes
 	 */
 	default Observable<ObservableValueEvent<T>> changes() {
 		return new ObservableValueChanges<>(this);
 	}
 
+	/**
+	 * @return An observable that fires an event when this value changes. Unlike {@link #changes()}, this method does not fire an initial
+	 *         event for the value when subscribed (unless the value happens to change during subscription, which is allowed).
+	 */
 	Observable<ObservableValueEvent<T>> noInitChanges();
 
 	@Override
@@ -331,7 +335,7 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 	 * @param value The value to wrap
 	 * @return An observable that always returns the given value
 	 */
-	public static <X> ObservableValue<X> of(final X value) {
+	public static <X> ObservableValue<X> of(X value) {
 		if (value == null)
 			throw new IllegalArgumentException("Cannot call constant(value) with a null value.  Use constant(TypeToken<X>, X).");
 		return new ConstantObservableValue<>(TypeTokens.get().of((Class<X>) value.getClass()), value);
@@ -343,8 +347,19 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 	 * @param value The value to wrap
 	 * @return An observable that always returns the given value
 	 */
-	public static <X> ObservableValue<X> of(final TypeToken<X> type, final X value) {
+	public static <X> ObservableValue<X> of(TypeToken<X> type, X value) {
 		return new ConstantObservableValue<>(type, value);
+	}
+
+	/**
+	 * @param <X> The compile-time type of the value to wrap
+	 * @param type The run-time type of the value to wrap
+	 * @param value Supplies the value for the observable
+	 * @param changes The observable that signals that the value may have changed
+	 * @return An observable that supplies the value of the given supplier, firing change events when the given observable fires
+	 */
+	public static <X> ObservableValue<X> of(TypeToken<X> type, Supplier<? extends X> value, Observable<?> changes) {
+		return new SyntheticObservable<>(type, value, changes);
 	}
 
 	/**
@@ -482,10 +497,16 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 		return new ComposedObservableValue<>(t, c -> value.get(), new XformOptions.XformDef(opts), components);
 	}
 
+	/**
+	 * Implements {@link ObservableValue#changes()} by default
+	 *
+	 * @param <T> The type of the value
+	 */
 	public class ObservableValueChanges<T> implements Observable<ObservableValueEvent<T>> {
 		private final ObservableValue<T> theValue;
 		private final Observable<ObservableValueEvent<T>> theNoInitChanges;
 
+		/** @param value The value that this changes observable is for */
 		public ObservableValueChanges(ObservableValue<T> value) {
 			theValue = value;
 			theNoInitChanges = value.noInitChanges();
@@ -954,6 +975,116 @@ public interface ObservableValue<T> extends java.util.function.Supplier<T>, Lock
 		@Override
 		public String toString() {
 			return "" + theValue;
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableValue#of(TypeToken, Supplier, Observable)}
+	 *
+	 * @param <T> The type of this value
+	 */
+	class SyntheticObservable<T> implements ObservableValue<T> {
+		private final TypeToken<T> theType;
+		private final Supplier<? extends T> theValue;
+		private final Observable<?> theChanges;
+
+		public SyntheticObservable(TypeToken<T> type, Supplier<? extends T> value, Observable<?> changes) {
+			theType = type;
+			theValue = value;
+			theChanges = changes;
+		}
+
+		@Override
+		public TypeToken<T> getType() {
+			return theType;
+		}
+
+		@Override
+		public T get() {
+			return theValue.get();
+		}
+
+		@Override
+		public Observable<ObservableValueEvent<T>> changes() {
+			return changes(true);
+		}
+
+		@Override
+		public Observable<ObservableValueEvent<T>> noInitChanges() {
+			return changes(false);
+		}
+
+		private Observable<ObservableValueEvent<T>> changes(boolean withInit) {
+			return new Observable<ObservableValueEvent<T>>() {
+				@Override
+				public Subscription subscribe(Observer<? super ObservableValueEvent<T>> observer) {
+					class SyntheticChanges implements Observer<Object> {
+						T theCurrentValue;
+						boolean isInitialized;
+
+						void initialize() {
+							isInitialized = true;
+							theCurrentValue = theValue.get();
+							if (withInit)
+								observer.onNext(createInitialEvent(theCurrentValue, null));
+						}
+
+						@Override
+						public <V> void onNext(V value) {
+							boolean init = !isInitialized;
+							T newValue = theValue.get();
+							T oldValue = theCurrentValue;
+							theCurrentValue = newValue;
+							if (init) {
+								isInitialized = true;
+								if (!withInit)
+									init = false;
+							}
+							if (init)
+								observer.onNext(createInitialEvent(newValue, value));
+							else
+								observer.onNext(createChangeEvent(oldValue, newValue, value));
+						}
+
+						@Override
+						public <V> void onCompleted(V value) {
+							T oldValue;
+							if (isInitialized)
+								oldValue = theCurrentValue;
+							else {
+								theCurrentValue = oldValue = theValue.get();
+								isInitialized = true;
+							}
+							observer.onCompleted(createChangeEvent(oldValue, oldValue, value));
+						}
+					}
+					SyntheticChanges changes = new SyntheticChanges();
+					Subscription sub = theChanges.subscribe(changes);
+					if (!changes.isInitialized) {
+						try (Transaction t = theChanges.lock()) {
+							if (!changes.isInitialized) {
+								changes.initialize();
+							}
+						}
+					}
+					return sub;
+				}
+
+				@Override
+				public boolean isSafe() {
+					return theChanges.isSafe();
+				}
+
+				@Override
+				public Transaction lock() {
+					return theChanges.lock();
+				}
+
+				@Override
+				public Transaction tryLock() {
+					return theChanges.tryLock();
+				}
+			};
 		}
 	}
 
