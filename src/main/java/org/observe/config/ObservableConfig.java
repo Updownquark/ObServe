@@ -119,12 +119,12 @@ public class ObservableConfig implements StructuredTransactable {
 				if (pathIter.hasNext()) {
 					if (!matcherIter.next().matches(pathIter.next()))
 						return false;
-				} else if (!ANY_DEPTH.equals(matcherIter.next().getName()))
+				} else if (!matcherIter.next().isMultiDepth())
 					return false;
 			}
 			if (matcherIter.hasNext())
 				return false;
-			else if (pathIter.hasNext() && !ANY_DEPTH.equals(getLastElement().getName()))
+			else if (pathIter.hasNext() && !getLastElement().isMultiDepth())
 				return false;
 			else
 				return true;
@@ -163,11 +163,13 @@ public class ObservableConfig implements StructuredTransactable {
 		private final String theName;
 		private final Map<String, String> theAttributes;
 		private final boolean isMulti;
+		private final boolean isMultiDepth;
 
-		protected ObservableConfigPathElement(String name, Map<String, String> attributes, boolean multi) {
+		protected ObservableConfigPathElement(String name, Map<String, String> attributes, boolean multi, boolean multiDepth) {
 			theName = name;
 			theAttributes = attributes;
-			isMulti = multi;
+			isMulti = multi || multiDepth;
+			isMultiDepth = multiDepth;
 		}
 
 		public String getName() {
@@ -180,6 +182,10 @@ public class ObservableConfig implements StructuredTransactable {
 
 		public boolean isMulti() {
 			return isMulti;
+		}
+
+		public boolean isMultiDepth() {
+			return isMultiDepth;
 		}
 
 		public boolean matches(ObservableConfig config) {
@@ -256,7 +262,9 @@ public class ObservableConfig implements StructuredTransactable {
 			if (theAttributes.isEmpty() && !isMulti)
 				return theName;
 			StringBuilder str = new StringBuilder(theName);
-			if (isMulti)
+			if (isMultiDepth)
+				str.append(ANY_DEPTH);
+			else if (isMulti)
 				str.append(ANY_NAME);
 			if (!theAttributes.isEmpty()) {
 				str.append('{');
@@ -280,6 +288,7 @@ public class ObservableConfig implements StructuredTransactable {
 		private final String theName;
 		private Map<String, String> theAttributes;
 		private boolean isMulti;
+		private boolean isMultiDepth;
 		private boolean isUsed;
 
 		protected ObservableConfigPathBuilder(ObservableConfig target, List<ObservableConfigPathElement> path, String name) {
@@ -297,10 +306,11 @@ public class ObservableConfig implements StructuredTransactable {
 			return this;
 		}
 
-		public ObservableConfigPathBuilder multi() {
+		public ObservableConfigPathBuilder multi(boolean deep) {
 			if (isUsed)
 				throw new IllegalStateException("This builder has already been used");
 			isMulti = true;
+			isMultiDepth = deep;
 			return this;
 		}
 
@@ -309,7 +319,7 @@ public class ObservableConfig implements StructuredTransactable {
 				throw new IllegalStateException("This builder has already been used");
 			isUsed = true;
 			thePath.add(new ObservableConfigPathElement(theName,
-				theAttributes == null ? Collections.emptyMap() : Collections.unmodifiableMap(theAttributes), isMulti));
+				theAttributes == null ? Collections.emptyMap() : Collections.unmodifiableMap(theAttributes), isMulti, isMultiDepth));
 		}
 
 		public ObservableConfigPathBuilder andThen(String name) {
@@ -472,19 +482,27 @@ public class ObservableConfig implements StructuredTransactable {
 		if (path.length() == 0)
 			return null;
 		String[] split = parsePath(path);
-		ObservableConfigPathBuilder builder = buildPath(split[0]);
-		for (int i = 1; i < split.length; i++) {
+		ObservableConfigPathBuilder builder = null;
+		for (int i = 0; i < split.length; i++) {
 			boolean multi;
-			if (ANY_DEPTH.equals(split[i]))
+			boolean deep = ANY_DEPTH.equals(split[i]);
+			String name;
+			if (deep) {
+				name = "";
 				multi = true;
-			else {
+			} else {
 				multi = split[i].length() > 0 && split[i].charAt(split[i].length() - 1) == ANY_NAME.charAt(0);
 				if (multi)
-					split[i] = split[i].substring(0, split[i].length() - 1);
+					name = split[i].substring(0, split[i].length() - 1);
+				else
+					name = split[i];
 			}
-			builder = builder.andThen(split[i]);
+			if (i == 0)
+				builder = buildPath(name);
+			else
+				builder = builder.andThen(name);
 			if (multi)
-				builder.multi();
+				builder.multi(deep);
 		}
 		return builder.build();
 	}
@@ -528,8 +546,9 @@ public class ObservableConfig implements StructuredTransactable {
 			ObservableConfigPath last = path.getLast();
 			TypeToken<ObservableConfig> type = (TypeToken<ObservableConfig>) getType();
 			TypeToken<ObservableCollection<ObservableConfig>> collType = ObservableCollection.TYPE_KEY.getCompoundType(type);
+			ObservableCollection<? extends ObservableConfig> emptyChildren = ObservableCollection.of(getType());
 			children = ObservableCollection.flattenValue(observeDescendant(path.getParent()).map(collType,
-				p -> (ObservableCollection<ObservableConfig>) p.getContent(last, until).getValues(), //
+				p -> (ObservableCollection<ObservableConfig>) (p == null ? emptyChildren : p.getContent(last, until).getValues()), //
 				opts -> opts.cache(true).reEvalOnUpdate(false).fireIfUnchanged(false)));
 		}
 		return new ObservableChildSet<>(this, path, children);
@@ -895,7 +914,7 @@ public class ObservableConfig implements StructuredTransactable {
 
 	public <E extends Exception> Subscription persistOnChange(ObservableConfigPersistence<E> persistence,
 		Consumer<? super Exception> onException) {
-		return persistWhen(watch(buildPath(ANY_DEPTH).build()), persistence, onException);
+		return persistWhen(watch(buildPath("").multi(true).build()), persistence, onException);
 	}
 
 	public <E extends Exception> Subscription persistWhen(Observable<?> observable, ObservableConfigPersistence<E> persistence,

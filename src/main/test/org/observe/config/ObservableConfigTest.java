@@ -95,7 +95,8 @@ public class ObservableConfigTest {
 		testValues.add(90);
 		Assert.assertEquals(9, testValues.size());
 
-		writeClearAndParse(() -> Assert.assertEquals(0, testValues.size()));
+		writeClearAndParse(//
+			() -> Assert.assertEquals(0, testValues.size()));
 		i = 0;
 		for (Integer value : testValues) {
 			switch (i) {
@@ -229,7 +230,8 @@ public class ObservableConfigTest {
 		Assert.assertEquals(Duration.ofDays(1), entity2.getC());
 		entity2.setA(50);
 
-		writeClearAndParse(() -> Assert.assertEquals(0, testEntities.getValues().size()));
+		writeClearAndParse(//
+			() -> Assert.assertEquals(0, testEntities.getValues().size()));
 		i = 0;
 		for (TestEntity entity : testEntities.getValues()) {
 			switch (i) {
@@ -268,7 +270,7 @@ public class ObservableConfigTest {
 		Assert.assertEquals(20, testEntities.getValues().get(1).getA());
 	}
 
-	@Test
+	// @Test
 	public void testComplexEntities() {}
 
 	public interface TestEntity {

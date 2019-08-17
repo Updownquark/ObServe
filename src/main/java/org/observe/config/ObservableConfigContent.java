@@ -11,7 +11,6 @@ import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.IntConsumer;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
@@ -50,7 +49,8 @@ public class ObservableConfigContent {
 		private final ObservableConfig theRoot;
 		private final ObservableConfigPath thePath;
 		private final ObservableConfig[] thePathElements;
-		private final Subscription[] thePathElSubscriptions;
+		private final long[] thePathElementStamps;
+		private Subscription thePathSubscription;
 		private final ListenerList<Observer<? super ObservableValueEvent<C>>> theListeners;
 
 		public ObservableConfigChild(TypeToken<C> type, ObservableConfig root, ObservableConfigPath path) {
@@ -58,12 +58,11 @@ public class ObservableConfigContent {
 			theRoot = root;
 			thePath = path;
 			for (ObservableConfigPathElement el : path.getElements()) {
-				if (el.isMulti() || el.getName().equals(ObservableConfig.ANY_NAME) || el.getName().equals(ObservableConfig.ANY_DEPTH))
+				if (el.isMulti())
 					throw new IllegalArgumentException("Cannot use observeValue with a variable path");
 			}
-			thePathElements = new ObservableConfig[path.getElements().size() + 1];
-			thePathElements[0] = theRoot;
-			thePathElSubscriptions = new Subscription[thePathElements.length];
+			thePathElements = new ObservableConfig[path.getElements().size()];
+			thePathElementStamps = new long[path.getElements().size()];
 			theListeners = ListenerList.build().withInUse(this::setInUse).build();
 		}
 
@@ -74,57 +73,83 @@ public class ObservableConfigContent {
 		void setInUse(boolean inUse) {
 			try (Transaction t = theRoot.lock(false, null)) {
 				if (inUse) {
-					watchPathElement(0);
-					if (resolvePath(1, false, i -> watchPathElement(i)))
-						watchTerminal();
-				} else {
-					invalidate(0);
-					for (int i = thePathElSubscriptions.length - 1; i >= 0; i--) {
-						if (thePathElSubscriptions[i] != null) {
-							thePathElSubscriptions[i].unsubscribe();
-							thePathElSubscriptions[i] = null;
+					thePathSubscription = theRoot.watch(ObservableConfig.ANY_DEPTH).act(evt -> {
+						int size = evt.relativePath.size();
+						if (size > thePathElements.length)
+							return;
+						int pathIndex = 0;
+						ObservableConfigEvent pathChange = evt;
+						while (pathIndex < thePathElements.length && pathIndex < evt.relativePath.size()) {
+							if (evt.relativePath.get(pathIndex) != thePathElements[pathIndex])
+								break;
+							pathChange = pathChange.asFromChild();
+							thePathElementStamps[pathIndex] = thePathElements[pathIndex].getStamp(false);
+							pathIndex++;
 						}
-					}
+						handleChange(pathIndex, pathChange, evt);
+					});
+				} else {
+					thePathSubscription.unsubscribe();
+					thePathSubscription = null;
 				}
 			}
 		}
 
-		private void pathChanged(int pathIndex, CollectionChangeType type, ObservableConfig newValue) {
-			boolean reCheck = false;
-			switch (type) {
+		void handleChange(int pathIndex, ObservableConfigEvent pathChange, ObservableConfigEvent evt) {
+			boolean checkForChange = false;
+			switch (evt.changeType) {
 			case add:
-				// This can affect the value if the new value matches the path and appears before the currently-used config
-				if (thePath.getElements().get(pathIndex - 1).matches(newValue) && (thePathElements[pathIndex] == null//
-				|| newValue.getParentChildRef().compareTo(thePathElements[pathIndex].getParentChildRef()) < 0))
-					reCheck = true; // The new element needs to replace the current element at the path index
+				if (pathIndex >= thePathElements.length
+				|| !thePath.getElements().get(pathIndex).matchedBefore(pathChange.eventTarget, pathChange)) {
+					checkForChange = true;
+				} else if (thePathElements[pathIndex] == null
+					|| pathChange.eventTarget.getParentChildRef().compareTo(thePathElements[pathIndex].getParentChildRef()) < 0) {
+					ObservableConfig oldValue = thePathElements[thePathElements.length - 1];
+					thePathElements[pathIndex] = pathChange.eventTarget;
+					thePathElementStamps[pathIndex] = thePathElements[pathIndex].getStamp(false);
+					if (pathIndex < thePathElements.length - 1)
+						resolvePath(pathIndex + 1, false);
+					ObservableConfig newValue = thePathElements[thePathElements.length - 1];
+					fire(createChangeEvent((C) oldValue, (C) newValue, evt));
+				}
 				break;
 			case remove:
+				if (evt.relativePath.isEmpty())
+					return; // Removed the root, but we'll keep listening to it
+				if (pathIndex == evt.relativePath.size()) {
+					pathIndex--;
+					ObservableConfig oldValue = thePathElements[thePathElements.length - 1];
+					Arrays.fill(thePathElements, pathIndex, thePathElements.length, null);
+					thePathElementStamps[pathIndex] = -1;
+					resolvePath(pathIndex, false);
+					ObservableConfig newValue = thePathElements[thePathElements.length - 1];
+					if (oldValue != newValue)
+						fire(createChangeEvent((C) oldValue, (C) newValue, evt));
+				} else
+					checkForChange = true;
+				break;
 			case set:
-				if (newValue == thePathElements[pathIndex])
-					reCheck = true;
-				else if (newValue.getParentChildRef().compareTo(thePathElements[pathIndex].getParentChildRef()) < 0//
-					&& thePath.getElements().get(pathIndex - 1).matches(newValue))
-					break;
+				if (pathIndex == 0)
+					return; // Something about the root changed, but that can't affect us
+				pathIndex--;
+				if (!thePath.getElements().get(pathIndex).matches(thePathElements[pathIndex])) {
+					ObservableConfig oldValue = thePathElements[thePathElements.length - 1];
+					Arrays.fill(thePathElements, pathIndex, thePathElements.length, null);
+					resolvePath(pathIndex, false);
+					ObservableConfig newValue = thePathElements[thePathElements.length - 1];
+					if (oldValue != newValue)
+						fire(createChangeEvent((C) oldValue, (C) newValue, evt));
+				} else
+					checkForChange = true;
+				break;
 			}
-			if (reCheck) {
-				invalidate(pathIndex);
-				if (resolvePath(pathIndex, false, i -> watchPathElement(i)))
-					watchTerminal();
+			if (checkForChange) {
+				ObservableConfig oldValue = thePathElements[thePathElements.length - 1];
+				resolvePath(pathIndex, false);
+				ObservableConfig newValue = thePathElements[thePathElements.length - 1];
+				if (oldValue != newValue)
+					fire(createChangeEvent((C) oldValue, (C) newValue, evt));
 			}
-		}
-
-		private void watchPathElement(int pathIndex) {
-			if (pathIndex >= thePath.getElements().size())
-				return;
-			thePathElSubscriptions[pathIndex] = thePathElements[pathIndex].getAllContent().getValues()
-				.onChange(evt -> pathChanged(pathIndex + 1, evt.getType(), evt.getNewValue()));
-		}
-
-		private void watchTerminal() {
-			int lastIdx = thePathElements.length - 1;
-			thePathElSubscriptions[lastIdx] = thePathElements[lastIdx].watch(ObservableConfig.EMPTY_PATH).act(evt -> {
-				fire(createChangeEvent((C) thePathElements[lastIdx], (C) thePathElements[lastIdx], evt));
-			});
 		}
 
 		private void fire(ObservableValueEvent<C> event) {
@@ -142,44 +167,39 @@ public class ObservableConfigContent {
 		@Override
 		public C get() {
 			try (Transaction t = lock()) {
-				if (!resolvePath(1, false, null))
-					return null;
+				resolvePath(0, false);
 				return (C) thePathElements[thePathElements.length - 1];
 			}
 		}
 
-		private void invalidate(int startIndex) {
-			for (int i = thePathElSubscriptions.length - 1; i >= startIndex; i--) {
-				if (thePathElSubscriptions[i] != null) {
-					thePathElSubscriptions[i].unsubscribe();
-					thePathElSubscriptions[i] = null;
-				}
-			}
-		}
-
-		boolean resolvePath(int startIndex, boolean createIfAbsent, IntConsumer onResolution) {
-			ObservableConfig parent = thePathElements[startIndex - 1];
+		boolean resolvePath(int startIndex, boolean createIfAbsent) {
+			ObservableConfig parent = startIndex == 0 ? theRoot : thePathElements[startIndex - 1];
 			boolean resolved = true;
+			boolean changed = false;
 			int i;
 			for (i = startIndex; i < thePathElements.length; i++) {
+				long stamp = parent.getStamp(false);
 				ObservableConfig child;
-				if (thePathElements[i] != null && thePathElements[i].getParent() != null) {
+				if (thePathElementStamps[i] == stamp) {
+					// No need to check--nothing's changed
 					child = thePathElements[i];
-					continue;
+				} else {
+					thePathElementStamps[i] = stamp;
+					child = parent.getChild(thePath.getElements().get(i), createIfAbsent, null);
+					if (thePathElements[i] != child) {
+						changed = true;
+						thePathElements[i] = child;
+					}
 				}
-				child = parent.getChild(thePath.getElements().get(i - 1), createIfAbsent, null);
 				if (child == null) {
 					resolved = false;
 					break;
-				} else {
-					thePathElements[i] = parent = child;
-					if (onResolution != null)
-						onResolution.accept(i);
-				}
+				} else
+					parent = child;
 			}
 			if (!resolved)
 				Arrays.fill(thePathElements, i, thePathElements.length, null);
-			return resolved;
+			return changed;
 		}
 
 		@Override
@@ -250,7 +270,7 @@ public class ObservableConfigContent {
 				String msg = isAcceptable(value);
 				if (msg != null)
 					throw new IllegalArgumentException(msg);
-				theConfigChild.resolvePath(1, true, null);
+				theConfigChild.resolvePath(1, true);
 				T oldValue = parse(theConfigChild.get());
 				theFormat.accept(theConfigChild.get(), value);
 				return oldValue;
