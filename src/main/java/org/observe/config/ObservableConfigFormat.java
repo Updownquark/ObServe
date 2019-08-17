@@ -156,6 +156,10 @@ public interface ObservableConfigFormat<T> {
 			return theFieldChildNames.get(fieldIndex);
 		}
 
+		public ObservableConfigFormat<?> getFieldFormat(int fieldIndex) {
+			return fieldFormats[fieldIndex];
+		}
+
 		public E createInstance(ObservableConfig config, QuickMap<String, Object> fieldValues, Observable<?> until) throws ParseException {
 			for (int i = 0; i < fieldValues.keySize(); i++) {
 				ObservableConfig fieldConfig = config.getChild(theFieldChildNames.get(i));
@@ -220,13 +224,27 @@ public interface ObservableConfigFormat<T> {
 							if (elementFormat instanceof SimpleConfigFormat) {
 								return Objects.equals(o1.getValue(),
 									o2 == null ? null : ((SimpleConfigFormat<E>) elementFormat).format.format(o2));
-								// } else if (elementFormat instanceof EntityConfigFormat
-								// && !((EntityConfigFormat<?>) elementFormat).getEntityType().getIdFields().isEmpty()) {
-								// EntityConfiguredValueType<?> entityType = ((EntityConfigFormat<?>) elementFormat).getEntityType();
-								// for(int i : entityType.getIdFields()){
-								// ConfiguredValueField<?, ?> f = entityType.getFields().get(i);
-								// TODO
-								// }
+							} else if (elementFormat instanceof EntityConfigFormat
+								&& !((EntityConfigFormat<?>) elementFormat).getEntityType().getIdFields().isEmpty()) {
+								EntityConfigFormat<?> entityFormat = (EntityConfigFormat<?>) elementFormat;
+								EntityConfiguredValueType<?> entityType = entityFormat.getEntityType();
+								boolean canFind = true;
+								for (int i : entityType.getIdFields()) {
+									ConfiguredValueField<?, ?> f = entityType.getFields().get(i);
+									ObservableConfigFormat<?> fieldFormat = entityFormat.getFieldFormat(i);
+									if (!(fieldFormat instanceof SimpleConfigFormat)) {
+										canFind = false;
+										break;
+									}
+									if (!Objects.equals(o1.get(entityFormat.getChildName(i)), //
+										((SimpleConfigFormat<Object>) fieldFormat).format
+										.format(((ConfiguredValueField<Object, ?>) f).get(o1))))
+										return false;
+								}
+								if (canFind)
+									return false;
+								else
+									return true; // No way to tell different values apart, just gotta reformat
 							} else
 								return true; // No way to tell different values apart, just gotta reformat
 						}

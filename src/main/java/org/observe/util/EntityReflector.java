@@ -14,6 +14,7 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
@@ -511,6 +512,10 @@ public class EntityReflector<E> {
 			theRawType = TypeTokens.getRawType(theType);
 		}
 
+		private EntityReflector<E> getReflector() {
+			return EntityReflector.this;
+		}
+
 		Object associate(Object key, Object value) {
 			if (theAssociated == null)
 				theAssociated = new IdentityHashMap<>();
@@ -560,9 +565,13 @@ public class EntityReflector<E> {
 			if (method.getDeclaringClass() == Object.class) {
 				switch (method.getName()) {
 				case "hashCode":
-					return System.identityHashCode(proxy);
+					if (method.getParameterTypes().length == 0)
+						return hashCodeImpl(proxy);
+					break;
 				case "equals":
-					return proxy == args[0];
+					if (args.length == 1 && method.getParameterTypes().length == 1 && method.getParameterTypes()[0] == Object.class)
+						return equalsImpl(proxy, args[0]);
+					break;
 				case "getClass": // Does this get delegated to here?
 					return theRawType;
 				case "clone":
@@ -591,6 +600,37 @@ public class EntityReflector<E> {
 			}
 			throw new IllegalStateException(
 				"Method " + method + " is not default or a recognized getter or setter, and its implementation is not provided");
+		}
+
+		private int hashCodeImpl(Object proxy) {
+			if (getIdFields().isEmpty())
+				return System.identityHashCode(proxy);
+			Object[] idValues = new Object[getIdFields().size()];
+			int i = 0;
+			for (int id : getIdFields()) {
+				idValues[i++] = theFieldGetter.apply(id);
+			}
+			return Objects.hash(idValues);
+		}
+
+		private boolean equalsImpl(Object proxy, Object arg) {
+			if (proxy == arg)
+				return true;
+			else if (getIdFields().isEmpty())
+				return false;
+			else if (arg == null)
+				return false;
+			else if (!Proxy.isProxyClass(arg.getClass())
+				|| !(Proxy.getInvocationHandler(arg) instanceof EntityReflector.ProxyMethodHandler))
+				return false;
+			EntityReflector<?>.ProxyMethodHandler other = (EntityReflector<?>.ProxyMethodHandler) Proxy.getInvocationHandler(arg);
+			if (getReflector() != other.getReflector() || theRawType != other.theRawType)
+				return false;
+			for (int id : getIdFields()) {
+				if (!Objects.equals(theFieldGetter.apply(id), other.theFieldGetter.apply(id)))
+					return false;
+			}
+			return true;
 		}
 
 		private Object buildString(E proxy) {
