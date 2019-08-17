@@ -48,14 +48,16 @@ public class ObservableConfigTest {
 	@Test
 	public void testXmlPersistence() throws IOException, SAXException {
 		readXml(getClass().getResourceAsStream("TestXml1.xml"));
-		writeClearAndParse();
+		writeClearAndParse(null);
 		testXml1();
 	}
 
-	private void writeClearAndParse() throws IOException, SAXException {
+	private void writeClearAndParse(Runnable beforeParse) throws IOException, SAXException {
 		StringWriter writer = new StringWriter();
 		ObservableConfig.writeXml(theConfig, writer, theEncoding, "\t");
 		theConfig.getAllContent().getValues().clear();
+		if (beforeParse != null)
+			beforeParse.run();
 		readXml(new ByteArrayInputStream(writer.toString().getBytes("UTF-8")));
 	}
 
@@ -93,7 +95,7 @@ public class ObservableConfigTest {
 		testValues.add(90);
 		Assert.assertEquals(9, testValues.size());
 
-		writeClearAndParse();
+		writeClearAndParse(() -> Assert.assertEquals(0, testValues.size()));
 		i = 0;
 		for (Integer value : testValues) {
 			switch (i) {
@@ -227,11 +229,7 @@ public class ObservableConfigTest {
 		Assert.assertEquals(Duration.ofDays(1), entity2.getC());
 		entity2.setA(50);
 
-		until.onNext(null);
-		writeClearAndParse();
-		// TODO This next statement should be removed--the collection should be able to locate the new data in the config
-		testEntities = theConfig.observeEntities(theConfig.createPath("test-entities/test-entity"), TypeTokens.get().of(TestEntity.class),
-			until);
+		writeClearAndParse(() -> Assert.assertEquals(0, testEntities.getValues().size()));
 		i = 0;
 		for (TestEntity entity : testEntities.getValues()) {
 			switch (i) {
@@ -263,6 +261,10 @@ public class ObservableConfigTest {
 		Assert.assertEquals(4, i);
 
 		theConfig.set("test-entities/test-entity{a=10,b=true}/a", "20");
+		Assert.assertEquals(20, testEntities.getValues().get(1).getA());
+
+		until.onNext(null);
+		theConfig.set("test-entities/test-entity{a=10,b=true}/a", "30");
 		Assert.assertEquals(20, testEntities.getValues().get(1).getA());
 	}
 
