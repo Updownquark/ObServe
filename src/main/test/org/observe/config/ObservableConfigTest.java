@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringWriter;
 import java.time.Duration;
+import java.util.List;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -124,16 +125,16 @@ public class ObservableConfigTest {
 	}
 
 	@Test
-	public void testReadOnlyEntities() throws IOException, SAXException {
-		testEntities(false);
+	public void testReadOnlySimpleEntities() throws IOException, SAXException {
+		testSimpleEntities(false);
 	}
 
 	@Test
-	public void testModifyEntities() throws IOException, SAXException {
-		testEntities(true);
+	public void testModifySimpleEntities() throws IOException, SAXException {
+		testSimpleEntities(true);
 	}
 
-	private void testEntities(boolean withModification) throws IOException, SAXException {
+	private void testSimpleEntities(boolean withModification) throws IOException, SAXException {
 		SimpleObservable<Void> until = new SimpleObservable<>();
 		readXml(getClass().getResourceAsStream("TestValues.xml"));
 		ObservableValueSet<TestEntity> testEntities = theConfig.observeEntities(theConfig.createPath("test-entities/test-entity"),
@@ -265,6 +266,9 @@ public class ObservableConfigTest {
 		Assert.assertEquals(20, testEntities.getValues().get(1).getA());
 	}
 
+	@Test
+	public void testComplexEntities() {}
+
 	public interface TestEntity {
 		int getA();
 
@@ -281,6 +285,30 @@ public class ObservableConfigTest {
 		default String print() {
 			return ObservableConfigTest.print(this);
 		}
+	}
+
+	public interface TestEntity2 {
+		String getText();
+
+		void setText(String text);
+
+		TestEntity3 getEntityField();
+
+		List<String> getTexts();
+
+		List<TestEntity4> getListedEntities();
+	}
+
+	public interface TestEntity3 {
+		int getD();
+
+		int setD(int d);
+	}
+
+	public interface TestEntity4 {
+		int getE();
+
+		int setE(int e);
 	}
 
 	private static String print(TestEntity entity) {
