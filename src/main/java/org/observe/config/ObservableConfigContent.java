@@ -1,17 +1,14 @@
 package org.observe.config;
 
-import java.lang.reflect.Method;
 import java.text.ParseException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.function.BiConsumer;
-import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
@@ -30,6 +27,7 @@ import org.observe.collect.ObservableCollectionEvent;
 import org.observe.config.ObservableConfig.ObservableConfigEvent;
 import org.observe.config.ObservableConfig.ObservableConfigPath;
 import org.observe.config.ObservableConfig.ObservableConfigPathElement;
+import org.observe.util.EntityReflector;
 import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
@@ -486,16 +484,16 @@ public class ObservableConfigContent {
 		public ObservableConfigEntityValues(ObservableValueSet<? extends ObservableConfig> configs, TypeToken<T> type,
 			ConfigEntityFieldParser fieldParser, Observable<?> until) {
 			theConfigs = configs;
-			Map<Method, BiFunction<T, Object[], Object>> customMethods = new HashMap<>();
+			EntityReflector.Builder<T> typeBuilder = EntityReflector.build(type);
 			try {
-				customMethods.put(Object.class.getDeclaredMethod("toString"), (proxy, args) -> {
+				typeBuilder.withCustomMethod(Object.class.getDeclaredMethod("toString"), (proxy, args) -> {
 					ConfigValueElement cve = (ConfigValueElement) ((EntityConfiguredValueType<T>) getType()).getAssociated(proxy, this);
 					return cve.print();
 				});
 			} catch (NoSuchMethodException | SecurityException e) {
 				throw new IllegalStateException(e);
 			}
-			theType = new EntityConfiguredValueType<>(type, customMethods);
+			theType = new EntityConfiguredValueType<>(typeBuilder.build());
 			theEntityFormat = ObservableConfigFormat.ofEntity(theType, fieldParser);
 			theFieldParser = fieldParser;
 

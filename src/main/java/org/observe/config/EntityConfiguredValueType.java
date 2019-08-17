@@ -1,8 +1,6 @@
 package org.observe.config;
 
-import java.lang.reflect.Method;
 import java.util.Collections;
-import java.util.Map;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
@@ -22,12 +20,8 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 	private final EntityReflector<E> theReflector;
 	private final QuickMap<String, EntityConfiguredValueField<? super E, ?>> theFields;
 
-	public EntityConfiguredValueType(TypeToken<E> type) {
-		this(type, null);
-	}
-
-	public EntityConfiguredValueType(TypeToken<E> type, Map<Method, ? extends BiFunction<? super E, Object[], ?>> customMethods) {
-		theReflector = new EntityReflector<>(type, null, null, customMethods);
+	public EntityConfiguredValueType(EntityReflector<E> reflector) {
+		theReflector = reflector;
 		QuickMap<String, EntityConfiguredValueField<? super E, ?>> fields = theReflector.getFields().keySet().createMap();
 		for (int i = 0; i < fields.keySet().size(); i++)
 			fields.put(i, new EntityConfiguredValueField<>(this, i, fields.keySet().get(i),

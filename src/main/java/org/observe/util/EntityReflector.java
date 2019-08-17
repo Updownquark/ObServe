@@ -53,6 +53,95 @@ public class EntityReflector<E> {
 		LOOKUP_CONSTRUCTOR = c;
 	}
 
+	/**
+	 * @param type The interface type to reflect on
+	 * @return A builder to create a reflector
+	 */
+	public static <E> Builder<E> build(TypeToken<E> type) {
+		return new Builder<>(type);
+	}
+
+	/**
+	 * Builds an {@link EntityReflector}
+	 *
+	 * @param <E> The interface type to reflect on
+	 */
+	public static class Builder<E> {
+		private final TypeToken<E> theType;
+		private final Class<E> theRawType;
+		private Function<Method, String> theGetterFilter;
+		private Function<Method, String> theSetterFilter;
+		private Map<Method, BiFunction<? super E, Object[], ?>> theCustomMethods;
+		private Set<String> theIdFields;
+
+		private Builder(TypeToken<E> type) {
+			theRawType = TypeTokens.getRawType(type);
+			if (theRawType == null || !theRawType.isInterface())
+				throw new IllegalArgumentException("This class only works for interface types");
+			else if ((theRawType.getModifiers() & Modifier.PUBLIC) == 0)
+				throw new IllegalArgumentException("This class only works for public interface types");
+			theType = type;
+			theGetterFilter = new PrefixFilter("get", 0);
+			theSetterFilter = new PrefixFilter("set", 1);
+		}
+
+		/**
+		 * @param getterFilter The function to determine what field a getter is for
+		 * @return This builder
+		 */
+		public Builder<E> withGetterFilter(Function<Method, String> getterFilter) {
+			theGetterFilter = getterFilter;
+			return this;
+		}
+
+		/**
+		 * @param setterFilter The function to determine what field a setter is for
+		 * @return This builder
+		 */
+		public Builder<E> withSetterFilter(Function<Method, String> setterFilter) {
+			theSetterFilter = setterFilter;
+			return this;
+		}
+
+		/**
+		 * @param customMethods Custom method implementations for {@link EntityReflector#newInstance(IntFunction, BiConsumer) created
+		 *        instances} of the type to use
+		 * @return This builder
+		 */
+		public Builder<E> withCustomMethods(Map<Method, ? extends BiFunction<? super E, Object[], ?>> customMethods) {
+			if (theCustomMethods == null)
+				theCustomMethods = new LinkedHashMap<>();
+			theCustomMethods.putAll(customMethods);
+			return this;
+		}
+
+		/**
+		 * @param method The method to implement
+		 * @param implementation The custom implementation of the method for {@link EntityReflector#newInstance(IntFunction, BiConsumer)
+		 *        created instances} of the type to use
+		 * @return This builder
+		 */
+		public Builder<E> withCustomMethod(Method method, BiFunction<? super E, Object[], ?> implementation) {
+			if (theCustomMethods == null)
+				theCustomMethods = new LinkedHashMap<>();
+			theCustomMethods.put(method, implementation);
+			return this;
+		}
+
+		public Builder<E> withId(String... ids) {
+			if (theIdFields == null)
+				theIdFields = new LinkedHashSet<>();
+			for (String id : ids)
+				theIdFields.add(id);
+			return this;
+		}
+
+		/** @return The new reflector */
+		public EntityReflector<E> build() {
+			return new EntityReflector<>(theType, theRawType, theGetterFilter, theSetterFilter, theCustomMethods, theIdFields);
+		}
+	}
+
 	/** A simple filter function to determine whether a method is a getter or setter for a field */
 	public static class PrefixFilter implements Function<Method, String> {
 		private final String thePrefix;
@@ -202,24 +291,8 @@ public class EntityReflector<E> {
 	private final E theProxy;
 	private final MethodRetrievingHandler theProxyHandler;
 
-	/** @param type The interface type to reflect on */
-	public EntityReflector(TypeToken<E> type) {
-		this(type, new PrefixFilter("get", 0), new PrefixFilter("set", 1), Collections.emptyMap());
-	}
-
-	/**
-	 * @param type The interface type to reflect on
-	 * @param getterFilter The function to determine what field a getter is for
-	 * @param setterFilter The function to determine what field a setter is for
-	 * @param customMethods Custom method implementations for {@link #newInstance(IntFunction, BiConsumer) instances} of the entity type
-	 */
-	public EntityReflector(TypeToken<E> type, Function<Method, String> getterFilter, Function<Method, String> setterFilter,
-		Map<Method, ? extends BiFunction<? super E, Object[], ?>> customMethods) {
-		Class<E> raw = TypeTokens.getRawType(type);
-		if (raw == null || !raw.isInterface())
-			throw new IllegalArgumentException("This class only works for interface types");
-		else if ((raw.getModifiers() & Modifier.PUBLIC) == 0)
-			throw new IllegalArgumentException("This class only works for public interface types");
+	private EntityReflector(TypeToken<E> type, Class<E> raw, Function<Method, String> getterFilter, Function<Method, String> setterFilter,
+		Map<Method, ? extends BiFunction<? super E, Object[], ?>> customMethods, Set<String> idFieldNames) {
 		theType = type;
 		theGetterFilter = getterFilter == null ? new PrefixFilter("get", 0) : getterFilter;
 		theSetterFilter = setterFilter == null ? new PrefixFilter("set", 1) : setterFilter;
@@ -230,20 +303,29 @@ public class EntityReflector<E> {
 			customMethods == null ? Collections.emptySet() : customMethods.keySet());
 		QuickMap<String, ReflectedField<E, ?>> fields = QuickSet.of(fieldGetters.keySet()).createMap();
 		LinkedHashSet<Integer> idFields = new LinkedHashSet<>();
-		// First, see if any fields are tagged with @Id
-		for (Map.Entry<String, Invokable<? super E, ?>> getter : fieldGetters.entrySet()) {
-			for (Annotation annotation : getter.getValue().getAnnotations()) {
-				if (annotation.annotationType().getSimpleName().equalsIgnoreCase("id")) // Any old ID annotation will do
-					idFields.add(fields.keySet().indexOf(getter.getKey()));
+		if (idFieldNames != null) {
+			for (String id : idFieldNames) {
+				int i = fields.keyIndexTolerant(id);
+				if (i < 0)
+					throw new IllegalArgumentException("No such field for ID: " + id);
+				idFields.add(i);
 			}
-		}
-		if (idFields.isEmpty()) {
-			// Otherwise, see if there is a field named ID
-			for (int i = 0; i < fields.keySize(); i++)
-				if (fields.keySet().get(i).equalsIgnoreCase("id")) {
-					idFields.add(i);
-					break;
+		} else { // Not specified, see if we can find the IDs ourselves
+			// First, see if any fields are tagged with @Id
+			for (Map.Entry<String, Invokable<? super E, ?>> getter : fieldGetters.entrySet()) {
+				for (Annotation annotation : getter.getValue().getAnnotations()) {
+					if (annotation.annotationType().getSimpleName().equalsIgnoreCase("id")) // Any old ID annotation will do
+						idFields.add(fields.keySet().indexOf(getter.getKey()));
 				}
+			}
+			if (idFields.isEmpty()) {
+				// Otherwise, see if there is a field named ID
+				for (int i = 0; i < fields.keySize(); i++)
+					if (fields.keySet().get(i).equalsIgnoreCase("id")) {
+						idFields.add(i);
+						break;
+					}
+			}
 		}
 		theIdFields = idFields.isEmpty() ? Collections.emptySet() : Collections.unmodifiableSet(idFields);
 		Map<String, ReflectedField<E, ?>> fieldsByGetter = new LinkedHashMap<>();
