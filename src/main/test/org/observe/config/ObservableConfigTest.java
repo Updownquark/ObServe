@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringWriter;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 
 import org.junit.Assert;
@@ -14,6 +15,7 @@ import org.observe.SimpleObservable;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfig.XmlEncoding;
 import org.observe.util.TypeTokens;
+import org.qommons.QommonsTestUtils;
 import org.xml.sax.SAXException;
 
 public class ObservableConfigTest {
@@ -267,8 +269,144 @@ public class ObservableConfigTest {
 		Assert.assertEquals(20, testEntities.getValues().get(1).getA());
 	}
 
-	// @Test
-	public void testComplexEntities() {}
+	// @Test TODO
+	public void testComplexEntities() throws IOException, SAXException {
+		SimpleObservable<Void> until = new SimpleObservable<>();
+		readXml(getClass().getResourceAsStream("TestValues.xml"));
+		ObservableValueSet<TestEntity2> testEntities = theConfig.observeEntities(theConfig.createPath("test-entities2/test-entity2"),
+			TypeTokens.get().of(TestEntity2.class), until);
+
+		int i = 0;
+		for (TestEntity2 entity : testEntities.getValues()) {
+			switch (i) {
+			case 0:
+				Assert.assertEquals("text1", entity.getText());
+				Assert.assertThat(entity.getTexts(), QommonsTestUtils.collectionsEqual(Arrays.asList("text2", "text3", "text4"), true));
+				entity.getTexts().remove(1);
+				Assert.assertEquals(1, entity.getEntityField().getD());
+				Assert.assertEquals(2, entity.getListedEntities().getValues().size());
+				int j = 0;
+				for (TestEntity4 child : entity.getListedEntities().getValues()) {
+					switch (j) {
+					case 0:
+						Assert.assertEquals(5, child.getE());
+						break;
+					case 1:
+						Assert.assertEquals(6, child.getE());
+						break;
+					}
+				}
+
+				entity.getEntityField().setD(10);
+				Assert.assertEquals("10", theConfig.getContent("test-entities2/test-entity2").getValues().get(i).get("entity-field/d"));
+
+				entity.getListedEntities().getValues().get(1).setE(60);
+				entity.getListedEntities().getValues().remove(0);
+				Assert.assertEquals(1, theConfig.getContent("test-entities2/test-entity2").getValues().get(i).getContent("listed-entities")
+					.getValues().size());
+				Assert.assertEquals("60", theConfig.getContent("test-entities2/test-entity2").getValues().get(i).get("listed-entities/listed-entity/e"));
+				break;
+			case 1:
+				Assert.assertEquals("text8", entity.getText());
+				Assert.assertThat(entity.getTexts(), QommonsTestUtils.collectionsEqual(Arrays.asList("text9", "text10"), true));
+				entity.getTexts().add("text11");
+				Assert.assertEquals(1, entity.getEntityField().getD());
+				Assert.assertEquals(2, entity.getListedEntities().getValues().size());
+				j = 0;
+				for (TestEntity4 child : entity.getListedEntities().getValues()) {
+					switch (j) {
+					case 0:
+						Assert.assertEquals(7, child.getE());
+						break;
+					case 1:
+						Assert.assertEquals(8, child.getE());
+						break;
+					}
+				}
+
+				theConfig.getContent("test-entities2/test-entity2").getValues().get(i).set("entity-field/d", "20");
+				Assert.assertEquals(20, entity.getEntityField().getD());
+				entity.getListedEntities().create().with(TestEntity4::getE, 9).create();
+				Assert.assertEquals(3, entity.getListedEntities().getValues().size());
+				Assert.assertEquals("9", theConfig.getContent("test-entities2/test-entity2").getValues().get(i).getContent("listed-entities/listed-entity")
+					.getValues().get(3).get("e"));
+
+				break;
+			default:
+				Assert.assertTrue("Too many entities", false);
+			}
+			i++;
+			entity.toString(); // Just making sure this doesn't throw an exception
+		}
+		Assert.assertEquals(2, i);
+
+		TestEntity2 entity2 = testEntities.create()//
+			.with(TestEntity2::getText, "new text")//
+			// .with("entity-field.d", 100)
+			.create().get();
+		Assert.assertEquals("new text", entity2.getText());
+
+		i = 0;
+		for (TestEntity2 entity : testEntities.getValues()) {
+			switch (i) {
+			case 0:
+				Assert.assertEquals("text1", entity.getText());
+				Assert.assertThat(entity.getTexts(), QommonsTestUtils.collectionsEqual(Arrays.asList("text2", "text4"), true));
+				Assert.assertEquals(10, entity.getEntityField().getD());
+				Assert.assertEquals(1, entity.getListedEntities().getValues().size());
+				Assert.assertEquals(60, entity.getListedEntities().getValues().getFirst().getE());
+				break;
+			case 1:
+				Assert.assertEquals("text8", entity.getText());
+				Assert.assertThat(entity.getTexts(), QommonsTestUtils.collectionsEqual(Arrays.asList("text9", "text10", "text11"), true));
+				Assert.assertEquals(20, entity.getEntityField().getD());
+				Assert.assertEquals(3, entity.getListedEntities().getValues().size());
+				int j = 0;
+				for (TestEntity4 child : entity.getListedEntities().getValues()) {
+					switch (j) {
+					case 0:
+						Assert.assertEquals(7, child.getE());
+						break;
+					case 1:
+						Assert.assertEquals(8, child.getE());
+						break;
+					case 3:
+						Assert.assertEquals(9, child.getE());
+						break;
+					}
+				}
+				break;
+			case 3:
+				// TODO
+			default:
+				Assert.assertTrue("Too many entities", false);
+			}
+			i++;
+		}
+		Assert.assertEquals(3, i);
+
+		writeClearAndParse(//
+			() -> Assert.assertEquals(0, testEntities.getValues().size()));
+
+		i = 0;
+		for (TestEntity2 entity : testEntities.getValues()) {
+			switch (i) {
+			case 0:
+				// TODO
+				break;
+			case 1:
+				// TODO
+				break;
+			case 2:
+				// TODO
+				break;
+			default:
+				Assert.assertTrue("Too many entities", false);
+			}
+			i++;
+		}
+		Assert.assertEquals(3, i);
+	}
 
 	public interface TestEntity {
 		int getA();
@@ -297,7 +435,7 @@ public class ObservableConfigTest {
 
 		List<String> getTexts();
 
-		List<TestEntity4> getListedEntities();
+		ObservableValueSet<TestEntity4> getListedEntities();
 	}
 
 	public interface TestEntity3 {

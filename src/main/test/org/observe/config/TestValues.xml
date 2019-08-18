@@ -19,4 +19,29 @@
 		<test-entity a="4" b="true" c="1h" />
 		<test-entity a="42" b="false" c="10w" />
 	</test-entities>
+	<test-entities2>
+		<test-entity2 text="text1">
+			<entity-field d="1"/>
+			<texts>
+				<text>text2</text>
+				<text>text3</text>
+				<text>text4</text>
+			</texts>
+			<listed-entities>
+				<listed-entity e="5" />
+				<listed-entity e="6" />
+			</listed-entities>
+		</test-entity2>
+		<test-entity2 text="text8">
+			<entity-field d="1"/>
+			<texts>
+				<text>text9</text>
+				<text>text10</text>
+			</texts>
+			<listed-entities>
+				<listed-entity e="7" />
+				<listed-entity e="8" />
+			</listed-entities>
+		</test-entity2>
+	</test-entities2>
 </config>
