@@ -105,8 +105,8 @@ public class ObservableConfigContent {
 				} else if (thePathElements[pathIndex] == null
 					|| pathChange.eventTarget.getParentChildRef().compareTo(thePathElements[pathIndex].getParentChildRef()) < 0) {
 					ObservableConfig oldValue = thePathElements[thePathElements.length - 1];
-					thePathElements[pathIndex] = pathChange.eventTarget;
-					thePathElementStamps[pathIndex] = thePathElements[pathIndex].getStamp(false);
+					thePathElements[pathIndex] = evt.relativePath.get(pathIndex);
+					thePathElementStamps[pathIndex] = -1;
 					if (pathIndex < thePathElements.length - 1)
 						resolvePath(pathIndex + 1, false);
 					ObservableConfig newValue = thePathElements[thePathElements.length - 1];
@@ -513,15 +513,28 @@ public class ObservableConfigContent {
 			} catch (NoSuchMethodException | SecurityException e) {
 				throw new IllegalStateException(e);
 			}
-			theType = new EntityConfiguredValueType<>(typeBuilder.build());
-			theEntityFormat = ObservableConfigFormat.ofEntity(theType, fieldParser);
+			ObservableConfigFormat<T> entityFormat;
+			try {
+				entityFormat = fieldParser.getConfigFormat(type);
+			} catch (IllegalArgumentException e) {
+				entityFormat = null;
+			}
+			if (entityFormat instanceof ObservableConfigFormat.EntityConfigFormat) {
+				theEntityFormat = (ObservableConfigFormat.EntityConfigFormat<T>) entityFormat;
+				theType = theEntityFormat.entityType;
+			} else {
+				theType = new EntityConfiguredValueType<>(typeBuilder.build());
+				theEntityFormat = ObservableConfigFormat.ofEntity(theType, fieldParser);
+				if (entityFormat == null)
+					fieldParser.withFormat(type, theEntityFormat);
+			}
 			theFieldParser = fieldParser;
 
+			theUntil = until == null ? Observable.empty() : until;
 			theValueElements = ((ObservableCollection<ObservableConfig>) theConfigs.getValues()).flow()
 				.map(new TypeToken<ConfigValueElement>() {}, cfg -> new ConfigValueElement(cfg), //
 					opts -> opts.cache(true).reEvalOnUpdate(false))
-				.collectActive(until);
-			theUntil = until == null ? Observable.empty() : until;
+				.collectActive(theUntil);
 
 			Subscription valueElSub = theValueElements.subscribe(evt -> {
 				if (isUpdating)
@@ -547,7 +560,7 @@ public class ObservableConfigContent {
 					break;
 				}
 			}, true);
-			until.take(1).act(__ -> valueElSub.unsubscribe());
+			theUntil.take(1).act(__ -> valueElSub.unsubscribe());
 			theValues = theValueElements.flow().map(type, cve -> cve.theInstance, opts -> opts.cache(false)).collectPassive();
 		}
 

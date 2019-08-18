@@ -532,13 +532,9 @@ public class ObservableConfig implements StructuredTransactable {
 	}
 
 	public ObservableValueSet<? extends ObservableConfig> getContent(ObservableConfigPath path) {
-		return getContent(path, Observable.empty());
-	}
-
-	public ObservableValueSet<? extends ObservableConfig> getContent(ObservableConfigPath path, Observable<?> until) {
 		ObservableCollection<? extends ObservableConfig> children;
 		if (path.getElements().size() == 1) {
-			if (path.getLastElement().getName().equals(ANY_NAME))
+			if (path.getLastElement().isMulti())
 				children = new FullObservableConfigContent<>(this, getType());
 			else
 				children = new SimpleObservableConfigContent<>(this, TYPE, path.getLastElement());
@@ -546,9 +542,10 @@ public class ObservableConfig implements StructuredTransactable {
 			ObservableConfigPath last = path.getLast();
 			TypeToken<ObservableConfig> type = (TypeToken<ObservableConfig>) getType();
 			TypeToken<ObservableCollection<ObservableConfig>> collType = ObservableCollection.TYPE_KEY.getCompoundType(type);
-			ObservableCollection<? extends ObservableConfig> emptyChildren = ObservableCollection.of(getType());
-			children = ObservableCollection.flattenValue(observeDescendant(path.getParent()).map(collType,
-				p -> (ObservableCollection<ObservableConfig>) (p == null ? emptyChildren : p.getContent(last, until).getValues()), //
+			ObservableValue<? extends ObservableConfig> descendant = observeDescendant(path.getParent());
+			ObservableCollection<ObservableConfig> emptyChildren = ObservableCollection.of(type);
+			children = ObservableCollection.flattenValue(descendant.map(collType,
+				p -> (ObservableCollection<ObservableConfig>) (p == null ? emptyChildren : p.getContent(last).getValues()), //
 				opts -> opts.cache(true).reEvalOnUpdate(false).fireIfUnchanged(false)));
 		}
 		return new ObservableChildSet<>(this, path, children);
@@ -612,7 +609,7 @@ public class ObservableConfig implements StructuredTransactable {
 
 	public <T> ObservableCollection<T> observeValues(ObservableConfigPath path, TypeToken<T> type, ObservableConfigFormat<T> format,
 		Observable<?> until) {
-		ObservableChildSet<? extends ObservableConfig> configs = (ObservableChildSet<? extends ObservableConfig>) getContent(path, until);
+		ObservableChildSet<? extends ObservableConfig> configs = (ObservableChildSet<? extends ObservableConfig>) getContent(path);
 		return new ObservableConfigValues<>(configs, type, format, until);
 	}
 
@@ -622,7 +619,7 @@ public class ObservableConfig implements StructuredTransactable {
 
 	public <T> ObservableValueSet<T> observeEntities(ObservableConfigPath path, TypeToken<T> type, ConfigEntityFieldParser fieldParser,
 		Observable<?> until) {
-		ObservableValueSet<? extends ObservableConfig> configs = getContent(path, until);
+		ObservableValueSet<? extends ObservableConfig> configs = getContent(path);
 		return new ObservableConfigEntityValues<>(configs, type, fieldParser, until);
 	}
 
@@ -727,14 +724,18 @@ public class ObservableConfig implements StructuredTransactable {
 			ObservableConfig child = createChild(name, theLocking);
 			if (preAddMod != null)
 				preAddMod.accept(child);
-			ElementId el = theContent.addElement(child, //
-				after == null ? null : Objects.requireNonNull(after.theParentContentRef),
-					before == null ? null : Objects.requireNonNull(before.theParentContentRef), //
-						first).getElementId();
-			child.initialize(this, el);
-			fire(CollectionChangeType.add, Arrays.asList(child), name, null);
+			addChild(child, after, before, first);
 			return child;
 		}
+	}
+
+	protected void addChild(ObservableConfig child, ObservableConfig after, ObservableConfig before, boolean first) {
+		ElementId el = theContent.addElement(child, //
+			after == null ? null : Objects.requireNonNull(after.theParentContentRef),
+			before == null ? null : Objects.requireNonNull(before.theParentContentRef), //
+			first).getElementId();
+		child.initialize(this, el);
+		fire(CollectionChangeType.add, Arrays.asList(child), child.getName(), null);
 	}
 
 	public ObservableConfig setName(String name) {
@@ -1119,9 +1120,8 @@ public class ObservableConfig implements StructuredTransactable {
 						persistAttributes(config, attributes);
 						isRoot = false;
 					} else {
-						newConfig = theStack.getLast().addChild(encoding.decode(name), newCfg -> {
-							persistAttributes(newCfg, attributes);
-						});
+						newConfig = theStack.getLast().createChild(name, theStack.getLast().getLocker());
+						persistAttributes(newConfig, attributes);
 					}
 					theStack.add(newConfig);
 					if (theContentStack.size() < theStack.size())
@@ -1183,6 +1183,8 @@ public class ObservableConfig implements StructuredTransactable {
 					}
 					if (!Objects.equals(contentStr, cfg.getValue()))
 						cfg.setValue(contentStr);
+					if (!theStack.isEmpty())
+						theStack.getLast().addChild(cfg, null, null, false);
 					hasContent = true;
 				}
 			});

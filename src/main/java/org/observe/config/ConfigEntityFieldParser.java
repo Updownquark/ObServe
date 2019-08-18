@@ -21,21 +21,34 @@ public class ConfigEntityFieldParser {
 	}
 
 	private final Map<Class<?>, ConfigFormatGenerator<?>> theFormats;
+	private final Map<TypeToken<?>, ObservableConfigFormat<?>> theFormatCache;
 
 	public ConfigEntityFieldParser() {
 		theFormats = new HashMap<>();
+		theFormatCache = new HashMap<>();
 	}
 
 	public <T> ConfigEntityFieldParser forSimpleType(Class<T> type, Format<T> format, Supplier<? extends T> defaultValue) {
-		theFormats.put(type, generate(ObservableConfigFormat.ofQommonFormat(format, defaultValue)));
+		theFormatCache.put(TypeTokens.get().of(type), ObservableConfigFormat.ofQommonFormat(format, defaultValue));
 		return this;
 	}
 
-	public <T> ObservableConfigFormat<T> getConfigFormat(ConfiguredValueField<?, T> field) {
-		Class<T> raw = TypeTokens.getRawType(TypeTokens.get().unwrap(field.getFieldType()));
+	public <T> ConfigEntityFieldParser withFormat(TypeToken<T> type, ObservableConfigFormat<T> format) {
+		theFormatCache.put(type, format);
+		return this;
+	}
+
+	public <T> ObservableConfigFormat<T> getConfigFormat(TypeToken<T> type) {
+		Class<T> raw = TypeTokens.getRawType(TypeTokens.get().unwrap(type));
+		ObservableConfigFormat<T> format = (ObservableConfigFormat<T>) theFormatCache.get(type);
+		if (format != null)
+			return format;
 		ConfigFormatGenerator<T> gen = (ConfigFormatGenerator<T>) theFormats.get(raw);
-		if (gen != null)
-			return gen.formatFor(field.getFieldType());
+		if (gen != null) {
+			format = gen.formatFor(type);
+			theFormatCache.put(type, format);
+			return format;
+		}
 		if (raw == String.class)
 			return (ObservableConfigFormat<T>) ObservableConfigFormat.TEXT;
 		else if (raw == double.class)
@@ -53,6 +66,10 @@ public class ConfigEntityFieldParser {
 		else if (raw == Instant.class)
 			return (ObservableConfigFormat<T>) ObservableConfigFormat.DATE;
 		else
-			throw new IllegalArgumentException("No custom or default format available for type " + raw.getName() + " of field " + field);
+			throw new IllegalArgumentException("No custom or default format available for type " + raw.getName());
+	}
+
+	public <T> ObservableConfigFormat<T> getConfigFormat(ConfiguredValueField<?, T> field) {
+		return getConfigFormat(field.getFieldType());
 	}
 }

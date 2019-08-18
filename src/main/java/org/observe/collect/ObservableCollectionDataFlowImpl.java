@@ -3161,9 +3161,9 @@ public class ObservableCollectionDataFlowImpl {
 		/** A {@link DerivedCollectionElement} implementation for {@link ActiveMappedCollectionManager} */
 		public class MappedElement implements DerivedCollectionElement<T> {
 			private final DerivedCollectionElement<I> theParentEl;
-			private CollectionElementListener<T> theListener;
-			private T theValue;
-			private final XformOptions.XformCacheHandler<I, T> theCacheHandler;
+			CollectionElementListener<T> theListener;
+			T theValue;
+			final XformOptions.XformCacheHandler<I, T> theCacheHandler;
 
 			MappedElement(DerivedCollectionElement<I> parentEl, boolean synthetic) {
 				theParentEl = parentEl;

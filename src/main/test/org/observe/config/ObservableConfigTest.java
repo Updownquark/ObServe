@@ -58,7 +58,8 @@ public class ObservableConfigTest {
 		theConfig.getAllContent().getValues().clear();
 		if (beforeParse != null)
 			beforeParse.run();
-		readXml(new ByteArrayInputStream(writer.toString().getBytes("UTF-8")));
+		readXml(//
+			new ByteArrayInputStream(writer.toString().getBytes("UTF-8")));
 	}
 
 	@Test
@@ -263,10 +264,6 @@ public class ObservableConfigTest {
 		Assert.assertEquals(4, i);
 
 		theConfig.set("test-entities/test-entity{a=10,b=true}/a", "20");
-		Assert.assertEquals(20, testEntities.getValues().get(1).getA());
-
-		until.onNext(null);
-		theConfig.set("test-entities/test-entity{a=10,b=true}/a", "30");
 		Assert.assertEquals(20, testEntities.getValues().get(1).getA());
 	}
 

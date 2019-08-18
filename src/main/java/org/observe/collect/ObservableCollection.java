@@ -34,6 +34,7 @@ import org.qommons.Ternian;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterList;
+import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
@@ -203,17 +204,17 @@ public interface ObservableCollection<E> extends BetterList<E> {
 			int [] index=new int[]{0};
 			SubscriptionCause cause = new SubscriptionCause();
 			try (Transaction ct = SubscriptionCause.use(cause)) {
-				spliterator(forward).forEachElement(el -> {
+				CollectionElement<E> el = getTerminalElement(forward);
+				while (el != null) {
 					ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(), index[0],
 						CollectionChangeType.add, null, el.get(), cause);
 					try (Transaction evtT = Causable.use(event)) {
 						observer.accept(event);
 					}
+					el = getAdjacentElement(el.getElementId(), forward);
 					if (forward)
 						index[0]++;
-					//					else
-					//						index[0]--;
-				}, forward);
+				}
 			}
 			// Subscribe changes
 			changeSub = onChange(observer);
@@ -224,21 +225,22 @@ public interface ObservableCollection<E> extends BetterList<E> {
 				changeSub.unsubscribe();
 				if (removeAll) {
 					// Remove events
-					// Remove elements in reverse order
+					// Remove elements in reverse order from how they were subscribed
 					int[] index = new int[] { !forward ? 0 : size() - 1 };
-					// int [] index=new int []{0};
 					SubscriptionCause cause = new SubscriptionCause();
 					try (Transaction ct = SubscriptionCause.use(cause)) {
-						spliterator(!forward).forEachElement(el -> {
+						CollectionElement<E> el = getTerminalElement(!forward);
+						while (el != null) {
 							E value = el.get();
 							ObservableCollectionEvent<E> event = new ObservableCollectionEvent<>(el.getElementId(), getType(), index[0],
 								CollectionChangeType.remove, value, value, cause);
 							try (Transaction evtT = Causable.use(event)) {
 								observer.accept(event);
 							}
+							el = getAdjacentElement(el.getElementId(), !forward);
 							if (forward)
 								index[0]--;
-						}, !forward);
+						}
 					}
 				}
 			}
