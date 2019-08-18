@@ -55,6 +55,14 @@ public class EntityReflector<E> {
 	}
 
 	/**
+	 * @param type The type to test
+	 * @return Whether the type is an entity type candidate to be reflected by this class
+	 */
+	public static boolean isEntityType(Class<?> type) {
+		return type.isInterface() && (type.getModifiers() & Modifier.PUBLIC) != 0;
+	}
+
+	/**
 	 * @param type The interface type to reflect on
 	 * @return A builder to create a reflector
 	 */

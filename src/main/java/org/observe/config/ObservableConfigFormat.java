@@ -324,4 +324,24 @@ public interface ObservableConfigFormat<T> {
 			}
 		};
 	}
+
+	static <E> ObservableConfigFormat<ObservableValueSet<E>> ofEntitySet(EntityConfigFormat<E> elementFormat, String childName,
+		ConfigEntityFieldParser fieldParser) {
+		return new ObservableConfigFormat<ObservableValueSet<E>>() {
+			@Override
+			public void format(ObservableValueSet<E> value, ObservableConfig config) {
+				// Nah, we don't support calling set on a field like this
+				throw new UnsupportedOperationException();// TODO Should we throw an exception?
+			}
+
+			@Override
+			public ObservableValueSet<E> parse(ObservableConfig config, ObservableValueSet<E> previousValue, ObservableConfigEvent change,
+				Observable<?> until) throws ParseException {
+				if (previousValue == null) // TODO config can be null
+					return config.observeEntities(config.createPath(childName), elementFormat.entityType.getType(), fieldParser, until);
+				else
+					return previousValue; // The entity set knows how to handle the events, we don't need to
+			}
+		};
+	}
 }

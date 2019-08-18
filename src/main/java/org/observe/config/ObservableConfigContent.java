@@ -515,7 +515,7 @@ public class ObservableConfigContent {
 			}
 			ObservableConfigFormat<T> entityFormat;
 			try {
-				entityFormat = fieldParser.getConfigFormat(type);
+				entityFormat = fieldParser.getConfigFormat(type, null);
 			} catch (IllegalArgumentException e) {
 				entityFormat = null;
 			}
