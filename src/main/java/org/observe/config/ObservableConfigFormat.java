@@ -9,17 +9,24 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import org.observe.Observable;
 import org.observe.SimpleObservable;
+import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfig.ObservableConfigEvent;
+import org.observe.config.ObservableConfig.ObservableConfigPath;
+import org.observe.util.EntityReflector;
 import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
+import org.qommons.Causable;
 import org.qommons.StringUtils;
 import org.qommons.Transaction;
+import org.qommons.collect.CollectionElement;
+import org.qommons.collect.ElementId;
 import org.qommons.collect.QuickSet.QuickMap;
 import org.qommons.io.Format;
 
@@ -37,8 +44,9 @@ public interface ObservableConfigFormat<T> {
 
 	void format(T value, ObservableConfig config);
 
-	T parse(ObservableConfig config, T previousValue, ObservableConfig.ObservableConfigEvent change, Observable<?> until)
-		throws ParseException;
+	T parse(ObservableConfig parent, ObservableConfig config, T previousValue, ObservableConfig.ObservableConfigEvent change,
+		Observable<?> until)
+			throws ParseException;
 
 	static <T> ObservableConfigFormat<T> ofQommonFormat(Format<T> format, Supplier<? extends T> defaultValue) {
 		return new SimpleConfigFormat<>(format, defaultValue);
@@ -65,8 +73,9 @@ public interface ObservableConfigFormat<T> {
 		}
 
 		@Override
-		public T parse(ObservableConfig config, T previousValue, ObservableConfig.ObservableConfigEvent change, Observable<?> until)
-			throws ParseException {
+		public T parse(ObservableConfig parent, ObservableConfig config, T previousValue, ObservableConfig.ObservableConfigEvent change,
+			Observable<?> until)
+				throws ParseException {
 			if (config == null)
 				return defaultValue.get();
 			if (change != null && change.relativePath.size() > 1)
@@ -124,8 +133,9 @@ public interface ObservableConfigFormat<T> {
 		}
 
 		@Override
-		public E parse(ObservableConfig config, E previousValue, ObservableConfig.ObservableConfigEvent change, Observable<?> until)
-			throws ParseException {
+		public E parse(ObservableConfig parent, ObservableConfig config, E previousValue, ObservableConfig.ObservableConfigEvent change,
+			Observable<?> until)
+				throws ParseException {
 			if (config != null && "true".equalsIgnoreCase(config.get("null")))
 				return null;
 			else if (previousValue == null)
@@ -163,7 +173,7 @@ public interface ObservableConfigFormat<T> {
 		public E createInstance(ObservableConfig config, QuickMap<String, Object> fieldValues, Observable<?> until) throws ParseException {
 			for (int i = 0; i < fieldValues.keySize(); i++) {
 				ObservableConfig fieldConfig = config.getChild(theFieldChildNames.get(i));
-				fieldValues.put(i, fieldFormats[i].parse(fieldConfig, null, null, until));
+				fieldValues.put(i, fieldFormats[i].parse(config, fieldConfig, null, null, until));
 			}
 			return entityType.create(//
 				idx -> fieldValues.get(idx), //
@@ -196,7 +206,7 @@ public interface ObservableConfigFormat<T> {
 			ObservableConfig fieldConfig = entityConfig.getChild(theFieldChildNames.get(fieldIdx));
 			if (change != null && fieldConfig != change.relativePath.get(1))
 				return; // The update does not actually affect the field value
-			Object newValue = ((ObservableConfigFormat<Object>) fieldFormats[fieldIdx]).parse(fieldConfig, oldValue,
+			Object newValue = ((ObservableConfigFormat<Object>) fieldFormats[fieldIdx]).parse(entityConfig, fieldConfig, oldValue,
 				change == null ? null : change.asFromChild(), until);
 			if (oldValue != newValue)
 				((ConfiguredValueField<E, Object>) field).set(previousValue, newValue);
@@ -292,8 +302,9 @@ public interface ObservableConfigFormat<T> {
 			}
 
 			@Override
-			public C parse(ObservableConfig config, C previousValue, ObservableConfigEvent change, Observable<?> until)
-				throws ParseException {
+			public C parse(ObservableConfig parent, ObservableConfig config, C previousValue, ObservableConfigEvent change,
+				Observable<?> until)
+					throws ParseException {
 				class ConfigContentValueWrapper extends ObservableCollectionWrapper<E> {
 					private final ObservableCollection<E> theValues;
 					private final SimpleObservable<Void> theContentUntil;
@@ -335,13 +346,302 @@ public interface ObservableConfigFormat<T> {
 			}
 
 			@Override
-			public ObservableValueSet<E> parse(ObservableConfig config, ObservableValueSet<E> previousValue, ObservableConfigEvent change,
-				Observable<?> until) throws ParseException {
+			public ObservableValueSet<E> parse(ObservableConfig parent, ObservableConfig config, ObservableValueSet<E> previousValue,
+				ObservableConfigEvent change, Observable<?> until) throws ParseException {
+				if (previousValue != null)
+					return previousValue; // The entity set knows how to handle the events, we don't need to
 				if (previousValue == null) // TODO config can be null
 					return config.observeEntities(config.createPath(childName), elementFormat.entityType.getType(), fieldParser, until);
-				else
-					return previousValue; // The entity set knows how to handle the events, we don't need to
 			}
 		};
+	}
+
+	class ObservableConfigEntityValues2<E> implements ObservableValueSet<E> {
+		private final ObservableConfig theCollectionElement;
+		private final EntityConfigFormat<E> theFormat;
+		private final String theChildName;
+		private final ConfigEntityFieldParser theFieldParser;
+		private final Observable<?> theUntil;
+
+		private final ObservableCollection<ConfigValueElement> theValueElements;
+		private final ObservableCollection<E> theValues;
+
+		QuickMap<String, Object> theNewInstanceFields;
+		Consumer<? super E> thePreAddAction;
+		ConfigValueElement theNewElement;
+
+		ObservableConfigEntityValues2(ObservableConfig collectionElement, EntityConfigFormat<E> format, String childName,
+			ConfigEntityFieldParser fieldParser, Observable<?> until) {
+			theCollectionElement = collectionElement;
+			theFormat = format;
+			theChildName = childName;
+			theFieldParser = fieldParser;
+			theUntil = until;
+
+			theValueElements = theCollectionElement.getContent(childName).getValues().flow()
+				.map(new TypeToken<ConfigValueElement>() {}, cfg -> new ConfigValueElement(cfg), //
+					opts -> opts.cache(true).reEvalOnUpdate(false))
+				.collectActive(theUntil);
+			theValues = theValueElements.flow().map(format.getEntityType().getType(), cve -> cve.theInstance, opts -> opts.cache(false))
+				.collectPassive();
+		}
+
+		protected void onChange(ObservableConfigEvent collectionChange) {
+			if (theNewInstanceFields != null)
+				return; // Yeah, we already know--we're causing the change
+			if (collectionChange.relativePath.isEmpty())
+				return; // Doesn't affect us
+			CollectionElement<ConfigValueElement> el = theValueElements
+				.getElementBySource(collectionChange.relativePath.get(0).getParentChildRef());
+			if (el == null) // Must be a different child
+				return;
+			try {
+				theFormat.parse(theCollectionElement, el.get().theConfig, el.get().theInstance, collectionChange.asFromChild(), theUntil);
+				theValueElements.mutableElement(el.getElementId()).set(el.get());
+			} catch (ParseException e) {
+				e.printStackTrace();
+			}
+		}
+
+		private class ConfigValueElement implements CollectionElement<E> {
+			private final ObservableConfig theConfig;
+			ElementId theValueId;
+			private E theInstance;
+
+			public ConfigValueElement(ObservableConfig config) {
+				theConfig = config;
+			}
+
+			void initialize(QuickMap<String, Object> fieldValues) {
+				fieldValues = fieldValues == null ? theFormat.getEntityType().getFields().keySet().createMap() : fieldValues.copy();
+				try {
+					theInstance = theFormat.createInstance(theConfig, fieldValues, theUntil);
+					theFormat.getEntityType().associate(theInstance, ObservableConfigEntityValues2.this, this);
+				} catch (ParseException e) {
+					System.err.println("Could not parse instance for " + theConfig);
+					e.printStackTrace();
+				}
+			}
+
+			@Override
+			public ElementId getElementId() {
+				return theValueId;
+			}
+
+			@Override
+			public E get() {
+				return theInstance;
+			}
+		}
+	}
+
+	/**
+	 * Implements {@link ObservableConfig#observeEntities(ObservableConfigPath, TypeToken, ConfigEntityFieldParser, Observable)}
+	 *
+	 * @param <T> The entity type
+	 */
+	static class ObservableConfigEntityValues<T> implements ObservableValueSet<T> {
+		private final ObservableValueSet<? extends ObservableConfig> theConfigs;
+		private final ConfigEntityFieldParser theFieldParser;
+		private final EntityConfiguredValueType<T> theType;
+		private final ObservableConfigFormat.EntityConfigFormat<T> theEntityFormat;
+
+		private final ObservableCollection<ConfigValueElement> theValueElements;
+		private final ObservableCollection<T> theValues;
+
+		private final Observable<?> theUntil;
+		QuickMap<String, Object> theNewInstanceFields;
+		Consumer<? super T> thePreAddAction;
+		ConfigValueElement theNewElement;
+		boolean isUpdating;
+
+		/**
+		 * @param configs The set of observable configs backing each entity
+		 * @param type The entity type
+		 * @param fieldParser The parsers/formatters/default values for each field
+		 * @param until The observable on which to release resources
+		 */
+		ObservableConfigEntityValues(ObservableValueSet<? extends ObservableConfig> configs, TypeToken<T> type,
+			ConfigEntityFieldParser fieldParser, Observable<?> until) {
+			theConfigs = configs;
+			EntityReflector.Builder<T> typeBuilder = EntityReflector.build(type);
+			try {
+				typeBuilder.withCustomMethod(Object.class.getDeclaredMethod("toString"), (proxy, args) -> {
+					ConfigValueElement cve = (ConfigValueElement) ((EntityConfiguredValueType<T>) getType()).getAssociated(proxy, this);
+					return cve.print();
+				});
+			} catch (NoSuchMethodException | SecurityException e) {
+				throw new IllegalStateException(e);
+			}
+			ObservableConfigFormat<T> entityFormat;
+			try {
+				entityFormat = fieldParser.getConfigFormat(type, null);
+			} catch (IllegalArgumentException e) {
+				entityFormat = null;
+			}
+			if (entityFormat instanceof ObservableConfigFormat.EntityConfigFormat) {
+				theEntityFormat = (ObservableConfigFormat.EntityConfigFormat<T>) entityFormat;
+				theType = theEntityFormat.entityType;
+			} else {
+				theType = new EntityConfiguredValueType<>(typeBuilder.build());
+				theEntityFormat = ObservableConfigFormat.ofEntity(theType, fieldParser);
+				if (entityFormat == null)
+					fieldParser.withFormat(type, theEntityFormat);
+			}
+			theFieldParser = fieldParser;
+
+			theUntil = until == null ? Observable.empty() : until;
+			theValueElements = ((ObservableCollection<ObservableConfig>) theConfigs.getValues()).flow()
+				.map(new TypeToken<ConfigValueElement>() {}, cfg -> new ConfigValueElement(cfg), //
+					opts -> opts.cache(true).reEvalOnUpdate(false))
+				.collectActive(theUntil);
+
+			Subscription valueElSub = theValueElements.subscribe(evt -> {
+				if (isUpdating)
+					return;
+				switch (evt.getType()) {
+				case add:
+					evt.getNewValue().theValueId = evt.getElementId();
+					evt.getNewValue().initialize(theNewInstanceFields);
+					theNewElement = evt.getNewValue();
+					if (thePreAddAction != null) {
+						try {
+							thePreAddAction.accept(evt.getNewValue().get());
+						} catch (RuntimeException e) { // Can't allow exceptions to propagate here--could mess up the collection structures
+							System.err.println("Exception in pre-add action");
+							e.printStackTrace();
+						}
+					}
+					break;
+				case set:
+					evt.getNewValue().update(evt);
+					break;
+				default:
+					break;
+				}
+			}, true);
+			theUntil.take(1).act(__ -> valueElSub.unsubscribe());
+			theValues = theValueElements.flow().map(type, cve -> cve.theInstance, opts -> opts.cache(false)).collectPassive();
+		}
+
+		@Override
+		public ConfiguredValueType<T> getType() {
+			return theType;
+		}
+
+		@Override
+		public ObservableCollection<? extends T> getValues() {
+			return theValues;
+		}
+
+		protected final ElementId getConfigElement(ElementId valueElement) {
+			if (valueElement == null)
+				return null;
+			return ((ObservableCollection<ObservableConfig>) theConfigs.getValues())
+				.getElement(theValueElements.getElement(valueElement).get().theConfig, true).getElementId();
+		}
+
+		@Override
+		public ValueCreator<T> create(ElementId after, ElementId before, boolean first) {
+			ElementId configAfter = getConfigElement(after);
+			ElementId configBefore = getConfigElement(before);
+			return new SimpleValueCreator<T>(theType) {
+				private final ValueCreator<? extends ObservableConfig> theConfigCreator = theConfigs.create(configAfter, configBefore,
+					first);
+
+				@Override
+				public <F> ValueCreator<T> with(ConfiguredValueField<? super T, F> field, F value) throws IllegalArgumentException {
+					super.with(field, value);
+					theFieldParser.getConfigFormat(field); // Throws an exception if not supported
+					getFieldValues().put(field.getName(), value);
+					return this;
+				}
+
+				@Override
+				public CollectionElement<T> create(Consumer<? super T> preAddAction) {
+					ConfigValueElement cve;
+					try (Transaction t = theConfigs.getValues().lock(true, null)) {
+						thePreAddAction = preAddAction;
+						theNewInstanceFields = getFieldValues();
+						theConfigCreator.create(cfg -> {
+							for (int i = 0; i < getFieldValues().keySize(); i++) {
+								Object value = getFieldValues().get(i);
+								if (value != null)
+									theEntityFormat.formatField(theType.getFields().get(i), value, cfg);
+							}
+						});
+						theNewInstanceFields = null;
+						cve = theNewElement;
+						theNewElement = null;
+					}
+					cve.initialize(getFieldValues());
+					return cve;
+				}
+			};
+		}
+
+		class ConfigValueElement implements CollectionElement<T> {
+			private final ObservableConfig theConfig;
+			ElementId theValueId;
+			private T theInstance;
+
+			public ConfigValueElement(ObservableConfig config) {
+				theConfig = config;
+			}
+
+			void initialize(QuickMap<String, Object> fieldValues) {
+				fieldValues = fieldValues == null ? theType.getFields().keySet().createMap() : fieldValues.copy();
+				try {
+					theInstance = theEntityFormat.createInstance(theConfig, fieldValues, theUntil);
+					theType.associate(theInstance, ObservableConfigEntityValues.this, this);
+				} catch (ParseException e) {
+					System.err.println("Could not parse instance for " + theConfig);
+					e.printStackTrace();
+				}
+			}
+
+			@Override
+			public ElementId getElementId() {
+				return theValueId;
+			}
+
+			@Override
+			public T get() {
+				return theInstance;
+			}
+
+			void update(Causable cause) {
+				ObservableConfigEvent configCause = cause
+					.getCauseLike(c -> c instanceof ObservableConfigEvent ? (ObservableConfigEvent) c : null);
+				try {
+					theEntityFormat.parse(5, theConfig, theInstance, configCause, theUntil);
+				} catch (ParseException e) {
+					System.err.println("Could not update instance for " + theConfig);
+					e.printStackTrace();
+				}
+			}
+
+			String print() {
+				StringBuilder str = new StringBuilder(theConfig.getName()).append('(');
+				boolean first = true;
+				for (int i = 0; i < theType.getFields().keySet().size(); i++) {
+					String value = theConfig.get(theEntityFormat.getChildName(i));
+					if (value != null) {
+						if (first)
+							first = false;
+						else
+							str.append(", ");
+						str.append(theType.getFields().keySet().get(i)).append('=').append(value);
+					}
+				}
+				str.append(')');
+				return str.toString();
+			}
+
+			@Override
+			public String toString() {
+				return theConfig.toString();
+			}
+		}
 	}
 }

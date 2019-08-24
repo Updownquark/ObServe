@@ -442,8 +442,8 @@ public class ObservableConfigContent {
 					theInstance = addedValue;
 				else {
 					try {
-						theInstance = theFormat.parse(theConfig, theInstance, null, //
-							Observable.or(theUntil, theValueUntil));
+						theInstance = theFormat.parse(theConfig.getParent(), theConfig, theInstance, //
+							null, Observable.or(theUntil, theValueUntil));
 					} catch (ParseException e) {
 						System.err.println("Could not initialize " + theConfig.getPath() + "(" + theType + ")");
 						e.printStackTrace();
@@ -455,9 +455,9 @@ public class ObservableConfigContent {
 				ObservableConfigEvent configCause = cause
 					.getCauseLike(c -> c instanceof ObservableConfigEvent ? (ObservableConfigEvent) c : null);
 				try {
-					theInstance = theFormat.parse(theConfig, theInstance, //
-						configCause == null ? null : configCause.asFromChild(), //
-							Observable.or(theUntil, theValueUntil));
+					theInstance = theFormat.parse(theConfig.getParent(), theConfig, //
+						theInstance, //
+						configCause == null ? null : configCause.asFromChild(), Observable.or(theUntil, theValueUntil));
 				} catch (ParseException e) {
 					System.err.println("Could not update " + theConfig.getPath() + "(" + theType + ")");
 					e.printStackTrace();
@@ -654,7 +654,7 @@ public class ObservableConfigContent {
 				ObservableConfigEvent configCause = cause
 					.getCauseLike(c -> c instanceof ObservableConfigEvent ? (ObservableConfigEvent) c : null);
 				try {
-					theEntityFormat.parse(theConfig, theInstance, configCause, theUntil);
+					theEntityFormat.parse(theConfig.getParent(), theConfig, theInstance, configCause, theUntil);
 				} catch (ParseException e) {
 					System.err.println("Could not update instance for " + theConfig);
 					e.printStackTrace();
