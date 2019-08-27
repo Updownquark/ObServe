@@ -269,7 +269,7 @@ public class ObservableConfigTest {
 		Assert.assertEquals(20, testEntities.getValues().get(1).getA());
 	}
 
-	// @Test TODO
+	@Test
 	public void testComplexEntities() throws IOException, SAXException {
 		SimpleObservable<Void> until = new SimpleObservable<>();
 		readXml(getClass().getResourceAsStream("TestValues.xml"));

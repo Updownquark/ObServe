@@ -69,9 +69,7 @@ public class ConfigEntityFieldParser {
 			return (ObservableConfigFormat<T>) ObservableConfigFormat.DURATION;
 		else if (raw == Instant.class)
 			return (ObservableConfigFormat<T>) ObservableConfigFormat.DATE;
-		else if (configName != null && EntityReflector.isEntityType(raw)) {
-			return ObservableConfigFormat.ofEntity(new EntityConfiguredValueType<>(EntityReflector.build(type).build()), this);
-		} else if (raw.isAssignableFrom(ObservableCollection.class)) {
+		else if (raw.isAssignableFrom(ObservableCollection.class)) {
 			String childName = StringUtils.singularize(configName);
 			ObservableConfigFormat<?> elementFormat = getConfigFormat(type.resolveType(Collection.class.getTypeParameters()[0]), childName);
 			return (ObservableConfigFormat<T>) ObservableConfigFormat.ofCollection((TypeToken<Collection<Object>>) type,
@@ -85,7 +83,9 @@ public class ConfigEntityFieldParser {
 					"Cannot create an " + ObservableValueSet.class.getSimpleName() + " for element type " + elementType);
 			return (ObservableConfigFormat<T>) ObservableConfigFormat
 				.ofEntitySet((ObservableConfigFormat.EntityConfigFormat<Object>) elementFormat, childName, this);
-		} else
+		} else if (configName != null && EntityReflector.isEntityType(raw))
+			return ObservableConfigFormat.ofEntity(new EntityConfiguredValueType<>(EntityReflector.build(type).build()), this);
+		else
 			throw new IllegalArgumentException("No custom or default format available for type " + raw.getName());
 	}
 

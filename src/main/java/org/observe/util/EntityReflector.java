@@ -342,7 +342,7 @@ public class EntityReflector<E> {
 		for (int i = 0; i < fields.keySet().size(); i++) {
 			Invokable<? super E, ?> getter = fieldGetters.get(fields.keySet().get(i));
 			Invokable<? super E, ?> setter = fieldSetters.get(fields.keySet().get(i));
-			if (!setter.getParameters().get(0).getType().isAssignableFrom(getter.getReturnType())) {
+			if (setter != null && !setter.getParameters().get(0).getType().isAssignableFrom(getter.getReturnType())) {
 				System.err.println("Setter " + setter + " for field with getter " + getter + " must accept a " + getter.getReturnType());
 				continue;
 			}
