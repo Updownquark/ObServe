@@ -26,6 +26,7 @@ import javax.swing.JPanel;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
 import javax.swing.JToggleButton;
+import javax.swing.SpinnerNumberModel;
 import javax.swing.event.ChangeListener;
 
 import org.observe.Observable;
@@ -499,6 +500,536 @@ public class ObservableSwingUtils {
 		return new MigFieldPanelPopulator<>(container, until);
 	}
 
+	public static interface FieldPanelPopulator<C extends Container> {
+		C getContainer();
+
+		<F> FieldPanelPopulator<C> addTextField(String fieldName, SettableValue<F> field, Format<F> format,
+			Consumer<PanelPopulatorField<F, ObservableTextField<F>>> modify);
+
+		FieldPanelPopulator<C> addCheckField(String fieldName, SettableValue<Boolean> field,
+			Consumer<PanelPopulatorField<Boolean, JCheckBox>> modify);
+
+		/* TODO
+		 * toggle/radio buttons
+		 * slider
+		 * table
+		 * tree
+		 * better button controls (visibility, variable text, etc.)
+		 * form controls (e.g. press enter in a text field and a submit action (also tied to a button) fires
+		 */
+
+		default FieldPanelPopulator<C> addIntSpinnerField(String fieldName, SettableValue<Integer> value,
+			Consumer<PanelPopulatorField<Integer, JSpinner>> modify) {
+			return addSpinnerField(fieldName, new JSpinner(new SpinnerNumberModel(0, Integer.MIN_VALUE, Integer.MAX_VALUE, 1)), value,
+				Number::intValue, modify);
+		}
+
+		default FieldPanelPopulator<C> addDoubleSpinnerField(String fieldName, SettableValue<Double> value,
+			Consumer<PanelPopulatorField<Double, JSpinner>> modify) {
+			return addSpinnerField(fieldName,
+				new JSpinner(new SpinnerNumberModel(0.0, Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 1.0)), value,
+				Number::doubleValue, modify);
+		}
+
+		<F> FieldPanelPopulator<C> addSpinnerField(String fieldName, JSpinner spinner, SettableValue<F> value,
+			Function<? super F, ? extends F> purifier, Consumer<PanelPopulatorField<F, JSpinner>> modify);
+
+		default <F> FieldPanelPopulator<C> addComboField(String fieldName, SettableValue<F> value,
+			Consumer<PanelComboField<F, JComboBox<F>>> modify, F... availableValues) {
+			return addComboField(fieldName, value, Arrays.asList(availableValues), modify);
+		}
+
+		<F> FieldPanelPopulator<C> addComboField(String fieldName, SettableValue<F> value, List<? extends F> availableValues,
+			Consumer<PanelComboField<F, JComboBox<F>>> modify);
+
+		// public <F> MigPanelPopulatorField<F, JToggleButton> addToggleField(String fieldName, SettableValue<F> value,
+		// boolean radio, F... availableValues) {
+		// return addToggleField(fieldName, value, radio, Arrays.asList(availableValues));
+		// }
+		//
+		// public <F> MigPanelPopulatorField<F, JToggleButton> addToggleField(String fieldName, SettableValue<F> value, boolean radio,
+		// List<? extends F> availableValues) {
+		// }
+		//
+		// public <F> MigPanelPopulatorField<F, JSlider> addSliderField(String fieldName, SettableValue<Integer> value) {}
+		//
+		// public <F> MigPanelPopulatorField<F, ObservableTableModel<F>> addTable(ObservableCollection<F> rows,
+		// ObservableCollection<CategoryRenderStrategy<? super F, ?>> columns) {}
+		//
+		// public <F> MigPanelPopulatorField<F, ObservableTreeModel> addTree(Object root,
+		// Function<Object, ? extends ObservableCollection<?>> branching) {}
+
+		FieldPanelPopulator<C> addHPanel(String fieldName, Consumer<HorizPanel> modify);
+
+		<S> FieldPanelPopulator<C> addComponent(String fieldName, S component, Consumer<PanelPopulatorField<Object, S>> modify);
+	}
+
+	private interface FieldPanelPopulatorImpl<C extends Container> extends FieldPanelPopulator<C> {
+		Observable<?> _getUntil();
+
+		abstract void doAdd(PanelPopulatorField<?, ?> field);
+
+		@Override
+		default <F> FieldPanelPopulator<C> addTextField(String fieldName, SettableValue<F> field, Format<F> format,
+			Consumer<PanelPopulatorField<F, ObservableTextField<F>>> modify) {
+			PanelPopulatorField<F, ObservableTextField<F>> fieldPanel = new PanelPopulatorField<>(fieldName,
+				new ObservableTextField<>(field, format, _getUntil()));
+			fieldPanel.getTooltip().changes().takeUntil(_getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
+			if (modify != null)
+				modify.accept(fieldPanel);
+			doAdd(fieldPanel);
+			return this;
+		}
+
+		@Override
+		default FieldPanelPopulator<C> addCheckField(String fieldName, SettableValue<Boolean> field,
+			Consumer<PanelPopulatorField<Boolean, JCheckBox>> modify) {
+			PanelPopulatorField<Boolean, JCheckBox> fieldPanel = new PanelPopulatorField<>(fieldName, new JCheckBox());
+			Subscription sub = checkFor(fieldPanel.getEditor(), fieldPanel.getTooltip(), field);
+			_getUntil().take(1).act(__ -> sub.unsubscribe());
+			if (modify != null)
+				modify.accept(fieldPanel);
+			doAdd(fieldPanel);
+			return this;
+		}
+
+		@Override
+		default <F> FieldPanelPopulator<C> addSpinnerField(String fieldName, JSpinner spinner, SettableValue<F> value,
+			Function<? super F, ? extends F> purifier, Consumer<PanelPopulatorField<F, JSpinner>> modify) {
+			PanelPopulatorField<F, JSpinner> fieldPanel = new PanelPopulatorField<>(fieldName, spinner);
+			ObservableSwingUtils.spinnerFor(spinner, fieldPanel.getTooltip().get(), value, purifier);
+			if (modify != null)
+				modify.accept(fieldPanel);
+			doAdd(fieldPanel);
+			return this;
+		}
+
+		@Override
+		default <F> FieldPanelPopulator<C> addComboField(String fieldName, SettableValue<F> value,
+			Consumer<PanelComboField<F, JComboBox<F>>> modify, F... availableValues) {
+			return addComboField(fieldName, value, Arrays.asList(availableValues), modify);
+		}
+
+		@Override
+		default <F> FieldPanelPopulator<C> addComboField(String fieldName, SettableValue<F> value, List<? extends F> availableValues,
+			Consumer<PanelComboField<F, JComboBox<F>>> modify) {
+			ObservableCollection<? extends F> observableValues;
+			if (availableValues instanceof ObservableCollection)
+				observableValues = (ObservableCollection<F>) availableValues;
+			else
+				observableValues = ObservableCollection.of(value.getType(), availableValues);
+			PanelComboField<F, JComboBox<F>> fieldPanel = new PanelComboField<>(fieldName, new JComboBox<>());
+			Subscription sub = ObservableComboBoxModel.comboFor(fieldPanel.getEditor(), fieldPanel.getTooltip(),
+				fieldPanel::getValueTooltip, observableValues, value);
+			_getUntil().take(1).act(__ -> sub.unsubscribe());
+			if (modify != null)
+				modify.accept(fieldPanel);
+			doAdd(fieldPanel);
+			return this;
+		}
+
+		// public <F> MigPanelPopulatorField<F, JToggleButton> addToggleField(String fieldName, SettableValue<F> value,
+		// boolean radio, F... availableValues) {
+		// return addToggleField(fieldName, value, radio, Arrays.asList(availableValues));
+		// }
+		//
+		// public <F> MigPanelPopulatorField<F, JToggleButton> addToggleField(String fieldName, SettableValue<F> value, boolean radio,
+		// List<? extends F> availableValues) {
+		// }
+		//
+		// public <F> MigPanelPopulatorField<F, JSlider> addSliderField(String fieldName, SettableValue<Integer> value) {}
+		//
+		// public <F> MigPanelPopulatorField<F, ObservableTableModel<F>> addTable(ObservableCollection<F> rows,
+		// ObservableCollection<CategoryRenderStrategy<? super F, ?>> columns) {}
+		//
+		// public <F> MigPanelPopulatorField<F, ObservableTreeModel> addTree(Object root,
+		// Function<Object, ? extends ObservableCollection<?>> branching) {}
+
+		@Override
+		default FieldPanelPopulator<C> addHPanel(String fieldName, Consumer<HorizPanel> modify) {
+			HorizPanel subPanel = new HorizPanel(fieldName, _getUntil());
+			if(modify!=null)
+				modify.accept(subPanel);
+			doAdd(subPanel);
+			return this;
+		}
+
+		@Override
+		default <S> FieldPanelPopulator<C> addComponent(String fieldName, S component, Consumer<PanelPopulatorField<Object, S>> modify) {
+			PanelPopulatorField<Object, S> subPanel = new PanelPopulatorField<>(fieldName, component);
+			if (modify != null)
+				modify.accept(subPanel);
+			doAdd(subPanel);
+			return this;
+		}
+	}
+
+	public static class PanelPopulatorField<F, E> {
+		private ObservableValue<String> theFieldName;
+		private final E theEditor;
+		private ObservableValue<String> theTooltip;
+		private SettableValue<ObservableValue<String>> theSettableTooltip;
+		private ObservableValue<String> thePostLabel;
+		private boolean isGrow;
+		private ObservableValue<Boolean> isVisible;
+
+		PanelPopulatorField(String fieldName, E editor) {
+			theFieldName = fieldName == null ? null : ObservableValue.of(TypeTokens.get().STRING, fieldName);
+			theEditor = editor;
+			theSettableTooltip = new SimpleSettableValue<>(ObservableValue.TYPE_KEY.getCompoundType(String.class), true);
+			theTooltip = ObservableValue.flatten(theSettableTooltip);
+		}
+
+		public E getEditor() {
+			return theEditor;
+		}
+
+		public PanelPopulatorField<F, E> withVariableFieldName(ObservableValue<String> fieldName) {
+			theFieldName = fieldName;
+			return this;
+		}
+
+		public PanelPopulatorField<F, E> visibleWhen(ObservableValue<Boolean> visible) {
+			isVisible = visible;
+			return this;
+		}
+
+		public PanelPopulatorField<F, E> modifyEditor(Consumer<E> modify) {
+			modify.accept(theEditor);
+			return this;
+		}
+
+		public ObservableValue<String> getTooltip() {
+			return theTooltip;
+		}
+
+		protected Component getComponent() {
+			if (!(theEditor instanceof Component))
+				throw new IllegalStateException("Editor is not a component");
+			return (Component) theEditor;
+		}
+
+		public PanelPopulatorField<F, E> withTooltip(String tooltip) {
+			return withTooltip(ObservableValue.of(TypeTokens.get().STRING, tooltip));
+		}
+
+		public PanelPopulatorField<F, E> withTooltip(ObservableValue<String> tooltip) {
+			theSettableTooltip.set(tooltip, null);
+			return this;
+		}
+
+		public PanelPopulatorField<F, E> withPostLabel(String descrip) {
+			thePostLabel = ObservableValue.of(descrip);
+			return this;
+		}
+
+		public PanelPopulatorField<F, E> withPostLabel(ObservableValue<String> descrip) {
+			thePostLabel = descrip;
+			return this;
+		}
+
+		public PanelPopulatorField<F, E> fill() {
+			isGrow = true;
+			return this;
+		}
+
+		protected ObservableValue<String> getFieldName() {
+			return theFieldName;
+		}
+
+		protected ObservableValue<String> getPostLabel() {
+			return thePostLabel;
+		}
+
+		protected boolean isGrow() {
+			return isGrow;
+		}
+
+		protected ObservableValue<Boolean> isVisible() {
+			return isVisible;
+		}
+	}
+
+	public static class PanelComboField<F, E> extends PanelPopulatorField<F, E> {
+		protected Function<? super F, String> theValueTooltip;
+
+		public PanelComboField(String fieldName, E editor) {
+			super(fieldName, editor);
+		}
+
+		public PanelComboField<F, E> withValueTooltip(Function<? super F, String> tooltip) {
+			theValueTooltip = tooltip;
+			return this;
+		}
+
+		public String getValueTooltip(F value) {
+			return theValueTooltip == null ? null : theValueTooltip.apply(value);
+		}
+
+		@Override
+		public PanelComboField<F, E> withVariableFieldName(ObservableValue<String> fieldName) {
+			return (PanelComboField<F, E>) super.withVariableFieldName(fieldName);
+		}
+
+		@Override
+		public PanelComboField<F, E> modifyEditor(Consumer<E> modify) {
+			return (PanelComboField<F, E>) super.modifyEditor(modify);
+		}
+
+		@Override
+		public PanelComboField<F, E> withTooltip(String tooltip) {
+			return (PanelComboField<F, E>) super.withTooltip(tooltip);
+		}
+
+		@Override
+		public PanelComboField<F, E> withTooltip(ObservableValue<String> tooltip) {
+			return (PanelComboField<F, E>) super.withTooltip(tooltip);
+		}
+
+		@Override
+		public PanelComboField<F, E> withPostLabel(String descrip) {
+			return (PanelComboField<F, E>) super.withPostLabel(descrip);
+		}
+
+		@Override
+		public PanelComboField<F, E> withPostLabel(ObservableValue<String> descrip) {
+			return (PanelComboField<F, E>) super.withPostLabel(descrip);
+		}
+
+		@Override
+		public PanelComboField<F, E> fill() {
+			return (PanelComboField<F, E>) super.fill();
+		}
+	}
+
+	public static class PanelSpinnerField<F> extends PanelPopulatorField<F, JSpinner> {
+		public PanelSpinnerField(String fieldName, JSpinner editor) {
+			super(fieldName, editor);
+		}
+
+		@Override
+		public PanelSpinnerField<F> withVariableFieldName(ObservableValue<String> fieldName) {
+			super.withVariableFieldName(fieldName);
+			return this;
+		}
+
+		@Override
+		public PanelSpinnerField<F> visibleWhen(ObservableValue<Boolean> visible) {
+			super.visibleWhen(visible);
+			return this;
+		}
+
+		@Override
+		public PanelSpinnerField<F> modifyEditor(Consumer<JSpinner> modify) {
+			super.modifyEditor(modify);
+			return this;
+		}
+
+		@Override
+		public PanelSpinnerField<F> withTooltip(String tooltip) {
+			super.withTooltip(tooltip);
+			return this;
+		}
+
+		@Override
+		public PanelSpinnerField<F> withTooltip(ObservableValue<String> tooltip) {
+			super.withTooltip(tooltip);
+			return this;
+		}
+
+		@Override
+		public PanelSpinnerField<F> withPostLabel(String descrip) {
+			super.withPostLabel(descrip);
+			return this;
+		}
+
+		@Override
+		public PanelSpinnerField<F> withPostLabel(ObservableValue<String> descrip) {
+			super.withPostLabel(descrip);
+			return this;
+		}
+
+		@Override
+		public PanelSpinnerField<F> fill() {
+			super.fill();
+			return this;
+		}
+
+		public PanelSpinnerField<F> withStepSize(F stepSize) {
+			((SpinnerNumberModel) getEditor().getModel()).setStepSize((Number) stepSize);
+			return this;
+		}
+	}
+
+	public static class HorizPanel extends PanelPopulatorField<Object, JPanel> implements FieldPanelPopulatorImpl<JPanel> {
+		private final Observable<?> theUntil;
+
+		public HorizPanel(String fieldName, Observable<?> until) {
+			super(fieldName, new JPanel(new JustifiedBoxLayout(false)));
+			theUntil = until;
+		}
+
+		@Override
+		public JPanel getContainer() {
+			return getEditor();
+		}
+
+		@Override
+		public Observable<?> _getUntil() {
+			return theUntil;
+		}
+
+		@Override
+		public void doAdd(PanelPopulatorField<?, ?> field) {
+			JLabel fieldNameLabel;
+			if (field.getFieldName() != null) {
+				fieldNameLabel = new JLabel(field.getFieldName().get());
+				field.getFieldName().changes().takeUntil(_getUntil()).act(evt -> fieldNameLabel.setText(evt.getNewValue()));
+				getContainer().add(fieldNameLabel);
+			} else
+				fieldNameLabel = null;
+			JLabel postLabel;
+			if (field.getPostLabel() != null) {
+				postLabel = new JLabel();
+				field.getPostLabel().changes().takeUntil(_getUntil()).act(evt -> postLabel.setText(evt.getNewValue()));
+			} else {
+				postLabel = null;
+			}
+			Component component = field.getComponent();
+			getContainer().add(component);
+			if (postLabel != null)
+				getContainer().add(postLabel);
+			if (field.isVisible() != null) {
+				field.isVisible().changes().takeUntil(_getUntil()).act(evt -> {
+					if (fieldNameLabel != null)
+						fieldNameLabel.setVisible(evt.getNewValue());
+					component.setVisible(evt.getNewValue());
+					if (postLabel != null)
+						postLabel.setVisible(evt.getNewValue());
+				});
+			}
+		}
+
+		public HorizPanel add(Component c) {
+			getEditor().add(c);
+			return this;
+		}
+
+		public HorizPanel layout(Consumer<JustifiedBoxLayout> onLayout) {
+			onLayout.accept((JustifiedBoxLayout) getEditor().getLayout());
+			return this;
+		}
+
+		@Override
+		public HorizPanel withVariableFieldName(ObservableValue<String> fieldName) {
+			super.withVariableFieldName(fieldName);
+			return this;
+		}
+
+		@Override
+		public HorizPanel visibleWhen(ObservableValue<Boolean> visible) {
+			super.visibleWhen(visible);
+			return this;
+		}
+
+		@Override
+		public HorizPanel modifyEditor(Consumer<JPanel> modify) {
+			super.modifyEditor(modify);
+			return this;
+		}
+
+		@Override
+		public HorizPanel withTooltip(String tooltip) {
+			super.withTooltip(tooltip);
+			return this;
+		}
+
+		@Override
+		public HorizPanel withTooltip(ObservableValue<String> tooltip) {
+			super.withTooltip(tooltip);
+			return this;
+		}
+
+		@Override
+		public HorizPanel withPostLabel(String descrip) {
+			super.withPostLabel(descrip);
+			return this;
+		}
+
+		@Override
+		public HorizPanel withPostLabel(ObservableValue<String> descrip) {
+			super.withPostLabel(descrip);
+			return this;
+		}
+
+		@Override
+		public HorizPanel fill() {
+			super.fill();
+			return this;
+		}
+
+		@Override
+		public <F> HorizPanel addTextField(String fieldName, SettableValue<F> field, Format<F> format,
+			Consumer<PanelPopulatorField<F, ObservableTextField<F>>> modify) {
+			FieldPanelPopulatorImpl.super.addTextField(fieldName, field, format, modify);
+			return this;
+		}
+
+		@Override
+		public HorizPanel addCheckField(String fieldName, SettableValue<Boolean> field,
+			Consumer<PanelPopulatorField<Boolean, JCheckBox>> modify) {
+			FieldPanelPopulatorImpl.super.addCheckField(fieldName, field, modify);
+			return this;
+		}
+
+		@Override
+		public HorizPanel addIntSpinnerField(String fieldName, SettableValue<Integer> value,
+			Consumer<PanelPopulatorField<Integer, JSpinner>> modify) {
+			FieldPanelPopulatorImpl.super.addIntSpinnerField(fieldName, value, modify);
+			return this;
+		}
+
+		@Override
+		public HorizPanel addDoubleSpinnerField(String fieldName, SettableValue<Double> value,
+			Consumer<PanelPopulatorField<Double, JSpinner>> modify) {
+			FieldPanelPopulatorImpl.super.addDoubleSpinnerField(fieldName, value, modify);
+			return this;
+		}
+
+		@Override
+		public <F> HorizPanel addSpinnerField(String fieldName, JSpinner spinner, SettableValue<F> value,
+			Function<? super F, ? extends F> purifier, Consumer<PanelPopulatorField<F, JSpinner>> modify) {
+			FieldPanelPopulatorImpl.super.addSpinnerField(fieldName, spinner, value, purifier, modify);
+			return this;
+		}
+
+		@Override
+		public <F> HorizPanel addComboField(String fieldName, SettableValue<F> value, Consumer<PanelComboField<F, JComboBox<F>>> modify,
+			F... availableValues) {
+			FieldPanelPopulatorImpl.super.addComboField(fieldName, value, modify, availableValues);
+			return this;
+		}
+
+		@Override
+		public <F> HorizPanel addComboField(String fieldName, SettableValue<F> value, List<? extends F> availableValues,
+			Consumer<PanelComboField<F, JComboBox<F>>> modify) {
+			FieldPanelPopulatorImpl.super.addComboField(fieldName, value, availableValues, modify);
+			return this;
+		}
+
+		@Override
+		public HorizPanel addHPanel(String fieldName, Consumer<HorizPanel> modify) {
+			FieldPanelPopulatorImpl.super.addHPanel(fieldName, modify);
+			return this;
+		}
+
+		@Override
+		public <S> HorizPanel addComponent(String fieldName, S component, Consumer<PanelPopulatorField<Object, S>> modify) {
+			FieldPanelPopulatorImpl.super.addComponent(fieldName, component, modify);
+			return this;
+		}
+	}
+
 	/**
 	 * <p>
 	 * Adds fields to a panel whose layout is a net.miginfocom.swing.MigLayout.
@@ -513,7 +1044,7 @@ public class ObservableSwingUtils {
 	 *
 	 * @param <C> The type of the container
 	 */
-	public static class MigFieldPanelPopulator<C extends Container> {
+	public static class MigFieldPanelPopulator<C extends Container> implements FieldPanelPopulatorImpl<C> {
 		private static final String MIG_LAYOUT_CLASS_NAME = "net.miginfocom.swing.MigLayout";
 
 		private final C theContainer;
@@ -536,252 +1067,63 @@ public class ObservableSwingUtils {
 			}
 		}
 
-		public MigButtonPanel addButtons() {
-			return new MigButtonPanel();
-		}
-
-		public <F> MigFieldPanelPopulator<C> addTextField(String fieldName, SettableValue<F> field, Format<F> format,
-			Consumer<MigPanelPopulatorField<F, ObservableTextField<F>>> modify) {
-			MigPanelPopulatorField<F, ObservableTextField<F>> fieldPanel = new MigPanelPopulatorField<>(fieldName, field,
-				new ObservableTextField<>(field, format, theUntil));
-			fieldPanel.getTooltip().changes().takeUntil(theUntil).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
-			if (modify != null)
-				modify.accept(fieldPanel);
-			fieldPanel.done();
-			return this;
-		}
-
-		public MigFieldPanelPopulator<C> addCheckField(String fieldName, SettableValue<Boolean> field,
-			Consumer<MigPanelPopulatorField<Boolean, JCheckBox>> modify) {
-			MigPanelPopulatorField<Boolean, JCheckBox> fieldPanel = new MigPanelPopulatorField<Boolean, JCheckBox>(fieldName, field,
-				new JCheckBox());
-			Subscription sub = checkFor(fieldPanel.getEditor(), fieldPanel.getTooltip(), field);
-			theUntil.take(1).act(__ -> sub.unsubscribe());
-			if (modify != null)
-				modify.accept(fieldPanel);
-			fieldPanel.done();
-			return this;
-		}
-
-		/* TODO
-		 * spinners
-		 * toggle/radio buttons
-		 * slider
-		 * table
-		 * tree
-		 * better button controls (visibility, variable text, etc.)
-		 * form controls (e.g. press enter in a text field and a submit action (also tied to a button) fires
-		 */
-
-		// public MigPanelPopulatorField<Integer, JSpinner> addIntSpinnerField(String fieldName, SettableValue<Integer> value) {
-		// return addSpinnerField(fieldName, value, Number::intValue);
-		// }
-		//
-		// public MigPanelPopulatorField<Double, JSpinner> addDoubleSpinnerField(String fieldName, SettableValue<Double> value) {
-		// return addSpinnerField(fieldName, value, Number::doubleValue);
-		// }
-		//
-		// public <F extends Number> MigPanelPopulatorField<F, JSpinner> addSpinnerField(String fieldName, SettableValue<F> value,
-		// Function<? super F, ? extends F> purifier) {
-		// MigPanelPopulatorField<F, JSpinner> fieldPanel=new MigPanelPopulatorField<F, JSpinner>(fieldName, value, new JSpinner(new SNM));
-		// }
-
-		public <F> MigFieldPanelPopulator<C> addComboField(String fieldName, SettableValue<F> value,
-			Consumer<MigPanelComboField<F, JComboBox<F>>> modify, F... availableValues) {
-			return addComboField(fieldName, value, Arrays.asList(availableValues), modify);
-		}
-
-		public <F> MigFieldPanelPopulator<C> addComboField(String fieldName, SettableValue<F> value, List<? extends F> availableValues,
-			Consumer<MigPanelComboField<F, JComboBox<F>>> modify) {
-			ObservableCollection<? extends F> observableValues;
-			if (availableValues instanceof ObservableCollection)
-				observableValues = (ObservableCollection<F>) availableValues;
-			else
-				observableValues = ObservableCollection.of(value.getType(), availableValues);
-			MigPanelComboField<F, JComboBox<F>> fieldPanel = new MigPanelComboField<>(fieldName, value, new JComboBox<>());
-			Subscription sub = ObservableComboBoxModel.comboFor(fieldPanel.getEditor(), fieldPanel.getTooltip(),
-				fieldPanel::getValueTooltip, observableValues, value);
-			theUntil.take(1).act(__ -> sub.unsubscribe());
-			if (modify != null)
-				modify.accept(fieldPanel);
-			fieldPanel.done();
-			return this;
-		}
-
-		// public <F> MigPanelPopulatorField<F, JToggleButton> addToggleField(String fieldName, SettableValue<F> value,
-		// boolean radio, F... availableValues) {
-		// return addToggleField(fieldName, value, radio, Arrays.asList(availableValues));
-		// }
-		//
-		// public <F> MigPanelPopulatorField<F, JToggleButton> addToggleField(String fieldName, SettableValue<F> value, boolean radio,
-		// List<? extends F> availableValues) {
-		// }
-		//
-		// public <F> MigPanelPopulatorField<F, JSlider> addSliderField(String fieldName, SettableValue<Integer> value) {}
-		//
-		// public <F> MigPanelPopulatorField<F, ObservableTableModel<F>> addTable(ObservableCollection<F> rows,
-		// ObservableCollection<CategoryRenderStrategy<? super F, ?>> columns) {}
-		//
-		// public <F> MigPanelPopulatorField<F, ObservableTreeModel> addTree(Object root,
-		// Function<Object, ? extends ObservableCollection<?>> branching) {}
-
+		@Override
 		public C getContainer() {
 			return theContainer;
 		}
 
-		public class MigPanelPopulatorField<F, E> {
-			private ObservableValue<String> theFieldName;
-			private final SettableValue<F> theValue;
-			private final E theEditor;
-			private ObservableValue<String> theTooltip;
-			private SettableValue<ObservableValue<String>> theSettableTooltip;
-			private JLabel thePostLabel;
-			private boolean isGrow;
-			private ObservableValue<Boolean> isVisible;
+		@Override
+		public Observable<?> _getUntil() {
+			return theUntil;
+		}
 
-			MigPanelPopulatorField(String fieldName, SettableValue<F> value, E editor) {
-				theFieldName = ObservableValue.of(TypeTokens.get().STRING, fieldName);
-				theValue = value;
-				theEditor = editor;
-				theSettableTooltip = new SimpleSettableValue<>(ObservableValue.TYPE_KEY.getCompoundType(String.class), true);
-				theTooltip = ObservableValue.flatten(theSettableTooltip);
-			}
-
-			public E getEditor() {
-				return theEditor;
-			}
-
-			public MigPanelPopulatorField<F, E> withVariableFieldName(ObservableValue<String> fieldName) {
-				theFieldName = fieldName;
-				return this;
-			}
-
-			public MigPanelPopulatorField<F, E> visibleWhen(ObservableValue<Boolean> visible) {
-				isVisible = visible;
-				return this;
-			}
-
-			public MigPanelPopulatorField<F, E> modifyEditor(Consumer<E> modify) {
-				modify.accept(theEditor);
-				return this;
-			}
-
-			public ObservableValue<String> getTooltip() {
-				return theTooltip;
-			}
-
-			protected Component getComponent() {
-				if (!(theEditor instanceof Component))
-					throw new IllegalStateException("Editor is not a component");
-				return (Component) theEditor;
-			}
-
-			public MigPanelPopulatorField<F, E> withTooltip(String tooltip) {
-				return withTooltip(ObservableValue.of(TypeTokens.get().STRING, tooltip));
-			}
-
-			public MigPanelPopulatorField<F, E> withTooltip(ObservableValue<String> tooltip) {
-				theSettableTooltip.set(tooltip, null);
-				return this;
-			}
-
-			public MigPanelPopulatorField<F, E> withPostLabel(String descrip) {
-				thePostLabel = new JLabel(descrip);
-				return this;
-			}
-
-			public MigPanelPopulatorField<F, E> withPostLabel(ObservableValue<String> descrip) {
-				thePostLabel = new JLabel();
-				descrip.changes().takeUntil(theUntil).act(evt -> thePostLabel.setText(evt.getNewValue()));
-				return this;
-			}
-
-			// public MigPanelPopulatorField<F, E> andThen() { // TODO signature?
-			// }
-
-			public MigPanelPopulatorField<F, E> fill() {
-				isGrow = true;
-				return this;
-			}
-
-			protected MigFieldPanelPopulator done() {
-				JLabel fieldNameLabel = new JLabel(theFieldName.get());
-				theFieldName.changes().takeUntil(theUntil).act(evt -> fieldNameLabel.setText(evt.getNewValue()));
-				theContainer.add(fieldNameLabel, "align right");
-				StringBuilder constraints = new StringBuilder();
-				if (isGrow)
-					constraints.append("growx, pushx");
-				if (thePostLabel == null) {
+		@Override
+		public void doAdd(PanelPopulatorField<?, ?> field) {
+			JLabel fieldNameLabel;
+			if (field.getFieldName() != null) {
+				fieldNameLabel = new JLabel(field.getFieldName().get());
+				field.getFieldName().changes().takeUntil(_getUntil()).act(evt -> fieldNameLabel.setText(evt.getNewValue()));
+				getContainer().add(fieldNameLabel, "align right");
+			} else
+				fieldNameLabel = null;
+			StringBuilder constraints = new StringBuilder();
+			if (field.isGrow())
+				constraints.append("growx, pushx");
+			JLabel postLabel;
+			if (field.getPostLabel() != null) {
+				postLabel = new JLabel();
+				field.getPostLabel().changes().takeUntil(_getUntil()).act(evt -> postLabel.setText(evt.getNewValue()));
+				if (fieldNameLabel == null) {
 					if (constraints.length() > 0)
 						constraints.append(", ");
-					constraints.append("span, wrap");
+					constraints.append("span 2");
 				}
-				Component component = getComponent();
-				theContainer.add(component, constraints.toString());
-				if (thePostLabel != null)
-					theContainer.add(thePostLabel, "wrap");
-				if (isVisible != null) {
-					isVisible.changes().takeUntil(theUntil).act(evt -> {
+			} else {
+				postLabel = null;
+				if (constraints.length() > 0)
+					constraints.append(", ");
+				constraints.append("span, wrap");
+			}
+			Component component = field.getComponent();
+			getContainer().add(component, constraints.toString());
+			if (postLabel != null)
+				getContainer().add(postLabel, "wrap");
+			if (field.isVisible() != null) {
+				field.isVisible().changes().takeUntil(_getUntil()).act(evt -> {
+					if (fieldNameLabel != null)
 						fieldNameLabel.setVisible(evt.getNewValue());
-						component.setVisible(evt.getNewValue());
-						if (thePostLabel != null)
-							thePostLabel.setVisible(evt.getNewValue());
-					});
-				}
-				return MigFieldPanelPopulator.this;
+					component.setVisible(evt.getNewValue());
+					if (postLabel != null)
+						postLabel.setVisible(evt.getNewValue());
+				});
 			}
 		}
 
-		public class MigPanelComboField<F, E> extends MigPanelPopulatorField<F, E> {
-			protected Function<? super F, String> theValueTooltip;
-
-			public MigPanelComboField(String fieldName, SettableValue<F> value, E editor) {
-				super(fieldName, value, editor);
-			}
-
-			public MigPanelComboField<F, E> withValueTooltip(Function<? super F, String> tooltip) {
-				theValueTooltip = tooltip;
-				return this;
-			}
-
-			public String getValueTooltip(F value) {
-				return theValueTooltip == null ? null : theValueTooltip.apply(value);
-			}
-
-			@Override
-			public MigPanelComboField<F, E> withVariableFieldName(ObservableValue<String> fieldName) {
-				return (MigPanelComboField<F, E>) super.withVariableFieldName(fieldName);
-			}
-
-			@Override
-			public MigPanelComboField<F, E> modifyEditor(Consumer<E> modify) {
-				return (MigPanelComboField<F, E>) super.modifyEditor(modify);
-			}
-
-			@Override
-			public MigPanelComboField<F, E> withTooltip(String tooltip) {
-				return (MigPanelComboField<F, E>) super.withTooltip(tooltip);
-			}
-
-			@Override
-			public MigPanelComboField<F, E> withTooltip(ObservableValue<String> tooltip) {
-				return (MigPanelComboField<F, E>) super.withTooltip(tooltip);
-			}
-
-			@Override
-			public MigPanelComboField<F, E> withPostLabel(String descrip) {
-				return (MigPanelComboField<F, E>) super.withPostLabel(descrip);
-			}
-
-			@Override
-			public MigPanelComboField<F, E> withPostLabel(ObservableValue<String> descrip) {
-				return (MigPanelComboField<F, E>) super.withPostLabel(descrip);
-			}
-
-			@Override
-			public MigPanelComboField<F, E> fill() {
-				return (MigPanelComboField<F, E>) super.fill();
-			}
+		public MigFieldPanelPopulator<C> addButtons(Consumer<MigButtonPanel> modify) {
+			MigButtonPanel buttons = new MigButtonPanel();
+			modify.accept(buttons);
+			buttons.done();
+			return this;
 		}
 
 		public class MigButtonPanel {
@@ -800,12 +1142,12 @@ public class ObservableSwingUtils {
 				JPanel buttonPanel = new JPanel(new JustifiedBoxLayout(false).setMainAlignment(JustifiedBoxLayout.Alignment.CENTER));
 				for (BiTuple<ObservableValue<String>, ObservableAction<?>> action : theActions) {
 					JButton button = new JButton();
-					action.getValue1().changes().takeUntil(theUntil).act(evt -> button.setText(evt.getNewValue()));
+					action.getValue1().changes().takeUntil(_getUntil()).act(evt -> button.setText(evt.getNewValue()));
 					ObservableAction<?> a = action.getValue2();
 					button.addActionListener(evt -> a.act(evt));
 					buttonPanel.add(button);
 				}
-				theContainer.add(buttonPanel, "span, growx, wrap");
+				getContainer().add(buttonPanel, "span, growx, wrap");
 				return MigFieldPanelPopulator.this;
 			}
 		}
