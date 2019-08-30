@@ -4,12 +4,12 @@ import java.awt.Component;
 import java.awt.Container;
 import java.awt.EventQueue;
 import java.awt.Font;
+import java.awt.LayoutManager;
 import java.awt.LayoutManager2;
 import java.awt.event.ActionListener;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -38,7 +38,6 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
-import org.qommons.BiTuple;
 import org.qommons.io.Format;
 
 /** Utilities for the org.observe.util.swing package */
@@ -559,7 +558,38 @@ public class ObservableSwingUtils {
 		// public <F> MigPanelPopulatorField<F, ObservableTreeModel> addTree(Object root,
 		// Function<Object, ? extends ObservableCollection<?>> branching) {}
 
-		FieldPanelPopulator<C> addHPanel(String fieldName, Consumer<HorizPanel> modify);
+		default FieldPanelPopulator<C> addButton(String text, ObservableAction<?> action,
+			Consumer<PanelPopulatorField<Object, JButton>> modify) {
+			return addButton(ObservableValue.of(text), action, modify);
+		}
+
+		FieldPanelPopulator<C> addButton(ObservableValue<String> text, ObservableAction<?> action,
+			Consumer<PanelPopulatorField<Object, JButton>> modify);
+
+		default FieldPanelPopulator<C> addHPanel(String fieldName, String layoutType, Consumer<HorizPanel> modify) {
+			LayoutManager layout;
+			if (layoutType == null)
+				layoutType = "box";
+			switch (layoutType.toLowerCase()) {
+			case "mig":
+				layout = createMigLayout(false, () -> "use addHPanel(String, LayoutManager, Consumer)");
+				break;
+			case "ctr":
+			case "center":
+				layout = new JustifiedBoxLayout(false).mainCenter();
+				break;
+			case "box":
+			case "just":
+			case "justify":
+			case "justified":
+			default:
+				layout = new JustifiedBoxLayout(false).mainJustified();
+				break;
+			}
+			return addHPanel(fieldName, layout, modify);
+		}
+
+		FieldPanelPopulator<C> addHPanel(String fieldName, LayoutManager layout, Consumer<HorizPanel> modify);
 
 		<S> FieldPanelPopulator<C> addComponent(String fieldName, S component, Consumer<PanelPopulatorField<Object, S>> modify);
 	}
@@ -646,11 +676,24 @@ public class ObservableSwingUtils {
 		// Function<Object, ? extends ObservableCollection<?>> branching) {}
 
 		@Override
-		default FieldPanelPopulator<C> addHPanel(String fieldName, Consumer<HorizPanel> modify) {
-			HorizPanel subPanel = new HorizPanel(fieldName, _getUntil());
+		default FieldPanelPopulator<C> addHPanel(String fieldName, LayoutManager layout, Consumer<HorizPanel> modify) {
+			HorizPanel subPanel = new HorizPanel(fieldName, layout, _getUntil());
 			if(modify!=null)
 				modify.accept(subPanel);
 			doAdd(subPanel);
+			return this;
+		}
+
+		@Override
+		default FieldPanelPopulator<C> addButton(ObservableValue<String> text, ObservableAction<?> action,
+			Consumer<PanelPopulatorField<Object, JButton>> modify) {
+			JButton button = new JButton();
+			text.changes().takeUntil(_getUntil()).act(evt -> button.setText(evt.getNewValue()));
+			button.addActionListener(evt -> action.act(evt));
+			PanelPopulatorField<Object, JButton> field = new PanelPopulatorField<>(null, button);
+			if (modify != null)
+				modify.accept(field);
+			doAdd(field);
 			return this;
 		}
 
@@ -666,6 +709,7 @@ public class ObservableSwingUtils {
 
 	public static class PanelPopulatorField<F, E> {
 		private ObservableValue<String> theFieldName;
+		private Consumer<LabelHolder> theFieldLabelModifier;
 		private final E theEditor;
 		private ObservableValue<String> theTooltip;
 		private SettableValue<ObservableValue<String>> theSettableTooltip;
@@ -674,7 +718,7 @@ public class ObservableSwingUtils {
 		private ObservableValue<Boolean> isVisible;
 
 		PanelPopulatorField(String fieldName, E editor) {
-			theFieldName = fieldName == null ? null : ObservableValue.of(TypeTokens.get().STRING, fieldName);
+			theFieldName = fieldName == null ? null : ObservableValue.of(fieldName);
 			theEditor = editor;
 			theSettableTooltip = new SimpleSettableValue<>(ObservableValue.TYPE_KEY.getCompoundType(String.class), true);
 			theTooltip = ObservableValue.flatten(theSettableTooltip);
@@ -684,8 +728,18 @@ public class ObservableSwingUtils {
 			return theEditor;
 		}
 
+		public PanelPopulatorField<F, E> withFieldName(String fieldName) {
+			theFieldName = fieldName == null ? null : ObservableValue.of(fieldName);
+			return this;
+		}
+
 		public PanelPopulatorField<F, E> withVariableFieldName(ObservableValue<String> fieldName) {
 			theFieldName = fieldName;
+			return this;
+		}
+
+		public PanelPopulatorField<F, E> modifyLabel(Consumer<LabelHolder> labelModifier) {
+			theFieldLabelModifier = labelModifier;
 			return this;
 		}
 
@@ -735,6 +789,16 @@ public class ObservableSwingUtils {
 
 		protected ObservableValue<String> getFieldName() {
 			return theFieldName;
+		}
+
+		protected JLabel createFieldNameLabel(Observable<?> until) {
+			if (theFieldName == null)
+				return null;
+			JLabel fieldNameLabel = new JLabel(theFieldName.get());
+			theFieldName.changes().takeUntil(until).act(evt -> fieldNameLabel.setText(evt.getNewValue()));
+			if (theFieldLabelModifier != null)
+				theFieldLabelModifier.accept(new LabelHolder(fieldNameLabel));
+			return fieldNameLabel;
 		}
 
 		protected ObservableValue<String> getPostLabel() {
@@ -864,8 +928,8 @@ public class ObservableSwingUtils {
 	public static class HorizPanel extends PanelPopulatorField<Object, JPanel> implements FieldPanelPopulatorImpl<JPanel> {
 		private final Observable<?> theUntil;
 
-		public HorizPanel(String fieldName, Observable<?> until) {
-			super(fieldName, new JPanel(new JustifiedBoxLayout(false)));
+		public HorizPanel(String fieldName, LayoutManager layout, Observable<?> until) {
+			super(fieldName, new JPanel(layout));
 			theUntil = until;
 		}
 
@@ -896,7 +960,10 @@ public class ObservableSwingUtils {
 				postLabel = null;
 			}
 			Component component = field.getComponent();
-			getContainer().add(component);
+			String constraints = null;
+			if (field.isGrow() && getContainer().getLayout().getClass().getName().startsWith("net.mig"))
+				constraints = "growx, pushx";
+			getContainer().add(component, constraints);
 			if (postLabel != null)
 				getContainer().add(postLabel);
 			if (field.isVisible() != null) {
@@ -908,16 +975,6 @@ public class ObservableSwingUtils {
 						postLabel.setVisible(evt.getNewValue());
 				});
 			}
-		}
-
-		public HorizPanel add(Component c) {
-			getEditor().add(c);
-			return this;
-		}
-
-		public HorizPanel layout(Consumer<JustifiedBoxLayout> onLayout) {
-			onLayout.accept((JustifiedBoxLayout) getEditor().getLayout());
-			return this;
 		}
 
 		@Override
@@ -1018,16 +1075,27 @@ public class ObservableSwingUtils {
 		}
 
 		@Override
-		public HorizPanel addHPanel(String fieldName, Consumer<HorizPanel> modify) {
-			FieldPanelPopulatorImpl.super.addHPanel(fieldName, modify);
-			return this;
-		}
-
-		@Override
 		public <S> HorizPanel addComponent(String fieldName, S component, Consumer<PanelPopulatorField<Object, S>> modify) {
 			FieldPanelPopulatorImpl.super.addComponent(fieldName, component, modify);
 			return this;
 		}
+	}
+
+	static final String MIG_LAYOUT_CLASS_NAME = "net.miginfocom.swing.MigLayout";
+
+	static LayoutManager2 createMigLayout(boolean withInsets, Supplier<String> err) {
+		String layoutConstraints = "fillx, hidemode 3";
+		if (!withInsets)
+			layoutConstraints += ", insets 0";
+		LayoutManager2 migLayout;
+		try {
+			migLayout = (LayoutManager2) Class.forName(MIG_LAYOUT_CLASS_NAME).getConstructor(String.class).newInstance(layoutConstraints);
+		} catch (InstantiationException | IllegalAccessException | ClassNotFoundException | IllegalArgumentException
+			| InvocationTargetException | NoSuchMethodException | SecurityException e) {
+			throw new IllegalStateException(
+				ObservableSwingUtils.class.getName() + " could not instantiate " + MIG_LAYOUT_CLASS_NAME + ": " + err.get(), e);
+		}
+		return migLayout;
 	}
 
 	/**
@@ -1045,8 +1113,6 @@ public class ObservableSwingUtils {
 	 * @param <C> The type of the container
 	 */
 	public static class MigFieldPanelPopulator<C extends Container> implements FieldPanelPopulatorImpl<C> {
-		private static final String MIG_LAYOUT_CLASS_NAME = "net.miginfocom.swing.MigLayout";
-
 		private final C theContainer;
 		private final Observable<?> theUntil;
 
@@ -1054,15 +1120,7 @@ public class ObservableSwingUtils {
 			theContainer = container;
 			theUntil = until == null ? Observable.empty() : until;
 			if (container.getLayout() == null || !MIG_LAYOUT_CLASS_NAME.equals(container.getLayout().getClass().getName())) {
-				LayoutManager2 migLayout;
-				try {
-					migLayout = (LayoutManager2) Class.forName(MIG_LAYOUT_CLASS_NAME).getConstructor(String.class)
-						.newInstance("fillx, hidemode 3");
-				} catch (InstantiationException | IllegalAccessException | ClassNotFoundException | IllegalArgumentException
-					| InvocationTargetException | NoSuchMethodException | SecurityException e) {
-					throw new IllegalStateException(getClass().getName() + " could not instantiate " + MIG_LAYOUT_CLASS_NAME
-						+ ": install the layout before using this class");
-				}
+				LayoutManager2 migLayout = createMigLayout(true, () -> "install the layout before using this class");
 				container.setLayout(migLayout);
 			}
 		}
@@ -1116,39 +1174,6 @@ public class ObservableSwingUtils {
 					if (postLabel != null)
 						postLabel.setVisible(evt.getNewValue());
 				});
-			}
-		}
-
-		public MigFieldPanelPopulator<C> addButtons(Consumer<MigButtonPanel> modify) {
-			MigButtonPanel buttons = new MigButtonPanel();
-			modify.accept(buttons);
-			buttons.done();
-			return this;
-		}
-
-		public class MigButtonPanel {
-			private final List<BiTuple<ObservableValue<String>, ObservableAction<?>>> theActions = new LinkedList<>();
-
-			public MigButtonPanel addButton(String text, ObservableAction<?> action) {
-				return addButton(ObservableValue.of(text), action);
-			}
-
-			public MigButtonPanel addButton(ObservableValue<String> text, ObservableAction<?> action) {
-				theActions.add(new BiTuple<>(text, action));
-				return this;
-			}
-
-			protected MigFieldPanelPopulator done() {
-				JPanel buttonPanel = new JPanel(new JustifiedBoxLayout(false).setMainAlignment(JustifiedBoxLayout.Alignment.CENTER));
-				for (BiTuple<ObservableValue<String>, ObservableAction<?>> action : theActions) {
-					JButton button = new JButton();
-					action.getValue1().changes().takeUntil(_getUntil()).act(evt -> button.setText(evt.getNewValue()));
-					ObservableAction<?> a = action.getValue2();
-					button.addActionListener(evt -> a.act(evt));
-					buttonPanel.add(button);
-				}
-				getContainer().add(buttonPanel, "span, growx, wrap");
-				return MigFieldPanelPopulator.this;
 			}
 		}
 	}
