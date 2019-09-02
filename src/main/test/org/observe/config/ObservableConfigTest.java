@@ -295,6 +295,7 @@ public class ObservableConfigTest {
 						Assert.assertEquals(6, child.getE());
 						break;
 					}
+					j++;
 				}
 
 				entity.getEntityField().setD(10);
@@ -322,6 +323,7 @@ public class ObservableConfigTest {
 						Assert.assertEquals(8, child.getE());
 						break;
 					}
+					j++;
 				}
 
 				theConfig.getContent("test-entities2/test-entity2").getValues().get(i).set("entity-field/d", "20");
@@ -374,6 +376,7 @@ public class ObservableConfigTest {
 						Assert.assertEquals(9, child.getE());
 						break;
 					}
+					j++;
 				}
 				break;
 			case 3:

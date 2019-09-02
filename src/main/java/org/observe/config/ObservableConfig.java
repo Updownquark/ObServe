@@ -367,7 +367,7 @@ public class ObservableConfig implements StructuredTransactable {
 
 		@Override
 		public String toString() {
-			StringBuilder str = new StringBuilder();
+			StringBuilder str = new StringBuilder(eventTarget.getName());
 			switch (changeType) {
 			case add:
 				str.append('+').append(relativePath.isEmpty() ? "this" : getRelativePathString());
@@ -376,7 +376,7 @@ public class ObservableConfig implements StructuredTransactable {
 				str.append('-').append(relativePath.isEmpty() ? "this" : getRelativePathString());
 				break;
 			case set:
-				str.append(relativePath.isEmpty() ? "this" : getRelativePathString());
+				str.append(PATH_SEPARATOR).append(relativePath.isEmpty() ? "this" : getRelativePathString());
 				ObservableConfig changed = relativePath.isEmpty() ? eventTarget : relativePath.get(relativePath.size() - 1);
 				if (!oldName.equals(changed.getName()))
 					str.append(".name ").append(oldName).append("->").append(changed.getName());
@@ -732,8 +732,8 @@ public class ObservableConfig implements StructuredTransactable {
 	protected void addChild(ObservableConfig child, ObservableConfig after, ObservableConfig before, boolean first) {
 		ElementId el = theContent.addElement(child, //
 			after == null ? null : Objects.requireNonNull(after.theParentContentRef),
-			before == null ? null : Objects.requireNonNull(before.theParentContentRef), //
-			first).getElementId();
+				before == null ? null : Objects.requireNonNull(before.theParentContentRef), //
+					first).getElementId();
 		child.initialize(this, el);
 		fire(CollectionChangeType.add, Arrays.asList(child), child.getName(), null);
 	}

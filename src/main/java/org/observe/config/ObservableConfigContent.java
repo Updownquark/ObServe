@@ -653,6 +653,8 @@ public class ObservableConfigContent {
 			void update(Causable cause) {
 				ObservableConfigEvent configCause = cause
 					.getCauseLike(c -> c instanceof ObservableConfigEvent ? (ObservableConfigEvent) c : null);
+				if (configCause != null)
+					configCause = configCause.asFromChild(); // If the cause was a config event, it is on the collection element
 				try {
 					theEntityFormat.parse(theConfig.getParent(), theConfig, theInstance, configCause, theUntil);
 				} catch (ParseException e) {

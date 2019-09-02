@@ -143,16 +143,16 @@ public interface ObservableConfigFormat<T> {
 				} else if (change.relativePath.isEmpty()) {
 					// Change to the value doesn't change any fields
 				} else {
-					ObservableConfig child = change.relativePath.get(1);
+					ObservableConfig child = change.relativePath.get(0);
 					int fieldIdx = theFieldsByChildName.keyIndexTolerant(child.getName());
-					if (change.relativePath.size() == 2 && !change.oldName.equals(child.getName())) {
+					if (change.relativePath.size() == 1 && !change.oldName.equals(child.getName())) {
 						if (fieldIdx >= 0)
-							parseUpdatedField(config, fieldIdx, previousValue, change, until);
+							parseUpdatedField(config, fieldIdx, previousValue, change.asFromChild(), until);
 						fieldIdx = theFieldsByChildName.keyIndexTolerant(change.oldName);
 						if (fieldIdx >= 0)
 							parseUpdatedField(config, fieldIdx, previousValue, null, until);
 					} else if (fieldIdx >= 0)
-						parseUpdatedField(config, fieldIdx, previousValue, change, until);
+						parseUpdatedField(config, fieldIdx, previousValue, change.asFromChild(), until);
 				}
 				return previousValue;
 			}
@@ -200,7 +200,7 @@ public interface ObservableConfigFormat<T> {
 			ConfiguredValueField<? super E, ?> field = entityType.getFields().get(fieldIdx);
 			Object oldValue = field.get(previousValue);
 			ObservableConfig fieldConfig = entityConfig.getChild(theFieldChildNames.get(fieldIdx));
-			if (change != null && fieldConfig != change.relativePath.get(1))
+			if (change != null && fieldConfig != change.relativePath.get(0))
 				return; // The update does not actually affect the field value
 			Object newValue = ((ObservableConfigFormat<Object>) fieldFormats[fieldIdx]).parse(entityConfig, fieldConfig, oldValue,
 				change == null ? null : change.asFromChild(), until);
@@ -343,9 +343,11 @@ public interface ObservableConfigFormat<T> {
 			@Override
 			public ObservableValueSet<E> parse(ObservableConfig parent, ObservableConfig config, ObservableValueSet<E> previousValue,
 				ObservableConfigEvent change, Observable<?> until) throws ParseException {
-				if (previousValue == null) // TODO config can be null
-					return new ObservableConfigEntityValues<>(parent, elementFormat, childName, fieldParser, until);
-				else {
+				if (previousValue == null) {
+					if (config == null)
+						config = parent.addChild(childName);
+					return new ObservableConfigEntityValues<>(config, elementFormat, childName, fieldParser, until);
+				} else {
 					((ObservableConfigEntityValues<E>) previousValue).onChange(change);
 					return previousValue;
 				}
