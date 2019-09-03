@@ -5,17 +5,22 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringWriter;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.observe.SimpleObservable;
 import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableCollectionTester;
 import org.observe.config.ObservableConfig.XmlEncoding;
 import org.observe.util.TypeTokens;
 import org.qommons.QommonsTestUtils;
+import org.qommons.TestHelper;
+import org.qommons.collect.ElementId;
 import org.xml.sax.SAXException;
 
 public class ObservableConfigTest {
@@ -411,6 +416,54 @@ public class ObservableConfigTest {
 		Assert.assertEquals(3, i);
 	}
 
+	// @Test
+	public void superTest() throws IOException, SAXException {
+		SimpleObservable<Void> until = new SimpleObservable<>();
+		readXml(getClass().getResourceAsStream("TestValues.xml"));
+		ObservableValueSet<TestEntity2> testEntities1 = theConfig.observeEntities(theConfig.createPath("test-entities2/test-entity2"),
+			TypeTokens.get().of(TestEntity2.class), until);
+		ObservableCollectionTester<TestEntity2> tester1 = new ObservableCollectionTester<>("testEntities1", testEntities1.getValues());
+		ObservableValueSet<TestEntity2> testEntities2 = theConfig.observeEntities(theConfig.createPath("test-entities2/test-entity2"),
+			TypeTokens.get().of(TestEntity2.class), until);
+		ObservableCollectionTester<TestEntity2> tester2 = new ObservableCollectionTester<>("testEntities2", testEntities2.getValues());
+		List<TestEntity2> expected = new ArrayList<>();
+		for (TestEntity2 entity : testEntities1.getValues())
+			expected.add(deepCopy(entity));
+		// TODO Do more with the field observable collections, making sure those collections keep up
+
+		class ObservableConfigSuperTester implements TestHelper.Testable {
+			@Override
+			public void accept(TestHelper helper) {
+				ObservableValueSet<TestEntity2> testEntities = helper.getBoolean() ? testEntities1 : testEntities2;
+
+				helper.doAction(1, () -> { // Add element
+					// TODO
+				}).or(1, () -> { // Remove element
+					// TODO
+				}).or(1, () -> {// Modify text
+					// TODO
+				}).or(1, () -> {// Modify entity field.d
+					// TODO
+				}).or(1, () -> {// Add text
+					// TODO
+				}).or(1, () -> {// Remove text
+					// TODO
+				}).or(1, () -> {// Update text
+					// TODO
+				}).or(1, () -> {// Add listed entity
+					// TODO
+				}).or(1, () -> {// Remove listed entity
+					// TODO
+				}).or(1, () -> {// Modify listed entity.e
+					// TODO
+				}).execute("modify");
+
+				tester1.check(expected);
+				tester2.check(expected);
+			}
+		}
+	}
+
 	public interface TestEntity {
 		int getA();
 
@@ -455,5 +508,121 @@ public class ObservableConfigTest {
 
 	private static String print(TestEntity entity) {
 		return "a=" + entity.getA() + ", b=" + entity.getB() + ", c=" + entity.getC();
+	}
+
+	private static TestEntity2 deepCopy(TestEntity2 entity) {
+		return new TestEntity2() {
+			private String theText;
+			private final TestEntity3 theEntityField;
+			private final List<String> theTexts;
+			private final List<TestEntity4> theListedEntities;
+
+			{
+				theText = entity.getText();
+				theEntityField = deepCopy(entity.getEntityField());
+				theTexts = new ArrayList<>(entity.getTexts());
+				theListedEntities = new ArrayList<>();
+				for (TestEntity4 te4 : entity.getListedEntities().getValues())
+					theListedEntities.add(deepCopy(te4));
+			}
+
+			@Override
+			public String getText() {
+				return theText;
+			}
+
+			@Override
+			public void setText(String text) {
+				theText = text;
+			}
+
+			@Override
+			public TestEntity3 getEntityField() {
+				return theEntityField;
+			}
+
+			@Override
+			public List<String> getTexts() {
+				return theTexts;
+			}
+
+			@Override
+			public ObservableValueSet<TestEntity4> getListedEntities() {
+				return new ObservableValueSet<ObservableConfigTest.TestEntity4>() {
+					@Override
+					public ObservableCollection<? extends TestEntity4> getValues() {
+						return ObservableCollection.of(TypeTokens.get().of(TestEntity4.class), theListedEntities);
+					}
+
+					@Override
+					public ConfiguredValueType<TestEntity4> getType() {
+						return null;
+					}
+
+					@Override
+					public ValueCreator<TestEntity4> create(ElementId after, ElementId before, boolean first) {
+						return null;
+					}
+
+					@Override
+					public boolean equals(Object o) {
+						return o instanceof ObservableValueSet && theListedEntities.equals(((ObservableValueSet<?>) o).getValues());
+					}
+				};
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				if (!(obj instanceof TestEntity2))
+					return false;
+				TestEntity2 other = (TestEntity2) obj;
+				return Objects.equals(theText, other.getText())//
+					&& Objects.equals(theEntityField, other.getEntityField())//
+					&& theTexts.equals(other.getTexts())//
+					&& theListedEntities.equals(other.getListedEntities().getValues());
+			}
+		};
+	}
+
+	private static TestEntity3 deepCopy(TestEntity3 entity) {
+		return new TestEntity3() {
+			private int theD;
+
+			@Override
+			public int getD() {
+				return theD;
+			}
+
+			@Override
+			public int setD(int d) {
+				return theD = d;
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				return obj instanceof TestEntity3 && theD == ((TestEntity3) obj).getD();
+			}
+		};
+	}
+
+	private static TestEntity4 deepCopy(TestEntity4 entity) {
+		return new TestEntity4() {
+			private int theE;
+
+			@Override
+			public int getE() {
+				return theE;
+			}
+
+			@Override
+			public int setE(int E) {
+				return theE = E;
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				return obj instanceof TestEntity4 && theE == ((TestEntity4) obj).getE();
+			}
+		};
 	}
 }
