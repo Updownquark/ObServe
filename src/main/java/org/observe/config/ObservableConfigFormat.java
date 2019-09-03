@@ -152,7 +152,7 @@ public interface ObservableConfigFormat<T> {
 						if (fieldIdx >= 0)
 							parseUpdatedField(config, fieldIdx, previousValue, null, until);
 					} else if (fieldIdx >= 0)
-						parseUpdatedField(config, fieldIdx, previousValue, change.asFromChild(), until);
+						parseUpdatedField(config, fieldIdx, previousValue, change, until);
 				}
 				return previousValue;
 			}
@@ -200,10 +200,13 @@ public interface ObservableConfigFormat<T> {
 			ConfiguredValueField<? super E, ?> field = entityType.getFields().get(fieldIdx);
 			Object oldValue = field.get(previousValue);
 			ObservableConfig fieldConfig = entityConfig.getChild(theFieldChildNames.get(fieldIdx));
-			if (change != null && fieldConfig != change.relativePath.get(0))
-				return; // The update does not actually affect the field value
+			if (change != null) {
+				if (change.relativePath.isEmpty() || fieldConfig != change.relativePath.get(0))
+					return; // The update does not actually affect the field value
+				change = change.asFromChild();
+			}
 			Object newValue = ((ObservableConfigFormat<Object>) fieldFormats[fieldIdx]).parse(entityConfig, fieldConfig, oldValue,
-				change == null ? null : change.asFromChild(), until);
+				change, until);
 			if (oldValue != newValue)
 				((ConfiguredValueField<E, Object>) field).set(previousValue, newValue);
 		}
@@ -390,13 +393,13 @@ public interface ObservableConfigFormat<T> {
 				return; // Yeah, we already know--we're causing the change
 			if (collectionChange.relativePath.isEmpty())
 				return; // Doesn't affect us
+			// TODO Exception from the next line because sometimes the change is a remove event
 			CollectionElement<ConfigValueElement> el = theValueElements
 				.getElementBySource(collectionChange.relativePath.get(0).getParentChildRef());
 			if (el == null) // Must be a different child
 				return;
 			try {
 				theFormat.parse(theCollectionElement, el.get().theConfig, el.get().theInstance, collectionChange.asFromChild(), theUntil);
-				theValueElements.mutableElement(el.getElementId()).set(el.get());
 			} catch (ParseException e) {
 				e.printStackTrace();
 			}
