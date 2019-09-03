@@ -305,7 +305,8 @@ public class ObservableConfigTest {
 				entity.getListedEntities().getValues().remove(0);
 				Assert.assertEquals(1, theConfig.getContent("test-entities2/test-entity2").getValues().get(i).getContent("listed-entities")
 					.getValues().size());
-				Assert.assertEquals("60", theConfig.getContent("test-entities2/test-entity2").getValues().get(i).get("listed-entities/listed-entity/e"));
+				Assert.assertEquals("60", theConfig.getContent("test-entities2/test-entity2").getValues().get(i)
+					.getContent("listed-entities/listed-entity").getValues().get(1).get("e"));
 				break;
 			case 1:
 				Assert.assertEquals("text8", entity.getText());
@@ -331,7 +332,7 @@ public class ObservableConfigTest {
 				entity.getListedEntities().create().with(TestEntity4::getE, 9).create();
 				Assert.assertEquals(3, entity.getListedEntities().getValues().size());
 				Assert.assertEquals("9", theConfig.getContent("test-entities2/test-entity2").getValues().get(i).getContent("listed-entities/listed-entity")
-					.getValues().get(3).get("e"));
+					.getValues().get(2).get("e"));
 
 				break;
 			default:
@@ -379,10 +380,9 @@ public class ObservableConfigTest {
 					j++;
 				}
 				break;
-			case 3:
+			case 2:
 				// TODO
-			default:
-				Assert.assertTrue("Too many entities", false);
+				break;
 			}
 			i++;
 		}

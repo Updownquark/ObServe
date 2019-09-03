@@ -14,17 +14,22 @@ import java.util.function.Supplier;
 
 import org.observe.Observable;
 import org.observe.SimpleObservable;
+import org.observe.collect.CollectionChangeType;
+import org.observe.collect.DefaultObservableSortedSet;
 import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableSortedSet;
 import org.observe.config.ObservableConfig.ObservableConfigEvent;
 import org.observe.util.ObservableCollectionWrapper;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
 import org.qommons.StringUtils;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.QuickSet.QuickMap;
 import org.qommons.io.Format;
+import org.qommons.tree.BetterTreeSet;
 
 import com.google.common.reflect.TypeToken;
 
@@ -83,20 +88,22 @@ public interface ObservableConfigFormat<T> {
 		}
 	}
 
-	static <E> EntityConfigFormat<E> ofEntity(EntityConfiguredValueType<E> entityType, ConfigEntityFieldParser formats) {
-		return new EntityConfigFormat<>(entityType, formats);
+	static <E> EntityConfigFormat<E> ofEntity(EntityConfiguredValueType<E> entityType, ConfigEntityFieldParser formats, String configName) {
+		return new EntityConfigFormat<>(entityType, formats, configName);
 	}
 
 	class EntityConfigFormat<E> implements ObservableConfigFormat<E> {
 		public final EntityConfiguredValueType<E> entityType;
+		public final String configName;
 		public final ConfigEntityFieldParser formats;
 		private final ObservableConfigFormat<?>[] fieldFormats;
 		private QuickMap<String, String> theFieldChildNames;
 		private QuickMap<String, String> theFieldsByChildName;
 
-		public EntityConfigFormat(EntityConfiguredValueType<E> entityType, ConfigEntityFieldParser formats) {
+		public EntityConfigFormat(EntityConfiguredValueType<E> entityType, ConfigEntityFieldParser formats, String configName) {
 			this.entityType = entityType;
 			this.formats = formats;
+			this.configName = configName;
 			fieldFormats = new ObservableConfigFormat[entityType.getFields().keySet().size()];
 			for (int i = 0; i < fieldFormats.length; i++)
 				fieldFormats[i] = formats.getConfigFormat(entityType.getFields().get(i));
@@ -134,9 +141,11 @@ public interface ObservableConfigFormat<T> {
 				throws ParseException {
 			if (config != null && "true".equalsIgnoreCase(config.get("null")))
 				return null;
-			else if (previousValue == null)
+			else if (previousValue == null) {
+				if (config == null)
+					config = parent.addChild(configName);
 				return createInstance(config, entityType.getFields().keySet().createMap(), until);
-			else {
+			} else {
 				if (change == null) {
 					for (int i = 0; i < entityType.getFields().keySize(); i++)
 						parseUpdatedField(config, i, previousValue, null, until);
@@ -169,7 +178,10 @@ public interface ObservableConfigFormat<T> {
 		public E createInstance(ObservableConfig config, QuickMap<String, Object> fieldValues, Observable<?> until) throws ParseException {
 			for (int i = 0; i < fieldValues.keySize(); i++) {
 				ObservableConfig fieldConfig = config.getChild(theFieldChildNames.get(i));
-				fieldValues.put(i, fieldFormats[i].parse(config, fieldConfig, null, null, until));
+				if (fieldValues.get(i) == null)
+					fieldValues.put(i, fieldFormats[i].parse(config, fieldConfig, null, null, until));
+				else
+					formatField(entityType.getFields().get(i), fieldValues.get(i), config);
 			}
 			return entityType.create(//
 				idx -> fieldValues.get(idx), //
@@ -319,8 +331,9 @@ public interface ObservableConfigFormat<T> {
 					}
 				}
 				if (previousValue == null) {
+					ObservableConfig child = config != null ? config : parent.addChild(childName);
 					SimpleObservable<Void> contentUntil = new SimpleObservable<>(null, false, null, b -> b.unsafe());
-					return (C) new ConfigContentValueWrapper(config.observeValues(childName, elementType, elementFormat, //
+					return (C) new ConfigContentValueWrapper(child.observeValues(childName, elementType, elementFormat, //
 						Observable.or(until, contentUntil)), contentUntil);
 				} else {
 					ConfigContentValueWrapper wrapper = (ConfigContentValueWrapper) previousValue;
@@ -365,12 +378,13 @@ public interface ObservableConfigFormat<T> {
 		private final ConfigEntityFieldParser theFieldParser;
 		private final Observable<?> theUntil;
 
-		private final ObservableCollection<ConfigValueElement> theValueElements;
+		private final ObservableSortedSet<ConfigValueElement> theValueElements;
+		// private final ObservableCollection<ConfigValueElement> theValueElements;
 		private final ObservableCollection<E> theValues;
 
 		E theNewInstance;
 		Consumer<? super E> thePreAddAction;
-		ConfigValueElement theNewElement;
+		ElementId theNewElement;
 
 		ObservableConfigEntityValues(ObservableConfig collectionElement, EntityConfigFormat<E> format, String childName,
 			ConfigEntityFieldParser fieldParser, Observable<?> until) {
@@ -380,28 +394,60 @@ public interface ObservableConfigFormat<T> {
 			theFieldParser = fieldParser;
 			theUntil = until;
 
-			theValueElements = theCollectionElement.getContent(childName).getValues().flow()
-				.map(new TypeToken<ConfigValueElement>() {}, cfg -> new ConfigValueElement(cfg), //
-					opts -> opts.cache(true).reEvalOnUpdate(false))
-				.collectActive(theUntil);
-			theValues = theValueElements.flow().map(format.getEntityType().getType(), cve -> cve.theInstance, opts -> opts.cache(false))
+			try (Transaction t = theCollectionElement.lock(false, null)) {
+				ObservableSortedSet<ConfigValueElement>[] valueElsRef = new ObservableSortedSet[1];
+				theValueElements = new DefaultObservableSortedSet<>(new TypeToken<ConfigValueElement>() {},
+					new BetterTreeSet<>(false, ConfigValueElement::compareTo), element -> {
+						return valueElsRef[0]
+							.search(cve -> element.compareTo(cve.config.getParentChildRef()), SortedSearchFilter.OnlyMatch)
+							.getElementId();
+					});
+				valueElsRef[0] = theValueElements;
+				for (ObservableConfig child : theCollectionElement.getContent(theChildName).getValues()) {
+					theValueElements.add(new ConfigValueElement(child));
+				}
+			}
+
+			// theValueElements = theCollectionElement.getContent(childName).getValues().flow()
+			// .map(new TypeToken<ConfigValueElement>() {}, cfg -> new ConfigValueElement(cfg), //
+			// opts -> opts.cache(true).reEvalOnUpdate(false))
+			// .collectActive(theUntil);
+
+			theValues = theValueElements.flow().map(format.getEntityType().getType(), cve -> cve.instance, opts -> opts.cache(false))
 				.collectPassive();
 		}
 
 		protected void onChange(ObservableConfigEvent collectionChange) {
-			if (theNewInstance != null)
-				return; // Yeah, we already know--we're causing the change
 			if (collectionChange.relativePath.isEmpty())
 				return; // Doesn't affect us
-			// TODO Exception from the next line because sometimes the change is a remove event
-			CollectionElement<ConfigValueElement> el = theValueElements
-				.getElementBySource(collectionChange.relativePath.get(0).getParentChildRef());
-			if (el == null) // Must be a different child
-				return;
-			try {
-				theFormat.parse(theCollectionElement, el.get().theConfig, el.get().theInstance, collectionChange.asFromChild(), theUntil);
-			} catch (ParseException e) {
-				e.printStackTrace();
+			boolean elementChange = collectionChange.relativePath.size() == 1;
+			ObservableConfig config = collectionChange.relativePath.get(0);
+			if (elementChange && collectionChange.changeType == CollectionChangeType.add) {
+				CollectionElement<ConfigValueElement> el = theValueElements.search(//
+					cve -> config.getParentChildRef().compareTo(cve.config.getParentChildRef()), SortedSearchFilter.PreferLess);
+				ConfigValueElement newEl = new ConfigValueElement(config);
+				if (el == null)// Must be empty
+					theNewElement = theValueElements.addElement(newEl, false).getElementId();
+				else if (el.get().config.getParentChildRef().compareTo(config.getParentChildRef()) < 0)
+					theNewElement = theValueElements.addElement(newEl, el.getElementId(), null, true).getElementId();
+				else
+					theNewElement = theValueElements.addElement(newEl, null, el.getElementId(), false).getElementId();
+			} else {
+				CollectionElement<ConfigValueElement> el = theValueElements.search(//
+					cve -> config.getParentChildRef().compareTo(cve.config.getParentChildRef()), SortedSearchFilter.OnlyMatch);
+				if (el == null) // Must be a different child
+					return;
+				if (collectionChange.relativePath.size() == 1 && collectionChange.changeType == CollectionChangeType.remove)
+					theValueElements.mutableElement(el.getElementId()).remove();
+
+				else {
+					try {
+						theFormat.parse(theCollectionElement, el.get().config, el.get().instance, collectionChange.asFromChild(),
+							theUntil);
+					} catch (ParseException e) {
+						e.printStackTrace();
+					}
+				}
 			}
 		}
 
@@ -415,16 +461,10 @@ public interface ObservableConfigFormat<T> {
 			return theValues;
 		}
 
-		protected final ObservableConfig getConfigElement(ElementId valueElement) {
-			if (valueElement == null)
-				return null;
-			return theValueElements.getElement(valueElement).get().theConfig;
-		}
-
 		@Override
 		public ValueCreator<E> create(ElementId after, ElementId before, boolean first) {
-			ObservableConfig configAfter = getConfigElement(after);
-			ObservableConfig configBefore = getConfigElement(before);
+			ObservableConfig configAfter = after == null ? null : theValueElements.getElement(after).get().config;
+			ObservableConfig configBefore = before == null ? null : theValueElements.getElement(before).get().config;
 			return new SimpleValueCreator<E>(getType()) {
 				@Override
 				public <F> ValueCreator<E> with(ConfiguredValueField<? super E, F> field, F value) throws IllegalArgumentException {
@@ -436,7 +476,7 @@ public interface ObservableConfigFormat<T> {
 
 				@Override
 				public CollectionElement<E> create(Consumer<? super E> preAddAction) {
-					ConfigValueElement cve;
+					ElementId cve;
 					try (Transaction t = theCollectionElement.lock(true, null)) {
 						thePreAddAction = preAddAction;
 						theCollectionElement.addChild(configAfter, configBefore, first, theChildName, cfg -> {
@@ -445,47 +485,42 @@ public interface ObservableConfigFormat<T> {
 							} catch (ParseException e) {
 								throw new IllegalStateException("Could not create instance", e);
 							}
-							theFormat.format(theNewInstance, cfg);
 						});
-						theNewInstance = null;
 						cve = theNewElement;
 						theNewElement = null;
 					}
-					return cve;
+					return theValues.getElement(cve);
 				}
 			};
 		}
 
-		private class ConfigValueElement implements CollectionElement<E> {
-			private final ObservableConfig theConfig;
-			ElementId theValueId;
-			private E theInstance;
+		private class ConfigValueElement implements Comparable<ConfigValueElement> {
+			final ObservableConfig config;
+			final E instance;
 
 			public ConfigValueElement(ObservableConfig config) {
-				theConfig = config;
+				this.config = config;
+				E inst = null;
 				if (theNewInstance != null) {
-					theInstance = theNewInstance;
+					inst = theNewInstance;
 					theNewInstance = null;
-					theNewElement = this;
 				} else {
 					try {
-						theInstance = theFormat.parse(theCollectionElement, config, null, null, theUntil);
+						inst = theFormat.parse(theCollectionElement, this.config, null, null, theUntil);
 					} catch (ParseException e) {
-						System.err.println("Could not parse instance for " + theConfig);
+						System.err.println("Could not parse instance for " + this.config);
 						e.printStackTrace();
+						inst = null;
 					}
 				}
-				theFormat.getEntityType().associate(theInstance, ObservableConfigEntityValues.this, this);
+				instance = inst;
+				if (instance != null)
+					theFormat.getEntityType().associate(instance, ObservableConfigEntityValues.this, this);
 			}
 
 			@Override
-			public ElementId getElementId() {
-				return theValueId;
-			}
-
-			@Override
-			public E get() {
-				return theInstance;
+			public int compareTo(ConfigValueElement o) {
+				return config.getParentChildRef().compareTo(o.config.getParentChildRef());
 			}
 		}
 	}

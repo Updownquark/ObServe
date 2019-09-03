@@ -84,7 +84,7 @@ public class ConfigEntityFieldParser {
 			return (ObservableConfigFormat<T>) ObservableConfigFormat
 				.ofEntitySet((ObservableConfigFormat.EntityConfigFormat<Object>) elementFormat, childName, this);
 		} else if (configName != null && EntityReflector.isEntityType(raw))
-			return ObservableConfigFormat.ofEntity(new EntityConfiguredValueType<>(EntityReflector.build(type).build()), this);
+			return ObservableConfigFormat.ofEntity(new EntityConfiguredValueType<>(EntityReflector.build(type).build()), this, configName);
 		else
 			throw new IllegalArgumentException("No custom or default format available for type " + raw.getName());
 	}

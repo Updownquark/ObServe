@@ -3,6 +3,7 @@ package org.observe.collect;
 import java.util.Collection;
 import java.util.LinkedList;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import org.observe.Subscription;
 import org.qommons.Causable;
@@ -25,19 +26,31 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	private final TypeToken<E> theType;
 	private final LinkedList<Causable> theTransactionCauses;
 	private final BetterList<E> theValues;
-	private org.qommons.collect.ListenerList<Consumer<? super ObservableCollectionEvent<? extends E>>> theObservers;
+	private final org.qommons.collect.ListenerList<Consumer<? super ObservableCollectionEvent<? extends E>>> theObservers;
+	private final Function<ElementId, ElementId> theElementSource;
 
 	/**
 	 * @param type The type for this collection
 	 * @param list The list to hold this collection's elements
 	 */
 	public DefaultObservableCollection(TypeToken<E> type, BetterList<E> list) {
+		this(type, list, null);
+	}
+
+	/**
+	 * @param type The type for this collection
+	 * @param list The list to hold this collection's elements
+	 * @param elementSource The function to provide element sources for this collection
+	 * @see #getElementBySource(ElementId)
+	 */
+	public DefaultObservableCollection(TypeToken<E> type, BetterList<E> list, Function<ElementId, ElementId> elementSource) {
 		theType = type;
 		if (list instanceof ObservableCollection)
 			throw new UnsupportedOperationException("ObservableCollection is not supported here");
 		theTransactionCauses = new LinkedList<>();
 		theValues = list;
 		theObservers = new org.qommons.collect.ListenerList<>("A collection may not be modified as a result of a change event");
+		theElementSource = elementSource;
 	}
 
 	/** @return This collection's backing values */
@@ -170,6 +183,12 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 
 	@Override
 	public CollectionElement<E> getElementBySource(ElementId sourceEl) {
+		if (theElementSource != null) {
+			ElementId el = theElementSource.apply(sourceEl);
+			if (el == null)
+				return null;
+			return getElement(el);
+		}
 		return theValues.getElementBySource(sourceEl);
 	}
 

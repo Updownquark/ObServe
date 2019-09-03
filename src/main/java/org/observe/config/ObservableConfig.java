@@ -408,7 +408,7 @@ public class ObservableConfig implements StructuredTransactable {
 		theLocking = locking;
 		theName = name;
 		theContent = new BetterTreeList<>(locking);
-		theListeners = ListenerList.build().build();
+		theListeners = ListenerList.build().allowReentrant().build();
 	}
 
 	protected ObservableConfig initialize(ObservableConfig parent, ElementId parentContentRef) {

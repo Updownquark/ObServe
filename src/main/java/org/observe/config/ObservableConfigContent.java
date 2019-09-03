@@ -524,7 +524,7 @@ public class ObservableConfigContent {
 				theType = theEntityFormat.entityType;
 			} else {
 				theType = new EntityConfiguredValueType<>(typeBuilder.build());
-				theEntityFormat = ObservableConfigFormat.ofEntity(theType, fieldParser);
+				theEntityFormat = ObservableConfigFormat.ofEntity(theType, fieldParser, null); // Child name not needed for the collection
 				if (entityFormat == null)
 					fieldParser.withFormat(type, theEntityFormat);
 			}
@@ -1250,7 +1250,7 @@ public class ObservableConfigContent {
 					ObservableConfig beforeChild = after == null ? null : theChildren.getElement(before).get();
 					ElementId newChildId;
 					try (Transaction t = theRoot.lock(true, null)) {
-						ObservableConfig parent = theRoot.getChild(thePath.getParent(), true, null);
+						ObservableConfig parent = thePath.getParent() == null ? theRoot : theRoot.getChild(thePath.getParent(), true, null);
 						ObservableConfig newChild = parent.addChild(afterChild, beforeChild, first, thePath.getLastElement().getName(),
 							cfg -> {
 								if (theFields != null)
