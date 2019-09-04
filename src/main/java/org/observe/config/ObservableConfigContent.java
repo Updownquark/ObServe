@@ -1247,7 +1247,7 @@ public class ObservableConfigContent {
 				@Override
 				public CollectionElement<C> create(Consumer<? super C> preAddAction) {
 					ObservableConfig afterChild = after == null ? null : theChildren.getElement(after).get();
-					ObservableConfig beforeChild = after == null ? null : theChildren.getElement(before).get();
+					ObservableConfig beforeChild = before == null ? null : theChildren.getElement(before).get();
 					ElementId newChildId;
 					try (Transaction t = theRoot.lock(true, null)) {
 						ObservableConfig parent = thePath.getParent() == null ? theRoot : theRoot.getChild(thePath.getParent(), true, null);

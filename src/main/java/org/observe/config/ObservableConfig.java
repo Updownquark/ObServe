@@ -837,6 +837,16 @@ public class ObservableConfig implements StructuredTransactable {
 		return out.toString();
 	}
 
+	public String printXml() {
+		StringWriter out = new StringWriter();
+		try {
+			_writeXml(this, out, new XmlEncoding(":", ":", ""), 0, "\t", new XmlWriteHelper(), true);
+		} catch (IOException e) {
+			throw new IllegalStateException(e);
+		}
+		return out.toString();
+	}
+
 	protected final Object getCurrentCause() {
 		return theRootCausable == null ? null : theRootCausable.get();
 	}
@@ -1290,10 +1300,10 @@ public class ObservableConfig implements StructuredTransactable {
 				BitSet copy = (BitSet) helper.childrenAsAttributes.clone();
 				helper.childrenAsAttributes.clear();
 				for (ObservableConfig child : config.theContent) {
-					if (copy.get(i))
-						continue;
-					out.append('\n');
-					_writeXml(child, out, encoding, indentAmount + 1, indentStr, helper, true);
+					if (!copy.get(i)) {
+						out.append('\n');
+						_writeXml(child, out, encoding, indentAmount + 1, indentStr, helper, true);
+					}
 					i++;
 				}
 
