@@ -2,6 +2,7 @@ package org.observe.util.swing;
 
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.Dimension;
 import java.awt.EventQueue;
 import java.awt.Font;
 import java.awt.LayoutManager;
@@ -12,11 +13,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+import javax.swing.Box;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
@@ -38,11 +39,18 @@ import org.observe.Subscription;
 import org.observe.collect.CollectionChangeEvent;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
+import org.qommons.collect.ListenerList;
 import org.qommons.io.Format;
 
 /** Utilities for the org.observe.util.swing package */
 public class ObservableSwingUtils {
-	private static final ConcurrentLinkedQueue<Runnable> EDT_EVENTS = new ConcurrentLinkedQueue<>();
+	private static final ListenerList<Runnable> EDT_EVENTS = ListenerList.build()//
+		.allowReentrant() // Things running on the EDT by onEQ() may call onEQ()
+		.forEachSafe(false) // Since we're not preventing reentrancy or using skipCurrent, we don't need this weight
+		.withFastSize(false) // Not calling size()
+		// Since events will often come as a flood after user interaction, I think it's better to have one lock than two
+		.withSyncType(ListenerList.SynchronizationType.LIST)//
+		.build();
 
 	/**
 	 * Executes a task on the AWT/Swing event thread. If this thread *is* the event thread, the task is executed inline
@@ -50,21 +58,25 @@ public class ObservableSwingUtils {
 	 * @param task The task to execute on the AWT {@link EventQueue}
 	 */
 	public static void onEQ(Runnable task) {
-		if (EventQueue.isDispatchThread())
-			task.run();
-		else {
-			boolean tellEdt = EDT_EVENTS.isEmpty();
-			EDT_EVENTS.add(task);
-			if (tellEdt)
+		boolean queueEmpty = EDT_EVENTS.isEmpty();
+		// If the queue is not empty, we need to add the task to the queue instead of running it inline to avoid ordering problems
+		if (!queueEmpty || !EventQueue.isDispatchThread()) {
+			EDT_EVENTS.add(task, false);
+			if (queueEmpty)
 				EventQueue.invokeLater(ObservableSwingUtils::emptyEdtEvents);
-		}
+		} else
+			task.run();
 	}
 
 	private static void emptyEdtEvents() {
-		Runnable task = EDT_EVENTS.poll();
+		Runnable task = EDT_EVENTS.poll(0);
 		while (task != null) {
-			task.run();
-			task = EDT_EVENTS.poll();
+			try {
+				task.run();
+			} catch (RuntimeException e) {
+				e.printStackTrace();
+			}
+			task = EDT_EVENTS.poll(0);
 		}
 	}
 
@@ -591,6 +603,10 @@ public class ObservableSwingUtils {
 
 		FieldPanelPopulator<C> addHPanel(String fieldName, LayoutManager layout, Consumer<HorizPanel> modify);
 
+		default FieldPanelPopulator<C> spacer(int size){
+			return addComponent(null, Box.createRigidArea(new Dimension(size, size)), null);
+		}
+
 		<S> FieldPanelPopulator<C> addComponent(String fieldName, S component, Consumer<PanelPopulatorField<Object, S>> modify);
 	}
 
@@ -977,9 +993,25 @@ public class ObservableSwingUtils {
 			}
 		}
 
+		/* Need to override all these because otherwise, the return type would be either FieldPanelPopulator or PanelPopulatorField.
+		 * So after calling a method of one, it would not be possible to chain a call to the other.
+		 * The only thing these overrides do is make the cross-chaining possible. */
+
+		@Override
+		public HorizPanel withFieldName(String fieldName) {
+			super.withFieldName(fieldName);
+			return this;
+		}
+
 		@Override
 		public HorizPanel withVariableFieldName(ObservableValue<String> fieldName) {
 			super.withVariableFieldName(fieldName);
+			return this;
+		}
+
+		@Override
+		public HorizPanel modifyLabel(Consumer<LabelHolder> labelModifier) {
+			super.modifyLabel(labelModifier);
 			return this;
 		}
 
@@ -1022,6 +1054,19 @@ public class ObservableSwingUtils {
 		@Override
 		public HorizPanel fill() {
 			super.fill();
+			return this;
+		}
+
+		@Override
+		public HorizPanel addButton(String text, ObservableAction<?> action, Consumer<PanelPopulatorField<Object, JButton>> modify) {
+			FieldPanelPopulatorImpl.super.addButton(text, action, modify);
+			return this;
+		}
+
+		@Override
+		public HorizPanel addButton(ObservableValue<String> text, ObservableAction<?> action,
+			Consumer<PanelPopulatorField<Object, JButton>> modify) {
+			FieldPanelPopulatorImpl.super.addButton(text, action, modify);
 			return this;
 		}
 
@@ -1071,6 +1116,12 @@ public class ObservableSwingUtils {
 		public <F> HorizPanel addComboField(String fieldName, SettableValue<F> value, List<? extends F> availableValues,
 			Consumer<PanelComboField<F, JComboBox<F>>> modify) {
 			FieldPanelPopulatorImpl.super.addComboField(fieldName, value, availableValues, modify);
+			return this;
+		}
+
+		@Override
+		public HorizPanel spacer(int size) {
+			FieldPanelPopulatorImpl.super.spacer(size);
 			return this;
 		}
 
