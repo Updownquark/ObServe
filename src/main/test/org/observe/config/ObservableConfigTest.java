@@ -478,8 +478,10 @@ public class ObservableConfigTest {
 						int index = helper.getInt(0, testEntities.getValues().size());
 						ElementId after = index == 0 ? null : testEntities.getValues().getElement(index - 1).getElementId();
 						String randomString = randomString(helper);
-						TestEntity2 newEntity = testEntities.create(after, null, true).with(TestEntity2::getText, randomString).create()
+						TestEntity2 newEntity = testEntities.create(after, null, true).with(TestEntity2::getText, randomString)//
+							.create()//
 							.get();
+						System.out.println(theConfig.getChild("test-entities2").printXml());
 						Assert.assertEquals(randomString, newEntity.getText());
 						expected.add(index, deepCopy(newEntity));
 					}).or(1, () -> { // Remove element
