@@ -18,9 +18,12 @@ import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionTester;
 import org.observe.config.ObservableConfig.XmlEncoding;
 import org.observe.util.TypeTokens;
+import org.qommons.BreakpointHere;
 import org.qommons.QommonsTestUtils;
 import org.qommons.TestHelper;
+import org.qommons.Transaction;
 import org.qommons.collect.ElementId;
+import org.qommons.tree.BetterTreeList;
 import org.xml.sax.SAXException;
 
 public class ObservableConfigTest {
@@ -416,54 +419,168 @@ public class ObservableConfigTest {
 		Assert.assertEquals(3, i);
 	}
 
-	// @Test
+	@Test
 	public void superTest() throws IOException, SAXException {
-		SimpleObservable<Void> until = new SimpleObservable<>();
-		readXml(getClass().getResourceAsStream("TestValues.xml"));
-		ObservableValueSet<TestEntity2> testEntities1 = theConfig.observeEntities(theConfig.createPath("test-entities2/test-entity2"),
-			TypeTokens.get().of(TestEntity2.class), until);
-		ObservableCollectionTester<TestEntity2> tester1 = new ObservableCollectionTester<>("testEntities1", testEntities1.getValues());
-		ObservableValueSet<TestEntity2> testEntities2 = theConfig.observeEntities(theConfig.createPath("test-entities2/test-entity2"),
-			TypeTokens.get().of(TestEntity2.class), until);
-		ObservableCollectionTester<TestEntity2> tester2 = new ObservableCollectionTester<>("testEntities2", testEntities2.getValues());
-		List<TestEntity2> expected = new ArrayList<>();
-		for (TestEntity2 entity : testEntities1.getValues())
-			expected.add(deepCopy(entity));
-		// TODO Do more with the field observable collections, making sure those collections keep up
+		TestHelper.createTester(ObservableConfigSuperTester.class)//
+		.revisitKnownFailures(true).withFailurePersistence(true)//
+		.withPlacemarks("modify").withRandomCases(100).withMaxFailures(1)//
+		.withDebug(BreakpointHere.isDebugEnabled() != null)//
+		.execute().throwErrorIfFailed();
+	}
 
-		class ObservableConfigSuperTester implements TestHelper.Testable {
-			@Override
-			public void accept(TestHelper helper) {
-				ObservableValueSet<TestEntity2> testEntities = helper.getBoolean() ? testEntities1 : testEntities2;
+	static class ObservableConfigSuperTester implements TestHelper.Testable {
+		private final ObservableConfig theConfig;
+		private final ObservableValueSet<TestEntity2> testEntities1;
+		private final ObservableValueSet<TestEntity2> testEntities2;
 
-				helper.doAction(1, () -> { // Add element
-					// TODO
-				}).or(1, () -> { // Remove element
-					// TODO
-				}).or(1, () -> {// Modify text
-					// TODO
-				}).or(1, () -> {// Modify entity field.d
-					// TODO
-				}).or(1, () -> {// Add text
-					// TODO
-				}).or(1, () -> {// Remove text
-					// TODO
-				}).or(1, () -> {// Update text
-					// TODO
-				}).or(1, () -> {// Add listed entity
-					// TODO
-				}).or(1, () -> {// Remove listed entity
-					// TODO
-				}).or(1, () -> {// Modify listed entity.e
-					// TODO
-				}).execute("modify");
+		private final List<TestEntity2> expected;
+		private final ObservableCollectionTester<TestEntity2> tester1;
+		private final ObservableCollectionTester<TestEntity2> tester2;
 
-				tester1.check(expected);
-				tester2.check(expected);
+		public ObservableConfigSuperTester() {
+			theConfig = ObservableConfig.createRoot("test");
+			try {
+				ObservableConfig.readXml(theConfig, ObservableConfigTest.class.getResourceAsStream("TestValues.xml"),
+					new XmlEncoding(":x", ":xx", " ", "blah", "test"));
+			} catch (IOException | SAXException e) {
+				throw new IllegalStateException(e);
+			}
+			SimpleObservable<Void> until = new SimpleObservable<>();
+			testEntities1 = theConfig.observeEntities(theConfig.createPath("test-entities2/test-entity2"),
+				TypeTokens.get().of(TestEntity2.class),
+				until);
+			tester1 = new ObservableCollectionTester<>("testEntities1", testEntities1.getValues());
+			testEntities2 = theConfig.observeEntities(theConfig.createPath("test-entities2/test-entity2"),
+				TypeTokens.get().of(TestEntity2.class),
+				until);
+			tester2 = new ObservableCollectionTester<>("testEntities2", testEntities2.getValues());
+			expected = new ArrayList<>();
+			for (TestEntity2 entity : testEntities1.getValues())
+				expected.add(deepCopy(entity));
+			// TODO Do more with the field observable collections, making sure those collections keep up
+		}
+
+		@Override
+		public void accept(TestHelper helper) {
+			int modifications = helper.getInt(100, 10000);
+			System.out.print(modifications + " modifications");
+			System.out.flush();
+			int tickSkip = modifications / 100;
+			try (Transaction t = theConfig.lock(true, null)) {
+				for (int i = 0; i < modifications; i++) {
+					ObservableValueSet<TestEntity2> testEntities = helper.getBoolean() ? testEntities1 : testEntities2;
+					if (i != 0 && i % tickSkip == 0) {
+						System.out.print(".");
+						System.out.flush();
+					}
+
+					helper.doAction(1, () -> { // Add element
+						int index = helper.getInt(0, testEntities.getValues().size());
+						ElementId after = index == 0 ? null : testEntities.getValues().getElement(index - 1).getElementId();
+						String randomString = randomString(helper);
+						TestEntity2 newEntity = testEntities.create(after, null, true).with(TestEntity2::getText, randomString).create()
+							.get();
+						Assert.assertEquals(randomString, newEntity.getText());
+						expected.add(index, deepCopy(newEntity));
+					}).or(1, () -> { // Remove element
+						if (testEntities.getValues().isEmpty())
+							return;
+						int index = helper.getInt(0, testEntities.getValues().size() - 1);
+						testEntities.getValues().remove(index);
+						expected.remove(index);
+					}).or(1, () -> {// Modify text
+						if (testEntities.getValues().isEmpty())
+							return;
+						int index = helper.getInt(0, testEntities.getValues().size() - 1);
+						TestEntity2 modify = testEntities.getValues().get(index);
+						String randomString = randomString(helper);
+						modify.setText(randomString(helper));
+						Assert.assertEquals(randomString, modify.getText());
+						expected.get(index).setText(randomString);
+					}).or(1, () -> {// Modify entity field.d
+						if (testEntities.getValues().isEmpty())
+							return;
+						int index = helper.getInt(0, testEntities.getValues().size() - 1);
+						TestEntity2 modify = testEntities.getValues().get(index);
+						int newD = helper.getAnyInt();
+						modify.getEntityField().setD(newD);
+						Assert.assertEquals(newD, modify.getEntityField().getD());
+						expected.get(index).getEntityField().setD(newD);
+					}).or(1, () -> {// Add text
+						if (testEntities.getValues().isEmpty())
+							return;
+						int index = helper.getInt(0, testEntities.getValues().size() - 1);
+						TestEntity2 modify = testEntities.getValues().get(index);
+						int textIndex = helper.getInt(0, modify.getTexts().size());
+						String randomString = randomString(helper);
+						modify.getTexts().add(textIndex, randomString);
+						Assert.assertEquals(randomString, modify.getTexts().get(textIndex));
+						expected.get(index).getTexts().add(textIndex, randomString);
+					}).or(1, () -> {// Remove text
+						if (testEntities.getValues().isEmpty())
+							return;
+						int index = helper.getInt(0, testEntities.getValues().size() - 1);
+						TestEntity2 modify = testEntities.getValues().get(index);
+						if (modify.getTexts().isEmpty())
+							return;
+						int textIndex = helper.getInt(0, modify.getTexts().size() - 1);
+						modify.getTexts().remove(textIndex);
+						expected.get(index).getTexts().remove(textIndex);
+					}).or(1, () -> {// Update text
+						if (testEntities.getValues().isEmpty())
+							return;
+						int index = helper.getInt(0, testEntities.getValues().size() - 1);
+						TestEntity2 modify = testEntities.getValues().get(index);
+						if (modify.getTexts().isEmpty())
+							return;
+						int textIndex = helper.getInt(0, modify.getTexts().size() - 1);
+						String randomString = randomString(helper);
+						modify.getTexts().set(textIndex, randomString);
+						Assert.assertEquals(randomString, modify.getTexts().get(textIndex));
+						expected.get(index).getTexts().set(textIndex, randomString);
+					}).or(1, () -> {// Add listed entity
+						if (testEntities.getValues().isEmpty())
+							return;
+						int index = helper.getInt(0, testEntities.getValues().size() - 1);
+						TestEntity2 modify = testEntities.getValues().get(index);
+						int leIndex = helper.getInt(0, modify.getListedEntities().getValues().size());
+						ElementId after = leIndex == 0 ? null
+							: modify.getListedEntities().getValues().getElement(leIndex - 1).getElementId();
+						int newE = helper.getAnyInt();
+						TestEntity4 newLE = modify.getListedEntities().create(after, null, true).with(TestEntity4::getE, newE).create()
+							.get();
+						Assert.assertEquals(newE, newLE.getE());
+						((List<TestEntity4>) expected.get(index).getListedEntities().getValues()).add(leIndex, deepCopy(newLE));
+					}).or(1, () -> {// Remove listed entity
+						if (testEntities.getValues().isEmpty())
+							return;
+						int index = helper.getInt(0, testEntities.getValues().size() - 1);
+						TestEntity2 modify = testEntities.getValues().get(index);
+						if (modify.getListedEntities().getValues().isEmpty())
+							return;
+						int leIndex = helper.getInt(0, modify.getListedEntities().getValues().size() - 1);
+						modify.getListedEntities().getValues().remove(leIndex);
+						expected.get(index).getListedEntities().getValues().remove(leIndex);
+					}).or(1, () -> {// Modify listed entity.e
+						if (testEntities.getValues().isEmpty())
+							return;
+						int index = helper.getInt(0, testEntities.getValues().size() - 1);
+						TestEntity2 modify = testEntities.getValues().get(index);
+						if (modify.getListedEntities().getValues().isEmpty())
+							return;
+						int leIndex = helper.getInt(0, modify.getListedEntities().getValues().size() - 1);
+						int newE = helper.getAnyInt();
+						modify.getListedEntities().getValues().get(leIndex).setE(newE);
+						Assert.assertEquals(newE, modify.getListedEntities().getValues().get(leIndex).getE());
+						expected.get(index).getListedEntities().getValues().get(leIndex).setE(newE);
+					}).execute("modify");
+
+					tester1.check(expected);
+					tester2.check(expected);
+				}
 			}
 		}
 	}
-
 	public interface TestEntity {
 		int getA();
 
@@ -515,13 +632,13 @@ public class ObservableConfigTest {
 			private String theText;
 			private final TestEntity3 theEntityField;
 			private final List<String> theTexts;
-			private final List<TestEntity4> theListedEntities;
+			private final ObservableCollection<TestEntity4> theListedEntities;
 
 			{
 				theText = entity.getText();
 				theEntityField = deepCopy(entity.getEntityField());
 				theTexts = new ArrayList<>(entity.getTexts());
-				theListedEntities = new ArrayList<>();
+				theListedEntities = ObservableCollection.create(TypeTokens.get().of(TestEntity4.class), new BetterTreeList<>(false));
 				for (TestEntity4 te4 : entity.getListedEntities().getValues())
 					theListedEntities.add(deepCopy(te4));
 			}
@@ -551,7 +668,7 @@ public class ObservableConfigTest {
 				return new ObservableValueSet<ObservableConfigTest.TestEntity4>() {
 					@Override
 					public ObservableCollection<? extends TestEntity4> getValues() {
-						return ObservableCollection.of(TypeTokens.get().of(TestEntity4.class), theListedEntities);
+						return theListedEntities;
 					}
 
 					@Override
@@ -581,12 +698,21 @@ public class ObservableConfigTest {
 					&& theTexts.equals(other.getTexts())//
 					&& theListedEntities.equals(other.getListedEntities().getValues());
 			}
+
+			@Override
+			public String toString() {
+				return "test-entity2(text=" + theText + ")";
+			}
 		};
 	}
 
 	private static TestEntity3 deepCopy(TestEntity3 entity) {
 		return new TestEntity3() {
 			private int theD;
+
+			{
+				theD = entity.getD();
+			}
 
 			@Override
 			public int getD() {
@@ -602,12 +728,21 @@ public class ObservableConfigTest {
 			public boolean equals(Object obj) {
 				return obj instanceof TestEntity3 && theD == ((TestEntity3) obj).getD();
 			}
+
+			@Override
+			public String toString() {
+				return "test-entity3(d=" + theD + ")";
+			}
 		};
 	}
 
 	private static TestEntity4 deepCopy(TestEntity4 entity) {
 		return new TestEntity4() {
 			private int theE;
+
+			{
+				theE = entity.getE();
+			}
 
 			@Override
 			public int getE() {
@@ -623,6 +758,20 @@ public class ObservableConfigTest {
 			public boolean equals(Object obj) {
 				return obj instanceof TestEntity4 && theE == ((TestEntity4) obj).getE();
 			}
+
+			@Override
+			public String toString() {
+				return "test-entity4(e=" + theE + ")";
+			}
 		};
+	}
+
+	private static String randomString(TestHelper helper) {
+		int len = helper.getInt(0, 100);
+		char[] ch = new char[len];
+		for (int i = 0; i < ch.length; i++) {
+			ch[i] = (char) helper.getInt(' ', '~');
+		}
+		return new String(ch);
 	}
 }
