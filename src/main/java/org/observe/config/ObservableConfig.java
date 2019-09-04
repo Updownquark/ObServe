@@ -640,7 +640,7 @@ public class ObservableConfig implements StructuredTransactable {
 
 	private Transaction withCause(Transaction t, Object cause) {
 		if (t == null || theRootCausable == null) // root causable can be null during initialization
-			return Transaction.NONE;
+			return t;
 		boolean causeIsRoot = theRootCausable.get() == null;
 		if (causeIsRoot) {
 			if (cause instanceof Causable) {
@@ -954,7 +954,9 @@ public class ObservableConfig implements StructuredTransactable {
 	}
 
 	public static ObservableConfig createRoot(String name, String value, CollectionLockingStrategy locking) {
-		return new ObservableConfig(name, locking).setValue(value).initialize(null, null);
+		return new ObservableConfig(name, locking)//
+			.setValue(value)//
+			.initialize(null, null);
 	}
 
 	public static class XmlEncoding {
