@@ -73,7 +73,7 @@ public class ConfigEntityFieldParser {
 			String childName = StringUtils.singularize(configName);
 			ObservableConfigFormat<?> elementFormat = getConfigFormat(type.resolveType(Collection.class.getTypeParameters()[0]), childName);
 			return (ObservableConfigFormat<T>) ObservableConfigFormat.ofCollection((TypeToken<Collection<Object>>) type,
-				(ObservableConfigFormat<Object>) elementFormat, childName);
+				(ObservableConfigFormat<Object>) elementFormat, configName, childName);
 		} else if (raw.isAssignableFrom(ObservableValueSet.class)) {
 			String childName = StringUtils.singularize(configName);
 			TypeToken<?> elementType = type.resolveType(ObservableValueSet.class.getTypeParameters()[0]);
@@ -82,7 +82,7 @@ public class ConfigEntityFieldParser {
 				throw new IllegalArgumentException(
 					"Cannot create an " + ObservableValueSet.class.getSimpleName() + " for element type " + elementType);
 			return (ObservableConfigFormat<T>) ObservableConfigFormat
-				.ofEntitySet((ObservableConfigFormat.EntityConfigFormat<Object>) elementFormat, childName, this);
+				.ofEntitySet((ObservableConfigFormat.EntityConfigFormat<Object>) elementFormat, configName, childName, this);
 		} else if (configName != null && EntityReflector.isEntityType(raw))
 			return ObservableConfigFormat.ofEntity(new EntityConfiguredValueType<>(EntityReflector.build(type).build()), this, configName);
 		else

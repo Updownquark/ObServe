@@ -225,7 +225,7 @@ public interface ObservableConfigFormat<T> {
 	}
 
 	static <E, C extends Collection<? extends E>> ObservableConfigFormat<C> ofCollection(TypeToken<C> collectionType,
-		ObservableConfigFormat<E> elementFormat, String childName) {
+		ObservableConfigFormat<E> elementFormat, String parentName, String childName) {
 		if(!TypeTokens.getRawType(collectionType).isAssignableFrom(ObservableCollection.class))
 			throw new IllegalArgumentException("This class can only produce instances of "+ObservableCollection.class.getName()
 				+", which is not compatible with type "+collectionType);
@@ -331,7 +331,7 @@ public interface ObservableConfigFormat<T> {
 					}
 				}
 				if (previousValue == null) {
-					ObservableConfig child = config != null ? config : parent.addChild(childName);
+					ObservableConfig child = config != null ? config : parent.addChild(parentName);
 					SimpleObservable<Void> contentUntil = new SimpleObservable<>(null, false, null, b -> b.unsafe());
 					return (C) new ConfigContentValueWrapper(child.observeValues(childName, elementType, elementFormat, //
 						Observable.or(until, contentUntil)), contentUntil);
@@ -348,8 +348,8 @@ public interface ObservableConfigFormat<T> {
 		};
 	}
 
-	static <E> ObservableConfigFormat<ObservableValueSet<E>> ofEntitySet(EntityConfigFormat<E> elementFormat, String childName,
-		ConfigEntityFieldParser fieldParser) {
+	static <E> ObservableConfigFormat<ObservableValueSet<E>> ofEntitySet(EntityConfigFormat<E> elementFormat, String parentName,
+		String childName, ConfigEntityFieldParser fieldParser) {
 		return new ObservableConfigFormat<ObservableValueSet<E>>() {
 			@Override
 			public void format(ObservableValueSet<E> value, ObservableConfig config) {
@@ -361,7 +361,7 @@ public interface ObservableConfigFormat<T> {
 				ObservableConfigEvent change, Observable<?> until) throws ParseException {
 				if (previousValue == null) {
 					if (config == null)
-						config = parent.addChild(childName);
+						config = parent.addChild(parentName);
 					return new ObservableConfigEntityValues<>(config, elementFormat, childName, fieldParser, until);
 				} else {
 					((ObservableConfigEntityValues<E>) previousValue).onChange(change);
