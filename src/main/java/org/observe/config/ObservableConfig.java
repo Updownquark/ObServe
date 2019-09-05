@@ -619,6 +619,18 @@ public class ObservableConfig implements StructuredTransactable {
 
 	public <T> ObservableValueSet<T> observeEntities(ObservableConfigPath path, TypeToken<T> type, ConfigEntityFieldParser fieldParser,
 		Observable<?> until) {
+		/*if (path.getLastElement() == null || path.getLastElement().isMulti())
+			throw new IllegalArgumentException("Invalid path for entity set: " + path);
+		ObservableConfigFormat<T> entityFormat = fieldParser.getConfigFormat(type, path.getLastElement().getName());
+		if (!(entityFormat instanceof ObservableConfigFormat.EntityConfigFormat))
+			throw new IllegalArgumentException(type + " is not parsed as an entity in this format set");
+		ObservableConfigFormat<ObservableValueSet<T>> valueSetFormat = ObservableConfigFormat.ofEntitySet(
+			(ObservableConfigFormat.EntityConfigFormat<T>) entityFormat, getName(), path.getLastElement().getName(), fieldParser);
+		try {
+			return valueSetFormat.parse(getParent(), this, null, null, until);
+		} catch (ParseException e) {
+			throw new IllegalArgumentException("Could not parse entity set", e);
+		}*/
 		ObservableValueSet<? extends ObservableConfig> configs = getContent(path);
 		return new ObservableConfigEntityValues<>(configs, type, fieldParser, until);
 	}
@@ -1310,7 +1322,8 @@ public class ObservableConfig implements StructuredTransactable {
 				out.append('\n');
 				for (i = 0; i < indentAmount; i++)
 					out.append(indentStr);
-			}
+			} else
+				helper.childrenAsAttributes.clear();
 			out.append("</").append(xmlName).append('>');
 		}
 	}
