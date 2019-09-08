@@ -47,7 +47,7 @@ public interface ObservableConfigFormat<T> {
 
 	void format(T value, ObservableConfig config);
 
-	T parse(ObservableConfig parent, ObservableConfig config, T previousValue, ObservableConfig.ObservableConfigEvent change,
+	T parse(ObservableConfig config, Supplier<ObservableConfig> create, T previousValue, ObservableConfig.ObservableConfigEvent change,
 		Observable<?> until)
 			throws ParseException;
 
@@ -76,9 +76,8 @@ public interface ObservableConfigFormat<T> {
 		}
 
 		@Override
-		public T parse(ObservableConfig parent, ObservableConfig config, T previousValue, ObservableConfig.ObservableConfigEvent change,
-			Observable<?> until)
-				throws ParseException {
+		public T parse(ObservableConfig config, Supplier<ObservableConfig> create, T previousValue,
+			ObservableConfig.ObservableConfigEvent change, Observable<?> until) throws ParseException {
 			if (config == null)
 				return defaultValue.get();
 			if (change != null && change.relativePath.size() > 1)
@@ -138,14 +137,13 @@ public interface ObservableConfigFormat<T> {
 		}
 
 		@Override
-		public E parse(ObservableConfig parent, ObservableConfig config, E previousValue, ObservableConfig.ObservableConfigEvent change,
-			Observable<?> until)
-				throws ParseException {
+		public E parse(ObservableConfig config, Supplier<ObservableConfig> create, E previousValue,
+			ObservableConfig.ObservableConfigEvent change, Observable<?> until) throws ParseException {
 			if (config != null && "true".equalsIgnoreCase(config.get("null")))
 				return null;
 			else if (previousValue == null) {
 				if (config == null)
-					config = parent.addChild(configName);
+					config = create.get();
 				return createInstance(config, entityType.getFields().keySet().createMap(), until);
 			} else {
 				if (change == null) {
@@ -181,7 +179,7 @@ public interface ObservableConfigFormat<T> {
 			for (int i = 0; i < fieldValues.keySize(); i++) {
 				ObservableConfig fieldConfig = config.getChild(theFieldChildNames.get(i));
 				if (fieldValues.get(i) == null)
-					fieldValues.put(i, fieldFormats[i].parse(config, fieldConfig, null, null, until));
+					fieldValues.put(i, fieldFormats[i].parse(fieldConfig, () -> config.addChild(configName), null, null, until));
 				else
 					formatField(entityType.getFields().get(i), fieldValues.get(i), config);
 			}
@@ -219,8 +217,8 @@ public interface ObservableConfigFormat<T> {
 					return; // The update does not actually affect the field value
 				change = change.asFromChild();
 			}
-			Object newValue = ((ObservableConfigFormat<Object>) fieldFormats[fieldIdx]).parse(entityConfig, fieldConfig, oldValue,
-				change, until);
+			Object newValue = ((ObservableConfigFormat<Object>) fieldFormats[fieldIdx]).parse(fieldConfig,
+				() -> entityConfig.addChild(configName), oldValue, change, until);
 			if (oldValue != newValue)
 				((ConfiguredValueField<E, Object>) field).set(previousValue, newValue);
 		}
@@ -315,7 +313,7 @@ public interface ObservableConfigFormat<T> {
 			}
 
 			@Override
-			public C parse(ObservableConfig parent, ObservableConfig config, C previousValue, ObservableConfigEvent change,
+			public C parse(ObservableConfig config, Supplier<ObservableConfig> create, C previousValue, ObservableConfigEvent change,
 				Observable<?> until)
 					throws ParseException {
 				class ConfigContentValueWrapper extends ObservableCollectionWrapper<E> {
@@ -333,7 +331,7 @@ public interface ObservableConfigFormat<T> {
 					}
 				}
 				if (previousValue == null) {
-					ObservableConfig child = config != null ? config : parent.addChild(parentName);
+					ObservableConfig child = config != null ? config : create.get();
 					SimpleObservable<Void> contentUntil = new SimpleObservable<>(null, false, null, b -> b.unsafe());
 					return (C) new ConfigContentValueWrapper(child.observeValues(childName, elementType, elementFormat, //
 						Observable.or(until, contentUntil)), contentUntil);
@@ -359,11 +357,12 @@ public interface ObservableConfigFormat<T> {
 			}
 
 			@Override
-			public ObservableValueSet<E> parse(ObservableConfig parent, ObservableConfig config, ObservableValueSet<E> previousValue,
+			public ObservableValueSet<E> parse(ObservableConfig config, Supplier<ObservableConfig> create,
+				ObservableValueSet<E> previousValue,
 				ObservableConfigEvent change, Observable<?> until) throws ParseException {
 				if (previousValue == null) {
 					if (config == null)
-						config = parent.addChild(parentName);
+						config = create.get();
 					return new ObservableConfigEntityValues<>(ObservableValue.of(config), null, elementFormat, childName, fieldParser,
 						until, false);
 				} else {
@@ -470,8 +469,8 @@ public interface ObservableConfigFormat<T> {
 
 				else {
 					try {
-						theFormat.parse(collectionChange.eventTarget, el.get().config, el.get().instance, collectionChange.asFromChild(),
-							theUntil);
+						theFormat.parse(el.get().config, () -> collectionChange.eventTarget.addChild(theChildName), el.get().instance,
+							collectionChange.asFromChild(), theUntil);
 					} catch (ParseException e) {
 						e.printStackTrace();
 					}
@@ -556,7 +555,7 @@ public interface ObservableConfigFormat<T> {
 					theNewInstance = null;
 				} else {
 					try {
-						inst = theFormat.parse(config.getParent(), this.config, null, null, //
+						inst = theFormat.parse(this.config, () -> this.config.getParent().addChild(theChildName), null, null, //
 							Observable.or(theUntil, elementObservable));
 					} catch (ParseException e) {
 						System.err.println("Could not parse instance for " + this.config);

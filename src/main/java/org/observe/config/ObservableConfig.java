@@ -27,6 +27,7 @@ import javax.xml.parsers.SAXParserFactory;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
+import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.SettableValue;
 import org.observe.Subscription;
@@ -585,6 +586,47 @@ public class ObservableConfig implements StructuredTransactable {
 	}
 
 	public <T> SettableValue<T> observeValue(ObservableConfigPath path, TypeToken<T> type, Format<T> format) {
+		return observeValue(path, type, format, new ConfigEntityFieldParser());
+	}
+
+	public <T> SettableValue<T> observeValue(ObservableConfigPath path, TypeToken<T> type, Format<T> format,
+		ConfigEntityFieldParser fieldParser) {
+		class ObservableConfigValue implements SettableValue<T>{
+			private final ObservableValue<? extends ObservableConfig> theDescendant;
+			private final ObservableValue
+			{
+				theDescendant=observeDescendant(path);
+			}
+			@Override
+			public TypeToken<T> getType() {
+				return type;
+			}
+			@Override
+			public T get() {
+				// TODO Auto-generated method stub
+				return null;
+			}
+			@Override
+			public Observable<ObservableValueEvent<T>> noInitChanges() {
+				// TODO Auto-generated method stub
+				return null;
+			}
+			@Override
+			public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+				// TODO Auto-generated method stub
+				return null;
+			}
+			@Override
+			public <V extends T> String isAcceptable(V value) {
+				// TODO Auto-generated method stub
+				return null;
+			}
+			@Override
+			public ObservableValue<String> isEnabled() {
+				// TODO Auto-generated method stub
+				return null;
+			}
+		};
 		return new ObservableConfigValue<>(type, this, path, config -> {
 			if (config.getValue() == null)
 				return null;

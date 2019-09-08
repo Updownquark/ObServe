@@ -228,11 +228,13 @@ public class ObservableConfigContent {
 		}
 	}
 
-	protected static class ObservableConfigValue<T> implements SettableValue<T> {
+	private static class ObservableConfigValue<T> implements SettableValue<T> {
 		private final ObservableConfigChild<ObservableConfig> theConfigChild;
 		private final TypeToken<T> theType;
-		private final Function<ObservableConfig, ? extends T> theParser;
-		private final BiConsumer<ObservableConfig, ? super T> theFormat;
+		private final ObservableConfigFormat<T> theFormat;
+		private final ListenerList<Observer<ObservableValueEvent<T>>> theListeners;
+		private T theValue;
+		private Subscription theConfigValueSub;
 
 		public ObservableConfigValue(TypeToken<T> type, ObservableConfig root, ObservableConfigPath path,
 			Function<ObservableConfig, ? extends T> parser, BiConsumer<ObservableConfig, ? super T> format) {
@@ -240,6 +242,21 @@ public class ObservableConfigContent {
 			theType = type;
 			theParser = parser;
 			theFormat = format;
+			theListeners=ListenerList.build().allowReentrant().withFastSize(false).withInUse(inUse->{
+				if(inUse){
+					theConfigValueSub=theConfigChild.changes().act(evt->{
+						if(evt.getOldValue()!=evt.getNewValue()){
+							theValue=theFormat.parse(evt.getNewValue(), theConfigChild., theValue, null, null)
+								evt.getNewValue().watch("").act(configEvt->{
+									changed(configEvt);
+								});
+						}
+					});
+				} else{
+					theConfigValueSub.unsubscribe();
+					theConfigValueSub=null;
+				}
+			}).build();
 		}
 
 		@Override
@@ -270,6 +287,19 @@ public class ObservableConfigContent {
 				String msg = isAcceptable(value);
 				if (msg != null)
 					throw new IllegalArgumentException(msg);
+				theConfigChild.resolvePath(0, true);
+				T oldValue = parse(theConfigChild.get());
+				theFormat.accept(theConfigChild.get(), value);
+				return oldValue;
+			}
+		}
+
+		@Override
+		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+			try (Transaction t = theConfigChild.getRoot().lock(true, cause)) {
+				String msg = isAcceptable(value);
+				if (msg != null)
+					throw new IllegalArgumentException(msg);
 				theConfigChild.resolvePath(1, true);
 				T oldValue = parse(theConfigChild.get());
 				theFormat.accept(theConfigChild.get(), value);
@@ -288,7 +318,7 @@ public class ObservableConfigContent {
 		}
 	}
 
-	protected static class ObservableConfigValues<T> extends ObservableCollectionWrapper<T> {
+	private static class ObservableConfigValues<T> extends ObservableCollectionWrapper<T> {
 		private final ObservableValueSet<? extends ObservableConfig> theConfigs;
 		private final TypeToken<T> theType;
 		private final ObservableConfigFormat<T> theFormat;
@@ -442,7 +472,7 @@ public class ObservableConfigContent {
 					theInstance = addedValue;
 				else {
 					try {
-						theInstance = theFormat.parse(theConfig.getParent(), theConfig, theInstance, //
+						theInstance = theFormat.parse(theConfig, ()->theConfig.getParent().addChild(BACKING_COLLECTION_CHANGED) theInstance, //
 							null, Observable.or(theUntil, theValueUntil));
 					} catch (ParseException e) {
 						System.err.println("Could not initialize " + theConfig.getPath() + "(" + theType + ")");
@@ -480,7 +510,7 @@ public class ObservableConfigContent {
 	 *
 	 * @param <T> The entity type
 	 */
-	protected static class ObservableConfigEntityValues<T> implements ObservableValueSet<T> {
+	private static class ObservableConfigEntityValues<T> implements ObservableValueSet<T> {
 		private final ObservableValueSet<? extends ObservableConfig> theConfigs;
 		private final EntityConfiguredValueType<T> theType;
 		private final ConfigEntityFieldParser theFieldParser;
