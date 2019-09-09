@@ -233,6 +233,7 @@ public class ObservableConfigContent {
 		private final TypeToken<T> theType;
 		private final ObservableConfigFormat<T> theFormat;
 		private final ListenerList<Observer<ObservableValueEvent<T>>> theListeners;
+		private final Observable<?> theUntil;
 		private T theValue;
 		private Subscription theConfigValueSub;
 
@@ -245,16 +246,21 @@ public class ObservableConfigContent {
 			theListeners=ListenerList.build().allowReentrant().withFastSize(false).withInUse(inUse->{
 				if(inUse){
 					theConfigValueSub=theConfigChild.changes().act(evt->{
-						if(evt.getOldValue()!=evt.getNewValue()){
-							theValue=theFormat.parse(evt.getNewValue(), theConfigChild., theValue, null, null)
-								evt.getNewValue().watch("").act(configEvt->{
-									changed(configEvt);
-								});
+						if(evt.getNewValue()==null)
+							theValue=null;
+						else if(evt.getOldValue()!=evt.getNewValue()){
+							try(Transaction t=evt.getNewValue().lock(false, evt)){
+								theValue=theFormat.parse(evt.getNewValue(), theConfigChild., theValue, null, null)
+									evt.getNewValue().watch("").act(configEvt->{
+										changed(configEvt);
+									});
+							}
 						}
 					});
 				} else{
 					theConfigValueSub.unsubscribe();
 					theConfigValueSub=null;
+					theValue=null;
 				}
 			}).build();
 		}

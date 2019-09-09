@@ -552,6 +552,10 @@ public class ObservableConfig implements StructuredTransactable {
 		return new ObservableChildSet<>(this, path, children);
 	}
 
+	public ObservableValue<? extends ObservableConfig> observeDescendant(String path) {
+		return observeDescendant(createPath(path));
+	}
+
 	public ObservableValue<? extends ObservableConfig> observeDescendant(ObservableConfigPath path) {
 		return new ObservableConfigChild<>(getType(), this, path);
 	}
