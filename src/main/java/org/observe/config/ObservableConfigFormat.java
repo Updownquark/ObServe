@@ -76,7 +76,7 @@ public interface ObservableConfigFormat<T> {
 			ObservableConfig c = config.get();
 			String value = c == null ? null : c.getValue();
 			if (value == null)
-				return null;
+				return defaultValue.get();
 			return format.parse(value);
 		}
 	}
