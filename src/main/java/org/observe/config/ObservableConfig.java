@@ -576,6 +576,10 @@ public class ObservableConfig implements StructuredTransactable {
 		return config == null ? null : config.getValue();
 	}
 
+	public <T> ObservableConfigValueBuilder<T> asValue(Class<T> type) {
+		return asValue(TypeTokens.get().of(type));
+	}
+
 	public <T> ObservableConfigValueBuilder<T> asValue(TypeToken<T> type) {
 		return new ObservableConfigValueBuilder<>(type);
 	}

@@ -77,8 +77,8 @@ public class ObservableConfigTest {
 		SimpleObservable<Void> until = new SimpleObservable<>();
 		readXml(getClass().getResourceAsStream("TestValues.xml"));
 
-		ObservableCollection<Integer> testValues = theConfig.observeValues("test-values/test-value", TypeTokens.get().INT,
-			ObservableConfigFormat.INT, until);
+		ObservableCollection<Integer> testValues = theConfig.asValue(Integer.class).at("test-values/test-value").until(until)
+			.buildCollection();
 		int i = 0;
 		for (Integer value : testValues) {
 			Assert.assertEquals(i, value.intValue());
@@ -151,8 +151,8 @@ public class ObservableConfigTest {
 	private void testSimpleEntities(boolean withModification) throws IOException, SAXException {
 		SimpleObservable<Void> until = new SimpleObservable<>();
 		readXml(getClass().getResourceAsStream("TestValues.xml"));
-		ObservableValueSet<TestEntity> testEntities = theConfig.observeEntities(theConfig.createPath("test-entities/test-entity"),
-			TypeTokens.get().of(TestEntity.class), until);
+		ObservableValueSet<TestEntity> testEntities = theConfig.asValue(TestEntity.class).at("test-entities/test-entity").until(until)
+			.buildEntitySet();
 
 		int i = 0;
 		for (TestEntity entity : testEntities.getValues()) {
@@ -281,8 +281,8 @@ public class ObservableConfigTest {
 	public void testComplexEntities() throws IOException, SAXException {
 		SimpleObservable<Void> until = new SimpleObservable<>();
 		readXml(getClass().getResourceAsStream("TestValues.xml"));
-		ObservableValueSet<TestEntity2> testEntities = theConfig.observeEntities(theConfig.createPath("test-entities2/test-entity2"),
-			TypeTokens.get().of(TestEntity2.class), until);
+		ObservableValueSet<TestEntity2> testEntities = theConfig.asValue(TestEntity2.class).at("test-entities2/test-entity2").until(until)
+			.buildEntitySet();
 
 		int i = 0;
 		for (TestEntity2 entity : testEntities.getValues()) {
@@ -446,13 +446,9 @@ public class ObservableConfigTest {
 				throw new IllegalStateException(e);
 			}
 			SimpleObservable<Void> until = new SimpleObservable<>();
-			testEntities1 = theConfig.observeEntities(theConfig.createPath("test-entities2/test-entity2"),
-				TypeTokens.get().of(TestEntity2.class),
-				until);
+			testEntities1 = theConfig.asValue(TestEntity2.class).at("test-entities2/test-entity2").until(until).buildEntitySet();
 			tester1 = new ObservableCollectionTester<>("testEntities1", testEntities1.getValues());
-			testEntities2 = theConfig.observeEntities(theConfig.createPath("test-entities2/test-entity2"),
-				TypeTokens.get().of(TestEntity2.class),
-				until);
+			testEntities2 = theConfig.asValue(TestEntity2.class).at("test-entities2/test-entity2").until(until).buildEntitySet();
 			tester2 = new ObservableCollectionTester<>("testEntities2", testEntities2.getValues());
 			expected = new ArrayList<>();
 			for (TestEntity2 entity : testEntities1.getValues())

@@ -200,8 +200,7 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 				try (Transaction t = parent.lock(true, cause)) {
 					E oldV = theValue;
 					oldValue[0] = oldV;
-					theModifyingValue.accept(value);
-					theFormat.format(value, oldV, parent);
+					theFormat.format(value, oldV, parent, theModifyingValue, getUntil());
 				} finally {
 					theModifyingValue.clear();
 				}
@@ -424,8 +423,9 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 					val = value.get();
 				} else {
 					try {
-						val = theFormat.parse(ObservableValue.of(this.theConfig), () -> this.theConfig.getParent().addChild(theChildName),
-							null, null, Observable.or(getUntil(), theElementObservable));
+						val = theFormat.parse(//
+							ObservableValue.of(this.theConfig), () -> this.theConfig.getParent().addChild(theChildName), null, null,
+							Observable.or(getUntil(), theElementObservable));
 					} catch (ParseException e) {
 						System.err.println("Could not parse instance for " + this.theConfig);
 						e.printStackTrace();
@@ -464,7 +464,8 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 						throw new IllegalArgumentException(StdMsg.ELEMENT_REMOVED);
 					isModifying = true;
 					_set(value);
-					theFormat.format(value, get(), theConfig);
+					theFormat.format(//
+						value, get(), theConfig, v -> {}, Observable.or(getUntil(), theElementObservable));
 				} finally {
 					isModifying = false;
 				}
@@ -640,6 +641,8 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 		ObservableConfigValues(ObservableValue<? extends ObservableConfig> collectionElement, Runnable ceCreate, TypeToken<E> type,
 			ObservableConfigFormat<E> format, String childName, ConfigEntityFieldParser fieldParser, Observable<?> until, boolean listen) {
 			theBacking = new Backing<>(collectionElement, ceCreate, type, format, childName, until, listen);
+
+			init(theBacking.getCollection());
 		}
 
 		protected void onChange(ObservableConfigEvent collectionChange) {

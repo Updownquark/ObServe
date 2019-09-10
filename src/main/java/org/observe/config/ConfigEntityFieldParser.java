@@ -73,7 +73,7 @@ public class ConfigEntityFieldParser {
 			String childName = StringUtils.singularize(configName);
 			ObservableConfigFormat<?> elementFormat = getConfigFormat(type.resolveType(Collection.class.getTypeParameters()[0]), childName);
 			return (ObservableConfigFormat<T>) ObservableConfigFormat.ofCollection((TypeToken<Collection<Object>>) type,
-				(ObservableConfigFormat<Object>) elementFormat, configName, childName);
+				(ObservableConfigFormat<Object>) elementFormat, this, configName, childName);
 		} else if (raw.isAssignableFrom(ObservableValueSet.class)) {
 			String childName = StringUtils.singularize(configName);
 			TypeToken<?> elementType = type.resolveType(ObservableValueSet.class.getTypeParameters()[0]);
