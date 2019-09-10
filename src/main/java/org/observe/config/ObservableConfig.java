@@ -17,9 +17,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.BiConsumer;
 import java.util.function.Consumer;
-import java.util.function.Function;
+import java.util.function.Supplier;
 
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParser;
@@ -27,7 +26,6 @@ import javax.xml.parsers.SAXParserFactory;
 
 import org.observe.Observable;
 import org.observe.ObservableValue;
-import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.SettableValue;
 import org.observe.Subscription;
@@ -36,9 +34,6 @@ import org.observe.collect.ObservableCollection;
 import org.observe.config.ObservableConfigContent.FullObservableConfigContent;
 import org.observe.config.ObservableConfigContent.ObservableChildSet;
 import org.observe.config.ObservableConfigContent.ObservableConfigChild;
-import org.observe.config.ObservableConfigContent.ObservableConfigEntityValues;
-import org.observe.config.ObservableConfigContent.ObservableConfigValue;
-import org.observe.config.ObservableConfigContent.ObservableConfigValues;
 import org.observe.config.ObservableConfigContent.SimpleObservableConfigContent;
 import org.observe.util.TypeTokens;
 import org.qommons.ArrayUtils;
@@ -561,7 +556,15 @@ public class ObservableConfig implements StructuredTransactable {
 	}
 
 	public SettableValue<String> observeValue() {
-		return observeValue(TypeTokens.get().STRING, Format.TEXT);
+		return observeValue(EMPTY_PATH);
+	}
+
+	public SettableValue<String> observeValue(String path) {
+		return observeValue(buildPath(path).build());
+	}
+
+	public SettableValue<String> observeValue(ObservableConfigPath path) {
+		return new ObservableConfigContent.ObservableConfigValue(this, path);
 	}
 
 	public String get(String path) {
@@ -573,112 +576,112 @@ public class ObservableConfig implements StructuredTransactable {
 		return config == null ? null : config.getValue();
 	}
 
-	public <T> SettableValue<T> observeValue(TypeToken<T> type, Format<T> format) {
-		return observeValue((ObservableConfigPath) null, type, format);
+	public <T> ObservableConfigValueBuilder<T> asValue(TypeToken<T> type) {
+		return new ObservableConfigValueBuilder<>(type);
 	}
 
-	public SettableValue<String> observeValue(String path) {
-		return observeValue(createPath(path));
-	}
+	public class ObservableConfigValueBuilder<T> {
+		private final TypeToken<T> theType;
+		private ObservableConfigFormat<T> theFormat;
+		private ConfigEntityFieldParser theFieldParser;
+		private Observable<?> theUntil;
+		private ObservableConfigPath thePath;
 
-	public SettableValue<String> observeValue(ObservableConfigPath path) {
-		return observeValue(path, TypeTokens.get().STRING, Format.TEXT);
-	}
+		ObservableConfigValueBuilder(TypeToken<T> type) {
+			theType = type;
+		}
 
-	public <T> SettableValue<T> observeValue(String path, TypeToken<T> type, Format<T> format) {
-		return observeValue(createPath(path), type, format);
-	}
+		public ObservableConfigValueBuilder<T> withFormat(ObservableConfigFormat<T> format) {
+			theFormat = format;
+			return this;
+		}
 
-	public <T> SettableValue<T> observeValue(ObservableConfigPath path, TypeToken<T> type, Format<T> format) {
-		return observeValue(path, type, format, new ConfigEntityFieldParser());
-	}
+		public ObservableConfigValueBuilder<T> withFormat(Format<T> format, Supplier<? extends T> defaultValue) {
+			theFormat = ObservableConfigFormat.ofQommonFormat(format, defaultValue);
+			return this;
+		}
 
-	public <T> SettableValue<T> observeValue(ObservableConfigPath path, TypeToken<T> type, Format<T> format,
-		ConfigEntityFieldParser fieldParser) {
-		class ObservableConfigValue implements SettableValue<T>{
-			private final ObservableValue<? extends ObservableConfig> theDescendant;
-			private final ObservableValue
-			{
-				theDescendant=observeDescendant(path);
-			}
-			@Override
-			public TypeToken<T> getType() {
-				return type;
-			}
-			@Override
-			public T get() {
-				// TODO Auto-generated method stub
-				return null;
-			}
-			@Override
-			public Observable<ObservableValueEvent<T>> noInitChanges() {
-				// TODO Auto-generated method stub
-				return null;
-			}
-			@Override
-			public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
-				// TODO Auto-generated method stub
-				return null;
-			}
-			@Override
-			public <V extends T> String isAcceptable(V value) {
-				// TODO Auto-generated method stub
-				return null;
-			}
-			@Override
-			public ObservableValue<String> isEnabled() {
-				// TODO Auto-generated method stub
-				return null;
-			}
-		};
-		return new ObservableConfigValue<>(type, this, path, config -> {
-			if (config.getValue() == null)
-				return null;
+		public ObservableConfigValueBuilder<T> withFieldParser(ConfigEntityFieldParser fieldParser) {
+			theFieldParser = fieldParser;
+			return this;
+		}
+
+		public ObservableConfigValueBuilder<T> at(String path) {
+			if (path.length() == 0)
+				return this;
+			return at(buildPath(path).build());
+		}
+
+		public ObservableConfigValueBuilder<T> at(ObservableConfigPath path) {
+			thePath = path;
+			return this;
+		}
+
+		public ObservableConfigValueBuilder<T> until(Observable<?> until) {
+			theUntil = until;
+			return this;
+		}
+
+		protected ConfigEntityFieldParser getFieldParser() {
+			if (theFieldParser == null)
+				theFieldParser = new ConfigEntityFieldParser();
+			return theFieldParser;
+		}
+
+		protected ObservableConfigFormat<T> getFormat() {
+			ObservableConfigFormat<T> format = theFormat;
+			if (format == null)
+				format = getFieldParser().getConfigFormat(theType, getName());
+			return format;
+		}
+
+		protected ObservableValue<? extends ObservableConfig> getDescendant() {
+			ObservableValue<? extends ObservableConfig> descendant;
+			if (thePath != null)
+				descendant = observeDescendant(thePath);
+			else
+				descendant = ObservableValue.of(ObservableConfig.this);
+			return descendant;
+		}
+
+		protected Supplier<ObservableConfig> createDescendant() {
+			ObservableConfigPath path = thePath;
+			return () -> getChild(path, true, null);
+		}
+
+		public T build() throws ParseException {
+			return getFormat().parse(getDescendant(), createDescendant()::get, null, null, theUntil);
+		}
+
+		public SettableValue<T> buildValue() {
+			return new ObservableConfigTransform.ObservableConfigValue<>(getDescendant(), this::createDescendant, theUntil, theType,
+				getFormat(), true);
+		}
+
+		public ObservableCollection<T> buildCollection() {
+			ObservableConfigFormat<ObservableCollection<T>> format = ObservableConfigFormat.ofCollection(//
+				ObservableCollection.TYPE_KEY.getCompoundType(theType), getFormat(), getFieldParser(), getName(),
+				StringUtils.singularize(getName()));
 			try {
-				return format.parse(config.getValue());
+				return format.parse(getDescendant(), createDescendant()::get, null, null, theUntil);
 			} catch (ParseException e) {
-				System.err.println("Could not parse value " + this + ": " + e.getMessage());
-				return null;
+				throw new IllegalStateException("Should not have failed", e);
 			}
-		}, (config, val) -> config.setValue(format.format(val)));
-	}
+		}
 
-	public <T> SettableValue<T> observeValue(ObservableConfigPath path, TypeToken<T> type, Function<ObservableConfig, ? extends T> parser,
-		BiConsumer<ObservableConfig, ? super T> format) {
-		return new ObservableConfigValue<>(type, this, path, parser, format);
-	}
-
-	public <T> ObservableCollection<T> observeValues(String path, TypeToken<T> type, ObservableConfigFormat<T> format,
-		Observable<?> until) {
-		return observeValues(createPath(path), type, format, until);
-	}
-
-	public <T> ObservableCollection<T> observeValues(ObservableConfigPath path, TypeToken<T> type, ObservableConfigFormat<T> format,
-		Observable<?> until) {
-		ObservableChildSet<? extends ObservableConfig> configs = (ObservableChildSet<? extends ObservableConfig>) getContent(path);
-		return new ObservableConfigValues<>(configs, type, format, until);
-	}
-
-	public <T> ObservableValueSet<T> observeEntities(ObservableConfigPath path, TypeToken<T> type, Observable<?> until) {
-		return observeEntities(path, type, new ConfigEntityFieldParser(), until);
-	}
-
-	public <T> ObservableValueSet<T> observeEntities(ObservableConfigPath path, TypeToken<T> type, ConfigEntityFieldParser fieldParser,
-		Observable<?> until) {
-		/*if (path.getLastElement() == null || path.getLastElement().isMulti())
-			throw new IllegalArgumentException("Invalid path for entity set: " + path);
-		ObservableConfigFormat<T> entityFormat = fieldParser.getConfigFormat(type, path.getLastElement().getName());
-		if (!(entityFormat instanceof ObservableConfigFormat.EntityConfigFormat))
-			throw new IllegalArgumentException(type + " is not parsed as an entity in this format set");
-		ObservableConfigFormat<ObservableValueSet<T>> valueSetFormat = ObservableConfigFormat.ofEntitySet(
-			(ObservableConfigFormat.EntityConfigFormat<T>) entityFormat, getName(), path.getLastElement().getName(), fieldParser);
-		try {
-			return valueSetFormat.parse(getParent(), this, null, null, until);
-		} catch (ParseException e) {
-			throw new IllegalArgumentException("Could not parse entity set", e);
-		}*/
-		ObservableValueSet<? extends ObservableConfig> configs = getContent(path);
-		return new ObservableConfigEntityValues<>(configs, type, fieldParser, until);
+		public ObservableValueSet<T> buildEntitySet() {
+			ObservableConfigFormat<T> entityFormat = getFormat();
+			if (!(entityFormat instanceof ObservableConfigFormat.EntityConfigFormat))
+				throw new IllegalStateException("Format for " + theType + " is not entity-enabled");
+			ObservableConfigFormat<ObservableValueSet<T>> format = ObservableConfigFormat.ofEntitySet(//
+				(ObservableConfigFormat.EntityConfigFormat<T>) entityFormat, getName(), StringUtils.singularize(getName()),
+				getFieldParser());
+			try {
+				return format.parse(getDescendant(), createDescendant(), null, null, theUntil);
+			} catch (ParseException e) {
+				throw new IllegalStateException("Should not have failed", e);
+			}
+		}
 	}
 
 	@Override

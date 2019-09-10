@@ -66,7 +66,7 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 				theStructureStamp++;
 				ObservableConfig newParent = evt.getNewValue();
 				try (Transaction ceT = newParent == null ? Transaction.NONE : newParent.lock(false, null)) {
-					initConfig(evt.getNewValue(), evt, listen);
+					initConfig(evt.getNewValue(), evt);
 					if (listen)
 						newParent.watch("").takeUntil(theUntil).act(this::onChange);
 				}
@@ -77,6 +77,10 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 		theStamp++;
 		if (structural)
 			theStructureStamp++;
+	}
+
+	protected ObservableValue<? extends ObservableConfig> getParent() { // TODO NEEDED?
+		return theParent;
 	}
 
 	protected ObservableConfig getParent(boolean createIfAbsent, Consumer<ObservableConfig> parentAction) {
@@ -124,7 +128,7 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 		return structuralOnly ? theStructureStamp : theStamp;
 	}
 
-	protected abstract void initConfig(ObservableConfig parent, Object cause, boolean listen);
+	protected abstract void initConfig(ObservableConfig parent, Object cause);
 
 	protected abstract void onChange(ObservableConfigEvent parentChange);
 
@@ -134,7 +138,8 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 
 		private final ListenerList<Observer<? super ObservableValueEvent<E>>> theListeners;
 
-		boolean isModifying;
+		private E theValue;
+		private final ValueHolder<E> theModifyingValue;
 
 		public ObservableConfigValue(ObservableValue<? extends ObservableConfig> parent, Runnable ceCreate, Observable<?> until,
 			TypeToken<E> type, ObservableConfigFormat<E> format, boolean listen) {
@@ -143,6 +148,7 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 			theFormat = format;
 
 			theListeners = ListenerList.build().allowReentrant().withFastSize(false).build();
+			theModifyingValue = new ValueHolder<>();
 
 			init(until, listen);
 		}
@@ -153,7 +159,9 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 		}
 
 		@Override
-		public E get() {}
+		public E get() {
+			return theValue;
+		}
 
 		@Override
 		public Observable<ObservableValueEvent<E>> noInitChanges() {
@@ -186,7 +194,20 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 		}
 
 		@Override
-		public <V extends E> E set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {}
+		public <V extends E> E set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+			Object[] oldValue = new Object[1];
+			getParent(true, parent -> {
+				try (Transaction t = parent.lock(true, cause)) {
+					E oldV = theValue;
+					oldValue[0] = oldV;
+					theModifyingValue.accept(value);
+					theFormat.format(value, oldV, parent);
+				} finally {
+					theModifyingValue.clear();
+				}
+			});
+			return (E) oldValue[0];
+		}
 
 		@Override
 		public <V extends E> String isAcceptable(V value) {
@@ -201,15 +222,36 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 		}
 
 		@Override
-		protected void initConfig(ObservableConfig parent, Object cause, boolean listen) {
-			// TODO Auto-generated method stub
-
+		protected void initConfig(ObservableConfig parent, Object cause) {
+			try {
+				theValue = theFormat.parse(getParent(), () -> getParent(true, null), theValue, null, getUntil());
+			} catch (ParseException e) {
+				e.printStackTrace();
+				theValue = null;
+			}
 		}
 
 		@Override
 		protected void onChange(ObservableConfigEvent parentChange) {
-			// TODO Auto-generated method stub
+			E oldValue = theValue;
+			if (!theModifyingValue.isPresent()) {
+				try {
+					theValue = theFormat.parse(getParent(), () -> getParent(true, null), theValue, parentChange, getUntil());
+					fire(createChangeEvent(oldValue, theValue, parentChange));
+				} catch (ParseException e) {
+					e.printStackTrace();
+				}
+			} else {
+				theValue = theModifyingValue.get();
+				fire(createChangeEvent(oldValue, theValue, parentChange));
+			}
+		}
 
+		private void fire(ObservableValueEvent<E> event) {
+			try (Transaction t = Causable.use(event)) {
+				theListeners.forEach(//
+					listener -> listener.onNext(event));
+			}
 		}
 	}
 
@@ -242,7 +284,7 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 		}
 
 		@Override
-		protected void initConfig(ObservableConfig collectionElement, Object cause, boolean listen) {
+		protected void initConfig(ObservableConfig collectionElement, Object cause) {
 			if (!theElements.isEmpty()) {
 				Iterator<ConfigElement> cveIter = theElements.values().reverse().iterator();
 				while (cveIter.hasNext()) {
@@ -260,8 +302,6 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 					fire(new ObservableCollectionEvent<>(cve.getElementId(), theType, theElements.size() - 1, CollectionChangeType.add,
 						null, cve.get(), cause));
 				}
-				if (listen)
-					collectionElement.watch(theChildName).takeUntil(getUntil()).act(this::onChange);
 			}
 		}
 

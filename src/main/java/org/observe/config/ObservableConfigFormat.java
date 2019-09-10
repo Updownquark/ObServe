@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import org.observe.Observable;
@@ -34,7 +35,8 @@ public interface ObservableConfigFormat<T> {
 	public static ObservableConfigFormat<Duration> DURATION = ofQommonFormat(Format.DURATION, () -> Duration.ZERO);
 	public static ObservableConfigFormat<Instant> DATE = ofQommonFormat(Format.date("ddMMyyyy HH:mm:ss.SSS"), () -> Instant.now());
 
-	T format(T value, T previousValue, ObservableConfig config);
+	void format(T value, T previousValue, ObservableConfig config, Consumer<T> acceptedValue, Observable<?> until)
+		throws IllegalArgumentException;
 
 	T parse(ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create, T previousValue,
 		ObservableConfig.ObservableConfigEvent change, Observable<?> until) throws ParseException;
@@ -53,7 +55,8 @@ public interface ObservableConfigFormat<T> {
 		}
 
 		@Override
-		public T format(T value, T previousValue, ObservableConfig config) {
+		public void format(T value, T previousValue, ObservableConfig config, Consumer<T> acceptedValue, Observable<?> until) {
+			acceptedValue.accept(value);
 			String formatted;
 			if (value == null)
 				formatted = null;
@@ -61,7 +64,6 @@ public interface ObservableConfigFormat<T> {
 				formatted = format.format(value);
 			if (!Objects.equals(formatted, config.getValue()))
 				config.setValue(formatted);
-			return value;
 		}
 
 		@Override
@@ -111,8 +113,9 @@ public interface ObservableConfigFormat<T> {
 		}
 
 		@Override
-		public E format(E value, E previousValue, ObservableConfig config) {
+		public void format(E value, E previousValue, ObservableConfig config, Consumer<E> acceptedValue, Observable<?> until) {
 			if (value == null) {
+				acceptedValue.accept(null);
 				config.set("null", "true");
 				for (int i = 0; i < entityType.getFields().keySize(); i++) {
 					ObservableConfig cfg = config.getChild(theFieldChildNames.get(i));
@@ -120,14 +123,22 @@ public interface ObservableConfigFormat<T> {
 						cfg.remove();
 				}
 			} else {
+				if (previousValue == null) {
+					QuickMap<String, Object> fields = entityType.getFields().keySet().createMap();
+					try {
+						previousValue = createInstance(config, fields, until);
+					} catch (ParseException e) {
+						e.printStackTrace();
+					}
+				}
+				acceptedValue.accept(previousValue);
 				config.set("null", null);
 				for (int i = 0; i < entityType.getFields().keySize(); i++) {
 					ConfiguredValueField<? super E, ?> field = entityType.getFields().get(i);
 					Object fieldValue = field.get(value);
-					formatField(field, fieldValue, config);
+					formatField(field, fieldValue, config, fv -> {}, until);
 				}
 			}
-			return value;
 		}
 
 		@Override
@@ -176,25 +187,28 @@ public interface ObservableConfigFormat<T> {
 				if (fieldValues.get(i) == null)
 					fieldValues.put(i, fieldFormats[i].parse(fieldConfig, () -> config.addChild(configName), null, null, until));
 				else
-					formatField(entityType.getFields().get(i), fieldValues.get(i), config);
+					formatField(entityType.getFields().get(i), fieldValues.get(i), config, f -> {}, until);
 			}
 			return entityType.create(//
 				idx -> fieldValues.get(idx), //
 				(idx, value) -> {
 					fieldValues.put(idx, value);
-					formatField(entityType.getFields().get(idx), value, config);
+					formatField(entityType.getFields().get(idx), value, config, v -> fieldValues.put(idx, v), until);
 				});
 		}
 
-		public void formatField(ConfiguredValueField<? super E, ?> field, Object fieldValue, ObservableConfig entityConfig) {
+		public void formatField(ConfiguredValueField<? super E, ?> field, Object fieldValue, ObservableConfig entityConfig,
+			Consumer<Object> onFieldValue, Observable<?> until) {
 			boolean[] added = new boolean[1];
 			if (fieldValue != null) {
 				ObservableConfig fieldConfig = entityConfig.getChild(theFieldChildNames.get(field.getIndex()), true, fc -> {
 					added[0] = true;
-					((ObservableConfigFormat<Object>) fieldFormats[field.getIndex()]).format(fieldValue, fieldValue, fc);
+					((ObservableConfigFormat<Object>) fieldFormats[field.getIndex()]).format(fieldValue, fieldValue, fc, onFieldValue,
+						until);
 				});
 				if (!added[0])
-					((ObservableConfigFormat<Object>) fieldFormats[field.getIndex()]).format(fieldValue, fieldValue, fieldConfig);
+					((ObservableConfigFormat<Object>) fieldFormats[field.getIndex()]).format(fieldValue, fieldValue, fieldConfig,
+						onFieldValue, until);
 			} else {
 				ObservableConfig fieldConfig = entityConfig.getChild(theFieldChildNames.get(field.getIndex()));
 				if (fieldConfig != null)
@@ -227,75 +241,39 @@ public interface ObservableConfigFormat<T> {
 		TypeToken<E> elementType = (TypeToken<E>) collectionType.resolveType(Collection.class.getTypeParameters()[0]);
 		return new ObservableConfigFormat<C>() {
 			@Override
-			public C format(C value, C previousValue, ObservableConfig config) {
+			public void format(C value, C previousValue, ObservableConfig config, Consumer<C> acceptedValue, Observable<?> until) {
 				if (value == null) {
+					acceptedValue.accept(null);
 					config.remove();
-					return previousValue;
+					return;
 				}
-				List<ObservableConfig> content = new ArrayList<>(config.getContent(childName).getValues());
+				if (previousValue == null)
+					previousValue = (C) new ObservableConfigTransform.ObservableConfigValues<>(ObservableValue.of(config), null,
+						elementType, elementFormat, childName, fieldParser, until, false);
+				acceptedValue.accept(previousValue);
 				try (Transaction t = config.lock(true, null)) {
-					ArrayUtils.adjust(content, asList(value), new ArrayUtils.DifferenceListener<ObservableConfig, E>() {
+					ArrayUtils.adjust((List<E>) previousValue, asList(value), new ArrayUtils.DifferenceListener<E, E>() {
 						@Override
-						public boolean identity(ObservableConfig o1, E o2) {
-							if (elementFormat instanceof SimpleConfigFormat) {
-								return Objects.equals(o1.getValue(),
-									o2 == null ? null : ((SimpleConfigFormat<E>) elementFormat).format.format(o2));
-							} else if (elementFormat instanceof EntityConfigFormat
-								&& !((EntityConfigFormat<?>) elementFormat).getEntityType().getIdFields().isEmpty()) {
-								EntityConfigFormat<?> entityFormat = (EntityConfigFormat<?>) elementFormat;
-								EntityConfiguredValueType<?> entityType = entityFormat.getEntityType();
-								boolean canFind = true;
-								for (int i : entityType.getIdFields()) {
-									ConfiguredValueField<?, ?> f = entityType.getFields().get(i);
-									ObservableConfigFormat<?> fieldFormat = entityFormat.getFieldFormat(i);
-									if (!(fieldFormat instanceof SimpleConfigFormat)) {
-										canFind = false;
-										break;
-									}
-									if (!Objects.equals(o1.get(entityFormat.getChildName(i)), //
-										((SimpleConfigFormat<Object>) fieldFormat).format
-										.format(((ConfiguredValueField<Object, ?>) f).get(o1))))
-										return false;
-								}
-								if (canFind)
-									return false;
-								else
-									return true; // No way to tell different values apart, just gotta reformat
-							} else
-								return true; // No way to tell different values apart, just gotta reformat
+						public boolean identity(E o1, E o2) {
+							return Objects.equals(o1, o2);
 						}
 
 						@Override
-						public ObservableConfig added(E o, int mIdx, int retIdx) {
-							ObservableConfig before = retIdx == content.size() ? null : content.get(retIdx);
-							return config.addChild(null, before, false, childName, cfg -> elementFormat.format(o, null, cfg));
+						public E added(E o, int mIdx, int retIdx) {
+							return o;
 						}
 
 						@Override
-						public ObservableConfig removed(ObservableConfig o, int oIdx, int incMod, int retIdx) {
-							o.remove();
+						public E removed(E o, int oIdx, int incMod, int retIdx) {
 							return null;
 						}
 
 						@Override
-						public ObservableConfig set(ObservableConfig o1, int idx1, int incMod, E o2, int idx2, int retIdx) {
-							ObservableConfig result;
-							if (incMod != retIdx) {
-								o1.remove();
-								ObservableConfig before = retIdx == content.size() ? null : content.get(retIdx);
-								result = config.addChild(null, before, false, childName, cfg -> {
-									cfg.copyFrom(o1, true);
-									elementFormat.format(o2, null, cfg);
-								});
-							} else {
-								result = o1;
-								elementFormat.format(o2, previousValue == null ? null : ((List<E>) previousValue).get(incMod), result);
-							}
-							return result;
+						public E set(E o1, int idx1, int incMod, E o2, int idx2, int retIdx) {
+							return o2;
 						}
 					});
 				}
-				return previousValue;
 			}
 
 			private List<E> asList(C value) {
@@ -326,9 +304,10 @@ public interface ObservableConfigFormat<T> {
 		String childName, ConfigEntityFieldParser fieldParser) {
 		return new ObservableConfigFormat<ObservableValueSet<E>>() {
 			@Override
-			public ObservableValueSet<E> format(ObservableValueSet<E> value, ObservableValueSet<E> preValue, ObservableConfig config) {
+			public void format(ObservableValueSet<E> value, ObservableValueSet<E> preValue, ObservableConfig config,
+				Consumer<ObservableValueSet<E>> acceptedValue, Observable<?> until) {
 				// Nah, we don't support calling set on a field like this, nothing to do
-				return preValue;
+				acceptedValue.accept(preValue);
 			}
 
 			@Override

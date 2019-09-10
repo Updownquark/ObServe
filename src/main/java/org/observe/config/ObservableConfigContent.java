@@ -228,98 +228,93 @@ public class ObservableConfigContent {
 		}
 	}
 
-	private static class ObservableConfigValue<T> implements SettableValue<T> {
+	protected static class ObservableConfigValue implements SettableValue<String> {
 		private final ObservableConfigChild<ObservableConfig> theConfigChild;
-		private final TypeToken<T> theType;
-		private final ObservableConfigFormat<T> theFormat;
-		private final ListenerList<Observer<ObservableValueEvent<T>>> theListeners;
-		private final Observable<?> theUntil;
-		private T theValue;
-		private Subscription theConfigValueSub;
 
-		public ObservableConfigValue(TypeToken<T> type, ObservableConfig root, ObservableConfigPath path,
-			Function<ObservableConfig, ? extends T> parser, BiConsumer<ObservableConfig, ? super T> format, Observable<?> until) {
+		public ObservableConfigValue(ObservableConfig root, ObservableConfigPath path) {
 			theConfigChild = new ObservableConfigChild<>(ObservableConfig.TYPE, root, path);
-			theType = type;
-			theParser = parser;
-			theFormat = format;
-			theUntil = until == null ? Observable.empty() : until;
-			theListeners=ListenerList.build().allowReentrant().withFastSize(false).withInUse(inUse->{
-				if(inUse){
-					theConfigValueSub=theConfigChild.changes().act(evt->{
-						if(evt.getNewValue()==null)
-							theValue=null;
-						else if(evt.getOldValue()!=evt.getNewValue()){
-							try(Transaction t=evt.getNewValue().lock(false, evt)){
-								theValue = theFormat.parse(ObservableValue.of(evt.getNewValue()), () -> {
-									theConfigChild.resolvePath(0, true);
-									return theConfigChild.get();
-								}, theValue, null, theUntil);
-								evt.getNewValue().watch("").takeUntil(theUntil).act(configEvt -> {
-									changed(configEvt);
-								});
-							}
-						}
-					});
-				} else{
-					theConfigValueSub.unsubscribe();
-					theConfigValueSub=null;
-					theValue=null;
-				}
-			}).build();
 		}
 
 		@Override
-		public TypeToken<T> getType() {
-			return theType;
+		public TypeToken<String> getType() {
+			return TypeTokens.get().STRING;
 		}
 
 		@Override
-		public T get() {
+		public String get() {
 			try (Transaction t = lock()) {
-				ObservableConfig config = theConfigChild.get();
-				return parse(config);
+				return parse(theConfigChild.get());
 			}
 		}
 
-		private T parse(ObservableConfig config) {
-			return theParser.apply(config);
+		private String parse(ObservableConfig config) {
+			return config == null ? null : config.getValue();
 		}
 
 		@Override
-		public Observable<ObservableValueEvent<T>> noInitChanges() {
-			return theConfigChild.noInitChanges().map(evt -> createChangeEvent(parse(evt.getOldValue()), parse(evt.getNewValue()), evt));
+		public Observable<ObservableValueEvent<String>> noInitChanges() {
+			return new Observable<ObservableValueEvent<String>>() {
+				@Override
+				public boolean isSafe() {
+					return true;
+				}
+
+				@Override
+				public Transaction lock() {
+					return theConfigChild.theRoot.lock(false, null);
+				}
+
+				@Override
+				public Transaction tryLock() {
+					return theConfigChild.theRoot.tryLock(false, null);
+				}
+
+				@Override
+				public Subscription subscribe(Observer<? super ObservableValueEvent<String>> observer) {
+					try (Transaction t = theConfigChild.theRoot.lock(false, null)) {
+						Subscription[] configSub = new Subscription[1];
+						Subscription valueSub = theConfigChild.changes().act(evt -> {
+							if (configSub[0] != null) {
+								configSub[0].unsubscribe();
+								configSub[0] = null;
+							}
+							ObservableConfig newConfig = evt.getNewValue();
+							try (Transaction configT = newConfig == null ? Transaction.NONE : newConfig.lock(false, null)) {
+								observer.onNext(createChangeEvent(parse(evt.getOldValue()), parse(newConfig), evt));
+								if (newConfig != null)
+									configSub[0] = newConfig.watch("").act(configEvt -> {
+										if (!configEvt.relativePath.isEmpty())
+											return;
+										observer.onNext(createChangeEvent(configEvt.oldValue, parse(newConfig), configEvt));
+									});
+							}
+						});
+						return () -> {
+							valueSub.unsubscribe();
+							if (configSub[0] != null)
+								configSub[0].unsubscribe();
+						};
+					}
+				}
+			};
 		}
 
 		@Override
-		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+		public String set(String value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
 			try (Transaction t = theConfigChild.getRoot().lock(true, cause)) {
 				String msg = isAcceptable(value);
 				if (msg != null)
 					throw new IllegalArgumentException(msg);
 				theConfigChild.resolvePath(0, true);
-				T oldValue = parse(theConfigChild.get());
-				theFormat.accept(theConfigChild.get(), value);
+				String oldValue = parse(theConfigChild.get());
+				theConfigChild.get().setValue(value);
 				return oldValue;
 			}
 		}
 
 		@Override
-		public <V extends T> T set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
-			try (Transaction t = theConfigChild.getRoot().lock(true, cause)) {
-				String msg = isAcceptable(value);
-				if (msg != null)
-					throw new IllegalArgumentException(msg);
-				theConfigChild.resolvePath(1, true);
-				T oldValue = parse(theConfigChild.get());
-				theFormat.accept(theConfigChild.get(), value);
-				return oldValue;
-			}
-		}
-
-		@Override
-		public <V extends T> String isAcceptable(V value) {
-			return TypeTokens.get().isInstance(theType, value) ? null : StdMsg.BAD_TYPE;
+		public String isAcceptable(String value) {
+			return null;
 		}
 
 		@Override
