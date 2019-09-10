@@ -238,11 +238,12 @@ public class ObservableConfigContent {
 		private Subscription theConfigValueSub;
 
 		public ObservableConfigValue(TypeToken<T> type, ObservableConfig root, ObservableConfigPath path,
-			Function<ObservableConfig, ? extends T> parser, BiConsumer<ObservableConfig, ? super T> format) {
+			Function<ObservableConfig, ? extends T> parser, BiConsumer<ObservableConfig, ? super T> format, Observable<?> until) {
 			theConfigChild = new ObservableConfigChild<>(ObservableConfig.TYPE, root, path);
 			theType = type;
 			theParser = parser;
 			theFormat = format;
+			theUntil = until == null ? Observable.empty() : until;
 			theListeners=ListenerList.build().allowReentrant().withFastSize(false).withInUse(inUse->{
 				if(inUse){
 					theConfigValueSub=theConfigChild.changes().act(evt->{
@@ -250,10 +251,13 @@ public class ObservableConfigContent {
 							theValue=null;
 						else if(evt.getOldValue()!=evt.getNewValue()){
 							try(Transaction t=evt.getNewValue().lock(false, evt)){
-								theValue=theFormat.parse(evt.getNewValue(), theConfigChild., theValue, null, null)
-									evt.getNewValue().watch("").act(configEvt->{
-										changed(configEvt);
-									});
+								theValue = theFormat.parse(ObservableValue.of(evt.getNewValue()), () -> {
+									theConfigChild.resolvePath(0, true);
+									return theConfigChild.get();
+								}, theValue, null, theUntil);
+								evt.getNewValue().watch("").takeUntil(theUntil).act(configEvt -> {
+									changed(configEvt);
+								});
 							}
 						}
 					});
