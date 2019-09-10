@@ -345,9 +345,9 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 						el.get().get(), collectionChange));
 				} else if (!isModifying) {
 					try {
-						E newValue = theFormat.parse(ObservableValue.of(el.get().getConfig()),
-							() -> collectionChange.eventTarget.addChild(theChildName), el.get().get(), collectionChange.asFromChild(),
-							getUntil());
+						E newValue = theFormat.parse(//
+							ObservableValue.of(el.get().getConfig()), () -> collectionChange.eventTarget.addChild(theChildName),
+							el.get().get(), collectionChange.asFromChild(), getUntil());
 						E oldValue = el.get().get();
 						incrementStamp(newValue != oldValue);
 						if (newValue != oldValue)

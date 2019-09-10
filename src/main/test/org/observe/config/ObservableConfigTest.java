@@ -314,7 +314,7 @@ public class ObservableConfigTest {
 				Assert.assertEquals(1, theConfig.getContent("test-entities2/test-entity2").getValues().get(i).getContent("listed-entities")
 					.getValues().size());
 				Assert.assertEquals("60", theConfig.getContent("test-entities2/test-entity2").getValues().get(i)
-					.getContent("listed-entities/listed-entity").getValues().get(1).get("e"));
+					.getContent("listed-entities/listed-entity").getValues().get(0).get("e"));
 				break;
 			case 1:
 				Assert.assertEquals("text8", entity.getText());

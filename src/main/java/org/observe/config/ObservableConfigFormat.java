@@ -218,12 +218,17 @@ public interface ObservableConfigFormat<T> {
 
 		public void parseUpdatedField(ObservableConfig entityConfig, int fieldIdx, E previousValue,
 			ObservableConfig.ObservableConfigEvent change, Observable<?> until) throws ParseException {
-			ConfiguredValueField<? super E, ?> field = entityType.getFields().get(fieldIdx);
+			ConfiguredValueField<? super E, Object> field = (ConfiguredValueField<? super E, Object>) entityType.getFields().get(fieldIdx);
 			Object oldValue = field.get(previousValue);
 			ObservableValue<? extends ObservableConfig> fieldConfig = entityConfig.observeDescendant(theFieldChildNames.get(fieldIdx));
 			if (change != null) {
-				if (change.relativePath.isEmpty() || fieldConfig != change.relativePath.get(0))
+				if (change.relativePath.isEmpty() || fieldConfig != change.relativePath.get(0)) {
+					field.set(previousValue, //
+						((ObservableConfigFormat<Object>) fieldFormats[fieldIdx]).parse(fieldConfig,
+							() -> entityConfig.getChild(theFieldChildNames.get(fieldIdx), true, null), oldValue, change.asFromChild(),
+							until));
 					return; // The update does not actually affect the field value
+				}
 				change = change.asFromChild();
 			}
 			Object newValue = ((ObservableConfigFormat<Object>) fieldFormats[fieldIdx]).parse(fieldConfig,
