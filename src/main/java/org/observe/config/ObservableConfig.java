@@ -560,7 +560,7 @@ public class ObservableConfig implements StructuredTransactable {
 	}
 
 	public SettableValue<String> observeValue(String path) {
-		return observeValue(buildPath(path).build());
+		return observeValue(createPath(path));
 	}
 
 	public SettableValue<String> observeValue(ObservableConfigPath path) {
@@ -613,7 +613,7 @@ public class ObservableConfig implements StructuredTransactable {
 		public ObservableConfigValueBuilder<T> at(String path) {
 			if (path.length() == 0)
 				return this;
-			return at(buildPath(path).build());
+			return at(createPath(path));
 		}
 
 		public ObservableConfigValueBuilder<T> at(ObservableConfigPath path) {
@@ -639,52 +639,51 @@ public class ObservableConfig implements StructuredTransactable {
 			return format;
 		}
 
-		protected ObservableValue<? extends ObservableConfig> getDescendant() {
+		protected ObservableValue<? extends ObservableConfig> getDescendant(boolean parent) {
 			ObservableValue<? extends ObservableConfig> descendant;
-			if (thePath != null)
-				descendant = observeDescendant(thePath);
-			else
+			if (thePath != null) {
+				if (parent && thePath.getElements().size() > 1)
+					descendant = observeDescendant(thePath.getParent());
+				else
+					descendant = ObservableValue.of(ObservableConfig.this);
+			} else
 				descendant = ObservableValue.of(ObservableConfig.this);
 			return descendant;
 		}
 
-		protected Supplier<ObservableConfig> createDescendant() {
-			ObservableConfigPath path = thePath;
+		protected Supplier<ObservableConfig> createDescendant(boolean parent) {
+			ObservableConfigPath path = parent ? thePath.getParent() : thePath;
 			return () -> getChild(path, true, null);
 		}
 
+		protected String getChildName() {
+			if (thePath == null)
+				return StringUtils.singularize(getName());
+			else
+				return thePath.getLastElement().getName();
+		}
+
 		public T build() throws ParseException {
-			return getFormat().parse(getDescendant(), createDescendant()::get, null, null, theUntil);
+			return getFormat().parse(getDescendant(false), createDescendant(false)::get, null, null, theUntil);
 		}
 
 		public SettableValue<T> buildValue() {
-			return new ObservableConfigTransform.ObservableConfigValue<>(getDescendant(), this::createDescendant, theUntil, theType,
-				getFormat(), true);
+			return new ObservableConfigTransform.ObservableConfigValue<>(getDescendant(false), createDescendant(false)::get, theUntil,
+				theType, getFormat(), true);
 		}
 
 		public ObservableCollection<T> buildCollection() {
-			ObservableConfigFormat<ObservableCollection<T>> format = ObservableConfigFormat.ofCollection(//
-				ObservableCollection.TYPE_KEY.getCompoundType(theType), getFormat(), getFieldParser(), getName(),
-				StringUtils.singularize(getName()));
-			try {
-				return format.parse(getDescendant(), createDescendant()::get, null, null, theUntil);
-			} catch (ParseException e) {
-				throw new IllegalStateException("Should not have failed", e);
-			}
+			return new ObservableConfigTransform.ObservableConfigValues<>(//
+				getDescendant(true), createDescendant(true)::get, theType, getFormat(), getChildName(), getFieldParser(), theUntil, true);
 		}
 
 		public ObservableValueSet<T> buildEntitySet() {
 			ObservableConfigFormat<T> entityFormat = getFormat();
 			if (!(entityFormat instanceof ObservableConfigFormat.EntityConfigFormat))
 				throw new IllegalStateException("Format for " + theType + " is not entity-enabled");
-			ObservableConfigFormat<ObservableValueSet<T>> format = ObservableConfigFormat.ofEntitySet(//
-				(ObservableConfigFormat.EntityConfigFormat<T>) entityFormat, getName(), StringUtils.singularize(getName()),
-				getFieldParser());
-			try {
-				return format.parse(getDescendant(), createDescendant(), null, null, theUntil);
-			} catch (ParseException e) {
-				throw new IllegalStateException("Should not have failed", e);
-			}
+			return new ObservableConfigTransform.ObservableConfigEntityValues<>(//
+				getDescendant(true), createDescendant(true)::get, (ObservableConfigFormat.EntityConfigFormat<T>) entityFormat,
+				getChildName(), getFieldParser(), theUntil, true);
 		}
 	}
 

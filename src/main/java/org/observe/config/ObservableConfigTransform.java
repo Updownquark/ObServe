@@ -67,7 +67,7 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 				ObservableConfig newParent = evt.getNewValue();
 				try (Transaction ceT = newParent == null ? Transaction.NONE : newParent.lock(false, null)) {
 					initConfig(evt.getNewValue(), evt);
-					if (listen)
+					if (listen && newParent != null)
 						newParent.watch("").takeUntil(theUntil).act(this::onChange);
 				}
 			});
@@ -297,7 +297,7 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 			if (collectionElement != null) {
 				for (ObservableConfig child : collectionElement.getContent(theChildName).getValues()) {
 					ConfigElement cve = createElement(child, null);
-					theElements.put(child.getParentChildRef(), cve);
+					cve.theElement = theElements.putEntry(child.getParentChildRef(), cve, false).getElementId();
 					fire(new ObservableCollectionEvent<>(cve.getElementId(), theType, theElements.size() - 1, CollectionChangeType.add,
 						null, cve.get(), cause));
 				}
@@ -332,7 +332,7 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 				incrementStamp(true);
 				fire(new ObservableCollectionEvent<>(newElId, theType, theElements.keySet().getElementsBefore(newElId),
 					CollectionChangeType.add, null, newEl.get(), collectionChange));
-			} else if (!isModifying) {
+			} else {
 				CollectionElement<ConfigElement> el = theElements.getEntry(config.getParentChildRef());
 				if (el == null) // Must be a different child
 					return;
@@ -343,7 +343,7 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 					fire(new ObservableCollectionEvent<>(el.getElementId(), theType,
 						theElements.keySet().getElementsBefore(el.getElementId()), CollectionChangeType.remove, el.get().get(),
 						el.get().get(), collectionChange));
-				} else {
+				} else if (!isModifying) {
 					try {
 						E newValue = theFormat.parse(ObservableValue.of(el.get().getConfig()),
 							() -> collectionChange.eventTarget.addChild(theChildName), el.get().get(), collectionChange.asFromChild(),
@@ -418,10 +418,10 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 				this.theConfig = config;
 				theElementObservable = new SimpleObservable<>(null, false, null, b -> b.unsafe());
 
-				E val;
 				if (value != null && value.isPresent()) {
-					val = value.get();
+					theFormat.format(value.get(), null, config, v -> theValue = v, Observable.or(getUntil(), theElementObservable));
 				} else {
+					E val;
 					try {
 						val = theFormat.parse(//
 							ObservableValue.of(this.theConfig), () -> this.theConfig.getParent().addChild(theChildName), null, null,
@@ -431,8 +431,8 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 						e.printStackTrace();
 						val = null;
 					}
+					theValue = val;
 				}
-				theValue = val;
 			}
 
 			protected ObservableConfig getConfig() {
@@ -472,12 +472,7 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 			}
 
 			protected void removeOp() throws UnsupportedOperationException {
-				try (Transaction t = lock(true, null)) {
-					isModifying = true;
-					theConfig.remove();
-				} finally {
-					isModifying = false;
-				}
+				theConfig.remove();
 			}
 
 			void dispose() {
@@ -631,6 +626,21 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 						theElements.getEntryById(el).get().set(value);
 					}
 				}
+			}
+
+			@Override
+			public int hashCode() {
+				return ObservableCollection.hashCode(this);
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				return ObservableCollection.equals(this, obj);
+			}
+
+			@Override
+			public String toString() {
+				return ObservableCollection.toString(this);
 			}
 		}
 	}
