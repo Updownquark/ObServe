@@ -258,6 +258,8 @@ public interface ObservableConfigFormat<T> {
 					previousValue = (C) new ObservableConfigTransform.ObservableConfigValues<>(ObservableValue.of(config), null,
 						elementType, elementFormat, childName, fieldParser, until, false);
 				acceptedValue.accept(previousValue);
+				if (previousValue == value)
+					return;
 				try (Transaction t = config.lock(true, null)) {
 					ArrayUtils.adjust((List<E>) previousValue, asList(value), new ArrayUtils.DifferenceListener<E, E>() {
 						@Override

@@ -453,9 +453,8 @@ public class ObservableConfigTest {
 			testEntities2 = theConfig.asValue(TestEntity2.class).at("test-entities2/test-entity2").until(until).buildEntitySet();
 			tester2 = new ObservableCollectionTester<>("testEntities2", testEntities2.getValues());
 			expected = new ArrayList<>();
-			for (TestEntity2 entity : testEntities1.getValues())
-				expected.add(deepCopy(entity));
-			// TODO Do more with the field observable collections, making sure those collections keep up
+			for (int i = 0; i < testEntities1.getValues().size(); i++)
+				expected.add(new TestEntity2Tester(testEntities1.getValues().get(i), testEntities2.getValues().get(i)));
 		}
 
 		@Override
@@ -482,13 +481,15 @@ public class ObservableConfigTest {
 							.create()//
 							.get();
 						Assert.assertEquals(randomString, newEntity.getText());
-						expected.add(index, deepCopy(newEntity));
+						TestEntity2 entity1 = testEntities == testEntities1 ? newEntity : testEntities2.getValues().get(index);
+						TestEntity2 entity2 = testEntities == testEntities1 ? testEntities1.getValues().get(index) : newEntity;
+						expected.add(index, new TestEntity2Tester(entity1, entity2));
 					}).or(1, () -> { // Remove element
 						if (testEntities.getValues().isEmpty())
 							return;
 						int index = helper.getInt(0, testEntities.getValues().size() - 1);
 						testEntities.getValues().remove(index);
-						expected.remove(index);
+						((TestEntity2Tester) expected.remove(index)).dispose();
 					}).or(1, () -> {// Modify text
 						if (testEntities.getValues().isEmpty())
 							return;
@@ -579,6 +580,9 @@ public class ObservableConfigTest {
 
 				tester1.check(expected);
 				tester2.check(expected);
+
+				for (TestEntity2 e2Tester : expected)
+					((TestEntity2Tester) e2Tester).check();
 			}
 		}
 	}
@@ -628,83 +632,105 @@ public class ObservableConfigTest {
 		return "a=" + entity.getA() + ", b=" + entity.getB() + ", c=" + entity.getC();
 	}
 
-	private static TestEntity2 deepCopy(TestEntity2 entity) {
-		return new TestEntity2() {
-			private String theText;
-			private final TestEntity3 theEntityField;
-			private final List<String> theTexts;
-			private final ObservableCollection<TestEntity4> theListedEntities;
+	private static class TestEntity2Tester implements TestEntity2 {
+		private String theText;
+		private final TestEntity3 theEntityField;
+		private final List<String> theTexts;
+		private final ObservableCollection<TestEntity4> theListedEntities;
 
-			{
-				theText = entity.getText();
-				theEntityField = deepCopy(entity.getEntityField());
-				theTexts = new ArrayList<>(entity.getTexts());
-				theListedEntities = ObservableCollection.create(TypeTokens.get().of(TestEntity4.class), new BetterTreeList<>(false));
-				for (TestEntity4 te4 : entity.getListedEntities().getValues())
-					theListedEntities.add(deepCopy(te4));
-			}
+		private ObservableCollectionTester<String> theTextsTester1;
+		private ObservableCollectionTester<TestEntity4> theLETester1;
+		private ObservableCollectionTester<String> theTextsTester2;
+		private ObservableCollectionTester<TestEntity4> theLETester2;
 
-			@Override
-			public String getText() {
-				return theText;
-			}
+		TestEntity2Tester(TestEntity2 entity1, TestEntity2 entity2) {
+			theText = entity1.getText();
+			theEntityField = deepCopy(entity1.getEntityField());
+			theTexts = new ArrayList<>(entity1.getTexts());
+			theListedEntities = ObservableCollection.create(TypeTokens.get().of(TestEntity4.class), new BetterTreeList<>(false));
+			for (TestEntity4 te4 : entity1.getListedEntities().getValues())
+				theListedEntities.add(deepCopy(te4));
 
-			@Override
-			public void setText(String text) {
-				theText = text;
-			}
+			theTextsTester1 = new ObservableCollectionTester<>("texts", (ObservableCollection<String>) entity1.getTexts());
+			theTextsTester2 = new ObservableCollectionTester<>("texts", (ObservableCollection<String>) entity2.getTexts());
+			theLETester1 = new ObservableCollectionTester<>("listed-entities", entity1.getListedEntities().getValues());
+			theLETester2 = new ObservableCollectionTester<>("listed-entities", entity2.getListedEntities().getValues());
+		}
 
-			@Override
-			public TestEntity3 getEntityField() {
-				return theEntityField;
-			}
+		@Override
+		public String getText() {
+			return theText;
+		}
 
-			@Override
-			public List<String> getTexts() {
-				return theTexts;
-			}
+		@Override
+		public void setText(String text) {
+			theText = text;
+		}
 
-			@Override
-			public ObservableValueSet<TestEntity4> getListedEntities() {
-				return new ObservableValueSet<ObservableConfigTest.TestEntity4>() {
-					@Override
-					public ObservableCollection<? extends TestEntity4> getValues() {
-						return theListedEntities;
-					}
+		@Override
+		public TestEntity3 getEntityField() {
+			return theEntityField;
+		}
 
-					@Override
-					public ConfiguredValueType<TestEntity4> getType() {
-						return null;
-					}
+		@Override
+		public List<String> getTexts() {
+			return theTexts;
+		}
 
-					@Override
-					public ValueCreator<TestEntity4> create(ElementId after, ElementId before, boolean first) {
-						return null;
-					}
+		@Override
+		public ObservableValueSet<TestEntity4> getListedEntities() {
+			return new ObservableValueSet<ObservableConfigTest.TestEntity4>() {
+				@Override
+				public ObservableCollection<? extends TestEntity4> getValues() {
+					return theListedEntities;
+				}
 
-					@Override
-					public boolean equals(Object o) {
-						return o instanceof ObservableValueSet && theListedEntities.equals(((ObservableValueSet<?>) o).getValues());
-					}
-				};
-			}
+				@Override
+				public ConfiguredValueType<TestEntity4> getType() {
+					return null;
+				}
 
-			@Override
-			public boolean equals(Object obj) {
-				if (!(obj instanceof TestEntity2))
-					return false;
-				TestEntity2 other = (TestEntity2) obj;
-				return Objects.equals(theText, other.getText())//
-					&& Objects.equals(theEntityField, other.getEntityField())//
-					&& theTexts.equals(other.getTexts())//
-					&& theListedEntities.equals(other.getListedEntities().getValues());
-			}
+				@Override
+				public ValueCreator<TestEntity4> create(ElementId after, ElementId before, boolean first) {
+					return null;
+				}
 
-			@Override
-			public String toString() {
-				return "test-entity2(text=" + theText + ")";
-			}
-		};
+				@Override
+				public boolean equals(Object o) {
+					return o instanceof ObservableValueSet && theListedEntities.equals(((ObservableValueSet<?>) o).getValues());
+				}
+			};
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (!(obj instanceof TestEntity2))
+				return false;
+			TestEntity2 other = (TestEntity2) obj;
+			return Objects.equals(theText, other.getText())//
+				&& Objects.equals(theEntityField, other.getEntityField())//
+				&& theTexts.equals(other.getTexts())//
+				&& theListedEntities.equals(other.getListedEntities().getValues());
+		}
+
+		@Override
+		public String toString() {
+			return "test-entity2(text=" + theText + ")";
+		}
+
+		void check() {
+			theTextsTester1.check(theTexts);
+			theLETester1.check(theListedEntities);
+			theTextsTester2.check(theTexts);
+			theLETester2.check(theListedEntities);
+		}
+
+		void dispose() {
+			theTextsTester1.setSynced(false);
+			theLETester1.setSynced(false);
+			theTextsTester2.setSynced(false);
+			theLETester2.setSynced(false);
+		}
 	}
 
 	private static TestEntity3 deepCopy(TestEntity3 entity) {

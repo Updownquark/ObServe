@@ -265,7 +265,6 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 
 		ConfigElement theNewElement;
 		Consumer<? super ConfigElement> thePreAddAction;
-		boolean isModifying;
 
 		public ObservableConfigBackedCollection(ObservableValue<? extends ObservableConfig> collectionElement, Runnable ceCreate,
 			TypeToken<E> type, ObservableConfigFormat<E> format, String childName, Observable<?> until, boolean listen) {
@@ -343,13 +342,18 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 					fire(new ObservableCollectionEvent<>(el.getElementId(), theType,
 						theElements.keySet().getElementsBefore(el.getElementId()), CollectionChangeType.remove, el.get().get(),
 						el.get().get(), collectionChange));
-				} else if (!isModifying) {
+				} else {
 					try {
-						E newValue = theFormat.parse(//
-							ObservableValue.of(el.get().getConfig()), () -> collectionChange.eventTarget.addChild(theChildName),
-							el.get().get(), collectionChange.asFromChild(), getUntil());
+						E newValue;
+						if (el.get().modifying != null) {
+							newValue = el.get().modifying.get();
+							el.get().modifying = null;
+						} else
+							newValue = theFormat.parse(//
+								ObservableValue.of(el.get().getConfig()), () -> collectionChange.eventTarget.addChild(theChildName),
+								el.get().get(), collectionChange.asFromChild(), getUntil());
 						E oldValue = el.get().get();
-						incrementStamp(newValue != oldValue);
+						incrementStamp(false);
 						if (newValue != oldValue)
 							el.get()._set(newValue);
 						fire(new ObservableCollectionEvent<>(el.getElementId(), theType,
@@ -432,6 +436,7 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 			private ElementId theElement;
 			private E theValue;
 			private CollectionElement<E> immutable;
+			ValueHolder<E> modifying;
 
 			public ConfigElement(ObservableConfig config, ValueHolder<E> value) {
 				this.theConfig = config;
@@ -481,12 +486,9 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 				try (Transaction t = lock(true, false, null)) {
 					if (!theConfig.getParentChildRef().isPresent())
 						throw new IllegalArgumentException(StdMsg.ELEMENT_REMOVED);
-					isModifying = true;
-					_set(value);
+					modifying = new ValueHolder<>(value);
 					theFormat.format(//
 						value, get(), theConfig, v -> {}, Observable.or(getUntil(), theElementObservable));
-				} finally {
-					isModifying = false;
 				}
 			}
 
