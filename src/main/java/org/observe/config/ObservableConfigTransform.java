@@ -496,6 +496,22 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 				}
 				return immutable;
 			}
+
+			@Override
+			public int hashCode() {
+				return theElement.hashCode();
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				return obj instanceof CollectionElement && theElement.equals(((CollectionElement<?>) obj).getElementId());
+			}
+
+			@Override
+			public String toString() {
+				return new StringBuilder().append('[').append(theElements.keySet().getElementsBefore(theElement)).append("]=")
+					.append(theValue).toString();
+			}
 		}
 
 		protected abstract class OCBCCollection implements ObservableCollection<E> {
