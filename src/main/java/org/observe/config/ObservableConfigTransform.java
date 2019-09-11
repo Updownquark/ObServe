@@ -47,17 +47,25 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 	private long theStamp;
 	private long theStructureStamp;
 
+	private boolean _isConnected;
+	private ObservableValue<Boolean> isConnected;
+
 	public ObservableConfigTransform(ObservableValue<? extends ObservableConfig> parent, Runnable ceCreate, Observable<?> until) {
 		theParent = parent;
 		theParentCreate = ceCreate;
-		if (until == null)
+		if (until == null) {
+			isConnected = ObservableValue.of(true);
 			theUntil = theParent.noInitChanges().filter(evt -> evt.getOldValue() != evt.getNewValue());
-		else
+		} else {
+			isConnected = ObservableValue.of(TypeTokens.get().BOOLEAN, () -> _isConnected, until.take(1));
 			theUntil = Observable.or(until, //
 				theParent.noInitChanges().takeUntil(until).filter(evt -> evt.getOldValue() != evt.getNewValue()));
+		}
 	}
 
 	protected void init(Observable<?> until, boolean listen) {
+		_isConnected = true;
+		until.take(1).act(__ -> _isConnected = false);
 		theParent.changes().takeUntil(until).act(//
 			evt -> {
 				if (evt.getNewValue() == evt.getOldValue())
@@ -73,13 +81,17 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 			});
 	}
 
+	public ObservableValue<Boolean> isConnected() {
+		return isConnected;
+	}
+
 	protected void incrementStamp(boolean structural) {
 		theStamp++;
 		if (structural)
 			theStructureStamp++;
 	}
 
-	protected ObservableValue<? extends ObservableConfig> getParent() { // TODO NEEDED?
+	protected ObservableValue<? extends ObservableConfig> getParent() {
 		return theParent;
 	}
 
@@ -195,6 +207,8 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 
 		@Override
 		public <V extends E> E set(V value, Object cause) throws IllegalArgumentException, UnsupportedOperationException {
+			if (!isConnected().get())
+				throw new UnsupportedOperationException("Not connected");
 			Object[] oldValue = new Object[1];
 			getParent(true, parent -> {
 				try (Transaction t = parent.lock(true, cause)) {
@@ -210,6 +224,8 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 
 		@Override
 		public <V extends E> String isAcceptable(V value) {
+			if (!isConnected().get())
+				return "Not connected";
 			if (!TypeTokens.get().isInstance(theType, value))
 				return StdMsg.ILLEGAL_ELEMENT;
 			return null;
@@ -217,7 +233,7 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 
 		@Override
 		public ObservableValue<String> isEnabled() {
-			return SettableValue.ALWAYS_ENABLED;
+			return isConnected().map(c -> c ? null : "Not connected");
 		}
 
 		@Override
@@ -387,6 +403,8 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 
 		protected ConfigElement add(Function<ObservableConfig, E> value, ElementId after, ElementId before, boolean first,
 			Consumer<ConfigElement> preAddAction) {
+			if (!isConnected().get())
+				throw new UnsupportedOperationException("Not connected");
 			ConfigElement[] cve = new ObservableConfigBackedCollection.ConfigElement[1];
 			getParent(true, parent -> {
 				try (Transaction t = parent.lock(true, null)) {
@@ -483,6 +501,8 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 			}
 
 			protected void setOp(E value) throws UnsupportedOperationException, IllegalArgumentException {
+				if (!isConnected().get())
+					throw new UnsupportedOperationException("Not connected");
 				try (Transaction t = lock(true, false, null)) {
 					if (!theConfig.getParentChildRef().isPresent())
 						throw new IllegalArgumentException(StdMsg.ELEMENT_REMOVED);
@@ -493,6 +513,8 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 			}
 
 			protected void removeOp() throws UnsupportedOperationException {
+				if (!isConnected().get())
+					throw new UnsupportedOperationException("Not connected");
 				theConfig.remove();
 			}
 
@@ -732,16 +754,20 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 
 				@Override
 				public String isEnabled() {
-					return null;
+					return isConnected().get() ? null : "Not connected";
 				}
 
 				@Override
 				public String isAcceptable(E value) {
+					if (!isConnected().get())
+						return "Not connected";
 					return getCollection().canAdd(value);
 				}
 
 				@Override
 				public void set(E value) throws UnsupportedOperationException, IllegalArgumentException {
+					if (!isConnected().get())
+						throw new UnsupportedOperationException("Not connected");
 					String msg = isAcceptable(value);
 					if (msg != null)
 						throw new IllegalArgumentException(msg);
@@ -788,6 +814,8 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 
 		@Override
 		public ValueCreator<E> create(ElementId after, ElementId before, boolean first) {
+			if (!isConnected().get())
+				throw new UnsupportedOperationException("Not connected");
 			return new SimpleValueCreator<E>(getType()) {
 				@Override
 				public <F> ValueCreator<E> with(ConfiguredValueField<? super E, F> field, F value) throws IllegalArgumentException {
