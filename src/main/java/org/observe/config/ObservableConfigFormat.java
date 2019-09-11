@@ -183,9 +183,11 @@ public interface ObservableConfigFormat<T> {
 
 		public E createInstance(ObservableConfig config, QuickMap<String, Object> fieldValues, Observable<?> until) throws ParseException {
 			for (int i = 0; i < fieldValues.keySize(); i++) {
+				int fi = i;
 				ObservableValue<? extends ObservableConfig> fieldConfig = config.observeDescendant(theFieldChildNames.get(i));
 				if (fieldValues.get(i) == null)
-					fieldValues.put(i, fieldFormats[i].parse(fieldConfig, () -> config.addChild(configName), null, null, until));
+					fieldValues.put(i,
+						fieldFormats[i].parse(fieldConfig, () -> config.addChild(theFieldChildNames.get(fi)), null, null, until));
 				else
 					formatField(entityType.getFields().get(i), fieldValues.get(i), config, f -> {}, until);
 			}

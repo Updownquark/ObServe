@@ -23,6 +23,7 @@ import org.qommons.QommonsTestUtils;
 import org.qommons.TestHelper;
 import org.qommons.Transaction;
 import org.qommons.collect.ElementId;
+import org.qommons.collect.FastFailLockingStrategy;
 import org.qommons.tree.BetterTreeList;
 import org.xml.sax.SAXException;
 
@@ -438,7 +439,8 @@ public class ObservableConfigTest {
 		private final ObservableCollectionTester<TestEntity2> tester2;
 
 		public ObservableConfigSuperTester() {
-			theConfig = ObservableConfig.createRoot("test");
+			// Use unsafe locking for performance--we're not doing anything thread-unsafe here
+			theConfig = ObservableConfig.createRoot("test", null, new FastFailLockingStrategy());
 			try {
 				ObservableConfig.readXml(theConfig, ObservableConfigTest.class.getResourceAsStream("TestValues.xml"),
 					new XmlEncoding(":x", ":xx", " ", "blah", "test"));
@@ -458,18 +460,20 @@ public class ObservableConfigTest {
 
 		@Override
 		public void accept(TestHelper helper) {
-			int modifications = helper.getInt(100, 10000);
-			System.out.print(modifications + " modifications");
+			int modifications = helper.getInt(10, 1000);
 			System.out.flush();
-			int tickSkip = modifications / 100;
-			try (Transaction t = theConfig.lock(true, null)) {
-				for (int i = 0; i < modifications; i++) {
-					ObservableValueSet<TestEntity2> testEntities = helper.getBoolean() ? testEntities1 : testEntities2;
-					if (i != 0 && i % tickSkip == 0) {
-						System.out.print(".");
-						System.out.flush();
-					}
+			double ticksPerMod = 100.0 / modifications;
+			int ticks = 0;
+			for (int i = 0; i < modifications; i++) {
+				ObservableValueSet<TestEntity2> testEntities = helper.getBoolean() ? testEntities1 : testEntities2;
+				int newTicks = (int) (i * ticksPerMod);
+				while (ticks < newTicks) {
+					System.out.print(".");
+					System.out.flush();
+					ticks++;
+				}
 
+				try (Transaction t = theConfig.lock(true, null)) {
 					helper.doAction(1, () -> { // Add element
 						int index = helper.getInt(0, testEntities.getValues().size());
 						ElementId after = index == 0 ? null : testEntities.getValues().getElement(index - 1).getElementId();
@@ -477,7 +481,6 @@ public class ObservableConfigTest {
 						TestEntity2 newEntity = testEntities.create(after, null, true).with(TestEntity2::getText, randomString)//
 							.create()//
 							.get();
-						System.out.println(theConfig.getChild("test-entities2").printXml());
 						Assert.assertEquals(randomString, newEntity.getText());
 						expected.add(index, deepCopy(newEntity));
 					}).or(1, () -> { // Remove element
@@ -492,7 +495,7 @@ public class ObservableConfigTest {
 						int index = helper.getInt(0, testEntities.getValues().size() - 1);
 						TestEntity2 modify = testEntities.getValues().get(index);
 						String randomString = randomString(helper);
-						modify.setText(randomString(helper));
+						modify.setText(randomString);
 						Assert.assertEquals(randomString, modify.getText());
 						expected.get(index).setText(randomString);
 					}).or(1, () -> {// Modify entity field.d
@@ -572,10 +575,10 @@ public class ObservableConfigTest {
 						Assert.assertEquals(newE, modify.getListedEntities().getValues().get(leIndex).getE());
 						expected.get(index).getListedEntities().getValues().get(leIndex).setE(newE);
 					}).execute("modify");
-
-					tester1.check(expected);
-					tester2.check(expected);
 				}
+
+				tester1.check(expected);
+				tester2.check(expected);
 			}
 		}
 	}

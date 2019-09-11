@@ -407,6 +407,25 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 
 		protected abstract ConfigElement createElement(ObservableConfig config, ValueHolder<E> value);
 
+		@Override
+		public int hashCode() {
+			return getCollection().hashCode();
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (this == obj)
+				return true;
+			else if (!(obj instanceof ObservableConfigBackedCollection))
+				return false;
+			return getCollection().equals(((ObservableConfigBackedCollection<?>) obj).getCollection());
+		}
+
+		@Override
+		public String toString() {
+			return getCollection().toString();
+		}
+
 		protected abstract class ConfigElement implements MutableCollectionElement<E> {
 			private final ObservableConfig theConfig;
 			private final SimpleObservable<Void> theElementObservable;
