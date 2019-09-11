@@ -28,6 +28,7 @@ import org.observe.Observable;
 import org.observe.ObservableValue;
 import org.observe.Observer;
 import org.observe.SettableValue;
+import org.observe.SimpleObservable;
 import org.observe.Subscription;
 import org.observe.collect.CollectionChangeType;
 import org.observe.collect.ObservableCollection;
@@ -64,7 +65,8 @@ import com.google.common.reflect.TypeToken;
  * <p>
  * A hierarchical structure of configuration elements. Each element has a name, a value (string), and any number of child configuration
  * elements. It is intended to provide an easy injection route for configuration data files (e.g. XML) into an application. Utilities are
- * provided to serialize and deserialize to persistence on various triggers.
+ * provided to serialize and deserialize to persistence on various triggers, as well as to convert hierarchical text configuration into
+ * simple objects, collections, and entities--all linked back to the same data source and updated with it.
  * </p>
  * <p>
  * The structure fires detailed events when it is changed, and utilities are provided to monitor individual configuration values and
@@ -72,8 +74,6 @@ import com.google.common.reflect.TypeToken;
  * </p>
  */
 public class ObservableConfig implements StructuredTransactable {
-	// TODO Need to uninstall listeners for removed descendants
-
 	public static final char PATH_SEPARATOR = '/';
 	public static final String PATH_SEPARATOR_STR = "" + PATH_SEPARATOR;
 	public static final String EMPTY_PATH = "".intern();
@@ -576,10 +576,18 @@ public class ObservableConfig implements StructuredTransactable {
 		return config == null ? null : config.getValue();
 	}
 
+	/**
+	 * @param type The type of the value or element to produce
+	 * @return A builder with many options that allows the construction of a formatted value, collection, or entity set
+	 */
 	public <T> ObservableConfigValueBuilder<T> asValue(Class<T> type) {
 		return asValue(TypeTokens.get().of(type));
 	}
 
+	/**
+	 * @param type The type of the value or element to produce
+	 * @return A builder with many options that allows the construction of a formatted value, collection, or entity set
+	 */
 	public <T> ObservableConfigValueBuilder<T> asValue(TypeToken<T> type) {
 		return new ObservableConfigValueBuilder<>(type);
 	}
@@ -663,8 +671,21 @@ public class ObservableConfig implements StructuredTransactable {
 				return thePath.getLastElement().getName();
 		}
 
-		public T build() throws ParseException {
-			return getFormat().parse(getDescendant(false), createDescendant(false)::get, null, null, theUntil);
+		public T parse() throws ParseException {
+			ObservableConfigFormat<T> format = getFormat();
+			// If the format is simple, we can just parse the value and then forget about it.
+			// Otherwise, we need to maintain the connection to update the value when configuration changes
+			if (format instanceof ObservableConfigFormat.SimpleConfigFormat)
+				return format.parse(getDescendant(false), createDescendant(false)::get, null, null, theUntil);
+			else
+				return buildValue().get();
+		}
+
+		public T parseDisconnected() throws ParseException {
+			SimpleObservable<Void> until = new SimpleObservable<>();
+			T value = getFormat().parse(getDescendant(false), createDescendant(false)::get, null, null, until);
+			until.onNext(null);
+			return value;
 		}
 
 		public SettableValue<T> buildValue() {
