@@ -2,13 +2,22 @@ package org.observe.util;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
+import java.util.function.Predicate;
 
 public class MethodRetrievingHandler implements InvocationHandler {
+	private Predicate<Method> theFilter;
+	private boolean useFirst;
+	private Method theFirstNoFilter;
 	private Method theInvoked;
 
 	@Override
 	public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-		theInvoked = method;
+		if (theFirstNoFilter == null)
+			theFirstNoFilter = method;
+		if (theFilter == null || theFilter.test(method)) {
+			if (!useFirst || theInvoked == null)
+				theInvoked = method;
+		}
 		Class<?> retType = method.getReturnType();
 		if (!retType.isPrimitive() || retType == void.class)
 			return null;
@@ -32,11 +41,17 @@ public class MethodRetrievingHandler implements InvocationHandler {
 			return null; // ?
 	}
 
-	public void reset() {
-		theInvoked = null;
+	public void reset(Predicate<Method> filter, boolean useFirst) {
+		theFilter = filter;
+		this.useFirst = useFirst;
+		theFirstNoFilter = theInvoked = null;
 	}
 
 	public Method getInvoked() {
 		return theInvoked;
+	}
+
+	public Method getFirstNoFilter() {
+		return theFirstNoFilter;
 	}
 }

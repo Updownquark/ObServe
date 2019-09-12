@@ -11,7 +11,7 @@ public interface ConfiguredValueType<E> {
 
 	QuickMap<String, ConfiguredValueField<? super E, ?>> getFields();
 
-	int getFieldIndex(Function<? super E, ?> fieldGetter);
+	<F> ConfiguredValueField<? super E, F> getField(Function<? super E, F> fieldGetter);
 
 	boolean allowsCustomFields();
 }

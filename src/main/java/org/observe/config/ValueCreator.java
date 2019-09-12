@@ -15,7 +15,7 @@ public interface ValueCreator<E> {
 
 	<F> ValueCreator<E> with(ConfiguredValueField<? super E, F> field, F value) throws IllegalArgumentException;
 
-	<F> ValueCreator<E> with(Function<? super E, F> field, F value) throws IllegalArgumentException;
+	<F> ValueCreator<E> with(Function<? super E, F> fieldGetter, F value) throws IllegalArgumentException;
 
 	default CollectionElement<E> create() {
 		return create(null);

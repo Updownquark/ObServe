@@ -46,9 +46,9 @@ public abstract class SimpleValueCreator<E> implements ValueCreator<E> {
 	}
 
 	@Override
-	public <F> ValueCreator<E> with(Function<? super E, F> field, F value) throws IllegalArgumentException {
-		int fieldIndex = theType.getFieldIndex(field);
-		return with((ConfiguredValueField<? super E, F>) theType.getFields().get(fieldIndex), value);
+	public <F> ValueCreator<E> with(Function<? super E, F> fieldGetter, F value) throws IllegalArgumentException {
+		ConfiguredValueField<? super E, F> field = theType.getField(fieldGetter);
+		return with(field, value);
 	}
 
 	protected QuickMap<String, Object> getFieldValues() {

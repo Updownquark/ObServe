@@ -826,8 +826,8 @@ public class ObservableConfigContent {
 				}
 
 				@Override
-				public int getFieldIndex(Function<? super C, ?> fieldGetter) {
-					throw new UnsupportedOperationException();
+				public <F> ConfiguredValueField<? super C, F> getField(Function<? super C, F> fieldGetter) {
+					throw new UnsupportedOperationException("No typed fields for an " + ObservableConfig.class.getSimpleName());
 				}
 
 				@Override

@@ -225,10 +225,10 @@ public interface ObservableConfigFormat<T> {
 			ObservableValue<? extends ObservableConfig> fieldConfig = entityConfig.observeDescendant(theFieldChildNames.get(fieldIdx));
 			if (change != null) {
 				if (change.relativePath.isEmpty() || fieldConfig != change.relativePath.get(0)) {
-					field.set(previousValue, //
-						((ObservableConfigFormat<Object>) fieldFormats[fieldIdx]).parse(fieldConfig,
-							() -> entityConfig.getChild(theFieldChildNames.get(fieldIdx), true, null), oldValue, change.asFromChild(),
-							until));
+					Object newValue = ((ObservableConfigFormat<Object>) fieldFormats[fieldIdx]).parse(fieldConfig,
+						() -> entityConfig.getChild(theFieldChildNames.get(fieldIdx), true, null), oldValue, change.asFromChild(), until);
+					if (newValue != oldValue)
+						field.set(previousValue, newValue);
 					return; // The update does not actually affect the field value
 				}
 				change = change.asFromChild();

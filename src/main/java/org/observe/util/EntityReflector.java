@@ -12,15 +12,14 @@ import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.NavigableSet;
 import java.util.Objects;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -32,6 +31,8 @@ import org.qommons.StringUtils;
 import org.qommons.collect.BetterCollections;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
+import org.qommons.collect.CollectionElement;
+import org.qommons.collect.ElementId;
 import org.qommons.collect.QuickSet;
 import org.qommons.collect.QuickSet.QuickMap;
 import org.qommons.tree.BetterTreeSet;
@@ -88,6 +89,7 @@ public class EntityReflector<E> {
 	public static class Builder<E> {
 		private final TypeToken<E> theType;
 		private final Class<E> theRawType;
+		private Map<TypeToken<?>, EntityReflector<?>> theSupers;
 		private Function<Method, String> theGetterFilter;
 		private Function<Method, String> theSetterFilter;
 		private Map<Method, BiFunction<? super E, Object[], ?>> theCustomMethods;
@@ -101,9 +103,15 @@ public class EntityReflector<E> {
 			else if ((theRawType.getModifiers() & Modifier.PUBLIC) == 0)
 				throw new IllegalArgumentException("This class only works for public interface types");
 			theType = type;
+			theSupers = new LinkedHashMap<>();
 			theGetterFilter = new PrefixFilter("get", 0);
 			theSetterFilter = new PrefixFilter("set", 1);
 			theMessages = new ArrayList<>();
+		}
+
+		public Builder<E> withSupers(Map<TypeToken<?>, EntityReflector<?>> supers) {
+			theSupers = supers;
+			return this;
 		}
 
 		/**
@@ -172,7 +180,8 @@ public class EntityReflector<E> {
 		 * @return The new reflector
 		 */
 		public EntityReflector<E> buildNoPrint() {
-			return new EntityReflector<>(theType, theRawType, theGetterFilter, theSetterFilter, theCustomMethods, theIdFields, theMessages);
+			return new EntityReflector<E>(theSupers, theType, theRawType, theGetterFilter, theSetterFilter, //
+				theCustomMethods == null ? Collections.emptyMap() : theCustomMethods, theIdFields, theMessages);
 		}
 
 		/**
@@ -257,6 +266,8 @@ public class EntityReflector<E> {
 		}
 	}
 
+	static final Object[] NO_ARGS = new Object[0];
+
 	/**
 	 * Represents a field in an interface entity type
 	 *
@@ -264,20 +275,22 @@ public class EntityReflector<E> {
 	 * @param <F> The field type
 	 */
 	public static class ReflectedField<E, F> {
+		private final EntityReflector<E> theReflector;
 		private final String theName;
 		private int theFieldIndex;
 		private boolean id;
-		private final FieldGetter<? super E, F> theGetter;
-		private FieldSetter<? super E, F> theSetter;
+		private final FieldGetter<E, F> theGetter;
+		private FieldSetter<E, F> theSetter;
 
 		ReflectedField(EntityReflector<E> reflector, String name, int fieldIndex, boolean id, Method getter) {
+			theReflector = reflector;
 			theName = name;
 			theFieldIndex = fieldIndex;
 			this.id = id;
 			theGetter = new FieldGetter<>(reflector, getter, this);
 		}
 
-		void setSetter(FieldSetter<? super E, F> setter) {
+		void setSetter(FieldSetter<E, F> setter) {
 			theSetter = setter;
 		}
 
@@ -291,28 +304,52 @@ public class EntityReflector<E> {
 			return theFieldIndex;
 		}
 
+		public TypeToken<F> getType() {
+			return theGetter.getReturnType();
+		}
+
 		public boolean isId() {
 			return id;
 		}
 
 		/** @return The entity type's getter method for this field */
-		public FieldGetter<? super E, F> getGetter() {
+		public FieldGetter<E, F> getGetter() {
 			return theGetter;
 		}
 
 		/** @return The entity type's setter method for this field */
-		public FieldSetter<? super E, F> getSetter() {
+		public FieldSetter<E, F> getSetter() {
 			return theSetter;
+		}
+
+		public F get(E entity) {
+			EntityReflector<E>.ProxyMethodHandler p = (EntityReflector<E>.ProxyMethodHandler) Proxy.getInvocationHandler(entity);
+			try {
+				return p.invokeOnType(entity, theGetter, NO_ARGS);
+			} catch (RuntimeException | Error e) {
+				throw e;
+			} catch (Throwable e) {
+				throw new IllegalStateException(e);
+			}
+		}
+
+		public void set(E entity, F value) {
+			if (theSetter == null)
+				throw new UnsupportedOperationException("No setter found for field " + theReflector.getType() + "." + theName);
+			EntityReflector<E>.ProxyMethodHandler p = (EntityReflector<E>.ProxyMethodHandler) Proxy.getInvocationHandler(entity);
+			try {
+				p.invokeOnType(entity, theSetter, new Object[] { value });
+			} catch (RuntimeException | Error e) {
+				throw e;
+			} catch (Throwable e) {
+				throw new IllegalStateException(e);
+			}
 		}
 
 		@Override
 		public String toString() {
-			return theName + " (" + theGetter.getReturnType() + ")";
+			return theReflector.getType() + "." + theName + " (" + theGetter.getReturnType() + ")";
 		}
-	}
-
-	public enum SetterReturnType {
-		OLD_VALUE, SELF, VOID;
 	}
 
 	static class MethodSignature implements Comparable<MethodSignature> {
@@ -354,15 +391,28 @@ public class EntityReflector<E> {
 		}
 	}
 
+	static class SuperPath {
+		final int index;
+		final SuperPath parent;
+
+		SuperPath(int index, SuperPath parent) {
+			this.index = index;
+			this.parent = parent;
+		}
+	}
+
 	public static abstract class MethodInterpreter<E, R> implements Comparable<MethodInterpreter<?, ?>> {
 		private final EntityReflector<E> theReflector;
+		private ElementId theMethodElement;
 		private final Method theMethod;
+		protected MethodInterpreter<? super E, ? super R>[] theSuperMethods;
 		private final Class<?>[] theParameters;
 		private final Invokable<E, R> theInvokable;
 
-		public MethodInterpreter(EntityReflector<E> reflector, Method method) {
+		MethodInterpreter(EntityReflector<E> reflector, Method method) {
 			theReflector = reflector;
 			theMethod = method;
+			theSuperMethods = new MethodInterpreter[(reflector == null || reflector.theSupers.isEmpty()) ? 0 : reflector.theSupers.size()];
 			theParameters = method.getParameterTypes();
 			TypeToken<?> type;
 			if (reflector != null)
@@ -372,8 +422,20 @@ public class EntityReflector<E> {
 			theInvokable = (Invokable<E, R>) type.method(method);
 		}
 
+		void setElement(ElementId methodElement) {
+			theMethodElement = methodElement;
+		}
+
+		void setSuper(int superIndex, MethodInterpreter<? super E, ? super R> superMethod) {
+			theSuperMethods[superIndex] = superMethod;
+		}
+
 		public EntityReflector<E> getReflector() {
 			return theReflector;
+		}
+
+		public ElementId getMethodElement() {
+			return theMethodElement;
 		}
 
 		public Method getMethod() {
@@ -388,42 +450,66 @@ public class EntityReflector<E> {
 			return theInvokable;
 		}
 
-		public TypeToken<?> getReturnType() {
-			return theInvokable.getReturnType();
+		public TypeToken<R> getReturnType() {
+			return (TypeToken<R>) theInvokable.getReturnType();
 		}
 
-		public abstract R invoke(E proxy, Object[] args, IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter)
+		protected R invoke(E proxy, SuperPath path, Object[] args, IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter)
+			throws Throwable {
+			if (path == null)
+				return invokeLocal(proxy, args, fieldGetter, fieldSetter);
+			return (R) theSuperMethods[path.index].invoke(proxy, path, args, fieldIdx -> {
+				try {
+					return getReflector().theSuperFieldGetters.get(path.index).get(fieldIdx).invokeLocal(proxy, NO_ARGS, fieldGetter,
+						fieldSetter);
+				} catch (RuntimeException | Error e) {
+					throw e;
+				} catch (Throwable e) {
+					throw new IllegalStateException(e);
+				}
+			}, (fieldIdx, value) -> {
+				try {
+					getReflector().theSuperFieldSetters.get(path.index).get(fieldIdx).invokeLocal(proxy, new Object[] { value },
+						fieldGetter, fieldSetter);
+				} catch (RuntimeException | Error e) {
+					throw e;
+				} catch (Throwable e) {
+					throw new IllegalStateException(e);
+				}
+			});
+		}
+
+		protected abstract R invokeLocal(E proxy, Object[] args, IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter)
 			throws Throwable;
 
 		@Override
 		public int compareTo(MethodInterpreter<?, ?> o) {
 			if (this == o)
 				return 0;
-			int comp = StringUtils.compareNumberTolerant(theMethod.getName(), o.theMethod.getName(), true, true);
-			if (comp != 0)
-				return comp;
-			int i;
-			for (i = 0; i < theParameters.length && i < o.theParameters.length; i++) {
-				comp = StringUtils.compareNumberTolerant(theParameters[i].getName(), o.theParameters[i].getName(), true, true);
-				if (comp != 0)
-					return comp;
-			}
-			if (i < theParameters.length)
-				return 1;
-			else if (i < o.theParameters.length)
-				return -1;
-			return 0;
+			return compare(o.theMethod.getName(), o.theParameters);
 		}
 
 		public int compare(Method method) {
 			if (theMethod == method)
 				return 0;
-			int comp = StringUtils.compareNumberTolerant(theMethod.getName(), method.getName(), true, true);
+			return compare(method.getName(), method.getParameterTypes());
+		}
+
+		public int compare(MethodSignature sig) {
+			return compare(sig.name, sig.parameters);
+		}
+
+		private int compare(String methodName, Class<?>[] parameters) {
+			int comp = StringUtils.compareNumberTolerant(theMethod.getName(), methodName, true, true);
 			if (comp != 0)
 				return comp;
-			Class<?>[] parameters = method.getParameterTypes();
+			comp = Integer.compare(theParameters.length, parameters.length);
+			if (comp != 0)
+				return comp;
 			int i;
 			for (i = 0; i < theParameters.length && i < parameters.length; i++) {
+				if (theParameters[i].equals(parameters[i]))
+					continue;
 				comp = StringUtils.compareNumberTolerant(theParameters[i].getName(), parameters[i].getName(), true, true);
 				if (comp != 0)
 					return comp;
@@ -462,7 +548,7 @@ public class EntityReflector<E> {
 	public static abstract class FieldRelatedMethod<E, F, R> extends MethodInterpreter<E, R> {
 		private final ReflectedField<E, F> theField;
 
-		public FieldRelatedMethod(EntityReflector<E> reflector, Method method, ReflectedField<E, F> field) {
+		FieldRelatedMethod(EntityReflector<E> reflector, Method method, ReflectedField<E, F> field) {
 			super(reflector, method);
 			theField = field;
 		}
@@ -478,7 +564,7 @@ public class EntityReflector<E> {
 		}
 
 		@Override
-		public F invoke(E proxy, Object[] args, IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter) {
+		protected F invokeLocal(E proxy, Object[] args, IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter) {
 			return (F) fieldGetter.apply(getField().getFieldIndex());
 		}
 	}
@@ -486,9 +572,10 @@ public class EntityReflector<E> {
 	public static class FieldSetter<E, F> extends FieldRelatedMethod<E, F, Object> {
 		private final SetterReturnType theReturnType;
 
-		public FieldSetter(EntityReflector<E> reflector, Method method, ReflectedField<E, F> field, SetterReturnType returnType) {
+		FieldSetter(EntityReflector<E> reflector, Method method, ReflectedField<E, F> field, SetterReturnType returnType) {
 			super(reflector, method, field);
 			theReturnType = returnType;
+			field.setSetter(this);
 		}
 
 		public SetterReturnType getSetterReturnType() {
@@ -496,7 +583,7 @@ public class EntityReflector<E> {
 		}
 
 		@Override
-		public Object invoke(E proxy, Object[] args, IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter) {
+		protected Object invokeLocal(E proxy, Object[] args, IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter) {
 			Object returnValue = null;
 			switch (theReturnType) {
 			case OLD_VALUE:
@@ -514,16 +601,21 @@ public class EntityReflector<E> {
 		}
 	}
 
+	public enum SetterReturnType {
+		OLD_VALUE, SELF, VOID;
+	}
+
 	public static class DefaultMethod<E, R> extends MethodInterpreter<E, R> {
 		private final MethodHandle theHandle;
 
-		public DefaultMethod(EntityReflector<E> reflector, Method method, MethodHandle handle) {
+		DefaultMethod(EntityReflector<E> reflector, Method method, MethodHandle handle) {
 			super(reflector, method);
 			theHandle = handle;
 		}
 
 		@Override
-		public R invoke(E proxy, Object[] args, IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter) throws Throwable {
+		protected R invokeLocal(E proxy, Object[] args, IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter)
+			throws Throwable {
 			if (theHandle == null)
 				throw new IllegalStateException("Unable to reflectively invoke default method " + getInvokable());
 			synchronized (theHandle) {
@@ -535,14 +627,45 @@ public class EntityReflector<E> {
 	public static class CustomMethod<E, R> extends MethodInterpreter<E, R> {
 		private BiFunction<? super E, Object[], R> theInterpreter;
 
-		public CustomMethod(EntityReflector<E> reflector, Method method, BiFunction<? super E, Object[], R> interpreter) {
+		CustomMethod(EntityReflector<E> reflector, Method method, BiFunction<? super E, Object[], R> interpreter) {
 			super(reflector, method);
 			theInterpreter = interpreter;
 		}
 
 		@Override
-		public R invoke(E proxy, Object[] args, IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter) {
+		protected R invokeLocal(E proxy, Object[] args, IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter) {
 			return theInterpreter.apply(proxy, args);
+		}
+	}
+
+	public static class ObjectMethodWrapper<E, R> extends MethodInterpreter<E, R> {
+		private final MethodInterpreter<Object, R> theObjectMethod;
+
+		ObjectMethodWrapper(EntityReflector<E> reflector, MethodInterpreter<Object, R> objectMethod) {
+			super(reflector, objectMethod.getMethod());
+			theObjectMethod = objectMethod;
+		}
+
+		public MethodInterpreter<Object, R> getObjectMethod() {
+			return theObjectMethod;
+		}
+
+		@Override
+		protected R invokeLocal(E proxy, Object[] args, IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter)
+			throws Throwable {
+			return theObjectMethod.invokeLocal(proxy, args, fieldGetter, fieldSetter);
+		}
+	}
+
+	public static class SuperDelegateMethod<E, R> extends MethodInterpreter<E, R> {
+		public SuperDelegateMethod(EntityReflector<E> reflector, Method method) {
+			super(reflector, method);
+		}
+
+		@Override
+		protected R invokeLocal(E proxy, Object[] args, IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter)
+			throws Throwable {
+			throw new IllegalStateException("No super method set");
 		}
 	}
 
@@ -555,7 +678,7 @@ public class EntityReflector<E> {
 	public static MethodInterpreter<Object, Void> DEFAULT_FINALIZE;
 	public static MethodInterpreter<Object, Object> DEFAULT_CLONE;
 	public static MethodInterpreter<Object, Class<?>> DEFAULT_GET_CLASS; // Does this get delegated to here?
-	public static final NavigableSet<MethodInterpreter<Object, ?>> DEFAULT_OBJECT_METHODS;
+	public static final Map<Method, MethodInterpreter<Object, ?>> DEFAULT_OBJECT_METHODS;
 
 	static {
 		Method equals, hashCode, toString, notify, notifyAll, wait, finalize, clone, getClass;
@@ -572,9 +695,11 @@ public class EntityReflector<E> {
 		} catch (NoSuchMethodException | SecurityException e) {
 			throw new IllegalStateException("Could not find Object methods!", e);
 		}
+		Map<Method, MethodInterpreter<Object, ?>> defaultObjectMethods = new LinkedHashMap<>();
 		DEFAULT_EQUALS = new MethodInterpreter<Object, Boolean>(null, equals) {
 			@Override
-			public Boolean invoke(Object proxy, Object[] args, IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter) {
+			protected Boolean invokeLocal(Object proxy, Object[] args, IntFunction<Object> fieldGetter,
+				BiConsumer<Integer, Object> fieldSetter) {
 				if (proxy == args[0])
 					return true;
 				else if (args[0] == null || !Proxy.isProxyClass(args[0].getClass()))
@@ -582,8 +707,8 @@ public class EntityReflector<E> {
 				InvocationHandler handler = Proxy.getInvocationHandler(args[0]);
 				if (!(handler instanceof EntityReflector.ProxyMethodHandler))
 					return false;
-				EntityReflector<?>.ProxyMethodHandler p = (EntityReflector<?>.ProxyMethodHandler) Proxy.getInvocationHandler(proxy);
-				EntityReflector<?>.ProxyMethodHandler other = (EntityReflector<?>.ProxyMethodHandler) Proxy.getInvocationHandler(args[0]);
+				EntityReflector<?>.ProxyMethodHandler p = getHandler(proxy);
+				EntityReflector<?>.ProxyMethodHandler other = (EntityReflector<?>.ProxyMethodHandler) handler;
 				if (p.getReflector() != other.getReflector())
 					return false;
 				else if (p.getReflector().getIdFields().isEmpty())
@@ -595,10 +720,12 @@ public class EntityReflector<E> {
 				return true;
 			}
 		};
+		defaultObjectMethods.put(equals, DEFAULT_EQUALS);
 		DEFAULT_HASH_CODE = new MethodInterpreter<Object, Integer>(null, hashCode) {
 			@Override
-			public Integer invoke(Object proxy, Object[] args, IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter) {
-				EntityReflector<?>.ProxyMethodHandler p = (EntityReflector<?>.ProxyMethodHandler) Proxy.getInvocationHandler(proxy);
+			protected Integer invokeLocal(Object proxy, Object[] args, IntFunction<Object> fieldGetter,
+				BiConsumer<Integer, Object> fieldSetter) {
+				EntityReflector<?>.ProxyMethodHandler p = getHandler(proxy);
 				if (p.getReflector().getIdFields().isEmpty())
 					return System.identityHashCode(proxy);
 				Object[] idValues = new Object[p.getReflector().getIdFields().size()];
@@ -609,10 +736,12 @@ public class EntityReflector<E> {
 				return Objects.hash(idValues);
 			}
 		};
+		defaultObjectMethods.put(hashCode, DEFAULT_HASH_CODE);
 		DEFAULT_TO_STRING = new MethodInterpreter<Object, String>(null, toString) {
 			@Override
-			public String invoke(Object proxy, Object[] args, IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter) {
-				EntityReflector<?>.ProxyMethodHandler p = (EntityReflector<?>.ProxyMethodHandler) Proxy.getInvocationHandler(proxy);
+			protected String invokeLocal(Object proxy, Object[] args, IntFunction<Object> fieldGetter,
+				BiConsumer<Integer, Object> fieldSetter) {
+				EntityReflector<?>.ProxyMethodHandler p = getHandler(proxy);
 				StringBuilder str = new StringBuilder(p.getReflector().theRawType.getSimpleName()).append(": ");
 				for (int i = 0; i < p.getReflector().theFields.keySet().size(); i++) {
 					if (i > 0)
@@ -622,24 +751,29 @@ public class EntityReflector<E> {
 				return str.toString();
 			}
 		};
+		defaultObjectMethods.put(toString, DEFAULT_TO_STRING);
 		DEFAULT_NOTIFY = new MethodInterpreter<Object, Void>(null, notify) {
 			@Override
-			public Void invoke(Object proxy, Object[] args, IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter) {
+			protected Void invokeLocal(Object proxy, Object[] args, IntFunction<Object> fieldGetter,
+				BiConsumer<Integer, Object> fieldSetter) {
 				Proxy.getInvocationHandler(proxy).notify();
 				return null;
 			}
 		};
+		defaultObjectMethods.put(notify, DEFAULT_NOTIFY);
 		DEFAULT_NOTIFY_ALL = new MethodInterpreter<Object, Void>(null, notifyAll) {
 			@Override
-			public Void invoke(Object proxy, Object[] args, IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter) {
+			protected Void invokeLocal(Object proxy, Object[] args, IntFunction<Object> fieldGetter,
+				BiConsumer<Integer, Object> fieldSetter) {
 				Proxy.getInvocationHandler(proxy).notifyAll();
 				return null;
 			}
 		};
+		defaultObjectMethods.put(notifyAll, DEFAULT_NOTIFY_ALL);
 		DEFAULT_WAIT = new MethodInterpreter<Object, Void>(null, wait) {
 			@Override
-			public Void invoke(Object proxy, Object[] args, IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter)
-				throws InterruptedException {
+			protected Void invokeLocal(Object proxy, Object[] args, IntFunction<Object> fieldGetter,
+				BiConsumer<Integer, Object> fieldSetter) throws InterruptedException {
 				InvocationHandler handler = Proxy.getInvocationHandler(proxy);
 				if (args.length == 0)
 					handler.wait();
@@ -650,45 +784,61 @@ public class EntityReflector<E> {
 				return null;
 			}
 		};
+		defaultObjectMethods.put(wait, DEFAULT_WAIT);
 		DEFAULT_FINALIZE = new MethodInterpreter<Object, Void>(null, finalize) {
 			@Override
-			public Void invoke(Object proxy, Object[] args, IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter) {
+			protected Void invokeLocal(Object proxy, Object[] args, IntFunction<Object> fieldGetter,
+				BiConsumer<Integer, Object> fieldSetter) {
 				return null;
 			}
 		};
+		defaultObjectMethods.put(finalize, DEFAULT_FINALIZE);
 		DEFAULT_CLONE = new MethodInterpreter<Object, Object>(null, clone) {
 			@Override
-			public Object invoke(Object proxy, Object[] args, IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter)
-				throws CloneNotSupportedException {
+			protected Object invokeLocal(Object proxy, Object[] args, IntFunction<Object> fieldGetter,
+				BiConsumer<Integer, Object> fieldSetter) throws CloneNotSupportedException {
 				throw new CloneNotSupportedException("Cannot clone proxies");
 			}
 		};
+		defaultObjectMethods.put(clone, DEFAULT_CLONE);
 		DEFAULT_GET_CLASS = new MethodInterpreter<Object, Class<?>>(null, getClass) {
 			@Override
-			public Class<?> invoke(Object proxy, Object[] args, IntFunction<Object> fieldGetter, BiConsumer<Integer, Object> fieldSetter) {
-				EntityReflector<?>.ProxyMethodHandler p = (EntityReflector<?>.ProxyMethodHandler) Proxy.getInvocationHandler(proxy);
-				return p.getReflector().theRawType;
+			protected Class<?> invokeLocal(Object proxy, Object[] args, IntFunction<Object> fieldGetter,
+				BiConsumer<Integer, Object> fieldSetter) {
+				return getHandler(proxy).getReflector().theRawType;
 			}
 		};
-		NavigableSet<MethodInterpreter<Object, ?>> defaultObjectMethods = new TreeSet<>(MethodInterpreter::compareTo);
-		defaultObjectMethods.addAll(Arrays.asList(DEFAULT_EQUALS, DEFAULT_HASH_CODE, DEFAULT_TO_STRING, //
-			DEFAULT_NOTIFY, DEFAULT_NOTIFY_ALL, DEFAULT_WAIT, DEFAULT_FINALIZE, DEFAULT_CLONE, DEFAULT_GET_CLASS));
-		DEFAULT_OBJECT_METHODS = Collections.unmodifiableNavigableSet(new TreeSet<>(defaultObjectMethods));
+		defaultObjectMethods.put(getClass, DEFAULT_GET_CLASS);
+		DEFAULT_OBJECT_METHODS = Collections.unmodifiableMap(defaultObjectMethods);
 	}
 
+	private final List<EntityReflector<? super E>> theSupers;
+	private final List<Map<ElementId, MethodInterpreter<E, ?>>> theSuperMethodMappings;
+	final List<List<MethodInterpreter<E, ?>>> theSuperFieldGetters;
+	final List<List<MethodInterpreter<E, ?>>> theSuperFieldSetters;
+	private final Map<Class<?>, SuperPath> theSuperPaths;
 	private final TypeToken<E> theType;
 	private final Class<?> theRawType;
 	private final Function<Method, String> theGetterFilter;
 	private final Function<Method, String> theSetterFilter;
-	private final QuickMap<String, ReflectedField<? super E, ?>> theFields;
-	private final BetterSortedSet<MethodInterpreter<? super E, ?>> theMethods;
+	private final QuickMap<String, ReflectedField<E, ?>> theFields;
+	private final BetterSortedSet<MethodInterpreter<E, ?>> theMethods;
 	private final Set<Integer> theIdFields;
 	private final E theProxy;
 	private final MethodRetrievingHandler theProxyHandler;
 
-	private EntityReflector(TypeToken<E> type, Class<E> raw, Function<Method, String> getterFilter, Function<Method, String> setterFilter,
+	private EntityReflector(Map<TypeToken<?>, EntityReflector<?>> supers, TypeToken<E> type, Class<E> raw,
+		Function<Method, String> getterFilter, Function<Method, String> setterFilter,
 		Map<Method, ? extends BiFunction<? super E, Object[], ?>> customMethods, Set<String> idFieldNames,
 			List<EntityReflectionMessage> messages) {
+		theSupers = (List<EntityReflector<? super E>>) (List<?>) QommonsUtils.map(Arrays.asList(raw.getGenericInterfaces()),
+			intf -> supers.computeIfAbsent(type.resolveType(intf), intfT -> {
+				return new EntityReflector<>(supers, (TypeToken<E>) intfT, (Class<E>) TypeTokens.getRawType(intfT), // Generics hack
+					getterFilter, setterFilter, customMethods, idFieldNames, messages);
+			}), true);
+		theSuperMethodMappings = QommonsUtils.map(theSupers, r -> new LinkedHashMap<>(), true);
+		theSuperFieldGetters = QommonsUtils.map(theSupers, r -> new ArrayList<>(r.getFields().keySize()), true);
+		theSuperFieldSetters = QommonsUtils.map(theSupers, r -> new ArrayList<>(r.getFields().keySize()), true);
 		theType = type;
 		theRawType = TypeTokens.getRawType(theType);
 		theGetterFilter = getterFilter == null ? new PrefixFilter("get", 0) : getterFilter;
@@ -697,10 +847,41 @@ public class EntityReflector<E> {
 		// First, find all the fields by their getters
 		Map<String, Method> fieldGetters = new LinkedHashMap<>();
 		findFields(type, getterFilter, fieldGetters, customMethods == null ? Collections.emptySet() : customMethods.keySet());
-		QuickMap<String, ReflectedField<? super E, ?>> fields = QuickSet.of(fieldGetters.keySet()).createMap();
+		QuickMap<String, ReflectedField<E, ?>> fields = QuickSet.of(fieldGetters.keySet()).createMap();
 		Set<Integer> idFields = new LinkedHashSet<>();
 		// Find ID fields
-		if (idFieldNames != null) {
+		if (!theSupers.isEmpty()) {
+			// If any of the super types are identified, all of its fields must either be present in all other identified super types
+			// (the types are not checked since this should be done by the compiler)
+			// or the field needs to be defaulted or customized in the sub type as either a constant or a function of other ID fields
+			// At the moment I don't check that last constraint--only that the field getter is defaulted or customized
+			for (int i = 0; i < theSupers.size(); i++) {
+				if (theSupers.get(i).getIdFields().isEmpty())
+					continue;
+				for (int id : theSupers.get(i).getIdFields()) {
+					ReflectedField<? super E, ?> fieldI = theSupers.get(i).getFields().get(id);
+					int fieldIdx = fields.keyIndexTolerant(fieldI.getName());
+					for (int j = 0; j < theSupers.size(); j++) {
+						if (i == j)
+							continue;
+						if (theSupers.get(j).getIdFields().isEmpty())
+							continue;
+						ReflectedField<? super E, ?> fieldJ = theSupers.get(j).getFields().getIfPresent(fieldI.getName());
+						if (fieldJ == null) {
+							if (fieldIdx >= 0)
+								throw new IllegalArgumentException("ID signatures of super types" + theSupers.get(i) + " and "
+									+ theSupers.get(j) + " for sub-type " + theType + " do not match: field " + fieldI
+									+ " is not present in " + theSupers.get(j) + " and must be defaulted or customized in " + this);
+						}
+					}
+					if (fieldIdx >= 0)
+						idFields.add(fieldIdx);
+				}
+			}
+		}
+		if (!idFields.isEmpty()) {
+			// Inherited from super type(s)
+		} else if (idFieldNames != null) {
 			for (String id : idFieldNames) {
 				int i = fields.keyIndexTolerant(id);
 				if (i < 0)
@@ -725,18 +906,21 @@ public class EntityReflector<E> {
 				}
 			}
 		}
-		BetterSortedSet<MethodInterpreter<? super E, ?>> methods = new BetterTreeSet<>(false, MethodInterpreter::compareTo);
-		methods.addAll(DEFAULT_OBJECT_METHODS);
+		BetterSortedSet<MethodInterpreter<E, ?>> methods = new BetterTreeSet<>(false, MethodInterpreter::compareTo);
 		for (int i = 0; i < fields.keySize(); i++) {
 			String fieldName = fields.keySet().get(i);
 			Method getter = fieldGetters.get(fieldName);
 			fields.put(i, new ReflectedField<>(this, fields.keySet().get(i), i, idFields.contains(i), getter));
-			methods.add(fields.get(i).getGetter());
+			fields.get(i).getGetter().setElement(methods.addElement(fields.get(i).getGetter(), false).getElementId());
 		}
 		theIdFields = idFields.isEmpty() ? Collections.emptySet() : Collections.unmodifiableSet(idFields);
 
-		populateMethods(this, theType, theGetterFilter, theSetterFilter, fields, methods, //
+		Map<Class<?>, SuperPath> superPaths = new HashMap<>();
+		populateMethods(theType, superPaths, fields, methods, //
 			customMethods == null ? Collections.emptyMap() : customMethods, messages);
+		populateMethods((TypeToken<E>) TypeTokens.get().OBJECT, superPaths, // Generics hack
+			fields, methods, customMethods, messages);
+		theSuperPaths = Collections.unmodifiableMap(superPaths);
 		theFields = fields.unmodifiable();
 		theMethods = BetterCollections.unmodifiableSortedSet(methods);
 
@@ -763,17 +947,19 @@ public class EntityReflector<E> {
 				getterFilter, fieldGetters, customMethods);
 	}
 
-	private static <T> void populateMethods(EntityReflector<T> reflector, TypeToken<T> type, //
-		Function<Method, String> getterFilter, Function<Method, String> setterFilter, //
-		QuickMap<String, ReflectedField<? super T, ?>> fields, BetterSortedSet<MethodInterpreter<? super T, ?>> methods, //
-		Map<Method, ? extends BiFunction<? super T, Object[], ?>> customMethods, List<EntityReflectionMessage> errors) {
-		Class<T> clazz = TypeTokens.getRawType(type);
+	private void populateMethods(TypeToken<E> type, Map<Class<?>, SuperPath> superPaths, //
+		QuickMap<String, ReflectedField<E, ?>> fields, BetterSortedSet<MethodInterpreter<E, ?>> methods, //
+		Map<Method, ? extends BiFunction<? super E, Object[], ?>> customMethods, List<EntityReflectionMessage> errors) {
+		Class<E> clazz = TypeTokens.getRawType(type);
 		if (clazz == null)
 			return;
 		for (Method m : clazz.getDeclaredMethods()) {
-			BiFunction<? super T, Object[], ?> custom = customMethods.get(m);
+			if (methods.search(method -> -method.compare(m), SortedSearchFilter.OnlyMatch) != null)
+				continue; // Overridden by a subclass and handled
+			BiFunction<? super E, Object[], ?> custom = customMethods.get(m);
 			if (custom != null) {
-				methods.add(new CustomMethod<>(reflector, m, custom));
+				CustomMethod<E, ?> method = new CustomMethod<>(this, m, custom);
+				method.setElement(methods.addElement(method, false).getElementId());
 				continue;
 			} else if (m.isDefault()) {
 				MethodHandle handle;
@@ -789,16 +975,22 @@ public class EntityReflector<E> {
 						continue;
 					}
 				}
-				methods.add(new DefaultMethod<>(reflector, m, handle));
+				DefaultMethod<E, ?> method = new DefaultMethod<>(this, m, handle);
+				method.setElement(methods.addElement(method, false).getElementId());
 				continue;
 			}
-			String fieldName = getterFilter.apply(m);
-			if (fieldName != null) {
-				continue; // Already added
+			MethodInterpreter<Object, ?> objectMethod = DEFAULT_OBJECT_METHODS.get(m);
+			if (objectMethod != null) {
+				MethodInterpreter<E, ?> method = new ObjectMethodWrapper<>(this, objectMethod);
+				method.setElement(methods.addElement(method, false).getElementId());
+				continue;
 			}
-			fieldName = setterFilter.apply(m);
+			String fieldName = theGetterFilter.apply(m);
+			if (fieldName != null)
+				continue; // Already added
+			fieldName = theSetterFilter.apply(m);
 			if (fieldName != null) {
-				ReflectedField<? super T, ?> field = fields.get(fieldName);
+				ReflectedField<? super E, ?> field = fields.get(fieldName);
 				if (field == null) {
 					errors.add(new EntityReflectionMessage(EntityReflectionMessageLevel.ERROR, m,
 						"No getter found for setter " + m + " of field " + fieldName));
@@ -822,7 +1014,8 @@ public class EntityReflector<E> {
 						"Return type of setter " + m + " cannot be satisfied for this class"));
 					continue;
 				}
-				methods.add(new FieldSetter<>(reflector, m, (ReflectedField<T, ?>) field, setterReturnType));
+				FieldSetter<E, ?> method = new FieldSetter<>(this, m, (ReflectedField<E, ?>) field, setterReturnType);
+				method.setElement(methods.addElement(method, false).getElementId());
 				continue;
 			}
 			if (clazz != Object.class) {
@@ -830,10 +1023,37 @@ public class EntityReflector<E> {
 					"Method " + m + " is not default or a recognized getter or setter, and its implementation is not provided"));
 			}
 		}
-		for (Class<?> intf : clazz.getInterfaces())
-			populateMethods(reflector, (TypeToken<T>) type.resolveType(intf), // Generics hack
-				getterFilter, setterFilter, //
-				fields, methods, customMethods, errors);
+		for (int i = 0; i < theSupers.size(); i++) {
+			populateSuperMethods(fields, methods, theSupers.get(i), i, errors);
+			theSuperPaths.put(theSupers.get(i).theRawType, new SuperPath(i, null));
+			int superI = i;
+			for (Map.Entry<Class<?>, SuperPath> superSuper : theSupers.get(i).theSuperPaths.entrySet()) {
+				theSuperPaths.computeIfAbsent(superSuper.getKey(), c -> new SuperPath(superI, superSuper.getValue()));
+			}
+		}
+	}
+
+	private <S> void populateSuperMethods(QuickMap<String, ReflectedField<E, ?>> fields, BetterSortedSet<MethodInterpreter<E, ?>> methods,
+		EntityReflector<S> superR, int superIndex, List<EntityReflectionMessage> errors) {
+		for (CollectionElement<MethodInterpreter<S, ?>> superMethod : superR.getMethods().elements()) {
+			MethodInterpreter<E, ?> subMethod = methods.searchValue(superMethod.get(), SortedSearchFilter.OnlyMatch);
+			if (subMethod == null) {
+				subMethod = new SuperDelegateMethod<>(this, superMethod.get().getMethod());
+				subMethod.setElement(methods.addElement(subMethod, false).getElementId());
+			}
+			((MethodInterpreter<E, Object>) subMethod).setSuper(superIndex, (MethodInterpreter<? super E, Object>) superMethod.get());
+			theSuperMethodMappings.get(superIndex).put(superMethod.getElementId(), subMethod);
+		}
+		for (ReflectedField<S, ?> field : superR.getFields().allValues()) {
+			theSuperFieldGetters.get(superIndex).add(theSuperMethodMappings.get(superIndex).get(field.getGetter().getMethodElement()));
+			if (field.getSetter() != null)
+				theSuperFieldSetters.get(superIndex).add(theSuperMethodMappings.get(superIndex).get(field.getSetter().getMethodElement()));
+		}
+	}
+
+	/** @return The reflectors for each of this reflector's type's super types */
+	public List<EntityReflector<? super E>> getSuper() {
+		return theSupers;
 	}
 
 	/** @return The interface entity type */
@@ -842,7 +1062,7 @@ public class EntityReflector<E> {
 	}
 
 	/** @return This entity's fields */
-	public QuickMap<String, ReflectedField<? super E, ?>> getFields() {
+	public QuickMap<String, ReflectedField<E, ?>> getFields() {
 		return theFields;
 	}
 
@@ -851,14 +1071,31 @@ public class EntityReflector<E> {
 		return theIdFields;
 	}
 
-	public MethodInterpreter<? super E, ?> getInterpreter(Method method) {
-		return theMethods.searchValue(m -> -m.compare(method), SortedSearchFilter.OnlyMatch);
+	/** @return All of this reflector's method interpreters */
+	public BetterSortedSet<MethodInterpreter<E, ?>> getMethods() {
+		return theMethods;
 	}
 
-	public <R> MethodInterpreter<? super E, R> getInterpreter(Function<? super E, R> method) throws IllegalArgumentException {
+	/**
+	 * @param method A method on this type
+	 * @return The interpreter for the given method in this reflector
+	 */
+	public MethodInterpreter<E, ?> getInterpreter(Method method) {
+		if (!method.getDeclaringClass().isAssignableFrom(theRawType))
+			throw new IllegalArgumentException("Method " + method + " cannot be applied to " + theType);
+		MethodSignature sig = new MethodSignature(method);
+		return theMethods.searchValue(m -> -m.compare(sig), SortedSearchFilter.OnlyMatch);
+	}
+
+	/**
+	 * @param method A function invoking a method on this type
+	 * @return The interpreter for the method invoked. If the function invokes multiple methods, this will be first method invoked
+	 * @throws IllegalArgumentException If the function does not invoke a method on this type
+	 */
+	public <R> MethodInterpreter<E, R> getInterpreter(Function<? super E, R> method) throws IllegalArgumentException {
 		Method invoked;
 		synchronized (this) {
-			theProxyHandler.reset();
+			theProxyHandler.reset(null, true);
 			method.apply(theProxy);
 			invoked = theProxyHandler.getInvoked();
 		}
@@ -867,25 +1104,34 @@ public class EntityReflector<E> {
 		MethodInterpreter<? super E, ?> found = getInterpreter(invoked);
 		if (found == null)
 			throw new IllegalStateException("Method " + invoked + " not found");
-		return (MethodInterpreter<? super E, R>) found;
-	}
-
-	public <F> ReflectedField<? super E, F> getField(Function<? super E, F> fieldGetter) throws IllegalArgumentException {
-		MethodInterpreter<? super E, F> method = getInterpreter(fieldGetter);
-		if (!(method instanceof FieldGetter))
-			throw new IllegalArgumentException(method + " is not a field getter");
-		return ((FieldGetter<? super E, F>) method).getField();
+		return (MethodInterpreter<E, R>) found;
 	}
 
 	/**
 	 * @param fieldGetter A function invoking a field getter on this type
-	 * @return The index in {@link #getFields()} of the field invoked. If the function invokes multiple methods, this will be last method
-	 *         invoked
-	 * @throws IllegalArgumentException If the function does not invoke a field getter or the method the function invokes last is not an
-	 *         included getter method
+	 * @return The field of the getter invoked. If the function invokes multiple field getters, the first will be used
+	 * @throws IllegalArgumentException If the function does not invoke a field getter
 	 */
-	public int getFieldIndex(Function<? super E, ?> fieldGetter) throws IllegalArgumentException {
-		return getField(fieldGetter).getFieldIndex();
+	public <F> ReflectedField<E, F> getField(Function<? super E, F> fieldGetter) throws IllegalArgumentException {
+		Method invoked, first;
+		synchronized (this) {
+			theProxyHandler.reset(m -> {
+				String fieldName = theGetterFilter.apply(m);
+				return fieldName != null && theFields.keySet().contains(fieldName);
+			}, true);
+			fieldGetter.apply(theProxy);
+			invoked = theProxyHandler.getInvoked();
+			first = theProxyHandler.getFirstNoFilter();
+		}
+		if (invoked == null) {
+			if (first != null)
+				throw new IllegalArgumentException(first + " is not a field getter");
+			throw new IllegalArgumentException("No " + theType + " method invoked");
+		}
+		MethodInterpreter<? super E, F> method = (MethodInterpreter<? super E, F>) getInterpreter(invoked);
+		if (!(method instanceof FieldGetter))
+			throw new IllegalArgumentException(method + " is not a field getter");
+		return ((FieldGetter<E, F>) method).getField();
 	}
 
 	/**
@@ -900,6 +1146,11 @@ public class EntityReflector<E> {
 		Class<E> rawType = TypeTokens.getRawType(theType);
 		return (E) Proxy.newProxyInstance(rawType.getClassLoader(), new Class[] { rawType },
 			new ProxyMethodHandler(fieldGetter, fieldSetter));
+	}
+
+	@Override
+	public String toString() {
+		return theType.toString();
 	}
 
 	/**
@@ -925,14 +1176,20 @@ public class EntityReflector<E> {
 		return ((ProxyMethodHandler) Proxy.getInvocationHandler(proxy)).getAssociated(key);
 	}
 
-	public Object getField(E proxy, int fieldIndex) {
-		ProxyMethodHandler handler = (EntityReflector<E>.ProxyMethodHandler) Proxy.getInvocationHandler(proxy);
-		return handler.theFieldGetter.apply(fieldIndex);
+	static EntityReflector<?>.ProxyMethodHandler getHandler(Object proxy) {
+		return (EntityReflector<?>.ProxyMethodHandler) Proxy.getInvocationHandler(proxy);
 	}
 
-	public void setField(E proxy, int fieldIndex, Object value) {
-		ProxyMethodHandler handler = (EntityReflector<E>.ProxyMethodHandler) Proxy.getInvocationHandler(proxy);
-		handler.theFieldSetter.accept(fieldIndex, value);
+	<R> MethodInterpreter<E, R> findMethodFromSuper(MethodInterpreter<? super E, R> superMethod) {
+		for (int i = 0; i < theSupers.size(); i++) {
+			if (theSupers.get(i) == superMethod.getReflector())
+				return (MethodInterpreter<E, R>) theSuperMethodMappings.get(i).get(superMethod.getMethodElement());
+			MethodInterpreter<? super E, R> superMethod_i = ((EntityReflector<E>) theSupers.get(i))// Generics hack
+				.findMethodFromSuper(superMethod);
+			if (superMethod_i != null)
+				return (MethodInterpreter<E, R>) theSuperMethodMappings.get(i).get(superMethod_i.getMethodElement());
+		}
+		throw new IllegalArgumentException("Method " + superMethod + " cannot be applied to " + theType);
 	}
 
 	private class ProxyMethodHandler implements InvocationHandler {
@@ -961,10 +1218,21 @@ public class EntityReflector<E> {
 
 		@Override
 		public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-			MethodInterpreter<? super E, ?> interpreter = getInterpreter(method);
+			MethodInterpreter<E, ?> interpreter = getInterpreter(method);
 			if (interpreter == null)
 				throw new IllegalStateException("Method " + method + " not found!");
-			return interpreter.invoke((E) proxy, args, theFieldGetter, theFieldSetter);
+			SuperPath path;
+			if (getSuper().isEmpty() || method.getDeclaringClass() == Object.class || method.getDeclaringClass() == theRawType)
+				path = null;
+			else
+				path = theSuperPaths.get(method.getDeclaringClass());
+			return interpreter.invoke((E) proxy, path, args, theFieldGetter, theFieldSetter);
+		}
+
+		protected <T> T invokeOnType(E proxy, MethodInterpreter<? super E, T> method, Object[] args) throws Throwable {
+			if (method.getReflector() != getReflector())
+				method = findMethodFromSuper(method);
+			return ((MethodInterpreter<E, T>) method).invoke(proxy, null, args, theFieldGetter, theFieldSetter);
 		}
 	}
 }

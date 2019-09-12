@@ -9,6 +9,7 @@ import java.util.function.Function;
 import java.util.function.IntFunction;
 
 import org.observe.util.EntityReflector;
+import org.observe.util.EntityReflector.ReflectedField;
 import org.observe.util.TypeTokens;
 import org.qommons.TriFunction;
 import org.qommons.collect.CollectionElement;
@@ -24,8 +25,7 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 		theReflector = reflector;
 		QuickMap<String, EntityConfiguredValueField<? super E, ?>> fields = theReflector.getFields().keySet().createMap();
 		for (int i = 0; i < fields.keySet().size(); i++)
-			fields.put(i, new EntityConfiguredValueField<>(this, i, fields.keySet().get(i),
-				theReflector.getFields().get(i).getGetter().getReturnType()));
+			fields.put(i, new EntityConfiguredValueField<>(this, theReflector.getFields().get(i)));
 		theFields = fields.unmodifiable();
 	}
 
@@ -45,8 +45,9 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 	}
 
 	@Override
-	public int getFieldIndex(Function<? super E, ?> fieldGetter) {
-		return theReflector.getFieldIndex(fieldGetter);
+	public <F> ConfiguredValueField<? super E, F> getField(Function<? super E, F> fieldGetter) {
+		ReflectedField<? super E, F> field = theReflector.getField(fieldGetter);
+		return (ConfiguredValueField<? super E, F>) theFields.get(field.getFieldIndex());
 	}
 
 	@Override
@@ -73,15 +74,11 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 
 	static class EntityConfiguredValueField<E, F> implements ConfiguredValueField<E, F> {
 		private final EntityConfiguredValueType<E> theValueType;
-		private final int theIndex;
-		private final String theName;
-		private final TypeToken<F> theFieldType;
+		private final EntityReflector.ReflectedField<? super E, F> theField;
 
-		EntityConfiguredValueField(EntityConfiguredValueType<E> valueType, int index, String name, TypeToken<F> fieldType) {
+		EntityConfiguredValueField(EntityConfiguredValueType<E> valueType, EntityReflector.ReflectedField<? super E, F> field) {
 			theValueType = valueType;
-			theIndex = index;
-			theName = name;
-			theFieldType = fieldType;
+			theField = field;
 		}
 
 		@Override
@@ -91,32 +88,32 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 
 		@Override
 		public String getName() {
-			return theName;
+			return theField.getName();
 		}
 
 		@Override
 		public TypeToken<F> getFieldType() {
-			return theFieldType;
+			return theField.getType();
 		}
 
 		@Override
 		public int getIndex() {
-			return theIndex;
+			return theField.getFieldIndex();
 		}
 
 		@Override
 		public F get(E entity) {
-			return (F) theValueType.theReflector.getField(entity, theIndex);
+			return theField.get(entity);
 		}
 
 		@Override
 		public void set(E entity, F fieldValue) throws UnsupportedOperationException {
-			theValueType.theReflector.setField(entity, theIndex, fieldValue);
+			theField.set(entity, fieldValue);
 		}
 
 		@Override
 		public String toString() {
-			return theValueType + "." + theName + " (" + theFieldType + ")";
+			return theField.toString();
 		}
 	}
 
@@ -171,9 +168,9 @@ public class EntityConfiguredValueType<E> implements ConfiguredValueType<E> {
 		}
 
 		@Override
-		public <F> ValueCreator<E> with(Function<? super E, F> field, F value) throws IllegalArgumentException {
-			int fieldIndex = theType.theReflector.getFieldIndex(field);
-			return with((ConfiguredValueField<? super E, F>) theType.getFields().get(fieldIndex), value);
+		public <F> ValueCreator<E> with(Function<? super E, F> fieldGetter, F value) throws IllegalArgumentException {
+			ConfiguredValueField<? super E, F> field = theType.getField(fieldGetter);
+			return with(field, value);
 		}
 
 		@Override
