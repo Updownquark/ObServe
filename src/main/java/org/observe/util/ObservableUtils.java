@@ -85,7 +85,7 @@ public class ObservableUtils {
 					ObservableCollectionLinkEvent linkEvt = new ObservableCollectionLinkEvent(c1, evt.getRootCausable());
 					return c2.lock(true, linkEvt);
 				});
-			// The inner transaction is so that each c2 change is causably linked to a particular c1 change
+			// The inner transaction is so that each c1 change is causably linked to a particular c2 change
 			ObservableCollectionLinkEvent linkEvt = new ObservableCollectionLinkEvent(c1, evt);
 			try (Transaction linkEvtT = Causable.use(linkEvt);
 				Transaction evtT = c2.lock(true, evt.getType() != CollectionChangeType.set, linkEvt)) {
