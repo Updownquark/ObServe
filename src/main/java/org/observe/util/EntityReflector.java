@@ -96,6 +96,9 @@ public class EntityReflector<E> {
 		private Set<String> theIdFields;
 		private List<EntityReflectionMessage> theMessages;
 
+		private MethodRetrievingHandler theProxyHandler;
+		private E theProxy;
+
 		private Builder(TypeToken<E> type) {
 			theRawType = TypeTokens.getRawType(type);
 			if (theRawType == null || !theRawType.isInterface())
@@ -155,6 +158,23 @@ public class EntityReflector<E> {
 				theCustomMethods = new LinkedHashMap<>();
 			theCustomMethods.put(method, implementation);
 			return this;
+		}
+
+		public <R> Builder<E> withCustomMethod(Function<? super E, R> method, BiFunction<? super E, Object[], R> implementation) {
+			if (theProxyHandler == null) {
+				theProxyHandler = new MethodRetrievingHandler();
+				theProxy = (E) Proxy.newProxyInstance(ObservableEntityUtils.class.getClassLoader(), new Class[] { theRawType },
+					theProxyHandler);
+			}
+			Method m;
+			synchronized (this) {
+				theProxyHandler.reset(null, true);
+				method.apply(theProxy);
+				m = theProxyHandler.getInvoked();
+			}
+			if (m == null)
+				throw new IllegalArgumentException("No " + theType + " method invoked");
+			return withCustomMethod(m, implementation);
 		}
 
 		public Builder<E> withId(String... ids) {
@@ -458,9 +478,11 @@ public class EntityReflector<E> {
 			throws Throwable {
 			if (path == null)
 				return invokeLocal(proxy, args, fieldGetter, fieldSetter);
-			return (R) theSuperMethods[path.index].invoke(proxy, path, args, fieldIdx -> {
+			return (R) theSuperMethods[path.index].invoke(proxy, path.parent, args, fieldIdx -> {
+				if (this instanceof FieldGetter && ((FieldGetter<E, R>) this).getField().getFieldIndex() == fieldIdx)
+					return fieldGetter.apply(fieldIdx);
 				try {
-					return getReflector().theSuperFieldGetters.get(path.index).get(fieldIdx).invokeLocal(proxy, NO_ARGS, fieldGetter,
+					return getReflector().theSuperFieldGetters.get(path.index).get(fieldIdx).invoke(proxy, null, NO_ARGS, fieldGetter,
 						fieldSetter);
 				} catch (RuntimeException | Error e) {
 					throw e;
@@ -468,8 +490,12 @@ public class EntityReflector<E> {
 					throw new IllegalStateException(e);
 				}
 			}, (fieldIdx, value) -> {
+				if (this instanceof FieldSetter && ((FieldSetter<E, ?>) this).getField().getFieldIndex() == fieldIdx) {
+					fieldSetter.accept(fieldIdx, args[0]);
+					return;
+				}
 				try {
-					getReflector().theSuperFieldSetters.get(path.index).get(fieldIdx).invokeLocal(proxy, new Object[] { value },
+					getReflector().theSuperFieldSetters.get(path.index).get(fieldIdx).invoke(proxy, null, new Object[] { value },
 						fieldGetter, fieldSetter);
 				} catch (RuntimeException | Error e) {
 					throw e;
@@ -541,7 +567,10 @@ public class EntityReflector<E> {
 
 		@Override
 		public String toString() {
-			return theMethod.toString(); // Probably do something prettier later
+			StringBuilder str = new StringBuilder().append(theReflector.getType()).append('.').append(theMethod.getName()).append('(');
+			StringUtils.conversational(", ", null).print(str, theParameters, (p, s) -> s.append(p.getName()));
+			str.append(')');
+			return str.toString();
 		}
 	}
 
@@ -1025,10 +1054,10 @@ public class EntityReflector<E> {
 		}
 		for (int i = 0; i < theSupers.size(); i++) {
 			populateSuperMethods(fields, methods, theSupers.get(i), i, errors);
-			theSuperPaths.put(theSupers.get(i).theRawType, new SuperPath(i, null));
+			superPaths.put(theSupers.get(i).theRawType, new SuperPath(i, null));
 			int superI = i;
 			for (Map.Entry<Class<?>, SuperPath> superSuper : theSupers.get(i).theSuperPaths.entrySet()) {
-				theSuperPaths.computeIfAbsent(superSuper.getKey(), c -> new SuperPath(superI, superSuper.getValue()));
+				superPaths.computeIfAbsent(superSuper.getKey(), c -> new SuperPath(superI, superSuper.getValue()));
 			}
 		}
 	}
