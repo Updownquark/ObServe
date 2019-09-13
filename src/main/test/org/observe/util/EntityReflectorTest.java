@@ -22,7 +22,7 @@ public class EntityReflectorTest {
 		void setA(int a);
 
 		default String print() {
-			return "id: " + getId() + ", a=" + getA();
+			return "id=" + getId() + ", a=" + getA();
 		}
 	}
 
@@ -76,7 +76,9 @@ public class EntityReflectorTest {
 			Assert.assertFalse("Should have thrown an exception", true);
 		} catch (UnsupportedOperationException e) {}
 		c1.setC(30);
+		Assert.assertEquals(0, c1.getB());
 		Assert.assertEquals("id=10, a=20, c=30", c1.print());
 		Assert.assertEquals(c1.print(), c1.toString());
+		// TODO
 	}
 }

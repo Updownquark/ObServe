@@ -1067,7 +1067,15 @@ public class EntityReflector<E> {
 		for (CollectionElement<MethodInterpreter<S, ?>> superMethod : superR.getMethods().elements()) {
 			MethodInterpreter<E, ?> subMethod = methods.searchValue(superMethod.get(), SortedSearchFilter.OnlyMatch);
 			if (subMethod == null) {
-				subMethod = new SuperDelegateMethod<>(this, superMethod.get().getMethod());
+				if (superMethod.get() instanceof FieldGetter)
+					subMethod = new FieldGetter<>(this, superMethod.get().getMethod(),
+						fields.get(((FieldGetter<?, ?>) superMethod.get()).getField().getName()));
+				else if (superMethod.get() instanceof FieldSetter)
+					subMethod = new FieldSetter<>(this, superMethod.get().getMethod(),
+						fields.get(((FieldSetter<?, ?>) superMethod.get()).getField().getName()),
+						((FieldSetter<?, ?>) superMethod.get()).getSetterReturnType());
+				else
+					subMethod = new SuperDelegateMethod<>(this, superMethod.get().getMethod());
 				subMethod.setElement(methods.addElement(subMethod, false).getElementId());
 			}
 			((MethodInterpreter<E, Object>) subMethod).setSuper(superIndex, (MethodInterpreter<? super E, Object>) superMethod.get());
