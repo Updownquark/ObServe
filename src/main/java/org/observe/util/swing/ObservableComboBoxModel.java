@@ -15,6 +15,8 @@ import javax.accessibility.AccessibleContext;
 import javax.swing.ComboBoxModel;
 import javax.swing.JComboBox;
 import javax.swing.JList;
+import javax.swing.event.ListDataEvent;
+import javax.swing.event.ListDataListener;
 import javax.swing.plaf.basic.ComboPopup;
 
 import org.observe.ObservableValue;
@@ -22,6 +24,7 @@ import org.observe.SettableValue;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
 import org.observe.util.TypeTokens;
+import org.qommons.Transaction;
 
 /**
  * A combo box model backed by an {@link ObservableCollection}
@@ -124,8 +127,10 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 				String enabled = selected.isEnabled().get();
 				ObservableSwingUtils.onEQ(() -> {
 					callbackLock[0] = true;
-					try {
-						comboBox.setSelectedItem(evt.getNewValue());
+					try (Transaction avT = availableValues.lock(false, null)) {
+						int index = availableValues.indexOf(evt.getNewValue());
+						if (index >= 0)
+							comboBox.setSelectedItem(evt.getNewValue());
 					} finally {
 						callbackLock[0] = false;
 					}
@@ -133,6 +138,51 @@ public class ObservableComboBoxModel<E> extends ObservableListModel<E> implement
 				});
 			}
 		}));
+		// It is possible for a value to change before the availableValues collection changes to include it.
+		// In this case, the above code will find an index of zero
+		// and we need to watch the values to set the selected value when it becomes available
+		ListDataListener comboDataListener = new ListDataListener() {
+			@Override
+			public void intervalAdded(ListDataEvent e) {
+				Object selectedV = selected.get();
+				if (selectedV != null && comboBox.getSelectedItem() != selectedV) {
+					for (int i = e.getIndex0(); i <= e.getIndex1(); i++) {
+						if (comboModel.getElementAt(i) == selectedV) {
+							callbackLock[0] = true;
+							try {
+								comboBox.setSelectedIndex(i);
+							} finally {
+								callbackLock[0] = false;
+							}
+							break;
+						}
+					}
+				}
+			}
+
+			@Override
+			public void intervalRemoved(ListDataEvent e) {}
+
+			@Override
+			public void contentsChanged(ListDataEvent e) {
+				Object selectedV = selected.get();
+				if (selectedV != null && comboBox.getSelectedItem() != selectedV) {
+					for (int i = e.getIndex0(); i <= e.getIndex1(); i++) {
+						if (comboModel.getElementAt(i) == selectedV) {
+							callbackLock[0] = true;
+							try {
+								comboBox.setSelectedIndex(i);
+							} finally {
+								callbackLock[0] = false;
+							}
+							break;
+						}
+					}
+				}
+			}
+		};
+		comboModel.addListDataListener(comboDataListener);
+		subs.add(() -> comboModel.removeListDataListener(comboDataListener));
 		subs.add(selected.isEnabled().changes().act(evt -> ObservableSwingUtils.onEQ(() -> checkEnabled.accept(evt.getNewValue()))));
 
 		// Pretty hacky here, but it's the only way I've found to display tooltips over expanded combo box items
