@@ -816,23 +816,11 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 		public ValueCreator<E> create(ElementId after, ElementId before, boolean first) {
 			if (!isConnected().get())
 				throw new UnsupportedOperationException("Not connected");
-			return new SimpleValueCreator<E>(getType()) {
-				@Override
-				public <F> ValueCreator<E> with(ConfiguredValueField<? super E, F> field, F value) throws IllegalArgumentException {
-					super.with(field, value);
-					theFieldParser.getConfigFormat(field); // Throws an exception if not supported
-					getFieldValues().put(field.getIndex(), value);
-					return this;
-				}
-
+			return new SimpleValueCreator<E>(getFormat().create(getType().getType())) {
 				@Override
 				public CollectionElement<E> create(Consumer<? super E> preAddAction) {
 					return add(cfg -> {
-						try {
-							return getFormat().createInstance(cfg, getFieldValues(), getUntil());
-						} catch (ParseException e) {
-							throw new IllegalStateException("Could not create instance", e);
-						}
+						return createValue(cfg, getUntil());
 					}, after, before, first, element -> {
 						if (preAddAction != null)
 							preAddAction.accept(element.get());

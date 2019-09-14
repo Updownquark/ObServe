@@ -1425,7 +1425,30 @@ public class ObservableConfig implements StructuredTransactable {
 		return pathEls.toArray(new String[pathEls.size()]);
 	}
 
-	private static String parsePathProperties(String pathEl, Map<String, String> properties) {
+	public static ObservableConfigPathElement parsePathElement(String pathEl) {
+		boolean multi;
+		boolean deep = ANY_DEPTH.equals(pathEl);
+		String name;
+		if (deep) {
+			name = "";
+			multi = true;
+		} else {
+			multi = pathEl.length() > 0 && pathEl.charAt(pathEl.length() - 1) == ANY_NAME.charAt(0);
+			if (multi)
+				name = pathEl.substring(0, pathEl.length() - 1);
+			else
+				name = pathEl;
+		}
+		Map<String, String> properties = null;
+		// Quick check to avoid pattern checking on every single path, few of which will have attributes
+		if (name.length() > 0 && name.charAt(name.length() - 1) == '}') {
+			properties = new LinkedHashMap<>();
+			name = parsePathProperties(name, properties);
+		}
+		return new ObservableConfigPathElement(name, properties, multi, deep);
+	}
+
+	public static String parsePathProperties(String pathEl, Map<String, String> properties) {
 		if (pathEl.length() == 0 || pathEl.charAt(pathEl.length() - 1) != '}')
 			return pathEl;
 		int index = pathEl.indexOf('{');

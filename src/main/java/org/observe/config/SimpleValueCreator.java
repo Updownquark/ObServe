@@ -1,57 +1,47 @@
 package org.observe.config;
 
-import java.util.Collections;
 import java.util.Set;
 import java.util.function.Function;
 
-import org.observe.util.TypeTokens;
-import org.qommons.collect.QuickSet.QuickMap;
+import org.observe.Observable;
+import org.observe.config.ObservableConfigFormat.EntityConfigCreator;
 
 public abstract class SimpleValueCreator<E> implements ValueCreator<E> {
-	private final ConfiguredValueType<E> theType;
-	private final QuickMap<String, Object> theFieldValues;
+	private final ObservableConfigFormat.EntityConfigCreator<E> theCreator;
 
-	public SimpleValueCreator(ConfiguredValueType<E> type) {
-		theType = type;
-		theFieldValues = type.getFields().keySet().createMap();
+	public SimpleValueCreator(EntityConfigCreator<E> creator) {
+		theCreator = creator;
 	}
 
 	@Override
 	public ConfiguredValueType<E> getType() {
-		return theType;
+		return theCreator.getEntityType();
 	}
 
 	@Override
 	public Set<Integer> getRequiredFields() {
-		return Collections.emptySet();
+		return theCreator.getRequiredFields();
 	}
 
 	@Override
 	public ValueCreator<E> with(String fieldName, Object value) throws IllegalArgumentException {
-		ConfiguredValueField<? super E, ?> field = theType.getFields().get(fieldName);
-		return with((ConfiguredValueField<? super E, Object>) field, value);
+		theCreator.with(fieldName, value);
+		return this;
 	}
 
 	@Override
 	public <F> ValueCreator<E> with(ConfiguredValueField<? super E, F> field, F value) throws IllegalArgumentException {
-		if (value == null) {
-			if (field.getFieldType().isPrimitive())
-				throw new IllegalArgumentException("Null value is not allowed for primitive field " + field);
-		} else {
-			if (!TypeTokens.get().isInstance(field.getFieldType(), value))
-				throw new IllegalArgumentException("Value of type " + value.getClass().getName() + " is not allowed for field " + field);
-		}
-		theFieldValues.put(field.getIndex(), value);
+		theCreator.with(field, value);
 		return this;
 	}
 
 	@Override
 	public <F> ValueCreator<E> with(Function<? super E, F> fieldGetter, F value) throws IllegalArgumentException {
-		ConfiguredValueField<? super E, F> field = theType.getField(fieldGetter);
-		return with(field, value);
+		theCreator.with(fieldGetter, value);
+		return this;
 	}
 
-	protected QuickMap<String, Object> getFieldValues() {
-		return theFieldValues;
+	protected E createValue(ObservableConfig config, Observable<?> until) {
+		return theCreator.create(config, until);
 	}
 }
