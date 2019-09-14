@@ -78,7 +78,8 @@ public class EntityReflectorTest {
 		c1.setC(30);
 		Assert.assertEquals(0, c1.getB());
 		Assert.assertEquals("id=10, a=20, c=30", c1.print());
-		Assert.assertEquals(c1.print(), c1.toString());
+		Assert.assertEquals(c1.print(), //
+			c1.toString());
 		// TODO
 	}
 }

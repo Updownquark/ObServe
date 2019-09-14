@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -875,7 +876,8 @@ public class EntityReflector<E> {
 
 		// First, find all the fields by their getters
 		Map<String, Method> fieldGetters = new LinkedHashMap<>();
-		findFields(type, getterFilter, fieldGetters, customMethods == null ? Collections.emptySet() : customMethods.keySet());
+		findFields(type, getterFilter, fieldGetters, customMethods == null ? Collections.emptySet() : customMethods.keySet(),
+			new HashSet<>());
 		QuickMap<String, ReflectedField<E, ?>> fields = QuickSet.of(fieldGetters.keySet()).createMap();
 		Set<Integer> idFields = new LinkedHashSet<>();
 		// Find ID fields
@@ -947,8 +949,6 @@ public class EntityReflector<E> {
 		Map<Class<?>, SuperPath> superPaths = new HashMap<>();
 		populateMethods(theType, superPaths, fields, methods, //
 			customMethods == null ? Collections.emptyMap() : customMethods, messages);
-		populateMethods((TypeToken<E>) TypeTokens.get().OBJECT, superPaths, // Generics hack
-			fields, methods, customMethods, messages);
 		theSuperPaths = Collections.unmodifiableMap(superPaths);
 		theFields = fields.unmodifiable();
 		theMethods = BetterCollections.unmodifiableSortedSet(methods);
@@ -958,22 +958,25 @@ public class EntityReflector<E> {
 	}
 
 	private static <T> void findFields(TypeToken<T> type, Function<Method, String> getterFilter, Map<String, Method> fieldGetters,
-		Set<Method> customMethods) {
+		Set<Method> customMethods, Set<String> fieldOverrides) {
 		Class<T> clazz = TypeTokens.getRawType(type);
 		if (clazz == null || clazz == Object.class)
 			return;
 		for (Method m : clazz.getDeclaredMethods()) {
-			if (customMethods.contains(m) || m.isDefault()) {
-				continue;
-			}
 			String fieldName = getterFilter.apply(m);
 			if (fieldName != null) {
+				if (fieldOverrides.contains(fieldName))
+					continue;
+				else if (customMethods.contains(m) || m.isDefault()) {
+					fieldOverrides.add(fieldName);
+					continue;
+				}
 				fieldGetters.put(fieldName, m);
 			}
 		}
 		for (Class<?> intf : clazz.getInterfaces())
 			findFields((TypeToken<T>) type.resolveType(intf), // Generics hack
-				getterFilter, fieldGetters, customMethods);
+				getterFilter, fieldGetters, customMethods, fieldOverrides);
 	}
 
 	private void populateMethods(TypeToken<E> type, Map<Class<?>, SuperPath> superPaths, //
@@ -1052,13 +1055,19 @@ public class EntityReflector<E> {
 					"Method " + m + " is not default or a recognized getter or setter, and its implementation is not provided"));
 			}
 		}
-		for (int i = 0; i < theSupers.size(); i++) {
-			populateSuperMethods(fields, methods, theSupers.get(i), i, errors);
-			superPaths.put(theSupers.get(i).theRawType, new SuperPath(i, null));
-			int superI = i;
-			for (Map.Entry<Class<?>, SuperPath> superSuper : theSupers.get(i).theSuperPaths.entrySet()) {
-				superPaths.computeIfAbsent(superSuper.getKey(), c -> new SuperPath(superI, superSuper.getValue()));
+		if (clazz == Object.class) {} else if (theSupers.isEmpty()) {
+			populateMethods((TypeToken<E>) TypeTokens.get().OBJECT, superPaths, // Generics hack
+				fields, methods, customMethods, errors);
+		} else {
+			for (int i = 0; i < theSupers.size(); i++) {
+				populateSuperMethods(fields, methods, theSupers.get(i), i, errors);
+				superPaths.put(theSupers.get(i).theRawType, new SuperPath(i, null));
+				int superI = i;
+				for (Map.Entry<Class<?>, SuperPath> superSuper : theSupers.get(i).theSuperPaths.entrySet()) {
+					superPaths.computeIfAbsent(superSuper.getKey(), c -> new SuperPath(superI, superSuper.getValue()));
+				}
 			}
+			superPaths.computeIfAbsent(Object.class, c -> new SuperPath(0, null));
 		}
 	}
 
@@ -1259,7 +1268,7 @@ public class EntityReflector<E> {
 			if (interpreter == null)
 				throw new IllegalStateException("Method " + method + " not found!");
 			SuperPath path;
-			if (getSuper().isEmpty() || method.getDeclaringClass() == Object.class || method.getDeclaringClass() == theRawType)
+			if (getSuper().isEmpty() || method.getDeclaringClass() == theRawType)
 				path = null;
 			else
 				path = theSuperPaths.get(method.getDeclaringClass());
