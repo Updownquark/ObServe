@@ -26,10 +26,12 @@ public class ConfigEntityFieldParser {
 
 	private final Map<Class<?>, ConfigFormatGenerator<?>> theFormats;
 	private final Map<TypeToken<?>, ObservableConfigFormat<?>> theFormatCache;
+	private final Map<TypeToken<?>, EntityReflector<?>> theReflectors;
 
 	public ConfigEntityFieldParser() {
 		theFormats = new HashMap<>();
 		theFormatCache = new HashMap<>();
+		theReflectors = new HashMap<>();
 	}
 
 	public <T> ConfigEntityFieldParser forSimpleType(Class<T> type, Format<T> format, Supplier<? extends T> defaultValue) {
@@ -84,7 +86,8 @@ public class ConfigEntityFieldParser {
 			return (ObservableConfigFormat<T>) ObservableConfigFormat
 				.ofEntitySet((ObservableConfigFormat.EntityConfigFormat<Object>) elementFormat, configName, childName, this);
 		} else if (configName != null && EntityReflector.isEntityType(raw))
-			return ObservableConfigFormat.ofEntity(new EntityConfiguredValueType<>(EntityReflector.build(type).build()), this, configName);
+			return ObservableConfigFormat
+				.ofEntity(new EntityConfiguredValueType<>(EntityReflector.build(type).withSupers(theReflectors).build()), this, configName);
 		else
 			throw new IllegalArgumentException("No custom or default format available for type " + raw.getName());
 	}
