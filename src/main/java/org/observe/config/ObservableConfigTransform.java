@@ -803,7 +803,7 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 		}
 
 		@Override
-		public ConfiguredValueType<E> getType() {
+		public EntityConfiguredValueType<E> getType() {
 			return getFormat().getEntityType();
 		}
 
@@ -813,17 +813,17 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 		}
 
 		@Override
-		public ValueCreator<E> create(ElementId after, ElementId before, boolean first) {
+		public <E2 extends E> ValueCreator<E, E2> create(TypeToken<E2> subType) {
 			if (!isConnected().get())
 				throw new UnsupportedOperationException("Not connected");
-			return new SimpleValueCreator<E>(getFormat().create(getType().getType())) {
+			return new SimpleValueCreator<E, E2>(getFormat().create(subType)) {
 				@Override
-				public CollectionElement<E> create(Consumer<? super E> preAddAction) {
+				public CollectionElement<E> create(Consumer<? super E2> preAddAction) {
 					return add(cfg -> {
 						return createValue(cfg, getUntil());
-					}, after, before, first, element -> {
+					}, getAfter(), getBefore(), isTowardBeginning(), element -> {
 						if (preAddAction != null)
-							preAddAction.accept(element.get());
+							preAddAction.accept((E2) element.get());
 					});
 				}
 			};

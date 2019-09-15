@@ -1,16 +1,17 @@
 package org.observe.config;
 
 import org.observe.collect.ObservableCollection;
-import org.qommons.collect.ElementId;
+
+import com.google.common.reflect.TypeToken;
 
 public interface ObservableValueSet<E> {
 	ConfiguredValueType<E> getType();
 
 	ObservableCollection<? extends E> getValues();
 
-	default ValueCreator<E> create() {
-		return create(null, null, false);
+	default ValueCreator<E, E> create() {
+		return create(getType().getType());
 	}
 
-	ValueCreator<E> create(ElementId after, ElementId before, boolean first);
+	<E2 extends E> ValueCreator<E, E2> create(TypeToken<E2> subType);
 }

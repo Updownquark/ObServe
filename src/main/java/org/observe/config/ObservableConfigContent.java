@@ -843,9 +843,14 @@ public class ObservableConfigContent {
 		}
 
 		@Override
-		public ValueCreator<C> create(ElementId after, ElementId before, boolean first) {
-			return new ValueCreator<C>() {
+		public <C2 extends C> ValueCreator<C, C2> create(TypeToken<C2> subType) {
+			if (subType != getType().getType())
+				throw new IllegalArgumentException("Unrecognized " + ObservableConfig.class.getSimpleName() + " sub-type " + subType);
+			return (ValueCreator<C, C2>) new ValueCreator<C, C>() {
 				private Map<String, String> theFields;
+				private ElementId theAfter;
+				private ElementId theBefore;
+				private boolean isTowardBeginning;
 
 				@Override
 				public ConfiguredValueType<C> getType() {
@@ -858,7 +863,26 @@ public class ObservableConfigContent {
 				}
 
 				@Override
-				public ValueCreator<C> with(String fieldName, Object value) throws IllegalArgumentException {
+				public ValueCreator<C, C> after(ElementId after) {
+					theAfter = after;
+					return this;
+				}
+
+				@Override
+				public ValueCreator<C, C> before(ElementId before) {
+					theBefore = before;
+					return this;
+
+				}
+
+				@Override
+				public ValueCreator<C, C> towardBeginning(boolean towardBeginning) {
+					isTowardBeginning = towardBeginning;
+					return this;
+				}
+
+				@Override
+				public ValueCreator<C, C> with(String fieldName, Object value) throws IllegalArgumentException {
 					if (theFields == null)
 						theFields = new LinkedHashMap<>();
 					theFields.put(fieldName, String.valueOf(value));
@@ -866,23 +890,24 @@ public class ObservableConfigContent {
 				}
 
 				@Override
-				public <F> ValueCreator<C> with(ConfiguredValueField<? super C, F> field, F value) throws IllegalArgumentException {
+				public <F> ValueCreator<C, C> with(ConfiguredValueField<? super C, F> field, F value) throws IllegalArgumentException {
 					throw new UnsupportedOperationException();
 				}
 
 				@Override
-				public <F> ValueCreator<C> with(Function<? super C, F> field, F value) throws IllegalArgumentException {
+				public <F> ValueCreator<C, C> with(Function<? super C, F> field, F value) throws IllegalArgumentException {
 					throw new UnsupportedOperationException();
 				}
 
 				@Override
 				public CollectionElement<C> create(Consumer<? super C> preAddAction) {
-					ObservableConfig afterChild = after == null ? null : theChildren.getElement(after).get();
-					ObservableConfig beforeChild = before == null ? null : theChildren.getElement(before).get();
+					ObservableConfig afterChild = theAfter == null ? null : theChildren.getElement(theAfter).get();
+					ObservableConfig beforeChild = theBefore == null ? null : theChildren.getElement(theBefore).get();
 					ElementId newChildId;
 					try (Transaction t = theRoot.lock(true, null)) {
 						ObservableConfig parent = thePath.getParent() == null ? theRoot : theRoot.getChild(thePath.getParent(), true, null);
-						ObservableConfig newChild = parent.addChild(afterChild, beforeChild, first, thePath.getLastElement().getName(),
+						ObservableConfig newChild = parent.addChild(afterChild, beforeChild, isTowardBeginning,
+							thePath.getLastElement().getName(),
 							cfg -> {
 								if (theFields != null)
 									for (Map.Entry<String, String> field : theFields.entrySet())

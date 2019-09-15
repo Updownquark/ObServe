@@ -85,10 +85,12 @@ public class ConfigEntityFieldParser {
 					"Cannot create an " + ObservableValueSet.class.getSimpleName() + " for element type " + elementType);
 			return (ObservableConfigFormat<T>) ObservableConfigFormat
 				.ofEntitySet((ObservableConfigFormat.EntityConfigFormat<Object>) elementFormat, configName, childName, this);
-		} else if (configName != null && EntityReflector.isEntityType(raw))
-			return ObservableConfigFormat
-				.ofEntity(new EntityConfiguredValueType<>(EntityReflector.build(type).withSupers(theReflectors).build()), this, configName);
-		else
+		} else if (configName != null && EntityReflector.isEntityType(raw)) {
+			EntityReflector<T> reflector = (EntityReflector<T>) theReflectors.get(type);
+			if (reflector == null)
+				reflector = EntityReflector.build(type).withSupers(theReflectors).build();
+			return ObservableConfigFormat.ofEntity(new EntityConfiguredValueType<>(reflector, theReflectors), this, configName);
+		} else
 			throw new IllegalArgumentException("No custom or default format available for type " + raw.getName());
 	}
 

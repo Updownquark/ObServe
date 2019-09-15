@@ -27,6 +27,8 @@ import org.qommons.collect.FastFailLockingStrategy;
 import org.qommons.tree.BetterTreeList;
 import org.xml.sax.SAXException;
 
+import com.google.common.reflect.TypeToken;
+
 public class ObservableConfigTest {
 	private ObservableConfig theConfig;
 	private XmlEncoding theEncoding;
@@ -477,7 +479,8 @@ public class ObservableConfigTest {
 						int index = helper.getInt(0, testEntities.getValues().size());
 						ElementId after = index == 0 ? null : testEntities.getValues().getElement(index - 1).getElementId();
 						String randomString = randomString(helper);
-						TestEntity2 newEntity = testEntities.create(after, null, true).with(TestEntity2::getText, randomString)//
+						TestEntity2 newEntity = testEntities.create().after(after).towardBeginning(true)
+							.with(TestEntity2::getText, randomString)//
 							.create()//
 							.get();
 						Assert.assertEquals(randomString, newEntity.getText());
@@ -549,7 +552,8 @@ public class ObservableConfigTest {
 						ElementId after = leIndex == 0 ? null
 							: modify.getListedEntities().getValues().getElement(leIndex - 1).getElementId();
 						int newE = helper.getAnyInt();
-						TestEntity4 newLE = modify.getListedEntities().create(after, null, true).with(TestEntity4::getE, newE).create()
+						TestEntity4 newLE = modify.getListedEntities().create().after(after).towardBeginning(true)
+							.with(TestEntity4::getE, newE).create()
 							.get();
 						Assert.assertEquals(newE, newLE.getE());
 						((List<TestEntity4>) expected.get(index).getListedEntities().getValues()).add(leIndex, deepCopy(newLE));
@@ -691,7 +695,7 @@ public class ObservableConfigTest {
 				}
 
 				@Override
-				public ValueCreator<TestEntity4> create(ElementId after, ElementId before, boolean first) {
+				public <T extends TestEntity4> ValueCreator<TestEntity4, T> create(TypeToken<T> subType) {
 					return null;
 				}
 
