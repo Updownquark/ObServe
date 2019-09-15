@@ -31,7 +31,7 @@ import org.qommons.io.Format;
 
 import com.google.common.reflect.TypeToken;
 
-public interface ObservableConfigFormat<T> {
+public interface ObservableConfigFormat<E> {
 	public static ObservableConfigFormat<String> TEXT = ofQommonFormat(Format.TEXT, () -> null);
 	public static ObservableConfigFormat<Double> DOUBLE = ofQommonFormat(Format.doubleFormat("0.############E0"), () -> 0.0);
 	public static ObservableConfigFormat<Float> FLOAT = ofQommonFormat(Format.floatFormat("0.########E0"), () -> 0.0f);
@@ -41,10 +41,10 @@ public interface ObservableConfigFormat<T> {
 	public static ObservableConfigFormat<Duration> DURATION = ofQommonFormat(Format.DURATION, () -> Duration.ZERO);
 	public static ObservableConfigFormat<Instant> DATE = ofQommonFormat(Format.date("ddMMyyyy HH:mm:ss.SSS"), () -> Instant.now());
 
-	void format(T value, T previousValue, ObservableConfig config, Consumer<T> acceptedValue, Observable<?> until)
+	void format(E value, E previousValue, ObservableConfig config, Consumer<E> acceptedValue, Observable<?> until)
 		throws IllegalArgumentException;
 
-	T parse(ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create, T previousValue,
+	E parse(ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create, E previousValue,
 		ObservableConfig.ObservableConfigEvent change, Observable<?> until) throws ParseException;
 
 	static <T> ObservableConfigFormat<T> ofQommonFormat(Format<T> format, Supplier<? extends T> defaultValue) {
@@ -87,11 +87,6 @@ public interface ObservableConfigFormat<T> {
 		}
 	}
 
-	static <E> EntityConfigFormatImpl<E> ofEntity(EntityConfiguredValueType<E> entityType, ConfigEntityFieldParser formats,
-		String configName) {
-		return new EntityConfigFormatImpl<>(entityType, formats, configName);
-	}
-
 	interface EntityConfigCreator<E> {
 		EntityConfiguredValueType<E> getEntityType();
 
@@ -109,6 +104,95 @@ public interface ObservableConfigFormat<T> {
 	interface EntityConfigFormat<E> extends ObservableConfigFormat<E> {
 		EntityConfiguredValueType<E> getEntityType();
 		<E2 extends E> EntityConfigCreator<E2> create(TypeToken<E2> subType);
+	}
+
+	class EntitySubFormat<E> {
+		final ObservableConfig.ObservableConfigPathElement configFilter;
+		final EntityConfigFormat<E> format;
+		final TypeToken<E> type;
+		final Class<E> rawType;
+		final Predicate<? super E> valueFilter;
+
+		EntitySubFormat(ObservableConfigPathElement configFilter, EntityConfigFormat<E> format, TypeToken<E> type,
+			Predicate<? super E> valueFilter) {
+			this.configFilter = configFilter;
+			this.format = format;
+			this.type = type;
+			rawType = TypeTokens.getRawType(type);
+			this.valueFilter = valueFilter;
+		}
+
+		boolean applies(Object value) {
+			return rawType.isInstance(value) && (valueFilter == null || valueFilter.test((E) value));
+		}
+	}
+
+	class PathElementBuilder {
+		private final String theName;
+		private final Map<String, String> theAttributes;
+
+		PathElementBuilder(String name) {
+			theName = name;
+			theAttributes = new LinkedHashMap<>();
+		}
+
+		public PathElementBuilder withAttribute(String attributeName, String attributeValue) {
+			theAttributes.put(attributeName, attributeValue);
+			return this;
+		}
+
+		public ObservableConfigPathElement build() {
+			boolean multi = theName.equals(ObservableConfig.ANY_NAME);
+			return new ObservableConfigPathElement(multi ? "" : theName, theAttributes, multi, false);
+		}
+	}
+
+	class EntityConfigBuilder<E> {
+		public static class EntitySubFormatBuilder<T> {
+			private final TypeToken<T> theType;
+			private Predicate<? super T> theValueFilter;
+
+			EntitySubFormatBuilder(TypeToken<T> type) {
+				theType = type;
+			}
+
+			public EntitySubFormatBuilder<T> withValueFilter(Predicate<? super T> valueFilter) {
+				theValueFilter = valueFilter;
+				return this;
+			}
+
+			public EntitySubFormat<T> build(String config, EntityConfigFormat<T> format) {
+				return new EntitySubFormat<>(ObservableConfig.parsePathElement(config), format, theType, theValueFilter);
+			}
+
+			public EntitySubFormat<T> build(String configName, Function<PathElementBuilder, ObservableConfigPathElement> path,
+				EntityConfigFormat<T> format) {
+				return new EntitySubFormat<>(path.apply(new PathElementBuilder(configName)), format, theType, theValueFilter);
+			}
+		}
+		private final TypeToken<E> theType;
+		private final List<EntitySubFormat<? extends E>> theSubFormats;
+
+		EntityConfigBuilder(TypeToken<E> type) {
+			theType = type;
+			theSubFormats = new LinkedList<>();
+		}
+
+		public <E2 extends E> EntityConfigBuilder<E> with(TypeToken<E2> type,
+			Function<EntitySubFormatBuilder<E2>, EntitySubFormat<E2>> subFormat) {
+			if (!theType.isAssignableFrom(type))
+				throw new IllegalArgumentException(type + " is not a sub-type of " + theType);
+			theSubFormats.add(subFormat.apply(new EntitySubFormatBuilder<>(type)));
+			return this;
+		}
+
+		public EntityConfigFormat<E> build() {
+			return new EntityConfigFormatImpl<>(QommonsUtils.unmodifiableCopy(theSubFormats));
+		}
+	}
+
+	static <E> EntityConfigFormat<E> ofEntity(EntityConfiguredValueType<E> entityType, ConfigEntityFieldParser formats, String configName) {
+		return new EntityConfigFormatImpl<>(entityType, formats, configName);
 	}
 
 	class EntityConfigFormatImpl<E> implements EntityConfigFormat<E> {
@@ -455,26 +539,6 @@ public interface ObservableConfigFormat<T> {
 			public SubFormat<T> build(String configName, Function<PathElementBuilder, ObservableConfigPathElement> path,
 				ObservableConfigFormat<T> format) {
 				return new SubFormat<>(path.apply(new PathElementBuilder(configName)), format, theType, theValueFilter);
-			}
-		}
-
-		public static class PathElementBuilder {
-			private final String theName;
-			private final Map<String, String> theAttributes;
-
-			PathElementBuilder(String name) {
-				theName = name;
-				theAttributes = new LinkedHashMap<>();
-			}
-
-			public PathElementBuilder withAttribute(String attributeName, String attributeValue) {
-				theAttributes.put(attributeName, attributeValue);
-				return this;
-			}
-
-			public ObservableConfigPathElement build() {
-				boolean multi = theName.equals(ObservableConfig.ANY_NAME);
-				return new ObservableConfigPathElement(multi ? "" : theName, theAttributes, multi, false);
 			}
 		}
 

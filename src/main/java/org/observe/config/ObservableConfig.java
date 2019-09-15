@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import javax.xml.parsers.ParserConfigurationException;
@@ -615,6 +616,18 @@ public class ObservableConfig implements StructuredTransactable {
 
 		public ObservableConfigValueBuilder<T> withFieldParser(ConfigEntityFieldParser fieldParser) {
 			theFieldParser = fieldParser;
+			return this;
+		}
+
+		public ObservableConfigValueBuilder<T> withHierarchicalFormat(
+			Function<ObservableConfigFormat.HeterogeneousFormat.Builder<T>, ObservableConfigFormat.HeterogeneousFormat<T>> format) {
+			theFormat = format.apply(ObservableConfigFormat.heterogeneous(theType));
+			return this;
+		}
+
+		public ObservableConfigValueBuilder<T> withHierarchicalEntityFormat(
+			Function<ObservableConfigFormat.HeterogeneousEntityFormat.Builder<T>, ObservableConfigFormat.HeterogeneousEntityFormat<T>> format) {
+			theFormat = format.apply(ObservableConfigFormat.heterogeneousEntities(theType));
 			return this;
 		}
 
