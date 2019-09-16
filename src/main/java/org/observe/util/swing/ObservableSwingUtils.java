@@ -69,10 +69,10 @@ public class ObservableSwingUtils {
 	}
 
 	private static void emptyEdtEvents() {
-		Runnable task = EDT_EVENTS.poll(0);
+		ListenerList.Element<Runnable> task = EDT_EVENTS.poll(0);
 		while (task != null) {
 			try {
-				task.run();
+				task.get().run();
 			} catch (RuntimeException e) {
 				e.printStackTrace();
 			}
