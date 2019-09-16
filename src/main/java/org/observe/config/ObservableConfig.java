@@ -596,7 +596,7 @@ public class ObservableConfig implements StructuredTransactable {
 	public class ObservableConfigValueBuilder<T> {
 		private final TypeToken<T> theType;
 		private ObservableConfigFormat<T> theFormat;
-		private ConfigEntityFieldParser theFieldParser;
+		private ObservableConfigFormatSet theFieldParser;
 		private Observable<?> theUntil;
 		private ObservableConfigPath thePath;
 
@@ -614,7 +614,7 @@ public class ObservableConfig implements StructuredTransactable {
 			return this;
 		}
 
-		public ObservableConfigValueBuilder<T> withFieldParser(ConfigEntityFieldParser fieldParser) {
+		public ObservableConfigValueBuilder<T> withFieldParser(ObservableConfigFormatSet fieldParser) {
 			theFieldParser = fieldParser;
 			return this;
 		}
@@ -626,8 +626,8 @@ public class ObservableConfig implements StructuredTransactable {
 		}
 
 		public ObservableConfigValueBuilder<T> withHierarchicalEntityFormat(
-			Function<ObservableConfigFormat.HeterogeneousEntityFormat.Builder<T>, ObservableConfigFormat.HeterogeneousEntityFormat<T>> format) {
-			theFormat = format.apply(ObservableConfigFormat.heterogeneousEntities(theType));
+			Function<ObservableConfigFormat.EntityFormatBuilder<T>, ObservableConfigFormat.EntityConfigFormat<T>> format) {
+			theFormat = format.apply(ObservableConfigFormat.buildEntities(theType, getFormatSet()));
 			return this;
 		}
 
@@ -647,16 +647,16 @@ public class ObservableConfig implements StructuredTransactable {
 			return this;
 		}
 
-		protected ConfigEntityFieldParser getFieldParser() {
+		protected ObservableConfigFormatSet getFormatSet() {
 			if (theFieldParser == null)
-				theFieldParser = new ConfigEntityFieldParser();
+				theFieldParser = new ObservableConfigFormatSet();
 			return theFieldParser;
 		}
 
 		protected ObservableConfigFormat<T> getFormat() {
 			ObservableConfigFormat<T> format = theFormat;
 			if (format == null)
-				format = getFieldParser().getConfigFormat(theType, getName());
+				format = getFormatSet().getConfigFormat(theType, getName());
 			return format;
 		}
 
@@ -708,7 +708,7 @@ public class ObservableConfig implements StructuredTransactable {
 
 		public ObservableCollection<T> buildCollection() {
 			return new ObservableConfigTransform.ObservableConfigValues<>(//
-				getDescendant(true), createDescendant(true)::get, theType, getFormat(), getChildName(), getFieldParser(), theUntil, true);
+				getDescendant(true), createDescendant(true)::get, theType, getFormat(), getChildName(), getFormatSet(), theUntil, true);
 		}
 
 		public ObservableValueSet<T> buildEntitySet() {
@@ -717,7 +717,7 @@ public class ObservableConfig implements StructuredTransactable {
 				throw new IllegalStateException("Format for " + theType + " is not entity-enabled");
 			return new ObservableConfigTransform.ObservableConfigEntityValues<>(//
 				getDescendant(true), createDescendant(true)::get, (ObservableConfigFormat.EntityConfigFormat<T>) entityFormat,
-				getChildName(), getFieldParser(), theUntil, true);
+				getChildName(), getFormatSet(), theUntil, true);
 		}
 	}
 

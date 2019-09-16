@@ -708,7 +708,7 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 		private final Backing<E> theBacking;
 
 		ObservableConfigValues(ObservableValue<? extends ObservableConfig> collectionElement, Runnable ceCreate, TypeToken<E> type,
-			ObservableConfigFormat<E> format, String childName, ConfigEntityFieldParser fieldParser, Observable<?> until, boolean listen) {
+			ObservableConfigFormat<E> format, String childName, ObservableConfigFormatSet fieldParser, Observable<?> until, boolean listen) {
 			theBacking = new Backing<>(collectionElement, ceCreate, type, format, childName, until, listen);
 
 			init(theBacking.getCollection());
@@ -788,10 +788,10 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 	}
 
 	static class ObservableConfigEntityValues<E> extends ObservableConfigBackedCollection<E> implements ObservableValueSet<E> {
-		private final ConfigEntityFieldParser theFieldParser;
+		private final ObservableConfigFormatSet theFieldParser;
 
 		ObservableConfigEntityValues(ObservableValue<? extends ObservableConfig> collectionElement, Runnable ceCreate,
-			EntityConfigFormat<E> format, String childName, ConfigEntityFieldParser fieldParser, Observable<?> until, boolean listen) {
+			EntityConfigFormat<E> format, String childName, ObservableConfigFormatSet fieldParser, Observable<?> until, boolean listen) {
 			super(collectionElement, ceCreate, format.getEntityType().getType(), format, childName, until, listen);
 
 			theFieldParser = fieldParser;

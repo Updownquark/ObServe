@@ -3,11 +3,12 @@ package org.observe.config;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 import org.observe.collect.ObservableCollection;
+import org.observe.config.ObservableConfigFormat.EntityConfigFormat;
 import org.observe.util.EntityReflector;
 import org.observe.util.TypeTokens;
 import org.qommons.StringUtils;
@@ -15,7 +16,7 @@ import org.qommons.io.Format;
 
 import com.google.common.reflect.TypeToken;
 
-public class ConfigEntityFieldParser {
+public class ObservableConfigFormatSet {
 	public interface ConfigFormatGenerator<T> {
 		ObservableConfigFormat<T> formatFor(TypeToken<T> type);
 	}
@@ -28,20 +29,36 @@ public class ConfigEntityFieldParser {
 	private final Map<TypeToken<?>, ObservableConfigFormat<?>> theFormatCache;
 	private final Map<TypeToken<?>, EntityReflector<?>> theReflectors;
 
-	public ConfigEntityFieldParser() {
-		theFormats = new HashMap<>();
-		theFormatCache = new HashMap<>();
-		theReflectors = new HashMap<>();
+	public ObservableConfigFormatSet() {
+		theFormats = new ConcurrentHashMap<>();
+		theFormatCache = new ConcurrentHashMap<>();
+		theReflectors = new ConcurrentHashMap<>();
 	}
 
-	public <T> ConfigEntityFieldParser forSimpleType(Class<T> type, Format<T> format, Supplier<? extends T> defaultValue) {
+	public <T> ObservableConfigFormatSet forSimpleType(Class<T> type, Format<T> format, Supplier<? extends T> defaultValue) {
 		theFormatCache.put(TypeTokens.get().of(type), ObservableConfigFormat.ofQommonFormat(format, defaultValue));
 		return this;
 	}
 
-	public <T> ConfigEntityFieldParser withFormat(TypeToken<T> type, ObservableConfigFormat<T> format) {
+	public <T> ObservableConfigFormatSet withFormat(TypeToken<T> type, ObservableConfigFormat<T> format) {
 		theFormatCache.put(type, format);
 		return this;
+	}
+
+	public <E> EntityConfiguredValueType<E> getEntityType(TypeToken<E> type) {
+		return getEntityFormat(type).getEntityType();
+	}
+
+	public <E> EntityConfigFormat<E> getEntityFormat(TypeToken<E> type) {
+		ObservableConfigFormat<?> format = theFormatCache.computeIfAbsent(type, t -> {
+			EntityReflector<E> reflector = (EntityReflector<E>) theReflectors.computeIfAbsent(type, t2 -> {
+				return EntityReflector.build(type).withSupers(theReflectors).build();
+			});
+			return ObservableConfigFormat.ofEntity(new EntityConfiguredValueType<>(reflector, theReflectors), this);
+		});
+		if (!(format instanceof EntityConfigFormat))
+			throw new IllegalArgumentException(type + " is not formatted as an entity");
+		return (EntityConfigFormat<E>) format;
 	}
 
 	public <T> ObservableConfigFormat<T> getConfigFormat(TypeToken<T> type, String configName) {
@@ -79,17 +96,12 @@ public class ConfigEntityFieldParser {
 		} else if (raw.isAssignableFrom(ObservableValueSet.class)) {
 			String childName = StringUtils.singularize(configName);
 			TypeToken<?> elementType = type.resolveType(ObservableValueSet.class.getTypeParameters()[0]);
-			ObservableConfigFormat<?> elementFormat = getConfigFormat(elementType, childName);
-			if (!(elementFormat instanceof ObservableConfigFormat.EntityConfigFormat))
-				throw new IllegalArgumentException(
-					"Cannot create an " + ObservableValueSet.class.getSimpleName() + " for element type " + elementType);
-			return (ObservableConfigFormat<T>) ObservableConfigFormat
-				.ofEntitySet((ObservableConfigFormat.EntityConfigFormat<Object>) elementFormat, configName, childName, this);
-		} else if (configName != null && EntityReflector.isEntityType(raw)) {
-			EntityReflector<T> reflector = (EntityReflector<T>) theReflectors.get(type);
-			if (reflector == null)
-				reflector = EntityReflector.build(type).withSupers(theReflectors).build();
-			return ObservableConfigFormat.ofEntity(new EntityConfiguredValueType<>(reflector, theReflectors), this, configName);
+			EntityConfigFormat<Object> elementFormat = (EntityConfigFormat<Object>) getEntityFormat(elementType);
+			format = (ObservableConfigFormat<T>) ObservableConfigFormat.<Object> ofEntitySet(elementFormat, childName, this);
+			theFormatCache.put(type, format);
+			return format;
+		} else if (EntityReflector.isEntityType(raw)) {
+			return getEntityFormat(type);
 		} else
 			throw new IllegalArgumentException("No custom or default format available for type " + raw.getName());
 	}

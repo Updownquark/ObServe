@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -122,6 +123,17 @@ public interface ObservableConfigFormat<E> {
 			this.valueFilter = valueFilter;
 		}
 
+		void moldConfig(ObservableConfig config) {
+			if (!config.getName().equals(configFilter.getName()))
+				config.setName(configFilter.getName());
+			for (Map.Entry<String, String> attr : configFilter.getAttributes().entrySet()) {
+				if (attr.getValue() == null)
+					config.getChild(attr.getKey(), true, null);
+				else
+					config.set(attr.getKey(), attr.getValue());
+			}
+		}
+
 		boolean applies(Object value) {
 			return rawType.isInstance(value) && (valueFilter == null || valueFilter.test((E) value));
 		}
@@ -147,13 +159,16 @@ public interface ObservableConfigFormat<E> {
 		}
 	}
 
-	class EntityConfigBuilder<E> {
+	class EntityFormatBuilder<E> {
 		public static class EntitySubFormatBuilder<T> {
 			private final TypeToken<T> theType;
+			private final ObservableConfigFormatSet theFormats;
 			private Predicate<? super T> theValueFilter;
+			private EntityConfigFormat<T> theFormat;
 
-			EntitySubFormatBuilder(TypeToken<T> type) {
+			EntitySubFormatBuilder(TypeToken<T> type, ObservableConfigFormatSet formats) {
 				theType = type;
+				theFormats = formats;
 			}
 
 			public EntitySubFormatBuilder<T> withValueFilter(Predicate<? super T> valueFilter) {
@@ -161,52 +176,72 @@ public interface ObservableConfigFormat<E> {
 				return this;
 			}
 
-			public EntitySubFormat<T> build(String config, EntityConfigFormat<T> format) {
-				return new EntitySubFormat<>(ObservableConfig.parsePathElement(config), format, theType, theValueFilter);
+			public EntitySubFormatBuilder<T> withFormat(EntityConfigFormat<T> format) {
+				theFormat = format;
+				return this;
 			}
 
-			public EntitySubFormat<T> build(String configName, Function<PathElementBuilder, ObservableConfigPathElement> path,
-				EntityConfigFormat<T> format) {
-				return new EntitySubFormat<>(path.apply(new PathElementBuilder(configName)), format, theType, theValueFilter);
+			public EntitySubFormat<T> build(String config) {
+				if (theFormat == null)
+					theFormat = theFormats.getEntityFormat(theType);
+				return new EntitySubFormat<>(ObservableConfig.parsePathElement(config), theFormat, theType, theValueFilter);
+			}
+
+			public EntitySubFormat<T> build(String configName, Function<PathElementBuilder, ObservableConfigPathElement> path) {
+				if (theFormat == null)
+					theFormat = theFormats.getEntityFormat(theType);
+				return new EntitySubFormat<>(path.apply(new PathElementBuilder(configName)), theFormat, theType, theValueFilter);
 			}
 		}
-		private final TypeToken<E> theType;
+
+		private final EntityConfiguredValueType<E> theType;
+		private final ObservableConfigFormatSet theFormats;
 		private final List<EntitySubFormat<? extends E>> theSubFormats;
 
-		EntityConfigBuilder(TypeToken<E> type) {
+		EntityFormatBuilder(EntityConfiguredValueType<E> type, ObservableConfigFormatSet formats) {
 			theType = type;
+			theFormats = formats;
 			theSubFormats = new LinkedList<>();
 		}
 
-		public <E2 extends E> EntityConfigBuilder<E> with(TypeToken<E2> type,
+		public <E2 extends E> EntityFormatBuilder<E> withSubType(TypeToken<E2> type,
 			Function<EntitySubFormatBuilder<E2>, EntitySubFormat<E2>> subFormat) {
-			if (!theType.isAssignableFrom(type))
+			if (!theType.getType().isAssignableFrom(type))
 				throw new IllegalArgumentException(type + " is not a sub-type of " + theType);
-			theSubFormats.add(subFormat.apply(new EntitySubFormatBuilder<>(type)));
+			theSubFormats.add(subFormat.apply(new EntitySubFormatBuilder<>(type, theFormats)));
 			return this;
 		}
 
 		public EntityConfigFormat<E> build() {
-			return new EntityConfigFormatImpl<>(QommonsUtils.unmodifiableCopy(theSubFormats));
+			return new EntityConfigFormatImpl<>(theType, theFormats, QommonsUtils.unmodifiableCopy(theSubFormats));
 		}
 	}
 
-	static <E> EntityConfigFormat<E> ofEntity(EntityConfiguredValueType<E> entityType, ConfigEntityFieldParser formats, String configName) {
-		return new EntityConfigFormatImpl<>(entityType, formats, configName);
+	static <E> EntityFormatBuilder<E> buildEntities(TypeToken<E> entityType, ObservableConfigFormatSet formats) {
+		return buildEntities(formats.getEntityType(entityType), formats);
+	}
+
+	static <E> EntityFormatBuilder<E> buildEntities(EntityConfiguredValueType<E> entityType, ObservableConfigFormatSet formats) {
+		return new EntityFormatBuilder<>(entityType, formats);
+	}
+
+	static <E> EntityConfigFormat<E> ofEntity(EntityConfiguredValueType<E> entityType, ObservableConfigFormatSet formats) {
+		return new EntityConfigFormatImpl<>(entityType, formats, Collections.emptyList());
 	}
 
 	class EntityConfigFormatImpl<E> implements EntityConfigFormat<E> {
 		public final EntityConfiguredValueType<E> entityType;
-		public final String configName;
-		public final ConfigEntityFieldParser formats;
+		public final ObservableConfigFormatSet formats;
+		private final List<EntitySubFormat<? extends E>> theSubFormats;
 		private final ObservableConfigFormat<?>[] fieldFormats;
 		private QuickMap<String, String> theFieldChildNames;
 		private QuickMap<String, String> theFieldsByChildName;
 
-		public EntityConfigFormatImpl(EntityConfiguredValueType<E> entityType, ConfigEntityFieldParser formats, String configName) {
+		public EntityConfigFormatImpl(EntityConfiguredValueType<E> entityType, ObservableConfigFormatSet formats,
+			List<EntitySubFormat<? extends E>> subFormats) {
 			this.entityType = entityType;
 			this.formats = formats;
-			this.configName = configName;
+			theSubFormats = subFormats;
 			fieldFormats = new ObservableConfigFormat[entityType.getFields().keySet().size()];
 			for (int i = 0; i < fieldFormats.length; i++)
 				fieldFormats[i] = formats.getConfigFormat(entityType.getFields().get(i));
@@ -223,17 +258,42 @@ public interface ObservableConfigFormat<E> {
 			return entityType;
 		}
 
+		private EntitySubFormat<? extends E> formatFor(E value) {
+			if (value == null)
+				return null;
+			for (EntitySubFormat<? extends E> subFormat : theSubFormats)
+				if (subFormat.applies(value))
+					return subFormat;
+			return null;
+		}
+
+		private EntitySubFormat<? extends E> formatFor(ObservableConfig config) {
+			if (config == null)
+				return null;
+			for (EntitySubFormat<? extends E> subFormat : theSubFormats)
+				if (subFormat.configFilter.matches(config))
+					return subFormat;
+			return null;
+		}
+
 		@Override
 		public void format(E value, E previousValue, ObservableConfig config, Consumer<E> acceptedValue, Observable<?> until) {
 			if (value == null) {
 				acceptedValue.accept(null);
-				config.set("null", "true");
+				config.setName("null");
 				for (int i = 0; i < entityType.getFields().keySize(); i++) {
 					ObservableConfig cfg = config.getChild(theFieldChildNames.get(i));
 					if (cfg != null)
 						cfg.remove();
 				}
 			} else {
+				EntitySubFormat<? extends E> subFormat = formatFor(value);
+				if (subFormat != null) {
+					subFormat.moldConfig(config);
+					((EntitySubFormat<E>) subFormat).format.format(value, subFormat.applies(previousValue) ? previousValue : null, config,
+						acceptedValue, until);
+					return;
+				}
 				if (previousValue == null) {
 					QuickMap<String, Object> fields = entityType.getFields().keySet().createMap();
 					try {
@@ -263,6 +323,14 @@ public interface ObservableConfigFormat<E> {
 					c = create.get();
 				return createInstance(c, entityType.getFields().keySet().createMap(), until);
 			} else {
+				EntitySubFormat<? extends E> subFormat = formatFor(c);
+				if (subFormat != null) {
+					return ((EntitySubFormat<E>) subFormat).format.parse(config, () -> {
+						ObservableConfig newCfg = create.get();
+						subFormat.moldConfig(newCfg);
+						return newCfg;
+					}, subFormat.applies(previousValue) ? previousValue : null, change, until);
+				}
 				if (change == null) {
 					for (int i = 0; i < entityType.getFields().keySize(); i++)
 						parseUpdatedField(c, i, previousValue, null, until);
@@ -389,14 +457,14 @@ public interface ObservableConfigFormat<E> {
 				change = change.asFromChild();
 			}
 			Object newValue = ((ObservableConfigFormat<Object>) fieldFormats[fieldIdx]).parse(fieldConfig,
-				() -> entityConfig.addChild(configName), oldValue, change, until);
+				() -> entityConfig.addChild(theFieldChildNames.get(fieldIdx)), oldValue, change, until);
 			if (oldValue != newValue)
 				((ConfiguredValueField<E, Object>) field).set(previousValue, newValue);
 		}
 	}
 
 	static <E, C extends Collection<? extends E>> ObservableConfigFormat<C> ofCollection(TypeToken<C> collectionType,
-		ObservableConfigFormat<E> elementFormat, ConfigEntityFieldParser fieldParser, String parentName, String childName) {
+		ObservableConfigFormat<E> elementFormat, ObservableConfigFormatSet fieldParser, String parentName, String childName) {
 		if (!TypeTokens.getRawType(collectionType).isAssignableFrom(ObservableCollection.class))
 			throw new IllegalArgumentException("This class can only produce instances of " + ObservableCollection.class.getName()
 				+ ", which is not compatible with type " + collectionType);
@@ -464,8 +532,8 @@ public interface ObservableConfigFormat<E> {
 		};
 	}
 
-	static <E> ObservableConfigFormat<ObservableValueSet<E>> ofEntitySet(EntityConfigFormat<E> elementFormat, String parentName,
-		String childName, ConfigEntityFieldParser fieldParser) {
+	static <E> ObservableConfigFormat<ObservableValueSet<E>> ofEntitySet(EntityConfigFormat<E> elementFormat, String childName,
+		ObservableConfigFormatSet fieldParser) {
 		return new ObservableConfigFormat<ObservableValueSet<E>>() {
 			@Override
 			public void format(ObservableValueSet<E> value, ObservableValueSet<E> preValue, ObservableConfig config,
@@ -558,6 +626,17 @@ public interface ObservableConfigFormat<E> {
 				this.valueFilter = valueFilter;
 			}
 
+			void moldConfig(ObservableConfig config) {
+				if (!config.getName().equals(configFilter.getName()))
+					config.setName(configFilter.getName());
+				for (Map.Entry<String, String> attr : configFilter.getAttributes().entrySet()) {
+					if (attr.getValue() == null)
+						config.getChild(attr.getKey(), true, null);
+					else
+						config.set(attr.getKey(), attr.getValue());
+				}
+			}
+
 			boolean applies(Object value) {
 				return rawType.isInstance(value) && (valueFilter == null || valueFilter.test((T) value));
 			}
@@ -594,20 +673,23 @@ public interface ObservableConfigFormat<E> {
 			if (value != null && format == null)
 				throw new IllegalArgumentException("No sub-format found for value " + value.getClass().getName() + " " + value);
 			if (value == null) {
-				config.setName("null");
+				config.set("null", "true");
 				config.getAllContent().getValues().clear();
 				acceptedValue.accept(null);
 				return;
-			} else
+			} else {
+				config.set("null", null);
+				format.moldConfig(config);
 				((SubFormat<T>) format).format.format(value, format.applies(previousValue) ? previousValue : null, config, acceptedValue,
 					until);
+			}
 		}
 
 		@Override
 		public T parse(ObservableValue<? extends ObservableConfig> config, Supplier<? extends ObservableConfig> create, T previousValue,
 			ObservableConfigEvent change, Observable<?> until) throws ParseException {
 			ObservableConfig c = config.get();
-			if (c == null || "null".equals(c.getName()))
+			if (c == null || "true".equals(c.get("null")))
 				return null;
 			SubFormat<? extends T> format = formatFor(c);
 			if (format == null)
