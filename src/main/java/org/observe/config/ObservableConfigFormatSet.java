@@ -50,12 +50,15 @@ public class ObservableConfigFormatSet {
 	}
 
 	public <E> EntityConfigFormat<E> getEntityFormat(TypeToken<E> type) {
-		ObservableConfigFormat<?> format = theFormatCache.computeIfAbsent(type, t -> {
+		ObservableConfigFormat<?> format = theFormatCache.get(type);
+		if (format == null) {
 			EntityReflector<E> reflector = (EntityReflector<E>) theReflectors.computeIfAbsent(type, t2 -> {
 				return EntityReflector.build(type).withSupers(theReflectors).build();
 			});
-			return ObservableConfigFormat.ofEntity(new EntityConfiguredValueType<>(reflector, theReflectors), this);
-		});
+			format = ObservableConfigFormat.ofEntity(new EntityConfiguredValueType<>(reflector, theReflectors), this);
+			ObservableConfigFormat<?> fFormat = format;
+			theFormatCache.computeIfAbsent(type, __ -> fFormat);
+		}
 		if (!(format instanceof EntityConfigFormat))
 			throw new IllegalArgumentException(type + " is not formatted as an entity");
 		return (EntityConfigFormat<E>) format;
