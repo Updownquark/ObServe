@@ -342,8 +342,8 @@ public class ObservableConfigTest {
 				Assert.assertEquals(20, entity.getEntityField().getD());
 				entity.getListedEntities().create().with(TestEntity4::getE, 9).create();
 				Assert.assertEquals(3, entity.getListedEntities().getValues().size());
-				Assert.assertEquals("9", theConfig.getContent("test-entities2/test-entity2").getValues().get(i).getContent("listed-entities/listed-entity")
-					.getValues().get(2).get("e"));
+				Assert.assertEquals("9", theConfig.getContent("test-entities2/test-entity2").getValues().get(i)
+					.getContent("listed-entities/listed-entity").getValues().get(2).get("e"));
 
 				break;
 			default:
@@ -432,6 +432,7 @@ public class ObservableConfigTest {
 	}
 
 	static class ObservableConfigSuperTester implements TestHelper.Testable {
+		private final XmlEncoding theEncoding;
 		private final ObservableConfig theConfig;
 		private final ObservableValueSet<TestEntity2> testEntities1;
 		private final ObservableValueSet<TestEntity2> testEntities2;
@@ -441,11 +442,11 @@ public class ObservableConfigTest {
 		private final ObservableCollectionTester<TestEntity2> tester2;
 
 		public ObservableConfigSuperTester() {
+			theEncoding = new XmlEncoding(":x", ":xx", " ", "blah", "test");
 			// Use unsafe locking for performance--we're not doing anything thread-unsafe here
 			theConfig = ObservableConfig.createRoot("test", null, new FastFailLockingStrategy());
 			try {
-				ObservableConfig.readXml(theConfig, ObservableConfigTest.class.getResourceAsStream("TestValues.xml"),
-					new XmlEncoding(":x", ":xx", " ", "blah", "test"));
+				ObservableConfig.readXml(theConfig, ObservableConfigTest.class.getResourceAsStream("TestValues.xml"), theEncoding);
 			} catch (IOException | SAXException e) {
 				throw new IllegalStateException(e);
 			}
@@ -553,8 +554,7 @@ public class ObservableConfigTest {
 							: modify.getListedEntities().getValues().getElement(leIndex - 1).getElementId();
 						int newE = helper.getAnyInt();
 						TestEntity4 newLE = modify.getListedEntities().create().after(after).towardBeginning(true)
-							.with(TestEntity4::getE, newE).create()
-							.get();
+							.with(TestEntity4::getE, newE).create().get();
 						Assert.assertEquals(newE, newLE.getE());
 						((List<TestEntity4>) expected.get(index).getListedEntities().getValues()).add(leIndex, deepCopy(newLE));
 					}).or(1, () -> {// Remove listed entity
@@ -579,17 +579,31 @@ public class ObservableConfigTest {
 						modify.getListedEntities().getValues().get(leIndex).setE(newE);
 						Assert.assertEquals(newE, modify.getListedEntities().getValues().get(leIndex).getE());
 						expected.get(index).getListedEntities().getValues().get(leIndex).setE(newE);
+					}).or(.05, () -> { // Persist/depersist
+						StringWriter writer = new StringWriter();
+						try {
+							ObservableConfig.writeXml(theConfig, writer, theEncoding, "\t");
+							theConfig.getAllContent().getValues().clear();
+							ObservableConfig.readXml(theConfig, new ByteArrayInputStream(writer.toString().getBytes("UTF-8")), theEncoding);
+							// Some edge whitespace information may be lost
+							for (TestEntity2 te2tester : expected)
+								((TestEntity2Tester) te2tester).trim();
+						} catch (IOException | SAXException e) {
+							throw new IllegalStateException(e);
+						}
 					}).execute("modify");
 				}
 
 				tester1.check(expected);
 				tester2.check(expected);
 
-				for (TestEntity2 e2Tester : expected)
-					((TestEntity2Tester) e2Tester).check();
+				for (int j = 0; j < expected.size(); j++) {
+					((TestEntity2Tester) expected.get(j)).check(testEntities1.getValues().get(j), testEntities2.getValues().get(j));
+				}
 			}
 		}
 	}
+
 	public interface TestEntity {
 		int getA();
 
@@ -642,6 +656,9 @@ public class ObservableConfigTest {
 		private final List<String> theTexts;
 		private final ObservableCollection<TestEntity4> theListedEntities;
 
+		private TestEntity2 theEntity1;
+		private TestEntity2 theEntity2;
+
 		private ObservableCollectionTester<String> theTextsTester1;
 		private ObservableCollectionTester<TestEntity4> theLETester1;
 		private ObservableCollectionTester<String> theTextsTester2;
@@ -655,10 +672,7 @@ public class ObservableConfigTest {
 			for (TestEntity4 te4 : entity1.getListedEntities().getValues())
 				theListedEntities.add(deepCopy(te4));
 
-			theTextsTester1 = new ObservableCollectionTester<>("texts", (ObservableCollection<String>) entity1.getTexts());
-			theTextsTester2 = new ObservableCollectionTester<>("texts", (ObservableCollection<String>) entity2.getTexts());
-			theLETester1 = new ObservableCollectionTester<>("listed-entities", entity1.getListedEntities().getValues());
-			theLETester2 = new ObservableCollectionTester<>("listed-entities", entity2.getListedEntities().getValues());
+			install(entity1, entity2);
 		}
 
 		@Override
@@ -719,14 +733,50 @@ public class ObservableConfigTest {
 
 		@Override
 		public String toString() {
-			return "test-entity2(text=" + theText + ")";
+			StringBuilder str = new StringBuilder("TestEntity2: ");
+			str.append("entityField=").append(theEntityField).append(", ");
+			str.append("listedEntities=").append(theListedEntities).append(", ");
+			str.append("text=").append(theText).append(", ");
+			str.append("texts=").append(theTexts);
+			return str.toString();
 		}
 
-		void check() {
-			theTextsTester1.check(theTexts);
-			theLETester1.check(theListedEntities);
-			theTextsTester2.check(theTexts);
-			theLETester2.check(theListedEntities);
+		void trim() {
+			for (int i = 0; i < theTexts.size(); i++)
+				theTexts.set(i, theTexts.get(i).trim());
+		}
+
+		void install(TestEntity2 entity1, TestEntity2 entity2) {
+			if (theEntity1 != entity1) {
+				theEntity1 = entity1;
+				theTextsTester1 = new ObservableCollectionTester<>("texts", (ObservableCollection<String>) entity1.getTexts());
+				theLETester1 = new ObservableCollectionTester<>("listed-entities", entity1.getListedEntities().getValues());
+			}
+			if (theEntity2 != entity2) {
+				theEntity2 = entity2;
+				theTextsTester2 = new ObservableCollectionTester<>("texts", (ObservableCollection<String>) entity2.getTexts());
+				theLETester2 = new ObservableCollectionTester<>("listed-entities", entity2.getListedEntities().getValues());
+			}
+		}
+
+		void check(TestEntity2 entity1, TestEntity2 entity2) {
+			if (theEntity1 != entity1) {
+				theEntity1 = entity1;
+				theTextsTester1 = new ObservableCollectionTester<>("texts", (ObservableCollection<String>) entity1.getTexts());
+				theLETester1 = new ObservableCollectionTester<>("listed-entities", entity1.getListedEntities().getValues());
+			} else {
+				theTextsTester1.check(theTexts);
+				theLETester1.check(theListedEntities);
+			}
+			if (theEntity2 != entity2) {
+				theEntity2 = entity2;
+				theTextsTester2 = new ObservableCollectionTester<>("texts", (ObservableCollection<String>) entity2.getTexts());
+				theLETester2 = new ObservableCollectionTester<>("listed-entities", entity2.getListedEntities().getValues());
+			} else {
+				theTextsTester2.check(theTexts);
+				theLETester2.check(theListedEntities);
+			}
+			install(entity1, entity2);
 		}
 
 		void dispose() {
@@ -762,7 +812,7 @@ public class ObservableConfigTest {
 
 			@Override
 			public String toString() {
-				return "test-entity3(d=" + theD + ")";
+				return "TestEntity3: d=" + theD;
 			}
 		};
 	}
@@ -792,7 +842,7 @@ public class ObservableConfigTest {
 
 			@Override
 			public String toString() {
-				return "test-entity4(e=" + theE + ")";
+				return "TestEntity4: e=" + theE;
 			}
 		};
 	}

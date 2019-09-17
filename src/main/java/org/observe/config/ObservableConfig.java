@@ -1324,9 +1324,11 @@ public class ObservableConfig implements StructuredTransactable {
 					break;
 				else if (ch == '&')
 					break;
+				else if (ch == '"')
+					break;
 				else if (ch == 0)
 					throw new IllegalArgumentException("Cannot encode NUL");
-				else if (ch < '\t' || ch > '~')
+				else if (ch < ' ' || ch > '~')
 					break;
 			}
 			if (c == xmlValue.length())
@@ -1338,9 +1340,11 @@ public class ObservableConfig implements StructuredTransactable {
 					escapeTemp.append("&lt;");
 				else if (ch == '&')
 					escapeTemp.append("&amp;");
+				else if (ch == '"')
+					escapeTemp.append("&quot;");
 				else if (ch == 0)
 					throw new IllegalArgumentException("Cannot encode NUL");
-				else if (ch < '\t' || ch > '~') {
+				else if (ch < ' ' || ch > '~') {
 					escapeTemp.append("&#x");
 					escapeTemp.append(Integer.toHexString(ch));
 					escapeTemp.append(';');
