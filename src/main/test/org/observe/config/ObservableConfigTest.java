@@ -451,9 +451,17 @@ public class ObservableConfigTest {
 				throw new IllegalStateException(e);
 			}
 			SimpleObservable<Void> until = new SimpleObservable<>();
-			testEntities1 = theConfig.asValue(TestEntity2.class).at("test-entities2/test-entity2").until(until).buildEntitySet();
+			ObservableConfigFormatSet formats = new ObservableConfigFormatSet();
+			formats.withFormat(TypeTokens.get().of(TestEntity4.class),
+				ObservableConfigFormat.buildEntities(TypeTokens.get().of(TestEntity4.class), formats)//
+				.withSubType(TypeTokens.get().of(TestEntity5.class), //
+					sb -> sb.build("*", b -> b.withAttribute("type", "5").build()))//
+				.build());
+			testEntities1 = theConfig.asValue(TestEntity2.class).withFormatSet(formats).at("test-entities2/test-entity2").until(until)
+				.buildEntitySet();
 			tester1 = new ObservableCollectionTester<>("testEntities1", testEntities1.getValues());
-			testEntities2 = theConfig.asValue(TestEntity2.class).at("test-entities2/test-entity2").until(until).buildEntitySet();
+			testEntities2 = theConfig.asValue(TestEntity2.class).withFormatSet(formats).at("test-entities2/test-entity2").until(until)
+				.buildEntitySet();
 			tester2 = new ObservableCollectionTester<>("testEntities2", testEntities2.getValues());
 			expected = new ArrayList<>();
 			for (int i = 0; i < testEntities1.getValues().size(); i++)
@@ -553,8 +561,21 @@ public class ObservableConfigTest {
 						ElementId after = leIndex == 0 ? null
 							: modify.getListedEntities().getValues().getElement(leIndex - 1).getElementId();
 						int newE = helper.getAnyInt();
-						TestEntity4 newLE = modify.getListedEntities().create().after(after).towardBeginning(true)
-							.with(TestEntity4::getE, newE).create().get();
+						double newF = 0;
+						boolean te5 = helper.getBoolean();
+						ValueCreator<TestEntity4, ? extends TestEntity4> creator;
+						if (te5) {
+							newF = helper.getAnyDouble();
+							creator = modify.getListedEntities().create(TypeTokens.get().of(TestEntity5.class)).with(TestEntity5::getF,
+								newF);
+						} else
+							creator = modify.getListedEntities().create();
+						TestEntity4 newLE = creator.after(after).towardBeginning(true).with(TestEntity4::getE, newE).create().get();
+						if (te5) {
+							Assert.assertTrue(newLE instanceof TestEntity5);
+							if (!checkEquals(newF, ((TestEntity5) newLE).getF()))
+								Assert.assertEquals(newF, ((TestEntity5) newLE).getF(), 1E-12);
+						}
 						Assert.assertEquals(newE, newLE.getE());
 						((List<TestEntity4>) expected.get(index).getListedEntities().getValues()).add(leIndex, deepCopy(newLE));
 					}).or(1, () -> {// Remove listed entity
@@ -579,6 +600,43 @@ public class ObservableConfigTest {
 						modify.getListedEntities().getValues().get(leIndex).setE(newE);
 						Assert.assertEquals(newE, modify.getListedEntities().getValues().get(leIndex).getE());
 						expected.get(index).getListedEntities().getValues().get(leIndex).setE(newE);
+					}).or(1, () -> {// Modify listed entity.x
+						if (testEntities.getValues().isEmpty())
+							return;
+						int index = helper.getInt(0, testEntities.getValues().size() - 1);
+						TestEntity2 modify = testEntities.getValues().get(index);
+						if (modify.getListedEntities().getValues().isEmpty())
+							return;
+						int leIndex = helper.getInt(0, modify.getListedEntities().getValues().size() - 1);
+						double newX = helper.getAnyDouble();
+						TestEntity4 listedEntity = modify.getListedEntities().getValues().get(leIndex);
+						try {
+							listedEntity.setX(newX);
+							if (listedEntity instanceof TestEntity5)
+								Assert.assertTrue("Should have thrown exception", false);
+							if (!checkEquals(newX, modify.getListedEntities().getValues().get(leIndex).getX()))
+								Assert.assertEquals(newX, modify.getListedEntities().getValues().get(leIndex).getX(), newX * 1E-12);
+							expected.get(index).getListedEntities().getValues().get(leIndex).setX(newX);
+						} catch (UnsupportedOperationException e) {
+							if (!(listedEntity instanceof TestEntity5))
+								Assert.assertTrue("Should not have thrown exception", false);
+						}
+					}).or(1, () -> {// Modify listed entity.f (for TestEntity5 instances)
+						if (testEntities.getValues().isEmpty())
+							return;
+						int index = helper.getInt(0, testEntities.getValues().size() - 1);
+						TestEntity2 modify = testEntities.getValues().get(index);
+						if (modify.getListedEntities().getValues().isEmpty())
+							return;
+						int leIndex = helper.getInt(0, modify.getListedEntities().getValues().size() - 1);
+						if (!(modify.getListedEntities().getValues().get(leIndex) instanceof TestEntity5))
+							return;
+						double newF = helper.getAnyDouble();
+						((TestEntity5) modify.getListedEntities().getValues().get(leIndex)).setF(newF);
+						if (!checkEquals(newF, ((TestEntity5) modify.getListedEntities().getValues().get(leIndex)).getF()))
+							Assert.assertEquals(newF, ((TestEntity5) modify.getListedEntities().getValues().get(leIndex)).getF(),
+								newF * 1E-12);
+						((TestEntity5) expected.get(index).getListedEntities().getValues().get(leIndex)).setF(newF);
 					}).or(.05, () -> { // Persist/depersist
 						StringWriter writer = new StringWriter();
 						try {
@@ -644,6 +702,26 @@ public class ObservableConfigTest {
 		int getE();
 
 		int setE(int e);
+
+		double getX();
+
+		double setX(double x);
+	}
+
+	public interface TestEntity5 extends TestEntity4 {
+		double getF();
+
+		TestEntity5 setF(double f);
+
+		@Override
+		default double getX() {
+			return 0.0;
+		}
+
+		@Override
+		default double setX(double x) {
+			throw new UnsupportedOperationException();
+		}
 	}
 
 	private static String print(TestEntity entity) {
@@ -802,12 +880,19 @@ public class ObservableConfigTest {
 
 			@Override
 			public int setD(int d) {
-				return theD = d;
+				int oldD = theD;
+				theD = d;
+				return oldD;
 			}
 
 			@Override
 			public boolean equals(Object obj) {
-				return obj instanceof TestEntity3 && theD == ((TestEntity3) obj).getD();
+				if (!(obj instanceof TestEntity3))
+					return false;
+				TestEntity3 other = (TestEntity3) obj;
+				if (theD != other.getD())
+					return false;
+				return true;
 			}
 
 			@Override
@@ -818,11 +903,13 @@ public class ObservableConfigTest {
 	}
 
 	private static TestEntity4 deepCopy(TestEntity4 entity) {
-		return new TestEntity4() {
+		class TestEntity4Tester implements TestEntity4 {
 			private int theE;
+			private double theX;
 
-			{
+			TestEntity4Tester() {
 				theE = entity.getE();
+				theX = entity.getX();
 			}
 
 			@Override
@@ -836,15 +923,86 @@ public class ObservableConfigTest {
 			}
 
 			@Override
+			public double getX() {
+				return theX;
+			}
+
+			@Override
+			public double setX(double x) {
+				double oldX = theX;
+				theX = x;
+				return oldX;
+			}
+
+			@Override
 			public boolean equals(Object obj) {
-				return obj instanceof TestEntity4 && theE == ((TestEntity4) obj).getE();
+				if (!(obj instanceof TestEntity4))
+					return false;
+				else if ((this instanceof TestEntity5) != (obj instanceof TestEntity5))
+					return false;
+				TestEntity4 other = (TestEntity4) obj;
+				if (theE != other.getE())
+					return false;
+				else if (!checkEquals(theX, other.getX()))
+					return false;
+				return true;
 			}
 
 			@Override
 			public String toString() {
-				return "TestEntity4: e=" + theE;
+				return "TestEntity4: e=" + theE + ", x=" + theX;
 			}
 		};
+		class TestEntity5Tester extends TestEntity4Tester implements TestEntity5 {
+			private double theF;
+
+			TestEntity5Tester() {
+				theF = ((TestEntity5) entity).getF();
+			}
+
+			@Override
+			public double getF() {
+				return theF;
+			}
+
+			@Override
+			public TestEntity5 setF(double f) {
+				theF = f;
+				return this;
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				if (!super.equals(obj))
+					return false;
+				TestEntity5 other = (TestEntity5) obj;
+				return checkEquals(theF, other.getF());
+			}
+
+			@Override
+			public String toString() {
+				return "TestEntity5: e=" + getE() + ", f=" + theF;
+			}
+		}
+		return entity instanceof TestEntity5 ? new TestEntity5Tester() : new TestEntity4Tester();
+	}
+
+	private static boolean checkEquals(double d1, double d2) {
+		if (d1 == d2) {//
+		} else if (Double.isNaN(d1)) {
+			if (!Double.isNaN(d2))
+				return false;
+		} else if (Double.isNaN(d2))
+			return false;
+		else {
+			double diff = Math.abs(d1 - d2);
+			if (diff < 1E-200) { // Differences between tiny numbers can't be treated the same way
+				if (diff > Math.abs(d1))
+					return false;
+			} else if (diff > Math.abs(d1) * 1E-12)
+				return false;
+		}
+		return true;
 	}
 
 	private static String randomString(TestHelper helper) {

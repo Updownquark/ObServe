@@ -124,7 +124,7 @@ public interface ObservableConfigFormat<E> {
 		}
 
 		void moldConfig(ObservableConfig config) {
-			if (!config.getName().equals(configFilter.getName()))
+			if (!configFilter.isMulti() && !config.getName().equals(configFilter.getName()))
 				config.setName(configFilter.getName());
 			for (Map.Entry<String, String> attr : configFilter.getAttributes().entrySet()) {
 				if (attr.getValue() == null)
@@ -354,8 +354,13 @@ public interface ObservableConfigFormat<E> {
 
 		@Override
 		public <E2 extends E> EntityConfigCreator<E2> create(TypeToken<E2> subType) {
-			if (subType != null && !subType.equals(entityType.getType()))
+			if (subType != null && !subType.equals(entityType.getType())) {
+				for (EntitySubFormat<? extends E> subFormat : theSubFormats) {
+					if (subFormat.type.isAssignableFrom(subType))
+						return ((EntitySubFormat<? super E2>) subFormat).format.create(subType);
+				}
 				throw new IllegalArgumentException("Unrecognized sub-type " + subType);
+			}
 			return (EntityConfigCreator<E2>) new EntityConfigCreator<E>() {
 				private final QuickMap<String, Object> theFieldValues = entityType.getFields().keySet().createMap();
 
@@ -404,7 +409,11 @@ public interface ObservableConfigFormat<E> {
 			};
 		}
 
-		public E createInstance(ObservableConfig config, QuickMap<String, Object> fieldValues, Observable<?> until) throws ParseException {
+		E createInstance(ObservableConfig config, QuickMap<String, Object> fieldValues, Observable<?> until) throws ParseException {
+			for (EntitySubFormat<? extends E> subFormat : theSubFormats) {
+				if (subFormat.configFilter.matches(config))
+					return subFormat.format.parse(ObservableValue.of(config), null, null, null, until);
+			}
 			for (int i = 0; i < fieldValues.keySize(); i++) {
 				int fi = i;
 				ObservableValue<? extends ObservableConfig> fieldConfig = config.observeDescendant(theFieldChildNames.get(i));
@@ -627,7 +636,7 @@ public interface ObservableConfigFormat<E> {
 			}
 
 			void moldConfig(ObservableConfig config) {
-				if (!config.getName().equals(configFilter.getName()))
+				if (!configFilter.isMulti() && !config.getName().equals(configFilter.getName()))
 					config.setName(configFilter.getName());
 				for (Map.Entry<String, String> attr : configFilter.getAttributes().entrySet()) {
 					if (attr.getValue() == null)

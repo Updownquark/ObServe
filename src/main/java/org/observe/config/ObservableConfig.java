@@ -596,7 +596,7 @@ public class ObservableConfig implements StructuredTransactable {
 	public class ObservableConfigValueBuilder<T> {
 		private final TypeToken<T> theType;
 		private ObservableConfigFormat<T> theFormat;
-		private ObservableConfigFormatSet theFieldParser;
+		private ObservableConfigFormatSet theFormatSet;
 		private Observable<?> theUntil;
 		private ObservableConfigPath thePath;
 
@@ -614,8 +614,8 @@ public class ObservableConfig implements StructuredTransactable {
 			return this;
 		}
 
-		public ObservableConfigValueBuilder<T> withFieldParser(ObservableConfigFormatSet fieldParser) {
-			theFieldParser = fieldParser;
+		public ObservableConfigValueBuilder<T> withFormatSet(ObservableConfigFormatSet formatSet) {
+			theFormatSet = formatSet;
 			return this;
 		}
 
@@ -648,9 +648,9 @@ public class ObservableConfig implements StructuredTransactable {
 		}
 
 		protected ObservableConfigFormatSet getFormatSet() {
-			if (theFieldParser == null)
-				theFieldParser = new ObservableConfigFormatSet();
-			return theFieldParser;
+			if (theFormatSet == null)
+				theFormatSet = new ObservableConfigFormatSet();
+			return theFormatSet;
 		}
 
 		protected ObservableConfigFormat<T> getFormat() {

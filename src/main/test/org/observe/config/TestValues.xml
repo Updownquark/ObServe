@@ -28,8 +28,8 @@
 				<text>text4</text>
 			</texts>
 			<listed-entities>
-				<listed-entity e="5" />
-				<listed-entity e="6" />
+				<listed-entity e="5" x="7.89" />
+				<listed-entity e="6" x="5001.5" />
 			</listed-entities>
 		</test-entity2>
 		<test-entity2 text="text8">
@@ -39,8 +39,8 @@
 				<text>text10</text>
 			</texts>
 			<listed-entities>
-				<listed-entity e="7" />
-				<listed-entity e="8" />
+				<listed-entity e="7" x="-500"/>
+				<listed-entity e="8" x="NaN"/>
 			</listed-entities>
 		</test-entity2>
 	</test-entities2>
