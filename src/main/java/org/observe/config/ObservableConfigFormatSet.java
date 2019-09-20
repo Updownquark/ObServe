@@ -110,6 +110,6 @@ public class ObservableConfigFormatSet {
 	}
 
 	public <T> ObservableConfigFormat<T> getConfigFormat(ConfiguredValueField<?, T> field) {
-		return getConfigFormat(field.getFieldType(), StringUtils.parseByCase(field.getName()).toKebabCase());
+		return getConfigFormat(field.getFieldType(), StringUtils.parseByCase(field.getName(), true).toKebabCase());
 	}
 }
