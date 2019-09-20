@@ -84,35 +84,29 @@ public class ObservableSwingUtils {
 	 * @param text The text to create the label with
 	 * @return The LabelHolder to use to configure the label
 	 */
-	public static LabelHolder label(String text) {
-		return new LabelHolder(text);
+	public static FontAdjuster<Component> label(String text) {
+		return new FontAdjuster<>(new JLabel(text));
 	}
 
 	/**
 	 * @param label The label to create the holder with
 	 * @return The LabelHolder to use to configure the label
 	 */
-	public static LabelHolder label(JLabel label) {
-		return new LabelHolder(label);
+	public static FontAdjuster<Component> label(JLabel label) {
+		return new FontAdjuster<>(label);
 	}
 
-	/** A holder of a JLabel that contains many chain-compatible methods for configuration */
-	public static class LabelHolder implements Supplier<JLabel> {
+	/**
+	 * A holder of a Component that contains many chain-compatible methods for font configuration
+	 *
+	 * @param <C> The type of the component held by the holder
+	 */
+	public static class FontAdjuster<C extends Component> implements Supplier<C> {
 		/** The label */
-		public final JLabel label;
+		public final C label;
 
-		/** Creates a holder for an empty label */
-		public LabelHolder() {
-			this(new JLabel());
-		}
-
-		/** @param text The text to create the label with */
-		public LabelHolder(String text) {
-			this(new JLabel(text));
-		}
-
-		/** @param label The label to create the holder with */
-		public LabelHolder(JLabel label) {
+		/** @param label The component to create the holder with */
+		public FontAdjuster(C label) {
 			this.label = label;
 		}
 
@@ -122,7 +116,7 @@ public class ObservableSwingUtils {
 		 * @param adjustment The operation
 		 * @return This holder
 		 */
-		public LabelHolder adjust(Consumer<JLabel> adjustment) {
+		public FontAdjuster<C> adjust(Consumer<C> adjustment) {
 			adjustment.accept(label);
 			return this;
 		}
@@ -132,7 +126,7 @@ public class ObservableSwingUtils {
 		 *
 		 * @return This holder
 		 */
-		public LabelHolder bold() {
+		public FontAdjuster<C> bold() {
 			return withStyle(Font.BOLD);
 		}
 
@@ -141,7 +135,7 @@ public class ObservableSwingUtils {
 		 *
 		 * @return This holder
 		 */
-		public LabelHolder plain() {
+		public FontAdjuster<C> plain() {
 			return withStyle(Font.PLAIN);
 		}
 
@@ -149,7 +143,7 @@ public class ObservableSwingUtils {
 		 * @param fontSize The point size for the label's font
 		 * @return This holder
 		 */
-		public LabelHolder withFontSize(float fontSize) {
+		public FontAdjuster<C> withFontSize(float fontSize) {
 			label.setFont(label.getFont().deriveFont(fontSize));
 			return this;
 		}
@@ -158,7 +152,7 @@ public class ObservableSwingUtils {
 		 * @param style The font {@link Font#getStyle() style} for the label
 		 * @return This holder
 		 */
-		public LabelHolder withStyle(int style) {
+		public FontAdjuster<C> withStyle(int style) {
 			label.setFont(label.getFont().deriveFont(style));
 			return this;
 		}
@@ -168,13 +162,13 @@ public class ObservableSwingUtils {
 		 * @param fontSize The point size for the label's font
 		 * @return This holder
 		 */
-		public LabelHolder withSizeAndStyle(int style, float fontSize) {
+		public FontAdjuster<C> withSizeAndStyle(int style, float fontSize) {
 			label.setFont(label.getFont().deriveFont(style, fontSize));
 			return this;
 		}
 
 		@Override
-		public JLabel get() {
+		public C get() {
 			return label;
 		}
 
@@ -517,6 +511,9 @@ public class ObservableSwingUtils {
 		<F> FieldPanelPopulator<C> addTextField(String fieldName, SettableValue<F> field, Format<F> format,
 			Consumer<PanelPopulatorField<F, ObservableTextField<F>>> modify);
 
+		<F> FieldPanelPopulator<C> addLabel(String fieldName, SettableValue<F> field, Format<F> format,
+			Consumer<PanelPopulatorField<F, JLabel>> modify);
+
 		FieldPanelPopulator<C> addCheckField(String fieldName, SettableValue<Boolean> field,
 			Consumer<PanelPopulatorField<Boolean, JCheckBox>> modify);
 
@@ -628,6 +625,20 @@ public class ObservableSwingUtils {
 		}
 
 		@Override
+		default <F> FieldPanelPopulator<C> addLabel(String fieldName, SettableValue<F> field, Format<F> format,
+			Consumer<PanelPopulatorField<F, JLabel>> modify) {
+			JLabel label = new JLabel();
+			PanelPopulatorField<F, JLabel> fieldPanel = new PanelPopulatorField<>(fieldName, label);
+			fieldPanel.getTooltip().changes().takeUntil(_getUntil()).act(evt -> fieldPanel.getEditor().setToolTipText(evt.getNewValue()));
+			field.isEnabled().combine((enabled, tt) -> enabled == null ? tt : enabled, fieldPanel.getTooltip()).changes()
+			.takeUntil(_getUntil()).act(evt -> label.setToolTipText(evt.getNewValue()));
+			if (modify != null)
+				modify.accept(fieldPanel);
+			doAdd(fieldPanel);
+			return this;
+		}
+
+		@Override
 		default FieldPanelPopulator<C> addCheckField(String fieldName, SettableValue<Boolean> field,
 			Consumer<PanelPopulatorField<Boolean, JCheckBox>> modify) {
 			PanelPopulatorField<Boolean, JCheckBox> fieldPanel = new PanelPopulatorField<>(fieldName, new JCheckBox());
@@ -707,6 +718,9 @@ public class ObservableSwingUtils {
 			text.changes().takeUntil(_getUntil()).act(evt -> button.setText(evt.getNewValue()));
 			button.addActionListener(evt -> action.act(evt));
 			PanelPopulatorField<Object, JButton> field = new PanelPopulatorField<>(null, button);
+			action.isEnabled().combine((enabled, tt) -> enabled == null ? tt : enabled, field.getTooltip()).changes().takeUntil(_getUntil())
+			.act(evt -> button.setToolTipText(evt.getNewValue()));
+			action.isEnabled().takeUntil(_getUntil()).changes().act(evt -> button.setEnabled(evt.getNewValue() == null));
 			if (modify != null)
 				modify.accept(field);
 			doAdd(field);
@@ -725,13 +739,14 @@ public class ObservableSwingUtils {
 
 	public static class PanelPopulatorField<F, E> {
 		private ObservableValue<String> theFieldName;
-		private Consumer<LabelHolder> theFieldLabelModifier;
+		private Consumer<FontAdjuster<JLabel>> theFieldLabelModifier;
 		private final E theEditor;
 		private ObservableValue<String> theTooltip;
 		private SettableValue<ObservableValue<String>> theSettableTooltip;
 		private ObservableValue<String> thePostLabel;
 		private boolean isGrow;
 		private ObservableValue<Boolean> isVisible;
+		private Consumer<FontAdjuster<?>> theFont;
 
 		PanelPopulatorField(String fieldName, E editor) {
 			theFieldName = fieldName == null ? null : ObservableValue.of(fieldName);
@@ -754,8 +769,29 @@ public class ObservableSwingUtils {
 			return this;
 		}
 
-		public PanelPopulatorField<F, E> modifyLabel(Consumer<LabelHolder> labelModifier) {
-			theFieldLabelModifier = labelModifier;
+		public PanelPopulatorField<F, E> modifyLabel(Consumer<FontAdjuster<JLabel>> labelModifier) {
+			if (theFieldLabelModifier == null)
+				theFieldLabelModifier = labelModifier;
+			else {
+				Consumer<FontAdjuster<JLabel>> prev = theFieldLabelModifier;
+				theFieldLabelModifier = f -> {
+					prev.accept(f);
+					labelModifier.accept(f);
+				};
+			}
+			return this;
+		}
+
+		public PanelPopulatorField<F, E> withFont(Consumer<FontAdjuster<?>> font) {
+			if (theFont == null)
+				theFont = font;
+			else {
+				Consumer<FontAdjuster<?>> prev = theFont;
+				theFont = f -> {
+					prev.accept(f);
+					font.accept(f);
+				};
+			}
 			return this;
 		}
 
@@ -776,6 +812,8 @@ public class ObservableSwingUtils {
 		protected Component getComponent() {
 			if (!(theEditor instanceof Component))
 				throw new IllegalStateException("Editor is not a component");
+			if (theFont != null)
+				theFont.accept(new FontAdjuster<>((Component) theEditor));
 			return (Component) theEditor;
 		}
 
@@ -813,8 +851,22 @@ public class ObservableSwingUtils {
 			JLabel fieldNameLabel = new JLabel(theFieldName.get());
 			theFieldName.changes().takeUntil(until).act(evt -> fieldNameLabel.setText(evt.getNewValue()));
 			if (theFieldLabelModifier != null)
-				theFieldLabelModifier.accept(new LabelHolder(fieldNameLabel));
+				theFieldLabelModifier.accept(new FontAdjuster<>(fieldNameLabel));
+			if (theFont != null)
+				theFont.accept(new FontAdjuster<>(fieldNameLabel));
 			return fieldNameLabel;
+		}
+
+		protected JLabel createPostLabel(Observable<?> until) {
+			if (thePostLabel == null)
+				return null;
+			JLabel postLabel = new JLabel(thePostLabel.get());
+			thePostLabel.changes().takeUntil(until).act(evt -> postLabel.setText(evt.getNewValue()));
+			if (theFieldLabelModifier != null)
+				theFieldLabelModifier.accept(new FontAdjuster<>(postLabel));
+			if (theFont != null)
+				theFont.accept(new FontAdjuster<>(postLabel));
+			return postLabel;
 		}
 
 		protected ObservableValue<String> getPostLabel() {
@@ -961,20 +1013,10 @@ public class ObservableSwingUtils {
 
 		@Override
 		public void doAdd(PanelPopulatorField<?, ?> field) {
-			JLabel fieldNameLabel;
-			if (field.getFieldName() != null) {
-				fieldNameLabel = new JLabel(field.getFieldName().get());
-				field.getFieldName().changes().takeUntil(_getUntil()).act(evt -> fieldNameLabel.setText(evt.getNewValue()));
+			JLabel fieldNameLabel = field.createFieldNameLabel(_getUntil());
+			if (fieldNameLabel != null)
 				getContainer().add(fieldNameLabel);
-			} else
-				fieldNameLabel = null;
-			JLabel postLabel;
-			if (field.getPostLabel() != null) {
-				postLabel = new JLabel();
-				field.getPostLabel().changes().takeUntil(_getUntil()).act(evt -> postLabel.setText(evt.getNewValue()));
-			} else {
-				postLabel = null;
-			}
+			JLabel postLabel = field.createPostLabel(_getUntil());
 			Component component = field.getComponent();
 			String constraints = null;
 			if (field.isGrow() && getContainer().getLayout().getClass().getName().startsWith("net.mig"))
@@ -1010,8 +1052,14 @@ public class ObservableSwingUtils {
 		}
 
 		@Override
-		public HorizPanel modifyLabel(Consumer<LabelHolder> labelModifier) {
+		public HorizPanel modifyLabel(Consumer<FontAdjuster<JLabel>> labelModifier) {
 			super.modifyLabel(labelModifier);
+			return this;
+		}
+
+		@Override
+		public HorizPanel withFont(Consumer<FontAdjuster<?>> labelModifier) {
+			super.withFont(labelModifier);
 			return this;
 		}
 
@@ -1074,6 +1122,13 @@ public class ObservableSwingUtils {
 		public <F> HorizPanel addTextField(String fieldName, SettableValue<F> field, Format<F> format,
 			Consumer<PanelPopulatorField<F, ObservableTextField<F>>> modify) {
 			FieldPanelPopulatorImpl.super.addTextField(fieldName, field, format, modify);
+			return this;
+		}
+
+		@Override
+		public <F> HorizPanel addLabel(String fieldName, SettableValue<F> field, Format<F> format,
+			Consumer<PanelPopulatorField<F, JLabel>> modify) {
+			FieldPanelPopulatorImpl.super.addLabel(fieldName, field, format, modify);
 			return this;
 		}
 
@@ -1188,27 +1243,20 @@ public class ObservableSwingUtils {
 
 		@Override
 		public void doAdd(PanelPopulatorField<?, ?> field) {
-			JLabel fieldNameLabel;
-			if (field.getFieldName() != null) {
-				fieldNameLabel = new JLabel(field.getFieldName().get());
-				field.getFieldName().changes().takeUntil(_getUntil()).act(evt -> fieldNameLabel.setText(evt.getNewValue()));
+			JLabel fieldNameLabel = field.createFieldNameLabel(_getUntil());
+			if (fieldNameLabel != null)
 				getContainer().add(fieldNameLabel, "align right");
-			} else
-				fieldNameLabel = null;
 			StringBuilder constraints = new StringBuilder();
 			if (field.isGrow())
 				constraints.append("growx, pushx");
-			JLabel postLabel;
-			if (field.getPostLabel() != null) {
-				postLabel = new JLabel();
-				field.getPostLabel().changes().takeUntil(_getUntil()).act(evt -> postLabel.setText(evt.getNewValue()));
+			JLabel postLabel = field.createPostLabel(_getUntil());
+			if (postLabel != null) {
 				if (fieldNameLabel == null) {
 					if (constraints.length() > 0)
 						constraints.append(", ");
 					constraints.append("span 2");
 				}
 			} else {
-				postLabel = null;
 				if (constraints.length() > 0)
 					constraints.append(", ");
 				constraints.append("span, wrap");
