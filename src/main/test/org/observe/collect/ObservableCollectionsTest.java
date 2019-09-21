@@ -170,7 +170,8 @@ public class ObservableCollectionsTest {
 		ObservableCollectionTester<Integer> combinedTester;
 		if (BARRAGE_USE_COMBINE) {
 			combinedOL = coll.flow().combine(intType, combine -> {
-				return combine.with(combineVar).withReverse(reverseCombineFn).build(combineFn);
+				return combine.with(combineVar).withReverse(reverseCombineFn).build(cv -> //
+				combineFn.apply(cv.getElement(), cv.get(combineVar)));
 			}).collect();
 			d().set("combined@" + depth, combinedOL);
 			combinedTester = new ObservableCollectionTester<>("combined", combinedOL);
@@ -1034,7 +1035,7 @@ public class ObservableCollectionsTest {
 		Set<Integer> correct = new TreeSet<>();
 		set.flow()//
 		.combine(intType, combine -> {
-			return combine.with(value1).build((v1, v2) -> v1 * v2);
+			return combine.with(value1).build(cv -> cv.getElement() * cv.get(value1));
 		}).filter(value -> value != null && value % 3 == 0 ? null : StdMsg.ILLEGAL_ELEMENT)//
 		.collect().subscribe(evt -> {
 			switch (evt.getType()) {
@@ -1483,7 +1484,7 @@ public class ObservableCollectionsTest {
 		value1.set(1, null);
 		ObservableCollectionTester<Integer> tester = new ObservableCollectionTester<>("combined", list.flow()//
 			.combine(intType, combine -> {
-				return combine.with(value1).build((v1, v2) -> v1 * v2);
+				return combine.with(value1).build(cv -> cv.getElement() * cv.get(value1));
 			}).filter(value -> value != null && value % 3 == 0 ? null : StdMsg.ILLEGAL_ELEMENT)//
 			.collect());
 
@@ -2068,8 +2069,8 @@ public class ObservableCollectionsTest {
 		SimpleSettableValue<Integer> mult = new SimpleSettableValue<>(new TypeToken<Integer>() {}, false);
 		mult.set(1, null);
 		ObservableCollection<Integer> product = list.flow().combine(intType, combine -> {
-			return combine.with(mult).build((v1, v2) -> //
-			v1 * v2);
+			return combine.with(mult).build(cv -> //
+			cv.getElement() * cv.get(mult));
 		}).collect();
 
 		for(int i = 0; i < 30; i++)
