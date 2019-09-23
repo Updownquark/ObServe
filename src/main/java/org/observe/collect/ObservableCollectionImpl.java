@@ -1769,7 +1769,7 @@ public final class ObservableCollectionImpl {
 
 						@Override
 						public void accept(ObservableCollectionEvent<? extends E> evt) {
-							try (Transaction t = theFlow.lock(true, evt)) {
+							try (Transaction t = theFlow.lock(true, evt.getType() != CollectionChangeType.set, evt)) {
 								T oldValue, newValue;
 								switch (evt.getType()) {
 								case add:
