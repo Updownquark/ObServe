@@ -8,6 +8,8 @@ import org.observe.collect.Equivalence;
 import org.observe.collect.ObservableCollection;
 import org.observe.collect.ObservableCollectionEvent;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterCollection;
+import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.MutableCollectionElement;
@@ -16,7 +18,7 @@ import com.google.common.reflect.TypeToken;
 
 /**
  * An ObservableCollection that simply delegates to another
- * 
+ *
  * @param <E> The type of the collection
  */
 public abstract class ObservableCollectionWrapper<E> implements ObservableCollection<E> {
@@ -24,7 +26,7 @@ public abstract class ObservableCollectionWrapper<E> implements ObservableCollec
 
 	/**
 	 * Initializes this collection with the collection to delegate to
-	 * 
+	 *
 	 * @param wrapped The wrapped collection to delegate to
 	 * @throws IllegalStateException If this collection has already been initialized
 	 */
@@ -95,8 +97,15 @@ public abstract class ObservableCollectionWrapper<E> implements ObservableCollec
 	}
 
 	@Override
-	public CollectionElement<E> getElementBySource(ElementId sourceEl) {
-		return getWrapped().getElementBySource(sourceEl);
+	public BetterList<CollectionElement<E>> getElementsBySource(ElementId sourceEl) {
+		return getWrapped().getElementsBySource(sourceEl);
+	}
+
+	@Override
+	public BetterList<ElementId> getSourceElements(ElementId localElement, BetterCollection<?> sourceCollection) {
+		if (sourceCollection == this)
+			return getWrapped().getSourceElements(localElement, getWrapped());
+		return getWrapped().getSourceElements(localElement, sourceCollection);
 	}
 
 	@Override

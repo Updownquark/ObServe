@@ -43,6 +43,7 @@ import org.observe.util.TypeTokens;
 import org.observe.util.WeakListening;
 import org.qommons.Causable;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedSet;
 import org.qommons.collect.CollectionElement;
@@ -1365,7 +1366,7 @@ public class ObservableMultiMapImpl {
 
 			@Override
 			public int hashCode() {
-				return ObservableCollection.hashCode(this);
+				return BetterCollection.hashCode(this);
 			}
 
 			@Override

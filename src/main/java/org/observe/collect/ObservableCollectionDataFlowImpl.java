@@ -1566,7 +1566,7 @@ public class ObservableCollectionDataFlowImpl {
 
 		@Override
 		public DerivedCollectionElement<E> getElementBySource(ElementId sourceEl) {
-			CollectionElement<E> el = theSource.getElementBySource(sourceEl);
+			CollectionElement<E> el = theSource.getElementsBySource(sourceEl);
 			return el == null ? null : new BaseDerivedElement(theSource.mutableElement(el.getElementId()));
 		}
 

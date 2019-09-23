@@ -28,6 +28,7 @@ import org.qommons.StructuredTransactable;
 import org.qommons.Transaction;
 import org.qommons.ValueHolder;
 import org.qommons.collect.BetterCollection;
+import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterSortedMap;
 import org.qommons.collect.BetterSortedSet.SortedSearchFilter;
 import org.qommons.collect.CollectionElement;
@@ -652,11 +653,19 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 			}
 
 			@Override
-			public CollectionElement<E> getElementBySource(ElementId sourceEl) {
-				CollectionElement<ConfigElement> el = theElements.values().getElementBySource(sourceEl);
+			public BetterList<CollectionElement<E>> getElementsBySource(ElementId sourceEl) {
+				CollectionElement<ConfigElement> el = theElements.values().getElementsBySource(sourceEl);
 				if (el != null)
 					return el.get().immutable();
 				return MutableCollectionElement.immutable(theElements.get(sourceEl));
+			}
+
+			@Override
+			public BetterList<ElementId> getSourceElements(ElementId localElement, BetterCollection<?> sourceCollection) {
+				BetterCollection<ConfigElement> values = theElements.values();
+				if (sourceCollection == this)
+					return values.getSourceElements(localElement, values);
+				return values.getSourceElements(localElement, sourceCollection);
 			}
 
 			@Override
@@ -689,7 +698,7 @@ public abstract class ObservableConfigTransform implements StructuredTransactabl
 
 			@Override
 			public int hashCode() {
-				return ObservableCollection.hashCode(this);
+				return BetterCollection.hashCode(this);
 			}
 
 			@Override

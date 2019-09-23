@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.function.IntUnaryOperator;
@@ -69,7 +70,7 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 				theFilter = newFilter;
 				theFilterValue.set(theFilter, null);
 				List<CollectionOp<E>> ops = new ArrayList<>();
-				theSourceValues.entrySet().spliterator().forEachElement(el -> {
+				for (CollectionElement<Entry<LinkElement, E>> el : theSourceValues.entrySet().elements()) {
 					CollectionElement<ElementId> presentElement = thePresentSourceElements.getElement(el.getElementId(), true); // value
 					LinkElement srcLinkEl = el.get().getKey();
 					E value = el.get().getValue();
@@ -87,7 +88,7 @@ public class FilteredCollectionLink<E> extends AbstractObservableCollectionLink<
 						mapSourceElement(srcLinkEl, destLinkEl);
 						ops.add(new CollectionOp<>(CollectionChangeType.add, destLinkEl, presentIndex, value));
 					}
-				}, true);
+				}
 				modified(ops, action.getHelper(), true);
 			});
 		}

@@ -34,7 +34,7 @@ public class DefaultObservableSortedSet<E> extends DefaultObservableCollection<E
 	 * @param type The type for the sorted set
 	 * @param sortedSet The backing sorted set to hold this observable set's values
 	 * @param elementSource The function to provide element sources for this collection
-	 * @see #getElementBySource(ElementId)
+	 * @see #getElementsBySource(ElementId)
 	 */
 	public DefaultObservableSortedSet(TypeToken<E> type, BetterSortedSet<E> sortedSet, Function<ElementId, ElementId> elementSource) {
 		super(type, sortedSet, elementSource);

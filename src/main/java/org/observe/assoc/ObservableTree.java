@@ -16,8 +16,10 @@ import org.observe.ObservableValueEvent;
 import org.observe.Observer;
 import org.observe.Subscription;
 import org.observe.collect.ObservableCollection;
+import org.observe.collect.ObservableElement;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
+import org.qommons.collect.BetterCollection;
 import org.qommons.collect.MutableCollectionElement.StdMsg;
 
 import com.google.common.reflect.TypeParameter;
@@ -521,17 +523,17 @@ public interface ObservableTree<N, V> extends Transactable {
 
 		@Override
 		public int hashCode() {
-			return ObservableCollection.hashCode(this);
+			return BetterCollection.hashCode(this);
 		}
 
 		@Override
 		public boolean equals(Object obj) {
-			return ObservableCollection.equals(this, obj);
+			return BetterCollection.equals(this, obj);
 		}
 
 		@Override
 		public String toString() {
-			return ObservableCollection.toString(this);
+			return BetterCollection.toString(this);
 		}
 	}
 }

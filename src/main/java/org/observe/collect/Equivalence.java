@@ -8,11 +8,13 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 
 import org.observe.util.TypeTokens;
+import org.qommons.QommonsUtils;
 import org.qommons.Transactable;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
 import org.qommons.collect.BetterHashMap;
 import org.qommons.collect.BetterHashSet;
+import org.qommons.collect.BetterList;
 import org.qommons.collect.BetterMap;
 import org.qommons.collect.BetterSet;
 import org.qommons.collect.CollectionElement;
@@ -430,9 +432,15 @@ public interface Equivalence<E> {
 		}
 
 		@Override
-		public CollectionElement<T2> getElementBySource(ElementId sourceEl) {
-			CollectionElement<E> wrapEl = theWrapped.getElementBySource(sourceEl);
-			return wrapEl == null ? null : handleFor(wrapEl);
+		public BetterList<CollectionElement<T2>> getElementsBySource(ElementId sourceEl) {
+			return QommonsUtils.map2(theWrapped.getElementsBySource(sourceEl), this::handleFor);
+		}
+
+		@Override
+		public BetterList<ElementId> getSourceElements(ElementId localElement, BetterCollection<?> sourceCollection) {
+			if (sourceCollection == this)
+				return theWrapped.getSourceElements(localElement, theWrapped);
+			return theWrapped.getSourceElements(localElement, sourceCollection);
 		}
 
 		@Override

@@ -717,21 +717,6 @@ public interface ObservableCollection<E> extends BetterList<E> {
 	}
 
 	/**
-	 * A typical hashCode implementation for collections
-	 *
-	 * @param coll The collection to hash
-	 * @return The hash code of the collection's contents
-	 */
-	static int hashCode(ObservableCollection<?> coll) {
-		try (Transaction t = coll.lock(false, null)) {
-			int hashCode = 1;
-			for (Object e : coll)
-				hashCode += e.hashCode();
-			return hashCode;
-		}
-	}
-
-	/**
 	 * A typical equals implementation for collections
 	 *
 	 * @param coll The collection to test
@@ -754,28 +739,6 @@ public interface ObservableCollection<E> extends BetterList<E> {
 			}
 			return !(e1.hasNext() || e2.hasNext());
 		}
-	}
-
-	/**
-	 * A simple toString implementation for collections
-	 *
-	 * @param coll The collection to print
-	 * @return The string representation of the collection's contents
-	 */
-	static String toString(ObservableCollection<?> coll) {
-		StringBuilder ret = new StringBuilder("[");
-		boolean first = true;
-		try (Transaction t = coll.lock(false, null)) {
-			for (Object value : coll) {
-				if (!first) {
-					ret.append(", ");
-				} else
-					first = false;
-				ret.append(value);
-			}
-		}
-		ret.append(']');
-		return ret.toString();
 	}
 
 	/**

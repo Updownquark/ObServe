@@ -1332,13 +1332,6 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public CollectionElement<E> getElementBySource(ElementId sourceEl) {
-			if (sourceEl instanceof ElementId.ReversedElementId)
-				sourceEl = sourceEl.reverse();
-			return CollectionElement.reverse(getWrapped().getElementBySource(sourceEl));
-		}
-
-		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
 			try (Transaction t = lock(false, null)) {
 				return getWrapped().onChange(new ReversedSubscriber(observer, size()));
@@ -1627,10 +1620,10 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public CollectionElement<T> getElementBySource(ElementId sourceEl) throws NoSuchElementException {
+		public CollectionElement<T> getElementsBySource(ElementId sourceEl) throws NoSuchElementException {
 			if (isReversed && sourceEl instanceof ElementId.ReversedElementId)
 				sourceEl = sourceEl.reverse();
-			CollectionElement<E> adj = theSource.getElementBySource(sourceEl);
+			CollectionElement<E> adj = theSource.getElementsBySource(sourceEl);
 			return adj == null ? null : elementFor(adj, null);
 		}
 
@@ -2111,7 +2104,7 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public CollectionElement<T> getElementBySource(ElementId sourceEl) throws NoSuchElementException {
+		public CollectionElement<T> getElementsBySource(ElementId sourceEl) throws NoSuchElementException {
 			try (Transaction t = lock(false, null)) {
 				if (sourceEl instanceof DerivedElementHolder
 					&& ((DerivedElementHolder<?>) sourceEl).treeNode.getRoot().equals(theDerivedElements.getRoot()))
@@ -2252,7 +2245,7 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public int hashCode() {
-			return ObservableCollection.hashCode(this);
+			return BetterCollection.hashCode(this);
 		}
 
 		@Override
@@ -2277,13 +2270,12 @@ public final class ObservableCollectionImpl {
 	 *
 	 * @param <E> The type of values in the collection
 	 */
-	public static class ConstantCollection<E> implements ObservableCollection<E> {
+	public static class ConstantCollection<E> extends BetterList.ConstantList<E> implements ObservableCollection<E> {
 		private final TypeToken<E> theType;
-		private final BetterList<? extends E> theValues;
 
 		ConstantCollection(TypeToken<E> type, BetterList<? extends E> values) {
+			super(values);
 			theType = type;
-			theValues = values;
 		}
 
 		@Override
@@ -2297,190 +2289,14 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public boolean isLockSupported() {
-			return true;
-		}
-
-		@Override
-		public Transaction lock(boolean write, boolean structural, Object cause) {
-			return Transaction.NONE;
-		}
-
-		@Override
-		public Transaction tryLock(boolean write, boolean structural, Object cause) {
-			return Transaction.NONE;
-		}
-
-		@Override
-		public long getStamp(boolean structuralOnly) {
-			return 0;
-		}
-
-		@Override
-		public boolean isContentControlled() {
-			return true;
-		}
-
-		@Override
-		public int size() {
-			return theValues.size();
-		}
-
-		@Override
-		public boolean isEmpty() {
-			return theValues.isEmpty();
-		}
-
-		@Override
-		public int getElementsBefore(ElementId id) {
-			return theValues.getElementsBefore(id);
-		}
-
-		@Override
-		public int getElementsAfter(ElementId id) {
-			return theValues.getElementsAfter(id);
-		}
-
-		@Override
-		public CollectionElement<E> getElement(int index) {
-			return (CollectionElement<E>) theValues.getElement(index);
-		}
-
-		@Override
-		public CollectionElement<E> getElement(E value, boolean first) {
-			if (!theValues.belongs(value))
-				return null;
-			return ((BetterList<E>) theValues).getElement(value, first);
-		}
-
-		@Override
-		public CollectionElement<E> getElement(ElementId id) {
-			return (CollectionElement<E>) theValues.getElement(id);
-		}
-
-		@Override
-		public CollectionElement<E> getTerminalElement(boolean first) {
-			return (CollectionElement<E>) theValues.getTerminalElement(first);
-		}
-
-		@Override
-		public CollectionElement<E> getAdjacentElement(ElementId elementId, boolean next) {
-			return (CollectionElement<E>) theValues.getAdjacentElement(elementId, next);
-		}
-
-		@Override
-		public MutableCollectionElement<E> mutableElement(ElementId id) {
-			MutableCollectionElement<? extends E> mutable = theValues.mutableElement(id);
-			return mutableElement(mutable);
-		}
-
-		private MutableCollectionElement<E> mutableElement(MutableCollectionElement<? extends E> el) {
-			return new MutableCollectionElement<E>() {
-				@Override
-				public BetterCollection<E> getCollection() {
-					return ConstantCollection.this;
-				}
-
-				@Override
-				public ElementId getElementId() {
-					return el.getElementId();
-				}
-
-				@Override
-				public E get() {
-					return el.get();
-				}
-
-				@Override
-				public String isEnabled() {
-					return StdMsg.UNSUPPORTED_OPERATION;
-				}
-
-				@Override
-				public String isAcceptable(E value) {
-					return StdMsg.UNSUPPORTED_OPERATION;
-				}
-
-				@Override
-				public void set(E value) throws UnsupportedOperationException, IllegalArgumentException {
-					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-				}
-
-				@Override
-				public String canRemove() {
-					return StdMsg.UNSUPPORTED_OPERATION;
-				}
-
-				@Override
-				public void remove() throws UnsupportedOperationException {
-					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-				}
-
-				@Override
-				public String canAdd(E value, boolean before) {
-					return StdMsg.UNSUPPORTED_OPERATION;
-				}
-
-				@Override
-				public ElementId add(E value, boolean before) throws UnsupportedOperationException, IllegalArgumentException {
-					throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-				}
-			};
-		}
-
-		@Override
-		public CollectionElement<E> getElementBySource(ElementId sourceEl) throws NoSuchElementException {
-			return getElement(sourceEl);
-		}
-
-		@Override
-		public String canAdd(E value) {
-			return StdMsg.UNSUPPORTED_OPERATION;
-		}
-
-		@Override
-		public CollectionElement<E> addElement(E value, boolean first) {
-			return null;
-		}
-
-		@Override
-		public String canAdd(E value, ElementId after, ElementId before) {
-			return StdMsg.UNSUPPORTED_OPERATION;
-		}
-
-		@Override
-		public CollectionElement<E> addElement(E value, ElementId after, ElementId before, boolean first)
-			throws UnsupportedOperationException, IllegalArgumentException {
-			return null;
-		}
-
-		@Override
 		public Subscription onChange(Consumer<? super ObservableCollectionEvent<? extends E>> observer) {
 			return () -> {};
 		}
 
 		@Override
-		public void clear() {}
-
-		@Override
 		public void setValue(Collection<ElementId> elements, E value) {
 			if (!elements.isEmpty())
 				throw new UnsupportedOperationException(StdMsg.UNSUPPORTED_OPERATION);
-		}
-
-		@Override
-		public int hashCode() {
-			return ObservableCollection.hashCode(this);
-		}
-
-		@Override
-		public boolean equals(Object obj) {
-			return ObservableCollection.equals(this, obj);
-		}
-
-		@Override
-		public String toString() {
-			return ObservableCollection.toString(this);
 		}
 	}
 
@@ -2635,11 +2451,11 @@ public final class ObservableCollectionImpl {
 		}
 
 		@Override
-		public CollectionElement<E> getElementBySource(ElementId sourceEl) throws NoSuchElementException {
+		public BetterList<CollectionElement<E>> getElementsBySource(ElementId sourceEl) throws NoSuchElementException {
 			ObservableCollection<? extends E> current = getWrapped().get();
 			if (current == null)
 				throw new NoSuchElementException();
-			return ((ObservableCollection<E>) current).getElementBySource(sourceEl);
+			return ((ObservableCollection<E>) current).getElementsBySource(sourceEl);
 		}
 
 		@Override
@@ -2722,17 +2538,17 @@ public final class ObservableCollectionImpl {
 
 		@Override
 		public int hashCode() {
-			return ObservableCollection.hashCode(this);
+			return BetterCollection.hashCode(this);
 		}
 
 		@Override
 		public boolean equals(Object obj) {
-			return ObservableCollection.equals(this, obj);
+			return BetterCollection.equals(this, obj);
 		}
 
 		@Override
 		public String toString() {
-			return ObservableCollection.toString(this);
+			return BetterCollection.toString(this);
 		}
 	}
 }

@@ -158,14 +158,6 @@ public class ObservableSortedSetImpl {
 		}
 
 		@Override
-		public CollectionElement<E> getElementBySource(ElementId sourceEl) {
-			CollectionElement<E> src = getWrapped().getElementBySource(sourceEl);
-			if (src != null && this.belongs(src.get()))
-				return null;
-			return null;
-		}
-
-		@Override
 		public void setValue(Collection<ElementId> elements, E value) {
 			getWrapped().setValue(elements, value);
 		}

@@ -25,8 +25,10 @@ import org.observe.config.ObservableConfig.ObservableConfigPath;
 import org.observe.config.ObservableConfig.ObservableConfigPathElement;
 import org.observe.util.TypeTokens;
 import org.qommons.Causable;
+import org.qommons.QommonsUtils;
 import org.qommons.Transaction;
 import org.qommons.collect.BetterCollection;
+import org.qommons.collect.BetterList;
 import org.qommons.collect.CollectionElement;
 import org.qommons.collect.ElementId;
 import org.qommons.collect.ListenerList;
@@ -461,9 +463,16 @@ public class ObservableConfigContent {
 		}
 
 		@Override
-		public CollectionElement<C> getElementBySource(ElementId sourceEl) {
-			ObservableConfig config = CollectionElement.get(getConfig()._getContent().getElementBySource(sourceEl));
-			return new ConfigCollectionElement<>(config);
+		public BetterList<CollectionElement<C>> getElementsBySource(ElementId sourceEl) {
+			return QommonsUtils.map2(getConfig()._getContent().getElementsBySource(sourceEl),
+				el -> new ConfigCollectionElement<>(el.get()));
+		}
+
+		@Override
+		public BetterList<ElementId> getSourceElements(ElementId localElement, BetterCollection<?> sourceCollection) {
+			if (sourceCollection == this)
+				return getConfig()._getContent().getSourceElements(localElement, getConfig()._getContent());
+			return getConfig()._getContent().getSourceElements(localElement, sourceCollection);
 		}
 
 		@Override
@@ -670,13 +679,16 @@ public class ObservableConfigContent {
 		}
 
 		@Override
-		public CollectionElement<C> getElementBySource(ElementId sourceEl) {
-			try (Transaction t = getConfig().lock(false, null)) {
-				ObservableConfig config = CollectionElement.get(getConfig()._getContent().getElementBySource(sourceEl));
-				if (!thePathElement.matches(config))
-					throw new NoSuchElementException();
-				return new ConfigCollectionElement<>(config);
-			}
+		public BetterList<CollectionElement<C>> getElementsBySource(ElementId sourceEl) {
+			return QommonsUtils.filterMap(getConfig()._getContent().getElementsBySource(sourceEl), el -> thePathElement.matches(el.get()),
+				el -> new ConfigCollectionElement<>(el.get()));
+		}
+
+		@Override
+		public BetterList<ElementId> getSourceElements(ElementId localElement, BetterCollection<?> sourceCollection) {
+			if (sourceCollection == this)
+				return getConfig()._getContent().getSourceElements(localElement, getConfig()._getContent());
+			return getConfig()._getContent().getSourceElements(localElement, sourceCollection);
 		}
 
 		@Override
@@ -915,7 +927,7 @@ public class ObservableConfigContent {
 								if (preAddAction != null)
 									preAddAction.accept((C) cfg);
 							});
-						newChildId = theChildren.getElementBySource(newChild.getParentChildRef()).getElementId();
+						newChildId = theChildren.getElementsBySource(newChild.getParentChildRef()).getFirst().getElementId();
 					}
 					return theChildren.getElement(newChildId);
 				}

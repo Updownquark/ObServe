@@ -41,7 +41,7 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	 * @param type The type for this collection
 	 * @param list The list to hold this collection's elements
 	 * @param elementSource The function to provide element sources for this collection
-	 * @see #getElementBySource(ElementId)
+	 * @see #getElementsBySource(ElementId)
 	 */
 	public DefaultObservableCollection(TypeToken<E> type, BetterList<E> list, Function<ElementId, ElementId> elementSource) {
 		theType = type;
@@ -182,14 +182,21 @@ public class DefaultObservableCollection<E> implements ObservableCollection<E> {
 	}
 
 	@Override
-	public CollectionElement<E> getElementBySource(ElementId sourceEl) {
+	public BetterList<CollectionElement<E>> getElementsBySource(ElementId sourceEl) {
 		if (theElementSource != null) {
 			ElementId el = theElementSource.apply(sourceEl);
 			if (el == null)
-				return null;
-			return getElement(el);
+				return BetterList.empty();
+			return BetterList.of(getElement(el));
 		}
-		return theValues.getElementBySource(sourceEl);
+		return theValues.getElementsBySource(sourceEl);
+	}
+
+	@Override
+	public BetterList<ElementId> getSourceElements(ElementId localElement, BetterCollection<?> sourceCollection) {
+		if (sourceCollection == this)
+			return theValues.getSourceElements(localElement, theValues); // Validate element
+		return theValues.getSourceElements(localElement, sourceCollection);
 	}
 
 	@Override
